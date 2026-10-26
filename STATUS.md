@@ -86,3 +86,57 @@ using the published public JWK. Pod credentials never enter MCP responses or tok
   the named base, bounded lifetimes, public-client-only authentication, exact resource/state
   requirements, consent completion, grant-wide revocation and metadata cache limits. No
   blocking implementation question remains; those defaults should be reviewed on integration.
+
+## Fix round 1 — 2026-10-26
+
+Review base: `78f2eb3de02af46c63cc9353e75460b638e204db`. All four supplied findings are
+addressed on `lane/sst-tsax`, with changes confined to the OAuth implementation, its tests
+and this report.
+
+- `bcca5b56` — `fix: validate scope sets before consuming credentials`: compare scope sets
+  before atomic consumption. Equivalent reordered/duplicate scope tokens work; invalid
+  scope requests leave codes and refresh tokens usable for retry. Regression tests also
+  verify rotation and family revocation when a successfully consumed token is replayed.
+- `2b04c835` — `fix: normalize OAuth endpoint routing URLs`: derive routing and endpoint
+  URLs from the parsed issuer, retaining the configured issuer identifier in metadata,
+  authorization responses and JWTs. Full-flow regressions cover explicit default ports,
+  uppercase hosts and trailing slashes.
+- `454a0d16` — `fix: redirect OAuth errors with issuer identification`: send authorization
+  validation errors to a registered redirect with the exact state and configured issuer;
+  advertise `authorization_response_iss_parameter_supported` and include `iss` on denied
+  consent in both trusted completion and broker callback flows. Tests cover unsafe client
+  identity/redirects, ambiguous parameters, preserved query/state and generic server errors.
+- `docs: record MCP OAuth review fixes` — this report commit.
+
+The conservative policy remains set equality for refresh scope: scope narrowing is still
+rejected. Duplicate parameters, invalid clients/redirects and absent/empty required state
+continue to fail locally before establishing a redirect response context.
+
+Final package result: **165 tests passed; 342/342 statements, 299/299 branches, 50/50
+functions and 304/304 lines covered**. No coverage exclusions or thresholds were changed.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/guarded-fetch run build` | PASS; existing workspace dependency. |
+| `pnpm --filter @jeswr/mcp-oauth run lint` | PASS. |
+| `pnpm --filter @jeswr/mcp-oauth run build` | PASS. |
+| `pnpm --filter @jeswr/mcp-oauth run typecheck` | PASS; implementation and tests. |
+| `pnpm --filter @jeswr/mcp-oauth run test` | PASS; 165 tests, 100% coverage. |
+| `pnpm run lint:root` | PASS. |
+| `env GIT_ALLOW_PROTOCOL=none NODE_OPTIONS=--require=/tmp/sst-tsax-network-guard.cjs TURBO_SCM_BASE=78f2eb3de02af46c63cc9353e75460b638e204db pnpm run gate` | PASS; 6/6 tasks. |
+| `env GIT_ALLOW_PROTOCOL=none NODE_OPTIONS=--require=/tmp/sst-tsax-network-guard.cjs pnpm run gate:full` | FAIL outside this lane: `@jeswr/app-pod-manager#build`, 26 successful tasks before stopping. Root tests passed, 26/26. |
+| `git diff --check` | PASS. |
+
+The full gate encounters the same unchanged Pod Manager `next/font` dependency on fetching
+Inter from Google Fonts, refused by the existing temporary network guard. No unrelated
+application workaround was added. Gate commands ran before the final report commit.
+
+Logs: `/tmp/sst-tsax-fix-package-gate.log` (package tests),
+`/tmp/sst-tsax-fix-lint-root.log`, `/tmp/sst-tsax-fix-gate.log` and
+`/tmp/sst-tsax-fix-gate-full.log`.
+
+No dependencies were added, so no new package-policy checks were needed. No push, PR,
+publish, branch switch or other-checkout edit was performed. Automated roborev remains
+unavailable in this checkout; no new automated verdict is claimed. All four implementation
+fixes are complete. Full-workspace validation and automated review retain the limitations
+above; there are no new open questions.
