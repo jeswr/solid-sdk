@@ -48,11 +48,36 @@ export function parseLwsDescription(
 
   function timestamp(value: unknown, field: string): string {
     const text = string(value, field);
+    const parts =
+      /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(?:Z|[+-](\d{2}):(\d{2}))$/.exec(
+        text,
+      );
+    if (!parts || parts[0] !== text) invalid(`${field} must be a timestamp with a timezone`);
+    const year = Number(parts[1]);
+    const month = Number(parts[2]);
+    const day = Number(parts[3]);
+    const hour = Number(parts[4]);
+    const minute = Number(parts[5]);
+    const second = Number(parts[6]);
+    const offsetHour = Number(parts[8] ?? 0);
+    const offsetMinute = Number(parts[9] ?? 0);
+    const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    const daysInMonth =
+      [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1] ?? 0;
+    // Check local calendar components before any Date parsing can normalise an
+    // impossible date. XSD permits 24:00:00 only at midnight, and offsets up to 14:00.
     if (
-      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(text) ||
-      !Number.isFinite(Date.parse(text))
+      day < 1 ||
+      day > daysInMonth ||
+      hour > 24 ||
+      minute > 59 ||
+      second > 59 ||
+      (hour === 24 && (minute !== 0 || second !== 0 || /[1-9]/.test(parts[7] ?? ""))) ||
+      offsetHour > 14 ||
+      offsetMinute > 59 ||
+      (offsetHour === 14 && offsetMinute !== 0)
     ) {
-      invalid(`${field} must be a timestamp with a timezone`);
+      invalid(`${field} must be a valid calendar timestamp with a timezone`);
     }
     return text;
   }

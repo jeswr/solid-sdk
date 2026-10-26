@@ -26,8 +26,9 @@ type/subscriptionType terms, and preserves unknown types and raw extra keys. Ver
 types and key material retain their cryptographic vocabulary. Scalar subscriptionType values stay
 scalar; list values stay lists. Malformed descriptions throw `CapabilitiesError` with
 `code: 'description-invalid'`; foreign description/root authorities throw `code: 'root-mismatch'`.
-Verification methods retain optional CID `revoked` and `expires` timestamps. Consumers must enforce
-these limits when using a key, including from cached descriptions. JWK parsing checks known member
+Verification methods retain optional CID `revoked` and `expires` timestamps after validating the
+calendar date, time, and timezone offset (up to ±14:00). Consumers must enforce these limits when
+using a key, including from cached descriptions. JWK parsing checks known member
 types and requires the public key parameters for EC, RSA, and OKP keys. Symmetric keys and all
 registered JOSE private or secret key members are rejected, as are unsupported key types.
 Cryptographic key import and signature verification remain the consumer's responsibility.
