@@ -186,8 +186,8 @@ export class OAuthCodeSource implements AccessTokenSource {
 
   async getAccessToken({ signal, rejectedToken }: AccessTokenRequest): Promise<AccessToken> {
     // Bound to the session generation from the very start: discovery included.
-    const bound = AbortSignal.any([signal, this.#fence.signal]);
     const generation = await this.#fence.generation();
+    const bound = AbortSignal.any([signal, this.#fence.signalFor(generation)]);
     const as = await abortable(this.#authorizationServer(), bound);
     bound.throwIfAborted();
     await this.#fence.assertCurrent(generation);

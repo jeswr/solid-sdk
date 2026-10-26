@@ -156,8 +156,9 @@ test("broadcast fences ignore unknown messages and invalidate peer work on super
   channels[0].onmessage({ data: { type: "superseded", generation: 1 } });
   assert.equal(signal.aborted, true);
   assert.equal(fence.signal.aborted, false);
+  assert.equal(await fence.generation(), 1, "memory-only peers retain the notified generation");
   await fence.supersede();
-  assert.deepEqual(channels[0].value, { type: "superseded", generation: 1 });
+  assert.deepEqual(channels[0].value, { type: "superseded", generation: 2 });
   fence.close();
   assert.equal(channels[0].closed, true);
   vi.stubGlobal("BroadcastChannel", undefined);
@@ -166,6 +167,107 @@ test("broadcast fences ignore unknown messages and invalidate peer work on super
   assert.equal(await local.generation(), 1);
   local.close();
 });
+
+test("fence signals follow observed generations and ignore delayed, duplicate and older broadcasts", async () => {
+  const channels = [];
+  class Channel {
+    constructor() {
+      channels.push(this);
+    }
+    postMessage(value) {
+      this.value = value;
+    }
+    close() {}
+  }
+  vi.stubGlobal("BroadcastChannel", Channel);
+  const store = createMemoryStore();
+  const fence = new SessionFence("delayed-broadcast", { store });
+  const peer = new SessionFence("delayed-broadcast", { store });
+  const cache = new FencedCache("test", { fence });
+  try {
+    const old = await cache.ticket(new AbortController().signal);
+    await peer.supersede();
+    assert.equal(old.signal.aborted, false, "the peer notification is still queued");
+    const fresh = await cache.ticket(new AbortController().signal);
+    assert.equal(fresh.generation, 1);
+    assert.equal(old.signal.aborted, true, "observing generation 1 cancels generation 0");
+    assert.equal(fresh.signal.aborted, false);
+    channels[0].onmessage({ data: channels[1].value });
+    channels[0].onmessage({ data: { type: "superseded", generation: 0 } });
+    assert.equal(fresh.signal.aborted, false);
+    const key = await cache.key(["fresh"]);
+    await cache.write(key, { token: "fresh" }, fresh);
+    assert.deepEqual(await cache.read(key, fresh), { token: "fresh" });
+
+    await peer.supersede();
+    channels[0].onmessage({ data: channels[1].value });
+    assert.equal(fresh.signal.aborted, true, "a newer logout still cancels old work");
+    const newest = await cache.ticket(new AbortController().signal);
+    assert.equal(newest.generation, 2);
+    channels[0].onmessage({ data: channels[1].value });
+    channels[0].onmessage({ data: { type: "superseded", generation: 1 } });
+    assert.equal(newest.signal.aborted, false);
+    await fence.supersede();
+    assert.equal(newest.signal.aborted, true, "local logout cancels its current generation");
+  } finally {
+    fence.close();
+    peer.close();
+  }
+});
+
+for (const notification of ["broadcast", "durable read"]) {
+  test(`a generation read pending across ${notification} keeps its superseded signal`, async () => {
+    let channel;
+    class Channel {
+      constructor() {
+        channel = this;
+      }
+      close() {}
+    }
+    vi.stubGlobal("BroadcastChannel", Channel);
+    const store = createMemoryStore();
+    const started = Promise.withResolvers();
+    const gate = Promise.withResolvers();
+    let paused = true;
+    const fence = new SessionFence("pending-generation", {
+      store: {
+        ...store,
+        getItem: async (key) => {
+          const value = await store.getItem(key);
+          if (paused) {
+            started.resolve();
+            await gate.promise;
+          }
+          return value;
+        },
+      },
+    });
+    const peer = new SessionFence("pending-generation", { store, broadcast: false });
+    const cache = new FencedCache("test", { fence });
+    try {
+      const pending = cache.ticket(new AbortController().signal);
+      await started.promise;
+      await peer.supersede();
+      paused = false;
+      if (notification === "broadcast") {
+        channel.onmessage({ data: { type: "superseded", generation: 1 } });
+      } else {
+        assert.equal(await fence.generation(), 1);
+      }
+      gate.resolve();
+      const stale = await pending;
+      assert.equal(stale.generation, 0, "the original read never adopts the new generation");
+      assert.equal(stale.signal.aborted, true);
+      await assert.rejects(cache.write(await cache.key(["stale"]), { token: "old" }, stale), {
+        name: "SessionSupersededError",
+      });
+    } finally {
+      gate.resolve();
+      fence.close();
+      peer.close();
+    }
+  });
+}
 
 test("server exceptions reject malformed inputs and client-secret-post stays protocol compliant", async () => {
   assert.equal(isEssMissingIssInteractionNeeded(null, "https://login.inrupt.com"), false);

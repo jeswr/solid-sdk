@@ -85,8 +85,8 @@ export class DPoPTokenProvider implements TokenProvider {
   }
 
   async upgrade(request: Request, challenge?: ChallengeContext): Promise<Request> {
-    const signal = AbortSignal.any([request.signal, this.#fence.signal]);
     const generation = await this.#fence.generation();
+    const signal = AbortSignal.any([request.signal, this.#fence.signalFor(generation)]);
     signal.throwIfAborted();
     request = new Request(request, { signal });
     const as = await this.#asProvider.getAuthorizationServer(request, challenge);
@@ -138,8 +138,8 @@ export class DPoPTokenProvider implements TokenProvider {
    * refresh token), reporting its identity; `undefined` when there is none.
    */
   async restore(request: Request): Promise<Identity | undefined> {
-    const signal = AbortSignal.any([request.signal, this.#fence.signal]);
     const generation = await this.#fence.generation();
+    const signal = AbortSignal.any([request.signal, this.#fence.signalFor(generation)]);
     signal.throwIfAborted();
     request = new Request(request, { signal });
     const as = await this.#asProvider.getAuthorizationServer(request);

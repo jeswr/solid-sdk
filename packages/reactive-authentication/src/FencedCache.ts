@@ -55,8 +55,9 @@ export class FencedCache<T extends {}> {
 
   /** Captures the generation and a signal that aborts on supersession. */
   async ticket(signal: AbortSignal): Promise<FenceTicket> {
-    const combined = AbortSignal.any([signal, this.#fence.signal]);
-    return { generation: await this.#fence.generation(), signal: combined };
+    const generation = await this.#fence.generation();
+    const combined = AbortSignal.any([signal, this.#fence.signalFor(generation)]);
+    return { generation, signal: combined };
   }
 
   async key(parts: readonly (string | undefined)[]): Promise<string> {

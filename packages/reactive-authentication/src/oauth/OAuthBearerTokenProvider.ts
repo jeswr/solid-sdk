@@ -51,9 +51,9 @@ export class OAuthBearerTokenProvider implements TokenProvider {
 
   async upgrade(request: Request): Promise<Request> {
     this.assertAllowed(request);
-    // The fence signal is captured before any await, so a logout from here on aborts this upgrade.
-    const signal = AbortSignal.any([request.signal, this.#fence.signal]);
+    // Observe any completed peer logout before capturing this generation's cancellation signal.
     const generation = await this.#fence.generation();
+    const signal = AbortSignal.any([request.signal, this.#fence.signalFor(generation)]);
 
     const token = await this.#token(signal);
     signal.throwIfAborted();
