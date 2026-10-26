@@ -1263,6 +1263,66 @@ describe("review round 2 regressions", () => {
     ).rejects.toThrow(/cannot be serialised/);
   });
 
+  test("prefixed-name lookalikes and base directions cannot forge triples", async () => {
+    const storage = solid();
+    const lookalike = namedNode("ex:o;ex:forged(ex:evil)");
+    const written = await storage.writeRdf(
+      `${ROOT}f.ttl`,
+      [quad(namedNode("urn:s"), namedNode("urn:p"), lookalike)],
+      { ifMatch: "*", prefixes: { ex: EX } },
+    );
+    const { dataset } = await storage.readRdf(written.url);
+    expect([...dataset].map((q) => q.object.value)).toEqual(["ex:o;ex:forged(ex:evil)"]);
+    await expect(
+      storage.writeRdf(
+        `${ROOT}d.ttl`,
+        [
+          quad(
+            namedNode("urn:s"),
+            namedNode("urn:p"),
+            literal("v", "en--ltr . <urn:e> <urn:e> <urn:e>"),
+          ),
+        ],
+        { ifMatch: "*" },
+      ),
+    ).rejects.toThrow(/base direction/);
+    const rtl = await storage.writeRdf(
+      `${ROOT}r.ttl`,
+      [
+        quad(
+          namedNode("urn:s"),
+          namedNode("urn:p"),
+          literal("v", { language: "ar", direction: "rtl" }),
+        ),
+      ],
+      { ifMatch: "*" },
+    );
+    expect((await storage.readRdf(rtl.url)).dataset.size).toBe(1);
+  });
+
+  test("non-UTF-8 percent-encodings move unchanged; Unicode and dotted prefixes are allowed", async () => {
+    for (const storage of [solid(), lws({ moveResource: true })]) {
+      const dst = await storage.create(ROOT, null, { kind: "container", name: "dst" });
+      const source =
+        storage.protocol === "solid"
+          ? (await storage.write(`${ROOT}a%FF`, "x", { contentType: "text/plain", ifMatch: "*" }))
+              .url
+          : (await storage.create(ROOT, "x", { contentType: "text/plain", name: "a%FF" })).url;
+      const moved = await storage.move(source, dst.url, await current(storage, source));
+      expect(moved.url).toBe(`${dst.url}${source.slice(ROOT.length)}`);
+    }
+    const storage = solid();
+    const written = await storage.writeRdf(
+      `${ROOT}u.ttl`,
+      [quad(namedNode(`${EX}s`), namedNode(`${EX}p`), literal("v"))],
+      { ifMatch: "*", prefixes: { "schema.org": EX, "\u00E9": "urn:x:" } },
+    );
+    expect((await storage.readRdf(written.url)).dataset.size).toBe(1);
+    await expect(
+      storage.writeRdf(`${ROOT}t.ttl`, [], { ifMatch: "*", prefixes: { "ex.": EX } }),
+    ).rejects.toThrow(/prefix name/);
+  });
+
   test("a queued mutation rejects promptly when its signal aborts", async () => {
     for (const storage of [solid(), lws()]) {
       const stuck = storage.create(ROOT, new ReadableStream<Uint8Array>({ pull() {} }), {

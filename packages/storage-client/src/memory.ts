@@ -835,14 +835,13 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
           message: "Cannot move a container into itself",
         });
       }
-      const base = decodeURIComponent(
-        node.url.slice((node.parent as string).length).replace(/\/$/, ""),
-      );
+      // The stored, already-encoded last segment: never decoded (it need not be UTF-8).
+      const base = node.url.slice((node.parent as string).length).replace(/\/$/, "");
       let newUrl: string;
       if (lws) {
-        newUrl = freeUrl(target.url, encodeURIComponent(base), node.kind);
+        newUrl = freeUrl(target.url, base, node.kind);
       } else {
-        const name = nameFor("MOVE", url, opts.name) ?? encodeURIComponent(base);
+        const name = nameFor("MOVE", url, opts.name) ?? base;
         newUrl = `${target.url}${name}${node.kind === "container" ? "/" : ""}`;
         if (nodes.has(newUrl) || nodes.has(newUrl.replace(/\/$/, "")) || nodes.has(`${newUrl}/`)) {
           throw fail("conflict", "MOVE", newUrl, 409, { message: `${newUrl} already exists` });
