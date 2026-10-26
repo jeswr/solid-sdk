@@ -8,6 +8,7 @@ import {
   LongChatMessageDoc,
   longChatToCanonical,
   type MessageTask,
+  sanitizeText,
 } from "@jeswr/solid-chat-interop";
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory, Store } from "n3";
@@ -54,7 +55,12 @@ export function readMessages(dataset: DatasetCore): ChatMessage[] {
       if (author !== undefined) message.author = author;
       if (published !== undefined) message.published = published;
       if (deletedAt !== undefined) message.deletedAt = deletedAt;
-    } else message = as2ToCanonical(graph, id) ?? longChatToCanonical(graph, id);
+    } else {
+      // PM stamps as:Note as well as sioc:Note but stores the body in sioc:content.
+      message = types.includes(`${NS.SIOC}Note`)
+        ? longChatToCanonical(graph, id)
+        : (as2ToCanonical(graph, id) ?? longChatToCanonical(graph, id));
+    }
     if (!message) continue;
     const deletedAt = readDate(graph, id, `${NS.SCHEMA}dateDeleted`);
     if (deletedAt !== undefined) message.deletedAt = deletedAt;
@@ -74,7 +80,7 @@ export function appendMessage(dataset: DatasetCore, room: string, input: SendInp
   if (dataset.match(DataFactory.namedNode(id), null, null).size)
     throw new ChatModelError("duplicate");
   const message = buildAs2Message(id, {
-    content: text(input.content),
+    content: sanitizeText(input.content),
     author: input.author,
     published: isoDate(input.at),
     room: `${roomIndex(room)}#it`,
@@ -100,7 +106,8 @@ export function editMessage(
   content: string,
   at: Date,
 ): Store {
-  const clean = text(content);
+  const clean = sanitizeText(content);
+  text(clean);
   const result = ownMessage(dataset, subject, actor, at);
   // Updating both aliases prevents a LongChat reader showing a stale body.
   new LongChatMessageDoc(subject, result, DataFactory).content = clean;
