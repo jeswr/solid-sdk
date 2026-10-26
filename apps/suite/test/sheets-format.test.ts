@@ -199,6 +199,28 @@ describe("cell input", () => {
     rejects(() => parseCellInput("EUR 12.00", "en-US", "USD"), "invalid-input");
     rejects(() => parseCellInput("$12.00", "en-US", "USD"), "invalid-input");
   });
+  it.each([
+    ["USD\u00a0.50", "en-US", 0.5],
+    ["-USD\u00a0.50", "en-US", -0.5],
+    ["+USD\u00a0.50", "en-US", 0.5],
+    ["USD\u00a0,50", "nl-NL", 0.5],
+    ["USD\u00a0-,50", "nl-NL", -0.5],
+    ["USD\u00a0+,50", "nl-NL", 0.5],
+  ])("parses decimal-leading currency %j in %s", (input, locale, value) => {
+    expect(parseCellInput(input, locale, "USD")).toEqual(number(value));
+  });
+  it.each([
+    ["USD\u00a0.", "en-US"],
+    ["USD\u00a0..50", "en-US"],
+    ["USD\u00a0.50oops", "en-US"],
+    ["USD\u00a0,50", "en-US"],
+    ["USD\u00a0,", "nl-NL"],
+    ["USD\u00a0-,,50", "nl-NL"],
+    ["USD\u00a0-,50oops", "nl-NL"],
+    ["USD\u00a0.50", "nl-NL"],
+  ])("rejects malformed decimal-leading currency %j in %s", (input, locale) => {
+    rejects(() => parseCellInput(input, locale, "USD"), "invalid-input");
+  });
   it.each(["nl-NL", "fy-NL"])("parses signed currency displays in %s", (locale) => {
     for (const value of [-1234.5, -0, 1234.5]) {
       for (const code of ["USD", "EUR"]) {

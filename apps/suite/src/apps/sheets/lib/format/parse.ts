@@ -129,7 +129,7 @@ export function parseCellInput(input: string, locale: string, code = "General"):
   const numericStart = /^[\p{N}+\-−.,\u061c\u200e\u200f]/u;
   const numericCandidate =
     numericStart.test(normalized) ||
-    /^(?:[%٪\p{Sc}]\s*[\p{N}+\-−.,\u061c\u200e\u200f]|[A-Z]{3}\s*[+\-−\u061c\u200e\u200f]*\d)/u.test(
+    /^(?:[%٪\p{Sc}]\s*[\p{N}+\-−.,\u061c\u200e\u200f]|[A-Z]{3}\s*[+\-−\u061c\u200e\u200f]*[\d.,])/u.test(
       normalized,
     ) ||
     /^(?:NaN|[+-]?Infinity|∞)$/.test(text);
