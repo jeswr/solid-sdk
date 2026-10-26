@@ -78,6 +78,7 @@ export default defineConfig({
         "src/apps/music/lib/smart/**/*.ts",
         "src/apps/money/lib/forecast/**/*.ts",
         "src/apps/money/lib/transfers/**/*.ts",
+        "src/apps/money/lib/holdings/**/*.ts",
         "src/apps/drive/lib/list/**/*.ts",
         "src/apps/drive/lib/model/**/*.ts",
         "src/apps/mail/lib/threading/**/*.ts",
