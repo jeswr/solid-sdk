@@ -133,6 +133,7 @@ export function getDemoPod(): Promise<DemoPod> {
     interface PendingRequest {
       request: Request;
       mutation: boolean;
+      durable: boolean;
       body: Uint8Array<ArrayBuffer> | undefined;
       resolve: (response: Response) => void;
       reject: (error: unknown) => void;
@@ -143,12 +144,12 @@ export function getDemoPod(): Promise<DemoPod> {
       pending = [];
       void serial(async () => {
         if (!active) throw new Error("Demo pod session was reset");
-        const mutating = batch.some(({ mutation }) => mutation);
+        const durable = batch.some((request) => request.durable);
         for (;;) {
-          // Read-only batches use the view refreshed by BroadcastChannel. A
-          // mutating batch always starts from the latest durable revision.
-          const latest = mutating ? await readStored(db) : undefined;
-          const trial = !mutating
+          // Plain read batches use the view refreshed by BroadcastChannel. A batch with
+          // a mutation or a conditional read starts from the latest durable revision.
+          const latest = durable ? await readStored(db) : undefined;
+          const trial = !durable
             ? view
             : latest
               ? createDemoPod({ root: DEMO_ROOT, snapshot: latest.snapshot })
@@ -190,6 +191,7 @@ export function getDemoPod(): Promise<DemoPod> {
     const fetch: typeof globalThis.fetch = async (input, init) => {
       // Materialise once so retries also work for Requests and streaming bodies.
       const request = new Request(input, init);
+      const mutation = !["GET", "HEAD", "OPTIONS"].includes(request.method);
       const body = request.body ? new Uint8Array(await request.arrayBuffer()) : undefined;
       // Simulated network latency belongs outside the storage queue. Concurrent
       // requests travel together and share a commit, including conditional edits.
@@ -198,7 +200,11 @@ export function getDemoPod(): Promise<DemoPod> {
         pending.push({
           request,
           body,
-          mutation: !["GET", "HEAD", "OPTIONS"].includes(request.method),
+          mutation,
+          // A conditional read is a precondition check, so it must see the durable pod
+          // rather than this tab's view, which another tab's commit may not have refreshed yet.
+          durable:
+            mutation || request.headers.has("if-match") || request.headers.has("if-none-match"),
           resolve,
           reject,
         });

@@ -37,6 +37,7 @@ vi.mock("../src/apps/drive/state/drive-context", () => ({ useDrive: () => drive 
 
 import { DriveDialogs } from "../src/apps/drive/components/dialogs";
 import { FileBrowser } from "../src/apps/drive/components/file-browser";
+import { isTyping } from "../src/apps/drive/components/shortcut-targets";
 import { TrashView } from "../src/apps/drive/components/views";
 
 vi.mock("../src/apps/drive/state/undo", () => ({ moveWithValidator: mocks.undoMove }));
@@ -748,6 +749,96 @@ it.each([
   expect(trash).toHaveBeenCalled();
   await view.unmount();
   trash.mockRestore();
+});
+
+it("navigates up from an empty listing once its last focused item is gone", async () => {
+  const view = await mount(
+    h(
+      DriveUiProvider,
+      null,
+      h(FileBrowser, {
+        title: "Work",
+        items: [],
+        folder: `${ROOT}Work/`,
+        columns: [],
+        empty: { title: "Empty", icon: null },
+      }),
+    ),
+  );
+  const listing = view.host.querySelector<HTMLElement>("[data-drive-listing]") as HTMLElement;
+  await act(async () => listing.focus());
+  await key(listing, "Backspace");
+  expect(mocks.router.push).toHaveBeenCalledWith("/drive/my");
+  mocks.router.push.mockClear();
+  await act(async () => {
+    listing.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowUp", altKey: true, bubbles: true }),
+    );
+  });
+  expect(mocks.router.push).toHaveBeenCalledWith("/drive/my");
+  await view.unmount();
+});
+
+it("toggles list and grid with v from a focused row but not with a modifier", async () => {
+  const view = await mount(tree(items));
+  const focused = row(view.host);
+  await act(async () => focused.focus());
+  await key(focused, "v");
+  expect(drive.updatePrefs).toHaveBeenCalledTimes(1);
+  const update = drive.updatePrefs.mock.calls[0]?.[0] as (prefs: typeof drive.prefs) => {
+    view: string;
+  };
+  expect(update({ ...drive.prefs, view: "list" }).view).toBe("grid");
+  expect(update({ ...drive.prefs, view: "grid" }).view).toBe("list");
+  await act(async () => {
+    focused.dispatchEvent(new KeyboardEvent("keydown", { key: "v", ctrlKey: true, bubbles: true }));
+  });
+  expect(drive.updatePrefs).toHaveBeenCalledTimes(1);
+  // The new view's element for the same item takes focus, so `v` works again.
+  drive.prefs.view = "grid";
+  await view.render(tree(items));
+  await act(async () => new Promise((resolve) => requestAnimationFrame(resolve)));
+  const card = row(view.host);
+  expect(card).not.toBe(focused);
+  expect(document.activeElement).toBe(card);
+  await key(card, "v");
+  expect(drive.updatePrefs).toHaveBeenCalledTimes(2);
+  await view.unmount();
+});
+
+it("leaves letter keys inside menus and listboxes to the menu's typeahead", () => {
+  const menu = document.createElement("div");
+  menu.setAttribute("role", "menu");
+  const item = document.createElement("div");
+  item.setAttribute("role", "menuitem");
+  menu.append(item);
+  const listbox = document.createElement("div");
+  listbox.setAttribute("role", "listbox");
+  expect(isTyping(item)).toBe(true);
+  expect(isTyping(listbox)).toBe(true);
+  expect(isTyping(document.createElement("button"))).toBe(false);
+  expect(isTyping(null)).toBe(false);
+});
+
+it("Shift+Delete in Trash asks to delete the selected entries for ever", async () => {
+  const entry = {
+    url: `${ROOT}.trash/slot/A.txt`,
+    original: `${ROOT}A.txt`,
+    name: "A.txt",
+    trashedAt: new Date(),
+  };
+  vi.spyOn(operations, "listTrash").mockResolvedValue([entry]);
+  const view = await mount(h(DriveUiProvider, null, h(Probe), h(TrashView)));
+  const checkbox = view.host.querySelector<HTMLInputElement>('[aria-label="Select A.txt"]');
+  if (!checkbox) throw new Error("Missing checkbox");
+  await key(checkbox, "Delete", true);
+  expect(ui.dialog).toBeUndefined();
+  await click(checkbox);
+  await key(checkbox, "Delete");
+  expect(ui.dialog).toBeUndefined();
+  await key(checkbox, "Delete", true);
+  expect(ui.dialog).toMatchObject({ kind: "delete-forever", entries: [entry] });
+  await view.unmount();
 });
 
 it.each([

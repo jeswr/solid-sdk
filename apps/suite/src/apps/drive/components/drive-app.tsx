@@ -18,16 +18,9 @@ import { DriveUiProvider, useDriveUi } from "../state/ui";
 import { DetailsPane } from "./details";
 import { DriveDialogs } from "./dialogs";
 import { PreviewDialog } from "./preview";
+import { isTyping } from "./shortcut-targets";
 import { DriveSidebar, NewMenu } from "./sidebar";
 import { UploadDock } from "./upload-dock";
-
-function isTyping(target: EventTarget | null): boolean {
-  return Boolean(
-    (target as HTMLElement | null)?.closest?.(
-      "input, textarea, select, [contenteditable='true'], [role='dialog']",
-    ),
-  );
-}
 
 function DriveChrome({ children }: { children: ReactNode }) {
   const { client, driveRoot, rootError, changes } = useDrive();

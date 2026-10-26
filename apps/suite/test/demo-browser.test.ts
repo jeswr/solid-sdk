@@ -131,6 +131,19 @@ it("does not resurrect files deleted in another tab", async () => {
   expect((await (await (await tab()).getDemoPod()).fetch(url)).status).toBe(404);
 });
 
+it("answers conditional reads from the durable pod before another tab's change arrives", async () => {
+  // No channel: b's view stays stale, as when a broadcast has not been delivered yet.
+  storage();
+  const a = await (await tab()).getDemoPod();
+  const url = `${DEMO_ROOT}drive/survivor`;
+  await a.fetch(url, { method: "PUT", body: "S" });
+  const b = await (await tab()).getDemoPod();
+  const etag = (await b.fetch(url)).headers.get("etag") as string;
+  expect((await a.fetch(url, { method: "DELETE" })).status).toBe(205);
+  expect((await b.fetch(url, { method: "HEAD", headers: { "if-match": etag } })).status).toBe(404);
+  expect((await b.fetch(url, { headers: { "if-none-match": "*" } })).status).toBe(404);
+});
+
 it("broadcasts durable changes and reloads other tabs before notifying subscribers", async () => {
   storage(true);
   const a = await (await tab()).getDemoPod();

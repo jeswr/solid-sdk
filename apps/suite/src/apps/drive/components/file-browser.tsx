@@ -252,6 +252,24 @@ export function FileBrowser(props: FileBrowserProps) {
     row?.focus();
   }, []);
 
+  // Switching view with `v` replaces every row element, so focus moves to the same item
+  // in the new view (or the listing) instead of falling back to the document body.
+  const refocusAfterView = useRef<string | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs once the new view's rows render
+  useEffect(() => {
+    const url = refocusAfterView.current;
+    if (url === null) return;
+    refocusAfterView.current = null;
+    const find = () =>
+      url
+        ? container.current?.querySelector<HTMLElement>(`[data-url="${CSS.escape(url)}"]`)
+        : undefined;
+    const row = find();
+    // A virtualised grid may only render the item after it has measured itself.
+    if (row) row.focus();
+    else requestAnimationFrame(() => (find() ?? container.current)?.focus());
+  }, [view]);
+
   const targetsFor = useCallback(
     (item: BrowserItem) => (selection.selected.includes(item.url) ? selected : [item]),
     [selection.selected, selected],
@@ -273,8 +291,10 @@ export function FileBrowser(props: FileBrowserProps) {
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
-    // Only the roving item owns listing shortcuts; descendants keep their native keys.
-    if (event.defaultPrevented || !target.matches("[data-url]")) return;
+    // The roving item (or the listing itself, once its last item is gone) owns listing
+    // shortcuts; descendants such as menus and inputs keep their native keys.
+    if (event.defaultPrevented || (target !== event.currentTarget && !target.matches("[data-url]")))
+      return;
     const focusUrl = target.dataset.url;
     const focused = visible.find((item) => item.url === focusUrl);
     const index = focused ? visible.indexOf(focused) : -1;
@@ -303,6 +323,13 @@ export function FileBrowser(props: FileBrowserProps) {
         return step(-visible.length);
       case event.key === "End":
         return step(visible.length);
+      case event.key === "v" && !mod && !event.altKey:
+        event.preventDefault();
+        refocusAfterView.current = focusUrl ?? "";
+        return updatePrefs((current) => ({
+          ...current,
+          view: current.view === "list" ? "grid" : "list",
+        }));
       case mod && event.key.toLowerCase() === "a":
         event.preventDefault();
         return dispatch({ type: "select-all" });

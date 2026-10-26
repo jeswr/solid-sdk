@@ -439,7 +439,17 @@ export function TrashView() {
             <h2>Trash is empty</h2>
           </div>
         ) : entries.length === 0 ? null : (
-          <table className="drv-table" aria-label="Trash">
+          <table
+            className="drv-table"
+            aria-label="Trash"
+            onKeyDown={(event) => {
+              // 04-drive §8: Shift+Delete in Trash deletes the selected entries for ever.
+              if (event.defaultPrevented || event.key !== "Delete" || !event.shiftKey) return;
+              if (chosen.length === 0) return;
+              event.preventDefault();
+              ui.openDialog({ kind: "delete-forever", entries: chosen });
+            }}
+          >
             <thead>
               <tr>
                 <th scope="col">
