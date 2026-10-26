@@ -101,3 +101,33 @@ build infrastructure was edited. Local logs are `/tmp/sst-ne8m-gate.log`,
 - No blocking questions. `QUESTIONS.md` records the unspecified output contract:
   duration in seconds, missing fields as null, track/disc without totals, first
   tagged artist/picture MIME, and upstream partial-result/error semantics.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Fix round 2 — metadata normalization
+
+- `c86a971a` — `fix: normalize metadata year and first artist`: reject non-finite
+  parsed years and fall back to the native ID3v1 year; use the first parsed
+  `common.artists` entry with `common.artist` as fallback. Extend synthetic
+  fixtures and tests for both ID3v2 versions, invalid/missing legacy years, and
+  repeated FLAC `ARTIST`/`ARTISTS` comments.
+- Final documentation commit — `docs: record metadata normalization validation`.
+
+Regression verification: the updated tests failed against the original
+`fb563b151d1a` implementation on invalid years and plural artists, then passed
+with the fixes. The temporary original-source substitution was restored before
+running the gates.
+
+| Command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS; generated the existing workspace dependency output |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; 33 tests, 100% metadata statements/branches/functions/lines |
+| `pnpm run lint:root` | PASS |
+| `TURBO_SCM_BASE=fb563b151d1a4f20412812343b5046fa2827ac3e pnpm run gate` | PASS; 6/6 tasks |
+| `pnpm run gate:full` | FAIL; unrelated `@jeswr/unstorage-solid#build` npm bootstrap hits `EROFS` in `/home/runner/.npm/_cacache/tmp/`; 16 tasks succeeded before cancellation |
+| `roborev status` | Unavailable; command not found (exit 127) |
+
+The first direct app gate attempt failed because `suite-ui` had no generated
+output in this checkout; the dependency build and complete rerun above passed.
+Full gate logs: `/tmp/sst-ne8m-round2-gate.log` and
+`/tmp/sst-ne8m-round2-gate-full.log`. No dependencies or UI changed. Both review
+findings are resolved; no implementation work or open questions remain.
