@@ -1,0 +1,26 @@
+[
+  {
+    "email": "test@example.com",
+    "password": "test-password-123",
+    "pods": [
+      {
+        "name": "test-pod",
+        "settings": {
+          "name": "Alex Wilder"
+        }
+      }
+    ]
+  },
+  {
+    "email": "work@example.com",
+    "password": "test-password-123",
+    "pods": [
+      {
+        "name": "work-pod",
+        "settings": {
+          "name": "Morgan Chen"
+        }
+      }
+    ]
+  }
+]

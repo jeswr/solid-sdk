@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "Solid",
+  "version": "0.2.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAivtuQP2w3AxZ/8dBdOYDSwtknAIMzs1TE2hmiCHXe9Zndt/zrn/MsBybc9E27jwZVn41hNKHI1zsFpIyaKezVBUQrSMzE/i6z3Qto4/oz2TBSWkiaz/f18V6qskPBZASoB3/slTTS+7Yx5JpaUOHbB7pN2lgLlKtyxHJ1H4+4htpPNltseZFPu/ID4yVGuLeGgfNUpM3IxMf6Ttt2syq+s24tCrNZY5YJoYPog2+9wTIOgBPvmar099++gxim84WfTtopyz2252cJRl/nkVk/fygGZFZ1PkbERmUWdgQ8XXl7uprfHAwyObCGdUbLnBEVNVVgburf/CsfI8G/WXK+wIDAQAB",
+  "description": "Sign in to Solid at the browser level — injects window.solid (DPoP-authenticated fetch) and a pinned account menu.",
+  "permissions": ["storage", "identity", "sidePanel", "contextMenus", "scripting", "alarms"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel/sidepanel.html"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Sign in to Solid",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/content-script.js"],
+      "run_at": "document_start",
+      "world": "ISOLATED"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["inject/inject.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    }
+  ]
+}

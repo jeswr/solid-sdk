@@ -1,0 +1,62 @@
+name: Client ID Document Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/pages.yml'
+      - 'package.json'
+      - 'public/clientid.jsonld'
+      - 'scripts/render-client-id.ts'
+      - 'src/background/client-id-template.ts'
+      - 'src/icons/icon128.png'
+      - 'src/manifest.json'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: client-id-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+      # The renderer uses only Node built-ins; no dependency install is needed.
+      - name: Render Client ID Document
+        run: npm run generate:client-id
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          # Enabling Pages is Jesse's repository-settings step (DESIGN §2 D2).
+          enablement: false
+      - name: Stage public document and logo
+        run: |
+          mkdir -p "$RUNNER_TEMP/client-id-site"
+          cp public/clientid.jsonld "$RUNNER_TEMP/client-id-site/clientid.jsonld"
+          cp src/icons/icon128.png "$RUNNER_TEMP/client-id-site/icon128.png"
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ${{ runner.temp }}/client-id-site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy Pages artifact
+        id: deployment
+        uses: actions/deploy-pages@v4
