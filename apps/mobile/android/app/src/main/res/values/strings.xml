@@ -5,4 +5,6 @@
     <string name="package_name">org.jeswr.suite</string>
     <string name="custom_url_scheme">org.jeswr.suite</string>
     <string name="webview_too_old">Solid Suite needs a newer Android System WebView. Update it from Google Play, then open the app again.</string>
+    <string name="share_target_label">Solid Suite</string>
+    <string name="share_rejected">Could not share with Solid Suite: unsupported or too large.</string>
 </resources>
