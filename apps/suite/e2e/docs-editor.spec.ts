@@ -60,8 +60,9 @@ test("creates, saves, reloads and formats a document accessibly", async ({ page 
   await expect(body).toContainText("A clear plan for the launch.");
   await expect(body).toContainText("Keep every word in your own pod.");
   await expect(title).toHaveValue("Launch plan");
-  await body.click();
-  await body.press("Control+Home");
+  // Click the paragraph itself: the editor reads a keyboard-moved caret from the
+  // asynchronous selectionchange event, which can land after the toolbar acts.
+  await body.getByText("A clear plan for the launch.", { exact: true }).click();
   await page.getByRole("combobox", { name: "Block type", exact: true }).selectOption("h1");
   await expect(body.locator("h1")).toHaveText("A clear plan for the launch.");
   // TipTap returns focus on the next animation frame; a key pressed before it lands
@@ -70,6 +71,7 @@ test("creates, saves, reloads and formats a document accessibly", async ({ page 
   await body.press("Control+End");
   await body.press("Enter");
   await format(page, "Checklist");
+  await expect(body).toBeFocused();
   await body.pressSequentially("Prepare the release");
   await expect(
     body.getByRole("checkbox", { name: "Prepare the release", exact: true }),
