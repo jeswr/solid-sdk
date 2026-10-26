@@ -23,6 +23,7 @@ export default defineConfig({
         "src/apps/sheets/lib/univer-spike/**/*.ts",
         "src/apps/contacts/lib/dedupe/**/*.ts",
         "src/apps/money/lib/rules/**/*.ts",
+        "src/apps/mail/lib/rules/**/*.ts",
       ],
       reporter: ["text", "json-summary"],
       thresholds: {
