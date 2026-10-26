@@ -7,7 +7,7 @@ import { deriveProposals } from "../actor/derive.js";
 import { readInboundContext, readInterpretations } from "../actor/interpretations.js";
 import { isSafeContainer, type PodFetch } from "../config.js";
 import { proposalContentDigest } from "../pod/digest.js";
-import { type ActionProposal, parseProposal, serializeProposal } from "../pod/proposals.js";
+import { type ActionProposal, parseProposal, serializeProposal, utcIso } from "../pod/proposals.js";
 import { objectsOf, subjectsOf } from "../pod/rdf-query.js";
 import { listContainer, readGraph } from "../pod/read.js";
 
@@ -108,12 +108,17 @@ export async function provenanceRequiresConfirmation(
       if (!expected || expected.confirmationRequired) continue;
       // A second assessment of the same offered datum may impose a stricter gate.
       // Never let first-record selection or deduplication hide that assessment.
-      const times = new Set(expected.offeredTimes?.map((time) => time.startTime));
+      const times = new Set(
+        expected.offeredTimes?.flatMap((time) => {
+          const start = utcIso(time.startTime);
+          return start ? [start] : [];
+        }),
+      );
       if (
         readInterpretations(store).some(
           (record) =>
             record.assertsPredicate === vocab.SCHEMA_START_TIME &&
-            times.has(record.assertsObjectLiteral ?? "") &&
+            times.has(utcIso(record.assertsObjectLiteral) ?? "") &&
             classifyReliability({
               confidence: record.confidence,
               securityBearing: record.securityBearing,

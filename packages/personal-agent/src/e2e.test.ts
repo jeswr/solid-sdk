@@ -345,6 +345,41 @@ describe("personal-agent end-to-end (Reader → Actor → ODRL-enforced outbox)"
   });
 
   it.each([
+    ["2026-07-07T14:00:00.000Z", true],
+    ["2026-07-07T16:00:00+02:00", true],
+    ["2026-07-07T09:00:00-05:00", true],
+    ["2026-07-07T14:00:00.001Z", false],
+    ["invalid", false],
+  ] as const)("rechecks duplicate assessment time %s using persistence normalization", async (time, requiresConfirmation) => {
+    const { pod } = await seededPod();
+    await rewriteReader(pod, (store) => {
+      const assertion = [
+        ...store.match(
+          null,
+          namedNode(vocab.AGENTIC_ASSERTS_PREDICATE),
+          namedNode(vocab.SCHEMA_START_TIME),
+        ),
+      ][0];
+      if (!assertion) throw new Error("missing start-time assessment");
+      const node = namedNode(assertion.subject.value);
+      const duplicate = namedNode(`${node.value}-second-assessment`);
+      for (const q of store.match(node, null, null)) {
+        const value =
+          q.predicate.value === vocab.AGENTIC_CONFIDENCE
+            ? DataFactory.literal("0.1")
+            : q.predicate.value === vocab.AGENTIC_ASSERTS_OBJECT
+              ? DataFactory.literal(time)
+              : q.object;
+        store.addQuad(duplicate, q.predicate, value);
+      }
+    });
+    const recorder = new RecordingSender(() => FIXED);
+    const result = await runOutboxOnce(outboxConfig(pod, scriptedVerifier(loosePolicy), recorder));
+    expect(result.queuedForConfirmation).toBe(requiresConfirmation ? 1 : 0);
+    expect(recorder.sent).toHaveLength(requiresConfirmation ? 0 : 1);
+  });
+
+  it.each([
     "absent-inbox",
     "overlapping-inbox",
     "missing-graph",

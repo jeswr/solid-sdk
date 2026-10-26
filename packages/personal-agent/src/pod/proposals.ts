@@ -152,7 +152,7 @@ export function proposalUrl(container: string, id: string): string | undefined {
 }
 
 /** Canonicalise an ISO-8601 datetime to a UTC ISO string, or `undefined` if invalid. */
-function utcIso(value: unknown): string | undefined {
+export function utcIso(value: unknown): string | undefined {
   if (typeof value !== "string" || value.length === 0 || value.length > 64) return undefined;
   const ms = Date.parse(value);
   if (!Number.isFinite(ms)) return undefined;
