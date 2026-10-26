@@ -500,3 +500,38 @@ as `media:PodcastEpisode` plus `schema:PodcastEpisode`. Items are requested only
 owned by the current user or marked collaborative. Other playlists retain their metadata
 without items and count once in `skipped`. Inaccessible contents do not prevent the remaining
 resources and recently-played history from importing or the successful cursor from advancing.
+## Tier A sync behavior
+
+GitHub repositories, Discord guilds, Twitch follows and Notion search exhaust their API
+pages within each run, then replace the snapshot. Page cursors are not persisted as change
+checkpoints. Strava traverses activity timestamp windows after its saved timestamp, using
+`before` with a one-second overlap and deduplicating activity IDs; Reddit walks saved
+posts newest-first to the last saved fullname and snapshots subscribed communities.
+Both use framework subject replacement for incremental writes. A cursor-free import
+replaces these collections, including items removed at the source.
+
+GitHub, Strava and Reddit create one shared-core `RunBudget` per import. Hosts can inject
+`{ maxRequests, maxItems, maxBytes? }` through `createGithubAdapter(limits)`,
+`createStravaAdapter(limits)` or `createRedditAdapter(limits)` from their adapter entry points;
+the existing singleton exports use the shared defaults: 20,000 requests, 2,000,000 items and
+512 MiB of cumulative response bytes. Omitting `maxBytes` retains that default byte limit.
+Every JSON response is charged as bytes stream in and also retains the 32 MiB per-response cap.
+GitHub's profile and repository requests share the same budget; Reddit's identity lookup,
+saved posts and subscribed communities likewise share one budget. Identity/profile lookups
+count as one item. Page items are counted before buffering, including overlaps, malformed
+entries and entries beyond Reddit's saved checkpoint. Exceeding a budget fails without
+advancing the checkpoint. GitHub also rejects a page whose valid IDs have
+all been seen. Strava rejects any activity at or after the requested `before` timestamp;
+a window with no new activity IDs ends traversal successfully, including an overlap-only
+terminal window. More than 100 activities sharing a start second can end traversal early.
+
+Dropbox drains `list_folder/continue` before returning its delta cursor. File metadata
+updates replace old descriptions, including removed optional fields; deleted path tombstones
+remove files and folder descendants. Imports continue to copy metadata only.
+
+Each adapter supplies a document-specific source fallback for provenance. Reddit adds the
+federation social Note type. The other Tier A vocab maps explicitly preserve their existing
+types where the current sectors have no equivalent (root `QUESTIONS.md` Q2); follows are
+not playback events, accounts are not people, and workouts are not clinical observations.
+Recorded fixture tests cover sorted Turtle mappings, re-imports, pagination, provenance,
+checkpoint retention on source errors, and Dropbox deletions without production API calls.
