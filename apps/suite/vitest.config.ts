@@ -30,6 +30,7 @@ export default defineConfig({
         "src/apps/docs/lib/outline/**/*.ts",
         "src/apps/drive/lib/files/**/*.ts",
         "src/apps/sheets/lib/refs/**/*.ts",
+        "src/apps/sheets/lib/structure/**/*.ts",
         "src/apps/calendar/lib/layout/**/*.ts",
         "src/apps/calendar/lib/recurrence/**/*.ts",
         "src/apps/calendar/lib/reminders/**/*.ts",
