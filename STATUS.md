@@ -171,3 +171,74 @@ so no additional automated review verdict could be read. Both supplied findings 
 there is no unfinished implementation or open question. The existing conservative rejection
 of unsupported references is retained. No dependencies were added, so `check:packages` was
 not required; no UI or screenshots apply. The final report commit records this validation.
+
+## Fix round 3 — review of e048dcd04dd6
+
+- `f03b9f95` (`fix: reject non-ASCII whitespace outside preview bodies`) replaces the
+  between-tag `.trim()` check with an explicit HTML ASCII whitespace check. Other text
+  outside the body now rejects with `PreviewError("invalid-html")`, preventing Unicode
+  whitespace from causing body metadata to be extracted as head metadata.
+- Added 15 parameterized regression cases: the five HTML ASCII whitespace characters and
+  a mixed sequence remain accepted; nine Unicode whitespace characters reject in head and
+  fragment contexts. Unicode body text remains accepted and body metadata remains ignored.
+  Before the fix, all nine Unicode cases failed; afterward all 169 preview tests pass with
+  100% statements, branches, functions and lines across the preview directory.
+- Scope is the reviewed parser check, its existing test file, and this validation report.
+
+Commands use Node 24 (`PATH=/opt/node24/bin:$PATH`),
+`XDG_DATA_HOME=/tmp/sst-lurx-data` and `XDG_CACHE_HOME=/tmp/sst-lurx-cache`.
+
+```sh
+pnpm --filter @jeswr/app-suite exec vitest run test/chat-preview.test.ts --coverage.enabled=false
+```
+
+Expected initial regression failure: nine new Unicode cases failed, 160 tests passed.
+
+```sh
+pnpm --filter @jeswr/app-suite exec vitest run test/chat-preview.test.ts --coverage.include='src/apps/chat/lib/preview/**/*.ts'
+pnpm exec turbo run build --filter='@jeswr/app-suite^...'
+pnpm run lint:root
+```
+
+PASS: all 169 focused tests with 100% directory coverage, all four dependency builds,
+and root lint/guards.
+
+```sh
+export VITEST_MAX_WORKERS=2
+pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test
+```
+
+PASS: package gate, all 73 test files and 4,568 tests, with 100% statements, branches,
+functions and lines throughout the configured coverage files. App lint reports the same
+40 existing warnings outside preview; the changed files have no diagnostics.
+
+```sh
+VITEST_MAX_WORKERS=2 TURBO_ENV_MODE=loose TURBO_SCM_BASE=e048dcd04dd6f6edbc19d5d06c31dbdfdd8bbf41 pnpm run gate
+VITEST_MAX_WORKERS=1 TURBO_ENV_MODE=loose TURBO_SCM_BASE=e048dcd04dd6f6edbc19d5d06c31dbdfdd8bbf41 pnpm run gate
+```
+
+FAIL outside this fix: both affected gate runs hit the existing vCard performance assertion
+at `apps/suite/test/vcard.test.ts:185`, respectively 4,603 ms and 5,226 ms against its
+4,000 ms limit. Each run has 4,567 passing tests, including all preview tests. Both report
+eight successful Turbo tasks out of nine; the retry reuses seven cached tasks. The vCard
+test has no diff from the supplied starting commit. No thresholds were changed.
+
+```sh
+VITEST_MAX_WORKERS=2 TURBO_ENV_MODE=loose pnpm run gate:full
+```
+
+FAIL outside this fix: the existing SDK-layer performance assertion at
+`test/check-sdk-layers.test.mjs:328` measures 54.7 ms against its 50 ms limit. The other
+744 root tests pass. Turbo reports 53 successful tasks out of 216 scheduled (six cached)
+before stopping. That test has no diff from the supplied starting commit.
+
+```sh
+git diff --check
+roborev status
+```
+
+PASS: diff whitespace check. Roborev remains unavailable (`command not found`, exit 127).
+The supplied finding is fixed; there is no unfinished implementation or open question.
+Remaining validation limitations are the workspace timing failures and unavailable roborev
+CLI. No dependencies were added, so `check:packages` was not required; no UI or screenshots
+apply. Work stayed on `lane/sst-lurx` in this checkout, without remote operations.
