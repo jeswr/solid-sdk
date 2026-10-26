@@ -4,7 +4,8 @@
 Usage: mobile-lock-scope.py <base-lockfile> <head-lockfile>
 Prints "true" when the resolved dependency closure of the mobile importers, or the
 lockfile-wide resolution settings, differ between the two files; otherwise "false".
-A missing or unparsable file counts as a change, so the mobile jobs run.
+A missing or unparsable file, or a reference that does not resolve to a snapshot, counts as a
+change, so the mobile jobs run.
 """
 
 import sys
@@ -14,6 +15,19 @@ import yaml
 ROOTS = ("apps/mobile", "packages/suite-native")
 GLOBAL_KEYS = ("lockfileVersion", "settings", "overrides", "patchedDependencies", "catalogs")
 DEP_FIELDS = ("dependencies", "devDependencies", "optionalDependencies")
+
+
+def ref_to_key(name, reference):
+    """Mirror pnpm's dependency-path refToRelative: aliases ("real@1.0.0") are already keys."""
+    if reference.startswith("@"):
+        return reference
+    at = reference.find("@")
+    if at == -1:
+        return f"{name}@{reference}"
+    colon, bracket = reference.find(":"), reference.find("(")
+    if (colon == -1 or at < colon) and (bracket == -1 or at < bracket):
+        return reference
+    return f"{name}@{reference}"
 
 
 def closure(lock):
@@ -44,19 +58,24 @@ def closure(lock):
                                 resolved.append(part)
                         pending_importers.append("/".join(resolved))
                     else:
-                        pending_packages.append(f"{name}@{version}")
+                        pending_packages.append(ref_to_key(name, version))
             continue
         key = pending_packages.pop()
         if key in seen_packages:
             continue
         seen_packages.add(key)
-        snapshot = snapshots.get(key) or {}
+        if key not in snapshots:
+            raise KeyError(f"unresolved lockfile reference {key}")
+        snapshot = snapshots[key] or {}
         for field in ("dependencies", "optionalDependencies"):
             for name, version in (snapshot.get(field) or {}).items():
-                pending_packages.append(f"{name}@{version}")
+                pending_packages.append(ref_to_key(name, str(version)))
+    packages = lock.get("packages") or {}
     importer_view = {path: importers.get(path) for path in sorted(seen_importers)}
-    package_view = {key: (lock.get("packages") or {}).get(key.split("(", 1)[0]) for key in sorted(seen_packages)}
-    return importer_view, sorted(seen_packages), package_view
+    package_view = {
+        key: (snapshots[key], packages.get(key.split("(", 1)[0])) for key in sorted(seen_packages)
+    }
+    return importer_view, package_view
 
 
 def view(path):
