@@ -37,6 +37,32 @@ describe("document block alignment", () => {
     expect(diffDocuments({ type: "doc" }, doc())).toEqual([]);
     expect(diffDocuments(doc(paragraph("Ada's plan")), doc(paragraph("Ada's plan")))).toEqual([]);
   });
+  it("accepts empty root attributes as equivalent to absent attributes", () => {
+    for (const content of [[], [paragraph("same")]]) {
+      const before = doc(...content);
+      const after = { ...before, attrs: {} };
+      expect(diffDocuments(before, after)).toEqual([]);
+      expect(diffDocuments(after, before)).toEqual([]);
+      expect(diffDocuments(after, after)).toEqual([]);
+    }
+  });
+  it("rejects unsupported root attributes instead of silently omitting their changes", () => {
+    for (const content of [[], [paragraph("same")]]) {
+      const plain = doc(...content);
+      const portrait = { ...plain, attrs: { layout: "portrait" } };
+      const landscape = { ...plain, attrs: { layout: "landscape" } };
+      for (const [before, after] of [
+        [portrait, landscape],
+        [portrait, portrait],
+        [portrait, plain],
+        [plain, portrait],
+      ] as const) {
+        expect(() => diffDocuments(before, after)).toThrow(
+          new TypeError("Document root attributes are unsupported"),
+        );
+      }
+    }
+  });
   it("reports insertions and deletions with side-specific block indexes", () => {
     const old = doc(paragraph("one"), paragraph("two"));
     const next = doc(paragraph("zero"), paragraph("one"), paragraph("two"), paragraph("three"));

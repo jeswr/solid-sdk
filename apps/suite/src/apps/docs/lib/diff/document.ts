@@ -259,13 +259,17 @@ function inlineDiff(
  * belong to their outer block. Snapshots are normalized JSON, including structural/attr edits.
  * Inline ranges use UTF-16 PM positions relative to that block, excluding surrogate splits.
  * Standard image/hardBreak/horizontalRule nodes are atoms; other nodes are containers.
+ * Nonempty document-root attributes are unsupported and throw TypeError.
  * Returns only changes, never mutates inputs. TypeError = invalid JSON/node; RangeError = bound.
  */
 export function diffDocuments(before: DocumentNode, after: DocumentNode): BlockChange[] {
   const documents = [before, after].map((doc) => {
     validateJson(doc, { remaining: DIFF_LIMITS.json });
     if (doc?.type !== "doc") throw new TypeError("Expected doc root");
-    return normalize(doc, { nodes: 0, text: 0 });
+    const normalized = normalize(doc, { nodes: 0, text: 0 });
+    if (Object.keys(normalized.attrs as Record<string, unknown>).length > 0)
+      throw new TypeError("Document root attributes are unsupported");
+    return normalized;
   });
   const left = documents[0]?.content as readonly DocumentNode[],
     right = documents[1]?.content as readonly DocumentNode[];
