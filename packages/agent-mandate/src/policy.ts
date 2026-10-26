@@ -6,6 +6,7 @@ import {
   LEFT_OPERANDS,
   matchingPermissions,
   ODRL_ACTIONS,
+  type OdrlActionName,
   type OdrlDuty,
   type OdrlPolicy,
   type OdrlRule,
@@ -121,14 +122,21 @@ function knownOperand(c: Constraint, value: unknown): boolean {
 }
 
 function candidate(r: Rule, p: Policy, q: Intent): boolean {
+  // Use the shared matcher for standard action implications before validating context.
+  const actionMatches = (ODRL_ACTIONS as readonly string[]).includes(q.action)
+    ? matchingPermissions(
+        { id: p.id, permissions: [{ type: "permission", action: r.action as OdrlActionName }] },
+        { action: q.action as OdrlActionName },
+      ).length > 0
+    : r.action === q.action;
   return (
-    (r.action === q.action || r.action === "use") &&
+    actionMatches &&
     (r.target === undefined || r.target === q.target) &&
     ((r.assignee ?? p.assignee) === undefined || (r.assignee ?? p.assignee) === q.agent)
   );
 }
 
-/** In-process ODRL engine. Profile actions are matched exactly, then lowered to odrl:use. */
+/** Shared standard action implications and exact profile actions, then lowered to odrl:use. */
 export const solidOdrlEngine: PolicyEngine = {
   id: "@jeswr/solid-odrl",
   evaluate(p, q) {

@@ -45,8 +45,10 @@ It never treats a policy denial as permission to transmit.
   unsupported vocabulary, engine failure, or no matching rule.
 - `permit`: autonomous permission after every preceding check passes.
 
-The default `solidOdrlEngine` matches agent actions exactly and lowers them to ODRL `use`
-for the workspace evaluator; `use` is the profile's wildcard. Prohibition always wins,
+The default `solidOdrlEngine` preserves the workspace evaluator's standard action
+implications (including `write` covering `append`) and matches agent actions exactly before
+lowering matching rules to ODRL `use`. The standard `use` umbrella excludes ACL control,
+delegation, ownership transfer and custom agent actions. Prohibition always wins,
 including when an input policy declares `conflict: perm`. Unsupported policies require
 confirmation. `Intent.attributes` is trusted executor context, including duty-discharge
 flags; it must not be copied from model assertions.

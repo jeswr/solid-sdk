@@ -10,6 +10,7 @@ import {
   type Decision,
   type Effect,
   type Intent,
+  type Mandate,
   type Policy,
   type Rule,
 } from "../src/types.js";
@@ -118,6 +119,75 @@ const policy = (extra: Partial<Policy> = {}): Policy => ({
   id: "urn:example:policy",
   permissions: [permit],
   ...extra,
+});
+it.each([
+  ["write", "append", true],
+  ["append", "write", false],
+  ["append", "modify", false],
+  ["use", "read", true],
+  ["use", "control", false],
+  ["use", "grantUse", false],
+  ["use", "nextPolicy", false],
+  ["use", "transfer", false],
+  ["use", `${AGENT}SendMessage`, false],
+  [`${AGENT}SendMessage`, `${AGENT}SendMessage`, true],
+  [`${AGENT}SendMessage`, `${AGENT}Transfer`, false],
+] as const)("matches %s rules against %s requests (applies: %s)", async (action, requested, applies) => {
+  const q = intent({ action: requested });
+  const permission: Rule = { type: "permission", action };
+  const prohibition: Rule = { type: "prohibition", action };
+  expect(await solidOdrlEngine.evaluate(policy({ permissions: [permission] }), q)).toEqual({
+    effect: applies ? "permit" : "not-applicable",
+  });
+  for (const placement of ["autonomous", "withApproval", "root"] as const) {
+    const m: Mandate = {
+      ...mandate(),
+      autonomous: policy({ permissions: [{ type: "permission", action: requested }] }),
+      withApproval: { id: "urn:approval" },
+      prohibitions: [],
+    };
+    const withProhibition: Mandate =
+      placement === "root"
+        ? { ...m, prohibitions: [prohibition] }
+        : { ...m, [placement]: { ...m[placement], prohibitions: [prohibition] } };
+    expect(await evaluateIntent(withProhibition, q)).toEqual(
+      applies
+        ? { decision: "prohibited", reason: "prohibition" }
+        : { decision: "permit", reason: "autonomous" },
+    );
+  }
+});
+it("retains context and duty checks on rules matched through action implications", async () => {
+  const p = policy({
+    permissions: [{ type: "permission", action: "append" }],
+    prohibitions: [
+      {
+        type: "prohibition",
+        action: "write",
+        constraints: [{ leftOperand: "purpose", operator: "eq", rightOperand: "restricted" }],
+      },
+    ],
+  });
+  expect(
+    await evaluateIntent({ ...mandate(), autonomous: p }, intent({ action: "append" })),
+  ).toEqual({
+    decision: "confirm-required",
+    reason: "indeterminate",
+  });
+  expect(
+    await solidOdrlEngine.evaluate(
+      p,
+      intent({ action: "append", attributes: { purpose: "restricted" } }),
+    ),
+  ).toEqual({ effect: "prohibited" });
+  expect(
+    await solidOdrlEngine.evaluate(
+      policy({
+        permissions: [{ type: "permission", action: "write", duties: [{ action: "inform" }] }],
+      }),
+      intent({ action: "append" }),
+    ),
+  ).toEqual({ effect: "indeterminate" });
 });
 it("matches action, target, inherited and rule parties without broadening", async () => {
   const query = intent({ action: "read" });
