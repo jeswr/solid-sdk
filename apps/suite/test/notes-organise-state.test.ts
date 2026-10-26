@@ -204,6 +204,7 @@ describe("labels across notes", () => {
     for (const operation of [renameLabel, mergeLabels]) {
       expect(operation([], "old", "new")).toEqual([]);
       expect(operation(notes, "missing", "new")).toEqual(notes);
+      expect(operation(notes, "missing", "keep")).toEqual(notes);
       const result = operation(notes, "old", "old");
       expect(result).toEqual(notes);
       expect(result).not.toBe(notes);

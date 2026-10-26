@@ -22,7 +22,11 @@ export function renameLabel<T extends LabelledNote>(
 ): T[] {
   assertLabels([from, to]);
   const validated = filterNotesByLabels(notes, [], "union");
-  if (from !== to && validated.some((note) => note.labels.includes(to))) {
+  if (
+    from !== to &&
+    validated.some((note) => note.labels.includes(from)) &&
+    validated.some((note) => note.labels.includes(to))
+  ) {
     throw new NotesError("invalid-transition", "The destination label already exists; use merge");
   }
   return replaceLabel(validated, from, to);
