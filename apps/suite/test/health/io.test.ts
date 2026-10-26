@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { LEGACY_NAMESPACES, NS } from "@jeswr/suite-vocab";
 import { AclResource } from "@solid/object";
@@ -341,6 +342,75 @@ it.each([
   await expect(action()).rejects.toThrow("not owner-private");
   expect(resources.get(url)).toEqual(before);
   expect(calls.some((call) => call.url === url && call.method === "PUT")).toBe(false);
+});
+it.each([
+  "public-acl",
+  "other-agent",
+  "denied-acl",
+  "broken-acl",
+  "empty-acl",
+  "missing-link",
+  "foreign-link",
+])("refuses to create a missing resource with unverifiable target privacy: %s", async (scenario) => {
+  const { store, put, faults, calls, resources } = make();
+  await store.initialize();
+  const path = "new.ttl";
+  const url = `${BASE}${path}`;
+  if (scenario === "public-acl")
+    put(
+      `${path}.acl`,
+      `${ownerAcl(url)}
+      <#public> a <${NS.ACL}Authorization>; <${NS.ACL}accessTo> <${url}>;
+      <${NS.ACL}agentClass> <${NS.FOAF}Agent>; <${NS.ACL}mode> <${NS.ACL}Read>.`,
+    );
+  if (scenario === "other-agent")
+    put(`${path}.acl`, ownerAcl(url).replace(`<${OWNER}>`, `<https://other.example/#me>`));
+  if (scenario === "denied-acl")
+    faults.set(`GET ${url}.acl`, () => new Response(null, { status: 403 }));
+  if (scenario === "broken-acl") put(`${path}.acl`, "not turtle");
+  if (scenario === "empty-acl") put(`${path}.acl`, "");
+  if (scenario === "missing-link")
+    faults.set(`HEAD ${url}`, () => new Response(null, { status: 404 }));
+  if (scenario === "foreign-link")
+    faults.set(
+      `HEAD ${url}`,
+      () =>
+        new Response(null, {
+          status: 404,
+          headers: { link: '<https://foreign.example/acl>; rel="acl"' },
+        }),
+    );
+  calls.length = 0;
+  await expect(store.write(path, emptyHealthDocument(), { create: true })).rejects.toThrow();
+  expect(resources.has(url)).toBe(false);
+  expect(calls.some((call) => call.url === url && call.method === "PUT")).toBe(false);
+  expect(calls.some((call) => call.url === BASE || call.url.includes("foreign"))).toBe(false);
+});
+it.each([
+  true,
+  false,
+])("checks a missing target's advertised ACL before creation (exists: %s)", async (exists) => {
+  const { store, put, faults, calls } = make();
+  await store.initialize();
+  const url = `${BASE}new.ttl`;
+  const aclUrl = `${BASE}permissions.ttl`;
+  if (exists) put("permissions.ttl", ownerAcl(url));
+  faults.set(
+    `HEAD ${url}`,
+    () =>
+      new Response(null, {
+        status: 404,
+        headers: { link: '<permissions.ttl>; rel="acl"' },
+      }),
+  );
+  calls.length = 0;
+  await store.write("new.ttl", emptyHealthDocument(), { create: true });
+  expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual([
+    `HEAD ${url}`,
+    `GET ${aclUrl}`,
+    ...(!exists ? [`HEAD ${BASE}`, `GET ${BASE}.acl`] : []),
+    `PUT ${url}`,
+  ]);
 });
 it("uses the resource ACL link and accepts private overrides without default rules", async () => {
   const { store, put, faults, calls } = make();

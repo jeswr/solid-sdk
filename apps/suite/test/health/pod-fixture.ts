@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { NS } from "@jeswr/suite-vocab";
 export const BASE = "https://pod.example/storage/health/";
@@ -43,7 +44,7 @@ export function podFixture() {
       });
       return new Response(null, { status: 201, headers: { ...responseHeaders, etag } });
     }
-    if (!resource) return new Response(null, { status: 404 });
+    if (!resource) return new Response(null, { status: 404, headers: responseHeaders });
     if (method === "HEAD") return new Response(null, { status: 200, headers: responseHeaders });
     if (resource.container) {
       const children = [...resources.keys()].filter((entry) => {

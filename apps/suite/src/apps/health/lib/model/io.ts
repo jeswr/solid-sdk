@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 
 import { fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
@@ -173,11 +174,9 @@ export function createHealthStore(fetch: typeof globalThis.fetch, storage: strin
   }
   async function verifyPrivacy(url: string, inherited = false): Promise<void> {
     const metadata = await transport(url, { method: "HEAD" });
-    if (metadata.status === 404 && !inherited) {
-      await verifyParentPrivacy(url);
-      return;
-    }
-    checked(metadata, "inspect privacy");
+    // A missing resource may still have an ACL. Only inherit after that ACL
+    // itself returns 404; the advertised link remains authoritative.
+    if (metadata.status !== 404 || inherited) checked(metadata, "inspect privacy");
     const aclUrl = aclLink(metadata, url);
     try {
       const acl = await fetchRdf(aclUrl, { fetch: transport });
