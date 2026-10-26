@@ -302,6 +302,7 @@ describe("bounded input and table validation", () => {
     }
   });
 
+  // Exercise the real 10M-code-unit boundary under coverage and concurrent workspace gates.
   it("bounds raw input and sniffing, including the BOM", () => {
     const atLimit = "x".repeat(CSV_LIMITS.maxCodeUnits);
     expect(parseCsv(atLimit, { delimiter: "," })).toEqual([[atLimit]]);
@@ -311,7 +312,7 @@ describe("bounded input and table validation", () => {
     fails("limit", () => serializeCsv([[atLimit]])); // CRLF counts too
     fails("limit", () => serializeCsv([[`${atLimit}x`]]));
     expect(inferColumnTypes([[atLimit]])).toEqual(["text"]);
-  });
+  }, 30_000);
 
   it("bounds aggregate text and encoded output, including doubled quotes and BOM", () => {
     const half = "x".repeat(CSV_LIMITS.maxCodeUnits / 2);
