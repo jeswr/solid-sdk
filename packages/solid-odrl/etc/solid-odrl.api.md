@@ -76,7 +76,7 @@ export const CONFLICT_STRATEGIES: readonly ["perm", "prohibit", "invalid"];
 export type ConflictStrategy = (typeof CONFLICT_STRATEGIES)[number];
 
 // @public
-export function constraintSatisfied(c: OdrlConstraint, request: RequestContext, now: Date): boolean;
+export function constraintSatisfied(c: OdrlConstraint, request: RequestContext, now: Date, options?: EvaluateOptions): boolean;
 
 // @public
 export type Decision = "permit" | "deny" | "notApplicable";
@@ -93,6 +93,7 @@ export interface DecisionRecordInput {
     readonly id: string;
     readonly policy: OdrlPolicy;
     readonly request: RequestContext;
+    readonly resolvePartyCollection?: EvaluateOptions["resolvePartyCollection"];
     readonly result: EvaluationResult;
 }
 
@@ -163,6 +164,7 @@ export function evaluateDelegated(chain: readonly OdrlPolicy[], request: Request
 export interface EvaluateOptions {
     readonly now?: Date;
     readonly requireDuties?: boolean;
+    readonly resolvePartyCollection?: (collectionIri: string) => ReadonlySet<string> | undefined;
 }
 
 // @public
@@ -207,6 +209,9 @@ export const ODRL_GRANT_USE: "http://www.w3.org/ns/odrl/2/grantUse";
 
 // @public
 export const ODRL_INLINE_CONTEXT: Readonly<Record<string, unknown>>;
+
+// @public
+export const ODRL_IS_PART_OF: "http://www.w3.org/ns/odrl/2/isPartOf";
 
 // @public
 export const ODRL_NEXT_POLICY: "http://www.w3.org/ns/odrl/2/nextPolicy";
@@ -335,7 +340,7 @@ export const OPERATOR_IRI: Readonly<Record<OperatorName, string>>;
 export type OperatorName = (typeof OPERATORS)[number];
 
 // @public
-export const OPERATORS: readonly ["eq", "neq", "gt", "gteq", "lt", "lteq", "isAnyOf", "isAllOf", "isNoneOf"];
+export const OPERATORS: readonly ["eq", "neq", "gt", "gteq", "lt", "lteq", "isAnyOf", "isAllOf", "isNoneOf", "isPartOf"];
 
 // @public
 export function parsePolicy(input: string | DatasetCore, contentType?: string, baseIRI?: string): Promise<OdrlPolicy | undefined>;

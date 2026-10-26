@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // The ODRL policy ↔ RDF lowering + round-trip. `policyToRdf` lowers a structured
 // OdrlPolicy to quads (via the typed wrapper write path — never hand-built
@@ -35,6 +36,7 @@ import {
   ODRL_CONSTRAINT,
   ODRL_DUTY,
   ODRL_INLINE_CONTEXT,
+  ODRL_IS_PART_OF,
   ODRL_LEFT_OPERAND,
   ODRL_OBLIGATION,
   ODRL_OFFER,
@@ -109,6 +111,7 @@ export function inferDatatype(c: OdrlConstraint, value: string | number): string
 
 /** Write a constraint node under `parent` via `odrl:constraint` (odrl:constraint). */
 function writeConstraint(b: GraphBuilder, parent: NodeRef, c: OdrlConstraint): void {
+  requirePartyCollectionConstraint(c);
   const node = b.linkBlankNode(parent, ODRL_CONSTRAINT);
   b.addIri(node, ODRL_LEFT_OPERAND, LEFT_OPERAND_IRI[c.leftOperand]);
   b.addIri(node, ODRL_OPERATOR, OPERATOR_IRI[c.operator]);
@@ -121,6 +124,22 @@ function writeConstraint(b: GraphBuilder, parent: NodeRef, c: OdrlConstraint): v
       const dt = inferDatatype(c, r);
       b.addLiteral(node, ODRL_RIGHT_OPERAND, String(r), dt);
     }
+  }
+}
+
+/** Reject malformed membership constraints before serialization can change their meaning. */
+function requirePartyCollectionConstraint(c: OdrlConstraint): void {
+  if (
+    c.operator === "isPartOf" &&
+    (c.leftOperand !== "recipient" ||
+      c.datatype !== undefined ||
+      typeof c.rightOperand !== "string" ||
+      safeIri(c.rightOperand) !== c.rightOperand)
+  ) {
+    throw new OdrlSerializationError(
+      "Refusing to serialise policy: recipient isPartOf requires a single absolute " +
+        "PartyCollection IRI without a literal datatype (fail-closed).",
+    );
   }
 }
 
@@ -440,6 +459,7 @@ function dutyJsonLd(duty: OdrlDuty): Record<string, unknown> {
 }
 
 function constraintJsonLd(c: OdrlConstraint): Record<string, unknown> {
+  requirePartyCollectionConstraint(c);
   const node: Record<string, unknown> = {
     leftOperand: { "@id": LEFT_OPERAND_IRI[c.leftOperand] },
     operator: { "@id": OPERATOR_IRI[c.operator] },
@@ -604,11 +624,29 @@ function projectDuty(node: DutyNode): OdrlDuty | undefined {
 function projectConstraint(node: ConstraintNode): OdrlConstraint | undefined {
   const leftIri = firstIri(node.leftOperands);
   const opIri = firstIri(node.operators);
-  if (leftIri === undefined || opIri === undefined) {
-    return undefined;
+  const left = leftIri === undefined ? undefined : IRI_TO_LEFT_OPERAND[leftIri];
+  const op = opIri === undefined ? undefined : (IRI_TO_OPERATOR[opIri] as OperatorName | undefined);
+  if ([...node.operators].some((term) => term.value === ODRL_IS_PART_OF)) {
+    // Inspect the actual RDF terms through the typed wrapper. A literal with an
+    // IRI-looking lexical value is not a PartyCollection reference. Retain an
+    // unsatisfied constraint for malformed operands; dropping it would turn a
+    // constrained permission into an unrestricted permission.
+    const rights = [...node.rightOperands];
+    const right = rights[0];
+    const valid =
+      left === "recipient" &&
+      node.leftOperands.size === 1 &&
+      op === "isPartOf" &&
+      node.operators.size === 1 &&
+      rights.length === 1 &&
+      right?.termType === "NamedNode" &&
+      safeIri(right.value) === right.value;
+    return {
+      leftOperand: left ?? "recipient",
+      operator: "isPartOf",
+      rightOperand: valid ? right.value : [],
+    };
   }
-  const left = IRI_TO_LEFT_OPERAND[leftIri];
-  const op = IRI_TO_OPERATOR[opIri] as OperatorName | undefined;
   if (left === undefined || op === undefined) {
     return undefined;
   }

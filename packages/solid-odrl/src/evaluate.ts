@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // The CLIENT-SIDE ODRL policy evaluator. PURE + DETERMINISTIC: given an OdrlPolicy
 // and a RequestContext it decides permit / deny / notApplicable, reporting the
@@ -28,6 +29,7 @@
 //   - If NEITHER matches → notApplicable (the policy says nothing about this
 //     request; the caller decides the default — typically deny for usage control).
 
+import { safeIri } from "@jeswr/rdf-serialize";
 import type {
   ActiveDuty,
   Decision,
@@ -61,8 +63,10 @@ export function evaluate(
 
   // Keep the matched effective RULE OBJECTS (not just their trace) so duty
   // collection can match by object identity, never by action-only fallback.
-  const matchedPermissionRules = matchingPermissions(policy, request, { now });
-  const matchedProhibitionRules = effectiveProhibitions.filter((r) => ruleMatches(r, request, now));
+  const matchedPermissionRules = matchingPermissions(policy, request, { ...options, now });
+  const matchedProhibitionRules = effectiveProhibitions.filter((r) =>
+    ruleMatches(r, request, now, options),
+  );
 
   const matchedPermissions = matchedPermissionRules.map((r) => toDecisionRule(r, "permission"));
   const matchedProhibitions = matchedProhibitionRules.map((r) => toDecisionRule(r, "prohibition"));
@@ -73,7 +77,7 @@ export function evaluate(
 
   // Collect the duties the matched permission(s) + policy obligations impose,
   // keyed on the matched effective rule objects (identity, not action).
-  const duties = collectDuties(policy, matchedPermissionRules, request, now);
+  const duties = collectDuties(policy, matchedPermissionRules, request, now, options);
 
   // --- resolve the decision -------------------------------------------------
   if (!hasPermit && !hasProhibit) {
@@ -160,7 +164,7 @@ export function matchingPermissions(
   const now = options.now ?? new Date();
   return (policy.permissions ?? [])
     .map((r) => effectiveRule(r, policy))
-    .filter((r) => ruleMatches(r, request, now));
+    .filter((r) => ruleMatches(r, request, now, options));
 }
 
 /** Decide a permit (honour `requireDuties`: an unfulfilled required duty → deny). */
@@ -239,7 +243,12 @@ function toDecisionRule(rule: OdrlRule, type: "permission" | "prohibition"): Dec
  * Does `rule` apply to `request`? Action-implication + target + assignee + every
  * constraint must hold.
  */
-function ruleMatches(rule: OdrlRule, request: RequestContext, now: Date): boolean {
+function ruleMatches(
+  rule: OdrlRule,
+  request: RequestContext,
+  now: Date,
+  options: EvaluateOptions,
+): boolean {
   if (!actionApplies(rule.action, request.action)) {
     return false;
   }
@@ -254,7 +263,7 @@ function ruleMatches(rule: OdrlRule, request: RequestContext, now: Date): boolea
   }
   // ALL constraints must be satisfied (fail-closed on a missing context value).
   for (const c of rule.constraints ?? []) {
-    if (!constraintSatisfied(c, request, now)) {
+    if (!constraintSatisfied(c, request, now, options)) {
       return false;
     }
   }
@@ -280,16 +289,17 @@ function collectDuties(
   matchedPermissionRules: readonly OdrlRule[],
   request: RequestContext,
   now: Date,
+  options: EvaluateOptions,
 ): ActiveDuty[] {
   const out: ActiveDuty[] = [];
   for (const rule of matchedPermissionRules) {
     for (const duty of rule.duties ?? []) {
-      out.push(toActiveDuty(duty, request, now));
+      out.push(toActiveDuty(duty, request, now, options));
     }
   }
   // Policy-level obligations are always active (they are not tied to a permission).
   for (const duty of policy.obligations ?? []) {
-    out.push(toActiveDuty(duty, request, now));
+    out.push(toActiveDuty(duty, request, now, options));
   }
   return out;
 }
@@ -301,8 +311,15 @@ function collectDuties(
  * is satisfied. Absent positive evidence, a duty is reported UNFULFILLED (so a
  * `requireDuties` caller fails closed; an advisory caller still sees it).
  */
-function toActiveDuty(duty: OdrlDuty, request: RequestContext, now: Date): ActiveDuty {
-  const constraintsOk = (duty.constraints ?? []).every((c) => constraintSatisfied(c, request, now));
+function toActiveDuty(
+  duty: OdrlDuty,
+  request: RequestContext,
+  now: Date,
+  options: EvaluateOptions,
+): ActiveDuty {
+  const constraintsOk = (duty.constraints ?? []).every((c) =>
+    constraintSatisfied(c, request, now, options),
+  );
   const key = `fulfilled:${duty.action}`;
   const asserted = request.attributes?.[key];
   const dischargedAsserted = asserted === true || asserted === "true" || asserted === 1;
@@ -322,10 +339,31 @@ export function constraintSatisfied(
   c: OdrlConstraint,
   request: RequestContext,
   now: Date,
+  options: EvaluateOptions = {},
 ): boolean {
   const supplied = requestValueFor(c, request, now);
   if (supplied === undefined) {
     return false; // fail-closed: no context value → not satisfied.
+  }
+  if (c.operator === "isPartOf") {
+    // ODRL 2.2 IM §2.5 / Vocabulary PartyCollection: this surface supports
+    // membership only for a single recipient IRI and a single collection IRI.
+    // Never coerce literals/arrays or normalise lexical RDF identity.
+    if (
+      c.leftOperand !== "recipient" ||
+      c.datatype !== undefined ||
+      typeof supplied !== "string" ||
+      safeIri(supplied) !== supplied ||
+      typeof c.rightOperand !== "string" ||
+      safeIri(c.rightOperand) !== c.rightOperand
+    ) {
+      return false;
+    }
+    try {
+      return options.resolvePartyCollection?.(c.rightOperand)?.has(supplied) === true;
+    } catch {
+      return false; // unavailable membership evidence cannot satisfy a constraint.
+    }
   }
   return compare(supplied, c, c.operator);
 }

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // G9 — the ODRL DECISION-RECORD emitter (agent-delegation profile, the sibling of
 // G8's `actionProvenance`). Where `actionProvenance` records that an action was
@@ -108,6 +109,12 @@ export interface DecisionRecordInput {
    * and never affects the recorded DECISION (which comes verbatim from `result`).
    */
   readonly evaluatedAt: Date;
+  /**
+   * The same stable membership resolver used by the evaluation, so anonymous
+   * rules with `recipient isPartOf` constraints are attributed correctly.
+   * Prefer {@link recordEvaluation} to thread this option automatically.
+   */
+  readonly resolvePartyCollection?: EvaluateOptions["resolvePartyCollection"];
 }
 
 /** The effective assignee of a rule = its own, else the policy-level one (as `evaluate`). */
@@ -170,12 +177,13 @@ function assignDecidingRules(
   policy: OdrlPolicy,
   request: RequestContext,
   now: Date,
+  options: EvaluateOptions,
 ): DecidingAssignment[] {
   const consumed = new Set<OdrlRule>();
   return decidingRules.map((descriptor) => {
     const pool =
       descriptor.type === "prohibition" ? (policy.prohibitions ?? []) : (policy.permissions ?? []);
-    const rule = pickSourceRule(descriptor, pool, consumed, policy, request, now);
+    const rule = pickSourceRule(descriptor, pool, consumed, policy, request, now, options);
     if (rule !== undefined) {
       consumed.add(rule);
     }
@@ -191,6 +199,7 @@ function pickSourceRule(
   policy: OdrlPolicy,
   request: RequestContext,
   now: Date,
+  options: EvaluateOptions,
 ): OdrlRule | undefined {
   const available = pool.filter((rule) => !consumed.has(rule));
   if (descriptor.id !== undefined) {
@@ -204,7 +213,7 @@ function pickSourceRule(
       effectiveAssignee(rule, policy) === descriptor.assignee,
   );
   const satisfied = shapeMatches.find((rule) =>
-    (rule.constraints ?? []).every((c) => constraintSatisfied(c, request, now)),
+    (rule.constraints ?? []).every((c) => constraintSatisfied(c, request, now, options)),
   );
   return satisfied ?? shapeMatches[0];
 }
@@ -314,6 +323,7 @@ export function decisionRecord(input: DecisionRecordInput): Quad[] {
     policy,
     request,
     evaluatedAt,
+    input,
   )) {
     writeDecidingRule(b, rec, descriptor, rule);
   }
@@ -410,7 +420,7 @@ export function decisionRecordJsonLd(input: DecisionRecordInput): Record<string,
     ...result.matchedPermissions,
     ...result.matchedProhibitions,
   ];
-  const assignments = assignDecidingRules(decidingRules, policy, request, evaluatedAt);
+  const assignments = assignDecidingRules(decidingRules, policy, request, evaluatedAt, input);
   if (assignments.length > 0) {
     doc.decidingRule = assignments.map(({ descriptor, rule }) =>
       decidingRuleJsonLd(descriptor, rule),
@@ -492,6 +502,8 @@ export interface EvaluatedDecisionRecord {
  * so the deciding-constraint re-resolution reproduces `evaluate`'s own match decisions
  * EXACTLY. Prefer this over calling `evaluate` + `decisionRecord` separately whenever a
  * record is wanted for a fresh evaluation.
+ * Membership-dependent constraints also use the same resolver for evaluation
+ * and recording; callers must keep its membership snapshot stable across calls.
  */
 export function recordEvaluation(
   id: string,
@@ -501,6 +513,13 @@ export function recordEvaluation(
 ): EvaluatedDecisionRecord {
   const now = options.now ?? new Date();
   const result = evaluate(policy, request, { ...options, now });
-  const input: DecisionRecordInput = { id, policy, request, result, evaluatedAt: now };
+  const input: DecisionRecordInput = {
+    id,
+    policy,
+    request,
+    result,
+    evaluatedAt: now,
+    resolvePartyCollection: options.resolvePartyCollection,
+  };
   return { result, quads: decisionRecord(input), jsonld: decisionRecordJsonLd(input) };
 }

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // The plain-object ODRL policy model + the evaluation request-context/result
 // types. These are the lossless, machine-readable shapes the builder lowers to RDF
@@ -19,6 +20,7 @@ export type RuleType = "permission" | "prohibition" | "obligation";
  * `rightOperand` may be a scalar (string/number) or a list (for set operators like
  * `isAnyOf`); `datatype` is the XSD datatype IRI for typed comparison
  * (e.g. `xsd:dateTime`, `xsd:integer`) — defaulted by left-operand where omitted.
+ * `recipient isPartOf` requires one PartyCollection IRI string and no datatype.
  */
 export interface OdrlConstraint {
   /** The constraint subject — what about the request is being constrained. */
@@ -192,4 +194,12 @@ export interface EvaluateOptions {
    * time. Injectable so evaluation is deterministic + testable.
    */
   readonly now?: Date;
+  /**
+   * Resolve an `odrl:PartyCollection` IRI to its member party IRIs for
+   * `recipient isPartOf <collection>`. Supply a stable, trusted membership
+   * snapshot; the evaluator never fetches. Missing/unknown collections or a
+   * resolver error leave the constraint unsatisfied, as do non-IRI or array
+   * recipients/collections. Membership uses exact IRI strings.
+   */
+  readonly resolvePartyCollection?: (collectionIri: string) => ReadonlySet<string> | undefined;
 }
