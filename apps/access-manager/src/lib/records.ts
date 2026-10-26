@@ -6,18 +6,13 @@
 // ONLY write paths — every mutation goes through these wrapper setters (the
 // house RDF discipline: typed accessors + n3.Writer, never hand-built triples).
 
-import type { DataFactory, DatasetCore, Term } from "@rdfjs/types";
+import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, TermWrapper } from "@rdfjs/wrapper";
+import { accmTerm } from "./canonical-vocab.js";
 import {
-  LiteralAs,
-  LiteralFrom,
-  NamedNodeAs,
-  NamedNodeFrom,
-  OptionalAs,
-  OptionalFrom,
-  SetFrom,
-  TermWrapper,
-} from "@rdfjs/wrapper";
-import { accmTerm, canonicalizeAccmDataset } from "./canonical-vocab.js";
+  AliasOptionalAs as OptionalAs,
+  AliasOptionalFrom as OptionalFrom,
+  AliasSetFrom as SetFrom,
+} from "./legacy.js";
 import { ACCM, DCT, DPV } from "./vocab.js";
 
 /** The request lifecycle status values (proposal §3.5 state machine). */
@@ -46,13 +41,9 @@ export function statusToIri(status: RequestStatus): string {
  * documents — they share the vocabulary.
  */
 export class AccmRecord extends TermWrapper {
-  constructor(term: string | Term, dataset: DatasetCore, factory: DataFactory) {
-    const subject = typeof term === "string" ? factory.namedNode(term) : term;
-    super(subject, canonicalizeAccmDataset(dataset, factory), factory);
-  }
-
   get statusIri(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, ACCM.status, NamedNodeAs.string);
+    const iri = OptionalFrom.subjectPredicate(this, ACCM.status, NamedNodeAs.string);
+    return iri === undefined ? undefined : accmTerm(iri);
   }
   set statusIri(value: string | undefined) {
     OptionalAs.object(
@@ -123,7 +114,8 @@ export class AccmRecord extends TermWrapper {
   }
 
   get dataClass(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, ACCM.dataClass, NamedNodeAs.string);
+    const iri = OptionalFrom.subjectPredicate(this, ACCM.dataClass, NamedNodeAs.string);
+    return iri === undefined ? undefined : accmTerm(iri);
   }
   set dataClass(value: string | undefined) {
     OptionalAs.object(

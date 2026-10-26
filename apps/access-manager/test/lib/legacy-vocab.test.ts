@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { NS } from "@jeswr/suite-vocab";
+import type { DatasetCore } from "@rdfjs/types";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
@@ -39,6 +40,52 @@ async function legacyRecord(status: "Pending" | "Approving" | "Approved" | "Deni
 }
 
 describe("legacy accm reads and canonical writes", () => {
+  it.each([
+    false,
+    true,
+  ])("reads without changing the caller's dataset (read-only: %s)", async (readOnly) => {
+    const dataset = await parseRdf(await legacyRecord("Approved"), "text/turtle", { baseIRI: URL });
+    const foreign = await parseRdf(
+      `<urn:other> <${LEGACY}status> <${LEGACY}Pending> . <urn:g> { <urn:named> <${LEGACY}status> <${LEGACY}Denied> . }`,
+      "application/trig",
+    );
+    for (const q of foreign) dataset.add(q);
+    const before = [...dataset];
+    const source: DatasetCore = dataset;
+    const input: DatasetCore = readOnly
+      ? {
+          size: dataset.size,
+          has: (q) => dataset.has(q),
+          match: (...args) => source.match(...args),
+          [Symbol.iterator]: () => dataset[Symbol.iterator](),
+          add() {
+            throw new Error("read-only dataset");
+          },
+          delete() {
+            throw new Error("read-only dataset");
+          },
+        }
+      : dataset;
+    const record = new AccmRecord(URL, input, DataFactory);
+    expect(record.status).toBe("Approved");
+    expect(record.dataClass).toBe(ACCM.DataClass);
+    expect([...record.snapshotModes]).toEqual([`${NS.ACL}Read`, `${NS.ACL}Append`]);
+    expect(dataset.size).toBe(before.length);
+    expect(before.every((q) => dataset.has(q))).toBe(true);
+    const output = await toTurtle(input);
+    expect(output).not.toContain("w3id.org/jeswr");
+    expect(dataset.size).toBe(before.length);
+    expect(before.every((q) => dataset.has(q))).toBe(true);
+    // Scalar replacement must remove its legacy spelling, without touching siblings.
+    if (!readOnly) {
+      record.status = "Denied";
+      expect(
+        dataset.match(DataFactory.namedNode(URL), DataFactory.namedNode(`${LEGACY}status`)).size,
+      ).toBe(0);
+      expect(before.filter((q) => q.subject.value !== URL).every((q) => dataset.has(q))).toBe(true);
+    }
+  });
+
   it.each([
     "Pending",
     "Approving",
@@ -82,7 +129,7 @@ describe("legacy accm reads and canonical writes", () => {
     expect(record.grantRef).toBe("https://pod.example/grant.ttl");
     expect(statusFromIri(`${LEGACY}${status}`)).toBe(status);
     expect([...dataset.match(null, DataFactory.namedNode(`${NS.RDF}type`))][0]?.object.value).toBe(
-      ACCM.DataClass,
+      `${LEGACY}DataClass`,
     );
     record.status = "Denied";
     record.snapshotModes.clear();

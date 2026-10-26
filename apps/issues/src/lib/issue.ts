@@ -1,9 +1,6 @@
 import {
   TermWrapper,
   DatasetWrapper,
-  OptionalFrom,
-  OptionalAs,
-  SetFrom,
   LiteralAs,
   LiteralFrom,
   NamedNodeAs,
@@ -17,7 +14,8 @@ import {
 // `Issue` model is used in client components (e.g. session-context), so it must
 // stay `node:fs`-free; `./task` carries only the runtime accessors.
 import { Task, type TaskPriority } from "@jeswr/solid-task-model/task";
-import { TaskTerm } from "./canonical-vocab";
+import { AliasOptionalAs as OptionalAs, AliasOptionalFrom as OptionalFrom, AliasSetFrom as SetFrom } from "./legacy";
+import { TaskTerm, taskTerm } from "./canonical-vocab";
 import { WF, DCT, RDF, STATE, TM, wf, dct, rdf, rdfs, sioc, foaf, vcard, schema, xsd, skos, prov, time, tm, odrl, TIME_UNIT_SECOND, SAVED_VIEW, VIEW_QUERY, RELEASED } from "./vocab";
 
 export type IssueState = "open" | "closed";
@@ -1066,7 +1064,8 @@ export class Rule extends TaskTerm {
 
   /** The trigger coded value (short name), or undefined if unset/unknown. */
   get trigger(): TriggerKind | undefined {
-    const iri = OptionalFrom.subjectPredicate(this, tm("trigger"), NamedNodeAs.string);
+    const value = OptionalFrom.subjectPredicate(this, tm("trigger"), NamedNodeAs.string);
+    const iri = value === undefined ? undefined : taskTerm(value);
     if (!iri || !iri.startsWith(TM)) return undefined;
     const local = iri.slice(TM.length);
     return isTrigger(local) ? local : undefined;
@@ -1077,7 +1076,8 @@ export class Rule extends TaskTerm {
 
   /** The action coded value (short name), or undefined if unset/unknown. */
   get action(): ActionKind | undefined {
-    const iri = OptionalFrom.subjectPredicate(this, tm("action"), NamedNodeAs.string);
+    const value = OptionalFrom.subjectPredicate(this, tm("action"), NamedNodeAs.string);
+    const iri = value === undefined ? undefined : taskTerm(value);
     if (!iri || !iri.startsWith(TM)) return undefined;
     const local = iri.slice(TM.length);
     return isAction(local) ? local : undefined;

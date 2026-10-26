@@ -2,6 +2,7 @@
 import { canonicalize, NS } from "@jeswr/suite-vocab";
 import type { DataFactory, DatasetCore } from "@rdfjs/types";
 import { NamedGraphDataset, SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
+import { Store } from "n3";
 
 /** Resolve accm vocabulary only; resource identifiers and literals stay intact. */
 export function accmTerm(iri: string): string {
@@ -9,9 +10,18 @@ export function accmTerm(iri: string): string {
   return resolved.startsWith(NS.ACCESS_MANAGER) ? resolved : iri;
 }
 
-/** Accept legacy pod records in memory, including snapshots later saved by CAS. */
+/** Predicate aliases, canonical first. Resource identifiers are never resolved here. */
+export function accmAliases(iri: string): string[] {
+  const canonical = accmTerm(iri);
+  return canonical.startsWith(NS.ACCESS_MANAGER)
+    ? [canonical, `https://w3id.org/jeswr/accm#${canonical.slice(NS.ACCESS_MANAGER.length)}`]
+    : [iri];
+}
+
+/** Canonicalize a serialization copy, preserving the caller's quads and graph names. */
 export function canonicalizeAccmDataset(dataset: DatasetCore, factory: DataFactory): DatasetCore {
-  for (const quad of [...dataset]) {
+  const copy = new Store([...dataset]);
+  for (const quad of dataset) {
     const predicate = accmTerm(quad.predicate.value);
     const vocabularyObject =
       predicate === `${NS.RDF}type` ||
@@ -25,11 +35,11 @@ export function canonicalizeAccmDataset(dataset: DatasetCore, factory: DataFacto
     if (predicate === quad.predicate.value && object.equals(quad.object)) continue;
     const graph =
       quad.graph.termType === "DefaultGraph"
-        ? dataset
-        : new NamedGraphDataset(quad.graph, dataset, factory);
+        ? copy
+        : new NamedGraphDataset(quad.graph, copy, factory);
     const anchor = new TermWrapper(quad.subject, graph, factory);
     SetFrom.subjectPredicate(anchor, predicate, TermAs.term, TermFrom.itself).add(object);
-    dataset.delete(quad);
+    copy.delete(quad);
   }
-  return dataset;
+  return copy;
 }
