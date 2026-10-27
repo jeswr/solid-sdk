@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import { fileImport, memoryFile, TEST_POD_ROOT } from "../core/testing.js";
@@ -24,7 +25,9 @@ describe("netflix file adapter", () => {
     expect(report.categories).toEqual(["media"]);
 
     const ds = pod.dataset(DOC);
-    const subjects = [...ds].filter((q) => q.predicate.value.endsWith("type"));
+    const subjects = [...ds].filter(
+      (q) => q.predicate.value.endsWith("type") && q.object.value === CLASSES.WatchAction,
+    );
     expect(subjects).toHaveLength(3);
 
     const titles = [...ds]

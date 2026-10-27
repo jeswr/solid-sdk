@@ -101,14 +101,23 @@ export function expandEvent(
   const dates: { wall: Date; date: Date }[] = [];
   // COUNT applies to valid local times from DTSTART, before EXDATE/range filtering.
   // Let rrule bound the search by the range, and stop once that valid count is met.
-  // An instant cutoff can map behind a valid candidate during rollback. Use
-  // the padded range as the conservative generation bound for instant UNTIL;
-  // the exact cutoff is enforced only after converting candidates to instants.
-  toRRule(
+  // An instant cutoff can map behind a valid candidate during rollback.
+  // UTC UNTIL plus a day bounds wall times for offsets on either side of zero;
+  // keep the exact instant comparison after conversion. Set rrule's own UNTIL
+  // so it also stops while seeking a range that starts beyond the cutoff.
+  const generation = toRRule(
     { ...rule, count: undefined, until: typeof rule.until === "string" ? rule.until : undefined },
     event.start,
     zone,
-  ).between(
+  );
+  const bounded =
+    rule.until === undefined || typeof rule.until === "string"
+      ? generation
+      : new RRule({
+          ...generation.origOptions,
+          until: asDate(new Date(Math.min(+rule.until + 86400000, +floatingTo + 86400000))),
+        });
+  bounded.between(
     rule.count === undefined ? new Date(+floatingFrom - 86400000) : floatingStart,
     new Date(+floatingTo + 86400000),
     true,
