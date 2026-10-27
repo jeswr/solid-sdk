@@ -58,6 +58,7 @@ export default defineConfig({
         "src/apps/calendar/lib/reminders/**/*.ts",
         "src/apps/calendar/lib/tz/**/*.ts",
         "src/apps/chat/lib/timeline/**/*.ts",
+        "src/apps/chat/lib/preview/**/*.ts",
         "src/apps/chat/lib/unread/**/*.ts",
         "src/apps/health/lib/stats/**/*.ts",
         "src/apps/health/lib/units/**/*.ts",
@@ -82,6 +83,7 @@ export default defineConfig({
         "src/apps/drive/lib/activity/**/*.ts",
         "src/apps/drive/lib/model/**/*.ts",
         "src/apps/mail/lib/threading/**/*.ts",
+        "src/apps/mail/lib/address/**/*.ts",
       ],
       reporter: ["text", "json-summary"],
       thresholds: {

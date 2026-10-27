@@ -152,6 +152,41 @@ describe("pure upload plans", () => {
     }
   });
 
+  it("preserves a capped dotted file's extension across existing and pending collisions", () => {
+    const dots = ".".repeat(172);
+    const name = `${dots}a.tar.gz`;
+    const source = `${dots}ab.tar.gz`;
+    const nextSource = `${dots}abc.tar.gz`;
+    const result = planUploads(
+      input({
+        entries: [file([source]), file([nextSource])],
+        existing: [remote([name]), remote([`${dots.slice(0, -3)} (1).tar.gz`])],
+      }),
+    );
+    expect(result.files.map((item) => item.sourcePath)).toEqual([[source], [nextSource]]);
+    expect(result.files.map((item) => item.path)).toEqual([
+      [`${dots.slice(0, -3)} (2).tar.gz`],
+      [`${dots.slice(0, -3)} (3).tar.gz`],
+    ]);
+    for (const item of result.files) {
+      expect([...(item.path[0] as string)]).toHaveLength(180);
+      expect(encodeUploadPath(item.path, "file")).toBe(item.targetPath);
+      expect(item.targetUrl).toBe(destination + item.targetPath);
+      expect(item.operation).toEqual({ action: "create", ifNoneMatch: "*" });
+    }
+  });
+
+  it.each([
+    { existing: [] },
+    { existing: [remote([`${".".repeat(173)}.tar.gz`])] },
+  ])("rejects a capped file with an ambiguous extension before planning uploads (%j)", ({
+    existing,
+  }) => {
+    expect(invalid({ entries: [file([`${".".repeat(180)}a.tar.gz`])], existing })).toThrowError(
+      new UploadPlanningError("invalid-name"),
+    );
+  });
+
   it("replaces only an existing file with its supplied strong ETag", () => {
     const result = planUploads(
       input({
