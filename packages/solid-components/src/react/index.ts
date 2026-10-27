@@ -55,6 +55,13 @@ export {
   NetworkError,
   NotFoundError,
 } from "../errors.js";
+export {
+  type AccessRequest,
+  type AccessRequestResult,
+  canRequestAccess,
+  RequestAccessUnavailableError,
+  requestAccessAfterDenial,
+} from "../request-access.js";
 export type {
   FetchSeam,
   GraphSource,

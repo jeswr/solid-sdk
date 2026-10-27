@@ -110,6 +110,13 @@ export {
   NetworkError,
   NotFoundError,
 } from "./errors.js";
+export {
+  type AccessRequest,
+  type AccessRequestResult,
+  canRequestAccess,
+  RequestAccessUnavailableError,
+  requestAccessAfterDenial,
+} from "./request-access.js";
 // The component resolver: the committed static map + the selection function.
 export {
   type ComponentEntry,
