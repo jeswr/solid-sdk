@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
   IconButton,
   Skeleton,
+  toast,
 } from "@jeswr/suite-ui";
 import {
   ArrowDownUp,
@@ -68,6 +69,7 @@ import {
   viewItems,
 } from "../lib/view/view";
 import { useDrive } from "../state/drive-context";
+import { readDrop } from "../state/dropped-files";
 import { errorMessage, useDriveActions, useDriveUi } from "../state/ui";
 import { ItemIcon } from "./item-icon";
 import { ContextEntries, DropdownEntries, useItemMenu } from "./item-menu";
@@ -398,6 +400,12 @@ export function FileBrowser(props: FileBrowserProps) {
     }
   };
 
+  const dropUpload = (target: string, data: DataTransfer) =>
+    void readDrop(data).then(
+      (files) => uploads.enqueue(target, files),
+      () => toast.error("Couldn't read the dropped folder"),
+    );
+
   const folderDropProps = (item: BrowserItem) =>
     item.kind === "folder"
       ? {
@@ -415,7 +423,7 @@ export function FileBrowser(props: FileBrowserProps) {
             event.stopPropagation();
             setDropTarget(undefined);
             setDropping(false);
-            if (hasFiles(event)) uploads.enqueue(item.url, event.dataTransfer.files);
+            if (hasFiles(event)) dropUpload(item.url, event.dataTransfer);
             else {
               const moving = draggedItems(event).filter((entry) => entry.url !== item.url);
               if (moving.length > 0) void actions.move(moving, item.url);
@@ -438,7 +446,7 @@ export function FileBrowser(props: FileBrowserProps) {
           if (!hasFiles(event)) return;
           event.preventDefault();
           setDropping(false);
-          uploads.enqueue(folder, event.dataTransfer.files);
+          dropUpload(folder, event.dataTransfer);
         },
       }
     : {};

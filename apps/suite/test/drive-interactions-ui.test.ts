@@ -1310,3 +1310,72 @@ it("Starred refreshes its rows when anything in Drive changes", async () => {
   drive.prefs = prefs;
   await view.unmount();
 });
+
+function dropEvent(entry: FileSystemEntry) {
+  const drop = new Event("drop", { bubbles: true, cancelable: true });
+  Object.defineProperty(drop, "dataTransfer", {
+    value: {
+      types: ["Files"],
+      items: [{ kind: "file", webkitGetAsEntry: () => entry, getAsFile: () => null }],
+      files: [],
+    },
+  });
+  return drop;
+}
+
+function folderEntry(name: string, children: object[]) {
+  return {
+    isFile: false,
+    isDirectory: true,
+    name,
+    createReader: () => {
+      let done = false;
+      return {
+        readEntries: (ok: (entries: object[]) => void) => {
+          ok(done ? [] : children);
+          done = true;
+        },
+      };
+    },
+  } as unknown as FileSystemEntry;
+}
+
+it("uploads a folder dropped on the listing or a folder row with its structure", async () => {
+  const folder: DriveItem = { url: `${ROOT}Archive/`, name: "Archive", kind: "folder" };
+  const view = await mount(tree([folder, ...items]));
+  const file = new File(["x"], "a.txt");
+  const entry = {
+    isFile: true,
+    isDirectory: false,
+    name: "a.txt",
+    file: (ok: (f: File) => void) => ok(file),
+  };
+  const content = view.host.querySelector(".drv-content");
+  if (!content) throw new Error("Missing listing");
+  await act(async () => {
+    content.dispatchEvent(dropEvent(folderEntry("Reports", [entry])));
+  });
+  await vi.waitFor(() =>
+    expect(drive.uploads.enqueue).toHaveBeenCalledWith(ROOT, [{ file, path: "Reports/a.txt" }]),
+  );
+  await act(async () => {
+    row(view.host, folder).dispatchEvent(dropEvent(folderEntry("Reports", [entry])));
+  });
+  await vi.waitFor(() =>
+    expect(drive.uploads.enqueue).toHaveBeenCalledWith(folder.url, [
+      { file, path: "Reports/a.txt" },
+    ]),
+  );
+  const unreadable = {
+    ...entry,
+    file: (_ok: unknown, error: (reason: DOMException) => void) =>
+      error(new DOMException("gone", "NotFoundError")),
+  };
+  await act(async () => {
+    content.dispatchEvent(dropEvent(folderEntry("Gone", [unreadable])));
+  });
+  await vi.waitFor(() =>
+    expect(mocks.toast.error).toHaveBeenCalledWith("Couldn't read the dropped folder"),
+  );
+  expect(drive.uploads.enqueue).toHaveBeenCalledTimes(2);
+});

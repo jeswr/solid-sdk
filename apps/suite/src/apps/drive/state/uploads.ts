@@ -11,6 +11,7 @@ import type { DriveClient } from "../lib/client/client";
 import { DriveError } from "../lib/client/client";
 import { type ConflictChoice, uploadFile } from "../lib/operations/operations";
 import { normalizeUploadName } from "../lib/upload";
+import type { DroppedFile } from "./dropped-files";
 
 export type UploadStatus = "queued" | "uploading" | "done" | "conflict" | "failed" | "skipped";
 
@@ -26,7 +27,7 @@ export interface UploadTask {
 
 export interface UploadQueue {
   readonly tasks: readonly UploadTask[];
-  enqueue(folder: string, files: Iterable<File>): void;
+  enqueue(folder: string, files: Iterable<File | DroppedFile>): void;
   resolve(id: string, choice: ConflictChoice, applyToAll?: boolean): void;
   retry(id: string): void;
   cancel(id: string): void;
@@ -39,8 +40,9 @@ const CONCURRENCY = 3;
  * Folder uploads keep their structure: `a/b/c.txt` lands in `<folder>a/b/`.
  * Solid servers create the intermediate containers on the file's PUT.
  */
-export function targetFolder(folder: string, file: File): string {
-  const segments = (file.webkitRelativePath || "").split("/").slice(0, -1);
+export function targetFolder(folder: string, source: File | DroppedFile): string {
+  const path = "path" in source ? source.path : source.webkitRelativePath;
+  const segments = (path || "").split("/").slice(0, -1);
   return segments.reduce(
     (url, segment) => `${url}${encodeURIComponent(normalizeUploadName(segment, "folder"))}/`,
     folder,
@@ -116,13 +118,14 @@ export function useUploadQueue(
   }, [client, invalidate, patch]);
 
   const enqueue = useCallback(
-    (folder: string, files: Iterable<File>) => {
+    (folder: string, files: Iterable<File | DroppedFile>) => {
       blanket.current = undefined;
-      for (const file of files) {
+      for (const source of files) {
+        const file = "path" in source ? source.file : source;
         const id = crypto.randomUUID();
         let target: string | undefined;
         try {
-          target = targetFolder(folder, file);
+          target = targetFolder(folder, source);
         } catch {
           target = undefined;
         }
