@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # sst-qfzq — CAL-L8 lane report
 
@@ -91,3 +92,54 @@ or components built, and no browser launched.
 Removed only the 14 untracked `callback.html` / `clientid.jsonld` files generated
 by the full gate in the seven pod web apps. Build output remains ignored; no
 generated artifacts are committed. No pushes, PRs, branch switches or publishing.
+
+## Fix round 1 — 2026-10-27
+
+Starting head: `6b41285c3d08ee77c78e282405ea83de5f6987a1`. Addressed only the
+two supplied review findings on `lane/sst-qfzq`:
+
+- `30adefcd` — `fix: use the first instant for all-day boundaries`. Validate
+  all-day inputs and resolve moved, resized and clamped boundaries to the earliest
+  valid instant, including repeated Havana midnights and every overlap option.
+- `1ed80aab` — `fix: normalize fractional-minute drag deltas`. Round converted
+  milliseconds only within `2 * Number.EPSILON * abs(rawMilliseconds)` and use
+  the validated integer throughout arithmetic. Reject larger submillisecond
+  fractions before Intl work. Test signed decimal values, values near the size
+  bound, and half-up snap ties for all three gestures.
+- Final report commit — `docs: record calendar drag fix verification`.
+
+Before each fix, the new regression cases reproduced the findings (six failing
+all-day cases and five failing fractional-minute cases). After both fixes,
+all 111 drag tests pass with 100% statements, branches, functions and lines.
+The API documentation describes canonical all-day boundaries and fractional
+conversion tolerance. No dependencies, lockfile, UI or unrelated source changes.
+
+Commands below used Node `v24.22.1`, pnpm `10.4.1`, and the environment prefix
+shown in the original verification section. Lifecycle scripts remained disabled.
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/app-suite^... --concurrency=4` | PASS — 7 dependency builds |
+| `pnpm exec biome check --write apps/suite/src/apps/calendar/lib/drag apps/suite/test/calendar-drag.test.ts` | PASS — formatted the new tests |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/calendar-drag.test.ts --coverage.include='src/apps/calendar/lib/drag/**/*.ts'` | PASS — 111 tests; 100% statements, branches, functions and lines |
+| `pnpm --filter @jeswr/app-suite run lint` | PASS — 54 existing unrelated warnings |
+| `pnpm --filter @jeswr/app-suite run build` | PASS — Next.js production build |
+| `pnpm --filter @jeswr/app-suite run typecheck` | PASS |
+| `VITEST_MAX_WORKERS=1 pnpm --filter @jeswr/app-suite run test` | PASS — 153 files, 7,618 tests; 100% coverage across all configured files |
+| `pnpm run lint:root` | PASS |
+| `VITEST_MAX_WORKERS=1 TURBO_SCM_BASE=6b41285c3d08ee77c78e282405ea83de5f6987a1 pnpm run gate` | PASS — 12/12 tasks |
+| `VITEST_MAX_WORKERS=1 pnpm run gate:full` | FAIL outside this lane — 224 successful tasks / 311 scheduled; `@jeswr/suite-ui#test` AppLauncher test exceeded its 5-second timeout; all 879 root tests passed |
+| `VITEST_MAX_WORKERS=1 pnpm --filter @jeswr/suite-ui run test` | PASS in isolation — 8 files, 196 tests; no timeout or test changes |
+| `git diff --check` | PASS |
+
+The full gate stopped at `packages/suite-ui/test/navigation.test.ts:159`,
+`supports checkboxes, keyboard reorder, drag pin/reorder and enforces the six-app
+limit`. The complete suite-ui test run passed alone. `packages/suite-ui` and the
+lockfile have no changes relative to the starting head. The full workspace gate
+has not passed; its previously recorded federation-trust snapshot failure was
+not reached in this round. The package gate and affected gate both passed.
+
+`roborev` remains unavailable in the sandbox; no automated per-commit verdict is
+claimed. No new implementation questions or unfinished fixes. All-day boundaries
+always choose the earliest valid instant, including with `overlap: "later"`, as
+required by the review. No tracker, remote, branch or other checkout changes.
