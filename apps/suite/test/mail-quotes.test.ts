@@ -283,14 +283,27 @@ describe("RFC 3676 flowed text", () => {
     expect(reconstructed("", { flowed: true })).toBe("");
   });
 
-  it("deletes exactly one trailing space per joined line when delSp is true", () => {
+  it("deletes exactly one trailing space per flowed line when delSp is true", () => {
     expect(reconstructed("long \nword  \nend\n", { flowed: true, delSp: true })).toBe(
       "longword end\n",
     );
     expect(reconstructed("tab\t\nnext\n", { flowed: true, delSp: true })).toBe("tab\t\nnext\n");
     expect(reconstructed("text \n\nnext", { flowed: true, delSp: true })).toBe("text\nnext");
-    expect(reconstructed("unfinished ", { flowed: true, delSp: true })).toBe("unfinished ");
-    expect(reconstructed("unfinished \n", { flowed: true, delSp: true })).toBe("unfinished \n");
+  });
+
+  it.each(["", "\n", "\r\n"])("decodes terminal flowed lines ending in %j", (eol) => {
+    const ending = eol === "" ? "" : "\n";
+    for (const prefix of ["", "> "]) {
+      for (const spaces of [" ", "  "]) {
+        const source = `${prefix}hello${spaces}${eol}`;
+        expect(reconstructed(source, { flowed: true, delSp: true })).toBe(
+          `${prefix}hello${spaces.slice(0, -1)}${ending}`,
+        );
+        expect(reconstructed(source, { flowed: true, delSp: false })).toBe(
+          source.replaceAll("\r\n", "\n"),
+        );
+      }
+    }
   });
 
   it("joins equal-depth quotes using the first prefix, preserving transitions", () => {
@@ -303,8 +316,19 @@ describe("RFC 3676 flowed text", () => {
       { kind: "quote", text: "> old", depth: 1 },
     ]);
     expect(reconstructed("> a \n>> b \nbody", { flowed: true, delSp: true })).toBe(
-      "> a \n>> b \nbody",
+      "> a\n>> b\nbody",
     );
+    expect(
+      splitQuotedText("body \r\n> old \r\n>> nested \r\nbody again\r\n\r\nend", {
+        flowed: true,
+        delSp: true,
+      }).segments,
+    ).toEqual([
+      { kind: "body", text: "body\n", depth: 0 },
+      { kind: "quote", text: "> old\n", depth: 1 },
+      { kind: "quote", text: ">> nested\n", depth: 2 },
+      { kind: "body", text: "body again\n\nend", depth: 0 },
+    ]);
     expect(splitQuotedText("> > a \n>> b", { flowed: true }).segments).toEqual([
       { kind: "quote", text: "> > a b", depth: 2 },
     ]);
@@ -326,15 +350,21 @@ describe("RFC 3676 flowed text", () => {
 
   it("never flows signature separators, even inside quotes", () => {
     for (const delSp of [true, false]) {
+      const space = delSp ? "" : " ";
       expect(splitQuotedText("body \n-- \nMira", { flowed: true, delSp }).segments).toEqual([
-        { kind: "body", text: "body \n", depth: 0 },
+        { kind: "body", text: `body${space}\n`, depth: 0 },
         { kind: "signature", text: "-- \nMira", depth: 0 },
       ]);
       expect(reconstructed("> text \n> -- \n> Mira", { flowed: true, delSp })).toBe(
-        "> text \n> -- \n> Mira",
+        `> text${space}\n> -- \n> Mira`,
       );
+      expect(reconstructed("one \n--\nMira", { flowed: true, delSp })).toBe(
+        `one${space}\n--\nMira`,
+      );
+      for (const signature of ["-- ", "> -- "]) {
+        expect(reconstructed(signature, { flowed: true, delSp })).toBe(signature);
+      }
     }
-    expect(reconstructed("one \n--\nMira", { flowed: true })).toBe("one \n--\nMira");
   });
 
   it("detects attributions after unflowing their physical lines", () => {

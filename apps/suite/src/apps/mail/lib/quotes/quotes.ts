@@ -93,13 +93,11 @@ function normaliseLines(body: string, flowed: boolean, delSp: boolean): Line[] {
   for (const [i, line] of physical.entries()) {
     if (pieces.length === 0) prefix = line.prefix;
     const next = physical[i + 1];
+    const isFlowed = line.content.endsWith(" ") && !isSignature(line.content);
     const join =
-      next !== undefined &&
-      line.depth === next.depth &&
-      line.content.endsWith(" ") &&
-      !isSignature(line.content) &&
-      !isSignature(next.content);
-    pieces.push(join && delSp ? line.content.slice(0, -1) : line.content);
+      isFlowed && next !== undefined && line.depth === next.depth && !isSignature(next.content);
+    // DelSp applies even when EOF, quote depth or a signature ends the paragraph.
+    pieces.push(isFlowed && delSp ? line.content.slice(0, -1) : line.content);
     if (!join) {
       const content = pieces.join("");
       logical.push({ value: prefix + content, content, prefix, depth: line.depth, eol: line.eol });
