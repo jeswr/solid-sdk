@@ -152,22 +152,18 @@ export function normalizeRequest(
   // Read every field from an owned snapshot, never from the caller's object, then hand the
   // transport main's portable shape: a checked URL string plus a plain init in which the
   // caller's explicit init (e.g. a replayable body) still wins.
-  const snapshot = snapshotFetchInput(input, init);
-  if (typeof snapshot.input === "string") return { url: snapshot.url, init: snapshot.init };
+  // Applying init during capture would serialize a FormData override once here and again
+  // at the transport, pairing the first boundary's headers with the second boundary's body.
+  const snapshot = snapshotFetchInput(input, undefined);
+  if (typeof snapshot.input === "string") return { url: snapshot.url, init };
   const req = snapshot.input;
   const fromRequest: RequestInit = {
     method: req.method,
     headers: req.headers,
     credentials: req.credentials,
     redirect: req.redirect,
-    mode: req.mode,
-    cache: req.cache,
-    integrity: req.integrity,
-    referrer: req.referrer,
-    referrerPolicy: req.referrerPolicy,
     ...(req.signal ? { signal: req.signal } : {}),
-    // Fetch rejects a stream body with keepalive, so keepalive survives only without a body.
-    ...(req.body ? { body: req.body, duplex: "half" } : { keepalive: req.keepalive }),
+    ...(req.body ? { body: req.body, duplex: "half" } : {}),
   } as RequestInit;
   return { url: snapshot.url, init: { ...fromRequest, ...(init ?? {}) } };
 }

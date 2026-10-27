@@ -17,12 +17,11 @@ export function createScopedFetch(
 ): typeof globalThis.fetch {
   const refusing = refuseRedirects(fetchImpl);
   return async (input, init) => {
-    const snapshot = snapshotFetchInput(input, init);
+    // Main forwarded only the checked URL and explicit init, even for Request inputs.
+    // Capture without applying init so validation cannot serialize an override body.
+    const snapshot = snapshotFetchInput(input, undefined);
     assertWithinBase(base, snapshot.url);
-    return refusing(
-      typeof snapshot.input === "string" ? new URL(snapshot.url).href : snapshot.input,
-      snapshot.init,
-    );
+    return refusing(snapshot.url, init);
   };
 }
 
@@ -38,9 +37,9 @@ export function createSameOriginRedirectRefusingFetch(
   const refusing = refuseRedirects(fetchImpl);
   return async (input, init) => {
     // Preserve the old absolute-target contract before the shared relative resolver.
-    const snapshot = snapshotFetchInput(input, init);
+    const snapshot = snapshotFetchInput(input, undefined);
     const target = new URL(snapshot.url);
-    const checked = assertWithinPodScope(`${origin}/`, target.href);
-    return refusing(typeof snapshot.input === "string" ? checked : snapshot.input, snapshot.init);
+    assertWithinPodScope(`${origin}/`, target.href);
+    return refusing(snapshot.url, init);
   };
 }

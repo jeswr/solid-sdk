@@ -49,7 +49,10 @@ Private, loopback, link-local, metadata, malformed, and disallowed redirect targ
 Loopback HTTP access is an explicit development-only option.
 
 Fetch wrappers share `snapshotFetchInput` to capture Request inputs before inspecting their
-URLs and preserve their body and request policies, including init overrides and referrer fields.
+URLs. The SSRF, pod-scope, and Node guards forward a URL string plus init: they inherit
+method, headers, credentials, redirect, signal, and body (with duplex), then overlay the
+explicit init. Other policies are carried only when supplied in init. `refuseRedirects`
+forwards a snapshot of the caller's Request class, retaining its request policies.
 Native URL getters ignore shadowed properties; other implementations and realms use their
 Request prototype's constructor/getter or a single string conversion before validation.
 A fully caller-defined Request class is only as trustworthy as the transport it is passed to,

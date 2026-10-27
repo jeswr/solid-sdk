@@ -55,9 +55,10 @@ The local `listContainer(containerUrl, base, fetchImpl)` wrapper keeps its signa
 returns `null` for 404/410. Invalid or unsafe member URLs are skipped individually; request
 headers, recursion, key mapping, and the existing stricter scope/redirect checks stay local.
 
-Request inputs use `@jeswr/guarded-fetch`'s `snapshotFetchInput` before scope validation,
-preserving bodies and request policies across supported implementations. Mutable URL objects
-are captured once before fetching.
+Request inputs use `@jeswr/guarded-fetch`'s `snapshotFetchInput` before scope validation.
+Both wrappers forward the captured URL string and explicit init, preserving init bodies,
+signals, and policies across Request implementations. Fields supplied only on the Request
+are not inherited. Mutable URL objects are captured once before fetching.
 `new SolidRedirectError(url, status)` remains supported with its original name, message,
 `url`, and `status` fields. The alias also accepts the shared `(message, detail)` form and
 recognizes errors thrown by `refuseRedirects` through `instanceof`.

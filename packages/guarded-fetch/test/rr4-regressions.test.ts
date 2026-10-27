@@ -1,6 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { type AddressInfo, createServer } from "node:http";
-import { MockAgent, Request as UndiciRequest, fetch as undiciFetch } from "undici";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
+import {
+  MockAgent,
+  FormData as UndiciFormData,
+  Request as UndiciRequest,
+  fetch as undiciFetch,
+} from "undici";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   createGuardedFetch,
@@ -29,6 +35,56 @@ const requestImplementations = {
 
 for (const [name, wrap] of Object.entries(followingWrappers)) {
   describe(`${name}: round 4 redirect and Request-brand regressions`, () => {
+    for (const [implementation, makeRequest] of Object.entries(requestImplementations)) {
+      for (const [transportName, construct] of Object.entries(requestImplementations)) {
+        it(`replays a ${implementation} Request's FormData override through a consuming ${transportName} transport`, async () => {
+          const seen: string[] = [];
+          const transport = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+            expect(typeof input).toBe("string");
+            const request = construct(input as string, init);
+            seen.push(request.url);
+            expect(request.method).toBe("POST");
+            expect(request.redirect).toBe("manual");
+            // Parsing fails if snapshotting generated a boundary for a different body.
+            expect([...(await request.formData()).entries()]).toEqual([["message", "payload"]]);
+            return seen.length === 1
+              ? new Response(null, { status: 307, headers: { location: `${BASE}next` } })
+              : new Response("ok");
+          });
+          const form = transportName === "native" ? new FormData() : new UndiciFormData();
+          form.set("message", "payload");
+          const response = await wrap(transport)(makeRequest(TARGET), {
+            method: "POST",
+            body: form as unknown as BodyInit,
+          });
+          expect(await response.text()).toBe("ok");
+          expect(transport).toHaveBeenCalledTimes(2);
+          expect(seen).toEqual([TARGET, `${BASE}next`]);
+        });
+
+        it(`accepts a ${implementation} no-cors POST through a consuming ${transportName} transport`, async () => {
+          const transport = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+            const request = construct(input as string, init);
+            expect(request.url).toBe(TARGET);
+            expect(request.method).toBe("POST");
+            // Main's URL+init adaptation does not inherit mode from a Request input.
+            expect(request.mode).toBe("cors");
+            expect(await request.text()).toBe("payload");
+            return new Response("ok");
+          });
+          const response = await wrap(transport)(
+            makeRequest(TARGET, {
+              method: "POST",
+              mode: "no-cors",
+              body: "payload",
+            }),
+          );
+          expect(await response.text()).toBe("ok");
+          expect(transport).toHaveBeenCalledOnce();
+        });
+      }
+    }
+
     it.each([307, 308])("replays an explicit body after a consuming %s hop", async (status) => {
       const seen: Array<{ url: string; method: string; body: string }> = [];
       const transport = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it, vi } from "vitest";
 import { createGuardedFetch, createPodScopedFetch, refuseRedirects } from "../src/index.js";
+import { normalizeRequest } from "../src/redirect.js";
 
 const BASE = "https://pod.example/alice/";
 const TARGET = `${BASE}item`;
@@ -44,7 +45,7 @@ for (const [name, factory] of Object.entries(factories)) {
     it.each([
       false,
       true,
-    ])("preserves body, policies and abort propagation (init override %s)", async (override) => {
+    ])("matches main's inherited fields and explicit overrides (init override %s)", async (override) => {
       const controller = new AbortController();
       const request = new Request(TARGET, {
         method: "POST",
@@ -66,14 +67,21 @@ for (const [name, factory] of Object.entries(factories)) {
         expect(effective.method).toBe(override ? "PUT" : "POST");
         expect(effective.headers.get("authorization")).toBe("Bearer fixture");
         expect(effective.credentials).toBe("include");
-        expect(effective.mode).toBe("same-origin");
-        expect(effective.cache).toBe(override ? "reload" : "no-store");
-        expect(effective.integrity).toBe("sha256-fixture");
-        // The refusing wrapper forwards the native snapshot; the URL+init wrappers cannot
-        // pair keepalive with the stream body they hand to the transport.
-        expect(effective.keepalive).toBe(name === "refusal");
-        expect(effective.referrer).toBe(`${BASE}referrer`);
-        expect(effective.referrerPolicy).toBe(override ? "origin" : "no-referrer");
+        // Main inherits these policies only in refuseRedirects, which forwards a Request.
+        // The URL+init guards carry them only when explicitly supplied in init.
+        const inheritsPolicies = name === "refusal";
+        expect(effective.mode).toBe(override || inheritsPolicies ? "same-origin" : "cors");
+        expect(effective.cache).toBe(
+          override ? "reload" : inheritsPolicies ? "no-store" : "default",
+        );
+        expect(effective.integrity).toBe(override || inheritsPolicies ? "sha256-fixture" : "");
+        expect(effective.keepalive).toBe(override || inheritsPolicies);
+        expect(effective.referrer).toBe(
+          override || inheritsPolicies ? `${BASE}referrer` : "about:client",
+        );
+        expect(effective.referrerPolicy).toBe(
+          override ? "origin" : inheritsPolicies ? "no-referrer" : "",
+        );
         expect(effective.redirect).toBe("manual");
         expect(await effective.text()).toBe(override ? "override body" : "private body");
         controller.abort();
@@ -86,7 +94,11 @@ for (const [name, factory] of Object.entries(factories)) {
           ? {
               method: "PUT",
               body: "override body",
+              mode: "same-origin",
               cache: "reload",
+              integrity: "sha256-fixture",
+              keepalive: true,
+              referrer: `${BASE}referrer`,
               referrerPolicy: "origin",
               redirect: "follow",
             }
@@ -122,4 +134,55 @@ it("SSRF-checks the internal target before transport", async () => {
   const inner = vi.fn(async () => new Response());
   await expect(factories.ssrf(inner)(request)).rejects.toThrow();
   expect(inner).not.toHaveBeenCalled();
+});
+
+it.each([false, true])("inherits exactly main's init keys (Request body %s)", async (withBody) => {
+  const controller = new AbortController();
+  const request = new Request(TARGET, {
+    method: withBody ? "POST" : "GET",
+    ...(withBody ? { body: "payload" } : {}),
+    headers: { "x-test": "original" },
+    signal: controller.signal,
+    mode: "same-origin",
+    cache: "no-store",
+    integrity: "sha256-fixture",
+    keepalive: true,
+    referrer: `${BASE}referrer`,
+    referrerPolicy: "no-referrer",
+  });
+  const shadow = vi.fn(() => {
+    throw new Error("caller property read");
+  });
+  for (const field of ["url", "method", "headers", "credentials", "redirect", "signal", "body"]) {
+    Object.defineProperty(request, field, { get: shadow });
+  }
+  const normalized = normalizeRequest(request, undefined);
+  expect(normalized.url).toBe(TARGET);
+  expect(Object.keys(normalized.init ?? {}).sort()).toEqual(
+    [
+      "method",
+      "headers",
+      "credentials",
+      "redirect",
+      "signal",
+      ...(withBody ? ["body", "duplex"] : []),
+    ].sort(),
+  );
+  expect(shadow).not.toHaveBeenCalled();
+  Reflect.get(Request.prototype, "headers", request).set("x-test", "mutated");
+  expect(new Headers(normalized.init?.headers).get("x-test")).toBe("original");
+  if (withBody) expect(await new Request(TARGET, normalized.init).text()).toBe("payload");
+  controller.abort();
+  expect(normalized.init?.signal?.aborted).toBe(true);
+});
+
+it("overlays the explicit init after snapshotting without adding generated body headers", () => {
+  const form = new FormData();
+  form.set("message", "payload");
+  const init = { method: "POST", body: form, cache: "reload" } as const;
+  const normalized = normalizeRequest(new Request(TARGET), init);
+  expect(normalized.init?.body).toBe(form);
+  expect(normalized.init?.cache).toBe("reload");
+  expect(new Headers(normalized.init?.headers).has("content-type")).toBe(false);
+  expect(normalized.init).not.toHaveProperty("duplex");
 });

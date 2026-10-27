@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { createRequire } from "node:module";
 import { RedirectRefusedError, refuseRedirects } from "@jeswr/guarded-fetch";
 import { describe, expect, it, vi } from "vitest";
 import { SolidRedirectError } from "../src/index.js";
@@ -7,6 +8,14 @@ import { createSameOriginRedirectRefusingFetch, createScopedFetch } from "../src
 const BASE = "https://pod.example/alice/";
 const TARGET = `${BASE}item`;
 const ORIGIN = new URL(BASE).origin;
+// Exercise the installed transport dependency without adding an unstorage dependency.
+const {
+  Request: UndiciRequest,
+  fetch: undiciFetch,
+  MockAgent,
+} = createRequire(new URL("../node_modules/@jeswr/guarded-fetch/dist/node.js", import.meta.url))(
+  "undici",
+);
 
 // Frozen bfa358b8 response predicate: every readable 3xx with Location except 304.
 function legacyRefuses(res: Response): boolean {
@@ -63,7 +72,7 @@ for (const [name, factory] of Object.entries(factories).filter(([name]) => name 
       expect(inner).toHaveBeenCalledOnce();
     });
 
-    it("keeps Request fields and overrides caller redirect:follow", async () => {
+    it("matches main's explicit-init-only forwarding for Request inputs", async () => {
       const request = new Request(TARGET, {
         method: "POST",
         body: "private fixture body",
@@ -74,14 +83,15 @@ for (const [name, factory] of Object.entries(factories).filter(([name]) => name 
         redirect: "follow",
       });
       const inner = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        expect(input).not.toBe(request);
+        expect(input).toBe(TARGET);
+        expect(init).toEqual({ redirect: "manual" });
         const effective = new Request(input, init);
-        expect(effective.method).toBe("POST");
-        expect(await effective.text()).toBe("private fixture body");
-        expect(effective.headers.get("authorization")).toBe("Bearer fixture-token");
-        expect(effective.mode).toBe("same-origin");
-        expect(effective.integrity).toBe("sha256-fixture");
-        expect(effective.credentials).toBe("include");
+        expect(effective.method).toBe("GET");
+        expect(await effective.text()).toBe("");
+        expect(effective.headers.get("authorization")).toBeNull();
+        expect(effective.mode).toBe("cors");
+        expect(effective.integrity).toBe("");
+        expect(effective.credentials).toBe("same-origin");
         expect(effective.redirect).toBe("manual");
         return new Response(null, { status: 204 });
       });
@@ -108,7 +118,7 @@ for (const [name, factory] of Object.entries(factories).filter(([name]) => name 
       }
     });
 
-    it("preserves body, policy fields, and effective init overrides", async () => {
+    it("preserves every explicit body, signal, and policy field exactly as on main", async () => {
       const controller = new AbortController();
       const request = new Request(TARGET, {
         method: "POST",
@@ -124,6 +134,8 @@ for (const [name, factory] of Object.entries(factories).filter(([name]) => name 
         referrerPolicy: "no-referrer",
       });
       const inner = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(input).toBe(TARGET);
+        expect(init).toEqual({ ...explicit, redirect: "manual" });
         const effective = new Request(input, init);
         expect(effective.url).toBe(TARGET);
         expect(effective.method).toBe("PUT");
@@ -141,10 +153,105 @@ for (const [name, factory] of Object.entries(factories).filter(([name]) => name 
         expect(effective.signal.aborted).toBe(true);
         return new Response();
       });
-      await factory(inner)(request, {
+      const explicit: RequestInit = {
         method: "PUT",
         body: "override body",
+        headers: { authorization: "Bearer fixture" },
+        signal: controller.signal,
+        credentials: "include",
+        mode: "same-origin",
+        cache: "no-store",
+        integrity: "sha256-fixture",
+        keepalive: true,
+        referrer: `${BASE}referrer`,
         referrerPolicy: "origin",
+        redirect: "follow",
+      };
+      await factory(inner)(request, explicit);
+    });
+
+    for (const [pair, RequestImpl, fetchImpl] of [
+      ["undici Request + native fetch", UndiciRequest, globalThis.fetch],
+      ["native Request + undici fetch", Request, undiciFetch],
+    ] as const) {
+      it.each([false, true])(`accepts ${pair} (explicit init %s)`, async (withInit) => {
+        const agent = new MockAgent();
+        agent.disableNetConnect();
+        agent
+          .get(ORIGIN)
+          .intercept({
+            path: "/alice/item",
+            method: withInit ? "PUT" : "GET",
+            ...(withInit ? { body: "override body", headers: { "x-test": "preserved" } } : {}),
+          })
+          .reply(200, "ok");
+        // Node's bundled undici uses the older dispatcher callbacks. Feed its actual
+        // fetch a consuming dispatcher rather than the installed undici 8 MockAgent.
+        const nativeDispatcher = {
+          dispatch(
+            options: { method: string; path: string; body?: AsyncIterable<Uint8Array> },
+            handler: {
+              onConnect(abort: () => void): void;
+              onHeaders(status: number, headers: string[], resume: () => void, text: string): void;
+              onData(chunk: Uint8Array): void;
+              onComplete(trailers: string[]): void;
+              onError(error: Error): void;
+            },
+          ) {
+            handler.onConnect(() => {});
+            void (async () => {
+              expect(options.path).toBe("/alice/item");
+              expect(options.method).toBe(withInit ? "PUT" : "GET");
+              const chunks: Uint8Array[] = [];
+              for await (const chunk of options.body ?? []) chunks.push(chunk);
+              expect(Buffer.concat(chunks).toString()).toBe(withInit ? "override body" : "");
+              handler.onHeaders(200, [], () => {}, "OK");
+              handler.onData(Buffer.from("ok"));
+              handler.onComplete([]);
+            })().catch((error: Error) => handler.onError(error));
+            return true;
+          },
+        };
+        const transport = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+          expect(input).toBe(TARGET);
+          return fetchImpl(input, {
+            ...init,
+            dispatcher: fetchImpl === globalThis.fetch ? nativeDispatcher : agent,
+          });
+        });
+        const request = new RequestImpl(TARGET, { method: "POST", body: "ignored on main" });
+        try {
+          const response = await factory(transport)(
+            request,
+            withInit
+              ? {
+                  method: "PUT",
+                  body: "override body",
+                  headers: { "x-test": "preserved" },
+                  redirect: "follow",
+                }
+              : undefined,
+          );
+          expect(await response.text()).toBe("ok");
+          expect(transport).toHaveBeenCalledOnce();
+          if (fetchImpl !== globalThis.fetch) agent.assertNoPendingInterceptors();
+        } finally {
+          await agent.close();
+        }
+      });
+    }
+
+    it.each([
+      TARGET,
+      "https://POD.example:443/alice/./item",
+      new URL(TARGET),
+    ])("matches main's URL string plus explicit init for %s", async (input) => {
+      const explicit = { method: "HEAD", headers: { authorization: "Bearer fixture" } };
+      const inner = vi.fn(async () => new Response());
+      await factory(inner)(input, explicit);
+      expect(inner).toHaveBeenCalledExactlyOnceWith(String(input), {
+        ...explicit,
+        redirect: "manual",
       });
     });
 
