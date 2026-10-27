@@ -482,6 +482,43 @@ describe("Web Mercator grid clustering", () => {
     expect(clusterPoints([point("origin", 0, 0)], 20)[0]?.centroid.suspicious).toBe(true);
   });
 
+  it("assigns closed geographic edges to their adjacent in-range tiles", () => {
+    for (const zoom of [1, 20]) {
+      for (const sign of [-1, 1]) {
+        const edge = point("edge", sign * 90, sign * 180);
+        const inside = point(
+          "inside",
+          sign * (MERCATOR_MAX_LATITUDE - 0.00000001),
+          sign * 179.99999999,
+        );
+        const clusters = clusterPoints([edge, inside], zoom);
+        expect(clusters).toHaveLength(1);
+        expect(clusters[0]?.memberIds).toEqual([edge.id, inside.id]);
+      }
+    }
+  });
+
+  it("matches known Web Mercator row boundaries rather than a latitude-linear grid", () => {
+    // At zoom 2, y=1 begins at atan(sinh(pi/2)) = 66.51326044311186 degrees north.
+    const upper = point("upper", 66.51326045, 1);
+    const lower = point("lower", 66.51326043, 1);
+    const middle = point("middle", 45, 1);
+    expect(clusterPoints([lower, upper, middle], 2).map((cluster) => cluster.memberIds)).toEqual([
+      [lower.id, middle.id],
+      [upper.id],
+    ]);
+  });
+
+  it("keeps input and returned results independent on repeated calls", () => {
+    const input = Object.freeze([Object.freeze(point("frozen", 10, 10))]);
+    const first = clusterPoints(input, 2);
+    const second = clusterPoints(input, 2);
+    expect(first).toEqual(second);
+    expect(first[0]?.centroid).not.toBe(second[0]?.centroid);
+    expect(first[0]?.memberIds).not.toBe(second[0]?.memberIds);
+    expect(first[0]?.centroid).not.toBe(input[0]);
+  });
+
   it.each([null, {}, "points", new Set()])("rejects unsupported point containers %j", (points) => {
     fails(() => clusterPoints(points, 0), "INVALID_POINTS");
   });
