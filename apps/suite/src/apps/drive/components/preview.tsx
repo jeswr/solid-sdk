@@ -460,7 +460,12 @@ export function PreviewPage({ item, parent }: { item: DriveItem; parent: string 
   const { driveRoot } = useDrive();
   const back = !parent || parent === driveRoot ? "/drive/my" : `/drive/f/${encodeRef(parent)}`;
   return (
-    <div className="drv-preview-page">
+    <section
+      className="drv-preview-page"
+      data-drive-preview
+      aria-label="File preview"
+      tabIndex={-1}
+    >
       <h1 className="sr-only">{item.name}</h1>
       <PreviewHeader
         item={item}
@@ -473,6 +478,6 @@ export function PreviewPage({ item, parent }: { item: DriveItem; parent: string 
       <div className="drv-preview-body">
         <PreviewBody item={item} />
       </div>
-    </div>
+    </section>
   );
 }

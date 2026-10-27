@@ -74,17 +74,43 @@ interface DriveUiValue {
 
 const DriveUiContext = createContext<DriveUiValue | undefined>(undefined);
 
-/** Return focus to an item or its listing when a mutation removes a control. */
+/** Return focus to an item, listing, preview or main region after a control is removed. */
 export function focusDriveListing(
   url?: string,
   preferred?: HTMLElement | null,
   listing = document.querySelector<HTMLElement>("[data-drive-listing]"),
 ) {
   const row = url ? listing?.querySelector<HTMLElement>(`[data-url="${CSS.escape(url)}"]`) : null;
-  const target = preferred?.isConnected ? preferred : (row ?? listing);
-  target?.focus();
-  // A connected element may have become disabled or hidden during the mutation.
-  if (document.activeElement !== target) (row ?? listing)?.focus();
+  for (const target of [
+    preferred,
+    row,
+    listing,
+    document.querySelector<HTMLElement>("[data-drive-preview]"),
+    document.querySelector<HTMLElement>('main, [role="main"]'),
+  ]) {
+    if (!target?.isConnected) continue;
+    target.focus();
+    // A connected element may have become disabled or hidden during the mutation.
+    if (document.activeElement === target) return;
+  }
+}
+
+/** Capture focus before removal; preserve any surviving control the user moves to. */
+export function captureDriveFocusRemoval(subtree?: Element | null) {
+  const focused = document.activeElement;
+  const inside = subtree?.contains(focused);
+  return (url?: string, preferred?: HTMLElement | null, listing?: HTMLElement | null) => {
+    const active = document.activeElement;
+    if (
+      active &&
+      active !== document.body &&
+      active.isConnected &&
+      !active.matches(":disabled") &&
+      !(inside && active === focused)
+    )
+      return;
+    focusDriveListing(url, preferred, listing);
+  };
 }
 
 export function DriveUiProvider({ children }: { children: ReactNode }) {
@@ -94,7 +120,9 @@ export function DriveUiProvider({ children }: { children: ReactNode }) {
   const [detailsItems, setDetailsItems] = useState<readonly DriveItem[]>([]);
   const detailsFocus = useRef<HTMLElement | null>(null);
   const detailsVisible = useRef(false);
-  const restoreDetailsFocus = useRef(false);
+  const restoreDetailsFocus = useRef<ReturnType<typeof captureDriveFocusRemoval> | undefined>(
+    undefined,
+  );
   const setDetailsOpen = useCallback((next: boolean | ((open: boolean) => boolean)) => {
     const open = typeof next === "function" ? next(detailsVisible.current) : next;
     if (open === detailsVisible.current) return;
@@ -103,14 +131,25 @@ export function DriveUiProvider({ children }: { children: ReactNode }) {
         document.activeElement instanceof HTMLElement && document.activeElement !== document.body
           ? document.activeElement
           : null;
-    } else restoreDetailsFocus.current = true;
+    } else {
+      restoreDetailsFocus.current = captureDriveFocusRemoval(
+        document.querySelector(".ish-details, .ish-details-sheet"),
+      );
+    }
     detailsVisible.current = open;
     setDetailsOpenState(open);
   }, []);
   useLayoutEffect(() => {
     if (detailsOpen || !restoreDetailsFocus.current) return;
-    restoreDetailsFocus.current = false;
-    focusDriveListing(detailsItems[0]?.url, detailsFocus.current);
+    const restore = restoreDetailsFocus.current;
+    restoreDetailsFocus.current = undefined;
+    const listing = document.querySelector<HTMLElement>("[data-drive-listing]");
+    const row =
+      listing?.querySelector<HTMLElement>('[data-url][tabindex="0"]') ??
+      (detailsItems[0]
+        ? listing?.querySelector<HTMLElement>(`[data-url="${CSS.escape(detailsItems[0].url)}"]`)
+        : null);
+    restore(detailsItems[0]?.url, row ?? detailsFocus.current, listing);
   }, [detailsOpen, detailsItems]);
   const [uploadRequest, setUploadRequest] = useState<{ id: number; folder: boolean }>();
   const [currentFolder, setCurrentFolder] = useState<string>();

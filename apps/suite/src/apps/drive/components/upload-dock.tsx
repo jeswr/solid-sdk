@@ -5,9 +5,9 @@
 
 import { FileTypeIcon, IconButton, Progress, toast } from "@jeswr/suite-ui";
 import { Check, ChevronDown, ChevronUp, RotateCcw, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useDrive } from "../state/drive-context";
-import { focusDriveListing } from "../state/ui";
+import { captureDriveFocusRemoval } from "../state/ui";
 
 export function UploadDock() {
   const { uploads } = useDrive();
@@ -17,6 +17,13 @@ export function UploadDock() {
   const done = tasks.filter((task) => task.status === "done");
   const reported = useRef(new Set<string>());
   const toggle = useRef<HTMLButtonElement>(null);
+  const dock = useRef<HTMLElement>(null);
+  const restoreFocus = useRef<(() => void) | undefined>(undefined);
+  useLayoutEffect(() => {
+    const restore = restoreFocus.current;
+    restoreFocus.current = undefined;
+    restore?.();
+  });
 
   // "Uploaded {n} files" once a batch settles.
   useEffect(() => {
@@ -36,7 +43,7 @@ export function UploadDock() {
       ? `Uploading ${active.length} ${active.length === 1 ? "item" : "items"}`
       : `${done.length} ${done.length === 1 ? "upload" : "uploads"} complete`;
   return (
-    <section className="drv-dock" aria-label="Uploads">
+    <section ref={dock} className="drv-dock" aria-label="Uploads">
       <header>
         <h2 aria-live="polite">{title}</h2>
         <IconButton
@@ -56,8 +63,8 @@ export function UploadDock() {
             label="Close uploads"
             variant="ghost"
             onClick={() => {
+              restoreFocus.current = captureDriveFocusRemoval(dock.current);
               uploads.clear();
-              focusDriveListing();
             }}
           >
             <X aria-hidden="true" size={18} />
@@ -87,9 +94,10 @@ export function UploadDock() {
                 <IconButton
                   label={`Retry ${task.name}`}
                   variant="ghost"
-                  onClick={() => {
+                  onClick={(event) => {
+                    const restore = captureDriveFocusRemoval(event.currentTarget);
+                    restoreFocus.current = () => restore(undefined, toggle.current);
                     uploads.retry(task.id);
-                    focusDriveListing(undefined, toggle.current);
                   }}
                 >
                   <RotateCcw aria-hidden="true" size={16} />
