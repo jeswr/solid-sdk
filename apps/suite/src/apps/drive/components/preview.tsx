@@ -94,7 +94,7 @@ function useLoadedFile(client: DriveClient, item: DriveItem): Loaded {
   const kind = filePreviewKind(item);
   const version = useResourceVersion(item.url);
   const [state, setState] = useState<Loaded>({ status: "loading" });
-  // biome-ignore lint/correctness/useExhaustiveDependencies: version invalidates the resource bytes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: metadata and version invalidate the resource bytes
   useEffect(() => {
     let live = true;
     let objectUrl: string | undefined;
@@ -138,7 +138,7 @@ function useLoadedFile(client: DriveClient, item: DriveItem): Loaded {
       live = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [client, item.url, kind, version]);
+  }, [client, item.url, item.etag, item.size, item.contentType, kind, version]);
   return state;
 }
 

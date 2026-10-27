@@ -7,7 +7,11 @@ import type { DriveItem } from "../src/apps/drive/lib/client/client";
 import { act, click, deferred, h, mount } from "./drive-ui-dom";
 
 const { client, ui } = vi.hoisted(() => ({
-  client: { read: vi.fn(), readRdf: vi.fn() },
+  client: {
+    read: vi.fn(),
+    readRdf: vi.fn(),
+    stat: vi.fn().mockRejectedValue(new Error("Metadata unavailable")),
+  },
   ui: vi.fn(),
 }));
 const changes = { subscribe: () => () => {} };

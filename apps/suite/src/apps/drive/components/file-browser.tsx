@@ -217,6 +217,15 @@ export function FileBrowser(props: FileBrowserProps) {
 
   const { setDetailsItems, setCurrentFolder, uploadRequest } = ui;
   useEffect(() => setDetailsItems(selected), [selected, setDetailsItems]);
+  const { preview, setPreview } = ui;
+  useEffect(() => {
+    if (!items || refreshing || !preview) return;
+    // Preview keeps its navigation order, but adopts refreshed metadata by URL.
+    const byUrl = new Map(items.map((item) => [item.url, item]));
+    const next = preview.items.map((item) => byUrl.get(item.url) ?? item);
+    if (next.some((item, index) => item !== preview.items[index]))
+      setPreview({ ...preview, items: next });
+  }, [items, refreshing, preview, setPreview]);
   useEffect(() => {
     setCurrentFolder(folder);
     return () => setCurrentFolder(undefined);

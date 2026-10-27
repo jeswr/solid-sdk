@@ -22,6 +22,7 @@ export interface DriveItem {
   readonly contentType?: string;
   readonly size?: number;
   readonly modified?: Date;
+  readonly etag?: string;
 }
 
 export interface WriteOptions {
@@ -52,7 +53,7 @@ export interface DriveClient {
   /** Children of a folder (hidden dot-names included; the UI filters them). */
   list(folderUrl: string, options?: { signal?: AbortSignal }): Promise<DriveItem[]>;
   /** Metadata for one item (HEAD), optionally conditional on the expected version. */
-  stat(url: string, options?: { ifMatch: string }): Promise<DriveItem & { etag?: string }>;
+  stat(url: string, options?: { ifMatch: string }): Promise<DriveItem>;
   read(url: string): Promise<Blob>;
   /** Bytes and validator from the same GET, for subsequent conditional deletion. */
   readVersion(url: string): Promise<{ body: Blob; etag?: string }>;

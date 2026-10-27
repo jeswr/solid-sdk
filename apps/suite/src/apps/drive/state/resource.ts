@@ -19,7 +19,7 @@ export function useResourceVersion(url: string | undefined): number {
 
 export function useLiveItem(initial: DriveItem): DriveItem;
 export function useLiveItem(initial: DriveItem | undefined): DriveItem | undefined;
-/** Keep selected/previewed metadata current even when its original listing is unmounted. */
+/** Revalidate on opening, new listing metadata and changes, including missed notifications. */
 export function useLiveItem(initial: DriveItem | undefined): DriveItem | undefined {
   const { client } = useDrive();
   const version = useResourceVersion(initial?.url);
@@ -28,8 +28,10 @@ export function useLiveItem(initial: DriveItem | undefined): DriveItem | undefin
     source: DriveItem;
     item: DriveItem;
   }>();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: version invalidates the resource metadata
   useEffect(() => {
-    if (!initial || version === 0) return;
+    if (!initial) return;
+    // A newer source or invalidation supersedes this HEAD, even for the same URL.
     let live = true;
     client.stat(initial.url).then(
       (item) => live && setSnapshot({ client, source: initial, item }),
