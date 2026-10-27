@@ -51,7 +51,8 @@
  * **Pure core, no platform:** only the WHATWG `fetch` / `Response` globals — browser-safe, no
  * `node:*` import. Exported from the default `.` entry and re-exported from `./node`.
  */
-import { isRedirect, redactUserinfo, snapshotRequest } from "./redirect.js";
+import { isRedirect, redactUserinfo } from "./redirect.js";
+import { snapshotFetchInput } from "./request-snapshot.js";
 
 /**
  * Raised when {@link refuseRedirects} refuses a redirect response instead of following it.
@@ -118,16 +119,13 @@ export function refuseRedirects(
   fetch: typeof globalThis.fetch = globalThis.fetch,
 ): typeof globalThis.fetch {
   const wrapped = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    // Never forward a mutable URL or read a caller-shadowable Request.url. The
-    // owned native snapshot preserves body and policy, including referrer fields.
-    const request =
-      typeof input === "string" || input instanceof URL ? undefined : snapshotRequest(input, init);
-    const target = request ?? String(input);
-    const url = request ? request.url : String(target);
+    const snapshot = snapshotFetchInput(input, init);
+    const { url } = snapshot;
+    const request = typeof snapshot.input === "string" ? undefined : snapshot.input;
     const effectiveInit: RequestInit = request
       ? { referrer: request.referrer, referrerPolicy: request.referrerPolicy, redirect: "manual" }
-      : { ...init, redirect: "manual" };
-    const res = await fetch(target, effectiveInit);
+      : { ...snapshot.init, redirect: "manual" };
+    const res = await fetch(snapshot.input, effectiveInit);
 
     const opaqueRedirect = res.type === "opaqueredirect";
     // Preserve the legacy clients' broader refusal as well as standard moved

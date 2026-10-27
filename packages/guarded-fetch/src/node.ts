@@ -74,7 +74,12 @@ export type { DnsLookup, GuardOptions, ResolvedAddress } from "./index.js";
 // redirect-refusing). `./index.js` is external in the node bundle, so `RedirectRefusedError` is
 // the SAME runtime class as the one from `@jeswr/guarded-fetch` (a single shared class, like
 // `SsrfError`), and `instanceof` works across both entries.
-export { RedirectRefusedError, refuseRedirects, snapshotRequest } from "./index.js";
+export {
+  RedirectRefusedError,
+  refuseRedirects,
+  snapshotFetchInput,
+  snapshotRequest,
+} from "./index.js";
 
 /** The `net.connect`-style lookup callback undici's connector invokes. */
 export type ConnectLookup = (

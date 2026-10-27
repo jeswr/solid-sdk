@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { snapshotFetchInput } from "@jeswr/guarded-fetch";
 import { matchingFixtureRoute } from "./fixture-route.js";
 import type { FixtureRoute } from "./types.js";
 
@@ -61,18 +62,15 @@ export function createFixtureRecorder(options: {
   const recorded = new Map<number, FixtureRoute>();
   let nextRequest = 0;
   const fetchImpl: typeof fetch = async (input, init) => {
-    // Constructing a new Request from a POST Request transfers its body stream.
-    // Read only URL/method metadata so the source transport receives the original body.
-    const url = new URL(
-      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
-    );
+    const snapshot = snapshotFetchInput(input, init);
+    const url = new URL(snapshot.url);
     const method = (
-      init?.method ?? (input instanceof Request ? input.method : "GET")
+      snapshot.init?.method ?? (typeof snapshot.input === "string" ? "GET" : snapshot.input.method)
     ).toUpperCase();
     const route = matchingFixtureRoute(url, routes);
     if (!route) throw new Error("Request has no configured public recorder route.");
     const sequence = nextRequest++;
-    const response = await options.fetch(input, init);
+    const response = await options.fetch(snapshot.input, snapshot.init);
     let body: unknown;
     try {
       body = await response.clone().json();

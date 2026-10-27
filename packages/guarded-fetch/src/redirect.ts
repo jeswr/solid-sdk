@@ -13,6 +13,8 @@
  * additionally strips credential headers and the body).
  */
 
+import { snapshotFetchInput } from "./request-snapshot.js";
+
 /** Whether a status code is a redirect we re-validate + follow manually. */
 export function isRedirect(status: number): boolean {
   return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
@@ -142,29 +144,14 @@ export function rewriteInitForRedirect(
   return next;
 }
 
-/** Snapshot native internal slots before reading any caller-shadowable Request properties. */
-export function snapshotRequest(input: Request, init?: RequestInit): Request {
-  // A nonempty init resets these two fields unless explicitly carried forward.
-  // Invoke native getters directly so own properties cannot substitute policy.
-  return new Request(input, {
-    referrer: Reflect.get(Request.prototype, "referrer", input),
-    referrerPolicy: Reflect.get(Request.prototype, "referrerPolicy", input),
-    ...init,
-  });
-}
-
-/** Normalise a fetch call using a native snapshot and all its request policy fields. */
+/** Normalise a captured fetch call into the redirect loop's URL/init interface. */
 export function normalizeRequest(
   input: RequestInfo | URL,
   init: RequestInit | undefined,
 ): { url: string; init: RequestInit | undefined; request?: Request } {
-  if (typeof input === "string") {
-    return { url: input, init };
-  }
-  if (input instanceof URL) {
-    return { url: input.toString(), init };
-  }
-  const req = snapshotRequest(input, init);
+  const snapshot = snapshotFetchInput(input, init);
+  if (typeof snapshot.input === "string") return { url: snapshot.url, init: snapshot.init };
+  const req = snapshot.input;
   const fromRequest: RequestInit = {
     method: req.method,
     headers: req.headers,
@@ -179,5 +166,5 @@ export function normalizeRequest(
     ...(req.signal ? { signal: req.signal } : {}),
     ...(req.body ? { body: req.body, duplex: "half" } : {}),
   } as RequestInit;
-  return { url: req.url, init: { ...init, ...fromRequest }, request: req };
+  return { url: snapshot.url, init: { ...init, ...fromRequest }, request: req };
 }

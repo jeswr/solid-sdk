@@ -14,11 +14,11 @@ import {
   isWithinPodScope,
   PodScopeError,
   refuseRedirects,
+  snapshotFetchInput,
 } from "@jeswr/guarded-fetch";
 import type { DatasetCore } from "@rdfjs/types";
 import { Agent } from "@solid/object";
 import { DataFactory, Store } from "n3";
-import { snapshotFetchInput } from "../core/request-snapshot.js";
 import { freshRdf } from "./rdf-read.js";
 import { ResourceWriteError, writeResource } from "./resource.js";
 import {

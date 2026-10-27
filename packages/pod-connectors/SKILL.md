@@ -23,7 +23,8 @@ Hosts pass the canonical `profileDocumentUrl` from their existing profile load i
 createFetchPodWriter. Pin profile reads and updates to that document while keeping the WebID
 as the RDF subject. Do not resolve redirects or fetch an unauthenticated profile during
 registration; authenticated profile and Type Index operations refuse redirects.
-Source API and document-bound fetch wrappers snapshot native Requests before validating
+Source API, document-bound fetch wrappers, and the fixture recorder use guarded-fetch's
+`snapshotFetchInput` to snapshot Requests before validating
 their URLs and forward the snapshots, preserving effective bodies and policies. Mutable
 URL inputs become checked strings before any asynchronous transport work.
 

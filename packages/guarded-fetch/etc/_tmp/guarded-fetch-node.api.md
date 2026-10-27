@@ -81,6 +81,13 @@ export interface ResolvedAddress {
 }
 
 // @public
+export function snapshotFetchInput(input: RequestInfo | URL, init?: RequestInit): {
+    input: string | Request;
+    url: string;
+    init: RequestInit | undefined;
+};
+
+// @public
 export function snapshotRequest(input: Request, init?: RequestInit): Request;
 
 // (No @packageDocumentation comment for this package)

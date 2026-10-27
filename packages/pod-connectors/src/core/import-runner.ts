@@ -11,11 +11,10 @@
  * Documents land at `<podRoot>integrations/<adapterId>/<slug>` — deterministic
  * URLs, so a re-import overwrites in place (idempotent).
  */
-import { refuseRedirects } from "@jeswr/guarded-fetch";
+import { refuseRedirects, snapshotFetchInput } from "@jeswr/guarded-fetch";
 import { IntegrationSyncError } from "./errors.js";
 import { fixtureFetch } from "./fixture-fetch.js";
 import { createImportSession } from "./import-session.js";
-import { snapshotFetchInput } from "./request-snapshot.js";
 import type {
   ConnectorState,
   ConnectorStateOptions,
@@ -156,7 +155,7 @@ export function createSourceAuth(
     }
     const headers = new Headers(
       snapshot.init?.headers ??
-        (snapshot.input instanceof Request ? snapshot.input.headers : undefined),
+        (typeof snapshot.input === "string" ? undefined : snapshot.input.headers),
     );
     headers.set("authorization", `Bearer ${token.accessToken}`);
     for (const [k, v] of Object.entries(adapter.apiHeaders ?? {})) headers.set(k, v);

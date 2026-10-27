@@ -40,14 +40,21 @@ The default entry is browser-safe and applies URL policy without importing `node
 - Pod boundaries: `assertWithinPodScope`, `isWithinPodScope`, `podScopedUrl`,
   `createPodScopedFetch`.
 - Credentialed fetches: `refuseRedirects` rejects every redirect instead of following it.
+- Input capture: `snapshotFetchInput(input, init)` returns the target string and the
+  matching string or Request snapshot to validate and forward; `snapshotRequest` remains
+  available for native Request snapshots.
 - Errors: `SsrfError`, `GuardError`, `PodScopeError`, `RedirectRefusedError`.
 
 Private, loopback, link-local, metadata, malformed, and disallowed redirect targets are rejected.
 Loopback HTTP access is an explicit development-only option.
 
-Fetch wrappers snapshot native Request inputs before inspecting their URLs and preserve
-their body and request policies, including explicit init overrides and referrer fields.
-URL objects are captured as strings before transport. `RedirectRefusedError` accepts both
+Fetch wrappers share `snapshotFetchInput` to capture Request inputs before inspecting their
+URLs and preserve their body and request policies, including init overrides and referrer fields.
+Native URL getters ignore shadowed properties; other implementations and realms use their
+Request prototype's constructor/getter or a single string conversion before validation.
+A fully caller-defined Request class is only as trustworthy as the transport it is passed to,
+the same as on main.
+`RedirectRefusedError` accepts both
 `(message, { url, status, location?, cause? })` and the legacy `(url, status)` constructor
 used by unstorage-solid's identical `SolidRedirectError` alias. The legacy form retains
 the `SolidRedirectError` name and message; shared refusals retain `RedirectRefusedError`.

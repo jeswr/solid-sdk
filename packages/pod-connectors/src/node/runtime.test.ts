@@ -311,6 +311,28 @@ describe("owner-only checkpoint", () => {
 });
 
 describe("Pod client credentials", () => {
+  it("refuses the real target of a shadowed Request before Pod I/O", async () => {
+    const { transport, requests } = fixturePod();
+    const authenticated = await createClientCredentialsFetch(config, transport);
+    const request = new Request("https://outside.test/private");
+    Object.defineProperty(request, "url", { value: `${TEST_POD_ROOT}allowed` });
+    await expect(authenticated(request)).rejects.toThrow();
+    expect(requests).toEqual([]);
+  });
+
+  it("captures stringifiable inputs once before credentialed Pod I/O", async () => {
+    const { transport, requests } = fixturePod();
+    const authenticated = await createClientCredentialsFetch(config, transport);
+    const target = `${TEST_POD_ROOT}missing`;
+    const stringify = vi
+      .fn()
+      .mockReturnValueOnce(target)
+      .mockReturnValue("https://outside.test/private");
+    expect((await authenticated({ toString: stringify } as unknown as URL)).status).toBe(404);
+    expect(stringify).toHaveBeenCalledOnce();
+    expect(requests.map((request) => request.url)).toEqual([target]);
+  });
+
   it.each([
     "https://second.test/alice/",
     "https://pod.test/second/",
