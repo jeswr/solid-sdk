@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { randomUUID } from "node:crypto";
-import { expect, test } from "@playwright/test";
+import { expect, test, type WebSocket } from "@playwright/test";
 import { CSS_BASE, handleLoginPopups, signIn } from "./helpers";
 import { seededAccounts } from "./seeded-accounts";
 
@@ -29,26 +29,26 @@ test("moves an issue on the open board through WebSocketChannel2023 without relo
     const saved = await created;
     expect(saved.ok()).toBe(true);
     const issueUrl = saved.url();
-    const containerUrl = new URL(".", issueUrl).href;
     await expect(editor.getByRole("heading", { name: title })).toBeVisible();
 
     // Observe the app's real subscription and socket; no route or WebSocket mocks.
+    const sockets: WebSocket[] = [];
+    page.on("websocket", (socket) => sockets.push(socket));
     const subscribed = page.waitForResponse((response) => {
       const request = response.request();
       if (response.status() === 401 || request.method() !== "POST" || !request.headers()["content-type"]?.includes("application/ld+json")) return false;
       const body = request.postDataJSON();
-      return body?.type === WEBSOCKET_CHANNEL_TYPE && body?.topic === containerUrl;
+      return body?.type === WEBSOCKET_CHANNEL_TYPE && body?.topic === issueUrl;
     });
-    const connected = page.waitForEvent("websocket");
     handleLoginPopups(context, alice.email, alice.password);
     await signIn(page, alice.webId);
     const subscription = await subscribed;
     expect(subscription.ok()).toBe(true);
     expect(new URL(subscription.url()).origin).toBe(CSS_BASE);
     const channel = await subscription.json() as { receiveFrom: string };
-    const socket = await connected;
     // receiveFrom can contain a capability token: compare without printing it.
-    expect(socket.url() === channel.receiveFrom).toBe(true);
+    await expect.poll(() => sockets.some((socket) => socket.url() === channel.receiveFrom)).toBe(true);
+    const socket = sockets.find((socket) => socket.url() === channel.receiveFrom)!;
     await page.getByRole("tab", { name: "Board view", exact: true }).click();
     const todo = page.getByRole("region", { name: /^to do \(/i });
     const inProgress = page.getByRole("region", { name: /^in progress \(/i });
@@ -65,9 +65,9 @@ test("moves an issue on the open board through WebSocketChannel2023 without relo
       timeout: 10_000,
       predicate: ({ payload }) => {
         try {
-          const event = JSON.parse(payload.toString()) as { object?: string | { id?: string } };
+          const event = JSON.parse(payload.toString()) as { type?: string; object?: string | { id?: string } };
           const resource = typeof event.object === "string" ? event.object : event.object?.id;
-          return resource === issueUrl || resource === containerUrl;
+          return event.type === "Update" && resource === issueUrl;
         } catch { return false; }
       },
     });

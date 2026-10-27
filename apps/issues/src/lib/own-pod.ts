@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Own-pod SSRF guard (load-bearing security).
  *
@@ -18,10 +19,9 @@
  * profile — and reject anything else. We also enforce an http(s)-only scheme so a
  * `data:`/`file:`/`javascript:` URL can never slip through.
  *
- * The WebSocket `receiveFrom` URL is a `ws:`/`wss:` URL on the SAME ORIGIN as a
- * pod storage (the pod's notification gateway), so it is validated by origin only
- * (mapping ws→http / wss→https) — a path-prefix check does not apply to the
- * gateway socket path.
+ * Notification subscription services and WebSocket gateways may live outside
+ * the pod path (as on CSS). Those services are validated by storage origin;
+ * resource and inbox URLs still require the storage path prefix.
  *
  * Pure functions, no network — unit tested without a live server.
  */
@@ -81,6 +81,17 @@ export function isOwnPodUrl(url: string | null | undefined, storageUrls: readonl
     if (storage && withinStorage(candidate, storage)) return true;
   }
   return false;
+}
+
+/**
+ * Whether a discovered notification service is HTTP(S) on an own storage origin.
+ * Server-level services need not live under the user's pod path. Resource and
+ * inbox fetches must continue to use {@link isOwnPodUrl} instead.
+ */
+export function isOwnPodServiceUrl(url: string | null | undefined, storageUrls: readonly string[]): boolean {
+  const candidate = parse(url);
+  if (!candidate || !isHttpUrl(candidate) || candidate.username || candidate.password) return false;
+  return storageUrls.some((root) => parseStorage(root)?.origin === candidate.origin);
 }
 
 /**

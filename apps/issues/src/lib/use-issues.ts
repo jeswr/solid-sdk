@@ -1,4 +1,5 @@
 "use client";
+// AUTHORED-BY Codex GPT-6.1-Sol
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -317,28 +318,27 @@ export function useIssues(
   // Stable join of the own-storage roots so the live-sync effect doesn't re-run
   // (and re-subscribe) when the caller passes a fresh array of the same values.
   const ownStorageKey = ownStorageUrls.join("\n");
+  // Content edits keep the same topic set; only membership changes re-subscribe.
+  const issueUrlsKey = JSON.stringify([...new Set(issues.map((issue) => issue.url))].sort());
 
-  // Live-sync: refresh (debounced) when the tracker's container changes in the
-  // pod. The own-pod storage roots gate the WebSocket subscription's SSRF guard
-  // (notifications.ts) — a foreign subscription/socket URL degrades to polling.
+  // Container notifications cover membership changes. Watch each loaded issue
+  // too so edits to existing resources invalidate the board on CSS.
   useEffect(() => {
     if (!trackerUrl) return;
     const containerUrl = new Repository(trackerUrl).containerUrl;
     const ownStorage = ownStorageKey ? ownStorageKey.split("\n") : [];
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const sync = watchContainer(
-      containerUrl,
-      () => {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(() => void fetchInto(), 800);
-      },
-      { ownStorageUrls: ownStorage },
-    );
+    const onChange = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => void fetchInto(), 800);
+    };
+    const topics = new Set([containerUrl, ...JSON.parse(issueUrlsKey) as string[]]);
+    const syncs = [...topics].map((topic) => watchContainer(topic, onChange, { ownStorageUrls: ownStorage }));
     return () => {
-      sync.close();
+      for (const sync of syncs) sync.close();
       if (timer) clearTimeout(timer);
     };
-  }, [trackerUrl, fetchInto, ownStorageKey]);
+  }, [trackerUrl, fetchInto, ownStorageKey, issueUrlsKey]);
 
   const mutate = useCallback(
     async (apply: (r: Repository) => Promise<unknown>) => {
