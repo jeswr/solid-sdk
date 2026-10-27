@@ -107,3 +107,42 @@ unfinished implementation work. `roborev` and the optional ROBOT/HermiT reasoner
 remain unavailable as documented above. Root scripts, tests and guardrails are
 unchanged from this round's base; the full-workspace failure remains an external
 verification limit.
+
+## Fix round 2 — nested and subclass coverage
+
+Base: `8912474e71e3850e15fa2fc87eb50fa7e86e13ad`.
+
+- `be981958` — `fix(vocab): retain nested failure coverage`: retain enclosing
+  results for coverage attribution while keeping deduplicated leaves for failure
+  counting and expected-path checks. Regression checks replace the Valuation
+  negative with a nested MonetaryAmount failure, remove the standalone helper
+  negative, and verify both shapes remain covered. Wrong wrapper paths, multiple
+  leaf failures and unrelated helper failures remain rejected.
+- `85333da5` — `fix(vocab): include subclasses in fixture coverage`: follow
+  transitive `rdfs:subClassOf` links in fixture data for class targets, matching
+  the installed validator. Positive/negative pairs using direct and transitive
+  subclasses pass; unrelated classes cannot supply coverage.
+- `docs: record coverage attribution fix results` — this round's status update.
+
+Both regressions reproduced the review findings before their respective fixes:
+the nested failure lost ValuationShape negative coverage, and the subclass pair
+lost both positive and negative BookmarkShape coverage. Tests use temporary
+copies, `@rdfjs/wrapper` accessors and `n3.Parser` / `n3.Writer`.
+
+Commands use `PATH=/opt/node24/bin:$PATH` (Node `v24.22.1`, pnpm `10.4.1`):
+
+| Exact command | Result |
+| --- | --- |
+| `node packages/solid-federation-vocab/scripts/test-shacl-fixtures.mjs` | PASS after each fix; FAIL as expected before each fix. |
+| `pnpm exec biome check --write packages/solid-federation-vocab/scripts/shacl-fixtures.mjs packages/solid-federation-vocab/scripts/test-shacl-fixtures.mjs` | PASS; formatted the regression checks. |
+| `pnpm --filter @jeswr/solid-federation-vocab run gate` | PASS: lint, build, typecheck, test and ontology; 179 fixtures across 14 sectors and all regression checks. |
+| `TURBO_SCM_BASE=8912474e71e3850e15fa2fc87eb50fa7e86e13ad pnpm run gate` | PASS: root lint and all affected tasks; 5 successful / 5 total. |
+| `pnpm run gate:full` | FAIL at `//#test:root`: 161 failed / 739 passed tests across the same four unchanged root files listed above, with empty subprocess diagnostics. Turbo stopped after 33 successful / 196 total tasks. |
+| `git diff --check` and `git diff --check 8912474e71e3850e15fa2fc87eb50fa7e86e13ad..HEAD` | PASS. |
+
+No dependencies, profiles or permanent fixture data changed. No new design
+questions or unfinished implementation work remain. `roborev` and the optional
+ROBOT/HermiT reasoner remain unavailable as documented above; ontology parsing
+and term hygiene passed. The full-workspace gate remains an external verification
+limit; root scripts, tests and guardrails are unchanged from this round's base.
+No push, PR, branch switch or fetch/merge was performed.
