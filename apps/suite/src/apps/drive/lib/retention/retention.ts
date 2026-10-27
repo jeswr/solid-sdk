@@ -71,7 +71,7 @@ function own(target: object, key: PropertyKey): unknown {
   }
 }
 
-function nonnegativeInteger(value: unknown): void {
+function nonnegativeInteger(value: unknown): asserts value is number {
   valid(Number.isSafeInteger(value) && (value as number) >= 0);
 }
 
