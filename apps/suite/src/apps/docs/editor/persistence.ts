@@ -9,10 +9,11 @@ import type { PodSession } from "@/lib/session/pod-session";
 import { createSolidDriveClient } from "../../drive/lib/client/client";
 import { deriveTitle, type SaveState, wordCount } from "../lib/editor/logic";
 import {
+  type BuildDocumentInput,
   createDocsStore,
   type DocsStore,
   docContainerUrls,
-  isDirectChild,
+  documentUpdateLocation,
   ResourceWriteError,
   type StoredDocument,
   TitleConflictError,
@@ -23,6 +24,7 @@ import {
   sameIncarnation,
 } from "../lib/model/incarnation";
 import { copyDocument } from "./copy";
+import { draftMirrorName, withDraftLock } from "./drafts";
 import { baseExtensions } from "./extensions";
 import { updateMirrorMetadata } from "./mirror-metadata";
 import { DocumentUpdateStore } from "./update-store";
@@ -81,7 +83,10 @@ export class DocumentPersistence {
   private bytes = 0;
   notify = () => {};
   onCreated: (url: string) => void = () => {};
-  constructor(readonly session: PodSession) {
+  constructor(
+    readonly session: PodSession,
+    readonly draftId = crypto.randomUUID(),
+  ) {
     const keepaliveFetch: typeof fetch = (input, init) => {
       const body = init?.body;
       const fits =
@@ -248,20 +253,35 @@ export class DocumentPersistence {
     while (this.version !== this.savedVersion) {
       const version = this.version;
       const source = this.stored ?? remote;
-      this.pendingRecovery ??= {
+      const json = yDocToProsemirrorJSON(this.doc) as JSONContent;
+      // Rebuild local intent on every attempt. Reuse our untouched reservation,
+      // but never overwrite a copy whose snapshot has since changed.
+      const prior = this.pendingRecovery;
+      let reservation = prior?.reservation;
+      if (
+        reservation &&
+        (prior?.title !== this.title || JSON.stringify(prior.json) !== JSON.stringify(json))
+      ) {
+        const current = await this.store.read(reservation.url);
+        if (!current || current.etag !== reservation.etag || !sameIncarnation(reservation, current))
+          reservation = undefined;
+      }
+      this.pendingRecovery = {
         key: `recovery:${this.pendingEdit?.owner ?? this.editOwner}`,
         title: this.title,
         source: {
           ...source,
           data: { ...source.data, title: `Recovered edits — ${this.title}`.slice(0, 190) },
         },
-        json: yDocToProsemirrorJSON(this.doc) as JSONContent,
+        json,
+        ...(reservation ? { reservation } : {}),
       };
       const recovery = this.pendingRecovery;
       const remember = () =>
         this.withMirror((mirror) => mirror.set(recovery.key, JSON.stringify(recovery)));
       await remember();
       const copy = await copyDocument(this.store, recovery.source, this.session, recovery.json, {
+        recovery: true,
         reservation: recovery.reservation,
         onReserved: async (reserved) => {
           recovery.reservation = reserved;
@@ -339,41 +359,29 @@ export class DocumentPersistence {
   }
   private async identify(stored: StoredDocument, recover = false) {
     if (stored.data.instanceId || stored.url.startsWith(this.store.legacyContainer)) return stored;
-    // A legacy snapshot may already have an id in its log. Inspect it in
-    // isolation before assigning one; never merge an unverified local mirror.
-    const probe = new Doc();
-    try {
-      let id: unknown;
-      try {
-        for (const { update } of await new DocumentUpdateStore(
-          stored.data.updateLog ?? docContainerUrls(stored.url).updateLog,
-          this.session.fetch,
-          async () => {},
-          false,
-        ).loadUpdates())
-          applyUpdate(probe, update);
-        id = probe.getMap("document").get("instanceId");
-      } catch (error) {
-        // Explicit recovery trusts the conditional snapshot, retiring an
-        // unusable log. Ordinary opens must still require its complete history.
-        if (!recover) throw error;
-      }
-      return await this.store.claimIdentity(
-        stored,
-        typeof id === "string" ? id : crypto.randomUUID(),
-      );
-    } finally {
-      probe.destroy();
-    }
+    return this.store.claimIdentity(stored, undefined, { requireHistory: true, recover });
   }
   async open(url?: string, recover = false) {
     this.assertActive();
     let pending: unknown;
     let cached: { webId: string; document: StoredDocument } | undefined;
     if (!recover || !url) {
-      this.local = this.createMirror(url ?? `suite.docs.draft:${this.session.webId}`);
+      this.local = this.createMirror(url ?? draftMirrorName(this.session.webId, this.draftId));
       await this.local.whenSynced;
       this.assertActive();
+      if (!url) {
+        const promoted: unknown = await this.local.get("promoted");
+        if (typeof promoted === "string") {
+          await this.local.destroy();
+          this.mirrorGeneration++;
+          this.doc.destroy();
+          this.doc = new Doc();
+          this.trackUpdates();
+          await this.open(promoted);
+          this.onCreated(promoted);
+          return;
+        }
+      }
       pending = await this.readPending();
       const seen = new Set<string>();
       while (url && !pending && !seen.has(this.local.name)) {
@@ -397,6 +405,8 @@ export class DocumentPersistence {
           this.stored = creating;
           this.creation = "creating";
         }
+        this.json = yDocToProsemirrorJSON(this.doc) as JSONContent;
+        this.body = generateHTML(this.json, baseExtensions(this.session.fetch));
         return;
       }
       cached = await this.metadata<{ webId: string; document: StoredDocument }>("stored");
@@ -546,12 +556,7 @@ export class DocumentPersistence {
       this.doc.getMap("document").set("instanceId", this.stored.data.instanceId);
   }
   private updateContainer() {
-    const stored = this.stored as StoredDocument;
-    const layout = docContainerUrls(stored.url);
-    const container = stored.data.updateLog ?? layout.updateLog;
-    if (!container.endsWith("/") || !isDirectChild(container.slice(0, -1), layout.container))
-      throw new Error("Invalid update location");
-    return container;
+    return documentUpdateLocation(this.stored as StoredDocument);
   }
   private recordIdentity(): string {
     const identity =
@@ -741,7 +746,12 @@ export class DocumentPersistence {
     if (this.readOnly || !this.online || this.conflict) return;
     if (this.creation === "draft" && this.version === this.savedVersion) return;
     if (this.tail) return this.tail;
-    this.tail = this.write().finally(() => {
+    const write = () => this.write();
+    this.tail = (
+      this.creation === "created"
+        ? write()
+        : withDraftLock(draftMirrorName(this.session.webId, this.draftId), write)
+    ).finally(() => {
       this.tail = undefined;
     });
     return this.tail;
@@ -766,7 +776,18 @@ export class DocumentPersistence {
         this.notify();
         if (this.creation !== "created") {
           if (this.creation === "draft") {
-            this.stored = await this.store.create({ ...snapshot, title });
+            // A second opener may have promoted this same draft while this
+            // writer waited for the promotion lock. Join that reservation.
+            let allocation = await this.metadata<BuildDocumentInput>("allocation");
+            if (!allocation) {
+              allocation = { ...snapshot, title, instanceId: crypto.randomUUID() };
+              await this.withMirror((mirror) =>
+                mirror.set("allocation", JSON.stringify(allocation)),
+              );
+            }
+            this.stored =
+              (await this.metadata<StoredDocument>("creating")) ??
+              (await this.store.create(allocation));
             this.creation = "creating";
             await this.local?.set("creating", JSON.stringify(this.stored));
           }
@@ -794,7 +815,10 @@ export class DocumentPersistence {
           this.needsFullState = false;
           this.providerError = undefined;
           if (this.draftMirror) {
-            await this.draftMirror.clearData();
+            // Retain a durable promotion receipt: reloading the old draft URL
+            // joins this incarnation rather than creating another document.
+            await this.draftMirror.set("promoted", stored.url);
+            await this.draftMirror.set("pending", 0);
             await this.draftMirror.destroy();
             this.draftMirror = undefined;
           }

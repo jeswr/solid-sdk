@@ -6,6 +6,7 @@ import { refuseRedirects } from "@jeswr/guarded-fetch";
 import { termsEqual } from "@jeswr/suite-vocab";
 import { Container, ContainerDataset } from "@solid/object";
 import { DataFactory, Store } from "n3";
+import { applyUpdate, Doc } from "yjs";
 import {
   type BuildDocumentInput,
   buildDocument,
@@ -20,9 +21,17 @@ import {
   TitleConflictError,
 } from "./errors.js";
 import { DocumentReplacedError, sameIncarnation } from "./incarnation.js";
-import { DOCS_SLUG, docContainerUrls, isDirectChild, LEGACY_DOCS_SLUG, toSlug } from "./layout.js";
+import {
+  DOCS_SLUG,
+  docContainerUrls,
+  documentUpdateLocation,
+  isDirectChild,
+  LEGACY_DOCS_SLUG,
+  toSlug,
+} from "./layout.js";
 import { nameFromUrl, REVALIDATE_HEADERS, readRdf, serializeTurtle, writeRdf } from "./rdf-io.js";
 import { discoverRegistrations, ensureTypeRegistrations } from "./type-index.js";
+import { DocumentUpdateStore } from "./update-store.js";
 import { DOCUMENT_CLASS, NS, PREFIXES } from "./vocab.js";
 
 export interface StoredDocument {
@@ -58,6 +67,10 @@ export interface CopyState {
   onReserved?: ((copy: StoredDocument) => Promise<void>) | undefined;
   /** Only referenced assets, not every file left in the source container. */
   assets: readonly string[];
+  /** Recovery may resolve an asset from the source incarnation's trash pair. */
+  readAsset?: ((url: string) => Promise<Response>) | undefined;
+  /** Empty mapping targets mean a missing image must become a visible placeholder. */
+  allowMissingAssets?: boolean;
   snapshot: (assetUrls: ReadonlyMap<string, string>) => Snapshot | Promise<Snapshot>;
   /** Persist a clone of the captured state with the same remapped asset references. */
   persistFullState: (
@@ -105,7 +118,11 @@ export class DocsStore {
   }
 
   /** Claim only the version that was opened, preserving all existing RDF and history. */
-  async claimIdentity(stored: StoredDocument, instanceId: string): Promise<StoredDocument> {
+  async claimIdentity(
+    stored: StoredDocument,
+    instanceId?: string,
+    options: { requireHistory?: boolean; recover?: boolean } = {},
+  ): Promise<StoredDocument> {
     this.assertScope(stored.url, true);
     if (stored.data.instanceId) return stored;
     const joinClaim = (remote: StoredDocument | undefined) => {
@@ -122,6 +139,28 @@ export class DocsStore {
       const data = parseDocument(stored.url, dataset);
       return joinClaim(data ? { url: stored.url, etag, data } : undefined);
     }
+    // Discover in isolation: a legacy log may already own an identity. All
+    // writers (including list renames) must join it before modifying RDF.
+    const container = documentUpdateLocation(stored);
+    const probe = new Doc();
+    try {
+      try {
+        const updates = await new DocumentUpdateStore(
+          container,
+          this.fetchImpl,
+          async () => {},
+          !options.requireHistory,
+        ).loadUpdates();
+        for (const { update } of updates) applyUpdate(probe, update);
+        const recorded = probe.getMap("document").get("instanceId");
+        if (typeof recorded === "string") instanceId = recorded;
+      } catch (error) {
+        if (!options.recover) throw error;
+      }
+    } finally {
+      probe.destroy();
+    }
+    instanceId ??= crypto.randomUUID();
     new DocumentDoc(`${stored.url}#it`, dataset, DataFactory).instanceId = instanceId;
     try {
       const written = await writeRdf(stored.url, dataset, { etag, fetchImpl: this.fetchImpl });
@@ -210,7 +249,7 @@ export class DocsStore {
       const dataset = buildDocument(url, {
         ...input,
         ...layout,
-        instanceId: crypto.randomUUID(),
+        instanceId: input.instanceId ?? crypto.randomUUID(),
         creator: input.creator ?? this.webId,
       });
       let etag: string | null;
@@ -226,7 +265,21 @@ export class DocsStore {
           prefixes: PREFIXES,
         }));
       } catch (error) {
-        if (error instanceof ResourceWriteError && error.status === 412) continue;
+        if (error instanceof ResourceWriteError && error.status === 412) {
+          if (input.instanceId) {
+            let existing: StoredDocument | undefined;
+            try {
+              existing = await this.read(url);
+            } catch (readError) {
+              if (!(readError instanceof RdfFetchError && readError.status === 404))
+                throw readError;
+            }
+            // A draft may have published its snapshot before losing the first
+            // acknowledgement. Reuse only its persisted allocation identity.
+            if (existing?.data.instanceId === input.instanceId) return existing;
+          }
+          continue;
+        }
         throw error;
       }
       return { url, etag, data: parseDocument(url, dataset) as PodDocument };
@@ -240,6 +293,7 @@ export class DocsStore {
     options: SaveOptions,
   ): Promise<StoredDocument> {
     this.assertScope(stored.url, true);
+    stored = await this.claimIdentity(stored, input.instanceId);
     let current = stored;
     let snapshot: Snapshot = {
       body: input.body ?? stored.data.body,
@@ -268,7 +322,7 @@ export class DocsStore {
         ...current.data,
         ...input,
         ...snapshot,
-        instanceId: current.data.instanceId ?? input.instanceId ?? crypto.randomUUID(),
+        instanceId: current.data.instanceId,
         title: titleChanged ? localTitle : current.data.title,
         priorRevisions: current.data.revisions,
         editor: this.webId,
@@ -332,8 +386,14 @@ export class DocsStore {
     const mapping = new Map<string, string>();
     for (const asset of new Set(state.assets)) {
       const destination = `${target.assets}${new URL(asset).pathname.split("/").at(-1)}`;
-      const response = await this.fetchImpl(asset);
-      if (!response.ok) throw new ResourceReadError(asset, response.status);
+      const response = await (state.readAsset?.(asset) ?? this.fetchImpl(asset));
+      if (!response.ok) {
+        if (state.allowMissingAssets && [404, 410].includes(response.status)) {
+          mapping.set(asset, "");
+          continue;
+        }
+        throw new ResourceReadError(asset, response.status);
+      }
       const bytes = new Uint8Array(await response.arrayBuffer());
       const written = await this.fetchImpl(destination, {
         method: "PUT",

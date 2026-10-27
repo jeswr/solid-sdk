@@ -1,22 +1,36 @@
 // AUTHORED-BY Codex
 "use client";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import type { PodSession } from "@/lib/session/pod-session";
+import { currentDraftId } from "../editor/drafts";
 import { DocumentPersistence } from "../editor/persistence";
 export function useDocument(session: PodSession, resource: string | undefined) {
   const router = useRouter();
+  const draft = useSearchParams().get("draft");
   const current = useRef<DocumentPersistence | null>(null);
   const [runtime, setRuntime] = useState<DocumentPersistence | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [recovery, setRecovery] = useState(0);
   const [, render] = useState(0);
   useEffect(() => {
-    if (current.current && current.current.stored?.url === resource && resource && recovery === 0)
+    if (
+      current.current?.session === session &&
+      current.current.stored?.url === resource &&
+      resource &&
+      recovery === 0
+    )
       return;
-    let live = true;
-    const next = new DocumentPersistence(session);
+    if (
+      !resource &&
+      draft &&
+      current.current?.session === session &&
+      current.current.draftId === draft &&
+      recovery === 0
+    )
+      return;
+    const next = new DocumentPersistence(session, resource ? undefined : currentDraftId());
     const previous = current.current;
     current.current = next;
     if (previous) void previous.destroy();
@@ -30,19 +44,16 @@ export function useDocument(session: PodSession, resource: string | undefined) {
     };
     void next.open(resource, recovery > 0).then(
       () => {
-        if (live) {
+        if (current.current === next) {
           next.online = next.online && navigator.onLine;
           setRuntime(next);
         }
       },
       (cause: unknown) => {
-        if (live) setError(cause);
+        if (current.current === next) setError(cause);
       },
     );
-    return () => {
-      live = false;
-    };
-  }, [session, resource, router, recovery]);
+  }, [session, resource, router, recovery, draft]);
   useEffect(() => {
     const flush = () => {
       void current.current?.flush();

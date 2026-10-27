@@ -30,6 +30,7 @@ import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { encodeRef } from "@/lib/refs";
 import type { PodSession } from "@/lib/session/pod-session";
 import { copyDocument } from "../editor/copy";
+import { type LocalDraft, listLocalDrafts } from "../editor/drafts";
 import { downloadDocument, rowExportJson } from "../editor/export-document";
 import { importDocument } from "../editor/import-document";
 import { useDocsStore } from "../hooks/use-docs-store";
@@ -52,6 +53,10 @@ export function DocumentList({ session }: { session: PodSession }) {
   const query = params.get("q") ?? "";
   const { starred, toggle } = useStarred();
   const [entries, setEntries] = useState<DocumentEntry[] | null>(null);
+  const [localDrafts, setLocalDrafts] = useState<{ webId: string; entries: LocalDraft[] } | null>(
+    null,
+  );
+  const drafts = localDrafts?.webId === session.webId ? localDrafts.entries : [];
   const [error, setError] = useState(false);
   const [renaming, setRenaming] = useState<DocumentEntry | null>(null);
   const [title, setTitle] = useState("");
@@ -67,6 +72,20 @@ export function DocumentList({ session }: { session: PodSession }) {
       setError(true);
     }
   }, [store]);
+  useEffect(() => {
+    let active = true;
+    void listLocalDrafts(session.webId).then(
+      (local) => {
+        if (active) setLocalDrafts({ webId: session.webId, entries: local });
+      },
+      () => {
+        if (active) setLocalDrafts({ webId: session.webId, entries: [] });
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [session.webId]);
   useEffect(() => {
     void reload();
   }, [reload]);
@@ -123,6 +142,20 @@ export function DocumentList({ session }: { session: PodSession }) {
             </Button>
           </div>
         </div>
+        {drafts.length > 0 && (
+          <aside aria-label="Unsaved documents on this device">
+            <h2>Unsaved documents on this device</h2>
+            <ul>
+              {drafts.map((draft) => (
+                <li key={draft.id}>
+                  <Link href={`/docs/new?draft=${encodeURIComponent(draft.id)}`}>
+                    Resume {draft.title}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </aside>
+        )}
         {importing && (
           <ImportDialog
             close={() => setImporting(false)}
