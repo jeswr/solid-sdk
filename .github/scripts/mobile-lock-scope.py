@@ -97,9 +97,17 @@ def closure(lock):
 
 def view(path):
     with open(path, encoding="utf-8") as handle:
-        # BaseLoader keeps every scalar a string: YAML 1.1 coercion would turn unquoted alias keys
-        # such as "on" and "yes" into True and silently merge them.
-        lock = yaml.load(handle, Loader=yaml.BaseLoader)
+        text = handle.read()
+    # pnpm never writes anchors, aliases or merge keys; BaseLoader would leave them unexpanded, so
+    # treat any as a change rather than walk a graph that may be missing inherited entries.
+    for event in yaml.parse(text, Loader=yaml.BaseLoader):
+        if isinstance(event, yaml.AliasEvent) or getattr(event, "anchor", None):
+            raise ValueError("lockfile uses YAML anchors or aliases")
+        if isinstance(event, yaml.ScalarEvent) and event.value == "<<" and event.style is None:
+            raise ValueError("lockfile uses a YAML merge key")
+    # BaseLoader keeps every scalar a string: YAML 1.1 coercion would turn unquoted alias keys
+    # such as "on" and "yes" into True and silently merge them.
+    lock = yaml.load(text, Loader=yaml.BaseLoader)
     # Every top-level field outside the dependency graph (settings, overrides, checksums, ...) is compared whole.
     return {key: value for key, value in lock.items() if key not in GRAPH_KEYS}, closure(lock)
 
