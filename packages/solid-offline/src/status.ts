@@ -125,6 +125,7 @@ export function createStatusSurface(options: StatusSurfaceOptions = {}): Offline
   // Settled freshness is independent of worker activity, so manual observations
   // and unread updates survive until the last overlapping attempt settles.
   const resources = new Map<string, ResourceFreshness>();
+  // Account for every observed attempt, even while a URL is absent from the snapshot.
   const revalidations = new Map<string, number>();
   let online = isOnline();
 
@@ -164,12 +165,11 @@ export function createStatusSurface(options: StatusSurfaceOptions = {}): Offline
 
   const onMessage = (event: MessageEvent): void => {
     const data = event.data as OfflineEvent | undefined;
-    // Preserve the tracked-URL boundary; malformed/unrelated broadcasts are inert.
-    if (typeof data?.url !== 'string' || !resources.has(data.url)) return;
+    if (typeof data?.url !== 'string') return;
     const active = revalidations.get(data.url) ?? 0;
     if (data.event === 'revalidating') {
       revalidations.set(data.url, active + 1);
-      emitIfChanged(data.url);
+      if (resources.has(data.url)) emitIfChanged(data.url);
       return;
     }
     if (
@@ -181,6 +181,8 @@ export function createStatusSurface(options: StatusSurfaceOptions = {}): Offline
     if (active > 1) revalidations.set(data.url, active - 1);
     else revalidations.delete(data.url);
 
+    // Lifecycle accounting survives tracking changes; only tracked URLs are visible.
+    if (!resources.has(data.url)) return;
     if (data.event === 'updated') setFreshness(data.url, 'updated');
     // A 304 confirms worker bytes, not that the consumer has read an update.
     else if (data.event === 'revalidated' && resources.get(data.url) !== 'updated')
@@ -221,7 +223,6 @@ export function createStatusSurface(options: StatusSurfaceOptions = {}): Offline
       setFreshness(url, 'stale');
     },
     forget(url: string): void {
-      revalidations.delete(url);
       if (!resources.delete(url)) return;
       emit();
     },

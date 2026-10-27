@@ -335,7 +335,7 @@ describe('revalidation status transitions', () => {
     expect(s.getSnapshot().pending).toBe(0);
   });
 
-  it('keeps resources independent and clears forgotten revalidation history', () => {
+  it('keeps resources independent and settles forgotten attempts without retracking', () => {
     const channel = new MockChannel();
     const s = make({ channel });
     s.markStale(URL);
@@ -351,6 +351,55 @@ describe('revalidation status transitions', () => {
     expect(s.getSnapshot().resources[URL]).toBe('fresh');
     channel.emit({ url: 'https://pod/other', event: 'revalidate-failed' });
     expect(s.getSnapshot().pending).toBe(0);
+  });
+
+  describe.each(['late tracking', 'forget and retrack'] as const)('%s', (tracking) => {
+    it.each([
+      'revalidated',
+      'updated',
+      'revalidate-failed',
+    ] as const)('keeps newer work pending after an older %s', (event) => {
+      const channel = new MockChannel();
+      const s = make({ channel });
+      if (tracking === 'forget and retrack') s.markStale(URL);
+      channel.emit({ url: URL, event: 'revalidating' }); // Attempt A.
+      if (tracking === 'forget and retrack') s.forget(URL);
+      expect(s.getSnapshot().resources[URL]).toBeUndefined();
+
+      s.markStale(URL);
+      // Tracking changes affect visibility, not the lifetime of attempt A.
+      expect(s.getSnapshot().pending).toBe(1);
+      channel.emit({ url: URL, event: 'revalidating' }); // Attempt B.
+      const pending = s.getSnapshot();
+      const listener = vi.fn();
+      s.subscribe(listener);
+      channel.emit({ url: URL, event }); // A settles while B is unresolved.
+      expect(s.getSnapshot()).toBe(pending);
+      expect(s.getSnapshot().pending).toBe(1);
+      expect(listener).not.toHaveBeenCalled();
+
+      channel.emit({ url: URL, event: 'revalidate-failed' }); // B settles.
+      const settled = event === 'updated' ? 'updated' : event === 'revalidated' ? 'fresh' : 'stale';
+      expect(s.getSnapshot()).toMatchObject({ pending: 0, resources: { [URL]: settled } });
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('cleans up attempts that start and settle while untracked', () => {
+      const channel = new MockChannel();
+      const s = make({ channel });
+      if (tracking === 'forget and retrack') {
+        s.markStale(URL);
+        channel.emit({ url: URL, event: 'revalidating' });
+        s.forget(URL);
+      }
+      const untracked = s.getSnapshot();
+      channel.emit({ url: URL, event: 'revalidating' });
+      channel.emit({ url: URL, event: 'updated' });
+      if (tracking === 'forget and retrack') channel.emit({ url: URL, event: 'revalidated' });
+      expect(s.getSnapshot()).toBe(untracked);
+      s.markStale(URL);
+      expect(s.getSnapshot()).toMatchObject({ pending: 0, resources: { [URL]: 'stale' } });
+    });
   });
 
   it('ignores unmatched failures and unknown events without notifying', () => {

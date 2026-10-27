@@ -82,6 +82,49 @@ describe('useOfflineStatus', () => {
     surface.close();
   });
 
+  it.each([
+    'late tracking',
+    'forget and retrack',
+  ] as const)('keeps syncing through %s until both attempts settle', (tracking) => {
+    const listeners = new Set<(event: MessageEvent) => void>();
+    const surface = createStatusSurface({
+      channel: {
+        addEventListener: (_type, listener) => {
+          listeners.add(listener);
+        },
+        removeEventListener: (_type, listener) => {
+          listeners.delete(listener);
+        },
+        close() {},
+      },
+    });
+    const emit = (event: OfflineEvent['event']) => {
+      for (const listener of listeners) {
+        listener(new MessageEvent('message', { data: { url: 'https://pod/doc', event } }));
+      }
+    };
+    const { result, unmount } = renderHook(() => useOfflineStatus(surface));
+    try {
+      act(() => {
+        if (tracking === 'forget and retrack') surface.markStale('https://pod/doc');
+        emit('revalidating');
+        if (tracking === 'forget and retrack') surface.forget('https://pod/doc');
+        surface.markStale('https://pod/doc');
+        emit('revalidating');
+      });
+      expect(result.current.syncing).toBe(true);
+      act(() => emit('revalidated'));
+      expect(result.current.syncing).toBe(true);
+      expect(result.current.pending).toBe(1);
+      act(() => emit('revalidate-failed'));
+      expect(result.current.syncing).toBe(false);
+      expect(result.current.pending).toBe(0);
+    } finally {
+      unmount();
+      surface.close();
+    }
+  });
+
   it('re-renders on connectivity change', async () => {
     const surface = createStatusSurface({ channelName: CHANNEL, isOnline: () => true });
     const { result } = renderHook(() => useOfflineStatus(surface));
