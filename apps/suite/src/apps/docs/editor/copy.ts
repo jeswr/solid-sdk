@@ -50,11 +50,12 @@ export async function copyDocument(
         wordCount: wordCount(json).words,
       };
     },
-    persistFullState: async (container, fetchImpl, mapping) => {
+    persistFullState: async (container, fetchImpl, mapping, instanceId) => {
       const doc = new Doc();
       const provider = new SolidPersistence({ doc, container, fetch: fetchImpl });
       try {
         await provider.whenSynced;
+        if (instanceId) doc.getMap("document").set("instanceId", instanceId);
         // Retrying a reservation must reuse its identities, including after an
         // append succeeded but its acknowledgement or final snapshot failed.
         if (!doc.getXmlFragment("prosemirror").length) {

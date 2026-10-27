@@ -2,11 +2,39 @@
 import { SolidUpdateStore } from "@jeswr/y-solid";
 import { SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement, XmlFragment } from "yjs";
+import sanitizeHtml from "sanitize-html";
+import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement, XmlFragment, XmlText } from "yjs";
 import { type DriveClient, DriveError } from "../../drive/lib/client/client";
 import { buildDocument, type PodDocument } from "../lib/model/document";
 import { docContainerUrls } from "../lib/model/layout";
 import { serializeTurtle } from "../lib/model/rdf-io";
+
+const urlAttribute = (key: string) =>
+  ["src", "href", "poster", "cite", "action", "formaction", "xlink:href"].includes(key) ||
+  key.startsWith("data-");
+
+/** Reuse the import pipeline's HTML parser, keeping text and non-URL attributes. */
+function relocateHtml(html: string, relocate: (iri: string) => string): string {
+  return sanitizeHtml(html, {
+    allowedTags: false,
+    allowedAttributes: false,
+    allowVulnerableTags: true,
+    nonTextTags: [],
+    transformTags: {
+      "*": (tagName, attribs) => {
+        for (const [key, value] of Object.entries(attribs)) {
+          if (urlAttribute(key)) attribs[key] = relocate(value);
+          else if (key === "srcset")
+            attribs[key] = value.replace(
+              /(^|[\s,])(https?:\/\/[^\s,]+)/g,
+              (_match, space: string, url: string) => `${space}${relocate(url)}`,
+            );
+        }
+        return { tagName, attribs };
+      },
+    },
+  });
+}
 
 /** Restore through the existing binary update store, retaining all CRDT identities. */
 async function relocateLog(
@@ -44,10 +72,29 @@ async function relocateLog(
       return;
     }
     let changed = false;
-    const visit = (node: XmlFragment | XmlElement) => {
+    const visit = (node: XmlFragment | XmlElement | XmlText) => {
+      if (node instanceof XmlText) {
+        let offset = 0;
+        for (const part of node.toDelta()) {
+          const length = typeof part.insert === "string" ? part.insert.length : 1;
+          for (const [mark, attrs] of Object.entries(part.attributes ?? {})) {
+            if (!attrs || typeof attrs !== "object") continue;
+            const next: Record<string, unknown> = { ...attrs };
+            for (const [key, value] of Object.entries(next)) {
+              if (urlAttribute(key) && typeof value === "string") next[key] = relocate(value);
+            }
+            if (JSON.stringify(next) !== JSON.stringify(attrs)) {
+              node.format(offset, length, { [mark]: next });
+              changed = true;
+            }
+          }
+          offset += length;
+        }
+        return;
+      }
       if (node instanceof XmlElement) {
         for (const [key, value] of Object.entries(node.getAttributes())) {
-          if (typeof value !== "string") continue;
+          if (!urlAttribute(key) || typeof value !== "string") continue;
           const next = relocate(value);
           if (next !== value) {
             node.setAttribute(key, next);
@@ -55,7 +102,8 @@ async function relocateLog(
           }
         }
       }
-      for (const child of node.toArray()) if (child instanceof XmlFragment) visit(child);
+      for (const child of node.toArray())
+        if (child instanceof XmlFragment || child instanceof XmlText) visit(child);
     };
     doc.transact(() => visit(doc.getXmlFragment("prosemirror")));
     // Appending full state preserves pending structs in the untouched original updates.
@@ -144,7 +192,7 @@ export async function relocateDocument(
     return iri;
   };
   const optional = (iri: string | undefined) => (iri === undefined ? undefined : relocate(iri));
-  const body = (html: string) => html.replaceAll(before.container, after.container);
+  const body = (html: string) => relocateHtml(html, relocate);
   const log = optional(data.updateLog);
   // Never fetch a log selected outside the relocated companion by snapshot metadata.
   if (log?.startsWith(after.container)) await relocateLog(client, log, relocate);

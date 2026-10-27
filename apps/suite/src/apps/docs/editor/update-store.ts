@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex
 import { SolidUpdateStore } from "@jeswr/y-solid";
+import { applyUpdate, Doc } from "yjs";
 
 class IncompleteLogError extends Error {}
 
@@ -10,6 +11,7 @@ export class DocumentUpdateStore extends SolidUpdateStore {
     http: typeof fetch,
     private readonly checkActive: () => Promise<void>,
     private readonly allowEmpty: boolean,
+    private readonly instanceId?: string,
   ) {
     super({ container, fetch: http });
   }
@@ -24,6 +26,16 @@ export class DocumentUpdateStore extends SolidUpdateStore {
         const updates = await super.loadUpdates();
         if (!updates.length && !this.allowEmpty)
           throw new IncompleteLogError("The document's update log is empty");
+        if (updates.length && this.instanceId) {
+          const identity = new Doc();
+          try {
+            for (const { update } of updates) applyUpdate(identity, update);
+            if (identity.getMap("document").get("instanceId") !== this.instanceId)
+              throw new Error("The update log belongs to a different document");
+          } finally {
+            identity.destroy();
+          }
+        }
         return updates;
       } catch (error) {
         if (!(error instanceof IncompleteLogError) || attempt >= 2) throw error;

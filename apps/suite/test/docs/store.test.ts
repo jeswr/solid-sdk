@@ -515,6 +515,27 @@ describe("snapshot conflicts", () => {
     ).toEqual(['"v1"']);
     expect(s.resources.get(DOC)).toEqual(remote);
   });
+  it("rejects a replacement discovered during a snapshot 412 retry", async () => {
+    const s = await server();
+    const stored = await document();
+    const replacement = {
+      body: await serializeTurtle(
+        buildDocument(DOC, { title: "Plan", body: "Replacement", instanceId: "replacement" }),
+      ),
+      etag: '"replacement"',
+      contentType: "text/turtle",
+    };
+    s.resources.set(DOC, replacement);
+    await expect(
+      s.store.save(
+        stored,
+        { body: "Offline edits" },
+        { regenerate: () => ({ body: "Offline edits", format: "text/html" }), wait: WAIT },
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(s.resources.get(DOC)).toEqual(replacement);
+    expect(s.calls.filter((call) => call.method === "PUT")).toHaveLength(1);
+  });
   it("regenerates every retry, uses the fresh ETag, and preserves remote metadata/history", async () => {
     const s = await server();
     const stored = await document();
@@ -860,6 +881,7 @@ describe("makeCopy", () => {
       `${POD}docs/plan-copy-2/updates/`,
       expect.any(Function),
       new Map(),
+      copy.data.instanceId,
     );
     expect(s.resources.get(oldContainer)).toEqual(old);
     expect(s.resources.has(`${POD}docs/plan-copy.ttl`)).toBe(false);

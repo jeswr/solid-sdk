@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
 // AUTHORED-BY Codex
+import { Blob as NodeBlob } from "node:buffer";
 import { SolidPersistence, SolidUpdateStore } from "@jeswr/y-solid";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement, XmlText } from "yjs";
 import { rowExportJson } from "../src/apps/docs/editor/export-document";
+import { deleteDocument } from "../src/apps/docs/editor/operations";
 import { DocumentPersistence } from "../src/apps/docs/editor/persistence";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_NAME, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
@@ -99,6 +101,33 @@ async function fixture() {
   };
 }
 const runtimes: DocumentPersistence[] = [];
+it("isolates a newly created document from the previous occupant's shared mirror", async () => {
+  vi.stubGlobal("Blob", NodeBlob);
+  const { runtime, session } = await fixture();
+  runtimes.push(runtime);
+  await runtime.open();
+  const paragraph = new XmlElement("paragraph");
+  const text = new XmlText();
+  text.insert(0, "Old content");
+  paragraph.insert(0, [text]);
+  runtime.doc.getXmlFragment("prosemirror").insert(0, [paragraph]);
+  runtime.rename("Plan");
+  runtime.change("<p>Old content</p>", json("Old content"));
+  await runtime.flush();
+  const url = runtime.stored?.url as string;
+  runtime.online = false;
+  runtime.provider?.destroy();
+  expect((await deleteDocument(url, session)).failed).toEqual([]);
+  const replacement = new DocumentPersistence(session);
+  runtimes.push(replacement);
+  await replacement.open();
+  replacement.doc.getXmlFragment("prosemirror").insert(0, [new XmlElement("replacement")]);
+  replacement.rename("Plan");
+  replacement.change("<p>Replacement</p>", json("Replacement"));
+  await replacement.flush();
+  expect(replacement.stored?.url).toBe(url);
+  expect(await replayText(replacement, session)).toBe("<replacement></replacement>");
+});
 afterEach(async () => {
   await Promise.all(runtimes.splice(0).map((runtime) => runtime.destroy()));
   mirrors.clear();
@@ -355,6 +384,7 @@ describe("Docs persistence review regressions", () => {
     await runtime.destroy();
     const container = (stored.data.updateLog as string).replace("updates/", "updates-123/");
     const recovered = new Doc();
+    recovered.getMap("document").set("instanceId", stored.data.instanceId);
     recovered.getXmlFragment("prosemirror").insert(0, [new XmlElement("paragraph")]);
     await new SolidUpdateStore({ container, fetch: session.fetch }).appendUpdate(
       encodeStateAsUpdate(recovered),
@@ -582,6 +612,7 @@ describe("Docs persistence review regressions", () => {
     const original = runtime.stored;
     if (!original) throw new Error("Missing document");
     runtime.online = false;
+    runtime.rename("Local title");
     runtime.change("<p>Local body</p>", json("Local body"));
     await runtime.destroy();
     await runtime.store.save(

@@ -62,6 +62,7 @@ export interface CopyState {
     updates: string,
     fetchImpl: typeof fetch,
     assetUrls: ReadonlyMap<string, string>,
+    instanceId: string | undefined,
   ) => Promise<void>;
 }
 
@@ -177,6 +178,7 @@ export class DocsStore {
       const dataset = buildDocument(url, {
         ...input,
         ...layout,
+        instanceId: crypto.randomUUID(),
         creator: input.creator ?? this.webId,
       });
       let etag: string | null;
@@ -217,6 +219,9 @@ export class DocsStore {
     const wait =
       options.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
     for (let attempt = 0; ; attempt++) {
+      // A 412 retry may have read a new document at the same readable slug.
+      if (current.data.instanceId !== stored.data.instanceId)
+        throw new ResourceReadError(stored.url, 409);
       if (
         titleChanged &&
         current.data.title !== stored.data.title &&
@@ -228,6 +233,7 @@ export class DocsStore {
         ...current.data,
         ...input,
         ...snapshot,
+        instanceId: current.data.instanceId,
         title: titleChanged ? localTitle : current.data.title,
         priorRevisions: current.data.revisions,
         editor: this.webId,
@@ -311,7 +317,7 @@ export class DocsStore {
       }
       mapping.set(asset, destination);
     }
-    await state.persistFullState(target.updateLog, this.fetchImpl, mapping);
+    await state.persistFullState(target.updateLog, this.fetchImpl, mapping, copy.data.instanceId);
     const snapshot = await state.snapshot(mapping);
     // Fresh copy history captures the copied content, never the reservation's empty body.
     const dataset = buildDocument(copy.url, {

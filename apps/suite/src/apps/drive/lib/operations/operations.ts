@@ -554,6 +554,17 @@ export async function trashItems(
       for (const [entry, versions] of intents) {
         addTrashRecord(index, entry);
         const record = transferRecord(index, entry.url);
+        const docs = new URL("docs/", client.storageUrl).href;
+        if (entry.original.startsWith(docs)) {
+          const partner = entries.find(
+            (other) =>
+              other.original ===
+              (entry.original.endsWith("/")
+                ? `${entry.original.slice(0, -1)}.ttl`
+                : docContainerUrls(entry.original).container),
+          );
+          record.pairedWith = partner?.url;
+        }
         record.status = "pending";
         for (const version of versions) record.sourceVersions.add(version);
       }
@@ -746,6 +757,53 @@ export async function restoreItems(
     done: [],
     failed: [],
   };
+  // Selecting either half restores the pair. The trash index, rather than the
+  // selected batch, owns the relationship and its persisted destinations.
+  const selected = new Map(entries.map((entry) => [entry.url, entry]));
+  const docs = new URL("docs/", client.storageUrl).href;
+  const partnerOriginal = (entry: TrashEntry) =>
+    entry.original.endsWith("/")
+      ? `${entry.original.slice(0, -1)}.ttl`
+      : docContainerUrls(entry.original).container;
+  const unpaired = entries.filter((entry) => {
+    try {
+      slotOf(driveRoot, entry);
+      validateOriginal(client, driveRoot, entry);
+    } catch {
+      return false; // Normal per-item validation below reports the error without I/O.
+    }
+    return (
+      entry.original.startsWith(docs) &&
+      !entries.some((other) => other.original === partnerOriginal(entry))
+    );
+  });
+  if (unpaired.length)
+    try {
+      const current = await client.readRdf(indexUrlOf(driveRoot));
+      const index = current ? trashIndexFrom(current.dataset) : emptyTrashIndex();
+      const available = trashEntries(index);
+      for (const entry of unpaired) {
+        const paired = index.record(entry.url).pairedWith;
+        const original = partnerOriginal(entry);
+        // Older trash records predate explicit pairing; only an unambiguous
+        // matching deletion may supply their partner.
+        const matches = available.filter(
+          (other) =>
+            other.original === original &&
+            (paired
+              ? other.url === paired
+              : other.trashedAt.getTime() === entry.trashedAt.getTime() &&
+                other.trashedBy === entry.trashedBy),
+        );
+        if (matches.length === 1) {
+          const partner = matches[0] as TrashEntry;
+          selected.set(partner.url, partner);
+        }
+      }
+      entries = [...selected.values()];
+    } catch (error) {
+      return { done: [], failed: entries.map((entry) => ({ url: entry.url, error })) };
+    }
   // Classify the complete batch while all trash resources are still present.
   // Cache the snapshot bytes and validator once, including for renamed pairs.
   const snapshots = new Map<

@@ -196,6 +196,25 @@ export class DocumentPersistence {
   private mirrorName(url: string, container: string) {
     return container === docContainerUrls(url).updateLog ? url : `${url}::${container}`;
   }
+  private async creationMirrorName(stored: StoredDocument) {
+    // Probe using an isolated Y.Doc: opening a reused URL's old mirror directly
+    // into the draft would merge the previous occupant before we could inspect it.
+    const doc = new Doc();
+    const mirror = new IndexeddbPersistence(stored.url, doc);
+    try {
+      await mirror.whenSynced;
+      const cached = this.parseMetadata<{ document: StoredDocument }>(await mirror.get("stored"));
+      const previousId =
+        cached?.document.data.instanceId ?? doc.getMap("document").get("instanceId");
+      return (cached || doc.getXmlFragment("prosemirror").length) &&
+        previousId !== stored.data.instanceId
+        ? `${stored.url}::instance:${stored.data.instanceId}`
+        : stored.url;
+    } finally {
+      await mirror.destroy();
+      doc.destroy();
+    }
+  }
   private async linkMirror(url: string, target: string) {
     // Keep a forward chain so offline reopens can find each generation. Stop
     // at pending edits when opening, before following a retired mirror's link.
@@ -277,6 +296,14 @@ export class DocumentPersistence {
     }
   }
   private async replaceLog(remote: StoredDocument) {
+    const replaced = this.stored?.data.instanceId !== remote.data.instanceId;
+    const mirrorName = this.mirrorName(
+      remote.url,
+      remote.data.updateLog ?? docContainerUrls(remote.url).updateLog,
+    );
+    const targetMirror = replaced
+      ? `${mirrorName}::instance:${remote.data.instanceId ?? "legacy"}`
+      : mirrorName;
     this.switchingLog = true;
     this.notify();
     try {
@@ -300,7 +327,7 @@ export class DocumentPersistence {
       this.title = remote.data.title;
       this.conflict = undefined;
       this.needsFullState = false;
-      this.local = this.createMirror(this.mirrorName(remote.url, this.updateContainer()));
+      this.local = this.createMirror(targetMirror);
       await this.local.whenSynced;
       await this.readPending();
       this.checkTitleConflict();
@@ -380,7 +407,6 @@ export class DocumentPersistence {
     if (!this.stored) throw new Error("not-found");
     this.creation = "created";
     if (!pending) this.title = this.stored.data.title;
-    this.checkTitleConflict();
     this.body = this.stored.data.body;
     this.lastSaved = Date.parse(this.stored.data.modified ?? new Date().toISOString());
     this.readOnly = url.startsWith(this.store.legacyContainer);
@@ -415,11 +441,15 @@ export class DocumentPersistence {
       !recover &&
       !this.readOnly &&
       !this.offlineCopy &&
-      (cached?.document.data.updateLog ?? layout.updateLog) !== container
+      ((cached?.document.data.updateLog ?? layout.updateLog) !== container ||
+        (cached && cached.document.data.instanceId !== this.stored.data.instanceId))
     ) {
-      await this.replaceLog(this.stored);
+      const remote = this.stored;
+      if (cached) this.stored = cached.document;
+      await this.replaceLog(remote);
       pending = this.version !== this.savedVersion;
     }
+    this.checkTitleConflict();
     if (!this.readOnly && !this.offlineCopy && !this.provider) {
       const provider = this.attachProvider(container, false);
       // Keep the editor unmounted until the initial CRDT merge finishes. Replaying
@@ -456,6 +486,8 @@ export class DocumentPersistence {
     );
     applyUpdate(this.doc, encodeStateAsUpdate(seed));
     seed.destroy();
+    if (this.stored?.data.instanceId)
+      this.doc.getMap("document").set("instanceId", this.stored.data.instanceId);
   }
   private updateContainer() {
     const stored = this.stored as StoredDocument;
@@ -466,6 +498,13 @@ export class DocumentPersistence {
     return container;
   }
   private checkTitleConflict() {
+    if (this.stored && this.pendingEdit && this.title === this.pendingEdit.baseTitle) {
+      // Body-only pending edits carry the old title as metadata, not local intent.
+      this.title = this.stored.data.title;
+      this.pendingEdit.title = this.title;
+      this.pendingEdit.baseTitle = this.title;
+      void this.writePending();
+    }
     if (
       this.stored &&
       this.version !== this.savedVersion &&
@@ -524,7 +563,7 @@ export class DocumentPersistence {
   private async checkLog(container: string) {
     const remote = await this.activeDocument();
     const active = remote.data.updateLog ?? docContainerUrls(remote.url).updateLog;
-    if (active !== container) {
+    if (active !== container || remote.data.instanceId !== this.stored?.data.instanceId) {
       const error = new InactiveLogError("The document has a new update log");
       this.pauseLog(error);
       throw error;
@@ -534,7 +573,7 @@ export class DocumentPersistence {
     const remote = await this.activeDocument();
     const previous = this.provider?.store.container ?? this.updateContainer();
     const active = remote.data.updateLog ?? docContainerUrls(remote.url).updateLog;
-    if (previous !== active) {
+    if (previous !== active || remote.data.instanceId !== this.stored?.data.instanceId) {
       await this.replaceLog(remote);
       this.offlineCopy = false;
       this.trashed = false;
@@ -577,6 +616,7 @@ export class DocumentPersistence {
         this.session.fetch,
         () => this.checkLog(container),
         allowEmpty,
+        this.stored?.data.instanceId,
       ),
     });
     this.provider.on("error", (error) => {
@@ -663,9 +703,12 @@ export class DocumentPersistence {
             await this.local?.set("creating", JSON.stringify(this.stored));
           }
           const stored = this.stored as StoredDocument;
-          if (this.local?.name !== stored.url) {
+          if (stored.data.instanceId)
+            this.doc.getMap("document").set("instanceId", stored.data.instanceId);
+          const mirrorName = await this.creationMirrorName(stored);
+          if (this.local?.name !== mirrorName) {
             this.draftMirror = this.local;
-            this.local = this.createMirror(stored.url);
+            this.local = this.createMirror(mirrorName);
           }
           await this.local.whenSynced;
           // Title edits may have arrived while create() was in flight. Move
@@ -688,6 +731,7 @@ export class DocumentPersistence {
             this.draftMirror = undefined;
           }
           this.creation = "created";
+          await this.linkMirror(stored.url, this.local.name);
           this.onCreated(stored.url);
           if (stored.data.body !== snapshot.body || stored.data.title !== title) {
             this.stored = await this.store.save(

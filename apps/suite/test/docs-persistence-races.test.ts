@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // AUTHORED-BY Codex
 import { Blob as NodeBlob } from "node:buffer";
-import { SolidPersistence } from "@jeswr/y-solid";
+import { SolidPersistence, SolidUpdateStore } from "@jeswr/y-solid";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement, XmlText } from "yjs";
 import { deleteDocument, restoreDocument } from "../src/apps/docs/editor/operations";
@@ -102,6 +102,96 @@ async function replay(log: string, session: PodSession) {
     doc.destroy();
   }
 }
+
+it.each([
+  "reconnect",
+  "reload",
+])("recovers offline edits instead of merging a reused document URL on %s", async (mode) => {
+  const { session, original, client, url, log } = await fixture();
+  original.online = false;
+  // A real offline transport also rejects the provider's incremental append.
+  original.provider?.destroy();
+  bodyText(original).insert(8, " offline");
+  original.change("<p>Original offline</p>", json("Original offline"));
+  await vi.waitFor(() => expect(mirrors.get(original.local as object)?.get("pending")).toBe(1));
+  expect((await deleteDocument(url, session)).failed).toEqual([]);
+  const replacement = client();
+  await replacement.open();
+  replacement.title = "Original";
+  const paragraph = new XmlElement("paragraph");
+  const text = new XmlText();
+  text.insert(0, "Replacement");
+  paragraph.insert(0, [text]);
+  replacement.doc.getXmlFragment("prosemirror").insert(0, [paragraph]);
+  replacement.change("<p>Replacement</p>", json("Replacement"));
+  await replacement.flush();
+  expect(replacement.stored?.url).toBe(url);
+  expect(replacement.stored?.data.updateLog).toBe(log);
+  let opening = original;
+  if (mode === "reload") {
+    reopen.set(url, new Map(mirrors.get(original.local as object)));
+    opening = client();
+    await opening.open(url);
+  } else await opening.reconnect();
+  await opening.flush();
+  expect(opening.recoveredCopy).toBeDefined();
+  expect((await opening.store.read(opening.recoveredCopy as string))?.data.body).toBe(
+    "<p>Original offline</p>",
+  );
+  expect((await opening.store.read(url))?.data.body).toBe("<p>Replacement</p>");
+  expect(await replay(log, session)).toBe("<paragraph>Replacement</paragraph>");
+});
+
+it("adopts a remote rename when reopening persisted body-only offline edits", async () => {
+  const { original, client, url } = await fixture();
+  const stored = original.stored;
+  if (!stored) throw new Error("Missing fixture");
+  original.online = false;
+  original.provider?.destroy();
+  bodyText(original).insert(8, " offline");
+  original.change("<p>Original offline</p>", json("Original offline"));
+  await vi.waitFor(() => expect(mirrors.get(original.local as object)?.get("pending")).toBe(1));
+  await original.store.save(
+    stored,
+    { title: "Remote title" },
+    { regenerate: () => ({ body: stored.data.body, format: "text/html" }) },
+  );
+  reopen.set(url, new Map(mirrors.get(original.local as object)));
+  const opening = client();
+  await opening.open(url);
+  expect(opening.conflict).toBeUndefined();
+  expect(opening.title).toBe("Remote title");
+  opening.capture("<p>Original offline</p>", json("Original offline"));
+  await opening.flush();
+  expect(opening.state).toBe("saved");
+  expect(opening.stored?.data).toMatchObject({
+    title: "Remote title",
+    body: "<p>Original offline</p>",
+  });
+});
+
+it("rejects a reused log whose Yjs identity does not match its snapshot", async () => {
+  const { pod, original, session, client, url, log } = await fixture();
+  original.provider?.destroy();
+  for (const [resource] of pod.snapshot().resources)
+    if (resource.startsWith(log)) await pod.fetch(resource, { method: "DELETE" });
+  const unrelated = new Doc();
+  unrelated.getMap("document").set("instanceId", "another-document");
+  try {
+    await new SolidUpdateStore({ container: log, fetch: session.fetch }).appendUpdate(
+      encodeStateAsUpdate(unrelated),
+    );
+  } finally {
+    unrelated.destroy();
+  }
+  const before = pod.snapshot().resources;
+  const opening = client();
+  await expect(opening.open(url)).rejects.toThrow("different document");
+  expect(opening.doc.getXmlFragment("prosemirror").length).toBe(0);
+  expect(pod.snapshot().resources).toEqual(before);
+  // A failed open must not flush an unrelated CRDT during teardown.
+  opening.online = false;
+});
 
 it("opens the full original body after restoring a document beside a same-name replacement", async () => {
   const { session, original, client, url } = await fixture();

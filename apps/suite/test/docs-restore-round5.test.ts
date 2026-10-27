@@ -3,11 +3,16 @@ import { SolidUpdateStore } from "@jeswr/y-solid";
 import { NamedNodeAs, NamedNodeFrom, OptionalAs, OptionalFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { expect, it } from "vitest";
-import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement } from "yjs";
+import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement, XmlText } from "yjs";
 import { deleteDocument, deleteForever } from "../src/apps/docs/editor/operations";
 import { buildDocument, parseDocument, serializeTurtle } from "../src/apps/docs/lib/model";
 import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
 import { listTrash, restoreItems } from "../src/apps/drive/lib/operations/operations";
+import {
+  addTrashRecord,
+  serializeTrashIndex,
+  trashIndexFrom,
+} from "../src/apps/drive/lib/operations/trash-index";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import type { PodSession } from "../src/lib/session/pod-session";
 
@@ -32,9 +37,9 @@ class Annotation extends TermWrapper {
     OptionalAs.object(this, `${OA}hasSource`, value, NamedNodeFrom.string);
   }
 }
-async function fixture() {
+async function fixture(extra = "", link = false) {
   const image = `${TREE}assets/chart.png`;
-  const body = `<p>Plan</p><img src="${image}"><img src="https://external.test/chart.png">`;
+  const body = `<p>Plan</p><img src="${image}"><img src="https://external.test/chart.png">${extra}`;
   const first = parseDocument(
     URL,
     buildDocument(URL, {
@@ -71,6 +76,12 @@ async function fixture() {
   const external = new XmlElement("image");
   external.setAttribute("src", "https://external.test/chart.png");
   paragraph.insert(0, [img, external]);
+  if (link) {
+    const text = new XmlText();
+    paragraph.insert(2, [text]);
+    text.insert(0, "Chart", { link: { href: image, title: image }, bold: {} });
+    text.insert(5, ` ${image}`, {});
+  }
   doc.getXmlFragment("prosemirror").insert(0, [paragraph]);
   const pod = createDemoPod({
     root: ROOT,
@@ -101,10 +112,148 @@ async function fixture() {
   expect(trash.failed).toEqual([]);
   return { pod, client, session, trash };
 }
+it.each([
+  "snapshot",
+  "companion",
+])("restores a Docs pair when only its %s is selected", async (first) => {
+  const { pod, client, trash } = await fixture();
+  await pod.fetch(URL, { method: "PUT", body: "replacement" });
+  const selected = trash.done.filter(
+    (entry) => entry.original.endsWith("/") === (first === "companion"),
+  );
+  const restored = await restoreItems(client, DRIVE, selected);
+  expect(restored.failed).toEqual([]);
+  const remaining = await listTrash(client, DRIVE);
+  expect((await restoreItems(client, DRIVE, remaining)).failed).toEqual([]);
+  const snapshot = await readSnapshot(client);
+  expect(snapshot?.updateLog).toBe(`${MOVED}updates/`);
+  expect(
+    await new SolidUpdateStore({
+      container: snapshot?.updateLog as string,
+      fetch: pod.fetch,
+    }).loadUpdates(),
+  ).not.toEqual([]);
+  expect(await (await pod.fetch(`${MOVED}assets/chart.png`)).text()).toBe("image");
+  expect(await (await pod.fetch(URL)).text()).toBe("replacement");
+  expect(await listTrash(client, DRIVE)).toEqual([]);
+});
+it("relocates XmlText link marks without changing their labels or other marks", async () => {
+  const { pod, client, trash } = await fixture("", true);
+  await pod.fetch(URL, { method: "PUT", body: "replacement" });
+  expect((await restoreItems(client, DRIVE, trash.done)).failed).toEqual([]);
+  const doc = new Doc();
+  try {
+    for (const { update } of await new SolidUpdateStore({
+      container: `${MOVED}updates/`,
+      fetch: pod.fetch,
+    }).loadUpdates())
+      applyUpdate(doc, update);
+    const text = (doc.getXmlFragment("prosemirror").get(0) as XmlElement).get(2) as XmlText;
+    expect(text.toDelta()).toEqual([
+      {
+        insert: "Chart",
+        attributes: {
+          link: { href: `${MOVED}assets/chart.png`, title: `${TREE}assets/chart.png` },
+          bold: {},
+        },
+      },
+      { insert: ` ${TREE}assets/chart.png` },
+    ]);
+  } finally {
+    doc.destroy();
+  }
+});
+it("relocates HTML URL attributes while preserving literal URLs in text and revision bodies", async () => {
+  const literal = `<pre><code>${TREE}assets/chart.png</code></pre><p title="${TREE}assets/chart.png">${TREE}</p>`;
+  const attrs = `<a href="${TREE}assets/chart.png">Chart</a><img srcset="${TREE}assets/chart.png 1x, ${TREE}assets/chart.png 2x" data-asset="${TREE}assets/chart.png">`;
+  const { pod, client, trash } = await fixture(literal + attrs);
+  await pod.fetch(URL, { method: "PUT", body: "replacement" });
+  expect((await restoreItems(client, DRIVE, trash.done)).failed).toEqual([]);
+  const snapshot = await readSnapshot(client);
+  for (const html of [snapshot?.body, ...(snapshot?.revisions.map((rev) => rev.body) ?? [])]) {
+    expect(html).toContain(literal);
+    expect(html).toContain(`href="${MOVED}assets/chart.png"`);
+    expect(html).toContain(`srcset="${MOVED}assets/chart.png 1x, ${MOVED}assets/chart.png 2x"`);
+    expect(html).toContain(`data-asset="${MOVED}assets/chart.png"`);
+  }
+});
 async function readSnapshot(client: ReturnType<typeof createSolidDriveClient>) {
   const snapshot = await client.readRdf(TARGET);
   return snapshot && parseDocument(TARGET, snapshot.dataset);
 }
+it.each([
+  "snapshot",
+  "companion",
+])("pairs legacy trash records when only the %s is selected", async (first) => {
+  const { pod, client, trash } = await fixture();
+  const indexUrl = `${DRIVE}.trash/index.ttl`;
+  const current = await client.readRdf(indexUrl);
+  if (!current) throw new Error("Missing index");
+  const index = trashIndexFrom(current.dataset);
+  for (const entry of trash.done) index.record(entry.url).pairedWith = undefined;
+  const partner = trash.done.find(
+    (entry) => entry.original.endsWith("/") === (first === "snapshot"),
+  );
+  if (!partner) throw new Error("Missing partner");
+  // Old deletion generations and other authors must not become this pair.
+  addTrashRecord(index, {
+    ...partner,
+    url: partner.url.replace(/\.trash\/[^/]+\//, ".trash/00000000-0000-4000-8000-000000000001/"),
+    trashedAt: new Date(partner.trashedAt.getTime() - 1),
+  });
+  addTrashRecord(index, {
+    ...partner,
+    url: partner.url.replace(/\.trash\/[^/]+\//, ".trash/00000000-0000-4000-8000-000000000002/"),
+    trashedBy: `${ROOT}other#me`,
+  });
+  await client.write(indexUrl, await serializeTrashIndex(index), {
+    contentType: "text/turtle",
+    ifMatch: current.etag as string,
+  });
+  await pod.fetch(URL, { method: "PUT", body: "replacement" });
+  const selected = trash.done.filter(
+    (entry) => entry.original.endsWith("/") === (first === "companion"),
+  );
+  const restored = await restoreItems(client, DRIVE, selected);
+  expect(restored.failed).toEqual([]);
+  expect(restored.done).toHaveLength(2);
+  expect((await readSnapshot(client))?.updateLog).toBe(`${MOVED}updates/`);
+  expect(await listTrash(client, DRIVE)).toEqual([]);
+});
+it("retains a lone selected snapshot if its partner's index cannot be read", async () => {
+  const { pod, client, trash } = await fixture();
+  const interrupted = {
+    ...client,
+    readRdf: async () => {
+      throw new TypeError("index unavailable");
+    },
+  };
+  const result = await restoreItems(interrupted, DRIVE, trash.done.slice(0, 1));
+  expect(result.done).toEqual([]);
+  expect(result.failed).toHaveLength(1);
+  for (const entry of trash.done) expect((await pod.fetch(entry.url)).ok).toBe(true);
+});
+it("rejects a lone selected snapshot whose trash index is missing", async () => {
+  const { pod, client, trash } = await fixture();
+  const missing = { ...client, readRdf: async () => undefined };
+  const result = await restoreItems(missing, DRIVE, trash.done.slice(0, 1));
+  expect(result.done).toEqual([]);
+  expect(result.failed[0]?.error).toMatchObject({ kind: "invalid-trash-record" });
+  for (const entry of trash.done) expect((await pod.fetch(entry.url)).ok).toBe(true);
+});
+it("restores Turtle without a Docs document as an ordinary Drive resource", async () => {
+  const { pod, client, trash } = await fixture();
+  await pod.fetch(trash.done[0]?.url as string, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: await serializeTurtle(new Store()),
+  });
+  await pod.fetch(URL, { method: "PUT", body: "replacement" });
+  expect((await restoreItems(client, DRIVE, trash.done)).failed).toEqual([]);
+  expect(await (await pod.fetch(TARGET)).text()).toBe("");
+  expect(await (await pod.fetch(URL)).text()).toBe("replacement");
+  expect(await listTrash(client, DRIVE)).toEqual([]);
+});
 it("rewrites restored image URLs in the HTML, revision bodies and replayed Yjs fragment", async () => {
   const { pod, client, trash } = await fixture();
   await pod.fetch(URL, { method: "PUT", body: "replacement" });
@@ -257,7 +406,7 @@ it("keeps a snapshot-only restore recoverable when its source read fails", async
       throw new TypeError("read failed");
     },
   };
-  expect((await restoreItems(interrupted, DRIVE, trash.done.slice(0, 1))).failed).toHaveLength(1);
+  expect((await restoreItems(interrupted, DRIVE, trash.done.slice(0, 1))).failed).toHaveLength(2);
   expect((await pod.fetch(trash.done[0]?.url as string)).ok).toBe(true);
 });
 it("retains a trash resource when an ambiguous DELETE failure has no durable effect", async () => {

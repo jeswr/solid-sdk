@@ -45,6 +45,13 @@ export interface TrashEntry {
 }
 
 export class TrashRecord extends TermWrapper {
+  /** Exact trash resource paired with this Docs snapshot/companion. */
+  get pairedWith(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, `${DCT}relation`, NamedNodeAs.string);
+  }
+  set pairedWith(value: string | undefined) {
+    OptionalAs.object(this, `${DCT}relation`, value, NamedNodeFrom.string);
+  }
   /** Chosen restore destination survives completion/removal of the companion record. */
   get restoredLocation(): string | undefined {
     return OptionalFrom.subjectPredicate(this, `${DCT}isReplacedBy`, NamedNodeAs.string);
