@@ -5,7 +5,7 @@
 
 import { FileTypeIcon, IconButton, Progress, toast } from "@jeswr/suite-ui";
 import { Check, ChevronDown, ChevronUp, RotateCcw, X } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useDrive } from "../state/drive-context";
 import { captureDriveFocusRemoval } from "../state/ui";
 
@@ -19,6 +19,18 @@ export function UploadDock() {
   const toggle = useRef<HTMLButtonElement>(null);
   const dock = useRef<HTMLElement>(null);
   const restoreFocus = useRef<(() => void) | undefined>(undefined);
+  // Status changes can remove Close or Retry without a click. Ref cleanup runs
+  // before the DOM removal, while the displaced focus can still be captured.
+  const restoreOnRemoval = useCallback((element: HTMLButtonElement | null) => {
+    if (!element) return;
+    return () => {
+      if (document.activeElement !== element) return;
+      const restore = captureDriveFocusRemoval(element);
+      restoreFocus.current ??= () => {
+        if (!element.isConnected) restore();
+      };
+    };
+  }, []);
   useLayoutEffect(() => {
     const restore = restoreFocus.current;
     restoreFocus.current = undefined;
@@ -60,6 +72,7 @@ export function UploadDock() {
         </IconButton>
         {active.length === 0 ? (
           <IconButton
+            ref={restoreOnRemoval}
             label="Close uploads"
             variant="ghost"
             onClick={() => {
@@ -92,6 +105,7 @@ export function UploadDock() {
               ) : null}
               {task.status === "failed" ? (
                 <IconButton
+                  ref={restoreOnRemoval}
                   label={`Retry ${task.name}`}
                   variant="ghost"
                   onClick={(event) => {

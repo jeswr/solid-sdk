@@ -32,7 +32,7 @@ import { encodeRef } from "@/lib/refs";
 import type { DriveClient, DriveItem } from "../lib/client/client";
 import { parseCsvPreview, previewKind } from "../lib/view/view";
 import { useDrive } from "../state/drive-context";
-import { useDriveActions, useDriveUi } from "../state/ui";
+import { captureDriveFocusRemoval, useDriveActions, useDriveUi } from "../state/ui";
 import { DetailsPane } from "./details";
 import { ItemIcon } from "./item-icon";
 
@@ -354,6 +354,7 @@ export function PreviewDialog() {
   const { preview, setPreview } = useDriveUi();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const detailsTrigger = useRef<HTMLElement | null>(null);
+  const restoreFocus = useRef<ReturnType<typeof captureDriveFocusRemoval> | undefined>(undefined);
   const item = preview?.items[preview.index];
   useEffect(() => {
     if (!preview) return;
@@ -381,17 +382,15 @@ export function PreviewDialog() {
         }}
         showCloseButton={false}
         onOpenAutoFocus={(event) => {
+          restoreFocus.current = captureDriveFocusRemoval();
           // Focus the viewer, not the first toolbar button (its tooltip would cover the header).
           event.preventDefault();
           (event.currentTarget as HTMLElement).focus();
         }}
         onCloseAutoFocus={(event) => {
           // Return focus to the previewed file's row so list shortcuts keep working.
-          const row = document.querySelector<HTMLElement>(`[data-url="${CSS.escape(item.url)}"]`);
           event.preventDefault();
-          const listing = document.querySelector<HTMLElement>("[data-drive-listing]");
-          (row ?? listing)?.focus();
-          if (row && document.activeElement !== row) listing?.focus();
+          restoreFocus.current?.(item.url);
         }}
       >
         <DialogTitle className="sr-only">{item.name}</DialogTitle>

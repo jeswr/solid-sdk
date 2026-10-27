@@ -35,7 +35,7 @@ import { formatFileSize } from "../lib/files";
 import { getMoveValidity } from "../lib/list";
 import { extensionChange, isHidden, validateName } from "../lib/operations/operations";
 import { useDrive } from "../state/drive-context";
-import { useDriveActions, useDriveUi } from "../state/ui";
+import { captureDriveFocusRemoval, useDriveActions, useDriveUi } from "../state/ui";
 
 export function DriveDialogs() {
   const { dialog, closeDialog } = useDriveUi();
@@ -217,7 +217,7 @@ function MoveDialog({
   const items = dialog?.kind === "move" ? dialog.items : [];
   const [nodes, setNodes] = useState<Record<string, TreeNode[] | "loading">>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [target, setTarget] = useState<string>();
+  const [target, setTarget] = useState(driveRoot);
   const [busy, setBusy] = useState(false);
   const tree = useRef<HTMLDivElement>(null);
   const generation = useRef(0);
@@ -242,7 +242,7 @@ function MoveDialog({
     const request = ++generation.current;
     setNodes({});
     setExpanded(new Set([driveRoot]));
-    setTarget(undefined);
+    setTarget(driveRoot);
     void (async () => {
       setNodes({ [driveRoot]: "loading" });
       const children = await client.list(driveRoot).catch(() => []);
@@ -305,13 +305,7 @@ function MoveDialog({
 
   const onTreeKey = (event: KeyboardEvent) => {
     const order = visibleOrder();
-    if (!target) {
-      if (event.key === "ArrowDown" || event.key === "Home") {
-        event.preventDefault();
-        setTarget(order[0]);
-      }
-      return;
-    }
+    if (!target) return;
     const index = order.indexOf(target);
     const go = (url: string | undefined) => {
       if (!url) return;
@@ -351,7 +345,7 @@ function MoveDialog({
         aria-selected={target === url}
         aria-disabled={!valid || undefined}
         data-node={url}
-        tabIndex={target === url || (!target && level === 1) ? 0 : -1}
+        tabIndex={target === url ? 0 : -1}
         className="drv-tree-item"
         onClick={(event) => {
           event.stopPropagation();
@@ -544,7 +538,7 @@ function UploadConflictDialog() {
   const [current] = conflicts;
   const [applyAll, setApplyAll] = useState(false);
   const checkboxId = useId();
-  const previousFocus = useRef<HTMLElement | null>(null);
+  const restoreFocus = useRef<(() => void) | undefined>(undefined);
   if (!current) return null;
   const choose = (choice: "keep-both" | "replace" | "skip") => {
     uploads.resolve(current.id, choice, applyAll);
@@ -555,15 +549,14 @@ function UploadConflictDialog() {
       <DialogContent
         className="drv-dialog-sm"
         onOpenAutoFocus={() => {
-          previousFocus.current =
+          const previousFocus =
             document.activeElement instanceof HTMLElement ? document.activeElement : null;
+          const restore = captureDriveFocusRemoval();
+          restoreFocus.current = () => restore(undefined, previousFocus);
         }}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
-          const listing = document.querySelector<HTMLElement>("[data-drive-listing]");
-          const target = previousFocus.current?.isConnected ? previousFocus.current : listing;
-          target?.focus();
-          if (document.activeElement !== target) listing?.focus();
+          restoreFocus.current?.();
         }}
       >
         <DialogHeader>

@@ -88,7 +88,7 @@ export function focusDriveListing(
     document.querySelector<HTMLElement>("[data-drive-preview]"),
     document.querySelector<HTMLElement>('main, [role="main"]'),
   ]) {
-    if (!target?.isConnected) continue;
+    if (!target?.isConnected || target === document.body) continue;
     target.focus();
     // A connected element may have become disabled or hidden during the mutation.
     if (document.activeElement === target) return;
@@ -153,9 +153,14 @@ export function DriveUiProvider({ children }: { children: ReactNode }) {
   }, [detailsOpen, detailsItems]);
   const [uploadRequest, setUploadRequest] = useState<{ id: number; folder: boolean }>();
   const [currentFolder, setCurrentFolder] = useState<string>();
-  const dialogFocus = useRef<{ element: HTMLElement | null; url: string | undefined } | undefined>(
-    undefined,
-  );
+  const dialogFocus = useRef<
+    | {
+        element: HTMLElement | null;
+        url: string | undefined;
+        restore: ReturnType<typeof captureDriveFocusRemoval>;
+      }
+    | undefined
+  >(undefined);
   const dialogOpen = useRef<number | undefined>(undefined);
   const nextDialog = useRef(0);
   const openDialog = useCallback((next: DriveDialog) => {
@@ -168,6 +173,7 @@ export function DriveUiProvider({ children }: { children: ReactNode }) {
           ? document.activeElement
           : null,
       url,
+      restore: captureDriveFocusRemoval(),
     };
     const id = ++nextDialog.current;
     dialogOpen.current = id;
@@ -184,7 +190,7 @@ export function DriveUiProvider({ children }: { children: ReactNode }) {
     // Name -> extension confirmation replaces one dialog with another.
     if (dialogOpen.current !== undefined) return;
     const saved = dialogFocus.current;
-    focusDriveListing(saved?.url, saved?.element);
+    saved?.restore(saved.url, saved.element);
   }, []);
   const value = useMemo<DriveUiValue>(
     () => ({
