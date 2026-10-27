@@ -1,0 +1,8 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# PM ContactDoc uses #it, direct mailto/tel/url; ORG also occurs on imported PM data.
+@prefix vcard: <http://www.w3.org/2006/vcard/ns#> .
+<#it> a vcard:Individual; vcard:fn "Pat Morgan";
+  vcard:hasEmail <mailto:pat@example.org>, <mailto:work@example.org>;
+  vcard:hasTelephone <tel:+44123>, <tel:+44567>;
+  vcard:url <https://pat.example/profile#me>;
+  vcard:organization-name "PM Inc"; vcard:note "Original note" .

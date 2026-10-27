@@ -3,6 +3,7 @@
 // Ported Pod Docs regression tests.
 import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
+import { ConcurrencyValidatorError } from "../../src/apps/docs/lib/model/errors.js";
 import {
   type DesiredRegistration,
   discoverRegistrations,
@@ -25,42 +26,36 @@ const CONTAINER = "https://alice.pod/pod-docs/";
 const REG: DesiredRegistration = { forClass: DOCUMENT_CLASS, container: CONTAINER };
 
 it.each([
-  false,
-  true,
-])("registers with weak profile/index ETags (already linked: %s)", async (linked) => {
+  [false, 'W/"profile"'],
+  [true, 'W/"index"'],
+  [false, undefined],
+  [true, undefined],
+] as const)("rejects unusable profile/index validators (linked: %s, ETag: %j)", async (linked, etag) => {
   const transport = mockFetch({
     [`GET ${WEBID}`]: {
       body: profileWith(linked ? { privateIndex: PRIVATE_INDEX } : {}),
-      etag: 'W/"profile"',
+      etag,
     },
     [`PUT ${PROFILE_DOC}`]: { etag: 'W/"profile-new"' },
-    [`GET ${PRIVATE_INDEX}`]: { body: "", etag: 'W/"index"' },
+    [`GET ${PRIVATE_INDEX}`]: { body: "", etag },
     [`PUT ${PRIVATE_INDEX}`]: { etag: 'W/"index-new"' },
     ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
   });
-  let conflicts = 0;
-  const fetchImpl: typeof fetch = async (url, init) => {
-    if (new Headers(init?.headers).get("if-match")?.startsWith("W/")) {
-      conflicts++;
-      return new Response(null, { status: 412 });
-    }
-    return transport.fetch(url, init);
-  };
   await expect(
-    ensureTypeRegistrations({ webId: WEBID, podRoot: POD, registrations: [REG], fetchImpl }),
-  ).resolves.toMatchObject({ added: 1 });
-  expect(conflicts).toBe(0);
+    ensureTypeRegistrations({
+      webId: WEBID,
+      podRoot: POD,
+      registrations: [REG],
+      fetchImpl: transport.fetch,
+    }),
+  ).rejects.toBeInstanceOf(ConcurrencyValidatorError);
   const replacements = transport.calls.filter(
     (call) => call.method === "PUT" && !call.headers["if-none-match"],
   );
-  expect(replacements.map((call) => [call.url, call.headers["if-match"]])).toEqual(
-    linked
-      ? [[PRIVATE_INDEX, "*"]]
-      : [
-          [PROFILE_DOC, "*"],
-          [PRIVATE_INDEX, "*"],
-        ],
-  );
+  expect(replacements).toEqual([]);
+  expect(
+    transport.calls.filter((call) => call.url === WEBID && call.method === "GET"),
+  ).toHaveLength(1);
 });
 
 function profileWith(links: { privateIndex?: string; publicIndex?: string }): string {
@@ -263,12 +258,12 @@ describe("ensureTypeRegistrations", () => {
   it("bootstraps a private index, links it from the profile, and adds the registration", async () => {
     const { fetch, calls } = mockFetch({
       ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
-      [`GET ${WEBID}`]: { body: profileWith({}), etag: 'W/"p"' },
+      [`GET ${WEBID}`]: { body: profileWith({}), etag: '"p"' },
       [`PUT ${PRIVATE_INDEX}`]: { status: 201 },
       [`PUT ${PROFILE_DOC}`]: { status: 205 },
       [`GET ${PRIVATE_INDEX}`]: {
         body: "@prefix solid: <http://www.w3.org/ns/solid/terms#> . <> a solid:TypeIndex .",
-        etag: 'W/"i"',
+        etag: '"i"',
       },
     });
     const result = await ensureTypeRegistrations({
@@ -280,9 +275,9 @@ describe("ensureTypeRegistrations", () => {
     expect(result.bootstrapped).toBe(true);
     expect(result.indexUrl).toBe(PRIVATE_INDEX);
     expect(result.added).toBe(1);
-    // A weak profile ETag uses the existence precondition.
+    // Profile replacement uses its exact strong validator.
     const profilePut = calls.find((c) => c.method === "PUT" && c.url === PROFILE_DOC);
-    expect(profilePut?.headers["if-match"]).toBe("*");
+    expect(profilePut?.headers["if-match"]).toBe('"p"');
     // The bootstrap index PUT was create-only.
     const indexCreate = calls.find(
       (c) => c.method === "PUT" && c.url === PRIVATE_INDEX && c.headers["if-none-match"] === "*",
@@ -296,7 +291,7 @@ describe("ensureTypeRegistrations", () => {
       [`GET ${WEBID}`]: { body: profileWith({ privateIndex: PRIVATE_INDEX }), etag: 'W/"p"' },
       [`GET ${PRIVATE_INDEX}`]: {
         body: "@prefix solid: <http://www.w3.org/ns/solid/terms#> . <> a solid:TypeIndex .",
-        etag: 'W/"i"',
+        etag: '"i"',
       },
       [`PUT ${PRIVATE_INDEX}`]: { status: 205 },
     });
@@ -308,9 +303,9 @@ describe("ensureTypeRegistrations", () => {
     });
     expect(result.bootstrapped).toBe(false);
     expect(result.added).toBe(1);
-    // A weak index ETag uses the existence precondition.
+    // Index replacement uses its exact strong validator.
     const put = calls.find((c) => c.method === "PUT" && c.url === PRIVATE_INDEX);
-    expect(put?.headers["if-match"]).toBe("*");
+    expect(put?.headers["if-match"]).toBe('"i"');
     // No profile write happened.
     expect(calls.some((c) => c.method === "PUT" && c.url === PROFILE_DOC)).toBe(false);
   });
@@ -367,7 +362,7 @@ describe("ensureTypeRegistrations", () => {
     `;
     const { fetch } = mockFetch({
       ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
-      [`GET ${WEBID}`]: { body: profileWith({}), etag: 'W/"p"' },
+      [`GET ${WEBID}`]: { body: profileWith({}), etag: '"p"' },
       [`PUT ${PRIVATE_INDEX}`]: { status: 412 }, // create-only collision
       [`PUT ${PROFILE_DOC}`]: { status: 205 },
       [`GET ${PRIVATE_INDEX}`]: { body: existingIndex, etag: 'W/"i"' },
@@ -508,8 +503,8 @@ it.each([false, true])("recovers profile linking conflicts (new link: %s)", asyn
     ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
     ...privateIndexPolicy(concurrentIndex, WEBID),
     [`PUT ${PRIVATE_INDEX}`]: { status: 201 },
-    [`GET ${PRIVATE_INDEX}`]: { body: "" },
-    [`GET ${concurrentIndex}`]: { body: "" },
+    [`GET ${PRIVATE_INDEX}`]: { body: "", etag: '"index"' },
+    [`GET ${concurrentIndex}`]: { body: "", etag: '"concurrent"' },
     [`PUT ${concurrentIndex}`]: { status: 201 },
   });
   const fetchImpl: typeof fetch = async (url, init) => {
@@ -548,7 +543,7 @@ it.each([false, true])("recovers profile linking conflicts (new link: %s)", asyn
 it.each([412, 403])("bounds or propagates profile linking failures (%s)", async (status) => {
   const { fetch, calls } = mockFetch({
     ...privateIndexPolicy(PRIVATE_INDEX, WEBID),
-    [`GET ${WEBID}`]: { body: profileWith({}) },
+    [`GET ${WEBID}`]: { body: profileWith({}), etag: '"profile"' },
     [`PUT ${PRIVATE_INDEX}`]: { status: 412 },
     [`PUT ${PROFILE_DOC}`]: { status },
   });
@@ -557,5 +552,5 @@ it.each([412, 403])("bounds or propagates profile linking failures (%s)", async 
   ).rejects.toMatchObject({ status });
   const writes = calls.filter((call) => call.url === PROFILE_DOC);
   expect(writes).toHaveLength(status === 412 ? 4 : 1);
-  expect(writes.every((call) => call.headers["if-match"] === "*")).toBe(true);
+  expect(writes.every((call) => call.headers["if-match"] === '"profile"')).toBe(true);
 });

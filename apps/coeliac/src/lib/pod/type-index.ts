@@ -16,7 +16,7 @@
  * skill's compile-verified `@rdfjs/wrapper` recipe; never hand-built triples.
  */
 import { fetchRdf } from "@jeswr/fetch-rdf";
-import { DIET_MEAL, DIET_SYMPTOM, docOf } from "@jeswr/solid-health-diary";
+import { DIET_MEAL, DIET_SYMPTOM, LEGACY_DIET_NS, docOf } from "@jeswr/solid-health-diary";
 import type { DatasetCore } from "@rdfjs/types";
 import {
   DatasetWrapper,
@@ -65,8 +65,14 @@ class TypeIndexDataset extends DatasetWrapper {
   }
   /** Whether a class is already registered against a container (idempotency). */
   hasRegistration(classIri: string, container: string): boolean {
+    const legacyClass = classIri === DIET_MEAL ? `${LEGACY_DIET_NS}Meal`
+      : classIri === DIET_SYMPTOM ? `${LEGACY_DIET_NS}Symptom` : undefined;
     for (const reg of this.registrations) {
-      if (reg.forClass === classIri && reg.instanceContainer === container) return true;
+      const registeredClass = reg.forClass;
+      if (
+        (registeredClass === classIri || (legacyClass !== undefined && registeredClass === legacyClass)) &&
+        reg.instanceContainer === container
+      ) return true;
     }
     return false;
   }

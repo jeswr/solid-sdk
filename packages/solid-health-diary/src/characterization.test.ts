@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 //
 // CHARACTERIZATION / GOLDEN-MASTER — pins the package's OBSERVABLE contract so a
@@ -110,6 +111,9 @@ const MAIN_EXPORTS = [
   "HEALTH_OBSERVATION",
   "HEALTH_PATIENT",
   "HEALTH_PATIENT_PROP",
+  "LEGACY_CORE_NS",
+  "LEGACY_DIET_NS",
+  "LEGACY_HEALTH_NS",
   "MARKER_PRESENCES",
   "MEAL_CONTEXTS",
   "Meal",
@@ -256,19 +260,19 @@ describe("emitted RDF is pinned (concept-IRI encoding + predicates)", () => {
     });
     const nquads = canonicalQuads(store, url);
     expect(nquads).toEqual([
-      `<${url}#exposure-0> <https://w3id.org/jeswr/sectors/health/diet#derivedFrom> <${item0}>`,
-      `<${url}#exposure-0> <https://w3id.org/jeswr/sectors/health/diet#exposureLevel> <https://w3id.org/jeswr/sectors/health/diet#possibleUndeclared>`,
-      `<${url}#exposure-0> <https://w3id.org/jeswr/sectors/health/diet#trigger> <https://w3id.org/jeswr/sectors/health/diet#sulphites>`,
-      `<${url}#exposure-0> a <https://w3id.org/jeswr/sectors/health/diet#Exposure>`,
+      `<${url}#exposure-0> <https://jeswr.org/ns/sectors/health/diet#derivedFrom> <${item0}>`,
+      `<${url}#exposure-0> <https://jeswr.org/ns/sectors/health/diet#exposureLevel> <https://jeswr.org/ns/sectors/health/diet#possibleUndeclared>`,
+      `<${url}#exposure-0> <https://jeswr.org/ns/sectors/health/diet#trigger> <https://jeswr.org/ns/sectors/health/diet#sulphites>`,
+      `<${url}#exposure-0> a <https://jeswr.org/ns/sectors/health/diet#Exposure>`,
       `<${mealSubject(url)}> <http://schema.org/startTime> "2026-07-01T08:00:00.000Z"`,
-      `<${mealSubject(url)}> <https://w3id.org/jeswr/sectors/health/diet#context> <https://w3id.org/jeswr/sectors/health/diet#restaurant>`,
-      `<${mealSubject(url)}> <https://w3id.org/jeswr/sectors/health/diet#hasItem> <${item0}>`,
-      `<${mealSubject(url)}> <https://w3id.org/jeswr/sectors/health/diet#portion> <https://w3id.org/jeswr/sectors/health/diet#large>`,
-      `<${mealSubject(url)}> a <https://w3id.org/jeswr/sectors/health/diet#Meal>`,
+      `<${mealSubject(url)}> <https://jeswr.org/ns/sectors/health/diet#context> <https://jeswr.org/ns/sectors/health/diet#restaurant>`,
+      `<${mealSubject(url)}> <https://jeswr.org/ns/sectors/health/diet#hasItem> <${item0}>`,
+      `<${mealSubject(url)}> <https://jeswr.org/ns/sectors/health/diet#portion> <https://jeswr.org/ns/sectors/health/diet#large>`,
+      `<${mealSubject(url)}> a <https://jeswr.org/ns/sectors/health/diet#Meal>`,
       `<${item0}> <http://schema.org/name> "Wine"`,
-      `<${item0}> <https://w3id.org/jeswr/sectors/health/diet#offCategory> "en:wines"`,
-      `<${item0}> <https://w3id.org/jeswr/sectors/health/diet#sourceConfidence> <https://w3id.org/jeswr/sectors/health/diet#off>`,
-      `<${item0}> a <https://w3id.org/jeswr/sectors/health/diet#FoodItem>`,
+      `<${item0}> <https://jeswr.org/ns/sectors/health/diet#offCategory> "en:wines"`,
+      `<${item0}> <https://jeswr.org/ns/sectors/health/diet#sourceConfidence> <https://jeswr.org/ns/sectors/health/diet#off>`,
+      `<${item0}> a <https://jeswr.org/ns/sectors/health/diet#FoodItem>`,
     ]);
   });
 });
