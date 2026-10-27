@@ -87,6 +87,9 @@ export function decodeKeepJson(json: string): unknown {
             limit: bounded ? BOUNDED_ARRAYS[previousString!]! : Number.POSITIVE_INFINITY,
             separators: 0,
           });
+          // The pending key is consumed once its value starts, so later
+          // brackets never rescan the gap after it (keeps the scan linear).
+          previousString = undefined;
         } else if (character === "}" || character === "]") {
           frames.pop();
         } else if (character === ",") {

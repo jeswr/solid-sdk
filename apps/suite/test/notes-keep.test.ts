@@ -425,6 +425,14 @@ describe("Keep input validation and limits", () => {
     fails(() => parse({ textContent: "labels", listContent: "labels" }), "INVALID_KEEP_NOTE");
   });
 
+  it("keeps the bracket preflight linear after a key with a long gap", () => {
+    const json = `{"labels":${" ".repeat(64_000)}${"[]".repeat(64_000)}}`;
+    const started = performance.now();
+    fails(() => parseKeepNote(json), "INVALID_KEEP_NOTE");
+    // The quadratic rescan took seconds; the linear scan takes milliseconds.
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
+
   it("keeps private content out of thrown diagnostics", () => {
     const result = parseKeepBatch([{ fileName: "fictional.json", json: '{"private Rowan text' }]);
     expect(result[0]).toMatchObject({
