@@ -179,24 +179,27 @@ function isTokenEndpointLeg(input: URL | RequestInfo, init: RequestInit | undefi
   return ct?.toLowerCase().includes("application/x-www-form-urlencoded") === true;
 }
 
-/** True iff a 4xx response is the RFC 9449 §8 `use_dpop_nonce` challenge (header or body error). */
+// AUTHORED-BY Codex GPT-6.1-Sol
+/** True iff a 4xx token response explicitly reports the RFC 9449 §8 `use_dpop_nonce` error. */
 async function isUseDpopNonceChallenge(res: Response): Promise<boolean> {
   if (res.status < 400 || res.status >= 500) {
     return false;
   }
-  // The canonical signal is a `DPoP-Nonce` header. RFC 9449 §8 also defines an
-  // `error":"use_dpop_nonce"` body for the token endpoint; treat either as the challenge.
-  if (res.headers.get("dpop-nonce")) {
-    return true;
-  }
+  // A nonce header alone is not an instruction to replay a grant: an AS can send one on any
+  // response. In particular, never replay invalid_grant (a rotated refresh token may be single-use).
   try {
     const cloned = res.clone();
     const text = await cloned.text();
     if (text.length === 0) {
       return false;
     }
-    const parsed = JSON.parse(text) as { error?: unknown };
-    return parsed.error === "use_dpop_nonce";
+    const parsed: unknown = JSON.parse(text);
+    return (
+      parsed !== null &&
+      typeof parsed === "object" &&
+      "error" in parsed &&
+      parsed.error === "use_dpop_nonce"
+    );
   } catch {
     return false;
   }
