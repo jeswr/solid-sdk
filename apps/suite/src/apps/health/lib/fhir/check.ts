@@ -1,7 +1,14 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { CATEGORY_SYSTEM, LOINC_SYSTEM, METRIC_CODES, UCUM_SYSTEM } from "./codes";
-import type { FhirBundle } from "./types";
+import type {
+  CodedConcept,
+  FhirBundle,
+  FhirResource,
+  ObservationResource,
+  Quantity,
+  Subject,
+} from "./types";
 import {
   array,
   date,
@@ -27,16 +34,16 @@ function fields(
   return record(value, required, optional, "INVALID_BUNDLE");
 }
 
-function coding(input: unknown, system: string): unknown {
+function coding(input: unknown, system: string): CodedConcept {
   const value = fields(input, ["coding"]);
   const items = array(value.coding, "INVALID_BUNDLE");
   valid(items.length === 1);
   const item = fields(items[0], ["system", "code"]);
-  valid(item.system === system);
-  return item.code;
+  valid(item.system === system && typeof item.code === "string");
+  return { coding: [{ system, code: item.code }] };
 }
 
-function quantity(input: unknown, unit: string): void {
+function quantity(input: unknown, unit: string): Quantity {
   const value = fields(input, ["value", "unit", "system", "code"]);
   valid(
     numeric(value.value) &&
@@ -44,25 +51,40 @@ function quantity(input: unknown, unit: string): void {
       value.system === UCUM_SYSTEM &&
       value.code === unit,
   );
+  return { value: value.value, unit, system: UCUM_SYSTEM, code: unit };
 }
 
-function annotation(input: unknown): void {
+function annotation(input: unknown): [{ text: string }] {
   const value = array(input, "INVALID_BUNDLE");
   valid(value.length === 1);
   const item = fields(value[0], ["text"]);
   valid(text(item.text));
+  return [{ text: item.text }];
 }
 
-function subject(input: unknown): void {
+function subject(input: unknown): Subject {
   const value = fields(input, [], ["reference", "display"]);
   if (Object.hasOwn(value, "reference")) {
     valid(Object.keys(value).length === 1 && patientReference(value.reference));
+    return { reference: value.reference };
   } else {
     valid(value.display === "Patient not supplied");
+    return { display: value.display };
   }
 }
 
-function observation(input: Record<string, unknown>): void {
+function component(
+  input: unknown,
+  code: string,
+  unit: string,
+): { code: CodedConcept; valueQuantity: Quantity } {
+  const value = fields(input, ["code", "valueQuantity"]);
+  const concept = coding(value.code, LOINC_SYSTEM);
+  valid(concept.coding[0].code === code);
+  return { code: concept, valueQuantity: quantity(value.valueQuantity, unit) };
+}
+
+function observation(input: Record<string, unknown>, resourceId: string): ObservationResource {
   const value = fields(
     input,
     ["resourceType", "id", "status", "category", "code", "effectiveDateTime", "note"],
@@ -70,37 +92,52 @@ function observation(input: Record<string, unknown>): void {
   );
   valid(value.status === "final" && date(value.effectiveDateTime, false));
   const code = coding(value.code, LOINC_SYSTEM);
-  const mapping = Object.values(METRIC_CODES).find((entry) => entry.code === code);
+  const mapping = Object.values(METRIC_CODES).find((entry) => entry.code === code.coding[0].code);
   valid(mapping !== undefined);
   const category = array(value.category, "INVALID_BUNDLE");
   valid(category.length === 1);
-  valid(coding(category[0], CATEGORY_SYSTEM) === mapping.category);
-  annotation(value.note);
+  const categoryCode = coding(category[0], CATEGORY_SYSTEM);
+  valid(categoryCode.coding[0].code === mapping.category);
+  const resource: ObservationResource = {
+    resourceType: "Observation",
+    id: resourceId,
+    status: value.status,
+    category: [categoryCode],
+    code,
+    effectiveDateTime: value.effectiveDateTime,
+    note: annotation(value.note),
+  };
   if (mapping.code === "85354-9") {
     valid(!Object.hasOwn(value, "valueQuantity"));
     const components = array(value.component, "INVALID_BUNDLE");
     valid(components.length === 2);
-    for (const [index, componentCode] of ["8480-6", "8462-4"].entries()) {
-      const component = fields(components[index], ["code", "valueQuantity"]);
-      valid(coding(component.code, LOINC_SYSTEM) === componentCode);
-      quantity(component.valueQuantity, mapping.unit);
-    }
+    resource.component = [
+      component(components[0], "8480-6", mapping.unit),
+      component(components[1], "8462-4", mapping.unit),
+    ];
   } else {
     valid(!Object.hasOwn(value, "component"));
-    quantity(value.valueQuantity, mapping.unit);
+    resource.valueQuantity = quantity(value.valueQuantity, mapping.unit);
   }
-  if (Object.hasOwn(value, "subject")) subject(value.subject);
+  if (Object.hasOwn(value, "subject")) resource.subject = subject(value.subject);
+  return resource;
 }
 
-/** Validate this exporter's subset, including required subjects; not a FHIR profile validator. */
-export function assertFhirBundle(input: unknown): asserts input is FhirBundle {
+/** Return fresh validated JSON for this exporter's subset; not a FHIR profile validator. */
+export function assertFhirBundle(input: unknown): FhirBundle {
   const value = fields(input, ["resourceType", "type", "timestamp"], ["entry"]);
   valid(
     value.resourceType === "Bundle" && value.type === "collection" && date(value.timestamp, false),
   );
-  if (!Object.hasOwn(value, "entry")) return;
+  const bundle: FhirBundle = {
+    resourceType: "Bundle",
+    type: "collection",
+    timestamp: value.timestamp,
+  };
+  if (!Object.hasOwn(value, "entry")) return bundle;
   const entries = array(value.entry, "INVALID_BUNDLE");
   valid(entries.length > 0);
+  bundle.entry = [];
   const urls = new Set<string>();
   const ids = new Set<string>();
   for (const item of entries) {
@@ -140,8 +177,9 @@ export function assertFhirBundle(input: unknown): asserts input is FhirBundle {
     const key = `${resource.resourceType}/${resource.id}`;
     valid(!ids.has(key));
     ids.add(key);
+    let materialized: FhirResource;
     if (resource.resourceType === "Observation") {
-      observation(resource);
+      materialized = observation(resource, resource.id);
     } else if (resource.resourceType === "MedicationStatement") {
       const medication = fields(resource, [
         "resourceType",
@@ -155,13 +193,23 @@ export function assertFhirBundle(input: unknown): asserts input is FhirBundle {
       valid(medication.status === "unknown");
       const concept = fields(medication.medicationCodeableConcept, ["text"]);
       valid(text(concept.text));
-      subject(medication.subject);
+      const patient = subject(medication.subject);
       const period = fields(medication.effectivePeriod, ["start"], ["end"]);
       valid(date(period.start));
+      const effectivePeriod: { start: string; end?: string } = { start: period.start };
       if (Object.hasOwn(period, "end")) {
         valid(date(period.end) && periodOrdered(period.start, period.end));
+        effectivePeriod.end = period.end;
       }
-      annotation(medication.dosage);
+      materialized = {
+        resourceType: "MedicationStatement",
+        id: resource.id,
+        status: medication.status,
+        medicationCodeableConcept: { text: concept.text },
+        subject: patient,
+        effectivePeriod,
+        dosage: annotation(medication.dosage),
+      };
     } else {
       const condition = fields(resource, [
         "resourceType",
@@ -172,7 +220,15 @@ export function assertFhirBundle(input: unknown): asserts input is FhirBundle {
       ]);
       const concept = fields(condition.code, ["text"]);
       valid(text(concept.text) && date(condition.onsetDateTime));
-      subject(condition.subject);
+      materialized = {
+        resourceType: "Condition",
+        id: resource.id,
+        code: { text: concept.text },
+        subject: subject(condition.subject),
+        onsetDateTime: condition.onsetDateTime,
+      };
     }
+    bundle.entry.push({ fullUrl: entry.fullUrl, resource: materialized });
   }
+  return bundle;
 }

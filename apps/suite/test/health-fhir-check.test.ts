@@ -75,11 +75,11 @@ function rejects(input: unknown, code = "INVALID_BUNDLE"): void {
 }
 
 describe("FHIR structural self-check", () => {
-  it("accepts JSON-parsed output and narrows unknown to the bundle type", () => {
+  it("returns a typed bundle from JSON-parsed output", () => {
     const value: unknown = JSON.parse(JSON.stringify(fixture()));
-    assertFhirBundle(value);
-    expect(value.type).toBe("collection");
-    expect(value.entry?.map((entry) => entry.resource.resourceType)).toEqual([
+    const bundle = assertFhirBundle(value);
+    expect(bundle.type).toBe("collection");
+    expect(bundle.entry?.map((entry) => entry.resource.resourceType)).toEqual([
       "Condition",
       "MedicationStatement",
       "Observation",
@@ -132,7 +132,7 @@ describe("FHIR structural self-check", () => {
   it("accepts an absent entry for empty collections but rejects an explicitly undefined one", () => {
     const bundle = fixture();
     delete bundle.entry;
-    assertFhirBundle(bundle);
+    expect(assertFhirBundle(bundle)).toEqual(bundle);
     change(bundle, "entry", undefined);
     rejects(bundle);
   });
@@ -177,6 +177,7 @@ describe("FHIR structural self-check", () => {
     ],
     ["code.coding.0.system", "https://example.org/not-loinc"],
     ["code.coding.0.code", "unsupported"],
+    ["code.coding.0.code", 42],
     ["code.coding.0.extra", true],
     ["category", []],
     ["category.0.coding", []],

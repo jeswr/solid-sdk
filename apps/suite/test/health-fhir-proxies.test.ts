@@ -102,7 +102,48 @@ describe("FHIR caller-data snapshots", () => {
 
   it("self-checks every emitted kind and nested field using descriptor snapshots", () => {
     const bundle = buildFhirBundle(records(), options());
-    expect(() => assertFhirBundle(descriptorOnly(bundle))).not.toThrow();
+    const checked = assertFhirBundle(descriptorOnly(bundle));
+    expect(JSON.parse(JSON.stringify(checked))).toEqual(bundle);
+  });
+
+  it("returns validated descriptor values when bundle and nested proxy gets disagree", () => {
+    const expected = buildFhirBundle(records(), options());
+    const input = buildFhirBundle(records(), options());
+    const entry = input.entry?.[0];
+    if (!entry) throw new Error("Expected fixture entry");
+    const get = vi.fn(() => "unvalidated proxy value");
+    entry.resource = new Proxy(entry.resource, { get });
+    const checked = assertFhirBundle(new Proxy(input, { get }));
+    expect(checked).toEqual(expected);
+    expect(checked.type).toBe("collection");
+    expect(checked.entry?.[0]?.resource.resourceType).toBe("Condition");
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("returns fresh objects and arrays throughout the bundle without mutating the input", () => {
+    const input = buildFhirBundle(records(), options());
+    const before = JSON.stringify(input);
+    const checked = assertFhirBundle(input);
+    function independent(actual: unknown, original: unknown): void {
+      if (typeof original !== "object" || original === null) return;
+      expect(actual).not.toBe(original);
+      for (const key of Object.keys(original)) {
+        independent(
+          (actual as Record<string, unknown>)[key],
+          (original as Record<string, unknown>)[key],
+        );
+      }
+    }
+    expect(checked).toEqual(input);
+    independent(checked, input);
+    expect(JSON.stringify(input)).toBe(before);
+    const entry = input.entry?.[0];
+    if (entry?.resource.resourceType !== "Condition") {
+      throw new Error("Expected fixture condition");
+    }
+    entry.resource.code.text = "Changed after validation";
+    input.entry?.pop();
+    expect(JSON.parse(JSON.stringify(checked))).toEqual(JSON.parse(before));
   });
 
   it.each(["source", "value"])("builds from the validated %s instead of a proxy get", (key) => {

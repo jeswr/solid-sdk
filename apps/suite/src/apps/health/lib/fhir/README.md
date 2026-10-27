@@ -77,7 +77,10 @@ never truncated, under [R4's string limit](https://hl7.org/fhir/R4/datatypes.htm
 `TOO_MANY_RECORDS`, `INVALID_INPUT`, `INVALID_OPTIONS`, `INVALID_BUNDLE`.
 Messages never include input or callback exception details.
 
-`assertFhirBundle(unknown)` throws `INVALID_BUNDLE` for malformed output, or
+`assertFhirBundle(unknown)` returns a fresh, recursively materialized `FhirBundle`
+from validated descriptor values. Consume its return value; it does not narrow
+or validate subsequent reads from the original object or proxy. It throws
+`INVALID_BUNDLE` for malformed output, or
 `TOO_MANY_RECORDS` for an oversized entry array. It checks this exporter's
 structural subset: envelope, IDs/UUID uniqueness, subjects, status, coding,
 categories, quantities, blood-pressure components, dosage, text and dates.
