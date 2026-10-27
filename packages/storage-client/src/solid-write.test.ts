@@ -303,6 +303,27 @@ describe("CSS write fixtures and HTTP plumbing", () => {
     );
     expect(before.calls).toHaveLength(0);
   });
+  test("an abort while reading an error body is a non-retryable network error", async () => {
+    const c = new AbortController();
+    const { storage } = backend({
+      [`PUT ${URL}`]: () =>
+        new Response(
+          new ReadableStream({
+            pull(controller) {
+              c.abort();
+              controller.error(new Error("aborted"));
+            },
+          }),
+          { status: 503, headers: { "content-type": "application/problem+json" } },
+        ),
+    });
+    expect(
+      await rejection(
+        storage.write(URL, "x", { contentType: "text/plain", ifMatch: "*", signal: c.signal }),
+        "network",
+      ),
+    ).toMatchObject({ retryable: false, method: "PUT", url: URL });
+  });
   test.each([
     429, 503,
   ])("consumed upload streams cannot retry HTTP %i on write or create", async (status) => {
@@ -2421,6 +2442,20 @@ describe("round-4 write regressions", () => {
         await rejection(storage.patch(URL, patch, { ifMatch: TAG }), "bad-request"),
       ).toMatchObject({ status: null, url: URL });
     expect(calls).toHaveLength(0);
+  });
+
+  test("SPARQL keeps typed literals whose datatype IRI contains --", async () => {
+    // n3 reports a "direction" for this typed literal; only language-tagged literals carry one.
+    const typed = literal("example", nn("urn:example:datatype--item"));
+    const statement = quad(s, p, typed);
+    const { storage, calls } = backend(
+      {},
+      { features: withFormats({ "text/turtle": ["application/sparql-update"] }) },
+    );
+    await storage.patch(URL, n3([statement]), { ifMatch: TAG });
+    expect(calls[0]?.body).toBe(
+      'INSERT DATA {\n<urn:s> <urn:p> "example"^^<urn:example:datatype--item> .\n}',
+    );
   });
 
   test("N3 preserves directional terms supported by CSS's installed n3 parser", async () => {

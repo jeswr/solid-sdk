@@ -29,9 +29,14 @@ export async function patchFormulas(
     // accepts @en--ltr in N3 Patch and preserves direction, so that format keeps it.
     if (
       format === "application/sparql-update" &&
-      [...input.inserts, ...input.deletes]
-        .flatMap(terms)
-        .some((term) => term.termType === "Literal" && (term as { direction?: unknown }).direction)
+      [...input.inserts, ...input.deletes].flatMap(terms).some(
+        (term) =>
+          term.termType === "Literal" &&
+          // Only a language-tagged literal can carry a base direction. n3 also reports a
+          // "direction" for a typed literal whose datatype IRI contains "--".
+          term.language !== "" &&
+          (term as { direction?: unknown }).direction,
+      )
     )
       throw new TypeError("SPARQL 1.1 Update cannot express directional literals");
     // Validate the rebuilt terms (plain n3 instances), so what is checked is what is written.

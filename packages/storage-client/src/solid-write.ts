@@ -6,7 +6,7 @@ import { escapeIri } from "@jeswr/rdf-serialize";
 import { DataFactory, Store } from "n3";
 import { StorageError, type StorageErrorCode, storageErrorFrom } from "./errors.js";
 import { discard, scoped, send } from "./http.js";
-import { pathParent } from "./internal.js";
+import { pathParent, throwIfAborted } from "./internal.js";
 import { serializeQuads, WRITABLE_RDF } from "./rdf.js";
 import type { SolidBackendOptions } from "./solid-backend.js";
 import { buildN3Patch, n3Envelope, patchFormulas } from "./solid-patch.js";
@@ -229,6 +229,8 @@ export function solidWrites(
     if (![200, 201, 204, 205].includes(response.status)) {
       if (response.status < 200 || response.status >= 400) {
         const cause = await storageErrorFrom(method, url, response);
+        // Reading the error body can be cut short by an abort; never report that as retryable.
+        throwIfAborted(method, url, signal);
         throw body instanceof ReadableStream
           ? new StorageError(cause.code, { ...cause, message: cause.message, retryable: false })
           : cause;
