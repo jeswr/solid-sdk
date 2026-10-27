@@ -155,9 +155,7 @@ describe("WebIdDPoPTokenProvider — owned request target (sst-m040)", () => {
       keepalive: true,
       signal: abort.signal,
     });
-    // Match the platform's existing new Request(input, { headers }) behavior,
-    // including its referrer/referrerPolicy handling when init is supplied.
-    const expected = new Request(request.clone(), { headers: request.headers });
+    const expected = request.clone();
     expect(await setup.provider.matches(request)).toBe(true);
     expect(request.bodyUsed).toBe(false); // matches must not consume an upload
     const upgraded = await setup.provider.upgrade(request);

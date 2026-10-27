@@ -84,7 +84,7 @@ import {
   hasCredentialHeaders,
 } from "./credentialed-redirects.js";
 import { brandFetchWrapper, resolvePristineFetch } from "./pristine.js";
-import { requestHref } from "./request.js";
+import { deriveRequest, requestHref } from "./request.js";
 
 /**
  * The structural TokenProvider surface this wrapper drives. The consuming app supplies its
@@ -367,7 +367,7 @@ export async function proactiveAuthenticatedFetch(
   init?: RequestInit,
   config?: ProactiveFetchConfig,
 ): Promise<Response> {
-  const request = new Request(input as RequestInfo, init);
+  const request = deriveRequest(input as RequestInfo, init);
   if (!state.provider || !shouldAttachToken(state, request)) {
     return fetchPassthrough(base, request);
   }

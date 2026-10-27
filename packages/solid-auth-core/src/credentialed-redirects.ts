@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
-import { requestHref } from "./request.js";
+import { deriveRequest, requestHref } from "./request.js";
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 const BODY_HEADERS = [
@@ -22,7 +22,7 @@ export function hasCredentialHeaders(request: Request): boolean {
 export function fetchPassthrough(base: typeof fetch, request: Request): Promise<Response> {
   return base(
     hasCredentialHeaders(request) && request.redirect !== "manual"
-      ? new Request(request, { redirect: "manual" })
+      ? deriveRequest(request, { redirect: "manual" })
       : request,
   );
 }
@@ -107,7 +107,7 @@ export async function fetchWithCredentialedRedirects(
   let body: ArrayBuffer | null = null;
   if (current.body !== null && replayable) {
     body = await bufferBody(current.body, current.signal);
-    current = new Request(current, { body });
+    current = deriveRequest(current, { body });
   }
 
   for (let hops = 0; ; hops++) {
@@ -151,20 +151,11 @@ export async function fetchWithCredentialedRedirects(
       if (rewrite) {
         for (const header of BODY_HEADERS) headers.delete(header);
       }
-      next = new Request(destination, {
-        method: rewrite ? "GET" : current.method,
-        headers,
-        body: rewrite ? null : body,
-        redirect: current.redirect,
-        cache: current.cache,
-        credentials: current.credentials,
-        integrity: current.integrity,
-        keepalive: current.keepalive,
-        mode: current.mode,
-        referrer: current.referrer,
-        referrerPolicy: current.referrerPolicy,
-        signal: current.signal,
-      });
+      next = deriveRequest(
+        current,
+        { method: rewrite ? "GET" : current.method, headers, body: rewrite ? null : body },
+        destination,
+      );
     } catch {
       // Invalid/unrequestable Locations leave the original response readable.
       return response;

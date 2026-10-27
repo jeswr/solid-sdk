@@ -103,7 +103,7 @@ import {
   stripAuthCallbackParams,
   writePersistedRedirectFlow,
 } from "./redirect.js";
-import { requestHref } from "./request.js";
+import { deriveRequest, requestHref } from "./request.js";
 import type { PersistedSession, SessionStore } from "./session-store.js";
 import type {
   BeginRedirectLoginOptions,
@@ -1047,7 +1047,7 @@ class SolidAuthEngine implements SolidAuth {
     input: RequestInfo | URL,
     init?: RequestInit,
   ): Promise<Response> {
-    const request = new Request(input as RequestInfo, init);
+    const request = deriveRequest(input as RequestInfo, init);
     const provider = this.#provider;
     if (provider && (await provider.matches(request))) {
       return fetchWithCredentialedRedirects(
@@ -3245,7 +3245,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       ),
     );
     headers.set("Authorization", `DPoP ${session.accessToken}`);
-    const upgraded = new Request(request, { headers, redirect: "manual" });
+    const upgraded = deriveRequest(request, { headers, redirect: "manual" });
     // Check the outgoing platform destination synchronously, immediately before return.
     if (requestHref(upgraded) !== href) {
       upgraded.headers.delete("Authorization");

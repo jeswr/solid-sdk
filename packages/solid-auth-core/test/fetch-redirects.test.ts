@@ -40,7 +40,8 @@ async function controllerFetch(base: typeof fetch, origins: string[], patchGloba
       },
     },
     publicFetch: async (input, init) => {
-      const request = new Request(input, init);
+      const request =
+        input instanceof Request && init === undefined ? input : new Request(input, init);
       const href = request.url;
       if (href === `${ISSUER}/.well-known/openid-configuration`) {
         return json({
@@ -133,6 +134,118 @@ async function proofOf(proof: string | null | undefined) {
 
 for (const kind of ["controller", "proactive"] as const) {
   describe(`${kind} credentialed redirects (injected transport)`, () => {
+    for (const route of [
+      "public passthrough",
+      "caller-credential passthrough",
+      "declined-upgrade fallback",
+      "credentialed first send",
+      "same-origin 307 hop",
+      "same-origin 303 rewrite",
+    ] as const) {
+      for (const inputKind of ["init", "Request", "Request with init"] as const) {
+        it(`preserves caller Request properties on ${route} (${inputKind})`, async () => {
+          const sent: Request[] = [];
+          const bodies: string[] = [];
+          const followed = route === "same-origin 307 hop" || route === "same-origin 303 rewrite";
+          const wrapped = await wrappedFetch(kind, async (input, init) => {
+            // Inspect the actual transport argument: reconstructing it here can itself
+            // reset referrer settings and conceal which SDK derivation dropped them.
+            expect(input).toBeInstanceOf(Request);
+            expect(init).toBeUndefined();
+            const request = input as Request;
+            sent.push(request);
+            bodies.push(await request.text());
+            return followed && sent.length === 1
+              ? new Response(null, {
+                  status: route === "same-origin 303 rewrite" ? 303 : 307,
+                  headers: { Location: "/final" },
+                })
+              : new Response("done");
+          });
+          const abort = new AbortController();
+          const hasBody = inputKind === "init" || route === "same-origin 303 rewrite";
+          const settings: RequestInit = {
+            referrer: "https://app.example/private/page",
+            referrerPolicy: "no-referrer",
+            mode: "same-origin",
+            credentials: "omit",
+            cache: "no-store",
+            integrity: "sha256-synthetic",
+            keepalive: true,
+            signal: abort.signal,
+            priority: "high",
+            redirect: "follow",
+            headers: {
+              "X-Caller": "kept",
+              ...(route === "caller-credential passthrough"
+                ? { Authorization: "Bearer caller-owned" }
+                : {}),
+            },
+            ...(hasBody ? { method: "POST", body: "caller body" } : {}),
+          };
+          const url = `${route.endsWith("passthrough") ? FOREIGN : POD}/start`;
+          const upgrade = vi.spyOn(WebIdDPoPTokenProvider.prototype, "upgrade");
+          if (route === "declined-upgrade fallback") {
+            upgrade.mockImplementationOnce(async (request) => request);
+          }
+          try {
+            const response =
+              inputKind === "init"
+                ? await wrapped(url, settings)
+                : await wrapped(
+                    new Request(url, settings),
+                    inputKind === "Request with init" ? { headers: settings.headers } : undefined,
+                  );
+            expect(await response.text()).toBe("done");
+            expect(sent.map((request) => request.url)).toEqual(
+              followed ? [url, `${POD}/final`] : [url],
+            );
+            const credentialed = route === "credentialed first send" || followed;
+            for (const [index, request] of sent.entries()) {
+              for (const key of [
+                "referrer",
+                "referrerPolicy",
+                "mode",
+                "credentials",
+                "cache",
+                "integrity",
+                "keepalive",
+              ] as const) {
+                expect(request[key], key).toBe(settings[key]);
+              }
+              if ("priority" in Request.prototype) {
+                expect(Reflect.get(request, "priority")).toBe("high");
+              }
+              expect(request.redirect).toBe(
+                credentialed || route === "caller-credential passthrough" ? "manual" : "follow",
+              );
+              expect(request.headers.get("X-Caller")).toBe("kept");
+              expect(request.headers.get("Authorization")).toBe(
+                credentialed
+                  ? `DPoP ${TOKEN}`
+                  : route === "caller-credential passthrough"
+                    ? "Bearer caller-owned"
+                    : null,
+              );
+              const rewritten = index === 1 && route === "same-origin 303 rewrite";
+              expect(request.method).toBe(hasBody && !rewritten ? "POST" : "GET");
+              expect(bodies[index]).toBe(hasBody && !rewritten ? "caller body" : "");
+              if (rewritten) expect(request.headers.has("Content-Type")).toBe(false);
+              expect(request.signal.aborted).toBe(false);
+            }
+            const reason = new Error("caller cancelled");
+            abort.abort(reason);
+            for (const request of sent) {
+              expect(request.signal.aborted).toBe(true);
+              expect(request.signal.reason).toBe(reason);
+            }
+          } finally {
+            upgrade.mockRestore();
+          }
+        });
+      }
+    }
+
     for (const [status, method, nextMethod] of [
       [301, "POST", "GET"],
       [302, "POST", "GET"],

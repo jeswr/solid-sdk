@@ -58,6 +58,11 @@ is superseded before credentials attach or a retry loses its live session. Manua
 mode is derived only when credentials are attached; fallback sources keep the caller's
 policy. Credential-free redirects are handled by the transport under that policy.
 
+Derived requests preserve the caller's referrer, referrer policy, mode, credentials,
+cache, integrity, keepalive, abort signal, and priority where supported, on passthrough,
+fallback, credential attachment, and every followed hop. Only the URL, redirect policy,
+credential headers, and method/body/content headers change as described here.
+
 Passthrough and fallback requests carrying caller-owned `Authorization`, `DPoP`, or
 `Proxy-Authorization` headers also use manual mode, whether supplied through `init.headers`
 or a Request. Their redirects are always returned unfollowed, including same-origin redirects:
