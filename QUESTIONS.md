@@ -28,7 +28,8 @@
    tokens, emails, links and code spans intact. Labels beside markdown punctuation
    remain literal to avoid changing markup. Durations must be positive finite
    decimal amounts that round-trip without precision loss/exponent notation, with
-   the exact unit minute/day; a unit without an amount fails. Accept IANA names
+   the exact unit minute/day; an empty amount with Todoist's `None` unit marker
+   means absent, while other units without an amount fail. Accept IANA names
    and links supported by Intl, but reject non-IANA abbreviations such as PST.
 
 These choices allow implementation without a blocking design decision. No UI is
