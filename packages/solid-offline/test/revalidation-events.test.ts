@@ -191,19 +191,17 @@ it.each([
   ]);
 });
 
-it('settles a failed sweep URL and continues confirming the next one', async () => {
+it('reports a failed sweep attempt before propagating its error', async () => {
   const deps = await setup();
-  const other = 'https://pod.example/other';
-  await handleFetch(makeGet(other), deps);
-  deps.fetch = vi.fn(async (input) => {
-    if ((input as Request).url === URL) throw new TypeError('fixture offline');
-    return new Response(null, { status: 304 });
+  await handleFetch(makeGet('https://pod.example/other'), deps);
+  const failure = new TypeError('fixture offline');
+  deps.fetch = vi.fn(async () => {
+    throw failure;
   });
-  expect(await resyncSweep(deps)).toMatchObject({ checked: 2, confirmed: 1, skipped: 1 });
-  for (const url of [URL, other]) {
-    expect(deps.broadcast.messages.filter((message) => message.url === url)).toEqual([
-      { url, event: 'revalidating' },
-      { url, event: url === URL ? 'revalidate-failed' : 'revalidated' },
-    ]);
-  }
+  await expect(resyncSweep(deps)).rejects.toBe(failure);
+  expect(deps.fetch).toHaveBeenCalledTimes(1);
+  expect(deps.broadcast.messages).toEqual([
+    { url: URL, event: 'revalidating' },
+    { url: URL, event: 'revalidate-failed' },
+  ]);
 });

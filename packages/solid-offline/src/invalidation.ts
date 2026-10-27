@@ -287,27 +287,23 @@ async function refreshListing(
   });
 }
 
-/** Keep failures local so a failed URL cannot interrupt the reconnect sweep. */
+/** Report invalidation outcomes while preserving the caller's error handling. */
 async function reportInvalidation(
   url: string,
   deps: InvalidateDeps,
   run: () => Promise<InvalidateOutcome>,
 ): Promise<InvalidateOutcome> {
-  try {
-    return await reportRevalidation(url, deps.broadcast, run, (outcome) => {
-      if (outcome.kind === '304-confirmed') return 'revalidated';
-      if (
-        outcome.kind === 'updated' ||
-        outcome.kind === 'deleted' ||
-        outcome.kind === 'listing-refreshed'
-      ) {
-        return 'updated';
-      }
-      return 'revalidate-failed';
-    });
-  } catch (error) {
-    return { kind: 'error', error };
-  }
+  return reportRevalidation(url, deps.broadcast, run, (outcome) => {
+    if (outcome.kind === '304-confirmed') return 'revalidated';
+    if (
+      outcome.kind === 'updated' ||
+      outcome.kind === 'deleted' ||
+      outcome.kind === 'listing-refreshed'
+    ) {
+      return 'updated';
+    }
+    return 'revalidate-failed';
+  });
 }
 
 /**
