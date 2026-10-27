@@ -55,7 +55,7 @@ test("creates, saves, reloads and formats a document accessibly", async ({ page 
     .filter({ visible: true })
     .last()
     .click();
-  await expect(page).toHaveURL(/\/docs\/new$/);
+  await expect(page).toHaveURL(/\/docs\/new\?draft=[0-9a-f-]+$/);
   const title = page.getByRole("textbox", { name: "Document title", exact: true });
   await title.fill("Launch plan");
   await title.press("Enter");
