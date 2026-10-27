@@ -224,3 +224,53 @@ validation limitation is the unrelated federation-trust snapshot failure.
 No dependencies, UI, manifests or lockfiles changed; no screenshots or
 `check:packages` run apply. No Git fetch, merge, push, branch switch, PR or tracker
 mutation was performed. There are no blocking questions.
+
+## Patient-reference URI review fix — 2026-10-27 UTC
+
+Review head: `a67a5fdda3f0ee1a00e256888ff956075d75fcff`.
+
+- `c168b084` — `fix(health): validate Patient URI syntax`.
+  Validate RFC 3986 characters and percent-encoded triplets before accepting a
+  Patient reference; permit square brackets only in parsed IP-literal hosts.
+  Cover export rejection before callbacks and independent self-check rejection
+  on every resource kind. Preserve valid path characters, escapes and IPv6 URLs.
+- Final documentation commit — `docs(health): record Patient URI validation`.
+
+Commands used the Node 24 / pnpm 10.4.1 environment prefix documented above:
+
+1. `pnpm exec turbo run build --filter='@jeswr/app-suite^...' --concurrency=4`
+   — PASS, seven dependency builds.
+2. `pnpm --filter @jeswr/app-suite exec vitest run test/health-fhir.test.ts test/health-fhir-check.test.ts test/health-fhir-proxies.test.ts --coverage --coverage.include='src/apps/health/lib/fhir/**/*.ts'`
+   — PASS, 351 tests; every FHIR file has 100% statements, branches, functions
+   and lines. The new regressions first reproduced 26 failing rejection cases
+   against the previous validator.
+3. The package gate — PASS, exit 0:
+
+   ```sh
+   pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test
+   ```
+
+   All 7,858 tests in 155 files passed with 100% per-file coverage. Production
+   build and strict typecheck passed. Lint reported 54 existing warnings,
+   no errors, and no FHIR diagnostics.
+4. `pnpm run lint:root` — PASS, exit 0, including all repository guards.
+5. `TURBO_SCM_BASE=a67a5fdda3f0ee1a00e256888ff956075d75fcff pnpm run gate`
+   — PASS, exit 0; all 12 tasks passed, including all 7,858 app tests.
+6. `pnpm run gate:full` — FAIL, exit 1; 327 successful tasks out of 365.
+   All 879 root tests passed. The unchanged federation-trust package failed
+   its existing inline snapshot at
+   `packages/federation-trust/test/characterization.test.ts:196`:
+   `delegation credential structure is stable` expects serialized JWK field
+   order `crv, x, kty`, while the runtime produces `kty, crv, x`.
+   Its other 53 tests passed. No federation-trust files were changed.
+7. `git diff --check` — PASS before the final documentation commit.
+
+Logs are local artifacts at `/tmp/sst-6jil-uri-{red,dependencies,fhir,app-gate,root-lint,affected-gate,full-gate}.log`.
+The app coverage summary is at `/tmp/sst-6jil-uri-app-coverage-summary.json`.
+Generated, untracked callback/client-ID files from the full-workspace builds
+were removed after the gate.
+
+`roborev` is unavailable, so no per-commit automated verdict could be obtained.
+The full-workspace validation limitation is the unrelated snapshot failure above.
+No dependencies, UI, manifests or lockfiles changed; no screenshots or
+`check:packages` run apply. There are no implementation gaps or open questions.
