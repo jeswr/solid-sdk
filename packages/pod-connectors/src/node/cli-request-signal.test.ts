@@ -15,9 +15,11 @@ import * as state from "./state.js";
 afterEach(() => vi.restoreAllMocks());
 
 it.each([
-  "import runner",
-  "fixture recorder",
-])("keeps per-request cancellation through the CLI withSignal wrapper and %s", async (wrapper) => {
+  ["import runner", "own"],
+  ["fixture recorder", "own"],
+  ["fixture recorder", "inherited"],
+  ["fixture recorder", "hidden"],
+])("keeps per-request cancellation through CLI withSignal and %s (%s init)", async (wrapper, kind) => {
   const target = "https://api.github.com/user";
   const command = new AbortController();
   const perRequest = new AbortController();
@@ -64,7 +66,13 @@ it.each([
   const runImport = vi.spyOn(importRunner, "runImport").mockImplementation(async (options) => {
     // Keep the real source wrappers and CLI transport closure; only replace the adapter run.
     try {
-      await options.sourceAuth?.fetch(new Request(target), { signal: perRequest.signal });
+      const init =
+        kind === "inherited"
+          ? Object.create({ signal: perRequest.signal })
+          : kind === "hidden"
+            ? Object.defineProperty({}, "signal", { value: perRequest.signal })
+            : { signal: perRequest.signal };
+      await options.sourceAuth?.fetch(new Request(target), init);
     } catch (error) {
       rejection = error;
     }

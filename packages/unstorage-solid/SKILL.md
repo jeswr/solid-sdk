@@ -21,6 +21,8 @@ This package is security-critical: no guard may be loosened.
 Scope wrappers use guarded-fetch's `snapshotFetchInput(input, init, { metadataOnly: true })` to validate fresh
 Request snapshots, never caller-shadowable `url` properties. Match main's transport boundary:
 forward the captured URL string plus the explicit init, forcing `redirect: "manual"`.
+Bake that init into `snapshot.init` with the existing spread semantics and forward only the
+captured object, so caller accessors run once across the composed wrappers.
 Bodies, signals, and policies supplied in init survive; Request-only fields are not inherited.
 When init supplies a non-null body, metadata capture uses an empty placeholder for body-capable
 inputs without transferring or checking the discarded body. Never forward that placeholder.

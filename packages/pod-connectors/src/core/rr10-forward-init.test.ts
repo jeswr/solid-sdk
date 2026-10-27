@@ -20,6 +20,97 @@ const wrappers = {
     }).fetch,
 };
 
+it.each(["inherited", "hidden"])("recorder honours %s method, body and headers", async (kind) => {
+  const values = { method: "PUT", body: "replacement", headers: { "x-option": "keep" } };
+  const init =
+    kind === "inherited"
+      ? Object.create(values)
+      : Object.defineProperties(
+          {},
+          Object.fromEntries(Object.entries(values).map(([key, value]) => [key, { value }])),
+        );
+  await wrappers["fixture recorder"](async (input, init) => {
+    const request = new Request(input, init);
+    expect(request.method).toBe("PUT");
+    expect(request.headers.get("x-option")).toBe("keep");
+    expect(await request.text()).toBe("replacement");
+    return Response.json({ total: 1 });
+  })(new Request(TARGET), init);
+});
+
+it.each([
+  "inherited",
+  "hidden",
+])("source-auth preserves %s headers while ignoring other non-spread options", async (kind) => {
+  const values = {
+    headers: { "x-option": "keep" },
+    method: "PUT",
+    body: "discard",
+    signal: AbortSignal.abort(),
+  };
+  const init =
+    kind === "inherited"
+      ? Object.create(values)
+      : Object.defineProperties(
+          {},
+          Object.fromEntries(Object.entries(values).map(([key, value]) => [key, { value }])),
+        );
+  const transport = vi.fn<typeof fetch>(async (input, init) => {
+    const request = new Request(input, init);
+    expect(request.headers.get("x-option")).toBe("keep");
+    expect(request.headers.get("authorization")).toBe("Bearer synthetic-token");
+    expect(request.method).toBe("GET");
+    expect(request.signal.aborted).toBe(false);
+    expect(await request.text()).toBe("");
+    return Response.json({ total: 1 });
+  });
+  await wrappers["import runner"](transport)(new Request(TARGET), init);
+  expect(transport).toHaveBeenCalledOnce();
+});
+
+it("source-auth keeps main's two enumerable header reads and uses the first value", async () => {
+  const headers = vi
+    .fn()
+    .mockReturnValueOnce({ "x-first": "keep" })
+    .mockReturnValue({ "x-second": "discard" });
+  await wrappers["import runner"](async (input, init) => {
+    const request = new Request(input, init);
+    expect(request.headers.get("x-first")).toBe("keep");
+    expect(request.headers.has("x-second")).toBe(false);
+    return Response.json({ total: 1 });
+  })(new Request(TARGET), {
+    get headers() {
+      return headers();
+    },
+  });
+  expect(headers).toHaveBeenCalledTimes(2);
+});
+
+for (const [name, wrap] of Object.entries(wrappers)) {
+  it(`${name}: reads a replacement stream accessor only once through composed wrappers`, async () => {
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("replacement"));
+        controller.close();
+      },
+    });
+    const getBody = vi.fn().mockReturnValueOnce(stream).mockReturnValue(undefined);
+    const input = new Request(TARGET, { method: "POST", body: "original" });
+    await wrap(async (input, init) => {
+      expect(await new Request(input, init).text()).toBe("replacement");
+      return Response.json({ total: 1 });
+    })(input, {
+      method: "PUT",
+      duplex: "half",
+      get body() {
+        return getBody();
+      },
+    } as RequestInit);
+    expect(getBody).toHaveBeenCalledOnce();
+    expect(await input.text()).toBe("original");
+  });
+}
+
 for (const [name, wrap] of Object.entries(wrappers)) {
   describe(`${name}: explicit Request init`, () => {
     it("rejects an already-aborted init.signal before the transport sends", async () => {

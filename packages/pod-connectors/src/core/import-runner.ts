@@ -145,7 +145,10 @@ export function createSourceAuth(
   );
   const sourceFetch = refuseRedirects(fetchImpl);
   const impl = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const snapshot = snapshotFetchInput(input, init, { forward: true });
+    // Main read headers directly before spreading init. Preserve both reads when headers
+    // is enumerable, and the direct lookup for inherited/non-enumerable headers.
+    const explicitHeaders = init?.headers;
+    const snapshot = snapshotFetchInput(input, init, { forward: true, initSemantics: "spread" });
     const url = new URL(snapshot.url);
     if (url.protocol !== "https:" || !origins.has(url.origin) || url.username || url.password) {
       throw new IntegrationSyncError(
@@ -154,8 +157,7 @@ export function createSourceAuth(
       );
     }
     const headers = new Headers(
-      snapshot.init?.headers ??
-        (typeof snapshot.input === "string" ? undefined : snapshot.input.headers),
+      explicitHeaders ?? (typeof snapshot.input === "string" ? undefined : snapshot.input.headers),
     );
     headers.set("authorization", `Bearer ${token.accessToken}`);
     for (const [k, v] of Object.entries(adapter.apiHeaders ?? {})) headers.set(k, v);

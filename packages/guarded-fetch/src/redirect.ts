@@ -155,7 +155,7 @@ export function normalizeRequest(
   // Applying init during capture would serialize a FormData override once here and again
   // at the transport, pairing the first boundary's headers with the second boundary's body.
   const snapshot = snapshotFetchInput(input, init, { metadataOnly: true });
-  if (typeof snapshot.input === "string") return { url: snapshot.url, init };
+  if (typeof snapshot.input === "string") return { url: snapshot.url, init: snapshot.init };
   const req = snapshot.input;
   const fromRequest: RequestInit = {
     method: req.method,
@@ -164,7 +164,7 @@ export function normalizeRequest(
     redirect: req.redirect,
     ...(req.signal ? { signal: req.signal } : {}),
     // Main kept duplex:"half" whenever the Request had a body, even under a body override.
-    ...(hasBodyOverride(init)
+    ...(hasBodyOverride(snapshot.init)
       ? snapshot.hadBody
         ? { duplex: "half" }
         : {}
@@ -172,5 +172,5 @@ export function normalizeRequest(
         ? { body: req.body, duplex: "half" }
         : {}),
   } as RequestInit;
-  return { url: snapshot.url, init: { ...fromRequest, ...(init ?? {}) } };
+  return { url: snapshot.url, init: { ...fromRequest, ...snapshot.init } };
 }

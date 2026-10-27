@@ -125,8 +125,13 @@ export interface ResolvedAddress {
 export function snapshotFetchInput(input: RequestInfo | URL, init?: RequestInit, options?: {
     metadataOnly?: boolean;
     discardBody?: boolean;
-    forward?: boolean;
-}): {
+} & ({
+    forward: true;
+    initSemantics: "spread" | "direct";
+} | {
+    forward?: false;
+    initSemantics?: never;
+})): {
     input: string | Request;
     url: string;
     init: RequestInit | undefined;

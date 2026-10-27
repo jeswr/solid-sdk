@@ -30,6 +30,28 @@ for (const [inputName, constructInput] of Object.entries(implementations)) {
   for (const [transportName, constructTransport] of Object.entries(implementations)) {
     for (const [wrapperName, wrap] of Object.entries(wrappers)) {
       describe(`${wrapperName}: ${inputName} input, ${transportName} consuming transport`, () => {
+        it("reads init.body once across metadata capture and redirect refusal", async () => {
+          const input = constructInput(TARGET, { method: "POST", body: "original" });
+          const stream = new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode("replacement"));
+              controller.close();
+            },
+          });
+          const body = vi.fn().mockReturnValueOnce(stream).mockReturnValue(undefined);
+          await wrap(async (input, init) => {
+            expect(await constructTransport(input, init).text()).toBe("replacement");
+            return new Response();
+          })(input, {
+            method: "PUT",
+            duplex: "half",
+            get body() {
+              return body();
+            },
+          } as RequestInit);
+          expect(body).toHaveBeenCalledOnce();
+          expect(await input.text()).toBe("original");
+        });
         for (const body of [null, undefined]) {
           it.each([
             "fresh",

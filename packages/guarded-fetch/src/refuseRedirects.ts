@@ -123,9 +123,9 @@ export function refuseRedirects(
     // caller's explicit init, exactly as main forwarded the original input and init, so a
     // delegated fetch that reads its options from init still sees them. The snapshot is taken
     // without init and never transfers a body that init replaces.
-    const snapshot = snapshotFetchInput(input, init, { forward: true });
+    const snapshot = snapshotFetchInput(input, init, { forward: true, initSemantics: "spread" });
     const { url } = snapshot;
-    const res = await fetch(snapshot.input, { ...(init ?? {}), redirect: "manual" });
+    const res = await fetch(snapshot.input, { ...snapshot.init, redirect: "manual" });
 
     const opaqueRedirect = res.type === "opaqueredirect";
     // Preserve the legacy clients' broader refusal as well as standard moved

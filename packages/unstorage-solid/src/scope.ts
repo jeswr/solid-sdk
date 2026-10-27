@@ -21,7 +21,7 @@ export function createScopedFetch(
     // Capture metadata without applying init or touching the body this wrapper never sends.
     const snapshot = snapshotFetchInput(input, init, { metadataOnly: true, discardBody: true });
     assertWithinBase(base, snapshot.url);
-    return refusing(snapshot.url, init);
+    return refusing(snapshot.url, snapshot.init);
   };
 }
 
@@ -40,6 +40,6 @@ export function createSameOriginRedirectRefusingFetch(
     const snapshot = snapshotFetchInput(input, init, { metadataOnly: true, discardBody: true });
     const target = new URL(snapshot.url);
     assertWithinPodScope(`${origin}/`, target.href);
-    return refusing(snapshot.url, init);
+    return refusing(snapshot.url, snapshot.init);
   };
 }

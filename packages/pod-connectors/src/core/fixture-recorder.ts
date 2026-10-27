@@ -62,7 +62,7 @@ export function createFixtureRecorder(options: {
   const recorded = new Map<number, FixtureRoute>();
   let nextRequest = 0;
   const fetchImpl: typeof fetch = async (input, init) => {
-    const snapshot = snapshotFetchInput(input, init, { forward: true });
+    const snapshot = snapshotFetchInput(input, init, { forward: true, initSemantics: "direct" });
     const url = new URL(snapshot.url);
     const method = (
       snapshot.init?.method ?? (typeof snapshot.input === "string" ? "GET" : snapshot.input.method)
