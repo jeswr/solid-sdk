@@ -19,7 +19,7 @@ import {
   TitleConflictError,
 } from "./errors.js";
 import { DOCS_SLUG, docContainerUrls, isDirectChild, LEGACY_DOCS_SLUG, toSlug } from "./layout.js";
-import { nameFromUrl, readRdf, writeRdf } from "./rdf-io.js";
+import { nameFromUrl, REVALIDATE_HEADERS, readRdf, serializeTurtle, writeRdf } from "./rdf-io.js";
 import { discoverRegistrations, ensureTypeRegistrations } from "./type-index.js";
 import { DOCUMENT_CLASS, NS, PREFIXES } from "./vocab.js";
 
@@ -271,7 +271,7 @@ export class DocsStore {
         throw new ResourceReadError(copy.url, 422);
       // Keep the reservation's validator: another client editing the visible
       // copy must cause a conflict rather than being overwritten by a retry.
-      copy = { ...current, etag: copy.etag };
+      // Keep the reserved metadata too: retries must generate identical final bytes.
     } else
       copy = await this.createAtSlug(
         {
@@ -314,12 +314,28 @@ export class DocsStore {
     await state.persistFullState(target.updateLog, this.fetchImpl, mapping);
     const snapshot = await state.snapshot(mapping);
     // Fresh copy history captures the copied content, never the reservation's empty body.
-    const dataset = buildDocument(copy.url, { ...copy.data, ...snapshot, priorRevisions: [] });
-    const { etag } = await writeRdf(copy.url, dataset, {
-      etag: copy.etag,
-      fetchImpl: this.fetchImpl,
-      prefixes: PREFIXES,
+    const dataset = buildDocument(copy.url, {
+      ...copy.data,
+      ...snapshot,
+      priorRevisions: [],
+      now: new Date(copy.data.modified as string),
     });
+    let etag: string | null;
+    try {
+      ({ etag } = await writeRdf(copy.url, dataset, {
+        etag: copy.etag,
+        fetchImpl: this.fetchImpl,
+        prefixes: PREFIXES,
+      }));
+    } catch (error) {
+      if (!(error instanceof ResourceWriteError && error.status === 412)) throw error;
+      // An earlier final PUT may have committed and lost its acknowledgement.
+      // Only our byte-identical intended snapshot settles that old reservation.
+      const current = await this.fetchImpl(copy.url, { headers: REVALIDATE_HEADERS });
+      if (!current.ok) throw new ResourceReadError(copy.url, current.status);
+      if ((await current.text()) !== (await serializeTurtle(dataset, PREFIXES))) throw error;
+      etag = current.headers.get("etag");
+    }
     return { url: copy.url, etag, data: parseDocument(copy.url, dataset) as PodDocument };
   }
 

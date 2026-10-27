@@ -3,7 +3,7 @@
 import { Blob as NodeBlob } from "node:buffer";
 import { SolidPersistence } from "@jeswr/y-solid";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { Doc, encodeStateAsUpdate, XmlElement, XmlText } from "yjs";
+import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement, XmlText } from "yjs";
 import { deleteDocument, restoreDocument } from "../src/apps/docs/editor/operations";
 import { DocumentPersistence } from "../src/apps/docs/editor/persistence";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
@@ -12,6 +12,7 @@ import type { PodSession } from "../src/lib/session/pod-session";
 
 // Each connection is a separate device: no shared IndexedDB or cross-tab broadcast.
 const mirrors = vi.hoisted(() => new Map<object, Map<string, unknown>>());
+const reopen = vi.hoisted(() => new Map<string, Map<string, unknown>>());
 vi.mock("y-indexeddb", () => ({
   IndexeddbPersistence: class {
     whenSynced = Promise.resolve(this);
@@ -19,7 +20,10 @@ vi.mock("y-indexeddb", () => ({
       readonly name: string,
       readonly doc: Doc,
     ) {
-      mirrors.set(this, new Map());
+      const values = new Map(reopen.get(name));
+      mirrors.set(this, values);
+      const update = values.get("update");
+      if (update instanceof Uint8Array) applyUpdate(doc, update);
       doc.on("update", this._storeUpdate);
     }
     save = () => mirrors.get(this)?.set("update", encodeStateAsUpdate(this.doc));
@@ -46,6 +50,7 @@ beforeEach(() => vi.stubGlobal("Blob", NodeBlob));
 afterEach(async () => {
   await Promise.all(runtimes.splice(0).map((runtime) => runtime.destroy()));
   mirrors.clear();
+  reopen.clear();
   vi.unstubAllGlobals();
 });
 const json = (text: string) => ({
@@ -160,6 +165,65 @@ it("resumes the reserved recovery copy after repeated final snapshot failures", 
     );
   } finally {
     read.mockRestore();
+    await writer.destroy();
+  }
+});
+
+it.each([
+  "reconnect",
+  "reload",
+])("settles a durable recovery copy after a lost final acknowledgement on %s", async (retry) => {
+  const { pod, session, original, client, url } = await fixture();
+  const recovered = client();
+  await recovered.open(url, true);
+  let lost = false;
+  const writer = new DocumentPersistence({
+    ...session,
+    fetch: async (input, init) => {
+      const response = await pod.fetch(input, init);
+      if (
+        !lost &&
+        response.ok &&
+        init?.method === "PUT" &&
+        /-copy\.ttl$/.test(String(input)) &&
+        new Headers(init.headers).has("if-match")
+      ) {
+        lost = true;
+        throw new TypeError("final acknowledgement lost");
+      }
+      return response;
+    },
+  });
+  const copying = vi
+    .spyOn(original.store, "makeCopy")
+    .mockImplementation((source, state) => writer.store.makeCopy(source, state));
+  bodyText(original).insert(8, " pending");
+  original.change("<p>Original pending</p>", json("Original pending"));
+  try {
+    await original.reconnect();
+    expect(lost).toBe(true);
+    expect(original.state).toBe("retrying");
+    const copies = pod
+      .snapshot()
+      .resources.filter(([resource]) => /\/original-copy\.ttl$/.test(resource));
+    expect(copies).toHaveLength(1);
+    let opening = original;
+    if (retry === "reload") {
+      reopen.set(url, new Map(mirrors.get(original.local as object)));
+      opening = client();
+      await expect(opening.open(url)).resolves.toBeUndefined();
+    } else await original.reconnect();
+    expect(opening.state).toBe("saved");
+    expect(opening.recoveredCopy).toBe(copies[0]?.[0]);
+    expect((await opening.store.read(opening.recoveredCopy as string))?.data.body).toBe(
+      "<p>Original pending</p>",
+    );
+    expect(await replay(opening.stored?.data.updateLog as string, session)).toBe(
+      "<paragraph>Original</paragraph>",
+    );
+    expect(mirrors.get(opening.local as object)?.get("pending")).not.toBe(1);
+  } finally {
+    copying.mockRestore();
     await writer.destroy();
   }
 });

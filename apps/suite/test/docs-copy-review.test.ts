@@ -50,3 +50,46 @@ it("copies owned assets while preserving external Markdown and other-document im
     doc.destroy();
   }
 });
+
+it("finalizes the same reserved copy after its successful snapshot acknowledgement is lost", async () => {
+  const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(Date.now()) });
+  let lost = false;
+  const http: typeof fetch = async (input, init) => {
+    const response = await pod.fetch(input, init);
+    if (
+      !lost &&
+      response.ok &&
+      init?.method === "PUT" &&
+      String(input).endsWith("-copy.ttl") &&
+      new Headers(init.headers).has("if-match")
+    ) {
+      lost = true;
+      throw new TypeError("response lost");
+    }
+    return response;
+  };
+  const session = { storageUrl: DEMO_ROOT, webId: DEMO_WEBID, fetch: http } as PodSession;
+  const store = createDocsStore({ podRoot: DEMO_ROOT, webId: DEMO_WEBID, fetchImpl: http });
+  const source = await store.create({ title: "Lost ack", body: "" });
+  let reservation: Awaited<ReturnType<typeof store.create>> | undefined;
+  const live = {
+    type: "doc",
+    content: [{ type: "paragraph", content: [{ type: "text", text: "Recovered edits" }] }],
+  };
+  await expect(
+    copyDocument(store, source, session, live, {
+      onReserved: async (copy) => {
+        reservation = copy;
+      },
+    }),
+  ).rejects.toThrow("response lost");
+  expect(lost).toBe(true);
+  const durable = await store.read(reservation?.url as string);
+  const copy = await copyDocument(store, source, session, live, { reservation });
+  expect(copy.url).toBe(reservation?.url);
+  expect(copy.etag).toBe(durable?.etag);
+  expect(copy.data.body).toBe("<p>Recovered edits</p>");
+  expect(
+    pod.snapshot().resources.filter(([url]) => /lost-ack-copy.*\.ttl$/.test(url)),
+  ).toHaveLength(1);
+});

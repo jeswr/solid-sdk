@@ -9,9 +9,9 @@
 
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { mapConcurrent } from "../../../../lib/parallel";
-import { buildDocument, type PodDocument, parseDocument } from "../../../docs/lib/model/document";
+import { relocateDocument, writeRestoreSnapshot } from "../../../docs/editor/relocate";
+import { type PodDocument, parseDocument } from "../../../docs/lib/model/document";
 import { docContainerUrls } from "../../../docs/lib/model/layout";
-import { serializeTurtle } from "../../../docs/lib/model/rdf-io";
 import {
   type DriveClient,
   DriveError,
@@ -29,6 +29,7 @@ import {
   removeTrashRecord,
   serializeTrashIndex,
   type TrashEntry,
+  type TrashRecord,
   trashEntries,
   trashIndexFrom,
 } from "./trash-index";
@@ -425,6 +426,7 @@ async function requireTrashEntry(
   driveRoot: string,
   entry: TrashEntry,
   pending = false,
+  inspect?: (record: TrashRecord) => void,
 ): Promise<string | undefined> {
   const current = await client.readRdf(indexUrlOf(driveRoot));
   const index = current ? trashIndexFrom(current.dataset) : emptyTrashIndex();
@@ -435,6 +437,7 @@ async function requireTrashEntry(
     (pending && record.status !== "pending")
   )
     throw new DriveError("invalid-trash-record", 409, entry.url);
+  inspect?.(record);
   if (!pending && record.status === "pending") {
     const reconciled = await reconcilePending(
       client,
@@ -777,7 +780,12 @@ export async function restoreItems(
     try {
       const slot = slotOf(driveRoot, entry);
       validateOriginal(client, driveRoot, entry);
-      const status = await requireTrashEntry(client, driveRoot, entry);
+      let restoredLocation: string | undefined;
+      const status = await requireTrashEntry(client, driveRoot, entry, false, (record) => {
+        restoredLocation = record.restoredLocation;
+      });
+      if (restoredLocation)
+        validateOriginal(client, driveRoot, { ...entry, original: restoredLocation });
       const occupied = status !== "partial" && (await exists(client, entry.original));
       const folder = entry.original.endsWith("/");
       const merge =
@@ -792,9 +800,10 @@ export async function restoreItems(
             )?.data,
           )));
       const target =
-        occupied && !merge
+        restoredLocation ??
+        (occupied && !merge
           ? childUrl(parentOf(entry.original) as string, restoredName(entry.name), folder)
-          : entry.original;
+          : entry.original);
       return {
         entry,
         slot,
@@ -825,8 +834,14 @@ export async function restoreItems(
         companion.target = docContainerUrls(plan.target).container;
         companion.merge = false;
       }
+      // The snapshot owns the pair's destination even after its companion has
+      // moved and its own trash record has been removed. Persist before moving.
+      await updateIndex(client, driveRoot, (index) => {
+        transferRecord(index, plan.entry.url).restoredLocation = plan.target;
+      });
     } catch (error) {
       Object.assign(plan, { error });
+      if (companion) Object.assign(companion, { error });
     }
   }
   const outcomes = new Map<TrashEntry, typeof result>();
@@ -862,37 +877,19 @@ export async function restoreItems(
         const { data, etag } = plan.snapshot;
         if (!etag || etag.startsWith("W/"))
           throw new DriveError("missing-validator", 409, entry.url);
-        const before = docContainerUrls(entry.original);
-        const after = docContainerUrls(target);
-        const relocate = (iri: string | undefined) =>
-          iri?.startsWith(before.container)
-            ? `${after.container}${iri.slice(before.container.length)}`
-            : iri;
-        const revision = (iri: string | undefined) =>
-          iri?.startsWith(`${entry.original}#`)
-            ? `${target}${iri.slice(entry.original.length)}`
-            : iri;
-        const dataset = buildDocument(target, {
-          ...data,
-          updateLog: relocate(data.updateLog),
-          assets: relocate(data.assets),
-          comments: relocate(data.comments),
-          now: new Date(data.modified ?? Date.now()),
-          priorRevisions: data.revisions.map((rev) => ({
-            ...rev,
-            id: revision(rev.id) as string,
-            wasRevisionOf: revision(rev.wasRevisionOf),
-          })),
-        });
-        const written = await client.write(target, await serializeTurtle(dataset), {
-          contentType: "text/turtle",
+        const body = await relocateDocument(client, entry.original, target, data, entry.trashedAt);
+        const written = await writeRestoreSnapshot(client, target, body, {
           ifNoneMatch: "*",
         });
         if (!written.etag || written.etag.startsWith("W/"))
           throw new DriveError("missing-validator", 409, target);
         const current = await client.stat(target, { ifMatch: written.etag });
         if (current.etag !== written.etag) throw new DriveError("conflict", 412, target);
-        await client.remove(entry.url, { ifMatch: etag });
+        try {
+          await client.remove(entry.url, { ifMatch: etag });
+        } catch (error) {
+          if (await exists(client, entry.url)) throw error;
+        }
       } else await client.move(entry.url, target);
       // Moving recreates missing parent folders (PUT creates intermediate containers).
       if (await recoveryStatus(client, driveRoot, entry))
@@ -962,8 +959,10 @@ async function removeTrashItem(client: DriveClient, url: string): Promise<void> 
       await client.remove(url, { recursive: true });
     } catch (error) {
       const cause = error instanceof DrivePartialFailureError ? error.cause : error;
-      if (!(cause instanceof DriveError && cause.kind === "not-found")) throw error;
+      // A DELETE may commit before its response is lost. Absence settles any
+      // ambiguous failure; a surviving resource still follows normal errors.
       if (!(await exists(client, url))) return;
+      if (!(cause instanceof DriveError && cause.kind === "not-found")) throw error;
       if (attempt > 0) throw error;
       // Recursive removal takes a new listing on the one retry.
       continue;

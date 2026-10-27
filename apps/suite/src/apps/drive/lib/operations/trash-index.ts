@@ -45,6 +45,13 @@ export interface TrashEntry {
 }
 
 export class TrashRecord extends TermWrapper {
+  /** Chosen restore destination survives completion/removal of the companion record. */
+  get restoredLocation(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, `${DCT}isReplacedBy`, NamedNodeAs.string);
+  }
+  set restoredLocation(value: string | undefined) {
+    OptionalAs.object(this, `${DCT}isReplacedBy`, value, NamedNodeFrom.string);
+  }
   /** Source URL/ETag tuples captured before the pending intent is persisted. */
   get sourceVersions(): Set<string> {
     return SetFrom.subjectPredicate(this, `${DCT}identifier`, LiteralAs.string, LiteralFrom.string);

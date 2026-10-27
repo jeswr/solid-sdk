@@ -660,6 +660,27 @@ describe("snapshot conflicts", () => {
 });
 
 describe("makeCopy", () => {
+  it("refuses to acknowledge a conflicting finalisation when the target cannot be re-read", async () => {
+    const s = await server();
+    let finalising = false;
+    const fetchImpl: typeof fetch = async (input, init) => {
+      if (String(input) === `${POD}docs/plan-copy.ttl`) {
+        if (init?.method === "PUT" && new Headers(init.headers).has("if-match")) {
+          finalising = true;
+          return new Response(null, { status: 412 });
+        }
+        if (finalising) return new Response(null, { status: 403 });
+      }
+      return s.fetchImpl(input, init);
+    };
+    await expect(
+      new DocsStore(POD, WEBID, fetchImpl).makeCopy(await document(), {
+        assets: [],
+        snapshot: () => ({ body: "Recovered body", format: "text/html" }),
+        persistFullState: async () => {},
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+  });
   it("retains a concurrent edit to a reserved copy when its owner retries", async () => {
     const s = await server();
     const source = await document();
