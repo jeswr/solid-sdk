@@ -40,3 +40,35 @@ for (const [name, construct] of Object.entries(implementations)) {
     });
   });
 }
+
+describe("refuseRedirects bases body replacement on the init it forwards (Codex rr11)", () => {
+  const inherited = () => Object.create({ body: "replacement" }) as RequestInit;
+  const hidden = () => {
+    const init: RequestInit = {};
+    Object.defineProperty(init, "body", { value: "replacement", enumerable: false });
+    return init;
+  };
+  for (const [implementation, Ctor] of [
+    ["native", Request],
+    ["undici", UndiciRequest],
+  ] as const) {
+    for (const [kind, make] of [
+      ["inherited", inherited],
+      ["non-enumerable", hidden],
+    ] as const) {
+      it(`sends the ${implementation} Request body when init has an ${kind} body`, async () => {
+        const request = new Ctor("https://pod.example/alice/doc", {
+          method: "POST",
+          body: "payload",
+        });
+        const transport = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+          // Each implementation reads its own Request brand.
+          expect(await new (Ctor as typeof Request)(input as Request, init).text()).toBe("payload");
+          return new Response("ok");
+        });
+        await refuseRedirects(transport as typeof fetch)(request as Request, make());
+        expect(transport).toHaveBeenCalledOnce();
+      });
+    }
+  }
+});

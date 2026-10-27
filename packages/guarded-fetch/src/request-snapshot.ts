@@ -20,7 +20,8 @@ export function snapshotRequest(input: Request, init?: RequestInit): Request {
  * `forward` is for callers that pass the Request on with the caller's init, main's call shape
  * `fetch(request, init)`: the snapshot is taken without init (placeholder only when init.body is
  * non-null, Fetch's own replacement rule, so a nullish override still inherits the body) and the
- * caller's init is returned unchanged for the caller to forward alongside it.
+ * caller's init is returned as an own-enumerable copy (what a spread forwards) for the caller to
+ * forward alongside it.
  */
 export function snapshotFetchInput(
   input: RequestInfo | URL,
@@ -30,7 +31,10 @@ export function snapshotFetchInput(
   if (typeof input === "string") return { input, url: input, init };
   const metadataOnly = options?.metadataOnly === true || options?.forward === true;
   const mode = options?.discardBody ? "discard" : options?.forward ? "constructor" : "spread";
-  const forwardedInit = options?.forward ? init : undefined;
+  // Forward mode hands back an own-enumerable copy of init, and decides body replacement from
+  // that same copy, so the placeholder decision always matches what is actually forwarded.
+  const forwardedInit = options?.forward && init ? { ...init } : undefined;
+  const captureInit = options?.forward ? forwardedInit : init;
 
   // Brand checks invoke native getters; instanceof and own properties are not trusted.
   try {
@@ -49,7 +53,7 @@ export function snapshotFetchInput(
   if (nativeRequest) {
     const request = snapshotRequest(
       input as Request,
-      metadataOnly ? metadataInit(input, Request.prototype, init, mode) : init,
+      metadataOnly ? metadataInit(input, Request.prototype, captureInit, mode) : init,
     );
     // The native getter reads the input's body slot without consuming it.
     const hadBody = Reflect.get(Request.prototype, "body", input) != null;
@@ -67,7 +71,7 @@ export function snapshotFetchInput(
         if (descriptor.get && typeof Ctor === "function") {
           const request = new Ctor(
             input,
-            metadataOnly ? metadataInit(input, owner, init, mode) : init,
+            metadataOnly ? metadataInit(input, owner, captureInit, mode) : init,
           );
           const url = descriptor.get.call(request);
           if (typeof url === "string") {
