@@ -15,9 +15,15 @@ export class DocumentUpdateStore extends SolidUpdateStore {
   ) {
     super({ container, fetch: http });
   }
+  override async listUpdateUrls() {
+    await this.checkActive();
+    return super.listUpdateUrls();
+  }
   override async readUpdate(url: string) {
+    await this.checkActive();
     const update = await super.readUpdate(url);
     if (!update) throw new IncompleteLogError("An update disappeared during loading");
+    await this.checkActive();
     return update;
   }
   override async loadUpdates() {

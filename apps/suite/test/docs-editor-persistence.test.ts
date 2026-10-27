@@ -151,7 +151,7 @@ describe("Docs pod and local mirror lifecycle", () => {
     expect(runtime.stored?.data.title).toBe("Plan");
     expect(runtime.stored?.data.body).toBe("<p>Latest paragraph</p>");
     expect(runtime.stored?.data.wordCount).toBe(2);
-    expect(mirrors.get(runtime.stored?.url as string)?.get("pending")).toBe(0);
+    expect(mirrors.get(runtime.local?.name as string)?.get("pending")).toBe(0);
     const replay = new Doc();
     const provider = new SolidPersistence({
       doc: replay,
@@ -172,7 +172,7 @@ describe("Docs pod and local mirror lifecycle", () => {
     runtime.change("<p>Retry this</p>", json("Retry this"));
     await runtime.flush();
     expect(runtime.state).toBe("retrying");
-    expect(mirrors.get(runtime.stored?.url as string)?.get("pending")).toBe(1);
+    expect(mirrors.get(runtime.local?.name as string)?.get("pending")).toBe(1);
     fail(false);
     await runtime.flush();
     expect(runtime.state).toBe("saved");
@@ -249,8 +249,12 @@ describe("Docs persistence review regressions", () => {
     );
     await runtime.reconnect();
     expect(runtime.state).toBe("retrying");
-    const owner = JSON.parse(mirrors.get(url)?.get("edit") as string).owner;
-    const pending = JSON.parse(mirrors.get(url)?.get(`recovery:${owner}`) as string);
+    const owner = JSON.parse(
+      mirrors.get(runtime.local?.name as string)?.get("edit") as string,
+    ).owner;
+    const pending = JSON.parse(
+      mirrors.get(runtime.local?.name as string)?.get(`recovery:${owner}`) as string,
+    );
     expect(pending.reservation.url).toMatch(/-copy\.ttl$/);
     runtime.online = false;
     await runtime.destroy();
@@ -335,12 +339,16 @@ describe("Docs persistence review regressions", () => {
     await other.open(url);
     runtime.online = false;
     runtime.rename("Pending rename in A");
-    await vi.waitFor(() => expect(mirrors.get(url)?.get("title")).toBe("Pending rename in A"));
+    await vi.waitFor(() =>
+      expect(mirrors.get(runtime.local?.name as string)?.get("title")).toBe("Pending rename in A"),
+    );
     other.change("<p>Body from B</p>", json("Body from B"));
     await other.flush();
     expect(other.stored?.data.title).toBe("Original title");
-    expect(mirrors.get(url)?.get("pending")).toBe(1);
-    expect(JSON.parse(mirrors.get(url)?.get("edit") as string).title).toBe("Pending rename in A");
+    expect(mirrors.get(runtime.local?.name as string)?.get("pending")).toBe(1);
+    expect(
+      JSON.parse(mirrors.get(runtime.local?.name as string)?.get("edit") as string).title,
+    ).toBe("Pending rename in A");
     await runtime.destroy();
     const reopened = new DocumentPersistence(session);
     runtimes.push(reopened);
@@ -595,12 +603,12 @@ describe("Docs persistence review regressions", () => {
     runtime.change("<p>Latest</p>", json("Latest"));
     await runtime.flush();
     expect(runtime.state).toBe("retrying");
-    expect(mirrors.get(runtime.stored?.url as string)?.get("pending")).toBe(1);
+    expect(mirrors.get(runtime.local?.name as string)?.get("pending")).toBe(1);
     f.intercept(undefined);
     await runtime.flush();
     expect(await replayText(runtime, session)).toContain("latest");
     expect(runtime.state).toBe("saved");
-    expect(mirrors.get(runtime.stored?.url as string)?.get("pending")).toBe(0);
+    expect(mirrors.get(runtime.local?.name as string)?.get("pending")).toBe(0);
   });
   it("retains the pending title baseline across reopen and surfaces a remote rename", async () => {
     const { runtime, session } = await fixture();
@@ -752,9 +760,9 @@ it("asks about a mismatched title when resuming legacy pending metadata without 
   await runtime.flush();
   const url = runtime.stored?.url as string;
   await runtime.destroy();
-  mirrors.get(url)?.set("pending", 1);
-  mirrors.get(url)?.set("title", "Older cached title");
-  mirrors.get(url)?.delete("edit");
+  mirrors.get(runtime.local?.name as string)?.set("pending", 1);
+  mirrors.get(runtime.local?.name as string)?.set("title", "Older cached title");
+  mirrors.get(runtime.local?.name as string)?.delete("edit");
   const reopened = new DocumentPersistence(session);
   runtimes.push(reopened);
   await reopened.open(url);

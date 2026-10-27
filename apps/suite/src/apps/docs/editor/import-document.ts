@@ -8,8 +8,14 @@ import { type ImportProgress, importDocx, MAX_IMPORT_BYTES } from "../lib/conver
 import { importMarkdown } from "../lib/convert/markdown";
 import { wordCount } from "../lib/editor/logic";
 import { createDocsStore, docContainerUrls, type StoredDocument } from "../lib/model";
+import {
+  DocumentReplacedError,
+  incarnationMirror,
+  sameIncarnation,
+} from "../lib/model/incarnation";
 import { baseExtensions } from "./extensions";
 import { deleteDocument } from "./operations";
+import { DocumentUpdateStore } from "./update-store";
 
 export function validateImportFile(file: Pick<File, "name" | "size">) {
   if (file.size > MAX_IMPORT_BYTES) throw new Error("Choose a file of 50 MB or less");
@@ -104,15 +110,33 @@ export async function importDocument(
       "prosemirror",
     );
     doc.getMap("document").set("instanceId", stored.data.instanceId);
-    const local = new IndexeddbPersistence(stored.url, doc);
+    const local = new IndexeddbPersistence(
+      incarnationMirror(stored, stored.data.updateLog as string),
+      doc,
+    );
+    const expected = stored;
     const provider = new SolidPersistence({
       doc,
-      container: docContainerUrls(stored.url).updateLog,
-      fetch: session.fetch,
+      store: new DocumentUpdateStore(
+        stored.data.updateLog as string,
+        session.fetch,
+        async () => {
+          const remote = await store.read(expected.url);
+          if (
+            !remote ||
+            !sameIncarnation(expected, remote) ||
+            remote.data.updateLog !== expected.data.updateLog
+          )
+            throw new DocumentReplacedError();
+        },
+        true,
+        stored.data.instanceId,
+      ),
     });
     try {
       await local.whenSynced;
       await local.set("title", result.title);
+      await local.set("stored", JSON.stringify({ webId: session.webId, document: stored }));
       await provider.whenSynced;
       await provider.persistFullState();
       await storeState(local, true);
@@ -123,7 +147,12 @@ export async function importDocument(
     }
     return { url: stored.url, skipped: result.skipped };
   } catch (error) {
-    if (stored) await deleteDocument(stored.url, session).catch(() => {});
+    if (stored) {
+      // A failed import owns only its reservation, never a replacement at its URL.
+      const current = await store.read(stored.url).catch(() => undefined);
+      if (current && sameIncarnation(stored, current))
+        await deleteDocument(stored.url, session).catch(() => {});
+    }
     throw error;
   }
 }

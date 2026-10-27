@@ -12,7 +12,9 @@ import {
   isDirectChild,
   type StoredDocument,
 } from "../lib/model";
+import { DocumentReplacedError, sameIncarnation } from "../lib/model/incarnation";
 import { baseExtensions } from "./extensions";
+import { DocumentUpdateStore } from "./update-store";
 export async function copyDocument(
   store: DocsStore,
   stored: StoredDocument,
@@ -52,7 +54,25 @@ export async function copyDocument(
     },
     persistFullState: async (container, fetchImpl, mapping, instanceId) => {
       const doc = new Doc();
-      const provider = new SolidPersistence({ doc, container, fetch: fetchImpl });
+      const url = `${container.slice(0, -"/updates/".length)}.ttl`;
+      const provider = new SolidPersistence({
+        doc,
+        store: new DocumentUpdateStore(
+          container,
+          fetchImpl,
+          async () => {
+            const remote = await store.read(url);
+            if (
+              !remote ||
+              !sameIncarnation({ url, data: { instanceId } }, remote) ||
+              remote.data.updateLog !== container
+            )
+              throw new DocumentReplacedError();
+          },
+          true,
+          instanceId,
+        ),
+      });
       try {
         await provider.whenSynced;
         if (instanceId) doc.getMap("document").set("instanceId", instanceId);

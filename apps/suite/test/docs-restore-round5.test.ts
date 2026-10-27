@@ -184,7 +184,7 @@ async function readSnapshot(client: ReturnType<typeof createSolidDriveClient>) {
 it.each([
   "snapshot",
   "companion",
-])("pairs legacy trash records when only the %s is selected", async (first) => {
+])("refuses legacy trash pairing inferred only from paths and timestamps (%s selected)", async (first) => {
   const { pod, client, trash } = await fixture();
   const indexUrl = `${DRIVE}.trash/index.ttl`;
   const current = await client.readRdf(indexUrl);
@@ -215,10 +215,10 @@ it.each([
     (entry) => entry.original.endsWith("/") === (first === "companion"),
   );
   const restored = await restoreItems(client, DRIVE, selected);
-  expect(restored.failed).toEqual([]);
-  expect(restored.done).toHaveLength(2);
-  expect((await readSnapshot(client))?.updateLog).toBe(`${MOVED}updates/`);
-  expect(await listTrash(client, DRIVE)).toEqual([]);
+  expect(restored.done).toEqual([]);
+  expect(restored.failed).toHaveLength(1);
+  expect(restored.failed[0]?.error).toMatchObject({ kind: "invalid-trash-record" });
+  for (const entry of trash.done) expect((await pod.fetch(entry.url)).ok).toBe(true);
 });
 it("retains a lone selected snapshot if its partner's index cannot be read", async () => {
   const { pod, client, trash } = await fixture();
@@ -443,4 +443,29 @@ it("keeps both trash sources when the paired restore destination cannot be persi
   expect((await pod.fetch(TARGET)).status).toBe(404);
   expect((await pod.fetch(MOVED)).status).toBe(404);
   expect(await listTrash(client, DRIVE)).toHaveLength(2);
+});
+
+it.each([
+  "wrong original",
+  "one-way relation",
+])("refuses an inconsistent recorded restore pair (%s)", async (fault) => {
+  const { pod, client, trash } = await fixture();
+  const snapshot = trash.done.find((entry) => !entry.original.endsWith("/"));
+  const companion = trash.done.find((entry) => entry.original.endsWith("/"));
+  if (!snapshot || !companion) throw new Error("Missing fixture pair");
+  const indexUrl = `${DRIVE}.trash/index.ttl`;
+  const current = await client.readRdf(indexUrl);
+  if (!current) throw new Error("Missing fixture index");
+  const index = trashIndexFrom(current.dataset);
+  if (fault === "wrong original")
+    index.record(companion.url).originalLocation = `${ROOT}docs/other/`;
+  else index.record(companion.url).pairedWith = `${DRIVE}.trash/other/plan.ttl`;
+  await client.write(indexUrl, await serializeTrashIndex(index), {
+    contentType: "text/turtle",
+    ifMatch: current.etag as string,
+  });
+  const restored = await restoreItems(client, DRIVE, [snapshot]);
+  expect(restored.done).toEqual([]);
+  expect(restored.failed[0]?.error).toMatchObject({ kind: "invalid-trash-record" });
+  for (const entry of trash.done) expect((await pod.fetch(entry.url)).ok).toBe(true);
 });

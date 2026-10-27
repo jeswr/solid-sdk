@@ -765,38 +765,37 @@ export async function restoreItems(
     entry.original.endsWith("/")
       ? `${entry.original.slice(0, -1)}.ttl`
       : docContainerUrls(entry.original).container;
-  const unpaired = entries.filter((entry) => {
+  const docsEntries = entries.filter((entry) => {
     try {
       slotOf(driveRoot, entry);
       validateOriginal(client, driveRoot, entry);
     } catch {
       return false; // Normal per-item validation below reports the error without I/O.
     }
-    return (
-      entry.original.startsWith(docs) &&
-      !entries.some((other) => other.original === partnerOriginal(entry))
-    );
+    return entry.original.startsWith(docs);
   });
-  if (unpaired.length)
+  const pairings = new Map<string, string>();
+  if (docsEntries.length)
     try {
       const current = await client.readRdf(indexUrlOf(driveRoot));
       const index = current ? trashIndexFrom(current.dataset) : emptyTrashIndex();
       const available = trashEntries(index);
-      for (const entry of unpaired) {
+      for (const entry of docsEntries) {
         const paired = index.record(entry.url).pairedWith;
         const original = partnerOriginal(entry);
-        // Older trash records predate explicit pairing; only an unambiguous
-        // matching deletion may supply their partner.
-        const matches = available.filter(
-          (other) =>
-            other.original === original &&
-            (paired
-              ? other.url === paired
-              : other.trashedAt.getTime() === entry.trashedAt.getTime() &&
-                other.trashedBy === entry.trashedBy),
-        );
-        if (matches.length === 1) {
-          const partner = matches[0] as TrashEntry;
+        // Paths locate possible conflicts, never establish a relationship.
+        // Refuse mixed generations before moving either half, even when the
+        // caller selected both and their original paths happen to match.
+        if (entries.some((other) => other.original === original && other.url !== paired))
+          throw new DriveError("invalid-trash-record", 409, entry.url);
+        const partner = available.find((other) => other.url === paired);
+        if (!paired && available.some((other) => other.original === original))
+          throw new DriveError("invalid-trash-record", 409, entry.url);
+        if (partner) {
+          if (partner.original !== original || index.record(partner.url).pairedWith !== entry.url)
+            throw new DriveError("invalid-trash-record", 409, entry.url);
+          pairings.set(entry.url, partner.url);
+          pairings.set(partner.url, entry.url);
           selected.set(partner.url, partner);
         }
       }
@@ -877,7 +876,9 @@ export async function restoreItems(
   for (const plan of plans) {
     if ("error" in plan || plan.entry.original.endsWith("/")) continue;
     const tree = `${plan.entry.original.slice(0, -4)}/`;
-    const companion = plans.find((other) => !("error" in other) && other.entry.original === tree);
+    const companion = plans.find(
+      (other) => !("error" in other) && other.entry.url === pairings.get(plan.entry.url),
+    );
     if (
       plan.target === plan.entry.original &&
       (!companion || "error" in companion || companion.target === tree)
@@ -926,9 +927,7 @@ export async function restoreItems(
       }
       const renamed = target !== entry.original;
       if (renamed && plan.snapshot) {
-        const companion = plans.find(
-          (other) => other.entry.original === docContainerUrls(entry.original).container,
-        );
+        const companion = plans.find((other) => other.entry.url === pairings.get(entry.url));
         const failedCompanion = companion && outcomes.get(companion.entry);
         if (failedCompanion?.failed.length)
           throw new TrashRestorePartialError(failedCompanion.failed);

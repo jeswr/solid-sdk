@@ -9,6 +9,7 @@ import { DataFactory, Store } from "n3";
 import {
   type BuildDocumentInput,
   buildDocument,
+  DocumentDoc,
   type PodDocument,
   parseDocument,
 } from "./document.js";
@@ -18,6 +19,7 @@ import {
   ResourceWriteError,
   TitleConflictError,
 } from "./errors.js";
+import { DocumentReplacedError, sameIncarnation } from "./incarnation.js";
 import { DOCS_SLUG, docContainerUrls, isDirectChild, LEGACY_DOCS_SLUG, toSlug } from "./layout.js";
 import { nameFromUrl, REVALIDATE_HEADERS, readRdf, serializeTurtle, writeRdf } from "./rdf-io.js";
 import { discoverRegistrations, ensureTypeRegistrations } from "./type-index.js";
@@ -100,6 +102,36 @@ export class DocsStore {
     const { dataset, etag } = await readRdf(url, this.fetchImpl);
     const data = parseDocument(url, dataset);
     return data === undefined ? undefined : { url, etag, data };
+  }
+
+  /** Claim only the version that was opened, preserving all existing RDF and history. */
+  async claimIdentity(stored: StoredDocument, instanceId: string): Promise<StoredDocument> {
+    this.assertScope(stored.url, true);
+    if (stored.data.instanceId) return stored;
+    const joinClaim = (remote: StoredDocument | undefined) => {
+      if (
+        !remote?.data.instanceId ||
+        JSON.stringify({ ...remote.data, instanceId: undefined }) !==
+          JSON.stringify({ ...stored.data, instanceId: undefined })
+      )
+        throw new DocumentReplacedError();
+      return remote;
+    };
+    const { dataset, etag } = await readRdf(stored.url, this.fetchImpl);
+    if (etag !== stored.etag) {
+      const data = parseDocument(stored.url, dataset);
+      return joinClaim(data ? { url: stored.url, etag, data } : undefined);
+    }
+    new DocumentDoc(`${stored.url}#it`, dataset, DataFactory).instanceId = instanceId;
+    try {
+      const written = await writeRdf(stored.url, dataset, { etag, fetchImpl: this.fetchImpl });
+      return { ...stored, etag: written.etag, data: { ...stored.data, instanceId } };
+    } catch (error) {
+      if (!(error instanceof ResourceWriteError && error.status === 412)) throw error;
+      // Concurrent first opens may join the winner only when identity was the
+      // sole change. Otherwise a fresh open must inspect the new incarnation.
+      return joinClaim(await this.read(stored.url));
+    }
   }
 
   /** Default location plus registered legacy location; legacy rows are read-only. */
@@ -220,8 +252,11 @@ export class DocsStore {
       options.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
     for (let attempt = 0; ; attempt++) {
       // A 412 retry may have read a new document at the same readable slug.
-      if (current.data.instanceId !== stored.data.instanceId)
-        throw new ResourceReadError(stored.url, 409);
+      if (
+        current !== stored &&
+        (!sameIncarnation(stored, current) || current.data.updateLog !== stored.data.updateLog)
+      )
+        throw new DocumentReplacedError();
       if (
         titleChanged &&
         current.data.title !== stored.data.title &&
@@ -233,7 +268,7 @@ export class DocsStore {
         ...current.data,
         ...input,
         ...snapshot,
-        instanceId: current.data.instanceId ?? input.instanceId,
+        instanceId: current.data.instanceId ?? input.instanceId ?? crypto.randomUUID(),
         title: titleChanged ? localTitle : current.data.title,
         priorRevisions: current.data.revisions,
         editor: this.webId,
@@ -273,7 +308,11 @@ export class DocsStore {
     if (copy) {
       this.assertScope(copy.url, true);
       const current = await this.read(copy.url);
-      if (!current || current.data.wasDerivedFrom !== `${source.url}#it`)
+      if (
+        !current ||
+        !sameIncarnation(copy, current) ||
+        current.data.wasDerivedFrom !== `${source.url}#it`
+      )
         throw new ResourceReadError(copy.url, 422);
       // Keep the reservation's validator: another client editing the visible
       // copy must cause a conflict rather than being overwritten by a retry.

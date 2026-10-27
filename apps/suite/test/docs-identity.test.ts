@@ -133,17 +133,21 @@ it.each([
   "neither",
   "snapshot",
   "log",
-])("opens a legacy document with identity in %s and establishes it on save", async (identity) => {
-  const { pod, session, client } = await fixture();
+])("opens a legacy document with identity in %s and claims it before editing", async (identity) => {
+  const { session, client } = await fixture();
   const runtime = client();
   const stored = await legacyDocument(runtime.store, session, identity);
   const originalId = stored.data.instanceId;
-  const before = pod.snapshot().resources;
+  const before = await runtime.store.read(stored.url);
   await runtime.open(stored.url);
   expect(yDocToProsemirrorJSON(runtime.doc)).toMatchObject({
     content: [{ type: "paragraph", content: [{ text: "Original" }] }],
   });
-  expect(pod.snapshot().resources).toEqual(before);
+  expect(runtime.stored?.data.instanceId).toEqual(expect.any(String));
+  expect({ ...runtime.stored?.data, instanceId: undefined }).toEqual({
+    ...before?.data,
+    instanceId: undefined,
+  });
   await runtime.forceSave();
   expect(runtime.state).toBe("saved");
   const saved = (await runtime.store.read(stored.url)) as StoredDocument;

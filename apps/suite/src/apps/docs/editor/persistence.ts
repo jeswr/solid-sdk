@@ -17,17 +17,17 @@ import {
   type StoredDocument,
   TitleConflictError,
 } from "../lib/model";
+import {
+  DocumentReplacedError,
+  incarnationMirror,
+  sameIncarnation,
+} from "../lib/model/incarnation";
 import { copyDocument } from "./copy";
 import { baseExtensions } from "./extensions";
 import { updateMirrorMetadata } from "./mirror-metadata";
 import { DocumentUpdateStore } from "./update-store";
 
 class InactiveLogError extends Error {}
-
-/** An absent legacy identity does not establish a different document instance. */
-function differentInstance(previous: string | undefined, next: string | undefined) {
-  return previous !== undefined && next !== undefined && previous !== next;
-}
 
 interface PendingEdit {
   owner?: string;
@@ -199,26 +199,10 @@ export class DocumentPersistence {
     );
   }
   private mirrorName(url: string, container: string) {
-    return container === docContainerUrls(url).updateLog ? url : `${url}::${container}`;
-  }
-  private async creationMirrorName(stored: StoredDocument) {
-    // Probe using an isolated Y.Doc: opening a reused URL's old mirror directly
-    // into the draft would merge the previous occupant before we could inspect it.
-    const doc = new Doc();
-    const mirror = new IndexeddbPersistence(stored.url, doc);
-    try {
-      await mirror.whenSynced;
-      const cached = this.parseMetadata<{ document: StoredDocument }>(await mirror.get("stored"));
-      const previousId =
-        cached?.document.data.instanceId ?? doc.getMap("document").get("instanceId");
-      return (cached || doc.getXmlFragment("prosemirror").length) &&
-        previousId !== stored.data.instanceId
-        ? `${stored.url}::instance:${stored.data.instanceId}`
-        : stored.url;
-    } finally {
-      await mirror.destroy();
-      doc.destroy();
-    }
+    return incarnationMirror(
+      { url, data: { instanceId: this.stored?.data.instanceId } },
+      container,
+    );
   }
   private async linkMirror(url: string, target: string) {
     // Keep a forward chain so offline reopens can find each generation. Stop
@@ -301,14 +285,11 @@ export class DocumentPersistence {
     }
   }
   private async replaceLog(remote: StoredDocument) {
-    const replaced = differentInstance(this.stored?.data.instanceId, remote.data.instanceId);
-    const mirrorName = this.mirrorName(
-      remote.url,
+    remote = await this.identify(remote);
+    const targetMirror = incarnationMirror(
+      remote,
       remote.data.updateLog ?? docContainerUrls(remote.url).updateLog,
     );
-    const targetMirror = replaced
-      ? `${mirrorName}::instance:${remote.data.instanceId ?? "legacy"}`
-      : mirrorName;
     this.switchingLog = true;
     this.notify();
     try {
@@ -339,6 +320,7 @@ export class DocumentPersistence {
       this.attachProvider(this.updateContainer(), false);
       await this.provider?.whenSynced;
       if (this.providerError) throw this.providerError;
+      this.recordIdentity();
       const extensions = baseExtensions(this.session.fetch);
       this.json = yDocToProsemirrorJSON(this.doc) as JSONContent;
       this.body = generateHTML(this.json, extensions);
@@ -354,6 +336,35 @@ export class DocumentPersistence {
 
   private assertActive() {
     if (this.stopped) throw new DOMException("Document closed", "AbortError");
+  }
+  private async identify(stored: StoredDocument, recover = false) {
+    if (stored.data.instanceId || stored.url.startsWith(this.store.legacyContainer)) return stored;
+    // A legacy snapshot may already have an id in its log. Inspect it in
+    // isolation before assigning one; never merge an unverified local mirror.
+    const probe = new Doc();
+    try {
+      let id: unknown;
+      try {
+        for (const { update } of await new DocumentUpdateStore(
+          stored.data.updateLog ?? docContainerUrls(stored.url).updateLog,
+          this.session.fetch,
+          async () => {},
+          false,
+        ).loadUpdates())
+          applyUpdate(probe, update);
+        id = probe.getMap("document").get("instanceId");
+      } catch (error) {
+        // Explicit recovery trusts the conditional snapshot, retiring an
+        // unusable log. Ordinary opens must still require its complete history.
+        if (!recover) throw error;
+      }
+      return await this.store.claimIdentity(
+        stored,
+        typeof id === "string" ? id : crypto.randomUUID(),
+      );
+    } finally {
+      probe.destroy();
+    }
   }
   async open(url?: string, recover = false) {
     this.assertActive();
@@ -408,6 +419,9 @@ export class DocumentPersistence {
       this.online = false;
       this.offlineCopy = true;
     }
+    // Only a failed remote read can use an offline snapshot. An identity or
+    // history validation failure must never turn a stale cache authoritative.
+    if (this.stored && !this.offlineCopy) this.stored = await this.identify(this.stored, recover);
     this.assertActive();
     if (!this.stored) throw new Error("not-found");
     this.creation = "created";
@@ -430,7 +444,7 @@ export class DocumentPersistence {
       // before advertising the new log to other clients.
       this.seedSnapshot();
       this.recordIdentity();
-      await this.activeDocument();
+      await this.checkLog(this.updateContainer());
       this.assertActive();
       await new SolidUpdateStore({ container, fetch: this.session.fetch }).appendUpdate(
         encodeStateAsUpdate(this.doc),
@@ -452,12 +466,37 @@ export class DocumentPersistence {
       !this.readOnly &&
       !this.offlineCopy &&
       ((cached?.document.data.updateLog ?? layout.updateLog) !== container ||
-        differentInstance(cached?.document.data.instanceId, this.stored.data.instanceId))
+        (cached
+          ? !sameIncarnation(cached.document, this.stored)
+          : this.doc.getXmlFragment("prosemirror").length > 0 &&
+            this.doc.getMap("document").get("instanceId") !== this.stored.data.instanceId))
     ) {
       const remote = this.stored;
       if (cached) this.stored = cached.document;
       await this.replaceLog(remote);
       pending = this.version !== this.savedVersion;
+    }
+    if (!recover && !this.readOnly && !this.offlineCopy) {
+      const name = this.mirrorName(url, container);
+      if (this.local?.name !== name) {
+        const previous = this.local;
+        this.mirrorGeneration++;
+        this.local = this.createMirror(name);
+        await this.local.whenSynced;
+        if (pending) await this.writePending();
+        else pending = await this.readPending();
+        await storeState(this.local, true);
+        if (previous) {
+          const edit = this.pendingEdit;
+          await updateMirrorMetadata(
+            previous,
+            (current) => (current.edit === JSON.stringify(edit) ? { pending: 0 } : undefined),
+            () => !this.stopped,
+          );
+          await previous.destroy();
+        }
+      }
+      await this.linkMirror(url, name);
     }
     this.checkTitleConflict();
     if (!this.readOnly && !this.offlineCopy && !this.provider) {
@@ -468,9 +507,16 @@ export class DocumentPersistence {
       this.assertActive();
       if (this.providerError) throw this.providerError;
     }
+    if (!this.readOnly && !this.offlineCopy) this.recordIdentity();
     // Legacy snapshots are view-only. Existing writable documents must hydrate
     // from their CRDT log, including when its visible content is empty.
-    if (this.readOnly) this.seedSnapshot();
+    if (this.readOnly) {
+      await this.local?.destroy();
+      this.local = undefined;
+      this.doc.destroy();
+      this.doc = new Doc();
+      this.seedSnapshot();
+    }
     if (recover) {
       this.local = this.createMirror(this.mirrorName(url, container));
       await this.local.whenSynced;
@@ -512,8 +558,10 @@ export class DocumentPersistence {
       this.stored?.data.instanceId ??
       (this.doc.getMap("document").get("instanceId") as string | undefined) ??
       crypto.randomUUID();
-    if (this.doc.getMap("document").get("instanceId") !== identity)
+    if (this.doc.getMap("document").get("instanceId") !== identity) {
       this.doc.getMap("document").set("instanceId", identity);
+      this.needsFullState = true;
+    }
     return identity;
   }
   private checkTitleConflict() {
@@ -579,13 +627,10 @@ export class DocumentPersistence {
     }
     return remote;
   }
-  private async checkLog(container: string) {
+  private async checkLog(container: string, expected = this.stored as StoredDocument) {
     const remote = await this.activeDocument();
     const active = remote.data.updateLog ?? docContainerUrls(remote.url).updateLog;
-    if (
-      active !== container ||
-      differentInstance(this.stored?.data.instanceId, remote.data.instanceId)
-    ) {
+    if (active !== container || !sameIncarnation(expected, remote)) {
       const error = new InactiveLogError("The document has a new update log");
       this.pauseLog(error);
       throw error;
@@ -595,10 +640,7 @@ export class DocumentPersistence {
     const remote = await this.activeDocument();
     const previous = this.provider?.store.container ?? this.updateContainer();
     const active = remote.data.updateLog ?? docContainerUrls(remote.url).updateLog;
-    if (
-      previous !== active ||
-      differentInstance(this.stored?.data.instanceId, remote.data.instanceId)
-    ) {
+    if (previous !== active || !sameIncarnation(this.stored as StoredDocument, remote)) {
       await this.replaceLog(remote);
       this.offlineCopy = false;
       this.trashed = false;
@@ -634,12 +676,13 @@ export class DocumentPersistence {
     this.assertActive();
     this.provider?.destroy();
     this.providerError = undefined;
+    const expected = this.stored as StoredDocument;
     this.provider = new SolidPersistence({
       doc: this.doc,
       store: new DocumentUpdateStore(
         container,
         this.session.fetch,
-        () => this.checkLog(container),
+        () => this.checkLog(container, expected),
         allowEmpty,
         this.stored?.data.instanceId,
       ),
@@ -703,7 +746,7 @@ export class DocumentPersistence {
     });
     return this.tail;
   }
-  private async write() {
+  private async write(replacements = 0): Promise<void> {
     try {
       await this.mirrorRestart;
       if (this.creation === "created") await this.reconcileProvider();
@@ -730,7 +773,7 @@ export class DocumentPersistence {
           const stored = this.stored as StoredDocument;
           if (stored.data.instanceId)
             this.doc.getMap("document").set("instanceId", stored.data.instanceId);
-          const mirrorName = await this.creationMirrorName(stored);
+          const mirrorName = incarnationMirror(stored, this.updateContainer());
           if (this.local?.name !== mirrorName) {
             this.draftMirror = this.local;
             this.local = this.createMirror(mirrorName);
@@ -810,7 +853,16 @@ export class DocumentPersistence {
             ),
           );
       }
-    } catch (error) {
+    } catch (failure) {
+      let error = failure;
+      if (error instanceof DocumentReplacedError && replacements < 3) {
+        try {
+          await this.reconcileProvider();
+          return await this.write(replacements + 1);
+        } catch (cause) {
+          error = cause;
+        }
+      }
       if (error instanceof TitleConflictError) {
         this.conflict = error;
         this.state = "failed";
@@ -844,6 +896,14 @@ export class DocumentPersistence {
     if (!this.stored || !this.conflict) return;
     const remote = await this.store.read(this.stored.url);
     if (!remote) return;
+    if (
+      !sameIncarnation(this.stored, remote) ||
+      (remote.data.updateLog ?? docContainerUrls(remote.url).updateLog) !== this.updateContainer()
+    ) {
+      await this.replaceLog(remote);
+      await this.flush();
+      return;
+    }
     if (!keepMine) this.title = remote.data.title;
     this.stored = remote;
     this.pendingEdit = undefined;

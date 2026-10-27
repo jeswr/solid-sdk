@@ -30,6 +30,7 @@ const WAIT = async () => {};
 
 async function document(title = "Plan", body = "old"): Promise<StoredDocument> {
   const dataset = buildDocument(DOC, {
+    instanceId: "fixture-document",
     title,
     body,
     now: NOW,

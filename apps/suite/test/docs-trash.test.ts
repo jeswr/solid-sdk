@@ -561,7 +561,7 @@ it("bounds Docs trash and Undo requests by compacting the typed Yjs log without 
   doc.destroy();
   expect(updates).toHaveLength(62);
   expect(results).toEqual([
-    { trash: { requests: 406, mutations: 132 }, undo: { requests: 343, mutations: 133 } },
-    { trash: { requests: 229, mutations: 73 }, undo: { requests: 38, mutations: 11 } },
+    { trash: { requests: 406, mutations: 132 }, undo: { requests: 344, mutations: 133 } },
+    { trash: { requests: 229, mutations: 73 }, undo: { requests: 39, mutations: 11 } },
   ]);
 });

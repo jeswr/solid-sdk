@@ -2,8 +2,6 @@
 import type { JSONContent } from "@tiptap/react";
 import { yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
 import { Packer } from "docx";
-import { IndexeddbPersistence } from "y-indexeddb";
-import { Doc } from "yjs";
 import type { PodSession } from "@/lib/session/pod-session";
 import { type ExportImage, toDocx } from "../lib/convert/docx-export";
 import { exportMarkdown } from "../lib/convert/markdown";
@@ -67,34 +65,16 @@ export async function downloadDocument(
   return name;
 }
 
-/** Row downloads prefer the same local Y.Doc as the editor, including unsynced offline edits. */
+/** Use the editor's incarnation validation before reading cached or pending content. */
 export async function rowExportJson(resource: string, session: PodSession): Promise<JSONContent> {
-  const seen = new Set<string>();
-  let name = resource;
-  while (!seen.has(name)) {
-    seen.add(name);
-    const doc = new Doc();
-    const local = new IndexeddbPersistence(name, doc);
-    try {
-      await local.whenSynced;
-      const next: unknown = await local.get("nextMirror");
-      if (typeof next === "string" && !(await local.get("pending"))) {
-        name = next;
-        continue;
-      }
-      if (doc.getXmlFragment("prosemirror").length)
-        return yDocToProsemirrorJSON(doc, "prosemirror") as JSONContent;
-      break;
-    } finally {
-      await local.destroy();
-      doc.destroy();
-    }
-  }
   const runtime = new DocumentPersistence(session);
   try {
     await runtime.open(resource);
     return yDocToProsemirrorJSON(runtime.doc, "prosemirror") as JSONContent;
   } finally {
+    // No editor captured a render here. Retain pending edits for its writer;
+    // teardown must not save the old snapshot or acknowledge those edits.
+    runtime.online = false;
     await runtime.destroy();
   }
 }
