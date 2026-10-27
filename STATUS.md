@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # sst-7ehi — MAI-L7 lane report
 
@@ -92,3 +93,54 @@ documented in [QUESTIONS.md](QUESTIONS.md); none blocked implementation.
 Automated per-commit review remains unavailable: `command -v roborev` found no
 executable, and the lane has no post-commit review hook. The dispatcher must run
 the repository's [roborev review workflow](skills/roborev-review/SKILL.md).
+
+## Fix round 2 — literal markers in flowed quotes
+
+Base: `09d7a5f514af4c26dbe3fb496c0589a7fdb7a6c2`.
+
+- `8365a077` — `fix(mail): preserve literal markers in flowed quotes`.
+  Unflowing now counts only contiguous RFC 3676 quote markers, preserving
+  space-separated literal markers in continuation content. Segment depth keeps
+  the API's space-separated count from the first physical line. Eight regression
+  cases cover literal markers, extra spaces, literal signature text, differing
+  API depths within an RFC paragraph, and RFC depth transitions, in both DelSp modes.
+- This report commit records the round's validation.
+
+Commands used Node **24.22.1** and pnpm **10.4.1**, with
+`PATH=/opt/node24/bin:$PATH COREPACK_HOME=/tmp/sst-7ehi-corepack` as above.
+
+- Before changing the decoder, the regression run failed all eight added cases
+  while the existing 70 tests passed.
+- `pnpm exec biome check --write apps/suite/src/apps/mail/lib/quotes/quotes.ts apps/suite/test/mail-quotes.test.ts`
+  — PASS.
+- `pnpm --filter @jeswr/app-suite exec vitest run test/mail-quotes.test.ts --coverage.include='src/apps/mail/lib/quotes/**/*.ts'`
+  — PASS: 78 tests; 100% statements, branches, functions and lines across the
+  quotes directory (150 statements, 135 branches, 10 functions, 124 lines).
+- `pnpm exec turbo run build --filter='@jeswr/app-suite^...' --concurrency=4`
+  — PASS: all seven workspace dependency builds.
+- `pnpm --filter @jeswr/app-suite run lint`, then
+  `pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test`
+  — PASS: lint (54 existing warnings), production build, typecheck, 153 test
+  files / 7,585 tests; configured library coverage remains 100% in all metrics.
+- `pnpm run lint:root` — PASS.
+- `TURBO_SCM_BASE=09d7a5f514af4c26dbe3fb496c0589a7fdb7a6c2 pnpm run gate`
+  — PASS: 12/12 tasks, seven cached, in 2m53s; all 7,585 app tests passed.
+- `pnpm run gate:full` — FAIL: 240 successful / 324 scheduled tasks, nine cached,
+  in 10m6s. All 879 root tests passed. The run stopped at unchanged
+  `packages/suite-ui` tests: `navigation.test.tsx:84` and `:159`, and
+  `shell.test.tsx:115`, exceeded their 5,000 ms timeouts; the next shell test
+  failed with "Axe is already running" at `shell.test.tsx:143`. UI results:
+  192 passed / four failed. Remaining workspace checks were cancelled.
+- `pnpm exec turbo run test --filter=@jeswr/suite-ui --concurrency=1`
+  — PASS on isolated retry: all 196 tests / eight files, three successful tasks
+  (two cached), in 40s, without source changes or timeout overrides.
+  `git diff --exit-code 09d7a5f514af4c26dbe3fb496c0589a7fdb7a6c2 HEAD -- packages/suite-ui`
+  confirmed that package is unchanged by this fix round.
+- `git diff --check` — PASS.
+
+The requested fix is complete. The full-workspace gate remains unsuccessful;
+the affected-workspace and app gates passed.
+
+Automated per-commit review remains unavailable: no `roborev` executable or
+post-commit hook is installed. Dispatcher review is still required. No dependency
+policy checks or screenshots apply to this pure-library fix. Open questions: none.
