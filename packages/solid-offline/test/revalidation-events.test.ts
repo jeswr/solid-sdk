@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleNotification, resyncSweep } from '../src/invalidation.js';
 import { MetadataStore } from '../src/metadata-store.js';
+import { reportRevalidation } from '../src/revalidation-events.js';
 import { createStatusSurface } from '../src/status.js';
 import { handleFetch, type SwrDeps } from '../src/swr.js';
 import { MockBroadcaster, MockByteCache, makeGet, turtleResponse } from './mocks.js';
@@ -40,6 +41,68 @@ const outcomes = [
   { name: 'network error', status: 0, event: 'revalidate-failed' },
   { name: 'offline', status: -1, event: 'revalidate-failed' },
 ] as const;
+
+describe.each(['start', 'terminal', 'both'] as const)('%s broadcast failure', (failureAt) => {
+  function broadcaster() {
+    return {
+      postMessage: vi.fn((message: { url: string; event: string }) => {
+        const start = message.event === 'revalidating';
+        if (failureAt === 'both' || (failureAt === 'start' ? start : !start)) {
+          throw new Error('fixture broadcast failure');
+        }
+      }),
+    };
+  }
+
+  it.each([
+    'updated',
+    'revalidated',
+    'revalidate-failed',
+  ] as const)('preserves the operation result for %s', async (event) => {
+    const broadcast = broadcaster();
+    const result = { kind: 'fixture result' };
+    const run = vi.fn(async () => result);
+    await expect(reportRevalidation(URL, broadcast, run, () => event)).resolves.toBe(result);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(broadcast.postMessage.mock.calls).toEqual([
+      [{ url: URL, event: 'revalidating' }],
+      [{ url: URL, event }],
+    ]);
+  });
+
+  it('preserves the original operation error', async () => {
+    const broadcast = broadcaster();
+    const failure = new TypeError('fixture operation failure');
+    const run = vi.fn(async () => {
+      throw failure;
+    });
+    const eventFor = vi.fn(() => 'updated' as const);
+    await expect(reportRevalidation(URL, broadcast, run, eventFor)).rejects.toBe(failure);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(eventFor).not.toHaveBeenCalled();
+    expect(broadcast.postMessage.mock.calls).toEqual([
+      [{ url: URL, event: 'revalidating' }],
+      [{ url: URL, event: 'revalidate-failed' }],
+    ]);
+  });
+
+  it.each(['Delete', '403', '404'] as const)('still purges revoked bytes on %s', async (path) => {
+    const deps = await setup();
+    const broadcast = broadcaster();
+    deps.broadcast.postMessage = broadcast.postMessage;
+    deps.fetch = vi.fn(async () => new Response(null, { status: Number(path) }));
+    await expect(
+      handleNotification({ type: path === 'Delete' ? 'Delete' : 'Update', object: URL }, deps),
+    ).resolves.toEqual({ kind: 'deleted' });
+    expect(await deps.meta.getByUrl(URL)).toEqual([]);
+    expect(deps.cache.size).toBe(0);
+    expect(deps.fetch).toHaveBeenCalledTimes(path === 'Delete' ? 0 : 1);
+    expect(broadcast.postMessage.mock.calls).toEqual([
+      [{ url: URL, event: 'revalidating' }],
+      [{ url: URL, event: 'updated' }],
+    ]);
+  });
+});
 
 describe.each([
   'background',

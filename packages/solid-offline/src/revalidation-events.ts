@@ -11,13 +11,21 @@ export async function reportRevalidation<T>(
   run: () => Promise<T>,
   eventFor: (result: T) => TerminalEvent,
 ): Promise<T> {
-  broadcast.postMessage({ url, event: 'revalidating' });
+  function report(event: 'revalidating' | TerminalEvent): void {
+    try {
+      broadcast.postMessage({ url, event });
+    } catch {
+      // Reporting is best effort; it must not block maintenance or replace its error.
+    }
+  }
+
+  report('revalidating');
   let event: TerminalEvent = 'revalidate-failed';
   try {
     const result = await run();
     event = eventFor(result);
     return result;
   } finally {
-    broadcast.postMessage({ url, event });
+    report(event);
   }
 }
