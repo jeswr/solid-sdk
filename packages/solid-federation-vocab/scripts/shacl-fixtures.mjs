@@ -80,6 +80,11 @@ function leafResults(results) {
   );
 }
 
+// Coverage also belongs to the parent properties whose sh:node checks failed.
+function coverageResults(results) {
+  return results.flatMap((result) => [result, ...coverageResults(result.detail)]);
+}
+
 export async function validateSectorFixtures(root, log = console.log) {
   const sectorsRoot = join(root, "sectors");
   const byDirectory = new Map();
@@ -177,12 +182,13 @@ export async function validateSectorFixtures(root, log = console.log) {
             `expected exactly one constraint failure at ${expectedPath}, got ${results.length}: ${results.map((r) => r.path?.value ?? "(node constraint)").join(", ")}`,
           );
         }
+        const coverage = coverageResults(report.results);
         for (const entry of covered) {
           const focusNodes = targets(shapes, data, entry.shape);
           if (!invalid && focusNodes.length) entry.valid = true;
           if (
             invalid &&
-            results.some(
+            coverage.some(
               (result) =>
                 focusNodes.some((focus) => focus.equals(result.focusNode)) &&
                 entry.properties.some((property) => property.equals(result.sourceShape)),

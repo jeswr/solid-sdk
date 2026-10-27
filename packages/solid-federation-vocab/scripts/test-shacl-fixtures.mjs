@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
-import { DataFactory, Store, Writer } from "n3";
+import { DataFactory, Parser, Store, Writer } from "n3";
 import { validateSectorFixtures } from "./shacl-fixtures.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -72,6 +72,72 @@ try {
   console.log(
     "✓ Invalid positives, imported Core failures and missing NodeShape negatives are rejected.",
   );
+
+  // One nested failure covers its parent property and its independently targeted helper.
+  copySector("collectibles");
+  const valuation = join(scratch, "test", "fixtures", "collectibles", "valuation.invalid.ttl");
+  const valuationText = readFileSync(valuation, "utf8");
+  const valuationData = new Store(new Parser().parse(valuationText));
+  const amount = "https://example.org/fixtures/collectibles/support-5";
+  iriProperties(valuationData, "https://example.org/fixtures/collectibles/Valuation-4", {
+    "https://jeswr.org/ns/sectors/collectibles#amount": amount,
+  });
+  const amountValue = SetFrom.subjectPredicate(
+    new TermWrapper(amount, valuationData, DataFactory),
+    "http://schema.org/value",
+    (term) => term,
+    (term) => term,
+  );
+  const [value] = amountValue;
+  amountValue.delete(value);
+  const writeValuation = () => {
+    writeRdf(valuation, valuationData);
+    writeFileSync(
+      valuation,
+      `# expect: http://schema.org/value\n${readFileSync(valuation, "utf8")}`,
+    );
+  };
+  const monetary = join(scratch, "test", "fixtures", "collectibles", "monetary-amount.invalid.ttl");
+  const monetaryText = readFileSync(monetary, "utf8");
+  rmSync(monetary);
+  writeValuation();
+  assert.equal((await check()).sectorCount, 3);
+
+  // Wrapper paths cannot replace the expected leaf path, or hide a second failure.
+  writeFileSync(
+    valuation,
+    readFileSync(valuation, "utf8").replace(
+      /^# expect: .+/,
+      "# expect: https://jeswr.org/ns/sectors/collectibles#amount",
+    ),
+  );
+  await assert.rejects(
+    check,
+    /expected exactly one constraint failure.*got 1: http:\/\/schema.org\/value/,
+  );
+  writeValuation();
+  SetFrom.subjectPredicate(
+    new TermWrapper(amount, valuationData, DataFactory),
+    "http://schema.org/currency",
+    (term) => term,
+    (term) => term,
+  ).clear();
+  writeValuation();
+  await assert.rejects(check, /expected exactly one constraint failure.*got 2/);
+
+  // An unrelated helper failure must not cover a conforming Valuation instance.
+  writeFileSync(
+    valuation,
+    monetaryText.replaceAll("/fixtures/", "/unrelated-fixture/") +
+      readFileSync(join(scratch, "test", "fixtures", "collectibles", "valid.ttl"), "utf8"),
+  );
+  await assert.rejects(check, /ValuationShape has no negative fixture coverage/);
+  writeFileSync(valuation, valuationText);
+  writeFileSync(monetary, monetaryText);
+  assert.equal((await check()).sectorCount, 3);
+  rmSync(join(scratch, "sectors", "collectibles"), { recursive: true });
+  rmSync(join(scratch, "test", "fixtures", "collectibles"), { recursive: true });
+  console.log("✓ Nested failures cover parent and helper shapes while counting distinct leaves.");
 
   // A sector can inherit all its enforceable properties from an imported profile.
   const SH = "http://www.w3.org/ns/shacl#";
