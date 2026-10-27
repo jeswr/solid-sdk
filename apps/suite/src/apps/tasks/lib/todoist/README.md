@@ -42,7 +42,8 @@ removing a token also removes one following space. Titles are trimmed and must
 remain nonempty. Descriptions and comments are never tokenised.
 
 Durations are positive finite decimal amounts with the exact unit `minute` or
-`day`; empty amount and unit mean absent. Decimals that cannot round-trip through
+`day`; an empty amount with an empty unit or Todoist's `None` marker means absent.
+Decimals that cannot round-trip through
 a JavaScript number without precision loss or exponent notation are rejected.
 Invalid amount/unit pairs throw
 `INVALID_DURATION`. Other fatal codes are `CSV_TOO_LARGE`, `INVALID_INDENT`,

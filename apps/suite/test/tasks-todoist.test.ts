@@ -447,7 +447,23 @@ describe("validation", () => {
     ).toEqual({ amount, unit: durationUnit });
   });
   it.each([
+    "",
+    "None",
+  ])("imports an absent duration with unit %j", (unit) => {
+    const result = parseTodoistCsv(
+      csv([task({ DURATION_UNIT: unit }), task({ DURATION: "5", DURATION_UNIT: "minute" })]),
+      options,
+    );
+    expect(result.tasks).toHaveLength(2);
+    expect(result.tasks[0]).not.toHaveProperty("duration");
+    expect(result.tasks[1]!.duration).toEqual({ amount: 5, unit: "minute" });
+    expect(result.warnings).toEqual([]);
+  });
+  it.each([
     ["", "minute"],
+    ["", "none"],
+    ["", "None "],
+    ["1", "None"],
     ["5", ""],
     ["1", "hour"],
     ["1", "minutes"],

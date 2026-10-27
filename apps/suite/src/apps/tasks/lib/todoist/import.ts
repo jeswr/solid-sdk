@@ -136,7 +136,7 @@ export function parseTodoistCsv(input: string, options: TodoistImportOptions): T
 }
 
 function duration(amount: string, unit: string, line: number): Pick<TodoistTaskDraft, "duration"> {
-  if (amount === "" && unit === "") return {};
+  if (amount === "" && (unit === "" || unit === "None")) return {};
   const value = Number(amount);
   if (
     /^\d+(?:\.\d+)?$/.exec(amount)?.[0] !== amount ||
