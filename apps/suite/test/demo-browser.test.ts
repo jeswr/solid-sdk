@@ -210,6 +210,22 @@ it("rejects failed durable commits without acknowledging or exposing the trial w
   expect((await reloaded.fetch(url)).status).toBe(404);
 });
 
+it("refuses to start rather than accept edits when IndexedDB cannot open", async () => {
+  vi.stubGlobal("indexedDB", {
+    open() {
+      const request = { error: new DOMException("denied", "SecurityError") } as {
+        error: DOMException;
+        onerror?: () => void;
+      };
+      queueMicrotask(() => request.onerror?.());
+      return request;
+    },
+  });
+  vi.stubGlobal("BroadcastChannel", undefined);
+  const module = await tab();
+  await expect(module.getDemoPod()).rejects.toBeInstanceOf(module.DemoStorageError);
+});
+
 it("falls back to memory when IndexedDB is unavailable", async () => {
   vi.stubGlobal("indexedDB", undefined);
   vi.stubGlobal("BroadcastChannel", undefined);

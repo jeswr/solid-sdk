@@ -19,13 +19,22 @@ interface StoredPod {
   readonly snapshot: DemoPodSnapshot;
 }
 
+/** Thrown when the browser refuses storage, so the demo never accepts edits it would lose. */
+export class DemoStorageError extends Error {
+  constructor(cause: unknown) {
+    super("This browser won't let the demo pod save anything", { cause });
+    this.name = "DemoStorageError";
+  }
+}
+
+/** Without an IndexedDB global (non-browser runtimes) the pod lives in memory. */
 function openDb(): Promise<IDBDatabase | undefined> {
   if (typeof indexedDB === "undefined") return Promise.resolve(undefined);
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 1);
     request.onupgradeneeded = () => request.result.createObjectStore(STORE);
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => resolve(undefined);
+    request.onerror = () => reject(new DemoStorageError(request.error));
   });
 }
 
