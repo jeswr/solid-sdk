@@ -9,6 +9,7 @@ const FILES = [
   "index.js",
   "hostile.html",
   "hostile.js",
+  "ios-probes.js",
   "navigation.html",
   "navigation.js",
   "foreign.html",
