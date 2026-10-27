@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { UploadDock } from "../src/components/upload-dock.js";
 import type { UploadItem } from "../src/uploads/queue.js";
@@ -101,14 +102,96 @@ test("scrolling keeps the focused control mounted and completion restores focus 
   expect(container.querySelectorAll("li").length).toBeLessThan(30);
 });
 
-test("completed queues retain a keyboard-focusable scroll region", () => {
-  render(<UploadDock {...controls} items={items.map((item) => ({ ...item, status: "done" }))} />);
+test.each([
+  "done",
+  "skipped",
+] as const)("an all-%s queue retains a scroll region in the tab order", async (status) => {
+  const user = userEvent.setup();
+  render(
+    <>
+      <UploadDock {...controls} items={items.map((item) => ({ ...item, status }))} />
+      <button type="button">After uploads</button>
+    </>,
+  );
   const viewport = screen.getByRole("region", { name: "Upload files" });
+  const toggle = screen.getByRole("button", { name: /Uploads.*Collapse/ });
+  act(() => toggle.focus());
+  await user.tab();
+  expect(document.activeElement).toBe(viewport);
   expect(viewport.tabIndex).toBe(0);
-  act(() => viewport.focus());
+  expect(viewport.querySelector("button")).toBeNull();
+  // Without an actionable row, preserve the viewport's native keyboard scrolling.
+  expect(fireEvent.keyDown(viewport, { key: "ArrowDown" })).toBe(true);
   expect(document.activeElement).toBe(viewport);
   expect(screen.getAllByRole("listitem").length).toBeLessThan(30);
-  expect(screen.getByRole("status").textContent).toContain("10000 uploaded");
+  await user.tab();
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "After uploads" }));
+  await user.tab({ shift: true });
+  expect(document.activeElement).toBe(viewport);
+  await user.tab({ shift: true });
+  expect(document.activeElement).toBe(toggle);
+});
+
+test.each([
+  "ArrowDown",
+  "ArrowUp",
+  "Home",
+  "End",
+])("completed mounted rows allow Tab into the viewport and %s to offscreen Pause/Cancel", async (key) => {
+  const user = userEvent.setup();
+  render(
+    <UploadDock
+      {...controls}
+      items={items.map((item, index) => (index === 5000 ? item : { ...item, status: "done" }))}
+    />,
+  );
+  const viewport = screen.getByRole("region", { name: "Upload files" });
+  expect(viewport.querySelector("button")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Pause File 5000" })).toBeNull();
+  act(() => screen.getByRole("button", { name: /Uploads.*Collapse/ }).focus());
+  await user.tab();
+  expect(document.activeElement).toBe(viewport);
+  expect(viewport.tabIndex).toBe(0);
+  await user.keyboard(`{${key}}`);
+  await waitFor(() =>
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Pause File 5000" })),
+  );
+  expect(viewport.scrollTop).toBeGreaterThan(0);
+  expect(viewport.tabIndex).toBe(-1);
+  await user.tab();
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel File 5000" }));
+});
+
+test.each([
+  true,
+  false,
+])("mounted controls are the tab entry when canPause=%s", async (canPause) => {
+  const user = userEvent.setup();
+  render(<UploadDock {...controls} items={items} canPause={canPause} />);
+  const viewport = screen.getByRole("region", { name: "Upload files" });
+  expect(viewport.tabIndex).toBe(-1);
+  act(() => screen.getByRole("button", { name: /Uploads.*Collapse/ }).focus());
+  await user.tab();
+  expect(document.activeElement).toBe(
+    screen.getByRole("button", { name: `${canPause ? "Pause" : "Cancel"} File 0` }),
+  );
+});
+
+test("the viewport tab stop follows controls entering and leaving the virtual window", async () => {
+  render(
+    <UploadDock
+      {...controls}
+      items={items.map((item, index) => (index === 0 ? item : { ...item, status: "done" }))}
+    />,
+  );
+  const viewport = screen.getByRole("region", { name: "Upload files" });
+  expect(viewport.tabIndex).toBe(-1);
+  fireEvent.scroll(viewport, { target: { scrollTop: 144 * 5000 } });
+  await waitFor(() => expect(screen.queryByRole("button", { name: "Pause File 0" })).toBeNull());
+  expect(viewport.tabIndex).toBe(0);
+  fireEvent.scroll(viewport, { target: { scrollTop: 0 } });
+  await screen.findByRole("button", { name: "Pause File 0" });
+  expect(viewport.tabIndex).toBe(-1);
 });
 
 test("an expanded 10,000-file queue mounts a window with list positions and reaches the last file by keyboard", async () => {

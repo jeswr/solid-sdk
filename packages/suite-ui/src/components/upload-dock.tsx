@@ -75,6 +75,11 @@ export function UploadDock({
       (canPause && ["queued", "uploading", "waiting"].includes(item.status))
     );
   }
+  const virtualRows = virtual.getVirtualItems();
+  const hasMountedControls = virtualRows.some(({ index }) => {
+    const item = items[index];
+    return item && (available(item, "action") || available(item, "cancel"));
+  });
   function buttonAt(index: number, control: "action" | "cancel") {
     return queue.current?.querySelector<HTMLButtonElement>(
       `[data-upload-index="${index}"] [data-upload-control="${control}"]:not(:disabled)`,
@@ -197,13 +202,13 @@ export function UploadDock({
           if (event.altKey || event.ctrlKey || event.metaKey) return;
           const target = event.target as HTMLElement;
           const row = target.closest<HTMLElement>("[data-upload-index]");
-          if (!row) return;
-          const index = Number(row.dataset.uploadIndex);
+          if (!row && target !== viewport.current) return;
+          const backwards = event.key === "ArrowUp" || event.key === "End";
+          // From the viewport, start navigation at the corresponding end of the queue.
+          const index = row ? Number(row.dataset.uploadIndex) : backwards ? items.length : -1;
           const control = target.dataset.uploadControl === "cancel" ? "cancel" : "action";
           if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-            event.preventDefault();
-            const backwards = event.key === "ArrowUp" || event.key === "End";
-            focusRow(
+            const moved = focusRow(
               event.key === "Home"
                 ? 0
                 : event.key === "End"
@@ -212,7 +217,9 @@ export function UploadDock({
               control,
               backwards ? -1 : 1,
             );
-          } else if (event.key === "Tab") {
+            // A queue without controls still needs native viewport scrolling.
+            if (row || moved) event.preventDefault();
+          } else if (event.key === "Tab" && row) {
             const buttons = row.querySelectorAll("button:not(:disabled)");
             if (target !== (event.shiftKey ? buttons[0] : buttons[buttons.length - 1])) return;
             if (
@@ -236,15 +243,14 @@ export function UploadDock({
                 ref={viewport}
                 className="su-upload-scroll"
                 aria-label="Upload files"
-                // Rows with controls are the tab stops; the region itself is one only when
-                // every upload is complete and no row has a control to scroll it.
-                tabIndex={items.every((item) => item.status === "done") ? 0 : -1}
+                // Mounted controls provide entry; otherwise the viewport must be reachable.
+                tabIndex={hasMountedControls ? -1 : 0}
               >
                 <ul
                   className="su-upload-list"
                   style={{ height: virtual.getTotalSize(), position: "relative" }}
                 >
-                  {virtual.getVirtualItems().map((virtualRow) => {
+                  {virtualRows.map((virtualRow) => {
                     const index = virtualRow.index;
                     const item = items[index];
                     if (!item) return null;
