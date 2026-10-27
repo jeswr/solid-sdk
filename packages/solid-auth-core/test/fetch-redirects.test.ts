@@ -19,7 +19,12 @@ const TOKEN = "synthetic-access-token";
 type Wrapper = "controller" | "proactive";
 
 /** Exercise real OAuth/DPoP code, stubbing only the OP's transport and popup. */
-async function controllerFetch(base: typeof fetch, origins: string[], patchGlobalFetch = false) {
+async function controllerFetch(
+  base: typeof fetch,
+  origins: string[],
+  patchGlobalFetch = false,
+  loggedIn = true,
+) {
   let nonce = "";
   const json = (value: unknown) =>
     new Response(JSON.stringify(value), { headers: { "Content-Type": "application/json" } });
@@ -74,12 +79,17 @@ async function controllerFetch(base: typeof fetch, origins: string[], patchGloba
       return base(request);
     },
   });
-  await auth.login(WEBID);
+  if (loggedIn) await auth.login(WEBID);
   return auth.authenticatedFetch;
 }
 
-async function wrappedFetch(kind: Wrapper, base: typeof fetch, origins = [POD, SECOND]) {
-  if (kind === "controller") return controllerFetch(base, origins);
+async function wrappedFetch(
+  kind: Wrapper,
+  base: typeof fetch,
+  origins = [POD, SECOND],
+  loggedIn = true,
+) {
+  if (kind === "controller") return controllerFetch(base, origins, false, loggedIn);
   const dpopKey = await DPoP.generateKeyPair("ES256");
   const client: oauth.Client = { client_id: CLIENT };
   const session: LiveSession = {
@@ -94,13 +104,33 @@ async function wrappedFetch(kind: Wrapper, base: typeof fetch, origins = [POD, S
     allowedOrigins: new Set(origins),
   };
   const state = {
-    provider: new WebIdDPoPTokenProvider(
-      () => session,
-      async () => true,
-    ),
+    provider: loggedIn
+      ? new WebIdDPoPTokenProvider(
+          () => session,
+          async () => true,
+        )
+      : null,
     allowedOrigins: session.allowedOrigins,
   };
   return ((input, init) => proactiveAuthenticatedFetch(state, base, input, init)) as typeof fetch;
+}
+
+/** Model browser credential-header filtering without adding a browser runner. */
+function stubRequestHeaderFiltering(shouldFilter: (request: Request) => boolean) {
+  const NativeRequest = Request;
+  vi.stubGlobal(
+    "Request",
+    class extends NativeRequest {
+      constructor(input: RequestInfo | URL, init?: RequestInit) {
+        super(input, init);
+        if (shouldFilter(this)) {
+          for (const header of ["Authorization", "DPoP", "Proxy-Authorization"]) {
+            this.headers.delete(header);
+          }
+        }
+      }
+    },
+  );
 }
 
 /** Verify the signature and token binding, as well as decoding the proof claims. */
@@ -133,6 +163,141 @@ async function proofOf(proof: string | null | undefined) {
 }
 
 for (const kind of ["controller", "proactive"] as const) {
+  describe(`${kind} browser Request modes`, () => {
+    for (const loggedIn of [false, true]) {
+      for (const init of [undefined, {}, { mode: "cors" as const }]) {
+        it(`derives a navigation Request ${loggedIn ? "logged in" : "logged out"} (${JSON.stringify(init)})`, async () => {
+          const sent: Request[] = [];
+          const wrapped = await wrappedFetch(
+            kind,
+            async (input) => {
+              sent.push(input as Request);
+              return new Response("done");
+            },
+            [POD],
+            loggedIn,
+          );
+          const request = new Request(`${POD}/start`, {
+            referrer: "https://app.example/page",
+            referrerPolicy: "no-referrer",
+          });
+          // Only the browser can originate a navigation Request (e.g. event.request).
+          // Expose that inherited mode while retaining a real platform Request brand.
+          Object.defineProperty(request, "mode", { value: "navigate" });
+          expect(() => new Request(request, { mode: request.mode })).toThrow(TypeError);
+          expect(await (await wrapped(request, init)).text()).toBe("done");
+          expect(sent).toHaveLength(1);
+          expect(sent[0].mode).toBe(init?.mode ?? "same-origin");
+          expect(sent[0].referrer).toBe(request.referrer);
+          expect(sent[0].referrerPolicy).toBe(request.referrerPolicy);
+          expect(sent[0].redirect).toBe(loggedIn ? "manual" : "follow");
+          expect(sent[0].headers.get("Authorization")).toBe(loggedIn ? `DPoP ${TOKEN}` : null);
+          if (loggedIn) {
+            expect(await proofOf(sent[0].headers.get("DPoP"))).toMatchObject({
+              htu: `${POD}/start`,
+              htm: "GET",
+            });
+          } else expect(sent[0].headers.has("DPoP")).toBe(false);
+        });
+      }
+
+      for (const asRequest of [false, true]) {
+        for (const callerCredentials of [false, true]) {
+          it(`keeps no-cors uncredentialed ${loggedIn ? "logged in" : "logged out"} (${asRequest ? "Request" : "init"}, ${callerCredentials ? "filtered caller credentials" : "no credentials"})`, async () => {
+            const sent: Request[] = [];
+            const result = new Response("public");
+            const redirectError = new TypeError("no-cors requires redirect follow");
+            const wrapped = await wrappedFetch(
+              kind,
+              async (input) => {
+                const request = input as Request;
+                sent.push(request);
+                expect(request.mode).toBe("no-cors");
+                expect(await request.text()).toBe("public body");
+                for (const header of ["Authorization", "DPoP", "Proxy-Authorization"]) {
+                  expect(request.headers.has(header)).toBe(false);
+                }
+                // Browsers reject no-cors with non-follow redirect policies at fetch.
+                if (request.redirect !== "follow") throw redirectError;
+                return result;
+              },
+              [POD],
+              loggedIn,
+            );
+            const upgrade = vi.spyOn(WebIdDPoPTokenProvider.prototype, "upgrade");
+            stubRequestHeaderFiltering((request) => request.mode === "no-cors");
+            try {
+              for (const redirect of ["follow", "error", "manual"] as const) {
+                const init: RequestInit = {
+                  method: "POST",
+                  mode: "no-cors",
+                  body: "public body",
+                  redirect,
+                  ...(callerCredentials
+                    ? {
+                        headers: {
+                          Authorization: "Bearer caller-token",
+                          DPoP: "caller-proof",
+                          "Proxy-Authorization": "Basic caller-proxy",
+                        },
+                      }
+                    : {}),
+                };
+                const pending = asRequest
+                  ? wrapped(new Request(`${POD}/start`, init))
+                  : wrapped(`${POD}/start`, init);
+                if (redirect === "follow") expect(await pending).toBe(result);
+                else await expect(pending).rejects.toBe(redirectError);
+                expect(sent.at(-1)?.redirect).toBe(redirect);
+              }
+              expect(sent).toHaveLength(3);
+              expect(upgrade).not.toHaveBeenCalled();
+            } finally {
+              vi.unstubAllGlobals();
+              upgrade.mockRestore();
+            }
+          });
+        }
+      }
+    }
+
+    for (const retry of [false, true]) {
+      for (const redirect of ["follow", "error", "manual"] as const) {
+        it(`keeps ${redirect} when constructed headers filter SDK credentials on the ${retry ? "retry" : "first upgrade"}`, async () => {
+          const sent: Request[] = [];
+          const result = new Response("unfollowed", {
+            status: 307,
+            headers: { Location: "/next" },
+          });
+          const wrapped = await wrappedFetch(kind, async (input) => {
+            sent.push(input as Request);
+            return retry && sent.length === 1 ? new Response(null, { status: 401 }) : result;
+          });
+          const upgrade = vi.spyOn(WebIdDPoPTokenProvider.prototype, "upgrade");
+          // Exercise read-back after construction independently of the no-cors bypass.
+          stubRequestHeaderFiltering(() => !retry || upgrade.mock.calls.length === 2);
+          try {
+            expect(await wrapped(`${POD}/start`, { redirect })).toBe(result);
+            expect(sent).toHaveLength(retry ? 2 : 1);
+            expect(upgrade).toHaveBeenCalledTimes(retry ? 2 : 1);
+            if (retry) {
+              expect(sent[0].redirect).toBe("manual");
+              expect(sent[0].headers.get("Authorization")).toBe(`DPoP ${TOKEN}`);
+            }
+            const filtered = sent.at(-1);
+            expect(filtered?.redirect).toBe(redirect);
+            expect(filtered?.headers.has("Authorization")).toBe(false);
+            expect(filtered?.headers.has("DPoP")).toBe(false);
+            expect(await result.text()).toBe("unfollowed");
+          } finally {
+            vi.unstubAllGlobals();
+            upgrade.mockRestore();
+          }
+        });
+      }
+    }
+  });
+
   describe(`${kind} credentialed redirects (injected transport)`, () => {
     for (const route of [
       "public passthrough",

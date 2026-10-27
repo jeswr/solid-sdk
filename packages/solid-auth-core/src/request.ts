@@ -21,7 +21,9 @@ export function deriveRequest(
     redirect: init?.redirect ?? input.redirect,
     referrer: init?.referrer ?? input.referrer,
     referrerPolicy: init?.referrerPolicy ?? input.referrerPolicy,
-    mode: init?.mode ?? input.mode,
+    // Non-empty init resets an inherited navigation mode per Fetch's constructor.
+    // Navigation requests can originate in service workers, but not in RequestInit.
+    mode: init?.mode ?? (input.mode === "navigate" ? "same-origin" : input.mode),
     credentials: init?.credentials ?? input.credentials,
     cache: init?.cache ?? input.cache,
     integrity: init?.integrity ?? input.integrity,

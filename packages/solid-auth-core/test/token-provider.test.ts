@@ -239,15 +239,24 @@ describe("WebIdDPoPTokenProvider — owned request target (sst-m040)", () => {
     });
   }
 
-  it("preserves a no-cors POST without losing its body", async () => {
-    const request = new Request(POD, { method: "POST", mode: "no-cors", body: "no-cors body" });
-    const upgraded = await setup.provider.upgrade(request);
-    const sent = new Request(upgraded);
-    expect(sent.url).toBe(POD);
-    expect(sent.method).toBe("POST");
-    expect(sent.mode).toBe("no-cors");
-    expect(await sent.text()).toBe("no-cors body");
-  });
+  for (const force of [false, true]) {
+    it(`keeps a no-cors POST uncredentialed without refreshing, forceRefresh=${force}`, async () => {
+      setup.session.expiresAt = 0;
+      const request = new Request(POD, { method: "POST", mode: "no-cors", body: "no-cors body" });
+      expect(await setup.provider.matches(request)).toBe(false);
+      const upgraded = await setup.provider.upgrade(request, force);
+      expect(upgraded).toBe(request);
+      const sent = new Request(upgraded);
+      expect(sent.url).toBe(POD);
+      expect(sent.method).toBe("POST");
+      expect(sent.mode).toBe("no-cors");
+      expect(sent.redirect).toBe("follow");
+      expect(sent.headers.has("Authorization")).toBe(false);
+      expect(sent.headers.has("DPoP")).toBe(false);
+      expect(await sent.text()).toBe("no-cors body");
+      expect(setup.refresh).not.toHaveBeenCalled();
+    });
+  }
 
   it("preserves no-cors POST and abort propagation through the proactive wrapper", async () => {
     const abort = new AbortController();
@@ -260,7 +269,9 @@ describe("WebIdDPoPTokenProvider — owned request target (sst-m040)", () => {
         expect(delivered.method).toBe("POST");
         expect(delivered.mode).toBe("no-cors");
         expect(await delivered.text()).toBe("no-cors body");
-        expect(await proofOf(delivered, setup.session)).toMatchObject({ htu: POD, htm: "POST" });
+        expect(delivered.redirect).toBe("follow");
+        expect(delivered.headers.has("Authorization")).toBe(false);
+        expect(delivered.headers.has("DPoP")).toBe(false);
         return new Response("ok");
       },
       POD,

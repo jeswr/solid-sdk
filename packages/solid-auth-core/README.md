@@ -55,13 +55,18 @@ origin. Redirects outside the allowlist are returned unchanged without contactin
 destination. Credential-free passthrough and fallback requests retain the caller's
 original redirect policy (`follow`, `error`, or `manual`), including when an upgrade
 is superseded before credentials attach or a retry loses its live session. Manual
-mode is derived only when credentials are attached; fallback sources keep the caller's
-policy. Credential-free redirects are handled by the transport under that policy.
+mode is derived only when credential headers survive Request construction; fallback
+sources keep the caller's policy. Credential-free redirects are handled by the transport
+under that policy. Neither wrapper attaches SDK tokens to `mode: "no-cors"` requests,
+and direct `upgrade()` calls leave them unchanged. Browser-filtered caller credential
+headers do not force manual redirects; these requests retain the caller's policy.
 
 Derived requests preserve the caller's referrer, referrer policy, mode, credentials,
 cache, integrity, keepalive, abort signal, and priority where supported, on passthrough,
 fallback, credential attachment, and every followed hop. Only the URL, redirect policy,
-credential headers, and method/body/content headers change as described here.
+credential headers, and method/body/content headers change as described here. Inherited
+`mode: "navigate"` becomes `"same-origin"` when deriving a Request, following Fetch's
+constructor rule for a non-empty init (including service-worker navigation requests).
 
 Passthrough and fallback requests carrying caller-owned `Authorization`, `DPoP`, or
 `Proxy-Authorization` headers also use manual mode, whether supplied through `init.headers`
@@ -86,8 +91,8 @@ Following more than 20 hops throws a TypeError.
 
 Browsers hide manual redirect details behind an `opaqueredirect` response. This response
 is returned as-is, so credentialed redirects in browsers surface to the caller instead
-of being followed. Direct `WebIdDPoPTokenProvider.upgrade()` calls also return Requests
-with manual redirect mode; the fetch wrappers own the hop loop.
+of being followed. Direct `WebIdDPoPTokenProvider.upgrade()` calls that attach credentials
+also return Requests with manual redirect mode; the fetch wrappers own the hop loop.
 
 ## Key API
 

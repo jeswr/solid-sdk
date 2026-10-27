@@ -321,6 +321,8 @@ export interface ProactiveFetchConfig {
 function shouldAttachToken(state: ProactiveFetchState, request: Request): boolean {
   const href = requestHref(request);
   if (href === undefined || !isOriginAllowed(state.allowedOrigins, href)) return false;
+  // Browser no-cors header guards cannot carry the SDK's Authorization/DPoP.
+  if (request.mode === "no-cors") return false;
   // OPTIONAL OAuth bypass (#123 PM parity): when issuer origins are supplied, never wrap the
   // provider's OWN discovery/token/refresh calls (would clobber oauth4webapi's headers / recurse).
   if (state.issuerOrigins && isProviderOAuthRequest(request, state.issuerOrigins)) return false;

@@ -3155,7 +3155,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
 
   /** True only for an allowed-origin request while a session is live. */
   async matches(request: Request): Promise<boolean> {
-    return this.#allowed(this.#getSession(), requestHref(request));
+    return this.#allowed(this.#getSession(), requestHref(request)) && request.mode !== "no-cors";
   }
 
   /**
@@ -3210,7 +3210,9 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     const href = requestHref(request);
     // Defense in depth: re-check the origin here too, so even a direct/forced
     // `upgrade` (bypassing `matches`) never attaches the token cross-origin.
-    if (!this.#allowed(session, href) || !session) return request;
+    // Browsers filter Authorization/DPoP in no-cors mode. Do not try to attach or
+    // refresh a token that cannot be sent, including on direct upgrade() calls.
+    if (!this.#allowed(session, href) || !session || request.mode === "no-cors") return request;
     // Refresh the access token if it is known-expired, or (on a 401 retry) if the
     // server rejected it. Refresh is single-flight + fail-closed.
     if (shouldRefresh(session.expiresAt, forceRefresh)) {
@@ -3245,7 +3247,12 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       ),
     );
     headers.set("Authorization", `DPoP ${session.accessToken}`);
-    const upgraded = deriveRequest(request, { headers, redirect: "manual" });
+    let upgraded = deriveRequest(request, { headers });
+    // Header guards can discard attempted credentials during construction. Only
+    // surviving headers require manual redirects; otherwise keep caller policy.
+    if (hasCredentialHeaders(upgraded) && upgraded.redirect !== "manual") {
+      upgraded = deriveRequest(upgraded, { redirect: "manual" });
+    }
     // Check the outgoing platform destination synchronously, immediately before return.
     if (requestHref(upgraded) !== href) {
       upgraded.headers.delete("Authorization");
