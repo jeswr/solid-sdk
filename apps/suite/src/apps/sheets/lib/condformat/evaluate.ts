@@ -111,7 +111,7 @@ function matcher(
   return (value) => (matches(value) ? rule.style : undefined);
 }
 
-function compensatedSum(numbers: readonly number[], divisor: number): number {
+function compensatedAverage(numbers: readonly number[], divisor: number): number {
   let sum = 0;
   let correction = 0;
   for (const value of numbers) {
@@ -120,7 +120,8 @@ function compensatedSum(numbers: readonly number[], divisor: number): number {
     correction += Math.abs(sum) >= Math.abs(scaled) ? sum - next + scaled : scaled - next + sum;
     sum = next;
   }
-  return sum + correction;
+  // Divide separately so rounding the total cannot discard the compensation.
+  return sum / numbers.length + correction / numbers.length;
 }
 
 /** Apply every rule to this entire rectangular range, without mutating either input. */
@@ -151,14 +152,11 @@ export function evaluateConditionalFormats(
     }
   }
   numbers.sort((a, b) => a - b);
-  // Keep ordinary sums exact where possible; normalize only after overflow.
-  const sum = compensatedSum(numbers, 1);
-  const average =
-    numbers.length === 0
-      ? 0
-      : Number.isFinite(sum)
-        ? sum / numbers.length
-        : (compensatedSum(numbers, scale) / numbers.length) * scale;
+  // Preserve compensation through division; normalize only after overflow.
+  const directAverage = numbers.length === 0 ? 0 : compensatedAverage(numbers, 1);
+  const average = Number.isFinite(directAverage)
+    ? directAverage
+    : compensatedAverage(numbers, scale) * scale;
   const matchers = validated.map((rule) => matcher(rule, numbers, counts, average));
   return values.map((row) =>
     row.map((value) => {

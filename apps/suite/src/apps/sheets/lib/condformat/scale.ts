@@ -3,10 +3,15 @@
 import type { ColourAnchor } from "./model";
 import { invalidRule } from "./validation";
 
-/** Weighted interpolation avoids overflowing (high - low) for finite opposite extremes. */
-export function interpolate(low: number, high: number, fraction: number): number {
-  if (low === high) return low;
-  const value = low * (1 - fraction) + high * fraction;
+/** Multiply before dividing for consistent anchors, falling back on overflow. */
+export function interpolate(low: number, high: number, numerator: number, denominator = 1): number {
+  if (low === high || numerator === 0) return low;
+  if (numerator === denominator) return high;
+  const product = (high - low) * numerator;
+  const fraction = numerator / denominator;
+  const value = Number.isFinite(product)
+    ? low + product / denominator
+    : low * (1 - fraction) + high * fraction;
   return Math.max(Math.min(low, high), Math.min(Math.max(low, high), value));
 }
 
@@ -21,7 +26,7 @@ function position(anchor: ColourAnchor, numbers: readonly number[]): number {
     case "number":
       return anchor.value;
     case "percent":
-      return interpolate(min, max, anchor.value / 100);
+      return interpolate(min, max, anchor.value, 100);
     case "percentile": {
       const rank = ((numbers.length - 1) * anchor.value) / 100;
       const lower = Math.floor(rank);

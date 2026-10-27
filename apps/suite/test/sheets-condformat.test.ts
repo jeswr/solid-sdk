@@ -312,6 +312,26 @@ describe("numeric population rules", () => {
     }
   });
 
+  it.each([
+    0.1, -0.1, 0.2, -0.2, 0.7, -0.7,
+  ])("preserves constant decimal averages %s and allows later rules", (value) => {
+    for (const length of [3, 6, 7, 10]) {
+      const values = Array<number>(length).fill(value);
+      for (const kind of ["aboveAverage", "belowAverage"] as const) {
+        expect(matches(values, { kind, style: bold })).toEqual(values.map(() => false));
+        expect(
+          evaluateConditionalFormats(
+            [values],
+            [
+              { kind, style: bold, stopIfTrue: true },
+              { kind: "notBlank", style: { italic: true } },
+            ],
+          ),
+        ).toEqual([values.map(() => ({ italic: true }))]);
+      }
+    }
+  });
+
   it("does not match numeric population rules on a range without numbers", () => {
     for (const kind of ["top", "bottom"] as const) {
       expect(matches([null, "", true, error], { kind, count: 1, style: bold })).toEqual([
@@ -333,6 +353,32 @@ describe("numeric population rules", () => {
 });
 
 describe("colour scales", () => {
+  it.each([
+    ["percent", "percentile"],
+    ["percentile", "percent"],
+  ] as const)("accepts equal %s and %s anchors", (first, second) => {
+    expect(
+      evaluateConditionalFormats(
+        [[0, 1, 2, 3]],
+        [
+          scale(
+            { kind: first, value: 20, color: black },
+            { kind: second, value: 20, color: white },
+          ),
+        ],
+      ),
+    ).toEqual([[{ fill: black }, { fill: white }, { fill: white }, { fill: white }]]);
+  });
+
+  it("rounds the exact midpoint below a percent anchor to the nearest RGB channel", () => {
+    expect(
+      evaluateConditionalFormats(
+        [[0, 14, 100]],
+        [scale(min, { kind: "percent", value: 28, color: white })],
+      ),
+    ).toEqual([[{ fill: black }, { fill: hex("808080") }, { fill: white }]]);
+  });
+
   it.each([
     [1, 2, 3],
     [1.2, 1.2000000000000002, 1.2000000000000004],
@@ -518,6 +564,32 @@ describe("colour scales", () => {
         [scale(min, max)],
       )[0]?.[1],
     ).toEqual({ fill: hex("808080") });
+  });
+
+  it("handles overflowing percent products and spans while retaining exact endpoints", () => {
+    const largest = Number.MAX_VALUE;
+    for (const values of [
+      [0, largest / 2, largest],
+      [-largest, 0, largest],
+    ]) {
+      expect(
+        evaluateConditionalFormats(
+          [values],
+          [scale(min, { kind: "percent", value: 50, color: white })],
+        ),
+      ).toEqual([[{ fill: black }, { fill: white }, { fill: white }]]);
+    }
+    expect(
+      evaluateConditionalFormats(
+        [[-1e16, 1]],
+        [
+          scale(
+            { kind: "percent", value: 0, color: black },
+            { kind: "percent", value: 100, color: white },
+          ),
+        ],
+      ),
+    ).toEqual([[{ fill: black }, { fill: white }]]);
   });
 
   it("produces no fill on a range with no numeric cells", () => {
