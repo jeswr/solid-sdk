@@ -93,3 +93,72 @@ The app coverage summary is preserved at `/tmp/sst-6jil-app-coverage-summary.jso
   MedicationStatement status `unknown`, display-only required subjects when no
   patient ID exists, lexical FHIR-kind ordering and strict ISO date precision.
   There are no blocking specification questions.
+
+## Fix round 1 — 2026-10-27 UTC
+
+Review base: `f7fa15482b9b588e49c7f591123e09d494e921eb`.
+All three review findings are addressed on `lane/sst-6jil`:
+
+- `ae56c1fa` — `fix(health): require absolute patient references`.
+  Conservative choice: replace `patientId` with `patientReference`, accepting
+  canonical absolute HTTP(S) REST URLs ending in `/Patient/<logical-id>`.
+  Preserve the supplied URL on each subject; reject bare IDs, relative references,
+  unsupported URL forms, and the former option. No Patient entry is fabricated.
+  The self-check uses the same reference validation; README and QUESTIONS agree.
+- `d311a30e` — `fix(health): compare period ends at supplied precision`.
+  Export and self-check compare calendar days when either boundary is date-only,
+  and include all matching times at an end's second/fractional-second precision.
+  Tests cover the reported noon-to-date-only period, offset timestamps,
+  fractional precision, and genuinely reversed periods. Input dates are preserved.
+- `adb59c9d` — `fix(health): bound FHIR primitive text length`.
+  Export `MAX_FHIR_STRING_LENGTH` (1,048,576 Unicode characters); enforce it for
+  text/markdown primitives and reference strings in export and self-check.
+  The source budget includes the generated `Source: ` prefix. Tests exercise
+  exact-bound acceptance and bound+1 rejection, including supplementary Unicode
+  characters and independent mutations of emitted text.
+- Final documentation commit — `docs(health): record FHIR fix validation`.
+
+### Fix-round validation
+
+Commands used the same Node 24 / pnpm 10.4.1 environment prefix as above.
+No dependencies were added, lifecycle scripts stayed disabled, and no Git
+fetch, merge, push, branch switch, PR, or tracker mutation was performed.
+
+1. `pnpm exec turbo run build --filter='@jeswr/app-suite^...' --concurrency=4`
+   — PASS, seven dependency builds. Initial direct app build/typecheck attempts
+   lacked uncommitted workspace `dist` outputs; this preparation resolved them.
+2. `pnpm --filter @jeswr/app-suite exec vitest run test/health-fhir.test.ts test/health-fhir-check.test.ts --coverage --coverage.include='src/apps/health/lib/fhir/**/*.ts'`
+   — PASS, 281 tests. Every FHIR source file has 100% statements, branches,
+   functions and lines, confirmed again in the complete app coverage report.
+3. The package gate — PASS, exit 0:
+
+   ```sh
+   pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test
+   ```
+
+   Production build and strict typecheck passed. All 7,788 tests in 154 files
+   passed with 100% per-file coverage. Lint reported 54 existing warnings,
+   no errors, and no FHIR diagnostics.
+4. `pnpm run lint:root` — PASS, exit 0, including all repository guards.
+5. `TURBO_SCM_BASE=f7fa15482b9b588e49c7f591123e09d494e921eb pnpm run gate`
+   — FAIL, exit 1: 877 root tests passed; two tests at
+   `test/agent-layers.test.mjs:509` exceeded the unchanged 5,000 ms timeout
+   (`require(TARGET)` and `(require as Loader)(TARGET)` variants of
+   `rejects disallowed path characters globally`). Turbo reported nine successful
+   tasks out of 11. The app's fresh production compilation passed in this run.
+6. `pnpm run gate:full` — FAIL, exit 1: 876 root tests passed; three variants of
+   the same unchanged test group timed out (`await import(TARGET)`,
+   `require(TARGET)`, and `type Value = import(TARGET).Value`). Turbo stopped with
+   62 successful tasks out of 232. No other failure was reported before it stopped.
+   These root timeout failures also occurred in the original lane validation;
+   no unrelated tests or timeout settings were changed for this fix round.
+7. `git diff --check` — PASS before the final documentation commit.
+
+Logs are local artifacts at `/tmp/sst-6jil-fix1-{dependency-build,fhir,app-gate,root-lint,affected-gate,full-gate}.log`.
+The app coverage summary is at `/tmp/sst-6jil-fix1-app-coverage-summary.json`.
+
+The requested fixes are complete. Remaining validation limitations are the
+unrelated root gate timeouts and the unavailable `roborev` executable; no
+per-commit roborev verdict could be obtained. No dependencies, UI, manifests or
+lockfiles changed. No screenshots or `check:packages` run apply. There are no
+blocking questions, and this lane has not been merged or pushed.
