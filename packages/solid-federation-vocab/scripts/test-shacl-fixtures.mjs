@@ -5,6 +5,8 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
+import { DataFactory, Store, Writer } from "n3";
 import { validateSectorFixtures } from "./shacl-fixtures.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -20,6 +22,15 @@ function copySector(source, target = source) {
     recursive: true,
   });
 }
+function iriProperties(store, subject, properties) {
+  const resource = new TermWrapper(subject, store, DataFactory);
+  for (const [predicate, value] of Object.entries(properties)) {
+    SetFrom.subjectPredicate(resource, predicate, NamedNodeAs.string, NamedNodeFrom.string).add(
+      value,
+    );
+  }
+}
+const writeRdf = (file, store) => writeFileSync(file, new Writer().quadsToString([...store]));
 
 try {
   copySector("core");
@@ -61,6 +72,62 @@ try {
   console.log(
     "✓ Invalid positives, imported Core failures and missing NodeShape negatives are rejected.",
   );
+
+  // A sector can inherit all its enforceable properties from an imported profile.
+  const SH = "http://www.w3.org/ns/shacl#";
+  const OWL = "http://www.w3.org/2002/07/owl#";
+  const TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+  const CORE = "https://jeswr.org/ns/core#";
+  const sectorDir = join(scratch, "sectors", "inherited");
+  mkdirSync(sectorDir);
+  const ontology = new Store();
+  iriProperties(ontology, "https://example.org/inherited", {
+    [TYPE]: `${OWL}Ontology`,
+    [`${OWL}imports`]: "https://jeswr.org/ns/core",
+  });
+  writeRdf(join(sectorDir, "inherited.ttl"), ontology);
+  const inheritedShapes = new Store();
+  iriProperties(inheritedShapes, "https://example.org/InheritedAccountShape", {
+    [TYPE]: `${SH}NodeShape`,
+    [`${SH}targetClass`]: "https://example.org/InheritedAccount",
+  });
+  writeRdf(join(sectorDir, "inherited.shacl.ttl"), inheritedShapes);
+  assert.equal((await check()).sectorCount, 2);
+  iriProperties(inheritedShapes, "https://example.org/InheritedAccountShape", {
+    [`${SH}node`]: `${CORE}AccountShape`,
+  });
+  writeRdf(join(sectorDir, "inherited.shacl.ttl"), inheritedShapes);
+  await assert.rejects(check, /inherited: constrained sector has no fixtures/);
+
+  const fixtureDir = join(scratch, "test", "fixtures", "inherited");
+  mkdirSync(fixtureDir);
+  const account = "https://example.org/account";
+  const data = new Store();
+  iriProperties(data, account, {
+    [TYPE]: "https://example.org/InheritedAccount",
+    [`${CORE}hasAccountHolder`]: "https://example.org/holder",
+    [`${CORE}hasAccountProvider`]: "https://example.org/provider",
+  });
+  iriProperties(data, "https://example.org/holder", { [TYPE]: `${CORE}AccountHolder` });
+  iriProperties(data, "https://example.org/provider", { [TYPE]: `${CORE}AccountProvider` });
+  writeRdf(join(fixtureDir, "valid.ttl"), data);
+  await assert.rejects(check, /InheritedAccountShape has no negative fixture coverage/);
+  SetFrom.subjectPredicate(
+    new TermWrapper(account, data, DataFactory),
+    `${CORE}hasAccountHolder`,
+    NamedNodeAs.string,
+    NamedNodeFrom.string,
+  ).delete("https://example.org/holder");
+  const inheritedNegative = join(fixtureDir, "account.invalid.ttl");
+  writeRdf(inheritedNegative, data);
+  writeFileSync(
+    inheritedNegative,
+    `# expect: ${CORE}hasAccountHolder\n${readFileSync(inheritedNegative, "utf8")}`,
+  );
+  assert.equal((await check()).sectorCount, 3);
+  rmSync(sectorDir, { recursive: true });
+  rmSync(fixtureDir, { recursive: true });
+  console.log("✓ Inherited-only constraints require fixtures and enforce NodeShape coverage.");
 
   // New nested profiles must be found without changing any sector inventory.
   copySector("drawing", "nested/drawing");

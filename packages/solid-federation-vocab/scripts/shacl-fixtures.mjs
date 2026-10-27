@@ -102,8 +102,6 @@ export async function validateSectorFixtures(root, log = console.log) {
   let fixtureCount = 0;
   let sectorCount = 0;
   for (const profile of profiles) {
-    if (!profile.shapes.countQuads(null, `${SH}property`, null, null)) continue;
-    sectorCount += 1;
     const shapes = new Store();
     const included = new Set();
     function include(current) {
@@ -129,6 +127,8 @@ export async function validateSectorFixtures(root, log = console.log) {
         invalid: false,
       }))
       .filter(({ properties }) => properties.length);
+    if (!covered.length) continue;
+    sectorCount += 1;
     const fixtureDir = join(root, "test", "fixtures", profile.sector);
     const files = existsSync(fixtureDir)
       ? readdirSync(fixtureDir)
