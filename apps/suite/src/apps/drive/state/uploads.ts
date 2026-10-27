@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex
 "use client";
 /**
  * The upload queue behind the upload dock (04-drive §2.6): up to three files
@@ -8,7 +9,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { DriveClient } from "../lib/client/client";
-import { DriveError } from "../lib/client/client";
+import { DriveError, parentOf } from "../lib/client/client";
 import { type ConflictChoice, uploadFile } from "../lib/operations/operations";
 import { normalizeUploadName } from "../lib/upload";
 import type { DroppedFile } from "./dropped-files";
@@ -52,6 +53,7 @@ export function targetFolder(folder: string, source: File | DroppedFile): string
 interface Job {
   task: UploadTask;
   file: File;
+  root: string;
   policy: "fail" | ConflictChoice;
 }
 
@@ -111,7 +113,17 @@ export function useUploadQueue(
         )
         .finally(() => {
           running.current -= 1;
-          invalidate(job.task.folder);
+          // The file PUT can create every container between the drop target and
+          // its destination. Refresh the whole path, including a flat upload once.
+          const folders = new Set([job.root]);
+          for (
+            let folder: string | undefined = job.task.folder;
+            folder && folder !== job.root;
+            folder = parentOf(folder)
+          ) {
+            folders.add(folder);
+          }
+          for (const folder of folders) invalidate(folder);
           pump();
         });
     }
@@ -131,6 +143,7 @@ export function useUploadQueue(
         }
         jobs.current.set(id, {
           file,
+          root: folder,
           policy: "fail",
           task: target
             ? { id, name: file.name, folder: target, size: file.size, status: "queued" }
