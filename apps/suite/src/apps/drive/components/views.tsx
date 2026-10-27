@@ -6,7 +6,7 @@
 import { Alert, AlertDescription, Button, FileTypeIcon, IconButton } from "@jeswr/suite-ui";
 import { Clock, FolderOpen, HardDrive, Search, Star, Trash2, Users } from "lucide-react";
 import { notFound, useParams, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { decodeRef, InvalidRefError } from "@/lib/refs";
 import {
   type DriveClient,
@@ -19,7 +19,7 @@ import { listTrash, recentFiles, searchByName, trashFolderOf } from "../lib/oper
 import type { TrashEntry } from "../lib/operations/trash-index";
 import { formatSize } from "../lib/view/view";
 import { useDrive, useFolder } from "../state/drive-context";
-import { useDriveActions, useDriveUi } from "../state/ui";
+import { focusDriveListing, useDriveActions, useDriveUi } from "../state/ui";
 import { Breadcrumbs } from "./breadcrumbs";
 import { type BrowserItem, FileBrowser } from "./file-browser";
 import { trashMenu } from "./item-menu";
@@ -384,6 +384,35 @@ export function TrashView() {
   );
   const chosen = (entries ?? []).filter((entry) => selected.has(entry.url));
   const { restore } = useDriveActions();
+  const listing = useRef<HTMLDivElement>(null);
+  const [restoreFocus, setRestoreFocus] = useState<{
+    removed: ReadonlySet<string>;
+    candidates: string[];
+  }>();
+  useLayoutEffect(() => {
+    // The change bus can finish re-listing before or after restore resolves.
+    // Wait until the successful entries have actually left the rendered list.
+    if (!restoreFocus || !entries || entries.some((entry) => restoreFocus.removed.has(entry.url)))
+      return;
+    const remaining = new Set(entries.map((entry) => entry.url));
+    const next = restoreFocus.candidates.find((url) => remaining.has(url));
+    focusDriveListing(next ?? entries[0]?.url, undefined, listing.current);
+    setRestoreFocus(undefined);
+  }, [entries, restoreFocus]);
+  const restoreEntries = async (targets: readonly TrashEntry[]) => {
+    const result = await restore(targets);
+    const removed = new Set(result?.done.map(({ entry }) => entry.url));
+    if (removed.size === 0) return;
+    setSelected((current) => new Set([...current].filter((url) => !removed.has(url))));
+    const urls = (entries ?? []).map((entry) => entry.url);
+    const index = urls.findIndex((url) => removed.has(url));
+    setRestoreFocus({
+      removed,
+      candidates: [...urls.slice(index), ...urls.slice(0, index).reverse()].filter(
+        (url) => !removed.has(url),
+      ),
+    });
+  };
   return (
     <div className="drv-page">
       <div className="drv-heading">
@@ -397,11 +426,7 @@ export function TrashView() {
         {chosen.length > 0 ? (
           <>
             <span className="drv-selection-count">{chosen.length} selected</span>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void restore(chosen).then(() => setSelected(new Set()))}
-            >
+            <Button size="sm" variant="outline" onClick={() => void restoreEntries(chosen)}>
               Restore
             </Button>
             <Button
@@ -424,7 +449,7 @@ export function TrashView() {
           </Button>
         </div>
       </div>
-      <div className="drv-content">
+      <div className="drv-content" ref={listing} data-drive-listing="" tabIndex={-1}>
         {current?.failed ? (
           <div role="alert">
             <p>Couldn't refresh Trash. Your recovery items are kept. Try again.</p>
@@ -481,11 +506,16 @@ export function TrashView() {
             <tbody>
               {entries.map((entry) => {
                 const menu = trashMenu(
-                  () => void restore([entry]),
+                  () => void restoreEntries([entry]),
                   () => ui.openDialog({ kind: "delete-forever", entries: [entry] }),
                 );
                 return (
-                  <tr key={entry.url} data-selected={selected.has(entry.url) || undefined}>
+                  <tr
+                    key={entry.url}
+                    data-url={entry.url}
+                    tabIndex={-1}
+                    data-selected={selected.has(entry.url) || undefined}
+                  >
                     <td className="drv-cell-check">
                       <input
                         type="checkbox"

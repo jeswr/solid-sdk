@@ -70,6 +70,19 @@ interface DriveUiValue {
 
 const DriveUiContext = createContext<DriveUiValue | undefined>(undefined);
 
+/** Return focus to an item or its listing when a mutation removes a control. */
+export function focusDriveListing(
+  url?: string,
+  preferred?: HTMLElement | null,
+  listing = document.querySelector<HTMLElement>("[data-drive-listing]"),
+) {
+  const row = url ? listing?.querySelector<HTMLElement>(`[data-url="${CSS.escape(url)}"]`) : null;
+  const target = preferred?.isConnected ? preferred : (row ?? listing);
+  target?.focus();
+  // A connected element may have become disabled or hidden during the mutation.
+  if (document.activeElement !== target) (row ?? listing)?.focus();
+}
+
 export function DriveUiProvider({ children }: { children: ReactNode }) {
   const [dialog, setDialog] = useState<DriveUiValue["dialog"]>();
   const [preview, setPreview] = useState<PreviewState>();
@@ -108,14 +121,7 @@ export function DriveUiProvider({ children }: { children: ReactNode }) {
     // Name -> extension confirmation replaces one dialog with another.
     if (dialogOpen.current !== undefined) return;
     const saved = dialogFocus.current;
-    const row = saved?.url
-      ? document.querySelector<HTMLElement>(`[data-url="${CSS.escape(saved.url)}"]`)
-      : null;
-    const listing = document.querySelector<HTMLElement>("[data-drive-listing]");
-    const target = saved?.element?.isConnected ? saved.element : (row ?? listing);
-    target?.focus();
-    // A connected element may have become disabled or hidden during the mutation.
-    if (document.activeElement !== target) (row ?? listing)?.focus();
+    focusDriveListing(saved?.url, saved?.element);
   }, []);
   const value = useMemo<DriveUiValue>(
     () => ({
@@ -439,6 +445,7 @@ export function useDriveActions() {
           first.renamed ? `Restored as ${nameOf(first.url)}` : `Restored ${first.entry.name}`,
         );
       } else if (result.done.length > 1) toast.success(`Restored ${result.done.length} items`);
+      return result;
     },
     [client, driveRoot, invalidate],
   );
