@@ -39,9 +39,9 @@
   ],
   "fedapp:sector": "https://jeswr.org/ns/sectors/finance#sector",
   "fedapp:access": [
-    "http://www.w3.org/ns/auth/acl#Read",
-    "http://www.w3.org/ns/auth/acl#Write",
-    "http://www.w3.org/ns/auth/acl#Append"
+    "acl:Read",
+    "acl:Write",
+    "acl:Append"
   ],
   "fedapp:consumes": [
     "https://jeswr.org/ns/sectors/finance#Transaction",

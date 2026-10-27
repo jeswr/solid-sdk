@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { createMemoryCache } from "./cache.js";
 import { CapabilitiesError } from "./errors.js";
@@ -13,7 +13,10 @@ import { PIM, SOLID, SSD } from "./vocab.js";
 
 const DEFAULT_TTL_MS = 3_600_000;
 const LWS_STORAGE = "https://www.w3.org/ns/lws#storage";
-const defaultCache = createMemoryCache();
+// Increment whenever parser changes invalidate previously derived feature evidence.
+const PARSED_CACHE_VERSION = 2;
+/** Shared module default so `capabilities()` and the resolver see the same records. */
+export const defaultCache = createMemoryCache();
 
 function linksFor(url: string, headers: Headers) {
   return parseLinkHeaders(headers.get("link"), url).filter((link) => link.context === url);
@@ -74,11 +77,12 @@ async function fetchDescription(
 ): Promise<StorageDescription> {
   const destination = httpUrl(descriptionUrl);
   const foreign = destination.origin !== httpUrl(resourceUrl).origin;
-  if (base.protocol === "lws" && foreign) {
+  // SSD-CLI-18 applies to both protocols, including direct cached refreshes.
+  if (foreign) {
     throw new CapabilitiesError(
       "root-mismatch",
       descriptionUrl,
-      "LWS description has a foreign origin",
+      "Storage description has a foreign origin",
     );
   }
   const headers = new Headers({
@@ -91,7 +95,6 @@ async function fetchDescription(
   const response = await request(destination.href, options, {
     method: "GET",
     headers,
-    ...(foreign ? { credentials: "omit" as const } : {}),
   });
   if (response.status === 304 && refreshing) {
     await discardBody(response);
@@ -123,10 +126,12 @@ async function fetchDescription(
       });
       parsed = {
         ...base,
-        ...parseSolidDescription(dataset, base.root, foreign),
-        ...(foreign
-          ? { evidence: [...new Set([...(base.evidence ?? []), "cross-origin-description"])] }
-          : {}),
+        // SSD-CLI-16: an assumed origin root cannot authorize root-scoped entries.
+        ...parseSolidDescription(
+          dataset,
+          base.root,
+          base.evidence?.includes("assumed-origin-root") ?? false,
+        ),
       };
     }
   } catch (error) {
@@ -161,11 +166,20 @@ export async function resolveStorageDescription(
   let cached = storageId === undefined ? undefined : await cache.get(storageId);
   let invalidationId = storageId;
   try {
+    if (
+      cached &&
+      (cached.version !== PARSED_CACHE_VERSION ||
+        cached.description.evidence?.includes("assumed-origin-root"))
+    ) {
+      // Assumed roots retain their provenance in the cached description, but cannot
+      // establish storage containment for a prefix hit, even at the current version.
+      await cache.delete(cached.description.id);
+      cached = undefined;
+    }
     if (cached) {
       if (
         httpUrl(cached.description.root).origin !== httpUrl(resource).origin ||
-        (cached.description.protocol === "lws" &&
-          cached.description.descriptionUrl !== null &&
+        (cached.description.descriptionUrl !== null &&
           httpUrl(cached.description.descriptionUrl).origin !== httpUrl(resource).origin)
       ) {
         throw new CapabilitiesError(
@@ -196,6 +210,7 @@ export async function resolveStorageDescription(
           true,
         );
         await cache.set(description.id, {
+          version: PARSED_CACHE_VERSION,
           description,
           // A 304 keeps the original entry arrays; a replacement body must be probed anew.
           ...(description.services === cached.description.services && cached.probe
@@ -267,8 +282,10 @@ export async function resolveStorageDescription(
         },
       ];
     }
-    await cache.set(description.id, { description });
-    await cache.rememberPrefix(description.root, description.id);
+    await cache.set(description.id, { version: PARSED_CACHE_VERSION, description });
+    if (!description.evidence?.includes("assumed-origin-root")) {
+      await cache.rememberPrefix(description.root, description.id);
+    }
     return description;
   } catch (error) {
     if (

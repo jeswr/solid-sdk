@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 import { IDBFactory, IDBObjectStore } from "fake-indexeddb";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { createIndexedDbCache, createMemoryCache } from "./cache.js";
@@ -13,6 +13,7 @@ afterEach(() => {
 
 const description = parseLwsDescription(sparqLwsCid, sparqLwsCid.id, "https://lws.example/data");
 const record = {
+  version: 1,
   description,
   probe: { url: description.root, observedAt: 42, acceptPatch: ["text/n3"], evidence: [] },
 };
@@ -78,6 +79,38 @@ describe.each([
     expect(await cache.lookupPrefix("https://pod.example/other/file")).toBe("other");
     await cache.rememberPrefix("https://pod.example/new/?x#y", "storage");
     expect(await cache.lookupPrefix("https://pod.example/new/file")).toBe("storage");
+  });
+});
+
+describe.each([
+  ["memory", () => createMemoryCache()],
+  [
+    "IndexedDB",
+    () => {
+      vi.stubGlobal("indexedDB", new IDBFactory());
+      return createIndexedDbCache();
+    },
+  ],
+] as const)("%s attachProbe", (_name, makeCache) => {
+  const probe = record.probe;
+  test("attaches only to the same, probe-less generation", async () => {
+    const cache = makeCache();
+    // Deleted (or never stored): nothing is resurrected.
+    expect(await cache.attachProbe?.(description.id, description, probe)).toBe(false);
+    expect(await cache.get(description.id)).toBeUndefined();
+    // Same generation without a probe: attached.
+    await cache.set(description.id, { version: 1, description });
+    expect(await cache.attachProbe?.(description.id, description, probe)).toBe(true);
+    expect(await cache.get(description.id)).toEqual(record);
+    // Already probed: left alone.
+    const second = { ...probe, observedAt: 99 };
+    expect(await cache.attachProbe?.(description.id, description, second)).toBe(false);
+    expect(await cache.get(description.id)).toEqual(record);
+    // Replaced by a newer generation: left alone.
+    const newer = { description: { ...description, fetchedAt: description.fetchedAt + 1 } };
+    await cache.set(description.id, newer);
+    expect(await cache.attachProbe?.(description.id, description, probe)).toBe(false);
+    expect(await cache.get(description.id)).toEqual(newer);
   });
 });
 

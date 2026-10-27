@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # @jeswr/solid-drawing
@@ -6,6 +7,13 @@ RDF vocabulary and typed helpers for describing an Excalidraw-compatible scene s
 
 The RDF descriptor holds metadata and points to the byte-exact `.excalidraw` JSON resource; it does
 not split the canvas into triples.
+
+Writers and the shipped ontology/SHACL files use `https://jeswr.org/ns/drawing#`
+(source: `@jeswr/suite-vocab` NS.DRAWING_APP), with ontology core references under
+NS.CORE, `https://jeswr.org/ns/core#`. Readers also accept the read-only legacy
+namespace exported as `LEGACY_DRAW_NS`, including mixed canonical/legacy data.
+Cardinality checks span both aliases: identical values agree, conflicting canvas
+links reject the scene, and conflicting optional values are omitted.
 
 > Experimental. Review the model before using it for long-lived data.
 
