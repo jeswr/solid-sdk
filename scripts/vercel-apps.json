@@ -110,13 +110,5 @@
     "package": "@jeswr/app-coeliac",
     "framework": "next",
     "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-coeliac"
-  },
-  {
-    "project": "solid-pod-migrator",
-    "rootDirectory": "apps/pod-migrator",
-    "package": "@jeswr/app-pod-migrator",
-    "framework": "vite",
-    "originEnv": "APP_ORIGIN",
-    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-pod-migrator"
   }
 ]
