@@ -57,7 +57,8 @@ async function reflow(page: Page) {
 
 test("launcher trigger, close, drag and boundary move tooltips", async ({ page }, info) => {
   await page.goto("/dev/components/app-launcher");
-  const trigger = page.getByRole("button", { name: "Apps", exact: true });
+  // Modal content hides its trigger from role queries while it remains in the DOM.
+  const trigger = page.locator('button[data-slot="app-launcher-trigger"][aria-label="Apps"]');
   await tooltip(page, info, trigger, "Apps", "launcher-trigger");
   await tabTo(page, trigger);
   await page.keyboard.press("Enter");
@@ -105,7 +106,11 @@ test("rail brand, pinned current link and More keep their navigation semantics",
     await expect(drive).toHaveAttribute("href", "/drive");
     await expect(drive).toHaveAttribute("aria-current", "page");
   }
-  const more = page.getByRole("button", { name: "More apps", exact: true });
+  const more = page
+    .locator(
+      (info.project.use.viewport?.width ?? 1280) >= 768 ? ".suite-rail" : ".suite-bottom-tabs",
+    )
+    .locator('button[data-slot="app-launcher-trigger"][aria-label="More apps"]');
   await tooltip(page, info, more, "More apps", "rail-more");
   await tabTo(page, more);
   await page.keyboard.press("Enter");
