@@ -138,7 +138,9 @@ const MAX_STATE_BYTES = 1024 * 1024;
  * typed {@link serializeRelationship}/{@link parseRelationship}. `save` uses `If-Match`
  * (the loaded ETag) — or `If-None-Match: *` for a brand-new resource — for optimistic
  * concurrency, and refuses redirects on every request. Every resource URL is
- * scope-guarded strictly within the container.
+ * scope-guarded strictly within the container. When a lexical-key resource is
+ * missing, loads also check the previous URL-canonicalized key. Legacy state keeps
+ * its canonical personIri, so subsequent saves use that resource and its ETag.
  */
 export function createPodRelationshipStore(
   options: PodRelationshipStoreOptions,
@@ -163,9 +165,19 @@ export function createPodRelationshipStore(
 
   return {
     async load(personIri: string): Promise<LoadedRelationship | undefined> {
-      const url = urlFor(personIri);
-      const res = await readFetch(url, { method: "GET", redirect: "manual" });
+      let url = urlFor(personIri);
+      let res = await readFetch(url, { method: "GET", redirect: "manual" });
       assertNoRedirect(res, "GET", url);
+      if (res.status === 404 && safeHttpIri(personIri) !== undefined) {
+        // Before the shared lexical guard, keys used URL.href then IRI escaping.
+        // Parse the original input here to reproduce its old URL normalization.
+        const legacyUrl = urlFor(new URL(personIri).href);
+        if (legacyUrl !== url) {
+          url = legacyUrl;
+          res = await readFetch(url, { method: "GET", redirect: "manual" });
+          assertNoRedirect(res, "GET", url);
+        }
+      }
       if (res.status === 404) return undefined;
       if (!res.ok) {
         throw new Error(`relationship load failed: GET ${url} -> ${res.status} ${res.statusText}`);

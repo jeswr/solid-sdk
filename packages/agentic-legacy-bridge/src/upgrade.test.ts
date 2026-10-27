@@ -2,6 +2,7 @@
 // AUTHORED-BY Claude Fable 5
 import { describe, expect, it, vi } from "vitest";
 import type { UpgradeOffer } from "./negotiate.js";
+import { base64Url } from "./safe-iri.js";
 import {
   createGuardedUpgradeTransport,
   createPodRelationshipStore,
@@ -15,6 +16,7 @@ import {
   recordIdentityVerified,
   type UpgradeTransport,
 } from "./upgrade.js";
+import { serializeRelationship } from "./upgrade-state.js";
 
 const PERSON = "urn:agentic:person:c2xhY2s6VDpV";
 const WEBID = "https://bob.example/profile/card#me";
@@ -284,6 +286,79 @@ describe("createPodRelationshipStore — pod round-trip with CAS", () => {
       return new Response(null, { status: 405 });
     }) as typeof fetch;
   }
+
+  it.each([
+    ["https://CAROL.example:443/a/../card#me", "https://carol.example/card#me"],
+    ["https://carol.example", "https://carol.example/"],
+    [
+      "https://bücher.example/日本語#me",
+      "https://xn--bcher-kva.example/%E6%97%A5%E6%9C%AC%E8%AA%9E#me",
+    ],
+    ["https://carol.example/a|b^c`d#me", "https://carol.example/a%7Cb%5Ec%60d#me"],
+    ["https://carol.example/a\\card#me", "https://carol.example/a/card#me"],
+    ["https://carol.example/a\ncard#me", "https://carol.example/acard#me"],
+  ])("resumes legacy canonical-key state for %s with CAS", async (personIri, legacyPersonIri) => {
+    const pod = new FakePod();
+    const legacyUrl = `${CONTAINER}rel-${base64Url(legacyPersonIri)}.ttl`;
+    const mem = new InMemoryRelationshipStore();
+    await recordBridgeDetected(mem, legacyPersonIri, AT);
+    const state = must(await mem.load(legacyPersonIri)).state;
+    // Seed the pre-migration resource independently of the current pod-store keying.
+    pod.store.set(legacyUrl, {
+      body: await serializeRelationship(state, legacyUrl),
+      etag: "v7",
+    });
+    const store = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
+    const loaded = must(await store.load(personIri));
+    expect(loaded).toMatchObject({
+      state: { personIri: legacyPersonIri, state: "bridge-detected" },
+      version: "v7",
+    });
+
+    expect(await recordIdentityVerified(store, personIri, WEBID, AT)).toMatchObject({ ok: true });
+    expect(pod.store.size).toBe(1);
+    expect(pod.store.get(legacyUrl)?.etag).toBe("v8");
+    // A new store instance must still find the advanced state, and stale saves must fail.
+    const reopened = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
+    expect(await reopened.load(personIri)).toMatchObject({
+      state: { state: "identity-verified" },
+      version: "v8",
+    });
+    await expect(reopened.save(loaded.state, loaded.version)).rejects.toBeInstanceOf(
+      RelationshipConflictError,
+    );
+  });
+
+  it("prefers lexical-key state when both lexical and legacy resources exist", async () => {
+    const pod = new FakePod();
+    const store = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
+    const lexical = "https://CAROL.example:443/card#me";
+    const legacy = "https://carol.example/card#me";
+    await recordBridgeDetected(store, legacy, AT);
+    await store.save({ ...must(await store.load(legacy)).state, personIri: lexical });
+    await recordIdentityVerified(store, lexical, WEBID, AT);
+
+    expect((await store.load(lexical))?.state).toMatchObject({
+      personIri: lexical,
+      state: "identity-verified",
+    });
+    expect((await store.load(legacy))?.state.state).toBe("bridge-detected");
+    expect(pod.store.size).toBe(2);
+  });
+
+  it("stores new HTTP relationships under their lexical key", async () => {
+    const pod = new FakePod();
+    const store = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
+    const personIri = "https://CAROL.example:443/a/../日本語#me";
+    await recordBridgeDetected(store, personIri, AT);
+    await recordIdentityVerified(store, personIri, WEBID, AT);
+
+    expect([...pod.store.keys()]).toEqual([`${CONTAINER}rel-${base64Url(personIri)}.ttl`]);
+    expect((await store.load(personIri))?.state).toMatchObject({
+      personIri,
+      state: "identity-verified",
+    });
+  });
 
   it("saves (create), loads with a version, and re-saves with If-Match", async () => {
     const pod = new FakePod();
