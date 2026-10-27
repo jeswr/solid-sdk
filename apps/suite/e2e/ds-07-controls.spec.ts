@@ -101,8 +101,11 @@ test("breadcrumbs: keyboard collapsed menu, native links and per-crumb drops", a
   await capture(page, info, "breadcrumbs-parents-open");
   await page.keyboard.press("Escape");
   await expect(narrow.getByRole("button", { name: "Show parent folders" })).toBeFocused();
+  // ArrowDown opens the menu; the next key must wait until it has focused its first item.
   await page.keyboard.press("ArrowDown");
+  await expect(menu.getByRole("menuitem", { name: "Work", exact: true })).toBeFocused();
   await page.keyboard.press("ArrowDown");
+  await expect(menu.getByRole("menuitem", { name: "Projects", exact: true })).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/folder=projects/);
   const current = page
