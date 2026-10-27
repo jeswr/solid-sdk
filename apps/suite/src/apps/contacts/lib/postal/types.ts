@@ -27,11 +27,20 @@ export type PostalAddressErrorCode =
   | "INVALID_ADR";
 
 /** Messages deliberately contain no address data. */
+// Identity check that cannot run caller code (instanceof walks prototypes; proxies can throw).
+const issued = new WeakSet<object>();
+
 export class PostalAddressError extends Error {
   constructor(public readonly code: PostalAddressErrorCode) {
     super(`Postal address: ${code}`);
     this.name = "PostalAddressError";
+    issued.add(this);
   }
+}
+
+/** Internal: true only for errors this library created. Never throws. */
+export function isPostalAddressError(error: unknown): error is PostalAddressError {
+  return typeof error === "object" && error !== null && issued.has(error);
 }
 
 export interface PostalCodeWarning {

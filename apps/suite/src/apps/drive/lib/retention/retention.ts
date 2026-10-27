@@ -32,7 +32,15 @@ export class RetentionError extends Error {
   constructor(public readonly code: RetentionErrorCode) {
     super(`Drive retention: ${code}`);
     this.name = "RetentionError";
+    issued.add(this);
   }
+}
+
+// Identity check that cannot run caller code (instanceof walks prototypes; proxies can throw).
+const issued = new WeakSet<object>();
+
+function isRetentionError(error: unknown): error is RetentionError {
+  return typeof error === "object" && error !== null && issued.has(error);
 }
 
 function valid(condition: unknown): asserts condition {
@@ -56,7 +64,7 @@ function record(value: unknown, keys: readonly string[]): Record<string, unknown
     }
     return fields;
   } catch (error) {
-    if (error instanceof RetentionError) throw error;
+    if (isRetentionError(error)) throw error;
     throw new RetentionError("INVALID_VERSION");
   }
 }
@@ -68,7 +76,7 @@ function own(target: object, key: PropertyKey): unknown {
     valid(descriptor !== undefined && "value" in descriptor);
     return descriptor.value;
   } catch (error) {
-    if (error instanceof RetentionError) throw error;
+    if (isRetentionError(error)) throw error;
     throw new RetentionError("INVALID_VERSION");
   }
 }

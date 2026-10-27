@@ -43,6 +43,9 @@ export interface AutoformatReplacement {
 
 export type AutoformatErrorCode = "INVALID_TEXT" | "UNKNOWN_RULE" | "INVALID_OPTIONS";
 
+// Identity check that cannot run caller code (instanceof walks prototypes; proxies can throw).
+const issued = new WeakSet<object>();
+
 export class AutoformatError extends Error {
   readonly name = "AutoformatError";
 
@@ -51,5 +54,11 @@ export class AutoformatError extends Error {
     message: string,
   ) {
     super(message);
+    issued.add(this);
   }
+}
+
+/** Internal: true only for errors this library created. Never throws. */
+export function isAutoformatError(error: unknown): error is AutoformatError {
+  return typeof error === "object" && error !== null && issued.has(error);
 }

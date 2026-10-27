@@ -330,4 +330,18 @@ describe("typed input errors", () => {
       "UNKNOWN_RULE",
     );
   });
+
+  it("maps a trap that throws a revoked proxy to a typed error", () => {
+    const thrown = Proxy.revocable({}, {});
+    thrown.revoke();
+    const rules = new Proxy(
+      {},
+      {
+        ownKeys() {
+          throw thrown.proxy;
+        },
+      },
+    );
+    errorCode(() => autoformatInput("", "x", { ...prose, rules }), "INVALID_OPTIONS");
+  });
 });

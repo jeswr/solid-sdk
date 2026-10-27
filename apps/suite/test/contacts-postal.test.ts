@@ -495,6 +495,17 @@ describe("postal input snapshots", () => {
     const revoked = Proxy.revocable({ ...blank }, {});
     revoked.revoke();
     rejects(() => toVCardAdr(revoked.proxy), "INVALID_ADDRESS");
+    const thrown = Proxy.revocable({}, {});
+    thrown.revoke();
+    const hostile = new Proxy(
+      { ...blank },
+      {
+        getOwnPropertyDescriptor() {
+          throw thrown.proxy;
+        },
+      },
+    );
+    rejects(() => toVCardAdr(hostile), "INVALID_ADDRESS");
     const extra = { ...sample, note: "ignored" } as PostalAddress;
     expect(toVCardAdr(extra)).toBe(toVCardAdr(sample));
   });

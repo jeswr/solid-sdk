@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { ISO_COUNTRY_CODES, POSTAL_CODE_PATTERNS } from "./countries";
 import {
+  isPostalAddressError,
   MAX_ADDRESS_COMPONENT_LENGTH,
   MAX_STREET_LINES,
   type PostalAddress,
@@ -68,7 +69,7 @@ function snapshot(address: unknown): PostalAddress {
     );
     return fields as unknown as PostalAddress;
   } catch (error) {
-    if (error instanceof PostalAddressError) throw error;
+    if (isPostalAddressError(error)) throw error;
     // Proxies with throwing traps: no native error escapes the typed boundary.
     throw new PostalAddressError("INVALID_ADDRESS");
   }

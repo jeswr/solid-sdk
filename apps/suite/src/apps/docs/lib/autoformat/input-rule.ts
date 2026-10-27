@@ -5,6 +5,7 @@ import {
   AutoformatError,
   type AutoformatReplacement,
   type AutoformatRuleId,
+  isAutoformatError,
   MAX_AUTOFORMAT_CONTEXT_LENGTH,
   MAX_TYPED_CHARACTER_LENGTH,
 } from "./types";
@@ -71,7 +72,7 @@ function readContext(context: AutoformatContext): {
     }
     return { inCode, rules };
   } catch (error) {
-    if (error instanceof AutoformatError) throw error;
+    if (isAutoformatError(error)) throw error;
     // Includes unreadable proxies; no native error or input data escapes the boundary.
     invalidOptions();
   }

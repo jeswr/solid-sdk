@@ -627,6 +627,23 @@ describe("Drive retention fail-closed validation", () => {
       () => planRetention([], NOW, revokedRecord.proxy as RetentionLimits),
       "INVALID_VERSION",
     );
+    const thrown = Proxy.revocable({}, {});
+    thrown.revoke();
+    const hostile = new Proxy(
+      {},
+      {
+        getPrototypeOf() {
+          throw thrown.proxy;
+        },
+      },
+    );
+    errorCode(() => planRetention([hostile as ManagedVersion], NOW), "INVALID_VERSION");
+    const hostileArray = new Proxy([version("a")], {
+      getOwnPropertyDescriptor() {
+        throw thrown.proxy;
+      },
+    });
+    errorCode(() => planRetention(hostileArray, NOW), "INVALID_VERSION");
     let reads = 0;
     const shifting = new Proxy(version("a", NOW, 1), {
       get(target, key, receiver) {
