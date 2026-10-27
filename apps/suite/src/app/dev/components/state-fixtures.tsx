@@ -2,7 +2,7 @@
 "use client";
 import {
   type ContentSurfaceState,
-  DetailsPane,
+  ItemDetails,
   PodMeter,
   surfaceErrors,
   TypedView,
@@ -19,7 +19,7 @@ const states: { name: string; state: ContentSurfaceState }[] = [
     state: { status: "error" as const, category: category as keyof typeof surfaceErrors },
   })),
 ];
-export type FixtureKind = "typed-view" | "details-pane" | "pod-meter";
+export type FixtureKind = "typed-view" | "item-details" | "pod-meter";
 function StateExample({
   kind,
   example,
@@ -42,8 +42,8 @@ function StateExample({
       <h2>{example.name}</h2>
       {kind === "typed-view" ? (
         <TypedView data={data} state={state} />
-      ) : kind === "details-pane" ? (
-        <DetailsPane
+      ) : kind === "item-details" ? (
+        <ItemDetails
           title="Quarterly plan"
           state={state}
           access={{ grants: [], canManage: false }}

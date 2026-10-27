@@ -1,5 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
-// Root-prefix arithmetic shared by the cache implementations and the resolver (internal).
+// Root-prefix arithmetic and record comparison shared by the caches, resolver and capabilities() (internal).
+import type { StorageDescription } from "./types.js";
+
 export type Prefix = { root: string; storageId: string };
 
 export function prefixUrl(value: string): URL {
@@ -35,4 +37,9 @@ export function longestPrefix(value: string, prefixes: Iterable<Prefix>): string
     }
   }
   return storageId;
+}
+
+/** Same cache generation: an identical description (deleted or replaced records never match). */
+export function sameDescription(a: StorageDescription, b: StorageDescription): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
 }

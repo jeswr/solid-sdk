@@ -135,17 +135,18 @@ classify SDK errors themselves. Fixtures live at `/dev/components/upload-dock`,
 
 ## DS-12 typed content and storage
 
-DS-12 adds `TypedView`, `DetailsPane`, and `PodMeter`. Import `styles/components.css`
+DS-12 adds `TypedView`, `ItemDetails`, and `PodMeter`. Import `styles/components.css`
 after the token styles. `TypedView` accepts a `TypedViewData` projection from typed RDF
 accessors; its registry maps RDF class IRIs to renderers and can be extended with a
 caller-owned map. The suite app's `src/components/typed-view-data.ts` supplies the adapter.
 Technical serialization is rendered only when `showTechnicalDetails` is true, inside a
 native disclosure. Bind that prop to Settings › Advanced, never to the resource itself.
 
-`DetailsPane` accepts metadata, an actions slot, and the structural result of
-`share.get`. Pass `ownerId` to exclude the owner from the people count, resolved names
-in `people`, and `onManageAccess` to open the consuming screen's share dialog. The
-consumer hosts the pane in its responsive sheet and owns loading, refresh and errors.
+`ItemDetails` is the content of the details pane: metadata, an actions slot, and the
+structural result of `share.get`. Pass `ownerId` to exclude the owner from the people
+count, resolved names in `people`, and `onManageAccess` to open the consuming screen's
+share dialog. Render it inside the shell's `DetailsPane` (`@jeswr/suite-ui/shell`), which
+owns the responsive pane or sheet; the consumer owns loading, refresh and errors.
 `PodMeter` takes usage in bytes and an optional quota; absent quota never implies a
 percentage. All three accept `ContentSurfaceState` for loading, empty and classified errors.
 Upload and preview components use the separately exported `SurfaceState`.
@@ -179,3 +180,33 @@ Fixtures: `/dev/components/app-rail`, `/dev/components/app-launcher`, and
 `/dev/components/bottom-tab-bar`. The DS-03 browser spec writes full-page screenshots to
 `artifacts/screens/DS-03/` for all configured widths/themes, with axe and 320px reflow checks.
 Run it again with `NEXT_PUBLIC_SHOW_BACKLOG_APPS=1` to capture the flagged backlog states.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+## DS-04 shell layout
+
+Shell components live in `@jeswr/suite-ui/shell`; also import `styles/shell.css`.
+`ShellFrame` accepts TopBar slots, a `SidebarNav` model, optional `DetailsPane`
+content, and rail/tab-bar slots. It owns the single visible page `h1`, the
+`main-content` skip target, the main scroll area and the document title
+(`shellDocumentTitle(page, app)`: `page · App · Solid Suite`). Next.js routes should
+also export `metadata.title` built with `shellDocumentTitle`, because the layout's
+metadata title replaces a title set on mount. Content should start
+at `h2`. Set `skipLink={false}` when the root layout already provides that link.
+
+`preferences` / `onPreferencesChange` connect to the consuming app's preferences
+hook. Both `sidebarOpen` and `detailsOpen` accept `null` for the responsive default
+(open at ≥1024, closed below). Explicit boolean choices override that default.
+The package performs no storage or network writes; the dev fixtures use a browser
+storage adapter until SDK-APP-11 is available. Bracket shortcuts ignore editable
+fields, modified/composing events and unrelated dialogs. Sheets trap focus and
+restore it to the corresponding TopBar control on close.
+On wide viewports an unconsumed Escape inside the details pane closes it
+(01-§6), except in editable fields and nested dialogs.
+
+Sidebar width is 264px; details width is 360px. Below 1024 both use modal side
+sheets and at most one is open: when saved preferences open both, the sidebar sheet
+shows, the details toggle reports collapsed, and any change writes back one region. At 768 the rail remains visible; below 768 the tab-bar slot replaces it
+and the TopBar is 48px. The details breakpoint follows the DS-04 task and 02-§2 (sheet below
+1024), not the ≥1280 persistent pane in 01-§4 and the mockups.
+Dev routes: `/dev/components/{shell,top-bar,sidebar-nav,details-pane}` in apps/suite.

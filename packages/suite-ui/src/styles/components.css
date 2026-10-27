@@ -1027,7 +1027,7 @@
   overflow-wrap: anywhere;
 }
 .suite-typed-view,
-.suite-details-pane,
+.suite-item-details,
 .suite-pod-meter {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -1132,7 +1132,7 @@
   font-size: var(--text-xs);
   margin-right: calc(-1 * var(--space-2));
 }
-.suite-details-pane button {
+.suite-item-details button {
   margin-top: var(--space-2);
 }
 .suite-usage-bar {
@@ -1207,7 +1207,7 @@
   background: var(--primary);
   border-radius: inherit;
 }
-:is(.suite-typed-view, .suite-details-pane, .suite-pod-meter) button {
+:is(.suite-typed-view, .suite-item-details, .suite-pod-meter) button {
   font: inherit;
   min-height: var(--control-h);
   max-width: 100%;
@@ -1218,18 +1218,18 @@
   background: var(--surface);
   cursor: pointer;
 }
-:is(.suite-typed-view, .suite-details-pane, .suite-pod-meter) a {
+:is(.suite-typed-view, .suite-item-details, .suite-pod-meter) a {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
   color: var(--primary);
 }
-:is(.suite-typed-view, .suite-details-pane, .suite-pod-meter) :focus-visible {
+:is(.suite-typed-view, .suite-item-details, .suite-pod-meter) :focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
   scroll-margin: var(--space-4);
 }
-.suite-details-pane {
+.suite-item-details {
   border: 0;
   border-left: 1px solid var(--border);
   border-radius: 0;
@@ -1317,7 +1317,7 @@
   .suite-raw-data summary {
     min-height: 44px;
   }
-  :is(.suite-typed-view, .suite-details-pane, .suite-pod-meter) :is(a, button) {
+  :is(.suite-typed-view, .suite-item-details, .suite-pod-meter) :is(a, button) {
     min-height: 44px;
   }
 }

@@ -7,8 +7,8 @@ import { type SurfaceState, surfaceErrors } from "../src/components/content.js";
 import {
   type AccessSummary,
   accessSummaryText,
-  DetailsPane,
-} from "../src/components/details-pane.js";
+  ItemDetails,
+} from "../src/components/item-details.js";
 import { PodMeter } from "../src/components/pod-meter.js";
 import { TypedView, type TypedViewData, typedViewRegistry } from "../src/components/typed-view.js";
 
@@ -99,7 +99,7 @@ test("a custom registry extends the built-in registry without mutations", () => 
 test("details summarize share.get, deduplicate people, exclude owner and gate Manage access", async () => {
   const manage = vi.fn();
   const { container, rerender } = render(
-    <DetailsPane
+    <ItemDetails
       title="Quarterly plan"
       ownerId="https://me.example"
       access={{ ...access, grants: [...access.grants, grant("https://mira.example")] }}
@@ -115,7 +115,7 @@ test("details summarize share.get, deduplicate people, exclude owner and gate Ma
   expect(container.textContent).not.toContain("http");
   await accessible(container);
   rerender(
-    <DetailsPane title="Plan" access={{ grants: [], canManage: false }} onManageAccess={manage} />,
+    <ItemDetails title="Plan" access={{ grants: [], canManage: false }} onManageAccess={manage} />,
   );
   expect(screen.getByText("Only you")).toBeDefined();
   expect(screen.queryByRole("button", { name: "Manage access" })).toBeNull();
@@ -136,12 +136,12 @@ test("public, signed-in, group and app grants cannot be misrepresented as privat
   }
 });
 test("details selection summaries, overflow people and access failures", async () => {
-  const { container, rerender } = render(<DetailsPane />);
+  const { container, rerender } = render(<ItemDetails />);
   expect(screen.getByText("Select an item to see its details")).toBeDefined();
-  rerender(<DetailsPane selection={{ count: 3, totalSize: 3000 }} />);
+  rerender(<ItemDetails selection={{ count: 3, totalSize: 3000 }} />);
   expect(screen.getByText("3 items selected · 3 KB")).toBeDefined();
   rerender(
-    <DetailsPane
+    <ItemDetails
       title="Plan"
       access={{
         grants: Array.from({ length: 7 }, (_, i) => grant(`https://person.example/${i}`)),
@@ -151,7 +151,7 @@ test("details selection summaries, overflow people and access failures", async (
   );
   expect(container.querySelectorAll(".suite-avatar")).toHaveLength(5);
   expect(screen.getByText("+2")).toBeDefined();
-  rerender(<DetailsPane title="Plan" accessState={{ status: "error", category: "forbidden" }} />);
+  rerender(<ItemDetails title="Plan" accessState={{ status: "error", category: "forbidden" }} />);
   expect(screen.getByRole("alert").textContent).toContain("You don't have access");
   await accessible(container);
 });
@@ -192,7 +192,7 @@ test.each(
   const { container } = render(
     <>
       <TypedView state={state} />
-      <DetailsPane state={state} />
+      <ItemDetails state={state} />
       <PodMeter state={state} />
     </>,
   );

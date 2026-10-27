@@ -85,6 +85,8 @@ export async function runImport(opts: RunImportOptions): Promise<ImportReport> {
       read: session.read,
       progress: (p) => opts.onProgress?.(p),
       write: session.write,
+      writeBinary: session.writeBinary,
+      remove: session.remove,
     });
     const { indexUrl } = await opts.podWriter.registerType(session.registrations());
     await session.finish();

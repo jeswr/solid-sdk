@@ -33,7 +33,7 @@ async function reflow(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
   await accessible(page);
 }
-for (const route of ["typed-view", "details-pane", "pod-meter"]) {
+for (const route of ["typed-view", "item-details", "pod-meter"]) {
   test(`${route}: every ready/loading/empty/error state`, async ({ page }, info) => {
     await page.goto(`/dev/components/${route}`);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
@@ -87,7 +87,7 @@ test("Advanced is required for raw data; every type stays readable and keyboard 
   await expect(page.locator(".suite-raw-data")).toHaveCount(0);
 });
 test("details actions, empty filters and retry are keyboard paths", async ({ page }) => {
-  await page.goto("/dev/components/details-pane");
+  await page.goto("/dev/components/item-details");
   await page.keyboard.press("Tab");
   await page.keyboard.press("Enter");
   await page.keyboard.press("Tab");

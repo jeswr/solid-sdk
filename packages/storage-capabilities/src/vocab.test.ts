@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 import { expect, test } from "vitest";
 import * as vocab from "./vocab.js";
 
@@ -49,6 +49,7 @@ test("exports every ADR-002 vocabulary IRI with its exact namespace", () => {
   });
   expect(vocab.ACQ).toEqual({
     endpoint: "http://www.w3.org/ns/solid/sparql#endpoint",
+    profile: "https://jeswr.github.io/solid-specs/specs/access-controlled-query/",
   });
   expect(vocab.ACL).toEqual({
     accessControl: "http://www.w3.org/ns/auth/acl#accessControl",
@@ -63,9 +64,21 @@ test("exports every ADR-002 vocabulary IRI with its exact namespace", () => {
     CrdtSyncService: "https://jeswr.org/ns/solid-sd#CrdtSyncService",
     VersioningService: "https://jeswr.org/ns/solid-sd#VersioningService",
     TrashService: "https://jeswr.org/ns/solid-sd#TrashService",
+    RecursiveDeleteService: "https://jeswr.org/ns/solid-sd#RecursiveDeleteService",
     AccessControl: "https://jeswr.org/ns/solid-sd#AccessControl",
     PatchSupport: "https://jeswr.org/ns/solid-sd#PatchSupport",
     RecursiveDelete: "https://jeswr.org/ns/solid-sd#RecursiveDelete",
+    ResumableUploads: "https://jeswr.org/ns/solid-sd#ResumableUploads",
+    Pagination: "https://jeswr.org/ns/solid-sd#Pagination",
+    ContentNegotiation: "https://jeswr.org/ns/solid-sd#ContentNegotiation",
+    source: "https://jeswr.org/ns/solid-sd#source",
+    patchType: "https://jeswr.org/ns/solid-sd#patchType",
+    target: "https://jeswr.org/ns/solid-sd#target",
+    model: "https://jeswr.org/ns/solid-sd#model",
+    WAC: "https://jeswr.org/ns/solid-sd#WAC",
+    ACP: "https://jeswr.org/ns/solid-sd#ACP",
+    ODRLGrants: "https://jeswr.org/ns/solid-sd#ODRLGrants",
+    yProtocolV1: "https://jeswr.org/ns/solid-sd#y-protocol-v1",
     StreamingHttpChannel: "https://jeswr.org/ns/solid-sd#StreamingHttpChannel",
     SseSubscription: "https://jeswr.org/ns/solid-sd#SseSubscription",
     WebSocketSubscription: "https://jeswr.org/ns/solid-sd#WebSocketSubscription",
