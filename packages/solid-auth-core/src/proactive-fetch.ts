@@ -77,7 +77,12 @@
 // PUBLIC profile read that must stay credential-free.)
 
 import { computeAllowedOrigins, isOriginAllowed, isUseDpopNonceChallenge } from "./controller.js";
-import { fetchWithCredentialedRedirects } from "./credentialed-redirects.js";
+import {
+  type CredentialedHopResult,
+  fetchPassthrough,
+  fetchWithCredentialedRedirects,
+  hasCredentialHeaders,
+} from "./credentialed-redirects.js";
 import { brandFetchWrapper, resolvePristineFetch } from "./pristine.js";
 import { requestHref } from "./request.js";
 
@@ -363,7 +368,9 @@ export async function proactiveAuthenticatedFetch(
   config?: ProactiveFetchConfig,
 ): Promise<Response> {
   const request = new Request(input as RequestInfo, init);
-  if (!state.provider || !shouldAttachToken(state, request)) return base(request);
+  if (!state.provider || !shouldAttachToken(state, request)) {
+    return fetchPassthrough(base, request);
+  }
   return fetchWithCredentialedRedirects(
     request,
     init,
@@ -378,15 +385,19 @@ async function proactiveAuthenticatedHop(
   base: typeof fetch,
   request: Request,
   config?: ProactiveFetchConfig,
-): Promise<Response> {
+): Promise<CredentialedHopResult> {
   const isSuperseded = config?.isSuperseded ?? isReactiveAuthResetError;
+  const fallback = async (source: Request): Promise<CredentialedHopResult> => ({
+    response: await fetchPassthrough(base, source),
+    followRedirects: !hasCredentialHeaders(source),
+  });
   const { provider } = state;
   // The credential gate — re-evaluated live every request, fail-closed for an empty set or
   // an unparseable URL (delegated to the seam's `isOriginAllowed`), plus the two OPTIONAL
   // #123-PM seams (the provider-internal-OAuth bypass + the session-liveness gate). When
   // neither optional seam is supplied this is EXACTLY the prior pod-drive gate.
   if (!provider || !shouldAttachToken(state, request)) {
-    return base(request);
+    return fallback(request);
   }
   // Clone BEFORE the first fetch consumes the body: a 401 retry must replay the body, but
   // request streams are single-use once fetched. clone() tees the stream while bodyUsed is
@@ -403,11 +414,13 @@ async function proactiveAuthenticatedHop(
   try {
     upgraded = await provider.upgrade(request);
   } catch (e) {
-    if (isSuperseded(e)) return base(retrySource);
+    if (isSuperseded(e)) return fallback(retrySource);
     throw e;
   }
   const response = await base(new Request(upgraded, { redirect: "manual" }));
-  if (response.status !== 401) return response;
+  if (response.status !== 401) {
+    return { response, followRedirects: upgraded !== request || !hasCredentialHeaders(upgraded) };
+  }
   // ONE bounded retry. The single re-`upgrade()` re-mints a FRESH DPoP proof (new jti/iat)
   // for the same request — recovering the common case where the first proof was stale (clock
   // skew / a server that wants a fresh proof). `pureNonce` records whether the 401 was an
@@ -425,7 +438,7 @@ async function proactiveAuthenticatedHop(
   // bypass + the liveness gate are re-evaluated on the retry too (the live state may have
   // changed mid-flight). `retrySource` carries the same URL/headers as the original request.
   if (!state.provider || !shouldAttachToken(state, retrySource)) {
-    return base(retrySource);
+    return fallback(retrySource);
   }
   // Tee the body ONCE MORE before the retry upgrade: `upgrade` builds a new Request from its
   // argument, which can consume the source body stream — so if the retry upgrade itself
@@ -438,13 +451,16 @@ async function proactiveAuthenticatedHop(
   try {
     retried = await state.provider.upgrade(retrySource);
   } catch (e) {
-    if (isSuperseded(e)) return base(retryFallback);
+    if (isSuperseded(e)) return fallback(retryFallback);
     throw e;
   }
   // (pureNonce is currently informational — see the NOTE above; referenced so a future
   // nonce-aware retry can branch on it without an unused-variable churn.)
   void pureNonce;
-  return base(new Request(retried, { redirect: "manual" }));
+  return {
+    response: await base(new Request(retried, { redirect: "manual" })),
+    followRedirects: retried !== retrySource || !hasCredentialHeaders(retried),
+  };
 }
 
 /**

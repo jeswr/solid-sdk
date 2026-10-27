@@ -4,6 +4,7 @@ description: Use when implementing browser Solid login with @jeswr/solid-auth-co
 ---
 <!-- AUTHORED-BY Codex GPT-5 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Work with `@jeswr/solid-auth-core`
 
@@ -33,6 +34,8 @@ React consumers use `SessionProvider` and `useSolidSession()` from `@jeswr/solid
 - Use `authenticatedFetch` only for allowed Solid resource origins and `publicFetch` for foreign/public origins.
 - Keep the allowed-origin set fail-closed: HTTPS resource origins only, with explicit loopback HTTP opt-in for development. Do not add the issuer merely because it issued the token.
 - Send every upgraded request with `redirect: "manual"`, overriding caller policy. The controller and proactive fetch wrapper check each visible redirect with the same live credential gate and mint a fresh URL/method/token-bound DPoP proof per hop; never use native redirect following for credentials.
+- Force manual mode on every passthrough or fallback carrying caller-owned `Authorization`, `DPoP`, or `Proxy-Authorization`, from either init headers or a Request. Return every such redirect unfollowed, even on the same origin; the SDK cannot re-mint caller proofs. Credential-free passthrough keeps the caller's redirect policy.
+- On SDK-authenticated hops that change origin, strip `Cookie`, `Cookie2`, `Proxy-Authorization`, `Authorization`, and caller `DPoP` before re-adding fresh SDK credentials. Same-origin hops preserve them before the SDK replaces its authorization and proof.
 - Return foreign redirects and browser `opaqueredirect` responses unchanged. Browsers hide Location in manual mode, so credentialed redirects surface to their callers. Direct `upgrade()` users also receive manual Requests and must handle redirects themselves.
 - Follow at most 20 hops. Apply Fetch's POST-to-GET 301/302 and non-GET/HEAD-to-GET 303 rewrites, dropping body/content headers. Buffer only non-stream `init.body` values before sending; treat Request bodies as streams and return redirects that require replaying a stream unfollowed.
 - Cache resource-server nonces only under the checked hop's origin; a nonce retry must sign that hop's URL. Refuse a response nonce when its reported URL belongs to a different origin.

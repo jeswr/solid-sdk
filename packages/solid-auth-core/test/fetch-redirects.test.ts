@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 import { once } from "node:events";
 import { createServer } from "node:http";
@@ -6,7 +7,7 @@ import * as DPoP from "dpop";
 import * as oauth from "oauth4webapi";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createSolidAuth, type LiveSession, WebIdDPoPTokenProvider } from "../src/controller.js";
-import { proactiveAuthenticatedFetch } from "../src/proactive-fetch.js";
+import { type ProactiveFetchState, proactiveAuthenticatedFetch } from "../src/proactive-fetch.js";
 
 const POD = "https://pod.example";
 const SECOND = "https://second.example";
@@ -197,6 +198,102 @@ for (const kind of ["controller", "proactive"] as const) {
       expect(calls).toBe(1);
     });
 
+    for (const location of [
+      "https://user:password@pod.example/final",
+      "mailto:someone@example.com",
+      "http://[invalid",
+    ]) {
+      it(`returns an unrequestable Location (${location}) untouched`, async () => {
+        const redirect = new Response("still readable", {
+          status: 302,
+          headers: { Location: location },
+        });
+        let calls = 0;
+        const wrapped = await wrappedFetch(kind, async () => {
+          calls++;
+          return redirect;
+        });
+        const response = await wrapped(`${POD}/start`);
+        expect(response).toBe(redirect);
+        expect(calls).toBe(1);
+        expect(response.bodyUsed).toBe(false);
+        expect(response.redirected).toBe(false);
+        expect(response.headers.get("Location")).toBe(location);
+        expect(await response.text()).toBe("still readable");
+      });
+    }
+
+    for (const asRequest of [false, true]) {
+      it(`strips origin-bound headers only when the origin changes (${asRequest ? "Request" : "init"})`, async () => {
+        const sent: Request[] = [];
+        const wrapped = await wrappedFetch(kind, async (input, init) => {
+          sent.push(new Request(input, init));
+          const locations = ["/middle", `${SECOND}/final`, `${POD}/back`];
+          return sent.length <= locations.length
+            ? new Response(null, { status: 302, headers: { Location: locations[sent.length - 1] } })
+            : new Response("done");
+        });
+        const init = {
+          headers: {
+            Cookie: "session=caller",
+            Cookie2: "legacy=caller",
+            "Proxy-Authorization": "Basic caller-proxy",
+            Authorization: "Bearer caller-token",
+            DPoP: "caller-proof",
+            "X-Ordinary": "preserved",
+          },
+        };
+        if (asRequest) await wrapped(new Request(`${POD}/start`, init));
+        else await wrapped(`${POD}/start`, init);
+        expect(sent.map((request) => request.url)).toEqual([
+          `${POD}/start`,
+          `${POD}/middle`,
+          `${SECOND}/final`,
+          `${POD}/back`,
+        ]);
+        for (const [index, request] of sent.entries()) {
+          for (const header of ["Cookie", "Cookie2", "Proxy-Authorization"] as const) {
+            expect(request.headers.get(header)).toBe(index < 2 ? init.headers[header] : null);
+          }
+          expect(request.headers.get("X-Ordinary")).toBe("preserved");
+          expect(request.headers.get("Authorization")).toBe(`DPoP ${TOKEN}`);
+          const proof = await proofOf(request.headers.get("DPoP"));
+          expect(proof.htu).toBe(request.url);
+        }
+      });
+
+      for (const header of ["Authorization", "DPoP", "Proxy-Authorization"]) {
+        it(`returns caller ${header} passthrough redirects unfollowed (${asRequest ? "Request" : "init"})`, async () => {
+          const sent: Request[] = [];
+          const responses: Response[] = [];
+          const wrapped = await wrappedFetch(kind, async (input, init) => {
+            sent.push(new Request(input, init));
+            const response = new Response("caller decides", {
+              status: 302,
+              headers: { Location: "/next" },
+            });
+            responses.push(response);
+            return response;
+          });
+          for (const redirect of ["follow", "error", "manual"] as const) {
+            const init = { headers: { [header.toLowerCase()]: "caller-owned" }, redirect };
+            const response = asRequest
+              ? await wrapped(new Request(`${FOREIGN}/start`, init))
+              : await wrapped(`${FOREIGN}/start`, init);
+            expect(response).toBe(responses.at(-1));
+            expect(response.bodyUsed).toBe(false);
+            expect(await response.text()).toBe("caller decides");
+          }
+          expect(sent).toHaveLength(3);
+          for (const request of sent) {
+            expect(request.url).toBe(`${FOREIGN}/start`);
+            expect(request.redirect).toBe("manual");
+            expect(request.headers.get(header)).toBe("caller-owned");
+          }
+        });
+      }
+    }
+
     it("caps a loop at 20 followed hops", async () => {
       let calls = 0;
       const wrapped = await wrappedFetch(kind, async () => {
@@ -235,6 +332,30 @@ for (const kind of ["controller", "proactive"] as const) {
       const next = await proofOf(sent[1].headers.get("DPoP"));
       expect(next).toMatchObject({ htu: `${SECOND}/middle`, htm: "GET" });
       expect(next.jti).not.toBe(first.jti);
+    });
+
+    it("reports followed hops on a final unfollowed redirect and its clones", async () => {
+      let calls = 0;
+      const wrapped = await wrappedFetch(kind, async () => {
+        calls++;
+        return new Response("redirect body", {
+          status: 302,
+          headers: { Location: calls === 1 ? `${SECOND}/middle?q=1#part` : `${FOREIGN}/end` },
+        });
+      });
+      const response = await wrapped(`${POD}/start`);
+      const clone = response.clone();
+      const nestedClone = clone.clone();
+      for (const result of [response, clone, nestedClone]) {
+        expect(result).toBeInstanceOf(Response);
+        expect(result.redirected).toBe(true);
+        expect(result.url).toBe(`${SECOND}/middle?q=1`);
+        expect(Object.getOwnPropertyDescriptor(result, "redirected")?.get).toBeTypeOf("function");
+        expect(Object.getOwnPropertyDescriptor(result, "url")?.get).toBeTypeOf("function");
+        expect(await result.text()).toBe("redirect body");
+      }
+      expect(calls).toBe(2);
+      expect(() => response.clone()).toThrow(TypeError);
     });
 
     for (const bodyKind of ["bytes", "blob", "params", "form"] as const) {
@@ -353,6 +474,131 @@ for (const kind of ["controller", "proactive"] as const) {
     });
   });
 }
+
+describe("controller caller credentials before login", () => {
+  for (const header of ["Authorization", "DPoP", "Proxy-Authorization"]) {
+    for (const asRequest of [false, true]) {
+      it(`returns ${header} redirects unfollowed (${asRequest ? "Request" : "init"})`, async () => {
+        const sent: Request[] = [];
+        const redirect = new Response("caller decides", {
+          status: 302,
+          headers: { Location: "/next" },
+        });
+        const auth = createSolidAuth({
+          callbackUri: "https://app.example/callback",
+          clientId: CLIENT,
+          authFlow: {
+            getCode: async () => {
+              throw new Error("unexpected login");
+            },
+          },
+          publicFetch: async (input, init) => {
+            sent.push(new Request(input, init));
+            return redirect;
+          },
+        });
+        const init = { headers: { [header]: "caller-owned" }, redirect: "follow" as const };
+        const response = asRequest
+          ? await auth.authenticatedFetch(new Request(`${POD}/start`, init))
+          : await auth.authenticatedFetch(`${POD}/start`, init);
+        expect(response).toBe(redirect);
+        expect(response.bodyUsed).toBe(false);
+        expect(await response.text()).toBe("caller decides");
+        expect(sent).toHaveLength(1);
+        expect(sent[0].redirect).toBe("manual");
+        expect(sent[0].headers.get(header)).toBe("caller-owned");
+      });
+    }
+  }
+});
+
+describe("proactive caller-credential passthrough and fallback routes", () => {
+  for (const route of [
+    "no-provider",
+    "empty-origins",
+    "issuer-bypass",
+    "liveness",
+    "hop-gate",
+    "first-reset",
+    "retry-gate",
+    "retry-reset",
+  ] as const) {
+    for (const asRequest of [false, true]) {
+      it(`${route} returns caller credentials unfollowed (${asRequest ? "Request" : "init"})`, async () => {
+        let upgrades = 0;
+        const provider = {
+          async upgrade(request: Request) {
+            upgrades++;
+            if (
+              (route === "first-reset" && upgrades === 1) ||
+              (route === "retry-reset" && upgrades === 2)
+            ) {
+              await request.text();
+              throw Object.assign(new Error("superseded"), { name: "ReactiveAuthResetError" });
+            }
+            const headers = new Headers(request.headers);
+            headers.set("Authorization", "DPoP sdk-token");
+            headers.set("DPoP", "sdk-proof");
+            return new Request(request, { headers });
+          },
+        };
+        let gateCalls = 0;
+        const state: ProactiveFetchState = {
+          provider: route === "no-provider" ? null : provider,
+          allowedOrigins: new Set(route === "empty-origins" ? [] : [POD]),
+          ...(route === "issuer-bypass" ? { issuerOrigins: new Set([POD]) } : {}),
+          canAttachNonInteractively: () => {
+            gateCalls++;
+            return !(
+              route === "liveness" ||
+              (route === "hop-gate" && gateCalls === 2) ||
+              (route === "retry-gate" && gateCalls === 3)
+            );
+          },
+        };
+        const sent: { request: Request; body: string }[] = [];
+        const redirect = new Response("unfollowed", {
+          status: 307,
+          headers: { Location: "/next" },
+        });
+        const base: typeof fetch = async (input, init) => {
+          const request = new Request(input, init);
+          sent.push({ request, body: await request.text() });
+          if (route.startsWith("retry-") && sent.length === 1) {
+            return new Response(null, { status: 401 });
+          }
+          return redirect;
+        };
+        const init = {
+          method: "POST",
+          body: "caller body",
+          headers: {
+            Authorization: "Bearer caller-token",
+            DPoP: "caller-proof",
+            "Proxy-Authorization": "Basic caller-proxy",
+          },
+          redirect: "follow" as const,
+        };
+        const response = asRequest
+          ? await proactiveAuthenticatedFetch(state, base, new Request(`${POD}/start`, init))
+          : await proactiveAuthenticatedFetch(state, base, `${POD}/start`, init);
+        expect(response).toBe(redirect);
+        expect(response.bodyUsed).toBe(false);
+        expect(await response.text()).toBe("unfollowed");
+        expect(sent).toHaveLength(route.startsWith("retry-") ? 2 : 1);
+        const fallback = sent.at(-1);
+        expect(fallback?.request.redirect).toBe("manual");
+        expect(fallback?.body).toBe("caller body");
+        for (const [header, value] of Object.entries(init.headers)) {
+          expect(fallback?.request.headers.get(header)).toBe(value);
+        }
+        expect(upgrades).toBe(
+          route === "retry-reset" ? 2 : route === "first-reset" || route === "retry-gate" ? 1 : 0,
+        );
+      });
+    }
+  }
+});
 
 describe("controller redirect nonce scoping", () => {
   it("retries and caches a second-origin nonce only for that checked hop", async () => {
@@ -527,7 +773,15 @@ describe("credentialed redirects over loopback HTTP", () => {
       status = 307;
       destination = "/final";
       const wrapped = await wrappedFetch(kind, fetch, [origin]);
-      expect((await wrapped(`${origin}/start`, { method: "POST", body: "ABC" })).status).toBe(200);
+      const response = await wrapped(`${origin}/start`, { method: "POST", body: "ABC" });
+      const clone = response.clone();
+      const nestedClone = clone.clone();
+      for (const result of [response, clone, nestedClone]) {
+        expect(result.status).toBe(200);
+        expect(result.redirected).toBe(true);
+        expect(result.url).toBe(`${origin}/final`);
+        expect(await result.text()).toBe("ok");
+      }
       expect(
         received.map(({ path, method, body, auth }) => ({ path, method, body, auth })),
       ).toEqual(
@@ -552,6 +806,8 @@ describe("credentialed redirects over loopback HTTP", () => {
       const wrapped = await wrappedFetch(kind, fetch, [origin]);
       const response = await wrapped(`${origin}/start`, { redirect: "follow" });
       expect(response.status).toBe(302);
+      expect(response.redirected).toBe(false);
+      expect(response.url).toBe(`${origin}/start`);
       expect(response.headers.get("Location")).toBe(destination);
       expect(await response.text()).toBe("ok");
       expect(foreignReceived).toEqual([]);
@@ -568,7 +824,14 @@ describe("credentialed redirects over loopback HTTP", () => {
       status = 302;
       destination = `${second}/final`;
       const wrapped = await wrappedFetch(kind, fetch, [origin, second]);
-      expect((await wrapped(`${origin}/start`)).status).toBe(200);
+      const response = await wrapped(`${origin}/start`);
+      const clone = response.clone();
+      for (const result of [response, clone]) {
+        expect(result.status).toBe(200);
+        expect(result.redirected).toBe(true);
+        expect(result.url).toBe(destination);
+        expect(await result.text()).toBe("foreign");
+      }
       expect(foreignReceived).toHaveLength(1);
       expect(foreignReceived[0].auth).toBe(`DPoP ${TOKEN}`);
       const firstProof = await proofOf(received[0].proof);
@@ -576,5 +839,32 @@ describe("credentialed redirects over loopback HTTP", () => {
       expect(nextProof).toMatchObject({ htu: destination, htm: "GET" });
       expect(nextProof.jti).not.toBe(firstProof.jti);
     });
+
+    for (const asRequest of [false, true]) {
+      it(`${kind}: caller-owned passthrough credentials never reach a redirected destination (${asRequest ? "Request" : "init"})`, async () => {
+        received.length = 0;
+        foreignReceived.length = 0;
+        status = 302;
+        destination = `${second}/final`;
+        const wrapped = await wrappedFetch(kind, fetch, []);
+        const init = {
+          headers: { Authorization: "Bearer caller-token", DPoP: "caller-proof" },
+          redirect: "follow" as const,
+        };
+        const response = asRequest
+          ? await wrapped(new Request(`${origin}/start`, init))
+          : await wrapped(`${origin}/start`, init);
+        expect(response.status).toBe(302);
+        expect(response.redirected).toBe(false);
+        expect(response.url).toBe(`${origin}/start`);
+        expect(await response.text()).toBe("ok");
+        expect(received).toHaveLength(1);
+        expect(received[0]).toMatchObject({ auth: "Bearer caller-token", proof: "caller-proof" });
+        expect(foreignReceived).toEqual([]);
+        // Check the destination is live, so refusal is not a network false positive.
+        expect((await fetch(destination)).status).toBe(200);
+        expect(foreignReceived).toEqual([{ auth: undefined, proof: undefined }]);
+      });
+    }
   }
 });

@@ -81,7 +81,12 @@ import { Agent } from "@solid/object";
 import * as DPoP from "dpop";
 import { DataFactory } from "n3";
 import * as oauth from "oauth4webapi";
-import { fetchWithCredentialedRedirects } from "./credentialed-redirects.js";
+import {
+  type CredentialedHopResult,
+  fetchPassthrough,
+  fetchWithCredentialedRedirects,
+  hasCredentialHeaders,
+} from "./credentialed-redirects.js";
 import { brandFetchWrapper, MODULE_PRISTINE_FETCH, resolvePristineFetch } from "./pristine.js";
 import {
   authErrorFrom,
@@ -1005,16 +1010,14 @@ class SolidAuthEngine implements SolidAuth {
   }
 
   get authenticatedFetch(): typeof fetch {
-    // When LOGGED OUT (no live session) hand back the pristine, credential-free
-    // fetch (the SolidAuthController contract). While logged in, return OUR OWN
-    // authenticated wrapper — built over the known-pristine #publicFetch, NOT
+    // Keep caller-owned credentials behind the redirect boundary even while logged
+    // out. The wrapper reads the live session and runs over pristine #publicFetch, NOT
     // ReactiveFetchManager.fetch (which captures globalThis.fetch at construction
     // and could route through a global another controller patched, applying the
     // WRONG credentials — the roborev finding). The wrapper is fully controller-
     // owned: pristine fetch → on 401 from an allowed origin, our provider upgrades
     // and retries. The global is never read or patched (except the explicit
     // patchGlobalFetch opt-in, which only affects bare `fetch()` callers, not this).
-    if (!this.#session) return this.#publicFetch;
     return this.#ownAuthenticatedFetch;
   }
 
@@ -1055,7 +1058,7 @@ class SolidAuthEngine implements SolidAuth {
       );
     }
     // No session / not an allowed origin → unauthenticated (public) request.
-    return base(request);
+    return fetchPassthrough(base, request);
   }
 
   /** Upgrade and retry only this checked hop; never let the transport redirect it. */
@@ -1063,7 +1066,7 @@ class SolidAuthEngine implements SolidAuth {
     base: typeof fetch,
     provider: WebIdDPoPTokenProvider,
     request: Request,
-  ): Promise<Response> {
+  ): Promise<CredentialedHopResult> {
     // Clone BEFORE the first fetch consumes the body: a 401 retry must replay the
     // body, but PUT/PATCH/POST request streams are single-use once fetched, so
     // re-upgrading the already-consumed request would send an empty/invalid body
@@ -1099,9 +1102,15 @@ class SolidAuthEngine implements SolidAuth {
       const retryResponse = await base(retried);
       // The RS may rotate the nonce again on the retry response — keep it current.
       provider.rememberNonce(retryResponse, request);
-      return retryResponse;
+      return {
+        response: retryResponse,
+        followRedirects: retried !== retrySource || !hasCredentialHeaders(retried),
+      };
     }
-    return response;
+    return {
+      response,
+      followRedirects: upgraded !== request || !hasCredentialHeaders(upgraded),
+    };
   }
 
   get webId(): string | null {

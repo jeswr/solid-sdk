@@ -1,5 +1,6 @@
 <!-- AUTHORED-BY Codex GPT-5 -->
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/solid-auth-core
 
@@ -52,6 +53,16 @@ initial request. Each hop receives a fresh DPoP proof for its URL and method, bo
 the attached access token. Resource-server nonces are cached only for the checked hop's
 origin. Redirects outside the allowlist are returned unchanged without contacting the
 destination. Uncredentialed passthrough requests retain the caller's redirect policy.
+
+Passthrough and fallback requests carrying caller-owned `Authorization`, `DPoP`, or
+`Proxy-Authorization` headers also use manual mode, whether supplied through `init.headers`
+or a Request. Their redirects are always returned unfollowed, including same-origin redirects:
+the SDK cannot mint fresh proofs for those credentials. On SDK-authenticated redirects,
+an origin change strips `Cookie`, `Cookie2`, `Proxy-Authorization`, `Authorization`, and
+caller `DPoP` headers before attaching freshly scoped SDK credentials. Same-origin hops
+preserve those headers before the SDK replaces its authorization and proof.
+The `authenticatedFetch` handle retains this boundary before login and after logout;
+`publicFetch` remains the explicit pristine transport.
 
 POST requests become GET on 301/302; 303 changes methods other than GET/HEAD to GET.
 These rewrites discard the body and its content headers. Other redirects preserve the
