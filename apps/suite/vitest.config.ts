@@ -52,6 +52,7 @@ export default defineConfig({
         "src/apps/sheets/lib/refs/**/*.ts",
         "src/apps/sheets/lib/csv/**/*.ts",
         "src/apps/sheets/lib/format/**/*.ts",
+        "src/apps/sheets/lib/condformat/**/*.ts",
         "src/apps/calendar/lib/layout/**/*.ts",
         "src/apps/calendar/lib/invites/**/*.ts",
         "src/apps/calendar/lib/recurrence/**/*.ts",
