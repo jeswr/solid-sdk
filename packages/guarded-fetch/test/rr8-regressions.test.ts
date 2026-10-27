@@ -213,3 +213,42 @@ for (const [name, ResponseImpl] of Object.entries({ native: Response, undici: Un
     }
   }, 1_000);
 }
+
+describe("refuseRedirects forwards the caller's explicit init (Codex rr9)", () => {
+  it("lets a delegated fetch that reads options from init see method, headers and body", async () => {
+    const seen: { method?: string; header?: string | null; body?: unknown; url?: string }[] = [];
+    // Like rdfFetchFor: reads its options from init, not from the Request.
+    const delegated = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      seen.push({
+        method: init?.method,
+        header: new Headers(init?.headers).get("content-type"),
+        body: init?.body,
+        url: new Request(input, init).url,
+      });
+      return new Response("ok");
+    }) as typeof fetch;
+    const request = new Request("https://pod.example/alice/doc");
+    for (let call = 0; call < 2; call += 1) {
+      const res = await refuseRedirects(delegated)(request, {
+        method: "PUT",
+        body: "payload",
+        headers: { "content-type": "text/turtle" },
+      });
+      expect(await res.text()).toBe("ok");
+    }
+    expect(seen).toEqual([
+      {
+        method: "PUT",
+        header: "text/turtle",
+        body: "payload",
+        url: "https://pod.example/alice/doc",
+      },
+      {
+        method: "PUT",
+        header: "text/turtle",
+        body: "payload",
+        url: "https://pod.example/alice/doc",
+      },
+    ]);
+  });
+});

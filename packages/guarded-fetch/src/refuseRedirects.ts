@@ -119,13 +119,13 @@ export function refuseRedirects(
   fetch: typeof globalThis.fetch = globalThis.fetch,
 ): typeof globalThis.fetch {
   const wrapped = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const snapshot = snapshotFetchInput(input, init);
+    // Forward an owned snapshot of the Request (never the caller's object) together with the
+    // caller's explicit init, exactly as main forwarded the original input and init, so a
+    // delegated fetch that reads its options from init still sees them. The snapshot is taken
+    // without init and never transfers a body that init replaces.
+    const snapshot = snapshotFetchInput(input, init, { metadataOnly: true });
     const { url } = snapshot;
-    const request = typeof snapshot.input === "string" ? undefined : snapshot.input;
-    const effectiveInit: RequestInit = request
-      ? { referrer: request.referrer, referrerPolicy: request.referrerPolicy, redirect: "manual" }
-      : { ...snapshot.init, redirect: "manual" };
-    const res = await fetch(snapshot.input, effectiveInit);
+    const res = await fetch(snapshot.input, { ...(init ?? {}), redirect: "manual" });
 
     const opaqueRedirect = res.type === "opaqueredirect";
     // Preserve the legacy clients' broader refusal as well as standard moved

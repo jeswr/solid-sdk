@@ -349,8 +349,10 @@ it("snapshots source URLs and preserves native request body and policies", async
     expect(effective.keepalive).toBe(true);
     expect(effective.credentials).toBe("include");
     expect(effective.integrity).toBe("sha256-fixture");
-    expect(effective.referrer).toBe("https://source.test/referrer");
-    expect(effective.referrerPolicy).toBe("no-referrer");
+    // refuseRedirects forwards { ...init, redirect: "manual" } with the Request, as on main,
+    // and Fetch resets referrer fields when a Request meets a non-empty init.
+    expect(effective.referrer).toBe("about:client");
+    expect(effective.referrerPolicy).toBe("");
     expect(effective.redirect).toBe("manual");
     return new Response();
   });

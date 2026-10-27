@@ -76,12 +76,10 @@ for (const [name, factory] of Object.entries(factories)) {
         );
         expect(effective.integrity).toBe(override || inheritsPolicies ? "sha256-fixture" : "");
         expect(effective.keepalive).toBe(override || inheritsPolicies);
-        expect(effective.referrer).toBe(
-          override || inheritsPolicies ? `${BASE}referrer` : "about:client",
-        );
-        expect(effective.referrerPolicy).toBe(
-          override ? "origin" : inheritsPolicies ? "no-referrer" : "",
-        );
+        // Fetch resets referrer fields when a Request is combined with a non-empty init, as
+        // main's refuseRedirects did with its { ...init, redirect: "manual" }.
+        expect(effective.referrer).toBe(override ? `${BASE}referrer` : "about:client");
+        expect(effective.referrerPolicy).toBe(override ? "origin" : "");
         expect(effective.redirect).toBe("manual");
         expect(await effective.text()).toBe(override ? "override body" : "private body");
         controller.abort();
