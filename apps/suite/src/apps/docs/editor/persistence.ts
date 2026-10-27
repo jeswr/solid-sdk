@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex
 import { RdfFetchError } from "@jeswr/fetch-rdf";
-import { SolidPersistence } from "@jeswr/y-solid";
+import { SolidPersistence, SolidUpdateStore } from "@jeswr/y-solid";
 import { generateJSON, getSchema, type JSONContent } from "@tiptap/react";
 import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
 import { clearDocument, IndexeddbPersistence, storeState } from "y-indexeddb";
@@ -18,6 +18,9 @@ import {
   TitleConflictError,
 } from "../lib/model";
 import { baseExtensions } from "./extensions";
+import { DocumentUpdateStore } from "./update-store";
+
+class InactiveLogError extends Error {}
 
 interface PendingEdit {
   title: string;
@@ -40,6 +43,7 @@ export class DocumentPersistence {
   conflict: TitleConflictError | undefined;
   readOnly = false;
   online = true;
+  trashed = false;
   private creation: "draft" | "creating" | "created" = "draft";
   private draftMirror: IndexeddbPersistence | undefined;
   private pendingEdit: PendingEdit | undefined;
@@ -150,6 +154,15 @@ export class DocumentPersistence {
         fetch: this.session.fetch,
       }).createFolder(container);
       this.assertActive();
+      // Recovery is an explicit creation state: make its base update durable
+      // before advertising the new log to other clients.
+      this.seedSnapshot();
+      await this.activeDocument();
+      this.assertActive();
+      await new SolidUpdateStore({ container, fetch: this.session.fetch }).appendUpdate(
+        encodeStateAsUpdate(this.doc),
+      );
+      this.assertActive();
       this.stored = await this.store.save(
         this.stored,
         { updateLog: container, revisionLabel: "Recovered last saved copy" },
@@ -158,22 +171,26 @@ export class DocumentPersistence {
       this.assertActive();
     }
     if (!this.readOnly && !this.offlineCopy) {
-      this.attachProvider(container);
+      this.attachProvider(container, false);
       // Keep the editor unmounted until the initial CRDT merge finishes. Replaying
       // the log must not race the first keyboard selection or a pending local edit.
       await this.provider?.whenSynced;
       this.assertActive();
       if (this.providerError) throw this.providerError;
     }
-    if (this.doc.getXmlFragment("prosemirror").length === 0) {
-      const extensions = baseExtensions(this.session.fetch);
-      const seed = prosemirrorJSONToYDoc(
-        getSchema(extensions),
-        generateJSON(this.body || "<p></p>", extensions),
-        "prosemirror",
-      );
-      applyUpdate(this.doc, encodeStateAsUpdate(seed));
-      seed.destroy();
+    // Legacy snapshots are view-only. Existing writable documents must hydrate
+    // from their CRDT log, including when its visible content is empty.
+    if (this.readOnly) this.seedSnapshot();
+    if (
+      !pending &&
+      !this.readOnly &&
+      cached?.webId === this.session.webId &&
+      (cached.document.data.updateLog ?? layout.updateLog) !== container
+    ) {
+      // A reopened device may still hold state from a retired log, even when
+      // those edits were previously marked saved. Keep the transfer durable.
+      this.needsFullState = true;
+      this.markDirty();
     }
     if (recover) {
       await clearDocument(url);
@@ -190,6 +207,16 @@ export class DocumentPersistence {
       : this.version || (this.provider && !this.provider.synced)
         ? "saving"
         : "saved";
+  }
+  private seedSnapshot() {
+    const extensions = baseExtensions(this.session.fetch);
+    const seed = prosemirrorJSONToYDoc(
+      getSchema(extensions),
+      generateJSON(this.body || "<p></p>", extensions),
+      "prosemirror",
+    );
+    applyUpdate(this.doc, encodeStateAsUpdate(seed));
+    seed.destroy();
   }
   private updateContainer() {
     const stored = this.stored as StoredDocument;
@@ -225,19 +252,84 @@ export class DocumentPersistence {
         JSON.stringify({ webId: this.session.webId, document: this.stored }),
       );
   }
-  private attachProvider(container: string) {
+  private pauseLog(error: Error) {
+    this.providerError = error;
+    this.needsFullState = true;
+    this.provider?.destroy();
+    this.state = "retrying";
+    this.scheduleRetry();
+    this.notify();
+  }
+  private async activeDocument() {
+    let remote: StoredDocument | undefined;
+    try {
+      remote = await this.store.read((this.stored as StoredDocument).url);
+    } catch (error) {
+      if (!(error instanceof RdfFetchError && [404, 410].includes(error.status ?? 0))) throw error;
+    }
+    if (!remote) {
+      this.trashed = true;
+      const error = new InactiveLogError("This document was moved to trash");
+      this.pauseLog(error);
+      throw error;
+    }
+    return remote;
+  }
+  private async checkLog(container: string) {
+    const remote = await this.activeDocument();
+    const active = remote.data.updateLog ?? docContainerUrls(remote.url).updateLog;
+    if (active !== container) {
+      const error = new InactiveLogError("The document has a new update log");
+      this.pauseLog(error);
+      throw error;
+    }
+  }
+  private async reconcileProvider() {
+    const remote = await this.activeDocument();
+    if (
+      this.version === this.savedVersion ||
+      (this.pendingEdit && this.title === this.pendingEdit.baseTitle)
+    )
+      this.title = remote.data.title;
+    this.stored = remote;
+    this.checkTitleConflict();
+    if (this.conflict) throw this.conflict;
+    this.offlineCopy = false;
+    const container = this.updateContainer();
+    if (
+      this.provider?.destroyed ||
+      this.provider?.store.container !== container ||
+      !this.provider.synced
+    ) {
+      this.state = "saving";
+      this.notify();
+      this.provider?.destroy();
+      await this.provider?.flush();
+      this.needsFullState = true;
+      this.attachProvider(container, false);
+      await this.provider?.whenSynced;
+      if (this.providerError) throw this.providerError;
+    }
+    this.trashed = false;
+  }
+  private attachProvider(container: string, allowEmpty = true) {
     this.assertActive();
     this.provider?.destroy();
-    this.provider = new SolidPersistence({ doc: this.doc, container, fetch: this.session.fetch });
-    this.provider.on("synced", () => {
-      if (this.version === this.savedVersion && !this.providerError) {
-        this.state = "saved";
-        this.notify();
-      }
+    this.providerError = undefined;
+    this.provider = new SolidPersistence({
+      doc: this.doc,
+      store: new DocumentUpdateStore(
+        container,
+        this.session.fetch,
+        () => this.checkLog(container),
+        allowEmpty,
+      ),
     });
     this.provider.on("error", (error) => {
       this.providerError = error;
+      this.needsFullState = true;
       this.state = "retrying";
+      this.scheduleRetry();
       this.notify();
     });
   }
@@ -265,7 +357,7 @@ export class DocumentPersistence {
       baseModified: this.pendingEdit?.baseModified ?? this.stored?.data.modified,
     };
     this.version++;
-    this.state = "saving";
+    this.state = this.trashed ? "retrying" : "saving";
     void this.local?.set("pending", 1);
     void this.local?.set("title", this.title);
     void this.local?.set("edit", JSON.stringify(this.pendingEdit));
@@ -281,10 +373,7 @@ export class DocumentPersistence {
   async flush(): Promise<void> {
     if (this.timer) clearTimeout(this.timer);
     if (this.readOnly || !this.online || this.conflict) return;
-    if (this.version === this.savedVersion) {
-      await this.provider?.flush();
-      return;
-    }
+    if (this.creation === "draft" && this.version === this.savedVersion) return;
     if (this.tail) return this.tail;
     this.tail = this.write().finally(() => {
       this.tail = undefined;
@@ -293,6 +382,11 @@ export class DocumentPersistence {
   }
   private async write() {
     try {
+      if (this.creation === "created") await this.reconcileProvider();
+      if (this.savedVersion === this.version) {
+        await this.persistUpdates();
+        await this.cacheStored();
+      }
       while (this.savedVersion !== this.version) {
         const version = this.version;
         const title = this.title || "Untitled document";
@@ -356,15 +450,9 @@ export class DocumentPersistence {
           );
         }
         if (this.title === title) this.title = (this.stored as StoredDocument).data.title;
-        await this.provider?.flush();
-        if (this.providerError || this.needsFullState) {
-          // Failed incremental writes remain in IndexedDB; reconcile with one full update.
-          await this.provider?.persistFullState();
-          this.providerError = undefined;
-          this.needsFullState = false;
-        }
-        await this.provider?.flush();
-        if (this.providerError) throw this.providerError;
+        // A concurrent snapshot/recovery may have changed the pointer during save.
+        await this.reconcileProvider();
+        await this.persistUpdates();
         if (this.local) await storeState(this.local, true);
         await this.cacheStored();
         this.savedVersion = version;
@@ -401,6 +489,19 @@ export class DocumentPersistence {
     }
     this.notify();
   }
+  private async persistUpdates() {
+    await this.provider?.flush();
+    if (this.providerError || this.needsFullState) {
+      // Failed or retired incremental writes remain in IndexedDB. Merge the
+      // entire local state into the active log before clearing pending edits.
+      await this.provider?.persistFullState();
+      this.providerError = undefined;
+      this.needsFullState = false;
+    }
+    await this.provider?.flush();
+    if (this.providerError) throw this.providerError;
+    if (this.provider) await this.checkLog(this.provider.store.container);
+  }
   async resolveTitle(keepMine: boolean) {
     if (!this.stored || !this.conflict) return;
     const remote = await this.store.read(this.stored.url);
@@ -427,18 +528,7 @@ export class DocumentPersistence {
     }
     this.online = true;
     try {
-      if (this.offlineCopy && this.stored) {
-        const remote = await this.store.read(this.stored.url);
-        this.assertActive();
-        if (!remote) throw new Error("not-found");
-        this.stored = remote;
-        this.checkTitleConflict();
-        this.offlineCopy = false;
-      }
-      if (this.creation === "created" && !this.readOnly && !this.provider?.synced) {
-        this.attachProvider(this.updateContainer());
-        await this.provider?.whenSynced;
-      }
+      if (this.creation === "created" && !this.readOnly) await this.reconcileProvider();
       await this.provider?.sync();
       this.assertActive();
       if (this.provider && this.version !== this.savedVersion) this.needsFullState = true;

@@ -135,6 +135,34 @@ it("renders a working Docs Trash link to Drive's unfiltered trash route", () => 
   const link = Array.from(host.querySelectorAll("a")).find((link) => link.textContent === "Trash");
   expect(link?.getAttribute("href")).toBe("/drive/trash");
 });
+it("shows that a trashed document's pending edits are kept on this device", () => {
+  const doc = new Doc();
+  const session = { storageUrl: "https://pod.test/", fetch: vi.fn() } as unknown as PodSession;
+  mocks.runtime = {
+    doc,
+    session,
+    state: "retrying",
+    online: true,
+    trashed: true,
+    lastSaved: Date.now(),
+    title: "Plan",
+    readOnly: false,
+  } as unknown as DocumentPersistence;
+  try {
+    const html = renderToString(
+      createElement(
+        TooltipProvider,
+        null,
+        createElement(DocumentEditor, { session, resource: undefined }),
+      ),
+    );
+    expect(html).toContain("Moved to trash — edits saved on this device");
+    expect(html).not.toContain("Saved to your pod");
+  } finally {
+    doc.destroy();
+    mocks.runtime = null;
+  }
+});
 it("keeps the document non-editable with visible Syncing feedback while opening", () => {
   mocks.runtime = null;
   const html = renderToString(

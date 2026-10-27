@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex
-import { SolidPersistence } from "@jeswr/y-solid";
+import { SolidPersistence, SolidUpdateStore } from "@jeswr/y-solid";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement } from "yjs";
 import { DocumentPersistence } from "../src/apps/docs/editor/persistence";
@@ -180,6 +180,41 @@ async function replayText(runtime: DocumentPersistence, session: PodSession) {
   }
 }
 describe("Docs persistence review regressions", () => {
+  it("transfers a reopened device's previously saved mirror into the new active log", async () => {
+    const { runtime, session } = await fixture();
+    runtimes.push(runtime);
+    await runtime.open();
+    runtime.doc.getXmlFragment("prosemirror").insert(0, [new XmlElement("original")]);
+    runtime.rename("Reopened log transfer");
+    await runtime.flush();
+    const stored = runtime.stored;
+    if (!stored) throw new Error("Missing fixture");
+    await runtime.destroy();
+    const container = (stored.data.updateLog as string).replace("updates/", "updates-123/");
+    const recovered = new Doc();
+    recovered.getXmlFragment("prosemirror").insert(0, [new XmlElement("recovered")]);
+    await new SolidUpdateStore({ container, fetch: session.fetch }).appendUpdate(
+      encodeStateAsUpdate(recovered),
+    );
+    recovered.destroy();
+    await runtime.store.save(
+      stored,
+      { updateLog: container },
+      {
+        regenerate: () => ({ body: runtime.body, format: "text/html" }),
+      },
+    );
+    const reopened = new DocumentPersistence(session);
+    runtimes.push(reopened);
+    await reopened.open(stored.url);
+    expect(reopened.state).toBe("saving");
+    expect(mirrors.get(stored.url)?.get("pending")).toBe(1);
+    await reopened.flush();
+    expect(reopened.state).toBe("saved");
+    const replay = await replayText(reopened, session);
+    expect(replay).toContain("original");
+    expect(replay).toContain("recovered");
+  });
   it("resumes creation after the initial log read fails without duplicating the document", async () => {
     const f = await fixture();
     const { runtime, pod, session } = f;

@@ -34,6 +34,82 @@ function fixture(companion = true) {
 }
 
 describe("Docs uses Drive trash records", () => {
+  it("merges a recreated update-only companion tree on Undo without changing asset URLs", async () => {
+    const { pod, session, client } = fixture();
+    const trashed = await deleteDocument(DOC, session);
+    await pod.fetch(`${TREE}updates/late.bin`, {
+      method: "PUT",
+      headers: { "content-type": "application/octet-stream" },
+      body: "late immutable update",
+    });
+    const restored = await restoreItems(client, DRIVE, trashed.done);
+    expect(restored.failed).toEqual([]);
+    expect(restored.done.map(({ url, renamed }) => ({ url, renamed }))).toEqual([
+      { url: DOC, renamed: false },
+      { url: TREE, renamed: false },
+    ]);
+    expect(await (await pod.fetch(`${TREE}updates/one.bin`)).text()).toBe("update");
+    expect(await (await pod.fetch(`${TREE}updates/late.bin`)).text()).toBe("late immutable update");
+    expect(await (await pod.fetch(`${TREE}assets/chart.png`)).text()).toBe("image");
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+  });
+  it.each([
+    ["assets/new.png", "image/png"],
+    ["updates/not-an-update.txt", "text/plain"],
+    ["updates/nested/update.bin", "application/octet-stream"],
+    ["other/update.bin", "application/octet-stream"],
+    ["unexpected.bin", "application/octet-stream"],
+  ])("preserves the normal restore collision policy for a companion containing %s", async (path, type) => {
+    const { pod, session, client } = fixture();
+    const trashed = await deleteDocument(DOC, session);
+    await pod.fetch(`${TREE}${path}`, {
+      method: "PUT",
+      headers: { "content-type": type },
+      body: "unrelated occupant",
+    });
+    const restored = await restoreItems(client, DRIVE, trashed.done);
+    expect(restored.failed).toEqual([]);
+    expect(restored.done[1]).toMatchObject({
+      url: `${ROOT}docs/plan%20(restored)/`,
+      renamed: true,
+    });
+    expect(await (await pod.fetch(`${TREE}${path}`)).text()).toBe("unrelated occupant");
+  });
+  it("merges empty update folders and timestamped recovery logs without renaming", async () => {
+    const { pod, session, client } = fixture();
+    const trashed = await deleteDocument(DOC, session);
+    await client.createFolder(`${TREE}updates/`);
+    await pod.fetch(`${TREE}updates-123/late`, {
+      method: "PUT",
+      headers: { "content-type": "application/octet-stream" },
+      body: "late",
+    });
+    expect((await restoreDocument(trashed.done, session)).failed).toEqual([]);
+    expect(await (await pod.fetch(`${TREE}updates/one.bin`)).text()).toBe("update");
+    expect(await (await pod.fetch(`${TREE}updates-123/late`)).text()).toBe("late");
+  });
+  it("retains recovery copies when an update URL is occupied by different bytes", async () => {
+    const { pod, session, client } = fixture();
+    const trashed = await deleteDocument(DOC, session);
+    await pod.fetch(`${TREE}updates/one.bin`, {
+      method: "PUT",
+      headers: { "content-type": "application/octet-stream" },
+      body: "different",
+    });
+    const restored = await restoreDocument(trashed.done, session);
+    expect(restored.done).toHaveLength(1);
+    expect(restored.failed).toHaveLength(1);
+    expect(await (await pod.fetch(`${TREE}updates/one.bin`)).text()).toBe("different");
+    const recovery = (await listTrash(client, DRIVE))[0];
+    expect(recovery?.status).toBe("partial");
+    expect(await (await pod.fetch(`${recovery?.url}updates/one.bin`)).text()).toBe("update");
+    await pod.fetch(`${TREE}updates/one.bin`, { method: "DELETE" });
+    // Retry the caller's original record after resolving the conflicting resource.
+    expect((await restoreDocument(trashed.done.slice(1), session)).failed).toEqual([]);
+    expect(await (await pod.fetch(`${TREE}updates/one.bin`)).text()).toBe("update");
+    expect(await (await pod.fetch(`${TREE}assets/chart.png`)).text()).toBe("image");
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+  });
   it("lists a Docs delete in Drive and restores both the snapshot and companion tree with restoreItems", async () => {
     const { pod, session, client } = fixture();
     const result = await deleteDocument(DOC, session);

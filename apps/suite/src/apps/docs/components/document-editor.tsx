@@ -376,7 +376,9 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
         }
         actions={
           <>
-            <SaveIndicator status={status} />
+            <SaveIndicator
+              status={runtime.trashed ? "Moved to trash — edits saved on this device" : status}
+            />
             {runtime.state === "failed" && !runtime.conflict && (
               <Button variant="link" onClick={() => setWhy(true)}>
                 Why?

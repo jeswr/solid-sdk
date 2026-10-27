@@ -657,6 +657,19 @@ function restoredName(name: string): string {
   return dot > 0 ? `${name.slice(0, dot)} (restored)${name.slice(dot)}` : `${name} (restored)`;
 }
 
+/** Only Docs' immutable update logs can safely share a recreated companion tree. */
+async function isDocsUpdateTree(client: DriveClient, original: string): Promise<boolean> {
+  const docs = new URL("docs/", client.storageUrl).href;
+  if (!original.startsWith(docs) || !original.endsWith("/")) return false;
+  for (const child of await client.list(original)) {
+    if (child.kind !== "folder" || !/^updates(?:-\d+)?$/.test(child.name)) return false;
+    for (const update of await client.list(child.url)) {
+      if (update.kind !== "file" || update.contentType !== "application/octet-stream") return false;
+    }
+  }
+  return true;
+}
+
 /** Merge recovery copies into their original tree, never replacing survivors. */
 async function restoreMissing(
   client: DriveClient,
@@ -718,7 +731,13 @@ export async function restoreItems(
       const slot = slotOf(driveRoot, entry);
       validateOriginal(client, driveRoot, entry);
       const status = await requireTrashEntry(client, driveRoot, entry);
-      if (status === "partial") {
+      const occupied = status !== "partial" && (await exists(client, entry.original));
+      if (status === "partial" || (occupied && (await isDocsUpdateTree(client, entry.original)))) {
+        // A failed merge must retry in place even after assets have been restored.
+        if (status !== "partial")
+          await updateIndex(client, driveRoot, (index) => {
+            transferRecord(index, entry.url).status = "partial";
+          });
         const remaining = await restoreMissing(client, entry.url, entry.original);
         if (remaining.length) throw new TrashRestorePartialError(remaining);
         if (await recoveryStatus(client, driveRoot, entry))
@@ -731,14 +750,7 @@ export async function restoreItems(
       const parent = parentOf(entry.original) as string;
       let target = entry.original;
       let renamed = false;
-      const exists = await client.stat(target).then(
-        () => true,
-        (error: unknown) => {
-          if (error instanceof DriveError && error.kind === "not-found") return false;
-          throw error;
-        },
-      );
-      if (exists) {
+      if (occupied) {
         target = childUrl(parent, restoredName(entry.name), folder);
         renamed = true;
       }
