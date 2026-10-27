@@ -23,9 +23,7 @@
 // implementation reproduces (see protocol.test.ts for the spec worked-example
 // vector).
 //
-// VOC-07: new graphs now use https://jeswr.org/ns/a2a# and therefore receive
-// new content hashes. These snapshots pin the new writer output; the published
-// legacy graph/hash conformance vector in protocol.test.ts remains unchanged.
+// Phase 1 preserves the published legacy wire bytes and content hashes.
 //
 // NON-DETERMINISM is normalised: intent node IRIs are supplied explicitly (never
 // the FNV digest of the NL), and RDFC-1.0 relabels blank nodes to stable c14n
@@ -141,7 +139,7 @@ describe("characterization — Protocol Document hash + JSON-LD (byte-exact)", (
     });
   }
 
-  it("new canonical PD content hash is byte-stable", async () => {
+  it("PD content hash is byte-stable (the published pin value must not move)", async () => {
     expect((await makePd()).hash).toMatchSnapshot();
   });
 

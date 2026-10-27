@@ -37,7 +37,14 @@ export async function validateIntent(
   // graphs must retain their IRIs so existing protocol hashes still verify.
   const data = toDataset(intentQuads(intent));
   const dataGraph = validationDataset(data);
-  const shapeGraph = validationDataset(toDataset(shapeQuads(shape)), data);
+  if (dataGraph === undefined) {
+    return {
+      conforms: false,
+      results: [{ message: "A2A namespace aliases identify distinct data nodes" }],
+    };
+  }
+  // Shapes use the SAME total renaming, without interpreting constraint roles.
+  const shapeGraph = validationDataset(toDataset(shapeQuads(shape)), false) as Store;
 
   const validator = new SHACLValidator(shapeGraph);
   const report = await validator.validate(dataGraph);

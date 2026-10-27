@@ -109,7 +109,7 @@ describe.each(variants)("restrictive SHACL aliases: $name", (variant) => {
   });
 });
 
-describe("SHACL identity and list roles", () => {
+describe("uniform SHACL namespace renaming", () => {
   it.each([
     "class",
     "targetClass",
@@ -134,7 +134,7 @@ describe("SHACL identity and list roles", () => {
     expect((await validateIntent(graph, shapes)).conforms).toBe(false);
   });
 
-  it("keeps class-axiom subjects distinct when they also identify resources", async () => {
+  it("fails closed when class-axiom subject identities would collapse", async () => {
     const graph = await parseRdf(
       `<${LEGACY_A2A_NS}SubIntent> <${RDFS}subClassOf> <${LEGACY_A2A_NS}Intent> .
         <${A2A}SubIntent> <${A2A}mode> 3 .`,
@@ -171,7 +171,7 @@ describe("SHACL identity and list roles", () => {
   it.each([
     LEGACY_A2A_NS,
     A2A,
-  ])("applies implicit class targets without renaming the shape (%s)", async (ns) => {
+  ])("applies the same renaming to implicit class targets (%s)", async (ns) => {
     const graph = await parseRdf(`<urn:focus> a <${ns}Intent> .`, "text/turtle", {});
     const shapes = await parseRdf(
       `@prefix sh: <${SH}> .
@@ -191,7 +191,7 @@ describe("SHACL identity and list roles", () => {
     "and",
     "or",
     "xone",
-  ])("keeps a shared named shape's class and resource value contexts separate (sh:%s)", async (link) => {
+  ])("renames a shared named shape uniformly in class and resource constraints (sh:%s)", async (link) => {
     const graph = await parseRdf(
       `<urn:focus> a <${LEGACY_A2A_NS}Intent> ; <${A2A}action> <${LEGACY_A2A_NS}Intent> .`,
       "text/turtle",
@@ -216,7 +216,7 @@ describe("SHACL identity and list roles", () => {
     `(<${LEGACY_A2A_NS}action> [ sh:alternativePath (rdf:type rdf:type) ])`,
     `(<${LEGACY_A2A_NS}action> rdf:type [ sh:zeroOrMorePath rdf:type ])`,
     `(<${LEGACY_A2A_NS}action> rdf:type [ sh:zeroOrOnePath rdf:type ])`,
-  ])("recognizes class values returned by %s", async (path) => {
+  ])("renames all values returned by %s", async (path) => {
     const graph = await parseRdf(
       `<urn:focus> <${A2A}action> <urn:action> ; <${A2A}mode> <${LEGACY_A2A_NS}GrantAction> .
         <urn:action> a <${LEGACY_A2A_NS}GrantAction> .`,
@@ -271,7 +271,7 @@ describe("SHACL identity and list roles", () => {
     expect((await validateIntent(graph, shapes)).conforms).toBe(false);
   });
 
-  it("preserves a targetNode absent from the data graph in value constraints", async () => {
+  it("renames a targetNode absent from the data graph consistently in value constraints", async () => {
     const graph = await parseRdf("", "text/turtle", {});
     const shapes = await parseRdf(
       `@prefix sh: <${SH}> .
@@ -287,7 +287,7 @@ describe("SHACL identity and list roles", () => {
     "node",
     "not",
     "qualifiedValueShape",
-  ])("preserves named sh:%s references", async (link) => {
+  ])("renames named sh:%s references", async (link) => {
     const graph = await parseRdf(`<urn:focus> <${A2A}action> <urn:action> .`, "text/turtle", {});
     const shapes = await parseRdf(
       `@prefix sh: <${SH}> .
@@ -302,7 +302,7 @@ describe("SHACL identity and list roles", () => {
     expect((await validateIntent(graph, shapes)).conforms).toBe(link === "not");
   });
 
-  it.each(["and", "or", "xone"])("preserves named shapes in sh:%s lists", async (link) => {
+  it.each(["and", "or", "xone"])("renames named shapes in sh:%s lists", async (link) => {
     const graph = await parseRdf(`<urn:focus> <${A2A}action> <urn:action> .`, "text/turtle", {});
     const shapes = await parseRdf(
       `@prefix sh: <${SH}> .
@@ -317,7 +317,7 @@ describe("SHACL identity and list roles", () => {
   it.each([
     LEGACY_A2A_NS,
     A2A,
-  ])("preserves resource identities in sh:in and sh:hasValue (%s)", async (required) => {
+  ])("renames resource identities consistently in sh:in and sh:hasValue (%s)", async (required) => {
     const graph = await parseRdf(
       `<urn:focus> <${A2A}action> <${LEGACY_A2A_NS}resource> .`,
       "text/turtle",
@@ -331,10 +331,10 @@ describe("SHACL identity and list roles", () => {
       "text/turtle",
       {},
     );
-    expect((await validateIntent(graph, shapes)).conforms).toBe(required === LEGACY_A2A_NS);
+    expect((await validateIntent(graph, shapes)).conforms).toBe(true);
   });
 
-  it("normalizes a shared list separately in vocabulary and resource contexts", async () => {
+  it("renames a shared list uniformly in vocabulary and resource contexts", async () => {
     const graph = await parseRdf(
       `<urn:focus> a <${LEGACY_A2A_NS}Intent> ; <${A2A}action> <${LEGACY_A2A_NS}Intent> .`,
       "text/turtle",
@@ -351,4 +351,94 @@ describe("SHACL identity and list roles", () => {
     );
     expect((await validateIntent(graph, shapes)).conforms).toBe(true);
   });
+});
+
+// Round 3: an alternative path mixes classes and ordinary values. Its semantics
+// must not depend on whether an unrelated triple happens to use the same class.
+describe("SHACL uniform renaming regressions", () => {
+  it.each(variants)("rejects class/resource alternative-path bypass ($name)", async (variant) => {
+    const graph = await parseRdf(
+      `<urn:focus> a <${variant.types}Intent> .
+       <urn:unrelated> <${variant.data}mode> <${variant.types}Intent> .`,
+      "text/turtle",
+      {},
+    );
+    const shapes = await parseRdf(
+      `@prefix v: <${variant.shape}> . @prefix sh: <${SH}> . @prefix rdf: <${RDF}> .
+       <urn:shape> a sh:NodeShape ; sh:targetNode <urn:focus> ;
+         sh:property [ sh:path [ sh:alternativePath (rdf:type v:action) ] ;
+           sh:not [ sh:in (v:Intent) ] ] .`,
+      "text/turtle",
+      {},
+    );
+    if (variant.name === "legacy" || variant.name === "canonical") {
+      expect((await new SHACLValidator(shapes).validate(graph)).conforms).toBe(false);
+    }
+    const report = await validateIntent(graph, shapes);
+    expect(report.conforms).toBe(false);
+    expect(report.results.length).toBeGreaterThan(0);
+  });
+
+  it.each([
+    `<${LEGACY_A2A_NS}x> <urn:p> 1 . <${A2A}x> <urn:p> 2 .`,
+    `<urn:s> <urn:p> <${LEGACY_A2A_NS}x>, <${A2A}x> .`,
+    `<${LEGACY_A2A_NS}x> <urn:p> 1 . <urn:s> <urn:p> <${A2A}x> .`,
+    `<urn:s> <urn:p> <${LEGACY_A2A_NS}x> . <${A2A}x> <urn:p> 1 .`,
+  ])("fails closed on identity collisions even without a restricting shape: %s", async (body) => {
+    const graph = await parseRdf(body, "text/turtle", {});
+    const shapes = await parseRdf("", "text/turtle", {});
+    const before = await canonicalNQuads([...graph]);
+    const report = await validateIntent(graph, shapes);
+    expect(report.conforms).toBe(false);
+    expect(report.results[0]?.message).toContain("distinct data nodes");
+    expect(await canonicalNQuads([...graph])).toBe(before);
+  });
+
+  it("accepts pure predicate/class mixing even when the same terms occur in other positions", async () => {
+    const graph = await parseRdf(
+      `<urn:focus> a <${LEGACY_A2A_NS}Intent>, <${A2A}Intent> ;
+        <${LEGACY_A2A_NS}action> <urn:action> ; <${A2A}action> <urn:action> .
+       <${LEGACY_A2A_NS}Intent> <urn:p> <${A2A}action> .`,
+      "text/turtle",
+      {},
+    );
+    const shapes = await parseRdf(
+      `@prefix sh: <${SH}> .
+       <urn:shape> a sh:NodeShape ; sh:targetClass <${A2A}Intent> ;
+         sh:property [ sh:path <${LEGACY_A2A_NS}action> ; sh:minCount 1 ; sh:maxCount 1 ] .`,
+      "text/turtle",
+      {},
+    );
+    expect((await validateIntent(graph, shapes)).conforms).toBe(true);
+  });
+});
+
+it("uniformly renames graph names and literal datatypes while preserving literal values", async () => {
+  const { validationDataset } = await import("../src/validationDataset.js");
+  const graph = await parseRdf(
+    `<${LEGACY_A2A_NS}graph> {
+      <${LEGACY_A2A_NS}subject> <${LEGACY_A2A_NS}property>
+        "value"^^<${LEGACY_A2A_NS}Datatype>, "bonjour"@fr, "${LEGACY_A2A_NS}literal" .
+    }`,
+    "application/trig",
+    {},
+  );
+  const view = validationDataset(graph);
+  expect(view).toBeDefined();
+  const quads = [...(view ?? [])];
+  expect(quads).toHaveLength(3);
+  for (const quad of quads) {
+    expect(quad.subject.value).toBe(`${A2A}subject`);
+    expect(quad.predicate.value).toBe(`${A2A}property`);
+    expect(quad.graph.value).toBe(`${A2A}graph`);
+  }
+  expect(
+    quads.some(
+      (q) => q.object.termType === "Literal" && q.object.datatype.value === `${A2A}Datatype`,
+    ),
+  ).toBe(true);
+  expect(quads.some((q) => q.object.termType === "Literal" && q.object.language === "fr")).toBe(
+    true,
+  );
+  expect(quads.some((q) => q.object.value === `${LEGACY_A2A_NS}literal`)).toBe(true);
 });

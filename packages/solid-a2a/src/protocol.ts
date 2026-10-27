@@ -21,8 +21,10 @@ import { serialize } from "./serialize.js";
 import type { ProtocolDocument, ProtocolDocumentInput, ProtocolMeta } from "./types.js";
 import {
   A2A,
-  A2A_INLINE_CONTEXT,
+  canonicalA2aIri,
   DCTERMS,
+  LEGACY_A2A_INLINE_CONTEXT,
+  legacyA2aIri,
   PROTOCOL_HASH_ALGORITHM,
   PROTOCOL_HASH_PREFIX,
   RDF_TYPE,
@@ -31,9 +33,9 @@ import {
 import { GraphBuilder, objectTerms } from "./wrappers.js";
 
 /** The minted PD class + the predicates linking a PD to its shapes. */
-const A2A_PROTOCOL_DOCUMENT = `${A2A}ProtocolDocument` as const;
-const A2A_REQUEST_SHAPE = `${A2A}requestShape` as const;
-const A2A_RESPONSE_SHAPE = `${A2A}responseShape` as const;
+const A2A_PROTOCOL_DOCUMENT = legacyA2aIri(`${A2A}ProtocolDocument`);
+const A2A_REQUEST_SHAPE = legacyA2aIri(`${A2A}requestShape`);
+const A2A_RESPONSE_SHAPE = legacyA2aIri(`${A2A}responseShape`);
 const DCTERMS_TITLE = `${DCTERMS}title` as const;
 const DCTERMS_DESCRIPTION = `${DCTERMS}description` as const;
 const DCTERMS_HAS_VERSION = `${DCTERMS}hasVersion` as const;
@@ -60,6 +62,7 @@ export async function buildProtocolDocument(
     throw new TypeError("buildProtocolDocument: a non-empty requestShape is required.");
   }
 
+  // Canonical emission is deferred to phase 2: pinned verifiers would reject it.
   const b = new GraphBuilder();
   b.addIri(meta.id, RDF_TYPE, A2A_PROTOCOL_DOCUMENT);
   if (meta.name !== undefined) {
@@ -190,7 +193,7 @@ function buildPdJsonLd(quads: readonly Quad[], meta: ProtocolMeta): Record<strin
   const responseShapes = linkedShapeIds(quads, meta.id, A2A_RESPONSE_SHAPE);
   const doc: Record<string, unknown> = {
     "@context": {
-      ...A2A_INLINE_CONTEXT,
+      ...LEGACY_A2A_INLINE_CONTEXT,
       dcterms: DCTERMS,
       sh: SH,
       ProtocolDocument: A2A_PROTOCOL_DOCUMENT,
@@ -226,7 +229,7 @@ function buildPdJsonLd(quads: readonly Quad[], meta: ProtocolMeta): Record<strin
 /** The IRI objects of `(subject, predicate, ?)` in the quads. */
 function linkedShapeIds(quads: readonly Quad[], subject: string, predicate: string): string[] {
   const node = new TermWrapper(subject, new Store(quads as Quad[]), DataFactory);
-  return [...objectTerms(node, predicate)]
+  return [...objectTerms(node, canonicalA2aIri(predicate))]
     .filter((term) => term.termType === "NamedNode")
     .map((term) => term.value);
 }

@@ -96,12 +96,12 @@ describe("A2A namespace compatibility", () => {
     expect((await validateIntent(dataset, buildShapeForIntent("grant"))).conforms).toBe(true);
   });
 
-  it.each(INTENT_ACTIONS)("writes canonical RDF and inline JSON-LD for %s", async (action) => {
+  it.each(INTENT_ACTIONS)("writes legacy wire RDF and inline JSON-LD for %s", async (action) => {
     const intent = { ...expected, action };
     const rdf = intentToRdf(intent);
-    expect(await canonicalNQuads(rdf)).toContain(A2A);
-    expect(await canonicalNQuads(rdf)).not.toContain(LEGACY);
-    expect(JSON.stringify(intentToJsonLd(intent))).not.toContain(LEGACY);
+    expect(await canonicalNQuads(rdf)).toContain(LEGACY);
+    expect(await canonicalNQuads(rdf)).not.toContain(A2A);
+    expect(JSON.stringify(intentToJsonLd(intent))).not.toContain(A2A);
     expect(await parseIntentGraph(await intentToTurtle(intent))).toEqual(intent);
   });
 
@@ -154,16 +154,10 @@ describe("A2A namespace compatibility", () => {
     const report = await validateIntent(dataset, shape);
     expect(report.conforms).toBe(false);
     expect(report.results.length).toBeGreaterThan(0);
-    const parsed = await parseIntentGraph(dataset);
-    expect(parsed).toEqual({
-      id: "urn:intent",
-      action: "grant",
-      target: "https://pod.example/data",
-    });
-    expect((await validateIntent(parsed as Intent, shape)).conforms).toBe(false);
+    expect(await parseIntentGraph(dataset)).toBeUndefined();
   });
 
-  it("preserves legacy instance identities and resource references during validation", async () => {
+  it("parses the same uniformly canonicalized identities and resources that SHACL validates", async () => {
     const dataset = await parseRdf(
       `@prefix old: <${LEGACY}> . @prefix a2a: <${A2A}> .
       @prefix schema: <https://schema.org/> .
@@ -177,9 +171,9 @@ describe("A2A namespace compatibility", () => {
     const parsed = await parseIntentGraph(dataset);
     expect(parsed).toEqual({
       ...expected,
-      id: `${LEGACY}request`,
-      target: `${LEGACY}resource`,
-      recipient: `${LEGACY}recipient`,
+      id: `${A2A}request`,
+      target: `${A2A}resource`,
+      recipient: `${A2A}recipient`,
     });
     const shape = await parseRdf(
       `${grantShape(LEGACY)}
@@ -195,7 +189,7 @@ describe("A2A namespace compatibility", () => {
     );
   });
 
-  it("does not alias resource values required by a shape", async () => {
+  it("renames resource values consistently in the data and shape", async () => {
     const dataset = await parseRdf(
       `${grantGraph(A2A)}
       <urn:action> <https://schema.org/agent> <${LEGACY}agent> .`,
@@ -212,8 +206,8 @@ describe("A2A namespace compatibility", () => {
       "text/turtle",
       {},
     );
-    expect((await validateIntent(dataset, shape)).conforms).toBe(false);
-    expect((await parseIntentGraph(dataset))?.agent).toBe(`${LEGACY}agent`);
+    expect((await validateIntent(dataset, shape)).conforms).toBe(true);
+    expect((await parseIntentGraph(dataset))?.agent).toBe(`${A2A}agent`);
   });
 
   it("counts distinct canonical and legacy action references separately", async () => {
@@ -231,7 +225,7 @@ describe("A2A namespace compatibility", () => {
     expect((await validateIntent(dataset, buildShapeForIntent("grant"))).conforms).toBe(false);
   });
 
-  it("preserves exact targetNode identities and validation focus nodes", async () => {
+  it("fails closed when targetNode identities would collapse", async () => {
     const data = await parseRdf(
       `<${LEGACY}x> <https://schema.org/name> "legacy" .
       <${A2A}x> <https://schema.org/name> "canonical" .`,
@@ -247,16 +241,17 @@ describe("A2A namespace compatibility", () => {
     );
     const report = await validateIntent(data, shape);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((result) => result.focusNode === `${LEGACY}x`)).toBe(true);
+    expect(report.results[0]?.message).toContain("distinct data nodes");
+    expect(await parseIntentGraph(data)).toBeUndefined();
   });
 
-  it("writes canonical shapes and protocol metadata, preserving supplied legacy shapes", async () => {
+  it("writes legacy shapes and protocol metadata, preserving supplied shape bytes", async () => {
     const shape = buildShapeForIntent("grant");
     const response = buildResponseShape(`${LEGACY}Intent`);
-    expect(await canonicalNQuads([...shape, ...response])).not.toContain(LEGACY);
+    expect(await canonicalNQuads([...shape, ...response])).not.toContain(A2A);
     const pd = await buildProtocolDocument({ requestShape: shape, meta: { id: "urn:pd" } });
-    expect(await pd.toTurtle()).not.toContain(LEGACY);
-    expect(JSON.stringify(await pd.toJsonLd())).not.toContain(LEGACY);
+    expect(await pd.toTurtle()).not.toContain(A2A);
+    expect(JSON.stringify(await pd.toJsonLd())).not.toContain(A2A);
     expect(await verifyProtocolDocument(await pd.toTurtle(), pd.hash)).toBe(true);
 
     const legacyShape = [...(await parseRdf(grantShape(LEGACY), "text/turtle", {}))];
@@ -297,9 +292,9 @@ describe("handshake namespace compatibility", () => {
   it.each([
     offer,
     response,
-  ])("writes canonical %s terms and preserves protocol identifiers", async (message) => {
+  ])("writes legacy %s wire terms and preserves protocol identifiers", async (message) => {
     const quads = handshakeToRdf(message);
-    expect(await canonicalNQuads(quads)).not.toContain(LEGACY);
+    expect(await canonicalNQuads(quads)).not.toContain(A2A);
     expect(await handshakeFromRdf(await handshakeToTurtle(message))).toEqual(message);
   });
 
@@ -312,12 +307,12 @@ describe("handshake namespace compatibility", () => {
     expect(await handshakeFromRdf(graph)).toEqual(offer);
   });
 
-  it("reads a legacy response and reserializes it canonically", async () => {
+  it("reads a legacy response and preserves its wire vocabulary", async () => {
     const old = `<urn:response> a <${LEGACY}UpgradeResponse> ;
       <${LEGACY}protocolHash> "sha256:pinned" ; <${LEGACY}accept> true ; <${LEGACY}reason> "agreed" .`;
     const back = await handshakeFromRdf(old);
     expect(back).toEqual(response);
-    expect(await handshakeToTurtle(back as UpgradeResponse)).not.toContain(LEGACY);
+    expect(await handshakeToTurtle(back as UpgradeResponse)).not.toContain(A2A);
   });
 
   it("rejects conflicting security flags across namespace aliases", async () => {

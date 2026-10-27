@@ -208,13 +208,13 @@ function addLiteral(node: TermWrapper, predicate: string, value: string): void {
 /** A `a2a:Parameter` node opened for writing. */
 class WritableParameter extends TermWrapper {
   typeParameter(): void {
-    addIri(this, RDF_TYPE, A2A_PARAMETER_CLASS);
+    addIri(this, RDF_TYPE, legacyA2aIri(A2A_PARAMETER_CLASS));
   }
   setKey(key: string): void {
-    addLiteral(this, A2A_PARAM_KEY, key);
+    addLiteral(this, legacyA2aIri(A2A_PARAM_KEY), key);
   }
   setValue(value: string): void {
-    addLiteral(this, A2A_PARAM_VALUE, value);
+    addLiteral(this, legacyA2aIri(A2A_PARAM_VALUE), value);
   }
 }
 
@@ -250,14 +250,14 @@ class WritableAction extends TermWrapper {
     addRequiredIri(this, SCHEMA_AGENT, iri, "agent");
   }
   addMode(modeIri: string): void {
-    addIri(this, A2A_MODE, modeIri);
+    addIri(this, legacyA2aIri(A2A_MODE), modeIri);
   }
 }
 
 /** An `a2a:Intent` node opened for WRITING. */
 class WritableIntent extends TermWrapper {
   typeIntent(): void {
-    addIri(this, RDF_TYPE, A2A_INTENT);
+    addIri(this, RDF_TYPE, legacyA2aIri(A2A_INTENT));
   }
   setAgent(iri: string): void {
     addRequiredIri(this, SCHEMA_AGENT, iri, "agent");
@@ -265,14 +265,22 @@ class WritableIntent extends TermWrapper {
 
   /** Link a fresh blank-node action node, typed with the action-type IRI. */
   linkAction(actionTypeIri: string): WritableAction {
-    const node = new WritableAction(this.linkBlank(A2A_ACTION), this.dataset, this.factory);
+    const node = new WritableAction(
+      this.linkBlank(legacyA2aIri(A2A_ACTION)),
+      this.dataset,
+      this.factory,
+    );
     node.typeAction(actionTypeIri);
     return node;
   }
 
   /** Link a fresh blank-node parameter node, typed `a2a:Parameter`. */
   linkParameter(): WritableParameter {
-    const node = new WritableParameter(this.linkBlank(A2A_PARAMETER), this.dataset, this.factory);
+    const node = new WritableParameter(
+      this.linkBlank(legacyA2aIri(A2A_PARAMETER)),
+      this.dataset,
+      this.factory,
+    );
     node.typeParameter();
     return node;
   }
@@ -314,7 +322,7 @@ export class IntentBuilder {
 
   /** Map an intent action kind to its RDF action-type IRI. */
   static actionTypeIri(action: IntentAction): string {
-    return ACTION_TYPE_IRI[action];
+    return legacyA2aIri(ACTION_TYPE_IRI[action]);
   }
 
   /** The accumulated quads. */

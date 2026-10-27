@@ -58,20 +58,21 @@ const protocol = await buildProtocolDocument({
 
 ## Vocabulary compatibility
 
-New intents, shapes, protocol metadata and handshakes use `https://jeswr.org/ns/a2a#`.
-Readers and `validateIntent` also accept `https://w3id.org/jeswr/a2a#`, including mixed graphs.
-Validation resolves vocabulary aliases in a temporary view, including nested property paths,
-comparison operands and vocabulary-valued constraint lists; it never rewrites the supplied
-graph. Lists and named shapes shared between vocabulary and resource constraints are
-projected separately. Instance subjects and resource values keep their exact IRIs, and
-named shapes remain distinct, so validation and parsing follow the same action and
-parameter nodes. Class targets and inheritance also resolve vocabulary aliases without
-renaming class-axiom subjects.
+Phase-1 writers keep emitting `https://w3id.org/jeswr/a2a#` intents, shapes, protocol
+metadata and handshakes, preserving existing wire bytes and protocol hashes. Canonical
+emission is deferred to phase 2 because pinned peers would reject it. Readers and
+`validateIntent` accept `https://jeswr.org/ns/a2a#`, legacy and mixed vocabulary.
 
-Existing protocol bodies and their hashes remain unchanged: `hashQuads` and
-`verifyProtocolDocument` hash the supplied IRIs exactly. Newly built canonical protocol
-bodies have new hashes. Caller-supplied shape bodies and protocol/shape identifiers are
-preserved, including legacy shapes already pinned by a hash. The published
+Validation uniformly renames every legacy A2A IRI in both data and shapes in a temporary
+view, including subjects, graph names, resource values and SHACL expressions. It fails
+closed if distinct legacy/canonical identity terms would collapse: subjects and objects
+outside `rdf:type` are checked together. Pure predicate and class alias mixing is accepted.
+Intent parsing reads that same normalized graph and returns `undefined` on identity
+collisions; returned A2A instance/resource IRIs therefore use the canonical spelling.
+
+`hashQuads` and `verifyProtocolDocument` still hash the original supplied IRIs exactly.
+Caller-supplied shape bodies, response classes and protocol/shape identifiers remain
+unchanged, including shapes already pinned by a hash. The published
 `https://w3id.org/jeswr/a2a-rdf/v1` specification URLs remain unchanged.
 
 ## Links

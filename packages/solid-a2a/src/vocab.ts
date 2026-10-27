@@ -59,7 +59,7 @@ export const DCTERMS = "http://purl.org/dc/terms/" as const;
  */
 // Canonical source: @jeswr/suite-vocab LEGACY_NAMESPACES catch-all (no NS.A2A entry).
 export const A2A = "https://jeswr.org/ns/a2a#" as const;
-/** Read-only namespace alias; never rewrite an existing content-addressed graph. */
+/** Phase-1 wire namespace; never rewrite an existing content-addressed graph. */
 export const LEGACY_A2A_NS = "https://w3id.org/jeswr/a2a#" as const;
 
 /** Resolve an A2A vocabulary alias for matching, never for hash verification. */
@@ -67,7 +67,7 @@ export function canonicalA2aIri(iri: string): string {
   return iri.startsWith(LEGACY_A2A_NS) ? A2A + iri.slice(LEGACY_A2A_NS.length) : iri;
 }
 
-/** The read-only alias of a canonical A2A predicate or class. */
+/** Phase-1 wire spelling of a trusted canonical A2A vocabulary term. */
 export function legacyA2aIri(iri: string): string {
   return iri.startsWith(A2A) ? LEGACY_A2A_NS + iri.slice(A2A.length) : iri;
 }
@@ -196,8 +196,9 @@ export const IRI_TO_ACTION: Readonly<Record<string, IntentAction>> = Object.from
 ) as Readonly<Record<string, IntentAction>>;
 
 /**
- * A SELF-CONTAINED inline JSON-LD `@context` for the intent graph. Like M1, the
- * emitted JSON-LD embeds this rather than a bare remote `@context` URL, so the
+ * A SELF-CONTAINED canonical inline JSON-LD `@context` for input intent graphs.
+ * Phase-1 writers embed LEGACY_A2A_INLINE_CONTEXT with the same term structure.
+ * Both avoid a bare remote `@context` URL, so the
  * document parses with NO network (offline + deterministic) and carries no
  * SSRF / availability dependency on a remote (CG-draft) context endpoint.
  * Object/IRI-valued terms carry `"@type": "@id"` so a `{ "@id": … }` value parses
@@ -215,6 +216,25 @@ export const A2A_INLINE_CONTEXT: Readonly<Record<string, unknown>> = {
   paramKey: A2A_PARAM_KEY,
   paramValue: A2A_PARAM_VALUE,
   mode: { "@id": A2A_MODE, "@type": "@id" },
+  object: { "@id": SCHEMA_OBJECT, "@type": "@id" },
+  target: { "@id": SCHEMA_TARGET, "@type": "@id" },
+  agent: { "@id": SCHEMA_AGENT, "@type": "@id" },
+  recipient: { "@id": SCHEMA_RECIPIENT, "@type": "@id" },
+} as const;
+
+/** Phase-1 inline context: pinned peers require the legacy wire vocabulary. */
+export const LEGACY_A2A_INLINE_CONTEXT: Readonly<Record<string, unknown>> = {
+  a2a: LEGACY_A2A_NS,
+  schema: SCHEMA,
+  acl: ACL,
+  ldp: LDP,
+  Intent: legacyA2aIri(A2A_INTENT),
+  Parameter: legacyA2aIri(A2A_PARAMETER_CLASS),
+  action: { "@id": legacyA2aIri(A2A_ACTION), "@type": "@id" },
+  parameter: { "@id": legacyA2aIri(A2A_PARAMETER), "@type": "@id" },
+  paramKey: legacyA2aIri(A2A_PARAM_KEY),
+  paramValue: legacyA2aIri(A2A_PARAM_VALUE),
+  mode: { "@id": legacyA2aIri(A2A_MODE), "@type": "@id" },
   object: { "@id": SCHEMA_OBJECT, "@type": "@id" },
   target: { "@id": SCHEMA_TARGET, "@type": "@id" },
   agent: { "@id": SCHEMA_AGENT, "@type": "@id" },
