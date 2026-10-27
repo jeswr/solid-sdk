@@ -6,6 +6,7 @@ import {
   MAX_CURRENCY_MINOR_UNITS,
   MAX_QUANTITY_DECIMALS,
   MAX_SIGNIFICANT_DIGITS,
+  MAX_TRANSACTION_ID_LENGTH,
   MAX_TRANSACTIONS,
 } from "./types";
 
@@ -55,7 +56,12 @@ function currency(value: unknown): asserts value is string {
 }
 
 function identifier(value: unknown): asserts value is string {
-  requireValue(typeof value === "string" && value.length > 0 && value.trim() === value);
+  requireValue(
+    typeof value === "string" &&
+      value.length > 0 &&
+      value.length <= MAX_TRANSACTION_ID_LENGTH &&
+      value.trim() === value,
+  );
 }
 
 export function decimal(value: unknown, decimals: number): bigint {

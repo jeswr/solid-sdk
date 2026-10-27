@@ -6,6 +6,7 @@ export {
   type GeoPoint,
   MAX_CLUSTER_POINTS,
   MAX_CLUSTER_ZOOM,
+  MAX_POINT_ID_LENGTH,
   MERCATOR_MAX_LATITUDE,
   MIN_CLUSTER_ZOOM,
 } from "./clusters";

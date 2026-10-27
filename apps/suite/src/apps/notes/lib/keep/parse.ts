@@ -12,8 +12,7 @@ import {
   type KeepParseResult,
   type KeepWebLink,
   MAX_KEEP_BATCH_FILES,
-  MAX_KEEP_LABELS,
-  MAX_KEEP_LIST_ITEMS,
+  MAX_KEEP_FILE_NAME_LENGTH,
 } from "./types";
 
 function requireValue(condition: unknown): asserts condition {
@@ -36,9 +35,8 @@ function flag(value: unknown): boolean {
   return value;
 }
 
-function array(value: unknown, limit = Number.POSITIVE_INFINITY): unknown[] {
+function array(value: unknown): unknown[] {
   requireValue(Array.isArray(value));
-  requireValue(value.length <= limit);
   return value;
 }
 
@@ -59,7 +57,7 @@ function timestamp(value: unknown): string {
 function labels(value: unknown): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
-  for (const entry of array(value, MAX_KEEP_LABELS)) {
+  for (const entry of array(value)) {
     const label = text(record(entry, ["name"]).name).trim();
     const key = label.toLowerCase();
     if (!seen.has(key)) {
@@ -132,9 +130,7 @@ export function parseKeepNote(json: string): KeepParseResult {
     "annotations",
     "attachments",
   ]);
-  // Check both bounded collections before validating/copying any of their items.
-  if ("listContent" in note) array(note.listContent, MAX_KEEP_LIST_ITEMS);
-  if ("labels" in note) array(note.labels, MAX_KEEP_LABELS);
+  // decodeKeepJson has already bounded listContent and labels before JSON.parse.
   const warnings: KeepImportWarning[] = [];
   if ("textContentHtml" in note) text(note.textContentHtml);
   const bodyText = "textContent" in note ? text(note.textContent) : "";
@@ -182,6 +178,9 @@ export function parseKeepBatch(files: readonly KeepNoteFile[]): KeepBatchResult[
     let fileName: string | undefined;
     try {
       const file = record(files[index], ["fileName", "json"]);
+      requireValue(
+        typeof file.fileName === "string" && file.fileName.length <= MAX_KEEP_FILE_NAME_LENGTH,
+      );
       fileName = text(file.fileName);
       requireValue(typeof file.json === "string");
       return { index, fileName, ok: true, ...parseKeepNote(file.json) };

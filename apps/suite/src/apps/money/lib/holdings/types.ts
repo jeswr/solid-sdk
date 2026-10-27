@@ -3,6 +3,8 @@ export const MAX_TRANSACTIONS = 50_000;
 export const MAX_SIGNIFICANT_DIGITS = 30;
 export const MAX_QUANTITY_DECIMALS = 8;
 export const MAX_CURRENCY_MINOR_UNITS = MAX_SIGNIFICANT_DIGITS;
+/** Longest transaction ID in UTF-16 units, checked before trimming, hashing or sorting. */
+export const MAX_TRANSACTION_ID_LENGTH = 1024;
 
 export type CostBasisMethod = "fifo" | "average";
 

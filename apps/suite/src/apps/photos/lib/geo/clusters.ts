@@ -9,6 +9,8 @@ import {
 import { isRecord, requireGeo } from "./error";
 
 export const MAX_CLUSTER_POINTS = 200_000;
+/** Longest point ID in UTF-16 units, checked before trimming or hashing. */
+export const MAX_POINT_ID_LENGTH = 1024;
 export const MIN_CLUSTER_ZOOM = 0;
 export const MAX_CLUSTER_ZOOM = 20;
 export const MERCATOR_MAX_LATITUDE = 85.05112878;
@@ -66,7 +68,10 @@ export function clusterPoints(points: unknown, zoom: unknown): GeoCluster[] {
   const ids = new Set<string>();
   for (const point of points) {
     requireGeo(
-      isRecord(point) && typeof point.id === "string" && point.id.trim().length > 0,
+      isRecord(point) &&
+        typeof point.id === "string" &&
+        point.id.length <= MAX_POINT_ID_LENGTH &&
+        point.id.trim().length > 0,
       "INVALID_POINTS",
     );
     requireGeo(!ids.has(point.id), "INVALID_POINTS");

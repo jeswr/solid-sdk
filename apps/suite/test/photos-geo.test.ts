@@ -16,6 +16,7 @@ import {
   haversineDistance,
   MAX_CLUSTER_POINTS,
   MAX_CLUSTER_ZOOM,
+  MAX_POINT_ID_LENGTH,
   MEAN_EARTH_RADIUS_METRES,
   MERCATOR_MAX_LATITUDE,
   MIN_CLUSTER_ZOOM,
@@ -602,6 +603,19 @@ describe("Web Mercator grid clustering", () => {
     expect(clusterPoints(points, 0)).toEqual([
       { count: MAX_CLUSTER_POINTS, centroid: origin, memberIds: points.map((p) => p.id) },
     ]);
+  });
+
+  it("bounds point ID length before trimming or hashing", () => {
+    expect(MAX_POINT_ID_LENGTH).toBe(1024);
+    const id = "x".repeat(MAX_POINT_ID_LENGTH);
+    expect(clusterPoints([{ id, latitude: 0, longitude: 0 }], 0)).toEqual([
+      { count: 1, centroid: origin, memberIds: [id] },
+    ]);
+    fails(() => clusterPoints([{ id: `${id}x`, latitude: 0, longitude: 0 }], 0), "INVALID_POINTS");
+    fails(
+      () => clusterPoints([{ id: "x".repeat(1_000_000), latitude: 0, longitude: 0 }], 0),
+      "INVALID_POINTS",
+    );
   });
 
   it("rejects bound+1 before reading any members or validating zoom", () => {

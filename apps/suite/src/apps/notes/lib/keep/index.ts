@@ -13,6 +13,7 @@ export {
   type KeepParseResult,
   type KeepWebLink,
   MAX_KEEP_BATCH_FILES,
+  MAX_KEEP_FILE_NAME_LENGTH,
   MAX_KEEP_LABELS,
   MAX_KEEP_LIST_ITEMS,
   MAX_KEEP_NOTE_BYTES,

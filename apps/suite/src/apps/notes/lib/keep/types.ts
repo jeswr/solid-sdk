@@ -5,6 +5,8 @@ export const MAX_KEEP_NOTE_BYTES = 1024 * 1024;
 export const MAX_KEEP_LIST_ITEMS = 2_000;
 export const MAX_KEEP_LABELS = 200;
 export const MAX_KEEP_BATCH_FILES = 10_000;
+/** Longest batch file name in UTF-16 units, checked before any scan. */
+export const MAX_KEEP_FILE_NAME_LENGTH = 1024;
 
 export const KEEP_COLOURS = [
   "DEFAULT",

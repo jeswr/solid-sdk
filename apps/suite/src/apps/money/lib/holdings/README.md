@@ -63,7 +63,8 @@ unrounded reduced `{ numerator: bigint, denominator: bigint }` fractions in mino
 units, with `unitCost` measured per whole share. BigInt fields need explicit
 conversion if the caller serialises results to JSON.
 
-`MAX_TRANSACTIONS` is 50,000; `MAX_SIGNIFICANT_DIGITS` is 30 per input amount or
+`MAX_TRANSACTIONS` is 50,000; `MAX_TRANSACTION_ID_LENGTH` is 1024 UTF-16 units,
+checked before an ID is trimmed, hashed or sorted (`INVALID_INPUT`); `MAX_SIGNIFICANT_DIGITS` is 30 per input amount or
 ratio component (leading fractional zeroes excluded, trailing zeroes counted).
 `MAX_QUANTITY_DECIMALS` is 8. Limits are exported and checked before the work they
 bound: array length before traversal/allocation/sorting, derived decimal/ratio

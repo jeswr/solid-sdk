@@ -1,6 +1,17 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { KeepImportError, MAX_KEEP_NOTE_BYTES } from "./types";
+import {
+  KeepImportError,
+  MAX_KEEP_LABELS,
+  MAX_KEEP_LIST_ITEMS,
+  MAX_KEEP_NOTE_BYTES,
+} from "./types";
+
+/** Top-level arrays whose item counts are bounded before JSON.parse materialises them. */
+const BOUNDED_ARRAYS: Readonly<Record<string, number>> = {
+  listContent: MAX_KEEP_LIST_ITEMS,
+  labels: MAX_KEEP_LABELS,
+};
 
 /** Bounded UTF-8 byte counting: stop before parsing or allocating decoded data. */
 function checkSize(json: string): void {
@@ -26,6 +37,11 @@ export function decodeKeepJson(json: string): unknown {
     let offset = 0;
     let copiedThrough = 0;
     const parts: string[] = [];
+    // Container stack: array frames count separators against their item limit.
+    const frames: { array: boolean; limit: number; separators: number }[] = [];
+    const afterKey = (start: number) =>
+      previousString !== undefined &&
+      /^[ \r\n\t]*:[ \r\n\t]*$/.test(json.slice(previousEnd, start));
     // Never restart at an escaped quote after an unterminated string. Each
     // token consumes a disjoint span, keeping malformed input linear as well.
     while (offset < json.length) {
@@ -51,13 +67,35 @@ export function decodeKeepJson(json: string): unknown {
         const timestamp =
           (previousString === "createdTimestampUsec" ||
             previousString === "userEditedTimestampUsec") &&
-          /^[ \r\n\t]*:[ \r\n\t]*$/.test(json.slice(previousEnd, start));
+          afterKey(start);
         if (timestamp) {
           parts.push(json.slice(copiedThrough, start), `"${token}"`);
           copiedThrough = offset;
         }
         previousString = undefined;
       } else {
+        if (character === "{" || character === "[") {
+          const bounded =
+            character === "[" &&
+            frames.length === 1 &&
+            !frames[0]!.array &&
+            previousString !== undefined &&
+            Object.hasOwn(BOUNDED_ARRAYS, previousString) &&
+            afterKey(start);
+          frames.push({
+            array: character === "[",
+            limit: bounded ? BOUNDED_ARRAYS[previousString!]! : Number.POSITIVE_INFINITY,
+            separators: 0,
+          });
+        } else if (character === "}" || character === "]") {
+          frames.pop();
+        } else if (character === ",") {
+          const frame = frames.at(-1);
+          // N items need N - 1 separators; trailing commas are rejected by JSON.parse.
+          if (frame?.array && ++frame.separators >= frame.limit) {
+            throw new KeepImportError("INVALID_KEEP_NOTE");
+          }
+        }
         offset += 1;
       }
     }

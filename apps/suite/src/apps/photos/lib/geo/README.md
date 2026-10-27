@@ -22,7 +22,8 @@ The URI follows [RFC 5870](https://www.rfc-editor.org/rfc/rfc5870.html), with no
 
 `clusterPoints(points, zoom)` requires an array of `{ id, latitude, longitude }` with unique,
 non-blank string IDs and integer zoom 0–20. It checks `MAX_CLUSTER_POINTS` (200000) before
-reading members. Each [Web Mercator tile](https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames)
+reading members, and each ID against `MAX_POINT_ID_LENGTH` (1024 UTF-16 units) before trimming
+or hashing it (`INVALID_POINTS`). Each [Web Mercator tile](https://wiki.openstreetmap.org/wiki/Slippy_map_tilenames)
 becomes `{ count, centroid, memberIds }`. Latitudes clamp at `MERCATOR_MAX_LATITUDE` only for
 tile assignment; centroids average original coordinates, including at zoom 0 across the date
 line. Tile indices stay in `[0, 2 ** zoom - 1]`, including at ±180. Clusters sort by count

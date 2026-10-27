@@ -7,6 +7,7 @@ import {
   type KeepImportErrorCode,
   type KeepNoteFile,
   MAX_KEEP_BATCH_FILES,
+  MAX_KEEP_FILE_NAME_LENGTH,
   MAX_KEEP_LABELS,
   MAX_KEEP_LIST_ITEMS,
   MAX_KEEP_NOTE_BYTES,
@@ -390,6 +391,40 @@ describe("Keep input validation and limits", () => {
     );
   });
 
+  it("rejects oversized top-level lists and labels before JSON.parse materialises them", () => {
+    const realParse = JSON.parse;
+    let parsed = 0;
+    JSON.parse = ((text: string, reviver?: Parameters<typeof realParse>[1]) => {
+      if (text.length > 100) parsed += 1;
+      return realParse(text, reviver);
+    }) as typeof JSON.parse;
+    try {
+      const over = (key: string, limit: number) =>
+        `{"title":"t", ${JSON.stringify(key)} : [${Array(limit + 1)
+          .fill("0")
+          .join(",")}]}`;
+      fails(() => parseKeepNote(over("listContent", MAX_KEEP_LIST_ITEMS)), "INVALID_KEEP_NOTE");
+      fails(() => parseKeepNote(over("labels", MAX_KEEP_LABELS)), "INVALID_KEEP_NOTE");
+      fails(() => parseKeepNote(over("labels", 100_000)), "INVALID_KEEP_NOTE");
+      expect(parsed).toBe(0);
+    } finally {
+      JSON.parse = realParse;
+    }
+    // Nested arrays and other keys are bounded by the byte limit and field validation instead.
+    const nested = { title: "a", attachments: [], annotations: [] };
+    expect(parse({ ...nested, labels: [{ name: "x" }] }).draft.labels).toEqual(["x"]);
+    fails(
+      () =>
+        parseKeepNote(
+          `{"other":{"labels":[${Array(MAX_KEEP_LABELS + 1)
+            .fill("0")
+            .join(",")}]}}`,
+        ),
+      "INVALID_KEEP_NOTE",
+    );
+    fails(() => parse({ textContent: "labels", listContent: "labels" }), "INVALID_KEEP_NOTE");
+  });
+
   it("keeps private content out of thrown diagnostics", () => {
     const result = parseKeepBatch([{ fileName: "fictional.json", json: '{"private Rowan text' }]);
     expect(result[0]).toMatchObject({
@@ -462,6 +497,15 @@ describe("Keep batches", () => {
     });
     fails(() => parseKeepBatch(tooMany), "BATCH_TOO_LARGE");
     fails(() => parseKeepBatch(null as unknown as KeepNoteFile[]), "INVALID_KEEP_NOTE");
+  });
+
+  it("bounds file names before scanning them and never echoes an oversized name", () => {
+    expect(MAX_KEEP_FILE_NAME_LENGTH).toBe(1024);
+    const fileName = "n".repeat(MAX_KEEP_FILE_NAME_LENGTH);
+    expect(parseKeepBatch([{ fileName, json: "{}" }])[0]).toMatchObject({ ok: true, fileName });
+    const [result] = parseKeepBatch([{ fileName: "n".repeat(1_000_000), json: "{}" }]);
+    expect(result).toMatchObject({ index: 0, ok: false, error: { code: "INVALID_KEEP_NOTE" } });
+    expect(result).not.toHaveProperty("fileName");
   });
 
   it("returns per-file errors for malformed descriptors, holes and unexpected getter failures", () => {

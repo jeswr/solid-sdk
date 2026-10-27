@@ -50,9 +50,12 @@ values for the importing caller to review, and must be handled as private text.
 | `MAX_KEEP_LIST_ITEMS` | 2,000 raw items | `INVALID_KEEP_NOTE` |
 | `MAX_KEEP_LABELS` | 200 raw labels, before deduplication | `INVALID_KEEP_NOTE` |
 | `MAX_KEEP_BATCH_FILES` | 10,000 files | `BATCH_TOO_LARGE` |
+| `MAX_KEEP_FILE_NAME_LENGTH` | 1,024 UTF-16 units per batch file name | `INVALID_KEEP_NOTE` |
 
-Byte counting stops at the limit before JSON parsing. After decoding, both
-collection lengths are checked before validating/copying entries; batch length
+Byte counting stops at the limit before JSON parsing. The pre-parse token scan
+also counts the items of the top-level `listContent` and `labels` arrays, so
+oversized collections are rejected before `JSON.parse` materialises them; file
+names are length-checked before they are scanned; batch length
 is checked before iterating files. Nonobject/malformed JSON, wrong field types,
 unknown fields, and malformed Unicode fail with `INVALID_KEEP_NOTE`.
 Invalid/out-of-range timestamps use `INVALID_TIMESTAMP`; unsafe attachment

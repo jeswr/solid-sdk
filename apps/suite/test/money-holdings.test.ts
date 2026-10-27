@@ -10,6 +10,7 @@ import {
   MAX_CURRENCY_MINOR_UNITS,
   MAX_QUANTITY_DECIMALS,
   MAX_SIGNIFICANT_DIGITS,
+  MAX_TRANSACTION_ID_LENGTH,
   MAX_TRANSACTIONS,
 } from "../src/apps/money/lib/holdings";
 import {
@@ -827,5 +828,13 @@ describe("fail-closed validation and limits", () => {
         computeHoldings([entry({ kind: "sell" }), entry({ id: "later", date: "bad" })], settings),
       "INVALID_INPUT",
     );
+  });
+
+  it("bounds transaction ID length before trimming, hashing or sorting", () => {
+    expect(MAX_TRANSACTION_ID_LENGTH).toBe(1024);
+    const id = "x".repeat(MAX_TRANSACTION_ID_LENGTH);
+    expect(computeHoldings([entry({ id })], settings).quantity).toBe("1");
+    fails(() => computeHoldings([entry({ id: `${id}x` })], settings), "INVALID_INPUT");
+    fails(() => computeHoldings([entry({ id: " ".repeat(1_000_000) })], settings), "INVALID_INPUT");
   });
 });
