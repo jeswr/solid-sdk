@@ -237,6 +237,18 @@ describe("content and labels", () => {
     ["Title\n~~~\n\n@code", "Title\n~~~\n\n@code", []],
     ["Title\n    @code\n\t@code\n@yes", "Title\n    @code\n\t@code", ["yes"]],
     ["Title\n```\n~~~~\n@code\n```\n@yes", "Title\n```\n~~~~\n@code\n```", ["yes"]],
+    ["Title\n```ts\ntext ``` @literal\n```\n@yes", "Title\n```ts\ntext ``` @literal\n```", ["yes"]],
+    ["Title\n```\n@code\n`````\n@yes", "Title\n```\n@code\n`````", ["yes"]],
+    ["Title\n````\n```\n@code\n````\n@yes", "Title\n````\n```\n@code\n````", ["yes"]],
+    ["Title\n```\n``` @literal\n@code\n```\n@yes", "Title\n```\n``` @literal\n@code\n```", ["yes"]],
+    ["Title\n```\n    ```\n@code\n   ```\t \n@yes", "Title\n```\n    ```\n@code\n   ```", ["yes"]],
+    ["Title\n```\n@code\n~~~\n@literal", "Title\n```\n@code\n~~~\n@literal", []],
+    ["Title\n```\n@literal", "Title\n```\n@literal", []],
+    ["Title\n```ts\n@literal\n```", "Title\n```ts\n@literal\n```", []],
+    ["Title ```@inline``` @yes", "Title ```@inline```", ["yes"]],
+    ["```info` @literal``` @yes", "```info` @literal```", ["yes"]],
+    ["Title\r\n```\r\n@code\r\n````\r\n@yes", "Title\r\n```\r\n@code\r\n````", ["yes"]],
+    ["Title\r```\r@code\r````\r@yes", "Title\r```\r@code\r````", ["yes"]],
   ])("splits labels while preserving markup: %s", (content, title, labels) => {
     const result = parseTodoistCsv(csv([task({ CONTENT: content as string })]), options).tasks[0]!;
     expect(result.title).toBe((title as string).trim());
