@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Lane sst-uqvt — SHT-L6
 
@@ -56,3 +57,55 @@ lane worktree, and this lane is restricted to this checkout.
 Open semantic questions and the implemented conservative choices are numbered in
 `QUESTIONS.md`; none blocks this implementation. No implementation work remains;
 full-workspace verification and automated review have the limitations recorded above.
+
+## Fix round 1 — numerical review findings
+
+Commit `4a281834` (`fix(sheets): preserve conditional format precision`) addresses
+all three findings against `32d40b11229dd4eae0332c75dccf3bcd2fbe5a6b`:
+
+- Equal interpolation endpoints remain exact and interpolated anchors clamp to
+  their endpoints, including percent and percentile anchors on constant ranges.
+- Averages use compensated summation directly, with the existing normalized
+  calculation retained only as an overflow fallback. Cells equal to the average
+  no longer match or stop subsequent rules incorrectly.
+- Scale fractions use direct finite differences and reserve normalization for
+  overflowing spans, preserving exact midpoint colours.
+
+Added 13 regression cases, bringing conditional-formatting tests to 136, and
+updated the average calculation's API documentation. No rule semantics,
+dependencies, manifests or other implementation surfaces changed. The final
+documentation commit records this fix round's validation.
+
+All commands below used `PATH=/opt/node24/bin:$PATH` (Node v24.22.1, pnpm 10.4.1).
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/sheets-condformat.test.ts --coverage --coverage.include='src/apps/sheets/lib/condformat/**/*.ts'` | PASS: 136 tests; 100% statements, branches, functions and lines. Nine regression cases reproduced the review failures before the fix. |
+| `pnpm exec turbo run build --filter='@jeswr/app-suite^...'` | PASS: seven dependency builds. |
+| `pnpm --filter @jeswr/app-suite run lint` | PASS: 604 files; the same 54 warnings outside this lane. |
+| `pnpm --filter @jeswr/app-suite run build` | PASS: production build and static generation. |
+| `pnpm --filter @jeswr/app-suite run typecheck` | PASS. |
+| `pnpm --filter @jeswr/app-suite run test` | PASS: 153 files / 7,643 tests; 100% statements, branches, functions and lines. |
+| `pnpm run lint:root` | PASS, including all workspace guards. |
+| `TURBO_SCM_BASE=32d40b11229dd4eae0332c75dccf3bcd2fbe5a6b pnpm run gate` | PASS: 12/12 tasks, seven cached; 2m16.518s. |
+| `pnpm run gate:full` | FAIL outside this lane: `@jeswr/federation-trust#test`, delegation credential inline snapshot at `packages/federation-trust/test/characterization.test.ts:196`. 290 tasks succeeded (nine cached) out of 352 total before Turbo stopped; 10m44.694s. All 879 root tests passed. |
+| `git diff --check` | PASS. |
+
+The full-workspace failure is JSON property order in the serialized public JWK:
+the snapshot expects `crv,x,kty`, while this runtime emits `kty,crv,x`.
+`packages/federation-trust` has no changes relative to the supplied starting
+commit. Its tests and snapshot were left unchanged to keep this fix round within
+the three requested findings. Full-workspace verification therefore remains
+incomplete; no requested conditional-formatting fixes remain unfinished.
+
+The full gate generated fourteen untracked callback/client-ID files under seven
+pod apps' `web/public/` directories. Those generated files were removed after the
+gate; no generated assets are committed. No UI, dependency additions, package
+policy checks or screenshots were required. No branches were switched, no remote
+operations were run, and no other checkouts were touched.
+
+`roborev` remains unavailable, so automated per-commit review could not run. No
+review tool was installed. There are no new semantic questions for this fix
+round; the original conservative interpretations remain unchanged. Tracker
+updates and review of the unrelated full-workspace failure remain with the
+dispatcher.
