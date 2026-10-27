@@ -138,3 +138,18 @@ export function replicaKeyRequest(
   if (key === null) return null;
   return new Request(`${REPLICA_KEY_ORIGIN}${encodeURIComponent(key)}`, { method: 'GET' });
 }
+
+/**
+ * Whether a replica byte-cache key belongs to `webId`. The WebID is the key's first component,
+ * so a purge can find bytes whose metadata row was lost (a crash between the byte write and the
+ * metadata write, or a failed byte delete after the row was dropped).
+ */
+export function replicaKeyBelongsTo(request: Request, webId: string): boolean {
+  if (!request.url.startsWith(REPLICA_KEY_ORIGIN)) return false;
+  try {
+    const key = decodeURIComponent(request.url.slice(REPLICA_KEY_ORIGIN.length));
+    return key.startsWith(`${webId}${KEY_DELIMITER}`);
+  } catch {
+    return false;
+  }
+}

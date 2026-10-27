@@ -50,6 +50,10 @@ it('stamps origin and activation in ISOLATED, ignoring page-supplied authority a
     userActivated: true,
   });
   sendMessage.mockClear();
+  post('SOLID_FORMFILL_REQUEST');
+  post('SOLID_FORMFILL_PREVIEW');
+  post('SOLID_FORMFILL_DECISION');
+  post('SOLID_FORMFILL_TRIGGER');
   post('SOLID_ORIGIN_GRANT_PROFILE');
   post('SOLID_ORIGIN_GRANT_REVOKE');
   expect(sendMessage).not.toHaveBeenCalled();

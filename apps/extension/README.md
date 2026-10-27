@@ -264,6 +264,36 @@ Empty target sets authorize nothing. Re-resolution does not widen an existing gr
 nested class scopes are both required. Changing the default profile does not rebind apps;
 changing an origin's profile clears its old pod/class scope before fresh consent.
 
+## Fill forms from your profile
+
+On a recognised contact or address form, click the small **Fill from pod** field button,
+activate it with Enter/Space, or right-click an editable field and choose **Fill from pod**.
+An extension-owned preview shows the requesting site, profile picker, and the exact values
+from your profile and linked address book. Check **Contact details** and/or **Address**, then
+choose **Fill**. **Remember for this site** preselects those categories on later visits;
+the preview still appears every time. Cancel, closing the preview or requesting tab, or
+navigating the tab to another origin writes nothing. Profile/address-book discovery has a
+30-second loading timeout; once open, the preview allows review until you decide, with only
+a 24-hour safety cap. Forms are never filled on page load or submitted by the extension.
+
+Form-fill consent is independent of app/API consent. Ordinary sites can use it without
+calling `window.solid`; it never enables that API or discloses your profile identifier.
+The worker stores only `{origin, profileId, categories, createdAt, expiresAt?}` in the separate
+`solid:formfill-grants` table. Switching the default profile does not rebind remembered sites.
+Removing or signing out of a profile clears its form-fill grants and cancels pending fills.
+
+Only HTTPS pages (plus loopback HTTP for development) and frames with the top page's origin
+are eligible. Passwords, payment fields, one-time codes, `autocomplete=off`, hidden and
+uneditable controls are refused. The content script checks again before writing, preserves
+existing/user-entered values, and emits native input/change events. Values live only in the
+worker/preview and the approved form controls; they are not cached in page storage.
+Public profile reads omit credentials; linked private address-book documents use the bound
+profile's authenticated fetch, restricted to its pod origins with redirects refused.
+
+The E2E fixture is [`test-site/address-form.html`](test-site/address-form.html); the local pod
+seed includes a private address record. `e2e/tests/formfill.spec.ts` covers approval, denial,
+and cross-origin iframe refusal.
+
 ## Build & load the unpacked extension
 
 ```bash

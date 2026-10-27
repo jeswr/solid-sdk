@@ -10,6 +10,9 @@
 
 <{{webId}}>
     {{#if name}}foaf:name "{{name}}";{{/if}}
+    {{#if name}}vcard:fn "{{name}}";{{/if}}
+    vcard:hasEmail <mailto:test@example.com>;
+    vcard:hasAddress <{{base.path}}private/address#home>;
     vcard:hasPhoto "{{base.path}}profile/photo.jpg";
     {{#if oidcIssuer}}solid:oidcIssuer <{{oidcIssuer}}>;{{/if}}
     solid:publicTypeIndex <{{base.path}}profile/type-index>;

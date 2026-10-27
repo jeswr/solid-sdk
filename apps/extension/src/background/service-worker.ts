@@ -78,6 +78,8 @@ import { type MessageSender, resolveRequestingOrigin } from './core/requesting-o
 import { filterResponseHeaders } from './core/response-headers';
 import { SingleFlight } from './core/single-flight';
 import { parseWebIdProfile } from './core/webid';
+import { FormFillWorker, registerFormFillMenu } from './formfill';
+import { loadFormFillData } from './formfill-data-loader';
 import { syncOriginFetchInjection } from './global-fetch-register';
 import { profileAuthority } from './profile-authority';
 import {
@@ -192,6 +194,7 @@ async function reconcileOriginGrants(): Promise<void> {
   const store = await getProfiles();
   const { profiles } = await store.list();
   const active = new Set(profiles.filter((p) => p.sessionState === 'active').map((p) => p.id));
+  await formFill.reconcile(profiles);
   const gone: OriginGrant[] = [];
   await originGrants.update((grants) =>
     grants.filter((g) => {
@@ -330,6 +333,7 @@ function refreshOnce(id: string): Promise<StoredSession | null> {
           cancelProfileOperations(id);
           try {
             try {
+              await formFill.revokeProfile(id);
               await store.signOut(id);
             } finally {
               await syncOriginGrants();
@@ -403,17 +407,41 @@ async function teardownSession(sender?: MessageSender, stamp?: string): Promise<
     : grant
       ? await store.get(grant.profileId)
       : null;
-  if (record)
-    await withProfileLifecycle(record.profile.id, async () => {
-      try {
-        await store.signOut(record.profile.id);
-      } finally {
-        await syncOriginGrants();
-      }
-    });
-  else if ((await store.list()).profiles.length === 0) {
-    const [cache, db] = await Promise.all([getReplicaCache(), getReplicaDb()]);
-    await purgeReplica(cache, db, null);
+  await revokeThenPublish(async () => {
+    if (record)
+      await withProfileLifecycle(record.profile.id, async () => {
+        try {
+          await formFill.revokeProfile(record.profile.id);
+          await store.signOut(record.profile.id);
+        } finally {
+          await syncOriginGrants();
+        }
+      });
+    else if ((await store.list()).profiles.length === 0) {
+      const [cache, db] = await Promise.all([getReplicaCache(), getReplicaDb()]);
+      await purgeReplica(cache, db, null);
+    }
+  });
+}
+
+/**
+ * Revocation is persisted before cleanup, so the revoked state is published even when a purge
+ * fails and needs a wake-time retry. A cleanup error wins over a publication error. When cleanup
+ * succeeded, a failed publication is retried once and still reported, so the caller never sees
+ * success while open pages may hold a revoked identity.
+ */
+async function revokeThenPublish(cleanup: () => Promise<void>): Promise<void> {
+  try {
+    await cleanup();
+  } catch (err) {
+    await updateDefaultIconAndBroadcast().catch(() => {});
+    throw err;
+  }
+  try {
+    await updateDefaultIconAndBroadcast();
+  } catch (err) {
+    await updateDefaultIconAndBroadcast().catch(() => {});
+    throw err;
   }
 }
 
@@ -924,14 +952,18 @@ async function handleProfiles(
         await store.rename(message.profileId, message.label);
         break;
       case 'SOLID_PROFILE_REMOVE':
-        await withProfileLifecycle(message.profileId, async () => {
-          try {
-            await store.remove(message.profileId);
-          } finally {
-            await syncOriginGrants();
-          }
-        });
-        break;
+        // Keeps the removing marker/error if cleanup failed, but clears the displayed identity.
+        await revokeThenPublish(() =>
+          withProfileLifecycle(message.profileId, async () => {
+            try {
+              await formFill.revokeProfile(message.profileId);
+              await store.remove(message.profileId);
+            } finally {
+              await syncOriginGrants();
+            }
+          }),
+        );
+        return { ok: true, ...(await store.list()) };
       case 'SOLID_PROFILE_SET_DEFAULT':
         await store.setDefault(message.profileId);
         break;
@@ -941,10 +973,7 @@ async function handleProfiles(
     await updateDefaultIconAndBroadcast();
     return { ok: true, ...(await store.list()) };
   } catch (err) {
-    // Removal persists revocation before purging bytes. Both account surfaces must re-read
-    // that state even when cleanup fails; a repaint failure must not hide the original error.
-    if (message.type === 'SOLID_PROFILE_REMOVE')
-      await updateDefaultIconAndBroadcast().catch(() => {});
+    // A failed SOLID_PROFILE_REMOVE has already published through revokeThenPublish.
     return { error: err instanceof Error ? err.message : 'Profile operation failed' };
   }
 }
@@ -1554,7 +1583,20 @@ async function handleOriginGrants(message: OriginGrantRequest, sender: MessageSe
       if (target.profile.sessionState !== 'active') return { error: 'Profile is not active.' };
       cancelProfileOperations(message.profileId);
     }
+    // Two managers can both pass the check above; recheck against the committed grant so
+    // a later, longer expiry can never overwrite an earlier shortening.
+    let extended = false;
     await withProfileLifecycle(grant.profileId, async () => {
+      const shorten = (g: OriginGrant): OriginGrant => {
+        if (
+          message.type !== 'SOLID_ORIGIN_GRANT_EXPIRY' ||
+          (g.expiresAt !== undefined && message.expiresAt > g.expiresAt)
+        ) {
+          extended = true;
+          return g;
+        }
+        return { ...g, expiresAt: message.expiresAt };
+      };
       await originGrants.update((all) =>
         message.type === 'SOLID_ORIGIN_GRANT_REVOKE'
           ? all.filter((g) => g.origin !== message.origin)
@@ -1568,7 +1610,7 @@ async function handleOriginGrants(message: OriginGrantRequest, sender: MessageSe
                       createdAt: Date.now(),
                       scope: { pods: [], classes: [] },
                     }
-                  : { ...g, expiresAt: message.expiresAt },
+                  : shorten(g),
             ),
       );
       if (
@@ -1579,6 +1621,8 @@ async function handleOriginGrants(message: OriginGrantRequest, sender: MessageSe
         await purgeOriginSlice(grant, record.profile.webId);
       }
     });
+    if (extended)
+      return { error: 'Expiry may only be shortened; request fresh consent to extend it.' };
     await updateDefaultIconAndBroadcast();
   }
   return { ok: true, grants: await originGrants.list() };
@@ -1595,6 +1639,17 @@ chrome.runtime.onMessage.addListener(
       );
     };
     switch (message.type) {
+      case 'SOLID_FORMFILL_REQUEST':
+        respond(formFill.request(message, sender));
+        return true;
+      case 'SOLID_FORMFILL_PREVIEW':
+      case 'SOLID_FORMFILL_DECISION':
+        respond(formFill.preview(message, sender));
+        return true;
+      case 'SOLID_FORMFILL_REPORT':
+        // Counts only; deliberately no persistent page/form telemetry.
+        sendResponse({ ok: true });
+        return false;
       case 'SOLID_ORIGIN_GRANTS_LIST':
       case 'SOLID_ORIGIN_GRANT_REVOKE':
       case 'SOLID_ORIGIN_GRANT_PROFILE':
@@ -1618,7 +1673,6 @@ chrome.runtime.onMessage.addListener(
         return true;
       case 'SOLID_LOGOUT':
         teardownSession(sender, message.stampedOrigin)
-          .then(() => updateDefaultIconAndBroadcast())
           .then(() => sendResponse({ ok: true }))
           .catch((err) => sendResponse({ error: String(err) }));
         return true;
@@ -1653,6 +1707,31 @@ chrome.runtime.onMessage.addListener(
   },
 );
 
+const formFill = new FormFillWorker({
+  profiles: async () => (await getProfiles()).list(),
+  load: async (profileId) => {
+    const result = await withProfileOperation(profileId, async (signal) => {
+      const ctx = await ensureSession(profileId);
+      if (!ctx) throw new Error('Please sign in to this profile.');
+      const current = () => checkProfileSession(ctx, signal);
+      const pods = await podOriginsFor(ctx.session, profileId);
+      const fetchSession = await buildFetchSession(ctx.session, ctx.keyPair, profileId);
+      const read = makeResolveFetch(
+        { ...fetchSession, allowedOrigins: pods },
+        ctx.session.webId,
+        signal,
+        current,
+      );
+      const data = await loadFormFillData(ctx.session.webId, pods, read);
+      await current();
+      return { data, current };
+    });
+    if (!result) throw new Error('Profile is no longer available.');
+    return result;
+  },
+  commit: withProfileTask,
+});
+
 /** First-run onboarding: prompt the user to PIN the toolbar action (extensions can't self-pin). */
 chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === 'install') {
@@ -1665,6 +1744,9 @@ chrome.runtime.onInstalled.addListener((details) => {
 // Wire the persistent side panel: a right-click "Open Solid side panel" action-menu entry
 // + its open handler. The toolbar action keeps its existing popup unchanged.
 registerSidePanel();
+registerFormFillMenu();
+// Local settings/grants are worker-owned; content scripts only receive explicit responses.
+void chrome.storage.local.setAccessLevel?.({ accessLevel: 'TRUSTED_CONTEXTS' }).catch(() => {});
 
 // Re-hydrate the session + icon on every SW wake.
 void updateDefaultIconAndBroadcast().catch(() => {});

@@ -39,6 +39,7 @@ import {
   computeReplicaKey,
   computeVaryKey,
   type ReplicaScope,
+  replicaKeyBelongsTo,
   replicaKeyRequest,
 } from './replica-key';
 
@@ -347,10 +348,17 @@ export class SharedReplica {
     return response;
   }
 
-  /** Drop one entry's bytes + metadata (a no-leak partial-write sweep). */
+  /**
+   * Drop one entry's bytes + metadata (a no-leak partial-write sweep). The metadata row is kept
+   * when the byte delete fails, so later purges still find those bytes by metadata.
+   */
   private async invalidate(metaKey: string, keyReq: Request): Promise<void> {
     await this.commit(async () => {
-      await this.cfg.cache.delete(keyReq, IGNORE_VARY).catch(() => false);
+      try {
+        await this.cfg.cache.delete(keyReq, IGNORE_VARY);
+      } catch {
+        return;
+      }
       await this.cfg.db.deleteMetadata(metaKey).catch(() => {});
     });
   }
@@ -401,6 +409,11 @@ export async function purgeReplica(
       );
       if (await cache.delete(keyReq, IGNORE_VARY)) bytesDropped++;
     }
+    // Then sweep this identity's byte keys that no metadata row indexes any more.
+    for (const keyReq of await enumerateCacheKeys()) {
+      if (replicaKeyBelongsTo(keyReq, webId) && (await cache.delete(keyReq, IGNORE_VARY)))
+        bytesDropped++;
+    }
     await db.deleteMetadataByWebId(webId);
     metaDropped = rows.length;
   } else {
@@ -441,7 +454,9 @@ export async function purgeReplica(
  * access live — it degrades only to "bytes linger until logout" (the prior state), with access
  * already revoked. This function is therefore BEST-EFFORT-THOROUGH: it purges as much of the slice
  * as it can, tolerating a per-row failure (so one unremovable row cannot abort the rest of the
- * slice), and returns the counts dropped. An empty target set covers nothing → a no-op.
+ * slice), and returns the counts dropped. A row whose byte delete fails keeps its metadata, so the
+ * logout/profile purge can still find and drop those bytes. An empty target set covers nothing → a
+ * no-op.
  */
 export async function purgeReplicaSlice(
   cache: ReplicaByteCache,
@@ -468,13 +483,18 @@ export async function purgeReplicaSlice(
     // A resource STILL covered by another live grant of the same (webId, grantScope) is retained —
     // revoking one of two overlapping grants must not evict what the survivor still authorises.
     if (retain.length > 0 && targetsCover(retain, row.resourceUrl)) continue;
-    // Drop the bytes AND the metadata INDEPENDENTLY + best-effort: a failure of either half must
-    // not abort the rest of the slice, and the byte half's failure must not skip the metadata
-    // half (else a stale, un-servable row would dangle). The grant is already removed by the
-    // caller (the fail-closed deny), so any residual here is only an un-servable leftover the
-    // logout purge will sweep — never live access.
+    // Best-effort per row: one failure must not abort the rest of the slice. The grant is already
+    // removed by the caller (the fail-closed deny), so a residual is never live access. The
+    // metadata row is how the logout/profile purge finds the bytes, so it is dropped only after
+    // the byte delete succeeded; otherwise the bytes would survive every later purge.
     const keyReq = new Request(replicaKeyUrlFor(row));
-    if (await cache.delete(keyReq, IGNORE_VARY).catch(() => false)) bytesDropped++;
+    let deleted: boolean;
+    try {
+      deleted = await cache.delete(keyReq, IGNORE_VARY);
+    } catch {
+      continue;
+    }
+    if (deleted) bytesDropped++;
     try {
       await db.deleteMetadata(row.key);
       metaDropped++;

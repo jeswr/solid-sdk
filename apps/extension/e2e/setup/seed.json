@@ -6,7 +6,8 @@
       {
         "name": "test-pod",
         "settings": {
-          "name": "Alex Wilder"
+          "name": "Alex Wilder",
+          "privateNote": "Alex Wilder personal note"
         }
       }
     ]
@@ -18,7 +19,8 @@
       {
         "name": "work-pod",
         "settings": {
-          "name": "Morgan Chen"
+          "name": "Morgan Chen",
+          "privateNote": "Morgan Chen work note"
         }
       }
     ]

@@ -446,6 +446,49 @@ describe('purgeReplica — synchronous-before-serve logout purge', () => {
     expect(db.noncesCleared).toBe(1);
   });
 
+  it("sweeps this identity's byte keys that no metadata row indexes, and only those", async () => {
+    const cache = new FakeCache();
+    const db = new FakeMetaStore();
+    await seedResource(cache, db, WEBID_A, SCOPE_PM, URL);
+    await seedResource(cache, db, WEBID_B, SCOPE_PM, URL);
+    // Orphan both identities' bytes, e.g. a worker killed between the byte and metadata writes.
+    db.rows.clear();
+    // A WebID that extends A's must not match A's key prefix.
+    await seedResource(cache, new FakeMetaStore(), `${WEBID_A}2`, SCOPE_PM, URL);
+
+    const purged = await purgeReplica(cache, db, WEBID_A);
+
+    expect(purged).toEqual({ bytesDropped: 1, metaDropped: 0 });
+    const remaining = [...cache.bytes.keys()].map((url) => decodeURIComponent(url));
+    expect(remaining).toHaveLength(2);
+    expect(remaining.some((key) => key.includes(`${WEBID_B}\u0000`))).toBe(true);
+    expect(remaining.some((key) => key.includes(`${WEBID_A}2\u0000`))).toBe(true);
+  });
+
+  it('a failed invalidation keeps its metadata, so the slice purge still removes the bytes', async () => {
+    const cache = new FakeCache();
+    const db = new FakeMetaStore();
+    await seedResource(cache, db, WEBID_A, SCOPE_PM, FINANCE);
+    const remove = cache.delete.bind(cache);
+    const deletion = vi.spyOn(cache, 'delete').mockRejectedValue(new Error('transient'));
+    // The resource is now gone: the read drops the cached entry, but the byte delete fails.
+    const egress = scriptedEgress([() => new Response('gone', { status: 404 })]);
+    const replica = new SharedReplica({ gate: allow(SCOPE_PM), egress, cache, db, webId: WEBID_A });
+    const result = await replica.read(FINANCE, 'GET', { Accept: 'text/turtle' }, undefined);
+    expect('response' in result && result.response.status).toBe(404);
+    expect(cache.bytes.size).toBe(1);
+    expect(db.rows.size).toBe(1);
+
+    deletion.mockImplementation(remove);
+    await purgeReplicaSlice(cache, db, {
+      webId: WEBID_A,
+      grantScope: SCOPE_PM,
+      targets: FINANCE_TARGETS,
+    });
+    expect(cache.bytes.size).toBe(0);
+    expect(db.rows.size).toBe(0);
+  });
+
   it('drops exactly the prior identity rows + clears nonces (scoped purge)', async () => {
     const cache = new FakeCache();
     const db = new FakeMetaStore();
@@ -653,25 +696,37 @@ describe('purgeReplicaSlice — per-class revoke/expiry byte purge (residual b)'
     expect(db.rows.size).toBe(1);
   });
 
-  it('tolerates a per-row cache-delete failure and still purges the rest of the slice', async () => {
+  it('keeps the metadata of a row whose byte delete fails, so the profile purge still finds it', async () => {
+    const cache = new FakeCache();
     const db = new FakeMetaStore();
-    await seedResource(new FakeCache(), db, WEBID_A, SCOPE_PM, FINANCE);
-    // A cache whose delete always throws — the metadata half must still be dropped (best-effort).
-    const throwingCache: ReplicaByteCache = {
-      match: async () => undefined,
-      put: async () => {},
-      delete: async () => {
-        throw new Error('cache delete failed');
-      },
-      keys: async () => [],
+    const OTHER_FINANCE = 'https://alice.pod.example/finance/payslip.ttl';
+    await seedResource(cache, db, WEBID_A, SCOPE_PM, FINANCE);
+    await seedResource(cache, db, WEBID_A, SCOPE_PM, OTHER_FINANCE);
+    const [stuckKey] = [...cache.bytes.keys()];
+    // One byte delete fails; the rest of the slice is still purged.
+    const realDelete = cache.delete.bind(cache);
+    cache.delete = async (request: Request) => {
+      if (request.url === stuckKey) throw new Error('cache delete failed');
+      return realDelete(request);
     };
-    const purged = await purgeReplicaSlice(throwingCache, db, {
+
+    const purged = await purgeReplicaSlice(cache, db, {
       webId: WEBID_A,
       grantScope: SCOPE_PM,
       targets: FINANCE_TARGETS,
     });
-    // The byte delete threw (0 counted) but the row was still removed — no abort.
-    expect(purged.bytesDropped).toBe(0);
+
+    expect(purged).toEqual({ bytesDropped: 1, metaDropped: 1 });
+    expect([...cache.bytes.keys()]).toEqual([stuckKey]);
+    expect(db.rows.size).toBe(1);
+
+    // The surviving row still indexes the stuck bytes, so the later profile purge removes them.
+    cache.delete = realDelete;
+    expect(await purgeReplica(cache, db, WEBID_A)).toMatchObject({
+      bytesDropped: 1,
+      metaDropped: 1,
+    });
+    expect(cache.bytes.size).toBe(0);
     expect(db.rows.size).toBe(0);
   });
 });

@@ -125,6 +125,8 @@ function installCaches(): void {
 }
 
 interface CapturedSender {
+  frameId?: number;
+  tab?: { id: number; url: string };
   origin?: string;
   url?: string;
   id?: string;
@@ -1724,6 +1726,50 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
     ).toBe(false);
   });
 
+  it('never lets a concurrent longer expiry overwrite an earlier shortening', async () => {
+    const deadline = Date.now() + 60_000;
+    await boot([parent({ expiresAt: deadline })]);
+    // A replica commit holds the profile queue, so both managers validate against the
+    // original expiry and then wait to commit in order.
+    let release!: () => void;
+    const gateOpen = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let committing!: () => void;
+    const committed = new Promise<void>((resolve) => {
+      committing = resolve;
+    });
+    const cache = await caches.open('solid-ext-replica-bytes');
+    const put = cache.put.bind(cache);
+    cache.put = async (request: RequestInfo | URL, response: Response) => {
+      committing();
+      await gateOpen;
+      return put(request as Request, response);
+    };
+    vi.spyOn(caches, 'open').mockResolvedValue(cache);
+    const pending = fetchFinance();
+    await committed;
+    const managers = Promise.all([
+      send(
+        { type: 'SOLID_ORIGIN_GRANT_EXPIRY', origin: APPX.origin, expiresAt: deadline - 10_000 },
+        EXT_SENDER,
+      ),
+      send(
+        { type: 'SOLID_ORIGIN_GRANT_EXPIRY', origin: APPX.origin, expiresAt: deadline - 1000 },
+        EXT_SENDER,
+      ),
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    release();
+    const [shorter, longer] = await managers;
+    await pending;
+    expect(shorter.ok).toBe(true);
+    expect(longer.error).toMatch(/only be shortened/);
+    expect((storage.get('solid:origin-grants') as OriginGrant[])[0].expiresAt).toBe(
+      deadline - 10_000,
+    );
+  });
+
   it.each([
     'nonexistent',
     'grant-1',
@@ -2104,4 +2150,138 @@ it('unregisters a revoked origin even when replica stores cannot open', async ()
   } finally {
     open.mockRestore();
   }
+});
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+// Exercise form-fill through the actual worker router and its credential boundary.
+describe('separate form-fill consent wired into the worker', () => {
+  const origin = 'https://shop.example';
+  const source: CapturedSender = {
+    origin,
+    url: `${origin}/checkout`,
+    frameId: 0,
+    tab: { id: 7, url: `${origin}/checkout` },
+  };
+  const fields = [
+    { field: 'name', category: 'contact' },
+    { field: 'street-address', category: 'address' },
+  ];
+  async function prepare() {
+    await seedSession();
+    await loadWorker();
+    chrome.tabs.get = vi.fn(async () => ({
+      id: 7,
+      url: source.url,
+    })) as unknown as typeof chrome.tabs.get;
+    chrome.windows.remove = vi.fn(async () => {});
+    fetchCalls = [];
+    fetchImpl = async (url) =>
+      new Response(
+        url === WEBID
+          ? `
+      @prefix v: <http://www.w3.org/2006/vcard/ns#>.
+      <${WEBID}> v:fn "Alex"; v:hasAddress <../private/address#home>; v:hasEmail <https://foreign.example/contact>.
+    `
+          : `<${WEBID}> <http://www.w3.org/2006/vcard/ns#hasAddress> <#home>.
+      <#home> <http://www.w3.org/2006/vcard/ns#street-address> "42 Sample Street".`,
+        { headers: { 'Content-Type': 'text/turtle' } },
+      );
+  }
+  async function pendingFill() {
+    const result = send(
+      {
+        type: 'SOLID_FORMFILL_REQUEST',
+        fields,
+        origin: 'https://forged.example',
+        stampedOrigin: 'https://forged.example',
+      },
+      source,
+    );
+    await vi.waitFor(() =>
+      expect(createdWindows.some((url) => url.includes('/formfill/preview.html'))).toBe(true),
+    );
+    const url = createdWindows.find((u) => u.includes('/formfill/preview.html'))!;
+    const requestId = new URL(url).searchParams.get('requestId')!;
+    return { result, requestId, previewSender: { ...EXT_SENDER, url, frameId: 0 } };
+  }
+  it('loads public data without credentials, confines private fetch, and returns only approved values', async () => {
+    await prepare();
+    const { result, requestId, previewSender } = await pendingFill();
+    const preview = await send({ type: 'SOLID_FORMFILL_PREVIEW', requestId }, previewSender);
+    expect(preview.origin).toBe(origin);
+    expect(preview.values).toEqual([
+      { field: 'name', category: 'contact', value: 'Alex' },
+      { field: 'street-address', category: 'address', value: '42 Sample Street' },
+    ]);
+    const publicCall = fetchCalls.find((c) => c.url === WEBID)!;
+    expect(publicCall.init).toMatchObject({ credentials: 'omit', redirect: 'error' });
+    expect(new Headers(publicCall.init?.headers).has('Authorization')).toBe(false);
+    const privateCall = fetchCalls.find(
+      (c) => c.url === 'https://alice.pod.example/private/address',
+    )!;
+    expect(privateCall.init).toMatchObject({ credentials: 'omit', redirect: 'error' });
+    expect(new Headers(privateCall.init?.headers).get('Authorization')).toBe(
+      'DPoP access-token-xyz',
+    );
+    expect(new Headers(privateCall.init?.headers).get('DPoP')).toBeTruthy();
+    expect(fetchCalls).toHaveLength(2);
+    await send(
+      {
+        type: 'SOLID_FORMFILL_DECISION',
+        requestId,
+        profileId: preview.profileId,
+        categories: ['address'],
+        remember: true,
+      },
+      previewSender,
+    );
+    expect(await result).toEqual({
+      origin,
+      values: [{ field: 'street-address', category: 'address', value: '42 Sample Street' }],
+    });
+    expect(storage.get('solid:formfill-grants')).toEqual([
+      expect.objectContaining({ origin, profileId: preview.profileId, categories: ['address'] }),
+    ]);
+    expect(
+      (await send({ type: 'SOLID_GET_STATE', stampedOrigin: origin }, source)).webId,
+    ).toBeNull();
+    expect(storage.get('solid:origin-grants')).toEqual([]);
+  });
+  it.each([
+    'SOLID_LOGOUT',
+    'SOLID_PROFILE_REMOVE',
+  ])('%s cancels the preview and removes form-fill grants', async (type) => {
+    await prepare();
+    const state = await send({ type: 'SOLID_PROFILES_LIST' }, EXT_SENDER);
+    const id = (state.profiles as Array<{ id: string }>)[0].id;
+    storage.set('solid:formfill-grants', [
+      { origin, profileId: id, categories: ['contact'], createdAt: 1 },
+    ]);
+    const { result } = await pendingFill();
+    expect((await send({ type, profileId: id }, EXT_SENDER)).error).toBeUndefined();
+    expect(await result).toEqual({ values: [] });
+    expect(storage.get('solid:formfill-grants')).toEqual([]);
+  });
+  it('rejects insecure and cross-origin iframe senders before any profile fetch', async () => {
+    await prepare();
+    for (const sender of [
+      {
+        ...source,
+        origin: 'http://remote.example',
+        url: 'http://remote.example',
+        tab: { id: 7, url: 'http://remote.example' },
+      },
+      {
+        ...source,
+        frameId: 5,
+        origin: 'https://embedded.example',
+        url: 'https://embedded.example',
+      },
+    ])
+      expect(await send({ type: 'SOLID_FORMFILL_REQUEST', fields }, sender)).toEqual({
+        values: [],
+      });
+    expect(fetchCalls).toHaveLength(0);
+    expect(createdWindows).toHaveLength(0);
+  });
 });

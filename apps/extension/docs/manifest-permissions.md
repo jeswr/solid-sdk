@@ -7,10 +7,10 @@ consent, independently checked by the worker, controls which pages can use that 
 
 | Permission | Purpose |
 |---|---|
-| `storage` | Settings, recent-account display metadata, client IDs, transient PKCE parameters, and `solid:origin-grants`. The origin table contains `{origin, profileId, scope: {pods, classes?}, createdAt, expiresAt?}`; class grants nest under their parent. Tokens and non-extractable DPoP keys remain in worker-owned profile IndexedDB. Legacy implicit grants do not authorize access. |
+| `storage` | Settings, recent-account display metadata, client IDs, transient PKCE parameters, and separate `solid:origin-grants` / `solid:formfill-grants` tables. Local storage is restricted to trusted extension contexts; page scripts and content scripts do not read grants directly. The origin table contains `{origin, profileId, scope: {pods, classes?}, createdAt, expiresAt?}`; class grants nest under their parent. Tokens and non-extractable DPoP keys remain in worker-owned profile IndexedDB. Legacy implicit grants do not authorize access. |
 | `identity` | Solid-OIDC authorization-code + PKCE through `chrome.identity.launchWebAuthFlow`. |
 | `sidePanel` | The persistent account surface; EXT-06 owns its grants-manager UI. |
-| `contextMenus` | The toolbar's “Open Solid side panel” menu entry. |
+| `contextMenus` | The toolbar's “Open Solid side panel” menu entry and the “Fill from pod” entry on editable controls. Form-fill clicks are routed only to the clicked tab and frame. |
 | `scripting` | Register the MAIN-world fetch-patch entry only for explicitly granted origins, with one exact `scheme://host:port/*` match per origin (including explicit default ports), no wildcard hosts or schemes, top frame only. Reconcile on worker wake, install/update, grant changes, and expiry. Remove the legacy `solid-main-world-inject` all-origins registration. |
 | `alarms` | Wake the worker at the earliest origin-grant expiry to unregister scripts and clear page capabilities. Alarms are a cleanup mechanism: every request independently checks expiry, even if the alarm is late. |
 
@@ -87,3 +87,34 @@ and Chromium's [`ExtensionURLPatternTest.Match17`](https://chromium.googlesource
 which checks default-port matching and rejection of alternate ports. Unit regressions model
 these port semantics for HTTPS, HTTP, custom ports and IPv6, including replacement of old
 wildcard-port registrations on wake.
+
+## Form-fill consent
+
+`solid:formfill-grants` stores `{origin, profileId, categories: ('contact'|'address')[],
+createdAt, expiresAt?}` independently of origin/API grants. These records authorize no
+`window.solid` access and do not register the MAIN-world fetch patch. Removal/sign-out
+revokes the profile's form-fill records; expired or malformed records cannot select a profile.
+
+The ISOLATED script runs in all HTTP(S) frames so an editable context-menu click can be
+routed by `frameId`. The worker derives the requesting origin from Chrome's sender origin
+and document URL, cross-checks the tab's top origin, and refuses opaque, insecure and
+cross-origin frames before loading data. The content script also refuses locally and
+rechecks each control at write time. The MAIN-world stub receives no form-fill messages.
+
+The closed-shadow field button requires a trusted click or Enter/Space. Both triggers
+open `formfill/preview.html` in extension chrome, with category checkboxes, a profile
+picker and optional remembering. Every fill requires an explicit preview decision;
+remembered categories only preselect checkboxes. Only the extension's preview may read
+pending values or decide. Cancel, OS close, closing the requesting tab, or navigating it to
+another origin returns no values. Discovery has a 30-second loading timeout before opening
+the preview; review has only a 24-hour safety cap. Same-origin navigation keeps it open.
+The response stays on the original content-script request channel, checks the current
+site and profile again, and includes only requested values in approved categories.
+Counts are reported after writing, without values or persistent telemetry.
+
+Public profile discovery uses `credentials: 'omit'`. Private documents must be explicitly
+linked from that profile and reside on its pod origins (the issuer is not added separately).
+The existing authenticated fetch provides DPoP; redirects are errors. No values are stored
+in page-accessible storage. Chrome's [context-menu API](https://developer.chrome.com/docs/extensions/reference/api/contextMenus)
+provides the clicked frame, and its [storage API](https://developer.chrome.com/docs/extensions/reference/api/storage)
+provides the trusted-context access level.

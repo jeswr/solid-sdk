@@ -7,7 +7,7 @@
  * origin's client-id mapping.
  */
 
-export {};
+import { installFormFill } from './formfill-controller';
 
 const CHANNEL = 'solid-browser-ext';
 
@@ -199,3 +199,5 @@ chrome.runtime.onMessage.addListener((message) => {
     toPage({ type: 'SOLID_STATE_UPDATE', webId: message.webId ?? null });
   }
 });
+
+installFormFill(window);
