@@ -4,9 +4,10 @@
 # sst-h2yt — CHT-L5 lane report
 
 Branch: `lane/sst-h2yt`. Base: `2c99c9d2202c6b18c38c88ed1524fcb3d2efd460`.
-Implementation complete. App checks and the affected gate pass. The full-workspace
-gate is blocked by an unrelated, independently reproduced federation-trust snapshot
-failure. Mandatory roborev review is unavailable in this environment.
+Implementation and fix round 1 are complete. App checks and the affected gate pass.
+The current full-workspace gate stops on unrelated root-test timeouts; all root
+tests pass in isolation. Mandatory roborev review is unavailable in this environment.
+The original implementation results follow; current validation is in the final section.
 
 ## Commits and scope
 
@@ -152,3 +153,68 @@ Scores count positive query terms and therefore tie within one conjunctive query
 
 No search implementation work is unfinished. A green full-workspace gate and
 automated commit review remain blocked by the external conditions above.
+
+## Fix round 1 — mention detection (2026-10-27)
+
+Fix-round base: `9a0632bb55603770dda77c7d0b38c2bf89d321b7`.
+Addressed exactly the two supplied review findings:
+
+- `11b39211 fix(chat): scan mention spans in linear time`: consume email and URL
+  spans rather than retaining context until whitespace. Cache the next label
+  delimiter and destination across failed nested candidates so suffixes are not
+  repeatedly scanned. Separate boundary-delimited mentions after email/URL spans
+  now work for both positive and negated filters.
+- Final documentation commit, `docs: record mention fix validation`: this update.
+
+Added 25 regression cases, bringing search coverage to 146 tests. Cases cover
+adjacent email/URL and mention spans, explicit mentions, negation, malformed and
+nested labels, repeated invalid destinations, and long ordinary word runs. The
+timing regression exercises 50,000 failed label candidates and a 500,000-character
+word run with a five-second budget; it took 670 ms in the affected gate. The old
+regex alone took 5,860 ms for one 100,000-character malformed-label input.
+The entire search directory retains 100% statements, branches, functions and lines.
+
+Conservative parsing choice: retain URI punctuation within URL spans; whitespace,
+angle brackets and quotes end those spans. Existing explicit mention syntax is
+retained, including backticks in otherwise valid destinations. No message-length
+limit, dependency, API, UI or unrelated implementation change was added.
+
+Commands used the same Node 24 / pnpm environment documented above:
+
+```sh
+pnpm exec turbo run build --filter='@jeswr/app-suite^...' --concurrency=4
+pnpm --filter @jeswr/app-suite exec vitest run chat-search --coverage.include='src/apps/chat/lib/search/**/*.ts' --coverage.reportsDirectory=/tmp/sst-h2yt-fix-search-coverage
+pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test
+pnpm run lint:root
+TURBO_SCM_BASE=9a0632bb55603770dda77c7d0b38c2bf89d321b7 pnpm run gate
+pnpm run gate:full
+pnpm run test:root
+```
+
+Results:
+
+- Dependency builds: PASS, seven tasks.
+- Focused search tests: PASS, 146 tests and 100% coverage of every metric.
+- App lint/build/typecheck/test: PASS, 155 files / 7,653 tests and 100% app coverage.
+  App lint reports the same 54 warnings in unchanged files.
+- Root lint: PASS.
+- Affected gate: PASS, 12 tasks (seven cached), including all 7,653 app tests.
+- Full-workspace gate: FAIL, 58 successful / 224 total tasks before cancellation.
+  Two unchanged `test/agent-layers.test.mjs:509` cases, “rejects disallowed path
+  characters globally” for `require(TARGET);` and `(require as Loader)(TARGET);`,
+  exceeded their existing 5,000 ms timeout. The root suite reported 877 pass / two
+  timeouts. No root test, checker or timeout setting changed in this lane.
+- Isolated root tests after that failure: PASS, all 879 tests / 12 files.
+- `roborev status`: unavailable, exit 127 (`roborev: command not found`).
+
+No generated untracked files remained after the gates. No dependency checks or
+screenshots were needed. No push, PR, branch switch, fetch or merge occurred.
+Both review findings are fixed; no implementation work or new interpretation
+questions remain. A green full-workspace gate and automated commit review remain
+outstanding for the reasons above.
+
+Evidence: `/tmp/sst-h2yt-fix-regression-before.log`,
+`/tmp/sst-h2yt-fix-search-tests.log`, `/tmp/sst-h2yt-fix-search-coverage/`,
+`/tmp/sst-h2yt-fix-dependency-build.log`, `/tmp/sst-h2yt-fix-package-gate.log`,
+`/tmp/sst-h2yt-fix-root-lint.log`, `/tmp/sst-h2yt-fix-gate.log`,
+`/tmp/sst-h2yt-fix-gate-full.log`, and `/tmp/sst-h2yt-fix-root-tests.log`.
