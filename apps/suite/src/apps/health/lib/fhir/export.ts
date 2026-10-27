@@ -94,8 +94,9 @@ export function buildFhirBundle(input: HealthRecords, options: FhirExportOptions
   const conditionCount = arrayLength(data.conditions, "INVALID_INPUT");
   checkCount(observationCount + medicationCount + conditionCount);
   const injected = record(options, ["uuid", "clock"], ["patientReference"], "INVALID_OPTIONS");
+  const { uuid: generateUuid, clock } = injected;
   requireValid(
-    typeof injected.uuid === "function" && typeof injected.clock === "function",
+    typeof generateUuid === "function" && typeof clock === "function",
     "INVALID_OPTIONS",
     "Clock and UUID generator are required",
   );
@@ -165,7 +166,7 @@ export function buildFhirBundle(input: HealthRecords, options: FhirExportOptions
   );
   let timestamp: string;
   try {
-    const now: unknown = injected.clock();
+    const now: unknown = clock();
     requireValid(now instanceof Date, "INVALID_OPTIONS", "Clock must return a Date");
     // Format the Date value itself, without invoking callback-supplied methods.
     timestamp = Date.prototype.toISOString.call(now);
@@ -177,7 +178,7 @@ export function buildFhirBundle(input: HealthRecords, options: FhirExportOptions
   const entry = resources.map((resource) => {
     let generated: unknown;
     try {
-      generated = injected.uuid();
+      generated = generateUuid();
     } catch {
       throw new FhirExportError("INVALID_OPTIONS", "UUID generator failed");
     }

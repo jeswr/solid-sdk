@@ -107,17 +107,17 @@ describe("FHIR caller-data snapshots", () => {
 
   it.each(["source", "value"])("builds from the validated %s instead of a proxy get", (key) => {
     const input = records();
+    const original = input.observations[0];
+    if (!original) throw new Error("Expected fixture observation");
     const oversized = "a".repeat(MAX_FHIR_STRING_LENGTH + 1);
-    const observation = new Proxy(input.observations[0], {
+    const observation = new Proxy(original, {
       get(target, field, receiver) {
         if (field === key) return key === "source" ? oversized : NaN;
         return Reflect.get(target, field, receiver);
       },
     });
     const actual = serialiseFhirBundle({ ...input, observations: [observation] }, options());
-    expect(actual).toBe(
-      serialiseFhirBundle({ ...input, observations: [input.observations[0]] }, options()),
-    );
+    expect(actual).toBe(serialiseFhirBundle({ ...input, observations: [original] }, options()));
     expect(actual).not.toContain(oversized);
     expect(actual).not.toContain('"value":null');
     assertFhirBundle(JSON.parse(actual));
@@ -170,7 +170,7 @@ describe("FHIR caller-data snapshots", () => {
     "1",
     undefined,
     null,
-    1n,
+    BigInt(1),
   ])("rejects a non-integer or negative proxy length %s before element work", (length) => {
     const inspect = vi.fn(() => []);
     const values = new Proxy([], {
@@ -218,6 +218,8 @@ describe("FHIR reflection failures", () => {
       throw new FhirExportError("UNSUPPORTED_METRIC", "private proxy detail");
     };
     const proxy = <T extends object>(value: T): T => new Proxy(value, { [trap]: fail });
+    const condition = records().conditions[0];
+    if (!condition) throw new Error("Expected fixture condition");
     rejects(() => buildFhirBundle(proxy(records()), options()), "INVALID_INPUT");
     rejects(() => buildFhirBundle(records(), proxy(options())), "INVALID_OPTIONS");
     rejects(
@@ -225,8 +227,7 @@ describe("FHIR reflection failures", () => {
       "INVALID_INPUT",
     );
     rejects(
-      () =>
-        buildFhirBundle({ ...records(), conditions: [proxy(records().conditions[0])] }, options()),
+      () => buildFhirBundle({ ...records(), conditions: [proxy(condition)] }, options()),
       "INVALID_INPUT",
     );
     const bundle = buildFhirBundle(records(), options());
