@@ -36,6 +36,7 @@ export default defineConfig({
         "src/apps/photos/lib/exif/**/*.ts",
         "src/apps/photos/lib/transform/**/*.ts",
         "src/apps/photos/lib/timeline/**/*.ts",
+        "src/apps/photos/lib/geo/**/*.ts",
         "src/apps/music/lib/queue/**/*.ts",
         "src/apps/music/lib/model/**/*.ts",
         "src/apps/photos/lib/albums/**/*.ts",
