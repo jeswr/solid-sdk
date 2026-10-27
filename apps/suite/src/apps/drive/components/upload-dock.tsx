@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex
 "use client";
 /** Upload dock (04-drive §4.1): the queue's progress, failures and retries. */
 
@@ -6,6 +7,7 @@ import { FileTypeIcon, IconButton, Progress, toast } from "@jeswr/suite-ui";
 import { Check, ChevronDown, ChevronUp, RotateCcw, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useDrive } from "../state/drive-context";
+import { focusDriveListing } from "../state/ui";
 
 export function UploadDock() {
   const { uploads } = useDrive();
@@ -14,6 +16,7 @@ export function UploadDock() {
   const active = tasks.filter((task) => task.status === "queued" || task.status === "uploading");
   const done = tasks.filter((task) => task.status === "done");
   const reported = useRef(new Set<string>());
+  const toggle = useRef<HTMLButtonElement>(null);
 
   // "Uploaded {n} files" once a batch settles.
   useEffect(() => {
@@ -37,6 +40,7 @@ export function UploadDock() {
       <header>
         <h2 aria-live="polite">{title}</h2>
         <IconButton
+          ref={toggle}
           label={collapsed ? "Expand uploads" : "Collapse uploads"}
           variant="ghost"
           onClick={() => setCollapsed((on) => !on)}
@@ -48,7 +52,14 @@ export function UploadDock() {
           )}
         </IconButton>
         {active.length === 0 ? (
-          <IconButton label="Close uploads" variant="ghost" onClick={uploads.clear}>
+          <IconButton
+            label="Close uploads"
+            variant="ghost"
+            onClick={() => {
+              uploads.clear();
+              focusDriveListing();
+            }}
+          >
             <X aria-hidden="true" size={18} />
           </IconButton>
         ) : null}
@@ -76,7 +87,10 @@ export function UploadDock() {
                 <IconButton
                   label={`Retry ${task.name}`}
                   variant="ghost"
-                  onClick={() => uploads.retry(task.id)}
+                  onClick={() => {
+                    uploads.retry(task.id);
+                    focusDriveListing(undefined, toggle.current);
+                  }}
                 >
                   <RotateCcw aria-hidden="true" size={16} />
                 </IconButton>

@@ -385,34 +385,43 @@ export function TrashView() {
   const chosen = (entries ?? []).filter((entry) => selected.has(entry.url));
   const { restore } = useDriveActions();
   const listing = useRef<HTMLDivElement>(null);
-  const [restoreFocus, setRestoreFocus] = useState<{
+  const [removalFocus, setRemovalFocus] = useState<{
     removed: ReadonlySet<string>;
     candidates: string[];
   }>();
   useLayoutEffect(() => {
-    // The change bus can finish re-listing before or after restore resolves.
+    // The change bus can finish re-listing before or after a removal resolves.
     // Wait until the successful entries have actually left the rendered list.
-    if (!restoreFocus || !entries || entries.some((entry) => restoreFocus.removed.has(entry.url)))
+    if (!removalFocus || !entries || entries.some((entry) => removalFocus.removed.has(entry.url)))
       return;
     const remaining = new Set(entries.map((entry) => entry.url));
-    const next = restoreFocus.candidates.find((url) => remaining.has(url));
+    const next = removalFocus.candidates.find((url) => remaining.has(url));
     focusDriveListing(next ?? entries[0]?.url, undefined, listing.current);
-    setRestoreFocus(undefined);
-  }, [entries, restoreFocus]);
-  const restoreEntries = async (targets: readonly TrashEntry[]) => {
-    const result = await restore(targets);
-    const removed = new Set(result?.done.map(({ entry }) => entry.url));
+    setRemovalFocus(undefined);
+  }, [entries, removalFocus]);
+  const focusAfterRemoval = (removedUrls: readonly string[]) => {
+    const removed = new Set(removedUrls);
     if (removed.size === 0) return;
     setSelected((current) => new Set([...current].filter((url) => !removed.has(url))));
     const urls = (entries ?? []).map((entry) => entry.url);
     const index = urls.findIndex((url) => removed.has(url));
-    setRestoreFocus({
+    setRemovalFocus({
       removed,
       candidates: [...urls.slice(index), ...urls.slice(0, index).reverse()].filter(
         (url) => !removed.has(url),
       ),
     });
   };
+  const restoreEntries = async (targets: readonly TrashEntry[]) => {
+    const result = await restore(targets);
+    focusAfterRemoval(result?.done.map(({ entry }) => entry.url) ?? []);
+  };
+  const confirmDelete = (targets: TrashEntry[], empty = false) =>
+    ui.openDialog({
+      kind: empty ? "empty-trash" : "delete-forever",
+      entries: targets,
+      onRemoved: focusAfterRemoval,
+    });
   return (
     <div className="drv-page">
       <div className="drv-heading">
@@ -429,11 +438,7 @@ export function TrashView() {
             <Button size="sm" variant="outline" onClick={() => void restoreEntries(chosen)}>
               Restore
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => ui.openDialog({ kind: "delete-forever", entries: chosen })}
-            >
+            <Button size="sm" variant="outline" onClick={() => confirmDelete(chosen)}>
               Delete for ever
             </Button>
           </>
@@ -443,7 +448,7 @@ export function TrashView() {
             size="sm"
             variant="destructive"
             disabled={!entries || entries.length === 0}
-            onClick={() => entries && ui.openDialog({ kind: "empty-trash", entries })}
+            onClick={() => entries && confirmDelete(entries, true)}
           >
             Empty trash
           </Button>
@@ -480,7 +485,7 @@ export function TrashView() {
               if (event.defaultPrevented || event.key !== "Delete" || !event.shiftKey) return;
               if (chosen.length === 0) return;
               event.preventDefault();
-              ui.openDialog({ kind: "delete-forever", entries: chosen });
+              confirmDelete(chosen);
             }}
           >
             <thead>
@@ -507,7 +512,7 @@ export function TrashView() {
               {entries.map((entry) => {
                 const menu = trashMenu(
                   () => void restoreEntries([entry]),
-                  () => ui.openDialog({ kind: "delete-forever", entries: [entry] }),
+                  () => confirmDelete([entry]),
                 );
                 return (
                   <tr

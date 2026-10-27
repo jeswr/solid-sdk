@@ -15,6 +15,7 @@ import {
   type ReactNode,
   useCallback,
   useContext,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -40,8 +41,11 @@ export type DriveDialog =
   | { kind: "new-folder"; parent: string }
   | { kind: "rename"; item: DriveItem }
   | { kind: "move"; items: DriveItem[] }
-  | { kind: "delete-forever"; entries: TrashEntry[] }
-  | { kind: "empty-trash"; entries: TrashEntry[] };
+  | {
+      kind: "delete-forever" | "empty-trash";
+      entries: TrashEntry[];
+      onRemoved?: (urls: readonly string[]) => void;
+    };
 
 export interface PreviewState {
   readonly items: readonly DriveItem[];
@@ -86,8 +90,28 @@ export function focusDriveListing(
 export function DriveUiProvider({ children }: { children: ReactNode }) {
   const [dialog, setDialog] = useState<DriveUiValue["dialog"]>();
   const [preview, setPreview] = useState<PreviewState>();
-  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [detailsOpen, setDetailsOpenState] = useState(false);
   const [detailsItems, setDetailsItems] = useState<readonly DriveItem[]>([]);
+  const detailsFocus = useRef<HTMLElement | null>(null);
+  const detailsVisible = useRef(false);
+  const restoreDetailsFocus = useRef(false);
+  const setDetailsOpen = useCallback((next: boolean | ((open: boolean) => boolean)) => {
+    const open = typeof next === "function" ? next(detailsVisible.current) : next;
+    if (open === detailsVisible.current) return;
+    if (open) {
+      detailsFocus.current =
+        document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+          ? document.activeElement
+          : null;
+    } else restoreDetailsFocus.current = true;
+    detailsVisible.current = open;
+    setDetailsOpenState(open);
+  }, []);
+  useLayoutEffect(() => {
+    if (detailsOpen || !restoreDetailsFocus.current) return;
+    restoreDetailsFocus.current = false;
+    focusDriveListing(detailsItems[0]?.url, detailsFocus.current);
+  }, [detailsOpen, detailsItems]);
   const [uploadRequest, setUploadRequest] = useState<{ id: number; folder: boolean }>();
   const [currentFolder, setCurrentFolder] = useState<string>();
   const dialogFocus = useRef<{ element: HTMLElement | null; url: string | undefined } | undefined>(
@@ -151,6 +175,7 @@ export function DriveUiProvider({ children }: { children: ReactNode }) {
       openDialog,
       closeDialog,
       restoreDialogFocus,
+      setDetailsOpen,
     ],
   );
   return <DriveUiContext value={value}>{children}</DriveUiContext>;
@@ -492,6 +517,7 @@ export function useDriveActions() {
       if (result.failed.length > 0)
         toast.error(errorMessage(result.failed[0]?.error, "Couldn't delete"));
       if (result.done.length > 0) toast.success("Deleted for ever");
+      return result;
     },
     [client, driveRoot, invalidate],
   );

@@ -454,6 +454,20 @@ function MoveDialog({
   );
 }
 
+interface RemovalFocus {
+  closed: boolean;
+  urls?: readonly string[];
+  onRemoved: ((urls: readonly string[]) => void) | undefined;
+}
+
+/** Fire `onRemoved` once both the dialog has closed and the removal has settled. */
+function settleRemovalFocus(removal: RemovalFocus) {
+  if (!removal.closed || !removal.urls) return;
+  const { onRemoved, urls } = removal;
+  removal.onRemoved = undefined;
+  onRemoved?.(urls);
+}
+
 function TrashConfirmDialog({
   open,
   onOpenChange,
@@ -467,10 +481,25 @@ function TrashConfirmDialog({
     dialog?.kind === "delete-forever" || dialog?.kind === "empty-trash" ? dialog.entries : [];
   const total = entries.reduce((sum, entry) => sum + (entry.size ?? 0), 0);
   const empty = dialog?.kind === "empty-trash";
+  const onRemoved =
+    dialog?.kind === "delete-forever" || dialog?.kind === "empty-trash"
+      ? dialog.onRemoved
+      : undefined;
+  // Removal and Radix close autofocus can finish in either order. Refocus only
+  // once the dialog has returned focus and the successful URLs are known.
+  const removalFocus = useRef<RemovalFocus | undefined>(undefined);
   const first = entries[0];
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent onCloseAutoFocus={restoreDialogFocus}>
+      <AlertDialogContent
+        onCloseAutoFocus={(event) => {
+          restoreDialogFocus(event);
+          const removal = removalFocus.current;
+          if (!removal) return;
+          removal.closed = true;
+          settleRemovalFocus(removal);
+        }}
+      >
         <AlertDialogHeader>
           <AlertDialogTitle>
             {empty
@@ -490,8 +519,15 @@ function TrashConfirmDialog({
           <AlertDialogAction
             variant="destructive"
             onClick={() => {
+              // One record per confirmed removal, so a later cancelled dialog
+              // never replays an earlier removal's focus move.
+              const removal: RemovalFocus = { closed: false, onRemoved };
+              removalFocus.current = removal;
               closeDialog();
-              void actions.removeForever(entries);
+              void actions.removeForever(entries).then((result) => {
+                removal.urls = result?.done.map((entry) => entry.url) ?? [];
+                settleRemovalFocus(removal);
+              });
             }}
           >
             {empty ? "Empty trash" : "Delete for ever"}
