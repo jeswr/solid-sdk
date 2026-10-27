@@ -173,6 +173,11 @@
       "slug": "extension",
       "name": "@jeswr/app-extension",
       "kind": "application"
+    },
+    {
+      "slug": "pod-migrator",
+      "name": "@jeswr/app-pod-migrator",
+      "kind": "application"
     }
   ],
   "dependsOn": [],
