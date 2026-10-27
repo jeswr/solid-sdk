@@ -66,7 +66,10 @@ function reject(message: string): never {
 function keys(value: unknown, allowed: readonly string[]): void {
   if (value === null || typeof value !== "object" || Array.isArray(value))
     reject("Expected a record");
-  if (Object.keys(value).some((key) => !allowed.includes(key))) reject("Unsupported fields");
+  // Stop at the first unknown own field instead of materialising an unbounded key array.
+  for (const key in value) {
+    if (Object.hasOwn(value, key) && !allowed.includes(key)) reject("Unsupported fields");
+  }
 }
 
 function data(cell: StructureCell): CellData {

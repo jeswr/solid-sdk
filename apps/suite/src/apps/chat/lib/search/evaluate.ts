@@ -63,11 +63,13 @@ function dateFormatter(timeZone: string): Intl.DateTimeFormat {
   if (
     typeof timeZone !== "string" ||
     timeZone.length > MAX_TIME_ZONE_LENGTH ||
-    !/^[A-Za-z_]+(?:\/[A-Za-z0-9_+.-]+)*$/u.test(timeZone)
+    timeZone.length === 0 ||
+    /^[+-]/u.test(timeZone)
   ) {
     throw new SearchError("INVALID_TIME_ZONE");
   }
   try {
+    // Intl validates IANA names and aliases, including digit-bearing legacy names.
     return new Intl.DateTimeFormat("en-US", {
       timeZone,
       calendar: "gregory",

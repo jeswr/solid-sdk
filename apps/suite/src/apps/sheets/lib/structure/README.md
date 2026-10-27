@@ -67,8 +67,11 @@ Sheets, cells, edits, move sources/destinations and move endpoints must be recor
 Primitives and arrays (including arrays carrying valid record fields) are rejected
 before field enumeration, so malformed strings or arrays cannot bypass the size
 preflight by materialising their character or element keys. The field validator
-reports these failures as `SheetReferenceError` with `unsupported` and a fixed
-message without caller data.
+checks own enumerable fields one at a time and stops at the first unsupported field,
+without creating a key array. Each record schema allows at most five fields, so at
+most six own fields are inspected, regardless of how many extra fields a record has.
+These failures use `SheetReferenceError` with `unsupported` and a fixed message
+without caller data.
 
 Unsupported or malformed input throws the exported `SheetReferenceError`, with
 `syntax`, `bounds`, `unsupported` or `invalid-edit` codes, before any result is

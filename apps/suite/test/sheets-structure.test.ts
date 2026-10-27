@@ -179,6 +179,83 @@ describe("workbook preflight limits", () => {
 });
 
 describe("record shape validation", () => {
+  it("accepts every record schema at its field bound and rejects one extra field", () => {
+    const sheet = { name: "Plan", cells: [] };
+    const cell = { row: 1, column: 1, formula: "=A1", notation: "A1", value: undefined } as const;
+    const edit = { ...insert };
+    const moveEdit = { ...move };
+    const source = { ...move.source };
+    const start = { ...move.source.start };
+    const end = { ...move.source.end };
+    const destination = { ...move.destination };
+    const cases: [readonly StructureSheet[], StructureEdit, object][] = [
+      [[sheet], insert, sheet],
+      [workbook([cell as unknown as StructureCell]), insert, cell],
+      [workbook([]), edit, edit],
+      [workbook([]), moveEdit, moveEdit],
+      [workbook([]), { ...move, source }, source],
+      [workbook([]), { ...move, source: { ...move.source, start } }, start],
+      [workbook([]), { ...move, source: { ...move.source, end } }, end],
+      [workbook([]), { ...move, destination }, destination],
+    ];
+    for (const [sheets, edit, record] of cases) {
+      expect(() => planStructureEdit(sheets, edit)).not.toThrow();
+      Object.defineProperty(record, "private-field", { enumerable: true, value: "private-value" });
+      const saved = structuredClone([sheets, edit]);
+      expect(() => planStructureEdit(sheets, edit)).toThrow(
+        expect.objectContaining({ code: "unsupported", message: "Unsupported fields" }),
+      );
+      expect([sheets, edit]).toEqual(saved);
+    }
+  });
+
+  it("rejects an oversized plain record without materialising its keys or reading extra values", () => {
+    const cell = { ...value(1, 1, "private-value") };
+    for (let index = 0; index < 100_001; index++) {
+      Object.defineProperty(cell, `private-field-${index}`, {
+        enumerable: true,
+        get() {
+          throw new Error("Unsupported values must not be read");
+        },
+      });
+    }
+    const keys = vi.spyOn(Object, "keys");
+    const own = vi.spyOn(Object, "hasOwn");
+    let caught: unknown;
+    let enumerated: boolean;
+    let inspected: number;
+    try {
+      planStructureEdit(workbook([cell]), insert);
+    } catch (error) {
+      caught = error;
+    } finally {
+      enumerated = keys.mock.calls.some(([input]) => input === cell);
+      inspected = own.mock.calls.filter(([input]) => input === cell).length;
+      keys.mockRestore();
+      own.mockRestore();
+    }
+    expect(enumerated).toBe(false);
+    expect(inspected).toBe(4); // Three allowed fields, then the first unsupported field.
+    expect(caught).toBeInstanceOf(SheetReferenceError);
+    expect(caught).toMatchObject({ code: "unsupported", message: "Unsupported fields" });
+  });
+
+  it("preserves own-field validation for null-prototype and inherited-field records", () => {
+    for (const prototype of [null, { "private-inherited-field": "private-value" }]) {
+      const cell = Object.assign(Object.create(prototype), value(1, 1, "literal"));
+      expect(planStructureEdit(workbook([cell]), insert).sheets[0]?.cells).toEqual([
+        value(1, 1, "literal"),
+      ]);
+      Object.defineProperty(cell, "private-own-field", {
+        enumerable: true,
+        value: "private-value",
+      });
+      expect(() => planStructureEdit(workbook([cell]), insert)).toThrow(
+        expect.objectContaining({ code: "unsupported", message: "Unsupported fields" }),
+      );
+    }
+  });
+
   const rejectWithoutEnumerating = (
     sheets: readonly StructureSheet[],
     edit: StructureEdit,

@@ -45,7 +45,9 @@ const results = evaluateQuery(query, messages, "Europe/London");
 - `createdAt` is an integer UTC Unix timestamp in years 0001–9999. Dates use the supplied
   IANA zone and proleptic Gregorian calendar: `before:` / `after:` exclude the named local
   date, and `on:` includes its whole day. No fixed 24-hour assumption is made, including
-  DST, fractional-hour offsets and skipped local dates. The host must have IANA ICU data.
+  DST, fractional-hour offsets and skipped local dates. Intl validates zone names and
+  aliases, including digit-bearing names such as `CST6CDT`, `EST5EDT`, `PST8PDT` and `GMT0`.
+  The host must have IANA ICU data.
 - Results sort by matched positive term count, then descending timestamp, then ascending
   UTF-16 ID. With conjunction semantics, scores are equal within a query. Every record
   is validated, including nonmatches; malformed records, sparse arrays and duplicate IDs

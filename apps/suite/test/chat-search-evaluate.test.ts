@@ -163,6 +163,29 @@ describe("message term matching", () => {
 });
 
 describe("local calendar date filters", () => {
+  it.each([
+    ["CST6CDT", "America/Chicago", "2026-04-03T05:00:00Z"],
+    ["EST5EDT", "America/New_York", "2026-04-03T04:00:00Z"],
+    ["MST7MDT", "America/Denver", "2026-04-03T06:00:00Z"],
+    ["PST8PDT", "America/Los_Angeles", "2026-04-03T07:00:00Z"],
+    ["GMT0", "UTC", "2026-04-03T00:00:00Z"],
+  ])("accepts the Intl IANA alias %s for %s", (alias, canonical, midnight) => {
+    const start = Date.parse(midnight);
+    for (const [createdAt, field] of [
+      [start - 1, "before"],
+      [start, "on"],
+      [start + 86_400_000, "after"],
+    ] as const) {
+      const snapshot = Object.freeze([Object.freeze({ ...message, createdAt })]);
+      const source = `${field}:2026-04-03`;
+      const expected = searchMessages(source, snapshot, canonical);
+      expect(expected).toHaveLength(1);
+      expect(searchMessages(source, snapshot, alias)).toEqual(expected);
+      expect(evaluateQuery(parseQuery(source), snapshot, alias)).toEqual(expected);
+    }
+    expect(matches("on:2026-04-03", { createdAt: start - 1 }, alias)).toBe(false);
+  });
+
   it("uses exclusive local dates and includes an entire day for on", () => {
     for (const createdAt of [
       "2026-04-03T00:00:00Z",
