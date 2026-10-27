@@ -36,12 +36,8 @@ import {
   STATUS_LIST_CREDENTIAL,
   STATUS_LIST_INDEX,
   STATUS_PURPOSE,
-  SVC_ACTION,
+  SVC,
   SVC_AGENT_AUTHORIZATION,
-  SVC_AUTHORIZES,
-  SVC_INLINE_CONTEXT,
-  SVC_POLICY,
-  SVC_TARGET,
   VC_CREDENTIAL,
   VC_CREDENTIAL_STATUS,
   VC_CREDENTIAL_SUBJECT,
@@ -70,8 +66,7 @@ function looksLikeIri(value: string): boolean {
 /** Resolve a (possibly relative) credential type to an absolute IRI. */
 function typeIri(type: string): string {
   if (type === "VerifiableCredential") return VC_CREDENTIAL;
-  // Preserve the signed pre-image of historical bare type names. New builders
-  // use explicit canonical IRIs, so verification never guesses an alias.
+  // Preserve the signed pre-image of historical bare type names.
   if (type === "AgentAuthorizationCredential") return `${LEGACY_SVC_NS}${type}`;
   // The Bitstring Status List classes — defined by the VC 2.0 base context, so
   // the bare names the JSON-LD projection keeps expand to these SAME IRIs.
@@ -413,12 +408,12 @@ export function credentialToTurtle(credential: Credential, format?: string): Pro
   return serialize(credentialToRdf(credential), format);
 }
 
-/** Absolute claim keys have no context coercion: preserve IRI-valued objects. */
+/** Explicit canonical keys need IRI coercion; preserve the legacy wire projection. */
 function jsonLdSubject(subject: CredentialSubject): Record<string, unknown> {
   function valueFor(claim: string, value: JsonValue | undefined): unknown {
     if (Array.isArray(value)) return value.map((item) => valueFor(claim, item));
     if (
-      looksLikeIri(claim) &&
+      claim.startsWith(SVC) &&
       claim !== STATUS_ENCODED_LIST &&
       typeof value === "string" &&
       looksLikeIri(value)
@@ -437,6 +432,7 @@ function jsonLdSubject(subject: CredentialSubject): Record<string, unknown> {
  * inline `@context`. A consumer can parse it back via `@jeswr/fetch-rdf`.
  */
 export function credentialToJsonLd(credential: Credential): Record<string, unknown> {
+  // Canonical emission is deferred to phase 2: pinned verifiers would reject it.
   // FAIL CLOSED on a missing/invalid issuer here too — the JSON-LD projection must
   // never emit a document with no valid issuer (parity with the RDF lowering). The
   // raw issuer is kept verbatim, and the RDF path now ALSO preserves the issuer
@@ -447,13 +443,7 @@ export function credentialToJsonLd(credential: Credential): Record<string, unkno
   const id = credential.id ?? `urn:uuid:${randomUUID()}`;
   const types = ["VerifiableCredential", ...(credential.type ?? [])];
   const doc: Record<string, unknown> = {
-    "@context": credentialToRdf(credential).some(
-      (q) =>
-        q.predicate.value.startsWith(LEGACY_SVC_NS) ||
-        (q.object.termType === "NamedNode" && q.object.value.startsWith(LEGACY_SVC_NS)),
-    )
-      ? LEGACY_SVC_INLINE_CONTEXT
-      : SVC_INLINE_CONTEXT,
+    "@context": LEGACY_SVC_INLINE_CONTEXT,
     id,
     type: [...new Set(types)],
     issuer: credential.issuer,
@@ -564,6 +554,7 @@ export function credentialFromRdf(dataset: DatasetCore): CredentialNode | undefi
  * IRI) and `@jeswr/solid-odrl` (the `policy` IRI).
  */
 export function buildAgentAuthorizationCredential(auth: AgentAuthorization): Credential {
+  // Canonical emission is deferred to phase 2: pinned verifiers would reject it.
   // FAIL CLOSED: this SYNC builder cannot compute the policy-content digest
   // (canonicalization is async). Silently ignoring `policyContent` would return
   // a credential the caller believes is content-bound but is not — the exact
@@ -578,17 +569,18 @@ export function buildAgentAuthorizationCredential(auth: AgentAuthorization): Cre
   }
   const actions = Array.isArray(auth.action) ? auth.action : [auth.action];
   const subject: Record<string, JsonValue> = {
-    [SVC_AUTHORIZES]: auth.agent,
-    [SVC_ACTION]: actions.length === 1 ? (actions[0] as string) : (actions as JsonValue),
+    [`${LEGACY_SVC_NS}authorizes`]: auth.agent,
+    [`${LEGACY_SVC_NS}action`]:
+      actions.length === 1 ? (actions[0] as string) : (actions as JsonValue),
   };
-  if (auth.target !== undefined) subject[SVC_TARGET] = auth.target;
-  if (auth.policy !== undefined) subject[SVC_POLICY] = auth.policy;
+  if (auth.target !== undefined) subject[`${LEGACY_SVC_NS}target`] = auth.target;
+  if (auth.policy !== undefined) subject[`${LEGACY_SVC_NS}policy`] = auth.policy;
   // The subject `id` is the principal: the WebID that holds the authority and is
   // delegating it. The credential ASSERTS, signed by the same WebID as issuer.
   const credentialSubject: CredentialSubject = { id: auth.principal, ...subject };
   const credential: Credential = {
     issuer: auth.principal,
-    type: [SVC_AGENT_AUTHORIZATION],
+    type: ["AgentAuthorizationCredential"],
     credentialSubject,
     ...(auth.id !== undefined ? { id: auth.id } : {}),
     ...(auth.validFrom !== undefined ? { validFrom: auth.validFrom } : {}),

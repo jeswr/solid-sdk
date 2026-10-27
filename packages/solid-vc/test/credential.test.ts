@@ -164,7 +164,7 @@ describe("buildAgentAuthorizationCredential + agentAuthorizationFromRdf", () => 
       ? cred.credentialSubject[0]
       : cred.credentialSubject;
     expect(subject?.id).toBe("https://alice.example/profile#me");
-    expect(cred.type).toContain(SVC_AGENT_AUTHORIZATION);
+    expect(cred.type).toEqual(["AgentAuthorizationCredential"]);
   });
 
   it("round-trips the agent / action / target / policy through RDF", async () => {

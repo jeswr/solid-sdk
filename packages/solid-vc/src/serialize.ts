@@ -11,25 +11,13 @@
 
 import { legacySerialize } from "@jeswr/rdf-serialize";
 import type { Quad } from "@rdfjs/types";
-import {
-  ACL,
-  DC_CREATED,
-  LEGACY_SVC_NS,
-  ODRL,
-  RDF,
-  RDFS,
-  SCHEMA,
-  SEC,
-  SVC,
-  VC,
-  XSD,
-} from "./vocab.js";
+import { ACL, DC_CREATED, LEGACY_SVC_NS, ODRL, RDF, RDFS, SCHEMA, SEC, VC, XSD } from "./vocab.js";
 
 /** Prefixes emitted in the serialised Turtle for readability. */
 const PREFIXES = {
   cred: VC,
   sec: SEC,
-  svc: SVC,
+  svc: LEGACY_SVC_NS,
   acl: ACL,
   odrl: ODRL,
   schema: SCHEMA,
@@ -51,20 +39,5 @@ const PREFIXES = {
  * empty exactly as before.
  */
 export function serialize(quads: readonly Quad[], format = "text/turtle"): Promise<string> {
-  // Preserve the historical projection of legacy signed graphs. Never rewrite
-  // payload terms merely to change a display prefix.
-  const hasCanonical = quads.some(
-    (q) =>
-      q.predicate.value.startsWith(SVC) ||
-      (q.object.termType === "NamedNode" && q.object.value.startsWith(SVC)),
-  );
-  const hasLegacy = quads.some(
-    (q) =>
-      q.predicate.value.startsWith(LEGACY_SVC_NS) ||
-      (q.object.termType === "NamedNode" && q.object.value.startsWith(LEGACY_SVC_NS)),
-  );
-  return legacySerialize(quads, format, {
-    ...PREFIXES,
-    svc: !hasCanonical && hasLegacy ? LEGACY_SVC_NS : SVC,
-  });
+  return legacySerialize(quads, format, PREFIXES);
 }

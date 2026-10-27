@@ -45,11 +45,11 @@ export const ODRL = "http://www.w3.org/ns/odrl/2/" as const;
 export const SCHEMA = "https://schema.org/" as const;
 
 /**
- * The Solid-VC extension namespace for newly authored authorization terms.
+ * The canonical Solid-VC extension namespace accepted by authorization readers.
  */
 // Canonical source: @jeswr/suite-vocab NS.SOLID_VC
 export const SVC = "https://jeswr.org/ns/solid-vc#" as const;
-/** Historical shorthand expansion: changing it would invalidate existing proofs. */
+/** Phase-1 wire and historical shorthand namespace: preserve existing proofs. */
 export const LEGACY_SVC_NS = "https://w3id.org/jeswr/solid-vc#" as const;
 
 /** `rdf:type`. */

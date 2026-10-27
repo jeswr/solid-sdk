@@ -54,7 +54,7 @@ describe("authorization namespace migration", () => {
     );
   });
 
-  it("builds and signs only canonical extension terms, with matching JSON-LD", async () => {
+  it("builds and signs the legacy wire format required by pinned verifiers", async () => {
     const key = await issuerKey();
     const signed = await issueAgentAuthorization(auth, key);
     expect((await verifyCredential(signed, { resolveKey: keyResolver(key) })).verified).toBe(true);
@@ -62,18 +62,21 @@ describe("authorization namespace migration", () => {
       await credentialToTurtle(signed),
       JSON.stringify(credentialToJsonLd(signed)),
     ]) {
-      expect(body).not.toContain(LEGACY);
-      expect(body).toContain(SVC);
+      expect(body).toContain(LEGACY);
+      expect(body).not.toContain(SVC);
     }
     const credential = buildAgentAuthorizationCredential(auth);
-    const document = await parseCredentialRdf(
-      JSON.stringify(credentialToJsonLd(credential)),
-      "application/ld+json",
-    );
-    expect(agentAuthorizationFromRdf(expectDefined(credentialFromRdf(document)))).toEqual(auth);
+    expect(credential.type).toEqual(["AgentAuthorizationCredential"]);
+    expect(credential.credentialSubject).toEqual({
+      id: ISSUER,
+      [`${LEGACY}authorizes`]: AGENT,
+      [`${LEGACY}action`]: ACL_READ,
+      [`${LEGACY}target`]: auth.target,
+    });
+    expect(credentialToJsonLd(credential).credentialSubject).toEqual(credential.credentialSubject);
     expect(
       credentialToRdf(credential).some(
-        (q) => q.object.value === `${SVC}AgentAuthorizationCredential`,
+        (q) => q.object.value === `${LEGACY}AgentAuthorizationCredential`,
       ),
     ).toBe(true);
   });
@@ -111,16 +114,33 @@ describe("authorization namespace migration", () => {
     [LEGACY, SVC],
     [SVC, LEGACY],
     [SVC, SVC],
-  ])("preserves JSON-LD IRI values for type %s and properties %s", async (typeNs, propertyNs) => {
+  ])("accepts explicit JSON-LD type %s and claims %s", async (typeNs, propertyNs) => {
+    const document = {
+      "@context": { vc: "https://www.w3.org/2018/credentials#" },
+      "@id": "urn:test:jsonld",
+      "@type": ["vc:VerifiableCredential", `${typeNs}AgentAuthorizationCredential`],
+      "vc:issuer": { "@id": ISSUER },
+      "vc:credentialSubject": {
+        "@id": ISSUER,
+        [`${propertyNs}authorizes`]: { "@id": AGENT },
+        [`${propertyNs}action`]: [{ "@id": ACL_READ }],
+        [`${propertyNs}target`]: { "@id": auth.target },
+      },
+    };
+    const data = await parseCredentialRdf(JSON.stringify(document), "application/ld+json");
+    expect(agentAuthorizationFromRdf(expectDefined(credentialFromRdf(data)))).toEqual(auth);
+  });
+
+  it("preserves IRI-valued canonical input in the JSON-LD projection", async () => {
     const document = credentialToJsonLd({
-      id: "urn:test:jsonld",
-      type: [`${typeNs}AgentAuthorizationCredential`],
+      id: "urn:test:canonical-jsonld",
+      type: [`${SVC}AgentAuthorizationCredential`],
       issuer: ISSUER,
       credentialSubject: {
         id: ISSUER,
-        [`${propertyNs}authorizes`]: AGENT,
-        [`${propertyNs}action`]: [ACL_READ],
-        [`${propertyNs}target`]: auth.target,
+        [`${SVC}authorizes`]: AGENT,
+        [`${SVC}action`]: [ACL_READ],
+        [`${SVC}target`]: auth.target,
       },
     });
     const data = await parseCredentialRdf(JSON.stringify(document), "application/ld+json");
@@ -132,7 +152,7 @@ describe("authorization namespace migration", () => {
       buildAgentAuthorizationCredential({ ...auth, policy: "https://example.org/policy" }),
     );
     const data = await parseCredentialRdf(
-      `${ttl}\n<${ISSUER}> <${LEGACY}${claim}> <https://example.org/conflict> .`,
+      `${ttl}\n<${ISSUER}> <${SVC}${claim}> <https://example.org/conflict> .`,
     );
     expect(agentAuthorizationFromRdf(expectDefined(credentialFromRdf(data)))).toBeUndefined();
   });
