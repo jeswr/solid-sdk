@@ -7,6 +7,7 @@ export function splitContent(content: string): { title: string; labels: string[]
   let cursor = 0;
   let code = 0;
   let fence = "";
+  let fenceQuotes = 0;
   let brackets = 0;
   let parentheses = 0;
   let angle = false;
@@ -15,7 +16,22 @@ export function splitContent(content: string): { title: string; labels: string[]
     if ((i === 0 || content[i - 1] === "\n" || content[i - 1] === "\r") && !code) {
       let end = i;
       while (end < content.length && content[end] !== "\n" && content[end] !== "\r") end++;
-      const sourceLine = content.slice(i, end);
+      let sourceLine = content.slice(i, end);
+      if (content[end] === "\r" && content[end + 1] === "\n") end++;
+      let offset = 0;
+      let quotes = 0;
+      // Strip only the enclosing quote markers; extra markers inside code are literal.
+      while (!fence || quotes < fenceQuotes) {
+        let start = offset;
+        while (start < offset + 3 && sourceLine[start] === " ") start++;
+        if (sourceLine[start] !== ">") break;
+        quotes++;
+        offset = start + 1;
+        if (sourceLine[offset] === " " || sourceLine[offset] === "\t") offset++;
+      }
+      sourceLine = sourceLine.slice(offset);
+      // A fence also ends when its enclosing block quote ends.
+      if (quotes < fenceQuotes) fence = "";
       const marker = /^ {0,3}(`{3,}|~{3,})/.exec(sourceLine);
       if (fence) {
         if (
@@ -34,6 +50,7 @@ export function splitContent(content: string): { title: string; labels: string[]
         ((marker[1] as string)[0] !== "`" || !sourceLine.slice(marker[0].length).includes("`"))
       ) {
         fence = marker[1] as string;
+        fenceQuotes = quotes;
         i = end;
         continue;
       }

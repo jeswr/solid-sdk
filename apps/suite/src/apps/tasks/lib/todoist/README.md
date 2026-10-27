@@ -42,7 +42,7 @@ DATE_LANG never triggers interpretation.
 
 Standalone whitespace-delimited `@labels` contain Unicode letters/numbers,
 underscores or hyphens; output excludes `@` and preserves case and duplicates.
-Code spans, fenced/indented code, bracketed links, autolinks, escapes, email addresses and labels next
+Code spans, fenced/indented code (including block quotes), bracketed links, autolinks, escapes, email addresses and labels next
 to punctuation remain literal. Markdown and internal whitespace are retained;
 removing a token also removes one following space. Titles are trimmed and must
 remain nonempty. Descriptions and comments are never tokenised.

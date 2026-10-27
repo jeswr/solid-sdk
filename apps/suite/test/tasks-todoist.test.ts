@@ -209,6 +209,38 @@ describe("Todoist project drafts", () => {
 
 describe("content and labels", () => {
   it.each([
+    "\n",
+    "\r\n",
+    "\r",
+  ])("preserves fenced code in block quotes with %j line endings", (newline) => {
+    for (const prefix of ["> ", ">", " > > ", "   >\t"]) {
+      for (const fence of ["~~~", "```ts"]) {
+        const literal = [
+          "Title",
+          `${prefix}${fence}`,
+          `${prefix} @literal`,
+          `${prefix}${fence.slice(0, 3)}`,
+        ].join(newline);
+        const result = parseTodoistCsv(
+          csv([task({ CONTENT: `${literal}${newline}@real` })]),
+          options,
+        ).tasks[0]!;
+        expect(result.title).toBe(literal);
+        expect(result.labels).toEqual(["real"]);
+      }
+    }
+  });
+
+  it.each([
+    ["Title\n> ~~~\n> @literal\n> ~~~\n@real", "Title\n> ~~~\n> @literal\n> ~~~", ["real"]],
+    ["Title\n> ~~~\n> @literal\n@real", "Title\n> ~~~\n> @literal", ["real"]],
+    ["Title\n> > ~~~\n> > @literal\n> @real", "Title\n> > ~~~\n> > @literal\n>", ["real"]],
+    ["Title\n~~~\n> ~~~\n@literal\n~~~\n@real", "Title\n~~~\n> ~~~\n@literal\n~~~", ["real"]],
+    [
+      "Title\n> ~~~\n> > ~~~\n> @literal\n> ~~~\n@real",
+      "Title\n> ~~~\n> > ~~~\n> @literal\n> ~~~",
+      ["real"],
+    ],
     ["@first **Read** @home now @last", "**Read** now", ["first", "home", "last"]],
     [
       "Read @café @二 @home-office @under_score @A1 @A1",
