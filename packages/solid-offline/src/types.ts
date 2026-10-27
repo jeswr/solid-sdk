@@ -124,7 +124,7 @@ export interface OfflineClientConfig {
   workerUrl?: string;
   /** Service-worker registration scope. Default: '/'. */
   scope?: string;
-  /** BroadcastChannel name for 'updated' events. Default: 'solid-offline'. */
+  /** BroadcastChannel name for revalidation events. Default: 'solid-offline'. */
   channelName?: string;
 }
 
@@ -202,9 +202,18 @@ export type AclStatus = 'ok' | 'forbidden' | 'not-found';
 export interface UpdatedEvent {
   url: string;
   event: 'updated';
-  /** The new ETag after revalidation. */
+  /** Optional legacy field; current worker messages contain only URL and event. */
   etag?: string;
 }
+
+/** URL-only progress messages; never include response bytes, headers or credentials. */
+export interface RevalidationEvent {
+  url: string;
+  event: 'revalidating' | 'revalidated' | 'revalidate-failed';
+}
+
+/** All messages on the offline BroadcastChannel. UpdatedEvent remains source-compatible. */
+export type OfflineEvent = UpdatedEvent | RevalidationEvent;
 
 /**
  * The Solid Notifications Protocol change types we react to. They mirror the

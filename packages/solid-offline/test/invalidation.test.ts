@@ -7,7 +7,7 @@
  * Covers:
  *   - ETag short-circuit: frame.state === cached ETag ⇒ no fetch, no broadcast
  *   - Update → revalidate (If-None-Match) → 200 replaces + broadcast
- *   - Update → revalidate → 304 confirms (no broadcast)
+ *   - Update → revalidate → 304 confirms + broadcasts revalidated
  *   - Delete → purge + broadcast
  *   - revalidate → 403/404 → purge + broadcast (no-leak parity)
  *   - Add/Remove → container listing re-fetch + broadcast
@@ -111,7 +111,7 @@ describe('ETag short-circuit', () => {
 });
 
 describe('Update → revalidate → broadcast', () => {
-  it('200 replaces bytes + metadata and broadcasts the new ETag', async () => {
+  it('200 replaces bytes + metadata and broadcasts URL-only events', async () => {
     const h = await harness([() => turtleResponse('<#x> <#y> <#z> .', { etag: '"v2"' })]);
     await seed(h, DOC, 'old', '"v1"');
 
@@ -121,12 +121,15 @@ describe('Update → revalidate → broadcast', () => {
     expect(outcome).toEqual({ kind: 'updated', etag: '"v2"' });
     // Conditional GET carried our old ETag.
     expect(h.calls[0]?.headers.get('if-none-match')).toBe('"v1"');
-    expect(h.broadcast.messages).toEqual([{ url: DOC, event: 'updated', etag: '"v2"' }]);
+    expect(h.broadcast.messages).toEqual([
+      { url: DOC, event: 'revalidating' },
+      { url: DOC, event: 'updated' },
+    ]);
     const rec = await h.meta.getByUrl(DOC);
     expect(rec[0]?.etag).toBe('"v2"');
   });
 
-  it('304 confirms without broadcasting', async () => {
+  it('304 confirms and broadcasts completion', async () => {
     const h = await harness([() => notModifiedResponse()]);
     await seed(h, DOC, 'body', '"v1"');
 
@@ -134,7 +137,10 @@ describe('Update → revalidate → broadcast', () => {
     const outcome = await handleNotification(frame, h.deps);
 
     expect(outcome.kind).toBe('304-confirmed');
-    expect(h.broadcast.messages).toHaveLength(0);
+    expect(h.broadcast.messages).toEqual([
+      { url: DOC, event: 'revalidating' },
+      { url: DOC, event: 'revalidated' },
+    ]);
     const rec = await h.meta.getByUrl(DOC);
     expect(rec[0]?.fetchedAt).toBe(1_000_000); // touched
     expect(rec[0]?.lastState).toBe('"v9"');
@@ -165,7 +171,10 @@ describe('Delete + forbidden', () => {
     );
 
     expect(outcome.kind).toBe('deleted');
-    expect(h.broadcast.messages).toEqual([{ url: DOC, event: 'updated' }]);
+    expect(h.broadcast.messages).toEqual([
+      { url: DOC, event: 'revalidating' },
+      { url: DOC, event: 'updated' },
+    ]);
     expect(await h.meta.getByUrl(DOC)).toHaveLength(0);
   });
 });
@@ -187,7 +196,10 @@ describe('Add/Remove → container listing re-fetch', () => {
     // Unconditional GET of the container (membership can't be confirmed by ETag).
     expect(h.calls[0]?.url).toBe(CONTAINER);
     expect(h.calls[0]?.headers.get('if-none-match')).toBeNull();
-    expect(h.broadcast.messages).toEqual([{ url: CONTAINER, event: 'updated', etag: '"c2"' }]);
+    expect(h.broadcast.messages).toEqual([
+      { url: CONTAINER, event: 'revalidating' },
+      { url: CONTAINER, event: 'updated' },
+    ]);
   });
 
   it('Remove on an uncached container is a no-op', async () => {
@@ -279,7 +291,10 @@ describe('revalidation 2xx but non-cacheable (no-store/private) purges the stale
     expect(outcome.kind).toBe('deleted');
     expect(await h.meta.getByUrl(DOC)).toHaveLength(0);
     expect(await h.cache.match(keyRequest(DOC, 'accept=text/turtle'))).toBeUndefined();
-    expect(h.broadcast.messages).toEqual([{ url: DOC, event: 'updated' }]);
+    expect(h.broadcast.messages).toEqual([
+      { url: DOC, event: 'revalidating' },
+      { url: DOC, event: 'updated' },
+    ]);
   });
 });
 
@@ -322,11 +337,13 @@ describe('resync sweep', () => {
     expect(result.confirmed).toBe(1);
     expect(result.replaced).toBe(1);
     expect(result.purged).toBe(1);
-    // Only the replaced (B) and the purged (C) broadcast.
-    expect(broadcast.messages.map((m) => m.url).sort()).toEqual([
-      'https://alice.example/b',
-      'https://alice.example/c',
-    ]);
+    // Every examined URL emits a start and one terminal event.
+    expect(
+      broadcast.messages
+        .filter((m) => m.event === 'updated')
+        .map((m) => m.url)
+        .sort(),
+    ).toEqual(['https://alice.example/b', 'https://alice.example/c']);
   });
 
   it('dedups multiple varyKeys of one URL into a single conditional GET', async () => {

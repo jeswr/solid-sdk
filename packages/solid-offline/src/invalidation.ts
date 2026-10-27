@@ -36,6 +36,7 @@ import {
 } from './cache-coherence.js';
 import { classifyResponse, computeVaryKey, keyRequest, type RequestLike } from './cache-policy.js';
 import type { MetadataStore } from './metadata-store.js';
+import { reportRevalidation } from './revalidation-events.js';
 import type { Broadcaster, ByteCache } from './swr.js';
 import type { CacheMetadata, NotificationFrame } from './types.js';
 
@@ -119,13 +120,15 @@ async function invalidateResource(
   }
 
   if (opts.deleted) {
-    return purge(url, records, deps);
+    const outcome = await purge(url, records, deps);
+    deps.broadcast.postMessage({ url, event: 'updated' });
+    return outcome;
   }
 
   return revalidateResource(url, records, state, deps);
 }
 
-/** Drop bytes + metadata for a deleted/forbidden resource, then broadcast. */
+/** Drop bytes + metadata for a deleted/forbidden resource; the caller broadcasts. */
 async function purge(
   url: string,
   records: CacheMetadata[],
@@ -143,7 +146,6 @@ async function purge(
   for (const record of records) {
     await deps.meta.delete(record.key);
   }
-  deps.broadcast.postMessage({ url, event: 'updated' });
   return { kind: 'deleted' };
 }
 
@@ -180,54 +182,55 @@ async function revalidateResource(
   state: string | undefined,
   deps: InvalidateDeps,
 ): Promise<InvalidateOutcome> {
-  const etag = records.find((r) => r.etag)?.etag;
-  const req = rdfRequest(url);
-  const rl: RequestLike = { url: req.url, method: req.method, headers: req.headers };
+  return reportInvalidation(url, deps, async () => {
+    const etag = records.find((r) => r.etag)?.etag;
+    const req = rdfRequest(url);
+    const rl: RequestLike = { url: req.url, method: req.method, headers: req.headers };
 
-  const condHeaders = new Headers(req.headers);
-  if (etag) condHeaders.set('If-None-Match', etag);
-  const condRequest = new Request(url, { method: 'GET', headers: condHeaders });
-  const fresh = await deps.fetch(condRequest);
+    const condHeaders = new Headers(req.headers);
+    if (etag) condHeaders.set('If-None-Match', etag);
+    const condRequest = new Request(url, { method: 'GET', headers: condHeaders });
+    const fresh = await deps.fetch(condRequest);
 
-  if (fresh.status === 304) {
-    // Unchanged after all (the notification ETag differed from ours but the
-    // server says our copy is current — e.g. a racing intermediate state).
-    const now = deps.now();
-    for (const record of records) {
-      record.fetchedAt = now;
-      if (state !== undefined) record.lastState = state;
-      await deps.meta.put(record);
+    if (fresh.status === 304) {
+      // Unchanged after all (the notification ETag differed from ours but the
+      // server says our copy is current — e.g. a racing intermediate state).
+      const now = deps.now();
+      for (const record of records) {
+        record.fetchedAt = now;
+        if (state !== undefined) record.lastState = state;
+        await deps.meta.put(record);
+      }
+      return { kind: '304-confirmed' };
     }
-    return { kind: '304-confirmed' };
-  }
 
-  if (fresh.status >= 200 && fresh.status < 300) {
-    const decision = classifyResponse(rl, resLike(fresh));
-    const newEtag = fresh.headers.get('etag') ?? undefined;
-    if (decision.cacheable) {
-      // Replace the whole resource: drop stale OTHER variants before writing the
-      // new canonical one (so lookup can't keep matching an old Vary row).
-      await purgeStaleVariants(url, records, computeVaryKey(rl, resLike(fresh)), deps);
-      await putCanonicalBytes(deps.cache, rl, fresh);
-      await deps.meta.put(
-        metadataFromResponse(rl, resLike(fresh), deps.now(), decision.negative, state ?? newEtag),
-      );
-      deps.broadcast.postMessage({ url, event: 'updated', etag: newEtag });
-      return { kind: 'updated', etag: newEtag };
+    if (fresh.status >= 200 && fresh.status < 300) {
+      const decision = classifyResponse(rl, resLike(fresh));
+      const newEtag = fresh.headers.get('etag') ?? undefined;
+      if (decision.cacheable) {
+        // Replace the whole resource: drop stale OTHER variants before writing the
+        // new canonical one (so lookup can't keep matching an old Vary row).
+        await purgeStaleVariants(url, records, computeVaryKey(rl, resLike(fresh)), deps);
+        await putCanonicalBytes(deps.cache, rl, fresh);
+        await deps.meta.put(
+          metadataFromResponse(rl, resLike(fresh), deps.now(), decision.negative, state ?? newEtag),
+        );
+        return { kind: 'updated', etag: newEtag };
+      }
+      // 2xx but NOT cacheable (Cache-Control: no-store / private). The resource is
+      // now uncacheable, so leaving the OLD bytes + metadata in place would keep
+      // serving a stale entry (the re-review corrective). Purge everything for this
+      // URL and broadcast so views re-read live.
+      return purge(url, records, deps);
     }
-    // 2xx but NOT cacheable (Cache-Control: no-store / private). The resource is
-    // now uncacheable, so leaving the OLD bytes + metadata in place would keep
-    // serving a stale entry (the re-review corrective). Purge everything for this
-    // URL and broadcast so views re-read live.
-    return purge(url, records, deps);
-  }
 
-  if (fresh.status === 403 || fresh.status === 404) {
-    return purge(url, records, deps);
-  }
+    if (fresh.status === 403 || fresh.status === 404) {
+      return purge(url, records, deps);
+    }
 
-  // Anything else (5xx, etc.): leave the provisional entry alone, surface nothing.
-  return { kind: 'skipped' };
+    // Anything else (5xx, etc.): leave the provisional entry alone; report failure.
+    return { kind: 'skipped' };
+  });
 }
 
 /**
@@ -247,44 +250,64 @@ async function refreshListing(
     return { kind: 'not-cached' };
   }
 
-  const req = rdfRequest(container);
-  const rl: RequestLike = { url: req.url, method: req.method, headers: req.headers };
-  const fresh = await deps.fetch(req);
+  return reportInvalidation(container, deps, async () => {
+    const req = rdfRequest(container);
+    const rl: RequestLike = { url: req.url, method: req.method, headers: req.headers };
+    const fresh = await deps.fetch(req);
 
-  if (fresh.status >= 200 && fresh.status < 300) {
-    const decision = classifyResponse(rl, resLike(fresh));
-    if (!decision.cacheable) {
-      // 2xx but uncacheable (no-store/private): purge the stale listing rather
-      // than leaving the old bytes/metadata in place (re-review corrective).
+    if (fresh.status >= 200 && fresh.status < 300) {
+      const decision = classifyResponse(rl, resLike(fresh));
+      if (!decision.cacheable) {
+        // 2xx but uncacheable (no-store/private): purge the stale listing rather
+        // than leaving the old bytes/metadata in place (re-review corrective).
+        return purge(container, records, deps);
+      }
+      // Replace the whole listing: drop stale OTHER variants before writing the new
+      // canonical one.
+      await purgeStaleVariants(container, records, computeVaryKey(rl, resLike(fresh)), deps);
+      await putCanonicalBytes(deps.cache, rl, fresh);
+      await deps.meta.put(
+        metadataFromResponse(
+          rl,
+          resLike(fresh),
+          deps.now(),
+          decision.negative,
+          fresh.headers.get('etag') ?? undefined,
+        ),
+      );
+      // (The newly-added member is fetched lazily on first read — P1 caches it then.
+      // We don't eagerly pull it: the warm budget owns proactive byte-warming.)
+      return { kind: 'listing-refreshed' };
+    }
+
+    if (fresh.status === 403 || fresh.status === 404) {
       return purge(container, records, deps);
     }
-    // Replace the whole listing: drop stale OTHER variants before writing the new
-    // canonical one.
-    await purgeStaleVariants(container, records, computeVaryKey(rl, resLike(fresh)), deps);
-    await putCanonicalBytes(deps.cache, rl, fresh);
-    await deps.meta.put(
-      metadataFromResponse(
-        rl,
-        resLike(fresh),
-        deps.now(),
-        decision.negative,
-        fresh.headers.get('etag') ?? undefined,
-      ),
-    );
-    deps.broadcast.postMessage({
-      url: container,
-      event: 'updated',
-      etag: fresh.headers.get('etag') ?? undefined,
-    });
-    // (The newly-added member is fetched lazily on first read — P1 caches it then.
-    // We don't eagerly pull it: the warm budget owns proactive byte-warming.)
-    return { kind: 'listing-refreshed' };
-  }
+    return { kind: 'skipped' };
+  });
+}
 
-  if (fresh.status === 403 || fresh.status === 404) {
-    return purge(container, records, deps);
+/** Keep failures local so a failed URL cannot interrupt the reconnect sweep. */
+async function reportInvalidation(
+  url: string,
+  deps: InvalidateDeps,
+  run: () => Promise<InvalidateOutcome>,
+): Promise<InvalidateOutcome> {
+  try {
+    return await reportRevalidation(url, deps.broadcast, run, (outcome) => {
+      if (outcome.kind === '304-confirmed') return 'revalidated';
+      if (
+        outcome.kind === 'updated' ||
+        outcome.kind === 'deleted' ||
+        outcome.kind === 'listing-refreshed'
+      ) {
+        return 'updated';
+      }
+      return 'revalidate-failed';
+    });
+  } catch (error) {
+    return { kind: 'error', error };
   }
-  return { kind: 'skipped' };
 }
 
 /**
