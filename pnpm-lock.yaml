@@ -3072,6 +3072,9 @@ importers:
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
+      '@jeswr/solid-dpop':
+        specifier: workspace:*
+        version: link:../solid-dpop
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
@@ -3084,6 +3087,9 @@ importers:
       n3:
         specifier: ^2.0.3
         version: 2.1.1
+      postal-mime:
+        specifier: 4.1.4
+        version: 4.1.4
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
@@ -3094,6 +3100,9 @@ importers:
       '@types/n3':
         specifier: ^1.26.1
         version: 1.26.1
+      rdf-validate-shacl:
+        specifier: ^0.6.5
+        version: 0.6.5
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -4526,10 +4535,38 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@26.1.1)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0))
 
   packages/storage-client:
+    dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../guarded-fetch
+      '@jeswr/rdf-serialize':
+        specifier: workspace:*
+        version: link:../rdf-serialize
+      '@jeswr/storage-capabilities':
+        specifier: workspace:*
+        version: link:../storage-capabilities
+      '@rdfjs/wrapper':
+        specifier: ^0.34.0
+        version: 0.34.0
+      '@solid/object':
+        specifier: ^0.6.0
+        version: 0.6.0
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@types/n3':
+        specifier: ^1.16.0
+        version: 1.26.1
+      fast-check:
+        specifier: ^4.3.0
+        version: 4.10.2
       typescript:
         specifier: ^6.0.3
         version: 6.0.3

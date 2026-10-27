@@ -1,0 +1,4 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+<https://pod.test/alice/integrations/netflix/media/viewing-history.ttl#watch-synthetic-cafe-orbit-part-1-ae5384c8> a <https://jeswr.org/ns/sectors/media#ListeningActivity>, <https://schema.org/WatchAction>;
+    <https://schema.org/name> "Synthetic café, \"Orbit\"\nPart 1";
+    <https://schema.org/startTime> "2026-01-20T00:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>.
