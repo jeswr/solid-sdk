@@ -38,13 +38,18 @@ vi.mock("../src/apps/drive/state/drive-context", () => ({ useDrive: () => drive 
 import { DriveDialogs } from "../src/apps/drive/components/dialogs";
 import { FileBrowser } from "../src/apps/drive/components/file-browser";
 import { isTyping } from "../src/apps/drive/components/shortcut-targets";
-import { TrashView } from "../src/apps/drive/components/views";
+import { StarredView, TrashView } from "../src/apps/drive/components/views";
 
 vi.mock("../src/apps/drive/state/undo", () => ({ moveWithValidator: mocks.undoMove }));
 
 import { DriveError } from "../src/apps/drive/lib/client/client";
 import * as operations from "../src/apps/drive/lib/operations/operations";
-import { DriveUiProvider, useDriveActions, useDriveUi } from "../src/apps/drive/state/ui";
+import {
+  DriveUiProvider,
+  repointStarred,
+  useDriveActions,
+  useDriveUi,
+} from "../src/apps/drive/state/ui";
 
 const ROOT = "https://pod.example/drive/";
 const items: DriveItem[] = ["A", "B", "C"].map((name) => ({
@@ -1190,4 +1195,118 @@ it.each([
   await view.unmount();
   restore.mockRestore();
   remove.mockRestore();
+});
+
+it("repoints stars to moved items and the descendants of moved folders", () => {
+  expect(
+    repointStarred(
+      [`${ROOT}A.txt`, `${ROOT}Docs/`, `${ROOT}Docs/x.txt`, `${ROOT}Docsy.txt`, `${ROOT}C.txt`],
+      [
+        { from: `${ROOT}A.txt`, to: `${ROOT}Work/A.txt` },
+        { from: `${ROOT}Docs/`, to: `${ROOT}Work/Docs/` },
+      ],
+    ),
+  ).toEqual([
+    `${ROOT}Work/A.txt`,
+    `${ROOT}Work/Docs/`,
+    `${ROOT}Work/Docs/x.txt`,
+    `${ROOT}Docsy.txt`,
+    `${ROOT}C.txt`,
+  ]);
+});
+
+it("merges a repointed star with a stale star already on the destination", () => {
+  expect(
+    repointStarred(
+      [`${ROOT}Work/A.txt`, `${ROOT}Archive/A.txt`],
+      [{ from: `${ROOT}Work/A.txt`, to: `${ROOT}Archive/A.txt` }],
+    ),
+  ).toEqual([`${ROOT}Archive/A.txt`]);
+});
+
+it("makes only the active row's location link a Tab stop", async () => {
+  const located = items.map((item) => ({ ...item, folder: `${ROOT}Work/` }));
+  const view = await mount(
+    h(
+      DriveUiProvider,
+      null,
+      h(FileBrowser, {
+        title: "Recent",
+        items: located,
+        columns: ["location"],
+        empty: { title: "Empty", icon: null },
+      }),
+    ),
+  );
+  const links = () => [...view.host.querySelectorAll<HTMLAnchorElement>(".drv-col-location a")];
+  expect(links().map((link) => link.tabIndex)).toEqual([0, -1, -1]);
+  await click(row(view.host, items[1]));
+  expect(links().map((link) => link.tabIndex)).toEqual([-1, 0, -1]);
+  await view.unmount();
+});
+
+it("moves down a grid row by the rendered number of columns", async () => {
+  drive.prefs.view = "grid";
+  const many: DriveItem[] = ["D", "E", "F"].map((name) => ({
+    url: `${ROOT}${name}.txt`,
+    name: `${name}.txt`,
+    kind: "file",
+    contentType: "text/plain",
+  }));
+  const all = [...items, ...many];
+  const actual = globalThis.getComputedStyle;
+  vi.spyOn(globalThis, "getComputedStyle").mockImplementation((element, pseudo) =>
+    (element as Element).classList.contains("drv-grid")
+      ? ({ gridTemplateColumns: "184px 184px" } as CSSStyleDeclaration)
+      : actual(element, pseudo),
+  );
+  const view = await mount(tree(all));
+  const first = row(view.host, all[0]);
+  await act(async () => first.focus());
+  await key(first, "ArrowDown");
+  expect(document.activeElement).toBe(row(view.host, all[2]));
+  await view.unmount();
+});
+
+it("a star follows a move and only the reversed items on a partial Undo", async () => {
+  let starred = items.map((item) => item.url);
+  drive.updatePrefs.mockImplementation((change: (current: { starred: string[] }) => unknown) => {
+    starred = (change({ ...drive.prefs, starred }) as { starred: string[] }).starred;
+  });
+  const view = await mount(tree(items));
+  mocks.client.move.mockImplementation(async (from: string) => ({
+    url: `${ROOT}Work/${from.split("/").pop()}`,
+    etag: '"version"',
+  }));
+  await act(async () => {
+    await actions.move(items.slice(0, 2), `${ROOT}Work/`);
+  });
+  expect(starred).toEqual([`${ROOT}Work/A.txt`, `${ROOT}Work/B.txt`, `${ROOT}C.txt`]);
+  const options = mocks.toast.success.mock.calls.at(-1)?.[1] as {
+    action: { onClick: () => Promise<void> };
+  };
+  mocks.undoMove.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(items[1]?.url);
+  await act(async () => options.action.onClick());
+  expect(starred).toEqual([`${ROOT}Work/A.txt`, `${ROOT}B.txt`, `${ROOT}C.txt`]);
+  drive.updatePrefs.mockReset();
+  await view.unmount();
+});
+
+it("Starred refreshes its rows when anything in Drive changes", async () => {
+  const prefs = drive.prefs;
+  drive.prefs = { ...prefs, starred: [items[0]?.url as string] } as typeof prefs;
+  let present = true;
+  mocks.client.stat.mockImplementation(async (url: string) => {
+    if (!present) throw new DriveError("not-found", 404, url);
+    return { ...(items[0] as DriveItem), url };
+  });
+  const view = await mount(h(DriveUiProvider, null, h(StarredView)));
+  expect(view.host.querySelector(`[data-url="${items[0]?.url}"]`)).not.toBeNull();
+  const listener = drive.changes.subscribeSubtree.mock.calls.at(-1)?.[1];
+  expect(drive.changes.subscribeSubtree.mock.calls.at(-1)?.[0]).toBe(ROOT);
+  present = false;
+  await act(async () => listener?.());
+  expect(view.host.querySelector(`[data-url="${items[0]?.url}"]`)).toBeNull();
+  drive.prefs = prefs;
+  await view.unmount();
 });

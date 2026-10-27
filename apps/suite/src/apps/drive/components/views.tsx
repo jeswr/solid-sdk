@@ -184,10 +184,18 @@ export function RecentView() {
 }
 
 export function StarredView() {
-  const { client, prefs } = useDrive();
+  const { client, prefs, driveRoot, changes } = useDrive();
   const [items, setItems] = useState<BrowserItem[]>();
+  const [version, setVersion] = useState(0);
   const starred = prefs.starred;
+  // Starred items live anywhere in Drive, so any change there may remove or alter a row.
+  useEffect(
+    () =>
+      driveRoot ? changes.subscribeSubtree(driveRoot, () => setVersion((v) => v + 1)) : undefined,
+    [changes, driveRoot],
+  );
   useEffect(() => {
+    void version;
     let live = true;
     Promise.all(
       starred.map((url) =>
@@ -205,7 +213,7 @@ export function StarredView() {
     return () => {
       live = false;
     };
-  }, [client, starred]);
+  }, [client, starred, version]);
   return (
     <FileBrowser
       title="Starred"
