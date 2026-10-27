@@ -17,6 +17,7 @@ import {
   id,
   numeric,
   patientReference,
+  periodOrdered,
   record,
   requireValid,
   text,
@@ -121,7 +122,7 @@ export function buildFhirBundle(input: HealthRecords, options: FhirExportOptions
     const effectivePeriod: { start: string; end?: string } = { start: value.start };
     if (Object.hasOwn(value, "end")) {
       requireValid(
-        date(value.end) && Date.parse(value.end) >= Date.parse(value.start),
+        date(value.end) && periodOrdered(value.start, value.end),
         "INVALID_INPUT",
         "Invalid medication end date",
       );

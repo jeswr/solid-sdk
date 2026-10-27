@@ -9,6 +9,7 @@ import {
   id,
   numeric,
   patientReference,
+  periodOrdered,
   record,
   requireValid,
   text,
@@ -170,7 +171,7 @@ export function assertFhirBundle(value: unknown): asserts value is FhirBundle {
       if (Object.hasOwn(resource.effectivePeriod, "end")) {
         valid(
           date(resource.effectivePeriod.end) &&
-            Date.parse(resource.effectivePeriod.end) >= Date.parse(resource.effectivePeriod.start),
+            periodOrdered(resource.effectivePeriod.start, resource.effectivePeriod.end),
         );
       }
       annotation(resource.dosage);

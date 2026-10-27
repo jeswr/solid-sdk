@@ -475,6 +475,39 @@ describe("health FHIR R4 collection export", () => {
   });
 
   it.each([
+    ["2026-09-01", "2026-09-01"],
+    ["2026-09-01T12:00:00Z", "2026-09-01"],
+    ["2026-09-01T23:59:59.999Z", "2026-09-01"],
+    ["2026-09-01T23:59:59.999-14:00", "2026-09-01"],
+    ["2026-09-01", "2026-09-01T00:00:00+14:00"],
+    ["2026-09-01T12:00:00.999Z", "2026-09-01T14:00:00+02:00"],
+    ["2026-09-01T12:00:00.199Z", "2026-09-01T12:00:00.1Z"],
+    ["2026-09-01T12:00:00.129Z", "2026-09-01T12:00:00.12Z"],
+    ["2026-09-01T12:00:00.123Z", "2026-09-01T12:00:00.123Z"],
+  ])("preserves valid period boundaries at supplied precision: %s to %s", (start, end) => {
+    const bundle = buildFhirBundle(
+      records({ medications: [{ ...medication, start, end }] }),
+      options(),
+    );
+    expect(bundle.entry?.[0]?.resource).toHaveProperty("effectivePeriod", { start, end });
+    assertFhirBundle(bundle);
+  });
+
+  it.each([
+    ["2026-09-02T00:00:00Z", "2026-09-01"],
+    ["2026-09-02", "2026-09-01T23:59:59-14:00"],
+    ["2026-09-01T12:00:01Z", "2026-09-01T14:00:00+02:00"],
+    ["2026-09-01T12:00:00.200Z", "2026-09-01T12:00:00.1Z"],
+    ["2026-09-01T12:00:00.130Z", "2026-09-01T12:00:00.12Z"],
+    ["2026-09-01T12:00:00.124Z", "2026-09-01T12:00:00.123Z"],
+  ])("rejects a start beyond the end's entire precision: %s to %s", (start, end) => {
+    expectCode(
+      () => buildFhirBundle(records({ medications: [{ ...medication, start, end }] }), options()),
+      "INVALID_INPUT",
+    );
+  });
+
+  it.each([
     null,
     [],
     { observations: [], medications: [] },

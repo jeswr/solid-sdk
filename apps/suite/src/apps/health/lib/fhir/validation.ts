@@ -90,6 +90,15 @@ export function date(value: unknown, allowDay = true): value is string {
   );
 }
 
+/** Compare validated dates at their supplied precision; Period.end includes matching times. */
+export function periodOrdered(start: string, end: string): boolean {
+  // A date has no timezone. Compare calendar days when either boundary is date-only.
+  if (start.length === 10 || end.length === 10) return start.slice(0, 10) <= end.slice(0, 10);
+  const fraction = /\.(\d+)/.exec(end)?.[1];
+  const endPrecisionMs = fraction === undefined ? 1000 : 10 ** (3 - fraction.length);
+  return Date.parse(start) < Date.parse(end) + endPrecisionMs;
+}
+
 export function uuid(value: unknown): value is string {
   return (
     typeof value === "string" &&

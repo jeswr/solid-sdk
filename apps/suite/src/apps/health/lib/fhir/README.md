@@ -62,6 +62,9 @@ Dates use strict Gregorian years 0001–9999. Observation effective time require
 condition dates also accept `YYYY-MM-DD`, sorted at midnight UTC. Original date
 strings are preserved. Invalid dates, unzoned times, rollover dates, excess
 precision and reversed medication periods fail. A period's endpoints may match.
+Period comparisons use calendar days when either endpoint is date-only; an end
+includes every matching time at its supplied day, second or fractional-second
+precision, following [R4 Period.end](https://hl7.org/fhir/R4/datatypes-definitions.html#Period.end).
 
 `MAX_FHIR_RECORDS` (100,000) applies to the combined arrays, checked before
 element inspection, copying, sorting or callbacks. Unknown fields, non-data

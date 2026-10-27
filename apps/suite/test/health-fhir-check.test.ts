@@ -261,6 +261,27 @@ describe("FHIR structural self-check", () => {
     rejects(bundle);
   });
 
+  it.each([
+    ["2026-09-01T12:00:00Z", "2026-09-01", true],
+    ["2026-09-01T23:59:59.999-14:00", "2026-09-01", true],
+    ["2026-09-01", "2026-09-01T00:00:00+14:00", true],
+    ["2026-09-01T12:00:00.999Z", "2026-09-01T14:00:00+02:00", true],
+    ["2026-09-01T12:00:00.199Z", "2026-09-01T12:00:00.1Z", true],
+    ["2026-09-01T12:00:00.129Z", "2026-09-01T12:00:00.12Z", true],
+    ["2026-09-01T12:00:00.123Z", "2026-09-01T12:00:00.123Z", true],
+    ["2026-09-02T00:00:00Z", "2026-09-01", false],
+    ["2026-09-02", "2026-09-01T23:59:59-14:00", false],
+    ["2026-09-01T12:00:01Z", "2026-09-01T14:00:00+02:00", false],
+    ["2026-09-01T12:00:00.200Z", "2026-09-01T12:00:00.1Z", false],
+    ["2026-09-01T12:00:00.130Z", "2026-09-01T12:00:00.12Z", false],
+    ["2026-09-01T12:00:00.124Z", "2026-09-01T12:00:00.123Z", false],
+  ])("checks period precision independently: %s to %s (valid=%s)", (start, end, accepted) => {
+    const bundle = fixture();
+    change(bundle, "entry.1.resource.effectivePeriod", { start, end });
+    if (accepted) assertFhirBundle(bundle);
+    else rejects(bundle);
+  });
+
   it.each([0, 1, 2, 3])("rejects relative patient references on entry %i", (index) => {
     const bundle = fixture();
     change(bundle, `entry.${index}.resource.subject`, { reference: "Patient/fictional-person" });
