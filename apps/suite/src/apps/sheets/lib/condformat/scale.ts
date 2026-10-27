@@ -31,7 +31,7 @@ function position(anchor: ColourAnchor, numbers: readonly number[]): number {
   }
 }
 
-function rgb(from: string, to: string, fraction: number): string {
+function interpolateRgb(from: string, to: string, fraction: number): string {
   let result = "#";
   for (const offset of [1, 3, 5]) {
     const low = Number.parseInt(from.slice(offset, offset + 2), 16);
@@ -64,7 +64,7 @@ export function colourScale(
       if (value <= upper.at) {
         const scale = Math.max(Math.abs(lower.at), Math.abs(upper.at));
         const fraction = (value / scale - lower.at / scale) / (upper.at / scale - lower.at / scale);
-        return rgb(lower.color, upper.color, fraction);
+        return interpolateRgb(lower.color, upper.color, fraction);
       }
     }
     return (points[points.length - 1] as (typeof points)[number]).color;
