@@ -89,9 +89,19 @@ export function discard(body: ReadableStream<Uint8Array> | null): void {
   body?.cancel().catch(() => undefined);
 }
 
-/** Throw the mapped StorageError for a non-success response. */
-export async function failed(method: string, url: string, response: Response): Promise<never> {
-  throw await storageErrorFrom(method, url, response);
+/**
+ * Throw the mapped StorageError for a non-success response. An abort while its error body is
+ * read becomes the non-retryable abort error, never a retryable server error.
+ */
+export async function failed(
+  method: string,
+  url: string,
+  response: Response,
+  signal?: AbortSignal,
+): Promise<never> {
+  const error = await storageErrorFrom(method, url, response);
+  throwIfAborted(method, url, signal);
+  throw error;
 }
 
 /** Lower-cased media type of a Content-Type value, without parameters, or null. */

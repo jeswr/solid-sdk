@@ -140,7 +140,7 @@ Solid write side (ADR-003 §6, T-022; implementation isolated in `src/solid-writ
   containers remain unconditional because membership changes their ETag. Listed .acl/.acr,
   advertised describedby documents, and every scoped rel="acl" link target (WAC or ACP,
   regardless of filename) discovered during header preflight are excluded from implicit copies;
-  source teardown still deletes listed auxiliary members. The explicit move source is never
+  source teardown still deletes listed auxiliary members; a 404 from one of them counts as deleted, because deleting its subject removes it (Solid Protocol §5.4). Any other source DELETE failure, including a 404 for a copied resource, still makes the move partial. The explicit move source is never
   excluded. Exclusion identity compares origin, percent-decoded path segments (raw segment on
   decoding failure), and the trailing slash; the suffix rule uses the decoded last segment.
   Requests keep their original spellings. ACLs and metadata are not copied implicitly.

@@ -124,13 +124,15 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     url: string,
     response: Response,
     expect: { range: boolean; conditional: boolean },
+    signal?: AbortSignal,
   ): Promise<ReadShape> {
     const expected =
       response.status === 200 ||
       (response.status === 206 && expect.range) ||
       (response.status === 304 && expect.conditional);
     if (!expected) {
-      if (response.status < 200 || response.status >= 400) await failed(method, url, response);
+      if (response.status < 200 || response.status >= 400)
+        await failed(method, url, response, signal);
       // Any other success or redirect (204, unsolicited 206/304, 3xx) is not a read result.
       discard(response.body);
       throw new StorageError("invalid-response", {
@@ -166,10 +168,13 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
   ): Promise<ReadResult> {
     const target = scoped(root, "GET", url);
     const response = await send(fetch, "GET", target, headers, signal);
-    const shape = await shapeOf("GET", target, response, {
-      range,
-      conditional: "If-None-Match" in headers,
-    });
+    const shape = await shapeOf(
+      "GET",
+      target,
+      response,
+      { range, conditional: "If-None-Match" in headers },
+      signal,
+    );
     return readResultFrom(response, target, shape, signal);
   }
 
@@ -290,7 +295,13 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     async head(url, opts = {}) {
       const target = scoped(root, "HEAD", url);
       const response = await send(fetch, "HEAD", target, { Accept: "*/*" }, opts.signal);
-      const shape = await shapeOf("HEAD", target, response, { range: false, conditional: false });
+      const shape = await shapeOf(
+        "HEAD",
+        target,
+        response,
+        { range: false, conditional: false },
+        opts.signal,
+      );
       return readResultFrom(response, target, shape, opts.signal);
     },
 

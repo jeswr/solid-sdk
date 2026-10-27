@@ -512,6 +512,7 @@ export function solidWrites(
       let nodes: Node[];
       let planned: Node[];
       const sourceEtags = new Map<string, string | null>();
+      const excluded = new Set<string>();
       try {
         requireEtag(first, kind === "resource" ? "GET" : "HEAD");
         checkEtag("MOVE", source, first.etag, opts.ifMatch);
@@ -519,7 +520,6 @@ export function solidWrites(
           kind === "container"
             ? await tree(source, 2000, opts.signal, checkContainerRdf)
             : [{ url: source, kind }];
-        const excluded = new Set<string>();
         const sourceIdentity = moveIdentity(source);
         for (const node of nodes) {
           const identity = moveIdentity(node.url);
@@ -615,11 +615,24 @@ export function solidWrites(
       const deleted = new Set<string>();
       try {
         for (const node of [...nodes].sort((a, b) => (a.url < b.url ? 1 : -1))) {
-          await remove(
-            node.url,
-            opts.signal,
-            node.kind === "resource" ? (sourceEtags.get(node.url) ?? undefined) : undefined,
-          );
+          try {
+            await remove(
+              node.url,
+              opts.signal,
+              node.kind === "resource" ? (sourceEtags.get(node.url) ?? undefined) : undefined,
+            );
+          } catch (cause) {
+            // Deleting a subject also deletes its auxiliary documents (Solid Protocol §5.4), so
+            // an excluded auxiliary member that is already gone needs no DELETE of its own.
+            if (
+              !(
+                cause instanceof StorageError &&
+                cause.code === "not-found" &&
+                excluded.has(moveIdentity(node.url))
+              )
+            )
+              throw cause;
+          }
           deleted.add(node.url);
         }
       } catch (cause) {

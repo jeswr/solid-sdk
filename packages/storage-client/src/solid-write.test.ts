@@ -303,6 +303,34 @@ describe("CSS write fixtures and HTTP plumbing", () => {
     );
     expect(before.calls).toHaveLength(0);
   });
+  test("an abort while reading a preflight error body is a non-retryable network error", async () => {
+    const failing = (c: AbortController) => () =>
+      new Response(
+        new ReadableStream({
+          pull(controller) {
+            c.abort();
+            controller.error(new Error("aborted"));
+          },
+        }),
+        { status: 503, headers: { "content-type": "application/problem+json" } },
+      );
+    const moving = new AbortController();
+    const move = backend({ [`GET ${URL}`]: failing(moving) });
+    expect(
+      await rejection(
+        move.storage.move(URL, NOTES, { ifMatch: TAG, name: "other.ttl", signal: moving.signal }),
+        "network",
+      ),
+    ).toMatchObject({ retryable: false, method: "GET", url: URL });
+    const deleting = new AbortController();
+    const remove = backend({ [`HEAD ${NOTES}`]: failing(deleting) });
+    expect(
+      await rejection(
+        remove.storage.delete(NOTES, { ifMatch: TAG, recursive: true, signal: deleting.signal }),
+        "network",
+      ),
+    ).toMatchObject({ retryable: false, method: "HEAD", url: NOTES });
+  });
   test("an abort while reading an error body is a non-retryable network error", async () => {
     const c = new AbortController();
     const { storage } = backend({
@@ -1114,6 +1142,36 @@ describe("emulated move", () => {
     });
     await storage.move(SRC, DEST, { ifMatch: '"source"' });
     expect(calls.filter((c) => c.method === "PUT").map((c) => c.url)).toEqual([COPY, `${COPY}a`]);
+  });
+  test("an auxiliary member already removed with its subject does not make the move partial", async () => {
+    // z-file is deleted first (reverse URL order); a conforming server removes its describedby
+    // document with it, so the later DELETE of a-metadata answers 404.
+    const nodes = [`${SRC}a-metadata`, `${SRC}z-file`];
+    const body = await serializeQuads(
+      nodes.map((u) => quad(nn(SRC), nn("http://www.w3.org/ns/ldp#contains"), nn(u))),
+      "text/turtle",
+    );
+    const { storage, calls } = await treeBackend({
+      [`GET ${SRC}`]: response(200, { "content-type": "text/turtle" }, body),
+      [`HEAD ${SRC}z-file`]: response(200, {
+        etag: '"source"',
+        link: `<${SRC}a-metadata>; rel="describedby"`,
+      }),
+      [`GET ${SRC}z-file`]: response(200, { etag: '"source"', "content-type": "text/plain" }, "z"),
+      [`PUT ${COPY}z-file`]: response(201, { etag: '"copy:z"' }),
+      [`DELETE ${SRC}z-file`]: response(),
+      [`HEAD ${SRC}a-metadata`]: response(200, {}),
+      [`DELETE ${SRC}a-metadata`]: response(404, {}),
+    });
+    expect((await storage.move(SRC, DEST, { ifMatch: '"source"' })).url).toBe(COPY);
+    expect(calls.filter((c) => c.method === "PUT").map((c) => c.url)).toEqual([
+      COPY,
+      `${COPY}z-file`,
+    ]);
+  });
+  test("a copied source resource that answers 404 on DELETE still makes the move partial", async () => {
+    const { storage } = await treeBackend({ [`DELETE ${SRC}sub/b`]: response(404, {}) });
+    await rejection(storage.move(SRC, DEST, { ifMatch: '"source"' }), "conflict");
   });
   test("container follow-up can be disabled, or fail after a committed move", async () => {
     const disabled = await treeBackend({}, { etagFollowUp: false });
