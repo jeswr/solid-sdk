@@ -11,40 +11,54 @@ export function requireValid(valid: boolean, code: FhirErrorCode, message: strin
   if (!valid) throw new FhirExportError(code, message);
 }
 
-export function object(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+/** Reflection on caller data can execute proxy traps; never expose their exceptions. */
+function readData<T>(code: FhirErrorCode, read: () => T): T {
+  try {
+    return read();
+  } catch {
+    throw new FhirExportError(code, "Expected plain data");
+  }
 }
 
-/** Reject unknown fields and non-data records instead of dropping input silently. */
+/** Validate and copy own data values once; callers only read the returned snapshot. */
 export function record(
   value: unknown,
   required: readonly string[],
   optional: readonly string[] = [],
   code: FhirErrorCode = "INVALID_INPUT",
-): asserts value is Record<string, unknown> {
-  requireValid(object(value), code, "Expected a plain record");
-  const prototype: unknown = Object.getPrototypeOf(value);
-  requireValid(
-    prototype === Object.prototype || prototype === null,
-    code,
-    "Expected a plain record",
-  );
-  for (const key of Reflect.ownKeys(value)) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+): Record<string, unknown> {
+  return readData(code, () => {
     requireValid(
-      typeof key === "string" &&
-        (required.includes(key) || optional.includes(key)) &&
-        descriptor?.enumerable === true &&
-        "value" in descriptor,
+      typeof value === "object" && value !== null && !Array.isArray(value),
       code,
-      "Unexpected or non-data field",
+      "Expected a plain record",
     );
-  }
-  requireValid(
-    required.every((key) => Object.hasOwn(value, key)),
-    code,
-    "Missing required field",
-  );
+    const prototype: unknown = Object.getPrototypeOf(value);
+    requireValid(
+      prototype === Object.prototype || prototype === null,
+      code,
+      "Expected a plain record",
+    );
+    const snapshot: Record<string, unknown> = Object.create(null);
+    for (const key of Reflect.ownKeys(value)) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      requireValid(
+        typeof key === "string" &&
+          (required.includes(key) || optional.includes(key)) &&
+          descriptor?.enumerable === true &&
+          "value" in descriptor,
+        code,
+        "Unexpected or non-data field",
+      );
+      snapshot[key] = descriptor.value;
+    }
+    requireValid(
+      required.every((key) => Object.hasOwn(snapshot, key)),
+      code,
+      "Missing required field",
+    );
+    return snapshot;
+  });
 }
 
 export function text(value: unknown, prefixLength = 0): value is string {
@@ -123,21 +137,48 @@ export function checkCount(count: number): void {
   requireValid(count <= MAX_FHIR_RECORDS, "TOO_MANY_RECORDS", "Too many health records");
 }
 
-/** Count is checked by callers before inspecting any array elements or allocating copies. */
-export function array(value: unknown, code: FhirErrorCode): asserts value is unknown[] {
-  requireValid(Array.isArray(value), code, "Expected an array");
-  requireValid(Object.getPrototypeOf(value) === Array.prototype, code, "Expected a plain array");
-  requireValid(
-    Reflect.ownKeys(value).length === value.length + 1,
-    code,
-    "Expected a dense data array",
-  );
-  for (let index = 0; index < value.length; index++) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, index);
+/** Capture lengths before any element work, including the combined export count check. */
+export function arrayLength(value: unknown, code: FhirErrorCode): number {
+  return readData(code, () => {
+    requireValid(Array.isArray(value), code, "Expected an array");
+    // Real arrays always have an own length data descriptor. Proxies hiding it throw here.
+    const { value: length } = Object.getOwnPropertyDescriptor(
+      value,
+      "length",
+    ) as PropertyDescriptor;
     requireValid(
-      descriptor?.enumerable === true && "value" in descriptor,
+      Number.isSafeInteger(length) && length >= 0,
+      code,
+      "Expected a nonnegative safe array length",
+    );
+    return length;
+  });
+}
+
+/** Copy descriptors using only the captured length, after checking the size bound. */
+export function array(
+  value: unknown,
+  code: FhirErrorCode,
+  length = arrayLength(value, code),
+): unknown[] {
+  checkCount(length);
+  return readData(code, () => {
+    requireValid(Object.getPrototypeOf(value) === Array.prototype, code, "Expected a plain array");
+    requireValid(
+      Reflect.ownKeys(value as object).length === length + 1,
       code,
       "Expected a dense data array",
     );
-  }
+    const snapshot: unknown[] = [];
+    for (let index = 0; index < length; index++) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, index);
+      requireValid(
+        descriptor?.enumerable === true && "value" in descriptor,
+        code,
+        "Expected a dense data array",
+      );
+      snapshot.push(descriptor.value);
+    }
+    return snapshot;
+  });
 }
