@@ -43,11 +43,17 @@ function wordAfter(text: string, offset: number): boolean {
   return /^[\p{L}\p{N}_]/u.test(text.slice(offset, offset + 2));
 }
 
-/** The needle is already folded. Phrases require a complete last word. */
-export function findMatches(source: FoldedText, needle: string, phrase: boolean): MatchRange[] {
+/** Folded needle; stop at the requested count or exclusive source-offset boundary. */
+export function findMatches(
+  source: FoldedText,
+  needle: string,
+  phrase: boolean,
+  limit = 1,
+  before = Infinity,
+): MatchRange[] {
   const ranges: MatchRange[] = [];
   let position = source.text.indexOf(needle);
-  while (position !== -1) {
+  while (position !== -1 && (source.spans[position] as SourceSpan).start < before) {
     const end = position + needle.length;
     if (
       (!wordAfter(needle, 0) || !wordBefore(source.text, position)) &&
@@ -57,6 +63,7 @@ export function findMatches(source: FoldedText, needle: string, phrase: boolean)
         (source.spans[position] as SourceSpan).start,
         (source.spans[end - 1] as SourceSpan).end,
       ]);
+      if (ranges.length === limit) break;
     }
     position = source.text.indexOf(needle, position + 1);
   }

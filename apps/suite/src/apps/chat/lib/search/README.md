@@ -58,6 +58,11 @@ const results = evaluateQuery(query, messages, "Europe/London");
   hits. Sorted, merged highlight ranges are half-open UTF-16 offsets into the displayed
   snippet, including its leading ellipsis. NFKD expansions and original combining marks
   retain source offsets. Long highlights clip to the window; no cut splits a surrogate pair.
+  Eligibility checks stop at each term's first match. The earliest positive match fixes the
+  snippet window before highlight collection; only occurrences starting before its end are
+  retained. Since none precede that earliest match, all retained highlights overlap the
+  window. Retained highlight counts depend on the snippet and term limits; occurrence
+  enumeration stops at the window's end.
 - `MAX_QUERY_LENGTH` (1,000 UTF-16 units), `MAX_QUERY_TERMS` (32) and `MAX_MESSAGES`
   (100,000) are exported. Query length is checked before scanning, term count during bounded
   tokenisation before AST processing, and message count before parsing/evaluating. AST

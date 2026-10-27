@@ -1,14 +1,17 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  MAX_MESSAGE_TEXT_LENGTH,
+  MAX_QUERY_TERMS,
   MAX_SNIPPET_LENGTH,
   type SearchSnippet,
   searchMessages,
 } from "../src/apps/chat/lib/search";
+import * as matching from "../src/apps/chat/lib/search/match";
 
-function snippet(query: string, text: string): SearchSnippet {
-  const result = searchMessages(
+function search(query: string, text: string) {
+  return searchMessages(
     query,
     [
       {
@@ -23,7 +26,11 @@ function snippet(query: string, text: string): SearchSnippet {
       },
     ],
     "UTC",
-  )[0];
+  );
+}
+
+function snippet(query: string, text: string): SearchSnippet {
+  const result = search(query, text)[0];
   expect(result).toBeDefined();
   return (result as NonNullable<typeof result>).snippet;
 }
@@ -42,6 +49,41 @@ function check(result: SearchSnippet): void {
 }
 
 describe("highlight snippets", () => {
+  it("bounds retained highlights and occurrence scans at the message and term limits", () => {
+    const text = "!".repeat(MAX_MESSAGE_TEXT_LENGTH);
+    const query = Array(MAX_QUERY_TERMS).fill("!").join(" ");
+    const scanLimit = MAX_QUERY_TERMS * (MAX_SNIPPET_LENGTH + 1);
+    const originalIndexOf = String.prototype.indexOf;
+    let scans = 0;
+    const indexOf = vi.spyOn(String.prototype, "indexOf").mockImplementation(function (
+      this: string,
+      needle: string,
+      position?: number,
+    ) {
+      if (this.length === MAX_MESSAGE_TEXT_LENGTH && needle === "!") {
+        // Fail before an unbounded implementation can allocate millions of ranges.
+        if (++scans > scanLimit) throw new Error("Occurrence scan exceeded the snippet budget");
+      }
+      return originalIndexOf.call(this, needle, position);
+    });
+    const findMatches = vi.spyOn(matching, "findMatches");
+    try {
+      expect(snippet(query, text)).toEqual({
+        text: `${"!".repeat(MAX_SNIPPET_LENGTH - 1)}…`,
+        ranges: [[0, MAX_SNIPPET_LENGTH - 1]],
+      });
+      expect(scans).toBeGreaterThan(0);
+      expect(scans).toBeLessThanOrEqual(scanLimit);
+      const ranges = findMatches.mock.results.flatMap((result) => result.value);
+      expect(ranges.length).toBeGreaterThan(0);
+      expect(ranges.length).toBeLessThanOrEqual(MAX_QUERY_TERMS * MAX_SNIPPET_LENGTH);
+      expect(ranges.every(([start]) => start < MAX_SNIPPET_LENGTH - 1)).toBe(true);
+    } finally {
+      indexOf.mockRestore();
+      findMatches.mockRestore();
+    }
+  });
+
   it("maps folded matches back to exact source offsets and excludes negative/filter terms", () => {
     expect(snippet("cafe ffi -rain from:mira", "🌿 Cafe\u0301 and ﬃle")).toEqual({
       text: "🌿 Cafe\u0301 and ﬃle",
@@ -96,6 +138,33 @@ describe("highlight snippets", () => {
     expect(atEnd.text.startsWith("…")).toBe(true);
     expect(atEnd.text.endsWith("café")).toBe(true);
     check(atEnd);
+  });
+
+  it("uses the earliest positive match regardless of term order and still requires distant terms", () => {
+    const text = `${"x ".repeat(100)}café ${"y ".repeat(200)}gate`;
+    const expected = {
+      text: `…${"x ".repeat(20)}café ${"y ".repeat(56)}y…`,
+      ranges: [[41, 45]],
+    };
+    expect(snippet("gate cafe", text)).toEqual(expected);
+    expect(snippet("cafe gate", text)).toEqual(expected);
+    expect(snippet("cafe -rain", text)).toEqual(expected);
+    expect(search("cafe -gate", text)).toEqual([]);
+    expect(search("cafe rain", text)).toEqual([]);
+  });
+
+  it("retains all visible folded punctuation and clips phrases crossing the window end", () => {
+    const punctuation = snippet(". .", "…".repeat(300));
+    expect(punctuation).toEqual({ text: `${"…".repeat(159)}…`, ranges: [[0, 159]] });
+    const phrase = `blue ${"sky ".repeat(40)}gate`;
+    const text = `café ${"x ".repeat(50)}${phrase} ${"y ".repeat(100)}`;
+    expect(snippet(`"${phrase}" cafe`, text)).toEqual({
+      text: `café ${"x ".repeat(50)}blue ${"sky ".repeat(12)}s…`,
+      ranges: [
+        [0, 4],
+        [105, 159],
+      ],
+    });
   });
 
   it("clips long highlights to the visible window", () => {

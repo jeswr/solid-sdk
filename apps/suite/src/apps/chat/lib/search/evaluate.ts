@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 import { type FoldedText, findMatches, hasLink, hasMention, project } from "./match";
 import { parseQuery } from "./parse";
-import { makeSnippet } from "./snippet";
+import { makeSnippet, snippetWindow } from "./snippet";
 import type { MatchRange, SearchMessage, SearchQuery, SearchResult, SearchTerm } from "./types";
 import {
   fold,
@@ -127,21 +127,37 @@ function matchMessage(
 ): SearchResult | null {
   let content: FoldedText | undefined;
   let score = 0;
-  const ranges: MatchRange[] = [];
+  let first = Infinity;
+  const highlights: { needle: string; phrase: boolean }[] = [];
   for (const term of query.terms) {
     let matches: boolean;
     if (term.type === "filter")
       matches = filterMatches(term, message, localDate(message.createdAt, formatter));
     else {
       content ??= project(message.text);
-      const found = findMatches(content, fold(term.value), term.type === "phrase");
+      const needle = fold(term.value);
+      const phrase = term.type === "phrase";
+      const found = findMatches(content, needle, phrase);
       matches = found.length > 0;
-      if (!term.negated) for (const range of found) ranges.push(range);
+      if (!term.negated && found[0]) {
+        first = Math.min(first, found[0][0]);
+        highlights.push({ needle, phrase });
+      }
     }
     if (term.negated ? matches : !matches) return null;
     if (!term.negated) score++;
   }
-  return { message, score, snippet: makeSnippet(message.text, ranges) };
+  const window = snippetWindow(message.text, first === Infinity ? 0 : first);
+  const ranges: MatchRange[] = [];
+  if (content) {
+    for (const { needle, phrase } of highlights) {
+      // Every positive match starts at/after `first`, hence at/after window[0].
+      for (const range of findMatches(content, needle, phrase, Infinity, window[1])) {
+        ranges.push(range);
+      }
+    }
+  }
+  return { message, score, snippet: makeSnippet(message.text, window, ranges) };
 }
 
 /** Validate untrusted ASTs and the whole snapshot; never mutate the caller's records. */
