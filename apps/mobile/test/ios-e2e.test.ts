@@ -43,7 +43,8 @@ describe("xcresult attachment export", () => {
         {
           attachments: [
             {
-              suggestedHumanReadableName: "e2e-result.json_1_UUID.json",
+              suggestedHumanReadableName:
+                "e2e-result.json_1_6F1C9A2B-1D3E-4F50-8A6B-7C8D9E0F1A2B.json",
               exportedFileName: "result-uuid.json",
             },
             {
@@ -112,12 +113,23 @@ describe("xcresult attachment export", () => {
     expect(run.mock.calls.some(([, args]) => args.includes("summary"))).toBe(true);
   });
   test("maps Xcode 26 attachment names with the extension dropped before the ordinal", async () => {
-    expect(attachmentFor("e2e-result_0_6F1C9A2B.json")).toBe("e2e-result.json");
-    expect(attachmentFor("e2e-navigation_0_6F1C9A2B.json")).toBe("e2e-navigation.json");
+    expect(attachmentFor("e2e-result_0_6F1C9A2B-1D3E-4F50-8A6B-7C8D9E0F1A2B.json")).toBe(
+      "e2e-result.json",
+    );
+    expect(attachmentFor("e2e-navigation_0_6F1C9A2B-1D3E-4F50-8A6B-7C8D9E0F1A2B.json")).toBe(
+      "e2e-navigation.json",
+    );
     expect(attachmentFor("e2e-result.json")).toBe("e2e-result.json");
     expect(attachmentFor("e2e-result")).toBe("e2e-result.json");
     // A longer name that merely shares the stem, a debug attachment, or a non-string is not evidence.
-    expect(attachmentFor("e2e-results_0_X.json")).toBeUndefined();
+    expect(
+      attachmentFor("e2e-results_0_6F1C9A2B-1D3E-4F50-8A6B-7C8D9E0F1A2B.json"),
+    ).toBeUndefined();
+    expect(
+      attachmentFor("e2e-result_debug_0_6F1C9A2B-1D3E-4F50-8A6B-7C8D9E0F1A2B.json"),
+    ).toBeUndefined();
+    expect(attachmentFor("e2e-result.backup.json")).toBeUndefined();
+    expect(attachmentFor("e2e-result_0_NOTAUUID.json")).toBeUndefined();
     expect(attachmentFor("e2e-debug_0_X.txt")).toBeUndefined();
     expect(attachmentFor(undefined)).toBeUndefined();
     await writeFile(
@@ -125,8 +137,15 @@ describe("xcresult attachment export", () => {
       JSON.stringify([
         {
           attachments: [
-            { suggestedHumanReadableName: "e2e-result_0_A.json", exportedFileName: "A.json" },
-            { suggestedHumanReadableName: "e2e-navigation_0_B.json", exportedFileName: "B.json" },
+            {
+              suggestedHumanReadableName: "e2e-result_0_6F1C9A2B-1D3E-4F50-8A6B-7C8D9E0F1A2B.json",
+              exportedFileName: "A.json",
+            },
+            {
+              suggestedHumanReadableName:
+                "e2e-navigation_0_7F1C9A2B-1D3E-4F50-8A6B-7C8D9E0F1A2B.json",
+              exportedFileName: "B.json",
+            },
           ],
         },
       ]),
