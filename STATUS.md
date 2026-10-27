@@ -95,3 +95,67 @@ Open interpretations are recorded in `QUESTIONS.md` and applied conservatively:
 limits shared across sources, all four exact CSV headers required, strongest-first
 pairwise duplicate suppression, and integer epoch seconds. None blocks this
 implementation.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+## Fix round 1 — scalar artist MBID warning
+
+Starting head: `cfd8466f8f870346f33dd2a0211b601737a833c1`.
+
+- `bfcaa663 fix: warn when dropping scalar artist MBIDs` — emit `INVALID_MBID`
+  for every supplied non-array `artist_mbids` value. Validate individual artist
+  UUIDs only inside arrays. Six regression cases cover a valid scalar lowercase
+  UUID, null, an invalid string, an object, a number and a boolean, preserving the
+  listen and checking the exact warning, field, source and physical line.
+- Final `docs: record scalar MBID fix validation` commit — this report update.
+
+Validation used the installed Node `v24.22.1` and pnpm `10.4.1`, with
+`PATH=/opt/node24/bin:$PATH` and
+`npm_config_manage_package_manager_versions=false`. App/focused runs used
+`VITEST_MAX_WORKERS=2`; repository Turbo runs used `VITEST_MAX_WORKERS=1` and
+`--env-mode=loose`.
+
+Commands and results:
+
+- From `apps/suite`, before the fix:
+  `pnpm exec vitest run test/music-scrobbles.test.ts -t 'warns when dropping non-array artist MBIDs' --coverage.enabled=false`
+  — expected regression failure: the valid scalar UUID emitted no warning;
+  the other five cases passed.
+- From `apps/suite`, after the fix:
+  `pnpm exec vitest run test/music-scrobbles.test.ts --coverage.include='src/apps/music/lib/scrobbles/**/*.ts'`
+  — PASS, 25 tests; 100% statements, branches, functions and lines for the
+  scrobbles directory.
+- `pnpm exec biome check --write apps/suite/src/apps/music/lib/scrobbles/normalize.ts apps/suite/test/music-scrobbles.test.ts`
+  — PASS after formatting the new parameterized test.
+- `pnpm exec turbo run build --filter='@jeswr/app-suite^...' --concurrency=4`
+  — PASS, all 7 dependency builds.
+- Required app gate:
+
+  ```sh
+  pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test
+  ```
+
+  PASS: production build and typecheck succeeded; 153 test files and 7,532
+  tests passed with 100% configured coverage in all four categories. App lint
+  exited 0 with 54 existing warnings outside this fix.
+- `pnpm run lint:root` — PASS, including all repository guards.
+- `TURBO_SCM_BASE=cfd8466f8f870346f33dd2a0211b601737a833c1 pnpm run gate --env-mode=loose`
+  — PASS, 12/12 tasks; all 7,532 app tests and 100% configured coverage.
+- `pnpm run gate:full --env-mode=loose` — FAILED, 160 successful tasks out of
+  263, on four existing 5-second timeouts at
+  `test/agent-layers.test.mjs:509`. The affected parameterized forms were
+  `await import(TARGET);`, `require(TARGET);`, `(require as Loader)(TARGET);`
+  and `type Value = import(TARGET).Value;`. Root results: 875 passed, 4 failed.
+- `pnpm exec turbo run test:root --filter=// --concurrency=1 --env-mode=loose`
+  — PASS in isolation, all 879 root tests across 12 files, with the original
+  timeouts unchanged. This supports resource contention during the full gate
+  as the cause of its timeout failures.
+- `git diff cfd8466f8f870346f33dd2a0211b601737a833c1 --exit-code -- test/agent-layers.test.mjs scripts/check-agent-layers.mjs`
+  — PASS: those root guard files are unchanged by this fix.
+- `git diff --check` — PASS.
+
+The review finding is fully addressed. Full-workspace validation remains red on
+the root test timeouts above; no unrelated tests or configuration were changed.
+Roborev remains unavailable, so automated commit verdicts could not be obtained.
+No dependencies, UI changes, generated files, tracker mutations, branch changes,
+fetches, merges, pushes or PRs were added in this fix round. No new open questions.
