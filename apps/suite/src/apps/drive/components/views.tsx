@@ -19,7 +19,7 @@ import { listTrash, recentFiles, searchByName, trashFolderOf } from "../lib/oper
 import type { TrashEntry } from "../lib/operations/trash-index";
 import { formatSize } from "../lib/view/view";
 import { useDrive, useFolder } from "../state/drive-context";
-import { focusDriveListing, useDriveActions, useDriveUi } from "../state/ui";
+import { captureDriveFocusRemoval, useDriveActions, useDriveUi } from "../state/ui";
 import { Breadcrumbs } from "./breadcrumbs";
 import { type BrowserItem, FileBrowser } from "./file-browser";
 import { trashMenu } from "./item-menu";
@@ -388,6 +388,7 @@ export function TrashView() {
   const [removalFocus, setRemovalFocus] = useState<{
     removed: ReadonlySet<string>;
     candidates: string[];
+    restore: ReturnType<typeof captureDriveFocusRemoval>;
   }>();
   useLayoutEffect(() => {
     // The change bus can finish re-listing before or after a removal resolves.
@@ -396,7 +397,7 @@ export function TrashView() {
       return;
     const remaining = new Set(entries.map((entry) => entry.url));
     const next = removalFocus.candidates.find((url) => remaining.has(url));
-    focusDriveListing(next ?? entries[0]?.url, undefined, listing.current);
+    removalFocus.restore(next ?? entries[0]?.url, undefined, listing.current);
     setRemovalFocus(undefined);
   }, [entries, removalFocus]);
   const focusAfterRemoval = (removedUrls: readonly string[]) => {
@@ -407,6 +408,7 @@ export function TrashView() {
     const index = urls.findIndex((url) => removed.has(url));
     setRemovalFocus({
       removed,
+      restore: captureDriveFocusRemoval(),
       candidates: [...urls.slice(index), ...urls.slice(0, index).reverse()].filter(
         (url) => !removed.has(url),
       ),

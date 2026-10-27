@@ -168,7 +168,7 @@ it.each([
 it.each([
   "failed",
   "partial",
-])("permanent delete preserves recovery focus after a %s batch", async (outcome) => {
+])("permanent delete preserves the surviving recovery control after a %s batch", async (outcome) => {
   const view = await setup();
   await act(async () => {
     await operations.trashItems(drive.client, ROOT, await drive.client.list(ROOT));
@@ -199,9 +199,7 @@ it.each([
   await act(async () => {
     await deletion.mock.results[0]?.value;
   });
-  await vi.waitFor(() =>
-    expect(document.activeElement).toBe(outcome === "partial" ? original[1] : trigger),
-  );
+  await vi.waitFor(() => expect(document.activeElement).toBe(trigger));
   expect(rows(view.host)).toHaveLength(outcome === "partial" ? 1 : 2);
   expect(original.at(-1)?.querySelector<HTMLInputElement>("input")?.checked).toBe(true);
 });
@@ -211,7 +209,7 @@ it.each([
   "row",
   "removed-opener",
   "removed-row",
-])("desktop Details close restores focus from %s", async (opener) => {
+])("desktop Details pane close prefers the current row after opening from %s", async (opener) => {
   const view = await setup();
   const row = rows(view.host)[0] as HTMLElement;
   await click(row);
@@ -240,13 +238,7 @@ it.each([
   expect(view.host.querySelector(".ish-details")).not.toBeNull();
   await activate(button("Close details", view.host));
   expect(view.host.querySelector(".ish-details")).toBeNull();
-  expect(document.activeElement).toBe(
-    trigger.isConnected
-      ? trigger
-      : opener === "removed-opener"
-        ? row
-        : view.host.querySelector("[data-drive-listing]"),
-  );
+  expect(document.activeElement).toBe(rows(view.host)[0]);
 });
 
 it.each([
