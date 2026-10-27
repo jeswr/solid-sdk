@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // <jeswr-contact-list> tests: render vcard:Individual fields (name / org / structured
 // email & phone / WebID) via the model's typed accessors, the empty state, and the
@@ -6,6 +7,7 @@
 // link; a hostile name renders as escaped text).
 
 import "../src/index.js";
+import { buildPerson } from "@jeswr/solid-task-model/contacts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { JeswrContactList } from "../src/index.js";
 import { CONTACTS_TTL, HOSTILE_CONTACT_TTL, mount, parseTurtle, waitFor } from "./fixtures.js";
@@ -52,6 +54,31 @@ describe("<jeswr-contact-list>", () => {
     el.store = parseTurtle("@prefix ex: <https://ex.example/> . ex:a ex:b ex:c .");
     await waitFor(el, (e) => !!e.querySelector('[part="empty"]'), "empty state renders");
     expect(el.querySelector('[part="empty"]')?.textContent).toContain("No contacts");
+  });
+
+  it.each([
+    "Example; Corp, Ltd",
+    "<img src=x onerror=alert(1)><script>alert(2)</script>",
+    "javascript:alert(3)",
+  ])("renders organization as text: %s", async (organization) => {
+    const el = await mount<JeswrContactList>("jeswr-contact-list");
+    el.store = buildPerson("https://pod.example/contacts/alice", { name: "Alice", organization });
+    await waitFor(el, (e) => !!e.querySelector('[part="contact"]'), "contact renders");
+    const secondary = el.querySelector('[part="contact"] small');
+    expect(secondary?.textContent).toBe(organization);
+    expect(secondary?.children).toHaveLength(0);
+    expect(el.querySelector("img, script, a")).toBeNull();
+  });
+
+  it("omits organization when absent and removes stale text when the contact changes", async () => {
+    const el = await mount<JeswrContactList>("jeswr-contact-list");
+    const url = "https://pod.example/contacts/alice";
+    el.store = buildPerson(url, { name: "Alice", organization: "Old Corp" });
+    await waitFor(el, (e) => e.textContent?.includes("Old Corp") === true, "organization renders");
+    el.store = buildPerson(url, { name: "Alice" });
+    await waitFor(el, (e) => !e.querySelector("small"), "organization clears");
+    expect(el.textContent).not.toContain("Old Corp");
+    expect(el.querySelector('[part="name"]')?.textContent).toBe("Alice");
   });
 
   it("re-reads via publicFetch (not the authed fetch) when public-read is toggled after load", async () => {
