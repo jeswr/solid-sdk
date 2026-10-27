@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   MAX_TODOIST_CSV_BYTES,
   MAX_TODOIST_CSV_ROWS,
+  MAX_TODOIST_TIME_ZONES,
   parseTodoistCsv,
   TodoistImportError,
   type TodoistImportErrorCode,
@@ -291,13 +292,13 @@ describe("dates and time zones", () => {
     }
   });
 
-  it("evicts formatters beyond 32 retained zones without changing date resolution", () => {
-    const zones = Intl.supportedValuesOf("timeZone").slice(0, 32);
+  it("accepts 32 zones including the default and reuses them at capacity", () => {
+    expect(MAX_TODOIST_TIME_ZONES).toBe(32);
+    const zones = Intl.supportedValuesOf("timeZone").slice(0, MAX_TODOIST_TIME_ZONES - 1);
     const timeZones = [
-      ...zones.slice(0, 31),
+      ...zones,
       options.defaultTimeZone,
-      zones[31]!,
-      "UTC",
+      ...zones.map((zone) => zone.toUpperCase()),
       zones[0]!,
     ];
     const NativeFormatter = Intl.DateTimeFormat;
@@ -319,9 +320,40 @@ describe("dates and time zones", () => {
           timeZone,
         })),
       );
-      expect(formatter).toHaveBeenCalledTimes(35);
-      // The first additional zone is evicted after the default zone.
-      expect(formatter.mock.calls.at(-1)![1]!.timeZone).toBe(zones[0]!.toLowerCase());
+      expect(formatter).toHaveBeenCalledTimes(MAX_TODOIST_TIME_ZONES);
+    } finally {
+      formatter.mockRestore();
+    }
+  });
+
+  it("rejects a 33rd zone before constructing it and resets the budget for each import", () => {
+    const zones = Intl.supportedValuesOf("timeZone").slice(0, MAX_TODOIST_TIME_ZONES);
+    const timeZones = [...zones, options.defaultTimeZone];
+    const input = csv(
+      Array.from({ length: MAX_TODOIST_CSV_ROWS }, (_, index) =>
+        task({ TIMEZONE: timeZones[index % timeZones.length]!, DATE: "2026-07-04T13:00Z" }),
+      ),
+    );
+    const NativeFormatter = Intl.DateTimeFormat;
+    const formatter = vi
+      .spyOn(Intl, "DateTimeFormat")
+      // biome-ignore lint/complexity/useArrowFunction: The constructor spy must be constructable.
+      .mockImplementation(function (locales, config) {
+        return new NativeFormatter(locales, config);
+      });
+    try {
+      expect(() => parseTodoistCsv(input, options)).toThrow(
+        expect.objectContaining({
+          name: "TodoistImportError",
+          code: "INVALID_TIMEZONE",
+          line: MAX_TODOIST_TIME_ZONES + 1,
+        }),
+      );
+      expect(formatter).toHaveBeenCalledTimes(MAX_TODOIST_TIME_ZONES);
+      formatter.mockClear();
+      const result = parseTodoistCsv(csv([task({ TIMEZONE: zones.at(-1)! })]), options);
+      expect(result.tasks).toHaveLength(1);
+      expect(formatter).toHaveBeenCalledTimes(2);
     } finally {
       formatter.mockRestore();
     }

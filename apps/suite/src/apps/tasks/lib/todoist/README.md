@@ -28,8 +28,10 @@ to millisecond precision, optionally ending in `Z` or `±HH:mm`. An explicit
 offset determines the instant. Otherwise the row's IANA TIMEZONE (or the required
 default) resolves the wall clock. Due values contain UTC `dateTime` and
 `timeZone`; all-day values also contain `kind: "date"` and the original `date`.
-Each import retains at most 32 formatters under case-folded timezone keys,
-evicting the oldest entry as needed; due values retain the supplied zone text.
+Each import constructs at most `MAX_TODOIST_TIME_ZONES` (32) formatters under
+case-folded timezone keys, including the default zone; distinct aliases count
+separately. Additional zones fail with `INVALID_TIMEZONE` before construction.
+Cached zones remain usable at the limit; due values retain the supplied zone text.
 Local dates within two days of the year 1 / 9999 endpoints are unsupported and
 rejected; timezone samples outside the supported range also fail with
 `INVALID_DATE`. Explicit-offset datetimes remain supported. Invalid calendar values,

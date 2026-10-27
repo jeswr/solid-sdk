@@ -3,6 +3,7 @@ import { splitContent } from "./content";
 import { checkSize, scanCsv } from "./csv";
 import { parseDue, zoneFormatter } from "./dates";
 import {
+  MAX_TODOIST_TIME_ZONES,
   TodoistImportError,
   type TodoistImportOptions,
   type TodoistProjectDraft,
@@ -25,9 +26,6 @@ const supportedColumns = new Set([
   "DURATION",
   "DURATION_UNIT",
 ]);
-// Native Intl formatters are expensive; input row/byte limits do not bound them practically.
-const MAX_CACHED_FORMATTERS = 32;
-
 /** Parse a bounded Todoist template into local drafts, with no IO or identity resolution. */
 export function parseTodoistCsv(input: string, options: TodoistImportOptions): TodoistProjectDraft {
   checkSize(input);
@@ -125,8 +123,9 @@ export function parseTodoistCsv(input: string, options: TodoistImportOptions): T
     const key = typeof zone === "string" ? zone.toLowerCase() : zone;
     let format = formats.get(key);
     if (!format) {
-      if (formats.size >= MAX_CACHED_FORMATTERS)
-        formats.delete(formats.keys().next().value as string);
+      // Keep all constructed formatters so cycling zones cannot bypass the budget.
+      if (formats.size >= MAX_TODOIST_TIME_ZONES)
+        throw new TodoistImportError("INVALID_TIMEZONE", line);
       format = zoneFormatter(zone, line);
       formats.set(key, format);
     }

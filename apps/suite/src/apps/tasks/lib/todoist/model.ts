@@ -2,6 +2,8 @@
 export const MAX_TODOIST_CSV_BYTES = 4 * 1024 * 1024;
 /** Data records, excluding the header; embedded newlines are not records. */
 export const MAX_TODOIST_CSV_ROWS = 20_000;
+/** Formatter constructions per import, including the default zone and distinct aliases. */
+export const MAX_TODOIST_TIME_ZONES = 32;
 
 export type TodoistImportErrorCode =
   | "INVALID_CSV"

@@ -3,6 +3,7 @@ export { parseTodoistCsv } from "./import";
 export {
   MAX_TODOIST_CSV_BYTES,
   MAX_TODOIST_CSV_ROWS,
+  MAX_TODOIST_TIME_ZONES,
   type TodoistCommentDraft,
   type TodoistDue,
   TodoistImportError,
