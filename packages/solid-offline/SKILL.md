@@ -53,11 +53,15 @@ The worker broadcasts URL-only `OfflineEvent` messages: `revalidating` starts an
 exactly one of `updated` (replacement/purge), `revalidated` (confirmed 304), or
 `revalidate-failed` (network/offline/storage/non-authoritative response) terminates it.
 Keep `UpdatedEvent` source-compatible; do not put ETags, bytes, headers, credentials, or
-errors on the channel. Direct delete notifications still send only `updated`.
+errors on the channel. Direct delete purges use the same balanced lifecycle without
+fetching; purge errors terminate with `revalidate-failed`.
 
 Track URLs with the surface's mark methods. For tracked URLs, start → `pending`,
 confirmed 304 → `fresh`, replacement/purge → `updated`, and failure → the prior state.
-Parallel attempts remain pending until all settle. Offline cache hits and no-op/skipped
+Parallel attempts remain pending until all settle. Keep settled freshness separate from
+active-attempt counts: manual marks update the settled state while pending, and failures
+retain that state. An unread `updated` survives 304 confirmations until a consumer mark
+acknowledges its read. Offline cache hits and no-op/skipped
 validations emit no lifecycle events. An unsolicited 304 on an unconditional listing
 refresh is a failed confirmation. `markPending` remains supported. `useOfflineStatus`
 returns `UseOfflineStatusResult`, which adds `syncing: boolean` (`pending > 0`) to the

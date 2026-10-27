@@ -240,6 +240,101 @@ describe('revalidation status transitions', () => {
     });
   });
 
+  it.each([
+    ['updated', 'revalidated'],
+    ['revalidated', 'updated'],
+    ['updated', 'updated'],
+  ] as const)('preserves an unread update across parallel %s / %s results', (first, second) => {
+    const channel = new MockChannel();
+    const s = make({ channel });
+    s.markFresh(URL);
+    const seen: string[] = [];
+    s.subscribe(() => seen.push(s.getSnapshot().resources[URL] as string));
+
+    channel.emit({ url: URL, event: 'revalidating' });
+    channel.emit({ url: URL, event: 'revalidating' });
+    const pending = s.getSnapshot();
+    channel.emit({ url: URL, event: first });
+    expect(s.getSnapshot()).toBe(pending);
+    channel.emit({ url: URL, event: second });
+    expect(s.getSnapshot()).toMatchObject({
+      pending: 0,
+      updated: 1,
+      resources: { [URL]: 'updated' },
+    });
+    expect(seen).toEqual(['pending', 'updated']);
+  });
+
+  it('retains an update through later confirmations until a consumer marks a fresh read', () => {
+    const channel = new MockChannel();
+    const s = make({ channel });
+    s.markFresh(URL);
+    channel.emit({ url: URL, event: 'updated' });
+    channel.emit({ url: URL, event: 'revalidating' });
+    channel.emit({ url: URL, event: 'revalidated' });
+    expect(s.getSnapshot().resources[URL]).toBe('updated');
+    channel.emit({ url: URL, event: 'revalidated' });
+    expect(s.getSnapshot().resources[URL]).toBe('updated');
+    s.markFresh(URL);
+    expect(s.getSnapshot()).toMatchObject({
+      pending: 0,
+      updated: 0,
+      resources: { [URL]: 'fresh' },
+    });
+  });
+
+  it.each([
+    ['fresh', 'markStale', 'stale'],
+    ['stale', 'markFresh', 'fresh'],
+    ['fresh', 'markPending', 'pending'],
+  ] as const)('keeps %s → %s through a failed attempt', (initial, mark, expected) => {
+    const channel = new MockChannel();
+    const s = make({ channel });
+    if (initial === 'fresh') s.markFresh(URL);
+    else s.markStale(URL);
+    channel.emit({ url: URL, event: 'revalidating' });
+    const pending = s.getSnapshot();
+    const listener = vi.fn();
+    s.subscribe(listener);
+    s[mark](URL);
+    expect(s.getSnapshot()).toBe(pending);
+    expect(listener).not.toHaveBeenCalled();
+    channel.emit({ url: URL, event: 'revalidate-failed' });
+    expect(s.getSnapshot().resources[URL]).toBe(expected);
+    expect(s.getSnapshot().pending).toBe(expected === 'pending' ? 1 : 0);
+  });
+
+  it('keeps the latest manual mark after a parallel confirmation and failure', () => {
+    const channel = new MockChannel();
+    const s = make({ channel });
+    s.markStale(URL);
+    channel.emit({ url: URL, event: 'revalidating' });
+    channel.emit({ url: URL, event: 'revalidating' });
+    channel.emit({ url: URL, event: 'revalidated' });
+    s.markFresh(URL);
+    s.markStale(URL);
+    expect(s.getSnapshot().pending).toBe(1);
+    channel.emit({ url: URL, event: 'revalidate-failed' });
+    expect(s.getSnapshot()).toMatchObject({ pending: 0, stale: 1, resources: { [URL]: 'stale' } });
+  });
+
+  it.each([
+    'revalidated',
+    'updated',
+  ] as const)('acknowledges an update during parallel work before a later %s', (event) => {
+    const channel = new MockChannel();
+    const s = make({ channel });
+    s.markFresh(URL);
+    channel.emit({ url: URL, event: 'revalidating' });
+    channel.emit({ url: URL, event: 'revalidating' });
+    channel.emit({ url: URL, event: 'updated' });
+    s.markFresh(URL);
+    expect(s.getSnapshot().pending).toBe(1);
+    channel.emit({ url: URL, event });
+    expect(s.getSnapshot().resources[URL]).toBe(event === 'updated' ? 'updated' : 'fresh');
+    expect(s.getSnapshot().pending).toBe(0);
+  });
+
   it('keeps resources independent and clears forgotten revalidation history', () => {
     const channel = new MockChannel();
     const s = make({ channel });

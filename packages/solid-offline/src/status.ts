@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Offline / stale / pending STATUS SURFACE (P5).
  *
@@ -121,8 +122,10 @@ export function createStatusSurface(options: StatusSurfaceOptions = {}): Offline
   const connectivity = options.connectivity ?? defaultConnectivity();
 
   const listeners = new Set<StatusListener>();
+  // Settled freshness is independent of worker activity, so manual observations
+  // and unread updates survive until the last overlapping attempt settles.
   const resources = new Map<string, ResourceFreshness>();
-  const revalidations = new Map<string, { count: number; previous: ResourceFreshness }>();
+  const revalidations = new Map<string, number>();
   let online = isOnline();
 
   // Cached immutable snapshot — `useSyncExternalStore` REQUIRES `getSnapshot` to
@@ -134,7 +137,8 @@ export function createStatusSurface(options: StatusSurfaceOptions = {}): Offline
     let stale = 0;
     let updated = 0;
     const map: Record<string, ResourceFreshness> = {};
-    for (const [url, freshness] of resources) {
+    for (const [url, settled] of resources) {
+      const freshness = revalidations.has(url) ? 'pending' : settled;
       map[url] = freshness;
       if (freshness === 'pending') pending += 1;
       else if (freshness === 'stale') stale += 1;
@@ -149,24 +153,23 @@ export function createStatusSurface(options: StatusSurfaceOptions = {}): Offline
   }
 
   function setFreshness(url: string, freshness: ResourceFreshness): void {
-    if (resources.get(url) === freshness) return;
     resources.set(url, freshness);
-    emit();
+    emitIfChanged(url);
+  }
+
+  function emitIfChanged(url: string): void {
+    const freshness = revalidations.has(url) ? 'pending' : resources.get(url);
+    if (snapshot.resources[url] !== freshness) emit();
   }
 
   const onMessage = (event: MessageEvent): void => {
     const data = event.data as OfflineEvent | undefined;
     // Preserve the tracked-URL boundary; malformed/unrelated broadcasts are inert.
     if (typeof data?.url !== 'string' || !resources.has(data.url)) return;
-    const active = revalidations.get(data.url);
+    const active = revalidations.get(data.url) ?? 0;
     if (data.event === 'revalidating') {
-      if (active) active.count += 1;
-      else
-        revalidations.set(data.url, {
-          count: 1,
-          previous: resources.get(data.url) as ResourceFreshness,
-        });
-      setFreshness(data.url, 'pending');
+      revalidations.set(data.url, active + 1);
+      emitIfChanged(data.url);
       return;
     }
     if (
@@ -175,18 +178,14 @@ export function createStatusSurface(options: StatusSurfaceOptions = {}): Offline
       data.event !== 'revalidate-failed'
     )
       return;
-    const confirmed =
-      data.event === 'updated' ? 'updated' : data.event === 'revalidated' ? 'fresh' : undefined;
-    if (active) {
-      if (confirmed) active.previous = confirmed;
-      active.count -= 1;
-      // Parallel attempts for one URL keep it pending until all have settled.
-      if (active.count > 0) return;
-      revalidations.delete(data.url);
-      setFreshness(data.url, active.previous);
-    } else if (confirmed) {
-      setFreshness(data.url, confirmed);
-    }
+    if (active > 1) revalidations.set(data.url, active - 1);
+    else revalidations.delete(data.url);
+
+    if (data.event === 'updated') setFreshness(data.url, 'updated');
+    // A 304 confirms worker bytes, not that the consumer has read an update.
+    else if (data.event === 'revalidated' && resources.get(data.url) !== 'updated')
+      setFreshness(data.url, 'fresh');
+    else emitIfChanged(data.url);
   };
 
   const onOnline = (): void => {

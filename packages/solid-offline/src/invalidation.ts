@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Notification-driven invalidation pipeline (P3, §5).
  *
@@ -120,9 +121,8 @@ async function invalidateResource(
   }
 
   if (opts.deleted) {
-    const outcome = await purge(url, records, deps);
-    deps.broadcast.postMessage({ url, event: 'updated' });
-    return outcome;
+    // Balance the purge's terminal event so it cannot settle an unrelated fetch.
+    return reportInvalidation(url, deps, () => purge(url, records, deps));
   }
 
   return revalidateResource(url, records, state, deps);

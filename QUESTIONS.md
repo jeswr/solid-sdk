@@ -8,8 +8,8 @@
    only `{ url, event }` from revalidation and invalidation. Outcome objects still carry ETags.
 2. Brief, Task (`status.ts` transitions): options are to track every broadcast URL or retain
    the existing tracked-resource boundary. Retain that boundary; consumers track URLs with
-   `markFresh`, `markStale`, or `markPending`. A failed revalidation restores the state
-   preceding its start; a manual pending state remains pending.
+   `markFresh`, `markStale`, or `markPending`. A failed revalidation retains settled
+   freshness, including manual marks made during the attempt; a manual pending state remains pending.
 3. Brief, Acceptance criteria (offline): options are to invent a revalidation for an offline
    cache read or pair only attempts that actually start. Retain offline cache reads without
    a revalidation or lifecycle messages; an attempt rejected because connectivity drops emits

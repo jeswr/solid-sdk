@@ -2,13 +2,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { handleNotification, resyncSweep } from '../src/invalidation.js';
 import { MetadataStore } from '../src/metadata-store.js';
+import { createStatusSurface } from '../src/status.js';
 import { handleFetch, type SwrDeps } from '../src/swr.js';
 import { MockBroadcaster, MockByteCache, makeGet, turtleResponse } from './mocks.js';
 
 const URL = 'https://pod.example/document';
 const stores: MetadataStore[] = [];
+const surfaces: ReturnType<typeof createStatusSurface>[] = [];
 afterEach(() => {
   for (const store of stores.splice(0)) store.close();
+  for (const surface of surfaces.splice(0)) surface.close();
 });
 
 async function setup() {
@@ -204,4 +207,78 @@ it('reports a failed sweep attempt before propagating its error', async () => {
     { url: URL, event: 'revalidating' },
     { url: URL, event: 'revalidate-failed' },
   ]);
+});
+
+describe('direct delete lifecycle', () => {
+  it.each([
+    'success',
+    'storage failure',
+  ] as const)('balances a delete during an unresolved fetch: %s', async (outcome) => {
+    const deps = await setup();
+    const listeners = new Set<(event: MessageEvent) => void>();
+    const surface = createStatusSurface({
+      channel: {
+        addEventListener: (_type, listener) => {
+          listeners.add(listener);
+        },
+        removeEventListener: (_type, listener) => {
+          listeners.delete(listener);
+        },
+        close() {},
+      },
+      isOnline: () => true,
+    });
+    surfaces.push(surface);
+    surface.markFresh(URL);
+    const postMessage = deps.broadcast.postMessage.bind(deps.broadcast);
+    deps.broadcast.postMessage = (message) => {
+      postMessage(message);
+      for (const listener of listeners) listener(new MessageEvent('message', { data: message }));
+    };
+
+    let settle!: (response: Response) => void;
+    deps.fetch = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          settle = resolve;
+        }),
+    );
+    const first = await handleFetch(makeGet(URL), deps);
+    expect(surface.getSnapshot().pending).toBe(1);
+    const failure = new Error('fixture storage failure');
+    if (outcome === 'storage failure') {
+      vi.spyOn(deps.meta, 'delete').mockRejectedValueOnce(failure);
+    }
+    const deleted = await handleNotification({ type: 'Delete', object: URL }, deps);
+    expect(deleted).toEqual(
+      outcome === 'success' ? { kind: 'deleted' } : { kind: 'error', error: failure },
+    );
+    expect(deps.broadcast.messages).toEqual([
+      { url: URL, event: 'revalidating' },
+      { url: URL, event: 'revalidating' },
+      { url: URL, event: outcome === 'success' ? 'updated' : 'revalidate-failed' },
+    ]);
+    expect(surface.getSnapshot().pending).toBe(1);
+
+    // A second fetch starts before the original one settles. Its pending state
+    // must survive the original terminal event as well as the delete's event.
+    // Restore cached data so the second read can start a background attempt.
+    deps.fetch = vi.fn(async () => turtleResponse('cached again', { etag: '"new"' }));
+    await handleFetch(makeGet(URL), deps);
+    let settleSecond!: (response: Response) => void;
+    deps.fetch = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          settleSecond = resolve;
+        }),
+    );
+    const second = await handleFetch(makeGet(URL), deps);
+    settle(new Response(null, { status: 304 }));
+    await first.revalidation;
+    expect(surface.getSnapshot().pending).toBe(1);
+    settleSecond(new Response(null, { status: 304 }));
+    await second.revalidation;
+    expect(surface.getSnapshot().pending).toBe(0);
+    expect(surface.getSnapshot().resources[URL]).toBe(outcome === 'success' ? 'updated' : 'fresh');
+  });
 });

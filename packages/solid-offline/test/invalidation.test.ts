@@ -156,7 +156,10 @@ describe('Delete + forbidden', () => {
 
     expect(outcome.kind).toBe('deleted');
     expect(h.calls).toHaveLength(0); // a Delete needs no revalidation
-    expect(h.broadcast.messages).toEqual([{ url: DOC, event: 'updated' }]);
+    expect(h.broadcast.messages).toEqual([
+      { url: DOC, event: 'revalidating' },
+      { url: DOC, event: 'updated' },
+    ]);
     expect(await h.meta.getByUrl(DOC)).toHaveLength(0);
     expect(await h.cache.match(keyRequest(DOC, 'accept=text/turtle'))).toBeUndefined();
   });

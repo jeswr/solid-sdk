@@ -67,20 +67,23 @@ by exactly one terminal message:
 | Event | Meaning | Status for a tracked URL |
 | --- | --- | --- |
 | `revalidating` | Revalidation started | `pending` |
-| `revalidated` | A conditional 304 confirmed the existing bytes | `fresh` |
+| `revalidated` | A conditional 304 confirmed the existing bytes | `fresh`, preserving an unread `updated` |
 | `updated` | Replacement, deletion, revocation, or a purge completed | `updated`; re-read |
-| `revalidate-failed` | Network/offline, storage, or non-authoritative HTTP failure | Restore the previous state |
+| `revalidate-failed` | Network/offline, storage, or non-authoritative HTTP failure | Retain settled freshness, including manual marks |
 
 Messages contain only `url` and `event`; no response bytes, headers, credentials, or error
 details. `OfflineEvent` includes all messages. `UpdatedEvent` and `offline.onUpdated`
 remain available; its optional `etag` field remains type-compatible but is not emitted.
-Direct delete notifications retain their standalone `updated` event. Offline cache hits,
+Direct delete purges also emit balanced `revalidating` / `updated` events (or
+`revalidate-failed` if the purge fails), without fetching. Offline cache hits,
 ETag notification short-circuits, and skipped SWR validations emit no lifecycle events.
 An unsolicited 304 on an unconditional listing refresh fails confirmation.
 
 The status surface updates only URLs already tracked by `markFresh`, `markStale`, or
-`markPending`. Parallel attempts keep a URL pending until all settle; a failed attempt
-does not undo another attempt's successful result. `forget` drops its status history.
+`markPending`. Parallel attempts keep a URL pending until all settle. Settled freshness
+records manual marks made during those attempts, so failures preserve the latest observation.
+An unread `updated` survives later 304 confirmations until the consumer marks its read.
+`markFresh` acknowledges a fresh read, including during pending work. `forget` drops its status history.
 Manual `markPending` calls still count toward pending work.
 
 ```ts
