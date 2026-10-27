@@ -92,7 +92,7 @@ export function parseTodoistCsv(input: string, options: TodoistImportOptions): T
     const priorityText = get("PRIORITY");
     if (!["", "1", "2", "3", "4"].includes(priorityText))
       throw new TodoistImportError("INVALID_PRIORITY", line);
-    const priority = priorityText === "" ? 4 : (Number(priorityText) as 1 | 2 | 3 | 4);
+    const priority = priorityText === "" ? 1 : (Number(priorityText) as 1 | 2 | 3 | 4);
     const task: TodoistTaskDraft = {
       id: `task-${orderKey}`,
       title,

@@ -21,7 +21,8 @@ record, including quoted newlines in earlier records. New sections reset the
 indent stack. Empty INDENT means 1; valid levels are 1–4. Notes attach to the last
 task in file order, including across sections and skipped rows. Author,
 responsible, description and date-language text are retained without resolution.
-Priorities match the numeric quick-add draft (1 highest, 4 default).
+Priorities range from 1 (highest) to 4 (lowest). Empty or missing PRIORITY defaults
+to 1, following [Todoist's CSV format](https://www.todoist.com/help/account-and-billing/security/import-or-export-a-project-as-a-csv-file-in-todoist-YC8YvN).
 
 Dates support Gregorian `YYYY-MM-DD` and `YYYY-MM-DDTHH:mm[:ss[.fraction]]`, up
 to millisecond precision, optionally ending in `Z` or `±HH:mm`. An explicit

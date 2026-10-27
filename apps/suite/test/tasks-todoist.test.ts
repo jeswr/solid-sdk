@@ -85,14 +85,14 @@ describe("Todoist project drafts", () => {
         priority,
       ]),
     ).toEqual([
-      ["task-0", null, null, 0, 4],
+      ["task-0", null, null, 0, 1],
       ["task-2", null, "section-1", 2, 1],
       ["task-3", "task-2", "section-1", 3, 2],
       ["task-4", "task-3", "section-1", 4, 3],
       ["task-5", "task-4", "section-1", 5, 4],
-      ["task-6", "task-2", "section-1", 6, 4],
-      ["task-7", null, "section-1", 7, 4],
-      ["task-9", null, "section-8", 9, 4],
+      ["task-6", "task-2", "section-1", 6, 1],
+      ["task-7", null, "section-1", 7, 1],
+      ["task-9", null, "section-8", 9, 1],
     ]);
     expect(result.tasks[1]).toMatchObject({
       title: "Pack supplies",
@@ -112,7 +112,7 @@ describe("Todoist project drafts", () => {
     ).toMatchObject({
       title: "task title",
       indent: 1,
-      priority: 4,
+      priority: 1,
       author: "",
       responsible: "",
       dateLang: "",
@@ -126,6 +126,17 @@ describe("Todoist project drafts", () => {
     expect(
       parseTodoistCsv("TYPE,EXTRA,CONTENT,EXTRA\ntask,a,Title,b", options).tasks[0]!.title,
     ).toBe("Title");
+  });
+
+  it.each([
+    ["", 1],
+    ["1", 1],
+    ["2", 2],
+    ["3", 3],
+    ["4", 4],
+  ])("imports Todoist priority %j as %i", (priority, expected) => {
+    const result = parseTodoistCsv(csv([task({ PRIORITY: priority as string })]), options);
+    expect(result.tasks[0]!.priority).toBe(expected);
   });
 
   it.each([
