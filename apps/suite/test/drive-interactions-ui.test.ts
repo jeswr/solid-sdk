@@ -1215,6 +1215,59 @@ it("repoints stars to moved items and the descendants of moved folders", () => {
   ]);
 });
 
+it("merges a repointed star with a stale star already on the destination", () => {
+  expect(
+    repointStarred(
+      [`${ROOT}Work/A.txt`, `${ROOT}Archive/A.txt`],
+      [{ from: `${ROOT}Work/A.txt`, to: `${ROOT}Archive/A.txt` }],
+    ),
+  ).toEqual([`${ROOT}Archive/A.txt`]);
+});
+
+it("makes only the active row's location link a Tab stop", async () => {
+  const located = items.map((item) => ({ ...item, folder: `${ROOT}Work/` }));
+  const view = await mount(
+    h(
+      DriveUiProvider,
+      null,
+      h(FileBrowser, {
+        title: "Recent",
+        items: located,
+        columns: ["location"],
+        empty: { title: "Empty", icon: null },
+      }),
+    ),
+  );
+  const links = () => [...view.host.querySelectorAll<HTMLAnchorElement>(".drv-col-location a")];
+  expect(links().map((link) => link.tabIndex)).toEqual([0, -1, -1]);
+  await click(row(view.host, items[1]));
+  expect(links().map((link) => link.tabIndex)).toEqual([-1, 0, -1]);
+  await view.unmount();
+});
+
+it("moves down a grid row by the rendered number of columns", async () => {
+  drive.prefs.view = "grid";
+  const many: DriveItem[] = ["D", "E", "F"].map((name) => ({
+    url: `${ROOT}${name}.txt`,
+    name: `${name}.txt`,
+    kind: "file",
+    contentType: "text/plain",
+  }));
+  const all = [...items, ...many];
+  const actual = globalThis.getComputedStyle;
+  vi.spyOn(globalThis, "getComputedStyle").mockImplementation((element, pseudo) =>
+    (element as Element).classList.contains("drv-grid")
+      ? ({ gridTemplateColumns: "184px 184px" } as CSSStyleDeclaration)
+      : actual(element, pseudo),
+  );
+  const view = await mount(tree(all));
+  const first = row(view.host, all[0]);
+  await act(async () => first.focus());
+  await key(first, "ArrowDown");
+  expect(document.activeElement).toBe(row(view.host, all[2]));
+  await view.unmount();
+});
+
 it("a star follows a move and only the reversed items on a partial Undo", async () => {
   let starred = items.map((item) => item.url);
   drive.updatePrefs.mockImplementation((change: (current: { starred: string[] }) => unknown) => {

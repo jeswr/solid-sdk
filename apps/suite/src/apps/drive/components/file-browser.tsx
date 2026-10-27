@@ -307,8 +307,15 @@ export function FileBrowser(props: FileBrowserProps) {
       if (!event.shiftKey) dispatch({ type: "click", id: next.url });
       focusRow(next.url);
     };
+    // Use the rendered track count: breakpoints change the grid template.
+    const grid = container.current?.querySelector<HTMLElement>(".drv-grid");
+    const tracks = grid
+      ? getComputedStyle(grid).gridTemplateColumns.split(" ").filter(Boolean).length
+      : 0;
     const columnsPerRow =
-      view === "grid" ? Math.max(1, Math.round((container.current?.clientWidth ?? 800) / 200)) : 1;
+      view === "grid"
+        ? Math.max(1, tracks || Math.round((container.current?.clientWidth ?? 800) / 200))
+        : 1;
     const targets = focused ? targetsFor(focused) : selected;
     switch (true) {
       case event.key === "ArrowDown":
@@ -719,6 +726,8 @@ export function FileBrowser(props: FileBrowserProps) {
         <tbody>
           {visible.map((item) => {
             const isSelected = selection.selected.includes(item.url);
+            const isActive =
+              selection.focus === item.url || (!selection.focus && item === visible[0]);
             const starred = actions.starred.has(item.url);
             return (
               <ItemShell
@@ -734,11 +743,7 @@ export function FileBrowser(props: FileBrowserProps) {
                     data-url={item.url}
                     aria-selected={isSelected}
                     data-drop={dropTarget === item.url || undefined}
-                    tabIndex={
-                      selection.focus === item.url || (!selection.focus && item === visible[0])
-                        ? 0
-                        : -1
-                    }
+                    tabIndex={isActive ? 0 : -1}
                     draggable={Boolean(folder)}
                     onDragStart={(event) => onDragStart(event, item)}
                     onClick={(event) => onItemClick(event, item)}
@@ -786,7 +791,8 @@ export function FileBrowser(props: FileBrowserProps) {
                                 : `/drive/f/${encodeRef(item.folder)}`
                             }
                             onClick={(event) => event.stopPropagation()}
-                            tabIndex={-1}
+                            // The active row's location is the next Tab stop.
+                            tabIndex={isActive ? 0 : -1}
                           >
                             {locationLabel(item.folder, driveRoot)}
                           </Link>

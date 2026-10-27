@@ -189,7 +189,7 @@ export function repointStarred(
   starred: readonly string[],
   moves: readonly { from: string; to: string }[],
 ): string[] {
-  return starred.map((entry) => {
+  const repointed = starred.map((entry) => {
     for (const { from, to } of moves) {
       if (entry === from) return to;
       if (from.endsWith("/") && to.endsWith("/") && entry.startsWith(from))
@@ -197,6 +197,8 @@ export function repointStarred(
     }
     return entry;
   });
+  // A stale star (for example on a trashed item) may already name the destination.
+  return [...new Set(repointed)];
 }
 
 function folderLabel(url: string, driveRoot: string | undefined): string {
