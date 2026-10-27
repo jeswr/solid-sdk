@@ -53,11 +53,12 @@ Pass the original provider's `clientSecret` too for confidential clients (Basic 
 `refreshSolidSession` needs the persisted issuer, refresh token and private JWK; never use the
 current provider instance's possibly regenerated key. It returns new state, preserves verified
 identity/ID-token fields, and retains an omitted rotated refresh token. `expiresAt` is epoch
-seconds. Coordinate concurrent refreshes when the AS rotates single-use refresh tokens.
+seconds. If `expires_in` is omitted, the helper clears the old `expiresAt` because the new
+lifetime is unknown. Coordinate concurrent refreshes when the AS rotates single-use refresh tokens.
 
 Handle `SolidSessionRefreshError.code` without logging state or raw tokens. Fail the callback
 on refresh failure; `invalid_grant` requires signing in again. The helper validates DPoP token
-type, nonempty access/rotated refresh tokens, and a safe nonnegative integer `expires_in`.
+type, nonempty access/rotated refresh tokens, and a safe nonnegative integer `expires_in` when supplied.
 Unknown OAuth errors become `oauth_error`; fetch/redirect failures become `network`.
 
 ## Security rules
@@ -68,6 +69,7 @@ Unknown OAuth errors become `oauth_error`; fetch/redirect failures become `netwo
 - Token retries require a 4xx `use_dpop_nonce` error and the server nonce; a nonce header on
   `invalid_grant` never replays the refresh credential.
 - Refresh discovery and token HTTP must use the explicit pristine `options.fetch`, never a patched global.
+- Match the discovered issuer exactly against the persisted identifier, without URL normalization.
 - Reject cleartext transport except explicitly allowed loopback development.
 - Treat the persisted access token, refresh token, ID token, and private DPoP JWK as secrets.
 - With JWT sessions, set a strong `AUTH_SECRET` and keep the encrypted JWT strategy. If using database sessions, persist the same state server-side.

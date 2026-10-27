@@ -121,6 +121,32 @@ describe("refreshSolidSession", () => {
     expect(result.refreshToken).toBe(session.refreshToken);
   });
 
+  it.each([
+    [NOW, "rotated-refresh-fixture"],
+    [NOW, undefined],
+    [undefined, "rotated-refresh-fixture"],
+    [undefined, undefined],
+  ])("accepts omitted lifetime with previous expiry %s and rotation %s", async (expiry, rotation) => {
+    const { expiresAt: _expiresAt, ...withoutExpiry } = session;
+    const state = Object.freeze({
+      ...withoutExpiry,
+      ...(expiry === undefined ? {} : { expiresAt: expiry }),
+    });
+    const op = mockEndpoint(() => json(tokens({ expires_in: undefined, refresh_token: rotation })));
+    const result = await refreshSolidSession(state, { clientId: CLIENT_ID, fetch: op.fetch });
+    expect(result).toEqual({
+      ...withoutExpiry,
+      accessToken: "new-access-fixture",
+      refreshToken: rotation ?? state.refreshToken,
+    });
+    expect(result).not.toHaveProperty("expiresAt");
+    expect(result).not.toBe(state);
+    expect(result.dpopKeyJwk).toBe(state.dpopKeyJwk);
+    expect(state.expiresAt).toBe(expiry);
+    expect(state.refreshToken).toBe(session.refreshToken);
+    expect(op.tokenCalls).toHaveLength(1);
+  });
+
   it("verifies the proof signature against the persisted key, without ath or private key disclosure", async () => {
     const op = mockEndpoint();
     // Round-trip the session as Auth.js persistence would, without a live provider instance.
@@ -260,7 +286,6 @@ describe("refreshSolidSession", () => {
     ["missing access token", { access_token: undefined }],
     ["empty access token", { access_token: "" }],
     ["non-string access token", { access_token: {} }],
-    ["missing expiry", { expires_in: undefined }],
     ["string expiry", { expires_in: "600" }],
     ["negative expiry", { expires_in: -1 }],
     ["fractional expiry", { expires_in: 0.5 }],
@@ -443,6 +468,43 @@ describe("refreshSolidSession input and discovery boundaries", () => {
     );
     expect(op.fetch).toHaveBeenCalledTimes(1);
     expect(op.tokenCalls).toHaveLength(0);
+  });
+
+  it.each([
+    ["https://op.example", "https://op.example/"],
+    ["https://op.example/", "https://op.example"],
+    [ISSUER, "https://OP.example/tenant"],
+    ["https://OP.example/tenant", ISSUER],
+    [ISSUER, "https://op.example:443/tenant"],
+    ["https://op.example:443/tenant", ISSUER],
+    [ISSUER, "https://op.example/other/../tenant"],
+    ["https://op.example/other/../tenant", ISSUER],
+  ])("rejects normalized-equivalent issuer %s versus %s before token HTTP", async (issuer, discovered) => {
+    const op = mockEndpoint(undefined, { issuer: discovered, token_endpoint: TOKEN_ENDPOINT });
+    await expectCode(
+      refreshSolidSession({ ...session, issuer }, { clientId: CLIENT_ID, fetch: op.fetch }),
+      "invalid_response",
+    );
+    expect(op.fetch).toHaveBeenCalledTimes(1);
+    expect(op.tokenCalls).toHaveLength(0);
+  });
+
+  it.each([
+    ["https://op.example", "https://op.example/.well-known/openid-configuration"],
+    ["https://op.example/", "https://op.example/.well-known/openid-configuration"],
+    ["https://OP.example/tenant", `${ISSUER}/.well-known/openid-configuration`],
+    ["https://op.example:443/tenant", `${ISSUER}/.well-known/openid-configuration`],
+    [`${ISSUER}/`, `${ISSUER}/.well-known/openid-configuration`],
+  ])("accepts an exactly matching issuer identifier %s", async (issuer, discoveryUrl) => {
+    const op = mockEndpoint(undefined, { issuer, token_endpoint: TOKEN_ENDPOINT });
+    const result = await refreshSolidSession(
+      { ...session, issuer },
+      { clientId: CLIENT_ID, fetch: op.fetch },
+    );
+    expect(result.issuer).toBe(issuer);
+    expect(result.accessToken).toBe("new-access-fixture");
+    expect(op.fetch.mock.calls[0]?.[0]).toBe(discoveryUrl);
+    expect(op.tokenCalls).toHaveLength(1);
   });
 
   it.each([

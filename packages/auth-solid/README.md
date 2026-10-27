@@ -79,9 +79,12 @@ DPoP key, plus the original `clientId` and an explicit pristine `fetch`. For a c
 client, pass the same `clientSecret` used by `Solid()`; it authenticates with Basic. HTTPS is
 required; `allowInsecure: true` permits only loopback HTTP for development.
 
-The helper discovers the issuer's token endpoint, uses the persisted key with no `ath` on the
-token proof, and retries a `use_dpop_nonce` challenge once. It returns new state with updated
+The helper discovers the issuer's token endpoint, requires an exact match with the persisted
+issuer identifier, uses the persisted key with no `ath` on the token proof, and retries a
+`use_dpop_nonce` challenge once. It returns new state with updated
 tokens and expiry in epoch seconds, retaining the old refresh token if rotation is omitted.
+When `expires_in` is omitted, it clears the previous `expiresAt`; the new lifetime is unknown.
+When supplied, `expires_in` must be a safe nonnegative integer in seconds.
 It preserves the verified WebID and ID token; it does not adopt an unverified refresh ID token.
 Coordinate concurrent refreshes in your session store when refresh tokens are single-use.
 

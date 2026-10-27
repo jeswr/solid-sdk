@@ -95,7 +95,8 @@ function formEncode(value: string): string {
  * refusal, and at most one nonce retry. Requires a pristine fetch; never reads global fetch.
  *
  * Returns new state, preserving the verified identity, ID token and key. An absent rotated refresh
- * token retains the old one. `expiresAt` is epoch SECONDS, counted from the token request's start.
+ * token retains the old one. `expiresAt` is epoch SECONDS, counted from the token request's start;
+ * an omitted `expires_in` clears the previous expiry because the new token's lifetime is unknown.
  * Does not verify or adopt an ID token returned by refresh. Callers own persistence and concurrency
  * control when an authorization server rotates single-use refresh tokens.
  *
@@ -118,7 +119,8 @@ export async function refreshSolidSession(
     throw new SolidSessionRefreshError("invalid_session");
   }
   const allowInsecure = options.allowInsecure === true;
-  const issuer = secureUrl(session.issuer, allowInsecure, "invalid_session");
+  const expectedIssuer = session.issuer;
+  const issuer = secureUrl(expectedIssuer, allowInsecure, "invalid_session");
   if (issuer.search) {
     throw new SolidSessionRefreshError("invalid_session");
   }
@@ -152,11 +154,8 @@ export async function refreshSolidSession(
     throw new SolidSessionRefreshError("invalid_response");
   }
   const metadata = await jsonObject(discovery);
-  try {
-    if (!nonemptyString(metadata.issuer) || new URL(metadata.issuer).href !== issuer.href) {
-      throw new Error();
-    }
-  } catch {
+  // OIDC Discovery §§4.3–5 requires identifier equality without URL normalization.
+  if (metadata.issuer !== expectedIssuer) {
     throw new SolidSessionRefreshError("invalid_response");
   }
   if (!nonemptyString(metadata.token_endpoint)) {
@@ -205,18 +204,20 @@ export async function refreshSolidSession(
     typeof token.token_type !== "string" ||
     token.token_type.toLowerCase() !== "dpop" ||
     !nonemptyString(token.access_token) ||
-    typeof token.expires_in !== "number" ||
-    !Number.isSafeInteger(token.expires_in) ||
-    token.expires_in < 0 ||
-    !Number.isSafeInteger(requestedAt + token.expires_in) ||
+    (token.expires_in !== undefined &&
+      (typeof token.expires_in !== "number" ||
+        !Number.isSafeInteger(token.expires_in) ||
+        token.expires_in < 0 ||
+        !Number.isSafeInteger(requestedAt + token.expires_in))) ||
     (token.refresh_token !== undefined && !nonemptyString(token.refresh_token))
   ) {
     throw new SolidSessionRefreshError("invalid_response");
   }
+  const { expiresAt: _expiresAt, ...withoutExpiry } = session;
   return {
-    ...session,
+    ...withoutExpiry,
     accessToken: token.access_token,
     refreshToken: token.refresh_token ?? session.refreshToken,
-    expiresAt: requestedAt + token.expires_in,
+    ...(token.expires_in === undefined ? {} : { expiresAt: requestedAt + token.expires_in }),
   };
 }
