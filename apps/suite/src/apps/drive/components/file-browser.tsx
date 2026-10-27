@@ -70,7 +70,7 @@ import {
 } from "../lib/view/view";
 import { useDrive } from "../state/drive-context";
 import { readDrop } from "../state/dropped-files";
-import { errorMessage, useDriveActions, useDriveUi } from "../state/ui";
+import { errorMessage, focusDriveListing, useDriveActions, useDriveUi } from "../state/ui";
 import { ItemIcon } from "./item-icon";
 import { ContextEntries, DropdownEntries, useItemMenu } from "./item-menu";
 
@@ -217,12 +217,7 @@ export function FileBrowser(props: FileBrowserProps) {
         document.activeElement === document.body ||
         container.current?.contains(document.activeElement)
       ) {
-        const next = selection.focus
-          ? container.current?.querySelector<HTMLElement>(
-              `[data-url="${CSS.escape(selection.focus)}"]`,
-            )
-          : container.current;
-        next?.focus();
+        focusDriveListing(selection.focus ?? undefined, undefined, container.current);
       }
       domFocus.current = selection.focus ?? undefined;
     }
@@ -453,13 +448,26 @@ export function FileBrowser(props: FileBrowserProps) {
 
   const filtered = filters.types.length > 0 || filters.modified !== undefined;
   const sortLabel = { name: "Name", modified: "Modified", size: "Size" }[prefs.sort.key];
+  const clearFilters = () => {
+    filters.set({ types: [], modified: undefined });
+    focusDriveListing(undefined, undefined, container.current);
+  };
 
   const toolbar =
     selected.length > 0 ? (
       <SelectionBar
         selected={selected}
         visible={visible}
-        onClear={() => dispatch({ type: "clear" })}
+        onClear={() => {
+          dispatch({ type: "clear" });
+          focusDriveListing(selection.focus ?? selected[0]?.url, undefined, container.current);
+        }}
+        onFocusCapture={() => {
+          // Toolbar controls disappear when their selected items leave the view.
+          // Keep the same row-removal path used for a focused row or card.
+          domFocus.current =
+            selected.find((item) => item.url === selection.focus)?.url ?? selected[0]?.url;
+        }}
       />
     ) : (
       <div className="drv-toolbar" role="toolbar" aria-label="Folder actions">
@@ -539,11 +547,7 @@ export function FileBrowser(props: FileBrowserProps) {
             </DropdownMenu>
           ) : null}
           {filtered ? (
-            <button
-              type="button"
-              className="drv-chip drv-chip-clear"
-              onClick={() => filters.set({ types: [], modified: undefined })}
-            >
+            <button type="button" className="drv-chip drv-chip-clear" onClick={clearFilters}>
               <X aria-hidden="true" size={14} /> Clear filters
             </button>
           ) : null}
@@ -627,7 +631,7 @@ export function FileBrowser(props: FileBrowserProps) {
     body = filtered ? (
       <div className="drv-state">
         <h2>No items match these filters</h2>
-        <Button variant="outline" onClick={() => filters.set({ types: [], modified: undefined })}>
+        <Button variant="outline" onClick={clearFilters}>
           Clear filters
         </Button>
       </div>
@@ -941,10 +945,12 @@ function SelectionBar({
   selected,
   visible,
   onClear,
+  onFocusCapture,
 }: {
   selected: readonly DriveItem[];
   visible: readonly DriveItem[];
   onClear: () => void;
+  onFocusCapture: () => void;
 }) {
   const actions = useDriveActions();
   const entries = useItemMenu(actions, selected, visible).filter(
@@ -954,7 +960,12 @@ function SelectionBar({
     (entry) => entry !== "separator" && ["download", "move", "star", "trash"].includes(entry.id),
   );
   return (
-    <div className="drv-toolbar drv-selectionbar" role="toolbar" aria-label="Selection actions">
+    <div
+      className="drv-toolbar drv-selectionbar"
+      role="toolbar"
+      aria-label="Selection actions"
+      onFocusCapture={onFocusCapture}
+    >
       <IconButton label="Clear selection" variant="ghost" onClick={onClear}>
         <X aria-hidden="true" size={18} />
       </IconButton>
