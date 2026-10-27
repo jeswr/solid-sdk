@@ -204,7 +204,9 @@ export function validateRule(value: ConditionalFormatRule): ConditionalFormatRul
         (initial.anchors.length !== 2 && initial.anchors.length !== 3)
       )
         invalidRule();
-      const anchors = Array.from(initial.anchors, anchor);
+      const anchors = Array.from(initial.anchors, anchor) as
+        | [ColourAnchor, ColourAnchor]
+        | [ColourAnchor, ColourAnchor, ColourAnchor];
       // Numeric anchor order is invalid independently of whether the range contains numbers.
       for (let index = 1; index < anchors.length; index++) {
         const before = anchors[index - 1] as ColourAnchor;

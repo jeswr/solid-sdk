@@ -12,7 +12,7 @@ function duplicateKey(value: CellValue): Key | undefined {
 }
 
 function comparison(rule: CellIsRule, value: CellValue): boolean {
-  if (rule.operator === "between" || rule.operator === "notBetween") {
+  if ("min" in rule) {
     const low = compare(value, rule.min);
     if (low === undefined) return false;
     // Validation guarantees that the two operands have the same type.
