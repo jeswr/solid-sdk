@@ -70,6 +70,7 @@ import {
 } from "../lib/view/view";
 import { useDrive } from "../state/drive-context";
 import { readDrop } from "../state/dropped-files";
+import { useDriveListingFocus } from "../state/listing-focus";
 import { errorMessage, focusDriveListing, useDriveActions, useDriveUi } from "../state/ui";
 import { ItemIcon } from "./item-icon";
 import { ContextEntries, DropdownEntries, useItemMenu } from "./item-menu";
@@ -175,7 +176,6 @@ export function FileBrowser(props: FileBrowserProps) {
   const filters = useFilters();
   const [storedSelection, setSelection] = useState<SelectionState>(createSelection);
   const previousIds = useRef<readonly string[]>([]);
-  const domFocus = useRef<string | undefined>(undefined);
   const [menuFor, setMenuFor] = useState<string>();
   const [dropTarget, setDropTarget] = useState<string>();
   const [dropping, setDropping] = useState(false);
@@ -212,16 +212,8 @@ export function FileBrowser(props: FileBrowserProps) {
   useLayoutEffect(() => {
     setSelection(selection);
     previousIds.current = ids;
-    if (domFocus.current && !ids.includes(domFocus.current)) {
-      if (
-        document.activeElement === document.body ||
-        container.current?.contains(document.activeElement)
-      ) {
-        focusDriveListing(selection.focus ?? undefined, undefined, container.current);
-      }
-      domFocus.current = selection.focus ?? undefined;
-    }
   }, [ids, selection]);
+  const listingFocus = useDriveListingFocus(ids, container);
 
   const { setDetailsItems, setCurrentFolder, uploadRequest } = ui;
   useEffect(() => setDetailsItems(selected), [selected, setDetailsItems]);
@@ -462,12 +454,13 @@ export function FileBrowser(props: FileBrowserProps) {
           dispatch({ type: "clear" });
           focusDriveListing(selection.focus ?? selected[0]?.url, undefined, container.current);
         }}
-        onFocusCapture={() => {
-          // Toolbar controls disappear when their selected items leave the view.
-          // Keep the same row-removal path used for a focused row or card.
-          domFocus.current =
-            selected.find((item) => item.url === selection.focus)?.url ?? selected[0]?.url;
-        }}
+        onFocusCapture={(event) =>
+          listingFocus.onFocusCapture(
+            event,
+            selected.find((item) => item.url === selection.focus)?.url ?? selected[0]?.url,
+          )
+        }
+        onBlurCapture={listingFocus.onBlurCapture}
       />
     ) : (
       <div className="drv-toolbar" role="toolbar" aria-label="Folder actions">
@@ -660,6 +653,7 @@ export function FileBrowser(props: FileBrowserProps) {
             {(menuButton) => (
               <li
                 className="drv-card"
+                data-drive-row={item.url}
                 data-selected={selection.selected.includes(item.url) || undefined}
                 data-drop={dropTarget === item.url || undefined}
                 {...folderDropProps(item)}
@@ -848,14 +842,15 @@ export function FileBrowser(props: FileBrowserProps) {
         data-drive-listing
         tabIndex={-1}
         onFocusCapture={(event) => {
-          domFocus.current = (event.target as HTMLElement).closest<HTMLElement>(
-            "[data-url]",
-          )?.dataset.url;
+          listingFocus.onFocusCapture(event);
+          const row = (event.target as HTMLElement).closest<HTMLElement>("[data-url]");
+          const url = row?.dataset.url;
+          if (url)
+            setSelection((current) =>
+              current.focus === url ? current : { ...current, focus: url },
+            );
         }}
-        onBlurCapture={(event) => {
-          if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node))
-            domFocus.current = undefined;
-        }}
+        onBlurCapture={listingFocus.onBlurCapture}
         onKeyDown={onKeyDown}
         {...contentDropProps}
       >
@@ -946,11 +941,13 @@ function SelectionBar({
   visible,
   onClear,
   onFocusCapture,
+  onBlurCapture,
 }: {
   selected: readonly DriveItem[];
   visible: readonly DriveItem[];
   onClear: () => void;
-  onFocusCapture: () => void;
+  onFocusCapture: React.FocusEventHandler<HTMLDivElement>;
+  onBlurCapture: React.FocusEventHandler<HTMLDivElement>;
 }) {
   const actions = useDriveActions();
   const entries = useItemMenu(actions, selected, visible).filter(
@@ -965,6 +962,7 @@ function SelectionBar({
       role="toolbar"
       aria-label="Selection actions"
       onFocusCapture={onFocusCapture}
+      onBlurCapture={onBlurCapture}
     >
       <IconButton label="Clear selection" variant="ghost" onClick={onClear}>
         <X aria-hidden="true" size={18} />

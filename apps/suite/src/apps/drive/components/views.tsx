@@ -6,7 +6,7 @@
 import { Alert, AlertDescription, Button, FileTypeIcon, IconButton } from "@jeswr/suite-ui";
 import { Clock, FolderOpen, HardDrive, Search, Star, Trash2, Users } from "lucide-react";
 import { notFound, useParams, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { decodeRef, InvalidRefError } from "@/lib/refs";
 import {
   type DriveClient,
@@ -19,7 +19,8 @@ import { listTrash, recentFiles, searchByName, trashFolderOf } from "../lib/oper
 import type { TrashEntry } from "../lib/operations/trash-index";
 import { formatSize } from "../lib/view/view";
 import { useDrive, useFolder } from "../state/drive-context";
-import { captureDriveFocusRemoval, useDriveActions, useDriveUi } from "../state/ui";
+import { useDriveListingFocus } from "../state/listing-focus";
+import { useDriveActions, useDriveUi } from "../state/ui";
 import { Breadcrumbs } from "./breadcrumbs";
 import { type BrowserItem, FileBrowser } from "./file-browser";
 import { trashMenu } from "./item-menu";
@@ -120,7 +121,19 @@ function useTreeFiles(query?: string) {
     const request = ++generation.current;
     const controller = new AbortController();
     active.current = controller;
-    setSnapshot({ client, root: driveRoot, query });
+    // Live scans keep the rendered rows (and their focused controls) until the
+    // replacement arrives. A root, client or query change still starts fresh.
+    setSnapshot((previous) => ({
+      client,
+      root: driveRoot,
+      query,
+      ...(previous?.client === client &&
+      previous.root === driveRoot &&
+      previous.query === query &&
+      previous.items
+        ? { items: previous.items }
+        : {}),
+    }));
     // The operations' scan API does not expose cancellation. Bind its list seam to
     // this request so aborted scans stop issuing IO, even if a transport ignores abort.
     const scoped: DriveClient = {
@@ -385,34 +398,12 @@ export function TrashView() {
   const chosen = (entries ?? []).filter((entry) => selected.has(entry.url));
   const { restore } = useDriveActions();
   const listing = useRef<HTMLDivElement>(null);
-  const [removalFocus, setRemovalFocus] = useState<{
-    removed: ReadonlySet<string>;
-    candidates: string[];
-    restore: ReturnType<typeof captureDriveFocusRemoval>;
-  }>();
-  useLayoutEffect(() => {
-    // The change bus can finish re-listing before or after a removal resolves.
-    // Wait until the successful entries have actually left the rendered list.
-    if (!removalFocus || !entries || entries.some((entry) => removalFocus.removed.has(entry.url)))
-      return;
-    const remaining = new Set(entries.map((entry) => entry.url));
-    const next = removalFocus.candidates.find((url) => remaining.has(url));
-    removalFocus.restore(next ?? entries[0]?.url, undefined, listing.current);
-    setRemovalFocus(undefined);
-  }, [entries, removalFocus]);
+  const listingFocus = useDriveListingFocus(entries?.map((entry) => entry.url) ?? [], listing);
   const focusAfterRemoval = (removedUrls: readonly string[]) => {
     const removed = new Set(removedUrls);
     if (removed.size === 0) return;
     setSelected((current) => new Set([...current].filter((url) => !removed.has(url))));
-    const urls = (entries ?? []).map((entry) => entry.url);
-    const index = urls.findIndex((url) => removed.has(url));
-    setRemovalFocus({
-      removed,
-      restore: captureDriveFocusRemoval(),
-      candidates: [...urls.slice(index), ...urls.slice(0, index).reverse()].filter(
-        (url) => !removed.has(url),
-      ),
-    });
+    listingFocus.focusAfterRemoval(removedUrls);
   };
   const restoreEntries = async (targets: readonly TrashEntry[]) => {
     const result = await restore(targets);
@@ -433,7 +424,13 @@ export function TrashView() {
         <Trash2 aria-hidden="true" size={16} />
         <AlertDescription>Items in the trash are deleted for ever after 30 days.</AlertDescription>
       </Alert>
-      <div className="drv-toolbar" role="toolbar" aria-label="Trash actions">
+      <div
+        className="drv-toolbar"
+        role="toolbar"
+        aria-label="Trash actions"
+        onFocusCapture={(event) => listingFocus.onFocusCapture(event, chosen[0]?.url)}
+        onBlurCapture={listingFocus.onBlurCapture}
+      >
         {chosen.length > 0 ? (
           <>
             <span className="drv-selection-count">{chosen.length} selected</span>
@@ -456,7 +453,14 @@ export function TrashView() {
           </Button>
         </div>
       </div>
-      <div className="drv-content" ref={listing} data-drive-listing="" tabIndex={-1}>
+      <div
+        className="drv-content"
+        ref={listing}
+        data-drive-listing=""
+        tabIndex={-1}
+        onFocusCapture={listingFocus.onFocusCapture}
+        onBlurCapture={listingFocus.onBlurCapture}
+      >
         {current?.failed ? (
           <div role="alert">
             <p>Couldn't refresh Trash. Your recovery items are kept. Try again.</p>
