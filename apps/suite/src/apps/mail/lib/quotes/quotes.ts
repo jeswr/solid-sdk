@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { QuoteError, validateBody } from "./validation";
 
 export type QuoteSegmentKind = "body" | "quote" | "attribution" | "signature" | "forwarded";
@@ -36,7 +37,11 @@ const OUTLOOK_HEADERS = [
   [1, /^To: .+/u],
   [0, /^Subject: .+/u],
 ] as const;
-const FORWARDED = new Set(["---------- Forwarded message ---------", "-----Original Message-----"]);
+const FORWARDED = new Set([
+  "---------- Forwarded message ---------",
+  "---------- Forwarded message ----------",
+  "-----Original Message-----",
+]);
 
 interface Line {
   value: string;

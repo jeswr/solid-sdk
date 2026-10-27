@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
+import { forward } from "../src/apps/mail/lib/compose";
 import {
   MAX_BODY_BYTES,
   MAX_BODY_LINES,
@@ -202,6 +204,7 @@ describe("mail quoted history", () => {
 
   it.each([
     "---------- Forwarded message ---------",
+    "---------- Forwarded message ----------",
     "-----Original Message-----",
   ])("treats %s and its unquoted remainder as forwarded history", (marker) => {
     const source = `Intro\n${marker}\n${outlook}\nForwarded body\n-- \nMira`;
@@ -213,6 +216,34 @@ describe("mail quoted history", () => {
     expect(result.visibleText).toBe("Intro\n");
     expect(result.hasQuotedHistory).toBe(true);
     expect(splitQuotedText(marker).segments[0]?.kind).toBe("forwarded");
+  });
+
+  it("recognises forwarded history emitted by the composer", () => {
+    const draft = forward({
+      from: { email: "mira@example.org", name: "Mira Sage" },
+      subject: "Fictional meeting",
+      text: "Earlier message.",
+      date: new Date("2026-10-26T12:00:00Z"),
+    });
+    const source = `Intro${draft.text}`;
+    const result = splitQuotedText(source);
+    expect(result.visibleText).toBe("Intro\n\n");
+    expect(result.hasQuotedHistory).toBe(true);
+    expect(result.segments).toEqual([
+      { kind: "body", text: "Intro\n\n", depth: 0 },
+      {
+        kind: "forwarded",
+        text: "---------- Forwarded message ----------\nFrom: Mira Sage <mira@example.org>\nSubject: Fictional meeting\n\n",
+        depth: 0,
+      },
+      {
+        kind: "attribution",
+        text: "On Mon, 26 Oct 2026 12:00:00 GMT, Mira Sage <mira@example.org> wrote:\n",
+        depth: 0,
+      },
+      { kind: "quote", text: "> Earlier message.", depth: 1 },
+    ]);
+    expect(reconstructed(source)).toBe(source.replaceAll("\r\n", "\n"));
   });
 
   it("ends a signature at a forward and retains quote/attribution kinds inside history", () => {
@@ -419,6 +450,7 @@ describe("lossless segmentation properties", () => {
       "Le lundi, Mira a écrit :",
       "-----Original Message-----",
       "---------- Forwarded message ---------",
+      "---------- Forwarded message ----------",
       "From: Mira",
       "Sent: Monday",
       "To: Sol",
