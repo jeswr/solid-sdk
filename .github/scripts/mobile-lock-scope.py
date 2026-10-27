@@ -97,7 +97,9 @@ def closure(lock):
 
 def view(path):
     with open(path, encoding="utf-8") as handle:
-        lock = yaml.safe_load(handle)
+        # BaseLoader keeps every scalar a string: YAML 1.1 coercion would turn unquoted alias keys
+        # such as "on" and "yes" into True and silently merge them.
+        lock = yaml.load(handle, Loader=yaml.BaseLoader)
     # Every top-level field outside the dependency graph (settings, overrides, checksums, ...) is compared whole.
     return {key: value for key, value in lock.items() if key not in GRAPH_KEYS}, closure(lock)
 
