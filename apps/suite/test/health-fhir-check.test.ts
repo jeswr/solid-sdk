@@ -45,7 +45,7 @@ function fixture(): Record<string, unknown> {
     {
       clock: () => new Date("2026-10-26T12:00:00Z"),
       uuid: () => `00000000-0000-4000-8000-${String(++sequence).padStart(12, "0")}`,
-      patientId: "fictional-person",
+      patientReference: "https://example.org/fhir/Patient/fictional-person",
     },
   ) as unknown as Record<string, unknown>;
 }
@@ -195,8 +195,11 @@ describe("FHIR structural self-check", () => {
     ["subject", {}],
     ["subject", { reference: "Patient/a", display: "Patient not supplied" }],
     ["subject", { reference: 42 }],
+    ["subject", { reference: "Patient/a" }],
     ["subject", { reference: "Practitioner/a" }],
     ["subject", { reference: "Patient/bad/id" }],
+    ["subject", { reference: "https://example.org/Practitioner/a" }],
+    ["subject", { reference: "https://example.org/Patient/a#fragment" }],
     ["subject", { display: "Invented patient" }],
   ])("rejects malformed Observation.%s", (path, value) => {
     const bundle = fixture();
@@ -255,6 +258,12 @@ describe("FHIR structural self-check", () => {
   it.each(["code", "subject", "onsetDateTime"])("requires Condition.%s", (field) => {
     const bundle = fixture();
     change(bundle, `entry.0.resource.${field}`, remove);
+    rejects(bundle);
+  });
+
+  it.each([0, 1, 2, 3])("rejects relative patient references on entry %i", (index) => {
+    const bundle = fixture();
+    change(bundle, `entry.${index}.resource.subject`, { reference: "Patient/fictional-person" });
     rejects(bundle);
   });
 

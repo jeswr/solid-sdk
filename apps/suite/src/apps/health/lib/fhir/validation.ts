@@ -50,6 +50,21 @@ export function id(value: unknown): value is string {
   return typeof value === "string" && /^[A-Za-z0-9.-]{1,64}$/.test(value);
 }
 
+/** Absolute REST Patient URLs can resolve independently of the bundle's UUID fullUrls. */
+export function patientReference(value: unknown): value is string {
+  if (typeof value !== "string" || !URL.canParse(value)) return false;
+  const url = new URL(value);
+  return (
+    (url.protocol === "https:" || url.protocol === "http:") &&
+    url.username === "" &&
+    url.password === "" &&
+    url.search === "" &&
+    url.hash === "" &&
+    /\/Patient\/[A-Za-z0-9.-]{1,64}$/.test(url.pathname) &&
+    url.href === value
+  );
+}
+
 export function numeric(value: unknown): value is number {
   return (
     typeof value === "number" &&

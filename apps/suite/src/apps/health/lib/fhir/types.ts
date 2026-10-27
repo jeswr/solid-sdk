@@ -71,7 +71,8 @@ export interface HealthRecords {
 export interface FhirExportOptions {
   readonly uuid: () => string;
   readonly clock: () => Date;
-  readonly patientId?: string;
+  /** Absolute HTTP(S) REST URL ending in Patient/<logical-id>. */
+  readonly patientReference?: string;
 }
 
 export interface Coding {

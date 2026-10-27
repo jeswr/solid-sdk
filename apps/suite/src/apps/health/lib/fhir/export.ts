@@ -16,19 +16,18 @@ import {
   date,
   id,
   numeric,
+  patientReference,
   record,
   requireValid,
   text,
   uuid,
 } from "./validation";
 
-function subject(patientId: string | undefined): Subject {
-  return patientId === undefined
-    ? { display: "Patient not supplied" }
-    : { reference: `Patient/${patientId}` };
+function subject(patientUrl: string | undefined): Subject {
+  return patientUrl === undefined ? { display: "Patient not supplied" } : { reference: patientUrl };
 }
 
-function observation(value: unknown, patientId: string | undefined): ObservationResource {
+function observation(value: unknown, patientUrl: string | undefined): ObservationResource {
   record(value, ["id", "metric", "value", "unit", "effective", "source"]);
   requireValid(
     id(value.id) && date(value.effective, false) && text(value.source),
@@ -53,7 +52,7 @@ function observation(value: unknown, patientId: string | undefined): Observation
     status: "final",
     category: [concept(mapping.category, CATEGORY_SYSTEM)],
     code: concept(mapping.code),
-    ...(patientId === undefined ? {} : { subject: subject(patientId) }),
+    ...(patientUrl === undefined ? {} : { subject: subject(patientUrl) }),
     effectiveDateTime: value.effective,
     note: [{ text: `Source: ${value.source}` }],
   };
@@ -96,21 +95,22 @@ export function buildFhirBundle(input: HealthRecords, options: FhirExportOptions
     "Expected record arrays",
   );
   checkCount(input.observations.length + input.medications.length + input.conditions.length);
-  record(options, ["uuid", "clock"], ["patientId"], "INVALID_OPTIONS");
+  record(options, ["uuid", "clock"], ["patientReference"], "INVALID_OPTIONS");
   requireValid(
     typeof options.uuid === "function" && typeof options.clock === "function",
     "INVALID_OPTIONS",
     "Clock and UUID generator are required",
   );
   requireValid(
-    !Object.hasOwn(options, "patientId") || id(options.patientId),
+    !Object.hasOwn(options, "patientReference") || patientReference(options.patientReference),
     "INVALID_OPTIONS",
-    "Expected a FHIR patient logical ID",
+    "Expected an absolute HTTP(S) Patient reference",
   );
   for (const values of [input.observations, input.medications, input.conditions])
     array(values, "INVALID_INPUT");
   const resources: FhirResource[] = [];
-  for (const value of input.observations) resources.push(observation(value, options.patientId));
+  for (const value of input.observations)
+    resources.push(observation(value, options.patientReference));
   for (const value of input.medications) {
     record(value, ["id", "name", "dosageText", "start"], ["end"]);
     requireValid(
@@ -132,7 +132,7 @@ export function buildFhirBundle(input: HealthRecords, options: FhirExportOptions
       id: value.id,
       status: "unknown",
       medicationCodeableConcept: { text: value.name },
-      subject: subject(options.patientId),
+      subject: subject(options.patientReference),
       effectivePeriod,
       dosage: [{ text: value.dosageText }],
     });
@@ -148,7 +148,7 @@ export function buildFhirBundle(input: HealthRecords, options: FhirExportOptions
       resourceType: "Condition",
       id: value.id,
       code: { text: value.name },
-      subject: subject(options.patientId),
+      subject: subject(options.patientReference),
       onsetDateTime: value.onset,
     });
   }

@@ -8,7 +8,7 @@ Pure TypeScript; no I/O, React, RDF, conversions or dependencies. Import from
 data; `serialiseFhirBundle(records, options)` returns compact JSON with stable
 key order. Required arrays: `observations`, `medications`, `conditions` (empty
 arrays are valid). Options require `clock: () => Date`, `uuid: () => string` and
-optionally `patientId` (a FHIR logical ID, not a URL).
+optionally `patientReference` (an absolute HTTP(S) REST Patient URL).
 An empty Bundle omits `entry`, following R4's rule to omit empty arrays in
 [FHIR JSON](https://hl7.org/fhir/R4/json.html).
 
@@ -38,8 +38,13 @@ Medications have `{id, name, dosageText, start, end?}`; names map to
 status. Conditions have `{id, name, onset}` and emit `code.text` and
 `onsetDateTime`; no diagnosis codes or clinical status are inferred.
 
-An explicit patient ID produces `subject.reference: "Patient/<id>"` on every
-resource. Without one, Observation omits subject; MedicationStatement and
+An explicit `patientReference`, e.g. `https://example.org/fhir/Patient/person-1`,
+is preserved as `subject.reference` on every resource. It must be a canonical
+HTTP(S) URL ending in `/Patient/<FHIR logical ID>`, without credentials, query
+or fragment. This replaces the former `patientId` option: bare IDs and relative
+references cannot resolve against UUID entry URLs under
+[R4's bundle reference rules](https://hl7.org/fhir/R4/bundle.html#references)
+and are rejected. Without a reference, Observation omits subject; MedicationStatement and
 Condition retain their required subject using the display-only Reference
 `{display: "Patient not supplied"}`. No Patient resource is generated.
 

@@ -19,7 +19,9 @@
    a subject on MedicationStatement and Condition. Options: omit the required
    subject, reject those records, or use a display-only Reference. Chosen:
    `{ display: "Patient not supplied" }` for those required subjects; Observation
-   omits subject. Only an explicit logical patient ID yields `Patient/<id>`.
+   omits subject. Following fix-round-1 finding 1, an explicit absolute HTTP(S)
+   `patientReference` is preserved on every subject; the former logical-ID option
+   is rejected because relative references cannot resolve against UUID fullUrls.
    No Patient resource or patient identity is fabricated. The self-check validates
    this exporter’s structural subset, not full FHIR profiles/clinical validity.
 4. **Ordering and dates** — same task. Options: input kind order or lexical FHIR

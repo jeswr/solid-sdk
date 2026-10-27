@@ -8,6 +8,7 @@ import {
   date,
   id,
   numeric,
+  patientReference,
   record,
   requireValid,
   text,
@@ -55,12 +56,7 @@ function annotation(value: unknown): void {
 function subject(value: unknown): void {
   fields(value, [], ["reference", "display"]);
   if (Object.hasOwn(value, "reference")) {
-    valid(
-      Object.keys(value).length === 1 &&
-        typeof value.reference === "string" &&
-        value.reference.startsWith("Patient/") &&
-        id(value.reference.slice(8)),
-    );
+    valid(Object.keys(value).length === 1 && patientReference(value.reference));
   } else {
     valid(value.display === "Patient not supplied");
   }

@@ -40,12 +40,12 @@ function records(overrides: Partial<HealthRecords> = {}): HealthRecords {
   return { observations: [], medications: [], conditions: [], ...overrides };
 }
 
-function options(patientId?: string): FhirExportOptions {
+function options(patientReference?: string): FhirExportOptions {
   let sequence = 0;
   return {
     clock: () => new Date("2026-10-26T12:00:00.000Z"),
     uuid: () => `00000000-0000-4000-8000-${String(++sequence).padStart(12, "0")}`,
-    ...(patientId === undefined ? {} : { patientId }),
+    ...(patientReference === undefined ? {} : { patientReference }),
   };
 }
 
@@ -88,7 +88,10 @@ describe("health FHIR R4 collection export", () => {
     table,
   )("maps %s only to its specified LOINC/UCUM pair", (metric, code, unit, category) => {
     const input = records({ observations: [{ ...observation, metric, unit, value: 37.25 }] });
-    const bundle = buildFhirBundle(input, options("fictional-patient"));
+    const bundle = buildFhirBundle(
+      input,
+      options("https://example.org/fhir/Patient/fictional-patient"),
+    );
     expect(bundle.entry).toEqual([
       {
         fullUrl: "urn:uuid:00000000-0000-4000-8000-000000000001",
@@ -98,7 +101,7 @@ describe("health FHIR R4 collection export", () => {
           status: "final",
           category: [{ coding: [{ system: CATEGORY_SYSTEM, code: category }] }],
           code: { coding: [{ system: LOINC_SYSTEM, code }] },
-          subject: { reference: "Patient/fictional-patient" },
+          subject: { reference: "https://example.org/fhir/Patient/fictional-patient" },
           effectiveDateTime: at,
           note: [{ text: "Source: Fictional example.org scale" }],
           valueQuantity: { value: 37.25, unit, system: UCUM_SYSTEM, code: unit },
@@ -182,14 +185,14 @@ describe("health FHIR R4 collection export", () => {
         medications: [medication, { ...medication, id: "med-2", end: "2026-09-30" }],
         conditions: [condition],
       }),
-      options("fictional-patient"),
+      options("https://example.org/fhir/Patient/fictional-patient"),
     );
     expect(bundle.entry?.map((entry) => entry.resource)).toEqual([
       {
         resourceType: "Condition",
         id: "condition-1",
         code: { text: condition.name },
-        subject: { reference: "Patient/fictional-patient" },
+        subject: { reference: "https://example.org/fhir/Patient/fictional-patient" },
         onsetDateTime: condition.onset,
       },
       {
@@ -197,7 +200,7 @@ describe("health FHIR R4 collection export", () => {
         id: "med-1",
         status: "unknown",
         medicationCodeableConcept: { text: medication.name },
-        subject: { reference: "Patient/fictional-patient" },
+        subject: { reference: "https://example.org/fhir/Patient/fictional-patient" },
         effectivePeriod: { start: medication.start },
         dosage: [{ text: medication.dosageText }],
       },
@@ -206,7 +209,7 @@ describe("health FHIR R4 collection export", () => {
         id: "med-2",
         status: "unknown",
         medicationCodeableConcept: { text: medication.name },
-        subject: { reference: "Patient/fictional-patient" },
+        subject: { reference: "https://example.org/fhir/Patient/fictional-patient" },
         effectivePeriod: { start: medication.start, end: "2026-09-30" },
         dosage: [{ text: medication.dosageText }],
       },
@@ -214,7 +217,7 @@ describe("health FHIR R4 collection export", () => {
     assertFhirBundle(bundle);
   });
 
-  it("does not invent a Patient reference when no ID is supplied", () => {
+  it("does not invent a Patient reference when no reference is supplied", () => {
     const bundle = buildFhirBundle(
       records({ observations: [observation], medications: [medication], conditions: [condition] }),
       options(),
@@ -227,6 +230,54 @@ describe("health FHIR R4 collection export", () => {
     expect(JSON.stringify(bundle)).not.toContain('"reference"');
     expect(bundle.entry).toHaveLength(3);
     assertFhirBundle(bundle);
+  });
+
+  it.each([
+    "http://example.org/Patient/fictional-person",
+    "https://example.org/fhir/r4/Patient/fictional-person",
+  ])("preserves an absolute patient reference on every record kind: %s", (reference) => {
+    const bundle = buildFhirBundle(
+      records({ observations: [observation], medications: [medication], conditions: [condition] }),
+      options(reference),
+    );
+    expect(bundle.entry?.map((entry) => entry.resource.subject)).toEqual([
+      { reference },
+      { reference },
+      { reference },
+    ]);
+    assertFhirBundle(JSON.parse(JSON.stringify(bundle)));
+  });
+
+  it.each([
+    "fictional-person",
+    "Patient/fictional-person",
+    "urn:uuid:00000000-0000-4000-8000-000000000001",
+    "ftp://example.org/Patient/a",
+    "https://[invalid]/Patient/a",
+    "https://example.org/Practitioner/a",
+    "https://example.org/Patient/bad/id",
+    `https://example.org/Patient/${"a".repeat(65)}`,
+    "https://example.org/Patient/a?query=1",
+    "https://example.org/Patient/a#fragment",
+    "https://user@example.org/Patient/a",
+    "https://:password@example.org/Patient/a",
+    "https://EXAMPLE.org/Patient/a",
+  ])("rejects unsupported patient reference %s before callbacks", (reference) => {
+    const injected = {
+      ...options(reference),
+      clock: vi.fn(options().clock),
+      uuid: vi.fn(options().uuid),
+    };
+    expectCode(() => build(records(), injected), "INVALID_OPTIONS");
+    expect(injected.clock).not.toHaveBeenCalled();
+    expect(injected.uuid).not.toHaveBeenCalled();
+  });
+
+  it("rejects legacy patientId rather than emitting an unresolvable relative reference", () => {
+    expectCode(
+      () => build(records(), { ...options(), patientId: "fictional-person" }),
+      "INVALID_OPTIONS",
+    );
   });
 
   it("sorts by kind, real instant and code-unit ID before assigning UUIDs", () => {
@@ -379,7 +430,7 @@ describe("health FHIR R4 collection export", () => {
     for (const value of [0, -1, Number.MAX_SAFE_INTEGER]) {
       const bundle = buildFhirBundle(
         records({ observations: [{ ...observation, id: "a".repeat(64), value }] }),
-        options("a".repeat(64)),
+        options(`https://example.org/Patient/${"a".repeat(64)}`),
       );
       assertFhirBundle(bundle);
     }
@@ -493,9 +544,9 @@ describe("health FHIR R4 collection export", () => {
     {},
     { clock: () => new Date(), uuid: null },
     { ...options(), clock: null },
-    { ...options(), patientId: undefined },
-    { ...options(), patientId: "" },
-    { ...options(), patientId: "https://example.org/person" },
+    { ...options(), patientReference: undefined },
+    { ...options(), patientReference: "" },
+    { ...options(), patientReference: "https://example.org/person" },
     { ...options(), extra: true },
   ])("rejects invalid options", (injected) => {
     expectCode(() => build(records(), injected), "INVALID_OPTIONS");
