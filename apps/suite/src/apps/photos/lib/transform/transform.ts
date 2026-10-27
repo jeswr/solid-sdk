@@ -178,15 +178,25 @@ export function composeEdits(value: unknown, edits: unknown): PhotoEditRecord {
   return result;
 }
 
+function roundCropExtent(pixels: number, start: number, end: number): number {
+  // Complementing both bounds puts them on the same binary grid before and after
+  // reflection: 1 - (1 - (1 - edge)) === 1 - edge for normalized edges.
+  const extent = pixels * (1 - start - (1 - end));
+  const lower = Math.floor(extent);
+  // Treat remapping error within one normalized epsilon as a half-pixel tie.
+  return extent - lower >= 0.5 - pixels * Number.EPSILON ? Math.ceil(extent) : lower;
+}
+
 /** Natural output dimensions; round continuous crop extents once, after all edits.
+ * Half-pixel ties (within one normalized epsilon) round up, including after reflection.
  * Subpixel results rounding to zero are rejected, never clamped or upscaled. */
 export function computeOutputSize(source: unknown, value: unknown): ImageSize {
   const size = imageSize(source);
   const { orientation: state, crop } = editRecord(value);
   const swapsAxes = state >= 5;
   return imageSize({
-    width: Math.round((swapsAxes ? size.height : size.width) * (crop.right - crop.left)),
-    height: Math.round((swapsAxes ? size.width : size.height) * (crop.bottom - crop.top)),
+    width: roundCropExtent(swapsAxes ? size.height : size.width, crop.left, crop.right),
+    height: roundCropExtent(swapsAxes ? size.width : size.height, crop.top, crop.bottom),
   });
 }
 

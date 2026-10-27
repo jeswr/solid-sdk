@@ -235,6 +235,79 @@ describe("sequential non-destructive edits", () => {
 });
 
 describe("aspect presets and output pixels", () => {
+  it("keeps the 401-pixel fractional crop through a horizontal flip and its inverse", () => {
+    const source = { width: 1000, height: 3000 };
+    const initial = cropped({ left: 0.001, top: 0, right: 0.4015, bottom: 1 });
+    const flip: PhotoEdit = { type: "flip", axis: "horizontal" };
+    const flipped = composeEdits(initial, [flip]);
+    const restored = composeEdits(JSON.parse(JSON.stringify(flipped)), [flip]);
+    for (const record of [initial, flipped, restored]) {
+      expect(computeOutputSize(source, record)).toEqual({ width: 401, height: 3000 });
+    }
+  });
+  it.each([
+    1, 2, 3, 4, 5, 6, 7, 8,
+  ])("keeps half-pixel extents through reversible edits from orientation %i", (orientation) => {
+    const source = { width: 1000, height: 3000 };
+    const width = orientation < 5 ? source.width : source.height;
+    const height = orientation < 5 ? source.height : source.width;
+    const pairs: [PhotoEdit, PhotoEdit, boolean][] = [
+      [{ type: "flip", axis: "horizontal" }, { type: "flip", axis: "horizontal" }, false],
+      [{ type: "flip", axis: "vertical" }, { type: "flip", axis: "vertical" }, false],
+      [{ type: "rotate", degrees: 90 }, { type: "rotate", degrees: -90 }, true],
+      [{ type: "rotate", degrees: -90 }, { type: "rotate", degrees: 90 }, true],
+      [{ type: "rotate", degrees: 180 }, { type: "rotate", degrees: -180 }, false],
+      [{ type: "rotate", degrees: 270 }, { type: "rotate", degrees: -270 }, true],
+    ];
+    for (const inset of [0.001, 0.125, 0.5]) {
+      for (const pixels of [0, 1, 17, 400]) {
+        const deltas = [
+          -1e-8,
+          -1e-10,
+          ...[-4, -2, -1, -0.5, 0, 0.5, 1, 2, 4].map((factor) => factor * Number.EPSILON * width),
+          1e-10,
+          1e-8,
+        ];
+        for (const delta of deltas) {
+          const initial = composeEdits(createEditRecord(orientation), [
+            {
+              type: "crop",
+              rect: {
+                left: inset,
+                top: inset,
+                right: inset + (pixels + 0.5 + delta) / width,
+                bottom: inset + (pixels + 17.5 + delta) / height,
+              },
+            },
+          ]);
+          // Crops just below half a pixel still fail with the existing typed error.
+          if (pixels === 0 && delta <= -1e-10) {
+            fails(() => computeOutputSize(source, initial), "invalid-size");
+            continue;
+          }
+          // Near zero, a negative rounding offset may also be outside the tolerance.
+          if (pixels === 0 && delta < 0) continue;
+          const output = computeOutputSize(source, initial);
+          if (Math.abs(delta) >= 1e-10 || delta === 0) {
+            const expected = pixels + (delta < 0 ? 0 : 1);
+            expect(output).toEqual({ width: expected, height: expected + 17 });
+          }
+          for (const [edit, inverse, swaps] of pairs) {
+            const changed = composeEdits(initial, [edit]);
+            expect(computeOutputSize(source, changed)).toEqual(
+              swaps ? { width: output.height, height: output.width } : output,
+            );
+            const restored = composeEdits(JSON.parse(JSON.stringify(changed)), [inverse]);
+            expect(restored.orientation).toBe(initial.orientation);
+            expect(computeOutputSize(source, restored)).toEqual(output);
+            expect(computeOutputSize(source, composeEdits(initial, [edit, inverse]))).toEqual(
+              output,
+            );
+          }
+        }
+      }
+    }
+  });
   it("fits centered presets inside landscape, portrait and square images", () => {
     expect(aspectRatioCrop(size, "original")).toEqual(full);
     expect(aspectRatioCrop(size, "4:3")).toEqual(full);
