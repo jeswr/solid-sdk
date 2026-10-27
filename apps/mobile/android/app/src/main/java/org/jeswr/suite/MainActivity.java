@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY GPT-5.6 Codex
 package org.jeswr.suite;
 
 import android.os.Bundle;
@@ -24,6 +25,7 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(SuiteAuthSessionPlugin.class);
         registerPlugin(SuiteShareIntakePlugin.class);
         registerPlugin(SuiteShareStagingPlugin.class);
+        registerPlugin(SuiteSecureStorePlugin.class);
         super.onCreate(savedInstanceState);
     }
 
