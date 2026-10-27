@@ -117,7 +117,7 @@ for (const component of ["data-table", "file-grid"]) {
     await expect(page.getByTestId("selected-keys")).toHaveText("Projects, Q3 budget.xlsx");
   });
 
-  test(`${component}: 10k virtualisation uses under 16ms of work per scroll frame`, async ({
+  test(`${component}: 10k virtualisation keeps scroll frame work within budget (median one frame, p90 two)`, async ({
     page,
   }, info) => {
     await page.goto(`/dev/components/${component}`);
@@ -156,6 +156,7 @@ for (const component of ["data-table", "file-grid"]) {
       .last()
       .getAttribute("aria-label");
     const samples: number[] = [];
+    const measured: { raw: number; overhead: number }[] = [];
     for (let frame = 0; frame < 40; frame++) {
       const overhead = await harness();
       const before = await duration();
@@ -165,8 +166,9 @@ for (const component of ["data-table", "file-grid"]) {
           requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
         );
       }, frame);
-      const work = ((await duration()) - before) * 1000 - overhead;
-      if (frame >= 5) samples.push(work); // warm up browser/JIT and initial virtual measurements
+      const raw = ((await duration()) - before) * 1000;
+      measured.push({ raw, overhead });
+      if (frame >= 5) samples.push(raw - overhead); // warm up browser/JIT and initial virtual measurements
     }
     await blank.close();
     expect(await page.locator("[data-collection-item]").count()).toBeLessThan(100);
@@ -174,7 +176,7 @@ for (const component of ["data-table", "file-grid"]) {
       initialLast,
     );
     await info.attach(`${component}-frame-work-ms`, {
-      body: JSON.stringify(samples),
+      body: JSON.stringify({ samples, measured }),
       contentType: "application/json",
     });
     // On a shared runner a busy neighbour inflates individual samples, so the typical (median)
