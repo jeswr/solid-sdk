@@ -17,7 +17,8 @@ vi.mock("../src/apps/drive/state/drive-context", () => ({
     session: { webId: "https://pod.example/profile#me" },
   }),
 }));
-vi.mock("../src/apps/drive/state/ui", () => ({
+vi.mock("../src/apps/drive/state/ui", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
   useDriveActions: () => ({ download: vi.fn(), starred: new Set() }),
   useDriveUi: ui,
 }));
