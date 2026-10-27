@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 5.5
 /** Public example fixtures for offline parser, feature and storage-client tests. */
 export {
