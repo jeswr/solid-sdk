@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY GPT-5.6 Codex
 import Capacitor
 import UIKit
 
@@ -7,6 +8,7 @@ class MainViewController: CAPBridgeViewController {
     private var bridgeGuard: BridgeOriginGuard?
     // WKWebView.uiDelegate is weak, so the controller keeps the guard alive.
     private var uiGuard: UIDelegateOriginGuard?
+    private var navigationGuard: SecureStoreNavigationGuard?
 
     override open func capacitorDidLoad() {
         // The protocol hides the delegation handler; the concrete bridge exposes it.
@@ -17,6 +19,8 @@ class MainViewController: CAPBridgeViewController {
         bridge.registerPluginInstance(SuiteAuthSessionPlugin())
         bridge.registerPluginInstance(SuiteShareIntakePlugin())
         bridge.registerPluginInstance(SuiteShareStagingPlugin())
+        let secureStore = SuiteSecureStorePlugin()
+        bridge.registerPluginInstance(secureStore)
         // Takes over the "Share" name from @capacitor/share so only staged files can be shared.
         bridge.registerPluginInstance(SuiteSharePlugin())
         guard let allowed = SuiteOrigin(url: bridge.config.serverURL) else {
@@ -33,5 +37,10 @@ class MainViewController: CAPBridgeViewController {
         let ui = UIDelegateOriginGuard(inner: handler, allowed: allowed)
         bridge.webView?.uiDelegate = ui
         uiGuard = ui
+        let navigation = SecureStoreNavigationGuard(inner: handler) { [weak secureStore] in
+            secureStore?.navigationCommitted()
+        }
+        bridge.webView?.navigationDelegate = navigation
+        navigationGuard = navigation
     }
 }
