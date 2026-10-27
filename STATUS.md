@@ -2,7 +2,67 @@
 
 # sst-8xm.15 lane report
 
-## Fix round 1
+## Fix round 2
+
+The unknown-expiry callback finding against `381977109fec` is addressed.
+The package gate, root lint, and affected workspace gate pass. The full
+workspace gate still fails in unchanged root guard tests.
+
+| Commit | Change |
+| --- | --- |
+| `91ccb542` — `fix: refresh callbacks when expiry is unknown` | Refresh both documented JWT callbacks when expiry is unknown or within 60 seconds. Add 14 tests executing the README and package-skill examples with the real helper over mocked HTTP. |
+| This report commit — `docs: record unknown-expiry callback fix` | Record fix-round validation and remaining verification blockers. |
+
+### Behavior and regression evidence
+
+The conservative policy is to refresh on each callback invocation while the
+stored expiry is unknown. Both examples document this explicitly. The helper
+continues clearing stale expiry; no default lifetime is inferred.
+
+The tests execute the actual documented code, supplying a mock Auth.js setup
+and token endpoint. They cover repeated omitted lifetimes, reuse of a rotated
+refresh token on the next callback, initially unknown expiry, the inclusive
+60-second margin, expired/zero expiry, future expiry, and absent Solid state.
+Before the documentation fix, four new regressions failed (two per example)
+with **126 passing tests**. The passing package suite now has **211 tests in
+4 files**, including **130 refresh tests**. All HTTP remains mocked.
+
+### Fix-round validation
+
+Commands used `PATH=/opt/node24/bin:$PATH` (Node **v24.22.1**, pnpm **10.4.1**).
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter='@jeswr/auth-solid^...'` | PASS: both workspace dependencies built. |
+| `pnpm --filter @jeswr/auth-solid run lint && pnpm --filter @jeswr/auth-solid run build && pnpm --filter @jeswr/auth-solid run typecheck && pnpm --filter @jeswr/auth-solid run test` | PASS: lint/build/strict typecheck; **211 tests passed**. |
+| `pnpm run lint:root` | PASS. |
+| `TURBO_SCM_BASE=381977109fecb2a50ea01895d2f1e27cd6a112ba pnpm run gate` | PASS: **7/7 tasks** succeeded. |
+| `pnpm run gate:full` | FAIL (exit 1): `//#test:root`; **161 failed / 739 passed** root tests across 4 failing files. Turbo stopped with **49 successful / 213 total tasks**. |
+| `roborev status` | Unavailable: exit 127, `roborev: command not found`. |
+| `git diff --check` | PASS. |
+
+The failing root files are `test/agent-layers.test.mjs`,
+`test/agent-layers-reachability.test.mjs`, `test/check-packages-guard.test.mjs`,
+and `test/check-sdk-layers.test.mjs`. Their empty child-process output failures
+match the pattern recorded in fix round 1.
+`git diff --quiet 381977109fecb2a50ea01895d2f1e27cd6a112ba -- test scripts guardrails vitest.config.ts package.json pnpm-lock.yaml`
+passed, confirming these sources and configuration are unchanged in this round.
+
+Logs: `/tmp/sst-8xm.15-fix2-{deps-build,regressions-red,package-tests,lint-root,affected-gate,full-gate}.log`.
+
+### Remaining work and open questions
+
+- The requested callback fix is complete. Full-workspace verification remains
+  blocked by existing root-test failures, and automated roborev is unavailable.
+  Jesse retains the security review and merge decision.
+- No dependencies were added; dependency-policy checks and installation are
+  not applicable. No open questions.
+- No push, PR, branch switch, remote fetch/merge, publishing, or edits to
+  another checkout were performed.
+
+---
+
+## Fix round 1 (historical)
 
 Both review findings against `ee16a1332ccdbb2c5538ca50330f4f73d0213d93`
 are addressed on `lane/sst-8xm.15`. The package gate, root lint, and affected
