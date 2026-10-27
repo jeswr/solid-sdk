@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   computeHoldings,
@@ -11,6 +12,11 @@ import {
   MAX_SIGNIFICANT_DIGITS,
   MAX_TRANSACTIONS,
 } from "../src/apps/money/lib/holdings";
+import {
+  ExactArithmetic,
+  MAX_ARITHMETIC_BITS,
+  MAX_ARITHMETIC_WORK,
+} from "../src/apps/money/lib/holdings/exact";
 
 const settings: HoldingsOptions = Object.freeze({
   method: "fifo",
@@ -61,6 +67,100 @@ function fails(run: () => unknown, code: HoldingsErrorCode) {
   }
   throw new Error(`Expected ${code}`);
 }
+
+describe("arithmetic resource bounds", () => {
+  const one = BigInt(1);
+  const maximum = (one << BigInt(MAX_ARITHMETIC_BITS)) - one;
+
+  it("accepts the internal size bound and rejects oversized operands, sums and products", () => {
+    const arithmetic = new ExactArithmetic();
+    expect(arithmetic.fraction(maximum)).toEqual({ numerator: maximum, denominator: one });
+    expect(arithmetic.fraction(-maximum)).toEqual({ numerator: -maximum, denominator: one });
+    expect(arithmetic.product(maximum, one)).toBe(maximum);
+    expect(arithmetic.product(-maximum, -one)).toBe(maximum);
+    expect(arithmetic.sum(maximum - one, one)).toBe(maximum);
+    expect(arithmetic.multiply(arithmetic.fraction(one), BigInt(2))).toEqual({
+      numerator: BigInt(2),
+      denominator: one,
+    });
+    for (const oversized of [maximum + one, -maximum - one]) {
+      fails(() => arithmetic.fraction(oversized), "VALUE_TOO_LARGE");
+      fails(() => arithmetic.product(one, oversized), "VALUE_TOO_LARGE");
+      fails(() => arithmetic.fraction(one, oversized), "VALUE_TOO_LARGE");
+    }
+    fails(() => arithmetic.product(maximum, BigInt(2)), "VALUE_TOO_LARGE");
+    fails(() => arithmetic.product(-maximum, BigInt(2)), "VALUE_TOO_LARGE");
+    fails(() => arithmetic.sum(maximum, one), "VALUE_TOO_LARGE");
+    fails(() => arithmetic.sum(-maximum, -one), "VALUE_TOO_LARGE");
+  });
+
+  it("accepts exactly the work budget and rejects the next product or GCD step", () => {
+    const arithmetic = new ExactArithmetic();
+    const words = Math.ceil(MAX_ARITHMETIC_BITS / 64);
+    const steps = MAX_ARITHMETIC_WORK / (words * words);
+    expect(Number.isInteger(steps)).toBe(true);
+    for (let index = 0; index < steps; index++) {
+      expect(arithmetic.fraction(maximum, maximum)).toEqual({ numerator: one, denominator: one });
+    }
+    fails(() => arithmetic.product(one, one), "VALUE_TOO_LARGE");
+    fails(() => arithmetic.fraction(one), "VALUE_TOO_LARGE");
+    // A fresh call gets its own budget; a long GCD must also charge every iteration.
+    const fresh = new ExactArithmetic();
+    for (let index = 0; index < steps - 1; index++) fresh.fraction(maximum, maximum);
+    fails(() => fresh.fraction(maximum, maximum - one), "VALUE_TOO_LARGE");
+    expect(new ExactArithmetic().fraction(maximum, maximum - one)).toEqual({
+      numerator: maximum,
+      denominator: maximum - one,
+    });
+  });
+
+  it.each([
+    "fifo",
+    "average",
+  ] as const)("bounds exponentially growing split quantities with %s", (method) => {
+    const history = [entry({ price: "0" })];
+    for (let index = 0; index < 50; index++) {
+      history.push(split(`${"9".repeat(30)}:1`, { id: `split-${String(index).padStart(3, "0")}` }));
+    }
+    const options = { ...settings, method, currentPrice: "0" };
+    expect(computeHoldings(history.slice(0, 11), options).costBasis).toBe("0.00");
+    fails(() => computeHoldings(history, options), "VALUE_TOO_LARGE");
+    expect(computeHoldings([entry()], options).quantity).toBe("1");
+  });
+
+  it("bounds fraction growth from repeated average-cost sales and zero-price buys", () => {
+    const history = [entry({ quantity: "2", price: "0.01" })];
+    for (let index = 0; index < 2500; index++) {
+      const prefix = String(index).padStart(4, "0");
+      history.push(
+        entry({ id: `${prefix}-a-sell`, date: "2026-01-02", kind: "sell", price: "0" }),
+        entry({ id: `${prefix}-b-buy`, date: "2026-01-02", price: "0" }),
+      );
+    }
+    const options = { ...settings, method: "average" as const };
+    expect(computeHoldings(history.slice(0, 21), options).openLots[0]?.exactCostBasis).toEqual({
+      numerator: one,
+      denominator: BigInt(512),
+    });
+    fails(() => computeHoldings(history, options), "VALUE_TOO_LARGE");
+  });
+
+  it("bounds cumulative split traversal even when each intermediate value fits", () => {
+    const component = "9".repeat(30);
+    const history = Array.from({ length: 256 }, (_, index) =>
+      entry({ id: `buy-${index}`, quantity: component, price: "0" }),
+    );
+    // Grow quantities safely, then repeat identity splits: only work accumulates.
+    for (let index = 0; index < 522; index++) {
+      history.push(
+        split(`${component}:${index < 10 ? "1" : component}`, {
+          id: `split-${String(index).padStart(3, "0")}`,
+        }),
+      );
+    }
+    fails(() => computeHoldings(history, { ...settings, currentPrice: "0" }), "VALUE_TOO_LARGE");
+  });
+});
 
 describe("investment lots", () => {
   it("returns explicit currency zeros for an empty history", () => {

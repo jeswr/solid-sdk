@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Investment lots and cost basis (MON-L7)
 
@@ -67,8 +68,14 @@ ratio component (leading fractional zeroes excluded, trailing zeroes counted).
 `MAX_QUANTITY_DECIMALS` is 8. Limits are exported and checked before the work they
 bound: array length before traversal/allocation/sorting, derived decimal/ratio
 string lengths before scanning/copying/BigInt conversion, and exponents before
-scaling. Intermediate/aggregate results may exceed 30 digits; this is an input
-limit, not an arithmetic truncation rule. FIFO advances an index through consumed
+scaling. Intermediate/aggregate results may exceed 30 digits. Internal arithmetic
+is separately bounded to 4,096 bits per integer and 4,194,304 work units per call.
+Each guarded addition, product or GCD remainder step charges the product of its
+operands' 64-bit word counts (zero counts as one word). The same budget covers
+replay, split traversal and final valuation. Oversized operands/products are
+rejected before multiplication or GCD; even a product that would later cancel
+must fit. Exceeding either bound throws `VALUE_TOO_LARGE` without rounding or
+truncation. Budgets reset for each call. FIFO advances an index through consumed
 lots; average cost updates one pool. Splits traverse remaining lots.
 
 Malformed inputs throw `HoldingsError` with a stable `code`, and messages contain
@@ -80,7 +87,7 @@ no input values:
 | `CURRENCY_MISMATCH` | A transaction differs from the call's explicit currency. |
 | `INVALID_AMOUNT` | Non-decimal, negative, non-string, overprecision or conflicting amount. |
 | `INVALID_SPLIT` | Malformed/nonpositive ratio, conflicting split fields or inexact quantity. |
-| `VALUE_TOO_LARGE` | Transaction, significant-digit, derived string-size or exponent bound exceeded. |
+| `VALUE_TOO_LARGE` | Input-size, intermediate integer-size or cumulative arithmetic-work bound exceeded. |
 | `INVALID_INPUT` | Unsupported shape, missing field/precision, method, kind, date, ID or currency code. |
 
 Records must be plain data (null-prototype records are accepted); arrays must be
