@@ -44,10 +44,12 @@ function dataValue(target: object, key: PropertyKey): unknown {
 
 /** Copy the known fields once, so later checks and callers never re-read caller objects. */
 function snapshot(address: unknown): PostalAddress {
-  if (typeof address !== "object" || address === null || Array.isArray(address)) {
+  if (typeof address !== "object" || address === null) {
     throw new PostalAddressError("INVALID_ADDRESS");
   }
   try {
+    // Inside the boundary: Array.isArray throws on revoked proxies.
+    if (Array.isArray(address)) throw new PostalAddressError("INVALID_ADDRESS");
     const fields: Record<string, unknown> = {};
     for (const key of ADDRESS_FIELDS) {
       const value = dataValue(address, key);
@@ -57,8 +59,9 @@ function snapshot(address: unknown): PostalAddress {
     if (!Array.isArray(street)) throw new PostalAddressError("INVALID_ADDRESS");
     // Check array length before iteration.
     const length = dataValue(street, "length");
-    // A proxy may report any length value: accept only a primitive safe integer.
-    if (!Number.isSafeInteger(length)) throw new PostalAddressError("INVALID_ADDRESS");
+    // A proxy may report any length value: accept only a primitive nonnegative safe integer.
+    if (!Number.isSafeInteger(length) || (length as number) < 0)
+      throw new PostalAddressError("INVALID_ADDRESS");
     if ((length as number) > MAX_STREET_LINES) throw new PostalAddressError("ADDRESS_TOO_LARGE");
     fields.street = Array.from({ length: length as number }, (_, index) =>
       dataValue(street, String(index)),

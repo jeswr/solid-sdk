@@ -485,6 +485,16 @@ describe("postal input snapshots", () => {
     });
     rejects(() => toVCardAdr({ ...blank, street: lying }), "INVALID_ADDRESS");
     expect(coercions).toBe(0);
+    const negative = new Proxy(["kept"], {
+      getOwnPropertyDescriptor(target, key) {
+        const descriptor = Reflect.getOwnPropertyDescriptor(target, key);
+        return key === "length" ? { ...descriptor, value: -1 } : descriptor;
+      },
+    });
+    rejects(() => toVCardAdr({ ...blank, street: negative }), "INVALID_ADDRESS");
+    const revoked = Proxy.revocable({ ...blank }, {});
+    revoked.revoke();
+    rejects(() => toVCardAdr(revoked.proxy), "INVALID_ADDRESS");
     const extra = { ...sample, note: "ignored" } as PostalAddress;
     expect(toVCardAdr(extra)).toBe(toVCardAdr(sample));
   });

@@ -41,8 +41,10 @@ function valid(condition: unknown): asserts condition {
 
 /** Copy own data fields once; accessors, extra keys and reflection traps fail closed. */
 function record(value: unknown, keys: readonly string[]): Record<string, unknown> {
-  valid(typeof value === "object" && value !== null && !Array.isArray(value));
+  valid(typeof value === "object" && value !== null);
   try {
+    // Inside the boundary: Array.isArray throws on revoked proxies.
+    valid(!Array.isArray(value));
     const prototype = Object.getPrototypeOf(value);
     valid(prototype === Object.prototype || prototype === null);
     const fields: Record<string, unknown> = {};
@@ -68,6 +70,15 @@ function own(target: object, key: PropertyKey): unknown {
   } catch (error) {
     if (error instanceof RetentionError) throw error;
     throw new RetentionError("INVALID_VERSION");
+  }
+}
+
+function isArray(value: unknown): boolean {
+  try {
+    return Array.isArray(value);
+  } catch {
+    // Revoked proxies throw a native TypeError.
+    return false;
   }
 }
 
@@ -100,7 +111,7 @@ export function planRetention(
   now: number,
   limits: RetentionLimits = {},
 ): RetentionPlan {
-  valid(Array.isArray(versions));
+  valid(isArray(versions));
   // A proxy may report any length value: accept only a primitive safe integer.
   const count = own(versions, "length");
   nonnegativeInteger(count);
