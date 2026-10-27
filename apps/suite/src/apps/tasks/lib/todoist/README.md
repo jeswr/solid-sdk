@@ -29,7 +29,7 @@ offset determines the instant. Otherwise the row's IANA TIMEZONE (or the require
 default) resolves the wall clock. Due values contain UTC `dateTime` and
 `timeZone`; all-day values also contain `kind: "date"` and the original `date`.
 Each import constructs at most `MAX_TODOIST_TIME_ZONES` (32) formatters under
-case-folded timezone keys, including the default zone; distinct aliases count
+ASCII case-folded timezone keys, including the default zone; distinct aliases count
 separately. Additional zones fail with `INVALID_TIMEZONE` before construction.
 Cached zones remain usable at the limit; due values retain the supplied zone text.
 Local dates within two days of the year 1 / 9999 endpoints are unsupported and

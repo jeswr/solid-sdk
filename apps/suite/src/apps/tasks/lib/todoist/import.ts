@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { splitContent } from "./content";
 import { checkSize, scanCsv } from "./csv";
-import { parseDue, zoneFormatter } from "./dates";
+import { normalizeTimeZone, parseDue, zoneFormatter } from "./dates";
 import {
   MAX_TODOIST_TIME_ZONES,
   TodoistImportError,
@@ -120,7 +120,7 @@ export function parseTodoistCsv(input: string, options: TodoistImportOptions): T
 
   function formatterFor(zone: string, line: number): Intl.DateTimeFormat {
     // Invalid runtime option types must still reach the typed timezone validator.
-    const key = typeof zone === "string" ? zone.toLowerCase() : zone;
+    const key = typeof zone === "string" ? normalizeTimeZone(zone) : zone;
     let format = formats.get(key);
     if (!format) {
       // Keep all constructed formatters so cycling zones cannot bypass the budget.

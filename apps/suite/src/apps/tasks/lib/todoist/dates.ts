@@ -6,19 +6,23 @@ import { type TodoistDue, TodoistImportError } from "./model";
 const singleZones = new Set(
   "CET CST6CDT Cuba EET EST EST5EDT Egypt Eire Factory GB GB-Eire GMT GMT+0 GMT-0 GMT0 Greenwich HST Hongkong Iceland Iran Israel Jamaica Japan Kwajalein Libya MET MST MST7MDT NZ NZ-CHAT Navajo PRC PST8PDT Poland Portugal ROC ROK Singapore Turkey UCT UTC Universal W-SU WET Zulu"
     .split(" ")
-    .map((zone) => zone.toLowerCase()),
+    .map(normalizeTimeZone),
 );
 
+/** IANA timezone case equivalence is ASCII-only; Unicode lookalikes stay invalid. */
+export function normalizeTimeZone(zone: string): string {
+  return zone.replace(/[A-Z]/g, (letter) => letter.toLowerCase());
+}
+
 export function zoneFormatter(zone: string, line: number): Intl.DateTimeFormat {
-  if (
-    typeof zone !== "string" ||
-    (!singleZones.has(zone.toLowerCase()) && !/^[A-Za-z_+-]+(?:\/[A-Za-z0-9_+-]+)+$/.test(zone))
-  ) {
+  if (typeof zone !== "string") throw new TodoistImportError("INVALID_TIMEZONE", line);
+  const normalized = normalizeTimeZone(zone);
+  if (!singleZones.has(normalized) && !/^[A-Za-z_+-]+(?:\/[A-Za-z0-9_+-]+)+$/.test(normalized)) {
     throw new TodoistImportError("INVALID_TIMEZONE", line);
   }
   try {
     return new Intl.DateTimeFormat("en-GB", {
-      timeZone: zone.toLowerCase(),
+      timeZone: normalized,
       calendar: "iso8601",
       numberingSystem: "latn",
       year: "numeric",

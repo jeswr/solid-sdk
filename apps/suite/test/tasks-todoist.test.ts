@@ -360,6 +360,23 @@ describe("dates and time zones", () => {
   });
 
   it.each([
+    ["Asia/Kolkata", "Asia/Kolkata"],
+    ["Kwajalein", "Kwajalein"],
+  ])("rejects Unicode case collisions with %s", (validZone, invalidZone) => {
+    const ctx = { defaultTimeZone: validZone };
+    error("TYPE,CONTENT", "INVALID_TIMEZONE", 1, { defaultTimeZone: invalidZone });
+    for (const date of ["", "2026-07-04T13:00", "2026-07-04T13:00Z"]) {
+      // The valid zone is already cached as the default or by an earlier row.
+      error(csv([task({ TIMEZONE: invalidZone, DATE: date })]), "INVALID_TIMEZONE", 2, ctx);
+      error(
+        csv([task({ TIMEZONE: validZone }), task({ TIMEZONE: invalidZone, DATE: date })]),
+        "INVALID_TIMEZONE",
+        3,
+      );
+    }
+  });
+
+  it.each([
     ["2026-07-04", "Europe/London", "2026-07-03T23:00:00.000Z", "date"],
     ["2026-01-04", "Europe/London", "2026-01-04T00:00:00.000Z", "date"],
     ["2024-02-29", "UTC", "2024-02-29T00:00:00.000Z", "date"],
