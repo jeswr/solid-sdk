@@ -902,6 +902,39 @@ describe("delete", () => {
       [SRC, null],
     ]);
   });
+  test("recursive delete continues past a descendant already removed with its subject", async () => {
+    // sub/a.meta sorts before sub/z-file but is deleted with it, so its own DELETE answers 404.
+    const members = [`${SRC}sub/0-file`, `${SRC}sub/a.meta`, `${SRC}sub/z-file`];
+    const { storage, calls } = await treeBackend({
+      [`GET ${SRC}sub/`]: response(
+        200,
+        { etag: '"source"', "content-type": "text/turtle" },
+        await serializeQuads(
+          members.map((u) =>
+            quad(nn(`${SRC}sub/`), nn("http://www.w3.org/ns/ldp#contains"), nn(u)),
+          ),
+          "text/turtle",
+        ),
+      ),
+      [`DELETE ${SRC}sub/a.meta`]: response(404, {}),
+      [`DELETE ${SRC}sub/0-file`]: response(),
+      [`DELETE ${SRC}sub/z-file`]: response(),
+    });
+    await storage.delete(SRC, { ifMatch: '"source"', recursive: true });
+    expect(calls.filter((c) => c.method === "DELETE").map((c) => c.url)).toEqual([
+      `${SRC}sub/z-file`,
+      `${SRC}sub/a.meta`,
+      `${SRC}sub/0-file`,
+      `${SRC}sub/`,
+      `${SRC}a`,
+      SRC,
+    ]);
+    const gone = await treeBackend({ [`DELETE ${SRC}`]: response(404, {}) });
+    await rejection(
+      gone.storage.delete(SRC, { ifMatch: '"source"', recursive: true }),
+      "not-found",
+    );
+  });
   test("concurrent addition surfaces the final 409, and aborts stop between requests", async () => {
     const { storage } = await treeBackend({ [`DELETE ${SRC}`]: response(409, {}) });
     await rejection(storage.delete(SRC, { ifMatch: '"source"', recursive: true }), "conflict");

@@ -108,7 +108,7 @@ Solid write side (ADR-003 §6, T-022; implementation isolated in `src/solid-writ
   resource deletion is the same. Recursive container deletion HEAD-checks the top ETag byte-equal
   first (mismatch: 412/current ETag), walks scoped listAll, and deletes children before containers.
   Children and the final container DELETE are unconditional: child ETags are unknown and container
-  membership changes its ETag. Concurrent additions can make the final DELETE conflict (409).
+  membership changes its ETag. Concurrent additions can make the final DELETE conflict (409). A descendant that answers 404 is skipped, because deleting a subject also deletes its auxiliary documents (Solid Protocol §5.4); a 404 for the top container still fails.
 - Solid move is emulated (features.move.detail.native false): refuse the root, require a container
   destination, reject self/subtree container cycles with conflict before requests, comparing
   percent-decoded path segments (raw segment on decoding failure; decoded slashes remain inside

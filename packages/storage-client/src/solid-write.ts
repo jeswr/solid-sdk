@@ -489,8 +489,16 @@ export function solidWrites(
         );
         for (const node of (await tree(dest, undefined, opts.signal)).sort((a, b) =>
           a.url < b.url ? 1 : -1,
-        ))
-          await remove(node.url, opts.signal);
+        )) {
+          try {
+            await remove(node.url, opts.signal);
+          } catch (cause) {
+            // A descendant can already be gone: deleting a subject also deletes its auxiliary
+            // documents (Solid Protocol §5.4). The top container itself must still exist.
+            if (node.url === dest || !(cause instanceof StorageError && cause.code === "not-found"))
+              throw cause;
+          }
+        }
       } else await remove(dest, opts.signal, opts.ifMatch);
     },
     async move(url, destination, opts = {}) {
