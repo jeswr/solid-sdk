@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // <jeswr-shacl-form> (the EDITABLE wrapper) tests. The load-bearing ones MIRROR the
 // read view's §9 SSRF tests — the edit form shares the EXACT hardening pipeline
@@ -14,7 +15,7 @@
 
 import "../src/index.js";
 import { Store } from "n3";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { JeswrShaclForm } from "../src/index.js";
 
 const SHAPES = `
@@ -57,9 +58,21 @@ async function waitForForm(el: JeswrShaclForm): Promise<HTMLElement> {
   throw new Error(`inner <shacl-form> never rendered (status: ${el.textContent})`);
 }
 
-afterEach(() => {
+// shacl-form's 200 ms initialization debounce outlives Lit's updateComplete.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+});
+
+afterEach(async () => {
   document.body.innerHTML = "";
-  vi.restoreAllMocks();
+  try {
+    // Finish detached forms' initialization while jsdom still provides document.
+    await vi.runAllTimersAsync();
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  }
 });
 
 describe("<jeswr-shacl-form> registration + edit-mode mounting", () => {
@@ -146,7 +159,7 @@ describe("<jeswr-shacl-form> §9 SSRF discipline (mirrors the read view)", () =>
       for (let i = 0; i < 60; i++) {
         await el.updateComplete;
         await Promise.resolve();
-        await new Promise((r) => setTimeout(r, 0));
+        await vi.runAllTimersAsync();
       }
       expect(globalSpy).not.toHaveBeenCalled();
       // Fail-closed: empty shapes never mount a form.
@@ -170,7 +183,7 @@ describe("<jeswr-shacl-form> §9 SSRF discipline (mirrors the read view)", () =>
       const form = await waitForForm(el);
       for (let i = 0; i < 60; i++) {
         await Promise.resolve();
-        await new Promise((r) => setTimeout(r, 0));
+        await vi.runAllTimersAsync();
       }
       expect(globalSpy).not.toHaveBeenCalled();
       const values = form.getAttribute("data-values") ?? "";

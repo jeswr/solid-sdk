@@ -20,7 +20,8 @@ design + inventory + phasing lives in:
 applications were imported with full history; `@jeswr/synthetic-rdf` and `@jeswr/solid-seed` are
 the maintainer-directed new packages tracked by solid-mortgage beads sm-63 and sm-64. The
 applications comprise the eight `pod-*` apps plus Access Manager, Pod Manager, Issues, App Store,
-and Coeliac. Mirror publishing has NOT run yet. Do not import further packages outside the phased
+and Coeliac. The browser extension (`apps/extension`, `@jeswr/app-extension`) was imported with
+full history from `jeswr/solid-suite-extension`. Mirror publishing has NOT run yet. Do not import further packages outside the phased
 package plan or explicit maintainer direction.
 
 ## The model in four rules

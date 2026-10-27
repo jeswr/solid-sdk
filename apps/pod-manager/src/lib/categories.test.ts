@@ -62,6 +62,13 @@ describe("categoryForClass", () => {
     expect(categoryForClass("http://schema.org/Invoice").id).toBe("finance");
   });
 
+  it("maps imported email messages and conversations to Email", () => {
+    for (const base of ["https://schema.org/", "http://schema.org/"]) {
+      expect(categoryForClass(`${base}EmailMessage`).id).toBe("mail");
+      expect(categoryForClass(`${base}Conversation`).id).toBe("mail");
+    }
+  });
+
   it("resolves a bare foaf:Person to Identity, not Contacts (priority order)", () => {
     expect(categoryForClass("http://xmlns.com/foaf/0.1/Person").id).toBe("identity");
   });

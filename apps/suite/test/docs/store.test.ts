@@ -5,6 +5,7 @@ import { RedirectRefusedError } from "@jeswr/guarded-fetch";
 import { assert, describe, expect, it, vi } from "vitest";
 import { buildDocument, parseDocument } from "../../src/apps/docs/lib/model/document.js";
 import {
+  ConcurrencyValidatorError,
   OutOfScopeError,
   ResourceReadError,
   ResourceWriteError,
@@ -452,42 +453,67 @@ describe("snapshot conflicts", () => {
     });
   });
   it.each([
-    "save",
-    "copy",
-  ])("completes %s without conflict retries on weak ETags", async (operation) => {
+    'W/"v1"',
+    null,
+  ])("rejects stale saves with validator %j and preserves remote history", async (etag) => {
     const s = await server();
     const fetchImpl = vi.fn<typeof fetch>(async (url, init) => {
-      // If-Match uses strong comparison, so a weak validator never matches.
-      if (new Headers(init?.headers).get("if-match")?.startsWith("W/"))
-        return new Response(null, { status: 412 });
       const response = await s.fetchImpl(url, init);
-      const etag = response.headers.get("etag");
-      if (etag) response.headers.set("etag", `W/${etag}`);
+      if (etag === null) response.headers.delete("etag");
+      else response.headers.set("etag", etag);
       return response;
     });
     const store = new DocsStore(POD, WEBID, fetchImpl);
     const source = await store.read(DOC);
     assert(source);
-    expect(source.etag).toBe('W/"v1"');
+    expect(source.etag).toBe(etag);
+    const remote = {
+      body: await serializeTurtle(
+        buildDocument(DOC, {
+          ...source.data,
+          body: "Remote edit",
+          now: new Date(NOW.getTime() + 600_000),
+          priorRevisions: source.data.revisions,
+          revisionLabel: "Remote revision",
+        }),
+      ),
+      etag: '"remote"',
+      contentType: "text/turtle",
+    };
+    s.resources.set(DOC, remote);
     const regenerate = vi.fn(() => ({ format: "text/html", body: "regenerated" }));
     const wait = vi.fn(WAIT);
-    const result =
-      operation === "save"
-        ? await store.save(source, { body: "live" }, { regenerate, wait })
-        : await store.makeCopy(source, {
-            assets: [],
-            snapshot: () => ({ format: "text/html", body: "live" }),
-            persistFullState: async () => {},
-          });
-    expect(result.data.body).toBe("live");
-    expect((await store.read(result.url))?.data.body).toBe("live");
+    await expect(store.save(source, { body: "live" }, { regenerate, wait })).rejects.toBeInstanceOf(
+      ConcurrencyValidatorError,
+    );
+    expect(s.calls.filter((call) => call.method === "PUT")).toEqual([]);
+    expect(s.resources.get(DOC)).toEqual(remote);
+    expect(source.data.body).toBe("old");
+    expect(source.data.revisions).not.toContainEqual(expect.objectContaining({ body: "live" }));
     expect(regenerate).not.toHaveBeenCalled();
     expect(wait).not.toHaveBeenCalled();
+  });
+  it.each([
+    'W/"remote"',
+    "",
+  ])("stops a conflict retry if the refreshed validator is unusable (%j)", async (etag) => {
+    const s = await server();
+    const stored = await document();
+    const existing = s.resources.get(DOC);
+    assert(existing);
+    const remote = { ...existing, etag };
+    s.resources.set(DOC, remote);
+    const regenerate = vi.fn(() => ({ format: "text/html", body: "live" }));
+    const wait = vi.fn(WAIT);
+    await expect(
+      s.store.save(stored, { body: "stale" }, { regenerate, wait }),
+    ).rejects.toBeInstanceOf(ConcurrencyValidatorError);
+    expect(regenerate).toHaveBeenCalledOnce();
+    expect(wait).toHaveBeenCalledOnce();
     expect(
-      s.calls.filter((call) => call.url === result.url && call.method === "PUT").at(-1)?.headers[
-        "if-match"
-      ],
-    ).toBe("*");
+      s.calls.filter((call) => call.method === "PUT").map((call) => call.headers["if-match"]),
+    ).toEqual(['"v1"']);
+    expect(s.resources.get(DOC)).toEqual(remote);
   });
   it("regenerates every retry, uses the fresh ETag, and preserves remote metadata/history", async () => {
     const s = await server();
@@ -620,20 +646,55 @@ describe("snapshot conflicts", () => {
     expect(saved.data.creator).toBe("https://bob.example/#me");
     expect(saved.data.revisions[0]?.attributedTo).toBe(WEBID);
   });
-  it("preserves defaults and sends explicit If-Match on servers with no ETag", async () => {
+  it("preserves snapshot defaults with a strong ETag", async () => {
     const s = await server();
-    const stored = { ...(await document()), etag: null };
+    const stored = await document();
     const result = await s.store.save(
       stored,
       {},
       { regenerate: () => ({ format: "text/html", body: "unused" }) },
     );
     expect(result.data.body).toBe("old");
-    expect(s.calls.find((c) => c.method === "PUT")?.headers["if-match"]).toBe("*");
+    expect(s.calls.find((c) => c.method === "PUT")?.headers["if-match"]).toBe(stored.etag);
   });
 });
 
 describe("makeCopy", () => {
+  it.each([
+    'W/"reservation"',
+    null,
+  ])("refuses to finalize a copy with an unusable reservation validator (%j)", async (etag) => {
+    const s = await server();
+    const copyUrl = `${POD}docs/plan-copy.ttl`;
+    const fetchImpl: typeof fetch = async (url, init) => {
+      const response = await s.fetchImpl(url, init);
+      if (String(url) === copyUrl && init?.method === "PUT") {
+        if (etag === null) response.headers.delete("etag");
+        else response.headers.set("etag", etag);
+      }
+      return response;
+    };
+    const remote = {
+      body: await serializeTurtle(buildDocument(copyUrl, { title: "Remote copy", body: "Remote" })),
+      etag: '"remote"',
+      contentType: "text/turtle",
+    };
+    await expect(
+      new DocsStore(POD, WEBID, fetchImpl).makeCopy(await document(), {
+        assets: [],
+        snapshot: () => ({ format: "text/html", body: "live" }),
+        persistFullState: async () => {
+          s.resources.set(copyUrl, remote);
+        },
+      }),
+    ).rejects.toBeInstanceOf(ConcurrencyValidatorError);
+    expect(s.resources.get(copyUrl)).toEqual(remote);
+    const writes = s.calls.filter((call) => call.url === copyUrl && call.method === "PUT");
+    expect(writes).toHaveLength(1);
+    expect(writes[0]?.headers["if-none-match"]).toBe("*");
+    expect(writes[0]?.headers["if-match"]).toBeUndefined();
+  });
+
   it.each([
     "text/html",
     "text/markdown",
@@ -730,9 +791,7 @@ describe("makeCopy", () => {
     const asset = `${docContainerUrls(source.url).assets}image`;
     const f: typeof fetch = async (url, init) => {
       if (String(url) === asset) return new Response(new Uint8Array([98, 105, 110, 97, 114, 121]));
-      const response = await s.fetchImpl(url, init);
-      response.headers.delete("etag");
-      return response;
+      return s.fetchImpl(url, init);
     };
     const copy = await new DocsStore(POD, WEBID, f).makeCopy(source, {
       assets: [asset],

@@ -65,9 +65,20 @@ Login uses the suite stack: `<jeswr-login-panel>` (`@jeswr/solid-elements`)
 over `@solid/reactive-authentication` (authorization-code + PKCE + DPoP popup;
 `public/callback.html` is the popup contract) with silent session restore via
 `@jeswr/solid-session-restore`. Set `VITE_CLIENT_ID` to a Client Identifier
-Document URL for a stable client identity; without it, dynamic registration is
-used (dev fallback). All data access flows through an injectable
+Document URL to override the client identity; without it or `APP_ORIGIN`, dynamic
+registration is used (dev fallback). All data access flows through an injectable
 authenticated-fetch seam, so every view is unit-testable with a stubbed fetch.
+
+From the monorepo root (Node 24), build for hosting with:
+
+```sh
+APP_ORIGIN=https://solid-access-manager.vercel.app pnpm turbo run build --filter=@jeswr/app-access-manager
+```
+
+Use `apps/access-manager/dist` as Vercel's output directory relative to the
+monorepo root. `APP_ORIGIN` sets the generated client document's URLs and the
+browser's client identity together; an explicit `VITE_CLIENT_ID` still overrides
+the browser identity. Turbo forwards and hashes both variables.
 
 ## Demo mode (`?demo`) + the GitHub Pages build
 

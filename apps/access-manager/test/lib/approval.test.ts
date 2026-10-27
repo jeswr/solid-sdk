@@ -259,7 +259,7 @@ describe("resume from the STORED snapshot (crash recovery — §3.5)", () => {
     const url = `${INBOX}broken-approving.ttl`;
     pod.seed(
       url,
-      `@prefix accm: <https://w3id.org/jeswr/accm#> . <${url}> accm:status accm:Approving .`,
+      `@prefix accm: <https://jeswr.org/ns/accm#> . <${url}> accm:status accm:Approving .`,
     );
     await expect(resumeApproval(url, await ctx())).rejects.toBeInstanceOf(ApprovalStateError);
   });
@@ -375,7 +375,7 @@ describe("resume-path snapshot confinement (roborev round 2 High)", () => {
     const targetLines = targets.map((t) => `accm:resolvesTo <${t}> ;`).join("\n  ");
     pod.seed(
       url,
-      `@prefix accm: <https://w3id.org/jeswr/accm#> .
+      `@prefix accm: <https://jeswr.org/ns/accm#> .
 <${url}> accm:status accm:Approving ;
   accm:grantId "${grantId}" ;
   accm:schemaVersion "1" ;
