@@ -109,3 +109,52 @@ review tool was installed. There are no new semantic questions for this fix
 round; the original conservative interpretations remain unchanged. Tracker
 updates and review of the unrelated full-workspace failure remain with the
 dispatcher.
+
+## Fix round 2 — decimal averages and equivalent scale anchors
+
+Commit `66b47a93` (`fix(sheets): stabilize averages and scale anchors`) addresses
+both findings against `c11cf40e994c294fe29143be869d92354717d41e`:
+
+- Divide the compensated sum and its correction separately when calculating an
+  average, retaining the normalized overflow fallback. Constant decimal values
+  remain equal to their average and do not incorrectly stop subsequent rules.
+- Calculate percentage anchor offsets by multiplying before division, using the
+  same interpolation helper as percentile anchors. Exact endpoints, clamping and
+  weighted overflow fallbacks remain covered. Equivalent anchors are accepted,
+  and cell `14` between min and 28% anchors over 0–100 receives `#808080`.
+
+Ten regression cases bring conditional-formatting tests to 146. They cover
+positive and negative decimal populations of several sizes, subsequent styles
+after `stopIfTrue`, both orders of equivalent percent/percentile anchors,
+midpoint rounding, overflowing anchor products/spans and exact endpoints. Eight
+cases failed before the implementation change. No rule semantics, dependencies,
+manifests or unrelated implementation files changed.
+
+All commands below used `PATH=/opt/node24/bin:$PATH`.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/sheets-condformat.test.ts --coverage --coverage.include='src/apps/sheets/lib/condformat/**/*.ts'` | PASS: 146 tests; 100% statements, branches, functions and lines. |
+| `pnpm exec turbo run build --filter='@jeswr/app-suite^...'` | PASS: seven dependency builds. |
+| `pnpm --filter @jeswr/app-suite run lint` | PASS: 604 files; 54 existing warnings outside this lane. An initial formatting error in the new tests was corrected before this pass. |
+| `pnpm --filter @jeswr/app-suite run build` | PASS: production build and static generation. |
+| `pnpm --filter @jeswr/app-suite run typecheck` | PASS. |
+| `pnpm --filter @jeswr/app-suite run test` | PASS: 153 files / 7,653 tests; 100% statements, branches, functions and lines. |
+| `pnpm run lint:root` | PASS, including all workspace guards. |
+| `TURBO_SCM_BASE=c11cf40e994c294fe29143be869d92354717d41e pnpm run gate` | PASS: 12/12 tasks, seven cached; 1m21.218s. |
+| `pnpm run gate:full` | FAIL outside this lane: the existing delegation credential inline snapshot at `packages/federation-trust/test/characterization.test.ts:196`. 289 tasks succeeded (nine cached) out of 352 total before Turbo stopped; 8m39.018s. All 879 root tests passed. |
+| `git diff --check` | PASS. |
+
+The full-workspace failure is the same public-JWK JSON property order mismatch
+recorded in fix round 1: the snapshot expects `crv,x,kty`, while the runtime emits
+`kty,crv,x`. `packages/federation-trust` has no changes relative to this round's
+starting commit. Its tests and snapshot remain unchanged. Full-workspace
+verification is therefore incomplete; both requested numerical fixes are
+complete. Fourteen untracked callback/client-ID files generated under seven pod
+apps' `web/public/` directories were removed after the gate.
+
+No dependency additions, package-policy checks, UI changes or screenshots were
+required. No branches were switched, no remote operations were run, and no other
+checkouts were touched. `roborev` is unavailable in this checkout, so automated
+per-commit review could not run; no review tool was installed. Tracker operations
+remain with the dispatcher. No new semantic questions arose in this fix round.
