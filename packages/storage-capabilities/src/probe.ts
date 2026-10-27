@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 import { discardBody, httpUrl, request } from "./http.js";
 import { parseProbeHeaders } from "./probe-headers.js";
 import type { ProbeResult, ResolveOptions } from "./types.js";
