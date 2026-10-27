@@ -19,6 +19,17 @@ async function newDocument(page: Page, title: string) {
   await titleInput.press("Enter");
   return page.getByRole("textbox", { name: "Document body", exact: true });
 }
+/**
+ * ProseMirror learns of a keyboard-moved caret from the asynchronous selectionchange
+ * event, and TipTap restores focus on the next animation frame. Let both settle before
+ * the next key, as a person's typing would.
+ */
+async function settle(page: Page) {
+  await page.evaluate(
+    () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+  );
+}
+
 async function format(page: Page, label: string) {
   const button = page
     .getByRole("toolbar", { name: "Formatting", exact: true })
@@ -68,10 +79,13 @@ test("creates, saves, reloads and formats a document accessibly", async ({ page 
   // TipTap returns focus on the next animation frame; a key pressed before it lands
   // would be undone when the editor re-applies its stored selection.
   await expect(body).toBeFocused();
+  await settle(page);
   await body.press("Control+End");
+  await settle(page);
   await body.press("Enter");
   await format(page, "Checklist");
   await expect(body).toBeFocused();
+  await settle(page);
   await body.pressSequentially("Prepare the release");
   await expect(
     body.getByRole("checkbox", { name: "Prepare the release", exact: true }),
