@@ -25,20 +25,27 @@ final class FixtureTests: XCTestCase {
             attachDebug(app, reason: "Missing fixture result element on \(page)")
             throw FixtureFailure(message: "Missing fixture result element")
         }
-        let ready = NSPredicate { _, _ in
-            guard element.exists, let text = element.value as? String,
-                  let data = text.data(using: .utf8),
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
-            return json["page"] as? String == page && json["done"] as? Bool == done
+        // The textarea's accessibility value can be cut short for a long result, while WebKit also
+        // exposes the same text as a static-text label, so either source may carry the full JSON.
+        let texts = app.webViews.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "{\"page\":"))
+        func parse(_ text: String?) -> (String, [String: Any])? {
+            guard let text, let json = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
+                  json["page"] as? String == page, json["done"] as? Bool == done else { return nil }
+            return (text, json)
         }
+        func current() -> (String, [String: Any])? {
+            guard element.exists else { return nil }
+            if let result = parse(element.value as? String) { return result }
+            return texts.allElementsBoundByIndex.lazy.compactMap { parse($0.label) }.first
+        }
+        let ready = NSPredicate { _, _ in current() != nil }
         let expectation = XCTNSPredicateExpectation(predicate: ready, object: element)
-        guard XCTWaiter.wait(for: [expectation], timeout: 30) == .completed else {
-            attachDebug(app, reason: "Fixture \(page) did not reach done=\(done)")
+        guard XCTWaiter.wait(for: [expectation], timeout: 30) == .completed, let result = current() else {
+            let length = (element.value as? String)?.count ?? -1
+            attachDebug(app, reason: "Fixture \(page) did not reach done=\(done); value length \(length)")
             throw FixtureFailure(message: "Fixture did not finish: \(element.debugDescription)")
         }
-        let text = try XCTUnwrap(element.value as? String)
-        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
-        return (text, json)
+        return result
     }
 
     /// Diagnostics only: the host prints e2e-debug attachments on failure and never treats them as evidence.
