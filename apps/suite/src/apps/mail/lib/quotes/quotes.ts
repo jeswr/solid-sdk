@@ -48,6 +48,8 @@ interface Line {
   content: string;
   prefix: string;
   depth: number;
+  /** RFC 3676 counts only contiguous leading markers when unflowing. */
+  rfcDepth: number;
   eol: string;
 }
 
@@ -65,6 +67,9 @@ function physicalLine(value: string, eol: string, flowed: boolean): Line {
     end = ++cursor;
     while (value[cursor] === " ") cursor++;
   }
+  let rfcDepth = 0;
+  while (value[rfcDepth] === ">") rfcDepth++;
+  if (flowed) end = rfcDepth;
   let content = value.slice(end);
   let prefix = value.slice(0, end);
   if (flowed && content.startsWith(" ")) {
@@ -72,7 +77,7 @@ function physicalLine(value: string, eol: string, flowed: boolean): Line {
     // Re-quote using the first line's spelling; depth was measured before unstuffing.
     if (depth > 0) prefix += " ";
   }
-  return { value: flowed ? prefix + content : value, content, prefix, depth, eol };
+  return { value: flowed ? prefix + content : value, content, prefix, depth, rfcDepth, eol };
 }
 
 /** RFC 3676 §§4.1–4.5; only join equal-depth lines, never a signature separator. */
@@ -90,17 +95,31 @@ function normaliseLines(body: string, flowed: boolean, delSp: boolean): Line[] {
   const logical: Line[] = [];
   let pieces: string[] = [];
   let prefix = "";
+  let depth = 0;
   for (const [i, line] of physical.entries()) {
-    if (pieces.length === 0) prefix = line.prefix;
+    if (pieces.length === 0) {
+      prefix = line.prefix;
+      depth = line.depth;
+    }
     const next = physical[i + 1];
     const isFlowed = line.content.endsWith(" ") && !isSignature(line.content);
     const join =
-      isFlowed && next !== undefined && line.depth === next.depth && !isSignature(next.content);
+      isFlowed &&
+      next !== undefined &&
+      line.rfcDepth === next.rfcDepth &&
+      !isSignature(next.content);
     // DelSp applies even when EOF, quote depth or a signature ends the paragraph.
     pieces.push(isFlowed && delSp ? line.content.slice(0, -1) : line.content);
     if (!join) {
       const content = pieces.join("");
-      logical.push({ value: prefix + content, content, prefix, depth: line.depth, eol: line.eol });
+      logical.push({
+        value: prefix + content,
+        content,
+        prefix,
+        depth,
+        rfcDepth: line.rfcDepth,
+        eol: line.eol,
+      });
       pieces = [];
     }
   }

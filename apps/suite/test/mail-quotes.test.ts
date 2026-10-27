@@ -329,9 +329,69 @@ describe("RFC 3676 flowed text", () => {
       { kind: "quote", text: ">> nested\n", depth: 2 },
       { kind: "body", text: "body again\n\nend", depth: 0 },
     ]);
-    expect(splitQuotedText("> > a \n>> b", { flowed: true }).segments).toEqual([
-      { kind: "quote", text: "> > a b", depth: 2 },
-    ]);
+  });
+
+  it.each([
+    {
+      source: "> > a \r\n> > b\r\n",
+      expected: "> > a > b\n",
+      delSpExpected: "> > a> b\n",
+      depth: 2,
+    },
+    {
+      source: ">> > a \r\n>> > b\r\n",
+      expected: ">> > a > b\n",
+      delSpExpected: ">> > a> b\n",
+      depth: 3,
+    },
+    {
+      source: "> a \r\n> > b\r\n",
+      expected: "> a > b\n",
+      delSpExpected: "> a> b\n",
+      depth: 1,
+    },
+    {
+      source: "> > a \r\n>b\r\n",
+      expected: "> > a b\n",
+      delSpExpected: "> > ab\n",
+      depth: 2,
+    },
+    {
+      source: ">  > a \r\n>  > b\r\n",
+      expected: ">  > a  > b\n",
+      delSpExpected: ">  > a > b\n",
+      depth: 2,
+    },
+    {
+      source: "> > text \n> > -- \n> tail",
+      expected: "> > text > -- tail",
+      delSpExpected: "> > text> --tail",
+      depth: 2,
+    },
+  ])("preserves literal markers while unflowing $source", ({
+    source,
+    expected,
+    delSpExpected,
+    depth,
+  }) => {
+    for (const delSp of [false, true]) {
+      expect(splitQuotedText(source, { flowed: true, delSp })).toEqual({
+        segments: [{ kind: "quote", text: delSp ? delSpExpected : expected, depth }],
+        visibleText: "",
+        hasQuotedHistory: true,
+      });
+    }
+  });
+
+  it.each([
+    ["> > a \r\n>> b\r\n", "> > a \n>> b\n", "> > a\n>> b\n"],
+    [">> a \r\n> > b\r\n", ">> a \n> > b\n", ">> a\n> > b\n"],
+  ])("keeps RFC depth changes separate when API depths match: %j", (source, expected, delSpExpected) => {
+    for (const delSp of [false, true]) {
+      expect(splitQuotedText(source, { flowed: true, delSp }).segments).toEqual([
+        { kind: "quote", text: delSp ? delSpExpected : expected, depth: 2 },
+      ]);
+    }
   });
 
   it("removes one stuffing space without turning escaped literal quotes into history", () => {
