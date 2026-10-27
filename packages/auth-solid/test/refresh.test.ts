@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 import { exportDpopKeyPairJwk, generateDpopKeyPair } from "@jeswr/solid-dpop";
 import {
   calculateJwkThumbprint,
@@ -7,10 +9,12 @@ import {
   importJWK,
   jwtVerify,
 } from "jose";
+import ts from "typescript";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
   type FetchLike,
   refreshSolidSession,
+  SOLID_JWT_KEY,
   type SolidJwtState,
   SolidSessionRefreshError,
   type SolidSessionRefreshErrorCode,
@@ -77,6 +81,90 @@ async function expectCode(promise: Promise<unknown>, code: SolidSessionRefreshEr
   await expect(promise).rejects.toMatchObject({ name: "SolidSessionRefreshError", code });
   await expect(promise).rejects.toBeInstanceOf(SolidSessionRefreshError);
 }
+
+type JwtCallback = (params: { token: Record<string, unknown> }) => Promise<Record<string, unknown>>;
+
+async function documentedJwt(file: string, fetch: FetchLike): Promise<JwtCallback> {
+  const markdown = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
+  const code = markdown.match(/```ts\n([\s\S]*?)```/)?.[1];
+  if (!code) throw new Error(`Missing TypeScript example in ${file}`);
+  const { outputText } = ts.transpileModule(
+    `${code}\nreturn typeof jwt === "function" ? jwt : undefined;`,
+    { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } },
+  );
+  let capturedCallback: JwtCallback | undefined;
+  const modules: Record<string, unknown> = {
+    "next-auth": {
+      default: (config: { callbacks: { jwt: JwtCallback } }) => {
+        capturedCallback = config.callbacks.jwt;
+        return {};
+      },
+    },
+    "@jeswr/auth-solid": { refreshSolidSession, SOLID_JWT_KEY, Solid: async () => ({}) },
+  };
+  const result: JwtCallback | undefined = await runInNewContext(`(async () => {${outputText}})()`, {
+    require: (name: string) => {
+      if (!(name in modules)) throw new Error(`Unexpected example import: ${name}`);
+      return modules[name];
+    },
+    exports: {},
+    globalThis: { fetch },
+    process: { env: { SOLID_CLIENT_ID: CLIENT_ID, SOLID_ISSUER: ISSUER } },
+    Date,
+  });
+  const callback = result ?? capturedCallback;
+  if (!callback) throw new Error(`Missing JWT callback in ${file}`);
+  return callback;
+}
+
+describe.each(["README.md", "SKILL.md"])("%s refresh callback", (file) => {
+  it("keeps refreshing after omitted lifetimes and reuses the rotated refresh token", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW * 1000);
+    const op = mockEndpoint(() =>
+      json(tokens({ expires_in: undefined, refresh_token: "rotated-refresh-fixture" })),
+    );
+    const jwt = await documentedJwt(file, op.fetch);
+    const token = { [SOLID_JWT_KEY]: session };
+    expect(await jwt({ token })).toBe(token);
+    expect(token[SOLID_JWT_KEY]).not.toHaveProperty("expiresAt");
+    expect(token[SOLID_JWT_KEY].refreshToken).toBe("rotated-refresh-fixture");
+    expect(op.tokenCalls).toHaveLength(1);
+
+    expect(await jwt({ token })).toBe(token);
+    expect(token[SOLID_JWT_KEY]).not.toHaveProperty("expiresAt");
+    expect(op.tokenCalls).toHaveLength(2);
+    expect(new URLSearchParams(String(op.tokenCalls[1]?.body)).get("refresh_token")).toBe(
+      "rotated-refresh-fixture",
+    );
+    expect(session.expiresAt).toBe(NOW);
+  });
+
+  it.each([
+    [undefined, 1],
+    [NOW + 61, 0],
+    [NOW + 60, 1],
+    [NOW - 1, 1],
+    [0, 1],
+  ])("makes %s expiry trigger %s refreshes", async (expiry, count) => {
+    vi.spyOn(Date, "now").mockReturnValue(NOW * 1000);
+    const op = mockEndpoint();
+    const jwt = await documentedJwt(file, op.fetch);
+    const { expiresAt: _expiresAt, ...withoutExpiry } = session;
+    const state = { ...withoutExpiry, ...(expiry === undefined ? {} : { expiresAt: expiry }) };
+    const token = { [SOLID_JWT_KEY]: state };
+    expect(await jwt({ token })).toBe(token);
+    expect(op.tokenCalls).toHaveLength(count);
+    if (count === 0) expect(op.fetch).not.toHaveBeenCalled();
+  });
+
+  it("leaves a JWT without Solid state unchanged without HTTP", async () => {
+    const op = mockEndpoint();
+    const jwt = await documentedJwt(file, op.fetch);
+    const token = {};
+    expect(await jwt({ token })).toBe(token);
+    expect(op.fetch).not.toHaveBeenCalled();
+  });
+});
 
 describe("refreshSolidSession", () => {
   it("discovers the issuer, rotates tokens, and returns new state without changing identity or key", async () => {

@@ -56,8 +56,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         });
       } else {
         const state = token[SOLID_JWT_KEY] as SolidJwtState | undefined;
-        // Auth.js stores expiresAt in epoch seconds. Refresh within 60 seconds of expiry.
-        if (state?.expiresAt !== undefined && Date.now() >= (state.expiresAt - 60) * 1000) {
+        // expiresAt is epoch seconds. Refresh when expiry is unknown or within 60 seconds.
+        if (
+          state &&
+          (state.expiresAt === undefined || Date.now() >= (state.expiresAt - 60) * 1000)
+        ) {
           token[SOLID_JWT_KEY] = await refreshSolidSession(state, {
             clientId,
             fetch: pristineFetch,
@@ -84,6 +87,7 @@ issuer identifier, uses the persisted key with no `ath` on the token proof, and 
 `use_dpop_nonce` challenge once. It returns new state with updated
 tokens and expiry in epoch seconds, retaining the old refresh token if rotation is omitted.
 When `expires_in` is omitted, it clears the previous `expiresAt`; the new lifetime is unknown.
+The callback above refreshes on every subsequent invocation while expiry remains unknown.
 When supplied, `expires_in` must be a safe nonnegative integer in seconds.
 It preserves the verified WebID and ID token; it does not adopt an unverified refresh ID token.
 Coordinate concurrent refreshes in your session store when refresh tokens are single-use.

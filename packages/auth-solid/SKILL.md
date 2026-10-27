@@ -21,7 +21,7 @@ Use this package only when Auth.js owns the OAuth/OIDC orchestration. It injects
 ## Refresh in the Auth.js JWT callback
 
 Capture a pristine fetch before any global patch. After the first-sign-in persistence branch,
-refresh the stored `SolidJwtState` when expiry is within 60 seconds:
+refresh the stored `SolidJwtState` when expiry is unknown or within 60 seconds:
 
 ```ts
 import {
@@ -39,7 +39,10 @@ async function jwt({ token, account }) {
     return token;
   }
   const state = token[SOLID_JWT_KEY] as SolidJwtState | undefined;
-  if (state?.expiresAt !== undefined && Date.now() >= (state.expiresAt - 60) * 1000) {
+  if (
+    state &&
+    (state.expiresAt === undefined || Date.now() >= (state.expiresAt - 60) * 1000)
+  ) {
     token[SOLID_JWT_KEY] = await refreshSolidSession(state, {
       clientId: process.env.SOLID_CLIENT_ID!,
       fetch: pristineFetch,
@@ -54,7 +57,8 @@ Pass the original provider's `clientSecret` too for confidential clients (Basic 
 current provider instance's possibly regenerated key. It returns new state, preserves verified
 identity/ID-token fields, and retains an omitted rotated refresh token. `expiresAt` is epoch
 seconds. If `expires_in` is omitted, the helper clears the old `expiresAt` because the new
-lifetime is unknown. Coordinate concurrent refreshes when the AS rotates single-use refresh tokens.
+lifetime is unknown; the callback refreshes on every subsequent invocation while it remains unknown.
+Coordinate concurrent refreshes when the AS rotates single-use refresh tokens.
 
 Handle `SolidSessionRefreshError.code` without logging state or raw tokens. Fail the callback
 on refresh failure; `invalid_grant` requires signing in again. The helper validates DPoP token
