@@ -138,16 +138,25 @@ for (const component of ["data-table", "file-grid"]) {
       .locator("[data-collection-item]")
       .last()
       .getAttribute("aria-label");
-    const samples: number[] = [];
-    for (let frame = 0; frame < 40; frame++) {
+    const sample = async (scrollTop: number | undefined) => {
       const before = await duration();
-      await viewport.evaluate(async (element, frame) => {
-        element.scrollTop = (frame + 1) * 320;
+      await viewport.evaluate(async (element, scrollTop) => {
+        if (scrollTop !== undefined) element.scrollTop = scrollTop;
         await new Promise<void>((resolve) =>
           requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
         );
-      }, frame);
-      const work = ((await duration()) - before) * 1000;
+      }, scrollTop);
+      return ((await duration()) - before) * 1000;
+    };
+    // Each sample also pays for the CDP evaluate round trip and an idle frame. Measure that
+    // harness cost without scrolling and subtract its median, so the budget covers only the
+    // component's scroll work.
+    const baseline: number[] = [];
+    for (let frame = 0; frame < 20; frame++) baseline.push(await sample(undefined));
+    const overhead = [...baseline].sort((a, b) => a - b)[Math.floor(baseline.length / 2)];
+    const samples: number[] = [];
+    for (let frame = 0; frame < 40; frame++) {
+      const work = (await sample((frame + 1) * 320)) - overhead;
       if (frame >= 5) samples.push(work); // warm up browser/JIT and initial virtual measurements
     }
     expect(await page.locator("[data-collection-item]").count()).toBeLessThan(100);
@@ -155,7 +164,7 @@ for (const component of ["data-table", "file-grid"]) {
       initialLast,
     );
     await info.attach(`${component}-frame-work-ms`, {
-      body: JSON.stringify(samples),
+      body: JSON.stringify({ overhead, samples }),
       contentType: "application/json",
     });
     // The 90th percentile tolerates a rare GC pause or a busy shared runner, while a
