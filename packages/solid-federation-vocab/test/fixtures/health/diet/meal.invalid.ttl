@@ -1,0 +1,12 @@
+# expect: http://schema.org/startTime
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/health/diet/shapes#MealShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix schema: <http://schema.org/>.
+@prefix diet: <https://jeswr.org/ns/sectors/health/diet#>.
+
+<https://example.org/fixtures/health/diet/Meal-1> a diet:Meal;
+    diet:hasItem <https://example.org/fixtures/health/diet/support-2>.
+<https://example.org/fixtures/health/diet/support-2> a diet:FoodItem;
+    schema:name "Fixture".

@@ -1,0 +1,19 @@
+# expect: https://jeswr.org/ns/core#hasAccountHolder
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/finance/shapes#FinancialAccountShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix fin: <https://jeswr.org/ns/sectors/finance#>.
+
+<https://example.org/fixtures/finance/FinancialAccount-2> a fin:FinancialAccount;
+    core:hasAccountProvider <https://example.org/fixtures/finance/support-4>;
+    core:identifiedBy <https://example.org/fixtures/finance/support-5>.
+<https://example.org/fixtures/finance/support-3> a core:Agent.
+<https://example.org/fixtures/finance/support-4> a core:Agent.
+<https://example.org/fixtures/finance/support-5> a core:Identifier;
+    core:value "Fixture";
+    core:inScheme <https://example.org/fixtures/finance/support-6>.
+<https://example.org/fixtures/finance/support-6> a core:IdentifierScheme;
+    core:schemeAuthority <https://example.org/fixtures/finance/support-7>.
+<https://example.org/fixtures/finance/support-7> a core:Agent.

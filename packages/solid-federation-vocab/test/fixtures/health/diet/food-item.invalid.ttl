@@ -1,0 +1,7 @@
+# expect: http://schema.org/name
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/health/diet/shapes#FoodItemShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix diet: <https://jeswr.org/ns/sectors/health/diet#>.
+
+<https://example.org/fixtures/health/diet/FoodItem-3> a diet:FoodItem.

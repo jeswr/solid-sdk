@@ -1,0 +1,19 @@
+# expect: https://jeswr.org/ns/sectors/health#patient
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/health/shapes#ImmunizationShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix health: <https://jeswr.org/ns/sectors/health#>.
+
+<https://example.org/fixtures/health/Immunization-28> a health:Immunization;
+    health:medication <https://example.org/fixtures/health/support-30>.
+<https://example.org/fixtures/health/support-29> a core:Person.
+<https://example.org/fixtures/health/support-30> a health:MedicinalProduct;
+    core:identifiedBy <https://example.org/fixtures/health/support-31>.
+<https://example.org/fixtures/health/support-31> a core:Identifier;
+    core:value "Fixture";
+    core:inScheme <https://example.org/fixtures/health/support-32>.
+<https://example.org/fixtures/health/support-32> a core:IdentifierScheme;
+    core:schemeAuthority <https://example.org/fixtures/health/support-33>.
+<https://example.org/fixtures/health/support-33> a core:Agent.

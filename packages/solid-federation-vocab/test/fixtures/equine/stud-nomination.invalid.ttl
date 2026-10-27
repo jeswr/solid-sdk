@@ -1,0 +1,9 @@
+# expect: https://jeswr.org/ns/sectors/equine#horse
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/equine/shapes#StudNominationShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix eq: <https://jeswr.org/ns/sectors/equine#>.
+
+<https://example.org/fixtures/equine/StudNomination-6> a eq:StudNomination;
+    eq:season "Fixture".

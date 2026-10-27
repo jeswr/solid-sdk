@@ -1,0 +1,7 @@
+# expect: http://schema.org/amount
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/equine/shapes#PrizeDistributionShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix eq: <https://jeswr.org/ns/sectors/equine#>.
+
+<https://example.org/fixtures/equine/PrizeDistribution-11> a eq:PrizeDistribution.

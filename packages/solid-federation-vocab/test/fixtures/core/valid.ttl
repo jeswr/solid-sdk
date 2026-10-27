@@ -1,0 +1,50 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Conforming instances of the core profile's NodeShapes.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+
+<https://example.org/fixtures/core/Person-1> a core:Person.
+<https://example.org/fixtures/core/Organization-2> a core:Organization;
+    core:identifiedBy <https://example.org/fixtures/core/support-3>.
+<https://example.org/fixtures/core/support-3> a core:Identifier;
+    core:value "Fixture";
+    core:inScheme <https://example.org/fixtures/core/support-4>.
+<https://example.org/fixtures/core/support-4> a core:IdentifierScheme;
+    core:schemeAuthority <https://example.org/fixtures/core/support-5>.
+<https://example.org/fixtures/core/support-5> a core:Agent.
+<https://example.org/fixtures/core/Identifier-6> a core:Identifier;
+    core:value "Fixture";
+    core:inScheme <https://example.org/fixtures/core/support-7>.
+<https://example.org/fixtures/core/support-7> a core:IdentifierScheme;
+    core:schemeAuthority <https://example.org/fixtures/core/support-8>.
+<https://example.org/fixtures/core/support-8> a core:Agent.
+<https://example.org/fixtures/core/IdentifierScheme-9> a core:IdentifierScheme;
+    core:schemeAuthority <https://example.org/fixtures/core/support-10>.
+<https://example.org/fixtures/core/support-10> a core:Agent.
+<https://example.org/fixtures/core/Account-11> a core:Account;
+    core:hasAccountHolder <https://example.org/fixtures/core/support-12>;
+    core:hasAccountProvider <https://example.org/fixtures/core/support-13>.
+<https://example.org/fixtures/core/support-12> a core:AccountHolder.
+<https://example.org/fixtures/core/support-13> a core:AccountProvider.
+<https://example.org/fixtures/core/Record-14> a core:Record;
+    core:subject <https://example.org/fixtures/core/support-15>.
+<https://example.org/fixtures/core/support-15> a core:Agent.
+<https://example.org/fixtures/core/Quantity-16> a core:Quantity;
+    core:numericValue 1.0.
+<https://example.org/fixtures/core/Activity-17> a core:Activity;
+    core:performedBy <https://example.org/fixtures/core/support-18>.
+<https://example.org/fixtures/core/support-18> a core:Agent.
+<https://example.org/fixtures/core/Relationship-19> a core:Relationship;
+    core:relatesParty <https://example.org/fixtures/core/support-20>, <https://example.org/fixtures/core/support-21>.
+<https://example.org/fixtures/core/support-20> a core:RelationshipParty.
+<https://example.org/fixtures/core/support-21> a core:RelationshipParty.
+<https://example.org/fixtures/core/ValidityFixture-22>
+    core:validFrom "2026-11-01"^^xsd:date.
+<https://example.org/fixtures/core/SoftwareAgent-23> a core:SoftwareAgent.
+<https://example.org/fixtures/core/Group-24> a core:Group.
+<https://example.org/fixtures/core/Asset-25> a core:Asset.
+<https://example.org/fixtures/core/InformationResource-26> a core:InformationResource.
+<https://example.org/fixtures/core/Event-27> a core:Event.
+<https://example.org/fixtures/core/Place-28> a core:Place.
+<https://example.org/fixtures/core/Category-29> a core:Category.

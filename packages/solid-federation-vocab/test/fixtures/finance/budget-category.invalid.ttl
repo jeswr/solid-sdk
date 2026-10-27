@@ -1,0 +1,13 @@
+# expect: https://jeswr.org/ns/sectors/finance#allocated
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/finance/shapes#BudgetCategoryShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix dcterms: <http://purl.org/dc/terms/>.
+@prefix fin: <https://jeswr.org/ns/sectors/finance#>.
+
+<https://example.org/fixtures/finance/BudgetCategory-62> a fin:BudgetCategory;
+    dcterms:title "Fixture".
+<https://example.org/fixtures/finance/support-63> a fin:MonetaryAmount;
+    fin:amount 1.0;
+    fin:currency "GBP".

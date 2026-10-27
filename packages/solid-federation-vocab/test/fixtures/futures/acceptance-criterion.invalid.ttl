@@ -1,0 +1,10 @@
+# expect: https://jeswr.org/ns/sectors/futures#operationalises
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/futures/shapes#AcceptanceCriterionShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix fut: <https://jeswr.org/ns/sectors/futures#>.
+@prefix as: <https://www.w3.org/ns/activitystreams#>.
+
+<https://example.org/fixtures/futures/AcceptanceCriterion-28> a fut:AcceptanceCriterion;
+    as:content "Fixture".

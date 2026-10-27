@@ -1,0 +1,9 @@
+# expect: https://jeswr.org/ns/sectors/contacts#locality
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/contacts/shapes#PostalAddressShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix contact: <https://jeswr.org/ns/sectors/contacts#>.
+
+<https://example.org/fixtures/contacts/PostalAddress-5> a contact:PostalAddress;
+    contact:countryName "Fixture".

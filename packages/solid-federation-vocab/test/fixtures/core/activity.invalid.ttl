@@ -1,0 +1,8 @@
+# expect: https://jeswr.org/ns/core#performedBy
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/core#ActivityShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+
+<https://example.org/fixtures/core/Activity-17> a core:Activity.
+<https://example.org/fixtures/core/support-18> a core:Agent.

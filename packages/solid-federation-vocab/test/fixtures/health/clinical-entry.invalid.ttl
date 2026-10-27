@@ -1,0 +1,9 @@
+# expect: https://jeswr.org/ns/sectors/health#patient
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/health/shapes#ClinicalEntryShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix health: <https://jeswr.org/ns/sectors/health#>.
+
+<https://example.org/fixtures/health/ClinicalEntry-34> a health:ClinicalEntry.
+<https://example.org/fixtures/health/support-35> a core:Person.

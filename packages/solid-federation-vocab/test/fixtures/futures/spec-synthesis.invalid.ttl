@@ -1,0 +1,16 @@
+# expect: https://jeswr.org/ns/sectors/futures#acceptanceCriterion
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/futures/shapes#SpecSynthesisShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix fut: <https://jeswr.org/ns/sectors/futures#>.
+@prefix as: <https://www.w3.org/ns/activitystreams#>.
+@prefix prov: <http://www.w3.org/ns/prov#>.
+
+<https://example.org/fixtures/futures/SpecSynthesis-26> a fut:SpecSynthesis;
+    as:content "Fixture";
+    prov:wasDerivedFrom <https://example.org/fixtures/futures/support-27>;
+    fut:bridgingEvidence "Fixture";
+    <https://w3id.org/security#proof> "Fixture";
+    prov:wasGeneratedBy "Fixture";
+    fut:dissent "Fixture".

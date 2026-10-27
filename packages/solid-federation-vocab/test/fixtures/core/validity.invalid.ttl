@@ -1,0 +1,9 @@
+# expect: https://jeswr.org/ns/core#validFrom
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/core#ValidityShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+
+<https://example.org/fixtures/core/ValidityFixture-22>
+    core:validFrom "2026-11-01"^^xsd:date, "wrong node kind".

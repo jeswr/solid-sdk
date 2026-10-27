@@ -1,0 +1,7 @@
+# expect: https://jeswr.org/ns/core#value
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/health/shapes#CodeableConceptShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix health: <https://jeswr.org/ns/sectors/health#>.
+
+<https://example.org/fixtures/health/CodeableConcept-36> a health:CodeableConcept.

@@ -1,0 +1,7 @@
+# expect: http://schema.org/url
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/bookmarks/shapes#BookmarkShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix bookmark: <https://jeswr.org/ns/sectors/bookmarks#>.
+
+<https://example.org/fixtures/bookmarks/Bookmark-1> a bookmark:Bookmark.

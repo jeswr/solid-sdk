@@ -1,0 +1,11 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Conforming instances of the social profile's NodeShapes.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix dcterms: <http://purl.org/dc/terms/>.
+@prefix social: <https://jeswr.org/ns/sectors/social#>.
+
+<https://example.org/fixtures/social/Note-1> a social:Note;
+    social:content "Fixture".
+<https://example.org/fixtures/social/Feed-2> a social:Feed;
+    dcterms:title "Fixture".
