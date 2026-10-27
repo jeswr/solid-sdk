@@ -184,6 +184,21 @@ export function hrefFor(item: Pick<DriveItem, "url" | "kind">): string {
     : `/drive/p/${encodeRef(item.url)}`;
 }
 
+/** Follow stars to an item's new URL, including the descendants of a moved folder. */
+export function repointStarred(
+  starred: readonly string[],
+  moves: readonly { from: string; to: string }[],
+): string[] {
+  return starred.map((entry) => {
+    for (const { from, to } of moves) {
+      if (entry === from) return to;
+      if (from.endsWith("/") && to.endsWith("/") && entry.startsWith(from))
+        return to + entry.slice(from.length);
+    }
+    return entry;
+  });
+}
+
 function folderLabel(url: string, driveRoot: string | undefined): string {
   return url === driveRoot ? "My Drive" : nameOf(url);
 }
@@ -277,6 +292,11 @@ export function useDriveActions() {
         invalidate(from);
         invalidate(to);
       }
+      // A star follows the item; leaving it on the old URL would star a replacement.
+      updatePrefs((current) => ({
+        ...current,
+        starred: repointStarred(current.starred, result.done),
+      }));
       if (result.failed.length > 0) {
         toast.error(
           result.done.length === 0
@@ -308,6 +328,7 @@ export function useDriveActions() {
                 label: "Undo",
                 onClick: async () => {
                   const failed: string[] = [];
+                  const restored: { from: string; to: string }[] = [];
                   for (const { from, to, identity } of undo) {
                     try {
                       if (!identity?.etag) throw new Error("No validator for Undo");
@@ -320,10 +341,16 @@ export function useDriveActions() {
                       );
                       invalidate(to);
                       invalidate(from);
+                      restored.push({ from: to, to: from });
                     } catch {
                       failed.push(nameOf(from));
                     }
                   }
+                  if (restored.length > 0)
+                    updatePrefs((current) => ({
+                      ...current,
+                      starred: repointStarred(current.starred, restored),
+                    }));
                   if (failed.length > 0)
                     toast.error(`This move cannot be safely undone: ${failed.join(", ")}`);
                 },
@@ -333,7 +360,7 @@ export function useDriveActions() {
       });
       return result;
     },
-    [client, driveRoot, invalidate, session],
+    [client, driveRoot, invalidate, session, updatePrefs],
   );
 
   const rename = useCallback(
@@ -343,12 +370,10 @@ export function useDriveActions() {
         invalidate(item.url);
         if (url !== item.url) {
           invalidate(url);
-          if (starred.has(item.url)) {
-            updatePrefs((current) => ({
-              ...current,
-              starred: current.starred.map((entry) => (entry === item.url ? url : entry)),
-            }));
-          }
+          updatePrefs((current) => ({
+            ...current,
+            starred: repointStarred(current.starred, [{ from: item.url, to: url }]),
+          }));
           toast.success(`Renamed to ${nameOf(url)}`);
         }
         return url;
@@ -357,7 +382,7 @@ export function useDriveActions() {
         return undefined;
       }
     },
-    [client, invalidate, starred, updatePrefs],
+    [client, invalidate, updatePrefs],
   );
 
   const makeCopy = useCallback(
