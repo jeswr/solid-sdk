@@ -98,6 +98,72 @@ async function replay(log: string, session: PodSession) {
   }
 }
 
+it("opens the full original body after restoring a document beside a same-name replacement", async () => {
+  const { session, original, client, url } = await fixture();
+  const trashed = await deleteDocument(url, session);
+  const replacement = await original.store.create({
+    title: "Original",
+    body: "<p>Replacement</p>",
+  });
+  expect(replacement.url).toBe(url);
+  const restored = await restoreDocument(trashed.done, session);
+  expect(restored.failed).toEqual([]);
+  const target = restored.done.find(({ entry }) => entry.original === url)?.url as string;
+  expect(target).not.toBe(url);
+  const opening = client();
+  await opening.open(target);
+  expect(opening.body).toBe("<p>Original</p>");
+  expect(opening.doc.getXmlFragment("prosemirror").toString()).toBe(
+    "<paragraph>Original</paragraph>",
+  );
+  expect(await replay(opening.stored?.data.updateLog as string, session)).toBe(
+    "<paragraph>Original</paragraph>",
+  );
+  expect((await original.store.read(url))?.data.body).toBe("<p>Replacement</p>");
+});
+
+it("resumes the reserved recovery copy after repeated final snapshot failures", async () => {
+  const { pod, session, original, client, url } = await fixture();
+  const recovered = client();
+  await recovered.open(url, true);
+  let fail = true;
+  const writer = new DocumentPersistence({
+    ...session,
+    fetch: async (input, init) =>
+      fail &&
+      init?.method === "PUT" &&
+      /-copy(?:-\d+)?\.ttl$/.test(String(input)) &&
+      new Headers(init.headers).has("if-match")
+        ? new Response(null, { status: 503 })
+        : pod.fetch(input, init),
+  });
+  // The retired runtime needs the failing transport, including its existing state.
+  const read = vi.spyOn(original.store, "makeCopy");
+  read.mockImplementation((source, state) => writer.store.makeCopy(source, state));
+  bodyText(original).insert(8, " pending");
+  original.change("<p>Original pending</p>", json("Original pending"));
+  try {
+    await original.reconnect();
+    expect(original.state).toBe("retrying");
+    await original.reconnect();
+    expect(original.state).toBe("retrying");
+    const copies = pod
+      .snapshot()
+      .resources.filter(([resource]) => /\/docs\/original-copy(?:-\d+)?\.ttl$/.test(resource));
+    expect(copies).toHaveLength(1);
+    fail = false;
+    await original.reconnect();
+    expect(original.state).toBe("saved");
+    expect(original.recoveredCopy).toBe(copies[0]?.[0]);
+    expect((await original.store.read(original.recoveredCopy as string))?.data.body).toBe(
+      "<p>Original pending</p>",
+    );
+  } finally {
+    read.mockRestore();
+    await writer.destroy();
+  }
+});
+
 it("keeps edits local while trashed and flushes them into the original log after Undo", async () => {
   const { pod, session, original, url, log, tree } = await fixture();
   const trashed = await deleteDocument(url, session);

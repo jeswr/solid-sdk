@@ -660,6 +660,110 @@ describe("snapshot conflicts", () => {
 });
 
 describe("makeCopy", () => {
+  it("retains a concurrent edit to a reserved copy when its owner retries", async () => {
+    const s = await server();
+    const source = await document();
+    let reservation: StoredDocument | undefined;
+    const state = {
+      assets: [],
+      snapshot: () => ({ body: "Recovered body", format: "text/html" }),
+      persistFullState: async () => {
+        throw new Error("interrupted");
+      },
+      onReserved: async (copy: StoredDocument) => {
+        reservation = copy;
+      },
+    };
+    await expect(s.store.makeCopy(source, state)).rejects.toThrow("interrupted");
+    assert(reservation);
+    const remote = await s.store.save(
+      reservation,
+      { body: "Another tab's copy edit" },
+      { regenerate: () => ({ body: "Another tab's copy edit", format: "text/html" }) },
+    );
+    await expect(
+      s.store.makeCopy(source, { ...state, reservation, persistFullState: async () => {} }),
+    ).rejects.toBeInstanceOf(ResourceWriteError);
+    expect((await s.store.read(remote.url))?.data.body).toBe("Another tab's copy edit");
+  });
+  it.each(["missing", "empty", "unrelated"])("rejects a %s recovery reservation", async (kind) => {
+    const s = await server();
+    const source = await document();
+    const reservation = { ...source, url: `${POD}docs/reservation.ttl` };
+    if (kind !== "missing")
+      s.resources.set(reservation.url, {
+        body:
+          kind === "empty"
+            ? ""
+            : await serializeTurtle(buildDocument(reservation.url, { title: "Unrelated" })),
+        etag: '"other"',
+        contentType: "text/turtle",
+      });
+    await expect(
+      s.store.makeCopy(source, {
+        reservation,
+        assets: [],
+        snapshot: () => ({ body: "live", format: "text/html" }),
+        persistFullState: async () => {},
+      }),
+    ).rejects.toMatchObject({ status: kind === "missing" ? 404 : 422 });
+  });
+  it.each([
+    "same",
+    "different",
+    "longer",
+    "unreadable",
+    "unavailable",
+  ])("resumes copied assets only when their bytes agree (%s)", async (kind) => {
+    const s = await server();
+    const source = await document();
+    const asset = `${docContainerUrls(DOC).assets}chart.png`;
+    s.resources.set(asset, { body: "png", contentType: "image/png", etag: '"asset"' });
+    let reservation: StoredDocument | undefined;
+    await expect(
+      s.store.makeCopy(source, {
+        assets: [asset],
+        snapshot: () => ({ body: "live", format: "text/html" }),
+        onReserved: async (copy) => {
+          reservation = copy;
+        },
+        persistFullState: async () => {
+          throw new Error("interrupted");
+        },
+      }),
+    ).rejects.toThrow("interrupted");
+    assert(reservation);
+    const target = `${docContainerUrls(reservation.url).assets}chart.png`;
+    if (kind === "different" || kind === "longer")
+      s.resources.set(target, {
+        body: kind === "longer" ? "longer" : "bad",
+        contentType: "image/png",
+        etag: '"changed"',
+      });
+    const fetchImpl: typeof fetch = async (input, init) => {
+      if (
+        String(input) === target &&
+        ((kind === "unreadable" && !init?.method) ||
+          (kind === "unavailable" && init?.method === "PUT"))
+      )
+        return new Response(null, { status: 503 });
+      return s.fetchImpl(input, init);
+    };
+    const retry = new DocsStore(POD, WEBID, fetchImpl).makeCopy(source, {
+      reservation,
+      assets: [asset],
+      snapshot: () => ({ body: "live", format: "text/html" }),
+      persistFullState: async () => {},
+    });
+    if (kind === "same") {
+      expect((await retry).url).toBe(reservation.url);
+      expect(s.resources.get(target)?.body).toBe("png");
+    } else
+      await expect(retry).rejects.toBeInstanceOf(
+        kind === "unreadable" ? ResourceReadError : ResourceWriteError,
+      );
+    expect(s.resources.has(`${POD}docs/plan-copy-2.ttl`)).toBe(false);
+  });
   it.each([
     'W/"reservation"',
     null,

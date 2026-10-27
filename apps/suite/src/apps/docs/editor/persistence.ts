@@ -19,14 +19,23 @@ import {
 } from "../lib/model";
 import { copyDocument } from "./copy";
 import { baseExtensions } from "./extensions";
+import { updateMirrorMetadata } from "./mirror-metadata";
 import { DocumentUpdateStore } from "./update-store";
 
 class InactiveLogError extends Error {}
 
 interface PendingEdit {
+  owner?: string;
   title: string;
   baseTitle: string;
   baseModified: string | undefined;
+}
+interface PendingRecovery {
+  key: string;
+  title: string;
+  source: StoredDocument;
+  json: JSONContent;
+  reservation?: StoredDocument;
 }
 
 /** One owner for the CRDT, mirrors and serial snapshot queue, independent of React mounts. */
@@ -35,6 +44,7 @@ export class DocumentPersistence {
   recoveredCopy: string | undefined;
   switchingLog = false;
   private mirrorRestart: Promise<void> | undefined;
+  private mirrorGeneration = 0;
   readonly store: DocsStore;
   local: IndexeddbPersistence | undefined;
   provider: SolidPersistence | undefined;
@@ -51,6 +61,8 @@ export class DocumentPersistence {
   private creation: "draft" | "creating" | "created" = "draft";
   private draftMirror: IndexeddbPersistence | undefined;
   private pendingEdit: PendingEdit | undefined;
+  private pendingRecovery: PendingRecovery | undefined;
+  private readonly editOwner = crypto.randomUUID();
   private offlineCopy = false;
   private destroyed: Promise<void> | undefined;
   private version = 0;
@@ -88,6 +100,7 @@ export class DocumentPersistence {
     });
   }
   private createMirror(name: string) {
+    const generation = this.mirrorGeneration;
     const mirror = new IndexeddbPersistence(name, this.doc);
     const save = mirror._storeUpdate;
     this.doc.off("update", save);
@@ -96,11 +109,13 @@ export class DocumentPersistence {
         save(update, origin);
       } catch (error) {
         if (!(error instanceof DOMException && error.name === "InvalidStateError")) throw error;
+        if (generation !== this.mirrorGeneration || mirror !== this.local) return;
         // Let the remaining Yjs listeners (including the pod provider) receive
         // this edit. Reopening seeds the mirror from the still-live Y.Doc.
         void this.restartMirror(mirror)
-          .then(() => this.writePending())
+          .then(() => (generation === this.mirrorGeneration ? this.writePending() : undefined))
           .catch(() => {
+            if (generation !== this.mirrorGeneration) return;
             this.state = "retrying";
             this.scheduleRetry();
             this.notify();
@@ -111,9 +126,11 @@ export class DocumentPersistence {
     return mirror;
   }
   private restartMirror(mirror: IndexeddbPersistence) {
+    if (mirror !== this.local) return Promise.resolve();
+    const generation = this.mirrorGeneration;
     this.mirrorRestart ??= (async () => {
       await mirror.destroy();
-      if (this.stopped) return;
+      if (this.stopped || generation !== this.mirrorGeneration || mirror !== this.local) return;
       this.local = this.createMirror(mirror.name);
       await this.local.whenSynced;
       await storeState(this.local, true);
@@ -125,24 +142,56 @@ export class DocumentPersistence {
   private async withMirror<T>(
     action: (mirror: IndexeddbPersistence) => Promise<T>,
   ): Promise<T | undefined> {
+    const generation = this.mirrorGeneration;
     await this.mirrorRestart;
+    if (generation !== this.mirrorGeneration) return undefined;
     const mirror = this.local;
     if (!mirror) return undefined;
     try {
       return await action(mirror);
     } catch (error) {
+      if (generation !== this.mirrorGeneration) return undefined;
       if (!(error instanceof DOMException && error.name === "InvalidStateError")) throw error;
       await this.restartMirror(mirror);
-      return this.local ? action(this.local) : undefined;
+      return generation === this.mirrorGeneration && this.local ? action(this.local) : undefined;
     }
   }
   private async writePending() {
-    if (!this.pendingEdit) return;
-    await this.withMirror(async (mirror) => {
-      await mirror.set("pending", 1);
-      await mirror.set("title", this.title);
-      await mirror.set("edit", JSON.stringify(this.pendingEdit));
-    });
+    const edit = this.pendingEdit;
+    if (!edit) return;
+    const generation = this.mirrorGeneration;
+    await this.withMirror((mirror) =>
+      updateMirrorMetadata(
+        mirror,
+        (current) => {
+          const previous = this.parseMetadata<PendingEdit>(current.edit);
+          const previousTitle = previous?.title ?? current.title;
+          if (
+            current.pending &&
+            previous?.owner !== edit.owner &&
+            previousTitle !== edit.title &&
+            typeof previousTitle === "string" &&
+            previousTitle !== previous?.baseTitle
+          )
+            return undefined;
+          return { pending: 1, title: edit.title, edit: JSON.stringify(edit) };
+        },
+        () => generation === this.mirrorGeneration,
+      ),
+    );
+  }
+  private async clearPending(title: string) {
+    const generation = this.mirrorGeneration;
+    await this.withMirror((mirror) =>
+      updateMirrorMetadata(
+        mirror,
+        (current) => {
+          const pending = this.parseMetadata<PendingEdit>(current.edit)?.title ?? current.title;
+          return pending === title ? { pending: 0 } : undefined;
+        },
+        () => generation === this.mirrorGeneration,
+      ),
+    );
   }
   private mirrorName(url: string, container: string) {
     return container === docContainerUrls(url).updateLog ? url : `${url}::${container}`;
@@ -175,6 +224,9 @@ export class DocumentPersistence {
     this.assertActive();
     if (pending) {
       this.pendingEdit = await this.metadata<PendingEdit>("edit");
+      this.pendingRecovery = await this.metadata<PendingRecovery>(
+        `recovery:${this.pendingEdit?.owner ?? this.editOwner}`,
+      );
       const title = this.pendingEdit?.title ?? (await this.local?.get("title"));
       if (typeof title === "string") this.title = title;
       this.version++;
@@ -188,18 +240,37 @@ export class DocumentPersistence {
     while (this.version !== this.savedVersion) {
       const version = this.version;
       const source = this.stored ?? remote;
-      const copy = await copyDocument(
-        this.store,
-        {
+      this.pendingRecovery ??= {
+        key: `recovery:${this.pendingEdit?.owner ?? this.editOwner}`,
+        title: this.title,
+        source: {
           ...source,
           data: { ...source.data, title: `Recovered edits — ${this.title}`.slice(0, 190) },
         },
-        this.session,
-        yDocToProsemirrorJSON(this.doc) as JSONContent,
-      );
+        json: yDocToProsemirrorJSON(this.doc) as JSONContent,
+      };
+      const recovery = this.pendingRecovery;
+      const remember = () =>
+        this.withMirror((mirror) => mirror.set(recovery.key, JSON.stringify(recovery)));
+      await remember();
+      const copy = await copyDocument(this.store, recovery.source, this.session, recovery.json, {
+        reservation: recovery.reservation,
+        onReserved: async (reserved) => {
+          recovery.reservation = reserved;
+          await remember();
+        },
+      });
       this.recoveredCopy = copy.url;
+      this.pendingRecovery = undefined;
+      await this.withMirror(async (mirror) => {
+        await mirror.set("recoveredCopy", copy.url);
+        await mirror.set(recovery.key, "");
+      });
       if (this.version !== version) continue;
-      await this.withMirror((mirror) => mirror.set("pending", 0));
+      if (this.title !== recovery.title) continue;
+      if (JSON.stringify(yDocToProsemirrorJSON(this.doc)) !== JSON.stringify(recovery.json))
+        continue;
+      await this.clearPending(this.title);
       if (this.version !== version) continue;
       this.savedVersion = version;
       this.pendingEdit = undefined;
@@ -221,6 +292,7 @@ export class DocumentPersistence {
         if (this.local) await this.restartMirror(this.local);
         await this.preserveRetiredEdits(remote);
       }
+      this.mirrorGeneration++;
       this.doc.destroy();
       this.doc = new Doc();
       this.trackUpdates();
@@ -266,6 +338,7 @@ export class DocumentPersistence {
         const next: unknown = await this.local.get("nextMirror");
         if (typeof next !== "string") break;
         await this.local.destroy();
+        this.mirrorGeneration++;
         this.doc.destroy();
         this.doc = new Doc();
         this.trackUpdates();
@@ -404,6 +477,9 @@ export class DocumentPersistence {
   }
   private async metadata<T>(key: string): Promise<T | undefined> {
     const raw = await this.withMirror((mirror) => mirror.get(key));
+    return this.parseMetadata<T>(raw);
+  }
+  private parseMetadata<T>(raw: unknown): T | undefined {
     if (typeof raw !== "string") return undefined;
     try {
       return JSON.parse(raw) as T;
@@ -531,6 +607,7 @@ export class DocumentPersistence {
   }
   private markDirty() {
     this.pendingEdit = {
+      owner: this.pendingEdit?.owner ?? this.editOwner,
       title: this.title,
       baseTitle: this.pendingEdit?.baseTitle ?? this.stored?.data.title ?? this.title,
       baseModified: this.pendingEdit?.baseModified ?? this.stored?.data.modified,
@@ -647,7 +724,7 @@ export class DocumentPersistence {
         this.savedVersion = version;
         this.lastSaved = Date.now();
         if (this.version === version) {
-          await this.withMirror((mirror) => mirror.set("pending", 0));
+          await this.clearPending((this.stored as StoredDocument).data.title);
           this.pendingEdit = undefined;
         }
       }

@@ -53,7 +53,7 @@ export function FindBar({
     }
   };
   const replace = (all: boolean) => {
-    if (!matches.length) return;
+    if (!editor.isEditable || !matches.length) return;
     try {
       const result = all
         ? replaceAll(editor.getJSON(), query, replacement, { caseSensitive: matchCase })
@@ -106,18 +106,22 @@ export function FindBar({
         />
         Match case
       </label>
-      <label htmlFor={`${id}-replace`}>Replace</label>
-      <Input
-        id={`${id}-replace`}
-        value={replacement}
-        onChange={(event) => setReplacement(event.target.value)}
-      />
-      <Button variant="outline" onClick={() => replace(false)}>
-        Replace
-      </Button>
-      <Button variant="outline" onClick={() => replace(true)}>
-        Replace all
-      </Button>
+      {editor.isEditable && (
+        <>
+          <label htmlFor={`${id}-replace`}>Replace</label>
+          <Input
+            id={`${id}-replace`}
+            value={replacement}
+            onChange={(event) => setReplacement(event.target.value)}
+          />
+          <Button variant="outline" onClick={() => replace(false)}>
+            Replace
+          </Button>
+          <Button variant="outline" onClick={() => replace(true)}>
+            Replace all
+          </Button>
+        </>
+      )}
       <IconButton
         label="Close find"
         variant="ghost"

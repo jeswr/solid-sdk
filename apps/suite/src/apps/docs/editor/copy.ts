@@ -2,15 +2,23 @@
 import { SolidPersistence } from "@jeswr/y-solid";
 import { generateHTML, generateJSON, getSchema, type JSONContent } from "@tiptap/react";
 import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
+import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import type { PodSession } from "@/lib/session/pod-session";
 import { wordCount } from "../lib/editor/logic";
-import { type DocsStore, docContainerUrls, isDirectChild, type StoredDocument } from "../lib/model";
+import {
+  type CopyState,
+  type DocsStore,
+  docContainerUrls,
+  isDirectChild,
+  type StoredDocument,
+} from "../lib/model";
 import { baseExtensions } from "./extensions";
 export async function copyDocument(
   store: DocsStore,
   stored: StoredDocument,
   session: PodSession,
   live?: JSONContent,
+  options: Pick<CopyState, "reservation" | "onReserved"> = {},
 ) {
   const extensions = baseExtensions(session.fetch);
   const captured = structuredClone(live ?? generateJSON(stored.data.body, extensions));
@@ -32,6 +40,7 @@ export async function copyDocument(
     return json;
   };
   return store.makeCopy(stored, {
+    ...options,
     assets,
     snapshot: (mapping) => {
       const json = remap(mapping);
@@ -42,10 +51,17 @@ export async function copyDocument(
       };
     },
     persistFullState: async (container, fetchImpl, mapping) => {
-      const doc = prosemirrorJSONToYDoc(getSchema(extensions), remap(mapping), "prosemirror");
+      const doc = new Doc();
       const provider = new SolidPersistence({ doc, container, fetch: fetchImpl });
       try {
         await provider.whenSynced;
+        // Retrying a reservation must reuse its identities, including after an
+        // append succeeded but its acknowledgement or final snapshot failed.
+        if (!doc.getXmlFragment("prosemirror").length) {
+          const seed = prosemirrorJSONToYDoc(getSchema(extensions), remap(mapping), "prosemirror");
+          applyUpdate(doc, encodeStateAsUpdate(seed));
+          seed.destroy();
+        }
         await provider.persistFullState();
       } finally {
         provider.destroy();

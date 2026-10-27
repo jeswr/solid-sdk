@@ -9,7 +9,9 @@
 
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { mapConcurrent } from "../../../../lib/parallel";
-import { parseDocument } from "../../../docs/lib/model/document";
+import { buildDocument, type PodDocument, parseDocument } from "../../../docs/lib/model/document";
+import { docContainerUrls } from "../../../docs/lib/model/layout";
+import { serializeTurtle } from "../../../docs/lib/model/rdf-io";
 import {
   type DriveClient,
   DriveError,
@@ -663,29 +665,15 @@ function restoredName(name: string): string {
 async function isDocsUpdateTree(
   client: DriveClient,
   original: string,
-  entries: readonly TrashEntry[],
+  document: PodDocument | undefined,
 ): Promise<boolean> {
   const docs = new URL("docs/", client.storageUrl).href;
   if (!original.startsWith(docs) || !original.endsWith("/")) return false;
-  const documentUrl = `${original.slice(0, -1)}.ttl`;
-  const source = (await exists(client, documentUrl))
-    ? documentUrl
-    : entries.find((entry) => entry.original === documentUrl)?.url;
-  if (!source) return false;
-  try {
-    const { dataset } = await fetchRdf(source, {
-      fetch: async () =>
-        new Response(await client.read(source), { headers: { "content-type": "text/turtle" } }),
-    });
-    const document = parseDocument(documentUrl, dataset);
-    if (
-      !document?.updateLog?.startsWith(original) ||
-      !/^updates(?:-\d+)?\/$/.test(document.updateLog.slice(original.length))
-    )
-      return false;
-  } catch {
+  if (
+    !document?.updateLog?.startsWith(original) ||
+    !/^updates(?:-\d+)?\/$/.test(document.updateLog.slice(original.length))
+  )
     return false;
-  }
   for (const child of await client.list(original)) {
     if (child.kind !== "folder" || !/^updates(?:-\d+)?$/.test(child.name)) return false;
     for (const update of await client.list(child.url)) {
@@ -755,17 +743,100 @@ export async function restoreItems(
     done: [],
     failed: [],
   };
-  const restored = await mapConcurrent(entries, async (entry) => {
-    const outcome: typeof result = { done: [], failed: [] };
+  // Classify the complete batch while all trash resources are still present.
+  // Cache the snapshot bytes and validator once, including for renamed pairs.
+  const snapshots = new Map<
+    string,
+    Promise<{ data: PodDocument; etag: string | undefined } | undefined>
+  >();
+  const snapshotFor = (documentUrl: string) => {
+    let pending = snapshots.get(documentUrl);
+    if (!pending) {
+      pending = (async () => {
+        const docs = new URL("docs/", client.storageUrl).href;
+        if (!documentUrl.startsWith(docs)) return undefined;
+        const source = entries.find((entry) => entry.original === documentUrl)?.url ?? documentUrl;
+        if (!(await exists(client, source))) return undefined;
+        // A failed read is an error, never evidence that this isn't a companion.
+        const { body, etag } = await client.readVersion(source);
+        try {
+          const { dataset } = await fetchRdf(documentUrl, {
+            fetch: async () => new Response(body, { headers: { "content-type": "text/turtle" } }),
+          });
+          const data = parseDocument(documentUrl, dataset);
+          return data ? { data, etag } : undefined;
+        } catch {
+          return undefined;
+        }
+      })();
+      snapshots.set(documentUrl, pending);
+    }
+    return pending;
+  };
+  const plans = await mapConcurrent(entries, async (entry) => {
     try {
       const slot = slotOf(driveRoot, entry);
       validateOriginal(client, driveRoot, entry);
       const status = await requireTrashEntry(client, driveRoot, entry);
       const occupied = status !== "partial" && (await exists(client, entry.original));
-      if (
+      const folder = entry.original.endsWith("/");
+      const merge =
         status === "partial" ||
-        (occupied && (await isDocsUpdateTree(client, entry.original, entries)))
-      ) {
+        (occupied &&
+          folder &&
+          (await isDocsUpdateTree(
+            client,
+            entry.original,
+            (
+              await snapshotFor(`${entry.original.slice(0, -1)}.ttl`)
+            )?.data,
+          )));
+      const target =
+        occupied && !merge
+          ? childUrl(parentOf(entry.original) as string, restoredName(entry.name), folder)
+          : entry.original;
+      return {
+        entry,
+        slot,
+        status,
+        merge,
+        target,
+        snapshot: undefined as Awaited<ReturnType<typeof snapshotFor>>,
+      };
+    } catch (error) {
+      return { entry, error };
+    }
+  });
+  for (const plan of plans) {
+    if ("error" in plan || plan.entry.original.endsWith("/")) continue;
+    const tree = `${plan.entry.original.slice(0, -4)}/`;
+    const companion = plans.find((other) => !("error" in other) && other.entry.original === tree);
+    if (
+      plan.target === plan.entry.original &&
+      (!companion || "error" in companion || companion.target === tree)
+    )
+      continue;
+    try {
+      plan.snapshot = await snapshotFor(plan.entry.original);
+      if (!plan.snapshot) continue;
+      if (plan.target === plan.entry.original && companion && !("error" in companion))
+        plan.target = `${companion.target.slice(0, -1)}.ttl`;
+      if (companion && !("error" in companion)) {
+        companion.target = docContainerUrls(plan.target).container;
+        companion.merge = false;
+      }
+    } catch (error) {
+      Object.assign(plan, { error });
+    }
+  }
+  const outcomes = new Map<TrashEntry, typeof result>();
+  const restore = async (plan: (typeof plans)[number]) => {
+    const { entry } = plan;
+    const outcome: typeof result = { done: [], failed: [] };
+    try {
+      if ("error" in plan) throw plan.error;
+      const { slot, status, target } = plan;
+      if (plan.merge) {
         // A failed merge must retry in place even after assets have been restored.
         if (status !== "partial")
           await updateIndex(client, driveRoot, (index) => {
@@ -777,29 +848,75 @@ export async function restoreItems(
           await client.remove(recoveryMarker(driveRoot, entry));
         await client.remove(slot).catch(() => undefined);
         outcome.done.push({ entry, url: entry.original, renamed: false });
+        outcomes.set(entry, outcome);
         return outcome;
       }
-      const folder = entry.original.endsWith("/");
-      const parent = parentOf(entry.original) as string;
-      let target = entry.original;
-      let renamed = false;
-      if (occupied) {
-        target = childUrl(parent, restoredName(entry.name), folder);
-        renamed = true;
-      }
+      const renamed = target !== entry.original;
+      if (renamed && plan.snapshot) {
+        const companion = plans.find(
+          (other) => other.entry.original === docContainerUrls(entry.original).container,
+        );
+        const failedCompanion = companion && outcomes.get(companion.entry);
+        if (failedCompanion?.failed.length)
+          throw new TrashRestorePartialError(failedCompanion.failed);
+        const { data, etag } = plan.snapshot;
+        if (!etag || etag.startsWith("W/"))
+          throw new DriveError("missing-validator", 409, entry.url);
+        const before = docContainerUrls(entry.original);
+        const after = docContainerUrls(target);
+        const relocate = (iri: string | undefined) =>
+          iri?.startsWith(before.container)
+            ? `${after.container}${iri.slice(before.container.length)}`
+            : iri;
+        const revision = (iri: string | undefined) =>
+          iri?.startsWith(`${entry.original}#`)
+            ? `${target}${iri.slice(entry.original.length)}`
+            : iri;
+        const dataset = buildDocument(target, {
+          ...data,
+          updateLog: relocate(data.updateLog),
+          assets: relocate(data.assets),
+          comments: relocate(data.comments),
+          now: new Date(data.modified ?? Date.now()),
+          priorRevisions: data.revisions.map((rev) => ({
+            ...rev,
+            id: revision(rev.id) as string,
+            wasRevisionOf: revision(rev.wasRevisionOf),
+          })),
+        });
+        const written = await client.write(target, await serializeTurtle(dataset), {
+          contentType: "text/turtle",
+          ifNoneMatch: "*",
+        });
+        if (!written.etag || written.etag.startsWith("W/"))
+          throw new DriveError("missing-validator", 409, target);
+        const current = await client.stat(target, { ifMatch: written.etag });
+        if (current.etag !== written.etag) throw new DriveError("conflict", 412, target);
+        await client.remove(entry.url, { ifMatch: etag });
+      } else await client.move(entry.url, target);
       // Moving recreates missing parent folders (PUT creates intermediate containers).
-      const { url } = await client.move(entry.url, target);
       if (await recoveryStatus(client, driveRoot, entry))
         await client.remove(recoveryMarker(driveRoot, entry));
       // The slot may contain another writer's resources; only remove it empty.
       await client.remove(slot).catch(() => undefined);
-      outcome.done.push({ entry, url, renamed });
+      outcome.done.push({ entry, url: target, renamed });
     } catch (error) {
       outcome.failed.push({ url: entry.url, error });
     }
+    outcomes.set(entry, outcome);
     return outcome;
-  });
-  for (const outcome of restored) {
+  };
+  // A renamed snapshot is advertised only after its companion has been restored.
+  await mapConcurrent(
+    plans.filter(({ entry }) => entry.original.endsWith("/")),
+    restore,
+  );
+  await mapConcurrent(
+    plans.filter(({ entry }) => !entry.original.endsWith("/")),
+    restore,
+  );
+  for (const entry of entries) {
+    const outcome = outcomes.get(entry) as typeof result;
     result.done.push(...outcome.done);
     result.failed.push(...outcome.failed);
   }

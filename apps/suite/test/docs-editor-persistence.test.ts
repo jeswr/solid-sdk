@@ -3,6 +3,7 @@
 import { SolidPersistence, SolidUpdateStore } from "@jeswr/y-solid";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement, XmlText } from "yjs";
+import { rowExportJson } from "../src/apps/docs/editor/export-document";
 import { DocumentPersistence } from "../src/apps/docs/editor/persistence";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_NAME, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
@@ -192,6 +193,156 @@ async function replayText(runtime: DocumentPersistence, session: PodSession) {
   }
 }
 describe("Docs persistence review regressions", () => {
+  it("reopens and resumes a reserved recovery copy without duplicating its log", async () => {
+    const f = await fixture();
+    const { runtime, session, pod } = f;
+    runtimes.push(runtime);
+    await runtime.open();
+    const paragraph = new XmlElement("paragraph");
+    const text = new XmlText();
+    text.insert(0, "Original");
+    paragraph.insert(0, [text]);
+    runtime.doc.getXmlFragment("prosemirror").insert(0, [paragraph]);
+    runtime.change("<p>Original</p>", json("Original"));
+    await runtime.flush();
+    const url = runtime.stored?.url as string;
+    const recovered = new DocumentPersistence(session);
+    runtimes.push(recovered);
+    await recovered.open(url, true);
+    text.insert(8, " pending");
+    runtime.change("<p>Original pending</p>", json("Original pending"));
+    f.intercept(async (input, init) =>
+      /-copy(?:-\d+)?\.ttl$/.test(String(input)) &&
+      init?.method === "PUT" &&
+      new Headers(init.headers).has("if-match")
+        ? new Response(null, { status: 503 })
+        : pod.fetch(input, init),
+    );
+    await runtime.reconnect();
+    expect(runtime.state).toBe("retrying");
+    const owner = JSON.parse(mirrors.get(url)?.get("edit") as string).owner;
+    const pending = JSON.parse(mirrors.get(url)?.get(`recovery:${owner}`) as string);
+    expect(pending.reservation.url).toMatch(/-copy\.ttl$/);
+    runtime.online = false;
+    await runtime.destroy();
+    f.intercept(undefined);
+    const reopened = new DocumentPersistence(session);
+    runtimes.push(reopened);
+    await reopened.open(url);
+    await reopened.flush();
+    expect(reopened.recoveredCopy).toBe(pending.reservation.url);
+    const copy = await reopened.store.read(reopened.recoveredCopy as string);
+    expect(copy?.data.body).toBe("<p>Original pending</p>");
+    const reader = new DocumentPersistence(session);
+    runtimes.push(reader);
+    await reader.open(copy?.url);
+    expect(await replayText(reader, session)).toBe("<paragraph>Original pending</paragraph>");
+    expect(
+      pod.snapshot().resources.filter(([resource]) => /-copy(?:-\d+)?\.ttl$/.test(resource)),
+    ).toHaveLength(1);
+  });
+  it("ignores a retired mirror metadata write that rejects after the new Y.Doc is installed", async () => {
+    const { runtime, session } = await fixture();
+    runtimes.push(runtime);
+    await runtime.open();
+    const paragraph = new XmlElement("paragraph");
+    const text = new XmlText();
+    text.insert(0, "Original");
+    paragraph.insert(0, [text]);
+    runtime.doc.getXmlFragment("prosemirror").insert(0, [paragraph]);
+    runtime.change("<p>Original</p>", json("Original"));
+    await runtime.flush();
+    const recovered = new DocumentPersistence(session);
+    runtimes.push(recovered);
+    await recovered.open(runtime.stored?.url, true);
+    const oldMirror = runtime.local;
+    if (!oldMirror) throw new Error("Missing mirror");
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let paused = false;
+    const set = oldMirror.set.bind(oldMirror);
+    const late = vi.spyOn(oldMirror, "set").mockImplementation(async (key, value) => {
+      if (key === "edit") {
+        paused = true;
+        await gate;
+        throw new DOMException("The connection is closed", "InvalidStateError");
+      }
+      return set(key, value);
+    });
+    try {
+      text.insert(8, " pending");
+      runtime.change("<p>Original pending</p>", json("Original pending"));
+      await vi.waitFor(() => expect(paused).toBe(true));
+      await runtime.reconnect();
+      const currentMirror = runtime.local;
+      expect(currentMirror?.name).not.toBe(oldMirror.name);
+      release();
+      await vi.waitFor(() =>
+        expect(late.mock.settledResults.every((result) => result.type !== "incomplete")).toBe(true),
+      );
+      await runtime.flush();
+      expect(runtime.local).toBe(currentMirror);
+      expect(runtime.doc.getXmlFragment("prosemirror").toString()).toBe(
+        "<paragraph>Original</paragraph>",
+      );
+      expect(await replayText(runtime, session)).toBe("<paragraph>Original</paragraph>");
+    } finally {
+      release();
+      late.mockRestore();
+    }
+  });
+  it("preserves another tab's pending rename when a body-only snapshot is saved", async () => {
+    const { runtime, session } = await fixture();
+    runtimes.push(runtime);
+    await runtime.open();
+    runtime.doc.getXmlFragment("prosemirror").insert(0, [new XmlElement("paragraph")]);
+    runtime.rename("Original title");
+    await runtime.flush();
+    const url = runtime.stored?.url as string;
+    const other = new DocumentPersistence(session);
+    runtimes.push(other);
+    await other.open(url);
+    runtime.online = false;
+    runtime.rename("Pending rename in A");
+    await vi.waitFor(() => expect(mirrors.get(url)?.get("title")).toBe("Pending rename in A"));
+    other.change("<p>Body from B</p>", json("Body from B"));
+    await other.flush();
+    expect(other.stored?.data.title).toBe("Original title");
+    expect(mirrors.get(url)?.get("pending")).toBe(1);
+    expect(JSON.parse(mirrors.get(url)?.get("edit") as string).title).toBe("Pending rename in A");
+    await runtime.destroy();
+    const reopened = new DocumentPersistence(session);
+    runtimes.push(reopened);
+    await reopened.open(url);
+    expect(reopened.title).toBe("Pending rename in A");
+    await reopened.flush();
+    expect(reopened.stored?.data.title).toBe("Pending rename in A");
+  });
+  it("exports the current recovery mirror from the document list after editing and saving", async () => {
+    const { runtime, session } = await fixture();
+    runtimes.push(runtime);
+    await runtime.open();
+    const paragraph = new XmlElement("paragraph");
+    const text = new XmlText();
+    text.insert(0, "Original");
+    paragraph.insert(0, [text]);
+    runtime.doc.getXmlFragment("prosemirror").insert(0, [paragraph]);
+    runtime.change("<p>Original</p>", json("Original"));
+    await runtime.flush();
+    const recovered = new DocumentPersistence(session);
+    runtimes.push(recovered);
+    const url = runtime.stored?.url as string;
+    await recovered.open(url, true);
+    const recoveredText = (recovered.doc.getXmlFragment("prosemirror").get(0) as XmlElement).get(
+      0,
+    ) as XmlText;
+    recoveredText.insert(8, " recovered edit");
+    recovered.change("<p>Original recovered edit</p>", json("Original recovered edit"));
+    await recovered.flush();
+    expect(await rowExportJson(url, session)).toEqual(json("Original recovered edit"));
+  });
   it("reloads a retired saved mirror into a fresh document without merging its old identities", async () => {
     const { runtime, session } = await fixture();
     runtimes.push(runtime);

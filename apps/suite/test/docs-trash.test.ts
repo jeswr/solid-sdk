@@ -1,9 +1,16 @@
 // AUTHORED-BY Codex
+
+import { DataFactory } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { deleteDocument, deleteForever, restoreDocument } from "../src/apps/docs/editor/operations";
-import { buildDocument, serializeTurtle } from "../src/apps/docs/lib/model";
-import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
+import {
+  buildDocument,
+  DocumentDoc,
+  parseDocument,
+  serializeTurtle,
+} from "../src/apps/docs/lib/model";
+import { createSolidDriveClient, DriveError } from "../src/apps/drive/lib/client/client";
 import { listTrash, restoreItems, trashItems } from "../src/apps/drive/lib/operations/operations";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import type { PodSession } from "../src/lib/session/pod-session";
@@ -38,6 +45,140 @@ async function fixture(companion = true) {
 }
 
 describe("Docs uses Drive trash records", () => {
+  it("relocates revision links and preserves an undated snapshot's complete body", async () => {
+    const { pod, session, client } = await fixture(false);
+    const dataset = buildDocument(DOC, {
+      title: "Plan",
+      body: "<p>Full body</p>",
+      revisionLabel: "Named draft",
+    });
+    new DocumentDoc(`${DOC}#it`, dataset, DataFactory).modified = undefined;
+    await pod.fetch(DOC, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body: await serializeTurtle(dataset),
+    });
+    const trashed = await deleteDocument(DOC, session);
+    await pod.fetch(DOC, { method: "PUT", body: "occupant" });
+    const restored = await restoreDocument(trashed.done, session);
+    expect(restored.failed).toEqual([]);
+    const url = restored.done[0]?.url as string;
+    const snapshot = await client.readRdf(url);
+    const data = snapshot && parseDocument(url, snapshot.dataset);
+    expect(data?.body).toBe("<p>Full body</p>");
+    expect(data?.revisions[0]?.id).toBe(`${url}#rev-0`);
+    expect(data?.revisions[0]?.label).toBe("Named draft");
+  });
+  it.each([
+    "source-read",
+    "source-validator",
+    "weak-source",
+    "write-validator",
+    "weak-write",
+    "changed-target",
+    "companion",
+  ])("retains the trash snapshot when a renamed pair cannot be safely restored (%s)", async (failure) => {
+    const { pod, session, client } = await fixture();
+    const trashed = await deleteDocument(DOC, session);
+    await pod.fetch(DOC, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body: await serializeTurtle(
+        buildDocument(DOC, { title: "Replacement", updateLog: `${TREE}updates/` }),
+      ),
+    });
+    await client.createFolder(`${TREE}updates/`);
+    const target = `${ROOT}docs/plan%20(restored).ttl`;
+    const interrupted = {
+      ...client,
+      readVersion: async (url: string) => {
+        if (url === trashed.done[0]?.url && failure === "source-read")
+          throw new DriveError("not-found", 404, url);
+        const version = await client.readVersion(url);
+        if (url === trashed.done[0]?.url && failure === "source-validator")
+          return { body: version.body };
+        if (url === trashed.done[0]?.url && failure === "weak-source")
+          return { ...version, etag: 'W/"source"' };
+        return version;
+      },
+      write: async (...args: Parameters<typeof client.write>) => {
+        const written = await client.write(...args);
+        if (args[0] === target && failure === "write-validator") return {};
+        if (args[0] === target && failure === "weak-write") return { etag: 'W/"written"' };
+        return written;
+      },
+      stat: async (...args: Parameters<typeof client.stat>) => {
+        const item = await client.stat(...args);
+        return args[0] === target && failure === "changed-target"
+          ? { ...item, etag: '"changed"' }
+          : item;
+      },
+      move: async (...args: Parameters<typeof client.move>) => {
+        if (args[0] === trashed.done[1]?.url && failure === "companion")
+          throw new Error("companion unavailable");
+        return client.move(...args);
+      },
+    };
+    const restored = await restoreItems(interrupted, DRIVE, trashed.done);
+    expect(restored.failed.some(({ url }) => url === trashed.done[0]?.url)).toBe(true);
+    expect((await pod.fetch(trashed.done[0]?.url as string)).ok).toBe(true);
+    expect(await (await pod.fetch(DOC)).text()).toContain("Replacement");
+    if (failure === "source-read") expect(restored.done).toEqual([]);
+  });
+  it("rewrites a renamed snapshot even when restoring just that record", async () => {
+    const { pod, session, client } = await fixture();
+    const trashed = await deleteDocument(DOC, session);
+    await pod.fetch(DOC, { method: "PUT", body: "occupant" });
+    const restored = await restoreDocument(trashed.done.slice(0, 1), session);
+    expect(restored.failed).toEqual([]);
+    const result = await client.readRdf(restored.done[0]?.url as string);
+    expect(result && parseDocument(restored.done[0]?.url as string, result.dataset)?.title).toBe(
+      "Plan",
+    );
+  });
+  it("keeps ordinary colliding resources in docs restorable without interpreting invalid RDF", async () => {
+    const { pod, session, client } = await fixture(false);
+    await pod.fetch(DOC, { method: "PUT", body: "ordinary file" });
+    const trashed = await deleteDocument(DOC, session);
+    await pod.fetch(DOC, { method: "PUT", body: "occupant" });
+    const restored = await restoreItems(client, DRIVE, trashed.done);
+    expect(restored.failed).toEqual([]);
+    expect(await (await pod.fetch(restored.done[0]?.url as string)).text()).toBe("ordinary file");
+  });
+  it("classifies companions before a parallel snapshot restore can delete its trash source", async () => {
+    const { pod, session, client } = await fixture();
+    const trashed = await deleteDocument(DOC, session);
+    await client.createFolder(`${TREE}updates/`);
+    let moving = false;
+    let release = () => {};
+    const moved = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const racing = {
+      ...client,
+      move: async (...args: Parameters<typeof client.move>) => {
+        if (args[0] !== trashed.done[0]?.url) return client.move(...args);
+        moving = true;
+        try {
+          return await client.move(...args);
+        } finally {
+          release();
+        }
+      },
+      read: async (source: string) => {
+        if (source === trashed.done[0]?.url && moving) await moved;
+        return client.read(source);
+      },
+    };
+    const restored = await restoreItems(racing, DRIVE, trashed.done);
+    expect(restored.failed).toEqual([]);
+    expect(restored.done[1]).toMatchObject({ url: TREE, renamed: false });
+    expect(
+      await (
+        await pod.fetch(`${TREE}updates/001798000000000-00000000-0000-4000-8000-000000000001`)
+      ).text(),
+    ).toBe("update");
+  });
   it("renames an ordinary docs archive collision instead of partially merging binary files", async () => {
     const { pod, client, session } = await fixture();
     const archive = `${ROOT}docs/archive/`;

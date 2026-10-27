@@ -51,6 +51,9 @@ export interface SaveOptions {
 }
 /** Callbacks must use one captured editor state so its log, body and format agree. */
 export interface CopyState {
+  /** Resume the same private reservation after an interrupted copy. */
+  reservation?: StoredDocument | undefined;
+  onReserved?: ((copy: StoredDocument) => Promise<void>) | undefined;
   /** Only referenced assets, not every file left in the source container. */
   assets: readonly string[];
   snapshot: (assetUrls: ReadonlyMap<string, string>) => Snapshot | Promise<Snapshot>;
@@ -260,30 +263,52 @@ export class DocsStore {
     }
     // Create reserves the name before dependent resources are copied. Failures propagate;
     // no success is returned until the new log, assets and final snapshot are durable.
-    const copy = await this.createAtSlug(
-      {
-        title: `Copy of ${source.data.title}`.slice(0, 200),
-        body: "",
-        format: source.data.format,
-        wasDerivedFrom: `${source.url}#it`,
-      },
-      `${toSlug(nameFromUrl(source.url).slice(0, -4)) || "document"}-copy`,
-    );
+    let copy = state.reservation;
+    if (copy) {
+      this.assertScope(copy.url, true);
+      const current = await this.read(copy.url);
+      if (!current || current.data.wasDerivedFrom !== `${source.url}#it`)
+        throw new ResourceReadError(copy.url, 422);
+      // Keep the reservation's validator: another client editing the visible
+      // copy must cause a conflict rather than being overwritten by a retry.
+      copy = { ...current, etag: copy.etag };
+    } else
+      copy = await this.createAtSlug(
+        {
+          title: `Copy of ${source.data.title}`.slice(0, 200),
+          body: "",
+          format: source.data.format,
+          wasDerivedFrom: `${source.url}#it`,
+        },
+        `${toSlug(nameFromUrl(source.url).slice(0, -4)) || "document"}-copy`,
+      );
+    await state.onReserved?.(copy);
     const target = docContainerUrls(copy.url);
     const mapping = new Map<string, string>();
     for (const asset of new Set(state.assets)) {
       const destination = `${target.assets}${new URL(asset).pathname.split("/").at(-1)}`;
       const response = await this.fetchImpl(asset);
       if (!response.ok) throw new ResourceReadError(asset, response.status);
+      const bytes = new Uint8Array(await response.arrayBuffer());
       const written = await this.fetchImpl(destination, {
         method: "PUT",
         headers: {
           "content-type": response.headers.get("content-type") ?? "application/octet-stream",
           "if-none-match": "*",
         },
-        body: await response.arrayBuffer(),
+        body: bytes,
       });
-      if (!written.ok) throw new ResourceWriteError(destination, written.status);
+      if (!written.ok) {
+        // A retry may find an asset copied before the interruption. Reuse only
+        // the same bytes; an unrelated occupant must never be overwritten.
+        if (!state.reservation || written.status !== 412)
+          throw new ResourceWriteError(destination, written.status);
+        const existing = await this.fetchImpl(destination);
+        if (!existing.ok) throw new ResourceReadError(destination, existing.status);
+        const prior = new Uint8Array(await existing.arrayBuffer());
+        if (prior.length !== bytes.length || prior.some((byte, index) => byte !== bytes[index]))
+          throw new ResourceWriteError(destination, 412);
+      }
       mapping.set(asset, destination);
     }
     await state.persistFullState(target.updateLog, this.fetchImpl, mapping);
