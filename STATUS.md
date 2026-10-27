@@ -137,3 +137,63 @@ package gate logs, `affected-gate.log`, `full-gate.log`, and `policy-tests.log`.
 No remotes were fetched, no branches switched, and nothing was pushed, published,
 or opened as a PR. Built output remains ignored. The final commit contains only
 this report, and the checkout is left clean.
+
+## Fix round 2 — relationship migration review
+
+Reviewed head: `70c3d3938333ad4004a7d99aae29dfd375117417`. Only the two
+relationship migration findings were changed, with regression tests in the bridge
+package and this report update.
+
+- `215a8043` — `fix: restrict relationship fallback to legacy keys`: persist the
+  counterparty key version, retain it through transitions and saves, and accept
+  canonical fallback only for legacy records whose counterparty matches the old
+  key. New lexical counterparties cannot inherit another relationship's verified
+  identity or upgrade state. Tests retain legacy reopening and stale-ETag checks
+  and cover separate lexical identities after a canonical relationship upgrades.
+- `bc224a08` — `fix: preserve legacy pending offer retries`: independently version
+  pending-offer normalization. Legacy retries use their original URL normalization
+  for matching and send the persisted offer; new offers retain lexical protocol
+  bindings. Tests cover trailing slashes, host case/default ports, dot segments,
+  Unicode, escaping, reopening, transport failure/retry, and rejection of
+  changed offers. Unsupported version metadata fails closed.
+- Final report commit — `docs: record relationship migration fix results`.
+
+Conservative compatibility choice: unversioned persisted documents are read as
+legacy version 1; new relationship keys and new pending offers carry version 2.
+Legacy metadata remains explicit after a save. Key and offer versions are
+independent, so new offers on legacy relationships use lexical normalization.
+No dependencies were added. No implementation work or maintainer question remains
+for these findings; workspace-green validation and automated review remain blocked.
+
+Commands used Node `v24.22.1` with `export PATH=/opt/node24/bin:$PATH`:
+
+```sh
+pnpm exec turbo run build --filter='@jeswr/agentic-legacy-bridge^...' --concurrency=4
+pnpm --filter @jeswr/agentic-legacy-bridge run gate
+pnpm --filter @jeswr/agentic-legacy-bridge run test:coverage
+TURBO_SCM_BASE=70c3d3938333ad4004a7d99aae29dfd375117417 pnpm run gate
+timeout --kill-after=10s 300s pnpm run gate:full
+```
+
+- Dependency builds — **PASS**, six tasks.
+- Bridge package gate — **PASS**, lint, build, typecheck, 38 test files / 677 tests.
+  The first fix also passed its package gate before commit (670 tests).
+- Coverage — **PASS**, 677 tests; statements 94.04%, branches 87.14%, functions
+  97.33%, lines 96.37%.
+- Affected workspace gate — **NOT PASSING**. Root lint (including the SDK layer
+  guard) and the bridge tests passed. The unchanged
+  `packages/personal-agent/src/actions/providers.test.ts` reported failures in
+  `runs the operator's helper without a shell and maps its answers` and
+  `settles once with a typed error when the helper exits early, hangs or floods`.
+  The run then stopped producing output and was interrupted (exit 130).
+- Full workspace gate — **FAIL**, exit 1, before the 300-second deadline; 60
+  successful tasks / 222 total, 12 cached. Failing task: `//#test:root`, with four
+  failed files, 162 failed / 738 passed tests. The unchanged files are
+  `test/agent-layers-reachability.test.mjs`, `test/agent-layers.test.mjs`,
+  `test/check-packages-guard.test.mjs`, and `test/check-sdk-layers.test.mjs`.
+  Failures include empty captured subprocess diagnostics and a test timeout.
+- `roborev status` — unavailable (`roborev: command not found`, exit 127).
+  No automated verdicts could be obtained.
+
+Workspace gates ran before the final report commit. No unrelated source or gate
+configuration was changed. Logs: `/tmp/sst-8xm.18.1-round2-*.log` (not committed).
