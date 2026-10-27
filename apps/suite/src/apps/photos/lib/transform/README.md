@@ -11,7 +11,9 @@ sizes, crops, orientations, and aspect presets throw `TransformError` with a typ
 `computeOutputSize` uses the oriented source dimensions and rounds each continuous crop extent
 to the nearest integer pixel, with half-pixel ties rounded up. Extents are calculated from
 complemented bounds, `(1 - start) - (1 - end)`, so reflections and their inverses use the same
-floating-point grid. A value within `sourceAxisPixels * Number.EPSILON` below a half-pixel
+floating-point grid. If complementing makes distinct bounds coincide, the original difference
+`end - start` preserves the narrow crop's extent. A value within
+`sourceAxisPixels * Number.EPSILON` below a half-pixel
 threshold counts as a tie, accounting for normalized-bound remapping and multiplication error.
 Values farther below the threshold round down. For example, a 1000×3000 source cropped to
 `{ left: 0.001, top: 0, right: 0.4015, bottom: 1 }` exports at 401×3000 before a horizontal flip,

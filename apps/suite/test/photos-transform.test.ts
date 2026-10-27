@@ -235,6 +235,25 @@ describe("sequential non-destructive edits", () => {
 });
 
 describe("aspect presets and output pixels", () => {
+  it.each([
+    1, 2, 3, 4, 5, 6, 7, 8,
+  ])("preserves narrow crop extents when complements coincide in orientation %i", (orientation) => {
+    const source = { width: Number.MAX_SAFE_INTEGER, height: 1 };
+    const horizontalCrop = { ...full, left: 0.10000000000000005, right: 0.10000000000000013 };
+    const verticalCrop = { ...full, top: horizontalCrop.left, bottom: horizontalCrop.right };
+    expect(
+      computeOutputSize(source, {
+        orientation,
+        crop: orientation < 5 ? horizontalCrop : verticalCrop,
+      }),
+    ).toEqual({ width: 1, height: 1 });
+    expect(
+      computeOutputSize(
+        { width: source.height, height: source.width },
+        { orientation, crop: orientation < 5 ? verticalCrop : horizontalCrop },
+      ),
+    ).toEqual({ width: 1, height: 1 });
+  });
   it("keeps the 401-pixel fractional crop through a horizontal flip and its inverse", () => {
     const source = { width: 1000, height: 3000 };
     const initial = cropped({ left: 0.001, top: 0, right: 0.4015, bottom: 1 });

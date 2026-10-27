@@ -181,7 +181,9 @@ export function composeEdits(value: unknown, edits: unknown): PhotoEditRecord {
 function roundCropExtent(pixels: number, start: number, end: number): number {
   // Complementing both bounds puts them on the same binary grid before and after
   // reflection: 1 - (1 - (1 - edge)) === 1 - edge for normalized edges.
-  const extent = pixels * (1 - start - (1 - end));
+  const complemented = 1 - start - (1 - end);
+  // Preserve distinct original bounds when their complements coincide.
+  const extent = pixels * (complemented > 0 ? complemented : end - start);
   const lower = Math.floor(extent);
   // Treat remapping error within one normalized epsilon as a half-pixel tie.
   return extent - lower >= 0.5 - pixels * Number.EPSILON ? Math.ceil(extent) : lower;
