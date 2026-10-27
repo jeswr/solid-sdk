@@ -145,3 +145,69 @@ No remote fetch, push, PR, publication, branch switch, or other checkout modific
 is installed. The required per-commit adversarial review remains for the lead/Jesse before
 merge; this security-critical package must not be auto-merged. No implementation work or
 open design question remains.
+
+## Fix round 2 — broadcast failures and tracking changes
+
+This round starts at `9df8dfc8a7466301f40f1362ae4b394055f6c2a7` and fixes exactly
+the two findings in the supplied review.
+
+Commits:
+
+- `26ecd5d5` — `fix: isolate revalidation broadcast failures`: isolate both start
+  and terminal reporting so cache maintenance proceeds and retains its result or
+  original error, even when either or both broadcasts throw.
+- `6aedea6b` — `fix: retain attempts across status tracking changes`: account for
+  every observed attempt independently of snapshot membership; keep active counts
+  through `forget()` and settle them even while untracked. Newly tracked or retracked
+  resources reflect attempts still in flight. Untracked URLs stay out of the snapshot.
+- The final report commit — `docs: record second review fix verification`.
+
+Security property corrected: a failed status broadcast cannot prevent revocation/deletion
+purges or mask the original maintenance error. An older terminal event cannot clear newer
+pending work after late tracking or forget/retrack. Reporting remains best effort: both
+URL-only lifecycle messages are attempted, with no delivery guarantee if the channel throws.
+No bytes, headers, credentials, or error details are added to broadcasts.
+
+Proof: 31 new regression cases include start-only, terminal-only, and combined broadcast
+failures; exact result/error identity; direct Delete and HTTP 403/404 purges of both bytes
+and metadata; all three terminal outcomes across late tracking and forget/retrack;
+untracked settlement cleanup; and React `syncing` through overlapping attempts. The
+pre-fix regression run failed 29 cases; the two cleanup cases already passed. After the
+fixes, all 343 tests pass across 16 files. All fixtures and transports are local mocks.
+Worker lifecycle wiring and the public API are unchanged.
+
+Verification uses Node `v24.22.1`, pnpm `10.4.1`, and `PATH=/opt/node24/bin:$PATH`:
+
+- `pnpm --filter solid-offline run lint` — passed; the same three existing warnings.
+- `pnpm --filter solid-offline run build` — passed.
+- `pnpm --filter solid-offline run typecheck` — passed.
+- `pnpm --filter solid-offline run test` — passed: 343 tests in 16 files.
+- `pnpm --filter solid-offline run api:check` — passed; no API report change.
+- `pnpm run lint:root` — passed as the first stage of the affected gate.
+- `TURBO_SCM_BASE=9df8dfc8a7466301f40f1362ae4b394055f6c2a7 pnpm run gate` —
+  failed: 13/14 Turbo tasks succeeded. All solid-offline checks passed. The unchanged
+  Coeliac Turbopack build failed processing `packages/app-shell/dist/styles.css` because
+  creating a process required binding a port: `Operation not permitted (os error 1)`.
+  Log: `/tmp/sst-8xm.13-round2-gate.log`.
+- `pnpm run gate:full` — failed: 60/232 Turbo tasks succeeded (11 cached), stopping
+  at unchanged root guardrail tests: 161 failures / 900 tests across `agent-layers`,
+  `agent-layers-reachability`, `check-packages-guard`, and `check-sdk-layers`.
+  Log: `/tmp/sst-8xm.13-round2-gate-full.log`.
+- `git diff --check` — passed.
+
+The root failures assert against empty child-process output. A direct Node 24 invocation
+of the unchanged `scripts/check-sdk-layers.mjs` passed against an empty temporary workspace;
+invoking that same command with Node 24 `spawnSync` returned `error.code: EPERM` and empty
+stdout/stderr. This reproduces the prior sandbox limitation. No root guardrail, Coeliac,
+or app-shell source was changed. The package gate is green; the workspace gates still
+require verification outside this sandbox.
+
+Supply chain: no dependencies, manifests, or lockfiles changed; `check:packages` is not
+applicable. No remote fetch, push, PR, publication, branch switch, or other checkout
+modification occurred. `roborev status` exited 127 (`roborev: command not found`), so
+required per-commit adversarial review remains for the lead/Jesse before merge. This
+security-critical package must not be auto-merged.
+
+Both requested fixes are complete. Remaining verification is the workspace-gate rerun
+and unavailable per-commit review. No open design question remains; tracking continues
+to control snapshot membership while attempt accounting follows the observed lifecycle.
