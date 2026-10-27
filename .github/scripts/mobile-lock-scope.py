@@ -2,9 +2,9 @@
 """Decide whether a lockfile change reaches the mobile shells.
 
 Usage: mobile-lock-scope.py <base-lockfile> <head-lockfile>
-Prints "true" when the resolved dependency closure of the mobile importers, or the
-lockfile-wide resolution settings, differ between the two files; otherwise "false".
-A missing or unparsable file, or a reference that does not resolve to a snapshot, counts as a
+Prints "true" when the resolved dependency closure of the mobile importers, or any lockfile-wide
+field outside the dependency graph, differs between the two files; otherwise "false".
+A missing or unparsable file, or a reference without a snapshot or package record, counts as a
 change, so the mobile jobs run.
 """
 
@@ -13,7 +13,7 @@ import sys
 import yaml
 
 ROOTS = ("apps/mobile", "packages/suite-native")
-GLOBAL_KEYS = ("lockfileVersion", "settings", "overrides", "patchedDependencies", "catalogs")
+GRAPH_KEYS = ("importers", "packages", "snapshots")
 DEP_FIELDS = ("dependencies", "devDependencies", "optionalDependencies")
 
 
@@ -28,6 +28,20 @@ def ref_to_key(name, reference):
     if (colon == -1 or at < colon) and (bracket == -1 or at < bracket):
         return reference
     return f"{name}@{reference}"
+
+
+def package_key(key):
+    """Strip trailing peer-dependency suffixes ("(peer@1.0.0)") the way pnpm's dependency-path does."""
+    while key.endswith(")"):
+        depth = 0
+        for index in range(len(key) - 1, -1, -1):
+            depth += {")": 1, "(": -1}.get(key[index], 0)
+            if depth == 0:
+                break
+        else:
+            raise KeyError(f"unbalanced peer suffix in {key}")
+        key = key[:index]
+    return key
 
 
 def closure(lock):
@@ -71,17 +85,21 @@ def closure(lock):
             for name, version in (snapshot.get(field) or {}).items():
                 pending_packages.append(ref_to_key(name, str(version)))
     packages = lock.get("packages") or {}
+    package_view = {}
+    for key in sorted(seen_packages):
+        base = package_key(key)
+        if base not in packages:
+            raise KeyError(f"no package record for {key}")
+        package_view[key] = (snapshots[key], packages[base])
     importer_view = {path: importers.get(path) for path in sorted(seen_importers)}
-    package_view = {
-        key: (snapshots[key], packages.get(key.split("(", 1)[0])) for key in sorted(seen_packages)
-    }
     return importer_view, package_view
 
 
 def view(path):
     with open(path, encoding="utf-8") as handle:
         lock = yaml.safe_load(handle)
-    return {key: lock.get(key) for key in GLOBAL_KEYS}, closure(lock)
+    # Every top-level field outside the dependency graph (settings, overrides, checksums, ...) is compared whole.
+    return {key: value for key, value in lock.items() if key not in GRAPH_KEYS}, closure(lock)
 
 
 def main():
