@@ -10,7 +10,7 @@ import {
   type OfflineStatusSurface,
   type StatusChannel,
 } from '../src/status.js';
-import type { UpdatedEvent } from '../src/types.js';
+import type { OfflineEvent } from '../src/types.js';
 
 /** A scriptable BroadcastChannel stand-in. */
 class MockChannel implements StatusChannel {
@@ -25,7 +25,7 @@ class MockChannel implements StatusChannel {
   close(): void {
     this.closed = true;
   }
-  emit(data: UpdatedEvent): void {
+  emit(data: OfflineEvent): void {
     for (const l of this.listeners) l({ data } as MessageEvent);
   }
 }
@@ -162,5 +162,112 @@ describe('status surface — snapshot + subscription', () => {
     s.subscribe(cb);
     channel.emit({ url: 'whatever', event: 'updated' });
     expect(cb).not.toHaveBeenCalled();
+  });
+});
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+const URL = 'https://pod/doc';
+describe('revalidation status transitions', () => {
+  it.each([
+    'revalidated',
+    'updated',
+    'revalidate-failed',
+  ] as const)('%s settles pending with a stable snapshot', (event) => {
+    const channel = new MockChannel();
+    const s = make({ channel });
+    s.markStale(URL);
+    const before = s.getSnapshot();
+    channel.emit({ url: URL, event: 'revalidating' });
+    expect(s.getSnapshot()).toMatchObject({
+      pending: 1,
+      stale: 0,
+      updated: 0,
+      resources: { [URL]: 'pending' },
+    });
+    expect(before.resources[URL]).toBe('stale');
+    channel.emit({ url: URL, event });
+    const state = event === 'revalidated' ? 'fresh' : event === 'updated' ? 'updated' : 'stale';
+    expect(s.getSnapshot()).toMatchObject({ pending: 0, resources: { [URL]: state } });
+    expect(s.getSnapshot()).toBe(s.getSnapshot());
+  });
+
+  it.each([
+    'fresh',
+    'stale',
+    'updated',
+    'pending',
+  ] as const)('restores previous %s on failure', (state) => {
+    const channel = new MockChannel();
+    const s = make({ channel });
+    if (state === 'stale') s.markStale(URL);
+    else if (state === 'pending') s.markPending(URL);
+    else {
+      s.markFresh(URL);
+      if (state === 'updated') channel.emit({ url: URL, event: 'updated' });
+    }
+    const before = s.getSnapshot();
+    channel.emit({ url: URL, event: 'revalidating' });
+    channel.emit({ url: URL, event: 'revalidate-failed' });
+    expect(s.getSnapshot()).toEqual(before);
+  });
+
+  it.each([
+    'revalidating',
+    'revalidated',
+    'updated',
+    'revalidate-failed',
+  ] as const)('ignores untracked %s messages', (event) => {
+    const channel = new MockChannel();
+    const s = make({ channel });
+    const before = s.getSnapshot();
+    channel.emit({ url: URL, event });
+    expect(s.getSnapshot()).toBe(before);
+  });
+
+  it('keeps parallel work pending and does not roll back a successful attempt', () => {
+    const channel = new MockChannel();
+    const s = make({ channel });
+    s.markStale(URL);
+    channel.emit({ url: URL, event: 'revalidating' });
+    channel.emit({ url: URL, event: 'revalidating' });
+    channel.emit({ url: URL, event: 'updated' });
+    expect(s.getSnapshot().pending).toBe(1);
+    channel.emit({ url: URL, event: 'revalidate-failed' });
+    expect(s.getSnapshot()).toMatchObject({
+      pending: 0,
+      updated: 1,
+      resources: { [URL]: 'updated' },
+    });
+  });
+
+  it('keeps resources independent and clears forgotten revalidation history', () => {
+    const channel = new MockChannel();
+    const s = make({ channel });
+    s.markStale(URL);
+    s.markFresh('https://pod/other');
+    channel.emit({ url: URL, event: 'revalidating' });
+    channel.emit({ url: 'https://pod/other', event: 'revalidating' });
+    expect(s.getSnapshot().pending).toBe(2);
+    s.forget(URL);
+    channel.emit({ url: URL, event: 'revalidated' });
+    expect(s.getSnapshot().resources[URL]).toBeUndefined();
+    s.markFresh(URL);
+    channel.emit({ url: URL, event: 'revalidate-failed' });
+    expect(s.getSnapshot().resources[URL]).toBe('fresh');
+    channel.emit({ url: 'https://pod/other', event: 'revalidate-failed' });
+    expect(s.getSnapshot().pending).toBe(0);
+  });
+
+  it('ignores unmatched failures and unknown events without notifying', () => {
+    const channel = new MockChannel();
+    const s = make({ channel });
+    s.markPending(URL);
+    const before = s.getSnapshot();
+    const listener = vi.fn();
+    s.subscribe(listener);
+    channel.emit({ url: URL, event: 'revalidate-failed' });
+    channel.emit({ url: URL, event: 'unrelated' } as unknown as OfflineEvent);
+    expect(s.getSnapshot()).toBe(before);
+    expect(listener).not.toHaveBeenCalled();
   });
 });

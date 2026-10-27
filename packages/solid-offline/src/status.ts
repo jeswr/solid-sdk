@@ -8,7 +8,7 @@
  *   - CONNECTIVITY  — online vs offline, from `navigator.onLine` + the `online` /
  *     `offline` window events.
  *   - PER-RESOURCE FRESHNESS — for each URL the consumer cares about:
- *       'pending'  a (re)validation is in flight (the consumer marked it),
+ *       'pending'  a (re)validation is in flight (worker event or consumer mark),
  *       'stale'    the last read was served from cache while offline / unconfirmed
  *                  (the SWR engine tagged it `X-Offline: stale`),
  *       'fresh'    a revalidation confirmed it (304) or the consumer marked a 200,
@@ -18,14 +18,14 @@
  * It is deliberately a *plain* `subscribe`/`getSnapshot` store (no framework) so
  * the React hooks (`react.ts`) can wrap it with `useSyncExternalStore` and a
  * vanilla app can use it directly. It listens to the same `BroadcastChannel` the
- * SWR engine broadcasts `updated` events on, so any tab's revalidation flips the
+ * SWR engine broadcasts revalidation events on, so any tab's revalidation flips the
  * status for every tab.
  *
  * It holds NO bytes and is NOT authoritative — it only reflects events. Tearing
  * it down (`close()`) drops listeners + the channel; it never touches the cache.
  */
 
-import type { UpdatedEvent } from './types.js';
+import type { OfflineEvent } from './types.js';
 
 /** Freshness of a single tracked resource. */
 export type ResourceFreshness = 'fresh' | 'stale' | 'pending' | 'updated';
@@ -61,7 +61,7 @@ export interface ConnectivityTarget {
 }
 
 export interface StatusSurfaceOptions {
-  /** BroadcastChannel name the SW broadcasts `updated` events on. Default: 'solid-offline'. */
+  /** BroadcastChannel name the SW broadcasts revalidation events on. Default: 'solid-offline'. */
   channelName?: string;
   /** Inject a channel (tests). Falls back to a real `BroadcastChannel` when available. */
   channel?: StatusChannel;
@@ -122,6 +122,7 @@ export function createStatusSurface(options: StatusSurfaceOptions = {}): Offline
 
   const listeners = new Set<StatusListener>();
   const resources = new Map<string, ResourceFreshness>();
+  const revalidations = new Map<string, { count: number; previous: ResourceFreshness }>();
   let online = isOnline();
 
   // Cached immutable snapshot — `useSyncExternalStore` REQUIRES `getSnapshot` to
@@ -154,12 +155,38 @@ export function createStatusSurface(options: StatusSurfaceOptions = {}): Offline
   }
 
   const onMessage = (event: MessageEvent): void => {
-    const data = event.data as UpdatedEvent | undefined;
-    if (data?.event !== 'updated') return;
-    // A newer version exists for this URL. Only flag resources the consumer is
-    // already tracking — we don't want to grow the map for every change in the
-    // pod, only the ones a view is actually showing.
-    if (resources.has(data.url)) setFreshness(data.url, 'updated');
+    const data = event.data as OfflineEvent | undefined;
+    // Preserve the tracked-URL boundary; malformed/unrelated broadcasts are inert.
+    if (typeof data?.url !== 'string' || !resources.has(data.url)) return;
+    const active = revalidations.get(data.url);
+    if (data.event === 'revalidating') {
+      if (active) active.count += 1;
+      else
+        revalidations.set(data.url, {
+          count: 1,
+          previous: resources.get(data.url) as ResourceFreshness,
+        });
+      setFreshness(data.url, 'pending');
+      return;
+    }
+    if (
+      data.event !== 'updated' &&
+      data.event !== 'revalidated' &&
+      data.event !== 'revalidate-failed'
+    )
+      return;
+    const confirmed =
+      data.event === 'updated' ? 'updated' : data.event === 'revalidated' ? 'fresh' : undefined;
+    if (active) {
+      if (confirmed) active.previous = confirmed;
+      active.count -= 1;
+      // Parallel attempts for one URL keep it pending until all have settled.
+      if (active.count > 0) return;
+      revalidations.delete(data.url);
+      setFreshness(data.url, active.previous);
+    } else if (confirmed) {
+      setFreshness(data.url, confirmed);
+    }
   };
 
   const onOnline = (): void => {
@@ -195,6 +222,7 @@ export function createStatusSurface(options: StatusSurfaceOptions = {}): Offline
       setFreshness(url, 'stale');
     },
     forget(url: string): void {
+      revalidations.delete(url);
       if (!resources.delete(url)) return;
       emit();
     },
@@ -205,6 +233,7 @@ export function createStatusSurface(options: StatusSurfaceOptions = {}): Offline
       connectivity?.removeEventListener('offline', onOffline);
       listeners.clear();
       resources.clear();
+      revalidations.clear();
     },
   };
 }

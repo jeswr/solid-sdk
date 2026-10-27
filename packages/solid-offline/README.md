@@ -55,6 +55,41 @@ import 'solid-offline/worker';
 The service worker stores no credentials. Authenticated warming happens in the page through the
 caller-supplied fetch, and cache state is scoped by WebID.
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Revalidation status
+
+Background SWR reads, forced `Cache-Control: no-cache` reads, notification updates,
+container-listing refreshes, and reconnect sweeps broadcast on `solid-offline` (or the
+configured channel). Every started attempt emits `{ url, event: 'revalidating' }`, followed
+by exactly one terminal message:
+
+| Event | Meaning | Status for a tracked URL |
+| --- | --- | --- |
+| `revalidating` | Revalidation started | `pending` |
+| `revalidated` | A conditional 304 confirmed the existing bytes | `fresh` |
+| `updated` | Replacement, deletion, revocation, or a purge completed | `updated`; re-read |
+| `revalidate-failed` | Network/offline, storage, or non-authoritative HTTP failure | Restore the previous state |
+
+Messages contain only `url` and `event`; no response bytes, headers, credentials, or error
+details. `OfflineEvent` includes all messages. `UpdatedEvent` and `offline.onUpdated`
+remain available; its optional `etag` field remains type-compatible but is not emitted.
+Direct delete notifications retain their standalone `updated` event. Offline cache hits,
+ETag notification short-circuits, and skipped SWR validations emit no lifecycle events.
+An unsolicited 304 on an unconditional listing refresh fails confirmation.
+
+The status surface updates only URLs already tracked by `markFresh`, `markStale`, or
+`markPending`. Parallel attempts keep a URL pending until all settle; a failed attempt
+does not undo another attempt's successful result. `forget` drops its status history.
+Manual `markPending` calls still count toward pending work.
+
+```ts
+import { useOfflineStatus } from 'solid-offline/react';
+
+const { syncing, pending, online } = useOfflineStatus(offline.status);
+// syncing === (pending > 0); use it to render a “Syncing…” indicator.
+```
+
 ## Links
 
 - [Source](https://github.com/jeswr/solid-offline)
