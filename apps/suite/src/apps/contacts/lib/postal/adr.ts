@@ -73,8 +73,7 @@ export function fromVCardAdr(value: string): PostalAddress {
     ...(poBox[0] === "" ? {} : { poBox: poBox[0] }),
     ...(extended[0] === "" ? {} : { extended: extended[0] }),
   };
-  assertPostalAddress(address);
-  return address;
+  return assertPostalAddress(address);
 }
 
 function escapeAdrText(value: string): string {
@@ -82,8 +81,8 @@ function escapeAdrText(value: string): string {
 }
 
 /** Preserve spelling, empty street-list entries, and literal punctuation in all seven positions. */
-export function toVCardAdr(address: PostalAddress): string {
-  assertPostalAddress(address);
+export function toVCardAdr(input: PostalAddress): string {
+  const address = assertPostalAddress(input);
   return [
     escapeAdrText(address.poBox ?? ""),
     escapeAdrText(address.extended ?? ""),

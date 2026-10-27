@@ -585,4 +585,42 @@ describe("Drive retention fail-closed validation", () => {
     const input = [version("https://pod.example.org/private-version", NOW + 1)];
     expect(() => planRetention(input, NOW)).toThrowError(/^Drive retention: INVALID_VERSION$/);
   });
+  it("reads each field once and maps reflection traps to typed errors", () => {
+    // Proxy reporting a key it has no descriptor for (no native TypeError escapes).
+    const phantom = new Proxy({}, { ownKeys: () => ["maxBytes"] });
+    errorCode(() => planRetention([], NOW, phantom as RetentionLimits), "INVALID_VERSION");
+    const trap = new Proxy(
+      {},
+      {
+        getPrototypeOf() {
+          throw new Error("trap");
+        },
+      },
+    );
+    errorCode(() => planRetention([trap as ManagedVersion], NOW), "INVALID_VERSION");
+    const throwingArray = new Proxy([version("a")], {
+      getOwnPropertyDescriptor(target, key) {
+        if (key === "0") throw new Error("trap");
+        return Reflect.getOwnPropertyDescriptor(target, key);
+      },
+    });
+    errorCode(() => planRetention(throwingArray, NOW), "INVALID_VERSION");
+    const accessor = [version("a")];
+    Object.defineProperty(accessor, "0", { get: () => version("a"), enumerable: true });
+    errorCode(() => planRetention(accessor, NOW), "INVALID_VERSION");
+    let reads = 0;
+    const shifting = new Proxy(version("a", NOW, 1), {
+      get(target, key, receiver) {
+        reads++;
+        return key === "sizeBytes" ? -1 : Reflect.get(target, key, receiver);
+      },
+    });
+    expect(planRetention([shifting], NOW)).toEqual({
+      keep: ["a"],
+      delete: [],
+      freedBytes: 0,
+      overBudget: false,
+    });
+    expect(reads).toBe(0);
+  });
 });

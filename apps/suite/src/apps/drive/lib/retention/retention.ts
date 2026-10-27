@@ -39,14 +39,35 @@ function valid(condition: unknown): asserts condition {
   if (!condition) throw new RetentionError("INVALID_VERSION");
 }
 
-function record(value: unknown, keys: readonly string[]): void {
+/** Copy own data fields once; accessors, extra keys and reflection traps fail closed. */
+function record(value: unknown, keys: readonly string[]): Record<string, unknown> {
   valid(typeof value === "object" && value !== null && !Array.isArray(value));
-  const prototype = Object.getPrototypeOf(value);
-  valid(prototype === Object.prototype || prototype === null);
-  for (const key of Reflect.ownKeys(value)) {
-    valid(typeof key === "string" && keys.includes(key));
-    const descriptor = Object.getOwnPropertyDescriptor(value, key) as PropertyDescriptor;
-    valid(descriptor.enumerable && "value" in descriptor);
+  try {
+    const prototype = Object.getPrototypeOf(value);
+    valid(prototype === Object.prototype || prototype === null);
+    const fields: Record<string, unknown> = {};
+    for (const key of Reflect.ownKeys(value)) {
+      valid(typeof key === "string" && keys.includes(key));
+      const descriptor = Object.getOwnPropertyDescriptor(value, key);
+      valid(descriptor?.enumerable && "value" in descriptor);
+      fields[key as string] = descriptor.value;
+    }
+    return fields;
+  } catch (error) {
+    if (error instanceof RetentionError) throw error;
+    throw new RetentionError("INVALID_VERSION");
+  }
+}
+
+/** Read an own data property without running getters or letting proxy traps escape. */
+function own(target: object, key: PropertyKey): unknown {
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(target, key);
+    valid(descriptor !== undefined && "value" in descriptor);
+    return descriptor.value;
+  } catch (error) {
+    if (error instanceof RetentionError) throw error;
+    throw new RetentionError("INVALID_VERSION");
   }
 }
 
@@ -80,26 +101,35 @@ export function planRetention(
   limits: RetentionLimits = {},
 ): RetentionPlan {
   valid(Array.isArray(versions));
-  if (versions.length > MAX_INPUT_VERSIONS) throw new RetentionError("TOO_MANY_VERSIONS");
+  const count = own(versions, "length") as number;
+  if (count > MAX_INPUT_VERSIONS) throw new RetentionError("TOO_MANY_VERSIONS");
   valid(Number.isSafeInteger(now));
-  record(limits, ["maxVersions", "maxBytes"]);
-  const maxVersions = limits.maxVersions === undefined ? DEFAULT_MAX_VERSIONS : limits.maxVersions;
-  const maxBytes = limits.maxBytes === undefined ? DEFAULT_MAX_BYTES : limits.maxBytes;
+  const limitFields = record(limits, ["maxVersions", "maxBytes"]);
+  const maxVersions =
+    limitFields.maxVersions === undefined ? DEFAULT_MAX_VERSIONS : limitFields.maxVersions;
+  const maxBytes = limitFields.maxBytes === undefined ? DEFAULT_MAX_BYTES : limitFields.maxBytes;
   nonnegativeInteger(maxVersions);
   nonnegativeInteger(maxBytes);
 
   const ids = new Set<string>();
-  for (const version of versions) {
-    record(version, ["id", "createdAt", "sizeBytes", "labelled"]);
+  const snapshots: ManagedVersion[] = [];
+  for (let index = 0; index < count; index++) {
+    const version = record(own(versions, index), [
+      "id",
+      "createdAt",
+      "sizeBytes",
+      "labelled",
+    ]) as unknown as ManagedVersion;
     valid(typeof version.id === "string");
     valid(Number.isSafeInteger(version.createdAt) && version.createdAt <= now);
     nonnegativeInteger(version.sizeBytes);
     valid(typeof version.labelled === "boolean");
     if (ids.has(version.id)) throw new RetentionError("DUPLICATE_VERSION");
     ids.add(version.id);
+    snapshots.push(version);
   }
 
-  const sorted = [...versions].sort((a, b) => {
+  const sorted = snapshots.sort((a, b) => {
     if (a.createdAt !== b.createdAt) return b.createdAt - a.createdAt;
     return Number(a.id > b.id) - Number(a.id < b.id);
   });

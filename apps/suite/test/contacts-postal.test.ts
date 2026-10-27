@@ -439,3 +439,43 @@ describe("exported postal bounds", () => {
     rejects(() => fromVCardAdr(`\\q${"x".repeat(MAX_ADR_VALUE_LENGTH - 1)}`), "ADDRESS_TOO_LARGE");
   });
 });
+
+describe("postal input snapshots", () => {
+  it("validates and uses one data snapshot, so getters cannot bypass bounds", () => {
+    let reads = 0;
+    const address = {
+      street: [],
+      region: "",
+      postalCode: "",
+      get locality() {
+        reads++;
+        return reads === 1 ? "Town" : "x".repeat(MAX_ADDRESS_COMPONENT_LENGTH + 1);
+      },
+    } as PostalAddress;
+    for (const run of [
+      () => toVCardAdr(address),
+      () => formatAddressMultiline(address, "US"),
+      () => validatePostalAddress(address),
+    ]) {
+      rejects(run, "INVALID_ADDRESS");
+    }
+    expect(reads).toBe(0);
+    const street = ["12 Example Lane"];
+    Object.defineProperty(street, "0", { get: () => "12 Example Lane", enumerable: true });
+    rejects(() => toVCardAdr({ ...blank, street }), "INVALID_ADDRESS");
+  });
+
+  it("maps throwing proxy traps to typed errors and ignores unknown keys", () => {
+    const trap = new Proxy(
+      { ...blank },
+      {
+        getOwnPropertyDescriptor() {
+          throw new Error("trap");
+        },
+      },
+    );
+    rejects(() => toVCardAdr(trap), "INVALID_ADDRESS");
+    const extra = { ...sample, note: "ignored" } as PostalAddress;
+    expect(toVCardAdr(extra)).toBe(toVCardAdr(sample));
+  });
+});

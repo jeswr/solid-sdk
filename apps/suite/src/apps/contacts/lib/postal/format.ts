@@ -36,9 +36,9 @@ function join(parts: readonly string[], separator: string): string {
   return parts.filter((part) => part !== "").join(separator);
 }
 
-function lines(address: PostalAddress, homeCountry: string): string[] {
+function lines(input: PostalAddress, homeCountry: string): string[] {
   assertCountryCode(homeCountry);
-  assertPostalAddress(address);
+  const address = assertPostalAddress(input);
   const fields = {
     locality: address.locality.trim(),
     region: address.region.trim(),
