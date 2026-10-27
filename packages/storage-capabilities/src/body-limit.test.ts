@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 import { expect, test, vi } from "vitest";
 import { createMemoryCache } from "./cache.js";
 import { resolveStorageDescription } from "./resolve.js";

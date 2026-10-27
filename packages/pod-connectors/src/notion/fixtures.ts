@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Recorded Notion API shapes (api.notion.com/v1, Notion-Version 2022-06-28) —
  * trimmed to the fields the adapter reads. Source: POST /v1/search (pages and

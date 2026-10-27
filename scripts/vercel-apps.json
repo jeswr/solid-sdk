@@ -87,5 +87,28 @@
     "framework": "next",
     "originEnv": "NEXT_PUBLIC_APP_ORIGIN",
     "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-pod-manager"
+  },
+  {
+    "project": "solid-sdk-access-manager",
+    "rootDirectory": "apps/access-manager",
+    "package": "@jeswr/app-access-manager",
+    "framework": "vite",
+    "originEnv": "APP_ORIGIN",
+    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-access-manager"
+  },
+  {
+    "project": "solid-sdk-issues",
+    "rootDirectory": "apps/issues",
+    "package": "@jeswr/app-issues",
+    "framework": "next",
+    "originEnv": "APP_ORIGIN",
+    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-issues"
+  },
+  {
+    "project": "solid-sdk-coeliac",
+    "rootDirectory": "apps/coeliac",
+    "package": "@jeswr/app-coeliac",
+    "framework": "next",
+    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-coeliac"
   }
 ]

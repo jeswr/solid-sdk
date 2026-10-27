@@ -62,6 +62,7 @@ export default defineConfig({
       { find: "@jeswr/pod-music", replacement: podMusicSrc("index.ts") },
       { find: "@jeswr/fetch-rdf", replacement: hostModule("@jeswr/fetch-rdf") },
       { find: "@solid/object", replacement: hostModule("@solid/object") },
+      { find: "@jeswr/suite-vocab", replacement: hostModule("@jeswr/suite-vocab") },
       { find: "@rdfjs/wrapper", replacement: hostModule("@rdfjs/wrapper") },
       { find: "n3", replacement: hostModule("n3") },
       // The library declares React as an OPTIONAL peer dep; bundling its source

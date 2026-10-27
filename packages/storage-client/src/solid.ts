@@ -1,3 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-/** Reserved solid entry point for @jeswr/storage-client; implementation follows T-001. */
-export {};
+// AUTHORED-BY Claude Opus 5.5
+/** The Solid backend (ADR-003 §6). */
+export { createSolidBackend, type SolidBackendOptions } from "./solid-backend.js";
