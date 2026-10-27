@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # NOT-L4 — Google Keep Takeout import (sst-u9jq)
 
@@ -73,3 +74,56 @@ this environment. No review verdicts were produced.
 - Screenshots, dev fixture routes, axe, and Playwright specs: not applicable to
   this pure-library change. No UI was built or browser launched.
 - No push, PR, branch switch, or change to another checkout was performed.
+
+## Fix round 1 — timestamp tokenization
+
+Addressed the supplied medium-severity review finding in `23a3be1f`
+(`fix(notes): tokenize Keep timestamps in linear time`). The tokenizer advances
+through disjoint string and numeric spans, consuming escapes without restarting
+at overlapping quote positions. Native JSON parsing validates numeric grammar
+before timestamp tokens are quoted; exact digits, escaped keys, error codes,
+and existing parsing contracts are preserved.
+
+Added nine regression cases covering long unterminated escaped strings, trailing
+backslashes, batch continuation, valid escaped text before both timestamp fields,
+and malformed numeric spellings. The timing regression failed against the old
+tokenizer at 4.36 seconds for two approximately 64 KiB malformed notes against a
+2-second budget, then passed with the forward scanner. No dependencies or API
+contracts changed, and no new interpretation questions arose.
+
+### Fix-round validation
+
+Commands used `PATH=/opt/node24/bin:$PATH` (Node v24.22.1, pnpm 10.4.1).
+An initial app build caught strict string-indexing type errors in the scanner;
+these were corrected with `charAt` and included in the amended fix commit.
+The final app sequence below passed after that correction.
+
+| Exact command | Result |
+| --- | --- |
+| `timeout 30s pnpm --filter @jeswr/app-suite exec vitest run test/notes-keep.test.ts --coverage.enabled=false -t 'rejects long unterminated escaped strings promptly'` | Expected FAIL against the old tokenizer: measured 4,359.94 ms versus the 2,000 ms budget |
+| `pnpm exec biome check apps/suite/src/apps/notes/lib/keep/json.ts apps/suite/test/notes-keep.test.ts` | PASS; no diagnostics |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/notes-keep.test.ts --coverage.include='src/apps/notes/lib/keep/**/*.ts'` | PASS; 164 tests; 100% statements, branches, functions, and lines |
+| `pnpm exec turbo run build --filter='@jeswr/app-suite^...' --concurrency=4` | PASS; seven dependency builds |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; 153 test files, 7,671 tests; all configured coverage metrics 100%; lint retains 54 unrelated warnings |
+| `pnpm run lint:root` | PASS; all root guards |
+| `TURBO_SCM_BASE=0512d28e42df7d9e4053a2cbb6a11b5af42c47c4 pnpm run gate` | PASS; 12 tasks succeeded, seven cached |
+| `pnpm run gate:full` | FAIL; unchanged root agent-layer timeout described below; 49 tasks succeeded, seven cached, 215 total |
+| `git diff --check` | PASS |
+
+The final app coverage report confirms 100% of all four metrics for each Keep
+TypeScript file. The full workspace gate failed only in
+`test/agent-layers.test.mjs:509`, parameterized case
+`rejects disallowed path characters globally: export * from TARGET;`, with
+`Test timed out in 5000ms`. Root results: 878 passed / one failed across 12
+files (11 passed / one failed). This is the same unchanged timeout family
+recorded during the original lane validation; remediation is outside this fix.
+
+Logs: `/tmp/sst-u9jq-fix-gate-full.log`, `/tmp/sst-u9jq-fix-gate.log`,
+`/tmp/sst-u9jq-fix-app-{lint,build,typecheck,test}.log`,
+`/tmp/sst-u9jq-fix-lint-root.log`, and `/tmp/sst-u9jq-fix-deps.log`.
+`roborev` remains unavailable, so automated per-commit review could not run.
+The supplied review finding is fully addressed; the full-workspace gate and
+automated review remain the validation limitations. No implementation work or
+new questions remain. No push, PR, branch switch, fetch, merge, or changes to
+another checkout were performed. This section is committed last as
+`docs: record Keep tokenizer fix validation`.
