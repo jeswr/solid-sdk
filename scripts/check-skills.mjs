@@ -32,12 +32,14 @@ const secretPatterns = [
 ];
 
 function isPlaceholder(value) {
-  const parameter = /^\$\{[A-Z_][A-Z0-9_]*:?[-=+?]([\s\S]*)\}$/i.exec(value);
+  const parameter = /^\$\{[A-Z_][A-Z0-9_]*(:?[-=+?])([\s\S]*)\}$/i.exec(value);
   if (parameter) {
+    // Error operators use their word only as a diagnostic, never as the value.
+    if (parameter[1].endsWith("?")) return true;
     // Shell operators can supply a literal credential even when the variable is unset.
     // Read the complete word, including spaces and nested expansions, before checking it.
-    const { value: word, end } = assignmentValue(parameter[1], 0, true);
-    return end === parameter[1].length && (word === "" || isPlaceholder(word));
+    const { value: word, end } = assignmentValue(parameter[2], 0, true);
+    return end === parameter[2].length && (word === "" || isPlaceholder(word));
   }
   // Existing recipes use a public localStorage identifier and a generated test password.
   // Exempt these exact examples rather than all storage keys or arbitrary expressions.
@@ -49,14 +51,21 @@ function isPlaceholder(value) {
   );
 }
 
-function delimitedEnd(text, start) {
+function delimitedEnd(text, start, multiline = false) {
   const closing = { "(": ")", "[": "]", "{": "}" };
   const stack = [closing[text[start]]];
   let quote;
-  for (let cursor = start + 1; cursor < text.length; cursor++) {
+  let escaped = false;
+  let lines = 1;
+  const limit = multiline ? Math.min(text.length, start + 4096) : text.length;
+  for (let cursor = start + 1; cursor < limit; cursor++) {
     const character = text[cursor];
-    if (/[\r\n]/.test(character)) return undefined;
-    if (character === "\\") cursor++;
+    if (/[\r\n]/.test(character)) {
+      if (!multiline) return undefined;
+      if ((character === "\n" || text[cursor + 1] !== "\n") && ++lines > 50) return undefined;
+    }
+    if (escaped) escaped = false;
+    else if (character === "\\") escaped = true;
     else if (quote) {
       if (character === quote) quote = undefined;
     } else if (/["'`]/.test(character)) quote = character;
@@ -71,25 +80,87 @@ function delimitedEnd(text, start) {
 
 function computedExpressionEnd(text, start) {
   const source = text.slice(start);
-  const environment =
-    /^(?:(?:process|Bun)\.env|import\.meta\.env)(?:\.[A-Z_$][\w$]*|\[[\t ]*(?:"[^"\r\n]+"|'[^'\r\n]+')[\t ]*\])/i.exec(
-      source,
-    );
+  // A bare $(...) uses the shell's newline boundaries, not JavaScript call rules.
+  if (source.startsWith("$(")) return undefined;
+  const environment = /^(?:(?:process|Bun)\.env|import\.meta\.env)(?:\.[A-Z_$][\w$]*|(?=\[))/i.exec(
+    source,
+  );
   const call = /^(?:await[\t ]+)?[A-Z_$][\w$]*(?:\??\.[A-Z_$][\w$]*)*[\t ]*(?=\()/i.exec(source);
   const end = call
-    ? delimitedEnd(text, start + call[0].length)
+    ? delimitedEnd(text, start + call[0].length, true)
     : environment
-      ? start + environment[0].length
+      ? text[start + environment[0].length] === "["
+        ? delimitedEnd(text, start + environment[0].length, true)
+        : start + environment[0].length
       : undefined;
-  if (end === undefined) return undefined;
-  // Accept complete expressions, never a prefix of a literal or a literal fallback.
-  if (end < text.length && !/[\s;,`)\]}]/.test(text[end])) return undefined;
-  if (/^[\t ]*(?:\?\?|\|\||&&|[+*/%?.-])/.test(text.slice(end))) return undefined;
+  if (end === undefined || !isExpressionEnd(text, end)) return undefined;
   return end;
+}
+
+function isExpressionEnd(text, end) {
+  // Accept complete expressions, never a prefix of a literal or a literal fallback.
+  return (
+    (end === text.length || /[\s;,`)\]}]/.test(text[end])) &&
+    !/^\s*(?:\?\?|\|\||&&|[+*/%?.-])/.test(text.slice(end))
+  );
+}
+
+function closesInlineCode(text, start) {
+  // Backticks before the assignment belong to Markdown when their run lengths
+  // match. A closing code span delimiter must not open an empty template value.
+  const prefix = text.slice(text.lastIndexOf("\n", start - 1) + 1, start);
+  let delimiter = "";
+  let contentStart = 0;
+  for (const match of prefix.matchAll(/(?<!\\)`+/g)) {
+    if (!delimiter) {
+      delimiter = match[0];
+      contentStart = match.index + delimiter.length;
+    } else if (delimiter === match[0]) delimiter = "";
+  }
+  return (
+    delimiter !== "" &&
+    /^`+/.exec(text.slice(start))?.[0] === delimiter &&
+    /^(?:(?:export|const|let|var)[\t ]+)?[A-Z_][A-Z0-9_]*[\t ]*=[\t ]*$/.test(
+      prefix.slice(contentStart),
+    )
+  );
+}
+
+function templateValue(text, start) {
+  let value = "";
+  let cursor = start + 1;
+  let computed = true;
+  while (cursor < text.length) {
+    if (text[cursor] === "`") {
+      return {
+        value: !isExpressionEnd(text, cursor + 1)
+          ? text.slice(start, cursor + 1)
+          : computed
+            ? ""
+            : value.trim(),
+        end: cursor + 1,
+      };
+    }
+    if (text[cursor] === "$" && text[cursor + 1] === "{") {
+      const end = delimitedEnd(text, cursor + 1, true);
+      if (end !== undefined) {
+        const expression = text.slice(cursor + 2, end - 1).trim();
+        computed &&= computedExpressionEnd(expression, 0) === expression.length;
+        value += text.slice(cursor, end);
+        cursor = end;
+        continue;
+      }
+    }
+    computed = false;
+    if (text[cursor] === "\\" && cursor + 1 < text.length) value += text[cursor++];
+    value += text[cursor++];
+  }
+  return { value: value.trim(), end: cursor };
 }
 
 function assignmentValue(text, start, parameterWord = false) {
   if (!parameterWord) {
+    if (text[start] === "`" && !closesInlineCode(text, start)) return templateValue(text, start);
     const end = computedExpressionEnd(text, start);
     if (end !== undefined) return { value: "", end };
   }
@@ -233,24 +304,42 @@ function* rawMetadataSegments(text, quotedScalars) {
   let cursor = 0;
   for (const [start, end] of [...quotedScalars].sort(([a], [b]) => a - b)) {
     yield { text: text.slice(cursor, start), lineOffset: lineNumber(text, cursor) };
-    let segmentStart = start + 1;
-    // Other YAML escapes are syntax boundaries, not literal assignment suffixes.
-    // The decoded scan handles their contents; retain actual source newlines here.
-    const escapes = /\\(["\\]|x[\da-fA-F]{2}|u[\da-fA-F]{4}|U[\da-fA-F]{8}|[\s\S])/g;
+    const segmentStart = start + 1;
     const scalar = text.slice(start + 1, end - 1);
-    for (const escaped of scalar.matchAll(escapes)) {
-      if (escaped[1] === '"' || escaped[1] === "\\") continue;
-      const escapeStart = start + 1 + escaped.index;
-      yield {
-        text: text.slice(segmentStart, escapeStart).replace(/\\(["\\])/g, "$1"),
-        lineOffset: lineNumber(text, segmentStart),
-      };
-      segmentStart = escapeStart + escaped[0].length;
+    if (text[start] === "'") {
+      yield { text: scalar.replaceAll("''", "'"), lineOffset: lineNumber(text, segmentStart) };
+      cursor = end;
+      continue;
     }
-    yield {
-      text: text.slice(segmentStart, end - 1).replace(/\\(["\\])/g, "$1"),
-      lineOffset: lineNumber(text, segmentStart),
-    };
+    // Preserve whitespace escapes so balanced computed expressions can span them.
+    // Map characters to the source to keep diagnostics on physical YAML lines.
+    // Other escapes remain boundaries; the decoded metadata scan handles them.
+    const escapes = /\\(["\\]|x[\da-fA-F]{2}|u[\da-fA-F]{4}|U[\da-fA-F]{8}|[\s\S])/g;
+    const whitespace = { n: "\n", r: "\r", t: "\t" };
+    let segment = "";
+    let sourceOffsets = [];
+    let rawCursor = segmentStart;
+    function append(from, to, replacement) {
+      const chunk = replacement ?? text.slice(from, to);
+      segment += chunk;
+      for (let index = 0; index < chunk.length; index++) {
+        sourceOffsets.push(replacement === undefined ? from + index : from);
+      }
+    }
+    for (const escaped of scalar.matchAll(escapes)) {
+      const escapeStart = start + 1 + escaped.index;
+      append(rawCursor, escapeStart);
+      if (escaped[1] === '"' || escaped[1] === "\\" || Object.hasOwn(whitespace, escaped[1])) {
+        append(escapeStart, escapeStart + escaped[0].length, whitespace[escaped[1]] ?? escaped[1]);
+      } else {
+        yield { text: segment, sourceOffsets };
+        segment = "";
+        sourceOffsets = [];
+      }
+      rawCursor = escapeStart + escaped[0].length;
+    }
+    append(rawCursor, end - 1);
+    yield { text: segment, sourceOffsets };
     cursor = end;
   }
   yield { text: text.slice(cursor), lineOffset: lineNumber(text, cursor) };
@@ -500,7 +589,8 @@ export function checkSkills(root, { write = false } = {}) {
               frontmatter[1].slice(start, state.position),
             )[0];
             const scalarStart = start + prefix.length;
-            if (frontmatter[1][scalarStart] === '"') quotedScalars.set(scalarStart, state.position);
+            if (/["']/.test(frontmatter[1][scalarStart] ?? ""))
+              quotedScalars.set(scalarStart, state.position);
           }
         },
       });
@@ -510,21 +600,19 @@ export function checkSkills(root, { write = false } = {}) {
       continue;
     }
     // Scan raw syntax too: decoded YAML discards standalone and inline comments.
-    for (const { text: rawMetadata, lineOffset } of rawMetadataSegments(
+    for (const { text: rawMetadata, lineOffset, sourceOffsets } of rawMetadataSegments(
       frontmatter[1],
       quotedScalars,
     )) {
+      const metadataLine = (offset) =>
+        sourceOffsets
+          ? 1 + lineNumber(frontmatter[1], sourceOffsets[offset])
+          : lineOffset + lineNumber(rawMetadata, offset);
       scanSecrets(rawMetadata, (category, offset) => {
-        report(
-          path,
-          `line ${lineOffset + lineNumber(rawMetadata, offset)}: possible ${category} (value omitted)`,
-        );
+        report(path, `line ${metadataLine(offset)}: possible ${category} (value omitted)`);
       });
       scanLocalPaths(rawMetadata, (offset) => {
-        report(
-          path,
-          `line ${lineOffset + lineNumber(rawMetadata, offset)}: absolute user path is forbidden`,
-        );
+        report(path, `line ${metadataLine(offset)}: absolute user path is forbidden`);
       });
     }
     if (!data || typeof data !== "object" || Array.isArray(data)) {

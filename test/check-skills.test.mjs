@@ -970,16 +970,36 @@ describe("skill validation", () => {
     '"Use when setting API_TOKEN=\\"<token>\\"."',
     '&description "Use when setting API_TOKEN=\\"<token>\\"."',
     '!!str "Use when setting API_TOKEN=\\"<token>\\"."',
-  ])("checks comments following double-quoted scalar syntax: %s", (description) => {
+    "'Use when setting API_TOKEN=your-token'",
+    "'Use when setting API_TOKEN=''your-token'''",
+    "&description 'Use when setting API_TOKEN=''your-token'''",
+    "!!str 'Use when setting API_TOKEN=''your-token'''",
+  ])("checks comments following quoted scalar syntax: %s", (description) => {
     const root = fixture();
     put(
       root,
       "skills/alpha/SKILL.md",
-      skill({ description: `${description} # API_TOKEN=fixture-credential-value` }),
+      skill({ description: `${description} # PASSWORD=fixture-credential-value` }),
     );
     expect(checkSkills(root, { write: true }).errors).toEqual([
       "skills/alpha/SKILL.md: line 3: possible environment secret (value omitted)",
     ]);
+  });
+
+  it.each([
+    '"Use when setting API_TOKEN=your-token"',
+    "'Use when setting API_TOKEN=your-token'",
+    "'Use when setting API_TOKEN=''your-token'''",
+    "&description 'Use when setting API_TOKEN=your-token'",
+    "!!str 'Use when setting API_TOKEN=your-token'",
+  ])("accepts harmless trailing comments after quoted scalars: %s", (description) => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({ description: `${description} # no credential value here` }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
   });
 
   const quotedAssignments = [
@@ -1070,16 +1090,18 @@ describe("skill validation", () => {
         ['"fixture-credential-value"', 1],
         ["'fixture credential value'", 1],
         ["example fixture-credential-value", 1],
+        ["PASSWORD must be set", 1],
         // biome-ignore lint/suspicious/noTemplateCurlyInString: literal documentation template
         ["${OTHER_PASSWORD:-fixture-credential-value}", 1],
       ].flatMap(([word, count]) => {
         const assignment = `PASSWORD=\${PASSWORD${operator}${word}}`;
+        const expected = operator.endsWith("?") ? 0 : count;
         return [
-          [`shell parameter ${operator} with word ${word}`, assignment, count],
+          [`shell parameter ${operator} with word ${word}`, assignment, expected],
           [
             `quoted shell parameter ${operator} with word ${word}`,
             `PASSWORD="${assignment.slice(9)}"`,
-            count,
+            expected,
           ],
         ];
       }),
@@ -1133,6 +1155,95 @@ describe("skill validation", () => {
     ["function call", "TOKEN=getToken();", 0],
     ["function call with arguments", 'TOKEN = await auth.getToken("scope", { refresh: true });', 0],
     ["function call with whitespace", "TOKEN = getToken ();", 0],
+    [
+      "multiline awaited call with nested brackets and quoted delimiters",
+      'const TOKEN = await auth.getToken(\n  "scope)",\n  { scopes: ["read", "write"], refresh: true },\n);',
+      0,
+    ],
+    ["multiline environment lookup", 'const API_KEY = process.env[\n  "API_KEY"\n];', 0],
+    [
+      "multiline call with a literal fallback on the next line",
+      'const TOKEN = getToken(\n  "scope"\n)\n  ?? "fixture-credential-value";',
+      1,
+    ],
+    [
+      "multiline call followed by another assignment",
+      'const TOKEN = getToken(\n  "scope"\n);\nPASSWORD=fixture-credential-value',
+      1,
+    ],
+    ["unbalanced multiline call", 'const TOKEN = getToken(\n  { scope: "read" ]\n);', 1],
+    [
+      "shell substitution keeps newline boundaries",
+      "TOKEN=$(gh auth token\nPASSWORD=fixture-credential-value\n)",
+      2,
+    ],
+    ["backtick-quoted literal", "const API_KEY = `fixture-credential-value`;", 1],
+    ["backtick-quoted spaces", "const API_KEY = `fixture credential value`;", 1],
+    ["backtick-quoted placeholder", "const API_KEY = `your-token`;", 0],
+    ["backtick-quoted call is literal", "const TOKEN = `auth.getToken()`;", 1],
+    ["multiline backtick literal", "const TOKEN = `\nfixture-credential-value\n`;", 1],
+    [
+      "template environment reference",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal documentation template
+      "const API_KEY = `${process.env.API_KEY}`;",
+      0,
+    ],
+    [
+      "template awaited call",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal documentation template
+      "const TOKEN = `${await auth.getToken()}`;",
+      0,
+    ],
+    [
+      "multiple template references",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal documentation template
+      "const TOKEN = `${process.env.TOKEN}${auth.getToken()}`;",
+      0,
+    ],
+    [
+      "template reference with a literal suffix",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal documentation template
+      "const TOKEN = `${process.env.TOKEN}fixture-credential-value`;",
+      1,
+    ],
+    [
+      "template reference with a literal prefix",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal documentation template
+      "const TOKEN = `fixture-credential-value${process.env.TOKEN}`;",
+      1,
+    ],
+    [
+      "template reference with a literal fallback",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal documentation template
+      'const TOKEN = `${process.env.TOKEN ?? "fixture-credential-value"}`;',
+      1,
+    ],
+    [
+      "template expression followed by a literal fallback",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal documentation template
+      'const TOKEN = `${auth.getToken()}` ?? "fixture-credential-value";',
+      1,
+    ],
+    [
+      "escaped template interpolation is literal",
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: literal documentation template
+      "const TOKEN = `\\${process.env.TOKEN}`;",
+      1,
+    ],
+    ["template literal inside inline code", "``const API_KEY = `fixture-credential-value`;``", 1],
+    [
+      "backtick inside an earlier quoted string",
+      'const note = "`", API_KEY = `fixture-credential-value`;',
+      1,
+    ],
+    ["inline placeholder boundary", "`API_KEY=your-token`PASSWORD=fixture-credential-value", 1],
+    ["inline empty assignment", "`API_KEY=` followed by `PASSWORD=fixture-credential-value`", 1],
+    [
+      "inline empty declaration",
+      "``const API_KEY =`` followed by `PASSWORD=fixture-credential-value`",
+      1,
+    ],
+    ["unterminated template literal", "const API_KEY = `fixture-credential-value", 1],
     ["quoted environment property", 'API_KEY="process.env.API_KEY"', 1],
     ["quoted function call", 'TOKEN="getToken()"', 1],
     ["quoted awaited function call", "TOKEN='await getToken()'", 1],
@@ -1196,7 +1307,7 @@ describe("skill validation", () => {
     ["empty before separator", "API_TOKEN=;PASSWORD=fixture-credential-value", 1],
   ];
   it.each(
-    ["description", "body", "companion"].flatMap((surface) =>
+    ["description", "body", "fence", "companion"].flatMap((surface) =>
       assignmentBoundaries.map(([label, text, count]) => [surface, label, text, count]),
     ),
   )("scans complete assignments in %s: %s", (surface, _label, text, count) => {
@@ -1210,7 +1321,9 @@ describe("skill validation", () => {
         ? skill({ description: JSON.stringify(`Use when setting ${text}`) })
         : surface === "body"
           ? skill({ body: text })
-          : text,
+          : surface === "fence"
+            ? skill({ body: `\`\`\`js\n${text}\n\`\`\`` })
+            : text,
     );
     const { errors } = checkSkills(root, { write: true });
     expect(errors).toHaveLength(surface === "description" ? count * 2 : count);
@@ -1222,6 +1335,37 @@ describe("skill validation", () => {
       );
     }
     expect(existsSync(join(root, "skills/INDEX.md"))).toBe(count === 0);
+  });
+
+  it.each([
+    ["50 lines", `getToken(${"\n".repeat(49)})`, 0],
+    ["more than 50 lines", `getToken(${"\n".repeat(50)})`, 1],
+    ["4 KiB of brackets and contents", `getToken(${"a".repeat(4094)})`, 0],
+    ["more than 4 KiB of brackets and contents", `getToken(${"a".repeat(4095)})`, 1],
+    ["CRLF at the line limit", `getToken(${"\r\n".repeat(49)})`, 0],
+  ])("bounds computed expression parsing at %s", (_label, expression, count) => {
+    const root = fixture();
+    const path = "skills/alpha/references/guide.md";
+    put(root, path, `const TOKEN = ${expression};`);
+    expect(checkSkills(root, { write: true }).errors).toEqual(
+      count === 0 ? [] : [`${path}: line 1: possible environment secret (value omitted)`],
+    );
+  });
+
+  it("preserves YAML source lines when computed values contain escaped newlines", () => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({
+        description: JSON.stringify('Use when TOKEN=getToken(\n  "scope"\n);'),
+        extra: 'metadata:\n  note: "PASSWORD=fixture-credential-value"\n',
+      }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: line 5: possible environment secret (value omitted)",
+      "skills/alpha/SKILL.md: decoded metadata: possible environment secret (value omitted)",
+    ]);
   });
 
   it.each([
