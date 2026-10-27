@@ -17,8 +17,8 @@ import {
   recordIdentityVerified,
   type UpgradeTransport,
 } from "./upgrade.js";
-import { serializeRelationship } from "./upgrade-state.js";
-import { AGENTIC_PERSON_IRI_VERSION } from "./vocab.js";
+import { serializeRelationship, transition } from "./upgrade-state.js";
+import { AGENTIC_OFFER_IRI_VERSION, AGENTIC_PERSON_IRI_VERSION } from "./vocab.js";
 
 const PERSON = "urn:agentic:person:c2xhY2s6VDpV";
 const WEBID = "https://bob.example/profile/card#me";
@@ -42,7 +42,10 @@ async function driveToCard(store: InMemoryRelationshipStore): Promise<void> {
 async function legacyDocument(state: Parameters<typeof serializeRelationship>[0], url: string) {
   const quads = new Parser().parse(await serializeRelationship(state, url));
   return new Writer({ format: "text/turtle" }).quadsToString(
-    quads.filter((quad) => quad.predicate.value !== AGENTIC_PERSON_IRI_VERSION),
+    quads.filter(
+      (quad) =>
+        ![AGENTIC_PERSON_IRI_VERSION, AGENTIC_OFFER_IRI_VERSION].includes(quad.predicate.value),
+    ),
   );
 }
 
@@ -296,6 +299,113 @@ describe("createPodRelationshipStore — pod round-trip with CAS", () => {
       return new Response(null, { status: 405 });
     }) as typeof fetch;
   }
+
+  it.each([
+    ["https://protocol.example", "https://protocol.example/"],
+    ["https://PROTOCOL.example:443/a/../v1", "https://protocol.example/v1"],
+    ["https://bücher.example/日本語", "https://xn--bcher-kva.example/%E6%97%A5%E6%9C%AC%E8%AA%9E"],
+    ["https://protocol.example/a\\v1?x=|^`", "https://protocol.example/a/v1?x=%7C%5E%60"],
+  ])("retries an unversioned pending offer with its original normalization: %s", async (input, canonical) => {
+    const pod = new FakePod();
+    const mem = new InMemoryRelationshipStore();
+    await driveToCard(mem);
+    const original = { ...rdfOffer, protocolSource: canonical };
+    const pending = transition(
+      must(await mem.load(PERSON)).state,
+      { kind: "offer", offer: original },
+      AT,
+    );
+    if (!pending.ok) throw new Error(pending.reason);
+    const url = `${CONTAINER}rel-${base64Url(PERSON)}.ttl`;
+    pod.store.set(url, { body: await legacyDocument(pending.state, url), etag: "v7" });
+
+    const store = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
+    const loaded = must(await store.load(PERSON));
+    expect(loaded.state).toMatchObject({ pendingOffer: original, pendingOfferVersion: 1 });
+    await store.save(loaded.state, loaded.version);
+    const reopened = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
+    expect((await reopened.load(PERSON))?.state.pendingOfferVersion).toBe(1);
+
+    const transport = vi.fn(async () => ({ accept: true, protocolHash: "h" }));
+    for (const changed of [
+      { ...original, protocolSource: "https://other.example/" },
+      { ...original, protocolHash: "other" },
+      { ...original, required: true },
+      { ...original, targetChannel: "a2a" as const },
+    ]) {
+      expect(await offerAndNegotiate(reopened, PERSON, changed, transport, AT)).toMatchObject({
+        ok: false,
+        reason: expect.stringMatching(/different/),
+      });
+    }
+    expect(transport).not.toHaveBeenCalled();
+
+    const retry = { ...rdfOffer, protocolSource: input };
+    const failing = vi.fn(async () => {
+      throw new Error("peer unavailable");
+    });
+    await expect(offerAndNegotiate(reopened, PERSON, retry, failing, AT)).rejects.toThrow(
+      /peer unavailable/,
+    );
+    expect(failing).toHaveBeenCalledWith({ target: CARD, payload: encodeUpgradeOffer(original) });
+    expect((await reopened.load(PERSON))?.state).toMatchObject({
+      state: "offer-pending",
+      pendingOffer: original,
+      pendingOfferVersion: 1,
+    });
+
+    const result = await offerAndNegotiate(reopened, PERSON, retry, transport, AT);
+    expect(result).toMatchObject({ ok: true, state: { state: "upgraded" } });
+    expect(transport).toHaveBeenCalledExactlyOnceWith({
+      target: CARD,
+      payload: encodeUpgradeOffer(original),
+    });
+  });
+
+  it("keeps lexical protocol bindings distinct for new pending offers after reopening", async () => {
+    const pod = new FakePod();
+    const store = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
+    const mem = new InMemoryRelationshipStore();
+    await driveToCard(mem);
+    await store.save(must(await mem.load(PERSON)).state);
+    const offer = { ...rdfOffer, protocolSource: "https://PROTOCOL.example:443" };
+    await expect(
+      offerAndNegotiate(
+        store,
+        PERSON,
+        offer,
+        async () => {
+          throw new Error("peer unavailable");
+        },
+        AT,
+      ),
+    ).rejects.toThrow(/peer unavailable/);
+
+    const reopened = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
+    expect((await reopened.load(PERSON))?.state).toMatchObject({
+      pendingOfferVersion: 2,
+      pendingOffer: offer,
+    });
+    const transport = vi.fn(async () => ({ accept: true, protocolHash: "h" }));
+    expect(
+      await offerAndNegotiate(
+        reopened,
+        PERSON,
+        { ...offer, protocolSource: "https://protocol.example/" },
+        transport,
+        AT,
+      ),
+    ).toMatchObject({ ok: false, reason: expect.stringMatching(/different/) });
+    expect(transport).not.toHaveBeenCalled();
+    expect(await offerAndNegotiate(reopened, PERSON, offer, transport, AT)).toMatchObject({
+      ok: true,
+      state: { state: "upgraded" },
+    });
+    expect(transport).toHaveBeenCalledExactlyOnceWith({
+      target: CARD,
+      payload: encodeUpgradeOffer(offer),
+    });
+  });
 
   it.each([
     ["https://CAROL.example:443/a/../card#me", "https://carol.example/card#me"],

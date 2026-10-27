@@ -41,6 +41,7 @@ import {
   AGENTIC_AGENT_CARD,
   AGENTIC_COUNTERPARTY,
   AGENTIC_CURRENT_CHANNEL,
+  AGENTIC_OFFER_IRI_VERSION,
   AGENTIC_OFFER_PROTOCOL_HASH,
   AGENTIC_OFFER_PROTOCOL_SOURCE,
   AGENTIC_OFFER_REQUIRED,
@@ -93,6 +94,8 @@ export interface RelationshipState {
   readonly agentCardUrl?: string;
   /** The pending upgrade offer (present only in `offer-pending`). */
   readonly pendingOffer?: UpgradeOffer;
+  /** Normalization used by the pending offer: 1 = legacy URL.href, 2 = lexical IRIs. */
+  readonly pendingOfferVersion?: 1 | 2;
   /** The channel upgraded to (present only in `upgraded`; equals `currentChannel`). */
   readonly upgradedChannel?: Channel;
   /** Why the current exchange aborted (present only in `aborted`). */
@@ -141,8 +144,11 @@ const MAX_PROTOCOL_HASH_LENGTH = 256;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: protocol bindings must reject all controls.
 const PROTOCOL_HASH_CONTROL = /[\u0000-\u001F\u007F-\u009F]/;
 
-/** Validate and canonicalise an untrusted offer before it becomes persisted state. */
-export function normalizeUpgradeOffer(offer: unknown): UpgradeOffer | undefined {
+/** Validate an offer; legacy normalization is used only to resume existing pending offers. */
+export function normalizeUpgradeOffer(
+  offer: unknown,
+  iriVersion: 1 | 2 = 2,
+): UpgradeOffer | undefined {
   if (typeof offer !== "object" || offer === null || Array.isArray(offer)) return undefined;
   const rec = offer as Record<string, unknown>;
   const targetChannel = asChannel(rec.targetChannel);
@@ -163,7 +169,18 @@ export function normalizeUpgradeOffer(offer: unknown): UpgradeOffer | undefined 
 
   let protocolSource: string | undefined;
   if (rec.protocolSource !== undefined) {
-    protocolSource = safeHttpIri(rec.protocolSource);
+    let source = rec.protocolSource;
+    if (iriVersion === 1) {
+      if (typeof source !== "string") return undefined;
+      try {
+        // Reproduce the old URL normalization, then delegate escaping/validation.
+        // Never apply this to a new offer's lexical protocol binding.
+        source = new URL(source).href;
+      } catch {
+        return undefined;
+      }
+    }
+    protocolSource = safeHttpIri(source);
     if (protocolSource === undefined) return undefined;
   }
 
@@ -190,6 +207,7 @@ function assemble(
     verifiedWebId?: string;
     agentCardUrl?: string;
     pendingOffer?: UpgradeOffer;
+    pendingOfferVersion?: 1 | 2;
     upgradedChannel?: Channel;
     abortReason?: string;
   },
@@ -202,7 +220,12 @@ function assemble(
     updatedAt: iso,
     ...(opt.verifiedWebId !== undefined ? { verifiedWebId: opt.verifiedWebId } : {}),
     ...(opt.agentCardUrl !== undefined ? { agentCardUrl: opt.agentCardUrl } : {}),
-    ...(opt.pendingOffer !== undefined ? { pendingOffer: opt.pendingOffer } : {}),
+    ...(opt.pendingOffer !== undefined
+      ? {
+          pendingOffer: opt.pendingOffer,
+          pendingOfferVersion: opt.pendingOfferVersion ?? 2,
+        }
+      : {}),
     ...(opt.upgradedChannel !== undefined ? { upgradedChannel: opt.upgradedChannel } : {}),
     ...(opt.abortReason !== undefined ? { abortReason: opt.abortReason } : {}),
   };
@@ -421,7 +444,7 @@ export function assertRelationshipInvariant(state: RelationshipState): void {
     if (state.pendingOffer.targetChannel === "email") {
       throw new Error("invariant: a pending offer must target an upgrade above the floor.");
     }
-    if (normalizeUpgradeOffer(state.pendingOffer) === undefined) {
+    if (normalizeUpgradeOffer(state.pendingOffer, state.pendingOfferVersion ?? 1) === undefined) {
       throw new Error("invariant: pending offer is malformed or unsafe.");
     }
   }
@@ -532,6 +555,11 @@ export async function serializeRelationship(
   if (state.pendingOffer !== undefined) {
     store.addQuad(
       subject,
+      namedNode(AGENTIC_OFFER_IRI_VERSION),
+      literal(String(state.pendingOfferVersion ?? 1)),
+    );
+    store.addQuad(
+      subject,
       namedNode(AGENTIC_OFFERED_CHANNEL),
       literal(state.pendingOffer.targetChannel),
     );
@@ -623,8 +651,11 @@ export function parseRelationship(
   const updatedAt = one(AGENTIC_UPDATED_AT);
 
   let pendingOffer: UpgradeOffer | undefined;
+  let pendingOfferVersion: 1 | 2 | undefined;
   const offeredChannel = asChannel(one(AGENTIC_OFFERED_CHANNEL));
   if (offeredChannel !== undefined) {
+    pendingOfferVersion = parseIriVersion(store, subject, AGENTIC_OFFER_IRI_VERSION);
+    if (pendingOfferVersion === undefined) return undefined;
     const hash = one(AGENTIC_OFFER_PROTOCOL_HASH);
     const sourceRaw = one(AGENTIC_OFFER_PROTOCOL_SOURCE);
     const source = safeHttpIri(sourceRaw);
@@ -635,7 +666,7 @@ export function parseRelationship(
       ...(hash !== undefined ? { protocolHash: hash } : {}),
       ...(source !== undefined ? { protocolSource: source } : {}),
     };
-    pendingOffer = normalizeUpgradeOffer(candidate);
+    pendingOffer = normalizeUpgradeOffer(candidate, pendingOfferVersion);
     if (pendingOffer === undefined) return undefined;
   }
 
@@ -648,6 +679,7 @@ export function parseRelationship(
       ...(verifiedWebId !== undefined ? { verifiedWebId } : {}),
       ...(agentCardUrl !== undefined ? { agentCardUrl } : {}),
       ...(pendingOffer !== undefined ? { pendingOffer } : {}),
+      ...(pendingOfferVersion !== undefined ? { pendingOfferVersion } : {}),
       // `upgraded` state's upgradedChannel is definitionally the currentChannel.
       ...(stateName === "upgraded" ? { upgradedChannel: channel } : {}),
       ...(abortReason !== undefined && stateName === "aborted" ? { abortReason } : {}),

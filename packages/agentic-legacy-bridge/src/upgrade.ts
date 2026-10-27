@@ -439,7 +439,10 @@ export async function offerAndNegotiate(
   const loaded = await store.load(personIri);
   if (loaded === undefined) return { ok: false, reason: "no relationship for counterparty." };
 
-  const normalized = normalizeUpgradeOffer(offer);
+  const normalized = normalizeUpgradeOffer(
+    offer,
+    loaded.state.state === "offer-pending" ? (loaded.state.pendingOfferVersion ?? 1) : 2,
+  );
   if (normalized === undefined) return { ok: false, reason: "offer is malformed or unsafe." };
 
   let pending: LoadedRelationship;
@@ -466,7 +469,9 @@ export async function offerAndNegotiate(
   const target = pending.state.agentCardUrl;
   if (target === undefined) return { ok: false, reason: "no verified card endpoint to offer to." };
 
-  const raw = await transport({ target, payload: encodeUpgradeOffer(normalized) });
+  const persistedOffer = pending.state.pendingOffer;
+  if (persistedOffer === undefined) return { ok: false, reason: "no persisted offer to send." };
+  const raw = await transport({ target, payload: encodeUpgradeOffer(persistedOffer) });
   const response = decodeUpgradeResponse(raw);
   const resolved = transition(pending.state, { kind: "offer-response", response }, now);
   if (!resolved.ok) return resolved;

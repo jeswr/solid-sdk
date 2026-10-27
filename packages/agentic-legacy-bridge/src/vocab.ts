@@ -183,6 +183,8 @@ export const AGENTIC_OFFERED_CHANNEL = `${AGENTIC}offeredChannel`;
 export const AGENTIC_OFFER_PROTOCOL_HASH = `${AGENTIC}offerProtocolHash`;
 /** The protocol-document IRI bound into a pending offer. */
 export const AGENTIC_OFFER_PROTOCOL_SOURCE = `${AGENTIC}offerProtocolSource`;
+/** Pending-offer normalization: 1 = legacy URL canonicalization, 2 = lexical IRIs. */
+export const AGENTIC_OFFER_IRI_VERSION = `${AGENTIC}offerIriVersion`;
 /** True when the pending offer is security-bearing (a decline ABORTS, never downgrades). */
 export const AGENTIC_OFFER_REQUIRED = `${AGENTIC}offerRequired`;
 /** The last transition time (`xsd:dateTime`). */
