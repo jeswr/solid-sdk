@@ -11,7 +11,9 @@ Branch: `lane/sst-8xm.1`. Base: `93afe9d606533fc0b36ab314423d2f0b73e528e6`.
 - `8f8b7734` — `test: cover live board and LDN inbox`: add the board and inbox specs, and conditionally replace any server-seeded inbox ACL. The board test observes the real WebSocketChannel2023 subscription and a change frame while a second context changes status, then checks the card moves without navigation. Inbox tests POST a typed, Writer-serialized Announce and check UI assignment delivery to Bob.
 - Final documentation commit — `docs: record issues lane validation`: this report.
 
-No production application code, manifests, dependencies, lockfiles, or server configuration changed.
+The original implementation through `dce0ad9a` changed no production application code,
+manifests, dependencies, lockfiles, or server configuration. Fix round 1 below adds the
+production subscription fixes requested by review.
 
 ## Validation
 
@@ -70,3 +72,60 @@ The full gate's failed root files were `test/agent-layers-reachability.test.mjs`
 - Local browser behavior remains unverified because the configured webServer could not start. The full and affected gates are not green; focused Issues lint, typecheck, and unit tests are green.
 - Per-commit roborev review could not run: `roborev status` returned `/bin/bash: line 1: roborev: command not found` (exit 127). No reviewer tooling was installed.
 - Open questions: none. The specs use only the harness's local `http://localhost:<port>` CSS. Inbox refresh uses the existing Refresh button; the board test requires the socket event and forbids navigation.
+
+## Fix round 1 — sst-8xm.1
+
+Review baseline: `dce0ad9a7013da8e0f3c3109995ddbafdc456896`.
+
+- `768fc815` — `fix: watch issue edits through CSS subscriptions`: accept discovered
+  HTTP(S) notification services on the user's storage origins, including CSS's service
+  outside the pod path. Topic and inbox URLs retain the own-storage path restriction;
+  foreign services and sockets still fail closed. Subscribe to each loaded issue as
+  well as the container, refresh the subscription set on membership changes, and close
+  all watchers and queued refreshes on teardown. The e2e test matches the edited issue's
+  subscription and socket, then requires its `Update` frame. Add 15 regression tests.
+- Final documentation commit — `docs: record subscription fix validation`: this report.
+
+The implementation follows the server-level discovery and separate resource/container
+notification behavior in the [CSS 7 notification documentation](https://communitysolidserver.github.io/CommunitySolidServer/7.x/usage/notifications/).
+It continues to discover the service URL rather than assuming a CSS path. No dependencies,
+manifests, lockfiles, or server configuration changed; `check:packages` was not needed.
+
+All commands used `PATH=/opt/node24/bin:$PATH` (Node `v24.22.1`, pnpm `10.4.1`), with
+dependency lifecycle scripts disabled.
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter='@jeswr/app-issues^...' --concurrency=4` | PASS: 7 dependency builds. |
+| `pnpm --filter @jeswr/app-issues exec vitest run src/lib/notifications.test.ts src/lib/own-pod.test.ts src/lib/use-issues.test.tsx` | PASS: 40 tests. Before the resource fix, both new resource-subscription regressions failed. |
+| `pnpm --filter @jeswr/app-issues run lint` | PASS; one existing `react-hooks/exhaustive-deps` warning in `src/components/issues-view.tsx:881`. |
+| `pnpm --filter @jeswr/app-issues exec eslint e2e` | PASS. |
+| `pnpm --filter @jeswr/app-issues run build` | FAIL: existing Google Fonts fetch failures for Geist and Geist Mono, exactly as recorded above. |
+| `pnpm --filter @jeswr/app-issues run typecheck` | PASS, including the new hook tests and changed e2e spec; also rerun after the build attempt. |
+| `pnpm --filter @jeswr/app-issues run test` | PASS: 48 files, 725 tests. |
+| `pnpm run lint:root` | PASS. |
+| `TURBO_SCM_BASE=dce0ad9a7013da8e0f3c3109995ddbafdc456896 pnpm run gate` | FAIL at `@jeswr/app-issues#build`: the same two Google Fonts fetch errors; 8 successful tasks of 10. |
+| `pnpm run gate:full` | FAIL at `//#test:root`: 49 successful tasks of 214. Root tests: 4 files failed, 8 passed; 161 tests failed, 739 passed. Other tasks were interrupted. |
+| `pnpm --filter @jeswr/app-issues exec playwright test --list` | PASS: 28 tests in 7 files. |
+| `pnpm --filter @jeswr/app-issues test:e2e` | FAIL before browser tests: configured local webServer could not start; exact error below. |
+| `git diff --check dce0ad9a7013da8e0f3c3109995ddbafdc456896 HEAD` | PASS. |
+
+The local-CSS e2e attempt reported:
+
+```text
+Error: Process from config.webServer was not able to start. Exit code: 1
+
+ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL @jeswr/app-issues@0.1.0 test:e2e: `bash scripts/test-e2e.sh`
+Exit status 1
+```
+
+The full gate's failing root files were `test/agent-layers-reachability.test.mjs`,
+`test/agent-layers.test.mjs`, `test/check-packages-guard.test.mjs`, and
+`test/check-sdk-layers.test.mjs`. Failures again included empty CLI-output assertions,
+such as `AssertionError: expected '' to contain '6 manifests scanned'`. These root
+tests are outside the review fixes and were left unchanged.
+
+No alternate server or browser setup was used. Browser behavior remains unverified;
+the package build, affected gate, and full gate remain non-green for the failures above.
+`roborev status` again returned `/bin/bash: line 1: roborev: command not found`
+(exit 127), so automated per-commit review remains unavailable. Open questions: none.
