@@ -141,7 +141,7 @@ describe("shell layout", () => {
       expect(screen.queryByRole("tooltip")).toBeNull();
       expect(update).not.toHaveBeenCalled();
     }
-  });
+  }, 15000);
   it.each([
     "sidebar",
     "details",

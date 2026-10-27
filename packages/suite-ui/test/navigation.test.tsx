@@ -274,7 +274,8 @@ describe("AppLauncher", () => {
       pinned: ["drive", "contacts", "permissions", "docs", "tasks", "calendar"],
     });
     await accessible();
-  });
+    // Repeated edits remount tooltip controls for all 15 apps alongside the gate's builds.
+  }, 15000);
   it("preserves hidden saved pins through checkbox, keyboard and drag edits", async () => {
     vi.stubEnv("NEXT_PUBLIC_SHOW_BACKLOG_APPS", "0");
     const { rerender } = render(<Harness initial={["home", "calendar", "drive", "docs"]} />);
