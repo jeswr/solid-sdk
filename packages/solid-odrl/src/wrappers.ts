@@ -56,7 +56,7 @@ function objectTerms(node: TermWrapper, predicate: string): Set<TermWrapperType>
   return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
 }
 
-/** A live alias view: writes use canonical predicates and remove legacy edges. */
+/** A live alias view: phase-1 writes use legacy predicates and clear canonical aliases. */
 class AliasedTermSet extends Set<TermWrapperType> {
   constructor(
     private readonly canonical: Set<TermWrapperType>,
@@ -97,16 +97,16 @@ class AliasedTermSet extends Set<TermWrapperType> {
     for (const value of this) callback.call(thisArg, value, value, this);
   }
   override add(value: TermWrapperType): this {
-    this.canonical.add(value);
-    this.legacy.clear();
+    // Canonical emission is deferred to phase 2: pinned verifiers would reject it.
+    this.clear();
+    this.legacy.add(value);
     return this;
   }
   override delete(value: TermWrapperType): boolean {
-    const canonical = this.canonical.delete(value);
-    const legacy = this.legacy.has(value);
-    // Removing the canonical parent must not expose an older alias as authority.
-    if (canonical || legacy) this.legacy.clear();
-    return canonical || legacy;
+    const found = this.has(value);
+    // Removing a parent must not expose any older spelling as authority.
+    if (found) this.clear();
+    return found;
   }
   override clear(): void {
     this.canonical.clear();

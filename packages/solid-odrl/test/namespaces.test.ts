@@ -58,7 +58,12 @@ describe("delegation namespace migration", () => {
       visited.push(term.value);
     });
     expect(visited).toEqual([next.value]);
-    expect([...data].some((q) => q.predicate.value === `${LEGACY}delegatedUnder`)).toBe(false);
+    expect([...data].some((q) => q.predicate.value === `${ODRLD}delegatedUnder`)).toBe(false);
+    expect(
+      [...data].some(
+        (q) => q.predicate.value === `${LEGACY}delegatedUnder` && q.object.value === next.value,
+      ),
+    ).toBe(true);
     expect(edges.delete(next)).toBe(true);
     expect(edges.delete(next)).toBe(false);
     expect(edges.size).toBe(0);
@@ -82,13 +87,13 @@ describe("delegation namespace migration", () => {
     [true, false],
     [false, true],
     [false, false],
-  ])("reads parent legacy=%s and depth legacy=%s, then emits canonical terms", async (legacyParent, legacyDepth) => {
+  ])("reads parent legacy=%s and depth legacy=%s, then emits legacy wire terms", async (legacyParent, legacyDepth) => {
     const parsed = defined(await parsePolicy(policy(legacyParent, legacyDepth)));
     expect(parsed.delegatedUnder).toBe(ROOT);
     expect(parsed.permissions?.[0]?.constraints?.[0]?.leftOperand).toBe("delegationDepth");
     for (const output of [await policyToTurtle(parsed), JSON.stringify(policyToJsonLd(parsed))]) {
-      expect(output).not.toContain(LEGACY);
-      expect(output).toContain(ODRLD);
+      expect(output).toContain(LEGACY);
+      expect(output).not.toContain(ODRLD);
       expect(output).toContain(ODRLD_PROFILE_IRI);
     }
     const root: OdrlPolicy = {

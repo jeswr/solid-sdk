@@ -7,7 +7,8 @@
 **Term namespace (`odrld:`):** `https://jeswr.org/ns/odrl-delegation#`
 
 Readers also accept `https://w3id.org/jeswr/odrl-delegation#` terms, including
-mixed graphs. Writers use canonical terms. The published profile IRI above stays
+mixed graphs. Phase-1 writers retain the legacy wire vocabulary because pinned
+verifiers reject canonical emission; that switch is deferred to phase 2. The published profile IRI above stays
 unchanged because it identifies the protocol opt-in.
 **Status:** Draft profile specification, implemented by `@jeswr/solid-odrl`
 (`evaluateDelegated`, `delegationProvenance`). Experimental, AI-agent-generated.
