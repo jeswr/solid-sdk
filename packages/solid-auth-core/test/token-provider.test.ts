@@ -195,7 +195,7 @@ describe("WebIdDPoPTokenProvider — owned request target (sst-m040)", () => {
   });
 
   for (const status of [307, 308]) {
-    it(`preserves a byte-backed POST across a same-origin ${status} redirect`, async () => {
+    it(`makes a direct upgraded POST manual on a same-origin ${status} redirect`, async () => {
       const received: { url?: string; method?: string; body: string; auth?: string }[] = [];
       const server = createServer(async (request, response) => {
         const chunks: Buffer[] = [];
@@ -220,10 +220,12 @@ describe("WebIdDPoPTokenProvider — owned request target (sst-m040)", () => {
           new Request(`${origin}/start`, { method: "POST", body: "ABC" }),
         );
         const response = await fetch(upgraded);
+        expect(upgraded.redirect).toBe("manual");
+        expect(response.status).toBe(status);
         expect(await response.text()).toBe("ok");
-        expect(response.url).toBe(`${origin}/final`);
+        expect(response.url).toBe(`${origin}/start`);
         expect(received).toEqual(
-          ["/start", "/final"].map((url) => ({
+          ["/start"].map((url) => ({
             url,
             method: "POST",
             body: "ABC",

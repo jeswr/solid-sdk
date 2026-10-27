@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Fable 5
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 // (Ported verbatim — plus the pristine-brand integration — from
 // @jeswr/solid-elements `src/auth/proactive-fetch.ts` (Opus 4.8-authored original,
 // task #123); this package is now its home, solid-elements will re-export.)
@@ -76,6 +77,7 @@
 // PUBLIC profile read that must stay credential-free.)
 
 import { computeAllowedOrigins, isOriginAllowed, isUseDpopNonceChallenge } from "./controller.js";
+import { fetchWithCredentialedRedirects } from "./credentialed-redirects.js";
 import { brandFetchWrapper, resolvePristineFetch } from "./pristine.js";
 import { requestHref } from "./request.js";
 
@@ -360,8 +362,24 @@ export async function proactiveAuthenticatedFetch(
   init?: RequestInit,
   config?: ProactiveFetchConfig,
 ): Promise<Response> {
-  const isSuperseded = config?.isSuperseded ?? isReactiveAuthResetError;
   const request = new Request(input as RequestInfo, init);
+  if (!state.provider || !shouldAttachToken(state, request)) return base(request);
+  return fetchWithCredentialedRedirects(
+    request,
+    init,
+    (next) => !!state.provider && shouldAttachToken(state, next),
+    (hop) => proactiveAuthenticatedHop(state, base, hop, config),
+  );
+}
+
+/** One checked hop, including the existing bounded 401 re-upgrade. */
+async function proactiveAuthenticatedHop(
+  state: ProactiveFetchState,
+  base: typeof fetch,
+  request: Request,
+  config?: ProactiveFetchConfig,
+): Promise<Response> {
+  const isSuperseded = config?.isSuperseded ?? isReactiveAuthResetError;
   const { provider } = state;
   // The credential gate — re-evaluated live every request, fail-closed for an empty set or
   // an unparseable URL (delegated to the seam's `isOriginAllowed`), plus the two OPTIONAL
@@ -388,7 +406,7 @@ export async function proactiveAuthenticatedFetch(
     if (isSuperseded(e)) return base(retrySource);
     throw e;
   }
-  const response = await base(upgraded);
+  const response = await base(new Request(upgraded, { redirect: "manual" }));
   if (response.status !== 401) return response;
   // ONE bounded retry. The single re-`upgrade()` re-mints a FRESH DPoP proof (new jti/iat)
   // for the same request — recovering the common case where the first proof was stale (clock
@@ -426,7 +444,7 @@ export async function proactiveAuthenticatedFetch(
   // (pureNonce is currently informational — see the NOTE above; referenced so a future
   // nonce-aware retry can branch on it without an unused-variable churn.)
   void pureNonce;
-  return base(retried);
+  return base(new Request(retried, { redirect: "manual" }));
 }
 
 /**

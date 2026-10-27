@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # @jeswr/solid-auth-core
 
@@ -41,6 +42,28 @@ await auth.logout();
 
 Call `dropLiveSession()` for transient failures that should preserve the durable refresh credential.
 Call `logout()` for intentional sign-out or a definitive invalid grant.
+
+## Credentialed redirects
+
+Credentialed requests always use `redirect: "manual"`, overriding the caller's redirect
+policy. The controller and proactive fetch wrapper follow visible 301/302/303/307/308
+redirects only when each destination passes the same live allowed-origin check as the
+initial request. Each hop receives a fresh DPoP proof for its URL and method, bound to
+the attached access token. Resource-server nonces are cached only for the checked hop's
+origin. Redirects outside the allowlist are returned unchanged without contacting the
+destination. Uncredentialed passthrough requests retain the caller's redirect policy.
+
+POST requests become GET on 301/302; 303 changes methods other than GET/HEAD to GET.
+These rewrites discard the body and its content headers. Other redirects preserve the
+method and replay bodies supplied through `init.body` as text, bytes, Blob, URLSearchParams,
+or FormData, buffered before sending. ReadableStream bodies and bodies supplied through a
+Request are treated as streams: redirects requiring their replay are returned unfollowed.
+Following more than 20 hops throws a TypeError.
+
+Browsers hide manual redirect details behind an `opaqueredirect` response. This response
+is returned as-is, so credentialed redirects in browsers surface to the caller instead
+of being followed. Direct `WebIdDPoPTokenProvider.upgrade()` calls also return Requests
+with manual redirect mode; the fetch wrappers own the hop loop.
 
 ## Key API
 

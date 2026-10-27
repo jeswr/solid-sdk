@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Fable 5
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 // (Ported from @jeswr/solid-elements `src/auth/index.ts` — the suite's best,
 // adversarially-reviewed login controller (Opus 4.8-authored original; every
 // "roborev finding" comment below refers to that history) — extracted as the
@@ -80,6 +81,7 @@ import { Agent } from "@solid/object";
 import * as DPoP from "dpop";
 import { DataFactory } from "n3";
 import * as oauth from "oauth4webapi";
+import { fetchWithCredentialedRedirects } from "./credentialed-redirects.js";
 import { brandFetchWrapper, MODULE_PRISTINE_FETCH, resolvePristineFetch } from "./pristine.js";
 import {
   authErrorFrom,
@@ -1045,47 +1047,61 @@ class SolidAuthEngine implements SolidAuth {
     const request = new Request(input as RequestInfo, init);
     const provider = this.#provider;
     if (provider && (await provider.matches(request))) {
-      // Clone BEFORE the first fetch consumes the body: a 401 retry must replay the
-      // body, but PUT/PATCH/POST request streams are single-use once fetched, so
-      // re-upgrading the already-consumed request would send an empty/invalid body
-      // (roborev finding). clone() tees the body stream — valid while bodyUsed is
-      // false (i.e. pre-fetch); for bodyless GET/HEAD it is a cheap no-op.
-      const retrySource = request.clone();
-      // PROACTIVE attach (forceRefresh=false): refresh only if a KNOWN expiry passed.
-      const upgraded = await provider.upgrade(request);
-      const response = await base(upgraded);
-      // RFC 9449 §8: capture any `DPoP-Nonce` the resource server returned (a
-      // `use_dpop_nonce` 401 challenge OR a rotated nonce on a 2xx) so the NEXT proof
-      // to this origin embeds it. `rememberNonce` reports whether it CHANGED.
-      const nonceChanged = provider.rememberNonce(response, request);
-      // If the proactively-attached token was REJECTED (401), retry once. Two reasons a
-      // protected resource 401s: (a) the access token is stale → forceRefresh re-grants
-      // it; (b) it REQUIRES a DPoP nonce we didn't have → we just cached it, so the
-      // re-`upgrade` embeds it. Retry whenever the server SUPPLIED a (new) nonce too —
-      // not only on `provider.matches` — so a `use_dpop_nonce` challenge against a
-      // still-valid token is honoured. Retry from the pre-fetch clone (intact body).
-      if (response.status === 401 && (nonceChanged || (await provider.matches(request)))) {
-        // Decide whether to force-refresh on the retry. A PURE nonce challenge
-        // (`WWW-Authenticate: DPoP error="use_dpop_nonce"`) means the TOKEN was fine —
-        // only the nonce was missing — so re-using the (valid) token with the now-cached
-        // nonce is right; burning a refresh-token grant would be wasteful. But if the
-        // server's error is ANYTHING ELSE (invalid_token / expired / revoked, or no
-        // explicit `use_dpop_nonce`), the token may genuinely be stale, so we MUST
-        // force-refresh even though a `DPoP-Nonce` was ALSO present — otherwise a server
-        // that rotates nonces while rejecting a dead token would loop on the stale token
-        // and never redeem the refresh (the roborev finding). Default to force-refresh
-        // unless it is UNAMBIGUOUSLY a pure-nonce challenge.
-        const pureNonceChallenge = nonceChanged && isUseDpopNonceChallenge(response);
-        const retried = await provider.upgrade(retrySource, !pureNonceChallenge);
-        const retryResponse = await base(retried);
-        // The RS may rotate the nonce again on the retry response — keep it current.
-        provider.rememberNonce(retryResponse, request);
-        return retryResponse;
-      }
-      return response;
+      return fetchWithCredentialedRedirects(
+        request,
+        init,
+        (next) => provider.matches(next),
+        async (hop) => this.#authenticatedHop(base, provider, hop),
+      );
     }
     // No session / not an allowed origin → unauthenticated (public) request.
     return base(request);
+  }
+
+  /** Upgrade and retry only this checked hop; never let the transport redirect it. */
+  async #authenticatedHop(
+    base: typeof fetch,
+    provider: WebIdDPoPTokenProvider,
+    request: Request,
+  ): Promise<Response> {
+    // Clone BEFORE the first fetch consumes the body: a 401 retry must replay the
+    // body, but PUT/PATCH/POST request streams are single-use once fetched, so
+    // re-upgrading the already-consumed request would send an empty/invalid body
+    // (roborev finding). clone() tees the body stream — valid while bodyUsed is
+    // false (i.e. pre-fetch); for bodyless GET/HEAD it is a cheap no-op.
+    const retrySource = request.clone();
+    // PROACTIVE attach (forceRefresh=false): refresh only if a KNOWN expiry passed.
+    const upgraded = await provider.upgrade(request);
+    const response = await base(upgraded);
+    // RFC 9449 §8: capture any `DPoP-Nonce` the resource server returned (a
+    // `use_dpop_nonce` 401 challenge OR a rotated nonce on a 2xx) so the NEXT proof
+    // to this origin embeds it. `rememberNonce` reports whether it CHANGED.
+    const nonceChanged = provider.rememberNonce(response, request);
+    // If the proactively-attached token was REJECTED (401), retry once. Two reasons a
+    // protected resource 401s: (a) the access token is stale → forceRefresh re-grants
+    // it; (b) it REQUIRES a DPoP nonce we didn't have → we just cached it, so the
+    // re-`upgrade` embeds it. Retry whenever the server SUPPLIED a (new) nonce too —
+    // not only on `provider.matches` — so a `use_dpop_nonce` challenge against a
+    // still-valid token is honoured. Retry from the pre-fetch clone (intact body).
+    if (response.status === 401 && (nonceChanged || (await provider.matches(request)))) {
+      // Decide whether to force-refresh on the retry. A PURE nonce challenge
+      // (`WWW-Authenticate: DPoP error="use_dpop_nonce"`) means the TOKEN was fine —
+      // only the nonce was missing — so re-using the (valid) token with the now-cached
+      // nonce is right; burning a refresh-token grant would be wasteful. But if the
+      // server's error is ANYTHING ELSE (invalid_token / expired / revoked, or no
+      // explicit `use_dpop_nonce`), the token may genuinely be stale, so we MUST
+      // force-refresh even though a `DPoP-Nonce` was ALSO present — otherwise a server
+      // that rotates nonces while rejecting a dead token would loop on the stale token
+      // and never redeem the refresh (the roborev finding). Default to force-refresh
+      // unless it is UNAMBIGUOUSLY a pure-nonce challenge.
+      const pureNonceChallenge = nonceChanged && isUseDpopNonceChallenge(response);
+      const retried = await provider.upgrade(retrySource, !pureNonceChallenge);
+      const retryResponse = await base(retried);
+      // The RS may rotate the nonce again on the retry response — keep it current.
+      provider.rememberNonce(retryResponse, request);
+      return retryResponse;
+    }
+    return response;
   }
 
   get webId(): string | null {
@@ -3149,6 +3165,11 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     let origin: string;
     try {
       origin = new URL(href).origin;
+      // A native-followed response must never poison the original hop's origin.
+      // Synthetic injected responses have no URL; manual transport identifies them
+      // by the checked hop request. Opaque browser redirects carry no usable nonce.
+      if (response.type === "opaqueredirect") return false;
+      if (response.url && new URL(response.url).origin !== origin) return false;
     } catch {
       return false;
     }
@@ -3215,7 +3236,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       ),
     );
     headers.set("Authorization", `DPoP ${session.accessToken}`);
-    const upgraded = new Request(request, { headers });
+    const upgraded = new Request(request, { headers, redirect: "manual" });
     // Check the outgoing platform destination synchronously, immediately before return.
     if (requestHref(upgraded) !== href) {
       upgraded.headers.delete("Authorization");
