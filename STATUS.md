@@ -129,3 +129,65 @@ No alternate server or browser setup was used. Browser behavior remains unverifi
 the package build, affected gate, and full gate remain non-green for the failures above.
 `roborev status` again returned `/bin/bash: line 1: roborev: command not found`
 (exit 127), so automated per-commit review remains unavailable. Open questions: none.
+
+## Fix round 2 — sst-8xm.1
+
+Review baseline: `7015b66f44dcf2e6d1886a40294d611b99a5badf`.
+
+- `23dafedf` — `fix: preserve queued issue refreshes`: retain the shared debounce
+  timer across membership changes and reconcile subscriptions by topic, closing
+  removed topics and opening added topics while keeping unchanged topics connected.
+  Tracker, identity, and storage-scope changes, and unmount, still close all watchers
+  and cancel queued invalidations. Add five tests and strengthen the membership test.
+- Final documentation commit — `docs: record queued refresh fix validation`: this report.
+
+Before the fix, the two deferred-fetch race cases (container and resource invalidations)
+lost their queued read, and the subscription-retention assertion failed. After the fix,
+all eight hook tests pass. The race cases resolve the first membership read while a
+second invalidation is queued, then require the next read to reveal the third issue
+without another notification or a manual refresh.
+
+Commands used `PATH=/opt/node24/bin:$PATH` (Node `v24.22.1`, pnpm `10.4.1`), with
+dependency lifecycle scripts disabled.
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter='@jeswr/app-issues^...' --concurrency=4` | PASS: 7 dependency builds. The first hook-test attempt lacked workspace `dist`; this bootstrap resolved it. |
+| `pnpm --filter @jeswr/app-issues exec vitest run src/lib/use-issues.test.tsx` | PASS: 8 tests, including the two reproduced races and tracker/identity/storage cleanup cases. |
+| `pnpm --filter @jeswr/app-issues run lint` | PASS; the existing `react-hooks/exhaustive-deps` warning at `src/components/issues-view.tsx:881` remains. |
+| `pnpm --filter @jeswr/app-issues run build` | FAIL: existing Google Fonts connection failures for Geist and Geist Mono; exact fatal errors below. |
+| `pnpm --filter @jeswr/app-issues run typecheck` | PASS after the build attempt. |
+| `pnpm --filter @jeswr/app-issues run test` | PASS: 48 files, 730 tests. |
+| `pnpm run lint:root` | PASS. |
+| `TURBO_SCM_BASE=7015b66f44dcf2e6d1886a40294d611b99a5badf pnpm run gate` | FAIL at `@jeswr/app-issues#build`: the same Google Fonts errors; 8 successful tasks of 10. |
+| `pnpm run gate:full` | FAIL at `//#test:root`: 44 successful tasks of 210. Root tests: 4 files failed, 8 passed; 161 tests failed, 739 passed. Other tasks were interrupted. |
+| `git diff --check 7015b66f44dcf2e6d1886a40294d611b99a5badf` | PASS. |
+
+The package build and affected gate reported:
+
+```text
+Error: Turbopack build failed with 2 errors:
+[next]/internal/font/google/geist_a71539c9.module.css
+next/font: error:
+Failed to fetch `Geist` from Google Fonts.
+
+[next]/internal/font/google/geist_mono_8d43a2aa.module.css
+next/font: error:
+Failed to fetch `Geist Mono` from Google Fonts.
+```
+
+Both requests failed to establish a connection to `https://fonts.googleapis.com`.
+The existing guarded-fetch dynamic-import warning also appeared. No font, server,
+dependency, manifest, lockfile, or e2e-spec changes were made. Browser tests were not
+rerun in this round; their earlier configured-webServer startup failure remains
+recorded above. No dependencies were added, so `check:packages` was not needed.
+
+The full gate again failed in `test/agent-layers-reachability.test.mjs`,
+`test/agent-layers.test.mjs`, `test/check-packages-guard.test.mjs`, and
+`test/check-sdk-layers.test.mjs`, including empty CLI-output assertions such as
+`AssertionError: expected '' to contain 'executor-only'`. These failures are outside
+the requested refresh-race fix and remain unchanged. The package build, affected
+gate, and full gate remain non-green for the recorded failures.
+
+`roborev status` returned `/bin/bash: line 1: roborev: command not found` (exit 127),
+so automated per-commit review remains unavailable. Open questions: none.
