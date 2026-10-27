@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Calendar drag maths (CAL-L8)
 
@@ -40,7 +41,9 @@ an ambiguous target is rejected. Clamp boundaries choose earlier for a start and
 later for an end so the minimum elapsed duration holds through a fold.
 
 With `allDay: true`, inputs must identify the first instant of their local dates
-(normally midnight; a midnight gap may start later). The end date is exclusive.
+(normally midnight; a midnight gap may start later). Repeated midnights always use
+the earliest instant for validation, moves and resizes, regardless of `overlap`.
+The end date is exclusive.
 Minute deltas must be multiples of 1,440. Moves preserve the calendar-date span;
 `resize-end` changes the exclusive end with a minimum of one local date.
 `resize-start` is rejected. All-day moves across DST can be 23 or 25 elapsed hours.

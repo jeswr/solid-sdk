@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from "vitest";
 import {
   applyDrag,
@@ -309,6 +310,89 @@ describe("all-day dates and recurrence plans", () => {
     expect(result.end - result.start).toBe(hours * 3_600_000);
     expect(result.seriesOffset.startWallMinutes).toBe(1440);
     expect(result.seriesOffset.endWallMinutes).toBe(1440);
+  });
+
+  it.each([
+    undefined,
+    "earlier",
+    "later",
+  ] as const)("uses the first midnight for moved all-day boundaries with overlap %s", (overlap) => {
+    const input = {
+      allDay: true,
+      timeZone: "America/Havana",
+      start: at("2026-11-02T05:00Z"),
+      end: at("2026-11-03T05:00Z"),
+      ...(overlap === undefined ? {} : { overlap }),
+    };
+    const movedStart = drag({ ...input, dayDelta: -1 });
+    expect(movedStart.start).toBe(at("2026-11-01T04:00Z"));
+    expect(movedStart.end).toBe(at("2026-11-02T05:00Z"));
+    expect(movedStart.end - movedStart.start).toBe(25 * 3_600_000);
+    expect(movedStart.dstAdjusted).toBe(false);
+    expect(movedStart.seriesOffset.startMs).toBe(-25 * 3_600_000);
+    expect(movedStart.seriesOffset.startDayDelta).toBe(-1);
+    expect(movedStart.seriesOffset.endDayDelta).toBe(-1);
+
+    const movedEnd = drag({ ...input, dayDelta: -2 });
+    expect(movedEnd.start).toBe(at("2026-10-31T04:00Z"));
+    expect(movedEnd.end).toBe(at("2026-11-01T04:00Z"));
+  });
+
+  it.each([
+    undefined,
+    "earlier",
+    "later",
+  ] as const)("validates the first midnight and rejects the second with overlap %s", (overlap) => {
+    const input = {
+      allDay: true,
+      timeZone: "America/Havana",
+      ...(overlap === undefined ? {} : { overlap }),
+    };
+    for (const kind of ["move", "resize-end"] as const) {
+      const firstStart = {
+        ...input,
+        kind,
+        start: at("2026-11-01T04:00Z"),
+        end: at("2026-11-02T05:00Z"),
+      };
+      expect(drag(firstStart).start).toBe(firstStart.start);
+      expect(drag(firstStart).end).toBe(firstStart.end);
+      error({ ...firstStart, start: at("2026-11-01T05:00Z") }, "INVALID_ALL_DAY");
+
+      const firstEnd = {
+        ...input,
+        kind,
+        start: at("2026-10-31T04:00Z"),
+        end: at("2026-11-01T04:00Z"),
+      };
+      expect(drag(firstEnd).start).toBe(firstEnd.start);
+      expect(drag(firstEnd).end).toBe(firstEnd.end);
+      error({ ...firstEnd, end: at("2026-11-01T05:00Z") }, "INVALID_ALL_DAY");
+    }
+  });
+
+  it.each([
+    undefined,
+    "earlier",
+    "later",
+  ] as const)("uses the first midnight for resized and clamped all-day ends with overlap %s", (overlap) => {
+    const input = {
+      allDay: true,
+      kind: "resize-end" as const,
+      timeZone: "America/Havana",
+      start: at("2026-10-31T04:00Z"),
+      end: at("2026-11-02T05:00Z"),
+      ...(overlap === undefined ? {} : { overlap }),
+    };
+    const resized = drag({ ...input, dayDelta: -1 });
+    expect(resized.start).toBe(input.start);
+    expect(resized.end).toBe(at("2026-11-01T04:00Z"));
+    expect(resized.clamped).toBe(false);
+    expect(resized.dstAdjusted).toBe(false);
+    const clamped = drag({ ...input, dayDelta: -3 });
+    expect(clamped.start).toBe(input.start);
+    expect(clamped.end).toBe(resized.end);
+    expect(clamped.clamped).toBe(true);
   });
 
   it("supports a date whose first instant follows a midnight gap, including re-use", () => {

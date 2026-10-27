@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   check,
   checkEpoch,
@@ -60,18 +61,18 @@ export function applyDrag(input: DragInput): DragResult {
   if (allDay) {
     const startDay = Math.floor(startWall / DAY_MS) * DAY_MS;
     const endDay = Math.floor(endWall / DAY_MS) * DAY_MS;
-    // Midnight gaps are valid date boundaries at the first instant of that date.
+    // Date boundaries use the first instant, including midnight gaps and overlaps.
     check(
-      zone.resolve(startDay, startOffset, overlap).instant === start &&
-        zone.resolve(endDay, endOffset, overlap).instant === end &&
+      zone.resolve(startDay, startOffset, "earlier").instant === start &&
+        zone.resolve(endDay, endOffset, "earlier").instant === end &&
         endDay > startDay,
       "INVALID_ALL_DAY",
     );
     if (kind === "move") {
-      const moved = zone.resolve(startDay + delta, startOffset, overlap);
+      const moved = zone.resolve(startDay + delta, startOffset, "earlier");
       nextStart = moved.instant;
       const movedDay = Math.floor(zone.wall(nextStart) / DAY_MS) * DAY_MS;
-      const movedEnd = zone.resolve(movedDay + endDay - startDay, endOffset, overlap);
+      const movedEnd = zone.resolve(movedDay + endDay - startDay, endOffset, "earlier");
       nextEnd = movedEnd.instant;
       // A skipped end date can make the original calendar span impossible.
       check(
@@ -82,7 +83,7 @@ export function applyDrag(input: DragInput): DragResult {
     } else {
       const proposed = endDay + delta;
       clamped = proposed < startDay + DAY_MS;
-      const resized = zone.resolve(Math.max(proposed, startDay + DAY_MS), endOffset, overlap);
+      const resized = zone.resolve(Math.max(proposed, startDay + DAY_MS), endOffset, "earlier");
       nextEnd = resized.instant;
       dstAdjusted = resized.dstAdjusted;
     }
