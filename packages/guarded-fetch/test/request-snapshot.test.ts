@@ -69,7 +69,9 @@ for (const [name, factory] of Object.entries(factories)) {
         expect(effective.mode).toBe("same-origin");
         expect(effective.cache).toBe(override ? "reload" : "no-store");
         expect(effective.integrity).toBe("sha256-fixture");
-        expect(effective.keepalive).toBe(true);
+        // The refusing wrapper forwards the native snapshot; the URL+init wrappers cannot
+        // pair keepalive with the stream body they hand to the transport.
+        expect(effective.keepalive).toBe(name === "refusal");
         expect(effective.referrer).toBe(`${BASE}referrer`);
         expect(effective.referrerPolicy).toBe(override ? "origin" : "no-referrer");
         expect(effective.redirect).toBe("manual");

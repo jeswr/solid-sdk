@@ -47,41 +47,7 @@ export function snapshotFetchInput(
         if (descriptor.get && typeof Ctor === "function") {
           const request = new Ctor(input, init);
           const url = descriptor.get.call(request);
-          if (typeof url === "string") {
-            // Foreign Request brands are not portable between fetch implementations.
-            // Read only prototype getters from the merged snapshot, then send the
-            // checked string and a plain init that any transport can construct.
-            const captured: Record<string, unknown> = {};
-            for (const field of [
-              "method",
-              "headers",
-              "body",
-              "signal",
-              "credentials",
-              "mode",
-              "cache",
-              "redirect",
-              "referrer",
-              "referrerPolicy",
-              "integrity",
-              "keepalive",
-            ]) {
-              let fieldOwner = prototype;
-              while (fieldOwner) {
-                const fieldDescriptor = Object.getOwnPropertyDescriptor(fieldOwner, field);
-                if (fieldDescriptor) {
-                  const value = fieldDescriptor.get?.call(request);
-                  if (value !== undefined) {
-                    captured[field] = field === "headers" ? new Headers(value) : value;
-                  }
-                  break;
-                }
-                fieldOwner = Object.getPrototypeOf(fieldOwner);
-              }
-            }
-            if (captured.body != null) captured.duplex = "half";
-            return { input: url, url, init: captured as RequestInit };
-          }
+          if (typeof url === "string") return { input: request, url, init: undefined };
         }
         break;
       }

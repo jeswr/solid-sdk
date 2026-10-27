@@ -148,7 +148,10 @@ export function rewriteInitForRedirect(
 export function normalizeRequest(
   input: RequestInfo | URL,
   init: RequestInit | undefined,
-): { url: string; init: RequestInit | undefined; request?: Request } {
+): { url: string; init: RequestInit | undefined } {
+  // Read every field from an owned snapshot, never from the caller's object, then hand the
+  // transport main's portable shape: a checked URL string plus a plain init in which the
+  // caller's explicit init (e.g. a replayable body) still wins.
   const snapshot = snapshotFetchInput(input, init);
   if (typeof snapshot.input === "string") return { url: snapshot.url, init: snapshot.init };
   const req = snapshot.input;
@@ -160,11 +163,11 @@ export function normalizeRequest(
     mode: req.mode,
     cache: req.cache,
     integrity: req.integrity,
-    keepalive: req.keepalive,
     referrer: req.referrer,
     referrerPolicy: req.referrerPolicy,
     ...(req.signal ? { signal: req.signal } : {}),
-    ...(req.body ? { body: req.body, duplex: "half" } : {}),
+    // Fetch rejects a stream body with keepalive, so keepalive survives only without a body.
+    ...(req.body ? { body: req.body, duplex: "half" } : { keepalive: req.keepalive }),
   } as RequestInit;
-  return { url: snapshot.url, init: { ...init, ...fromRequest }, request: req };
+  return { url: snapshot.url, init: { ...fromRequest, ...(init ?? {}) } };
 }

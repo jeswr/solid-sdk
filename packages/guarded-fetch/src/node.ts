@@ -332,14 +332,9 @@ export function createNodeGuardedFetch(options: NodePinningOptions = {}): typeof
   // pins, picking the http:-loopback-only rule by the request's own scheme so an http: hop
   // cannot flip loopback→public at connect.
   const pinningFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    // Node's built-in Request and the installed undici Request have distinct
-    // brands. Convert the owned native snapshot to undici's URL/init interface.
-    const { url: urlStr, init: effectiveInit, request } = normalizeRequest(input, init);
-    if (request?.keepalive && request.body && effectiveInit) {
-      // Fetch forbids a stream BodyInit with keepalive. A native keepalive
-      // Request can only have a replayable body; retain its bytes on conversion.
-      effectiveInit.body = await request.arrayBuffer();
-    }
+    // Node's built-in Request and the installed undici Request have distinct brands, so the
+    // transport always receives the checked URL string plus a plain init.
+    const { url: urlStr, init: effectiveInit } = normalizeRequest(input, init);
     const requireLoopbackOnly = safeIsHttp(urlStr) && allowLoopback;
     const lookup = createValidatingLookup(resolveAll, allowLoopback, requireLoopbackOnly);
     const connect: Record<string, unknown> = { lookup };

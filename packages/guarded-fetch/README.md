@@ -52,8 +52,6 @@ Fetch wrappers share `snapshotFetchInput` to capture Request inputs before inspe
 URLs and preserve their body and request policies, including init overrides and referrer fields.
 Native URL getters ignore shadowed properties; other implementations and realms use their
 Request prototype's constructor/getter or a single string conversion before validation.
-Foreign Request snapshots become a checked URL string and a plain init, with fresh Headers,
-so native and installed fetch implementations can both construct the effective request.
 A fully caller-defined Request class is only as trustworthy as the transport it is passed to,
 the same as on main.
 `RedirectRefusedError` accepts both

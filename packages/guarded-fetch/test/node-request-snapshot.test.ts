@@ -55,7 +55,8 @@ it.each([
   expect(effective.mode).toBe("same-origin");
   expect(effective.cache).toBe("no-store");
   expect(effective.integrity).toBe("sha256-fixture");
-  expect(effective.keepalive).toBe(keepalive);
+  // keepalive cannot accompany the stream body handed to undici.
+  expect(effective.keepalive).toBe(false);
   expect(effective.referrer).toBe("https://pod.example/referrer");
   expect(effective.referrerPolicy).toBe("no-referrer");
   expect(effective.redirect).toBe("manual");
