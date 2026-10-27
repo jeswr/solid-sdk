@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
+import { Parser, Writer } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import type { UpgradeOffer } from "./negotiate.js";
 import { base64Url } from "./safe-iri.js";
@@ -17,6 +18,7 @@ import {
   type UpgradeTransport,
 } from "./upgrade.js";
 import { serializeRelationship } from "./upgrade-state.js";
+import { AGENTIC_PERSON_IRI_VERSION } from "./vocab.js";
 
 const PERSON = "urn:agentic:person:c2xhY2s6VDpV";
 const WEBID = "https://bob.example/profile/card#me";
@@ -34,6 +36,14 @@ async function driveToCard(store: InMemoryRelationshipStore): Promise<void> {
   await recordBridgeDetected(store, PERSON, AT);
   await recordIdentityVerified(store, PERSON, WEBID, AT);
   await discoverCard(store, PERSON, async () => ({ agentCardUrl: CARD }), AT);
+}
+
+/** Reproduce an unversioned document written before lexical relationship keys. */
+async function legacyDocument(state: Parameters<typeof serializeRelationship>[0], url: string) {
+  const quads = new Parser().parse(await serializeRelationship(state, url));
+  return new Writer({ format: "text/turtle" }).quadsToString(
+    quads.filter((quad) => quad.predicate.value !== AGENTIC_PERSON_IRI_VERSION),
+  );
 }
 
 describe("InMemoryRelationshipStore — optimistic concurrency (CAS)", () => {
@@ -305,13 +315,13 @@ describe("createPodRelationshipStore — pod round-trip with CAS", () => {
     const state = must(await mem.load(legacyPersonIri)).state;
     // Seed the pre-migration resource independently of the current pod-store keying.
     pod.store.set(legacyUrl, {
-      body: await serializeRelationship(state, legacyUrl),
+      body: await legacyDocument(state, legacyUrl),
       etag: "v7",
     });
     const store = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
     const loaded = must(await store.load(personIri));
     expect(loaded).toMatchObject({
-      state: { personIri: legacyPersonIri, state: "bridge-detected" },
+      state: { personIri: legacyPersonIri, personIriVersion: 1, state: "bridge-detected" },
       version: "v7",
     });
 
@@ -321,12 +331,57 @@ describe("createPodRelationshipStore — pod round-trip with CAS", () => {
     // A new store instance must still find the advanced state, and stale saves must fail.
     const reopened = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
     expect(await reopened.load(personIri)).toMatchObject({
-      state: { state: "identity-verified" },
+      state: { personIriVersion: 1, state: "identity-verified" },
       version: "v8",
     });
     await expect(reopened.save(loaded.state, loaded.version)).rejects.toBeInstanceOf(
       RelationshipConflictError,
     );
+  });
+
+  it.each([
+    ["https://CAROL.example:443/card#me", "https://carol.example/card#me"],
+    ["https://carol.example", "https://carol.example/"],
+    ["https://carol.example/a/../card#me", "https://carol.example/card#me"],
+    [
+      "https://bücher.example/日本語#me",
+      "https://xn--bcher-kva.example/%E6%97%A5%E6%9C%AC%E8%AA%9E#me",
+    ],
+  ])("does not reuse a new relationship for another lexical identity: %s", async (lexical, canonical) => {
+    const pod = new FakePod();
+    const store = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
+    await recordBridgeDetected(store, canonical, AT);
+    await recordIdentityVerified(store, canonical, WEBID, AT);
+    await discoverCard(store, canonical, async () => ({ agentCardUrl: CARD }), AT);
+    await offerAndNegotiate(
+      store,
+      canonical,
+      rdfOffer,
+      async () => ({ accept: true, protocolHash: "h" }),
+      AT,
+    );
+
+    const reopened = createPodRelationshipStore({ container: CONTAINER, writeFetch: pod.fetch });
+    expect(await reopened.load(lexical)).toBeUndefined();
+    const discover = vi.fn(async () => ({ agentCardUrl: CARD }));
+    const transport = vi.fn(async () => ({ accept: true }));
+    expect(await discoverCard(reopened, lexical, discover, AT)).toMatchObject({ ok: false });
+    expect(await offerAndNegotiate(reopened, lexical, rdfOffer, transport, AT)).toMatchObject({
+      ok: false,
+    });
+    expect(discover).not.toHaveBeenCalled();
+    expect(transport).not.toHaveBeenCalled();
+
+    expect(await recordBridgeDetected(reopened, lexical, AT)).toMatchObject({ ok: true });
+    const separate = must(await reopened.load(lexical)).state;
+    expect(separate).toMatchObject({
+      personIri: lexical,
+      personIriVersion: 2,
+      state: "bridge-detected",
+    });
+    expect(separate.verifiedWebId).toBeUndefined();
+    expect((await reopened.load(canonical))?.state.state).toBe("upgraded");
+    expect(pod.store.size).toBe(2);
   });
 
   it("prefers lexical-key state when both lexical and legacy resources exist", async () => {

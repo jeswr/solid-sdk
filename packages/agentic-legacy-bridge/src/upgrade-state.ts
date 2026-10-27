@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The channel-UPGRADE relationship state machine (M2-DESIGN.md §4.1) — the pure,
  * pod-persistable data + transition model that tracks how far a conversation has moved
@@ -44,6 +45,7 @@ import {
   AGENTIC_OFFER_PROTOCOL_SOURCE,
   AGENTIC_OFFER_REQUIRED,
   AGENTIC_OFFERED_CHANNEL,
+  AGENTIC_PERSON_IRI_VERSION,
   AGENTIC_RELATIONSHIP,
   AGENTIC_RELATIONSHIP_STATE,
   AGENTIC_STATE_ABORTED,
@@ -79,6 +81,8 @@ export type RelationshipStateName =
 export interface RelationshipState {
   /** The counterparty person node (a `urn:agentic:person:…` or a WebID). */
   readonly personIri: string;
+  /** Key scheme: 1 for legacy URL-canonicalized records, 2 for lexical RDF identity. */
+  readonly personIriVersion?: 1 | 2;
   /** The current state. */
   readonly state: RelationshipStateName;
   /** The channel messages currently flow on. `email` is the always-available floor. */
@@ -178,7 +182,7 @@ export type TransitionResult =
 
 /** Assemble a new immutable state, omitting undefined optionals. */
 function assemble(
-  personIri: string,
+  identity: Pick<RelationshipState, "personIri" | "personIriVersion">,
   state: RelationshipStateName,
   currentChannel: Channel,
   iso: string,
@@ -191,7 +195,8 @@ function assemble(
   },
 ): RelationshipState {
   return {
-    personIri,
+    personIri: identity.personIri,
+    personIriVersion: identity.personIriVersion ?? 2,
     state,
     currentChannel,
     updatedAt: iso,
@@ -219,7 +224,7 @@ export function initialRelationship(
   if (asChannel(currentChannel) === undefined) {
     throw new Error("initialRelationship: currentChannel is not a known channel.");
   }
-  return assemble(safePerson, "legacy-only", currentChannel, now.toISOString(), {});
+  return assemble({ personIri: safePerson }, "legacy-only", currentChannel, now.toISOString(), {});
 }
 
 /** `false` for an illegal transition (typed reason). */
@@ -240,7 +245,7 @@ export function transition(
 ): TransitionResult {
   const iso = now.toISOString();
   const from = state.state;
-  const person = state.personIri;
+  const person = state;
 
   switch (event.kind) {
     case "bridge-detected": {
@@ -472,6 +477,15 @@ function stateIriToName(iri: string): RelationshipStateName | undefined {
   }
 }
 
+/** Missing metadata denotes the legacy scheme; malformed or future versions fail closed. */
+function parseIriVersion(store: Store, subject: string, predicate: string): 1 | 2 | undefined {
+  const versions = store.getObjects(namedNode(subject), namedNode(predicate), null);
+  if (versions.length === 0) return 1;
+  const version = versions[0];
+  if (versions.length !== 1 || version?.termType !== "Literal") return undefined;
+  return version.value === "1" ? 1 : version.value === "2" ? 2 : undefined;
+}
+
 /**
  * Serialise a relationship state as an owner-private Turtle resource at `resourceUrl`
  * (subject `<resourceUrl>#it`), via `n3.Writer` (never hand-built triples). Every IRI
@@ -495,6 +509,11 @@ export async function serializeRelationship(
   const store = new Store();
   store.addQuad(subject, namedNode(RDF_TYPE), namedNode(AGENTIC_RELATIONSHIP));
   store.addQuad(subject, namedNode(AGENTIC_COUNTERPARTY), namedNode(person));
+  store.addQuad(
+    subject,
+    namedNode(AGENTIC_PERSON_IRI_VERSION),
+    literal(String(state.personIriVersion ?? 2)),
+  );
   store.addQuad(
     subject,
     namedNode(AGENTIC_RELATIONSHIP_STATE),
@@ -592,6 +611,9 @@ export function parseRelationship(
   const person = personRaw !== undefined ? (asUrn(personRaw) ?? safeHttpIri(personRaw)) : undefined;
   if (person === undefined) return undefined;
 
+  const personIriVersion = parseIriVersion(store, subject, AGENTIC_PERSON_IRI_VERSION);
+  if (personIriVersion === undefined) return undefined;
+
   const channel = asChannel(one(AGENTIC_CURRENT_CHANNEL));
   if (channel === undefined) return undefined;
 
@@ -617,14 +639,20 @@ export function parseRelationship(
     if (pendingOffer === undefined) return undefined;
   }
 
-  const rebuilt = assemble(person, stateName, channel, updatedAt ?? new Date(0).toISOString(), {
-    ...(verifiedWebId !== undefined ? { verifiedWebId } : {}),
-    ...(agentCardUrl !== undefined ? { agentCardUrl } : {}),
-    ...(pendingOffer !== undefined ? { pendingOffer } : {}),
-    // `upgraded` state's upgradedChannel is definitionally the currentChannel.
-    ...(stateName === "upgraded" ? { upgradedChannel: channel } : {}),
-    ...(abortReason !== undefined && stateName === "aborted" ? { abortReason } : {}),
-  });
+  const rebuilt = assemble(
+    { personIri: person, personIriVersion },
+    stateName,
+    channel,
+    updatedAt ?? new Date(0).toISOString(),
+    {
+      ...(verifiedWebId !== undefined ? { verifiedWebId } : {}),
+      ...(agentCardUrl !== undefined ? { agentCardUrl } : {}),
+      ...(pendingOffer !== undefined ? { pendingOffer } : {}),
+      // `upgraded` state's upgradedChannel is definitionally the currentChannel.
+      ...(stateName === "upgraded" ? { upgradedChannel: channel } : {}),
+      ...(abortReason !== undefined && stateName === "aborted" ? { abortReason } : {}),
+    },
+  );
 
   // Reject a document that decodes to a structurally-invalid state (fail-closed).
   try {

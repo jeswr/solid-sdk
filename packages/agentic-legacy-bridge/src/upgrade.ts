@@ -139,7 +139,8 @@ const MAX_STATE_BYTES = 1024 * 1024;
  * (the loaded ETag) — or `If-None-Match: *` for a brand-new resource — for optimistic
  * concurrency, and refuses redirects on every request. Every resource URL is
  * scope-guarded strictly within the container. When a lexical-key resource is
- * missing, loads also check the previous URL-canonicalized key. Legacy state keeps
+ * missing, loads also check the previous URL-canonicalized key, accepting only
+ * records marked as legacy (including unversioned documents). Legacy state keeps
  * its canonical personIri, so subsequent saves use that resource and its ETag.
  */
 export function createPodRelationshipStore(
@@ -166,6 +167,7 @@ export function createPodRelationshipStore(
   return {
     async load(personIri: string): Promise<LoadedRelationship | undefined> {
       let url = urlFor(personIri);
+      let legacyKey: string | undefined;
       let res = await readFetch(url, { method: "GET", redirect: "manual" });
       assertNoRedirect(res, "GET", url);
       if (res.status === 404 && safeHttpIri(personIri) !== undefined) {
@@ -173,6 +175,7 @@ export function createPodRelationshipStore(
         // Parse the original input here to reproduce its old URL normalization.
         const legacyUrl = urlFor(new URL(personIri).href);
         if (legacyUrl !== url) {
+          legacyKey = canonicalPersonKey(new URL(personIri).href);
           url = legacyUrl;
           res = await readFetch(url, { method: "GET", redirect: "manual" });
           assertNoRedirect(res, "GET", url);
@@ -189,6 +192,11 @@ export function createPodRelationshipStore(
       const turtle = new TextDecoder().decode(bytes);
       const state = parseRelationship(turtle, url);
       if (state === undefined) return undefined; // unparseable → treat as no state (fail-closed)
+      if (
+        legacyKey !== undefined &&
+        (state.personIriVersion !== 1 || state.personIri !== legacyKey)
+      )
+        return undefined;
       const etag = res.headers.get("etag");
       if (etag === null || etag.length === 0) {
         throw new Error("relationship load failed: existing state has no ETag for safe CAS.");

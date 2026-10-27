@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
 import type { UpgradeOffer } from "./negotiate.js";
 import {
@@ -265,6 +266,28 @@ describe("serialize / parse round-trip (pod persistence)", () => {
     );
     s = expectOk(transition(s, { kind: "identity-verified", webId: WEBID }, AT));
     expect(await roundTrip(s)).toEqual(s);
+    expect(s.personIriVersion).toBe(2);
+  });
+
+  it("preserves legacy key metadata through negotiation, fallback, and revocation", async () => {
+    const card = { ...toCardDiscovered(), personIriVersion: 1 as const };
+    const offered = expectOk(transition(card, { kind: "offer", offer: rdfOffer }, AT));
+    const upgraded = expectOk(
+      transition(
+        offered,
+        {
+          kind: "offer-response",
+          response: { accept: true, protocolHash: "abc123" },
+        },
+        AT,
+      ),
+    );
+    const fallback = expectOk(transition(upgraded, { kind: "transport-failure" }, AT));
+    const revoked = expectOk(transition(fallback, { kind: "revoke-verification" }, AT));
+    for (const state of [card, offered, upgraded, fallback, revoked]) {
+      expect(state.personIriVersion).toBe(1);
+      expect(await roundTrip(state)).toEqual(state);
+    }
   });
 
   it("round-trips every pending-offer binding", async () => {

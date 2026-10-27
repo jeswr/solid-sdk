@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Vocabulary — the IRI constants this package writes.
  *
@@ -170,6 +171,8 @@ export const AGENTIC_RELATIONSHIP = `${AGENTIC}Relationship`;
 export const AGENTIC_RELATIONSHIP_STATE = `${AGENTIC}relationshipState`;
 /** The counterparty person node this relationship tracks. */
 export const AGENTIC_COUNTERPARTY = `${AGENTIC}counterparty`;
+/** Counterparty key scheme: 1 = legacy URL canonicalization, 2 = lexical RDF identity. */
+export const AGENTIC_PERSON_IRI_VERSION = `${AGENTIC}personIriVersion`;
 /** The channel currently in use with the counterparty (`agentic:currentChannel`). */
 export const AGENTIC_CURRENT_CHANNEL = `${AGENTIC}currentChannel`;
 /** The verified agent-card URL discovered for the counterparty (only after IDENTITY-VERIFIED). */
