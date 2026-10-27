@@ -95,12 +95,14 @@ for (const [implementation, construct] of Object.entries(implementations)) {
   it.each([
     undefined,
     null,
-  ])(`${implementation}: retains body transfer when init.body is %s`, async (body) => {
+  ])(`${implementation}: discards the input body when init.body is explicitly %s`, async (body) => {
     const input = construct(TARGET, { method: "POST", body: "original" });
     const normalized = normalizeRequest(input, { body });
-    expect(input.bodyUsed).toBe(true);
+    expect(input.bodyUsed).toBe(false);
     expect(normalized.init).toHaveProperty("duplex", "half");
-    if (body === null) expect(normalized.init?.body).toBeNull();
+    expect(normalized.init).toHaveProperty("body", body);
+    expect(await new Request(normalized.url, normalized.init).text()).toBe("");
+    expect(await input.text()).toBe("original");
   });
 
   it(`${implementation}: snapshots metadata without reading shadowed fields or inheriting placeholder body/duplex`, async () => {
@@ -147,7 +149,7 @@ for (const [implementation, construct] of Object.entries(implementations)) {
     const input = construct(TARGET, { method: "POST", body: "original" });
     const normalized = normalizeRequest(input, { method, body: "" });
     expect(normalized.init?.body).toBe("");
-    expect(normalized.init).not.toHaveProperty("duplex");
+    expect(normalized.init).toHaveProperty("duplex", "half");
     expect(input.bodyUsed).toBe(false);
     if (method === "POST") {
       expect(await new Request(normalized.url, normalized.init).text()).toBe("");

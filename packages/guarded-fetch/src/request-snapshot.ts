@@ -22,7 +22,7 @@ export function snapshotFetchInput(
   input: RequestInfo | URL,
   init?: RequestInit,
   options?: { metadataOnly?: boolean; discardBody?: boolean },
-): { input: string | Request; url: string; init: RequestInit | undefined } {
+): { input: string | Request; url: string; init: RequestInit | undefined; hadBody?: boolean } {
   if (typeof input === "string") return { input, url: input, init };
 
   // Brand checks invoke native getters; instanceof and own properties are not trusted.
@@ -46,7 +46,9 @@ export function snapshotFetchInput(
         ? metadataInit(input, Request.prototype, init, options.discardBody === true)
         : init,
     );
-    return { input: request, url: request.url, init: undefined };
+    // The native getter reads the input's body slot without consuming it.
+    const hadBody = Reflect.get(Request.prototype, "body", input) != null;
+    return { input: request, url: request.url, init: undefined, hadBody };
   }
 
   try {
@@ -65,7 +67,14 @@ export function snapshotFetchInput(
               : init,
           );
           const url = descriptor.get.call(request);
-          if (typeof url === "string") return { input: request, url, init: undefined };
+          if (typeof url === "string") {
+            return {
+              input: request,
+              url,
+              init: undefined,
+              hadBody: protoGet(owner, "body", input) != null,
+            };
+          }
         }
         break;
       }
@@ -86,7 +95,9 @@ function metadataInit(
   init: RequestInit | undefined,
   discardBody: boolean,
 ): RequestInit | undefined {
-  if (!discardBody && init?.body == null) return undefined;
+  // Main spread the caller's init over the Request's fields, so any own body key (even
+  // null/undefined) replaced the input body: capture metadata without touching it then.
+  if (!discardBody && !hasBodyOverride(init)) return undefined;
   const method = Reflect.get(prototype, "method", input);
   // GET/HEAD inputs cannot carry a body. Leave init validation to the transport, as on main.
   if (method === "GET" || method === "HEAD") return undefined;
@@ -94,4 +105,18 @@ function metadataInit(
   // Bytes avoid generating a Content-Type that could corrupt a later FormData boundary.
   // Never serialize or consume the caller's replacement body here.
   return { body: new ArrayBuffer(0) };
+}
+
+/** True when spreading `init` would replace the Request body (an own enumerable `body`). */
+export function hasBodyOverride(init: RequestInit | undefined): boolean {
+  return init != null && Object.prototype.propertyIsEnumerable.call(init, "body");
+}
+
+/** Invoke a prototype-chain getter on `target`, never an own property. */
+function protoGet(start: object | null, name: string, target: unknown): unknown {
+  for (let owner = start; owner; owner = Object.getPrototypeOf(owner)) {
+    const descriptor = Object.getOwnPropertyDescriptor(owner, name);
+    if (descriptor) return descriptor.get?.call(target);
+  }
+  return undefined;
 }

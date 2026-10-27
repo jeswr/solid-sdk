@@ -134,11 +134,12 @@ export function refuseRedirects(
       res.status >= 300 && res.status < 400 && res.status !== 304 && res.headers.has("location");
     if (opaqueRedirect || isRedirect(res.status) || locatedRedirect) {
       const location = opaqueRedirect ? undefined : (res.headers.get("location") ?? undefined);
-      // Drain the refused redirect's body so a streamed body is not left dangling.
+      // Best-effort cancel of the refused redirect's body, never awaited: a clone the transport
+      // retains would keep cancellation pending and hang the refusal.
       try {
-        await res.body?.cancel();
+        res.body?.cancel().catch(() => {});
       } catch {
-        // Body already consumed / closed — fine.
+        // Body already consumed / locked — fine.
       }
       const safeUrl = redactUserinfo(url);
       const safeLocation = location !== undefined ? redactUserinfo(location) : undefined;

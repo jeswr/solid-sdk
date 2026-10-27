@@ -13,7 +13,7 @@
  * additionally strips credential headers and the body).
  */
 
-import { snapshotFetchInput } from "./request-snapshot.js";
+import { hasBodyOverride, snapshotFetchInput } from "./request-snapshot.js";
 
 /** Whether a status code is a redirect we re-validate + follow manually. */
 export function isRedirect(status: number): boolean {
@@ -163,7 +163,14 @@ export function normalizeRequest(
     credentials: req.credentials,
     redirect: req.redirect,
     ...(req.signal ? { signal: req.signal } : {}),
-    ...(init?.body == null && req.body ? { body: req.body, duplex: "half" } : {}),
+    // Main kept duplex:"half" whenever the Request had a body, even under a body override.
+    ...(hasBodyOverride(init)
+      ? snapshot.hadBody
+        ? { duplex: "half" }
+        : {}
+      : req.body
+        ? { body: req.body, duplex: "half" }
+        : {}),
   } as RequestInit;
   return { url: snapshot.url, init: { ...fromRequest, ...(init ?? {}) } };
 }

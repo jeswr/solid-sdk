@@ -88,6 +88,7 @@ export function snapshotFetchInput(input: RequestInfo | URL, init?: RequestInit,
     input: string | Request;
     url: string;
     init: RequestInit | undefined;
+    hadBody?: boolean;
 };
 
 // @public

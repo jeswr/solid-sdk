@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { FormData as UndiciFormData } from "undici";
+import { FormData as UndiciFormData, Request as UndiciRequest } from "undici";
 import { beforeEach, expect, it, vi } from "vitest";
 
 const { transport } = vi.hoisted(() => ({ transport: vi.fn() }));
@@ -109,3 +109,70 @@ it("refuses a shadowed native Request to a private IP before the undici transpor
   await expect(createNodeGuardedFetch()(request)).rejects.toThrow();
   expect(transport).not.toHaveBeenCalled();
 });
+
+for (const [name, RequestImpl] of Object.entries({ native: Request, undici: UndiciRequest })) {
+  it.each([
+    "fresh",
+    "consumed",
+    "locked",
+  ] as const)(`${name}: the Node transport consumes a replacement stream for a %s POST without explicit duplex`, async (state) => {
+    const input = new RequestImpl("https://pod.example/item", {
+      method: "POST",
+      body: "original",
+    }) as unknown as Request;
+    if (state === "consumed") await input.text();
+    const reader = state === "locked" ? input.body?.getReader() : undefined;
+    const wasUsed = input.bodyUsed;
+    const wasLocked = input.body?.locked;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("replacement upload"));
+        controller.close();
+      },
+    });
+    const guarded = createNodeGuardedFetch({
+      resolveAll: async () => [{ address: "93.184.216.34", family: 4 }],
+    });
+    try {
+      expect(await (await guarded(input, { body })).text()).toBe("replacement upload");
+      expect(transport).toHaveBeenCalledOnce();
+      expect(transport.mock.calls[0]?.[0]).toHaveProperty("duplex", "half");
+      expect(input.bodyUsed).toBe(wasUsed);
+      expect(input.body?.locked).toBe(wasLocked);
+    } finally {
+      reader?.releaseLock();
+    }
+    if (state !== "consumed") expect(await input.text()).toBe("original");
+  });
+
+  it.each([
+    false,
+    true,
+  ])(`${name}: the Node transport matches main for a body-less stream override (explicit duplex %s)`, async (explicitDuplex) => {
+    const input = new RequestImpl("https://pod.example/item", {
+      method: "POST",
+    }) as unknown as Request;
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode("replacement upload"));
+        controller.close();
+      },
+    });
+    const guarded = createNodeGuardedFetch({
+      resolveAll: async () => [{ address: "93.184.216.34", family: 4 }],
+    });
+    const pending = guarded(input, {
+      body,
+      ...(explicitDuplex ? { duplex: "half" } : {}),
+    } as RequestInit);
+    if (explicitDuplex) {
+      expect(await (await pending).text()).toBe("replacement upload");
+      expect(transport).toHaveBeenCalledOnce();
+    } else {
+      await expect(pending).rejects.toThrow(/duplex/i);
+      expect(transport).not.toHaveBeenCalled();
+    }
+    expect(input.body).toBeNull();
+    expect(input.bodyUsed).toBe(false);
+  });
+}
