@@ -26,6 +26,7 @@ export default defineConfig({
         "src/apps/music/lib/lyrics/**/*.ts",
         "src/apps/contacts/lib/vcard/**/*.ts",
         "src/apps/contacts/lib/phone/**/*.ts",
+        "src/apps/contacts/lib/postal/**/*.ts",
         "src/apps/contacts/lib/model/**/*.ts",
         "src/apps/money/lib/import/**/*.ts",
         "src/apps/calendar/lib/ics/**/*.ts",
