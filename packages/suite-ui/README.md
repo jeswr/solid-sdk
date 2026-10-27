@@ -112,12 +112,30 @@ The reducer enforces valid transitions and at most three active uploads. Pass th
 `attempt` back in progress, complete and fail events to ignore stale transport callbacks.
 The caller must abort paused/cancelled requests, schedule queued work, persist the queue,
 and implement storage capabilities. Set `canPause={false}` when pausing is unavailable.
+Collapsed docks mount no file rows. Expanded queues use the same TanStack virtualizer as
+the collections, with measured row heights and list position/count semantics. Tab moves
+through the file actions across virtual windows; Up/Down and Home/End move between files,
+and Escape collapses the dock and focuses its toggle. The summary live region includes
+the entire queue, including rows outside the viewport.
 
 `DropZoneOverlay` wraps a folder pane and returns `{ files: [{ file, path }], directories }`.
 Paths are relative, directory paths end in `/`, and empty dropped directories are retained.
 All directory reader batches are exhausted. File/folder buttons provide keyboard alternatives;
 the folder picker uses the browser's `webkitdirectory` API. Non-file drags pass through.
 The returned paths are display paths: the app's upload planner applies storage naming rules.
+`readDrop(captured, options?)` and `filesFromPicker(files, options?)` accept `DropReadOptions`:
+`maxEntries` (10,000 files and directories combined), `maxDepth` (32, with a dropped root at
+depth zero), `timeoutMs` (30,000 for the whole read), and `signal`. Bounds must be finite
+integers; counts/depth may be zero and the timeout must be positive. They reject/throw a
+`DropReadError` with `code` equal to `limit-exceeded`, `aborted`, or `timeout`; limit errors
+also identify `limit` (`maxEntries` or `maxDepth`). No partial upload is returned. Browser
+read failures still propagate their original error. The synchronous picker checks bounds,
+cancellation and elapsed time between files; asynchronous directory/file callbacks are
+also interrupted by cancellation or the deadline, even if the browser never responds.
+Pass `readOptions={{ maxEntries, maxDepth, timeoutMs }}` to `DropZoneOverlay` to override
+these defaults. Escape and unmount abort traversal; Escape restores browsing and focus.
+Late browser callbacks cannot deliver cancelled files. Limit/timeout errors show recovery
+feedback and clear the busy state. The caller still owns any work started by `onFiles`.
 
 `PreviewPane` takes `{ name, blob, contentType?, typedView?, details? }` as `source`.
 The owning app supplies parsed typed data through `typedView={<TypedView ... />}`; the
@@ -141,6 +159,17 @@ accessors; its registry maps RDF class IRIs to renderers and can be extended wit
 caller-owned map. The suite app's `src/components/typed-view-data.ts` supplies the adapter.
 Technical serialization is rendered only when `showTechnicalDetails` is true, inside a
 native disclosure. Bind that prop to Settings › Advanced, never to the resource itself.
+
+`TypedView` and `TypedRendererProps` accept an optional `resolveImage: ImageResolver`,
+`(url: string, signal: AbortSignal) => Promise<string | undefined>`. Supply a stable resolver
+that reads through the authenticated SDK and returns an object URL. Contacts, tracks and
+photos show a placeholder while resolving, after rejection/undefined/unsafe output, and
+after image load errors. Reads are aborted on URL/resolver changes and unmount; late
+results are ignored. The caller owns object URL creation, caching and revocation, including
+URLs from aborted reads. Caller-supplied `blob:` image sources render directly without
+calling the resolver. Existing HTTP(S) and local `/path` image sources still work without
+a resolver; unsafe schemes, credentials and protocol-relative URLs remain rejected, and
+link URL policy is unchanged. Custom registry renderers receive the resolver too.
 
 `ItemDetails` is the content of the details pane: metadata, an actions slot, and the
 structural result of `share.get`. Pass `ownerId` to exclude the owner from the people

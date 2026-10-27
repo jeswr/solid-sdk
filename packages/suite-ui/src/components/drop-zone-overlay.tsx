@@ -3,7 +3,13 @@
 "use client";
 import { Upload } from "lucide-react";
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { captureDrop, type DroppedFiles, filesFromPicker, readDrop } from "../uploads/drop.js";
+import {
+  captureDrop,
+  type DroppedFiles,
+  type DropReadOptions,
+  filesFromPicker,
+  readDrop,
+} from "../uploads/drop.js";
 import { SurfaceFeedback, type SurfaceState } from "./surface-state.js";
 export interface DropZoneOverlayProps {
   folderName: string;
@@ -14,6 +20,8 @@ export interface DropZoneOverlayProps {
   disabled?: boolean;
   /** For visual documentation of the drag-over state. */
   showOverlay?: boolean;
+  /** Bounds shared by directory drops and the file/folder pickers. */
+  readOptions?: Omit<DropReadOptions, "signal">;
 }
 export function DropZoneOverlay({
   folderName,
@@ -23,12 +31,14 @@ export function DropZoneOverlay({
   onAction,
   disabled = false,
   showOverlay = false,
+  readOptions,
 }: DropZoneOverlayProps) {
   const [dragging, setDragging] = useState(false);
   const [reading, setReading] = useState(false);
   const [failed, setFailed] = useState(false);
   const depth = useRef(0);
   const busy = useRef(false);
+  const traversal = useRef<AbortController | null>(null);
   const filesInput = useRef<HTMLInputElement>(null);
   const folderInput = useRef<HTMLInputElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
@@ -54,14 +64,33 @@ export function DropZoneOverlay({
     depth.current = 0;
     setDragging(false);
   };
+  const cancel = () => {
+    traversal.current?.abort();
+    traversal.current = null;
+    busy.current = false;
+    setReading(false);
+  };
+  useEffect(
+    () => () => {
+      traversal.current?.abort();
+      traversal.current = null;
+    },
+    [],
+  );
   useEffect(() => {
-    if (!dragging) return;
+    if (!dragging && !reading) return;
     const clear = () => {
       depth.current = 0;
       setDragging(false);
     };
     const onEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") clear();
+      if (event.key === "Escape") {
+        clear();
+        traversal.current?.abort();
+        traversal.current = null;
+        busy.current = false;
+        setReading(false);
+      }
     };
     window.addEventListener("keydown", onEscape);
     window.addEventListener("dragend", clear);
@@ -71,23 +100,29 @@ export function DropZoneOverlay({
       window.removeEventListener("dragend", clear);
       window.removeEventListener("blur", clear);
     };
-  }, [dragging]);
-  async function accept(read: () => Promise<DroppedFiles> | DroppedFiles) {
+  }, [dragging, reading]);
+  async function accept(read: (signal: AbortSignal) => Promise<DroppedFiles> | DroppedFiles) {
     if (busy.current || disabled) return;
     // Keep the original target across failures and retries while the children stay mounted.
     if (!failed)
       previousFocus.current =
         document.activeElement instanceof HTMLElement ? document.activeElement : null;
     busy.current = true;
+    const controller = new AbortController();
+    traversal.current = controller;
     setReading(true);
     setFailed(false);
     try {
-      await onFiles(await read());
+      const files = await read(controller.signal);
+      if (!controller.signal.aborted) await onFiles(files);
     } catch {
-      setFailed(true);
+      if (!controller.signal.aborted) setFailed(true);
     } finally {
-      busy.current = false;
-      setReading(false);
+      if (traversal.current === controller) {
+        traversal.current = null;
+        busy.current = false;
+        setReading(false);
+      }
     }
   }
   return (
@@ -123,13 +158,17 @@ export function DropZoneOverlay({
         if (disabled || !event.dataTransfer.types.includes("Files")) return;
         event.preventDefault();
         reset();
-        void accept(() =>
-          readDrop(captureDrop(event.dataTransfer.items, event.dataTransfer.files)),
+        void accept((signal) =>
+          readDrop(captureDrop(event.dataTransfer.items, event.dataTransfer.files), {
+            ...readOptions,
+            signal,
+          }),
         );
       }}
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           reset();
+          cancel();
           setFailed(false);
         }
       }}
@@ -145,7 +184,7 @@ export function DropZoneOverlay({
         onChange={(event) => {
           const files = Array.from(event.currentTarget.files ?? []);
           event.currentTarget.value = "";
-          void accept(() => filesFromPicker(files));
+          void accept((signal) => filesFromPicker(files, { ...readOptions, signal }));
         }}
       />
       <input
@@ -159,7 +198,7 @@ export function DropZoneOverlay({
         onChange={(event) => {
           const files = Array.from(event.currentTarget.files ?? []);
           event.currentTarget.value = "";
-          void accept(() => filesFromPicker(files));
+          void accept((signal) => filesFromPicker(files, { ...readOptions, signal }));
         }}
       />
       <div inert={reading || failed}>

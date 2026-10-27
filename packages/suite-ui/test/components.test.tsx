@@ -39,6 +39,13 @@ async function accessible(container: HTMLElement) {
 }
 beforeEach(() => {
   vi.clearAllMocks();
+  // jsdom has no layout; expose the viewport and measured upload row heights.
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.classList.contains("su-upload-item") ? 144 : 400;
+  });
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockReturnValue(400);
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
   let sequence = 0;
   vi.stubGlobal(
@@ -51,6 +58,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 describe("UploadDock", () => {

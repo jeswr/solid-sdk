@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
 export type {
   CollectionErrorKind,
@@ -48,6 +49,7 @@ export { TagInput } from "./components/tag-input.js";
 export type { ToolbarAction, ToolbarProps } from "./components/toolbar.js";
 export { Toolbar } from "./components/toolbar.js";
 export type {
+  ImageResolver,
   TypedProperty,
   TypedRendererProps,
   TypedViewData,
@@ -116,6 +118,8 @@ export {
   captureDrop,
   type DroppedFile,
   type DroppedFiles,
+  DropReadError,
+  type DropReadOptions,
   filesFromPicker,
   readDrop,
 } from "./uploads/drop.js";
