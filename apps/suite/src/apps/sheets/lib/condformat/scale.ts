@@ -1,10 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { ColourAnchor } from "./model";
 import { invalidRule } from "./validation";
 
 /** Weighted interpolation avoids overflowing (high - low) for finite opposite extremes. */
 export function interpolate(low: number, high: number, fraction: number): number {
-  return low * (1 - fraction) + high * fraction;
+  if (low === high) return low;
+  const value = low * (1 - fraction) + high * fraction;
+  return Math.max(Math.min(low, high), Math.min(Math.max(low, high), value));
 }
 
 function position(anchor: ColourAnchor, numbers: readonly number[]): number {
@@ -62,8 +65,14 @@ export function colourScale(
       const lower = points[index - 1] as (typeof points)[number];
       const upper = points[index] as (typeof points)[number];
       if (value <= upper.at) {
-        const scale = Math.max(Math.abs(lower.at), Math.abs(upper.at));
-        const fraction = (value / scale - lower.at / scale) / (upper.at / scale - lower.at / scale);
+        const span = upper.at - lower.at;
+        let fraction: number;
+        if (Number.isFinite(span)) {
+          fraction = (value - lower.at) / span;
+        } else {
+          const scale = Math.max(Math.abs(lower.at), Math.abs(upper.at));
+          fraction = (value / scale - lower.at / scale) / (upper.at / scale - lower.at / scale);
+        }
         return interpolateRgb(lower.color, upper.color, fraction);
       }
     }

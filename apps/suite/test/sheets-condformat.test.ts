@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   type CellRange,
@@ -273,6 +274,44 @@ describe("numeric population rules", () => {
     ).toEqual([true, false]);
   });
 
+  it.each([
+    ["aboveAverage", [{}, {}, bold]],
+    ["belowAverage", [bold, {}, {}]],
+  ] as const)("keeps cells equal to the average out of %s and allows later rules", (kind, expected) => {
+    for (const values of [
+      [3, 4, 5],
+      [-5, -4, -3],
+    ]) {
+      expect(evaluateConditionalFormats([values], [{ kind, style: bold }])).toEqual([expected]);
+      expect(
+        evaluateConditionalFormats(
+          [values],
+          [
+            { kind, style: bold, stopIfTrue: true },
+            { kind: "notBlank", style: { italic: true } },
+          ],
+        ),
+      ).toEqual([expected.map((style) => ("bold" in style ? style : { italic: true }))]);
+    }
+  });
+
+  it.each([
+    ["aboveAverage", [false, false, true, true]],
+    ["belowAverage", [true, true, false, false]],
+  ] as const)("compensates cancellation before calculating %s", (kind, expected) => {
+    expect(matches([-1e16, 0, 1, 1e16], { kind, style: bold })).toEqual(expected);
+    expect(matches([-1e16, -1, 0, 1e16], { kind, style: bold })).toEqual(expected);
+  });
+
+  it.each([
+    Number.MAX_VALUE,
+    -Number.MAX_VALUE,
+  ])("preserves extreme constant averages %s", (value) => {
+    for (const kind of ["aboveAverage", "belowAverage"] as const) {
+      expect(matches([value, value], { kind, style: bold })).toEqual([false, false]);
+    }
+  });
+
   it("does not match numeric population rules on a range without numbers", () => {
     for (const kind of ["top", "bottom"] as const) {
       expect(matches([null, "", true, error], { kind, count: 1, style: bold })).toEqual([
@@ -294,6 +333,49 @@ describe("numeric population rules", () => {
 });
 
 describe("colour scales", () => {
+  it.each([
+    [1, 2, 3],
+    [1.2, 1.2000000000000002, 1.2000000000000004],
+    [-1.2000000000000004, -1.2000000000000002, -1.2],
+  ])("preserves the exact midpoint of %s, %s, %s", (low, middle, high) => {
+    expect(evaluateConditionalFormats([[low, middle, high]], [scale(min, max)])).toEqual([
+      [{ fill: black }, { fill: hex("808080") }, { fill: white }],
+    ]);
+  });
+
+  it.each([
+    "percent",
+    "percentile",
+  ] as const)("preserves equal endpoints for %s anchors", (kind) => {
+    for (const value of [3, -3, Number.MAX_VALUE, Number.MIN_VALUE]) {
+      for (const percent of [20, 80]) {
+        expect(
+          evaluateConditionalFormats(
+            [[value, value]],
+            [scale(min, { kind, value: percent, color: hex("FF0000") }, max)],
+          ),
+        ).toEqual([[{ fill: black }, { fill: black }]]);
+      }
+    }
+  });
+
+  it.each([
+    "percent",
+    "percentile",
+  ] as const)("keeps %s anchors inside adjacent endpoints", (kind) => {
+    for (const [low, high] of [
+      [3, 3.0000000000000004],
+      [-3.0000000000000004, -3],
+    ] as const) {
+      expect(
+        evaluateConditionalFormats(
+          [[low, high]],
+          [scale(min, { kind, value: 1, color: white }, max)],
+        ),
+      ).toEqual([[{ fill: black }, { fill: white }]]);
+    }
+  });
+
   it("interpolates RGB channels, normalizes shorthand and skips nonnumeric cells", () => {
     expect(
       evaluateConditionalFormats(

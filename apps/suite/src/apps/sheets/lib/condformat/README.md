@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Conditional formatting (SHT-L6)
 
@@ -40,8 +41,8 @@ Blanks and errors do not participate. `noError` includes blank cells.
 Population rules and scales use numeric cells only, including cells stopped by
 other rules. Absolute `count` is a positive safe integer, capped to the population
 when selecting. Percent `count` is in (0, 100], rounded upward to at least one
-numeric cell. Rank ties are included. Average uses a compensated, normalized sum
-to avoid overflow with extreme finite values.
+numeric cell. Rank ties are included. Average uses compensated summation,
+normalizing only if the direct sum overflows with extreme finite values.
 
 Anchor kinds are `min`, `max`, `number`, `percent`, and `percentile`. The first two
 omit `value`; the others require a finite number (0–100 for percentages).

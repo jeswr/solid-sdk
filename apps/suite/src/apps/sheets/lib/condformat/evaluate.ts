@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { CellIsRule, CellRange, CellStyle, CellValue, ConditionalFormatRule } from "./model";
 import { colourScale } from "./scale";
 import { checkLimits, compare, validateCell, validateRule } from "./validation";
@@ -110,6 +111,18 @@ function matcher(
   return (value) => (matches(value) ? rule.style : undefined);
 }
 
+function compensatedSum(numbers: readonly number[], divisor: number): number {
+  let sum = 0;
+  let correction = 0;
+  for (const value of numbers) {
+    const scaled = value / divisor;
+    const next = sum + scaled;
+    correction += Math.abs(sum) >= Math.abs(scaled) ? sum - next + scaled : scaled - next + sum;
+    sum = next;
+  }
+  return sum + correction;
+}
+
 /** Apply every rule to this entire rectangular range, without mutating either input. */
 export function evaluateConditionalFormats(
   values: CellRange,
@@ -138,19 +151,14 @@ export function evaluateConditionalFormats(
     }
   }
   numbers.sort((a, b) => a - b);
-  // Normalize and compensate the sum: even finite extreme values must not overflow the mean.
-  let sum = 0;
-  let correction = 0;
-  if (scale !== 0) {
-    for (const value of numbers) {
-      const normalized = value / scale;
-      const next = sum + normalized;
-      correction +=
-        Math.abs(sum) >= Math.abs(normalized) ? sum - next + normalized : normalized - next + sum;
-      sum = next;
-    }
-  }
-  const average = numbers.length === 0 ? 0 : ((sum + correction) / numbers.length) * scale;
+  // Keep ordinary sums exact where possible; normalize only after overflow.
+  const sum = compensatedSum(numbers, 1);
+  const average =
+    numbers.length === 0
+      ? 0
+      : Number.isFinite(sum)
+        ? sum / numbers.length
+        : (compensatedSum(numbers, scale) / numbers.length) * scale;
   const matchers = validated.map((rule) => matcher(rule, numbers, counts, average));
   return values.map((row) =>
     row.map((value) => {
