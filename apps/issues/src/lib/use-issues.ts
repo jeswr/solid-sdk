@@ -318,8 +318,22 @@ export function useIssues(
   // Stable join of the own-storage roots so the live-sync effect doesn't re-run
   // (and re-subscribe) when the caller passes a fresh array of the same values.
   const ownStorageKey = ownStorageUrls.join("\n");
-  // Content edits keep the same topic set; only membership changes re-subscribe.
+  // Content edits keep the same topic set; membership changes add/remove topics.
   const issueUrlsKey = JSON.stringify([...new Set(issues.map((issue) => issue.url))].sort());
+  const liveSyncs = useRef(new Map<string, ReturnType<typeof watchContainer>>());
+  const liveRefreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Keep queued invalidations and unchanged watchers across membership changes.
+  // Tear down only when the tracker, identity, or storage scope changes, or on unmount.
+  useEffect(() => {
+    const syncs = liveSyncs.current;
+    return () => {
+      for (const sync of syncs.values()) sync.close();
+      syncs.clear();
+      if (liveRefreshTimer.current) clearTimeout(liveRefreshTimer.current);
+      liveRefreshTimer.current = undefined;
+    };
+  }, [fetchInto, ownStorageKey]);
 
   // Container notifications cover membership changes. Watch each loaded issue
   // too so edits to existing resources invalidate the board on CSS.
@@ -327,17 +341,24 @@ export function useIssues(
     if (!trackerUrl) return;
     const containerUrl = new Repository(trackerUrl).containerUrl;
     const ownStorage = ownStorageKey ? ownStorageKey.split("\n") : [];
-    let timer: ReturnType<typeof setTimeout> | undefined;
     const onChange = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => void fetchInto(), 800);
+      if (liveRefreshTimer.current) clearTimeout(liveRefreshTimer.current);
+      liveRefreshTimer.current = setTimeout(() => {
+        liveRefreshTimer.current = undefined;
+        void fetchInto();
+      }, 800);
     };
     const topics = new Set([containerUrl, ...JSON.parse(issueUrlsKey) as string[]]);
-    const syncs = [...topics].map((topic) => watchContainer(topic, onChange, { ownStorageUrls: ownStorage }));
-    return () => {
-      for (const sync of syncs) sync.close();
-      if (timer) clearTimeout(timer);
-    };
+    const syncs = liveSyncs.current;
+    for (const [topic, sync] of syncs) {
+      if (!topics.has(topic)) {
+        sync.close();
+        syncs.delete(topic);
+      }
+    }
+    for (const topic of topics) {
+      if (!syncs.has(topic)) syncs.set(topic, watchContainer(topic, onChange, { ownStorageUrls: ownStorage }));
+    }
   }, [trackerUrl, fetchInto, ownStorageKey, issueUrlsKey]);
 
   const mutate = useCallback(

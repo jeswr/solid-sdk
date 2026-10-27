@@ -65,16 +65,67 @@ describe("useIssues live subscriptions", () => {
   });
 
   it("watches added issues and closes removed subscriptions after membership changes", async () => {
+    list.mockResolvedValue({ issues: [issue("one"), issue("removed")], canCreate: true });
     const { unmount } = renderHook(() => useIssues(TRACKER, WEBID, OWN));
     await act(async () => {});
     const active = channels.filter((channel) => channel.close.mock.calls.length === 0);
     const container = active.find((channel) => channel.topic === CONTAINER)!;
-    list.mockResolvedValue({ issues: [issue("two")], canCreate: true });
+    list.mockResolvedValue({ issues: [issue("one"), issue("two")], canCreate: true });
     act(() => container.onChange());
     await act(async () => { await vi.advanceTimersByTimeAsync(800); });
-    expect(active.find((channel) => channel.topic === issue("one").url)!.close).toHaveBeenCalledOnce();
+    expect(container.close).not.toHaveBeenCalled();
+    expect(active.find((channel) => channel.topic === issue("one").url)!.close).not.toHaveBeenCalled();
+    expect(active.find((channel) => channel.topic === issue("removed").url)!.close).toHaveBeenCalledOnce();
+    expect(watch).toHaveBeenCalledTimes(4);
     expect(channels.filter((channel) => channel.close.mock.calls.length === 0).map((channel) => channel.topic))
-      .toEqual([CONTAINER, issue("two").url]);
+      .toEqual([CONTAINER, issue("one").url, issue("two").url]);
+    unmount();
+    expect(channels.every((channel) => channel.close.mock.calls.length === 1)).toBe(true);
+  });
+
+  it.each([CONTAINER, issue("one").url])("preserves a queued %s invalidation when an in-flight fetch changes membership", async (topic) => {
+    const { result } = renderHook(() => useIssues(TRACKER, WEBID, OWN));
+    await act(async () => {});
+    const pending = Promise.withResolvers<{ issues: IssueRecord[]; canCreate: boolean }>();
+    list.mockReturnValueOnce(pending.promise)
+      .mockResolvedValue({ issues: [issue("one"), issue("two"), issue("three")], canCreate: true });
+    const container = channels.findLast((channel) => channel.topic === CONTAINER)!;
+    act(() => container.onChange());
+    await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+    expect(list).toHaveBeenCalledTimes(2);
+
+    // A second creation invalidates the list while the first membership read is
+    // still pending. Its debounce must survive that read adding a subscription.
+    act(() => channels.findLast((channel) => channel.topic === topic)!.onChange());
+    await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+    await act(async () => { pending.resolve({ issues: [issue("one"), issue("two")], canCreate: true }); });
+    expect(result.current.issues.map((record) => record.title)).toEqual(["one", "two"]);
+    await act(async () => { await vi.advanceTimersByTimeAsync(399); });
+    expect(list).toHaveBeenCalledTimes(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(list).toHaveBeenCalledTimes(3);
+    expect(result.current.issues.map((record) => record.title)).toEqual(["one", "two", "three"]);
+    expect(container.close).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { change: "tracker", tracker: "https://pod.example/alice/other/index.ttl", creator: WEBID, own: OWN },
+    { change: "identity", tracker: TRACKER, creator: "https://pod.example/bob/profile/card#me", own: OWN },
+    { change: "storage roots", tracker: TRACKER, creator: WEBID, own: ["https://pod.example/bob/"] },
+  ])("closes subscriptions and cancels queued invalidations when $change changes", async (next) => {
+    const { rerender, unmount } = renderHook(
+      ({ tracker, creator, own }) => useIssues(tracker, creator, own),
+      { initialProps: { tracker: TRACKER, creator: WEBID, own: OWN } },
+    );
+    await act(async () => {});
+    const active = channels.filter((channel) => channel.close.mock.calls.length === 0);
+    act(() => active.find((channel) => channel.topic === CONTAINER)!.onChange());
+    await act(async () => { rerender(next); });
+    expect(active.every((channel) => channel.close.mock.calls.length === 1)).toBe(true);
+    const reads = list.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+    expect(list).toHaveBeenCalledTimes(reads);
+    expect(watch).toHaveBeenLastCalledWith(issue("one").url, expect.any(Function), { ownStorageUrls: next.own });
     unmount();
     expect(channels.every((channel) => channel.close.mock.calls.length === 1)).toBe(true);
   });
