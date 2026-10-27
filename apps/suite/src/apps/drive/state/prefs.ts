@@ -20,12 +20,16 @@ export type DrivePreferences = z.infer<typeof drivePreferencesSchema>;
 
 const DEFAULTS = drivePreferencesSchema.parse({});
 const listeners = new Set<() => void>();
+/** Preferences that storage refused to save, kept for the rest of the session. */
+const unsaved = new Map<string, DrivePreferences>();
 
 function keyFor(webId: string): string {
   return `suite.drive.prefs.${webId}`;
 }
 
 function load(webId: string): DrivePreferences {
+  const memory = unsaved.get(keyFor(webId));
+  if (memory) return memory;
   try {
     const raw = localStorage.getItem(keyFor(webId));
     if (!raw) return DEFAULTS;
@@ -54,8 +58,11 @@ export function useDrivePreferences(webId: string) {
       const next = change(load(webId));
       try {
         localStorage.setItem(keyFor(webId), JSON.stringify(next));
+        unsaved.delete(keyFor(webId));
       } catch {
-        // Storage can be unavailable (private mode); keep the in-memory value.
+        // Storage can be unavailable (private mode or full); keep the value in memory
+        // so listeners reloading preferences do not revert it.
+        unsaved.set(keyFor(webId), next);
       }
       setPrefs(next);
       for (const listener of listeners) listener();

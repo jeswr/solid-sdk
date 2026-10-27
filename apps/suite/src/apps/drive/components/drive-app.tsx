@@ -14,6 +14,7 @@ import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { measureUsage, purgeExpired } from "../lib/operations/operations";
 import { DriveProvider, useDrive } from "../state/drive-context";
+import { claimPurge } from "../state/purge-marker";
 import { DriveUiProvider, useDriveUi } from "../state/ui";
 import { DetailsPane } from "./details";
 import { DriveDialogs } from "./dialogs";
@@ -31,8 +32,7 @@ function DriveChrome({ children }: { children: ReactNode }) {
 
   // Once per session: purge trash older than 30 days (04-drive §4.9).
   useEffect(() => {
-    if (!driveRoot || sessionStorage.getItem("suite.drive.purged") === driveRoot) return;
-    sessionStorage.setItem("suite.drive.purged", driveRoot);
+    if (!driveRoot || !claimPurge(driveRoot)) return;
     void purgeExpired(client, driveRoot).then(
       (result) => {
         for (const warning of result.warnings ?? []) toast.error(warning.message);
