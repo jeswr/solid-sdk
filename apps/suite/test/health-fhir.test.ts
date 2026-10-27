@@ -661,6 +661,28 @@ describe("health FHIR R4 collection export", () => {
     expectCode(() => build(records(), injected), "INVALID_OPTIONS");
   });
 
+  it("preserves the original options receiver for captured clock and UUID methods", () => {
+    const clockReceivers: unknown[] = [];
+    const uuidReceivers: unknown[] = [];
+    const injected: FhirExportOptions = {
+      clock() {
+        clockReceivers.push(this);
+        return new Date("2026-10-26T12:00:00Z");
+      },
+      uuid() {
+        uuidReceivers.push(this);
+        return `00000000-0000-4000-8000-${String(this.clock().getUTCDate()).padStart(12, "0")}`;
+      },
+    };
+    const bundle = buildFhirBundle(records({ observations: [observation] }), injected);
+    expect(bundle.timestamp).toBe("2026-10-26T12:00:00.000Z");
+    expect(bundle.entry?.[0]?.fullUrl).toBe("urn:uuid:00000000-0000-4000-8000-000000000026");
+    expect(clockReceivers).toHaveLength(2);
+    for (const receiver of clockReceivers) expect(receiver).toBe(injected);
+    expect(uuidReceivers).toHaveLength(1);
+    expect(uuidReceivers[0]).toBe(injected);
+  });
+
   it.each([
     undefined,
     "2026-10-26",

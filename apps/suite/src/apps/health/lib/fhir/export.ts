@@ -166,7 +166,7 @@ export function buildFhirBundle(input: HealthRecords, options: FhirExportOptions
   );
   let timestamp: string;
   try {
-    const now: unknown = clock();
+    const now: unknown = Reflect.apply(clock, options, []);
     requireValid(now instanceof Date, "INVALID_OPTIONS", "Clock must return a Date");
     // Format the Date value itself, without invoking callback-supplied methods.
     timestamp = Date.prototype.toISOString.call(now);
@@ -178,7 +178,7 @@ export function buildFhirBundle(input: HealthRecords, options: FhirExportOptions
   const entry = resources.map((resource) => {
     let generated: unknown;
     try {
-      generated = generateUuid();
+      generated = Reflect.apply(generateUuid, options, []);
     } catch {
       throw new FhirExportError("INVALID_OPTIONS", "UUID generator failed");
     }
