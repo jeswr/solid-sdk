@@ -181,16 +181,20 @@ export function composeEdits(value: unknown, edits: unknown): PhotoEditRecord {
 function roundCropExtent(pixels: number, start: number, end: number): number {
   // Complementing both bounds puts them on the same binary grid before and after
   // reflection: 1 - (1 - (1 - edge)) === 1 - edge for normalized edges.
-  const complemented = 1 - start - (1 - end);
-  // Preserve distinct original bounds when their complements coincide.
-  const extent = pixels * (complemented > 0 ? complemented : end - start);
+  const complemented = pixels * (1 - start - (1 - end));
+  const original = pixels * (end - start);
+  // Preserve the original extent if reflection loses enough precision to change
+  // nearest-pixel rounding, including when distinct bounds have coincident complements.
+  const extent =
+    complemented > 0 && Math.round(complemented) === Math.round(original) ? complemented : original;
   const lower = Math.floor(extent);
-  // Treat remapping error within one normalized epsilon as a half-pixel tie.
-  return extent - lower >= 0.5 - pixels * Number.EPSILON ? Math.ceil(extent) : lower;
+  // Limit remapping tolerance to a billionth of a pixel, even for huge sources.
+  const tolerance = Math.min(pixels * Number.EPSILON, 1e-9);
+  return extent - lower >= 0.5 - tolerance ? Math.ceil(extent) : lower;
 }
 
 /** Natural output dimensions; round continuous crop extents once, after all edits.
- * Half-pixel ties (within one normalized epsilon) round up, including after reflection.
+ * Half-pixel ties round up; remapping tolerance is capped at a billionth of a pixel.
  * Subpixel results rounding to zero are rejected, never clamped or upscaled. */
 export function computeOutputSize(source: unknown, value: unknown): ImageSize {
   const size = imageSize(source);

@@ -235,6 +235,47 @@ describe("sequential non-destructive edits", () => {
 });
 
 describe("aspect presets and output pixels", () => {
+  it.each(
+    [
+      { pixels: Number.MAX_SAFE_INTEGER, left: 0.1, right: 0.10000000000000016 },
+      { pixels: 4503599627370497, left: 0.5, right: 0.5000000000000002 },
+      { pixels: Number.MAX_SAFE_INTEGER, left: 0.5, right: 0.5000000000000001 },
+    ].flatMap((bounds) =>
+      [1, 2, 3, 4, 5, 6, 7, 8].map((orientation) => ({ ...bounds, orientation })),
+    ),
+  )("rounds narrow crop $left..$right on a $pixels-pixel source in orientation $orientation", ({
+    pixels,
+    left,
+    right,
+    orientation,
+  }) => {
+    const horizontalCrop = { ...full, left, right };
+    const verticalCrop = { ...full, top: left, bottom: right };
+    expect(
+      computeOutputSize(
+        { width: pixels, height: 1 },
+        { orientation, crop: orientation < 5 ? horizontalCrop : verticalCrop },
+      ),
+    ).toEqual({ width: 1, height: 1 });
+    expect(
+      computeOutputSize(
+        { width: 1, height: pixels },
+        { orientation, crop: orientation < 5 ? verticalCrop : horizontalCrop },
+      ),
+    ).toEqual({ width: 1, height: 1 });
+  });
+  it("bounds the half-pixel tolerance for large source dimensions", () => {
+    const source = { width: 4503599627370497, height: 1 };
+    for (const extent of [1.25, 1.5 - 1e-8, 1.5, 1.75, 2.25]) {
+      expect(computeOutputSize(source, cropped({ ...full, right: extent / source.width }))).toEqual(
+        { width: Math.round(extent), height: 1 },
+      );
+    }
+    fails(
+      () => computeOutputSize(source, cropped({ ...full, right: 0.25 / source.width })),
+      "invalid-size",
+    );
+  });
   it.each([
     1, 2, 3, 4, 5, 6, 7, 8,
   ])("preserves narrow crop extents when complements coincide in orientation %i", (orientation) => {
