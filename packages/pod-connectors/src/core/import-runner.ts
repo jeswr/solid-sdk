@@ -15,6 +15,7 @@ import { refuseRedirects } from "@jeswr/guarded-fetch";
 import { IntegrationSyncError } from "./errors.js";
 import { fixtureFetch } from "./fixture-fetch.js";
 import { createImportSession } from "./import-session.js";
+import { snapshotFetchInput } from "./request-snapshot.js";
 import type {
   ConnectorState,
   ConnectorStateOptions,
@@ -145,9 +146,8 @@ export function createSourceAuth(
   );
   const sourceFetch = refuseRedirects(fetchImpl);
   const impl = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const url = new URL(
-      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
-    );
+    const snapshot = snapshotFetchInput(input, init);
+    const url = new URL(snapshot.url);
     if (url.protocol !== "https:" || !origins.has(url.origin) || url.username || url.password) {
       throw new IntegrationSyncError(
         adapterId,
@@ -155,12 +155,13 @@ export function createSourceAuth(
       );
     }
     const headers = new Headers(
-      init?.headers ?? (input instanceof Request ? input.headers : undefined),
+      snapshot.init?.headers ??
+        (snapshot.input instanceof Request ? snapshot.input.headers : undefined),
     );
     headers.set("authorization", `Bearer ${token.accessToken}`);
     for (const [k, v] of Object.entries(adapter.apiHeaders ?? {})) headers.set(k, v);
-    const next: RequestInit = { ...init, headers };
-    return sourceFetch(input as RequestInfo, next);
+    const next: RequestInit = { ...snapshot.init, headers };
+    return sourceFetch(snapshot.input, next);
   };
   return { fetch: impl as typeof fetch };
 }

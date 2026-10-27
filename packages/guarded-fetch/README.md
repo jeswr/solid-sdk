@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # @jeswr/guarded-fetch
@@ -43,6 +44,13 @@ The default entry is browser-safe and applies URL policy without importing `node
 
 Private, loopback, link-local, metadata, malformed, and disallowed redirect targets are rejected.
 Loopback HTTP access is an explicit development-only option.
+
+Fetch wrappers snapshot native Request inputs before inspecting their URLs and preserve
+their body and request policies, including explicit init overrides and referrer fields.
+URL objects are captured as strings before transport. `RedirectRefusedError` accepts both
+`(message, { url, status, location?, cause? })` and the legacy `(url, status)` constructor
+used by unstorage-solid's identical `SolidRedirectError` alias. The legacy form retains
+the `SolidRedirectError` name and message; shared refusals retain `RedirectRefusedError`.
 
 ## Links
 

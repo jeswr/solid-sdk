@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 /**
  * The POD-SCOPE guard — the suite's ONE reviewed home for "is this URL within the
@@ -297,7 +298,7 @@ export function createPodScopedFetch(
   const scopeOptions: PodScopeOptions = { allowRoot: options.allowRoot ?? true };
 
   const scoped = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const { url: startUrl, init: effectiveInit } = normalizeRequest(input, init);
+    const { url: startUrl, init: effectiveInit, request } = normalizeRequest(input, init);
     let currentUrl = assertWithinPodScope(root, startUrl, scopeOptions);
     let currentInit: RequestInit = { ...(effectiveInit ?? {}) };
     const seen = new Set<string>();
@@ -306,8 +307,14 @@ export function createPodScopedFetch(
         throw new PodScopeError(`redirect loop detected at ${currentUrl}.`);
       }
       seen.add(currentUrl);
-      const res = await fetcher(currentUrl, {
-        ...currentInit,
+      const initialRequest = hop === 0 ? request : undefined;
+      const res = await fetcher(initialRequest ?? currentUrl, {
+        ...(initialRequest
+          ? {
+              referrer: initialRequest.referrer,
+              referrerPolicy: initialRequest.referrerPolicy,
+            }
+          : currentInit),
         // Every hop is re-checked by US, so the underlying fetch must NOT auto-follow.
         redirect: "manual",
       });

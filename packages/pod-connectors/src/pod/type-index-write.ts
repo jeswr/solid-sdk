@@ -18,6 +18,7 @@ import {
 import type { DatasetCore } from "@rdfjs/types";
 import { Agent } from "@solid/object";
 import { DataFactory, Store } from "n3";
+import { snapshotFetchInput } from "../core/request-snapshot.js";
 import { freshRdf } from "./rdf-read.js";
 import { ResourceWriteError, writeResource } from "./resource.js";
 import {
@@ -111,9 +112,9 @@ export async function ensureTypeRegistrations(opts: {
   // A valid Pod URL alone does not grant access to unrelated Pod documents.
   const indexFetch = documentFetch(selectedIndex, authenticatedFetch);
   const fetchImpl: typeof fetch = (input, init) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    assertWithinPodScope(indexStorage, url, { allowRoot: false });
-    return indexFetch(input, init);
+    const snapshot = snapshotFetchInput(input, init);
+    assertWithinPodScope(indexStorage, snapshot.url, { allowRoot: false });
+    return indexFetch(snapshot.input, snapshot.init);
   };
 
   if (!indexUrl) {
@@ -160,11 +161,11 @@ export async function ensureTypeRegistrations(opts: {
 /** Pin authenticated access to exactly one document, independently of its RDF subjects. */
 function documentFetch(document: string, fetchImpl: typeof fetch): typeof fetch {
   return (input, init) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-    if (documentUrl(url) !== document) {
+    const snapshot = snapshotFetchInput(input, init);
+    if (documentUrl(snapshot.url) !== document) {
       throw new PodScopeError("Type Index request is outside the selected document.");
     }
-    return fetchImpl(input, init);
+    return fetchImpl(snapshot.input, snapshot.init);
   };
 }
 

@@ -17,3 +17,8 @@ Keep the existing scope delegate as an additional member filter, including its s
 root-alias rules. Malformed and unsafe entries are skipped individually. Keep recursion,
 request headers, key mapping, clear ordering, watch handling, and redirect wrappers local.
 This package is security-critical: no guard may be loosened.
+
+Scope wrappers validate fresh native Request snapshots, never caller-shadowable `url`
+properties, and forward those snapshots with bodies, signals and policies preserved.
+Capture URL objects once and fetch the checked string. Keep `SolidRedirectError` identical
+to `RedirectRefusedError`, including the legacy `(url, status)` constructor contract.

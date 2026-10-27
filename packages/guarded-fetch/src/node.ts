@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * `@jeswr/guarded-fetch/node` — the SSRF-safe NODE fetch path that FULLY CLOSES the
@@ -56,6 +57,7 @@ import {
   isPublicAddress,
   SsrfError,
 } from "./index.js";
+import { normalizeRequest } from "./redirect.js";
 
 // Re-export `GuardOptions` (+ its own transitive public members `DnsLookup` / `ResolvedAddress`)
 // from THIS entry point. `NodePinningOptions extends Omit<GuardOptions, …>` below, so
@@ -67,13 +69,12 @@ import {
 // JS. The `type GuardOptions` import above is kept for local use (an `export type … from` gives
 // no local binding).
 export type { DnsLookup, GuardOptions, ResolvedAddress } from "./index.js";
-
 // Re-export the redirect-refusal wrapper from THIS entry too, so a `./node`-only consumer can
 // stack it on the pinning fetch (`refuseRedirects(nodeGuardedFetch)` — SSRF-pinned AND
 // redirect-refusing). `./index.js` is external in the node bundle, so `RedirectRefusedError` is
 // the SAME runtime class as the one from `@jeswr/guarded-fetch` (a single shared class, like
 // `SsrfError`), and `instanceof` works across both entries.
-export { RedirectRefusedError, refuseRedirects } from "./index.js";
+export { RedirectRefusedError, refuseRedirects, snapshotRequest } from "./index.js";
 
 /** The `net.connect`-style lookup callback undici's connector invokes. */
 export type ConnectLookup = (
@@ -326,12 +327,14 @@ export function createNodeGuardedFetch(options: NodePinningOptions = {}): typeof
   // pins, picking the http:-loopback-only rule by the request's own scheme so an http: hop
   // cannot flip loopback→public at connect.
   const pinningFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const urlStr =
-      typeof input === "string"
-        ? input
-        : input instanceof URL
-          ? input.toString()
-          : (input as Request).url;
+    // Node's built-in Request and the installed undici Request have distinct
+    // brands. Convert the owned native snapshot to undici's URL/init interface.
+    const { url: urlStr, init: effectiveInit, request } = normalizeRequest(input, init);
+    if (request?.keepalive && request.body && effectiveInit) {
+      // Fetch forbids a stream BodyInit with keepalive. A native keepalive
+      // Request can only have a replayable body; retain its bytes on conversion.
+      effectiveInit.body = await request.arrayBuffer();
+    }
     const requireLoopbackOnly = safeIsHttp(urlStr) && allowLoopback;
     const lookup = createValidatingLookup(resolveAll, allowLoopback, requireLoopbackOnly);
     const connect: Record<string, unknown> = { lookup };
@@ -341,13 +344,13 @@ export function createNodeGuardedFetch(options: NodePinningOptions = {}): typeof
     const agent = new Agent({ connect });
     try {
       const undiciInit = {
-        ...(init ?? {}),
+        ...(effectiveInit ?? {}),
         // The guard already set redirect:"manual"; reinforce + forbid undici-level redirects.
         redirect: "manual",
         maxRedirections: 0,
         dispatcher: agent,
       };
-      return (await undiciFetch(input as never, undiciInit as never)) as unknown as Response;
+      return (await undiciFetch(urlStr, undiciInit as never)) as unknown as Response;
     } finally {
       void agent.close().catch(() => {});
     }

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 /**
  * Shared MANUAL-REDIRECT machinery, extracted from `./guard.ts` so both guarded fetches —
@@ -141,25 +142,42 @@ export function rewriteInitForRedirect(
   return next;
 }
 
-/** Normalise the `(input, init)` a `fetch`-shaped call receives into a `{ url, init }` pair. */
+/** Snapshot native internal slots before reading any caller-shadowable Request properties. */
+export function snapshotRequest(input: Request, init?: RequestInit): Request {
+  // A nonempty init resets these two fields unless explicitly carried forward.
+  // Invoke native getters directly so own properties cannot substitute policy.
+  return new Request(input, {
+    referrer: Reflect.get(Request.prototype, "referrer", input),
+    referrerPolicy: Reflect.get(Request.prototype, "referrerPolicy", input),
+    ...init,
+  });
+}
+
+/** Normalise a fetch call using a native snapshot and all its request policy fields. */
 export function normalizeRequest(
   input: RequestInfo | URL,
   init: RequestInit | undefined,
-): { url: string; init: RequestInit | undefined } {
+): { url: string; init: RequestInit | undefined; request?: Request } {
   if (typeof input === "string") {
     return { url: input, init };
   }
   if (input instanceof URL) {
     return { url: input.toString(), init };
   }
-  const req = input as Request;
+  const req = snapshotRequest(input, init);
   const fromRequest: RequestInit = {
     method: req.method,
     headers: req.headers,
     credentials: req.credentials,
     redirect: req.redirect,
+    mode: req.mode,
+    cache: req.cache,
+    integrity: req.integrity,
+    keepalive: req.keepalive,
+    referrer: req.referrer,
+    referrerPolicy: req.referrerPolicy,
     ...(req.signal ? { signal: req.signal } : {}),
     ...(req.body ? { body: req.body, duplex: "half" } : {}),
   } as RequestInit;
-  return { url: req.url, init: { ...fromRequest, ...(init ?? {}) } };
+  return { url: req.url, init: { ...init, ...fromRequest }, request: req };
 }

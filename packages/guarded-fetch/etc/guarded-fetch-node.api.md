@@ -54,6 +54,7 @@ export interface NodePinningOptions extends Omit<GuardOptions, "fetch" | "pinnin
 
 // @public
 export class RedirectRefusedError extends Error {
+    constructor(url: string, status: number);
     constructor(message: string, detail: {
         url: string;
         status: number;
@@ -78,6 +79,9 @@ export interface ResolvedAddress {
     // (undocumented)
     readonly family: number;
 }
+
+// @public
+export function snapshotRequest(input: Request, init?: RequestInit): Request;
 
 // (No @packageDocumentation comment for this package)
 

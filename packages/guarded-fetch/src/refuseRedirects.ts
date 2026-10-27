@@ -51,7 +51,7 @@
  * **Pure core, no platform:** only the WHATWG `fetch` / `Response` globals — browser-safe, no
  * `node:*` import. Exported from the default `.` entry and re-exported from `./node`.
  */
-import { isRedirect, redactUserinfo } from "./redirect.js";
+import { isRedirect, redactUserinfo, snapshotRequest } from "./redirect.js";
 
 /**
  * Raised when {@link refuseRedirects} refuses a redirect response instead of following it.
@@ -72,12 +72,26 @@ export class RedirectRefusedError extends Error {
    * opaque-redirect (whose headers are stripped) or a redirect with no `Location`.
    */
   readonly location: string | undefined;
+  /** Backwards-compatible `SolidRedirectError` constructor. */
+  constructor(url: string, status: number);
   constructor(
     message: string,
     detail: { url: string; status: number; location?: string; cause?: unknown },
+  );
+  constructor(
+    messageOrUrl: string,
+    detailOrStatus: number | { url: string; status: number; location?: string; cause?: unknown },
   ) {
+    const legacy = typeof detailOrStatus === "number";
+    const detail: { url: string; status: number; location?: string; cause?: unknown } = legacy
+      ? { url: messageOrUrl, status: detailOrStatus }
+      : detailOrStatus;
+    const message = legacy
+      ? `[unstorage-solid] refusing to follow a redirect (status ${detail.status}) from ${messageOrUrl} ` +
+        "(a redirected pod request could forward credentials off-origin — SSRF/credential-leak guard)"
+      : messageOrUrl;
     super(message, detail.cause !== undefined ? { cause: detail.cause } : undefined);
-    this.name = "RedirectRefusedError";
+    this.name = legacy ? "SolidRedirectError" : "RedirectRefusedError";
     this.url = detail.url;
     this.status = detail.status;
     this.location = detail.location;
@@ -104,23 +118,16 @@ export function refuseRedirects(
   fetch: typeof globalThis.fetch = globalThis.fetch,
 ): typeof globalThis.fetch {
   const wrapped = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    // Pass the ORIGINAL input THROUGH untouched so a `Request`'s policy-bearing fields (mode,
-    // cache, integrity, keepalive, credentials, body, signal, …) are preserved — the underlying
-    // fetch's Request constructor applies the `init` override OVER the input's own fields, so we
-    // FORCE `redirect:"manual"` (the fetch cannot auto-follow, even if the caller or the Request
-    // itself asked for "follow") WITHOUT dropping any other caller-set fetch policy. We
-    // deliberately do NOT reconstruct the init from the Request: that path drops policy-bearing
-    // fields (`mode:"same-origin"`, `integrity`, …), which for a credential-safety wrapper would
-    // silently weaken the caller's request policy. Only the URL for the refusal message is
-    // derived separately (see {@link requestUrlOf}).
-    //
-    // NOTE `referrer`/`referrerPolicy` are NOT in the preserved list above, and deliberately so:
-    // per the Fetch spec, constructing an effective request from a `Request` input together with
-    // a NON-EMPTY `init` (ours always is — it carries at least `redirect`) resets `referrer` to
-    // `"client"` and `referrerPolicy` to `""` on the request the underlying fetch actually issues,
-    // regardless of what the input `Request` itself carried. So those two fields are NOT
-    // preserved through this wrapper — only genuinely-preserved fields are documented as such.
-    const res = await fetch(input, { ...(init ?? {}), redirect: "manual" });
+    // Never forward a mutable URL or read a caller-shadowable Request.url. The
+    // owned native snapshot preserves body and policy, including referrer fields.
+    const request =
+      typeof input === "string" || input instanceof URL ? undefined : snapshotRequest(input, init);
+    const target = request ?? String(input);
+    const url = request ? request.url : String(target);
+    const effectiveInit: RequestInit = request
+      ? { referrer: request.referrer, referrerPolicy: request.referrerPolicy, redirect: "manual" }
+      : { ...init, redirect: "manual" };
+    const res = await fetch(target, effectiveInit);
 
     const opaqueRedirect = res.type === "opaqueredirect";
     // Preserve the legacy clients' broader refusal as well as standard moved
@@ -135,7 +142,7 @@ export function refuseRedirects(
       } catch {
         // Body already consumed / closed — fine.
       }
-      const safeUrl = redactUserinfo(requestUrlOf(input));
+      const safeUrl = redactUserinfo(url);
       const safeLocation = location !== undefined ? redactUserinfo(location) : undefined;
       const where = opaqueRedirect ? "opaque redirect" : `status ${res.status}`;
       const to = safeLocation !== undefined ? ` → ${safeLocation}` : "";
@@ -147,20 +154,4 @@ export function refuseRedirects(
     return res;
   };
   return wrapped as typeof globalThis.fetch;
-}
-
-/**
- * The request URL of a `fetch`-shaped input, for the refusal message only. Reads (never mutates
- * or reconstructs) the input: a string is itself, a `URL` stringifies, a `Request` yields its
- * `.url`. Deliberately does NOT touch any other Request field — the input is passed to the
- * underlying fetch intact.
- */
-function requestUrlOf(input: RequestInfo | URL): string {
-  if (typeof input === "string") {
-    return input;
-  }
-  if (input instanceof URL) {
-    return input.toString();
-  }
-  return (input as Request).url;
 }

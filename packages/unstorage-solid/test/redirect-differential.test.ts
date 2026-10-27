@@ -74,7 +74,7 @@ for (const [name, factory] of Object.entries(factories).filter(([name]) => name 
         redirect: "follow",
       });
       const inner = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        expect(input).toBe(request);
+        expect(input).not.toBe(request);
         const effective = new Request(input, init);
         expect(effective.method).toBe("POST");
         expect(await effective.text()).toBe("private fixture body");
@@ -87,6 +87,65 @@ for (const [name, factory] of Object.entries(factories).filter(([name]) => name 
       });
       await factory(inner)(request, { redirect: "follow" });
       expect(inner).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      "https://evil.example/steal",
+      "https://pod.example/outside",
+    ])("validates the internal Request target despite a shadowed url: %s", async (target) => {
+      const request = new Request(target);
+      Object.defineProperty(request, "url", { get: () => TARGET });
+      const inner = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(new Request(input, init).url).toBe(target);
+        return new Response();
+      });
+      if (name === "watch" && target.startsWith(ORIGIN)) {
+        await factory(inner)(request);
+        expect(inner).toHaveBeenCalledOnce();
+      } else {
+        await expect(factory(inner)(request)).rejects.toThrow();
+        expect(inner).not.toHaveBeenCalled();
+      }
+    });
+
+    it("preserves body, policy fields, and effective init overrides", async () => {
+      const controller = new AbortController();
+      const request = new Request(TARGET, {
+        method: "POST",
+        body: "private body",
+        headers: { authorization: "Bearer fixture" },
+        signal: controller.signal,
+        credentials: "include",
+        mode: "same-origin",
+        cache: "no-store",
+        integrity: "sha256-fixture",
+        keepalive: true,
+        referrer: `${BASE}referrer`,
+        referrerPolicy: "no-referrer",
+      });
+      const inner = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const effective = new Request(input, init);
+        expect(effective.url).toBe(TARGET);
+        expect(effective.method).toBe("PUT");
+        expect(await effective.text()).toBe("override body");
+        expect(effective.headers.get("authorization")).toBe("Bearer fixture");
+        expect(effective.credentials).toBe("include");
+        expect(effective.mode).toBe("same-origin");
+        expect(effective.cache).toBe("no-store");
+        expect(effective.integrity).toBe("sha256-fixture");
+        expect(effective.keepalive).toBe(true);
+        expect(effective.referrer).toBe(`${BASE}referrer`);
+        expect(effective.referrerPolicy).toBe("origin");
+        expect(effective.redirect).toBe("manual");
+        controller.abort();
+        expect(effective.signal.aborted).toBe(true);
+        return new Response();
+      });
+      await factory(inner)(request, {
+        method: "PUT",
+        body: "override body",
+        referrerPolicy: "origin",
+      });
     });
 
     it("snapshots mutable URL inputs before an authenticated fetch can await", async () => {

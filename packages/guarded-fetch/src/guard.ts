@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * The SSRF / DNS-rebinding guard POLICY CORE — the small, reviewed custom code over the
@@ -334,7 +335,7 @@ class SsrfGuard {
   }
 
   async fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-    const { url: startUrl, init: effectiveInit } = normalizeRequest(input, init);
+    const { url: startUrl, init: effectiveInit, request } = normalizeRequest(input, init);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     const callerSignal = effectiveInit?.signal ?? undefined;
@@ -347,7 +348,7 @@ class SsrfGuard {
       }
     }
     try {
-      return await this.fetchGuarded(startUrl, effectiveInit, controller);
+      return await this.fetchGuarded(startUrl, effectiveInit, controller, request);
     } finally {
       clearTimeout(timer);
       callerSignal?.removeEventListener("abort", onCallerAbort);
@@ -358,6 +359,7 @@ class SsrfGuard {
     startUrl: string,
     init: RequestInit | undefined,
     controller: AbortController,
+    request?: Request,
   ): Promise<Response> {
     let currentUrl = startUrl;
     let currentInit: RequestInit = { ...(init ?? {}) };
@@ -372,8 +374,14 @@ class SsrfGuard {
 
       let res: Response;
       try {
-        res = await this.fetcher(currentUrl, {
-          ...currentInit,
+        const initialRequest = hop === 0 ? request : undefined;
+        res = await this.fetcher(initialRequest ?? currentUrl, {
+          ...(initialRequest
+            ? {
+                referrer: initialRequest.referrer,
+                referrerPolicy: initialRequest.referrerPolicy,
+              }
+            : currentInit),
           // We re-validate every hop ourselves, so the underlying fetch must NOT auto-follow.
           redirect: "manual",
           signal: controller.signal,
