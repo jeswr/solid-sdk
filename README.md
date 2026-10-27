@@ -3,7 +3,7 @@
 The **@jeswr Solid suite workspace** — reusable TypeScript SDK packages plus the private
 applications that consume them, consolidated into one pnpm + Turborepo workspace.
 
-The workspace contains 72 packages and 17 applications; `suite.json` records the inventory.
+The workspace contains 72 packages and 18 applications; `suite.json` records the inventory.
 The original forty packages and thirteen applications were imported with full git history.
 Maintainer-directed additions include `@jeswr/synthetic-rdf`, `@jeswr/solid-seed`, and
 [`@jeswr/ldp-container`](packages/ldp-container/README.md), the shared security-critical

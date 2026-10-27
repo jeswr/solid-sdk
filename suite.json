@@ -169,6 +169,11 @@
       "slug": "mobile",
       "name": "@jeswr/app-mobile",
       "kind": "application"
+    },
+    {
+      "slug": "extension",
+      "name": "@jeswr/app-extension",
+      "kind": "application"
     }
   ],
   "dependsOn": [],
