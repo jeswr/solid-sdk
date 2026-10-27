@@ -158,6 +158,8 @@ describe("iOS project", () => {
     const ui = read("ios/App/AppUITests/FixtureTests.swift");
     expect(ui).toContain("waitForExistence(timeout:");
     expect(ui).toContain("XCTNSPredicateExpectation");
+    // A long result can be cut short in the accessibility value; the static-text label is the fallback.
+    expect(ui).toContain(`label BEGINSWITH %@`);
     expect(ui).toContain('name: "e2e-result.json"');
     expect(ui).toContain("attachment.lifetime = .keepAlways");
     expect(ui).not.toMatch(/evaluateJavaScript|@testable import/);
