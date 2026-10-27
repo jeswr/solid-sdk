@@ -18,8 +18,8 @@ export function createScopedFetch(
   const refusing = refuseRedirects(fetchImpl);
   return async (input, init) => {
     // Main forwarded only the checked URL and explicit init, even for Request inputs.
-    // Capture metadata without applying init or transferring an overridden body.
-    const snapshot = snapshotFetchInput(input, init, { metadataOnly: true });
+    // Capture metadata without applying init or touching the body this wrapper never sends.
+    const snapshot = snapshotFetchInput(input, init, { metadataOnly: true, discardBody: true });
     assertWithinBase(base, snapshot.url);
     return refusing(snapshot.url, init);
   };
@@ -37,7 +37,7 @@ export function createSameOriginRedirectRefusingFetch(
   const refusing = refuseRedirects(fetchImpl);
   return async (input, init) => {
     // Preserve the old absolute-target contract before the shared relative resolver.
-    const snapshot = snapshotFetchInput(input, init, { metadataOnly: true });
+    const snapshot = snapshotFetchInput(input, init, { metadataOnly: true, discardBody: true });
     const target = new URL(snapshot.url);
     assertWithinPodScope(`${origin}/`, target.href);
     return refusing(snapshot.url, init);

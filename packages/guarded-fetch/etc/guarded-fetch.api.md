@@ -124,6 +124,7 @@ export interface ResolvedAddress {
 // @public
 export function snapshotFetchInput(input: RequestInfo | URL, init?: RequestInit, options?: {
     metadataOnly?: boolean;
+    discardBody?: boolean;
 }): {
     input: string | Request;
     url: string;

@@ -15,11 +15,13 @@ export function snapshotRequest(input: Request, init?: RequestInit): Request {
  * For Request inputs with `metadataOnly`, init is not applied: a non-null init.body selects an empty
  * placeholder so capturing metadata never transfers or checks the body being replaced.
  * That snapshot's body must not be forwarded; overlay the caller's init after capture.
+ * `discardBody` (with `metadataOnly`) always uses the placeholder, for callers that forward only the
+ * URL and the caller's init, so the input body is never transferred or checked.
  */
 export function snapshotFetchInput(
   input: RequestInfo | URL,
   init?: RequestInit,
-  options?: { metadataOnly?: boolean },
+  options?: { metadataOnly?: boolean; discardBody?: boolean },
 ): { input: string | Request; url: string; init: RequestInit | undefined } {
   if (typeof input === "string") return { input, url: input, init };
 
@@ -40,7 +42,9 @@ export function snapshotFetchInput(
   if (nativeRequest) {
     const request = snapshotRequest(
       input as Request,
-      options?.metadataOnly ? metadataInit(input, Request.prototype, init) : init,
+      options?.metadataOnly
+        ? metadataInit(input, Request.prototype, init, options.discardBody === true)
+        : init,
     );
     return { input: request, url: request.url, init: undefined };
   }
@@ -56,7 +60,9 @@ export function snapshotFetchInput(
         if (descriptor.get && typeof Ctor === "function") {
           const request = new Ctor(
             input,
-            options?.metadataOnly ? metadataInit(input, owner, init) : init,
+            options?.metadataOnly
+              ? metadataInit(input, owner, init, options.discardBody === true)
+              : init,
           );
           const url = descriptor.get.call(request);
           if (typeof url === "string") return { input: request, url, init: undefined };
@@ -78,8 +84,9 @@ function metadataInit(
   input: RequestInfo | URL,
   prototype: object,
   init: RequestInit | undefined,
+  discardBody: boolean,
 ): RequestInit | undefined {
-  if (init?.body == null) return undefined;
+  if (!discardBody && init?.body == null) return undefined;
   const method = Reflect.get(prototype, "method", input);
   // GET/HEAD inputs cannot carry a body. Leave init validation to the transport, as on main.
   if (method === "GET" || method === "HEAD") return undefined;

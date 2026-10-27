@@ -203,6 +203,34 @@ for (const [name, factory] of Object.entries(factories).filter(([name]) => name 
         if (state !== "consumed") expect(await request.text()).toBe("original");
       });
 
+      it.each([
+        "fresh",
+        "consumed",
+        "locked",
+      ])(`reuses a %s ${implementation} POST Request twice without an init body`, async (state) => {
+        // The wrappers forward only the checked URL (main's contract), so the unsent body is never touched.
+        const request = new Ctor(TARGET, { method: "POST", body: "original" });
+        if (state === "consumed") await request.text();
+        const reader = state === "locked" ? request.body?.getReader() : undefined;
+        const inner = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+          expect(input).toBe(TARGET);
+          expect(init).toEqual({ redirect: "manual" });
+          return new Response("ok");
+        });
+        const fetch = factory(inner);
+        try {
+          for (let call = 0; call < 2; call += 1) {
+            expect(await (await fetch(request)).text()).toBe("ok");
+            expect(request.bodyUsed).toBe(state === "consumed");
+            expect(request.body?.locked).toBe(state !== "fresh");
+          }
+          expect(inner).toHaveBeenCalledTimes(2);
+        } finally {
+          reader?.releaseLock();
+        }
+        if (state !== "consumed") expect(await request.text()).toBe("original");
+      });
+
       for (const method of ["GET", "HEAD"]) {
         it.each([
           undefined,
