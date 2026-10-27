@@ -104,19 +104,57 @@ describe("message term matching", () => {
     ["(@mira-vale)", true],
     ["@Élodie", true],
     ["@[Mira Vale](https://example.org/mira#me)", true],
+    ["@[https://example.org/@mira](HTTPS://example.org/noel#me)", true],
+    ["@[Mira](https://example.org/`mira)", true],
+    ["@[@[Mira](https://example.org/mira#me)", true],
     ["@[Mira Vale](https://[invalid)", false],
+    ["@[Mira](https://example.org", false],
+    ["@[Mira](https://example.org/with space)", false],
+    ["@[Mira](https://mira:password@example.org)", false],
+    ["@[Mira](https://example.org/\\path)", false],
+    ["@[Mira\nVale](https://example.org/mira#me)", false],
+    ["@[](https://example.org/mira#me)", false],
+    ["mira@[Noel](https://example.org/noel#me)", false],
     ["mira@example.org", false],
     ["mira\u0301@example.org", false],
     ["@@noel", false],
     ["https://example.org/@noel", false],
     ["https://example.org/a-@noel", false],
     ["mira@example.org @noel", true],
+    ["mira@example.org,@noel", true],
+    ["<mira@example.org>,(@noel)", true],
+    ["(mira@example.org),(@noel)", true],
+    ['"mira@example.org",(@noel)', true],
+    ["<mira@example.org>,(@[Noel Fen](https://example.org/noel#me))", true],
+    ["<https://example.org/@mira>,(@noel)", true],
+    ["<https://mira@example.org/@kit>,(@noel)", true],
+    ['"https://example.org/@mira",(@noel)', true],
+    ["mira@example.org@noel", false],
+    ["mira+kit@example.org", false],
+    ["https://mira@example.org/@noel", false],
+    ["ftp://example.org/@noel", false],
+    ["@[broken],(@noel)", true],
+    ["@[broken\n(@noel)", true],
     ["https://example.org/@noel\n@kit", true],
     ["@", false],
     ["@[]()", false],
     ["", false],
   ])("detects mentions in %s", (text, expected) => {
     expect(matches("has:mention", { text })).toBe(expected);
+    expect(matches("from:mira -has:mention", { text })).toBe(!expected);
+  });
+
+  it("scans repeated failed mention labels without rescanning their suffixes", () => {
+    const labels = "@[".repeat(50_000);
+    const started = performance.now();
+    for (const suffix of ["", "\n", "]", "](ftp://example.org)", "](https://[invalid)"]) {
+      expect(matches("has:mention", { text: labels + suffix })).toBe(false);
+    }
+    expect(matches("has:mention", { text: "@[a](https://<".repeat(50_000) })).toBe(false);
+    expect(matches("has:mention", { text: "a".repeat(500_000) })).toBe(false);
+    expect(matches("has:mention", { text: `${labels}](https://example.org/noel)` })).toBe(true);
+    // A generous ceiling separates linear scans from repeated scans of 100,000 units.
+    expect(performance.now() - started).toBeLessThan(5_000);
   });
 });
 

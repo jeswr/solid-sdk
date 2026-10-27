@@ -71,26 +71,33 @@ export function hasLink(text: string): boolean {
 }
 
 export function hasMention(text: string): boolean {
-  let cursor = 0;
-  let seenAt = false;
-  let seenScheme = false;
+  let labelEnd = -1;
+  let validDestination = false;
+  const destination = /https?:\/\/[^\s)<>"'\\]+/iy;
+  // Consume complete email/URL spans. Word runs also match without an @, so a
+  // failed email candidate cannot cause repeated scans of the same word suffix.
   for (const match of text.matchAll(
-    /@(?:[\p{L}\p{N}_]+(?:[.-][\p{L}\p{N}_]+)*|\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\))/giu,
+    /:\/\/[^\s<>"']*|[\p{L}\p{M}\p{N}_][\p{L}\p{M}\p{N}_.+-]*(?:@[\p{L}\p{M}\p{N}_.@-]+)?|@/gu,
   )) {
-    // Ignore email addresses, repeated @, and URL userinfo/path fragments.
-    // Advance once through the prefix instead of rescanning it for each candidate.
-    for (; cursor < match.index; cursor++) {
-      const character = text.charAt(cursor);
-      if (/\s/u.test(character)) {
-        seenAt = false;
-        seenScheme = false;
-      } else {
-        if (character === "@") seenAt = true;
-        if (text.startsWith("://", cursor)) seenScheme = true;
-      }
+    if (match[0] !== "@" || wordBefore(text, match.index) || text.charAt(match.index - 1) === "@") {
+      continue;
     }
-    if (wordBefore(text, match.index) || seenAt || seenScheme) continue;
-    if (!match[2] || parseAutolink(match[2])) return true;
+    if (wordAfter(text, match.index + 1)) return true;
+    if (text.charAt(match.index + 1) !== "[") continue;
+    const labelStart = match.index + 2;
+    // Nested failed @[ candidates share their next ]/newline and destination.
+    // Both cursors only move forward; each label suffix is inspected once.
+    if (labelEnd < labelStart) {
+      labelEnd = labelStart;
+      while (labelEnd < text.length && !/[\]\n]/u.test(text.charAt(labelEnd))) labelEnd++;
+      destination.lastIndex = labelEnd + 2;
+      const target = text.startsWith("](", labelEnd) ? destination.exec(text) : null;
+      validDestination =
+        target !== null &&
+        text.charAt(destination.lastIndex) === ")" &&
+        parseAutolink(target[0]) !== null;
+    }
+    if (labelEnd > labelStart && validDestination) return true;
   }
   return false;
 }
