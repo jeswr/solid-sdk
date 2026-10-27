@@ -243,6 +243,35 @@ describe("EXIF rational coordinates", () => {
       }).latitude,
     ).toBe(1);
   });
+
+  it("rejects an exact rational sum beyond a bound even when floating-point addition hides it", () => {
+    for (const [axis, bound] of [
+      ["latitude", 90],
+      ["longitude", 180],
+    ] as const) {
+      fails(
+        () =>
+          fromExifGps({
+            ...exif,
+            [axis]: [
+              [bound, 1],
+              [0, 1],
+              [1, Number.MAX_SAFE_INTEGER],
+            ],
+          }),
+        "INVALID_COORDINATE",
+      );
+      const atBound = fromExifGps({
+        ...exif,
+        [axis]: [
+          [(bound * 2 - 1) * 1000003, 2000006],
+          [30000990, 1000033],
+          [0, 1000037],
+        ],
+      });
+      expect(Math.abs(atBound[axis])).toBe(bound);
+    }
+  });
 });
 
 describe("coordinate validation, formatting and links", () => {

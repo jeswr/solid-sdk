@@ -48,7 +48,7 @@ export function readCoordinate(value: unknown): GeoCoordinate {
   return createCoordinate(value.latitude, value.longitude);
 }
 
-function rational(value: unknown): number {
+function rational(value: unknown): readonly [bigint, bigint] {
   requireGeo(Array.isArray(value) && value.length === 2, "INVALID_COORDINATE");
   const [numerator, denominator] = value;
   requireGeo(
@@ -58,16 +58,29 @@ function rational(value: unknown): number {
       denominator > 0,
     "INVALID_COORDINATE",
   );
-  return numerator / denominator;
+  return [BigInt(numerator), BigInt(denominator)];
 }
 
-function dms(value: unknown): number {
+function dms(value: unknown, bound: number): number {
   requireGeo(Array.isArray(value) && value.length === 3, "INVALID_COORDINATE");
-  const degrees = rational(value[0]);
-  const minutes = rational(value[1]);
-  const seconds = rational(value[2]);
-  requireGeo(minutes < 60 && seconds < 60, "INVALID_COORDINATE");
-  return degrees + minutes / 60 + seconds / 3600;
+  const [degrees, degreesDenominator] = rational(value[0]);
+  const [minutes, minutesDenominator] = rational(value[1]);
+  const [seconds, secondsDenominator] = rational(value[2]);
+  const sixty = BigInt(60);
+  const hour = BigInt(3600);
+  requireGeo(
+    minutes < sixty * minutesDenominator && seconds < sixty * secondsDenominator,
+    "INVALID_COORDINATE",
+  );
+  // Compare exact rationals: 90 degrees plus even a tiny positive second is out of bounds.
+  const denominator = degreesDenominator * minutesDenominator * secondsDenominator * hour;
+  const numerator =
+    degrees * minutesDenominator * secondsDenominator * hour +
+    minutes * degreesDenominator * secondsDenominator * sixty +
+    seconds * degreesDenominator * minutesDenominator;
+  requireGeo(numerator <= BigInt(bound) * denominator, "INVALID_COORDINATE");
+  // Keep the integral part exact; rounding each large integer before division could cross a bound.
+  return Number(numerator / denominator) + Number(numerator % denominator) / Number(denominator);
 }
 
 /** Hemisphere references must match their axes; malformed or missing tags fail closed. */
@@ -75,8 +88,8 @@ export function fromExifGps(value: unknown): GeoCoordinate {
   requireGeo(isRecord(value), "INVALID_COORDINATE");
   requireGeo(value.latitudeRef === "N" || value.latitudeRef === "S", "INVALID_COORDINATE");
   requireGeo(value.longitudeRef === "E" || value.longitudeRef === "W", "INVALID_COORDINATE");
-  const latitude = dms(value.latitude) * (value.latitudeRef === "S" ? -1 : 1);
-  const longitude = dms(value.longitude) * (value.longitudeRef === "W" ? -1 : 1);
+  const latitude = dms(value.latitude, 90) * (value.latitudeRef === "S" ? -1 : 1);
+  const longitude = dms(value.longitude, 180) * (value.longitudeRef === "W" ? -1 : 1);
   return createCoordinate(latitude, longitude);
 }
 

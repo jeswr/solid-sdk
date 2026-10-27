@@ -11,6 +11,8 @@ reader's `gps` shape. `createCoordinate` and `fromExifGps` return a fresh coordi
 three `[numerator, denominator]` pairs for degrees, minutes, seconds. Numerators and denominators
 must be safe unsigned integers, with positive denominators; references are uppercase N/S or E/W
 on the appropriate axis. Decimal tags, strings, negative rationals, and missing tags are rejected.
+Bounds are checked with exact integer arithmetic before converting the combined rational to a
+number, so a tiny fractional excess at ±90/±180 cannot disappear through floating-point rounding.
 
 `formatDecimal` returns `"51.507333, -0.127667"`; `formatDms` returns
 `"51°30′26.4″N, 0°7′39.6″W"`. Seconds round to one decimal place, carrying into minutes/degrees.
