@@ -79,7 +79,13 @@ export function id(value: unknown): value is string {
 
 /** Absolute REST Patient URLs can resolve independently of the bundle's UUID fullUrls. */
 export function patientReference(value: unknown): value is string {
-  if (!text(value) || !URL.canParse(value)) return false;
+  // RFC 3986 URI characters and percent triplets; URL parsing alone is more permissive.
+  if (
+    !text(value) ||
+    /[^A-Za-z0-9._~:/?#[\]@!$&'()*+,;=%-]|%(?![\dA-Fa-f]{2})/.test(value) ||
+    !URL.canParse(value)
+  )
+    return false;
   const url = new URL(value);
   return (
     (url.protocol === "https:" || url.protocol === "http:") &&
@@ -87,6 +93,8 @@ export function patientReference(value: unknown): value is string {
     url.password === "" &&
     url.search === "" &&
     url.hash === "" &&
+    // Square brackets are URI delimiters for IP literals, but are not path characters.
+    !/[[\]]/.test(url.pathname) &&
     /\/Patient\/[A-Za-z0-9.-]{1,64}$/.test(url.pathname) &&
     url.href === value
   );

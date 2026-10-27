@@ -291,6 +291,43 @@ describe("FHIR structural self-check", () => {
   });
 
   it.each([
+    "https://example.org/fhir%/Patient/a",
+    "https://example.org/fhir%2/Patient/a",
+    "https://example.org/fhir%GG/Patient/a",
+    "https://example.org/fhir%G0/Patient/a",
+    "https://example.org/fhir%0G/Patient/a",
+    "https://example.org/fhir%20%/Patient/a",
+    "https://example.org/fhir[/Patient/a",
+    "https://example.org/fhir]/Patient/a",
+    "https://example.org/fhir|/Patient/a",
+    "https://exam{ple.org/Patient/a",
+    "https://exam}ple.org/Patient/a",
+    "https://exam`ple.org/Patient/a",
+    'https://exam"ple.org/Patient/a',
+  ])("rejects malformed Patient URI syntax on every resource kind: %s", (reference) => {
+    for (const index of [0, 1, 2, 3]) {
+      const bundle = fixture();
+      change(bundle, `entry.${index}.resource.subject`, { reference });
+      rejects(bundle);
+    }
+  });
+
+  it.each([
+    "https://example.org/fhir_~!$&'()*+,;=:@.-/Patient/a",
+    "https://example.org/fhir%20%2f%2F%25%5B%5d/Patient/a",
+    "https://example.org/fhir%E2%82%AC/Patient/a",
+    "http://[2001:db8::1]:8080/fhir/Patient/a",
+  ])("preserves valid Patient URI syntax independently: %s", (reference) => {
+    const bundle = fixture();
+    for (const index of [0, 1, 2, 3]) {
+      change(bundle, `entry.${index}.resource.subject`, { reference });
+    }
+    expect(assertFhirBundle(bundle).entry?.map((entry) => entry.resource.subject)).toEqual(
+      Array.from({ length: 4 }, () => ({ reference })),
+    );
+  });
+
+  it.each([
     ["code.text", ""],
     ["code.text", 42],
     ["onsetDateTime", "invalid"],

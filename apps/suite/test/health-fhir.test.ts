@@ -236,6 +236,12 @@ describe("health FHIR R4 collection export", () => {
   it.each([
     "http://example.org/Patient/fictional-person",
     "https://example.org/fhir/r4/Patient/fictional-person",
+    "https://example.org/fhir_~!$&'()*+,;=:@.-/Patient/fictional-person",
+    "https://example.org/fhir%20r4/Patient/fictional-person",
+    "https://example.org/fhir%2fr4%2Fr5/Patient/fictional-person",
+    "https://example.org/fhir%25%5B%5d/Patient/fictional-person",
+    "https://example.org/fhir%E2%82%AC/Patient/fictional-person",
+    "http://[2001:db8::1]:8080/fhir/Patient/fictional-person",
   ])("preserves an absolute patient reference on every record kind: %s", (reference) => {
     const bundle = buildFhirBundle(
       records({ observations: [observation], medications: [medication], conditions: [condition] }),
@@ -263,6 +269,24 @@ describe("health FHIR R4 collection export", () => {
     "https://user@example.org/Patient/a",
     "https://:password@example.org/Patient/a",
     "https://EXAMPLE.org/Patient/a",
+    "https://example.org/fhir%/Patient/a",
+    "https://example.org/fhir%2/Patient/a",
+    "https://example.org/fhir%GG/Patient/a",
+    "https://example.org/fhir%G0/Patient/a",
+    "https://example.org/fhir%0G/Patient/a",
+    "https://example.org/fhir%20%/Patient/a",
+    "https://example.org/fhir[/Patient/a",
+    "https://example.org/fhir]/Patient/a",
+    "https://example.org/fhir|/Patient/a",
+    "https://example.org/fhir^/Patient/a",
+    "https://example.org/fhir{/Patient/a",
+    "https://example.org/fhir}/Patient/a",
+    "https://example.org/fhir`/Patient/a",
+    'https://example.org/fhir"/Patient/a',
+    "https://exam{ple.org/Patient/a",
+    "https://exam}ple.org/Patient/a",
+    "https://exam`ple.org/Patient/a",
+    'https://exam"ple.org/Patient/a',
   ])("rejects unsupported patient reference %s before callbacks", (reference) => {
     const injected = {
       ...options(reference),
