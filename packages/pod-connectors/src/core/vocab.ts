@@ -27,7 +27,8 @@ const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
  * @deprecated Import from @jeswr/rdf-serialize, rejecting values changed by escapeIri first.
  */
 export function safeIri(value: string | undefined): string | undefined {
-  if (value !== undefined && escapeIri(value) !== value) return undefined;
+  if (typeof value !== "string") return undefined;
+  if (escapeIri(value) !== value) return undefined;
   return sharedSafeIri(value);
 }
 
