@@ -73,3 +73,37 @@ a different expectation format and is outside this brief.
 Workspace-wide gate failures and unavailable roborev/ROBOT verification remain
 external limits. No push, PR, publication, branch switch or remote fetch/merge
 was performed.
+
+## Fix round 1 — inherited-constraint coverage
+
+- `b99344c8` — `fix(vocab): require fixtures for inherited constraints`: compose
+  imported profiles before deciding fixture requirements from the sector's own
+  NodeShapes' effective constraints. A sector that only inherits Core's Account
+  properties through `sh:node` now requires fixtures and per-shape coverage.
+  Importing Core without inheriting constraints does not require fixtures.
+- `docs: record inherited-constraint fix results` — this round's status update.
+
+The regression first reproduced the finding on the unchanged validator with
+`AssertionError: Missing expected rejection` for the inherited sector's absent
+fixture directory. It now checks that missing fixtures and missing negative
+coverage fail, and that a conforming positive plus a single-property negative
+passes. Temporary RDF is built with `@rdfjs/wrapper` and serialized with
+`n3.Writer`; the fixture node has only the sector class, so independent Core
+targets cannot supply the coverage.
+
+Commands use `PATH=/opt/node24/bin:$PATH` as above:
+
+| Exact command | Result |
+| --- | --- |
+| `node packages/solid-federation-vocab/scripts/test-shacl-fixtures.mjs` (new regression before the fix) | FAIL as expected: the original validator skipped the inherited sector. |
+| `pnpm exec biome check packages/solid-federation-vocab/scripts/shacl-fixtures.mjs packages/solid-federation-vocab/scripts/test-shacl-fixtures.mjs` | PASS. |
+| `pnpm --filter @jeswr/solid-federation-vocab run gate` | PASS: lint, build, typecheck, test and ontology; 179 fixtures across 14 sectors plus the inherited-sector regression. |
+| `TURBO_SCM_BASE=392fff8b7d96cb1245de35757579415a3b527991 pnpm run gate` | PASS: root lint and all affected tasks; 5 successful / 5 total. |
+| `pnpm run gate:full` | FAIL at `//#test:root`: 162 failed root tests across the same four files listed above (empty subprocess diagnostics and a timeout). Turbo stopped after 39 successful / 202 total tasks. |
+| `git diff --check` and `git diff --check 392fff8b7d96cb1245de35757579415a3b527991..HEAD` | PASS. |
+
+No dependencies or profiles changed. There are no new design questions or
+unfinished implementation work. `roborev` and the optional ROBOT/HermiT reasoner
+remain unavailable as documented above. Root scripts, tests and guardrails are
+unchanged from this round's base; the full-workspace failure remains an external
+verification limit.
