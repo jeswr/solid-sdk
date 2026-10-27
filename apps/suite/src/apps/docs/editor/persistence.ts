@@ -24,6 +24,11 @@ import { DocumentUpdateStore } from "./update-store";
 
 class InactiveLogError extends Error {}
 
+/** An absent legacy identity does not establish a different document instance. */
+function differentInstance(previous: string | undefined, next: string | undefined) {
+  return previous !== undefined && next !== undefined && previous !== next;
+}
+
 interface PendingEdit {
   owner?: string;
   title: string;
@@ -296,7 +301,7 @@ export class DocumentPersistence {
     }
   }
   private async replaceLog(remote: StoredDocument) {
-    const replaced = this.stored?.data.instanceId !== remote.data.instanceId;
+    const replaced = differentInstance(this.stored?.data.instanceId, remote.data.instanceId);
     const mirrorName = this.mirrorName(
       remote.url,
       remote.data.updateLog ?? docContainerUrls(remote.url).updateLog,
@@ -424,6 +429,7 @@ export class DocumentPersistence {
       // Recovery is an explicit creation state: make its base update durable
       // before advertising the new log to other clients.
       this.seedSnapshot();
+      this.recordIdentity();
       await this.activeDocument();
       this.assertActive();
       await new SolidUpdateStore({ container, fetch: this.session.fetch }).appendUpdate(
@@ -432,7 +438,11 @@ export class DocumentPersistence {
       this.assertActive();
       this.stored = await this.store.save(
         this.stored,
-        { updateLog: container, revisionLabel: "Recovered last saved copy" },
+        {
+          updateLog: container,
+          instanceId: this.recordIdentity(),
+          revisionLabel: "Recovered last saved copy",
+        },
         { regenerate: () => ({ body: this.body, format: "text/html" }) },
       );
       this.assertActive();
@@ -442,7 +452,7 @@ export class DocumentPersistence {
       !this.readOnly &&
       !this.offlineCopy &&
       ((cached?.document.data.updateLog ?? layout.updateLog) !== container ||
-        (cached && cached.document.data.instanceId !== this.stored.data.instanceId))
+        differentInstance(cached?.document.data.instanceId, this.stored.data.instanceId))
     ) {
       const remote = this.stored;
       if (cached) this.stored = cached.document;
@@ -496,6 +506,15 @@ export class DocumentPersistence {
     if (!container.endsWith("/") || !isDirectChild(container.slice(0, -1), layout.container))
       throw new Error("Invalid update location");
     return container;
+  }
+  private recordIdentity(): string {
+    const identity =
+      this.stored?.data.instanceId ??
+      (this.doc.getMap("document").get("instanceId") as string | undefined) ??
+      crypto.randomUUID();
+    if (this.doc.getMap("document").get("instanceId") !== identity)
+      this.doc.getMap("document").set("instanceId", identity);
+    return identity;
   }
   private checkTitleConflict() {
     if (this.stored && this.pendingEdit && this.title === this.pendingEdit.baseTitle) {
@@ -563,7 +582,10 @@ export class DocumentPersistence {
   private async checkLog(container: string) {
     const remote = await this.activeDocument();
     const active = remote.data.updateLog ?? docContainerUrls(remote.url).updateLog;
-    if (active !== container || remote.data.instanceId !== this.stored?.data.instanceId) {
+    if (
+      active !== container ||
+      differentInstance(this.stored?.data.instanceId, remote.data.instanceId)
+    ) {
       const error = new InactiveLogError("The document has a new update log");
       this.pauseLog(error);
       throw error;
@@ -573,7 +595,10 @@ export class DocumentPersistence {
     const remote = await this.activeDocument();
     const previous = this.provider?.store.container ?? this.updateContainer();
     const active = remote.data.updateLog ?? docContainerUrls(remote.url).updateLog;
-    if (previous !== active || remote.data.instanceId !== this.stored?.data.instanceId) {
+    if (
+      previous !== active ||
+      differentInstance(this.stored?.data.instanceId, remote.data.instanceId)
+    ) {
       await this.replaceLog(remote);
       this.offlineCopy = false;
       this.trashed = false;
@@ -749,7 +774,7 @@ export class DocumentPersistence {
         } else {
           this.stored = await this.store.save(
             this.stored as StoredDocument,
-            { ...snapshot, title },
+            { ...snapshot, title, instanceId: this.recordIdentity() },
             {
               regenerate: () => ({
                 body: this.body,
@@ -800,6 +825,9 @@ export class DocumentPersistence {
     this.notify();
   }
   private async persistUpdates() {
+    // Upgrade identity-free logs only on save, retaining an existing snapshot
+    // identity (or the log's identity when migrating an older snapshot).
+    if (this.stored?.data.instanceId) this.recordIdentity();
     await this.provider?.flush();
     if (this.providerError || this.needsFullState) {
       // Failed or retired incremental writes remain in IndexedDB. Merge the

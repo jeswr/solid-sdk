@@ -103,6 +103,7 @@ export async function importDocument(
       result.json,
       "prosemirror",
     );
+    doc.getMap("document").set("instanceId", stored.data.instanceId);
     const local = new IndexeddbPersistence(stored.url, doc);
     const provider = new SolidPersistence({
       doc,

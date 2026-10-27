@@ -233,7 +233,7 @@ export class DocsStore {
         ...current.data,
         ...input,
         ...snapshot,
-        instanceId: current.data.instanceId,
+        instanceId: current.data.instanceId ?? input.instanceId,
         title: titleChanged ? localTitle : current.data.title,
         priorRevisions: current.data.revisions,
         editor: this.webId,

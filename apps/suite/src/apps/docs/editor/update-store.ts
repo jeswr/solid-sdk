@@ -30,7 +30,10 @@ export class DocumentUpdateStore extends SolidUpdateStore {
           const identity = new Doc();
           try {
             for (const { update } of updates) applyUpdate(identity, update);
-            if (identity.getMap("document").get("instanceId") !== this.instanceId)
+            const recorded = identity.getMap("document").get("instanceId");
+            // Missing identity predates this guard. Only a recorded mismatch
+            // proves that the log belongs to another document.
+            if (recorded !== undefined && recorded !== this.instanceId)
               throw new Error("The update log belongs to a different document");
           } finally {
             identity.destroy();
