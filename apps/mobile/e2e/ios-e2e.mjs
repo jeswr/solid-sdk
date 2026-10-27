@@ -1,7 +1,7 @@
 // AUTHORED-BY GPT-5.6 Codex
 import { execFile } from "node:child_process";
 import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { checkFixture, checkIOSNavigation, checkRejectedShare } from "./checks.ts";
@@ -97,6 +97,19 @@ export async function exportAttachments(bundle, output, run = command) {
   return "legacy";
 }
 
+/**
+ * Xcode exports a named attachment as `<name>`, `<name>_<n>_<uuid>.<ext>`, or (Xcode 26) with the
+ * extension first dropped from `<name>`, so `e2e-result.json` may appear as `e2e-result_0_<uuid>.json`.
+ */
+export function attachmentFor(label) {
+  if (typeof label !== "string") return undefined;
+  return attachmentNames.find((candidate) =>
+    [candidate, candidate.replace(/\.json$/, "")].some(
+      (base) => label === base || label.startsWith(`${base}_`) || label.startsWith(`${base}.`),
+    ),
+  );
+}
+
 /** Bulk exports use generated filenames; manifest.json maps attachment names to those files. */
 export async function readAttachments(directory) {
   const files = new Map();
@@ -109,18 +122,13 @@ export async function readAttachments(directory) {
   }
   await walk(directory);
   const candidates = new Map(attachmentNames.map((name) => [name, new Set()]));
+  const labels = [];
   for (const [path, contents] of files) {
     if (path.endsWith("manifest.json")) {
       visit(JSON.parse(contents), (node) => {
-        // Xcode can append an ordinal/UUID and another extension to the original name.
         const label = node.suggestedHumanReadableName;
-        const name = attachmentNames.find(
-          (candidate) =>
-            typeof label === "string" &&
-            (label === candidate ||
-              label.startsWith(`${candidate}_`) ||
-              label.startsWith(`${candidate}.`)),
-        );
+        if (typeof label === "string") labels.push(label);
+        const name = attachmentFor(label);
         if (!name) return;
         // Resolve only inside the fresh export directory; no manifest may read arbitrary files.
         const exported = resolve(directory, String(node.exportedFileName));
@@ -135,8 +143,15 @@ export async function readAttachments(directory) {
   return Object.fromEntries(
     attachmentNames.map((name) => {
       const paths = [...candidates.get(name)];
-      if (paths.length !== 1)
-        throw new Error(`Expected exactly one ${name} attachment; got ${paths.length}`);
+      if (paths.length !== 1) {
+        // The CI log is the only diagnostic channel, so say what the export did contain.
+        const seen = [...files.keys()].map((path) => relative(directory, path)).sort();
+        throw new Error(
+          `Expected exactly one ${name} attachment; got ${paths.length}` +
+            ` (manifest names: ${labels.slice(0, 20).join(", ") || "none"};` +
+            ` files: ${seen.slice(0, 20).join(", ") || "none"})`,
+        );
+      }
       return [name, JSON.parse(files.get(paths[0]))];
     }),
   );
