@@ -103,9 +103,12 @@ export async function exportAttachments(bundle, output, run = command) {
  */
 export function attachmentFor(label) {
   if (typeof label !== "string") return undefined;
+  // Only Xcode's own `_<ordinal>_<uuid>[.<ext>]` suffix; e2e-result_debug.json is not evidence.
+  const suffix =
+    /^(?:_\d+_[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}(?:\.[A-Za-z0-9]+)?)?$/;
   return attachmentNames.find((candidate) =>
     [candidate, candidate.replace(/\.json$/, "")].some(
-      (base) => label === base || label.startsWith(`${base}_`) || label.startsWith(`${base}.`),
+      (base) => label.startsWith(base) && suffix.test(label.slice(base.length)),
     ),
   );
 }
