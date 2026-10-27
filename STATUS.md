@@ -86,3 +86,62 @@ the existing tracked-resource boundary and offline/no-op behavior, retain the op
 legacy ETag type field while omitting it from messages, and treat non-authoritative HTTP
 answers (including unsolicited listing 304s) as failed confirmation. No unanswered question
 blocks the implementation. Application UI wiring is out of scope.
+
+## Fix round 1 — status races
+
+This round starts at `7d5d23f99d24fe0404dd02b9d027352ab787d8d9` and supersedes the
+original status-restoration and standalone-delete descriptions above.
+
+Commits:
+
+- `2596d246` — `fix: preserve status across overlapping revalidations`: fix all three
+  review findings. Separate settled freshness from worker-attempt counts, retain unread
+  updates through 304 confirmations until a consumer mark, preserve manual marks through
+  failed attempts, and balance direct-delete purges with the existing lifecycle helper.
+  README, SKILL, and the existing interpretation record describe these corrected semantics.
+- The final report commit — `docs: record status race verification`.
+
+Security property corrected: overlapping confirmations cannot hide an unread replacement
+or purge, failed confirmation cannot discard a later manual stale observation, and a delete
+cannot consume another fetch's pending count. The channel continues to carry only URL/event
+objects. Direct deletion still performs no fetch; a failed purge now reports its own failure.
+Public types and dependencies are unchanged.
+
+Proof: ten new status cases cover both completion orders, sticky updates across later
+confirmations, explicit read acknowledgment, all three manual mark methods during an attempt,
+and a manual observation between parallel settlement events. Two new integrated worker/status
+cases exercise direct deletion during a deferred fetch, including metadata purge failure;
+they then start a second fetch and prove each fetch settles only its own pending work.
+The existing delete test now asserts the exact balanced URL-only event pair. Before the
+fix, the regression run failed 11 cases; after the fix, all 312 tests passed across 16 files.
+
+Fix-round verification uses `PATH=/opt/node24/bin:$PATH` (Node `v24.22.1`, pnpm `10.4.1`):
+
+- `pnpm --filter solid-offline run lint` — passed, with the same three existing warnings.
+- `pnpm --filter solid-offline run build` — passed.
+- `pnpm --filter solid-offline run typecheck` — passed.
+- `pnpm --filter solid-offline run test` — passed: 312 tests in 16 files.
+- `pnpm --filter solid-offline run api:check` — passed; no public API report change.
+- `pnpm run lint:root` — passed.
+- `TURBO_SCM_BASE=7d5d23f99d24fe0404dd02b9d027352ab787d8d9 pnpm run gate` —
+  failed in unchanged root guardrail tests: 161 failures / 900 tests in four files
+  (`agent-layers`, `agent-layers-reachability`, `check-packages-guard`, `check-sdk-layers`).
+  Turbo completed 13/15 tasks; all 312 solid-offline tests passed within this run.
+- `pnpm run gate:full` — failed at the same unchanged root guardrail tests: 161 failures /
+  900 tests in the same four files; Turbo completed 45/209 tasks (9 cached) before stopping.
+- `git diff --check` — passed.
+
+The root failures again assert against empty child-process output. An isolated Node 24
+`spawnSync` probe invoking the unchanged `scripts/check-sdk-layers.mjs` against a temporary
+empty workspace reproduced `error.code: EPERM` with empty stdout/stderr. This supports the
+existing sandbox diagnosis; no root guardrail code or tests were changed. Both workspace
+gates require a rerun outside this restricted environment; the green package gate does not
+establish a green workspace. Logs are `/tmp/sst-8xm.13-fix-gate.log` and
+`/tmp/sst-8xm.13-fix-gate-full.log`.
+
+Supply chain: no dependency, manifest, or lockfile changes; `check:packages` is not applicable.
+No remote fetch, push, PR, publication, branch switch, or other checkout modification occurred.
+`roborev status` still exits 127 because roborev is unavailable; no active post-commit hook
+is installed. The required per-commit adversarial review remains for the lead/Jesse before
+merge; this security-critical package must not be auto-merged. No implementation work or
+open design question remains.
