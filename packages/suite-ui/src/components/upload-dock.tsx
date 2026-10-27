@@ -236,8 +236,9 @@ export function UploadDock({
                 ref={viewport}
                 className="su-upload-scroll"
                 aria-label="Upload files"
-                // biome-ignore lint/a11y/noNoninteractiveTabindex: keyboard scrolling must work when every upload is completed.
-                tabIndex={0}
+                // Rows with controls are the tab stops; the region itself is one only when
+                // every upload is complete and no row has a control to scroll it.
+                tabIndex={items.every((item) => item.status === "done") ? 0 : -1}
               >
                 <ul
                   className="su-upload-list"
