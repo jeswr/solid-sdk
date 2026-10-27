@@ -30,9 +30,10 @@ export async function loadFormFillData(
   if (!isValidClientIdUrl(webId)) throw new Error('Profile address is unavailable.');
   const publicDocument = await fetchDocument(webId, false);
   if (!publicDocument.ok) throw new Error('Could not load your profile.');
-  const quads: Quad[] = new Parser({ baseIRI: webId, format: 'text/turtle' }).parse(
-    publicDocument.text,
-  );
+  const quads: Quad[] = new Parser({
+    baseIRI: publicDocument.url.split('#')[0],
+    format: 'text/turtle',
+  }).parse(publicDocument.text);
   const links = new Set<string>();
   for (const q of quads) {
     if (
@@ -52,12 +53,16 @@ export async function loadFormFillData(
   for (const url of [...links].slice(0, 8)) {
     const document = await fetchDocument(url, true);
     if (document.ok)
-      quads.push(...new Parser({ baseIRI: url, format: 'text/turtle' }).parse(document.text));
+      quads.push(
+        ...new Parser({ baseIRI: document.url.split('#')[0], format: 'text/turtle' }).parse(
+          document.text,
+        ),
+      );
   }
   const turtle = await new Promise<string>((resolve, reject) => {
     const writer = new Writer();
     writer.addQuads(quads);
     writer.end((error, result) => (error ? reject(error) : resolve(result)));
   });
-  return readFormFillData(webId, turtle, webId);
+  return readFormFillData(webId, turtle, publicDocument.url.split('#')[0]);
 }

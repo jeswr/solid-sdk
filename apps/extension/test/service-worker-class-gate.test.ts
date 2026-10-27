@@ -23,6 +23,7 @@ import { ProfileStore } from '../src/background/core/profile-store';
 import type { ReplicaMetadata } from '../src/background/core/replica-db';
 import type { StoredSession } from '../src/background/session-store';
 import { MemoryProfileDb, profileCredentials } from './profile-fixtures';
+import { opaqueRedirect, redirectProbe } from './redirect-fixtures';
 
 let profileDb: MemoryProfileDb;
 vi.mock('../src/background/profile-db', () => ({
@@ -1082,7 +1083,7 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
     { type: 'privateTypeIndex', indexOrigin: 'https://separate.pod.example' },
     { type: 'publicTypeIndex', indexOrigin: 'https://alice.pod.example' },
     { type: 'publicTypeIndex', indexOrigin: 'https://separate.pod.example' },
-    { type: 'publicTypeIndex', indexOrigin: 'http://public-index.example' },
+    { type: 'publicTypeIndex', indexOrigin: 'http://localhost:3000' },
   ])('discovers $type on $indexOrigin after real split-host pod-only consent', async ({
     type,
     indexOrigin,
@@ -1157,11 +1158,11 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
     expect(new Headers(fetchCalls[1].init?.headers).has('Authorization')).toBe(authenticated);
     expect(new Headers(fetchCalls[1].init?.headers).has('DPoP')).toBe(authenticated);
     expect(fetchCalls[1].init?.credentials).toBe('omit');
-    expect(fetchCalls[1].init?.redirect).toBe('error');
+    expect(fetchCalls[1].init?.redirect).toBe('manual');
     expect(new Headers(consentIndex?.init?.headers).has('Authorization')).toBe(authenticated);
     expect(new Headers(consentIndex?.init?.headers).has('DPoP')).toBe(authenticated);
     expect(consentIndex?.init?.credentials).toBe('omit');
-    expect(consentIndex?.init?.redirect).toBe('error');
+    expect(consentIndex?.init?.redirect).toBe('manual');
   });
 
   it.each([
@@ -1497,6 +1498,318 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
     storage.set('solid:origin-grants', grants);
     await loadWorker();
   }
+
+  it('follows a gated slash redirect and caches only the final authorized URL', async () => {
+    await boot();
+    const original = 'https://alice.pod.example/finance/x.ttl';
+    const final = `${original}/`;
+    fetchImpl = async (url, init) =>
+      init?.redirect === 'follow'
+        ? redirectProbe(`${final}?view=1`)
+        : url === original
+          ? opaqueRedirect()
+          : new Response('final bytes', {
+              headers: { etag: 'final-etag', 'DPoP-Nonce': 'final-nonce' },
+            });
+    expect((await fetchFinance()).body).toBe('final bytes');
+    expect(fetchCalls.map((c) => c.url)).toEqual([original, original, `${final}?view=1`]);
+    expect(fetchCalls[1].init).toMatchObject({
+      method: 'HEAD',
+      credentials: 'omit',
+      redirect: 'follow',
+      headers: {},
+    });
+    expect([...idbMeta.values()].map((m) => m.resourceUrl)).toEqual([`${final}?view=1`]);
+    expect(idbNonces.get('https://alice.pod.example')).toBe('final-nonce');
+
+    // Scope no longer covers the final resource: neither the alias nor a direct warm
+    // cache lookup may return the stored bytes.
+    storage.set('solid:origin-grants', [
+      parent({
+        scope: {
+          pods: ['https://alice.pod.example'],
+          classes: [
+            classGrant({
+              targets: [{ url: original, kind: 'instance' }],
+            }),
+          ],
+        },
+      }),
+    ]);
+    fetchCalls.length = 0;
+    const denied = await fetchFinance();
+    expect(denied.body).toBeUndefined();
+    expect(denied.error).toBe('Out of grant scope');
+    expect(fetchCalls.map((c) => c.url)).toEqual([original, original]);
+    fetchCalls.length = 0;
+    expect((await fetchFinance({ url: `${final}?view=1` })).status).toBe(403);
+    expect(fetchCalls).toHaveLength(0);
+  });
+
+  it.each([
+    ['https://evil.example/steal', /Redirect target denied/],
+    ['https://idp.example/token?exchange=1', /Redirect target denied/],
+    ['https://idp.example/outside-pods', /Out of grant scope/],
+    ['https://alice.pod.example/private/secret', /Out of grant scope/],
+    ['http://alice.pod.example/finance/secret', /Forbidden URL/],
+    ['file:///etc/passwd', /Forbidden URL/],
+  ])('refuses a redirect outside the full gate without target egress (%s)', async (url, error) => {
+    await boot();
+    fetchImpl = async (_url, init) =>
+      init?.redirect === 'follow' ? redirectProbe(url) : opaqueRedirect();
+    const denied = await fetchFinance();
+    expect(denied.body).toBeUndefined();
+    expect(denied.error).toMatch(error);
+    expect(fetchCalls).toHaveLength(2);
+    expect(fetchCalls.every((call) => call.url === 'https://alice.pod.example/finance/x.ttl')).toBe(
+      true,
+    );
+    expect(cacheStore.size).toBe(0);
+  });
+
+  it('refuses the token endpoint as an original URL too', async () => {
+    await boot([parent({ scope: { pods: ['https://idp.example'] } })]);
+    expect((await fetchFinance({ url: 'https://idp.example/token' })).status).toBe(403);
+    expect(fetchCalls).toHaveLength(0);
+  });
+
+  it.each([
+    'PUT',
+    'POST',
+    'PATCH',
+    'DELETE',
+  ])('fails closed on a %s redirect with no probe or second request', async (method) => {
+    await boot([
+      parent({
+        scope: { pods: ['https://alice.pod.example'], classes: [classGrant({ modes: ['write'] })] },
+      }),
+    ]);
+    fetchImpl = async () => opaqueRedirect();
+    const response = await fetchFinance({ method, body: 'payload' });
+    expect(response.error).toBe('Redirect rejected');
+    expect(fetchCalls).toHaveLength(1);
+    expect(fetchCalls[0].init).toMatchObject({ method, body: 'payload', redirect: 'manual' });
+  });
+
+  it('checks live grant changes between redirect hops', async () => {
+    await boot();
+    fetchImpl = async () => {
+      storage.set('solid:origin-grants', [
+        parent({ scope: { pods: [], classes: [classGrant()] } }),
+      ]);
+      return opaqueRedirect();
+    };
+    expect((await fetchFinance()).error).toBe('Out of grant scope');
+    expect(fetchCalls).toHaveLength(1);
+  });
+
+  it('rejects a profile rebinding during discovery before re-sending', async () => {
+    const grant = parent();
+    await boot([grant]);
+    fetchImpl = async (_url, init) => {
+      if (init?.redirect !== 'follow') return opaqueRedirect();
+      storage.set('solid:origin-grants', [{ ...grant, profileId: '2' }]);
+      return redirectProbe('https://alice.pod.example/finance/final');
+    };
+    const denied = await fetchFinance();
+    expect(denied.error).toBe('Origin not granted access');
+    expect(denied.body).toBeUndefined();
+    expect(fetchCalls).toHaveLength(2);
+    expect(cacheStore.size).toBe(0);
+  });
+
+  it('rechecks intermediate resource URLs before committing or relaying final bytes', async () => {
+    const grant = parent();
+    await boot([grant]);
+    const original = 'https://alice.pod.example/finance/x.ttl';
+    const middle = 'https://alice.pod.example/finance/middle';
+    const final = 'https://alice.pod.example/finance/final';
+    fetchImpl = async (url, init) => {
+      if (init?.redirect === 'follow') return redirectProbe(url === original ? middle : final);
+      if (url !== final) return opaqueRedirect();
+      storage.set('solid:origin-grants', [
+        {
+          ...grant,
+          scope: {
+            pods: grant.scope.pods,
+            classes: [
+              classGrant({
+                targets: [
+                  { url: original, kind: 'instance' },
+                  { url: final, kind: 'instance' },
+                ],
+              }),
+            ],
+          },
+        },
+      ]);
+      return new Response('final bytes', { headers: { etag: 'final-etag' } });
+    };
+    const denied = await fetchFinance();
+    expect(denied.error).toBe('Out of grant scope');
+    expect(denied.body).toBeUndefined();
+    expect(fetchCalls.map((call) => call.url)).toEqual([original, original, middle, middle, final]);
+    expect(cacheStore.size).toBe(0);
+    expect(idbMeta.size).toBe(0);
+  });
+
+  it('rechecks the final target before storing or relaying its bytes', async () => {
+    await boot();
+    fetchImpl = async (url, init) => {
+      if (init?.redirect === 'follow')
+        return redirectProbe('https://alice.pod.example/finance/next');
+      if (url.endsWith('/x.ttl')) return opaqueRedirect();
+      storage.set('solid:origin-grants', [
+        parent({
+          scope: {
+            pods: ['https://alice.pod.example'],
+            classes: [
+              classGrant({
+                targets: [{ url: 'https://alice.pod.example/finance/x.ttl', kind: 'instance' }],
+              }),
+            ],
+          },
+        }),
+      ]);
+      return new Response('revoked target bytes');
+    };
+    const denied = await fetchFinance();
+    expect(denied.error).toBe('Out of grant scope');
+    expect(denied.body).toBeUndefined();
+    expect(cacheStore.size).toBe(0);
+  });
+
+  it.each([
+    'publicTypeIndex',
+    'privateTypeIndex',
+  ])('follows a discovery %s slash redirect with the same credential policy', async (type) => {
+    await boot([parent({ scope: { pods: ['https://alice.pod.example'] } })]);
+    const index = 'https://alice.pod.example/settings/index';
+    fetchImpl = async (url, init) =>
+      init?.redirect === 'follow'
+        ? redirectProbe(`${index}/`)
+        : url === WEBID
+          ? new Response(`<${WEBID}> <http://www.w3.org/ns/solid/terms#${type}> <${index}> .`)
+          : url === index
+            ? opaqueRedirect()
+            : new Response(`<#r> <http://www.w3.org/ns/solid/terms#forClass> <${classGrant().dataClass}> ;
+              <http://www.w3.org/ns/solid/terms#instanceContainer> <finance/> .`);
+    const result = await send(
+      {
+        type: 'SOLID_RESOLVE_CLASS',
+        requestId: 'redirect-discovery',
+        classIRI: classGrant().dataClass,
+        stampedOrigin: APPX.origin,
+      },
+      APPX,
+    );
+    expect(result.targets).toEqual([{ url: `${index}/finance/`, kind: 'container' }]);
+    expect(fetchCalls.map((c) => c.url)).toEqual([WEBID, index, index, `${index}/`]);
+    for (const call of fetchCalls) {
+      const probing = call.init?.redirect === 'follow';
+      expect(call.init).toMatchObject({
+        credentials: 'omit',
+        redirect: probing ? 'follow' : 'manual',
+      });
+      expect(new Headers(call.init?.headers).has('Authorization')).toBe(
+        type === 'privateTypeIndex' && call.url !== WEBID && !probing,
+      );
+      if (probing) expect(call.init).toMatchObject({ method: 'HEAD', headers: {} });
+    }
+  });
+
+  it('drops relative targets in a public type index redirected to a foreign origin', async () => {
+    await boot([parent({ scope: { pods: ['https://alice.pod.example'] } })]);
+    const index = 'https://alice.pod.example/settings/index';
+    const final = 'https://public.example/settings/index/';
+    fetchImpl = async (url, init) =>
+      init?.redirect === 'follow'
+        ? redirectProbe(final)
+        : url === WEBID
+          ? new Response(
+              `<${WEBID}> <http://www.w3.org/ns/solid/terms#publicTypeIndex> <${index}> .`,
+            )
+          : url === index
+            ? opaqueRedirect()
+            : new Response(`<#r> <http://www.w3.org/ns/solid/terms#forClass> <${classGrant().dataClass}> ;
+              <http://www.w3.org/ns/solid/terms#instanceContainer> <finance/> .`);
+    const result = await send(
+      {
+        type: 'SOLID_RESOLVE_CLASS',
+        requestId: 'foreign-index-base',
+        classIRI: classGrant().dataClass,
+        stampedOrigin: APPX.origin,
+      },
+      APPX,
+    );
+    expect(result.targets).toEqual([]);
+    expect(fetchCalls.map((c) => c.url)).toEqual([WEBID, index, index, final]);
+    for (const call of fetchCalls) {
+      expect(call.init?.credentials).toBe('omit');
+      expect(new Headers(call.init?.headers).has('Authorization')).toBe(false);
+      expect(new Headers(call.init?.headers).has('DPoP')).toBe(false);
+    }
+  });
+
+  it.each([
+    ['https://public.example/profile', true],
+    ['http://alice.pod.example/profile', false],
+    ['https://idp.example/token', false],
+    ['data:text/plain,profile', false],
+    ['opaque', false],
+  ])('applies public discovery URL restrictions at every hop (%s)', async (target, allowed) => {
+    await boot([parent({ scope: { pods: ['https://alice.pod.example'] } })]);
+    fetchImpl = async (url, init) => {
+      if (init?.redirect === 'follow') return redirectProbe(target);
+      if (url !== WEBID) return new Response('');
+      return target === 'opaque' ? Response.error() : opaqueRedirect();
+    };
+    const result = await send(
+      {
+        type: 'SOLID_RESOLVE_CLASS',
+        requestId: 'public-redirect',
+        classIRI: classGrant().dataClass,
+        stampedOrigin: APPX.origin,
+      },
+      APPX,
+    );
+    expect(result.targets).toEqual([]);
+    expect(fetchCalls.map((c) => c.url)).toEqual(
+      allowed ? [WEBID, WEBID, target] : target === 'opaque' ? [WEBID] : [WEBID, WEBID],
+    );
+    for (const call of fetchCalls) {
+      expect(call.init).toMatchObject({ credentials: 'omit' });
+      if (call.init?.redirect === 'follow')
+        expect(call.init).toMatchObject({ method: 'HEAD', headers: {} });
+      else expect(call.init?.redirect).toBe('manual');
+      expect(new Headers(call.init?.headers).has('Authorization')).toBe(false);
+      expect(new Headers(call.init?.headers).has('DPoP')).toBe(false);
+    }
+  });
+
+  it('refuses private discovery redirects outside the live parent pod scope', async () => {
+    await boot([parent({ scope: { pods: ['https://alice.pod.example'] } })]);
+    const index = 'https://alice.pod.example/private/index';
+    fetchImpl = async (url, init) =>
+      init?.redirect === 'follow'
+        ? redirectProbe('https://idp.example/private')
+        : url === WEBID
+          ? new Response(
+              `<${WEBID}> <http://www.w3.org/ns/solid/terms#privateTypeIndex> <${index}> .`,
+            )
+          : opaqueRedirect();
+    const result = await send(
+      {
+        type: 'SOLID_RESOLVE_CLASS',
+        requestId: 'private-redirect',
+        classIRI: classGrant().dataClass,
+        stampedOrigin: APPX.origin,
+      },
+      APPX,
+    );
+    expect(result.targets).toEqual([]);
+    expect(fetchCalls.map((c) => c.url)).toEqual([WEBID, index, index]);
+  });
 
   it('ignores standalone class/login grants and client-id declarations without a parent', async () => {
     storage.set('solid:granted-origins', [APPX.origin]);
@@ -2214,12 +2527,12 @@ describe('separate form-fill consent wired into the worker', () => {
       { field: 'street-address', category: 'address', value: '42 Sample Street' },
     ]);
     const publicCall = fetchCalls.find((c) => c.url === WEBID)!;
-    expect(publicCall.init).toMatchObject({ credentials: 'omit', redirect: 'error' });
+    expect(publicCall.init).toMatchObject({ credentials: 'omit', redirect: 'manual' });
     expect(new Headers(publicCall.init?.headers).has('Authorization')).toBe(false);
     const privateCall = fetchCalls.find(
       (c) => c.url === 'https://alice.pod.example/private/address',
     )!;
-    expect(privateCall.init).toMatchObject({ credentials: 'omit', redirect: 'error' });
+    expect(privateCall.init).toMatchObject({ credentials: 'omit', redirect: 'manual' });
     expect(new Headers(privateCall.init?.headers).get('Authorization')).toBe(
       'DPoP access-token-xyz',
     );

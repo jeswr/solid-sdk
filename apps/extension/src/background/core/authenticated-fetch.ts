@@ -14,8 +14,9 @@
  *   3. NONCE RETRY (RFC 9449 §8). On a pure `use_dpop_nonce` 401, the proof is re-minted
  *      with the server `DPoP-Nonce` and the request retried ONCE.
  *   4. SINGLE RETRY. Exactly one retry, so a misbehaving server cannot loop us.
- *   5. NO REDIRECTS. Never forward DPoP or return bytes from an unchecked redirect target,
- *      including on the credential-free path and the nonce retry.
+ *   5. GATED REDIRECTS. GET/HEAD discover opaque redirect targets with credential-free
+ *      HEAD probes. Every direct re-send passes credential policy and the full live gate.
+ *      Other methods fail closed on redirects without any probe or re-send.
  *
  * The re-entrancy guard (a fetch the SW itself issues for discovery/token/refresh must
  * never recurse into THIS path) is the caller's responsibility: discovery/token use the
@@ -24,6 +25,7 @@
  */
 
 import { createDpopProof } from './dpop';
+import { fetchWithRedirects } from './manual-redirect';
 import { isOriginAllowed, isTokenEndpoint } from './origin-policy';
 import { isUseDpopNonceChallenge } from './www-authenticate';
 
@@ -51,6 +53,9 @@ export interface AuthenticatedFetchOptions {
   readonly nonce?: string;
   /** Injected fetch (test seam). Defaults to the global. */
   readonly fetchImpl?: typeof fetch;
+  readonly signal?: AbortSignal;
+  /** Full live access gate, run before EVERY send, including nonce retries. */
+  readonly authorize?: (url: string, method: string) => Promise<void>;
 }
 
 export interface AuthenticatedFetchResult {
@@ -59,6 +64,9 @@ export interface AuthenticatedFetchResult {
   readonly nonce?: string;
   /** Whether the token was actually attached (false => sent as a plain, public fetch). */
   readonly authenticated: boolean;
+  /** Final authorized request URL/method (Response.url is lost when the worker buffers it). */
+  readonly url: string;
+  readonly method: string;
 }
 
 const HOP_BY_HOP = new Set(['authorization', 'dpop', 'host', 'content-length', 'connection']);
@@ -82,52 +90,56 @@ export async function authenticatedFetch(
   session: FetchSession,
   options: AuthenticatedFetchOptions,
 ): Promise<AuthenticatedFetchResult> {
-  const { url, method, body } = options;
   const fetchImpl = options.fetchImpl ?? fetch;
-  const safeHeaders = sanitizeHeaders(options.headers);
-
-  const mayAttach =
-    isOriginAllowed(session.allowedOrigins, url) && !isTokenEndpoint(url, session.tokenEndpoint);
-
-  if (!mayAttach) {
-    // Foreign / public / token-endpoint: a plain, credential-free fetch.
-    const response = await fetchImpl(url, {
-      method,
-      headers: safeHeaders,
-      body,
-      redirect: 'error',
-    });
-    return { response, authenticated: false };
-  }
-
-  const send = async (nonce?: string): Promise<Response> => {
-    const proof = await createDpopProof({
-      keyPair: session.dpopKeyPair,
-      htm: method,
-      htu: url,
-      accessToken: session.accessToken,
-      nonce,
-    });
-    return fetchImpl(url, {
-      method,
-      headers: {
-        ...safeHeaders,
-        Authorization: `DPoP ${session.accessToken}`,
-        DPoP: proof,
-      },
-      body,
-      redirect: 'error',
-    });
-  };
-
-  let response = await send(options.nonce);
-  let serverNonce = response.headers.get('dpop-nonce') ?? undefined;
-
-  // RFC 9449 §8: one retry on a pure nonce challenge, using the server's fresh nonce.
-  if (response.status === 401 && isUseDpopNonceChallenge(response) && serverNonce) {
-    response = await send(serverNonce);
-    serverNonce = response.headers.get('dpop-nonce') ?? serverNonce;
-  }
-
-  return { response, nonce: serverNonce, authenticated: true };
+  const nonces = new Map<string, string>();
+  if (options.nonce) nonces.set(new URL(options.url).origin, options.nonce);
+  return fetchWithRedirects(
+    { ...options, headers: sanitizeHeaders(options.headers) },
+    async ({ url, method, headers, body }, redirected) => {
+      const mayAttach =
+        isOriginAllowed(session.allowedOrigins, url) &&
+        !isTokenEndpoint(url, session.tokenEndpoint);
+      // Preserve the initial public-fetch API, but NEVER follow it into an unchecked target.
+      if (redirected && !mayAttach) throw new TypeError('Redirect target denied');
+      const origin = new URL(url).origin;
+      const send = async (nonce?: string): Promise<Response> => {
+        const hopHeaders = { ...headers };
+        if (mayAttach) {
+          hopHeaders.Authorization = `DPoP ${session.accessToken}`;
+          hopHeaders.DPoP = await createDpopProof({
+            keyPair: session.dpopKeyPair,
+            htm: method,
+            htu: url,
+            accessToken: session.accessToken,
+            nonce,
+          });
+        }
+        // Re-read live authority AFTER signing; no await separates this gate from fetch.
+        await options.authorize?.(url, method);
+        return fetchImpl(url, {
+          method,
+          headers: hopHeaders,
+          body,
+          redirect: 'manual',
+          signal: options.signal,
+        });
+      };
+      let response = await send(nonces.get(origin));
+      let serverNonce = response.headers.get('dpop-nonce') ?? undefined;
+      // One RFC 9449 §8 retry PER HOP, with a fresh proof for this URL and method.
+      if (
+        mayAttach &&
+        response.status === 401 &&
+        isUseDpopNonceChallenge(response) &&
+        serverNonce
+      ) {
+        response = await send(serverNonce);
+        serverNonce = response.headers.get('dpop-nonce') ?? serverNonce;
+      }
+      if (serverNonce) nonces.set(origin, serverNonce);
+      return { response, nonce: serverNonce, authenticated: mayAttach };
+    },
+    fetchImpl,
+    options.signal,
+  );
 }

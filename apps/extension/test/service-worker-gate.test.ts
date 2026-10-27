@@ -23,6 +23,7 @@ import { ProfileStore } from '../src/background/core/profile-store';
 import type { ReplicaMetadata } from '../src/background/core/replica-db';
 import type { StoredSession } from '../src/background/session-store';
 import { fixtureGrant, MemoryProfileDb, profileCredentials } from './profile-fixtures';
+import { opaqueRedirect, redirectProbe } from './redirect-fixtures';
 
 let profileDb: MemoryProfileDb;
 vi.mock('../src/background/profile-db', () => ({
@@ -346,10 +347,9 @@ describe('service-worker per-requesting-origin gate (wired)', () => {
     storage.set('solid:granted-origins', ['https://pm.example']);
     await loadWorker();
     const foreign = vi.fn(() => new Response('foreign private bytes'));
-    // Model native fetch: without a redirect policy it follows under the worker's host access.
     fetchImpl = async (_url, init) => {
-      if (init?.redirect === 'error') throw new TypeError('Redirect rejected');
-      if (init?.redirect === 'manual') return new Response(null, { status: 302 });
+      if (init?.redirect === 'manual') return opaqueRedirect();
+      if (init?.redirect === 'follow') return redirectProbe('https://evil.example/private');
       return foreign();
     };
     const response = await sendFetch(
@@ -359,7 +359,14 @@ describe('service-worker per-requesting-origin gate (wired)', () => {
     expect(foreign).not.toHaveBeenCalled();
     expect(response.body).toBeUndefined();
     expect(response.error).toMatch(/redirect/i);
-    expect(fetchCalls.at(-1)?.init?.redirect).toBe('error');
+    expect(fetchCalls).toHaveLength(2);
+    expect(fetchCalls.at(-1)?.init).toMatchObject({
+      method: 'HEAD',
+      redirect: 'follow',
+      credentials: 'omit',
+      headers: {},
+    });
+    expect(fetchCalls.every((call) => call.url === url)).toBe(true);
   });
 
   it('the legitimate owner path: a GRANTED app reads its pod → SUCCEEDS with egress', async () => {
