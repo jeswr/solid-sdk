@@ -64,21 +64,19 @@ is built per call and reused for reference validation, edits and output placemen
 lookups do not rescan the workbook.
 
 Sheets, cells, edits, move sources/destinations and move endpoints must be records.
-Primitives and arrays (including arrays carrying valid record fields) are rejected
-before field enumeration, so malformed strings or arrays cannot bypass the size
-preflight by materialising their character or element keys. The field validator
-checks own enumerable fields one at a time and stops at the first unsupported field,
-without creating a key array. Each record schema allows at most five fields, so at
-most six own fields are inspected, regardless of how many extra fields a record has.
-These failures use `SheetReferenceError` with `unsupported` and a fixed message
-without caller data.
+Null, primitives and arrays (including arrays carrying valid record fields) are
+rejected. Only documented fields are read; extra fields are ignored without being
+enumerated or copied into snapshots or change records. Malformed strings or arrays
+cannot bypass the size preflight by materialising their character or element keys.
+Record shape failures use `SheetReferenceError` with `unsupported` and a fixed
+message without caller data.
 
 Unsupported or malformed input throws the exported `SheetReferenceError`, with
 `syntax`, `bounds`, `unsupported` or `invalid-edit` codes, before any result is
 returned. This includes moves splitting a referenced range, named/structured/3D/
 external references, intersections/unions, array/spill syntax, reversed ranges,
-duplicate sheets or cell addresses, and unknown model fields. Formatting, dates
-as objects, dimensions, merged cells and engine-native metadata need an adapter;
-they are not silently discarded. Every input formula is validated even if the
+duplicate sheets or cell addresses, and object values such as dates. Formatting,
+dimensions, merged cells and engine-native metadata need an adapter; supplying them
+as extra fields has no effect. Every input formula is validated even if the
 edit would delete or overwrite its cell. See root `QUESTIONS.md` for the
 conservative choices where SHT-L5 does not define a policy.

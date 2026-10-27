@@ -63,13 +63,10 @@ function reject(message: string): never {
   throw new SheetReferenceError("unsupported", message);
 }
 
-function keys(value: unknown, allowed: readonly string[]): void {
+/** Read only documented fields; enumerating extra keys would make validation unbounded. */
+function keys(value: unknown): void {
   if (value === null || typeof value !== "object" || Array.isArray(value))
     reject("Expected a record");
-  // Stop at the first unknown own field instead of materialising an unbounded key array.
-  for (const key in value) {
-    if (Object.hasOwn(value, key) && !allowed.includes(key)) reject("Unsupported fields");
-  }
 }
 
 function data(cell: StructureCell): CellData {
@@ -113,7 +110,7 @@ function findSheet(sheets: ReadonlyMap<string, number>, name: string): number {
 function validateWorkbook(sheets: readonly StructureSheet[]): Map<string, number> {
   const names = new Map<string, number>();
   for (const [index, sheet] of sheets.entries()) {
-    keys(sheet, ["name", "cells"]);
+    keys(sheet);
     validateSheet(sheet.name);
     const name = sheet.name.toLowerCase();
     if (names.has(name)) reject("Duplicate sheet name");
@@ -122,7 +119,7 @@ function validateWorkbook(sheets: readonly StructureSheet[]): Map<string, number
   for (const sheet of sheets) {
     const positions = new Set<string>();
     for (const cell of sheet.cells) {
-      keys(cell, ["row", "column", "value", "formula", "notation"]);
+      keys(cell);
       validatePosition(cell);
       if (positions.has(address(cell))) reject("Duplicate cell address");
       positions.add(address(cell));
@@ -168,16 +165,16 @@ function contains(rect: Rectangle, sheet: string, cell: CellPosition): boolean {
 
 function validateOperation(sheets: ReadonlyMap<string, number>, edit: StructureEdit): void {
   if (edit.kind !== "move") {
-    keys(edit, ["sheet", "axis", "kind", "index", "count"]);
+    keys(edit);
     validateEdit(edit);
     findSheet(sheets, edit.sheet);
     return;
   }
-  keys(edit, ["kind", "source", "destination"]);
-  keys(edit.source, ["sheet", "start", "end"]);
-  keys(edit.source.start, ["row", "column"]);
-  keys(edit.source.end, ["row", "column"]);
-  keys(edit.destination, ["sheet", "row", "column"]);
+  keys(edit);
+  keys(edit.source);
+  keys(edit.source.start);
+  keys(edit.source.end);
+  keys(edit.destination);
   findSheet(sheets, edit.source.sheet);
   findSheet(sheets, edit.destination.sheet);
   validatePosition(edit.source.start);
@@ -217,7 +214,8 @@ function relocate(
   return {
     sheet,
     position: {
-      ...cell,
+      row: cell.row,
+      column: cell.column,
       [key]: positiveIndex(index + (edit.kind === "insert" ? edit.count : -edit.count)),
     },
   };

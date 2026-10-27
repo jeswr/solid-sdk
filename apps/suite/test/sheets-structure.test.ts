@@ -179,9 +179,10 @@ describe("workbook preflight limits", () => {
 });
 
 describe("record shape validation", () => {
-  it("accepts every record schema at its field bound and rejects one extra field", () => {
-    const sheet = { name: "Plan", cells: [] };
-    const cell = { row: 1, column: 1, formula: "=A1", notation: "A1", value: undefined } as const;
+  it("ignores extra fields in every record schema without copying them into plans", () => {
+    const sheet = { name: "Plan", cells: [value(3, 1, 8)] };
+    const cell = { row: 3, column: 1, formula: "=A3", notation: "A1", value: undefined } as const;
+    const cells = [value(2, 2, 8), formula(1, 1, "=B2")];
     const edit = { ...insert };
     const moveEdit = { ...move };
     const source = { ...move.source };
@@ -191,56 +192,74 @@ describe("record shape validation", () => {
     const cases: [readonly StructureSheet[], StructureEdit, object][] = [
       [[sheet], insert, sheet],
       [workbook([cell as unknown as StructureCell]), insert, cell],
-      [workbook([]), edit, edit],
-      [workbook([]), moveEdit, moveEdit],
-      [workbook([]), { ...move, source }, source],
-      [workbook([]), { ...move, source: { ...move.source, start } }, start],
-      [workbook([]), { ...move, source: { ...move.source, end } }, end],
-      [workbook([]), { ...move, destination }, destination],
+      [workbook(cells), edit, edit],
+      [workbook(cells), moveEdit, moveEdit],
+      [workbook(cells), { ...move, source }, source],
+      [workbook(cells), { ...move, source: { ...move.source, start } }, start],
+      [workbook(cells), { ...move, source: { ...move.source, end } }, end],
+      [workbook(cells), { ...move, destination }, destination],
     ];
     for (const [sheets, edit, record] of cases) {
-      expect(() => planStructureEdit(sheets, edit)).not.toThrow();
+      const expected = planStructureEdit(sheets, edit);
       Object.defineProperty(record, "private-field", { enumerable: true, value: "private-value" });
       const saved = structuredClone([sheets, edit]);
-      expect(() => planStructureEdit(sheets, edit)).toThrow(
-        expect.objectContaining({ code: "unsupported", message: "Unsupported fields" }),
-      );
+      expect(planStructureEdit(sheets, edit)).toStrictEqual(expected);
       expect([sheets, edit]).toEqual(saved);
     }
   });
 
-  it("rejects an oversized plain record without materialising its keys or reading extra values", () => {
-    const cell = { ...value(1, 1, "private-value") };
+  it("ignores an unbounded number of extra fields without reading their values", () => {
+    const cell = value(3, 1, "literal");
+    const expected = planStructureEdit(workbook([cell]), insert);
     for (let index = 0; index < 100_001; index++) {
       Object.defineProperty(cell, `private-field-${index}`, {
         enumerable: true,
         get() {
-          throw new Error("Unsupported values must not be read");
+          throw new Error("Extra values must not be read");
         },
       });
     }
-    const keys = vi.spyOn(Object, "keys");
-    const own = vi.spyOn(Object, "hasOwn");
-    let caught: unknown;
-    let enumerated: boolean;
-    let inspected: number;
-    try {
-      planStructureEdit(workbook([cell]), insert);
-    } catch (error) {
-      caught = error;
-    } finally {
-      enumerated = keys.mock.calls.some(([input]) => input === cell);
-      inspected = own.mock.calls.filter(([input]) => input === cell).length;
-      keys.mockRestore();
-      own.mockRestore();
-    }
-    expect(enumerated).toBe(false);
-    expect(inspected).toBe(4); // Three allowed fields, then the first unsupported field.
-    expect(caught).toBeInstanceOf(SheetReferenceError);
-    expect(caught).toMatchObject({ code: "unsupported", message: "Unsupported fields" });
+    expect(planStructureEdit(workbook([cell]), insert)).toStrictEqual(expected);
   });
 
-  it("preserves own-field validation for null-prototype and inherited-field records", () => {
+  it("never enumerates Proxy records while validating, shifting or moving cells", () => {
+    const ownKeys = vi.fn((): never => {
+      throw new Error("Record keys must not be enumerated");
+    });
+    const record = <T extends object>(value: T): T => new Proxy(value, { ownKeys });
+    const cells = [value(3, 3, 8), formula(1, 1, "=C3"), formula(4, 4, "=R[-1]C[-1]", "R1C1")];
+    const sheets = workbook(cells).map((sheet) =>
+      record({ name: sheet.name, cells: sheet.cells.map(record) }),
+    );
+    const edits: StructureEdit[] = [
+      insert,
+      deletion,
+      { ...insert, axis: "column" },
+      { ...deletion, axis: "column" },
+      move,
+      { ...move, destination: { sheet: "Other", row: 5, column: 5 } },
+    ];
+    for (const edit of edits) {
+      const proxiedEdit =
+        edit.kind === "move"
+          ? record({
+              kind: edit.kind,
+              source: record({
+                sheet: edit.source.sheet,
+                start: record(edit.source.start),
+                end: record(edit.source.end),
+              }),
+              destination: record(edit.destination),
+            })
+          : record(edit);
+      expect(planStructureEdit(sheets, proxiedEdit)).toStrictEqual(
+        planStructureEdit(workbook(cells), edit),
+      );
+    }
+    expect(ownKeys).not.toHaveBeenCalled();
+  });
+
+  it("ignores extra own and inherited fields on records with custom prototypes", () => {
     for (const prototype of [null, { "private-inherited-field": "private-value" }]) {
       const cell = Object.assign(Object.create(prototype), value(1, 1, "literal"));
       expect(planStructureEdit(workbook([cell]), insert).sheets[0]?.cells).toEqual([
@@ -250,9 +269,13 @@ describe("record shape validation", () => {
         enumerable: true,
         value: "private-value",
       });
-      expect(() => planStructureEdit(workbook([cell]), insert)).toThrow(
-        expect.objectContaining({ code: "unsupported", message: "Unsupported fields" }),
-      );
+      Object.defineProperty(cell, Symbol("private-symbol-field"), {
+        enumerable: true,
+        value: "private-value",
+      });
+      expect(planStructureEdit(workbook([cell]), insert).sheets[0]?.cells).toStrictEqual([
+        value(1, 1, "literal"),
+      ]);
     }
   });
 
@@ -726,8 +749,6 @@ describe("fail-closed inputs", () => {
     [{ name: "Plan", cells: [{ row: 1, column: 1, formula: 123 }] }],
     [{ name: "Plan", cells: [{ row: 1, column: 1, formula: "=A1", notation: "invalid" }] }],
     [{ name: "Plan", cells: [{ row: 1, column: 1, formula: "=Missing!A1" }] }],
-    [{ name: "Plan", cells: [], merged: [] }],
-    [{ name: "Plan", cells: [{ row: 1, column: 1, value: 1, style: {} }] }],
     null,
     {},
     [null],
@@ -745,14 +766,12 @@ describe("fail-closed inputs", () => {
     { ...insert, count: 1.2 },
     { ...insert, index: Number.MAX_SAFE_INTEGER, count: 2 },
     { ...insert, sheet: "Missing" },
-    { ...insert, extra: true },
     { ...move, source: { ...move.source, start: { row: 4, column: 2 } } },
     { ...move, source: { ...move.source, end: { row: 3, column: 1 } } },
     { ...move, destination: { sheet: "Missing", row: 1, column: 1 } },
     { ...move, destination: { sheet: "Other", row: 0, column: 1 } },
     { ...move, destination: { sheet: "Other", row: Number.MAX_SAFE_INTEGER, column: 1 } },
     { ...move, destination: { sheet: "Other", row: 1, column: Number.MAX_SAFE_INTEGER } },
-    { ...move, source: { ...move.source, start: { row: 1, column: 1, extra: true } } },
     null,
   ])("rejects invalid edit %#", (edit) => fail(workbook([]), edit as unknown as StructureEdit));
   it("validates unsupported formulas even when their cells would be deleted or overwritten", () => {
