@@ -15,8 +15,8 @@
   },
   "scripts": {
     "lint": "node scripts/lint.mjs",
-    "typecheck": "node --check scripts/validate.mjs && node --check scripts/lint.mjs && node --check scripts/build.mjs && node --check scripts/example.mjs && node --check scripts/ontology-gate.mjs && node --check scripts/import-sectors.mjs && node --check scripts/legacy-w3id-alignments.mjs && node --check scripts/test-rebase.mjs && node --check scripts/verify-persistent-ids.mjs",
-    "test": "node scripts/validate.mjs && node scripts/test-rebase.mjs",
+    "typecheck": "node --check scripts/validate.mjs && node --check scripts/shacl-fixtures.mjs && node --check scripts/test-shacl-fixtures.mjs && node --check scripts/lint.mjs && node --check scripts/build.mjs && node --check scripts/example.mjs && node --check scripts/ontology-gate.mjs && node --check scripts/import-sectors.mjs && node --check scripts/legacy-w3id-alignments.mjs && node --check scripts/test-rebase.mjs && node --check scripts/verify-persistent-ids.mjs",
+    "test": "node scripts/validate.mjs && node scripts/test-shacl-fixtures.mjs && node scripts/test-rebase.mjs",
     "ontology": "node scripts/ontology-gate.mjs",
     "build": "node scripts/build.mjs && node scripts/example.mjs",
     "gate": "npm run lint && npm run build && npm run typecheck && npm test && npm run ontology"

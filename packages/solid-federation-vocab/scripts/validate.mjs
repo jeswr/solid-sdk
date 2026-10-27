@@ -15,8 +15,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import jsonld from "jsonld";
-import { Parser, Store } from "n3";
-import SHACLValidator from "rdf-validate-shacl";
+import { Parser } from "n3";
+import { validateSectorFixtures } from "./shacl-fixtures.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -202,36 +202,12 @@ for (const [file, ns, properties] of [
   }
 }
 
-// Exercise the actual profiles, including advisory constraints: a wrong datatype
-// must produce a result even when the profile grades it Warning or Info.
-console.log("\nSHACL: core validity and scheduling fixtures");
-const fixtureRoot = join(ROOT, "test", "fixtures", "scheduling");
-const shapes = new Store();
-for (const profile of ["core/core.shacl.ttl", "scheduling/scheduling.shacl.ttl"]) {
-  shapes.addQuads(new Parser().parse(readFileSync(join(ROOT, "sectors", profile), "utf8")));
-}
-for (const file of readdirSync(fixtureRoot)
-  .filter((f) => f.endsWith(".ttl"))
-  .sort()) {
-  try {
-    const data = new Store(new Parser().parse(readFileSync(join(fixtureRoot, file), "utf8")));
-    const report = await new SHACLValidator(shapes).validate(data);
-    const expectedValid = !file.endsWith(".invalid.ttl");
-    if (report.conforms !== expectedValid || (expectedValid && report.results.length > 0)) {
-      fail(
-        `${file}: expected ${expectedValid ? "no results" : "a constraint failure"}, got ${report.results.length} result(s)`,
-      );
-      for (const result of report.results) {
-        console.error(
-          `    ${result.focusNode.value}: ${result.path?.value ?? ""} ${result.message.map((m) => m.value).join("; ")}`,
-        );
-      }
-    } else {
-      ok(`${file}: ${expectedValid ? "conforms without warnings" : "rejected as expected"}`);
-    }
-  } catch (err) {
-    fail(`${file}: SHACL validation failed: ${err.message}`);
-  }
+// Exercise every constrained sector, including advisory Warning/Info constraints.
+console.log("\nSHACL: sector fixture gate");
+try {
+  await validateSectorFixtures(ROOT);
+} catch (error) {
+  fail(error.message);
 }
 
 console.log("");
