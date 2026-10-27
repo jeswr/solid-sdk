@@ -10,6 +10,7 @@ import SHACLValidator from "rdf-validate-shacl";
 const SH = "http://www.w3.org/ns/shacl#";
 const OWL = "http://www.w3.org/2002/07/owl#";
 const TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const SUBCLASS = "http://www.w3.org/2000/01/rdf-schema#subClassOf";
 const objects = (store, subject, predicate) => [
   ...SetFrom.subjectPredicate(
     new TermWrapper(subject, store, DataFactory),
@@ -51,15 +52,26 @@ function constrainedProperties(store, shape, visited = new Set()) {
   ];
 }
 
+// Match the validator's class targets: rdf:type followed by rdfs:subClassOf* in data.
+function instancesOf(data, type, visited = new Set()) {
+  const key = `${type.termType}:${type.value}`;
+  if (visited.has(key)) return [];
+  visited.add(key);
+  return [
+    ...data.getSubjects(TYPE, type, null),
+    ...data
+      .getSubjects(SUBCLASS, type, null)
+      .flatMap((subclass) => instancesOf(data, subclass, visited)),
+  ];
+}
+
 // Untargeted helper NodeShapes are reached through sh:node callers.
 function targets(shapes, data, shape, visited = new Set()) {
   if (visited.has(shape.value)) return [];
   visited.add(shape.value);
   return [
     ...objects(shapes, shape, `${SH}targetNode`),
-    ...objects(shapes, shape, `${SH}targetClass`).flatMap((type) =>
-      data.getSubjects(TYPE, type, null),
-    ),
+    ...objects(shapes, shape, `${SH}targetClass`).flatMap((type) => instancesOf(data, type)),
     ...objects(shapes, shape, `${SH}targetSubjectsOf`).flatMap((property) =>
       data.getSubjects(property, null, null),
     ),

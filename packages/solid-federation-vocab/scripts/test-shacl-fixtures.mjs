@@ -195,6 +195,54 @@ try {
   rmSync(fixtureDir, { recursive: true });
   console.log("✓ Inherited-only constraints require fixtures and enforce NodeShape coverage.");
 
+  // Class targets include instances of subclasses declared in each fixture's data graph.
+  const bookmarkClass = "https://jeswr.org/ns/sectors/bookmarks#Bookmark";
+  const subclass = "https://example.org/SpecialBookmark";
+  const intermediate = "https://example.org/IntermediateBookmark";
+  const subClassOf = "http://www.w3.org/2000/01/rdf-schema#subClassOf";
+  for (const parent of [bookmarkClass, intermediate]) {
+    for (const [file, text] of [
+      [positive, valid],
+      [negative, original],
+    ]) {
+      const subclassData = new Store(new Parser().parse(text));
+      for (const subject of subclassData.getSubjects(TYPE, bookmarkClass, null)) {
+        const types = SetFrom.subjectPredicate(
+          new TermWrapper(subject, subclassData, DataFactory),
+          TYPE,
+          NamedNodeAs.string,
+          NamedNodeFrom.string,
+        );
+        types.delete(bookmarkClass);
+        types.add(subclass);
+      }
+      iriProperties(subclassData, subclass, { [subClassOf]: parent });
+      if (parent === intermediate) {
+        iriProperties(subclassData, intermediate, { [subClassOf]: bookmarkClass });
+      }
+      writeRdf(file, subclassData);
+      if (file === negative) {
+        writeFileSync(file, `${original.split("\n")[0]}\n${readFileSync(file, "utf8")}`);
+      }
+    }
+    assert.equal((await check()).sectorCount, 2);
+  }
+  for (const file of [positive, negative]) {
+    writeFileSync(
+      file,
+      readFileSync(file, "utf8").replaceAll(bookmarkClass, "https://example.org/UnrelatedClass"),
+    );
+  }
+  await assert.rejects(check, (error) => {
+    assert.match(error.message, /BookmarkShape has no positive fixture coverage/);
+    assert.match(error.message, /BookmarkShape has no negative fixture coverage/);
+    assert.match(error.message, /expected exactly one constraint failure.*got 0/);
+    return true;
+  });
+  writeFileSync(positive, valid);
+  writeFileSync(negative, original);
+  console.log("✓ Direct and transitive subclasses count as targets; unrelated classes do not.");
+
   // New nested profiles must be found without changing any sector inventory.
   copySector("drawing", "nested/drawing");
   assert.equal((await check()).sectorCount, 3);
