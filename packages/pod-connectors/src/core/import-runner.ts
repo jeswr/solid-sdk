@@ -145,7 +145,7 @@ export function createSourceAuth(
   );
   const sourceFetch = refuseRedirects(fetchImpl);
   const impl = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const snapshot = snapshotFetchInput(input, init);
+    const snapshot = snapshotFetchInput(input, init, { forward: true });
     const url = new URL(snapshot.url);
     if (url.protocol !== "https:" || !origins.has(url.origin) || url.username || url.password) {
       throw new IntegrationSyncError(

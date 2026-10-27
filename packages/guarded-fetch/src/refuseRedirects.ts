@@ -123,7 +123,7 @@ export function refuseRedirects(
     // caller's explicit init, exactly as main forwarded the original input and init, so a
     // delegated fetch that reads its options from init still sees them. The snapshot is taken
     // without init and never transfers a body that init replaces.
-    const snapshot = snapshotFetchInput(input, init, { metadataOnly: true });
+    const snapshot = snapshotFetchInput(input, init, { forward: true });
     const { url } = snapshot;
     const res = await fetch(snapshot.input, { ...(init ?? {}), redirect: "manual" });
 
