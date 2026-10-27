@@ -3,6 +3,10 @@
 /** Checked before inspecting, copying or sorting any version. */
 export const MAX_INPUT_VERSIONS = 100_000;
 export const DEFAULT_MAX_VERSIONS = 100;
+/** Per-id UTF-16 length; longer ids are INVALID_VERSION. Checked before hashing or sorting. */
+export const MAX_VERSION_ID_LENGTH = 1024;
+/** Total UTF-16 length of all ids; more is TOO_MANY_VERSIONS. Bounds Set and sort string work. */
+export const MAX_TOTAL_VERSION_ID_LENGTH = 8 * 1024 * 1024;
 export const DEFAULT_MAX_BYTES = 1024 ** 3;
 
 export interface ManagedVersion {
@@ -134,6 +138,7 @@ export function planRetention(
 
   const ids = new Set<string>();
   const snapshots: ManagedVersion[] = [];
+  let totalIdLength = 0;
   for (let index = 0; index < count; index++) {
     const version = record(own(versions, index), [
       "id",
@@ -141,7 +146,9 @@ export function planRetention(
       "sizeBytes",
       "labelled",
     ]) as unknown as ManagedVersion;
-    valid(typeof version.id === "string");
+    valid(typeof version.id === "string" && version.id.length <= MAX_VERSION_ID_LENGTH);
+    totalIdLength += version.id.length;
+    if (totalIdLength > MAX_TOTAL_VERSION_ID_LENGTH) throw new RetentionError("TOO_MANY_VERSIONS");
     valid(Number.isSafeInteger(version.createdAt) && version.createdAt <= now);
     nonnegativeInteger(version.sizeBytes);
     valid(typeof version.labelled === "boolean");

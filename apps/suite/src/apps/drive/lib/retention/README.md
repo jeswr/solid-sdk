@@ -30,6 +30,9 @@ Malformed lists, records, numeric fields, times or limits throw
 totals use integer arithmetic; an unrepresentable numeric `freedBytes` is rejected
 with the same code. Duplicate IDs throw `DUPLICATE_VERSION`. More than 100,000
 versions throws `TOO_MANY_VERSIONS` before inspecting or copying any records.
+An id longer than `MAX_VERSION_ID_LENGTH` (1,024 UTF-16 units) is `INVALID_VERSION`;
+ids totalling more than `MAX_TOTAL_VERSION_ID_LENGTH` (8 Mi units) throw
+`TOO_MANY_VERSIONS`. Both are checked before ids are hashed or sorted.
 Errors never echo caller-provided IDs. Records must be plain data objects, with
 only the documented keys and no accessors. IDs are opaque strings.
 

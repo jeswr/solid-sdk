@@ -3,6 +3,8 @@ export {
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_VERSIONS,
   MAX_INPUT_VERSIONS,
+  MAX_TOTAL_VERSION_ID_LENGTH,
+  MAX_VERSION_ID_LENGTH,
   type ManagedVersion,
   planRetention,
   RetentionError,

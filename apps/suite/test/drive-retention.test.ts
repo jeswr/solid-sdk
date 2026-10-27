@@ -4,6 +4,8 @@ import {
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_VERSIONS,
   MAX_INPUT_VERSIONS,
+  MAX_TOTAL_VERSION_ID_LENGTH,
+  MAX_VERSION_ID_LENGTH,
   type ManagedVersion,
   planRetention,
   RetentionError,
@@ -658,5 +660,21 @@ describe("Drive retention fail-closed validation", () => {
       overBudget: false,
     });
     expect(reads).toBe(0);
+  });
+
+  it("bounds id length per version and in total before hashing or sorting", () => {
+    expect(MAX_VERSION_ID_LENGTH).toBe(1024);
+    expect(MAX_TOTAL_VERSION_ID_LENGTH).toBe(8 * 1024 * 1024);
+    const atBound = "a".repeat(MAX_VERSION_ID_LENGTH);
+    expect(planRetention([version(atBound)], NOW).keep).toEqual([atBound]);
+    errorCode(() => planRetention([version(`${atBound}a`)], NOW), "INVALID_VERSION");
+    const count = MAX_TOTAL_VERSION_ID_LENGTH / MAX_VERSION_ID_LENGTH;
+    const ids = (n: number) =>
+      Array.from({ length: n }, (_, i) =>
+        version(`${String(i).padStart(8, "0")}${"p".repeat(1016)}`),
+      );
+    const plan = planRetention(ids(count), NOW);
+    expect(plan.keep.length + plan.delete.length).toBe(count);
+    errorCode(() => planRetention(ids(count + 1), NOW), "TOO_MANY_VERSIONS");
   });
 });

@@ -40,8 +40,8 @@ valid input then always returns `null`.
 
 `MAX_AUTOFORMAT_CONTEXT_LENGTH` is 512 UTF-16 units before typing. Longer blocks
 are accepted and only their trailing window is matched; clipped surrogate pairs
-are kept out of matching without changing edit offsets. The full original block
-is checked for lone surrogates, so only Unicode validation scales with its length.
+are kept out of matching without changing edit offsets. Only the window is
+checked for lone surrogates, so the work per keystroke is bounded by the window.
 `MAX_TYPED_CHARACTER_LENGTH` is two UTF-16 units; the engine also checks that these
 encode exactly one scalar. Length checks precede scans and copies.
 

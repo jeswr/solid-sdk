@@ -81,7 +81,7 @@ function readContext(context: AutoformatContext): {
 /**
  * textBefore excludes typed, which must be one Unicode scalar value (no paste/IME batch).
  * Apply the returned edit to textBefore + typed. Fractions wait for a non-digit delimiter.
- * Full text is Unicode-validated; only the trailing window participates in matching.
+ * Only the trailing window is Unicode-validated and participates in matching.
  */
 export function autoformatInput(
   textBefore: string,
@@ -96,16 +96,20 @@ export function autoformatInput(
   if (typed.length === 0 || typed.length > MAX_TYPED_CHARACTER_LENGTH) {
     throw new AutoformatError("INVALID_TEXT", "Expected exactly one typed Unicode scalar value");
   }
-  if (!textBefore.isWellFormed() || !typed.isWellFormed() || Array.from(typed).length !== 1) {
+  // Only the trailing window is considered, so only it is scanned: work stays bounded per keystroke.
+  let before = textBefore.slice(windowStart);
+  const first = before.charCodeAt(0);
+  const previous = windowStart > 0 ? textBefore.charCodeAt(windowStart - 1) : 0;
+  // A low surrogate here whose high half sits just outside the window is a clipped valid pair.
+  if (first >= 0xdc00 && first <= 0xdfff && previous >= 0xd800 && previous <= 0xdbff) {
+    before = before.slice(1);
+  }
+  if (!before.isWellFormed() || !typed.isWellFormed() || Array.from(typed).length !== 1) {
     throw new AutoformatError("INVALID_TEXT", "Expected well-formed Unicode and one typed scalar");
   }
   const { inCode, rules } = readContext(context);
   if (inCode) return null;
 
-  let before = textBefore.slice(windowStart);
-  const first = before.charCodeAt(0);
-  // The full input is valid; a low surrogate here is the clipped half of a valid pair.
-  if (first >= 0xdc00 && first <= 0xdfff) before = before.slice(1);
   const text = before + typed;
   const to = textBefore.length + typed.length;
   function replacement(

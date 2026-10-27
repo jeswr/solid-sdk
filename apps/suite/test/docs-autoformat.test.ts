@@ -244,7 +244,18 @@ describe("typed input errors", () => {
   ])("rejects lone surrogates in either input: %j", (invalid) => {
     errorCode(() => autoformatInput(invalid, ".", prose), "INVALID_TEXT");
     errorCode(() => autoformatInput("", invalid, prose), "INVALID_TEXT");
-    errorCode(() => autoformatInput(`${invalid}${"x".repeat(512)}`, ".", prose), "INVALID_TEXT");
+    // Outside the considered 512-unit window: ignored, never scanned.
+    expect(autoformatInput(`${invalid}${"x".repeat(512)}`, ".", prose)).toBeNull();
+  });
+
+  it("rejects a lone low surrogate at the window start but keeps a clipped valid pair", () => {
+    errorCode(() => autoformatInput(`a\udc00${"x".repeat(511)}`, ".", prose), "INVALID_TEXT");
+    expect(autoformatInput(`\ud83d\ude00${"x".repeat(511)}`, ".", prose)).toBeNull();
+  });
+
+  it("bounds Unicode validation to the window for very long blocks", () => {
+    const text = `\ud800${"x".repeat(1_000_000)}..`;
+    expect(transformed(text, ".")).toBe(`${text.slice(0, -2)}…`);
   });
 
   it.each([null, 1, {}, ["x"]])("rejects non-string text %j without coercion", (value) => {
