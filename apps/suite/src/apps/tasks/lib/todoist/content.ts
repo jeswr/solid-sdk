@@ -10,10 +10,11 @@ export function splitContent(content: string): { title: string; labels: string[]
   let fenceQuotes = 0;
   let brackets = 0;
   let parentheses = 0;
+  let linkQuote = "";
   let angle = false;
   for (let i = 0; i < content.length; i++) {
     const char = content[i];
-    if ((i === 0 || content[i - 1] === "\n" || content[i - 1] === "\r") && !code) {
+    if ((i === 0 || content[i - 1] === "\n" || content[i - 1] === "\r") && !code && !linkQuote) {
       let end = i;
       while (end < content.length && content[end] !== "\n" && content[end] !== "\r") end++;
       let sourceLine = content.slice(i, end);
@@ -61,6 +62,21 @@ export function splitContent(content: string): { title: string; labels: string[]
     }
     if (char === "\\" && !code) {
       i++;
+      continue;
+    }
+    if (linkQuote) {
+      if (char === linkQuote) linkQuote = "";
+      continue;
+    }
+    // Quotes start a link title only after the destination's whitespace separator.
+    if (
+      !code &&
+      parentheses === 1 &&
+      !angle &&
+      (char === '"' || char === "'") &&
+      /\s/.test(content[i - 1] as string)
+    ) {
+      linkQuote = char;
       continue;
     }
     if (char === "`") {

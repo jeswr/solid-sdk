@@ -209,6 +209,26 @@ describe("Todoist project drafts", () => {
 
 describe("content and labels", () => {
   it.each([
+    '[text](https://example.org "a ) @literal title")',
+    "[text](https://example.org 'a ) @literal title')",
+    '[text](https://example.org "a ( @literal title")',
+    '[text](https://example.org "a \' ) @literal title")',
+    String.raw`[text](https://example.org "a \" ) @literal title")`,
+    String.raw`[text](https://example.org 'a \' ) @literal title')`,
+    '[text](https://example.org "a ` ) @literal title")',
+    '[text](https://example.org "a < [ ) @literal title")',
+    '[text](https://example.org "a\n~~~ ) @literal title")',
+    '[text](https://example.org "a\r\n~~~ ) @literal title")',
+    '[text]( "a ) @literal title")',
+    "[text](https://example.org/it's-here)",
+    '[text](<https://example.org/a(b)> "a ) @literal title")',
+  ])("preserves quoted link titles and resumes labels after the link: %s", (link) => {
+    const result = parseTodoistCsv(csv([task({ CONTENT: `${link} @real` })]), options).tasks[0]!;
+    expect(result.title).toBe(link);
+    expect(result.labels).toEqual(["real"]);
+  });
+
+  it.each([
     "\n",
     "\r\n",
     "\r",
