@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
 import { buildActionMetadata } from "./emit.js";
 import { SENT_AT_PATTERN_HASH, SENT_AT_PATTERN_IRI } from "./patterns.js";
@@ -6,6 +7,23 @@ import { SENT_AT_PATTERN_HASH, SENT_AT_PATTERN_IRI } from "./patterns.js";
 const SENDER = "https://jeswr.org/agent";
 
 describe("buildActionMetadata (Rule 2 — the outbound sent-at descriptor)", () => {
+  it.each([
+    ["https://pod.example/日本語.ttl", "https://pod.example/%E6%97%A5%E6%9C%AC%E8%AA%9E.ttl"],
+    ["https://bücher.example/é.ttl", "https://xn--bcher-kva.example/%C3%A9.ttl"],
+    ["https://POD.example:443/replies/../reply.ttl", "https://pod.example/reply.ttl"],
+  ])("emits a usable header for %s while preserving RDF IRIs", async (iri, pointer) => {
+    const built = await buildActionMetadata({
+      sentAt: "2026-07-05T09:12:00Z",
+      podCopyUrl: iri,
+      issuer: iri,
+      sender: iri,
+      derivedFrom: iri,
+    });
+    expect(new Headers(built.headers).get("X-Agentic-Reply")).toBe(pointer);
+    expect(built.credential.issuer).toBe(iri);
+    expect(built.credential.credentialSubject).toMatchObject({ sender: iri, wasDerivedFrom: iri });
+  });
+
   it("builds the schema:Message descriptor pinned to the sent-at pattern", async () => {
     const built = await buildActionMetadata({
       sentAt: "2026-07-05T09:12:00Z",
