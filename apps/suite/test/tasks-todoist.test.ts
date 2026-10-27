@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // biome-ignore-all lint/style/noNonNullAssertion: Tests assert fixture sizes before using entries.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   MAX_TODOIST_CSV_BYTES,
   MAX_TODOIST_CSV_ROWS,
@@ -245,10 +245,81 @@ describe("content and labels", () => {
 });
 
 describe("dates and time zones", () => {
+  it("reuses one formatter for case variants while preserving each supplied timezone", () => {
+    const zones = Array.from({ length: 64 }, (_, mask) =>
+      Array.from("Europe/London", (char, index) =>
+        mask & (1 << index) ? char.toUpperCase() : char.toLowerCase(),
+      ).join(""),
+    );
+    const NativeFormatter = Intl.DateTimeFormat;
+    const formatter = vi
+      .spyOn(Intl, "DateTimeFormat")
+      // biome-ignore lint/complexity/useArrowFunction: The constructor spy must be constructable.
+      .mockImplementation(function (locales, config) {
+        return new NativeFormatter(locales, config);
+      });
+    try {
+      const result = parseTodoistCsv(
+        csv(zones.map((timeZone) => task({ TIMEZONE: timeZone, DATE: "2026-07-04T13:00" }))),
+        options,
+      );
+      expect(result.tasks.map(({ due }) => due)).toEqual(
+        zones.map((timeZone) => ({
+          kind: "dateTime",
+          dateTime: "2026-07-04T12:00:00.000Z",
+          timeZone,
+        })),
+      );
+      expect(formatter).toHaveBeenCalledExactlyOnceWith("en-GB", {
+        ...formatter.mock.calls[0]![1],
+        timeZone: "europe/london",
+      });
+    } finally {
+      formatter.mockRestore();
+    }
+  });
+
+  it("evicts formatters beyond 32 retained zones without changing date resolution", () => {
+    const zones = Intl.supportedValuesOf("timeZone").slice(0, 32);
+    const timeZones = [
+      ...zones.slice(0, 31),
+      options.defaultTimeZone,
+      zones[31]!,
+      "UTC",
+      zones[0]!,
+    ];
+    const NativeFormatter = Intl.DateTimeFormat;
+    const formatter = vi
+      .spyOn(Intl, "DateTimeFormat")
+      // biome-ignore lint/complexity/useArrowFunction: The constructor spy must be constructable.
+      .mockImplementation(function (locales, config) {
+        return new NativeFormatter(locales, config);
+      });
+    try {
+      const result = parseTodoistCsv(
+        csv(timeZones.map((timeZone) => task({ TIMEZONE: timeZone, DATE: "2026-07-04T13:00Z" }))),
+        options,
+      );
+      expect(result.tasks.map(({ due }) => due)).toEqual(
+        timeZones.map((timeZone) => ({
+          kind: "dateTime",
+          dateTime: "2026-07-04T13:00:00.000Z",
+          timeZone,
+        })),
+      );
+      expect(formatter).toHaveBeenCalledTimes(35);
+      // The first additional zone is evicted after the default zone.
+      expect(formatter.mock.calls.at(-1)![1]!.timeZone).toBe(zones[0]!.toLowerCase());
+    } finally {
+      formatter.mockRestore();
+    }
+  });
+
   it.each([
     ["2026-07-04", "Europe/London", "2026-07-03T23:00:00.000Z", "date"],
     ["2026-01-04", "Europe/London", "2026-01-04T00:00:00.000Z", "date"],
     ["2024-02-29", "UTC", "2024-02-29T00:00:00.000Z", "date"],
+    ["2024-02-29", "utc", "2024-02-29T00:00:00.000Z", "date"],
     ["2026-07-04T13:45", "", "2026-07-04T12:45:00.000Z", "dateTime"],
     ["2026-07-04T13:45:12.123", "Asia/Kathmandu", "2026-07-04T08:00:12.123Z", "dateTime"],
     ["2026-07-04T00:00:00.1", "UTC", "2026-07-04T00:00:00.100Z", "dateTime"],
@@ -446,10 +517,7 @@ describe("validation", () => {
       ).tasks[0]!.duration,
     ).toEqual({ amount, unit: durationUnit });
   });
-  it.each([
-    "",
-    "None",
-  ])("imports an absent duration with unit %j", (unit) => {
+  it.each(["", "None"])("imports an absent duration with unit %j", (unit) => {
     const result = parseTodoistCsv(
       csv([task({ DURATION_UNIT: unit }), task({ DURATION: "5", DURATION_UNIT: "minute" })]),
       options,

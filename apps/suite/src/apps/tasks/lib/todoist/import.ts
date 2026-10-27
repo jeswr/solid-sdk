@@ -25,6 +25,8 @@ const supportedColumns = new Set([
   "DURATION",
   "DURATION_UNIT",
 ]);
+// Native Intl formatters are expensive; input row/byte limits do not bound them practically.
+const MAX_CACHED_FORMATTERS = 32;
 
 /** Parse a bounded Todoist template into local drafts, with no IO or identity resolution. */
 export function parseTodoistCsv(input: string, options: TodoistImportOptions): TodoistProjectDraft {
@@ -32,7 +34,8 @@ export function parseTodoistCsv(input: string, options: TodoistImportOptions): T
   scanCsv(input);
   // Validate options only after all input limits; never consult the host's default zone.
   const defaultZone = options?.defaultTimeZone;
-  const formats = new Map([[defaultZone, zoneFormatter(defaultZone, 1)]]);
+  const formats = new Map<string, Intl.DateTimeFormat>();
+  formatterFor(defaultZone, 1);
   const sections: TodoistSectionDraft[] = [];
   const tasks: TodoistTaskDraft[] = [];
   const warnings: TodoistWarning[] = [];
@@ -117,16 +120,25 @@ export function parseTodoistCsv(input: string, options: TodoistImportOptions): T
   if (!headers) throw new TodoistImportError("INVALID_CSV", 1);
   return { sections, tasks, warnings };
 
+  function formatterFor(zone: string, line: number): Intl.DateTimeFormat {
+    // Invalid runtime option types must still reach the typed timezone validator.
+    const key = typeof zone === "string" ? zone.toLowerCase() : zone;
+    let format = formats.get(key);
+    if (!format) {
+      if (formats.size >= MAX_CACHED_FORMATTERS)
+        formats.delete(formats.keys().next().value as string);
+      format = zoneFormatter(zone, line);
+      formats.set(key, format);
+    }
+    return format;
+  }
+
   function deadline(
     value: string,
     zone: string,
     line: number,
   ): Pick<TodoistTaskDraft, "due" | "dueText"> {
-    let format = formats.get(zone);
-    if (!format) {
-      format = zoneFormatter(zone, line);
-      formats.set(zone, format);
-    }
+    const format = formatterFor(zone, line);
     if (value === "") return {};
     const due = parseDue(value, zone, format, line);
     if (due) return { due };
