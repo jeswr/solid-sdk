@@ -13,6 +13,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { measureUsage, purgeExpired } from "../lib/operations/operations";
+import { DriveFocusBoundary } from "../state/app-focus";
 import { DriveProvider, useDrive } from "../state/drive-context";
 import { claimPurge } from "../state/purge-marker";
 import { DriveUiProvider, useDriveUi } from "../state/ui";
@@ -150,7 +151,9 @@ function SessionGate({ children }: { children: ReactNode }) {
 export function DriveApp({ children }: { children: ReactNode }) {
   return (
     <PodSessionProvider>
-      <SessionGate>{children}</SessionGate>
+      <DriveFocusBoundary>
+        <SessionGate>{children}</SessionGate>
+      </DriveFocusBoundary>
       <Toaster position="bottom-center" />
     </PodSessionProvider>
   );

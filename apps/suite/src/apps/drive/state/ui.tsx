@@ -79,14 +79,15 @@ export function focusDriveListing(
   url?: string,
   preferred?: HTMLElement | null,
   listing = document.querySelector<HTMLElement>("[data-drive-listing]"),
+  scope: ParentNode = document,
 ) {
   const row = url ? listing?.querySelector<HTMLElement>(`[data-url="${CSS.escape(url)}"]`) : null;
   for (const target of [
     preferred,
     row,
     listing,
-    document.querySelector<HTMLElement>("[data-drive-preview]"),
-    document.querySelector<HTMLElement>('main, [role="main"]'),
+    scope.querySelector<HTMLElement>("[data-drive-preview]"),
+    scope.querySelector<HTMLElement>('main, [role="main"]'),
   ]) {
     if (!target?.isConnected || target === document.body) continue;
     target.focus();
