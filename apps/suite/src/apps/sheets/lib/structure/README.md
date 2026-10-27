@@ -63,6 +63,13 @@ formula length/token excesses retain `unsupported`. One case-insensitive name in
 is built per call and reused for reference validation, edits and output placement;
 lookups do not rescan the workbook.
 
+Sheets, cells, edits, move sources/destinations and move endpoints must be records.
+Primitives and arrays (including arrays carrying valid record fields) are rejected
+before field enumeration, so malformed strings or arrays cannot bypass the size
+preflight by materialising their character or element keys. The field validator
+reports these failures as `SheetReferenceError` with `unsupported` and a fixed
+message without caller data.
+
 Unsupported or malformed input throws the exported `SheetReferenceError`, with
 `syntax`, `bounds`, `unsupported` or `invalid-edit` codes, before any result is
 returned. This includes moves splitting a referenced range, named/structured/3D/

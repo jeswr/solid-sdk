@@ -178,6 +178,90 @@ describe("workbook preflight limits", () => {
   });
 });
 
+describe("record shape validation", () => {
+  const rejectWithoutEnumerating = (
+    sheets: readonly StructureSheet[],
+    edit: StructureEdit,
+    malformed: unknown,
+  ) => {
+    const keys = vi.spyOn(Object, "keys");
+    let caught: unknown;
+    let enumerated: boolean;
+    try {
+      planStructureEdit(sheets, edit);
+    } catch (error) {
+      caught = error;
+    } finally {
+      enumerated = keys.mock.calls.some(([input]) => input === malformed);
+      keys.mockRestore();
+    }
+    expect(enumerated).toBe(false);
+    expect(caught).toBeInstanceOf(SheetReferenceError);
+    expect(caught).toMatchObject({ code: "unsupported", message: "Expected a record" });
+  };
+
+  it.each([
+    MAX_CELL_VALUE_LENGTH,
+    MAX_CELL_VALUE_LENGTH + 1,
+  ])("rejects strings and arrays of length %i before enumerating record fields", (length) => {
+    for (const malformed of ["private-input".padEnd(length, "x"), new Array(length).fill(null)]) {
+      const cell = malformed as unknown as StructureCell;
+      rejectWithoutEnumerating(workbook([cell]), insert, malformed);
+      for (const endpoint of ["start", "end"] as const) {
+        const edit = {
+          ...move,
+          source: { ...move.source, [endpoint]: malformed },
+        } as unknown as StructureEdit;
+        rejectWithoutEnumerating(workbook([]), edit, malformed);
+      }
+    }
+  });
+
+  it.each([
+    null,
+    undefined,
+    true,
+    1,
+    "",
+  ])("rejects primitive move endpoints before enumeration: %j", (malformed) => {
+    for (const endpoint of ["start", "end"] as const) {
+      const edit = {
+        ...move,
+        source: { ...move.source, [endpoint]: malformed },
+      } as unknown as StructureEdit;
+      rejectWithoutEnumerating(workbook([]), edit, malformed);
+    }
+  });
+
+  it("rejects arrays carrying otherwise valid fields at every record position", () => {
+    const sheet = Object.assign([], { name: "Plan", cells: [] });
+    const cell = Object.assign([], value(1, 1, "private-input"));
+    const edit = Object.assign([], insert);
+    const moveEdit = Object.assign([], move);
+    const source = Object.assign([], move.source);
+    const start = Object.assign([], move.source.start);
+    const end = Object.assign([], move.source.end);
+    const destination = Object.assign([], move.destination);
+    const cases: [unknown, unknown, unknown][] = [
+      [[sheet], insert, sheet],
+      [workbook([cell]), insert, cell],
+      [workbook([]), edit, edit],
+      [workbook([]), moveEdit, moveEdit],
+      [workbook([]), { ...move, source }, source],
+      [workbook([]), { ...move, source: { ...move.source, start } }, start],
+      [workbook([]), { ...move, source: { ...move.source, end } }, end],
+      [workbook([]), { ...move, destination }, destination],
+    ];
+    for (const [sheets, edit, malformed] of cases) {
+      rejectWithoutEnumerating(
+        sheets as readonly StructureSheet[],
+        edit as StructureEdit,
+        malformed,
+      );
+    }
+  });
+});
+
 describe("structural workbook plans", () => {
   it("rewrites references to deleted blank cells while preserving literal values", () => {
     const result = planStructureEdit(

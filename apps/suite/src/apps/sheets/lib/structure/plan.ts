@@ -63,7 +63,9 @@ function reject(message: string): never {
   throw new SheetReferenceError("unsupported", message);
 }
 
-function keys(value: object, allowed: readonly string[]): void {
+function keys(value: unknown, allowed: readonly string[]): void {
+  if (value === null || typeof value !== "object" || Array.isArray(value))
+    reject("Expected a record");
   if (Object.keys(value).some((key) => !allowed.includes(key))) reject("Unsupported fields");
 }
 
