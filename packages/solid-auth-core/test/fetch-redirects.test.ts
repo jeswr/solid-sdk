@@ -5,7 +5,7 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import * as DPoP from "dpop";
 import * as oauth from "oauth4webapi";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createSolidAuth, type LiveSession, WebIdDPoPTokenProvider } from "../src/controller.js";
 import { type ProactiveFetchState, proactiveAuthenticatedFetch } from "../src/proactive-fetch.js";
 
@@ -158,7 +158,12 @@ for (const kind of ["controller", "proactive"] as const) {
           await (
             await wrapped(`${POD}/start`, {
               method,
-              ...(hasBody ? { body: "ABC", headers: { "Content-Type": "text/plain" } } : {}),
+              ...(hasBody
+                ? {
+                    body: "ABC",
+                    headers: { "Content-Type": "text/plain", "Content-Length": "3" },
+                  }
+                : {}),
               redirect: "follow",
             })
           ).text(),
@@ -167,6 +172,12 @@ for (const kind of ["controller", "proactive"] as const) {
         expect(sent[1].request.url).toBe(`${POD}/final?q=1#part`);
         expect(sent[1].request.method).toBe(nextMethod);
         expect(sent[1].body).toBe(nextMethod === "GET" || !hasBody ? "" : "ABC");
+        if (hasBody) {
+          expect(sent[0].request.headers.get("Content-Length")).toBe("3");
+          expect(sent[1].request.headers.get("Content-Length")).toBe(
+            nextMethod === "GET" ? null : "3",
+          );
+        }
         if (nextMethod === "GET") expect(sent[1].request.headers.has("Content-Type")).toBe(false);
         const proofs = await Promise.all(
           sent.map(({ request }) => proofOf(request.headers.get("DPoP"))),
@@ -358,6 +369,55 @@ for (const kind of ["controller", "proactive"] as const) {
       expect(() => response.clone()).toThrow(TypeError);
     });
 
+    for (const timing of ["before", "during"] as const) {
+      for (const customReason of [false, true]) {
+        it(`aborts ${timing} body buffering with the ${customReason ? "custom" : "default"} signal reason`, async () => {
+          const base = vi.fn<typeof fetch>();
+          const wrapped = await wrappedFetch(kind, base);
+          const abort = new AbortController();
+          let reading!: () => void;
+          const started = new Promise<void>((resolve) => {
+            reading = resolve;
+          });
+          // Cancellation itself may stall; rejecting fetch must not wait for it.
+          const cancel = vi.fn(() => new Promise<void>(() => {}));
+          const stream = new ReadableStream<Uint8Array<ArrayBuffer>>(
+            {
+              pull() {
+                reading();
+                return new Promise<void>(() => {});
+              },
+              cancel,
+            },
+            { highWaterMark: 0 },
+          );
+          class StalledBlob extends Blob {
+            override stream() {
+              return stream;
+            }
+          }
+          const reason = customReason
+            ? new DOMException("cancel buffering", "AbortError")
+            : undefined;
+          if (timing === "before") abort.abort(reason);
+          const pending = wrapped(`${POD}/start`, {
+            method: "POST",
+            body: new StalledBlob(["ABC"]),
+            signal: abort.signal,
+          });
+          if (timing === "during") {
+            await started;
+            abort.abort(reason);
+          }
+          await expect(pending).rejects.toBe(abort.signal.reason);
+          expect(abort.signal.reason.name).toBe("AbortError");
+          expect(base).not.toHaveBeenCalled();
+          if (timing === "during")
+            expect(cancel).toHaveBeenCalledExactlyOnceWith(abort.signal.reason);
+        });
+      }
+    }
+
     for (const bodyKind of ["bytes", "blob", "params", "form"] as const) {
       it(`replays a buffered ${bodyKind} body without changing its content type or bytes`, async () => {
         const form = new FormData();
@@ -472,6 +532,111 @@ for (const kind of ["controller", "proactive"] as const) {
       await wrapped(`${FOREIGN}/public`, { redirect: "error" });
       expect(policies).toEqual(["follow", "error"]);
     });
+
+    for (const retry of [false, true]) {
+      for (const redirect of ["follow", "error", "manual"] as const) {
+        it(`keeps ${redirect} when the provider declines credentials on the ${retry ? "retry" : "first upgrade"}`, async () => {
+          const sent: Request[] = [];
+          const result = new Response("public", {
+            status: redirect === "manual" ? 307 : 200,
+            headers: { Location: "/next" },
+          });
+          const redirectError = new TypeError("redirect disallowed");
+          const wrapped = await wrappedFetch(kind, async (input, init) => {
+            const request = new Request(input, init);
+            sent.push(request);
+            expect(await request.text()).toBe("ABC");
+            if (retry && sent.length === 1) {
+              expect(request.redirect).toBe("manual");
+              expect(request.headers.get("Authorization")).toBe(`DPoP ${TOKEN}`);
+              upgrade.mockImplementationOnce(async (source) => source);
+              return new Response(null, { status: 401 });
+            }
+            expect(request.redirect).toBe(redirect);
+            expect(request.headers.has("Authorization")).toBe(false);
+            expect(request.headers.has("DPoP")).toBe(false);
+            if (request.redirect === "error") throw redirectError;
+            return result;
+          });
+          const upgrade = vi.spyOn(WebIdDPoPTokenProvider.prototype, "upgrade");
+          if (!retry) upgrade.mockImplementationOnce(async (source) => source);
+          try {
+            const pending = wrapped(`${POD}/start`, { method: "POST", body: "ABC", redirect });
+            if (redirect === "error") await expect(pending).rejects.toBe(redirectError);
+            else expect(await pending).toBe(result);
+            expect(sent).toHaveLength(retry ? 2 : 1);
+          } finally {
+            upgrade.mockRestore();
+          }
+        });
+      }
+    }
+
+    it("keeps a later credential-free fallback's native follow policy and final response URL", async () => {
+      const sent: Request[] = [];
+      const result = new Response("public final");
+      Object.defineProperties(result, {
+        url: { configurable: true, value: `${FOREIGN}/final` },
+        redirected: { configurable: true, value: true },
+      });
+      const wrapped = await wrappedFetch(kind, async (input, init) => {
+        const request = new Request(input, init);
+        sent.push(request);
+        if (sent.length === 1) {
+          expect(request.redirect).toBe("manual");
+          expect(request.headers.get("Authorization")).toBe(`DPoP ${TOKEN}`);
+          upgrade.mockImplementationOnce(async (source) => source);
+          return new Response(null, { status: 302, headers: { Location: "/middle" } });
+        }
+        expect(request.url).toBe(`${POD}/middle`);
+        expect(request.redirect).toBe("follow");
+        expect(request.headers.has("Authorization")).toBe(false);
+        expect(request.headers.has("DPoP")).toBe(false);
+        return result;
+      });
+      const upgrade = vi.spyOn(WebIdDPoPTokenProvider.prototype, "upgrade");
+      try {
+        const response = await wrapped(`${POD}/start`, { redirect: "follow" });
+        expect(response).toBe(result);
+        for (const final of [response, response.clone()]) {
+          expect(final.url).toBe(`${FOREIGN}/final`);
+          expect(final.redirected).toBe(true);
+          expect(await final.text()).toBe("public final");
+        }
+        expect(sent).toHaveLength(2);
+      } finally {
+        upgrade.mockRestore();
+      }
+    });
+
+    it("returns caller credentials unfollowed when upgrade declines to replace them", async () => {
+      const sent: Request[] = [];
+      const result = new Response("caller decides", {
+        status: 307,
+        headers: { Location: "/next" },
+      });
+      const wrapped = await wrappedFetch(kind, async (input, init) => {
+        sent.push(new Request(input, init));
+        return result;
+      });
+      const upgrade = vi
+        .spyOn(WebIdDPoPTokenProvider.prototype, "upgrade")
+        .mockImplementationOnce(async (source) => source);
+      try {
+        expect(
+          await wrapped(`${POD}/start`, {
+            headers: { Authorization: "Bearer caller-token", DPoP: "caller-proof" },
+            redirect: "follow",
+          }),
+        ).toBe(result);
+        expect(sent).toHaveLength(1);
+        expect(sent[0].redirect).toBe("manual");
+        expect(sent[0].headers.get("Authorization")).toBe("Bearer caller-token");
+        expect(sent[0].headers.get("DPoP")).toBe("caller-proof");
+      } finally {
+        upgrade.mockRestore();
+      }
+    });
   });
 }
 
@@ -520,8 +685,10 @@ describe("proactive caller-credential passthrough and fallback routes", () => {
     "liveness",
     "hop-gate",
     "first-reset",
+    "first-unchanged",
     "retry-gate",
     "retry-reset",
+    "retry-unchanged",
   ] as const) {
     for (const asRequest of [false, true]) {
       it(`${route} returns caller credentials unfollowed (${asRequest ? "Request" : "init"})`, async () => {
@@ -529,6 +696,12 @@ describe("proactive caller-credential passthrough and fallback routes", () => {
         const provider = {
           async upgrade(request: Request) {
             upgrades++;
+            if (
+              (route === "first-unchanged" && upgrades === 1) ||
+              (route === "retry-unchanged" && upgrades === 2)
+            ) {
+              return request;
+            }
             if (
               (route === "first-reset" && upgrades === 1) ||
               (route === "retry-reset" && upgrades === 2)
@@ -593,9 +766,110 @@ describe("proactive caller-credential passthrough and fallback routes", () => {
           expect(fallback?.request.headers.get(header)).toBe(value);
         }
         expect(upgrades).toBe(
-          route === "retry-reset" ? 2 : route === "first-reset" || route === "retry-gate" ? 1 : 0,
+          route === "retry-reset" || route === "retry-unchanged"
+            ? 2
+            : route === "first-reset" || route === "first-unchanged" || route === "retry-gate"
+              ? 1
+              : 0,
         );
       });
+    }
+  }
+});
+
+describe("proactive credential-free passthrough and fallback routes", () => {
+  for (const route of [
+    "no-provider",
+    "empty-origins",
+    "issuer-bypass",
+    "liveness",
+    "hop-gate",
+    "first-reset",
+    "first-unchanged",
+    "retry-gate",
+    "retry-reset",
+    "retry-unchanged",
+  ] as const) {
+    for (const redirect of ["follow", "error", "manual"] as const) {
+      for (const asRequest of [false, true]) {
+        it(`${route} keeps caller policy on credential-free ${redirect} (${asRequest ? "Request" : "init"})`, async () => {
+          let upgrades = 0;
+          const provider = {
+            async upgrade(request: Request) {
+              upgrades++;
+              if (
+                (route === "first-reset" && upgrades === 1) ||
+                (route === "retry-reset" && upgrades === 2)
+              ) {
+                await request.text();
+                throw Object.assign(new Error("superseded"), { name: "ReactiveAuthResetError" });
+              }
+              if (
+                (route === "first-unchanged" && upgrades === 1) ||
+                (route === "retry-unchanged" && upgrades === 2)
+              ) {
+                return request;
+              }
+              const headers = new Headers(request.headers);
+              headers.set("Authorization", "DPoP sdk-token");
+              headers.set("DPoP", "sdk-proof");
+              return new Request(request, { headers });
+            },
+          };
+          let gateCalls = 0;
+          const state: ProactiveFetchState = {
+            provider: route === "no-provider" ? null : provider,
+            allowedOrigins: new Set(route === "empty-origins" ? [] : [POD]),
+            ...(route === "issuer-bypass" ? { issuerOrigins: new Set([POD]) } : {}),
+            canAttachNonInteractively: () => {
+              gateCalls++;
+              return !(
+                route === "liveness" ||
+                (route === "hop-gate" && gateCalls === 2) ||
+                (route === "retry-gate" && gateCalls === 3)
+              );
+            },
+          };
+          const sent: Request[] = [];
+          const result = new Response("public", {
+            status: redirect === "manual" ? 307 : 200,
+            headers: { Location: "/next" },
+          });
+          const redirectError = new TypeError("redirect disallowed");
+          const base: typeof fetch = async (input, init) => {
+            const request = new Request(input, init);
+            sent.push(request);
+            expect(await request.text()).toBe("public body");
+            if (route.startsWith("retry-") && sent.length === 1) {
+              expect(request.redirect).toBe("manual");
+              expect(request.headers.get("Authorization")).toBe("DPoP sdk-token");
+              return new Response(null, { status: 401 });
+            }
+            expect(request.redirect).toBe(redirect);
+            for (const header of ["Authorization", "DPoP", "Proxy-Authorization"]) {
+              expect(request.headers.has(header)).toBe(false);
+            }
+            // Model native redirect handling at the transport boundary.
+            if (request.redirect === "error") throw redirectError;
+            return result;
+          };
+          const url = `${POD}/${route === "issuer-bypass" ? ".well-known/openid-configuration" : "start"}`;
+          const init = { method: "POST", body: "public body", redirect };
+          const pending = asRequest
+            ? proactiveAuthenticatedFetch(state, base, new Request(url, init))
+            : proactiveAuthenticatedFetch(state, base, url, init);
+          if (redirect === "error") await expect(pending).rejects.toBe(redirectError);
+          else expect(await pending).toBe(result);
+          expect(sent).toHaveLength(route.startsWith("retry-") ? 2 : 1);
+          expect(upgrades).toBe(
+            route === "retry-reset" || route === "retry-unchanged"
+              ? 2
+              : route === "first-reset" || route === "first-unchanged" || route === "retry-gate"
+                ? 1
+                : 0,
+          );
+        });
+      }
     }
   }
 });

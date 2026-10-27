@@ -1075,7 +1075,7 @@ class SolidAuthEngine implements SolidAuth {
     const retrySource = request.clone();
     // PROACTIVE attach (forceRefresh=false): refresh only if a KNOWN expiry passed.
     const upgraded = await provider.upgrade(request);
-    const response = await base(upgraded);
+    const response = await fetchPassthrough(base, upgraded);
     // RFC 9449 §8: capture any `DPoP-Nonce` the resource server returned (a
     // `use_dpop_nonce` 401 challenge OR a rotated nonce on a 2xx) so the NEXT proof
     // to this origin embeds it. `rememberNonce` reports whether it CHANGED.
@@ -1099,17 +1099,17 @@ class SolidAuthEngine implements SolidAuth {
       // unless it is UNAMBIGUOUSLY a pure-nonce challenge.
       const pureNonceChallenge = nonceChanged && isUseDpopNonceChallenge(response);
       const retried = await provider.upgrade(retrySource, !pureNonceChallenge);
-      const retryResponse = await base(retried);
+      const retryResponse = await fetchPassthrough(base, retried);
       // The RS may rotate the nonce again on the retry response — keep it current.
       provider.rememberNonce(retryResponse, request);
       return {
         response: retryResponse,
-        followRedirects: retried !== retrySource || !hasCredentialHeaders(retried),
+        followRedirects: retried !== retrySource && hasCredentialHeaders(retried),
       };
     }
     return {
       response,
-      followRedirects: upgraded !== request || !hasCredentialHeaders(upgraded),
+      followRedirects: upgraded !== request && hasCredentialHeaders(upgraded),
     };
   }
 

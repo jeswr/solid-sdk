@@ -389,7 +389,7 @@ async function proactiveAuthenticatedHop(
   const isSuperseded = config?.isSuperseded ?? isReactiveAuthResetError;
   const fallback = async (source: Request): Promise<CredentialedHopResult> => ({
     response: await fetchPassthrough(base, source),
-    followRedirects: !hasCredentialHeaders(source),
+    followRedirects: false,
   });
   const { provider } = state;
   // The credential gate — re-evaluated live every request, fail-closed for an empty set or
@@ -417,9 +417,9 @@ async function proactiveAuthenticatedHop(
     if (isSuperseded(e)) return fallback(retrySource);
     throw e;
   }
-  const response = await base(new Request(upgraded, { redirect: "manual" }));
+  const response = await fetchPassthrough(base, upgraded);
   if (response.status !== 401) {
-    return { response, followRedirects: upgraded !== request || !hasCredentialHeaders(upgraded) };
+    return { response, followRedirects: upgraded !== request && hasCredentialHeaders(upgraded) };
   }
   // ONE bounded retry. The single re-`upgrade()` re-mints a FRESH DPoP proof (new jti/iat)
   // for the same request — recovering the common case where the first proof was stale (clock
@@ -458,8 +458,8 @@ async function proactiveAuthenticatedHop(
   // nonce-aware retry can branch on it without an unused-variable churn.)
   void pureNonce;
   return {
-    response: await base(new Request(retried, { redirect: "manual" })),
-    followRedirects: retried !== retrySource || !hasCredentialHeaders(retried),
+    response: await fetchPassthrough(base, retried),
+    followRedirects: retried !== retrySource && hasCredentialHeaders(retried),
   };
 }
 

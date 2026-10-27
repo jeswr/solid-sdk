@@ -52,7 +52,11 @@ redirects only when each destination passes the same live allowed-origin check a
 initial request. Each hop receives a fresh DPoP proof for its URL and method, bound to
 the attached access token. Resource-server nonces are cached only for the checked hop's
 origin. Redirects outside the allowlist are returned unchanged without contacting the
-destination. Uncredentialed passthrough requests retain the caller's redirect policy.
+destination. Credential-free passthrough and fallback requests retain the caller's
+original redirect policy (`follow`, `error`, or `manual`), including when an upgrade
+is superseded before credentials attach or a retry loses its live session. Manual
+mode is derived only when credentials are attached; fallback sources keep the caller's
+policy. Credential-free redirects are handled by the transport under that policy.
 
 Passthrough and fallback requests carrying caller-owned `Authorization`, `DPoP`, or
 `Proxy-Authorization` headers also use manual mode, whether supplied through `init.headers`
@@ -65,9 +69,13 @@ The `authenticatedFetch` handle retains this boundary before login and after log
 `publicFetch` remains the explicit pristine transport.
 
 POST requests become GET on 301/302; 303 changes methods other than GET/HEAD to GET.
-These rewrites discard the body and its content headers. Other redirects preserve the
-method and replay bodies supplied through `init.body` as text, bytes, Blob, URLSearchParams,
-or FormData, buffered before sending. ReadableStream bodies and bodies supplied through a
+These rewrites discard the body and its content headers, including Content-Length.
+Other redirects preserve the method and replay bodies supplied through `init.body` as
+text, bytes, Blob, URLSearchParams, or FormData, buffered before sending. Buffering checks
+the request's abort signal before
+reading and races each read against cancellation. An abort cancels the reader and rejects
+with the signal's reason (an AbortError by default), without waiting for buffering or
+source cancellation to finish. ReadableStream bodies and bodies supplied through a
 Request are treated as streams: redirects requiring their replay are returned unfollowed.
 Following more than 20 hops throws a TypeError.
 

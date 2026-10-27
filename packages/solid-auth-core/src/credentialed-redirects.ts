@@ -4,7 +4,13 @@
 import { requestHref } from "./request.js";
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
-const BODY_HEADERS = ["Content-Encoding", "Content-Language", "Content-Location", "Content-Type"];
+const BODY_HEADERS = [
+  "Content-Encoding",
+  "Content-Language",
+  "Content-Length",
+  "Content-Location",
+  "Content-Type",
+];
 const CREDENTIAL_HEADERS = ["Authorization", "DPoP", "Proxy-Authorization"];
 const ORIGIN_HEADERS = [...CREDENTIAL_HEADERS, "Cookie", "Cookie2"];
 
@@ -15,7 +21,9 @@ export function hasCredentialHeaders(request: Request): boolean {
 /** Caller-owned credentials cannot be re-scoped or replayed on a redirect. */
 export function fetchPassthrough(base: typeof fetch, request: Request): Promise<Response> {
   return base(
-    hasCredentialHeaders(request) ? new Request(request, { redirect: "manual" }) : request,
+    hasCredentialHeaders(request) && request.redirect !== "manual"
+      ? new Request(request, { redirect: "manual" })
+      : request,
   );
 }
 
@@ -38,6 +46,44 @@ function withRedirectMetadata(response: Response, url: string): Response {
   return response;
 }
 
+/** Buffer replayable bodies without making cancellation wait for their source. */
+async function bufferBody(
+  body: ReadableStream<Uint8Array>,
+  signal: AbortSignal,
+): Promise<ArrayBuffer> {
+  signal.throwIfAborted();
+  const reader = body.getReader();
+  let onAbort!: () => void;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => {
+      reject(signal.reason);
+      void reader.cancel(signal.reason).catch(() => {});
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  try {
+    const chunks: Uint8Array[] = [];
+    let size = 0;
+    for (;;) {
+      const { done, value } = await Promise.race([reader.read(), aborted]);
+      if (done) break;
+      chunks.push(value);
+      size += value.byteLength;
+    }
+    signal.throwIfAborted();
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return bytes.buffer;
+  } finally {
+    signal.removeEventListener("abort", onAbort);
+    reader.releaseLock();
+  }
+}
+
 /**
  * Follow visible redirects only after the same live credential gate accepts each hop.
  * `send` upgrades afresh and performs the bounded 401 retry for that hop.
@@ -55,10 +101,12 @@ export async function fetchWithCredentialedRedirects(
   let replayable =
     request.body === null ||
     (source != null && !(typeof source === "object" && "getReader" in source));
-  let current = new Request(request, { redirect: "manual" });
+  // Keep sources and fallback clones on the caller's policy. Only the credential
+  // attachment/send boundary derives manual requests, including on later hops.
+  let current = request;
   let body: ArrayBuffer | null = null;
   if (current.body !== null && replayable) {
-    body = await current.arrayBuffer();
+    body = await bufferBody(current.body, current.signal);
     current = new Request(current, { body });
   }
 
@@ -66,7 +114,8 @@ export async function fetchWithCredentialedRedirects(
     const { response, followRedirects } = await send(current);
     const href = requestHref(current);
     if (hops > 0 && href !== undefined && response.type !== "opaqueredirect") {
-      const url = new URL(href);
+      // A credential-free fallback may have followed further native redirects.
+      const url = new URL(response.url || href);
       url.hash = "";
       withRedirectMetadata(response, url.href);
     }
@@ -106,7 +155,7 @@ export async function fetchWithCredentialedRedirects(
         method: rewrite ? "GET" : current.method,
         headers,
         body: rewrite ? null : body,
-        redirect: "manual",
+        redirect: current.redirect,
         cache: current.cache,
         credentials: current.credentials,
         integrity: current.integrity,
