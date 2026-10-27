@@ -24,13 +24,13 @@ export type {
 export { Breadcrumbs } from "./components/breadcrumbs.js";
 export type { SurfaceState as ContentSurfaceState } from "./components/content.js";
 export { formatBytes, plainText, surfaceErrors } from "./components/content.js";
-export type { AccessSummary, ItemDetailsProps } from "./components/item-details.js";
-export { accessSummaryText, ItemDetails } from "./components/item-details.js";
 export { DropZoneOverlay, type DropZoneOverlayProps } from "./components/drop-zone-overlay.js";
 export type { EditableTextProps } from "./components/editable-text.js";
 export { EditableText } from "./components/editable-text.js";
 export type { FilterChip, FilterChipsProps } from "./components/filter-chips.js";
 export { FilterChips } from "./components/filter-chips.js";
+export type { AccessSummary, ItemDetailsProps } from "./components/item-details.js";
+export { accessSummaryText, ItemDetails } from "./components/item-details.js";
 export { PodMeter } from "./components/pod-meter.js";
 export {
   PreviewPane,
