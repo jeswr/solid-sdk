@@ -1,16 +1,18 @@
 # Extension E2E tests
 
-Use Node.js 24 and the locked dependencies:
+Use Node.js 24 and the workspace lockfile, from the solid-sdk root:
 
 ```sh
-npm ci
-npx playwright install chromium
-npm run test:e2e
+pnpm install --frozen-lockfile
+pnpm --filter @jeswr/app-extension exec playwright install chromium
+pnpm --filter @jeswr/app-extension run test:e2e
 ```
 
-CI runs the same E2E command after `npm run gate`. The command builds `dist/`, then
-Playwright's global setup starts an in-memory Community Solid Server on port 3000,
-seeded from `setup/seed.json` and `setup/templates/pod/`. It discovers the unpacked
+CI runs the same E2E command in `.github/workflows/extension.yml`; `gate.yml` covers lint,
+typecheck, unit tests and build. The command builds `dist/`, then Playwright's global
+setup starts an in-memory Community Solid Server on port 3000, seeded from
+`setup/seed.json` and `setup/templates/pod/`, with an isolated Components.js module root
+(see `setup/css-server.ts`). It discovers the unpacked
 extension's ID and starts the test sites on ports 8080 and 8081 with matching Client
 ID Documents. No separately running server or live pod is needed.
 
