@@ -1,5 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { CellPosition, StructuralEdit } from "../refs";
+
+export const MAX_SHEETS = 256;
+/** Total populated cells across the workbook, including explicit nulls and formulas. */
+export const MAX_CELLS = 100_000;
+export const MAX_SHEET_NAME_LENGTH = 256;
+export const MAX_CELL_VALUE_LENGTH = 32_768;
 
 export type CellData =
   | {

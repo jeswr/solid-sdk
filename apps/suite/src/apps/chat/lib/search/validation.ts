@@ -5,6 +5,10 @@ import type { SearchField, SearchQuery, SearchTerm } from "./types";
 export const MAX_QUERY_LENGTH = 1_000;
 export const MAX_QUERY_TERMS = 32;
 export const MAX_MESSAGES = 100_000;
+export const MAX_MESSAGE_ID_LENGTH = 2_048;
+export const MAX_MESSAGE_TEXT_LENGTH = 1_000_000;
+export const MAX_MESSAGE_FIELD_LENGTH = 2_048;
+export const MAX_TIME_ZONE_LENGTH = 64;
 export const MAX_SNIPPET_LENGTH = 160;
 
 export type SearchErrorCode =

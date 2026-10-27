@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   type AxisRange,
   type CellPosition,
@@ -8,16 +9,55 @@ import {
 } from "../refs";
 import { validateEdit } from "../refs/edits";
 import { positiveIndex, sameSheet, validatePosition, validateSheet } from "../refs/model";
-import { rewriteFormula } from "./formula";
-import type {
-  CellChange,
-  CellData,
-  MoveRange,
-  StructureCell,
-  StructureEdit,
-  StructurePlan,
-  StructureSheet,
+import { checkFormulaLength, rewriteFormula } from "./formula";
+import {
+  type CellChange,
+  type CellData,
+  MAX_CELL_VALUE_LENGTH,
+  MAX_CELLS,
+  MAX_SHEET_NAME_LENGTH,
+  MAX_SHEETS,
+  type MoveRange,
+  type StructureCell,
+  type StructureEdit,
+  type StructurePlan,
+  type StructureSheet,
 } from "./model";
+
+function invalidInput(): never {
+  throw new SheetReferenceError(
+    "invalid-edit",
+    "Malformed or oversized workbook or structural edit",
+  );
+}
+
+function checkSheetName(name: unknown): void {
+  if (typeof name !== "string" || name.length > MAX_SHEET_NAME_LENGTH) invalidInput();
+}
+
+/** Counts precede traversal; all lengths precede validation, indexing and formula scans. */
+function preflight(sheets: readonly StructureSheet[], edit: StructureEdit): void {
+  if (!Array.isArray(sheets) || sheets.length > MAX_SHEETS) invalidInput();
+  let cells = 0;
+  for (const sheet of sheets) {
+    if (!sheet || !Array.isArray(sheet.cells)) invalidInput();
+    checkSheetName(sheet.name);
+    cells += sheet.cells.length;
+    if (cells > MAX_CELLS) invalidInput();
+  }
+  if (edit.kind === "move") {
+    checkSheetName(edit.source.sheet);
+    checkSheetName(edit.destination.sheet);
+  } else checkSheetName(edit.sheet);
+  for (const sheet of sheets) {
+    for (const cell of sheet.cells) {
+      if (!cell) invalidInput();
+      if (typeof cell.value === "string" && cell.value.length > MAX_CELL_VALUE_LENGTH)
+        invalidInput();
+      if (typeof cell.formula === "string") checkFormulaLength(cell.formula);
+    }
+  }
+}
 
 function reject(message: string): never {
   throw new SheetReferenceError("unsupported", message);
@@ -57,21 +97,24 @@ function data(cell: StructureCell): CellData {
 const address = (cell: CellPosition): string => `${cell.row},${cell.column}`;
 const order = (a: CellPosition, b: CellPosition): number => a.row - b.row || a.column - b.column;
 
-function findSheet(sheets: readonly StructureSheet[], name: string): StructureSheet {
+function findSheet(sheets: ReadonlyMap<string, number>, name: string): number {
+  checkSheetName(name);
   validateSheet(name);
-  const sheet = sheets.find((sheet) => sameSheet(sheet.name, name));
-  if (!sheet) reject("Unknown sheet");
+  const sheet = sheets.get(name.toLowerCase());
+  if (sheet === undefined) reject("Unknown sheet");
   return sheet;
 }
 
-function validateWorkbook(sheets: readonly StructureSheet[]): void {
-  const names = new Set<string>();
-  for (const sheet of sheets) {
+function validateWorkbook(sheets: readonly StructureSheet[]): Map<string, number> {
+  const names = new Map<string, number>();
+  for (const [index, sheet] of sheets.entries()) {
     keys(sheet, ["name", "cells"]);
     validateSheet(sheet.name);
     const name = sheet.name.toLowerCase();
     if (names.has(name)) reject("Duplicate sheet name");
-    names.add(name);
+    names.set(name, index);
+  }
+  for (const sheet of sheets) {
     const positions = new Set<string>();
     for (const cell of sheet.cells) {
       keys(cell, ["row", "column", "value", "formula", "notation"]);
@@ -81,12 +124,13 @@ function validateWorkbook(sheets: readonly StructureSheet[]): void {
       data(cell);
       if (cell.formula !== undefined) {
         rewriteFormula(cell.formula, cell.notation ?? "A1", cell, cell, (ref) => {
-          findSheet(sheets, ref.sheet ?? sheet.name);
+          findSheet(names, ref.sheet ?? sheet.name);
           return ref;
         });
       }
     }
   }
+  return names;
 }
 
 interface Rectangle {
@@ -117,7 +161,7 @@ function contains(rect: Rectangle, sheet: string, cell: CellPosition): boolean {
   );
 }
 
-function validateOperation(sheets: readonly StructureSheet[], edit: StructureEdit): void {
+function validateOperation(sheets: ReadonlyMap<string, number>, edit: StructureEdit): void {
   if (edit.kind !== "move") {
     keys(edit, ["sheet", "axis", "kind", "index", "count"]);
     validateEdit(edit);
@@ -222,8 +266,9 @@ function moveReference(
 }
 
 function plan(sheets: readonly StructureSheet[], edit: StructureEdit): StructurePlan {
-  validateWorkbook(sheets);
-  validateOperation(sheets, edit);
+  preflight(sheets, edit);
+  const names = validateWorkbook(sheets);
+  validateOperation(names, edit);
   const next = sheets.map((sheet) => ({ name: sheet.name, cells: [] as StructureCell[] }));
   for (const sheet of sheets) {
     for (const cell of sheet.cells) {
@@ -243,7 +288,10 @@ function plan(sheets: readonly StructureSheet[], edit: StructureEdit): Structure
         );
         content = { ...content, formula } as CellData;
       }
-      const output = findSheet(next, target.sheet) as { name: string; cells: StructureCell[] };
+      const output = next[findSheet(names, target.sheet)] as {
+        name: string;
+        cells: StructureCell[];
+      };
       output.cells.push({ row: target.position.row, column: target.position.column, ...content });
     }
   }

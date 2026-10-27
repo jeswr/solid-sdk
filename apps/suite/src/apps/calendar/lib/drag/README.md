@@ -64,10 +64,12 @@ All errors are `CalendarDragError` with a stable `code`; messages contain no cal
 data. The exported `MAX_DELTA_MINUTES` (525,600) and `MAX_DAY_DELTA` (366) are absolute,
 independent limits, checked before Intl work. Epoch milliseconds and local wall dates
 must lie within exported `MIN_EPOCH_MS` / `MAX_EPOCH_MS` (Gregorian years 0001–9999).
+The exported `MAX_TIME_ZONE_LENGTH` (64 UTF-16 units) is checked before zone regex
+or Intl processing; an oversized zone throws `INVALID_INPUT`.
 
 | Code | Cause |
 | --- | --- |
-| `INVALID_INPUT` | Input is not an object |
+| `INVALID_INPUT` | Input is not an object or the time-zone string exceeds its length bound |
 | `INVALID_DELTA` | Non-finite/wrong-type deltas, fractional days, or submillisecond minutes |
 | `DELTA_TOO_LARGE` | Either signed delta exceeds its bound |
 | `INVALID_SNAP` | Snap is not one of the exported `SNAP_MINUTES` |

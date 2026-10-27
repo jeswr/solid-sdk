@@ -4,11 +4,35 @@ import { type FoldedText, findMatches, hasLink, hasMention, project } from "./ma
 import { parseQuery } from "./parse";
 import { makeSnippet } from "./snippet";
 import type { MatchRange, SearchMessage, SearchQuery, SearchResult, SearchTerm } from "./types";
-import { fold, MAX_MESSAGES, SearchError, validateQuery, validText } from "./validation";
+import {
+  fold,
+  MAX_MESSAGE_FIELD_LENGTH,
+  MAX_MESSAGE_ID_LENGTH,
+  MAX_MESSAGE_TEXT_LENGTH,
+  MAX_MESSAGES,
+  MAX_TIME_ZONE_LENGTH,
+  SearchError,
+  validateQuery,
+  validText,
+} from "./validation";
 
 function checkMessages(messages: readonly SearchMessage[]): void {
   if (!Array.isArray(messages)) throw new SearchError("INVALID_MESSAGE");
   if (messages.length > MAX_MESSAGES) throw new SearchError("TOO_MANY_MESSAGES");
+  // Inspect only types and lengths across the snapshot before scanning or hashing strings.
+  for (const message of messages) {
+    if (!message) throw new SearchError("INVALID_MESSAGE");
+    checkLength(message.id, MAX_MESSAGE_ID_LENGTH);
+    checkLength(message.roomId, MAX_MESSAGE_ID_LENGTH);
+    checkLength(message.authorName, MAX_MESSAGE_FIELD_LENGTH);
+    checkLength(message.authorWebId, MAX_MESSAGE_FIELD_LENGTH);
+    checkLength(message.text, MAX_MESSAGE_TEXT_LENGTH);
+    if (message.inReplyTo !== null) checkLength(message.inReplyTo, MAX_MESSAGE_ID_LENGTH);
+  }
+}
+
+function checkLength(value: unknown, limit: number): void {
+  if (typeof value !== "string" || value.length > limit) throw new SearchError("INVALID_MESSAGE");
 }
 
 function nonblank(value: unknown): boolean {
@@ -36,7 +60,11 @@ function validateMessage(message: SearchMessage, ids: Set<string>): void {
 }
 
 function dateFormatter(timeZone: string): Intl.DateTimeFormat {
-  if (typeof timeZone !== "string" || !/^[A-Za-z_]+(?:\/[A-Za-z0-9_+.-]+)*$/u.test(timeZone)) {
+  if (
+    typeof timeZone !== "string" ||
+    timeZone.length > MAX_TIME_ZONE_LENGTH ||
+    !/^[A-Za-z_]+(?:\/[A-Za-z0-9_+.-]+)*$/u.test(timeZone)
+  ) {
     throw new SearchError("INVALID_TIME_ZONE");
   }
   try {

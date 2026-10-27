@@ -1,5 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { CalendarDragError, check, checkEpoch, type OverlapChoice } from "./types";
+// AUTHORED-BY Codex GPT-6
+import {
+  CalendarDragError,
+  check,
+  checkEpoch,
+  MAX_TIME_ZONE_LENGTH,
+  type OverlapChoice,
+} from "./types";
 
 export const MINUTE_MS = 60_000;
 export const DAY_MS = 86_400_000;
@@ -14,6 +21,7 @@ export class Zone {
   private readonly format: Intl.DateTimeFormat;
 
   constructor(name: string) {
+    check(typeof name !== "string" || name.length <= MAX_TIME_ZONE_LENGTH, "INVALID_INPUT");
     check(typeof name === "string" && name.length > 0 && !/^[+-]/.test(name), "UNKNOWN_TIME_ZONE");
     try {
       this.format = new Intl.DateTimeFormat("en-GB", {

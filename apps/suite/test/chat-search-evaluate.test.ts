@@ -1,9 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   evaluateQuery,
+  MAX_MESSAGE_FIELD_LENGTH,
+  MAX_MESSAGE_ID_LENGTH,
+  MAX_MESSAGE_TEXT_LENGTH,
   MAX_MESSAGES,
+  MAX_TIME_ZONE_LENGTH,
   parseQuery,
   SearchError,
   type SearchErrorCode,
@@ -238,6 +242,61 @@ describe("local calendar date filters", () => {
 });
 
 describe("ranking and snapshot validation", () => {
+  it.each([
+    ["id", MAX_MESSAGE_ID_LENGTH],
+    ["roomId", MAX_MESSAGE_ID_LENGTH],
+    ["inReplyTo", MAX_MESSAGE_ID_LENGTH],
+    ["authorName", MAX_MESSAGE_FIELD_LENGTH],
+    ["authorWebId", MAX_MESSAGE_FIELD_LENGTH],
+    ["text", MAX_MESSAGE_TEXT_LENGTH],
+  ] as const)("bounds %s before scanning strings", (field, limit) => {
+    expect(matches("has:attachment", { [field]: "x".repeat(limit) })).toBe(true);
+    const oversized = { ...message, [field]: "x".repeat(limit + 1) };
+    const query = parseQuery("has:attachment");
+    const unicode = vi.spyOn(String.prototype, "isWellFormed");
+    const trim = vi.spyOn(String.prototype, "trim");
+    const normalize = vi.spyOn(String.prototype, "normalize");
+    const intl = vi.spyOn(Intl, "DateTimeFormat");
+    let caught: unknown;
+    try {
+      // The entire snapshot must pass preflight before even the first record is scanned.
+      evaluateQuery(query, [message, oversized], "UTC");
+    } catch (error) {
+      caught = error;
+    }
+    const calls = [unicode, trim, normalize, intl].map((spy) => spy.mock.calls.length);
+    vi.restoreAllMocks();
+    expect(caught).toBeInstanceOf(SearchError);
+    expect(caught).toMatchObject({
+      code: "INVALID_MESSAGE",
+      message: "Chat search: INVALID_MESSAGE",
+    });
+    expect(calls).toEqual([0, 0, 0, 0]);
+    fails(() => searchMessages('"', [oversized], "UTC"), "INVALID_MESSAGE");
+  });
+
+  it("passes a zone at the length bound to Intl and rejects bound+1 before regex or Intl", () => {
+    const Original = Intl.DateTimeFormat;
+    // The host need not provide a real IANA name of exactly 64 characters.
+    function zoneFormatter(locales?: Intl.LocalesArgument, options?: Intl.DateTimeFormatOptions) {
+      return new Original(locales, { ...options, timeZone: "UTC" });
+    }
+    const intl = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(zoneFormatter);
+    const atBound = "A".repeat(MAX_TIME_ZONE_LENGTH);
+    try {
+      expect(searchMessages("has:attachment", [], atBound)).toEqual([]);
+      expect(intl).toHaveBeenCalledWith("en-US", expect.objectContaining({ timeZone: atBound }));
+      intl.mockClear();
+      const oversized = `${atBound}A`;
+      const regex = vi.spyOn(RegExp.prototype, "test");
+      fails(() => searchMessages("has:attachment", [], oversized), "INVALID_TIME_ZONE");
+      expect(regex).not.toHaveBeenCalledWith(oversized);
+      expect(intl).not.toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it("sorts newest first and breaks ties by ID without changing records or input order", () => {
     const messages = Object.freeze([
       Object.freeze({ ...message, id: "z", createdAt: 1 }),

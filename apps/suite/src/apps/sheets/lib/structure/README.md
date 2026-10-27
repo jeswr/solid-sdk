@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Structural edit plans
 
@@ -46,9 +47,21 @@ not share mutable input objects. This API does not evaluate formulas.
 The formula dialect matches `../refs`: cell and rectangular/whole-axis references,
 quoted sheet names with doubled apostrophes, numbers, strings with doubled quotes,
 booleans, standard error literals, operators, parentheses and comma-separated
-function calls. Syntax is limited to 8,192 characters and 512 tokens. Existing
+function calls. Exported `MAX_FORMULA_LENGTH` (8,192 UTF-16 units) and
+`MAX_FORMULA_TOKENS` (512) bound formula syntax, including rewritten output length. Existing
 source text is preserved outside rewritten references; rewritten sheet qualifiers
 are quoted. All qualified sheets must exist in the input workbook.
+
+Exported limits are `MAX_SHEETS` (256), `MAX_CELLS` (100,000 populated cells across
+the entire workbook, including explicit nulls and formulas), `MAX_SHEET_NAME_LENGTH`
+(256 UTF-16 units, including edit and reference sheet names), and
+`MAX_CELL_VALUE_LENGTH` (32,768 UTF-16 units per string value). An early preflight
+checks sheet count before reading sheets, aggregate cell count before reading cells,
+and all input lengths before validation scans, lowercasing, materialisation, sorting
+or serialisation. Oversize workbook data or edit names throw `invalid-edit`;
+formula length/token excesses retain `unsupported`. One case-insensitive name index
+is built per call and reused for reference validation, edits and output placement;
+lookups do not rescan the workbook.
 
 Unsupported or malformed input throws the exported `SheetReferenceError`, with
 `syntax`, `bounds`, `unsupported` or `invalid-edit` codes, before any result is

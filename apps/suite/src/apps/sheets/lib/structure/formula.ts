@@ -11,6 +11,9 @@ import {
   SheetReferenceError,
 } from "../refs";
 
+export const MAX_FORMULA_LENGTH = 8_192;
+export const MAX_FORMULA_TOKENS = 512;
+
 interface Token {
   kind: "value" | "function" | "operator" | "punctuation";
   text: string;
@@ -33,9 +36,13 @@ function fail(): never {
   throw new SheetReferenceError("unsupported", "Unsupported or malformed formula syntax");
 }
 
+export function checkFormulaLength(formula: string): void {
+  if (formula.length > MAX_FORMULA_LENGTH) fail();
+}
+
 function tokenize(formula: string, notation: "A1" | "R1C1", origin: CellPosition): Token[] {
   const tokens: Token[] = [];
-  if (formula.length > 8192) fail();
+  checkFormulaLength(formula);
   let start = 1;
   while (start < formula.length) {
     const rest = formula.slice(start);
@@ -68,7 +75,7 @@ function tokenize(formula: string, notation: "A1" | "R1C1", origin: CellPosition
       else if (punctuation) token = { kind: "punctuation", text: punctuation[0], start };
       else fail();
     }
-    if (tokens.length >= 512) fail();
+    if (tokens.length >= MAX_FORMULA_TOKENS) fail();
     tokens.push(token);
     start += token.text.length;
   }
@@ -145,6 +152,6 @@ export function rewriteFormula(
     end = token.start + token.text.length;
   }
   output += formula.slice(end);
-  if (output.length > 8192) fail();
+  checkFormulaLength(output);
   return output;
 }

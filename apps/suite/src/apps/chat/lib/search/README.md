@@ -64,6 +64,13 @@ const results = evaluateQuery(query, messages, "Europe/London");
   `EMPTY_QUERY`; unbalanced quotes throw `UNTERMINATED_PHRASE`; impossible/ill-formed
   dates throw `INVALID_DATE`. All failures use exported `SearchError` with a static message
   and machine-readable `code`, without echoing caller data.
+- String bounds are exported and measured in UTF-16 units: `MAX_MESSAGE_ID_LENGTH`
+  (2,048) covers `id`, `roomId` and non-null `inReplyTo`; `MAX_MESSAGE_FIELD_LENGTH`
+  (2,048) covers `authorName` and `authorWebId`; `MAX_MESSAGE_TEXT_LENGTH`
+  (1,000,000) covers `text`. The whole snapshot passes type/length preflight before
+  Unicode checks, trimming, hashing, projection or highlight sorting. Oversize fields
+  throw `INVALID_MESSAGE`. `MAX_TIME_ZONE_LENGTH` (64) is checked before zone regex
+  or Intl processing; oversize zones throw `INVALID_TIME_ZONE`.
 
 Root `QUESTIONS.md` records the conservative readings of underspecified behaviour.
 The app coverage gate requires 100% statements, branches, functions and lines per file.

@@ -9,6 +9,7 @@ import {
   MAX_DAY_DELTA,
   MAX_DELTA_MINUTES,
   MAX_EPOCH_MS,
+  MAX_TIME_ZONE_LENGTH,
   MIN_EPOCH_MS,
   SNAP_MINUTES,
 } from "../src/apps/calendar/lib/drag";
@@ -501,6 +502,28 @@ describe("all-day dates and recurrence plans", () => {
 });
 
 describe("limits and typed failures", () => {
+  it("passes a zone at the length bound to Intl and rejects bound+1 before regex or Intl", () => {
+    const Original = Intl.DateTimeFormat;
+    // Exercise the length contract independently of the host's available IANA names.
+    function zoneFormatter(locales?: Intl.LocalesArgument, options?: Intl.DateTimeFormatOptions) {
+      return new Original(locales, { ...options, timeZone: "UTC" });
+    }
+    const intl = vi.spyOn(Intl, "DateTimeFormat").mockImplementation(zoneFormatter);
+    const atBound = "A".repeat(MAX_TIME_ZONE_LENGTH);
+    try {
+      expect(drag({ timeZone: atBound }).start).toBe(base.start);
+      expect(intl).toHaveBeenCalledWith("en-GB", expect.objectContaining({ timeZone: atBound }));
+      intl.mockClear();
+      const oversized = `${atBound}A`;
+      const regex = vi.spyOn(RegExp.prototype, "test");
+      error({ timeZone: oversized }, "INVALID_INPUT");
+      expect(regex).not.toHaveBeenCalledWith(oversized);
+      expect(intl).not.toHaveBeenCalled();
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it.each([-1, 1])("accepts the signed minute/day bounds (%i)", (sign) => {
     expect(drag({ deltaMinutes: sign * MAX_DELTA_MINUTES }).start).toBe(
       base.start + sign * MAX_DELTA_MINUTES * MINUTE_MS,

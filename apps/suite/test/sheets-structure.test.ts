@@ -1,7 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  MAX_CELL_VALUE_LENGTH,
+  MAX_CELLS,
+  MAX_FORMULA_LENGTH,
+  MAX_FORMULA_TOKENS,
+  MAX_SHEET_NAME_LENGTH,
+  MAX_SHEETS,
   type MoveRange,
   planStructureEdit,
   SheetReferenceError,
@@ -56,6 +62,121 @@ const fail = (sheets: readonly StructureSheet[], edit: StructureEdit, code?: str
     if (code) expect((error as SheetReferenceError).code).toBe(code);
   }
 };
+
+describe("workbook preflight limits", () => {
+  it("accepts the sheet-count bound and rejects bound+1 without reading sheets", () => {
+    const sheets = Array.from({ length: MAX_SHEETS }, (_, index) => ({
+      name: `Sheet${index}`,
+      cells: [],
+    }));
+    expect(planStructureEdit(sheets, { ...insert, sheet: "Sheet0" }).sheets).toHaveLength(
+      MAX_SHEETS,
+    );
+    const oversized = new Array<StructureSheet>(MAX_SHEETS + 1);
+    Object.defineProperty(oversized, 0, {
+      get() {
+        throw new Error("Sheets must not be read");
+      },
+    });
+    fail(oversized, insert, "invalid-edit");
+  });
+
+  it("bounds total cells across sheets before reading any cell", () => {
+    const cells = Array.from({ length: MAX_CELLS }, (_, index) => value(index + 1, 1, index));
+    const sheets = workbook(cells.slice(0, MAX_CELLS / 2), cells.slice(MAX_CELLS / 2));
+    const result = planStructureEdit(sheets, { ...insert, index: MAX_CELLS + 1 });
+    expect(result.sheets.reduce((count, sheet) => count + sheet.cells.length, 0)).toBe(MAX_CELLS);
+    expect(result.changes).toEqual([]);
+
+    const unreadable = new Array<StructureCell>(MAX_CELLS);
+    Object.defineProperty(unreadable, 0, {
+      get() {
+        throw new Error("Cells must not be read");
+      },
+    });
+    fail(workbook(unreadable, [value(1, 1, null)]), insert, "invalid-edit");
+    fail(workbook(new Array<StructureCell>(MAX_CELLS + 1)), insert, "invalid-edit");
+  });
+
+  it("bounds sheet names in the workbook, edit and formula references", () => {
+    const name = "S".repeat(MAX_SHEET_NAME_LENGTH);
+    const sheets = [{ name, cells: [formula(1, 1, `='${name}'!A3`)] }];
+    const edit = { ...insert, sheet: name.toLowerCase() };
+    expect(planStructureEdit(sheets, edit).sheets[0]?.cells[0]?.formula).toBe(`='${name}'!A5`);
+    const oversized = `${name}S`;
+    fail([{ name: oversized, cells: [] }], insert, "invalid-edit");
+    fail(sheets, { ...insert, sheet: oversized }, "invalid-edit");
+    fail(sheets, { ...move, source: { ...move.source, sheet: oversized } }, "invalid-edit");
+    fail(
+      sheets,
+      { ...move, destination: { ...move.destination, sheet: oversized } },
+      "invalid-edit",
+    );
+    fail(workbook([formula(1, 1, `='${oversized}'!A1`)]), insert, "invalid-edit");
+  });
+
+  it("bounds string values before scanning earlier formulas or normalising names", () => {
+    const text = "x".repeat(MAX_CELL_VALUE_LENGTH);
+    expect(planStructureEdit(workbook([value(3, 1, text)]), insert).sheets[0]?.cells).toEqual([
+      value(5, 1, text),
+    ]);
+    const lower = vi.spyOn(String.prototype, "toLowerCase");
+    let caught: unknown;
+    try {
+      planStructureEdit(
+        workbook([formula(1, 1, "=unsupported_name"), value(3, 1, `${text}x`)]),
+        insert,
+      );
+    } catch (error) {
+      caught = error;
+    }
+    const calls = lower.mock.calls.length;
+    lower.mockRestore();
+    expect(calls).toBe(0);
+    expect(caught).toBeInstanceOf(SheetReferenceError);
+    expect(caught).toMatchObject({
+      code: "invalid-edit",
+      message: "Malformed or oversized workbook or structural edit",
+    });
+  });
+
+  it("exports and enforces exact formula length and token bounds", () => {
+    expect(MAX_FORMULA_LENGTH).toBe(8_192);
+    expect(MAX_FORMULA_TOKENS).toBe(512);
+    const text = `="${"x".repeat(MAX_FORMULA_LENGTH - 3)}"`;
+    expect(rewrite(text)).toBe(text);
+    fail(workbook([formula(1, 1, `${text} `)]), insert, "unsupported");
+    const tokens = `=${"+".repeat(MAX_FORMULA_TOKENS - 1)}1`;
+    expect(rewrite(tokens)).toBe(tokens);
+    fail(workbook([formula(1, 1, `=+${tokens.slice(1)}`)]), insert, "unsupported");
+  });
+
+  it("reuses one case-insensitive index for forward references, edits and output cells", () => {
+    const countLowercase = (count: number): number => {
+      const sheets = Array.from({ length: count }, (_, index) => ({
+        name: `Sheet${index}`,
+        cells: [formula(1, 1, `=sHeEt${count - 1}!A1+A1`), value(2, 1, index)],
+      }));
+      const lower = vi.spyOn(String.prototype, "toLowerCase");
+      let result: ReturnType<typeof planStructureEdit>;
+      let calls: number;
+      try {
+        result = planStructureEdit(sheets, { ...insert, sheet: "sHeEt0", index: 3, count: 1 });
+        calls = lower.mock.calls.length;
+      } finally {
+        lower.mockRestore();
+      }
+      expect(result.sheets).toEqual(sheets);
+      expect(result.changes).toEqual([]);
+      return calls;
+    };
+    const small = countLowercase(32);
+    const large = countLowercase(128);
+    // Four times as many sheets/cells/references must require at most four times the work.
+    expect(large).toBeLessThanOrEqual(small * 4);
+    expect(large).toBeLessThan(128 * 30);
+  });
+});
 
 describe("structural workbook plans", () => {
   it("rewrites references to deleted blank cells while preserving literal values", () => {
@@ -450,6 +571,9 @@ describe("fail-closed inputs", () => {
     {},
     [null],
     [{ name: "Plan" }],
+    [{ name: 1, cells: [] }],
+    [{ name: "Plan", cells: [null] }],
+    [{ name: "Plan", cells: new Array(1) }],
   ])("rejects invalid workbook %#", (sheets) =>
     fail(sheets as unknown as readonly StructureSheet[], insert));
   it.each([

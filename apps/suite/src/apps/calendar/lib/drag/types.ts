@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 
+export const MAX_TIME_ZONE_LENGTH = 64;
 export const MAX_DELTA_MINUTES = 525_600;
 export const MAX_DAY_DELTA = 366;
 export const MIN_EPOCH_MS = -62_135_596_800_000; // 0001-01-01T00:00:00.000Z
