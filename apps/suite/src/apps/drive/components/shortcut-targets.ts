@@ -4,7 +4,7 @@ export function isTyping(target: EventTarget | null): boolean {
   return Boolean(
     (target as HTMLElement | null)?.closest?.(
       // Menus and listboxes use letters for typeahead, so Drive shortcuts stay out of them.
-      "input, textarea, select, [contenteditable='true'], [role='dialog'], [role='menu'], [role='menubar'], [role='listbox']",
+      "input, textarea, select, [contenteditable='true'], [role='dialog'], [role='alertdialog'], [role='menu'], [role='menubar'], [role='listbox']",
     ),
   );
 }

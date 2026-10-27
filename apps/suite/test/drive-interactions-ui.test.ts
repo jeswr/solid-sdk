@@ -806,7 +806,7 @@ it("toggles list and grid with v from a focused row but not with a modifier", as
   await view.unmount();
 });
 
-it("leaves letter keys inside menus and listboxes to the menu's typeahead", () => {
+it("leaves letter keys inside menus, listboxes and confirmations to them", () => {
   const menu = document.createElement("div");
   menu.setAttribute("role", "menu");
   const item = document.createElement("div");
@@ -814,6 +814,11 @@ it("leaves letter keys inside menus and listboxes to the menu's typeahead", () =
   menu.append(item);
   const listbox = document.createElement("div");
   listbox.setAttribute("role", "listbox");
+  const confirm = document.createElement("div");
+  confirm.setAttribute("role", "alertdialog");
+  const cancel = document.createElement("button");
+  confirm.append(cancel);
+  expect(isTyping(cancel)).toBe(true);
   expect(isTyping(item)).toBe(true);
   expect(isTyping(listbox)).toBe(true);
   expect(isTyping(document.createElement("button"))).toBe(false);
