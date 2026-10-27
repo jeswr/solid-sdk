@@ -162,3 +162,65 @@ unrelated root gate timeouts and the unavailable `roborev` executable; no
 per-commit roborev verdict could be obtained. No dependencies, UI, manifests or
 lockfiles changed. No screenshots or `check:packages` run apply. There are no
 blocking questions, and this lane has not been merged or pushed.
+
+## Fix round 2 — 2026-10-27 UTC
+
+Review base: `123b08706454adb58bafead576bb4c1e5f5ea32c`.
+All three proxy-related review findings are addressed on `lane/sst-6jil`:
+
+- `e99a83a8` — `fix(health): snapshot FHIR caller data`.
+  Capture each own data descriptor once for records, options, nested values and
+  arrays; reject accessors and build/check only the captured values. Validate
+  captured array lengths as nonnegative safe integers, then check the combined
+  record bound before inspecting elements. Wrap reflection and `Array.isArray`
+  failures as the appropriate `FhirExportError`, without caller error details.
+  Add 25 proxy regressions covering changing lengths/values, invalid lengths,
+  descriptor-only input, throwing traps, accessors and revoked proxies.
+- `a2efb100` — `fix(health): retain validated callback types`.
+  Capture validated callback constants so TypeScript retains function narrowing
+  inside the resource mapping closure. Make regression fixtures compatible with
+  strict indexed access and the app's ES2017 TypeScript target.
+- Final documentation commit — `docs(health): record FHIR snapshot validation`.
+
+### Fix-round validation
+
+Final commands used the Node 24 / pnpm 10.4.1 environment prefix documented above.
+Initial app checks exposed missing generated dependency output and strict typing
+errors; dependency builds and `a2efb100` resolved them before the final gate runs.
+
+1. `pnpm exec turbo run build --filter='@jeswr/app-suite^...' --concurrency=4`
+   — PASS, seven dependency builds.
+2. `pnpm --filter @jeswr/app-suite exec vitest run test/health-fhir.test.ts test/health-fhir-check.test.ts test/health-fhir-proxies.test.ts --coverage --coverage.include='src/apps/health/lib/fhir/**/*.ts'`
+   — PASS, 306 tests; every FHIR file has 100% statements, branches, functions
+   and lines, also confirmed in the complete app coverage report.
+3. The package gate — PASS, exit 0:
+
+   ```sh
+   pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test
+   ```
+
+   Production build and strict typecheck passed. All 7,813 tests in 155 files
+   passed with 100% per-file coverage. Lint reported 54 existing warnings,
+   no errors, and no FHIR diagnostics.
+4. `pnpm run lint:root` — PASS, exit 0, including all repository guards.
+5. `TURBO_SCM_BASE=123b08706454adb58bafead576bb4c1e5f5ea32c pnpm run gate`
+   — PASS, exit 0; 12 successful tasks, including all 7,813 app tests.
+6. `pnpm run gate:full` — FAIL, exit 1; 316 successful tasks out of 363.
+   All 879 root tests passed. The unchanged federation-trust package failed one
+   inline snapshot at `packages/federation-trust/test/characterization.test.ts:196`:
+   `delegation credential structure is stable` expects serialized JWK field
+   order `crv, x, kty`, while the runtime produces `kty, crv, x`.
+   Its other 53 tests passed. No federation-trust files were changed.
+7. `git diff --check` — PASS before the final documentation commit.
+
+Logs are local artifacts at `/tmp/sst-6jil-fix2-{dependency-build,fhir,app-gate-final,root-lint,affected-gate,full-gate}.log`.
+The app coverage summary is at `/tmp/sst-6jil-fix2-app-coverage-summary.json`.
+Generated, untracked callback/client-ID files from full-workspace app builds were
+removed after the gate; no generated output is committed.
+
+The requested implementation and regression tests are complete. The full-workspace
+validation limitation is the unrelated federation-trust snapshot failure.
+`roborev` remains unavailable, so no per-commit roborev verdict could be obtained.
+No dependencies, UI, manifests or lockfiles changed; no screenshots or
+`check:packages` run apply. No Git fetch, merge, push, branch switch, PR or tracker
+mutation was performed. There are no blocking questions.
