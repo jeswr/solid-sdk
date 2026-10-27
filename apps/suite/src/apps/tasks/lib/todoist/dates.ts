@@ -49,6 +49,8 @@ function localInstant(wall: number, format: Intl.DateTimeFormat, line: number): 
   for (const delta of [-172_800_000, -86_400_000, 0, 86_400_000, 172_800_000]) {
     const sample = second + delta;
     const candidate = second - (wallAt(sample, format) - sample);
+    // A timezone offset can push even a guarded sample beyond year 9999.
+    if (!Number.isFinite(candidate)) throw new TodoistImportError("INVALID_DATE", line);
     if (wallAt(candidate, format) === second) candidates.add(candidate);
   }
   if (candidates.size !== 1) throw new TodoistImportError("INVALID_DATE", line);

@@ -31,7 +31,8 @@ default) resolves the wall clock. Due values contain UTC `dateTime` and
 Each import retains at most 32 formatters under case-folded timezone keys,
 evicting the oldest entry as needed; due values retain the supplied zone text.
 Local dates within two days of the year 1 / 9999 endpoints are unsupported and
-rejected; explicit-offset datetimes remain supported. Invalid calendar values,
+rejected; timezone samples outside the supported range also fail with
+`INVALID_DATE`. Explicit-offset datetimes remain supported. Invalid calendar values,
 unsupported ISO forms, DST overlaps and gaps fail with `INVALID_DATE`.
 Natural-language dates are retained verbatim in `dueText` with `UNPARSED_DATE`;
 DATE_LANG never triggers interpretation.

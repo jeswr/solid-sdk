@@ -344,6 +344,9 @@ describe("dates and time zones", () => {
     ["0099-02-28", "UTC", "0099-02-28T00:00:00.000Z", "date"],
     ["2026-07-04T13:00", "US/Eastern", "2026-07-04T17:00:00.000Z", "dateTime"],
     ["2026-07-04T13:00", "CET", "2026-07-04T11:00:00.000Z", "dateTime"],
+    ["9999-12-29T23:59:59", "UTC", "9999-12-29T23:59:59.000Z", "dateTime"],
+    ["9999-12-29T22:59:59", "Europe/Paris", "9999-12-29T21:59:59.000Z", "dateTime"],
+    ["9999-12-29T23:59:59Z", "Europe/Paris", "9999-12-29T23:59:59.000Z", "dateTime"],
   ])("resolves %s in %s", (dateText, timeZone, dateTime, kind) => {
     const due = parseTodoistCsv(csv([task({ DATE: dateText, TIMEZONE: timeZone })]), options)
       .tasks[0]!.due!;
@@ -405,6 +408,12 @@ describe("dates and time zones", () => {
     "9999-12-31",
   ])("rejects invalid or unsupported ISO date %j", (dateText) => {
     error(csv([task({ DATE: dateText })]), "INVALID_DATE");
+  });
+  it.each([
+    ["9999-12-29T23:59:59", "Europe/Paris"],
+    ["9999-12-29T23:59:59.999", "Asia/Tokyo"],
+  ])("rejects an unsupported timezone sample at the date boundary: %s %s", (dateText, timeZone) => {
+    error(csv([task({ DATE: dateText, TIMEZONE: timeZone })]), "INVALID_DATE");
   });
   it.each([
     ["2026-03-29T01:30", "Europe/London"],
