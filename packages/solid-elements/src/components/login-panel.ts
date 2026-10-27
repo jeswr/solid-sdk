@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // <jeswr-login-panel> — the suite's keystone login surface as a framework-
 // agnostic Web Component. It wraps @solid/reactive-authentication's
@@ -76,6 +77,8 @@ type Phase =
  * the reactive-auth DPoP login flow + silent session restore behind the injected
  * LoginController seam. Presentation/auth chrome — no RDF data model (the WebID is
  * an identity, surfaced via the `.webId` accessor + the `session-change` event).
+ * Set `webid-label` / `webIdLabel` to customize the sign-in field's visible and
+ * accessible label (default "Your WebID"). The value is rendered as text, never HTML.
  *
  * @summary Solid WebID login panel with silent session restore.
  * @slot - Content shown in the signed-in state (e.g. account links).
@@ -118,6 +121,7 @@ export class JeswrLoginPanel extends LitElement {
     controller: { attribute: false },
     // Optional pre-filled WebID for the input (e.g. a deep-link).
     initialWebId: { type: String, attribute: "initial-webid" },
+    webIdLabel: { type: String, attribute: "webid-label", reflect: true },
     // Whether to attempt silent restore on connect. Default TRUE (the suite
     // invariant). A custom converter (NOT the plain Boolean type) so the attribute
     // behaves intuitively for HTML authors: `auto-restore="false"` (or "0"/"off")
@@ -149,6 +153,8 @@ export class JeswrLoginPanel extends LitElement {
   declare controller?: LoginController;
   /** Optional pre-filled WebID for the input. */
   declare initialWebId: string;
+  /** Sign-in field label, rendered as text (default "Your WebID"). Reflected to `webid-label`. */
+  declare webIdLabel: string;
   /** Attempt silent restore on connect (default true). */
   declare autoRestore: boolean;
   /** Optional heading copy (default "Sign in"). */
@@ -441,6 +447,7 @@ export class JeswrLoginPanel extends LitElement {
   constructor() {
     super();
     this.initialWebId = "";
+    this.webIdLabel = "Your WebID";
     this.autoRestore = true;
     this.heading = "Sign in";
     this._phase = "idle";
@@ -750,7 +757,7 @@ export class JeswrLoginPanel extends LitElement {
           ? html`
               <form part="form" @submit=${this.#onSubmit}>
                 <label class="field">
-                  Your WebID
+                  ${this.webIdLabel}
                   <input
                     part="webid-input"
                     type="url"

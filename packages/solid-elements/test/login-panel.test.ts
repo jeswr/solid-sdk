@@ -6,6 +6,8 @@
 // real OP. Because this is auth-adjacent (the seam is the credential-leak
 // boundary), the seam tests are adversarial: they assert `.publicFetch` is the
 // PRISTINE fetch the controller exposes, distinct from the authenticated one.
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { getByRole } from "@testing-library/dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { initialsOf, JeswrLoginPanel } from "../src/components/login-panel.js";
 import type {
@@ -201,6 +203,75 @@ describe("<jeswr-login-panel> login UI", () => {
     expect((shadow(el).querySelector('[part="webid-input"]') as HTMLInputElement).value).toBe(
       "https://typed.example/me",
     );
+  });
+});
+
+describe("<jeswr-login-panel> sign-in field label", () => {
+  function expectLabel(el: JeswrLoginPanel, text: string): HTMLInputElement {
+    const label = shadow(el).querySelector("label");
+    if (!label) throw new Error("no field label");
+    expect(label.textContent?.trim()).toBe(text);
+    const input = getByRole(label, "textbox", { name: text }) as HTMLInputElement;
+    expect(input.getAttribute("part")).toBe("webid-input");
+    expect(Array.from(input.labels ?? [])).toEqual([label]);
+    expect(input.hasAttribute("aria-label")).toBe(false);
+    expect(input.hasAttribute("aria-labelledby")).toBe(false);
+    return input;
+  }
+
+  it("keeps the default visible and accessible label unchanged", async () => {
+    const el = await mount(new MockController(), { "auto-restore": "false" });
+    expect(el.webIdLabel).toBe("Your WebID");
+    expectLabel(el, "Your WebID");
+  });
+
+  it("uses webid-label on mount and reacts to subsequent attribute changes", async () => {
+    const el = await mount(new MockController(), {
+      "auto-restore": "false",
+      "webid-label": "Your account address",
+    });
+    expect(el.webIdLabel).toBe("Your account address");
+    const input = expectLabel(el, "Your account address");
+
+    el.setAttribute("webid-label", "Sign-in address");
+    await el.updateComplete;
+    expect(el.webIdLabel).toBe("Sign-in address");
+    expect(expectLabel(el, "Sign-in address")).toBe(input);
+  });
+
+  it("updates the label and reflects webIdLabel to webid-label", async () => {
+    const el = await mount(new MockController(), { "auto-restore": "false" });
+    const input = expectLabel(el, "Your WebID");
+    input.value = "https://typed.example/me";
+    input.dispatchEvent(new Event("input"));
+    await el.updateComplete;
+
+    el.webIdLabel = "Your account address";
+    await el.updateComplete;
+    expect(el.getAttribute("webid-label")).toBe("Your account address");
+    expect(expectLabel(el, "Your account address")).toBe(input);
+    expect(input.value).toBe("https://typed.example/me");
+  });
+
+  it.each([
+    "attribute",
+    "property",
+  ])("renders markup from the %s as literal text", async (source) => {
+    const text = '<img src="x" onerror="alert(1)"><script>alert(2)</script> & Account';
+    const el = await mount(new MockController(), {
+      "auto-restore": "false",
+      ...(source === "attribute" ? { "webid-label": text } : {}),
+    });
+    if (source === "property") {
+      el.webIdLabel = text;
+      await el.updateComplete;
+    }
+
+    expect(el.webIdLabel).toBe(text);
+    expect(el.getAttribute("webid-label")).toBe(text);
+    const input = expectLabel(el, text);
+    expect(Array.from(input.parentElement?.children ?? [])).toEqual([input]);
+    expect(shadow(el).querySelector("img, script")).toBeNull();
   });
 });
 

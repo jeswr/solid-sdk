@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # @jeswr/solid-elements
 
@@ -48,6 +49,21 @@ Or use the registered tags directly:
 - React wrappers: `@jeswr/solid-elements/react` (client-only under SSR frameworks).
 - Optional auth adapter: `createReactiveAuthController` from `@jeswr/solid-elements/auth`.
 - Theme and feedback helpers are exported from the root.
+
+## Login panel field label
+
+Set `webid-label` on `<jeswr-login-panel>` or its reflected `webIdLabel` string property
+to customize the sign-in field label. The default remains `Your WebID`. The value renders
+as plain text, never HTML, and the wrapping label supplies the input's accessible name.
+The host must also set the panel's `controller` property to show the sign-in form.
+
+```html
+<jeswr-login-panel webid-label="Your account address"></jeswr-login-panel>
+```
+
+```js
+panel.webIdLabel = "Your account address"; // Reflects to webid-label.
+```
 
 ## Links
 

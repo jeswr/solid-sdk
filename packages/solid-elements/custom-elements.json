@@ -916,7 +916,7 @@
       "declarations": [
         {
           "kind": "class",
-          "description": "The suite's keystone login surface as a framework-agnostic Web Component. Wraps\nthe reactive-auth DPoP login flow + silent session restore behind the injected\nLoginController seam. Presentation/auth chrome — no RDF data model (the WebID is\nan identity, surfaced via the `.webId` accessor + the `session-change` event).",
+          "description": "The suite's keystone login surface as a framework-agnostic Web Component. Wraps\nthe reactive-auth DPoP login flow + silent session restore behind the injected\nLoginController seam. Presentation/auth chrome — no RDF data model (the WebID is\nan identity, surfaced via the `.webId` accessor + the `session-change` event).\nSet `webid-label` / `webIdLabel` to customize the sign-in field's visible and\naccessible label (default \"Your WebID\"). The value is rendered as text, never HTML.",
           "name": "JeswrLoginPanel",
           "cssProperties": [
             {
@@ -1060,6 +1060,18 @@
               "description": "Optional pre-filled WebID for the input.",
               "default": "\"\"",
               "attribute": "initial-webid"
+            },
+            {
+              "kind": "field",
+              "name": "webIdLabel",
+              "privacy": "public",
+              "type": {
+                "text": "string"
+              },
+              "description": "Sign-in field label, rendered as text (default \"Your WebID\"). Reflected to `webid-label`.",
+              "default": "\"Your WebID\"",
+              "attribute": "webid-label",
+              "reflects": true
             },
             {
               "kind": "field",
@@ -1261,6 +1273,15 @@
               "description": "Optional pre-filled WebID for the input.",
               "default": "\"\"",
               "fieldName": "initialWebId"
+            },
+            {
+              "name": "webid-label",
+              "type": {
+                "text": "string"
+              },
+              "description": "Sign-in field label, rendered as text (default \"Your WebID\"). Reflected to `webid-label`.",
+              "default": "\"Your WebID\"",
+              "fieldName": "webIdLabel"
             },
             {
               "name": "auto-restore",

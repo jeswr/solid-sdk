@@ -9,8 +9,7 @@ import { EventName } from '@lit/react';
 import { LitElement } from 'lit';
 import { PropertyValues } from 'lit';
 import { ReactWebComponent } from '@lit/react';
-import { TemplateResult } from 'lit-html';
-import { TemplateResult as TemplateResult_2 } from 'lit';
+import { TemplateResult } from 'lit';
 
 // Warning: (ae-forgotten-export) The symbol "JeswrAccountMenu" needs to be exported by the entry point index.d.ts
 //
