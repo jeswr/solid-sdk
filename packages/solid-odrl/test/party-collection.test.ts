@@ -198,10 +198,10 @@ describe("recipient isPartOf evaluation", () => {
     expect(
       evaluate(prohibition, { ...REQUEST, attributes: { recipient: OUTSIDER } }, OPTIONS).decision,
     ).toBe("notApplicable");
-    expect(evaluate(prohibition, REQUEST).decision).toBe("notApplicable");
+    expect(evaluate(prohibition, REQUEST).decision).toBe("deny");
     expect(
       evaluate(prohibition, REQUEST, { resolvePartyCollection: () => undefined }).decision,
-    ).toBe("notApplicable");
+    ).toBe("deny");
   });
 
   it.each([
@@ -230,6 +230,210 @@ describe("recipient isPartOf evaluation", () => {
         { ...OPTIONS, requireDuties: true },
       ).decision,
     ).toBe("deny");
+  });
+});
+
+describe("indeterminate recipient membership prohibitions", () => {
+  const prohibition = {
+    type: "prohibition" as const,
+    action: "distribute" as const,
+    constraints: [CONSTRAINT],
+  };
+  const policy: OdrlPolicy = {
+    id: POLICY.id,
+    permissions: [{ type: "permission", action: "distribute" }],
+    prohibitions: [prohibition],
+  };
+  const unavailable: { name: string; options: EvaluateOptions }[] = [
+    { name: "missing resolver", options: { now: NOW } },
+    {
+      name: "unknown collection",
+      options: { ...OPTIONS, resolvePartyCollection: () => undefined },
+    },
+    {
+      name: "resolver exception",
+      options: {
+        ...OPTIONS,
+        resolvePartyCollection: () => {
+          throw new Error("Collection unavailable");
+        },
+      },
+    },
+    {
+      name: "membership lookup exception",
+      options: {
+        ...OPTIONS,
+        resolvePartyCollection: () => {
+          const members = new Set<string>();
+          members.has = () => {
+            throw new Error("Snapshot unavailable");
+          };
+          return members;
+        },
+      },
+    },
+  ];
+
+  describe.each(unavailable)("$name", ({ options }) => {
+    it.each([
+      undefined,
+      "perm",
+      "prohibit",
+      "invalid",
+    ] as const)("denies despite a matching permission with conflict strategy %s", (conflict) => {
+      const evaluated = evaluate({ ...policy, conflict }, REQUEST, options);
+      expect(evaluated.decision).toBe("deny");
+      expect(evaluated.reason).toMatch(/indeterminate.*membership/i);
+      expect(evaluated.matchedPermissions).toHaveLength(1);
+      expect(evaluated.matchedProhibitions).toEqual([]);
+      expect(evaluated.conflict).toBe(false);
+      expect(evaluated.duties).toEqual([]);
+    });
+
+    it("denies with no matching permission", () => {
+      expect(evaluate({ ...policy, permissions: [] }, REQUEST, options).decision).toBe("deny");
+    });
+
+    it("denies through delegated evaluation and decision recording", () => {
+      expect(evaluateDelegated([policy], REQUEST, options).decision).toBe("deny");
+      const record = recordEvaluation(
+        "https://alice.example/records/unresolved",
+        policy,
+        REQUEST,
+        options,
+      );
+      expect(record.result.decision).toBe("deny");
+      expect(record.jsonld.reason).toBe(record.result.reason);
+    });
+  });
+
+  it.each([
+    new Set<string>(),
+    new Set([OUTSIDER]),
+  ])("permits when a trusted snapshot confirms nonmembership: %j", (members) => {
+    const options = { ...OPTIONS, resolvePartyCollection: () => members };
+    expect(evaluate(policy, REQUEST, options).decision).toBe("permit");
+    expect(evaluate({ ...policy, permissions: [] }, REQUEST, options).decision).toBe(
+      "notApplicable",
+    );
+  });
+
+  it.each([
+    undefined,
+    true,
+    42,
+    "bob",
+    [MEMBER],
+  ])("denies when the recipient cannot be evaluated: %j", (recipient) => {
+    expect(
+      evaluate({ ...policy }, { action: "distribute", attributes: { recipient } }, OPTIONS)
+        .decision,
+    ).toBe("deny");
+  });
+
+  it.each([
+    { ...CONSTRAINT, rightOperand: "organisation" },
+    { ...CONSTRAINT, rightOperand: [COLLECTION] },
+    { ...CONSTRAINT, datatype: `${XSD}string` },
+    { ...CONSTRAINT, leftOperand: "purpose" as const },
+  ])("denies when the prohibition's membership constraint is malformed: %j", (constraint) => {
+    expect(
+      evaluate(
+        { ...policy, prohibitions: [{ ...prohibition, constraints: [constraint] }] },
+        REQUEST,
+        OPTIONS,
+      ).decision,
+    ).toBe("deny");
+  });
+
+  it.each([
+    { action: "read" as const },
+    { target: "https://alice.example/other" },
+    { assignee: OUTSIDER },
+  ])("ignores an unresolved prohibition outside the request's scope: %j", (scope) => {
+    const resolvePartyCollection = vi.fn(() => undefined);
+    expect(
+      evaluate({ ...policy, prohibitions: [{ ...prohibition, ...scope }] }, REQUEST, {
+        resolvePartyCollection,
+      }).decision,
+    ).toBe("permit");
+    expect(resolvePartyCollection).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    true,
+    false,
+  ])("lets a confirmed false conjunct rule out an unresolved prohibition (membership first: %s)", (membershipFirst) => {
+    const other: OdrlConstraint = {
+      leftOperand: "purpose",
+      operator: "eq",
+      rightOperand: "research",
+    };
+    const constraints = membershipFirst ? [CONSTRAINT, other] : [other, CONSTRAINT];
+    expect(
+      evaluate(
+        { ...policy, prohibitions: [{ ...prohibition, constraints }] },
+        { ...REQUEST, attributes: { ...REQUEST.attributes, purpose: "marketing" } },
+      ).decision,
+    ).toBe("permit");
+  });
+
+  it("denies when another constraint holds but membership remains unresolved", () => {
+    expect(
+      evaluate(
+        {
+          ...policy,
+          prohibitions: [
+            {
+              ...prohibition,
+              constraints: [
+                CONSTRAINT,
+                { leftOperand: "purpose", operator: "eq", rightOperand: "research" },
+              ],
+            },
+          ],
+        },
+        { ...REQUEST, attributes: { ...REQUEST.attributes, purpose: "research" } },
+      ).decision,
+    ).toBe("deny");
+  });
+
+  it("does not lose an unresolved prohibition beside confirmed membership outcomes", () => {
+    for (const members of [new Set([MEMBER]), new Set([OUTSIDER])]) {
+      expect(
+        evaluate(
+          {
+            ...policy,
+            conflict: "perm",
+            prohibitions: [
+              prohibition,
+              { ...prohibition, constraints: [{ ...CONSTRAINT, rightOperand: OTHER_COLLECTION }] },
+            ],
+          },
+          REQUEST,
+          {
+            ...OPTIONS,
+            resolvePartyCollection: (iri) => (iri === COLLECTION ? members : undefined),
+          },
+        ).decision,
+      ).toBe("deny");
+    }
+  });
+
+  it.each([
+    "text/turtle",
+    "application/ld+json",
+  ])("preserves unresolved prohibition enforcement through %s", async (contentType) => {
+    const body =
+      contentType === "text/turtle"
+        ? await policyToTurtle(policy)
+        : JSON.stringify(policyToJsonLd(policy));
+    const parsed = required(await parsePolicy(await parseRdf(body, contentType)));
+    expect(evaluate(parsed, REQUEST).decision).toBe("deny");
+    expect(evaluate(parsed, REQUEST, OPTIONS).decision).toBe("deny");
+    expect(
+      evaluate(parsed, { ...REQUEST, attributes: { recipient: OUTSIDER } }, OPTIONS).decision,
+    ).toBe("permit");
   });
 });
 

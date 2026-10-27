@@ -89,8 +89,13 @@ missing/non-IRI/array recipients, missing resolvers, unknown collections (`undef
 and resolver errors leave the constraint unsatisfied. A constrained permission then
 does not match; if no other rule matches, the result is `"notApplicable"` (default deny).
 A prohibition with a satisfied membership constraint denies under the default
-conflict strategy. Unevaluable prohibition constraints follow the same existing
-unsatisfied-constraint rule. Other left operands, array right operands, and literal
+conflict strategy. Unavailable membership evidence is indeterminate: if a
+prohibition otherwise could apply, evaluation returns `"deny"` before conflict
+resolution, including with `conflict: "perm"`. Only confirmed nonmembership or
+another unsatisfied constraint rules out that prohibition. Its action, target,
+and assignee must still apply to the request. Indeterminate prohibitions are not
+reported as matched rules; the decision reason explains the denial.
+Other left operands, array right operands, and literal
 datatypes are unsupported for `isPartOf`; policy serializers reject malformed forms.
 Collection RDF type declarations are not required inside the policy; the resolver
 identifies the referenced PartyCollection and its members.

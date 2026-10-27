@@ -197,9 +197,11 @@ export interface EvaluateOptions {
   /**
    * Resolve an `odrl:PartyCollection` IRI to its member party IRIs for
    * `recipient isPartOf <collection>`. Supply a stable, trusted membership
-   * snapshot; the evaluator never fetches. Missing/unknown collections or a
-   * resolver error leave the constraint unsatisfied, as do non-IRI or array
-   * recipients/collections. Membership uses exact IRI strings.
+   * snapshot; the evaluator never fetches. Missing/unknown collections, resolver
+   * errors, and non-IRI or array recipients/collections cannot satisfy a permission
+   * or duty. For an otherwise applicable prohibition, these are indeterminate and
+   * force deny before conflict resolution. Confirmed nonmembership rules out the
+   * constraint. Membership uses exact IRI strings.
    */
   readonly resolvePartyCollection?: (collectionIri: string) => ReadonlySet<string> | undefined;
 }

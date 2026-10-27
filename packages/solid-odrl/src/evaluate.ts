@@ -28,6 +28,9 @@
 //                  caller fall through to a less-safe default; deny is fail-closed).
 //   - If NEITHER matches → notApplicable (the policy says nothing about this
 //     request; the caller decides the default — typically deny for usage control).
+//   - An otherwise applicable prohibition with indeterminate recipient membership
+//     denies before conflict resolution. Only confirmed nonmembership (or another
+//     unsatisfied conjunct) can rule it out; unavailable evidence cannot grant.
 
 import { safeIri } from "@jeswr/rdf-serialize";
 import type {
@@ -64,9 +67,13 @@ export function evaluate(
   // Keep the matched effective RULE OBJECTS (not just their trace) so duty
   // collection can match by object identity, never by action-only fallback.
   const matchedPermissionRules = matchingPermissions(policy, request, { ...options, now });
-  const matchedProhibitionRules = effectiveProhibitions.filter((r) =>
-    ruleMatches(r, request, now, options),
-  );
+  const prohibitionMatches = effectiveProhibitions.map((rule) => ({
+    rule,
+    status: ruleMatchStatus(rule, request, now, options),
+  }));
+  const matchedProhibitionRules = prohibitionMatches
+    .filter(({ status }) => status === true)
+    .map(({ rule }) => rule);
 
   const matchedPermissions = matchedPermissionRules.map((r) => toDecisionRule(r, "permission"));
   const matchedProhibitions = matchedProhibitionRules.map((r) => toDecisionRule(r, "prohibition"));
@@ -80,6 +87,17 @@ export function evaluate(
   const duties = collectDuties(policy, matchedPermissionRules, request, now, options);
 
   // --- resolve the decision -------------------------------------------------
+  if (prohibitionMatches.some(({ status }) => status === undefined)) {
+    return result(
+      "deny",
+      "A potentially applicable prohibition has indeterminate recipient membership; denying (fail-closed).",
+      matchedPermissions,
+      matchedProhibitions,
+      [],
+      false,
+    );
+  }
+
   if (!hasPermit && !hasProhibit) {
     return result(
       "notApplicable",
@@ -164,7 +182,7 @@ export function matchingPermissions(
   const now = options.now ?? new Date();
   return (policy.permissions ?? [])
     .map((r) => effectiveRule(r, policy))
-    .filter((r) => ruleMatches(r, request, now, options));
+    .filter((r) => ruleMatchStatus(r, request, now, options) === true);
 }
 
 /** Decide a permit (honour `requireDuties`: an unfulfilled required duty → deny). */
@@ -240,15 +258,15 @@ function toDecisionRule(rule: OdrlRule, type: "permission" | "prohibition"): Dec
 }
 
 /**
- * Does `rule` apply to `request`? Action-implication + target + assignee + every
- * constraint must hold.
+ * Does `rule` apply to `request`? `undefined` preserves indeterminate membership.
+ * A confirmed false conjunct rules out the rule regardless of constraint order.
  */
-function ruleMatches(
+function ruleMatchStatus(
   rule: OdrlRule,
   request: RequestContext,
   now: Date,
   options: EvaluateOptions,
-): boolean {
+): boolean | undefined {
   if (!actionApplies(rule.action, request.action)) {
     return false;
   }
@@ -262,12 +280,17 @@ function ruleMatches(
     return false;
   }
   // ALL constraints must be satisfied (fail-closed on a missing context value).
+  let status: boolean | undefined = true;
   for (const c of rule.constraints ?? []) {
-    if (!constraintSatisfied(c, request, now, options)) {
+    const constraint = constraintStatus(c, request, now, options);
+    if (constraint === false) {
       return false;
     }
+    if (constraint === undefined) {
+      status = undefined;
+    }
   }
-  return true;
+  return status;
 }
 
 /** Does the rule's action concept cover the requested action (odrl:use umbrella)? */
@@ -341,10 +364,17 @@ export function constraintSatisfied(
   now: Date,
   options: EvaluateOptions = {},
 ): boolean {
+  return constraintStatus(c, request, now, options) === true;
+}
+
+/** Internal tri-state result: unavailable membership evidence is indeterminate. */
+function constraintStatus(
+  c: OdrlConstraint,
+  request: RequestContext,
+  now: Date,
+  options: EvaluateOptions,
+): boolean | undefined {
   const supplied = requestValueFor(c, request, now);
-  if (supplied === undefined) {
-    return false; // fail-closed: no context value → not satisfied.
-  }
   if (c.operator === "isPartOf") {
     // ODRL 2.2 IM §2.5 / Vocabulary PartyCollection: this surface supports
     // membership only for a single recipient IRI and a single collection IRI.
@@ -357,13 +387,16 @@ export function constraintSatisfied(
       typeof c.rightOperand !== "string" ||
       safeIri(c.rightOperand) !== c.rightOperand
     ) {
-      return false;
+      return undefined;
     }
     try {
-      return options.resolvePartyCollection?.(c.rightOperand)?.has(supplied) === true;
+      return options.resolvePartyCollection?.(c.rightOperand)?.has(supplied);
     } catch {
-      return false; // unavailable membership evidence cannot satisfy a constraint.
+      return undefined;
     }
+  }
+  if (supplied === undefined) {
+    return false; // fail-closed: no context value → not satisfied.
   }
   return compare(supplied, c, c.operator);
 }

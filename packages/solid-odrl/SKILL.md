@@ -40,10 +40,15 @@ its right operand must be a single IRI without a literal datatype. Serializers
 reject unsupported forms. The parser retains malformed membership as an
 unsatisfied constraint rather than dropping it and widening a permission.
 
-Permissions and prohibitions use the evaluator's existing constraint rule:
-unsatisfied constraints prevent a rule from matching. A satisfied prohibition
-denies under the default `prohibit` conflict strategy. With no matching rules,
-`evaluate` returns `notApplicable`; enforcement callers must default deny.
+Permissions and duties require positively satisfied membership. For prohibitions,
+missing/invalid operands or unavailable membership evidence are indeterminate,
+distinct from confirmed nonmembership. An otherwise applicable indeterminate
+prohibition forces `deny` before conflict resolution, even with `conflict: "perm"`.
+A mismatched action, target, assignee, or another unsatisfied constraint rules out
+the prohibition. Only confirmed matches appear in `matchedProhibitions`; the
+decision reason explains indeterminate denials. A satisfied prohibition denies
+under the default `prohibit` conflict strategy. With no matching or indeterminate
+rules, `evaluate` returns `notApplicable`; enforcement callers must default deny.
 
 The resolver flows through `evaluate`, `evaluateDelegated`, `matchingPermissions`, duty constraints,
 `constraintSatisfied(c, request, now, options)`, and `recordEvaluation`.
