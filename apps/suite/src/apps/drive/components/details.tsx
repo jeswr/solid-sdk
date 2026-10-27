@@ -16,6 +16,7 @@ import { formatFileSize } from "../lib/files";
 import { breadcrumbs } from "../lib/files/breadcrumbs";
 import { formatModified, formatSize, friendlyType } from "../lib/view/view";
 import { useDrive } from "../state/drive-context";
+import { useLiveItem } from "../state/resource";
 import { useDriveUi } from "../state/ui";
 import { ItemIcon } from "./item-icon";
 
@@ -55,7 +56,7 @@ export function DetailsPane({
   const factsId = useId();
   const { session } = useDrive();
   const [technical, setTechnical] = useState(false);
-  const [item] = detailsItems;
+  const item = useLiveItem(detailsItems[0]);
   if (!item) {
     return (
       <div className="drv-details">

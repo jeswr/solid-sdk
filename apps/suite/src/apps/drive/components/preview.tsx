@@ -32,6 +32,7 @@ import { encodeRef } from "@/lib/refs";
 import type { DriveClient, DriveItem } from "../lib/client/client";
 import { parseCsvPreview, previewKind } from "../lib/view/view";
 import { useDrive } from "../state/drive-context";
+import { useLiveItem, useResourceVersion } from "../state/resource";
 import { captureDriveFocusRemoval, useDriveActions, useDriveUi } from "../state/ui";
 import { DetailsPane } from "./details";
 import { ItemIcon } from "./item-icon";
@@ -91,7 +92,9 @@ function valueLabel(iri: string): string {
 
 function useLoadedFile(client: DriveClient, item: DriveItem): Loaded {
   const kind = filePreviewKind(item);
+  const version = useResourceVersion(item.url);
   const [state, setState] = useState<Loaded>({ status: "loading" });
+  // biome-ignore lint/correctness/useExhaustiveDependencies: version invalidates the resource bytes
   useEffect(() => {
     let live = true;
     let objectUrl: string | undefined;
@@ -122,9 +125,9 @@ function useLoadedFile(client: DriveClient, item: DriveItem): Loaded {
       } else if (kind === "image" && !blob.type.startsWith("image/")) {
         return { status: "error" } as const;
       }
+      // An abandoned read must not create a URL after its cleanup has run.
+      if (!live) return { status: "loading" } as const;
       objectUrl = URL.createObjectURL(media);
-      // A read may finish after cleanup has already run.
-      if (!live) URL.revokeObjectURL(objectUrl);
       return { status: "blob", url: objectUrl } as const;
     };
     run().then(
@@ -135,7 +138,7 @@ function useLoadedFile(client: DriveClient, item: DriveItem): Loaded {
       live = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [client, item.url, kind]);
+  }, [client, item.url, kind, version]);
   return state;
 }
 
@@ -355,7 +358,7 @@ export function PreviewDialog() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const detailsTrigger = useRef<HTMLElement | null>(null);
   const restoreFocus = useRef<ReturnType<typeof captureDriveFocusRemoval> | undefined>(undefined);
-  const item = preview?.items[preview.index];
+  const item = useLiveItem(preview?.items[preview.index]);
   useEffect(() => {
     if (!preview) return;
     const onKey = (event: KeyboardEvent) => {
@@ -455,8 +458,15 @@ export function PreviewDialog() {
 }
 
 /** Direct load of `/drive/p/[ref]`: the viewer as a page with a way back. */
-export function PreviewPage({ item, parent }: { item: DriveItem; parent: string | undefined }) {
+export function PreviewPage({
+  item: initial,
+  parent,
+}: {
+  item: DriveItem;
+  parent: string | undefined;
+}) {
   const { driveRoot } = useDrive();
+  const item = useLiveItem(initial);
   const back = !parent || parent === driveRoot ? "/drive/my" : `/drive/f/${encodeRef(parent)}`;
   return (
     <section

@@ -47,15 +47,26 @@ function DriveChrome({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!driveRoot) return;
     let live = true;
-    const measure = () =>
+    let generation = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const measure = () => {
+      const request = ++generation;
       void measureUsage(client, driveRoot).then(
-        (bytes) => live && setUsage(bytes),
+        (bytes) => live && request === generation && setUsage(bytes),
         () => undefined,
       );
+    };
+    const unsubscribe = changes.subscribeSubtree(driveRoot, () => {
+      // Invalidate pending measurements immediately and coalesce mutation bursts.
+      ++generation;
+      clearTimeout(timer);
+      timer = setTimeout(measure, 200);
+    });
+    setUsage(undefined);
     measure();
-    const unsubscribe = changes.subscribe(driveRoot, measure);
     return () => {
       live = false;
+      clearTimeout(timer);
       unsubscribe();
     };
   }, [client, driveRoot, changes]);
