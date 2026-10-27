@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { isRecord, type Listen, type ListenSource, type ScrobbleWarning } from "./types";
 
 const MIN_TIME = Date.UTC(2002, 0, 1);
@@ -111,8 +112,15 @@ export function normalize(
     if (value !== undefined) mbids.release = value;
   }
   if (info?.artist_mbids !== undefined) {
-    if (!Array.isArray(info.artist_mbids)) mbid(info.artist_mbids, "artist_mbids");
-    else {
+    if (!Array.isArray(info.artist_mbids)) {
+      warnings.push({
+        source,
+        line,
+        code: "INVALID_MBID",
+        field: "artist_mbids",
+        message: "Invalid MBID dropped.",
+      });
+    } else {
       const artists: string[] = [];
       info.artist_mbids.forEach((value, index) => {
         const id = mbid(value, `artist_mbids[${index}]`);

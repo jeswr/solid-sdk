@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import fc from "fast-check";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -294,6 +295,30 @@ it("drops invalid lowercase UUID MBIDs individually and reports their field and 
   expect(
     lb([row(epoch, { additional_info: { artist_mbids: ["bad"] } })]).listens[0]?.mbids,
   ).toEqual({});
+});
+
+it.each([
+  artistId,
+  null,
+  "bad",
+  {},
+  42,
+  true,
+])("warns when dropping non-array artist MBIDs (%j)", (value) => {
+  const result = parseListenBrainz(
+    `\n${JSON.stringify(row(epoch, { additional_info: { artist_mbids: value } }))}`,
+    options,
+  );
+  expect(result.listens).toEqual(lb([row()]).listens);
+  expect(result.warnings).toEqual([
+    {
+      source: "listenbrainz",
+      line: 2,
+      code: "INVALID_MBID",
+      field: "artist_mbids",
+      message: "Invalid MBID dropped.",
+    },
+  ]);
 });
 
 it("deduplicates case and whitespace variants across sources at exactly 30 seconds", () => {
