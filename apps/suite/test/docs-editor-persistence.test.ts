@@ -1,7 +1,8 @@
+// @vitest-environment jsdom
 // AUTHORED-BY Codex
 import { SolidPersistence, SolidUpdateStore } from "@jeswr/y-solid";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement } from "yjs";
+import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement, XmlText } from "yjs";
 import { DocumentPersistence } from "../src/apps/docs/editor/persistence";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_NAME, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
@@ -13,6 +14,7 @@ const mirrors = vi.hoisted(() => new Map<string, Map<string, unknown>>());
 vi.mock("y-indexeddb", () => ({
   IndexeddbPersistence: class {
     whenSynced = Promise.resolve(this);
+    closed = false;
     constructor(
       readonly name: string,
       readonly doc: Doc,
@@ -20,18 +22,24 @@ vi.mock("y-indexeddb", () => ({
       if (!mirrors.has(name)) mirrors.set(name, new Map());
       const update = mirrors.get(name)?.get("update") as Uint8Array | undefined;
       if (update) applyUpdate(doc, update);
-      doc.on("update", this.save);
+      doc.on("update", this._storeUpdate);
       connections.add(this);
     }
-    save = () => mirrors.get(this.name)?.set("update", encodeStateAsUpdate(this.doc));
+    save = () => {
+      if (this.closed) throw new DOMException("The connection is closed", "InvalidStateError");
+      mirrors.get(this.name)?.set("update", encodeStateAsUpdate(this.doc));
+    };
+    _storeUpdate = this.save;
     async get(key: string) {
+      if (this.closed) throw new DOMException("The connection is closed", "InvalidStateError");
       return mirrors.get(this.name)?.get(key);
     }
     async set(key: string, value: unknown) {
+      if (this.closed) throw new DOMException("The connection is closed", "InvalidStateError");
       mirrors.get(this.name)?.set(key, value);
     }
     async destroy() {
-      this.doc.off("update", this.save);
+      this.doc.off("update", this._storeUpdate);
       connections.delete(this);
     }
     async clearData() {
@@ -42,6 +50,10 @@ vi.mock("y-indexeddb", () => ({
     mirror.save();
   },
   clearDocument: async (name: string) => {
+    for (const connection of connections) {
+      const mirror = connection as { name: string; closed: boolean };
+      if (mirror.name === name) mirror.closed = true;
+    }
     mirrors.delete(name);
   },
 }));
@@ -180,7 +192,7 @@ async function replayText(runtime: DocumentPersistence, session: PodSession) {
   }
 }
 describe("Docs persistence review regressions", () => {
-  it("transfers a reopened device's previously saved mirror into the new active log", async () => {
+  it("reloads a retired saved mirror into a fresh document without merging its old identities", async () => {
     const { runtime, session } = await fixture();
     runtimes.push(runtime);
     await runtime.open();
@@ -192,7 +204,7 @@ describe("Docs persistence review regressions", () => {
     await runtime.destroy();
     const container = (stored.data.updateLog as string).replace("updates/", "updates-123/");
     const recovered = new Doc();
-    recovered.getXmlFragment("prosemirror").insert(0, [new XmlElement("recovered")]);
+    recovered.getXmlFragment("prosemirror").insert(0, [new XmlElement("paragraph")]);
     await new SolidUpdateStore({ container, fetch: session.fetch }).appendUpdate(
       encodeStateAsUpdate(recovered),
     );
@@ -207,13 +219,154 @@ describe("Docs persistence review regressions", () => {
     const reopened = new DocumentPersistence(session);
     runtimes.push(reopened);
     await reopened.open(stored.url);
-    expect(reopened.state).toBe("saving");
-    expect(mirrors.get(stored.url)?.get("pending")).toBe(1);
+    expect(reopened.doc.getXmlFragment("prosemirror").toString()).toBe("<paragraph></paragraph>");
+    expect(reopened.recoveredCopy).toBeUndefined();
     await reopened.flush();
     expect(reopened.state).toBe("saved");
     const replay = await replayText(reopened, session);
-    expect(replay).toContain("original");
-    expect(replay).toContain("recovered");
+    expect(replay).toBe("<paragraph></paragraph>");
+  });
+  it("recovery leaves another tab's mirror usable and its next edit durable", async () => {
+    const { runtime, session } = await fixture();
+    runtimes.push(runtime);
+    await runtime.open();
+    runtime.doc.getXmlFragment("prosemirror").insert(0, [new XmlElement("paragraph")]);
+    runtime.rename("Shared mirror");
+    await runtime.flush();
+    const recovered = new DocumentPersistence(session);
+    runtimes.push(recovered);
+    await recovered.open(runtime.stored?.url, true);
+    expect(() =>
+      runtime.doc.getXmlFragment("prosemirror").insert(1, [new XmlElement("paragraph")]),
+    ).not.toThrow();
+    runtime.change("<p>Local edit</p>", json("Local edit"));
+    expect(mirrors.get(runtime.local?.name as string)?.get("update")).toEqual(
+      encodeStateAsUpdate(runtime.doc),
+    );
+  });
+  it("reopens a closed mirror connection without throwing or dropping the next edit", async () => {
+    const { runtime } = await fixture();
+    runtimes.push(runtime);
+    await runtime.open();
+    runtime.rename("Closed mirror");
+    await runtime.flush();
+    (runtime.local as unknown as { closed: boolean }).closed = true;
+    expect(() =>
+      runtime.doc.getXmlFragment("prosemirror").insert(0, [new XmlElement("paragraph")]),
+    ).not.toThrow();
+    runtime.change("<p>Survives closure</p>", json("Survives closure"));
+    await runtime.flush();
+    expect(runtime.state).toBe("saved");
+    expect(mirrors.get(runtime.local?.name as string)?.get("update")).toEqual(
+      encodeStateAsUpdate(runtime.doc),
+    );
+  });
+  it("reopens a closed mirror for an offline title-only edit", async () => {
+    const { runtime } = await fixture();
+    runtimes.push(runtime);
+    await runtime.open();
+    runtime.rename("Before closure");
+    await runtime.flush();
+    const closed = runtime.local;
+    (closed as unknown as { closed: boolean }).closed = true;
+    runtime.online = false;
+    runtime.rename("Durable offline title");
+    await vi.waitFor(() => expect(runtime.local).not.toBe(closed));
+    await vi.waitFor(() =>
+      expect(mirrors.get(runtime.local?.name as string)?.get("title")).toBe(
+        "Durable offline title",
+      ),
+    );
+    expect(mirrors.get(runtime.local?.name as string)?.get("pending")).toBe(1);
+  });
+  it("follows recovery mirrors offline and preserves pending edits through another recovery", async () => {
+    const f = await fixture();
+    const { runtime, session } = f;
+    runtimes.push(runtime);
+    await runtime.open();
+    const paragraph = new XmlElement("paragraph");
+    const text = new XmlText();
+    text.insert(0, "Original");
+    paragraph.insert(0, [text]);
+    runtime.doc.getXmlFragment("prosemirror").insert(0, [paragraph]);
+    runtime.change("<p>Original</p>", json("Original"));
+    await runtime.flush();
+    const url = runtime.stored?.url as string;
+    const first = new DocumentPersistence(session);
+    runtimes.push(first);
+    await first.open(url, true);
+    first.online = false;
+    const firstText = (first.doc.getXmlFragment("prosemirror").get(0) as XmlElement).get(
+      0,
+    ) as XmlText;
+    firstText.insert(8, " offline");
+    first.change("<p>Original offline</p>", json("Original offline"));
+    await first.destroy();
+    f.intercept(async () => {
+      throw new TypeError("offline");
+    });
+    const offline = new DocumentPersistence(session);
+    runtimes.push(offline);
+    await offline.open(url);
+    expect(offline.online).toBe(false);
+    expect(offline.doc.getXmlFragment("prosemirror").toString()).toBe(
+      "<paragraph>Original offline</paragraph>",
+    );
+    await offline.destroy();
+    f.intercept(undefined);
+    const second = new DocumentPersistence(session);
+    runtimes.push(second);
+    await second.open(url, true);
+    const reopened = new DocumentPersistence(session);
+    runtimes.push(reopened);
+    await reopened.open(url);
+    await reopened.flush();
+    expect(reopened.state).toBe("saved");
+    expect(await replayText(reopened, session)).toBe("<paragraph>Original</paragraph>");
+    const copy = await reopened.store.read(reopened.recoveredCopy as string);
+    expect(copy?.data.body).toBe("<p>Original offline</p>");
+    expect(mirrors.get(first.local?.name as string)?.get("pending")).toBe(0);
+  });
+  it("retains a rename made during creation when the next snapshot fails and the document reopens", async () => {
+    const f = await fixture();
+    const { runtime, session, pod } = f;
+    runtimes.push(runtime);
+    await runtime.open();
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let creating = false;
+    f.intercept(async (input, init) => {
+      if (
+        init?.method === "PUT" &&
+        String(input).endsWith(".ttl") &&
+        String(input).includes("/docs/")
+      ) {
+        if (new Headers(init.headers).has("if-match")) return new Response(null, { status: 503 });
+        creating = true;
+        await gate;
+      }
+      return pod.fetch(input, init);
+    });
+    runtime.rename("Original title");
+    const writing = runtime.flush();
+    await vi.waitFor(() => expect(creating).toBe(true));
+    runtime.rename("Renamed while creating");
+    release();
+    await writing;
+    expect(runtime.state).toBe("retrying");
+    runtime.online = false;
+    await runtime.destroy();
+    const reopened = new DocumentPersistence(session);
+    runtimes.push(reopened);
+    await reopened.open(runtime.stored?.url);
+    expect(reopened.title).toBe("Renamed while creating");
+    expect(reopened.state).not.toBe("saved");
+    f.intercept(undefined);
+    await reopened.flush();
+    expect(reopened.stored?.data.title).toBe("Renamed while creating");
+    expect(reopened.state).toBe("saved");
   });
   it("resumes creation after the initial log read fails without duplicating the document", async () => {
     const f = await fixture();

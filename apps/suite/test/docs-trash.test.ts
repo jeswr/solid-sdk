@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { deleteDocument, deleteForever, restoreDocument } from "../src/apps/docs/editor/operations";
+import { buildDocument, serializeTurtle } from "../src/apps/docs/lib/model";
 import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
 import { listTrash, restoreItems, trashItems } from "../src/apps/drive/lib/operations/operations";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
@@ -11,16 +12,19 @@ const ROOT = "https://docs-trash.test/alice/";
 const DRIVE = `${ROOT}drive/`;
 const DOC = `${ROOT}docs/plan.ttl`;
 const TREE = `${ROOT}docs/plan/`;
-function fixture(companion = true) {
+async function fixture(companion = true) {
+  const snapshot = await serializeTurtle(
+    buildDocument(DOC, { title: "Plan", updateLog: `${TREE}updates/` }),
+  );
   const pod = createDemoPod({
     root: ROOT,
     seed: [
-      { path: "docs/plan.ttl", body: "document snapshot", contentType: "text/turtle" },
+      { path: "docs/plan.ttl", body: snapshot, contentType: "text/turtle" },
       ...(companion
         ? [
             { path: "docs/plan/assets/chart.png", body: "image", contentType: "image/png" },
             {
-              path: "docs/plan/updates/one.bin",
+              path: "docs/plan/updates/001798000000000-00000000-0000-4000-8000-000000000001",
               body: "update",
               contentType: "application/octet-stream",
             },
@@ -34,10 +38,39 @@ function fixture(companion = true) {
 }
 
 describe("Docs uses Drive trash records", () => {
+  it("renames an ordinary docs archive collision instead of partially merging binary files", async () => {
+    const { pod, client, session } = await fixture();
+    const archive = `${ROOT}docs/archive/`;
+    await pod.fetch(`${archive}updates/notes.bin`, {
+      method: "PUT",
+      headers: { "content-type": "application/octet-stream" },
+      body: "original",
+    });
+    const trashed = await trashItems(client, DRIVE, [await client.stat(archive)], {
+      webId: session.webId,
+      now: new Date(),
+    });
+    await pod.fetch(`${archive}updates/notes.bin`, {
+      method: "PUT",
+      headers: { "content-type": "application/octet-stream" },
+      body: "replacement",
+    });
+    const restored = await restoreItems(client, DRIVE, trashed.done);
+    expect(restored.failed).toEqual([]);
+    expect(restored.done[0]).toMatchObject({
+      renamed: true,
+      url: `${ROOT}docs/archive%20(restored)/`,
+    });
+    expect(await (await pod.fetch(`${archive}updates/notes.bin`)).text()).toBe("replacement");
+    expect(
+      await (await pod.fetch(`${ROOT}docs/archive%20(restored)/updates/notes.bin`)).text(),
+    ).toBe("original");
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+  });
   it("merges a recreated update-only companion tree on Undo without changing asset URLs", async () => {
-    const { pod, session, client } = fixture();
+    const { pod, session, client } = await fixture();
     const trashed = await deleteDocument(DOC, session);
-    await pod.fetch(`${TREE}updates/late.bin`, {
+    await pod.fetch(`${TREE}updates/001798000000001-00000000-0000-4000-8000-000000000002`, {
       method: "PUT",
       headers: { "content-type": "application/octet-stream" },
       body: "late immutable update",
@@ -48,19 +81,28 @@ describe("Docs uses Drive trash records", () => {
       { url: DOC, renamed: false },
       { url: TREE, renamed: false },
     ]);
-    expect(await (await pod.fetch(`${TREE}updates/one.bin`)).text()).toBe("update");
-    expect(await (await pod.fetch(`${TREE}updates/late.bin`)).text()).toBe("late immutable update");
+    expect(
+      await (
+        await pod.fetch(`${TREE}updates/001798000000000-00000000-0000-4000-8000-000000000001`)
+      ).text(),
+    ).toBe("update");
+    expect(
+      await (
+        await pod.fetch(`${TREE}updates/001798000000001-00000000-0000-4000-8000-000000000002`)
+      ).text(),
+    ).toBe("late immutable update");
     expect(await (await pod.fetch(`${TREE}assets/chart.png`)).text()).toBe("image");
     expect(await listTrash(client, DRIVE)).toEqual([]);
   });
   it.each([
     ["assets/new.png", "image/png"],
     ["updates/not-an-update.txt", "text/plain"],
+    ["updates/notes.bin", "application/octet-stream"],
     ["updates/nested/update.bin", "application/octet-stream"],
     ["other/update.bin", "application/octet-stream"],
     ["unexpected.bin", "application/octet-stream"],
   ])("preserves the normal restore collision policy for a companion containing %s", async (path, type) => {
-    const { pod, session, client } = fixture();
+    const { pod, session, client } = await fixture();
     const trashed = await deleteDocument(DOC, session);
     await pod.fetch(`${TREE}${path}`, {
       method: "PUT",
@@ -75,23 +117,60 @@ describe("Docs uses Drive trash records", () => {
     });
     expect(await (await pod.fetch(`${TREE}${path}`)).text()).toBe("unrelated occupant");
   });
+  it.each([
+    undefined,
+    `${ROOT}docs/other/updates/`,
+    `${TREE}not-updates/`,
+  ])("requires sibling Docs metadata naming its own log before merging (%s)", async (updateLog) => {
+    const { pod, client, session } = await fixture();
+    const trashed = await deleteDocument(DOC, session);
+    await pod.fetch(DOC, {
+      method: "PUT",
+      headers: { "content-type": "text/turtle" },
+      body: await serializeTurtle(buildDocument(DOC, { title: "Occupant", updateLog })),
+    });
+    await client.createFolder(`${TREE}updates/`);
+    const restored = await restoreItems(client, DRIVE, trashed.done.slice(1));
+    expect(restored.failed).toEqual([]);
+    expect(restored.done[0]?.renamed).toBe(true);
+  });
+  it.each([
+    "invalid turtle",
+    "",
+  ])("falls back to rename when the sibling cannot verify a Docs companion (%s)", async (body) => {
+    const { pod, client, session } = await fixture();
+    const trashed = await deleteDocument(DOC, session);
+    await pod.fetch(DOC, { method: "PUT", headers: { "content-type": "text/turtle" }, body });
+    await client.createFolder(`${TREE}updates/`);
+    const restored = await restoreItems(client, DRIVE, trashed.done.slice(1));
+    expect(restored.failed).toEqual([]);
+    expect(restored.done[0]?.renamed).toBe(true);
+  });
   it("merges empty update folders and timestamped recovery logs without renaming", async () => {
-    const { pod, session, client } = fixture();
+    const { pod, session, client } = await fixture();
     const trashed = await deleteDocument(DOC, session);
     await client.createFolder(`${TREE}updates/`);
-    await pod.fetch(`${TREE}updates-123/late`, {
+    await pod.fetch(`${TREE}updates-123/001798000000002-00000000-0000-4000-8000-000000000003`, {
       method: "PUT",
       headers: { "content-type": "application/octet-stream" },
       body: "late",
     });
     expect((await restoreDocument(trashed.done, session)).failed).toEqual([]);
-    expect(await (await pod.fetch(`${TREE}updates/one.bin`)).text()).toBe("update");
-    expect(await (await pod.fetch(`${TREE}updates-123/late`)).text()).toBe("late");
+    expect(
+      await (
+        await pod.fetch(`${TREE}updates/001798000000000-00000000-0000-4000-8000-000000000001`)
+      ).text(),
+    ).toBe("update");
+    expect(
+      await (
+        await pod.fetch(`${TREE}updates-123/001798000000002-00000000-0000-4000-8000-000000000003`)
+      ).text(),
+    ).toBe("late");
   });
   it("retains recovery copies when an update URL is occupied by different bytes", async () => {
-    const { pod, session, client } = fixture();
+    const { pod, session, client } = await fixture();
     const trashed = await deleteDocument(DOC, session);
-    await pod.fetch(`${TREE}updates/one.bin`, {
+    await pod.fetch(`${TREE}updates/001798000000000-00000000-0000-4000-8000-000000000001`, {
       method: "PUT",
       headers: { "content-type": "application/octet-stream" },
       body: "different",
@@ -99,19 +178,35 @@ describe("Docs uses Drive trash records", () => {
     const restored = await restoreDocument(trashed.done, session);
     expect(restored.done).toHaveLength(1);
     expect(restored.failed).toHaveLength(1);
-    expect(await (await pod.fetch(`${TREE}updates/one.bin`)).text()).toBe("different");
+    expect(
+      await (
+        await pod.fetch(`${TREE}updates/001798000000000-00000000-0000-4000-8000-000000000001`)
+      ).text(),
+    ).toBe("different");
     const recovery = (await listTrash(client, DRIVE))[0];
     expect(recovery?.status).toBe("partial");
-    expect(await (await pod.fetch(`${recovery?.url}updates/one.bin`)).text()).toBe("update");
-    await pod.fetch(`${TREE}updates/one.bin`, { method: "DELETE" });
+    expect(
+      await (
+        await pod.fetch(
+          `${recovery?.url}updates/001798000000000-00000000-0000-4000-8000-000000000001`,
+        )
+      ).text(),
+    ).toBe("update");
+    await pod.fetch(`${TREE}updates/001798000000000-00000000-0000-4000-8000-000000000001`, {
+      method: "DELETE",
+    });
     // Retry the caller's original record after resolving the conflicting resource.
     expect((await restoreDocument(trashed.done.slice(1), session)).failed).toEqual([]);
-    expect(await (await pod.fetch(`${TREE}updates/one.bin`)).text()).toBe("update");
+    expect(
+      await (
+        await pod.fetch(`${TREE}updates/001798000000000-00000000-0000-4000-8000-000000000001`)
+      ).text(),
+    ).toBe("update");
     expect(await (await pod.fetch(`${TREE}assets/chart.png`)).text()).toBe("image");
     expect(await listTrash(client, DRIVE)).toEqual([]);
   });
   it("lists a Docs delete in Drive and restores both the snapshot and companion tree with restoreItems", async () => {
-    const { pod, session, client } = fixture();
+    const { pod, session, client } = await fixture();
     const result = await deleteDocument(DOC, session);
     expect(result).toMatchObject({ done: [{ original: DOC }, { original: TREE }], failed: [] });
     const entries = await listTrash(client, DRIVE);
@@ -122,13 +217,17 @@ describe("Docs uses Drive trash records", () => {
     const restored = await restoreItems(client, DRIVE, entries);
     expect(restored.failed).toEqual([]);
     expect(restored.done.map(({ url }) => url)).toEqual([DOC, TREE]);
-    expect(await (await pod.fetch(DOC)).text()).toBe("document snapshot");
+    expect(await (await pod.fetch(DOC)).text()).toContain("Plan");
     expect(await (await pod.fetch(`${TREE}assets/chart.png`)).text()).toBe("image");
-    expect(await (await pod.fetch(`${TREE}updates/one.bin`)).text()).toBe("update");
+    expect(
+      await (
+        await pod.fetch(`${TREE}updates/001798000000000-00000000-0000-4000-8000-000000000001`)
+      ).text(),
+    ).toBe("update");
     expect(await listTrash(client, DRIVE)).toEqual([]);
   });
   it("uses the same records for Docs restore and confirmed permanent deletion", async () => {
-    const { session, client, pod } = fixture();
+    const { session, client, pod } = await fixture();
     const first = await deleteDocument(DOC, session);
     expect((await restoreDocument(first.done, session)).failed).toEqual([]);
     const second = await deleteDocument(DOC, session);
@@ -139,7 +238,7 @@ describe("Docs uses Drive trash records", () => {
     for (const entry of second.done) expect((await pod.fetch(entry.url)).status).toBe(404);
   });
   it("trashes a document without a companion container", async () => {
-    const { session, client } = fixture(false);
+    const { session, client } = await fixture(false);
     const result = await deleteDocument(DOC, session);
     expect(result.done).toHaveLength(1);
     expect(result.failed).toEqual([]);
@@ -151,16 +250,17 @@ describe("Docs uses Drive trash records", () => {
     "docs/plan.ttl?x=1",
     "docs/plan.txt",
   ])("refuses non-document location %s before deleting anything", async (path) => {
-    const { session, pod } = fixture();
+    const { session, pod } = await fixture();
     await expect(deleteDocument(`${ROOT}${path}`, session)).rejects.toThrow();
     expect((await pod.fetch(DOC)).ok).toBe(true);
   });
   it("preserves Drive partial records when the companion tree cannot finish moving", async () => {
-    const { session, client, pod } = fixture();
+    const { session, client, pod } = await fixture();
     const interrupted = {
       ...session,
       fetch: (async (input, init) =>
-        String(input) === `${TREE}updates/one.bin` && init?.method === "DELETE"
+        String(input) === `${TREE}updates/001798000000000-00000000-0000-4000-8000-000000000001` &&
+        init?.method === "DELETE"
           ? new Response(null, { status: 403 })
           : pod.fetch(input, init)) as typeof fetch,
     };
@@ -173,7 +273,7 @@ describe("Docs uses Drive trash records", () => {
     expect(tree).toMatchObject({ status: "partial" });
     expect(tree?.remaining).toEqual([
       `${tree?.url}assets/chart.png`,
-      `${tree?.url}updates/one.bin`,
+      `${tree?.url}updates/001798000000000-00000000-0000-4000-8000-000000000001`,
     ]);
     const restored = await restoreItems(client, DRIVE, visible);
     expect(restored.failed).toEqual([]);
@@ -182,13 +282,17 @@ describe("Docs uses Drive trash records", () => {
       { url: TREE, renamed: false },
     ]);
     expect(await (await pod.fetch(`${TREE}assets/chart.png`)).text()).toBe("image");
-    expect(await (await pod.fetch(`${TREE}updates/one.bin`)).text()).toBe("update");
+    expect(
+      await (
+        await pod.fetch(`${TREE}updates/001798000000000-00000000-0000-4000-8000-000000000001`)
+      ).text(),
+    ).toBe("update");
     expect((await pod.fetch(DOC)).ok).toBe(true);
     expect((await pod.fetch(`${ROOT}docs/plan%20(restored)/`)).status).toBe(404);
     expect(await listTrash(client, DRIVE)).toEqual([]);
   });
   it("does not remove either source when Drive cannot persist the batch intents", async () => {
-    const { session, pod } = fixture();
+    const { session, pod } = await fixture();
     const unavailable = {
       ...session,
       fetch: (async (input, init) =>
@@ -205,7 +309,7 @@ describe("Docs uses Drive trash records", () => {
   });
   it("surfaces completion warnings and leaves records that Drive can reconcile", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const { session, pod, client } = fixture();
+    const { session, pod, client } = await fixture();
     let writes = 0;
     const unavailable = {
       ...session,
@@ -231,7 +335,10 @@ describe("Docs uses Drive trash records", () => {
         remaining:
           entry.original === DOC
             ? [entry.url]
-            : [`${entry.url}assets/chart.png`, `${entry.url}updates/one.bin`],
+            : [
+                `${entry.url}assets/chart.png`,
+                `${entry.url}updates/001798000000000-00000000-0000-4000-8000-000000000001`,
+              ],
       })),
     );
     expect((await restoreDocument(reconciled, session)).failed).toEqual([]);
@@ -240,7 +347,7 @@ describe("Docs uses Drive trash records", () => {
     warn.mockRestore();
   });
   it("refuses to start a delete when the companion existence check is forbidden", async () => {
-    const { session, pod } = fixture();
+    const { session, pod } = await fixture();
     const forbidden = {
       ...session,
       fetch: (async (input, init) =>
@@ -252,7 +359,7 @@ describe("Docs uses Drive trash records", () => {
     expect((await pod.fetch(DOC)).ok).toBe(true);
   });
   it("refuses Docs restore or purge of records for other apps", async () => {
-    const { session } = fixture();
+    const { session } = await fixture();
     const entry = {
       url: `${DRIVE}.trash/slot/file`,
       original: `${ROOT}mail/file.ttl`,

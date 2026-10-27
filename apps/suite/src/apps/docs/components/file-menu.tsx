@@ -10,6 +10,7 @@ import {
 } from "@jeswr/suite-ui";
 import { MoreHorizontal } from "lucide-react";
 import Link from "next/link";
+import { useRef } from "react";
 import type { DownloadFormat } from "../editor/export-document";
 import { DownloadMenu } from "./download-menu";
 export function FileMenu({
@@ -33,6 +34,7 @@ export function FileMenu({
   print: () => void;
   importFile: () => void;
 }) {
+  const renameOnClose = useRef(false);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -40,14 +42,28 @@ export function FileMenu({
           <MoreHorizontal aria-hidden="true" />
         </IconButton>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent
+        align="end"
+        onCloseAutoFocus={(event) => {
+          if (renameOnClose.current) {
+            event.preventDefault();
+            renameOnClose.current = false;
+            rename();
+          }
+        }}
+      >
         <DropdownMenuItem asChild>
           <Link href="/docs/new">New</Link>
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={copy} disabled={draft}>
           Make a copy
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={rename} disabled={readOnly}>
+        <DropdownMenuItem
+          onSelect={() => {
+            renameOnClose.current = true;
+          }}
+          disabled={readOnly}
+        >
           Rename
         </DropdownMenuItem>
         <DownloadMenu download={download} print={print} />

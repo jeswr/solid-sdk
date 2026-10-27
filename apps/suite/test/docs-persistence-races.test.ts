@@ -20,9 +20,10 @@ vi.mock("y-indexeddb", () => ({
       readonly doc: Doc,
     ) {
       mirrors.set(this, new Map());
-      doc.on("update", this.save);
+      doc.on("update", this._storeUpdate);
     }
     save = () => mirrors.get(this)?.set("update", encodeStateAsUpdate(this.doc));
+    _storeUpdate = this.save;
     async get(key: string) {
       return mirrors.get(this)?.get(key);
     }
@@ -30,7 +31,7 @@ vi.mock("y-indexeddb", () => ({
       mirrors.get(this)?.set(key, value);
     }
     async destroy() {
-      this.doc.off("update", this.save);
+      this.doc.off("update", this._storeUpdate);
     }
     async clearData() {
       mirrors.get(this)?.clear();
@@ -116,7 +117,7 @@ it("keeps edits local while trashed and flushes them into the original log after
   expect(await (await pod.fetch(`${tree}assets/chart.png`)).text()).toBe("image");
 });
 
-it("moves an already-open client's full state into the recovery log before reporting Saved", async () => {
+it("preserves retired-log edits in a separate copy and reloads without duplicate paragraphs", async () => {
   const { pod, session, original, client, url, log } = await fixture();
   const other = client();
   await other.open(url);
@@ -132,7 +133,15 @@ it("moves an already-open client's full state into the recovery log before repor
   await other.reconnect();
   await other.flush();
   expect(other.state).toBe("saved");
-  expect(await replay(active, session)).toContain("Original B edit");
+  expect(await replay(active, session)).toBe("<paragraph>Original</paragraph>");
+  const copy = await other.store.read(other.recoveredCopy as string);
+  expect(copy?.data.body).toBe("<p>Original B edit</p>");
+  expect(await replay(copy?.data.updateLog as string, session)).toBe(
+    "<paragraph>Original B edit</paragraph>",
+  );
+  expect(other.doc.getXmlFragment("prosemirror").toString()).toBe(
+    "<paragraph>Original</paragraph>",
+  );
   expect(retired?.destroyed).toBe(true);
   expect(other.provider?.store.container).toBe(active);
   expect(pod.snapshot().resources.filter(([resource]) => resource.startsWith(log))).toEqual(
@@ -141,6 +150,38 @@ it("moves an already-open client's full state into the recovery log before repor
   // The first client's independent mirror must follow the pointer too, even without edits.
   await original.reconnect();
   expect(original.provider?.store.container).toBe(active);
+});
+
+it("keeps retired-log edits pending when saving their separate copy fails", async () => {
+  const { pod, session, client, url } = await fixture();
+  let fail = false;
+  const writer = new DocumentPersistence({
+    ...session,
+    fetch: async (input, init) =>
+      fail && init?.method === "PUT" && String(input).includes("-copy")
+        ? new Response(null, { status: 503 })
+        : pod.fetch(input, init),
+  });
+  runtimes.push(writer);
+  await writer.open(url);
+  const oldDoc = writer.doc;
+  const recovered = client();
+  await recovered.open(url, true);
+  bodyText(writer).insert(8, " pending");
+  writer.change("<p>Original pending</p>", json("Original pending"));
+  fail = true;
+  await writer.reconnect();
+  expect(writer.state).toBe("retrying");
+  expect(writer.doc).toBe(oldDoc);
+  expect(mirrors.get(writer.local as object)?.get("pending")).toBe(1);
+  expect(await replay(recovered.stored?.data.updateLog as string, session)).toBe(
+    "<paragraph>Original</paragraph>",
+  );
+  fail = false;
+  await writer.reconnect();
+  expect(writer.state).toBe("saved");
+  const copy = await writer.store.read(writer.recoveredCopy as string);
+  expect(copy?.data.body).toBe("<p>Original pending</p>");
 });
 
 it("retries a stale opening listing after compaction without seeding duplicate paragraphs", async () => {
@@ -282,7 +323,11 @@ it("does not report Saved when the pointer changes during a successful update PU
   expect(retired?.destroyed).toBe(true);
   const active = replacement?.stored?.data.updateLog as string;
   expect(writer.provider?.store.container).toBe(active);
-  expect(await replay(active, session)).toContain("Original racing edit");
+  expect(await replay(active, session)).toBe("<paragraph>Original</paragraph>");
+  const copy = await writer.store.read(writer.recoveredCopy as string);
+  expect(await replay(copy?.data.updateLog as string, session)).toBe(
+    "<paragraph>Original racing edit</paragraph>",
+  );
   await original.reconnect();
 });
 

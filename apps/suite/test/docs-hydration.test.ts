@@ -163,6 +163,33 @@ it("shows that a trashed document's pending edits are kept on this device", () =
     mocks.runtime = null;
   }
 });
+it("links the separate copy containing edits from a retired log", () => {
+  const doc = new Doc();
+  const session = { storageUrl: "https://pod.test/", fetch: vi.fn() } as unknown as PodSession;
+  mocks.runtime = {
+    doc,
+    session,
+    state: "saved",
+    online: true,
+    lastSaved: Date.now(),
+    title: "Plan",
+    recoveredCopy: "https://pod.test/docs/recovered.ttl",
+  } as unknown as DocumentPersistence;
+  try {
+    const host = document.createElement("div");
+    host.innerHTML = renderToString(
+      createElement(DocumentEditor, { session, resource: undefined }),
+    );
+    const link = [...host.querySelectorAll("a")].find(
+      (anchor) => anchor.textContent === "a separate copy",
+    );
+    expect(link?.getAttribute("href")).toMatch(/^\/docs\/d\//);
+    expect(host.textContent).toContain("Your pending edits were saved");
+  } finally {
+    doc.destroy();
+    mocks.runtime = null;
+  }
+});
 it("keeps the document non-editable with visible Syncing feedback while opening", () => {
   mocks.runtime = null;
   const html = renderToString(

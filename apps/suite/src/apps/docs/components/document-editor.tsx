@@ -86,7 +86,7 @@ export function DocumentEditor({
       </SuiteFrame>
     );
   }
-  if (!runtime)
+  if (!runtime || runtime.switchingLog)
     return (
       <SuiteFrame app="docs" sidebar={<DocsSidebar />} context="Opening document…">
         <DocumentSkeleton message="Syncing…" />
@@ -565,6 +565,12 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             </dl>
           </DialogContent>
         </Dialog>
+        {runtime.recoveredCopy && (
+          <p role="status">
+            This document was recovered in another tab. Your pending edits were saved in{" "}
+            <Link href={`/docs/d/${encodeRef(runtime.recoveredCopy)}`}>a separate copy</Link>.
+          </p>
+        )}
         <Dialog open={!!runtime.conflict} onOpenChange={() => {}}>
           <DialogContent>
             <DialogTitle>This title changed somewhere else</DialogTitle>

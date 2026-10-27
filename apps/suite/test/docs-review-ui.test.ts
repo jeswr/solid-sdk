@@ -7,6 +7,7 @@ import { act, createElement, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorToolbar } from "../src/apps/docs/components/editor-toolbar";
+import { FileMenu } from "../src/apps/docs/components/file-menu";
 import { ImportDialog } from "../src/apps/docs/components/import-dialog";
 
 let root: Root;
@@ -31,6 +32,56 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 describe("Docs keyboard review regressions", () => {
+  it("focuses the title after keyboard Rename closes the File menu", async () => {
+    const input = document.createElement("input");
+    host.append(input);
+    const title = document.createElement("input");
+    document.body.append(title);
+    try {
+      await act(async () =>
+        root.render(
+          createElement(
+            TooltipProvider,
+            null,
+            createElement(FileMenu, {
+              copy: vi.fn(),
+              rename: () => {
+                title.focus();
+                title.select();
+              },
+              remove: vi.fn(),
+              shortcuts: vi.fn(),
+              draft: false,
+              readOnly: false,
+              download: vi.fn(),
+              print: vi.fn(),
+              importFile: vi.fn(),
+            }),
+          ),
+        ),
+      );
+      const trigger = host.querySelector('[aria-label="File menu"]') as HTMLElement;
+      await act(async () => {
+        trigger.focus();
+        trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      });
+      const rename = await vi.waitFor(() => {
+        const item = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+          (item) => item.textContent === "Rename",
+        );
+        expect(item).toBeDefined();
+        return item as HTMLElement;
+      });
+      await act(async () => {
+        rename.focus();
+        rename.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      });
+      await vi.waitFor(() => expect(document.querySelector('[role="menu"]')).toBeNull());
+      await vi.waitFor(() => expect(document.activeElement).toBe(title));
+    } finally {
+      title.remove();
+    }
+  });
   it("gives the toolbar one Tab stop and roves with arrows, Home and End", async () => {
     const editor = { isActive: () => false } as unknown as Editor;
     const actions = [

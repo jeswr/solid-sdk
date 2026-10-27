@@ -1,9 +1,9 @@
 // AUTHORED-BY Codex
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { SolidPersistence, SolidUpdateStore } from "@jeswr/y-solid";
-import { generateJSON, getSchema, type JSONContent } from "@tiptap/react";
-import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
-import { clearDocument, IndexeddbPersistence, storeState } from "y-indexeddb";
+import { generateHTML, generateJSON, getSchema, type JSONContent } from "@tiptap/react";
+import { prosemirrorJSONToYDoc, yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
+import { IndexeddbPersistence, storeState } from "y-indexeddb";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import type { PodSession } from "@/lib/session/pod-session";
 import { createSolidDriveClient } from "../../drive/lib/client/client";
@@ -17,6 +17,7 @@ import {
   type StoredDocument,
   TitleConflictError,
 } from "../lib/model";
+import { copyDocument } from "./copy";
 import { baseExtensions } from "./extensions";
 import { DocumentUpdateStore } from "./update-store";
 
@@ -30,7 +31,10 @@ interface PendingEdit {
 
 /** One owner for the CRDT, mirrors and serial snapshot queue, independent of React mounts. */
 export class DocumentPersistence {
-  readonly doc = new Doc();
+  doc = new Doc();
+  recoveredCopy: string | undefined;
+  switchingLog = false;
+  private mirrorRestart: Promise<void> | undefined;
   readonly store: DocsStore;
   local: IndexeddbPersistence | undefined;
   provider: SolidPersistence | undefined;
@@ -75,11 +79,175 @@ export class DocumentPersistence {
       webId: session.webId,
       fetchImpl: keepaliveFetch,
     });
+    this.trackUpdates();
+  }
+  private trackUpdates() {
     this.doc.on("update", (update: Uint8Array) => {
       this.updates++;
       this.bytes += update.byteLength;
     });
   }
+  private createMirror(name: string) {
+    const mirror = new IndexeddbPersistence(name, this.doc);
+    const save = mirror._storeUpdate;
+    this.doc.off("update", save);
+    mirror._storeUpdate = (update, origin: unknown) => {
+      try {
+        save(update, origin);
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "InvalidStateError")) throw error;
+        // Let the remaining Yjs listeners (including the pod provider) receive
+        // this edit. Reopening seeds the mirror from the still-live Y.Doc.
+        void this.restartMirror(mirror)
+          .then(() => this.writePending())
+          .catch(() => {
+            this.state = "retrying";
+            this.scheduleRetry();
+            this.notify();
+          });
+      }
+    };
+    this.doc.on("update", mirror._storeUpdate);
+    return mirror;
+  }
+  private restartMirror(mirror: IndexeddbPersistence) {
+    this.mirrorRestart ??= (async () => {
+      await mirror.destroy();
+      if (this.stopped) return;
+      this.local = this.createMirror(mirror.name);
+      await this.local.whenSynced;
+      await storeState(this.local, true);
+    })().finally(() => {
+      this.mirrorRestart = undefined;
+    });
+    return this.mirrorRestart;
+  }
+  private async withMirror<T>(
+    action: (mirror: IndexeddbPersistence) => Promise<T>,
+  ): Promise<T | undefined> {
+    await this.mirrorRestart;
+    const mirror = this.local;
+    if (!mirror) return undefined;
+    try {
+      return await action(mirror);
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "InvalidStateError")) throw error;
+      await this.restartMirror(mirror);
+      return this.local ? action(this.local) : undefined;
+    }
+  }
+  private async writePending() {
+    if (!this.pendingEdit) return;
+    await this.withMirror(async (mirror) => {
+      await mirror.set("pending", 1);
+      await mirror.set("title", this.title);
+      await mirror.set("edit", JSON.stringify(this.pendingEdit));
+    });
+  }
+  private mirrorName(url: string, container: string) {
+    return container === docContainerUrls(url).updateLog ? url : `${url}::${container}`;
+  }
+  private async linkMirror(url: string, target: string) {
+    // Keep a forward chain so offline reopens can find each generation. Stop
+    // at pending edits when opening, before following a retired mirror's link.
+    const seen = new Set<string>();
+    let name = url;
+    while (name !== target && !seen.has(name)) {
+      seen.add(name);
+      const doc = new Doc();
+      const mirror = new IndexeddbPersistence(name, doc);
+      try {
+        await mirror.whenSynced;
+        const next: unknown = await mirror.get("nextMirror");
+        if (typeof next === "string") name = next;
+        else {
+          await mirror.set("nextMirror", target);
+          return;
+        }
+      } finally {
+        await mirror.destroy();
+        doc.destroy();
+      }
+    }
+  }
+  private async readPending() {
+    const pending = await this.local?.get("pending");
+    this.assertActive();
+    if (pending) {
+      this.pendingEdit = await this.metadata<PendingEdit>("edit");
+      const title = this.pendingEdit?.title ?? (await this.local?.get("title"));
+      if (typeof title === "string") this.title = title;
+      this.version++;
+      this.needsFullState = true;
+    }
+    return pending;
+  }
+  private async preserveRetiredEdits(remote: StoredDocument) {
+    // A recovered snapshot has new CRDT identities. Keep local intent in its
+    // own durable document; merging either history would duplicate the body.
+    while (this.version !== this.savedVersion) {
+      const version = this.version;
+      const source = this.stored ?? remote;
+      const copy = await copyDocument(
+        this.store,
+        {
+          ...source,
+          data: { ...source.data, title: `Recovered edits — ${this.title}`.slice(0, 190) },
+        },
+        this.session,
+        yDocToProsemirrorJSON(this.doc) as JSONContent,
+      );
+      this.recoveredCopy = copy.url;
+      if (this.version !== version) continue;
+      await this.withMirror((mirror) => mirror.set("pending", 0));
+      if (this.version !== version) continue;
+      this.savedVersion = version;
+      this.pendingEdit = undefined;
+    }
+  }
+  private async replaceLog(remote: StoredDocument) {
+    this.switchingLog = true;
+    this.notify();
+    try {
+      this.provider?.destroy();
+      await this.provider?.flush();
+      await this.preserveRetiredEdits(remote);
+      await this.withMirror(async (mirror) => {
+        await mirror.destroy();
+      });
+      // The editor can emit another edit while the old connection is closing.
+      // Reopen it if needed so that edit is copied before replacing its Y.Doc.
+      if (this.version !== this.savedVersion) {
+        if (this.local) await this.restartMirror(this.local);
+        await this.preserveRetiredEdits(remote);
+      }
+      this.doc.destroy();
+      this.doc = new Doc();
+      this.trackUpdates();
+      this.stored = remote;
+      this.title = remote.data.title;
+      this.conflict = undefined;
+      this.needsFullState = false;
+      this.local = this.createMirror(this.mirrorName(remote.url, this.updateContainer()));
+      await this.local.whenSynced;
+      await this.readPending();
+      this.checkTitleConflict();
+      this.attachProvider(this.updateContainer(), false);
+      await this.provider?.whenSynced;
+      if (this.providerError) throw this.providerError;
+      const extensions = baseExtensions(this.session.fetch);
+      this.json = yDocToProsemirrorJSON(this.doc) as JSONContent;
+      this.body = generateHTML(this.json, extensions);
+      // Also repair a stale snapshot written while the log pointer was changing.
+      if (this.body !== remote.data.body) this.markDirty();
+      await this.linkMirror(remote.url, this.local.name);
+      this.notify();
+    } finally {
+      this.switchingLog = false;
+      this.notify();
+    }
+  }
+
   private assertActive() {
     if (this.stopped) throw new DOMException("Document closed", "AbortError");
   }
@@ -88,23 +256,23 @@ export class DocumentPersistence {
     let pending: unknown;
     let cached: { webId: string; document: StoredDocument } | undefined;
     if (!recover || !url) {
-      this.local = new IndexeddbPersistence(
-        url ?? `suite.docs.draft:${this.session.webId}`,
-        this.doc,
-      );
+      this.local = this.createMirror(url ?? `suite.docs.draft:${this.session.webId}`);
       await this.local.whenSynced;
       this.assertActive();
-      pending = await this.local.get("pending");
-      this.assertActive();
-      const edit = await this.metadata<PendingEdit>("edit");
-      this.assertActive();
-      if (pending) {
-        this.pendingEdit = edit;
-        const title = edit?.title ?? (await this.local.get("title"));
+      pending = await this.readPending();
+      const seen = new Set<string>();
+      while (url && !pending && !seen.has(this.local.name)) {
+        seen.add(this.local.name);
+        const next: unknown = await this.local.get("nextMirror");
+        if (typeof next !== "string") break;
+        await this.local.destroy();
+        this.doc.destroy();
+        this.doc = new Doc();
+        this.trackUpdates();
+        this.local = this.createMirror(next);
+        await this.local.whenSynced;
         this.assertActive();
-        if (typeof title === "string") this.title = title;
-        this.version++;
-        this.needsFullState = true;
+        pending = await this.readPending();
       }
       if (!url) {
         const creating = await this.metadata<StoredDocument>("creating");
@@ -170,41 +338,39 @@ export class DocumentPersistence {
       );
       this.assertActive();
     }
-    if (!this.readOnly && !this.offlineCopy) {
-      this.attachProvider(container, false);
+    if (
+      !recover &&
+      !this.readOnly &&
+      !this.offlineCopy &&
+      (cached?.document.data.updateLog ?? layout.updateLog) !== container
+    ) {
+      await this.replaceLog(this.stored);
+      pending = this.version !== this.savedVersion;
+    }
+    if (!this.readOnly && !this.offlineCopy && !this.provider) {
+      const provider = this.attachProvider(container, false);
       // Keep the editor unmounted until the initial CRDT merge finishes. Replaying
       // the log must not race the first keyboard selection or a pending local edit.
-      await this.provider?.whenSynced;
+      await provider.whenSynced;
       this.assertActive();
       if (this.providerError) throw this.providerError;
     }
     // Legacy snapshots are view-only. Existing writable documents must hydrate
     // from their CRDT log, including when its visible content is empty.
     if (this.readOnly) this.seedSnapshot();
-    if (
-      !pending &&
-      !this.readOnly &&
-      cached?.webId === this.session.webId &&
-      (cached.document.data.updateLog ?? layout.updateLog) !== container
-    ) {
-      // A reopened device may still hold state from a retired log, even when
-      // those edits were previously marked saved. Keep the transfer durable.
-      this.needsFullState = true;
-      this.markDirty();
-    }
     if (recover) {
-      await clearDocument(url);
-      this.assertActive();
-      this.local = new IndexeddbPersistence(url, this.doc);
+      this.local = this.createMirror(this.mirrorName(url, container));
       await this.local.whenSynced;
       this.assertActive();
+      await this.linkMirror(url, this.local.name);
     }
+    this.recoveredCopy ??= (await this.local?.get("recoveredCopy")) as string | undefined;
     await this.cacheStored();
     this.assertActive();
     if (this.offlineCopy) this.scheduleRetry();
     this.state = this.conflict
       ? "failed"
-      : this.version || (this.provider && !this.provider.synced)
+      : this.version !== this.savedVersion || (this.provider && !this.provider.synced)
         ? "saving"
         : "saved";
   }
@@ -237,7 +403,7 @@ export class DocumentPersistence {
     }
   }
   private async metadata<T>(key: string): Promise<T | undefined> {
-    const raw = await this.local?.get(key);
+    const raw = await this.withMirror((mirror) => mirror.get(key));
     if (typeof raw !== "string") return undefined;
     try {
       return JSON.parse(raw) as T;
@@ -246,12 +412,16 @@ export class DocumentPersistence {
     }
   }
   private async cacheStored() {
-    if (this.stored)
-      await this.local?.set(
-        "stored",
-        JSON.stringify({ webId: this.session.webId, document: this.stored }),
-      );
+    await this.withMirror(async (mirror) => {
+      if (this.recoveredCopy) await mirror.set("recoveredCopy", this.recoveredCopy);
+      if (this.stored)
+        await mirror.set(
+          "stored",
+          JSON.stringify({ webId: this.session.webId, document: this.stored }),
+        );
+    });
   }
+
   private pauseLog(error: Error) {
     this.providerError = error;
     this.needsFullState = true;
@@ -286,6 +456,14 @@ export class DocumentPersistence {
   }
   private async reconcileProvider() {
     const remote = await this.activeDocument();
+    const previous = this.provider?.store.container ?? this.updateContainer();
+    const active = remote.data.updateLog ?? docContainerUrls(remote.url).updateLog;
+    if (previous !== active) {
+      await this.replaceLog(remote);
+      this.offlineCopy = false;
+      this.trashed = false;
+      return;
+    }
     if (
       this.version === this.savedVersion ||
       (this.pendingEdit && this.title === this.pendingEdit.baseTitle)
@@ -332,6 +510,7 @@ export class DocumentPersistence {
       this.scheduleRetry();
       this.notify();
     });
+    return this.provider;
   }
   capture(body: string, json: JSONContent) {
     this.body = body;
@@ -358,9 +537,11 @@ export class DocumentPersistence {
     };
     this.version++;
     this.state = this.trashed ? "retrying" : "saving";
-    void this.local?.set("pending", 1);
-    void this.local?.set("title", this.title);
-    void this.local?.set("edit", JSON.stringify(this.pendingEdit));
+    void this.writePending().catch(() => {
+      this.state = "retrying";
+      this.scheduleRetry();
+      this.notify();
+    });
     this.notify();
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => void this.flush(), 2000);
@@ -382,6 +563,7 @@ export class DocumentPersistence {
   }
   private async write() {
     try {
+      await this.mirrorRestart;
       if (this.creation === "created") await this.reconcileProvider();
       if (this.savedVersion === this.version) {
         await this.persistUpdates();
@@ -406,9 +588,16 @@ export class DocumentPersistence {
           const stored = this.stored as StoredDocument;
           if (this.local?.name !== stored.url) {
             this.draftMirror = this.local;
-            this.local = new IndexeddbPersistence(stored.url, this.doc);
+            this.local = this.createMirror(stored.url);
           }
           await this.local.whenSynced;
+          // Title edits may have arrived while create() was in flight. Move
+          // their baseline and pending marker before deleting the draft mirror.
+          if (this.pendingEdit) {
+            this.pendingEdit.baseTitle = stored.data.title;
+            this.pendingEdit.baseModified = stored.data.modified;
+            await this.writePending();
+          }
           if (!this.provider?.synced) {
             this.attachProvider(this.updateContainer());
             await this.provider?.whenSynced;
@@ -453,12 +642,12 @@ export class DocumentPersistence {
         // A concurrent snapshot/recovery may have changed the pointer during save.
         await this.reconcileProvider();
         await this.persistUpdates();
-        if (this.local) await storeState(this.local, true);
+        await this.withMirror((mirror) => storeState(mirror, true));
         await this.cacheStored();
         this.savedVersion = version;
         this.lastSaved = Date.now();
         if (this.version === version) {
-          await this.local?.set("pending", 0);
+          await this.withMirror((mirror) => mirror.set("pending", 0));
           this.pendingEdit = undefined;
         }
       }
@@ -547,6 +736,7 @@ export class DocumentPersistence {
     this.destroyed = (async () => {
       // An incomplete open must never allocate resources after this teardown.
       try {
+        await this.mirrorRestart;
         await this.tail;
         if (this.creation === "created") await this.flush();
         await this.provider?.flush();

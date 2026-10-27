@@ -7,7 +7,9 @@
  * they return `{ done, failed }` so the UI can report partial results.
  */
 
+import { fetchRdf } from "@jeswr/fetch-rdf";
 import { mapConcurrent } from "../../../../lib/parallel";
+import { parseDocument } from "../../../docs/lib/model/document";
 import {
   type DriveClient,
   DriveError,
@@ -658,13 +660,41 @@ function restoredName(name: string): string {
 }
 
 /** Only Docs' immutable update logs can safely share a recreated companion tree. */
-async function isDocsUpdateTree(client: DriveClient, original: string): Promise<boolean> {
+async function isDocsUpdateTree(
+  client: DriveClient,
+  original: string,
+  entries: readonly TrashEntry[],
+): Promise<boolean> {
   const docs = new URL("docs/", client.storageUrl).href;
   if (!original.startsWith(docs) || !original.endsWith("/")) return false;
+  const documentUrl = `${original.slice(0, -1)}.ttl`;
+  const source = (await exists(client, documentUrl))
+    ? documentUrl
+    : entries.find((entry) => entry.original === documentUrl)?.url;
+  if (!source) return false;
+  try {
+    const { dataset } = await fetchRdf(source, {
+      fetch: async () =>
+        new Response(await client.read(source), { headers: { "content-type": "text/turtle" } }),
+    });
+    const document = parseDocument(documentUrl, dataset);
+    if (
+      !document?.updateLog?.startsWith(original) ||
+      !/^updates(?:-\d+)?\/$/.test(document.updateLog.slice(original.length))
+    )
+      return false;
+  } catch {
+    return false;
+  }
   for (const child of await client.list(original)) {
     if (child.kind !== "folder" || !/^updates(?:-\d+)?$/.test(child.name)) return false;
     for (const update of await client.list(child.url)) {
-      if (update.kind !== "file" || update.contentType !== "application/octet-stream") return false;
+      if (
+        update.kind !== "file" ||
+        update.contentType !== "application/octet-stream" ||
+        !/^\d{15}-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(update.name)
+      )
+        return false;
     }
   }
   return true;
@@ -732,7 +762,10 @@ export async function restoreItems(
       validateOriginal(client, driveRoot, entry);
       const status = await requireTrashEntry(client, driveRoot, entry);
       const occupied = status !== "partial" && (await exists(client, entry.original));
-      if (status === "partial" || (occupied && (await isDocsUpdateTree(client, entry.original)))) {
+      if (
+        status === "partial" ||
+        (occupied && (await isDocsUpdateTree(client, entry.original, entries)))
+      ) {
         // A failed merge must retry in place even after assets have been restored.
         if (status !== "partial")
           await updateIndex(client, driveRoot, (index) => {

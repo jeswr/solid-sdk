@@ -82,7 +82,7 @@ export async function importDocx(data: ArrayBuffer, options: DocxImportOptions) 
       includeEmbeddedStyleMap: false,
       externalFileAccess: false,
       convertImage: mammoth.images.imgElement(async (image) => {
-        const placeholder = `https://docs.invalid/import-image/${images.length}`;
+        const placeholder = `https://docs.invalid/import-image/${images.length}/end`;
         // Reserve the index before awaiting: mammoth may convert images concurrently.
         const slot = { data: new ArrayBuffer(0), contentType: image.contentType, placeholder };
         images.push(slot);

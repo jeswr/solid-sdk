@@ -309,6 +309,35 @@ describe("imports and Markdown", () => {
     );
     expect(result.skipped).toEqual([]);
   });
+  it("keeps all eleven DOCX image URLs distinct when placeholder indexes share prefixes", async () => {
+    const source = new Document({
+      sections: [
+        {
+          children: Array.from(
+            { length: 11 },
+            (_, index) =>
+              new Paragraph({
+                children: [
+                  new ImageRun({
+                    type: "png",
+                    data: new Uint8Array([index]),
+                    transformation: { width: 1, height: 1 },
+                  }),
+                ],
+              }),
+          ),
+        },
+      ],
+    });
+    let uploaded = 0;
+    const result = await importDocx(await Packer.toArrayBuffer(source), {
+      progress: vi.fn(),
+      uploadImage: async () => `https://pod.test/assets/image-${uploaded++}.png`,
+    });
+    expect([...result.html.matchAll(/src="([^"]+)"/g)].map((match) => match[1])).toEqual(
+      Array.from({ length: 11 }, (_, index) => `https://pod.test/assets/image-${index}.png`),
+    );
+  });
   it("handles an image-free document, rejects unsafe upload URLs and propagates failed uploads", async () => {
     const progress = vi.fn();
     const empty = new Document({ sections: [{ children: [new Paragraph("Text only")] }] });
