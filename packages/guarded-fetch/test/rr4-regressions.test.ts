@@ -37,7 +37,10 @@ for (const [name, wrap] of Object.entries(followingWrappers)) {
   describe(`${name}: round 4 redirect and Request-brand regressions`, () => {
     for (const [implementation, makeRequest] of Object.entries(requestImplementations)) {
       for (const [transportName, construct] of Object.entries(requestImplementations)) {
-        it(`replays a ${implementation} Request's FormData override through a consuming ${transportName} transport`, async () => {
+        it.each([
+          "GET",
+          "POST",
+        ])(`replays a ${implementation} %s Request's FormData override through a consuming ${transportName} transport`, async (method) => {
           const seen: string[] = [];
           const transport = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
             expect(typeof input).toBe("string");
@@ -53,7 +56,7 @@ for (const [name, wrap] of Object.entries(followingWrappers)) {
           });
           const form = transportName === "native" ? new FormData() : new UndiciFormData();
           form.set("message", "payload");
-          const response = await wrap(transport)(makeRequest(TARGET), {
+          const response = await wrap(transport)(makeRequest(TARGET, { method }), {
             method: "POST",
             body: form as unknown as BodyInit,
           });

@@ -170,6 +170,65 @@ for (const [name, factory] of Object.entries(factories).filter(([name]) => name 
       await factory(inner)(request, explicit);
     });
 
+    for (const [implementation, Ctor] of [
+      ["native", Request],
+      ["undici", UndiciRequest],
+    ] as const) {
+      it.each([
+        "fresh",
+        "consumed",
+        "locked",
+      ])(`reuses a %s ${implementation} POST Request twice with an explicit body`, async (state) => {
+        const request = new Ctor(TARGET, { method: "POST", body: "original" });
+        if (state === "consumed") await request.text();
+        const reader = state === "locked" ? request.body?.getReader() : undefined;
+        const explicit = { method: "PUT", body: "x" };
+        const inner = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+          expect(input).toBe(TARGET);
+          expect(init).toEqual({ ...explicit, redirect: "manual" });
+          expect(await new Request(input, init).text()).toBe("x");
+          return new Response("ok");
+        });
+        const fetch = factory(inner);
+        try {
+          for (let call = 0; call < 2; call += 1) {
+            expect(await (await fetch(request, explicit)).text()).toBe("ok");
+            expect(request.bodyUsed).toBe(state === "consumed");
+            expect(request.body?.locked).toBe(state !== "fresh");
+          }
+          expect(inner).toHaveBeenCalledTimes(2);
+        } finally {
+          reader?.releaseLock();
+        }
+        if (state !== "consumed") expect(await request.text()).toBe("original");
+      });
+
+      for (const method of ["GET", "HEAD"]) {
+        it.each([
+          undefined,
+          "POST",
+        ])(`matches main for a ${implementation} ${method} input with an init body (init method %s)`, async (override) => {
+          const input = new Ctor(TARGET, { method });
+          const explicit = { ...(override ? { method: override } : {}), body: "x" };
+          const inner = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+            expect(input).toBe(TARGET);
+            expect(init).toEqual({ ...explicit, redirect: "manual" });
+            const request = new Request(input, init);
+            expect(request.method).toBe("POST");
+            expect(await request.text()).toBe("x");
+            return new Response("ok");
+          });
+          if (override) {
+            expect(await (await factory(inner)(input, explicit)).text()).toBe("ok");
+          } else {
+            await expect(factory(inner)(input, explicit)).rejects.toThrow(TypeError);
+          }
+          expect(inner).toHaveBeenCalledOnce();
+          expect(input.bodyUsed).toBe(false);
+        });
+      }
+    }
+
     for (const [pair, RequestImpl, fetchImpl] of [
       ["undici Request + native fetch", UndiciRequest, globalThis.fetch],
       ["native Request + undici fetch", Request, undiciFetch],

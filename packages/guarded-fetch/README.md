@@ -53,6 +53,11 @@ URLs. The SSRF, pod-scope, and Node guards forward a URL string plus init: they 
 method, headers, credentials, redirect, signal, and body (with duplex), then overlay the
 explicit init. Other policies are carried only when supplied in init. `refuseRedirects`
 forwards a snapshot of the caller's Request class, retaining its request policies.
+The URL+init guards capture metadata with `snapshotFetchInput(input, init, { metadataOnly: true })`.
+When init supplies a non-null body, capture uses an empty byte placeholder for body-capable
+inputs, leaving the discarded input body untouched even if already consumed or locked.
+The placeholder body and duplex are never inherited; the caller's replacement goes directly
+to the transport. Without a replacement, capture retains the existing body-transfer behavior.
 Native URL getters ignore shadowed properties; other implementations and realms use their
 Request prototype's constructor/getter or a single string conversion before validation.
 A fully caller-defined Request class is only as trustworthy as the transport it is passed to,

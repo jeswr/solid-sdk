@@ -154,7 +154,7 @@ export function normalizeRequest(
   // caller's explicit init (e.g. a replayable body) still wins.
   // Applying init during capture would serialize a FormData override once here and again
   // at the transport, pairing the first boundary's headers with the second boundary's body.
-  const snapshot = snapshotFetchInput(input, undefined);
+  const snapshot = snapshotFetchInput(input, init, { metadataOnly: true });
   if (typeof snapshot.input === "string") return { url: snapshot.url, init };
   const req = snapshot.input;
   const fromRequest: RequestInit = {
@@ -163,7 +163,7 @@ export function normalizeRequest(
     credentials: req.credentials,
     redirect: req.redirect,
     ...(req.signal ? { signal: req.signal } : {}),
-    ...(req.body ? { body: req.body, duplex: "half" } : {}),
+    ...(init?.body == null && req.body ? { body: req.body, duplex: "half" } : {}),
   } as RequestInit;
   return { url: snapshot.url, init: { ...fromRequest, ...(init ?? {}) } };
 }

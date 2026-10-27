@@ -81,7 +81,9 @@ export interface ResolvedAddress {
 }
 
 // @public
-export function snapshotFetchInput(input: RequestInfo | URL, init?: RequestInit): {
+export function snapshotFetchInput(input: RequestInfo | URL, init?: RequestInit, options?: {
+    metadataOnly?: boolean;
+}): {
     input: string | Request;
     url: string;
     init: RequestInit | undefined;

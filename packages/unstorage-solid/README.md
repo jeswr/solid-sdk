@@ -59,6 +59,8 @@ Request inputs use `@jeswr/guarded-fetch`'s `snapshotFetchInput` before scope va
 Both wrappers forward the captured URL string and explicit init, preserving init bodies,
 signals, and policies across Request implementations. Fields supplied only on the Request
 are not inherited. Mutable URL objects are captured once before fetching.
+With a non-null init body, metadata capture leaves the discarded Request body untouched,
+so the same input can be reused and consumed or locked inputs accept replacement bodies.
 `new SolidRedirectError(url, status)` remains supported with its original name, message,
 `url`, and `status` fields. The alias also accepts the shared `(message, detail)` form and
 recognizes errors thrown by `refuseRedirects` through `instanceof`.
