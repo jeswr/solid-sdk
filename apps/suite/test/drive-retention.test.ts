@@ -608,6 +608,15 @@ describe("Drive retention fail-closed validation", () => {
     const accessor = [version("a")];
     Object.defineProperty(accessor, "0", { get: () => version("a"), enumerable: true });
     errorCode(() => planRetention(accessor, NOW), "INVALID_VERSION");
+    for (const length of [{ valueOf: () => 0 }, Symbol("length"), -1]) {
+      const lying = new Proxy([] as ManagedVersion[], {
+        getOwnPropertyDescriptor(target, key) {
+          const descriptor = Reflect.getOwnPropertyDescriptor(target, key);
+          return key === "length" ? { ...descriptor, value: length } : descriptor;
+        },
+      });
+      errorCode(() => planRetention(lying, NOW), "INVALID_VERSION");
+    }
     let reads = 0;
     const shifting = new Proxy(version("a", NOW, 1), {
       get(target, key, receiver) {

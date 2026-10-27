@@ -475,6 +475,16 @@ describe("postal input snapshots", () => {
       },
     );
     rejects(() => toVCardAdr(trap), "INVALID_ADDRESS");
+    let coercions = 0;
+    const lying = new Proxy([] as string[], {
+      getOwnPropertyDescriptor(target, key) {
+        const descriptor = Reflect.getOwnPropertyDescriptor(target, key);
+        const value = { valueOf: () => (coercions++ === 0 ? 0 : MAX_STREET_LINES + 1) };
+        return key === "length" ? { ...descriptor, value } : descriptor;
+      },
+    });
+    rejects(() => toVCardAdr({ ...blank, street: lying }), "INVALID_ADDRESS");
+    expect(coercions).toBe(0);
     const extra = { ...sample, note: "ignored" } as PostalAddress;
     expect(toVCardAdr(extra)).toBe(toVCardAdr(sample));
   });

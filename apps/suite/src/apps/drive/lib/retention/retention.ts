@@ -101,7 +101,9 @@ export function planRetention(
   limits: RetentionLimits = {},
 ): RetentionPlan {
   valid(Array.isArray(versions));
-  const count = own(versions, "length") as number;
+  // A proxy may report any length value: accept only a primitive safe integer.
+  const count = own(versions, "length");
+  nonnegativeInteger(count);
   if (count > MAX_INPUT_VERSIONS) throw new RetentionError("TOO_MANY_VERSIONS");
   valid(Number.isSafeInteger(now));
   const limitFields = record(limits, ["maxVersions", "maxBytes"]);

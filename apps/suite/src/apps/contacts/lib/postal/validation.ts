@@ -56,9 +56,13 @@ function snapshot(address: unknown): PostalAddress {
     const street = fields.street;
     if (!Array.isArray(street)) throw new PostalAddressError("INVALID_ADDRESS");
     // Check array length before iteration.
-    const length = dataValue(street, "length") as number;
-    if (length > MAX_STREET_LINES) throw new PostalAddressError("ADDRESS_TOO_LARGE");
-    fields.street = Array.from({ length }, (_, index) => dataValue(street, String(index)));
+    const length = dataValue(street, "length");
+    // A proxy may report any length value: accept only a primitive safe integer.
+    if (!Number.isSafeInteger(length)) throw new PostalAddressError("INVALID_ADDRESS");
+    if ((length as number) > MAX_STREET_LINES) throw new PostalAddressError("ADDRESS_TOO_LARGE");
+    fields.street = Array.from({ length: length as number }, (_, index) =>
+      dataValue(street, String(index)),
+    );
     return fields as unknown as PostalAddress;
   } catch (error) {
     if (error instanceof PostalAddressError) throw error;
