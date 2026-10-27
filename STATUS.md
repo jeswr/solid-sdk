@@ -2,6 +2,73 @@
 
 # sst-8xm.15 lane report
 
+## Fix round 1
+
+Both review findings against `ee16a1332ccdbb2c5538ca50330f4f73d0213d93`
+are addressed on `lane/sst-8xm.15`. The package gate, root lint, and affected
+workspace gate pass. The full workspace gate still fails in unchanged root
+guard tests. The original implementation report below is historical.
+
+| Commit | Change |
+| --- | --- |
+| `a6258fad` — `fix: validate refresh lifetime and issuer` | Accept omitted `expires_in`, remove stale expiry, and preserve rotated refresh credentials. Compare discovered issuer identifiers exactly before token HTTP. Add regression tests and update package documentation. |
+| This report commit — `docs: record refresh review fixes` | Record fix-round validation and remaining verification blockers. |
+
+### Security properties and regression evidence
+
+- **Unknown lifetime:** omission of `expires_in` succeeds with or without
+  refresh-token rotation and with or without a previous expiry. The returned
+  object has no `expiresAt` property; the input and persisted key are preserved.
+  Supplied invalid lifetimes remain rejected; zero and valid lifetimes retain
+  their existing behavior. Clearing unknown expiry is the conservative option;
+  no lifetime is inferred or configured.
+- **Issuer identity:** discovery must match the original persisted issuer string.
+  Eight normalization-equivalent mismatches (root trailing slash, hostname case,
+  default port, and dot segments, each in both directions) fail before token HTTP.
+  Five exact-identifier cases succeed while discovery URLs are constructed
+  separately. Existing secure-transport guards remain covered.
+- Before the implementation change, the new regressions produced the expected
+  **12 failures / 104 passes**: four omitted-lifetime failures and eight accepted
+  issuer mismatches. The passing package suite now has **197 tests in 4 files**,
+  including **116 refresh tests**. Tests use only mocked HTTP and ephemeral keys.
+
+### Fix-round validation
+
+Commands used `PATH=/opt/node24/bin:$PATH` (Node **v24.22.1**, pnpm **10.4.1**).
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter='@jeswr/auth-solid^...'` | PASS: both workspace dependencies built. |
+| `pnpm --filter @jeswr/auth-solid run lint && pnpm --filter @jeswr/auth-solid run build && pnpm --filter @jeswr/auth-solid run typecheck && pnpm --filter @jeswr/auth-solid run test` | PASS: lint/build/strict typecheck; **197 tests passed**. |
+| `pnpm run lint:root` | PASS. |
+| `TURBO_SCM_BASE=ee16a1332ccdbb2c5538ca50330f4f73d0213d93 pnpm run gate` | PASS: **7/7 tasks** succeeded, including all auth-solid tasks. |
+| `pnpm run gate:full` | FAIL (exit 1): `//#test:root`; **161 failed / 739 passed** root tests across 4 failing files. Turbo stopped with **60 successful / 228 total tasks**. |
+| `roborev status` | Unavailable: exit 127, `roborev: command not found`. |
+| `git diff --check` | PASS. |
+
+The full-gate failures are empty child-process output assertions in unchanged
+`test/agent-layers.test.mjs`, `test/agent-layers-reachability.test.mjs`,
+`test/check-packages-guard.test.mjs`, and `test/check-sdk-layers.test.mjs`.
+This matches the failure class recorded before this fix round.
+`git diff --quiet ee16a1332ccdbb2c5538ca50330f4f73d0213d93 -- test scripts guardrails vitest.config.ts package.json pnpm-lock.yaml`
+passed. No unrelated guard changes or additional diagnostic test runs were made.
+
+Logs: `/tmp/sst-8xm.15-fix1-{deps-build,regressions-red,package-tests,lint-root,affected-gate,full-gate}.log`.
+
+### Remaining work and open questions
+
+- Both requested code fixes are complete. Full-workspace verification remains
+  blocked by the root test failures; automated roborev review is unavailable.
+  Jesse's security review and merge decision remain required.
+- No dependencies were added; manifests and lockfile are unchanged.
+  Dependency-policy checks and installation are not applicable.
+- No open questions. No push, PR, branch switch, remote fetch/merge, publishing,
+  or edits to another checkout were performed.
+
+---
+
+# Original implementation report (historical)
+
 Implementation is complete on `lane/sst-8xm.15`, based on
 `0d8842080a31b716b2d1350efed53b19eb8c6832`. The auth-solid package gate and root
 lint pass. Both workspace gates fail in unchanged root guard tests. Jesse must
