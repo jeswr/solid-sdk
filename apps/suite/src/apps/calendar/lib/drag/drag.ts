@@ -25,8 +25,13 @@ export function applyDrag(input: DragInput): DragResult {
     Math.abs(deltaMinutes) <= MAX_DELTA_MINUTES && Math.abs(dayDelta) <= MAX_DAY_DELTA,
     "DELTA_TOO_LARGE",
   );
+  const rawDeltaMs = deltaMinutes * MINUTE_MS;
+  const deltaMs = Math.round(rawDeltaMs);
+  // Allow only rounding from number representation and multiplication, not submillisecond deltas.
   check(
-    Number.isSafeInteger(deltaMinutes * MINUTE_MS) && Number.isInteger(dayDelta),
+    Number.isSafeInteger(deltaMs) &&
+      Math.abs(rawDeltaMs - deltaMs) <= 2 * Number.EPSILON * Math.abs(rawDeltaMs) &&
+      Number.isInteger(dayDelta),
     "INVALID_DELTA",
   );
   check(
@@ -52,7 +57,7 @@ export function applyDrag(input: DragInput): DragResult {
   checkEpoch(endWall);
   const startOffset = startWall - start;
   const endOffset = endWall - end;
-  const delta = deltaMinutes * MINUTE_MS + dayDelta * DAY_MS;
+  const delta = deltaMs + dayDelta * DAY_MS;
   let nextStart = start;
   let nextEnd = end;
   let clamped = false;

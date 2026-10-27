@@ -29,7 +29,8 @@ const result = applyDrag({
 Minutes and days are added to the moving edge's local Gregorian clock before snapping
 to the nearest 5/10/15/30/60-minute boundary from local midnight; ties round toward the
 later boundary, including before 1970. Fractional minutes are accepted at millisecond
-precision. Timed moves preserve the exact input elapsed duration. Resizes keep the
+precision, allowing only floating-point roundoff around an integer millisecond.
+Timed moves preserve the exact input elapsed duration. Resizes keep the
 other edge fixed and clamp outward on the grid to leave at least one elapsed snap
 step. Events may cross any date boundary.
 

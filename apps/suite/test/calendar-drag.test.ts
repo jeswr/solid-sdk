@@ -65,6 +65,31 @@ describe("calendar drag", () => {
     expect(drag({ snapMinutes, deltaMinutes: snapMinutes / 2 - 1 / 60 }).start).toBe(base.start);
   });
 
+  it.each([-1, 1])("accepts decimal minute deltas with floating-point roundoff (%i)", (sign) => {
+    expect(drag({ deltaMinutes: sign * 4.1, snapMinutes: 5 }).start).toBe(
+      base.start + sign * 5 * MINUTE_MS,
+    );
+    expect(drag({ deltaMinutes: sign * 0.00005, snapMinutes: 5 }).start).toBe(base.start);
+    expect(drag({ deltaMinutes: sign * 525_599.99995 }).start).toBe(
+      base.start + sign * MAX_DELTA_MINUTES * MINUTE_MS,
+    );
+  });
+
+  it.each([
+    "move",
+    "resize-start",
+    "resize-end",
+  ] as const)("uses normalized integer milliseconds at a half-up snap tie for %s", (kind) => {
+    const result = drag({
+      kind,
+      start: kind === "resize-end" ? -3_600_000 : -396_000,
+      end: kind === "resize-end" ? -396_000 : 3_600_000,
+      deltaMinutes: 4.1, // Exactly 246,000 ms takes the moving edge to -150,000 ms.
+      snapMinutes: 5,
+    });
+    expect(kind === "resize-end" ? result.end : result.start).toBe(0);
+  });
+
   it("snaps the resulting edge rather than the delta; preserves subsecond duration", () => {
     const start = base.start + 6 * MINUTE_MS + 123;
     const end = base.end + 456;
@@ -494,6 +519,20 @@ describe("limits and typed failures", () => {
     error({ dayDelta: sign * (MAX_DAY_DELTA + 1) }, "DELTA_TOO_LARGE");
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
+  });
+
+  it.each([
+    -1, 1,
+  ])("rejects submillisecond deltas beyond roundoff before Intl work (%i)", (sign) => {
+    const spy = vi.spyOn(Intl, "DateTimeFormat");
+    try {
+      for (const milliseconds of [1e-8, 0.5, 1.0000001, 246_000.001, 31_535_999_999.999]) {
+        error({ deltaMinutes: (sign * milliseconds) / MINUTE_MS }, "INVALID_DELTA");
+      }
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("accepts the epoch bounds and rejects one millisecond beyond", () => {
