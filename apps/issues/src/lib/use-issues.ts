@@ -322,6 +322,7 @@ export function useIssues(
   const issueUrlsKey = JSON.stringify([...new Set(issues.map((issue) => issue.url))].sort());
   const liveSyncs = useRef(new Map<string, ReturnType<typeof watchContainer>>());
   const liveRefreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const liveRefreshMaxTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Keep queued invalidations and unchanged watchers across membership changes.
   // Tear down only when the tracker, identity, or storage scope changes, or on unmount.
@@ -332,6 +333,8 @@ export function useIssues(
       syncs.clear();
       if (liveRefreshTimer.current) clearTimeout(liveRefreshTimer.current);
       liveRefreshTimer.current = undefined;
+      if (liveRefreshMaxTimer.current) clearTimeout(liveRefreshMaxTimer.current);
+      liveRefreshMaxTimer.current = undefined;
     };
   }, [fetchInto, ownStorageKey]);
 
@@ -341,12 +344,19 @@ export function useIssues(
     if (!trackerUrl) return;
     const containerUrl = new Repository(trackerUrl).containerUrl;
     const ownStorage = ownStorageKey ? ownStorageKey.split("\n") : [];
-    const onChange = () => {
+    const flush = () => {
       if (liveRefreshTimer.current) clearTimeout(liveRefreshTimer.current);
-      liveRefreshTimer.current = setTimeout(() => {
-        liveRefreshTimer.current = undefined;
-        void fetchInto();
-      }, 800);
+      liveRefreshTimer.current = undefined;
+      if (liveRefreshMaxTimer.current) clearTimeout(liveRefreshMaxTimer.current);
+      liveRefreshMaxTimer.current = undefined;
+      void fetchInto();
+    };
+    const onChange = () => {
+      // Keep burst debouncing, but bound the wait so staggered per-topic polls
+      // (or continuous socket events) cannot keep postponing the board refresh.
+      liveRefreshMaxTimer.current ??= setTimeout(flush, 5_000);
+      if (liveRefreshTimer.current) clearTimeout(liveRefreshTimer.current);
+      liveRefreshTimer.current = setTimeout(flush, 800);
     };
     const topics = new Set([containerUrl, ...JSON.parse(issueUrlsKey) as string[]]);
     const syncs = liveSyncs.current;

@@ -64,6 +64,59 @@ describe("useIssues live subscriptions", () => {
     expect(result.current.issues[0].status).toBe("in-progress");
   });
 
+  it("debounces a short notification burst without leaving an extra refresh queued", async () => {
+    renderHook(() => useIssues(TRACKER, WEBID, OWN));
+    await act(async () => {});
+    const container = channels.find((channel) => channel.topic === CONTAINER)!;
+    act(() => container.onChange());
+    await act(async () => { await vi.advanceTimersByTimeAsync(600); });
+    act(() => container.onChange());
+    await act(async () => { await vi.advanceTimersByTimeAsync(799); });
+    expect(list).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(list).toHaveBeenCalledTimes(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps refreshing with 40 polling fallbacks staggered 625 ms apart", async () => {
+    const { watchContainer } = await vi.importActual<typeof import("./notifications")>("./notifications");
+    const initialIssues = Array.from({ length: 39 }, (_, index) => issue(`issue-${index}`));
+    list.mockResolvedValue({ issues: initialIssues, canCreate: true });
+    watch.mockImplementation((topic, onChange, options) => {
+      const delay = (watch.mock.calls.length - 1) * 625;
+      const doFetch: typeof fetch = async (_url, init) => {
+        // Stagger discovery failures so the real watcher's 25-second poll
+        // timers keep invalidating the board less than 800 ms apart.
+        if (init?.method === "HEAD") await new Promise((resolve) => setTimeout(resolve, delay));
+        return new Response(null, { status: 404 });
+      };
+      return watchContainer(topic, onChange, { ...options, fetch: doFetch });
+    });
+    const { result, unmount } = renderHook(() => useIssues(TRACKER, WEBID, OWN));
+    await act(async () => {});
+    expect(watch).toHaveBeenCalledTimes(40);
+    list.mockResolvedValue({
+      issues: initialIssues.map((record) => ({ ...record, status: "in-progress" })), canCreate: true,
+    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(29_999); });
+    expect(list).toHaveBeenCalledTimes(1);
+    await act(async () => { await vi.advanceTimersByTimeAsync(1); });
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(result.current.issues[0].status).toBe("in-progress");
+    // Check progress throughout the review's 125-second reproduction window.
+    for (const elapsed of [25_000, 25_000, 25_000, 20_000]) {
+      const reads = list.mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(elapsed); });
+      expect(list.mock.calls.length).toBeGreaterThan(reads);
+    }
+    unmount();
+    const reads = list.mock.calls.length;
+    await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
+    expect(list).toHaveBeenCalledTimes(reads);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("watches added issues and closes removed subscriptions after membership changes", async () => {
     list.mockResolvedValue({ issues: [issue("one"), issue("removed")], canCreate: true });
     const { unmount } = renderHook(() => useIssues(TRACKER, WEBID, OWN));
@@ -123,7 +176,7 @@ describe("useIssues live subscriptions", () => {
     await act(async () => { rerender(next); });
     expect(active.every((channel) => channel.close.mock.calls.length === 1)).toBe(true);
     const reads = list.mock.calls.length;
-    await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
     expect(list).toHaveBeenCalledTimes(reads);
     expect(watch).toHaveBeenLastCalledWith(issue("one").url, expect.any(Function), { ownStorageUrls: next.own });
     unmount();
@@ -140,7 +193,7 @@ describe("useIssues live subscriptions", () => {
     act(() => container.onChange());
     const reads = list.mock.calls.length;
     unmount();
-    await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
     expect(list).toHaveBeenCalledTimes(reads);
   });
 });
