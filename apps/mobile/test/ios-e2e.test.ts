@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { CAPABILITIES } from "../e2e/checks.ts";
 import {
+  attachmentFor,
   exportAttachments,
   readAttachments,
   readDebugAttachments,
@@ -109,6 +110,45 @@ describe("xcresult attachment export", () => {
       "e2e-navigation.json": {},
     });
     expect(run.mock.calls.some(([, args]) => args.includes("summary"))).toBe(true);
+  });
+  test("maps Xcode 26 attachment names with the extension dropped before the ordinal", async () => {
+    expect(attachmentFor("e2e-result_0_6F1C9A2B.json")).toBe("e2e-result.json");
+    expect(attachmentFor("e2e-navigation_0_6F1C9A2B.json")).toBe("e2e-navigation.json");
+    expect(attachmentFor("e2e-result.json")).toBe("e2e-result.json");
+    expect(attachmentFor("e2e-result")).toBe("e2e-result.json");
+    // A longer name that merely shares the stem, a debug attachment, or a non-string is not evidence.
+    expect(attachmentFor("e2e-results_0_X.json")).toBeUndefined();
+    expect(attachmentFor("e2e-debug_0_X.txt")).toBeUndefined();
+    expect(attachmentFor(undefined)).toBeUndefined();
+    await writeFile(
+      join(directory, "manifest.json"),
+      JSON.stringify([
+        {
+          attachments: [
+            { suggestedHumanReadableName: "e2e-result_0_A.json", exportedFileName: "A.json" },
+            { suggestedHumanReadableName: "e2e-navigation_0_B.json", exportedFileName: "B.json" },
+          ],
+        },
+      ]),
+    );
+    await writeFile(join(directory, "A.json"), '{"done":true}');
+    await writeFile(join(directory, "B.json"), "{}");
+    expect(await readAttachments(directory)).toEqual({
+      "e2e-result.json": { done: true },
+      "e2e-navigation.json": {},
+    });
+  });
+  test("names the manifest labels and files it saw when evidence is missing", async () => {
+    await writeFile(
+      join(directory, "manifest.json"),
+      JSON.stringify([
+        { attachments: [{ suggestedHumanReadableName: "Other", exportedFileName: "C.png" }] },
+      ]),
+    );
+    await writeFile(join(directory, "C.png"), "");
+    await expect(readAttachments(directory)).rejects.toThrow(
+      "got 0 (manifest names: Other; files: C.png, manifest.json)",
+    );
   });
   test("rejects missing, malformed, duplicate and out-of-directory attachment evidence", async () => {
     await expect(readAttachments(directory)).rejects.toThrow("exactly one");
