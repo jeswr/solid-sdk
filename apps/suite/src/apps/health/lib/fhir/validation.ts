@@ -1,6 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { type FhirErrorCode, FhirExportError, MAX_FHIR_RECORDS } from "./types";
+import {
+  type FhirErrorCode,
+  FhirExportError,
+  MAX_FHIR_RECORDS,
+  MAX_FHIR_STRING_LENGTH,
+} from "./types";
 
 export function requireValid(valid: boolean, code: FhirErrorCode, message: string): asserts valid {
   if (!valid) throw new FhirExportError(code, message);
@@ -42,8 +47,16 @@ export function record(
   );
 }
 
-export function text(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
+export function text(value: unknown, prefixLength = 0): value is string {
+  if (typeof value !== "string") return false;
+  let length = value.length + prefixLength;
+  if (length > MAX_FHIR_STRING_LENGTH) {
+    // Reject oversized UTF-16 data before scanning. Count surrogate pairs as one character.
+    if (length > MAX_FHIR_STRING_LENGTH * 2) return false;
+    for (const character of value) length -= character.length - 1;
+    if (length > MAX_FHIR_STRING_LENGTH) return false;
+  }
+  return value.trim().length > 0;
 }
 
 export function id(value: unknown): value is string {
@@ -52,7 +65,7 @@ export function id(value: unknown): value is string {
 
 /** Absolute REST Patient URLs can resolve independently of the bundle's UUID fullUrls. */
 export function patientReference(value: unknown): value is string {
-  if (typeof value !== "string" || !URL.canParse(value)) return false;
+  if (!text(value) || !URL.canParse(value)) return false;
   const url = new URL(value);
   return (
     (url.protocol === "https:" || url.protocol === "http:") &&

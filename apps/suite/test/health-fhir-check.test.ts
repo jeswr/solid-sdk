@@ -6,6 +6,7 @@ import {
   buildFhirBundle,
   FhirExportError,
   MAX_FHIR_RECORDS,
+  MAX_FHIR_STRING_LENGTH,
 } from "../src/apps/health/lib/fhir";
 
 /** All records and IDs are synthetic. Each test starts from a fresh valid export. */
@@ -309,5 +310,31 @@ describe("FHIR structural self-check", () => {
     bundle.entry = entries;
     rejects(bundle, "TOO_MANY_RECORDS");
     expect(getter).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "entry.0.resource.code.text",
+    "entry.1.resource.medicationCodeableConcept.text",
+    "entry.1.resource.dosage.0.text",
+    "entry.2.resource.note.0.text",
+  ])("independently enforces primitive text length at %s", (path) => {
+    for (const character of ["a", "\u{1F4CA}"]) {
+      const bundle = fixture();
+      change(bundle, path, character.repeat(MAX_FHIR_STRING_LENGTH));
+      assertFhirBundle(bundle);
+      change(bundle, path, character.repeat(MAX_FHIR_STRING_LENGTH + 1));
+      rejects(bundle);
+    }
+  });
+
+  it("applies the string bound to Reference.reference", () => {
+    const prefix = "https://example.org/";
+    const suffix = "/Patient/person-1";
+    const path = "a".repeat(MAX_FHIR_STRING_LENGTH - prefix.length - suffix.length);
+    const bundle = fixture();
+    change(bundle, "entry.0.resource.subject.reference", `${prefix}${path}${suffix}`);
+    assertFhirBundle(bundle);
+    change(bundle, "entry.0.resource.subject.reference", `${prefix}${path}a${suffix}`);
+    rejects(bundle);
   });
 });

@@ -31,7 +31,7 @@ function subject(patientUrl: string | undefined): Subject {
 function observation(value: unknown, patientUrl: string | undefined): ObservationResource {
   record(value, ["id", "metric", "value", "unit", "effective", "source"]);
   requireValid(
-    id(value.id) && date(value.effective, false) && text(value.source),
+    id(value.id) && date(value.effective, false) && text(value.source, "Source: ".length),
     "INVALID_INPUT",
     "Invalid observation fields",
   );

@@ -69,6 +69,10 @@ precision, following [R4 Period.end](https://hl7.org/fhir/R4/datatypes-definitio
 `MAX_FHIR_RECORDS` (100,000) applies to the combined arrays, checked before
 element inspection, copying, sorting or callbacks. Unknown fields, non-data
 objects, sparse/custom arrays, malformed values and duplicate IDs fail closed.
+`MAX_FHIR_STRING_LENGTH` (1,048,576 Unicode characters) bounds text and markdown
+primitives in both input validation and the self-check, including the generated
+`Source: ` prefix and Patient reference strings. Oversized text is rejected,
+never truncated, under [R4's string limit](https://hl7.org/fhir/R4/datatypes.html#string).
 `FhirExportError.code` is one of `UNSUPPORTED_METRIC`, `UNIT_MISMATCH`,
 `TOO_MANY_RECORDS`, `INVALID_INPUT`, `INVALID_OPTIONS`, `INVALID_BUNDLE`.
 Messages never include input or callback exception details.

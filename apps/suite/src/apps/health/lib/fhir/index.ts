@@ -14,6 +14,7 @@ export {
   type FhirResource,
   type HealthRecords,
   MAX_FHIR_RECORDS,
+  MAX_FHIR_STRING_LENGTH,
   type MedicationInput,
   type MedicationStatementResource,
   type ObservationInput,

@@ -10,6 +10,7 @@ import {
   type HealthRecords,
   LOINC_SYSTEM,
   MAX_FHIR_RECORDS,
+  MAX_FHIR_STRING_LENGTH,
   type ObservationInput,
   serialiseFhirBundle,
   UCUM_SYSTEM,
@@ -459,6 +460,81 @@ describe("health FHIR R4 collection export", () => {
   ])("rejects malformed condition %j", (change) => {
     expectCode(
       () => build({ ...records(), conditions: [{ ...condition, ...change }] }),
+      "INVALID_INPUT",
+    );
+  });
+
+  it.each([
+    "source",
+    "medication name",
+    "dosage",
+    "condition name",
+    "patient reference",
+  ])("enforces the text bound for %s, accounting for generated text", (field) => {
+    expect(MAX_FHIR_STRING_LENGTH).toBe(1_048_576);
+    const referencePrefix = "https://example.org/";
+    const referenceSuffix = "/Patient/person-1";
+    const prefixLength =
+      field === "source"
+        ? "Source: ".length
+        : field === "patient reference"
+          ? referencePrefix.length + referenceSuffix.length
+          : 0;
+    for (const extra of [0, 1]) {
+      const value = "a".repeat(MAX_FHIR_STRING_LENGTH - prefixLength + extra);
+      const input = records({
+        observations: [{ ...observation, source: field === "source" ? value : observation.source }],
+        medications: [
+          {
+            ...medication,
+            name: field === "medication name" ? value : medication.name,
+            dosageText: field === "dosage" ? value : medication.dosageText,
+          },
+        ],
+        conditions: [{ ...condition, name: field === "condition name" ? value : condition.name }],
+      });
+      const injected = {
+        ...options(
+          field === "patient reference"
+            ? `${referencePrefix}${value}${referenceSuffix}`
+            : undefined,
+        ),
+        clock: vi.fn(options().clock),
+      };
+      if (extra === 0) {
+        const bundle = buildFhirBundle(input, injected);
+        assertFhirBundle(JSON.parse(JSON.stringify(bundle)));
+      } else {
+        expectCode(
+          () => buildFhirBundle(input, injected),
+          field === "patient reference" ? "INVALID_OPTIONS" : "INVALID_INPUT",
+        );
+        expect(injected.clock).not.toHaveBeenCalled();
+      }
+    }
+  });
+
+  it("counts Unicode characters at the text bound and rejects extremely long text", () => {
+    for (const field of ["source", "name"] as const) {
+      const limit = MAX_FHIR_STRING_LENGTH - (field === "source" ? "Source: ".length : 0);
+      for (const extra of [0, 1]) {
+        const value = "\u{1F4CA}".repeat(limit + extra);
+        const input =
+          field === "source"
+            ? records({ observations: [{ ...observation, source: value }] })
+            : records({ conditions: [{ ...condition, name: value }] });
+        if (extra === 0) assertFhirBundle(buildFhirBundle(input, options()));
+        else expectCode(() => buildFhirBundle(input, options()), "INVALID_INPUT");
+      }
+    }
+    expectCode(
+      () =>
+        buildFhirBundle(
+          records({
+            conditions: [{ ...condition, name: "a".repeat(MAX_FHIR_STRING_LENGTH * 2 + 1) }],
+          }),
+          options(),
+        ),
       "INVALID_INPUT",
     );
   });

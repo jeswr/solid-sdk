@@ -2,6 +2,8 @@
 // AUTHORED-BY Codex GPT-6
 
 export const MAX_FHIR_RECORDS = 100_000;
+/** R4 string and markdown primitives: 1024 * 1024 Unicode characters. */
+export const MAX_FHIR_STRING_LENGTH = 1_048_576;
 
 export type FhirErrorCode =
   | "UNSUPPORTED_METRIC"
