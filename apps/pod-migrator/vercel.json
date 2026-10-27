@@ -4,6 +4,7 @@
   "installCommand": "cd ../.. && pnpm install --frozen-lockfile --ignore-scripts",
   "buildCommand": "cd ../.. && pnpm exec turbo run build --filter=@jeswr/app-pod-migrator",
   "outputDirectory": "dist",
+  "ignoreCommand": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-pod-migrator",
   "rewrites": [{ "source": "/((?!assets/|.*\\.[^/]+$).*)", "destination": "/index.html" }],
   "headers": [
     {
