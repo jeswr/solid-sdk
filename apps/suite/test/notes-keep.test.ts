@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   KEEP_COLOURS,
@@ -229,6 +230,16 @@ describe("Keep timestamp precision", () => {
     fails(() => parseKeepNote('{"title":12,"isPinned":0}'), "INVALID_KEEP_NOTE");
   });
 
+  it("consumes escaped quotes and backslashes before preserving later timestamps", () => {
+    const textContent = '"createdTimestampUsec":123\\'.repeat(1_000);
+    const json = `{"textContent":${JSON.stringify(textContent)},"createdTimestampUsec":9007199254740999,"userEditedTimestampUsec":-1001}`;
+    expect(parseKeepNote(json).draft).toMatchObject({
+      body: { kind: "text", text: textContent },
+      created: "2255-06-05T23:47:34.740Z",
+      updated: "1969-12-31T23:59:59.999Z",
+    });
+  });
+
   it.each([
     "8640000000000000001",
     "-8640000000000000001",
@@ -267,9 +278,16 @@ describe("Keep input validation and limits", () => {
     '{"title":"raw\nnewline"}',
     '{"title":"x",}',
     '{"createdTimestampUsec":01}',
+    '{"createdTimestampUsec":00}',
     '{"createdTimestampUsec":+1}',
     '{"createdTimestampUsec":1.}',
+    '{"createdTimestampUsec":1..0}',
     '{"createdTimestampUsec":1e}',
+    '{"createdTimestampUsec":1e+}',
+    '{"createdTimestampUsec":--1}',
+    '{"createdTimestampUsec":-}',
+    '{"title":"unterminated',
+    '{"title":"trailing\\',
     '{"createdTimestampUsec":NaN}',
     "null",
     "[]",
@@ -382,6 +400,23 @@ describe("Keep input validation and limits", () => {
 });
 
 describe("Keep batches", () => {
+  it("rejects long unterminated escaped strings promptly and continues the batch", () => {
+    // Many possible quote starts must not trigger searches over overlapping suffixes.
+    const malformed = `{"textContent":"${'\\"'.repeat(32_000)}`;
+    const started = performance.now();
+    const results = parseKeepBatch([
+      { fileName: "unterminated.json", json: malformed },
+      { fileName: "trailing-backslash.json", json: `${malformed}\\` },
+      { fileName: "following.json", json: '{"title":"Following note"}' },
+    ]);
+    expect(performance.now() - started).toBeLessThan(2_000);
+    expect(results).toMatchObject([
+      { ok: false, error: { code: "INVALID_KEEP_NOTE" } },
+      { ok: false, error: { code: "INVALID_KEEP_NOTE" } },
+      { ok: true, draft: { title: "Following note" } },
+    ]);
+  });
+
   it("isolates every error code between successful files, retaining input order and duplicate names", () => {
     const files = [
       { fileName: "note.json", json: '{"title":"First"}' },

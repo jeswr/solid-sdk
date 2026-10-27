@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { KeepImportError, MAX_KEEP_NOTE_BYTES } from "./types";
 
 /** Bounded UTF-8 byte counting: stop before parsing or allocating decoded data. */
@@ -22,23 +23,46 @@ export function decodeKeepJson(json: string): unknown {
   try {
     let previousString: string | undefined;
     let previousEnd = 0;
-    const preserved = json.replace(
-      /"(?:[^"\\]|\\[\s\S])*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/g,
-      (token: string, offset: number) => {
-        if (token.startsWith('"')) {
-          previousString = JSON.parse(token) as string;
-          previousEnd = offset + token.length;
-          return token;
+    let offset = 0;
+    let copiedThrough = 0;
+    const parts: string[] = [];
+    // Never restart at an escaped quote after an unterminated string. Each
+    // token consumes a disjoint span, keeping malformed input linear as well.
+    while (offset < json.length) {
+      const start = offset;
+      const character = json.charAt(offset);
+      if (character === '"') {
+        offset += 1;
+        while (offset < json.length && json[offset] !== '"') {
+          offset += json[offset] === "\\" ? 2 : 1;
         }
+        offset += 1;
+        previousString = JSON.parse(json.slice(start, offset)) as string;
+        previousEnd = offset;
+      } else if (character === "-" || (character >= "0" && character <= "9")) {
+        offset += 1;
+        while (offset < json.length && "0123456789.eE+-".includes(json.charAt(offset))) {
+          offset += 1;
+        }
+        const token = json.slice(start, offset);
+        // Check number grammar before quoting, so malformed tokens cannot be
+        // turned into valid JSON strings. Timestamp spelling stays exact.
+        JSON.parse(token);
         const timestamp =
           (previousString === "createdTimestampUsec" ||
             previousString === "userEditedTimestampUsec") &&
-          /^[ \r\n\t]*:[ \r\n\t]*$/.test(json.slice(previousEnd, offset));
+          /^[ \r\n\t]*:[ \r\n\t]*$/.test(json.slice(previousEnd, start));
+        if (timestamp) {
+          parts.push(json.slice(copiedThrough, start), `"${token}"`);
+          copiedThrough = offset;
+        }
         previousString = undefined;
-        return timestamp ? `"${token}"` : token;
-      },
-    );
-    return JSON.parse(preserved) as unknown;
+      } else {
+        offset += 1;
+      }
+    }
+    parts.push(json.slice(copiedThrough));
+    return JSON.parse(parts.join("")) as unknown;
   } catch {
     throw new KeepImportError("INVALID_KEEP_NOTE");
   }
