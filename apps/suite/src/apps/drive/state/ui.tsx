@@ -21,6 +21,7 @@ import {
   useState,
 } from "react";
 import { encodeRef } from "@/lib/refs";
+import { DriveAccessError } from "../lib/client/access";
 import { DriveError, type DriveItem, nameOf } from "../lib/client/client";
 import {
   copyItem,
@@ -41,6 +42,7 @@ export type DriveDialog =
   | { kind: "new-folder"; parent: string }
   | { kind: "rename"; item: DriveItem }
   | { kind: "move"; items: DriveItem[] }
+  | { kind: "delete-source"; items: DriveItem[] }
   | {
       kind: "delete-forever" | "empty-trash";
       entries: TrashEntry[];
@@ -235,7 +237,11 @@ export function useDriveUi(): DriveUiValue {
 
 /** User-facing message for a failed operation. */
 export function errorMessage(error: unknown, fallback = "Something went wrong"): string {
-  if (error instanceof TrashMovingError || error instanceof TrashRestorePartialError)
+  if (
+    error instanceof DriveAccessError ||
+    error instanceof TrashMovingError ||
+    error instanceof TrashRestorePartialError
+  )
     return error.message;
   if (error instanceof DriveError) {
     switch (error.kind) {
@@ -283,6 +289,7 @@ function folderLabel(url: string, driveRoot: string | undefined): string {
 }
 
 export function useDriveActions() {
+  const { openDialog } = useDriveUi();
   const { client, driveRoot, session, updatePrefs, prefs, invalidate } = useDrive();
   const router = useRouter();
 
@@ -532,7 +539,21 @@ export function useDriveActions() {
           invalidate(entry.url);
         }
         if (result.failed.length > 0) {
-          toast.error(errorMessage(result.failed[0]?.error, "Couldn't move to trash"));
+          const failure = result.failed[0]?.error;
+          if (failure instanceof DriveAccessError) {
+            toast.error(errorMessage(failure), {
+              action: {
+                label: "Delete forever",
+                onClick: () =>
+                  openDialog({
+                    kind: "delete-source",
+                    items: items.filter((item) =>
+                      result.failed.some((failed) => failed.url === item.url),
+                    ),
+                  }),
+              },
+            });
+          } else toast.error(errorMessage(failure, "Couldn't move to trash"));
         }
         const first = result.done[0];
         if (!first) return;
@@ -551,7 +572,7 @@ export function useDriveActions() {
         toast.error(errorMessage(error, "Couldn't move to trash"));
       }
     },
-    [client, driveRoot, invalidate, restore, session.webId],
+    [client, driveRoot, invalidate, restore, session.webId, openDialog],
   );
 
   const removeForever = useCallback(
@@ -568,6 +589,24 @@ export function useDriveActions() {
     [client, driveRoot, invalidate],
   );
 
+  const removeSourcesForever = useCallback(
+    async (items: readonly DriveItem[]) => {
+      const done: DriveItem[] = [];
+      for (const item of items) {
+        try {
+          await client.remove(item.url, { recursive: item.kind === "folder" });
+          done.push(item);
+          invalidate(item.url);
+        } catch (error) {
+          toast.error(errorMessage(error, "Couldn't delete"));
+        }
+      }
+      if (done.length) toast.success("Deleted for ever");
+      return { done };
+    },
+    [client, invalidate],
+  );
+
   return {
     starred,
     open,
@@ -581,6 +620,7 @@ export function useDriveActions() {
     trash,
     restore,
     removeForever,
+    removeSourcesForever,
   };
 }
 

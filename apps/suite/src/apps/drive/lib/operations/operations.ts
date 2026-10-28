@@ -15,6 +15,7 @@ import {
   type MoveResult,
   nameOf,
   parentOf,
+  policyArchiveOf,
 } from "../client/client";
 import { guessContentType } from "../files";
 import { keepBothName, normalizeUploadName } from "../upload";
@@ -27,6 +28,19 @@ import {
   trashEntries,
   trashIndexFrom,
 } from "./trash-index";
+
+const LEASE_MS = 60_000;
+const liveTransfers = new Set<string>();
+const stoppedTransfers = new Map<string, number>();
+
+function ownerIsLive(record: ReturnType<typeof transferRecord>): boolean {
+  return (
+    !!record.leaseOwner &&
+    (liveTransfers.has(record.leaseOwner) ||
+      (!stoppedTransfers.has(record.leaseOwner) &&
+        (record.leaseUntil?.getTime() ?? 0) > Date.now()))
+  );
+}
 
 function transferRecord(index: ReturnType<typeof emptyTrashIndex>, url: string) {
   return index.record(url);
@@ -378,12 +392,14 @@ async function reconcilePending(
   client: DriveClient,
   driveRoot: string,
   entry: TrashEntry,
-  versions: ReadonlySet<string>,
+  record: ReturnType<typeof transferRecord>,
   durable = false,
 ): Promise<"partial" | "complete" | undefined> {
+  if (record.leaseOwner && liveTransfers.has(record.leaseOwner)) return undefined;
   if (!(await exists(client, entry.url))) return undefined;
   const marked = await recoveryStatus(client, driveRoot, entry);
-  if (!marked && (await holdsRecovery(client, entry.url, entry.original, versions)))
+  if (!marked && ownerIsLive(record)) return undefined;
+  if (!marked && (await holdsRecovery(client, entry.url, entry.original, record.sourceVersions)))
     return undefined;
   const status = marked ?? "partial";
   let promoted = true;
@@ -393,7 +409,8 @@ async function reconcilePending(
       promoted =
         record.originalLocation === entry.original &&
         record.trashedAt?.getTime() === entry.trashedAt.getTime() &&
-        (record.status === "pending" || record.status === "partial");
+        (record.status === "pending" || record.status === "partial") &&
+        (!ownerIsLive(record) || !!marked);
       if (promoted) record.status = status;
     });
   } catch (error) {
@@ -420,6 +437,7 @@ async function requireTrashEntry(
   driveRoot: string,
   entry: TrashEntry,
   pending = false,
+  owner?: string,
 ): Promise<string | undefined> {
   const current = await client.readRdf(indexUrlOf(driveRoot));
   const index = current ? trashIndexFrom(current.dataset) : emptyTrashIndex();
@@ -427,17 +445,15 @@ async function requireTrashEntry(
   if (
     record.originalLocation !== entry.original ||
     record.trashedAt?.getTime() !== entry.trashedAt.getTime() ||
-    (pending && record.status !== "pending")
+    (pending &&
+      (record.status !== "pending" ||
+        record.leaseOwner !== owner ||
+        (record.leaseUntil?.getTime() ?? 0) <= Date.now()))
   )
     throw new DriveError("invalid-trash-record", 409, entry.url);
+  if (!pending && record.status !== "pending" && ownerIsLive(record)) throw new TrashMovingError();
   if (!pending && record.status === "pending") {
-    const reconciled = await reconcilePending(
-      client,
-      driveRoot,
-      entry,
-      record.sourceVersions,
-      true,
-    );
+    const reconciled = await reconcilePending(client, driveRoot, entry, record, true);
     if (reconciled) return reconciled;
     throw new TrashMovingError();
   }
@@ -483,12 +499,7 @@ export async function listTrash(
     }
     let status = transferRecord(index, entry.url).status;
     if (status === "pending") {
-      status = await reconcilePending(
-        client,
-        driveRoot,
-        entry,
-        index.record(entry.url).sourceVersions,
-      );
+      status = await reconcilePending(client, driveRoot, entry, index.record(entry.url));
       if (!status) continue;
     } else if (!(await exists(client, entry.url))) {
       // Restore/delete may have succeeded while their final index PUT failed.
@@ -517,6 +528,43 @@ export async function trashItems(
   items: readonly DriveItem[],
   options: { webId?: string; now?: Date } = {},
 ): Promise<BatchResult<TrashEntry>> {
+  const owner = `urn:uuid:${crypto.randomUUID()}`;
+  liveTransfers.add(owner);
+  let renewing: Promise<void> = Promise.resolve();
+  const heartbeat = setInterval(() => {
+    renewing = renewing
+      .then(() =>
+        updateIndex(client, driveRoot, (index) => {
+          for (const record of index.records) {
+            if (record.leaseOwner === owner && record.status === "pending")
+              record.leaseUntil = new Date(Date.now() + LEASE_MS);
+          }
+        }),
+      )
+      .catch((error: unknown) => {
+        console.warn(new TrashIndexWarning(indexUrlOf(driveRoot), error));
+      });
+  }, LEASE_MS / 4);
+  try {
+    return await runTrash(client, driveRoot, items, options, owner);
+  } finally {
+    clearInterval(heartbeat);
+    await renewing;
+    liveTransfers.delete(owner);
+    stoppedTransfers.set(owner, Date.now() + LEASE_MS);
+    for (const [stopped, until] of stoppedTransfers) {
+      if (until < Date.now()) stoppedTransfers.delete(stopped);
+    }
+  }
+}
+
+async function runTrash(
+  client: DriveClient,
+  driveRoot: string,
+  items: readonly DriveItem[],
+  options: { webId?: string; now?: Date },
+  owner: string,
+): Promise<BatchResult<TrashEntry>> {
   const result: BatchResult<TrashEntry> = { done: [], failed: [] };
   const trash = trashFolderOf(driveRoot);
   const entries = items.map((item) => {
@@ -539,6 +587,7 @@ export async function trashItems(
   }
   // No source may be removed until every intent is durably discoverable.
   try {
+    await client.prepareTrash(trash, options.webId);
     const intents = await Promise.all(
       entries.map(async (entry) => [entry, await sourceVersions(client, entry.original)] as const),
     );
@@ -547,6 +596,8 @@ export async function trashItems(
         addTrashRecord(index, entry);
         const record = transferRecord(index, entry.url);
         record.status = "pending";
+        record.leaseOwner = owner;
+        record.leaseUntil = new Date(Date.now() + LEASE_MS);
         for (const version of versions) record.sourceVersions.add(version);
       }
     });
@@ -561,8 +612,9 @@ export async function trashItems(
   for (const entry of entries) {
     try {
       await client.move(entry.original, entry.url, {
+        ...(options.webId ? { privateOwner: options.webId } : {}),
         beforeDelete: async () => {
-          await requireTrashEntry(client, driveRoot, entry, true);
+          await requireTrashEntry(client, driveRoot, entry, true, owner);
           await client.stat(entry.url);
         },
       });
@@ -576,8 +628,12 @@ export async function trashItems(
   if (result.done.length > 0 || partial.length > 0) {
     try {
       await updateIndex(client, driveRoot, (index) => {
-        for (const entry of result.done) transferRecord(index, entry.url).status = "complete";
-        for (const entry of partial) transferRecord(index, entry.url).status = "partial";
+        for (const entry of [...result.done, ...partial]) {
+          const record = transferRecord(index, entry.url);
+          record.status = partial.includes(entry) ? "partial" : "complete";
+          record.leaseOwner = undefined;
+          record.leaseUntil = undefined;
+        }
       });
     } catch (error) {
       // Preserve the completed side effects, but callers must withhold Undo
@@ -641,6 +697,11 @@ function validateOriginal(driveRoot: string, entry: TrashEntry): void {
   }
 }
 
+async function removePolicyArchive(client: DriveClient, url: string): Promise<void> {
+  const archive = policyArchiveOf(url) as string;
+  if (await exists(client, archive)) await client.remove(archive);
+}
+
 function restoredName(name: string): string {
   const dot = name.lastIndexOf(".");
   return dot > 0 ? `${name.slice(0, dot)} (restored)${name.slice(dot)}` : `${name} (restored)`;
@@ -651,12 +712,15 @@ async function restoreMissing(
   client: DriveClient,
   from: string,
   to: string,
+  settled: boolean,
 ): Promise<{ url: string; error: unknown }[]> {
   try {
     if (from.endsWith("/")) {
+      let created = false;
       if (!(await exists(client, to))) {
         try {
           await client.createFolder(to);
+          created = true;
         } catch (error) {
           if (!(error instanceof DriveError && error.kind === "conflict")) throw error;
         }
@@ -664,13 +728,23 @@ async function restoreMissing(
       const remaining: { url: string; error: unknown }[] = [];
       for (const child of await client.list(from))
         remaining.push(
-          ...(await restoreMissing(client, child.url, `${to}${child.url.slice(from.length)}`)),
+          ...(await restoreMissing(
+            client,
+            child.url,
+            `${to}${child.url.slice(from.length)}`,
+            settled,
+          )),
         );
       // Non-recursive removal succeeds only for an empty recovery container.
-      if (remaining.length === 0) await client.remove(from);
+      if (remaining.length === 0) {
+        await client.mergeContainer(from, to, created);
+        if (!settled) throw new TrashMovingError();
+        await client.remove(from);
+      }
       return remaining;
     }
     if (await exists(client, to)) {
+      if (!settled) throw new TrashMovingError();
       const compared = await sameRecoveryFile(client, from, to);
       if (!compared.same) throw new DriveError("conflict", 412, to);
       if (!compared.etag || compared.etag.startsWith("W/"))
@@ -684,6 +758,13 @@ async function restoreMissing(
       // this verification and the recovery DELETE. Keep that cross-resource window small.
       await client.remove(from, { ifMatch: compared.etag });
       return [];
+    }
+    if (!settled) {
+      // An expired owner may still have an HTTP DELETE in flight. Even an absent
+      // original can be recreated with the same content-derived ETag. Copy it
+      // back, but retain recovery until a terminal receipt confirms quiescence.
+      await client.copy(from, to);
+      throw new TrashMovingError();
     }
     await client.move(from, to);
     return [];
@@ -707,10 +788,17 @@ export async function restoreItems(
       validateOriginal(driveRoot, entry);
       const status = await requireTrashEntry(client, driveRoot, entry);
       if (status === "partial") {
-        const remaining = await restoreMissing(client, entry.url, entry.original);
+        const current = await client.readRdf(indexUrlOf(driveRoot));
+        const owner = current && trashIndexFrom(current.dataset).record(entry.url).leaseOwner;
+        const settled =
+          !owner ||
+          stoppedTransfers.has(owner) ||
+          !!(await recoveryStatus(client, driveRoot, entry));
+        const remaining = await restoreMissing(client, entry.url, entry.original, settled);
         if (remaining.length) throw new TrashRestorePartialError(remaining);
         if (await recoveryStatus(client, driveRoot, entry))
           await client.remove(recoveryMarker(driveRoot, entry));
+        await removePolicyArchive(client, entry.url);
         await client.remove(slot).catch(() => undefined);
         result.done.push({ entry, url: entry.original, renamed: false });
         continue;
@@ -735,6 +823,7 @@ export async function restoreItems(
       if (await recoveryStatus(client, driveRoot, entry))
         await client.remove(recoveryMarker(driveRoot, entry));
       // The slot may contain another writer's resources; only remove it empty.
+      await removePolicyArchive(client, entry.url);
       await client.remove(slot).catch(() => undefined);
       result.done.push({ entry, url, renamed });
     } catch (error) {
@@ -762,6 +851,7 @@ export async function deleteForever(
       await removeTrashItem(client, entry.url);
       if (await recoveryStatus(client, driveRoot, entry))
         await client.remove(recoveryMarker(driveRoot, entry));
+      await removePolicyArchive(client, entry.url);
       await client.remove(slotOf(driveRoot, entry)).catch(() => undefined);
       result.done.push(entry);
     } catch (error) {

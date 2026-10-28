@@ -45,6 +45,18 @@ export interface TrashEntry {
 }
 
 export class TrashRecord extends TermWrapper {
+  get leaseOwner(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, `${PROV}wasAssociatedWith`, NamedNodeAs.string);
+  }
+  set leaseOwner(value: string | undefined) {
+    OptionalAs.object(this, `${PROV}wasAssociatedWith`, value, NamedNodeFrom.string);
+  }
+  get leaseUntil(): Date | undefined {
+    return OptionalFrom.subjectPredicate(this, `${DCT}valid`, LiteralAs.date);
+  }
+  set leaseUntil(value: Date | undefined) {
+    OptionalAs.object(this, `${DCT}valid`, value, LiteralFrom.dateTime);
+  }
   /** Source URL/ETag tuples captured before the pending intent is persisted. */
   get sourceVersions(): Set<string> {
     return SetFrom.subjectPredicate(this, `${DCT}identifier`, LiteralAs.string, LiteralFrom.string);

@@ -34,6 +34,7 @@ import { type DriveItem, nameOf, parentOf } from "../lib/client/client";
 import { formatFileSize } from "../lib/files";
 import { getMoveValidity } from "../lib/list";
 import { extensionChange, isHidden, validateName } from "../lib/operations/operations";
+import type { TrashEntry } from "../lib/operations/trash-index";
 import { useDrive } from "../state/drive-context";
 import { captureDriveFocusRemoval, useDriveActions, useDriveUi } from "../state/ui";
 
@@ -56,7 +57,11 @@ export function DriveDialogs() {
       />
       <TrashConfirmDialog
         key={`trash-${dialog?.id}`}
-        open={dialog?.kind === "delete-forever" || dialog?.kind === "empty-trash"}
+        open={
+          dialog?.kind === "delete-forever" ||
+          dialog?.kind === "empty-trash" ||
+          dialog?.kind === "delete-source"
+        }
         onOpenChange={onOpenChange}
       />
       <UploadConflictDialog />
@@ -472,7 +477,11 @@ function TrashConfirmDialog({
   const { dialog, closeDialog, restoreDialogFocus } = useDriveUi();
   const actions = useDriveActions();
   const entries =
-    dialog?.kind === "delete-forever" || dialog?.kind === "empty-trash" ? dialog.entries : [];
+    dialog?.kind === "delete-forever" || dialog?.kind === "empty-trash"
+      ? dialog.entries
+      : dialog?.kind === "delete-source"
+        ? dialog.items
+        : [];
   const total = entries.reduce((sum, entry) => sum + (entry.size ?? 0), 0);
   const empty = dialog?.kind === "empty-trash";
   const onRemoved =
@@ -518,7 +527,11 @@ function TrashConfirmDialog({
               const removal: RemovalFocus = { closed: false, onRemoved };
               removalFocus.current = removal;
               closeDialog();
-              void actions.removeForever(entries).then((result) => {
+              const deleted =
+                dialog?.kind === "delete-source"
+                  ? actions.removeSourcesForever(dialog.items)
+                  : actions.removeForever(entries as TrashEntry[]);
+              void deleted.then((result) => {
                 removal.urls = result?.done.map((entry) => entry.url) ?? [];
                 settleRemovalFocus(removal);
               });
