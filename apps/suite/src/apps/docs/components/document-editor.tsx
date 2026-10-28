@@ -42,7 +42,6 @@ import {
   validateImage,
   wordCount,
 } from "../lib/editor/logic";
-import { sameIncarnation } from "../lib/model/incarnation";
 import { DocsError, DocsSidebar, DocumentSkeleton, Hint } from "./common";
 import { DeleteDialog } from "./delete-dialog";
 import { CountPopover, LinkPopover } from "./editor-popovers";
@@ -106,13 +105,6 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const userEdited = useRef(false);
   const [title, setTitle] = useState(runtime.title);
-  const titleEdit = useRef({
-    value: runtime.title,
-    dirty: false,
-    stored: runtime.stored,
-    ownSave: runtime.lastTitleSave,
-    remoteTitle: runtime.lastRemoteTitle,
-  });
   const [revision, setRevision] = useState(0);
   const [, updateSelection] = useState(0);
   const [mac, setMac] = useState(false);
@@ -214,53 +206,8 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
     setMac(/Mac|iPhone|iPad/.test(navigator.platform));
   }, []);
   useEffect(() => {
-    const edit = titleEdit.current;
-    const remote = runtime.lastRemoteTitle;
-    if (
-      document.activeElement === titleRef.current &&
-      edit.dirty &&
-      remote &&
-      remote !== edit.remoteTitle &&
-      remote.data.title !== edit.value &&
-      remote.data.title !== title
-    ) {
-      // A body save can include a remote rename before React sees that rename.
-      edit.remoteTitle = remote;
-      edit.ownSave = runtime.lastTitleSave;
-      runtime.rename(title.trim() || "Untitled document", edit.value);
-      return;
-    }
-    edit.remoteTitle = remote;
-    if (runtime.lastTitleSave && edit.ownSave !== runtime.lastTitleSave) {
-      // Acknowledge this tab's writes even while the same focus session continues.
-      edit.ownSave = runtime.lastTitleSave;
-      edit.stored = runtime.lastTitleSave;
-      edit.value = runtime.lastTitleSave.data.title;
-      edit.dirty = title !== edit.value;
-    }
-    if (document.activeElement !== titleRef.current || !edit.dirty) {
-      edit.value = runtime.title;
-      edit.stored = runtime.stored;
-      setTitle(runtime.title);
-    } else if (
-      runtime.stored &&
-      (!edit.stored ||
-        runtime.stored.etag !== edit.stored.etag ||
-        !sameIncarnation(edit.stored, runtime.stored)) &&
-      runtime.stored.data.title !== edit.value &&
-      runtime.stored.data.title !== title
-    ) {
-      // Keep the baseline the user actually edited, even after reconciliation.
-      runtime.rename(title.trim() || "Untitled document", edit.value);
-    }
-  }, [
-    runtime,
-    runtime.title,
-    runtime.stored,
-    runtime.lastTitleSave,
-    runtime.lastRemoteTitle,
-    title,
-  ]);
+    setTitle(runtime.title);
+  }, [runtime.title]);
   useEffect(() => {
     document.title = `${title || "Untitled document"} · Docs · Solid Suite`;
   }, [title]);
@@ -352,11 +299,9 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
     runtime.readOnly,
   );
   const commitTitle = () => {
-    const edit = titleEdit.current;
-    if (edit.dirty && title !== edit.value)
-      runtime.rename(title.trim() || "Untitled document", edit.value);
-    edit.dirty = false;
-    edit.value = runtime.title;
+    const committed = title.trim() || "Untitled document";
+    if (committed !== runtime.title) runtime.rename(committed);
+    else void runtime.flush();
     setTitle(runtime.title);
   };
   const act = async (task: () => Promise<void>) => {
@@ -404,19 +349,9 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
               readOnly={runtime.readOnly}
               className="docs-title-input"
               value={title}
-              onFocus={(event) => {
-                titleEdit.current = {
-                  value: event.currentTarget.value,
-                  dirty: false,
-                  stored: runtime.stored,
-                  ownSave: runtime.lastTitleSave,
-                  remoteTitle: runtime.lastRemoteTitle,
-                };
-              }}
               onChange={(event) => {
-                titleEdit.current.dirty = event.target.value !== titleEdit.current.value;
                 setTitle(event.target.value);
-                if (!runtime.stored) runtime.rename(event.target.value);
+                runtime.stageTitle(event.target.value);
               }}
               onBlur={commitTitle}
               onKeyDown={(event) => {

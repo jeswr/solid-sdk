@@ -9,6 +9,14 @@ import type { PodSession } from "@/lib/session/pod-session";
 import { createSolidDriveClient } from "../../drive/lib/client/client";
 import { deriveTitle, type SaveState, wordCount } from "../lib/editor/logic";
 import {
+  acknowledgeTitle,
+  editTitle,
+  mergeTitle,
+  observeTitle,
+  resolveTitle,
+  type TitleState,
+} from "../lib/editor/title-merge";
+import {
   type BuildDocumentInput,
   createDocsStore,
   type DocsStore,
@@ -58,10 +66,7 @@ export class DocumentPersistence {
   local: IndexeddbPersistence | undefined;
   provider: SolidPersistence | undefined;
   stored: StoredDocument | undefined;
-  /** The last snapshot this publisher wrote, distinct from remote reconciliation. */
-  lastTitleSave: StoredDocument | undefined;
-  /** A foreign rename remains observable even if a later body save includes it. */
-  lastRemoteTitle: StoredDocument | undefined;
+  private titleState: TitleState | undefined;
   title = "";
   body = "<p></p>";
   json: JSONContent = { type: "doc", content: [{ type: "paragraph" }] };
@@ -398,7 +403,21 @@ export class DocumentPersistence {
     const pending = Boolean(await mirror?.get("pending"));
     if (assertOpen) this.assertActive();
     if (pending) {
-      this.pendingEdit = this.parseMetadata<PendingEdit>(await mirror?.get("edit"));
+      const edit = this.parseMetadata<PendingEdit>(await mirror?.get("edit"));
+      // A title conflict stays durable after its body is saved. Re-reading that
+      // same intent is not another body edit; actual CRDT merges are tracked by
+      // refreshLocalState independently.
+      if (
+        !assertOpen &&
+        this.conflict &&
+        this.pendingEdit &&
+        edit &&
+        edit.owner === this.pendingEdit.owner &&
+        edit.title === this.pendingEdit.title &&
+        edit.baseTitle === this.pendingEdit.baseTitle
+      )
+        return pending;
+      this.pendingEdit = edit;
       // The last pending edit may belong to another tab. Its owner is not
       // necessarily the one that already reserved this incarnation's copy.
       const recoveryKey: unknown = await mirror?.get("activeRecovery");
@@ -410,7 +429,14 @@ export class DocumentPersistence {
         ),
       );
       const title = this.pendingEdit?.title ?? (await mirror?.get("title"));
-      if (typeof title === "string") this.title = title;
+      if (typeof title === "string") {
+        this.title = title;
+        this.titleState = {
+          base: this.pendingEdit?.baseTitle,
+          local: title === this.pendingEdit?.baseTitle ? null : title,
+          remote: this.stored?.data.title ?? "",
+        };
+      }
       this.version++;
       this.needsFullState = true;
     } else if (mirror === this.local) {
@@ -516,6 +542,7 @@ export class DocumentPersistence {
       this.trackUpdates();
       this.stored = remote;
       this.title = remote.data.title;
+      this.titleState = undefined;
       this.conflict = undefined;
       this.needsFullState = false;
       this.local = this.createMirror(targetMirror);
@@ -762,21 +789,26 @@ export class DocumentPersistence {
     }
     return identity;
   }
+  private currentTitleState(): TitleState {
+    return (
+      this.titleState ?? {
+        base: this.pendingEdit ? this.pendingEdit.baseTitle : this.stored?.data.title,
+        local: this.pendingEdit && this.title !== this.pendingEdit.baseTitle ? this.title : null,
+        remote: this.stored?.data.title ?? "",
+      }
+    );
+  }
   private checkTitleConflict() {
-    if (this.stored && this.pendingEdit && this.title === this.pendingEdit.baseTitle) {
-      // Body-only pending edits carry the old title as metadata, not local intent.
-      this.title = this.stored.data.title;
+    if (!this.stored) return;
+    this.titleState = observeTitle(this.currentTitleState(), this.stored.data.title);
+    const merged = mergeTitle(this.titleState);
+    this.title = merged.title;
+    this.conflict = merged.conflict
+      ? new TitleConflictError(this.stored.url, this.title, this.titleState.remote)
+      : undefined;
+    if (this.pendingEdit) {
       this.pendingEdit.title = this.title;
-      this.pendingEdit.baseTitle = this.title;
-      void this.writePending();
-    }
-    if (
-      this.stored &&
-      this.version !== this.savedVersion &&
-      this.stored.data.title !== this.pendingEdit?.baseTitle &&
-      this.stored.data.title !== this.title
-    ) {
-      this.conflict = new TitleConflictError(this.stored.url, this.title, this.stored.data.title);
+      this.pendingEdit.baseTitle = this.titleState.base;
     }
   }
   private async metadata<T>(key: string): Promise<T | undefined> {
@@ -836,12 +868,6 @@ export class DocumentPersistence {
   }
   private async reconcileProvider(allowStopped = false) {
     const remote = await this.activeDocument();
-    const known = this.stored as StoredDocument;
-    if (
-      (remote.etag !== known.etag || !sameIncarnation(known, remote)) &&
-      remote.data.title !== known.data.title
-    )
-      this.lastRemoteTitle = remote;
     const previous = this.provider?.store.container ?? this.updateContainer();
     const active = remote.data.updateLog ?? docContainerUrls(remote.url).updateLog;
     if (previous !== active || !sameIncarnation(this.stored as StoredDocument, remote)) {
@@ -850,14 +876,8 @@ export class DocumentPersistence {
       this.trashed = false;
       return;
     }
-    if (
-      this.version === this.savedVersion ||
-      (this.pendingEdit && this.title === this.pendingEdit.baseTitle)
-    )
-      this.title = remote.data.title;
     this.stored = remote;
     this.checkTitleConflict();
-    if (this.conflict) throw this.conflict;
     this.offlineCopy = false;
     const container = this.updateContainer();
     if (
@@ -911,33 +931,41 @@ export class DocumentPersistence {
     this.markDirty();
     if (this.creation !== "created") void this.flush();
   }
-  rename(title: string, baseTitle = this.stored?.data.title) {
+  stageTitle(title: string) {
     if (this.readOnly || this.title === title) return;
-    this.title = title.slice(0, 200);
-    this.markDirty(baseTitle);
+    this.titleState = editTitle(this.currentTitleState(), title.slice(0, 200));
+    this.title = mergeTitle(this.titleState).title;
+    this.markDirty();
+    if (this.creation !== "created") void this.flush();
+  }
+  rename(title: string) {
+    this.stageTitle(title);
     void this.flush();
   }
-  private async recordTitleSave(stored: StoredDocument) {
-    this.lastTitleSave = stored;
+  private async recordTitleSave(stored: StoredDocument, writtenTitle?: string) {
+    this.titleState =
+      writtenTitle === stored.data.title
+        ? acknowledgeTitle(this.currentTitleState(), stored.data.title)
+        : observeTitle(this.currentTitleState(), stored.data.title);
+    this.checkTitleConflict();
     if (this.pendingEdit) {
-      if (this.pendingEdit.title === this.pendingEdit.baseTitle)
-        this.pendingEdit.title = stored.data.title;
-      this.pendingEdit.baseTitle = stored.data.title;
       this.pendingEdit.baseModified = stored.data.modified;
       await this.writePending();
     }
   }
-  private markDirty(baseTitle = this.stored?.data.title) {
+  private markDirty() {
+    const state = this.currentTitleState();
+    // Direct title assignment is used when seeding drafts; body edits preserve title intent.
+    this.titleState = this.title === mergeTitle(state).title ? state : editTitle(state, this.title);
     this.pendingEdit = {
       owner: this.pendingEdit?.owner ?? this.editOwner,
       title: this.title,
-      // A never-promoted draft has no pod baseline. Its first typed title is
-      // local intent, including when another tab has already promoted it.
-      baseTitle: this.pendingEdit ? this.pendingEdit.baseTitle : baseTitle,
+      baseTitle: this.titleState.base,
       baseModified: this.pendingEdit?.baseModified ?? this.stored?.data.modified,
     };
+    this.checkTitleConflict();
     this.version++;
-    this.state = this.trashed ? "retrying" : "saving";
+    this.state = this.conflict ? "failed" : this.trashed ? "retrying" : "saving";
     void this.writePending().catch(() => {
       this.state = "retrying";
       this.scheduleRetry();
@@ -954,7 +982,7 @@ export class DocumentPersistence {
   }
   async flush(): Promise<void> {
     if (this.timer) clearTimeout(this.timer);
-    if (this.readOnly || !this.online || this.conflict) return;
+    if (this.readOnly || !this.online) return;
     if (this.tail) return this.tail;
     const write = () => this.write();
     this.tail = (
@@ -967,6 +995,7 @@ export class DocumentPersistence {
     return this.tail;
   }
   private async write(replacements = 0): Promise<void> {
+    let writingSnapshot = false;
     try {
       await this.mirrorRestart;
       await this.refreshLocalState();
@@ -980,7 +1009,18 @@ export class DocumentPersistence {
       while (this.savedVersion !== this.version) {
         await this.refreshLocalState();
         const version = this.version;
-        const title = this.title || "Untitled document";
+        this.checkTitleConflict();
+        const titleMerge = this.stored
+          ? mergeTitle(this.currentTitleState())
+          : { conflict: false, snapshotTitle: this.title };
+        const title = titleMerge.conflict
+          ? titleMerge.snapshotTitle
+          : titleMerge.snapshotTitle || "Untitled document";
+        const writtenTitle =
+          !titleMerge.conflict &&
+          (this.currentTitleState().local !== null || title !== this.stored?.data.title)
+            ? title
+            : undefined;
         const snapshot = {
           body: this.body,
           format: "text/html",
@@ -1001,7 +1041,7 @@ export class DocumentPersistence {
             }
             const creating = await this.metadata<StoredDocument>("creating");
             this.stored = creating ?? (await this.store.create(allocation));
-            if (!creating) await this.recordTitleSave(this.stored);
+            if (!creating) await this.recordTitleSave(this.stored, writtenTitle);
             this.creation = "creating";
             if (creating) {
               // Joining another tab's promotion does not establish a pod base
@@ -1024,13 +1064,9 @@ export class DocumentPersistence {
           // A tab can keep editing the draft after promotion. Retain its
           // mirror and lineage so reconnects and reloads still discover it.
           await this.rememberPreviousMirrors();
-          // Title edits may have arrived while create() was in flight. Move
-          // their baseline and pending marker before acknowledging promotion.
-          if (this.pendingEdit) {
-            this.pendingEdit.baseTitle = stored.data.title;
-            this.pendingEdit.baseModified = stored.data.modified;
-            await this.writePending();
-          }
+          // Transfer the acknowledged baseline and pending intent to the promoted
+          // mirror without treating the local title as a new pod observation.
+          await this.writePending();
           if (!this.provider?.synced) {
             this.attachProvider(this.updateContainer(), true, this.stopped);
             await this.provider?.whenSynced;
@@ -1043,6 +1079,7 @@ export class DocumentPersistence {
           await this.linkMirror(stored.url, this.local.name);
           this.onCreated(stored.url);
           if (stored.data.body !== snapshot.body || stored.data.title !== title) {
+            writingSnapshot = true;
             this.stored = await this.store.save(
               stored,
               { ...snapshot, title },
@@ -1054,9 +1091,11 @@ export class DocumentPersistence {
                 }),
               },
             );
-            await this.recordTitleSave(this.stored);
+            writingSnapshot = false;
+            await this.recordTitleSave(this.stored, writtenTitle);
           }
         } else {
+          writingSnapshot = true;
           this.stored = await this.store.save(
             this.stored as StoredDocument,
             { ...snapshot, title, instanceId: this.recordIdentity() },
@@ -1068,7 +1107,8 @@ export class DocumentPersistence {
               }),
             },
           );
-          await this.recordTitleSave(this.stored);
+          writingSnapshot = false;
+          await this.recordTitleSave(this.stored, writtenTitle);
         }
         if (this.title === title) this.title = (this.stored as StoredDocument).data.title;
         // A concurrent snapshot/recovery may have changed the pointer during save.
@@ -1080,10 +1120,9 @@ export class DocumentPersistence {
         this.lastSaved = Date.now();
         if (this.version === version) {
           if (!confirmed) throw new Error("Document updates were not persisted");
-          const cleared = await this.clearPending(
-            (this.stored as StoredDocument).data.title,
-            confirmed,
-          );
+          const cleared =
+            !this.conflict &&
+            (await this.clearPending((this.stored as StoredDocument).data.title, confirmed));
           if (cleared) this.pendingEdit = undefined;
           else {
             await this.refreshLocalState(false);
@@ -1100,7 +1139,7 @@ export class DocumentPersistence {
           }
         }
       }
-      this.state = "saved";
+      this.state = this.conflict ? "failed" : "saved";
       if (this.provider && (this.updates >= 200 || this.bytes >= 2 * 1024 * 1024)) {
         this.updates = 0;
         this.bytes = 0;
@@ -1124,7 +1163,9 @@ export class DocumentPersistence {
         }
       }
       if (error instanceof TitleConflictError) {
+        this.titleState = observeTitle(this.currentTitleState(), error.remoteTitle);
         this.conflict = error;
+        if (writingSnapshot && this.creation === "created") return this.write(replacements);
         this.state = "failed";
       } else {
         this.state =
@@ -1169,7 +1210,11 @@ export class DocumentPersistence {
       await this.flush();
       return;
     }
-    if (!keepMine) this.title = remote.data.title;
+    this.titleState = resolveTitle(
+      observeTitle(this.currentTitleState(), remote.data.title),
+      keepMine,
+    );
+    this.title = mergeTitle(this.titleState).title;
     // Apply the explicit title choice to every mirror carrying that intent.
     // Otherwise a retained draft marker would reintroduce the rejected title.
     const rejectedTitle = this.conflict.localTitle;

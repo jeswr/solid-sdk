@@ -79,7 +79,38 @@ function textContent(node: JSONContent): string {
   return node.text ?? (node.content ?? []).map(textContent).join(" ");
 }
 export function exportMarkdown(json: JSONContent, dropHighlights = false): string {
-  return markdown.serialize(clean(json, dropHighlights));
+  // The upstream serializer escapes inline delimiters but leaves block syntax
+  // and edge whitespace literal. Protect text before serializing, then restore
+  // its escapes afterwards so the serializer cannot double-escape them. Mark
+  // delimiters, link destinations and code retain their normal serialization.
+  let prefix = "DOCSLITERAL";
+  const source = JSON.stringify(json);
+  while (source.includes(prefix)) prefix += "X";
+  const escapes: string[] = [];
+  const protect = (node: JSONContent, inCode = false): JSONContent => {
+    const code =
+      inCode || node.type === "codeBlock" || node.marks?.some((mark) => mark.type === "code");
+    const result = { ...node };
+    if (node.text && !code) {
+      result.text = node.text.replace(
+        /^[ \t]+|[ \t]+$|[\\`*_[\]<>!#.+()~=|:@&\-\n\r\t]/gm,
+        (value) => {
+          const escaped = Array.from(value, (char) =>
+            /[ \t\n\r:@&]/.test(char) ? `&#${char.charCodeAt(0)};` : `\\${char}`,
+          ).join("");
+          return `${prefix}${escapes.push(escaped) - 1}END`;
+        },
+      );
+    }
+    if (node.content) result.content = node.content.map((child) => protect(child, code));
+    return result;
+  };
+  return markdown
+    .serialize(protect(clean(json, dropHighlights)))
+    .replace(
+      new RegExp(`${prefix}(\\d+)END`, "g"),
+      (_, index: string) => escapes[Number(index)] as string,
+    );
 }
 export function importMarkdown(source: string, fileName: string) {
   if (new TextEncoder().encode(source).byteLength > MAX_IMPORT_BYTES)

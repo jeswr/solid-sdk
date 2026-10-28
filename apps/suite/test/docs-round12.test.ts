@@ -258,6 +258,125 @@ it("still detects another writer's rename when this tab autosaves its body befor
   }
 });
 
+it("preserves a remote rename during a pending body snapshot with a focused local title and broadcasts", async () => {
+  broadcasts();
+  const { pod, session, create, client } = await fixture();
+  const runtime = await create();
+  const source = runtime.stored as StoredDocument;
+  const ui = await titleInput(runtime);
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let paused = false;
+  let saving: Promise<void> | undefined;
+  try {
+    append(runtime, " autosaved body");
+    await act(async () => ui.input.focus());
+    await ui.type("My title");
+    await runtime.store.save(
+      source,
+      { title: "Remote title" },
+      { regenerate: () => ({ body: source.data.body, format: "text/html" }) },
+    );
+    vi.spyOn(session, "fetch").mockImplementation(async (input, init) => {
+      if (!paused && String(input) === source.url && init?.method === "PUT") {
+        paused = true;
+        await gate;
+      }
+      return pod.fetch(input, init);
+    });
+    saving = runtime.flush();
+    await vi.waitFor(() => expect(paused).toBe(true));
+    await ui.render();
+    release();
+    await act(async () => saving);
+    await ui.render();
+    await runtime.flush();
+    expect(runtime.conflict?.localTitle).toBe("My title");
+    expect(runtime.conflict?.remoteTitle).toBe("Remote title");
+    expect(document.body.textContent).toContain("Yours: My title");
+    expect((await runtime.store.read(source.url))?.data).toMatchObject({
+      title: "Remote title",
+      body: "<p>Original autosaved body</p>",
+    });
+    append(runtime, " while conflicted");
+    await act(async () => runtime.forceSave());
+    expect((await runtime.store.read(source.url))?.data).toMatchObject({
+      title: "Remote title",
+      body: "<p>Original autosaved body while conflicted</p>",
+    });
+    expect(runtime.state).toBe("failed");
+    const reopened = client();
+    await reopened.open(source.url);
+    expect((await reopened.store.read(source.url))?.data.title).toBe("Remote title");
+    expect(reopened.body).toBe("<p>Original autosaved body while conflicted</p>");
+    expect(reopened.conflict?.localTitle).toBe("My title");
+    expect(reopened.conflict?.remoteTitle).toBe("Remote title");
+    const snapshotSave = vi.spyOn(runtime.store, "save");
+    await runtime.flush();
+    await runtime.flush();
+    expect(snapshotSave).not.toHaveBeenCalled();
+  } finally {
+    release();
+    await saving;
+    await ui.close();
+  }
+});
+
+it("saves the body with the remote title after a pending title PUT loses its ETag race", async () => {
+  broadcasts();
+  const { pod, session, create } = await fixture();
+  const runtime = await create();
+  const source = runtime.stored as StoredDocument;
+  const ui = await titleInput(runtime);
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let paused = false;
+  let saving: Promise<void> | undefined;
+  const save = runtime.store.save.bind(runtime.store);
+  vi.spyOn(runtime.store, "save").mockImplementation((stored, input, options) =>
+    save(stored, input, { ...options, wait: async () => {} }),
+  );
+  try {
+    append(runtime, " racing body");
+    await act(async () => ui.input.focus());
+    await ui.type("My title");
+    vi.spyOn(session, "fetch").mockImplementation(async (input, init) => {
+      if (!paused && String(input) === source.url && init?.method === "PUT") {
+        paused = true;
+        await gate;
+      }
+      return pod.fetch(input, init);
+    });
+    saving = runtime.flush();
+    await vi.waitFor(() => expect(paused).toBe(true));
+    await save(
+      source,
+      { title: "Remote title" },
+      {
+        regenerate: () => ({ body: source.data.body, format: "text/html" }),
+      },
+    );
+    release();
+    await act(async () => saving);
+    await ui.render();
+    expect(runtime.conflict?.localTitle).toBe("My title");
+    expect(runtime.conflict?.remoteTitle).toBe("Remote title");
+    expect(runtime.state).toBe("failed");
+    expect((await runtime.store.read(source.url))?.data).toMatchObject({
+      title: "Remote title",
+      body: "<p>Original racing body</p>",
+    });
+  } finally {
+    release();
+    await saving;
+    await ui.close();
+  }
+});
+
 it.each([
   "list",
   "editor menu",
