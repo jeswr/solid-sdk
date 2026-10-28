@@ -11,6 +11,9 @@ export const drivePreferencesSchema = z.object({
         url: z.url({ protocol: /^https?$/ }),
         name: z.string().optional(),
         type: z.enum(["file", "folder"]).optional(),
+        contentType: z.string().optional(),
+        size: z.number().int().nonnegative().optional(),
+        modified: z.iso.datetime({ offset: true }).optional(),
         openedAt: z.iso.datetime({ offset: true }),
       }),
     )

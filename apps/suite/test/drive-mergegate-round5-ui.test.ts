@@ -164,7 +164,13 @@ it("records successful foreign file and folder opens through preferences, dedupl
   const view = await mount(wrap(h(PreviewRouteView)));
   expect(view.host.textContent).toContain("Readable public content");
   expect(stored()).toEqual([
-    { url: foreign.url, name: foreign.name, type: "file", openedAt: expect.any(String) },
+    {
+      url: foreign.url,
+      name: foreign.name,
+      type: "file",
+      contentType: "text/plain",
+      openedAt: expect.any(String),
+    },
   ]);
   const first = stored()[0].openedAt;
   await view.render(wrap(h(FolderView, { url: folder.url })));
@@ -257,7 +263,13 @@ it("records unsupported foreign files only after successful metadata reads", asy
   const view = await mount(wrap(h(PreviewRouteView)));
   expect(view.host.textContent).toContain("Can't preview this file");
   expect(stored()).toEqual([
-    { url: foreign.url, name: foreign.name, type: "file", openedAt: expect.any(String) },
+    {
+      url: foreign.url,
+      name: foreign.name,
+      type: "file",
+      contentType: "application/octet-stream",
+      openedAt: expect.any(String),
+    },
   ]);
 });
 
@@ -323,7 +335,13 @@ it("records foreign opens in the listing preview dialog without recording own ne
   const view = await mount(wrap(h(Modal)));
   await act(async () => actions.open(foreign, [foreign, own], ui.setPreview));
   expect(stored()).toEqual([
-    { url: foreign.url, name: foreign.name, type: "file", openedAt: expect.any(String) },
+    {
+      url: foreign.url,
+      name: foreign.name,
+      type: "file",
+      contentType: "text/plain",
+      openedAt: expect.any(String),
+    },
   ]);
   await key(document.body, "ArrowRight");
   expect(stored()).toHaveLength(1);
