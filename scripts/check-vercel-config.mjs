@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // AUTHORED-BY Codex GPT-5.6 (Sol)
 // AUTHORED-BY Codex GPT-6.1 (Sol)
+// AUTHORED-BY Codex GPT-6
 
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, globSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -30,6 +31,34 @@ function isDirectory(path) {
     return statSync(path).isDirectory();
   } catch {
     return false;
+  }
+}
+
+function checkGitDeployment(root, app, failures) {
+  const path = `${app.rootDirectory}/vercel.json`;
+  const config = readJson(root, path, failures);
+  if (!config) return;
+  // Vercel enables unspecified branches. ** also covers branch names containing /.
+  const suite = app.rootDirectory === "apps/suite" && app.project === "solid-suite";
+  const expected = suite ? { "**": false, main: true } : false;
+  const matches = (value) =>
+    expected === false
+      ? value === false
+      : value !== null &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        Object.keys(value).length === 2 &&
+        value["**"] === false &&
+        value.main === true;
+  const policy = suite ? '{ "**": false, "main": true } (main only)' : "false";
+  if (!matches(app.gitDeploymentEnabled)) {
+    failures.push(`${app.project}: gitDeploymentEnabled must be ${policy}`);
+  }
+  if (!matches(config.git?.deploymentEnabled)) {
+    failures.push(`${path}: git.deploymentEnabled must be ${policy}`);
+  }
+  if (suite && config.ignoreCommand !== app.vercelIgnore) {
+    failures.push(`${path}: ignoreCommand must match vercelIgnore`);
   }
 }
 
@@ -197,6 +226,8 @@ function checkVercelConfig(root) {
     failures.push(`${path}: expected a non-empty array of deployments`);
   }
   if (Array.isArray(apps)) {
+    const directories = new Set();
+    const projects = new Set();
     for (const [index, app] of apps.entries()) {
       if (
         !app ||
@@ -217,6 +248,11 @@ function checkVercelConfig(root) {
         continue;
       }
       const directory = app.rootDirectory;
+      if (directories.has(directory) || projects.has(app.project)) {
+        failures.push(`${path}[${index}]: duplicate deployment root or project`);
+      }
+      directories.add(directory);
+      projects.add(app.project);
       if (!isDirectory(join(root, directory))) {
         failures.push(`${app.project}: rootDirectory ${directory} is missing or not a directory`);
         continue;
@@ -230,11 +266,23 @@ function checkVercelConfig(root) {
         failures.push(`${directory}/package.json: deployed package must be private`);
       }
       checkIgnoreCommand(root, app, failures);
+      checkGitDeployment(root, app, failures);
       if (app.framework === "vite") checkViteConfig(root, directory, failures);
       // Client ID documents are required unless the deployment explicitly opts out.
       if (app.clientIdDocument !== false) {
         checkBuildEnv(root, app, failures);
         checkClientIdBuild(root, app, manifest, failures);
+      }
+    }
+    // Check future apps (including pod-migrator) even before inventory registration.
+    for (const config of globSync(["apps/*/vercel.json", "apps/*/web/vercel.json"], {
+      cwd: root,
+    })) {
+      if (!directories.has(config.slice(0, -"/vercel.json".length))) {
+        const value = readJson(root, config, failures);
+        if (value && value.git?.deploymentEnabled !== false) {
+          failures.push(`${config}: git.deploymentEnabled must be false`);
+        }
       }
     }
   }

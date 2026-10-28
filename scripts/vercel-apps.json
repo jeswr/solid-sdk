@@ -6,7 +6,11 @@
     "framework": "next",
     "clientIdDocument": false,
     "originEnv": "APP_ORIGIN",
-    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-suite"
+    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-suite",
+    "gitDeploymentEnabled": {
+      "**": false,
+      "main": true
+    }
   },
   {
     "project": "solid-pod-drive",
@@ -14,7 +18,8 @@
     "package": "@jeswr/pod-drive-web",
     "framework": "vite",
     "originEnv": "APP_ORIGIN",
-    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-drive-web"
+    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-drive-web",
+    "gitDeploymentEnabled": false
   },
   {
     "project": "solid-pod-docs",
@@ -22,7 +27,8 @@
     "package": "@jeswr/pod-docs-web",
     "framework": "vite",
     "originEnv": "APP_ORIGIN",
-    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-docs-web"
+    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-docs-web",
+    "gitDeploymentEnabled": false
   },
   {
     "project": "solid-pod-chat",
@@ -30,7 +36,8 @@
     "package": "@jeswr/pod-chat-web",
     "framework": "vite",
     "originEnv": "APP_ORIGIN",
-    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-chat-web"
+    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-chat-web",
+    "gitDeploymentEnabled": false
   },
   {
     "project": "solid-pod-mail",
@@ -38,7 +45,8 @@
     "package": "@jeswr/pod-mail-web",
     "framework": "vite",
     "originEnv": "APP_ORIGIN",
-    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-mail-web"
+    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-mail-web",
+    "gitDeploymentEnabled": false
   },
   {
     "project": "solid-pod-photos",
@@ -46,7 +54,8 @@
     "package": "@jeswr/pod-photos-web",
     "framework": "vite",
     "originEnv": "APP_ORIGIN",
-    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-photos-web"
+    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-photos-web",
+    "gitDeploymentEnabled": false
   },
   {
     "project": "solid-pod-music",
@@ -54,7 +63,8 @@
     "package": "@jeswr/pod-music-web",
     "framework": "vite",
     "originEnv": "APP_ORIGIN",
-    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-music-web"
+    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-music-web",
+    "gitDeploymentEnabled": false
   },
   {
     "project": "solid-pod-money",
@@ -62,7 +72,8 @@
     "package": "@jeswr/pod-money-web",
     "framework": "vite",
     "originEnv": "APP_ORIGIN",
-    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-money-web"
+    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-money-web",
+    "gitDeploymentEnabled": false
   },
   {
     "project": "solid-pod-health",
@@ -70,7 +81,8 @@
     "package": "@jeswr/pod-health-web",
     "framework": "vite",
     "originEnv": "APP_ORIGIN",
-    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-health-web"
+    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/pod-health-web",
+    "gitDeploymentEnabled": false
   },
   {
     "project": "solid-app-store",
@@ -78,7 +90,8 @@
     "package": "@jeswr/solid-app-store-web",
     "framework": "vite",
     "originEnv": "APP_ORIGIN",
-    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/solid-app-store-web"
+    "vercelIgnore": "node ../../../scripts/vercel-ignore-build.mjs @jeswr/solid-app-store-web",
+    "gitDeploymentEnabled": false
   },
   {
     "project": "solid-pod-manager",
@@ -86,7 +99,8 @@
     "package": "@jeswr/app-pod-manager",
     "framework": "next",
     "originEnv": "NEXT_PUBLIC_APP_ORIGIN",
-    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-pod-manager"
+    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-pod-manager",
+    "gitDeploymentEnabled": false
   },
   {
     "project": "solid-sdk-access-manager",
@@ -94,7 +108,8 @@
     "package": "@jeswr/app-access-manager",
     "framework": "vite",
     "originEnv": "APP_ORIGIN",
-    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-access-manager"
+    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-access-manager",
+    "gitDeploymentEnabled": false
   },
   {
     "project": "solid-sdk-issues",
@@ -102,13 +117,15 @@
     "package": "@jeswr/app-issues",
     "framework": "next",
     "originEnv": "APP_ORIGIN",
-    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-issues"
+    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-issues",
+    "gitDeploymentEnabled": false
   },
   {
     "project": "solid-sdk-coeliac",
     "rootDirectory": "apps/coeliac",
     "package": "@jeswr/app-coeliac",
     "framework": "next",
-    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-coeliac"
+    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-coeliac",
+    "gitDeploymentEnabled": false
   }
 ]
