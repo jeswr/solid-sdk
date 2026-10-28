@@ -26,6 +26,10 @@ DESIGN.md as follows. These notes are colocated with the engine and reflected in
   unknown conditions are refused. Existing owner/creator role matchers require trusted metadata;
   there is no trusted creator channel yet, so these documents are refused. A creator is never
   automatically the target owner. Only provably applicable target denials may restrict the proof.
+  Non-CSS ACP targets use the closed allowlist in DESIGN.md: emitted owner locks and simple
+  agent/public/authenticated policies with ACP-only modes; ACR access requires Read+Write.
+  Client/issuer/VC matchers, extra triples and unvalidated forms refuse the complete path.
+  ESS source PublicClient grants require authentication; denials keep the broader reading.
   ESS resource Control denials are ignored: they cannot restrict inherited `memberAccess` ACR
   permissions. Partial ACR permissions are refused rather than conflated with full Control.
 - CSS 7.2 uses ACL mode IRIs and resource Control. Its configured `AuthAuxiliaryReader` derives
@@ -56,9 +60,9 @@ DESIGN.md as follows. These notes are colocated with the engine and reflected in
   source denial, and cannot be trusted as target restrictions.
   Source grant clauses requiring absent CSS context are dropped and reported, while active
   alternatives survive. Source ESS grants use a conservative agent-matcher subset; target
-  documents outside that subset are refused. Emitted supported client matchers explicitly
-  include `PublicAgent`. ESS issuer matching and generic VC equality are unestablished, so
-  affected source clauses and target grant clauses are omitted with a report. Target grant
+  documents must fit the closed allowlist. ESS client, issuer and generic VC target conditions
+  are outside it; affected target clauses are omitted with a report. Source issuer/VC grants
+  also lack established enforcement and are omitted. Target grant
   exclusions using those conditions omit the whole grant; target denials remove the condition
   or exclusion and apply unconditionally with respect to it. CSS VC restrictions cause the
   affected grant or possibly denied modes to be omitted.

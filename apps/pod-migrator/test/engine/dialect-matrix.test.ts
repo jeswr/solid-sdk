@@ -4,8 +4,10 @@ import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
 import { ACL, ACP, FOAF, RDF, RdfNode, serialize } from "../../src/engine/rdf.js";
+import { readAcp } from "../../src/engine/systems/acp.js";
 import type { Mode } from "../../src/engine/types.js";
-import { FakePod, type Identity } from "./fake-pod.js";
+import { acceptedTargets, rejectedTargets, targetFixture } from "./allowlist-fixtures.js";
+import { allowedEssTarget, FakePod, type Identity } from "./fake-pod.js";
 import { acl, resolve, stranger } from "./helpers.js";
 
 const requireCss = createRequire(import.meta.url);
@@ -84,6 +86,22 @@ const constructs = [
   "deny-except-issuer",
 ] as const;
 type Construct = (typeof constructs)[number];
+
+describe("unvalidated-target allowlist matrix", () => {
+  it.each(acceptedTargets)("accept: %s", async (shape) => {
+    const target = pod("ess", "bob");
+    const dataset = await targetFixture(target, shape);
+    expect(() => readAcp(dataset, target.root, target.acl(target.root), "ess", true)).not.toThrow();
+    expect(allowedEssTarget(dataset, target.root)).toBe(true);
+  });
+  it.each(rejectedTargets)("reject: %s", async (shape) => {
+    const target = pod("ess", "bob");
+    const dataset = await targetFixture(target, shape);
+    for (const dialect of ["ess", undefined] as const)
+      expect(() => readAcp(dataset, target.root, target.acl(target.root), dialect, true)).toThrow();
+    expect(allowedEssTarget(dataset, target.root)).toBe(false);
+  });
+});
 const other = "https://people.example/other#me";
 const client = "urn:client";
 const issuer = "urn:issuer";
@@ -374,7 +392,7 @@ async function fixture(
         );
         if (construct.startsWith("deny-except-")) denial.add(`${ACP}noneOf`, excluded.value);
         if (construct === "deny-append" || construct === "deny-write")
-          rule.add(`${ACP}allow`, `${ACL}Write`);
+          rule.add(`${ACP}allow`, `${source.implementation === "ess" ? ACP : ACL}Write`);
       }
     }
     if (

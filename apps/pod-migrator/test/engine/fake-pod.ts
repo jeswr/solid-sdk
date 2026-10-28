@@ -31,6 +31,94 @@ export interface Identity {
   groups?: string[];
   vc?: string[];
 }
+/** Independent closed target grammar; server evaluation below still reads hostile source RDF. */
+export function allowedEssTarget(dataset: Store, resource: string): boolean {
+  const key = (term: { termType: string; value: string }) => `${term.termType}:${term.value}`;
+  const roots = new Map<string, import("@rdfjs/types").Term>();
+  for (const q of dataset)
+    if (
+      q.predicate.value === `${ACP}resource` ||
+      (q.predicate.value === `${RDF}type` && q.object.value === `${ACP}AccessControlResource`)
+    )
+      roots.set(key(q.subject), q.subject);
+  if (roots.size !== 1) return false;
+  const subjects = new Map<string, string[]>();
+  const node = (
+    term: import("@rdfjs/types").Term | RdfNode,
+    type: string,
+    predicates: string[],
+  ) => {
+    subjects.set(key(term), [`${RDF}type`, ...predicates.map((p) => ACP + p)]);
+    const n = new RdfNode(term as import("@rdfjs/types").Term, dataset, DataFactory);
+    if (n.iris(`${RDF}type`).some((t) => t !== ACP + type)) throw new Error("Unknown target type");
+    return n;
+  };
+  try {
+    const root = node(
+      [...roots.values()][0] as import("@rdfjs/types").Term,
+      "AccessControlResource",
+      ["resource", "accessControl", "memberAccessControl", "access", "memberAccess"],
+    );
+    const bindings = root.iris(`${ACP}resource`);
+    if (
+      bindings.length > 1 ||
+      (bindings.length
+        ? bindings[0] !== resource
+        : !root.iris(`${RDF}type`).includes(`${ACP}AccessControlResource`))
+    )
+      return false;
+    for (const scope of ["accessControl", "memberAccessControl", "access", "memberAccess"]) {
+      for (const entry of root.nodes(ACP + scope)) {
+        const acrAccess = scope === "access" || scope === "memberAccess";
+        const policies = acrAccess
+          ? [entry]
+          : node(entry, "AccessControl", ["apply"]).nodes(`${ACP}apply`);
+        if (!acrAccess && policies.length !== 1) return false;
+        for (const entryPolicy of policies) {
+          const p = node(entryPolicy, "Policy", ["allow", "deny", "allOf", "noneOf"]);
+          const allows = p.iris(`${ACP}allow`);
+          const denies = p.iris(`${ACP}deny`);
+          const modes = [...allows, ...denies];
+          if (allows.length && denies.length) return false;
+          if (!acrAccess && denies.includes(`${ACP}Write`) !== denies.includes(`${ACP}Append`))
+            return false;
+          if (
+            acrAccess
+              ? modes.length !== 2 ||
+                !modes.includes(`${ACP}Read`) ||
+                !modes.includes(`${ACP}Write`)
+              : modes.some(
+                  (mode) =>
+                    !["Read", "Write", "Append", "Control"].some((name) => mode === ACP + name),
+                )
+          )
+            return false;
+          if (!p.nodes(`${ACP}allOf`).length) return false;
+          for (const matcher of [...p.nodes(`${ACP}allOf`), ...p.nodes(`${ACP}noneOf`)]) {
+            const agents = node(matcher, "Matcher", ["agent"]).iris(`${ACP}agent`);
+            if (
+              agents.length !== 1 ||
+              agents.some(
+                (agent) =>
+                  agent.startsWith(ACP) &&
+                  agent !== `${ACP}PublicAgent` &&
+                  agent !== `${ACP}AuthenticatedAgent`,
+              )
+            )
+              return false;
+          }
+        }
+      }
+    }
+    return [...dataset].every(
+      (q) =>
+        q.graph.termType === "DefaultGraph" &&
+        subjects.get(key(q.subject))?.includes(q.predicate.value),
+    );
+  } catch {
+    return false;
+  }
+}
 /** Independent server evaluation: deliberately does not call the engine's readers/prover. */
 export class FakePod {
   readonly data = new Map<string, Stored>();
@@ -186,8 +274,9 @@ export class FakePod {
                     (agent === `${ACP}CreatorAgent` && identity.agent === this.creators.get(url)))),
             )) &&
           (!clients.length ||
-            clients.includes(`${ACP}PublicClient`) ||
-            clients.includes(identity.client ?? "")) &&
+            ((this.implementation !== "ess" || !!identity.agent) &&
+              (clients.includes(`${ACP}PublicClient`) ||
+                clients.includes(identity.client ?? "")))) &&
           // ESS issuer enforcement is unestablished. Model a server ignoring it,
           // so retaining unsupported RDF can never manufacture safety evidence.
           (this.implementation === "ess" ||
@@ -213,12 +302,18 @@ export class FakePod {
         ) {
           const convert = (values: Iterable<string>) =>
             [...values].map((mode) =>
-              this.implementation === "ess" ? mode.replace(ACP, ACL) : mode,
+              this.implementation === "ess"
+                ? mode.startsWith(ACP)
+                  ? mode.replace(ACP, ACL)
+                  : mode.replace(ACL, "urn:unestablished-mode:")
+                : mode,
             );
           const grants = convert(policy.allow);
           const denials = convert(policy.deny);
           if (control) {
-            if (grants.includes(`${ACL}Write`)) allowed.add(`${ACL}Control`);
+            // ACR Append may permit editing sharing; never model it as powerless.
+            if (grants.includes(`${ACL}Write`) || grants.includes(`${ACL}Append`))
+              allowed.add(`${ACL}Control`);
             if (denials.includes(`${ACL}Write`)) denied.add(`${ACL}Control`);
           } else {
             for (const mode of grants)
@@ -329,6 +424,12 @@ export class FakePod {
       return new Response(null, { status: 412 });
     if (method === "PUT") {
       const bytes = new Uint8Array(await new Response(init.body).arrayBuffer());
+      if (auxiliary && this.implementation === "ess") {
+        const dataset = await parseRdf(new TextDecoder().decode(bytes), "text/turtle", {
+          baseIRI: url,
+        });
+        if (!allowedEssTarget(dataset, resource)) return new Response(null, { status: 400 });
+      }
       const next: Stored = {
         bytes,
         type: headers.get("content-type") ?? "application/octet-stream",

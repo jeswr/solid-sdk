@@ -56,7 +56,7 @@ describe("round 7: widest existing-target readings", () => {
     n("urn:partial").add(`${ACP}allOf`, "urn:partial:matcher");
     n("urn:partial:matcher").add(`${ACP}agent`, stranger);
     expect(() => readAcp(dataset, target.root, target.acl(target.root), "ess", true)).toThrow(
-      "Partial",
+      "allowlist",
     );
   });
   it.each([

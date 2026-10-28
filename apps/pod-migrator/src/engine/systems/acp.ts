@@ -4,6 +4,7 @@ import { AccessControlResource, type Matcher, Policy } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { ACL, ACP, modeIri, RDF, RdfNode, readModes, serialize } from "../rdf.js";
 import type { EffectivePolicy, Grant, Subject } from "../types.js";
+import { assertUnvalidatedTargetAcp } from "./acp-target.js";
 export class PolicyTooComplex extends Error {
   override name = "PolicyTooComplex";
 }
@@ -36,15 +37,17 @@ function matcherClauses(matcher: Matcher, dialect?: AcpDialect, negative = false
       ? [{ kind: "public" }]
       : [...matcher.vc].map((vcType) => ({ kind: "vc", vcType })),
   ];
+  // ESS client matching may require login, including PublicClient. Positive
+  // source clauses keep that requirement; uncertain denials stay broader.
+  if (dialect === "ess" && matcher.client.size) attributes.push([{ kind: "authenticated" }]);
   // CSS's reference implementation ANDs different attributes, ORs values of one attribute.
-  for (const attribute of attributes)
-    if (attribute.length) {
-      present = true;
-      result = product(
-        result,
-        attribute.map((subject) => [subject]),
-      );
-    }
+  for (const attribute of attributes.filter((values) => values.length > 0)) {
+    present = true;
+    result = product(
+      result,
+      attribute.map((subject) => [subject]),
+    );
+  }
   return present
     ? result.map((clause) =>
         clause.some((subject) => subject.kind !== "public")
@@ -70,6 +73,7 @@ export function readAcp(
   target = false,
   onInactive?: (node: string, reason: string) => void,
 ): EffectivePolicy {
+  if (target && dialect !== "css") assertUnvalidatedTargetAcp(dataset, resource);
   const result: EffectivePolicy = { grants: [], denials: [] };
   // CSS enumerates EVERY acp:resource statement, not only the requested IRI.
   // Track the entire reachable graph so detached/unknown controls fail closed.
@@ -117,22 +121,8 @@ export function readAcp(
         // ESS also accepts policy-level client requirements and VC-only policies.
         // No trusted creator metadata is available for existing target resources.
         // Reject every unmodelled target shape, including uncertain exclusions.
-        if (target && dialect === "ess") {
-          if (
-            !matcher.agent.size ||
-            matcher.issuer.size ||
-            matcher.vc.size ||
-            matcher.agent.has(`${ACP}CreatorAgent`) ||
-            matcher.agent.has(`${ACP}OwnerAgent`)
-          )
-            throw new TypeError(
-              "Existing target ESS matcher requires unestablished conditions or creator metadata",
-            );
-        }
       }
       if (!all.length && !any.length) {
-        if (target && dialect === "ess" && policy.allow.size)
-          throw new TypeError("Existing target ESS grant has no established positive matcher");
         return;
       }
       const expand = (matcherDialect?: AcpDialect, negative = false): Subject[][] => {
@@ -211,10 +201,6 @@ export function readAcp(
         )
           throw new TypeError("Target ACP Write/Append denial implication is ambiguous");
         if (control) {
-          if (target && modes.has("read") !== modes.has("write"))
-            throw new TypeError(
-              "Partial target ACR permissions cannot be represented safely as Control",
-            );
           const hasControl =
             field === "grants"
               ? modes.has("read") && modes.has("write")

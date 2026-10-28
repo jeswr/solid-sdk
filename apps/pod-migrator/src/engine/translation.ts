@@ -70,7 +70,7 @@ export function translatePolicy(
   const unestablished = (subject: Subject) =>
     (context.targetImplementation === "css" && subject.kind === "vc") ||
     (context.targetImplementation === "ess" &&
-      (subject.kind === "issuer" || subject.kind === "vc"));
+      (subject.kind === "client" || subject.kind === "issuer" || subject.kind === "vc"));
   let sourceRuleTurtle = context.sourceRuleTurtle;
   const choose = (
     kind: ReportKind,
@@ -94,7 +94,7 @@ export function translatePolicy(
     if (target === "acp" && original.except.some(unestablished)) {
       choose(
         "exclusion-unsupported",
-        "Target enforcement of this issuer or credential exclusion is not established. Omit the entire grant.",
+        "Target enforcement of this client, issuer or credential exclusion is not established. Omit the entire grant.",
         ["skip", "abort"],
         `${ruleIndex}:unestablished`,
       );
@@ -143,7 +143,7 @@ export function translatePolicy(
       if (clauses.some((clause) => clause.some(unestablished))) {
         choose(
           "condition-unsupported",
-          "Target enforcement of this issuer or credential condition is not established. Omit the affected clauses.",
+          "Target enforcement of this client, issuer or credential condition is not established. Omit the affected clauses.",
           ["skip", "abort"],
           `${ruleIndex}:unestablished`,
         );
@@ -273,7 +273,7 @@ export function translatePolicy(
       )
         choose(
           "deny-unsupported",
-          "ESS issuer and credential enforcement is not established. Apply this denial without those conditions or exclusions.",
+          "ESS client, issuer and credential target conditions are outside the allowlist. Apply this denial without those conditions or exclusions.",
           ["drop-overlapping", "abort"],
           `unestablished:${index}`,
         );

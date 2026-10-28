@@ -145,8 +145,11 @@ constructs, unknown ACP predicates, and ambiguous resource bindings make the doc
 (owner-only/skip/abort). ACR-self policies map to Control only for an independently established
 ESS source. CSS derives ACR access from Control on the protected resource through
 `AuthAuxiliaryReader`; ineffective ACR-self or `acp:access` grants must never become destination
-Control. `acp:PublicClient` matches
-any client context. Target documents must have exclusive resource/ACR-self scopes on read and
+Control. CSS's `acp:PublicClient` matches any client context. ESS source grants with
+any client condition, including `PublicClient`, require an authenticated agent under the
+narrower plausible login requirement;
+ESS source denials and grant exclusions retain the broader plausible wildcard reading.
+Target documents must have exclusive resource/ACR-self scopes on read and
 verification: conservative denials cannot mask a broader server-effective grant. Typed ESS
 ACR roots without `acp:resource` are supported only for an established ESS source and without
 competing resource bindings. ESS mode IRIs must likewise never identify the server dialect:
@@ -190,8 +193,7 @@ the resource's ACL/ACR and every ancestor document that can apply, during planni
 pre-write phase proof and verification. A grant with a condition or shape we cannot fully
 evaluate counts as granting to everyone, or the path is refused with `acl-unreadable` and
 skip/abort. It is never silently narrowed or dropped. This implementation refuses unsupported
-target shapes, including separate ESS agent/client matchers, VC-only policies, unknown
-conditions and ESS issuer/VC conditions. A denial counts only when that implementation
+target shapes. A denial counts only when that implementation
 provably enforces it in that scope; unknown denials are not trusted. ESS resource-level
 `deny acp:Control` cannot restrict ACR permissions inherited through `memberAccess` and is
 ignored in the target proof. Partial ACR Read/Write permissions are refused rather than
@@ -201,6 +203,37 @@ The engine currently has no trusted creator metadata channel and refuses such ta
 documents. The symbolic prover never equates an unknown creator with the target owner.
 The fake pod and independent oracle use server semantics and retained creation metadata,
 including collaborator-created resources; they must not repeat source-reader restrictions.
+
+**Closed allowlist for targets without live validation (ESS and any non-CSS ACP).** Before
+modelling an existing document, require the complete graph to fit these shapes. Apply this
+check to the destination resource and every ancestor whose member controls can apply, during
+planning, the fresh pre-write proof and verification. CSS retains its live-validated model.
+
+- One ACR root, exclusively bound by `acp:resource` to this resource, with resource and/or
+  member controls. The existing ESS typed-root fixture also permits exactly one typed
+  `acp:AccessControlResource` root without `acp:resource`; competing roots are refused.
+- `acp:accessControl` / `acp:memberAccessControl` link to controls containing exactly one
+  `acp:apply` policy. A policy has only `acp:allOf` matchers, optional `acp:noneOf` matchers,
+  and either allow or deny modes from **acp:Read, acp:Write, acp:Append, acp:Control**. At least
+  one positive matcher is required. The writer's inert resource policy for a Control-only
+  rule may have no modes. Write/Append denials must still satisfy the existing paired-mode rule.
+- Each matcher contains exactly one `acp:agent`: an explicit WebID, `acp:PublicAgent`, or
+  `acp:AuthenticatedAgent`. Multiple emitted matchers may form a conjunction or exclusions.
+- `acp:access` / `acp:memberAccess` link directly to policies with the same matcher shape and
+  **exactly acp:Read + acp:Write** in one polarity, matching emitted ACR Control policies.
+- Correct role types (`AccessControlResource`, `AccessControl`, `Policy`, `Matcher`) are optional
+  except on the unbound typed root. No other types, predicates, detached nodes, named graphs,
+  competing node roles, or extra triples are permitted, including on policies and matchers.
+
+This admits the migrator's owner locks and simple grant/denial output. It refuses ACR Append,
+partial ACR permissions, all `acl:` mode IRIs in ACRs, `PublicClient`, client/issuer/VC and
+owner/creator role matchers, `anyOf`, and unknown constructs in full, without partial modelling.
+An unallowlisted document makes the entire destination path an `acl-unreadable` report item
+with **skip / abort**; the plan writes nothing beneath it. ESS output omits client/issuer/VC
+grant clauses and exclusions and broadens affected denials, with report items, so generated
+documents obey the same grammar. The fake independently checks this grammar for target writes
+and in the dialect matrix; its hostile-source evaluator remains separate. The typed-root
+fixture is an offline contract, not a captured fresh PodSpaces ACR or live ESS validation.
 
 `PodSide.implementation` is an optional, trusted caller assertion (`css`, `ess`, `nss`), established
 independently of editable access RDF. An unknown source uses conservative readings; ACP target
@@ -214,7 +247,7 @@ checker chain ignores `acl:origin`: origin-restricted grants are unsupported on 
 ACP target**, with skip/abort. Preserving the condition's RDF text is not a safe translation.
 ESS issuer matching has no established enforcement evidence, and the generic `acp:vc` type
 equality used by the fake is not evidence of ESS's documented credential-grant processing.
-Issuer- or VC-conditioned grants to ESS are omitted with `condition-unsupported` and
+Client-, issuer- or VC-conditioned grants to ESS are omitted with `condition-unsupported` and
 skip/abort; grants with those exclusions are omitted with `exclusion-unsupported`. Denials
 are applied without those conditions or exclusions, with a `deny-unsupported` report item;
 an otherwise empty positive clause becomes public. Other established conjuncts remain.
@@ -246,7 +279,7 @@ controls the target pod.
 | agent, public, authenticated | same | same | — |
 | WAC `agentGroup` | same | no equivalent | `group-unsupported`: **skip** (drop the grant) / **expand** to the group's current members, read anonymously at plan time only when publicly readable, shown as a list, with a warning that later membership changes won't follow / **abort** |
 | WAC `acl:origin` | enforcement unestablished (CSS ignores it) | no equivalent (`acp:client` is a client id, not an origin) | `origin-unsupported`: **skip** / **abort**. Drop the affected grant clause; never retain or remove only the condition |
-| ACP `client`, `issuer`, `vc` in a clause | no equivalent | client retained; CSS issuer retained; ESS issuer/VC and CSS VC unsupported | `condition-unsupported`: **skip the clause** / **abort**. Never drop just the condition |
+| ACP `client`, `issuer`, `vc` in a clause | no equivalent | CSS client/issuer retained; ESS client/issuer/VC and CSS VC unsupported | `condition-unsupported`: **skip the clause** / **abort**. Never drop just the condition |
 | ACP `noneOf` exclusions | no equivalent | same | `exclusion-unsupported`: **skip the grant** / **abort** |
 | ACP `deny` | subtract it when the denial's subjects exactly cover a grant's clause; otherwise | same | `deny-unsupported`: **drop every grant the denial overlaps** (narrowest) / **abort** |
 | ACP `creator` / `owner` | target owner WebID | same | info item `owner-mapped` |
@@ -276,9 +309,10 @@ remain restrictive. ESS client-only grants are inactive. The reader accepts the 
 ESS subset in which each required matcher includes an agent attribute and no unestablished
 issuer/VC condition. Source denials use the broadest plausible positive matching and narrowest plausible exclusions, so a missing
 agent cannot weaken a denial. Unestablished ESS issuer/VC conditions are unrestricted for
-source denials and grant exclusions. The ESS target writer adds `PublicAgent` to supported
-client matchers; translation omits issuer/VC grant clauses and broadens affected denials.
-It preserves supported conjunctions as separate matchers, including repeated attributes.
+source denials and grant exclusions. ESS source `PublicClient` grants require login; an
+otherwise public clause becomes authenticated. ESS target translation omits client/issuer/VC
+grant clauses and broadens affected denials. It preserves allowed agent conjunctions as
+separate matchers. Existing ESS documents must pass the closed allowlist above first.
 
 Group evidence uses `PodSide.publicHttp`, a separate fenced transport over auth-core's pristine
 `publicFetch`. There is no owner-token fallback, including for unknown implementations. CSS's
@@ -325,22 +359,22 @@ nested ESS folders, ineffective Control denials, and unsupported target shapes.
 | `group-private` | S no membership; T no private match; M no expansion | S/T absent; M drop | S/T absent; M drop | S private resolution uncertain; T not relied on; M no expansion | Never infer no target access from missing membership evidence; refuse uncertain overwrite |
 | `owner` | S/T absent; M owner-only substitution | S no context; T not enforced; M drop inactive clause | S possible owner role; T existing role refused without trusted metadata; M emit explicit target owner | S/T absent; M owner-only substitution | Refuse role matchers without trusted metadata; no owner exemption for an unknown role |
 | `creator` | S/T absent; M owner-only substitution | S no context; T not enforced; M drop inactive clause | S documented creator role; T existing role refused without trusted metadata; M map source grant only to target owner; omit creator exclusions and narrow denials | S/T absent; M owner-only substitution | Collaborator remains creator after overwrite; refuse without trusted metadata |
-| `client-only` | S/T absent; M drop clause | S/T can match without agent; M retain to ACP | S inactive without identity/VC requirement; T unsupported existing shape refused; M drop source clause; supported output supplies `PublicAgent` | S/T absent; M drop clause | CSS reads actual condition; ESS refuses unmodelled no-agent matcher |
-| `client-agent` | S/T absent; M drop clause | S/T AND attributes, OR values; M retain | S/T agent AND client; M retain all conditions | S/T absent; M drop clause | Retain supported agent/client conjunction in both scopes; prove all contexts |
+| `client-only` | S/T absent; M drop clause | S/T can match without agent; M retain to CSS ACP | S inactive without identity/VC requirement; T outside allowlist; M drop clause | S/T absent; M drop clause | CSS reads actual condition; ESS refuses all client matchers |
+| `client-agent` | S/T absent; M drop clause | S/T AND attributes, OR values; M retain | S agent AND client; T outside allowlist; M omit target clause | S/T absent; M drop clause | ESS refuses client matchers; CSS retains and proves conjunctions |
 | `client-separate` | S/T absent; M drop clause | S/T policy-level conjunction; M retain | S documented agent and separate client requirement; T existing shape refused; M source subset omits with report | S/T absent; M drop clause | ESS refuses separate no-agent client matcher; CSS evaluates conjunction |
 | `issuer` | S/T absent; M drop clause | S/T exact issuer equality; M retain | S enforcement unestablished; T enforcement unestablished; M omit source/target grant, broaden denial without issuer | S/T absent; M drop clause | ESS refuses uncertain condition; CSS evaluates exact issuer in both scopes |
 | `vc` | S/T absent; M drop clause | S no VC context; T unenforced; M drop inactive/unsupported clause | S generic `acp:vc` equality unestablished; T likewise; M omit source/target grant, broaden denial | S/T absent; M drop clause | Refuse unestablished target VC conditions in either scope |
 | `vc-only` | S/T absent; M drop clause | S no VC context; T not used; M drop | S documented VC policies may grant; T generic condition unestablished; M source subset omits, target refuses | S/T absent; M drop clause | ESS oracle permits matching VC context; target reader refuses instead of dropping grant |
 | `origin` | S ignored; T unenforced; M omit clause | S/T absent; M omit clause | S/T absent; M omit clause | S may restrict; T unestablished; M omit clause | Ignore uncertain target origin restriction and count the full grant |
 | `allOf` | S/T no arbitrary conjunction; M narrow or omit | S/T every matcher must match; M retain | S documented policy-level agent/client conjunction; T supported subset only; M source narrows, target refuses unmodelled forms | S/T no arbitrary conjunction; M narrow or omit | Keep every established conjunct; refuse unmodelled target matcher forms |
-| `anyOf` | S/T union of principals; M retain representable clauses | S/T at least one matcher; M retain disjunction | S documented alternatives; T supported subset only; M source drops uncertain alternatives, target refuses them | S/T union of principals; M retain representable clauses | Keep every possible alternative; refuse unsupported target alternatives |
+| `anyOf` | S/T union of principals; M retain representable clauses | S/T at least one matcher; M retain disjunction | S documented alternatives; T outside allowlist; M split supported source alternatives into emitted policies | S/T union of principals; M retain representable clauses | ESS refuses existing anyOf; CSS keeps every possible alternative |
 | `deny` | S/T absent; M subtract exact or drop overlaps | S/T deny overrides allow; M retain | S/T deny overrides allow; M retain conservatively | S/T absent; M subtract or drop overlaps | Count only established, applicable denials; no uncertain denial may hide a grant |
 | `noneOf` | S/T absent; M omit excluded grant | S/T no excluded matcher may match; M retain | S/T exclusions; M retain conservative exclusion | S/T absent; M omit excluded grant | Keep only established exclusions; refuse ambiguous target exclusions |
 | `deny-vc` | S/T absent; M narrow overlaps | S inactive; T unenforced; M drop inactive denial or affected ESS grants | S possibly credential-conditioned; T generic VC condition unestablished; M broaden denial without VC condition | S/T absent; M narrow overlaps | Refuse unestablished denial condition; never use it to mask a grant |
 | `noneOf-vc` | S/T absent; M omit grant | S exclusion inactive; T unenforced; M remove inactive exclusion or omit ESS grant | S possibly restrictive; T unestablished; M omit excluded grant | S/T absent; M omit grant | Refuse unestablished exclusion; never use it to narrow a target grant |
 | `deny-except-vc` | S/T absent; M drop overlaps | S exclusion inactive; T untrusted; M broaden denial | S exclusion may apply; T unestablished; M remove exclusion to broaden denial | S/T absent; M drop overlaps | Refuse unestablished denial/exclusion combination |
-| `noneOf-client-only` | S/T absent; M omit grant | S/T client-only exclusion; M retain | S uncertain exclusion variant; T existing shape refused; M source conservatively retains exclusion; writer supplies agent | S/T absent; M omit grant | ESS refuses unmodelled exclusion; CSS evaluates actual client condition |
-| `deny-client-only` | S/T absent; M drop overlaps | S/T client-only denial; M retain | S inactive or uncertain variant; T existing shape refused; M source retains possible denial; writer supplies agent | S/T absent; M drop overlaps | ESS refuses unmodelled denial matcher; CSS evaluates actual client condition |
+| `noneOf-client-only` | S/T absent; M omit grant | S/T client-only exclusion; M retain | S uncertain exclusion variant; T outside allowlist; M conservatively retain source exclusion, omit target grant | S/T absent; M omit grant | ESS refuses client exclusions; CSS evaluates actual client condition |
+| `deny-client-only` | S/T absent; M drop overlaps | S/T client-only denial; M retain | S inactive or uncertain variant; T outside allowlist; M retain possible source denial, broaden target denial | S/T absent; M drop overlaps | ESS refuses client denials; CSS evaluates actual client condition |
 | `deny-issuer` | S/T absent; M narrow overlaps | S/T exact issuer-conditioned denial; M retain | S condition may restrict; T unestablished; M broaden denial without issuer | S/T absent; M narrow overlaps | ESS refuses unestablished issuer denial; CSS evaluates actual condition |
 | `noneOf-issuer` | S/T absent; M omit grant | S/T exact issuer exclusion; M retain | S exclusion may restrict; T unestablished; M omit grant | S/T absent; M omit grant | ESS refuses unestablished issuer exclusion; CSS evaluates actual condition |
 | `deny-except-issuer` | S/T absent; M narrow overlaps | S/T issuer exclusion on denial; M retain | S exclusion may apply; T unestablished; M remove exclusion | S/T absent; M narrow overlaps | ESS refuses unestablished issuer exclusion on a denial |
@@ -352,12 +386,18 @@ nested ESS folders, ineffective Control denials, and unsupported target shapes.
 | `deny-append` | S/T absent; M subtract conservatively | S before implication; T writer denies both modes; M broaden denial | S mode denied; T both modes denied; M broaden denial | S/T absent; M subtract conservatively | Refuse one-mode ACP target denial; cannot mask derived Append |
 | `deny-write` | S/T absent; M subtract conservatively | S before implication; T writer denies both modes; M broaden denial | S mode denied; T both modes denied; M broaden denial | S/T absent; M subtract conservatively | Refuse one-mode ACP target denial; cannot mask Append-only access |
 | `defaultForNew` | S ignored; T not emitted; M refuse | S/T absent; M no grant | S/T absent; M no grant | S legacy inheritance; T modern `default`; M normalize only established NSS | NSS reads legacy defaults; other dialects refuse unsupported target shape |
-| `acp-modes` | S/T absent; M no grant | S ignored; T emits `acl:*`; M refuse mixed source | S/T `acp:Read/Write/Append`; M normalize vocabulary | S/T absent; M no grant | ESS normalizes established modes; CSS refuses mixed target vocabulary |
+| `acp-modes` | S/T absent; M no grant | S ignored; T emits `acl:*`; M refuse mixed source | S/T only `acp:Read/Write/Append`; M normalize vocabulary | S/T absent; M no grant | ESS allowlist refuses every `acl:` mode, including denials; CSS refuses ACP modes |
 | `typed-acr` | S/T absent; M no grant | S ignores missing `resource`; T requires binding; M refuse | S typed root fallback; T explicit exclusive binding; M normalize | S/T absent; M no grant | ESS fallback only when exclusive; CSS refuses; separate owner binding keeps fixture readable |
-| `acr-self` | S/T absent; M no grant | S no protected Control; T not emitted; M refuse grant | S ACR-self Read+Write gives Control; T scoped access; M normalize | S/T absent; M no grant | CSS refuses unsupported ACR-self form; ESS reads exclusive ACR Control scope |
+| `acr-self` | S/T absent; M no grant | S no protected Control; T not emitted; M refuse grant | S ACR-self Read+Write gives Control; T outside allowlist; M normalize source into scoped access | S/T absent; M no grant | Both target readers refuse this existing form |
 | `access` | S/T absent; M no grant | S ignored; T not emitted; M refuse grant | S/T resource ACR Read+Write gives Control; M preserve resource scope | S/T absent; M no grant | ESS reads ACR permissions separately; CSS refuses ineffective target form |
 | `memberAccess` | S/T absent; M no grant | S ignored; T not emitted; M refuse grant | S/T descendant ACR Read+Write gives Control; M preserve member scope | S/T absent; M no grant | ESS ancestor ACR permissions remain additive; no resource-mode denial can remove them |
 | `resource-control-mode` | S/T absent in ACP form; M no grant | S/T resource `acl:Control`; M normalize | S resource Control mode inactive; T resource grant/denial ignored, cannot restrict inherited ACR access; M do not emit | S/T absent in ACP form; M no grant | Ignore ESS resource Control denial; inherited memberAccess Control remains visible |
+
+The additional `unvalidated-target allowlist matrix` accept/reject rows enumerate owner locks,
+the typed-root fixture, agent/public/authenticated grants, all permitted modes, denials and
+exclusions, and adversarial changes to every graph role. Independent fake and engine decisions
+must agree. Round-8 regressions exercise ACR Append, mixed-vocabulary denials and PublicClient
+denials on resources and ancestors, plus source wildcard translation to both target languages.
 
 ## 6. Writing ACLs and ACRs
 
