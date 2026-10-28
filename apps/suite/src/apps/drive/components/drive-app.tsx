@@ -14,7 +14,7 @@ import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
 import { measureUsage, purgeExpired } from "../lib/operations/operations";
 import { DriveFocusBoundary } from "../state/app-focus";
-import { DriveProvider, useDrive } from "../state/drive-context";
+import { DriveProvider, DriveRootDiscoveryError, useDrive } from "../state/drive-context";
 import { claimPurge } from "../state/purge-marker";
 import { DriveUiProvider, useDriveUi } from "../state/ui";
 import { DetailsPane } from "./details";
@@ -115,7 +115,11 @@ function DriveChrome({ children }: { children: ReactNode }) {
       {rootError ? (
         <div className="drv-state" role="alert">
           <h1>Can't open your Drive</h1>
-          <p>The storage didn't respond.</p>
+          <p>
+            {rootError instanceof DriveRootDiscoveryError
+              ? rootError.message
+              : "The storage didn't respond."}
+          </p>
           <Button variant="outline" onClick={() => location.reload()}>
             Retry
           </Button>

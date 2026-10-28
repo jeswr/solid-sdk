@@ -7,7 +7,10 @@ import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 import { DRIVE, OWNER, PUBLIC, ROOT, wacPod } from "./drive-wac-pod";
 
 const route = vi.hoisted(() => ({ ref: "" }));
-vi.mock("@/apps/docs/lib/model/type-index", () => ({ ensureTypeRegistrations: vi.fn() }));
+vi.mock("@/apps/docs/lib/model/type-index", () => ({
+  discoverProfileRegistrations: vi.fn(async () => []),
+  ensureTypeRegistrations: vi.fn(),
+}));
 vi.mock("@/lib/refs", async () => import("../src/lib/refs"));
 vi.mock("next/navigation", () => {
   const search = new URLSearchParams();

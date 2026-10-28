@@ -8,6 +8,7 @@
  * queue. Screens read it through {@link useDrive} and {@link useFolder}.
  */
 
+import { termsEqual } from "@jeswr/suite-vocab";
 import {
   createContext,
   type ReactNode,
@@ -18,7 +19,10 @@ import {
   useRef,
   useState,
 } from "react";
-import { ensureTypeRegistrations } from "@/apps/docs/lib/model/type-index";
+import {
+  discoverProfileRegistrations,
+  ensureTypeRegistrations,
+} from "@/apps/docs/lib/model/type-index";
 import type { PodSession } from "@/lib/session/pod-session";
 import {
   createSolidDriveClient,
@@ -52,7 +56,28 @@ export interface DriveContextValue {
 
 const DriveContext = createContext<DriveContextValue | undefined>(undefined);
 
+export class DriveRootDiscoveryError extends Error {
+  constructor(cause: unknown) {
+    super("Can't read your Drive type index. Check your access and retry.", { cause });
+  }
+}
+
 async function resolveDriveRoot(client: DriveClient, session: PodSession): Promise<string> {
+  try {
+    const locations = await discoverProfileRegistrations(
+      session.webId,
+      session.fetch,
+      session.storageUrl,
+    );
+    // Reuse the first DriveRoot container in discovery order (public, then private).
+    // Other classes and solid:instance resources do not designate a Drive root.
+    const existing = locations.find(
+      (location) => termsEqual(location.forClass, DRIVE_ROOT_CLASS) && location.container,
+    )?.container;
+    if (existing) return existing;
+  } catch (cause) {
+    throw new DriveRootDiscoveryError(cause);
+  }
   const root = `${session.storageUrl}drive/`;
   try {
     await client.createFolder(root);

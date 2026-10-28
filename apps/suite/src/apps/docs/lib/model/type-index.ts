@@ -283,12 +283,16 @@ export async function ensureTypeRegistrations(opts: {
  * Read a WebID profile's type indexes and return every registered location.
  * The profile dataset must already be fetched (it carries the index links).
  * A missing/unreadable index (404/403) contributes nothing rather than failing.
+ * Set `requireReadable` for bootstrap decisions: an inaccessible index cannot
+ * prove absence and must prevent creating a competing registration. A 404 is
+ * confirmed absence in either mode.
  */
 export async function discoverRegistrations(
   webId: string,
   profile: DatasetCore,
   fetchImpl: typeof fetch,
   podRoot: string,
+  requireReadable = false,
 ): Promise<RegisteredLocation[]> {
   const links = typeIndexLinks(webId, profile);
   const urls = [links.publicIndex, links.privateIndex].filter((u): u is string => Boolean(u));
@@ -304,9 +308,27 @@ export async function discoverRegistrations(
         out.push(location);
       }
     } catch (e) {
-      if (e instanceof RdfFetchError && (e.status === 404 || e.status === 403)) continue;
+      if (
+        e instanceof RdfFetchError &&
+        (e.status === 404 || (!requireReadable && e.status === 403))
+      )
+        continue;
       throw e;
     }
   }
   return out;
+}
+
+/**
+ * Discover before bootstrap, failing if the profile or an existing advertised
+ * index cannot be read. Order is public then private, preserving each index's
+ * registration order so callers can consistently choose the first match.
+ */
+export async function discoverProfileRegistrations(
+  webId: string,
+  fetchImpl: typeof fetch,
+  podRoot: string,
+): Promise<RegisteredLocation[]> {
+  const { dataset } = await readRdf(webId, refuseRedirects(fetchImpl));
+  return discoverRegistrations(webId, dataset, fetchImpl, podRoot, true);
 }
