@@ -644,7 +644,7 @@ it("Undo uses the move response validator even if a replacement is present befor
   };
   await act(async () => options.action.onClick());
   expect(mocks.undoMove).toHaveBeenCalledWith(
-    expect.any(Object),
+    expect.objectContaining({ onProtectionChange: drive.invalidate }),
     destination,
     items[0]?.url,
     copiedEtag,

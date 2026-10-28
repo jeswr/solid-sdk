@@ -102,21 +102,6 @@ async function resolveDriveRoot(client: DriveClient, session: PodSession): Promi
 
 export function DriveProvider({ session, children }: { session: PodSession; children: ReactNode }) {
   const { confirmAccess, dialog } = useAccessConfirmation();
-  const client = useMemo(
-    () =>
-      createSolidDriveClient({
-        storageUrl: session.storageUrl,
-        fetch: session.fetch,
-        confirmAccess,
-        webId: session.webId,
-        onPrivateFolder: (url) =>
-          toast(`${nameOf(url)} was restored as private`, {
-            description:
-              "Its original access was unknown. Only you can access this folder and new files in it.",
-          }),
-      }),
-    [session, confirmAccess],
-  );
   const [driveRoot, setDriveRoot] = useState<string>();
   const [rootError, setRootError] = useState<unknown>();
   const [prefs, updatePrefs] = useDrivePreferences(session.webId);
@@ -156,6 +141,23 @@ export function DriveProvider({ session, children }: { session: PodSession; chil
       }
     }
   }, []);
+
+  const client = useMemo(
+    () =>
+      createSolidDriveClient({
+        storageUrl: session.storageUrl,
+        fetch: session.fetch,
+        confirmAccess,
+        webId: session.webId,
+        onProtectionChange: invalidate,
+        onPrivateFolder: (url) =>
+          toast(`${nameOf(url)} was restored as private`, {
+            description:
+              "Its original access was unknown. Only you can access this folder and new files in it.",
+          }),
+      }),
+    [session, confirmAccess, invalidate],
+  );
 
   useEffect(() => session.subscribe((url) => invalidate(url)), [session, invalidate]);
 

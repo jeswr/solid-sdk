@@ -49,7 +49,7 @@ export function protectionLedger(http: typeof fetch) {
     } catch (cause) {
       throw new DriveAccessError(
         cause,
-        "Drive could not read or save required folder protection in IndexedDB. Enable browser storage and retry.",
+        "Drive could not read or save required resource protection in IndexedDB. Enable browser storage and retry.",
       );
     }
   };

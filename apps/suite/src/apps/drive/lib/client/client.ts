@@ -31,6 +31,7 @@ import {
   policyArchiveOf,
   requirePolicy,
 } from "./ancestors";
+import { protectionLedger } from "./protection-ledger";
 import { containerData, relocate, sameGraph } from "./rdf";
 
 export type { ContainerPolicy } from "./ancestors";
@@ -54,6 +55,8 @@ export interface DriveItem {
   readonly size?: number;
   readonly modified?: Date;
   readonly etag?: string;
+  /** A durable own-ACL requirement is still awaiting verification. */
+  readonly protectionRequired?: true;
 }
 
 export interface WriteOptions {
@@ -275,10 +278,14 @@ export function createSolidDriveClient(options: {
   confirmAccess?: ConfirmAccess;
   webId?: string;
   onPrivateFolder?: (url: string) => void;
+  onProtectionChange?: (url: string) => void;
 }): DriveClient {
   const { storageUrl } = options;
   const http = options.fetch;
   const access = accessControl(http, storageUrl);
+  const ledger = protectionLedger(http);
+  const protection = async (url: string): Promise<{ protectionRequired?: true }> =>
+    (await ledger.get(url)) ? { protectionRequired: true } : {};
   let owner = options.webId;
   // Scoped to this authenticated client; listings retain their declared metadata for HEAD users.
   const resources = new Map<string, Resource>();
@@ -320,7 +327,15 @@ export function createSolidDriveClient(options: {
     }
   };
 
-  const list: DriveClient["list"] = async (url, opts) => (await listing(url, opts)).items;
+  const list: DriveClient["list"] = async (url, opts) => {
+    await provision.check(url);
+    return Promise.all(
+      (await listing(url, opts)).items.map(async (item) => ({
+        ...item,
+        ...(await protection(item.url)),
+      })),
+    );
+  };
 
   const stat: DriveClient["stat"] = async (url, opts) => {
     const response = await ensureOk(
@@ -346,10 +361,12 @@ export function createSolidDriveClient(options: {
       ...(length !== null && !isFolder ? { size: Number(length) } : {}),
       ...(modified ? { modified: new Date(modified) } : {}),
       ...(etag ? { etag } : {}),
+      ...(await protection(url)),
     };
   };
 
   const readVersion: DriveClient["readVersion"] = async (url) => {
+    await provision.check(url);
     const response = await ensureOk(await http(url), url);
     rememberType(url, response.headers);
     const body = await response.blob();
@@ -360,6 +377,7 @@ export function createSolidDriveClient(options: {
   const read: DriveClient["read"] = async (url) => (await readVersion(url)).body;
 
   const readRdf: DriveClient["readRdf"] = async (url) => {
+    await provision.check(url);
     try {
       const result = await fetchRdf(url, { fetch: http });
       rememberType(url, result.response.headers);
@@ -375,7 +393,7 @@ export function createSolidDriveClient(options: {
   };
 
   // The only payload/container PUT seam. A provisioner may skip only its own
-  // unfinished ACL while creating the empty container, never its ancestors'.
+  // unfinished ACL while creating an empty placeholder, never its ancestors'.
   const guardedWrite = async (
     url: string,
     init: RequestInit,
@@ -402,16 +420,13 @@ export function createSolidDriveClient(options: {
     return etag ? { etag } : {};
   };
 
-  const rawPutFolder = async (target: string): Promise<Response> => {
+  const rawPut = async (target: string, body: string, headers: HeadersInit): Promise<Response> => {
     return guardedWrite(
       target,
       {
         method: "PUT",
-        headers: {
-          "content-type": "text/turtle",
-          "if-none-match": "*",
-          link: '<http://www.w3.org/ns/ldp#BasicContainer>; rel="type"',
-        },
+        body,
+        headers,
       },
       true,
     );
@@ -422,10 +437,16 @@ export function createSolidDriveClient(options: {
     http,
     access,
     readRdf,
-    putFolder: rawPutFolder,
+    putFolder: (url) =>
+      rawPut(url, "", {
+        "content-type": "text/turtle",
+        "if-none-match": "*",
+        link: '<http://www.w3.org/ns/ldp#BasicContainer>; rel="type"',
+      }),
     error: errorFor,
     owner: () => owner,
     ...(options.onPrivateFolder ? { onPrivateFolder: options.onPrivateFolder } : {}),
+    ...(options.onProtectionChange ? { onProtectionChange: options.onProtectionChange } : {}),
   });
   const createFolder: DriveClient["createFolder"] = async (url, policy) => {
     const target = url.endsWith("/") ? url : `${url}/`;
@@ -438,6 +459,7 @@ export function createSolidDriveClient(options: {
     requireValidator: boolean,
     bodies: boolean,
   ): Promise<SourceSnapshot> => {
+    if (bodies) await provision.check(url);
     const policy = (headers: Headers): Promise<AccessState> =>
       bodies
         ? access.snapshot(url, headers)
@@ -573,18 +595,23 @@ export function createSolidDriveClient(options: {
     } else {
       let placeholder: CreatedResource | undefined;
       if (policy) {
-        const empty = await write(
+        const resource: CreatedResource = { url: to, etag: undefined };
+        const result = await provision.file(
           to,
-          "",
-          {
-            contentType: source.contentType as string,
-            ifNoneMatch: "*",
+          policy,
+          source.url,
+          () =>
+            rawPut(to, "", {
+              "content-type": source.contentType as string,
+              "if-none-match": "*",
+            }),
+          (response) => {
+            resource.etag = response.headers.get("etag") ?? undefined;
+            created.push(resource);
           },
-          { kind: "protect-ancestors" },
         );
-        placeholder = { url: to, etag: empty.etag };
-        created.push(placeholder);
-        copiedAccess.set(to, await access.install(policy, source.url, to));
+        placeholder = resource;
+        copiedAccess.set(to, result.policy as OwnAccess);
       }
       const result = await write(
         to,
@@ -710,6 +737,7 @@ export function createSolidDriveClient(options: {
 
   const mergeContainer: DriveClient["mergeContainer"] = async (from, to, decision) => {
     requirePolicy(decision, ["preserve-source"]);
+    await provision.check(from);
     const original = await listing(from);
     const own = await access.snapshot(from, original.headers);
     const source: SourceSnapshot = {

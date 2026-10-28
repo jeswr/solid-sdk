@@ -76,6 +76,7 @@ import { OwnerLabel } from "../state/ownership";
 import { errorMessage, focusDriveListing, useDriveActions, useDriveUi } from "../state/ui";
 import { ItemIcon } from "./item-icon";
 import { ContextEntries, DropdownEntries, useItemMenu } from "./item-menu";
+import { ProtectionBanner } from "./protection-banner";
 
 export type BrowserItem = DriveItem & { readonly folder?: string; readonly openedAt?: Date };
 export type BrowserColumn =
@@ -898,6 +899,11 @@ export function FileBrowser(props: FileBrowserProps) {
         ) : null}
       </div>
       {props.banner}
+      {items
+        ?.filter((item) => item.protectionRequired)
+        .map((item) => (
+          <ProtectionBanner key={item.url} item={item} />
+        ))}
       {toolbar}
       {/* biome-ignore lint/a11y/noStaticElementInteractions: keyboard model for the listing lives on its wrapper */}
       <div

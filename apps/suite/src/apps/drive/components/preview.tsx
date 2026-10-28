@@ -38,6 +38,7 @@ import { useRecordSharedOpen } from "../state/shared";
 import { captureDriveFocusRemoval, useDriveActions, useDriveUi } from "../state/ui";
 import { DetailsPane } from "./details";
 import { ItemIcon } from "./item-icon";
+import { ProtectionBanner } from "./protection-banner";
 
 const TEXT_LIMIT = 1024 * 1024;
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
@@ -110,6 +111,10 @@ function useLoadedFile(
     let objectUrl: string | undefined;
     setState({ status: "loading" });
     if (metadataStatus === "loading") return;
+    if (item.protectionRequired) {
+      setState({ status: "error" });
+      return;
+    }
     const recordOnce = (current: DriveItem) => {
       if (recorded.current) return;
       recorded.current = true;
@@ -179,6 +184,7 @@ function useLoadedFile(
     version,
     recordOpen,
     metadataStatus,
+    item.protectionRequired,
   ]);
   return state;
 }
@@ -233,6 +239,7 @@ export function PreviewBody({
   const actions = useDriveActions();
   const loaded = useLoadedFile(client, item, metadataStatus);
   const kind = filePreviewKind(item);
+  if (item.protectionRequired) return <ProtectionBanner key={item.url} item={item} />;
   if (loaded.status === "loading")
     return <Skeleton className="drv-preview-skeleton" aria-label="Loading preview" />;
   if (loaded.status === "error") {

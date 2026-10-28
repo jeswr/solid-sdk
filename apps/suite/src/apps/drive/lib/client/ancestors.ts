@@ -21,7 +21,7 @@ const provisioning = new Map<string, Promise<void>>();
 function singleFlight(url: string, work: () => Promise<void>, join = true): Promise<void> {
   const current = provisioning.get(url);
   if (current) return join ? current : current.then(() => singleFlight(url, work, false));
-  // Publish before the first request, and retain failures through empty-folder cleanup.
+  // Publish before the first request, and retain failures through empty-resource cleanup.
   const pending = Promise.resolve()
     .then(async () => {
       const locks = globalThis.navigator?.locks;
@@ -73,6 +73,7 @@ export function ancestorGuard(options: {
   error: (status: number, url: string) => Error;
   owner: () => string | undefined;
   onPrivateFolder?: (url: string) => void;
+  onProtectionChange?: (url: string) => void;
 }) {
   const { http, storageUrl, access } = options;
   const ledger = protectionLedger(http);
@@ -106,7 +107,7 @@ export function ancestorGuard(options: {
     ) {
       throw new DriveAccessError(
         own,
-        "This folder still requires protection. Check that pod CORS exposes Link and ETag, then retry.",
+        `This ${url.endsWith("/") ? "folder" : "file"} still requires protection. Check that pod CORS exposes Link and ETag, then retry.`,
       );
     }
     await ledger.clear(url);
@@ -118,28 +119,36 @@ export function ancestorGuard(options: {
   };
   const cleanup = async (url: string, response: Response) => {
     const etag = response.headers.get("etag");
-    // Unknown/foreign control documents are not ours to remove with the folder.
+    // Unknown/foreign control documents are not ours to remove with the resource.
     if (etag && (await access.snapshot(url, response.headers)).status !== "unknown")
       await http(url, { method: "DELETE", headers: { "if-match": etag } }).catch(() => undefined);
   };
   // The sole raw creation seam, private to the provisioner. Callers hold this
-  // folder's flight and must supply either verified inheritance or an ACL.
+  // resource's flight and must supply either verified inheritance or an ACL.
   const create = async (
     url: string,
     decision: Exclude<ContainerPolicy, { kind: "owner-only" }>,
     onCreated?: (response: Response) => void,
+    put = () => options.putFolder(url),
   ): Promise<{ response: Response; policy?: OwnAccess }> => {
-    if (decision.kind === "archived")
-      await ledger.set(url, await requirementFor(decision.acl, decision.from));
-    const response = await options.putFolder(url);
-    onCreated?.(response);
     try {
-      const policy =
-        decision.kind === "archived" ? await install(url, decision.acl, decision.from) : undefined;
-      return { response, ...(policy ? { policy } : {}) };
-    } catch (error) {
-      await cleanup(url, response);
-      throw error;
+      if (decision.kind === "archived")
+        await ledger.set(url, await requirementFor(decision.acl, decision.from));
+      const response = await put();
+      onCreated?.(response);
+      try {
+        const policy =
+          decision.kind === "archived"
+            ? await install(url, decision.acl, decision.from)
+            : undefined;
+        return { response, ...(policy ? { policy } : {}) };
+      } catch (error) {
+        await cleanup(url, response);
+        throw error;
+      }
+    } finally {
+      // Failed cleanup can leave an item even when the operation reports failure.
+      options.onProtectionChange?.(url);
     }
   };
   const archived = async (url: string): Promise<OwnAccess | undefined> => {
@@ -259,90 +268,109 @@ export function ancestorGuard(options: {
         if (plan?.private && !container.includes("/.trash/")) options.onPrivateFolder?.(container);
       });
     }
-    // Container metadata writes also need their own protection, not just their parents'.
-    // Only the provisioner holding this container's flight may skip its own unfinished ACL.
-    if (!creating && destination.endsWith("/")) {
-      await provisioning.get(destination);
-      await singleFlight(destination, async () => {
-        const required = await ledger.get(destination);
+    // Only the provisioner holding this resource's flight may skip its own requirement.
+    if (!creating) await check(destination);
+  };
+  const check = async (url: string): Promise<void> => {
+    try {
+      await provisioning.get(url);
+      await singleFlight(url, async () => {
+        const required = await ledger.get(url);
         if (required) {
-          const response = await http(destination, { method: "HEAD" });
-          if (!response.ok) throw new DriveAccessError("Required folder is unavailable");
-          await verify(destination, response.headers, required);
+          const response = await http(url, { method: "HEAD" });
+          if (!response.ok) throw new DriveAccessError("Required resource is unavailable");
+          await verify(url, response.headers, required);
         }
       });
+    } catch (cause) {
+      if (url.endsWith("/")) throw cause;
+      throw new DriveAccessError(
+        cause,
+        "This file's sharing could not be secured — Retry / Delete",
+      );
     }
+  };
+  const resource = async (
+    url: string,
+    decision: ContainerPolicy,
+    onCreated?: (response: Response) => void,
+    put?: () => Promise<Response>,
+  ): Promise<{ response: Response; policy?: OwnAccess }> => {
+    requirePolicy(decision, ["inherit-verified", "archived", "owner-only"]);
+    const from = decision.kind === "archived" ? decision.from : url;
+    await guard(url, true);
+    let result: { response: Response; policy?: OwnAccess } | undefined;
+    await singleFlight(
+      url,
+      async () => {
+        const current = await http(url, { method: "HEAD" });
+        const required = await ledger.get(url);
+        if (required && current.ok) await verify(url, current.headers, required);
+        // A conflict on an already-existing resource is not a failed provisioning
+        // flight: concurrent writers may still use its verified protection.
+        if (current.ok) return;
+        if (current.status !== 404) throw options.error(current.status, url);
+        const remembered = required
+          ? { policy: await policyFor(required), from: required.from }
+          : undefined;
+        let policy: OwnAccess | undefined;
+        if (decision.kind === "archived") policy = decision.acl;
+        else if (decision.kind === "owner-only") {
+          const webId = decision.webId ?? options.owner();
+          if (!webId) throw new DriveAccessError("Owner WebID unavailable");
+          policy = { url: `${url}.acl`, etag: "", dataset: privateAcl(url, webId) };
+        } else if (!remembered && current.headers.get("x-solid-demo-access-control") !== "none") {
+          // A reappearing historical folder has an original audience. Only omit
+          // its ledger when current inheritance is verified to be no wider.
+          const original = decision.original ?? (await archived(url));
+          const inherited = requireAccess(await access.effective(url, true), url);
+          if (original && accessGains(access.forResource(original, url), inherited).length)
+            policy = original;
+        }
+        if (
+          remembered &&
+          policy &&
+          !sameGraph(
+            relocate(remembered.policy.dataset, [
+              [remembered.policy.url, `${url}.acl`],
+              [remembered.from, url],
+            ]),
+            relocate(policy.dataset, [
+              [policy.url, `${url}.acl`],
+              [from, url],
+            ]),
+          )
+        )
+          throw new DriveAccessError("Resource has a different unfinished protection requirement");
+        const creationPolicy = remembered?.policy ?? policy;
+        const creationFrom = remembered ? remembered.from : from;
+        // Do not record a new policy for a pre-existing resource: the conditional PUT
+        // must conflict without changing the protection requirement of another writer.
+        result = await create(
+          url,
+          creationPolicy
+            ? { kind: "archived", acl: creationPolicy, from: creationFrom }
+            : { kind: "inherit-verified" },
+          onCreated,
+          put,
+        );
+      },
+      false,
+    );
+    if (!result) throw options.error(412, url);
+    return result;
   };
   return {
     guard,
-    async folder(
+    check,
+    folder: resource,
+    file: (
       url: string,
-      decision: ContainerPolicy,
-      onCreated?: (response: Response) => void,
-    ): Promise<{ response: Response; policy?: OwnAccess }> {
-      requirePolicy(decision, ["inherit-verified", "archived", "owner-only"]);
-      const from = decision.kind === "archived" ? decision.from : url;
-      await guard(url, true);
-      let result: { response: Response; policy?: OwnAccess } | undefined;
-      await singleFlight(
-        url,
-        async () => {
-          const current = await http(url, { method: "HEAD" });
-          const required = await ledger.get(url);
-          if (required && current.ok) await verify(url, current.headers, required);
-          // A conflict on an already-existing folder is not a failed provisioning
-          // flight: concurrent writers may still use its verified protection.
-          if (current.ok) return;
-          if (current.status !== 404) throw options.error(current.status, url);
-          const remembered = required
-            ? { policy: await policyFor(required), from: required.from }
-            : undefined;
-          let policy: OwnAccess | undefined;
-          if (decision.kind === "archived") policy = decision.acl;
-          else if (decision.kind === "owner-only") {
-            const webId = decision.webId ?? options.owner();
-            if (!webId) throw new DriveAccessError("Owner WebID unavailable");
-            policy = { url: `${url}.acl`, etag: "", dataset: privateAcl(url, webId) };
-          } else if (!remembered && current.headers.get("x-solid-demo-access-control") !== "none") {
-            // A reappearing historical folder has an original audience. Only omit
-            // its ledger when current inheritance is verified to be no wider.
-            const original = decision.original ?? (await archived(url));
-            const inherited = requireAccess(await access.effective(url, true), url);
-            if (original && accessGains(access.forResource(original, url), inherited).length)
-              policy = original;
-          }
-          if (
-            remembered &&
-            policy &&
-            !sameGraph(
-              relocate(remembered.policy.dataset, [
-                [remembered.policy.url, `${url}.acl`],
-                [remembered.from, url],
-              ]),
-              relocate(policy.dataset, [
-                [policy.url, `${url}.acl`],
-                [from, url],
-              ]),
-            )
-          )
-            throw new DriveAccessError("Folder has a different unfinished protection requirement");
-          const creationPolicy = remembered?.policy ?? policy;
-          const creationFrom = remembered ? remembered.from : from;
-          // Do not record a new policy for a pre-existing folder: the conditional PUT
-          // must conflict without changing the protection requirement of another writer.
-          result = await create(
-            url,
-            creationPolicy
-              ? { kind: "archived", acl: creationPolicy, from: creationFrom }
-              : { kind: "inherit-verified" },
-            onCreated,
-          );
-        },
-        false,
-      );
-      if (!result) throw options.error(412, url);
-      return result;
-    },
+      policy: OwnAccess,
+      from: string,
+      put: () => Promise<Response>,
+      onCreated: (response: Response) => void,
+    ) => resource(url, { kind: "archived", acl: policy, from }, onCreated, put),
     async protect(url: string, policy: OwnAccess, from = url): Promise<void> {
       await guard(url, true);
       await singleFlight(
