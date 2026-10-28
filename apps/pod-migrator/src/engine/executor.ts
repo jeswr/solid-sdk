@@ -249,6 +249,7 @@ export async function executeMigration(
         entry.state.resource.sourceUrl,
         state.source.root,
         sourceDocs,
+        state.source.implementation,
       );
       const actualPolicy =
         entry.decision === "overwrite"
@@ -371,6 +372,7 @@ export async function executeMigration(
           entry.state.resource.sourceUrl,
           state.source.root,
           documents,
+          state.source.implementation,
         );
         assertNotWider(currentSource, scopePolicy(policy, "resource"), context);
       }

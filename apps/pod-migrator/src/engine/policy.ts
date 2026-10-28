@@ -6,6 +6,7 @@ import type {
   EffectivePolicy,
   Grant,
   Mode,
+  PodSide,
   Subject,
 } from "./types.js";
 export function emptyPolicy(): EffectivePolicy {
@@ -24,18 +25,28 @@ export function scopePolicy(
 export function unionPolicies(...policies: EffectivePolicy[]): EffectivePolicy {
   return { grants: policies.flatMap((p) => p.grants), denials: policies.flatMap((p) => p.denials) };
 }
+/** Pass sourceImplementation only for source reads; target proofs stay additive. */
 export function effectivePolicy(
   system: AccessSystem,
   url: string,
   root: string,
   documents: ReadonlyMap<string, Pick<AccessDocument, "policy"> | undefined>,
+  sourceImplementation?: PodSide["implementation"],
 ): EffectivePolicy {
   const found: EffectivePolicy[] = [];
+  // ESS documentation supports both additive and default-only member grants.
+  // Intersect those readings for sources; targets retain the additive reading.
+  const explicitEssGrants =
+    system === "acp" &&
+    sourceImplementation === "ess" &&
+    (documents.get(url)?.policy.grants.some((rule) => rule.appliesTo !== "members") ?? false);
   let current: string | undefined = url;
   while (current !== undefined) {
     const doc = documents.get(current);
     if (doc) {
-      found.push(scopePolicy(doc.policy, current === url ? "resource" : "members"));
+      const scoped = scopePolicy(doc.policy, current === url ? "resource" : "members");
+      if (explicitEssGrants && current !== url) scoped.grants = [];
+      found.push(scoped);
       if (system === "wac") break;
     }
     current = parent(current, root);

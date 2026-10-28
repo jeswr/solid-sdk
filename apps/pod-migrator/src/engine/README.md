@@ -19,6 +19,15 @@ DESIGN.md as follows. These notes are colocated with the engine and reflected in
   document offers owner-only/skip/abort); an uncertain denial or exclusion counts as applying.
   This includes ESS/CSS/NSS differences, legacy `acl:defaultForNew`, ACR-self policies,
   `acp:access`, ACP-namespace modes and typed ACRs without `acp:resource`.
+  ESS grant modes are established before vocabulary normalization: only known `acp:*`
+  modes activate; inactive `acl:*` or other modes are reported with skip/abort. Denials
+  retain both vocabularies. ESS denial exemptions requiring unestablished issuer/VC
+  enforcement are removed in the source reader, independently of target support.
+  Conflicting ESS member-policy documentation is intersected: explicit own grants
+  suppress ancestor member grants, while ancestor denials always apply. CSS sources
+  and every target proof retain additive ACP semantics. ESS→ACP materializes controls
+  per resource with an inheritance-narrowed decision, so target member grants cannot
+  undo that strict source reading.
 - **Reading existing TARGET:** take the widest plausible permissions on the resource and every
   applicable ancestor, during planning, the fresh phase proof and verification. An unsupported
   grant shape refuses the path with skip/abort; it never silently loses a possible grant.

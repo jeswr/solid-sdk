@@ -144,6 +144,32 @@ describe("every translation-table construct", () => {
 });
 
 describe("access proof", () => {
+  it("intersects ESS source inheritance readings while target and CSS composition stays additive", () => {
+    const root = "https://source.example/pod/";
+    const file = `${root}file`;
+    const inheritedGrant = grant(undefined, { appliesTo: "members" });
+    const inheritedDenial = grant([[agent]], { appliesTo: "members" });
+    const documents = new Map([
+      [root, { policy: { grants: [inheritedGrant], denials: [inheritedDenial] } }],
+      [file, { policy: ownerPolicy(sourceOwner) }],
+    ]);
+    expect(effectivePolicy("acp", file, root, documents, "ess").grants).toHaveLength(1);
+    expect(effectivePolicy("acp", file, root, documents, "ess").denials).toHaveLength(1);
+    for (const implementation of ["css", undefined] as const)
+      expect(effectivePolicy("acp", file, root, documents, implementation).grants).toHaveLength(2);
+    for (const own of [
+      undefined,
+      emptyPolicy(),
+      { grants: [], denials: [grant([[agent]])] },
+      policy(grant(undefined, { appliesTo: "members" })),
+    ]) {
+      if (own) documents.set(file, { policy: own });
+      else documents.delete(file);
+      const effective = effectivePolicy("acp", file, root, documents, "ess");
+      expect(effective.grants).toEqual([{ ...inheritedGrant, appliesTo: "resource" }]);
+      expect(effective.denials).toContainEqual({ ...inheritedDenial, appliesTo: "resource" });
+    }
+  });
   it("rejects widening, condition removal, dropped exclusions and dropped denies", () => {
     expect(() => assertNotWider(emptyPolicy(), policy(grant()))).toThrow("widens");
     for (const source of [

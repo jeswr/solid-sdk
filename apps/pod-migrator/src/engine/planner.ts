@@ -51,6 +51,7 @@ export interface PlanState {
   rewriteIris: boolean;
   snapshot: string;
   targetDocuments: Map<string, AccessDocument | undefined>;
+  materializeMembers: boolean;
 }
 export interface ExecutionState {
   state: PlanState;
@@ -192,6 +193,8 @@ export async function planMigration(opts: {
       ),
     );
   const sourceDocs = new Map<string, AccessDocument | undefined>();
+  const materializeMembers =
+    targetSystem === "acp" && (sourceSystem === "wac" || source.implementation === "ess");
   const sourceErrors = new Set<string>();
   for (const [index, item] of resources.entries()) {
     if (sourceSystem !== "unknown")
@@ -318,7 +321,13 @@ export async function planMigration(opts: {
       );
     const sourceEffective = unreadable
       ? emptyPolicy()
-      : effectivePolicy(sourceSystem, resource.sourceUrl, source.root, sourceDocs);
+      : effectivePolicy(
+          sourceSystem,
+          resource.sourceUrl,
+          source.root,
+          sourceDocs,
+          source.implementation,
+        );
     const sourceMembers =
       unreadable || resource.kind === "resource"
         ? emptyPolicy()
@@ -396,20 +405,20 @@ export async function planMigration(opts: {
     };
     if (!unreadable && sourceSystem !== "unknown" && targetSystem !== "unknown") {
       report.push(...translatePolicy(sourceEffective, targetSystem, context).report);
-      if (resource.kind === "container" && !(sourceSystem === "wac" && targetSystem === "acp"))
+      if (resource.kind === "container" && !materializeMembers)
         report.push(
           ...translatePolicy(sourceMembers, targetSystem, { ...context, scopeId: "members:" })
             .report,
         );
     }
-    if (sourceSystem === "wac" && targetSystem === "acp" && resource.kind === "container") {
+    if (materializeMembers && resource.kind === "container") {
       const memberPolicy = sourceDocument && scopePolicy(sourceDocument.policy, "members");
       if (memberPolicy?.grants.length)
         report.push(
           reportItem(
             "inheritance-narrowed",
             resource.sourceUrl,
-            "ACP inheritance is additive. Use explicit per-resource controls for all existing descendants so narrower child ACLs remain narrow; new descendants receive owner access only.",
+            "Target ACP inheritance is additive. Use explicit per-resource controls for all existing descendants to preserve WAC replacement or the strictest ESS default-only grant reading; new descendants receive owner access only.",
             ["per-resource", "abort"],
             "",
             sourceDocument?.turtle,
@@ -456,6 +465,7 @@ export async function planMigration(opts: {
     rewriteIris: opts.rewriteIris ?? false,
     snapshot: JSON.stringify(plan),
     targetDocuments: targetDocs,
+    materializeMembers,
   });
   opts.onProgress?.({ phase: "plan", done: resources.length, total: resources.length });
   return plan;
@@ -521,7 +531,7 @@ export function finalizePlan(plan: MigrationPlan, resolutions: Resolutions): Exe
       resolutions,
     ).policy;
     const members =
-      resource.kind === "container" && !(plan.sourceSystem === "wac" && plan.targetSystem === "acp")
+      resource.kind === "container" && !state.materializeMembers
         ? translatePolicy(
             resourceState.sourceMembers,
             plan.targetSystem,

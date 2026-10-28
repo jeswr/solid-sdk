@@ -156,7 +156,20 @@ export function readAcp(
         ["denials", policy.deny],
       ] as const) {
         const rawModes = [...values];
-        const modes = convert(rawModes);
+        // Establish source activation before normalizing vocabularies: ESS does
+        // not grant acl:* modes. Denials keep both plausible vocabularies.
+        const establishedModes =
+          !target && dialect === "ess" && field === "grants"
+            ? rawModes.filter((value) =>
+                ["Read", "Write", "Append", "Control"].some((name) => value === ACP + name),
+              )
+            : rawModes;
+        if (establishedModes.length !== rawModes.length)
+          onInactive?.(
+            policy.value,
+            "Source grant modes were omitted: only established acp:* modes activate ESS grants.",
+          );
+        const modes = convert(establishedModes);
         const uncertain =
           dialect !== "ess" &&
           (control || fallback || rawModes.some((value) => value.startsWith(ACP)));
@@ -232,9 +245,22 @@ export function readAcp(
         }
         if (modes.size && foreign && field === "grants")
           throw new TypeError("Cannot safely place grants from another ACP resource node");
+        const denialMatchers = [...policy.noneOf].filter(
+          (matcher) => dialect !== "ess" || (!matcher.issuer.size && !matcher.vc.size),
+        );
+        if (
+          !target &&
+          field === "denials" &&
+          modes.size &&
+          denialMatchers.length !== policy.noneOf.size
+        )
+          onInactive?.(
+            policy.value,
+            "Source denial exemptions were omitted: ESS issuer or credential matching is unestablished, so the denial applies more broadly.",
+          );
         const exclusions =
           !target && field === "denials"
-            ? [...policy.noneOf].flatMap((matcher) =>
+            ? denialMatchers.flatMap((matcher) =>
                 matcherClauses(matcher, dialect).flatMap((clause) => {
                   // A named identity already implies login. Any other conjunction is
                   // narrower than each of its subjects, so it must never become

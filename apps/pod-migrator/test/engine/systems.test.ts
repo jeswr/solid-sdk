@@ -246,7 +246,7 @@ describe("ACP expressions and writers", () => {
     });
     node("urn:control", { [`${ACP}apply`]: ["urn:policy"] });
     const p = node("urn:policy", {
-      [`${ACP}allow`]: [`${ACL}Read`],
+      [`${ACP}allow`]: [`${ACP}Read`],
       [`${ACP}allOf`]: ["urn:matcher"],
     });
     expect(() => readAcp(dataset, resource, url)).toThrow("ESS");
