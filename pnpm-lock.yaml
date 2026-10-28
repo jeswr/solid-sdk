@@ -2997,13 +2997,34 @@ importers:
 
   packages/mcp-oauth:
     dependencies:
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
+      '@jeswr/solid-dpop':
+        specifier: workspace:*
+        version: link:../solid-dpop
+      '@jeswr/solid-openid-client':
+        specifier: workspace:*
+        version: link:../solid-openid-client
+      '@rdfjs/wrapper':
+        specifier: ^0.34.0
+        version: 0.34.0
+      n3:
+        specifier: ^2.1.1
+        version: 2.1.1
+      openid-client:
+        specifier: ^6.8.4
+        version: 6.8.4
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@types/n3':
+        specifier: ^1.26.1
+        version: 1.26.1
       '@types/node':
         specifier: ^25.9.2
         version: 25.9.5
@@ -3175,6 +3196,9 @@ importers:
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
+      '@jeswr/solid-odrl':
+        specifier: workspace:*
+        version: link:../solid-odrl
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1
@@ -4119,6 +4143,9 @@ importers:
       '@jeswr/solid-chat-interop':
         specifier: workspace:*
         version: link:../solid-chat-interop
+      '@jeswr/solid-dpop':
+        specifier: workspace:*
+        version: link:../solid-dpop
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.4.3)

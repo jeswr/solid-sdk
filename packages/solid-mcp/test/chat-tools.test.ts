@@ -7,7 +7,9 @@ import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import type { SolidMcpConfig } from "../src/auth.js";
 import { createChatPodPort } from "../src/chat-tools.js";
+import { createCliFetch } from "../src/client-credentials.js";
 import { createSolidMcpServer } from "../src/server.js";
+import { ISSUER, mockCss, proofOf } from "./fixtures/css.mjs";
 
 const ROOT = "https://alice.example/pod/";
 const OWNER = `${ROOT}profile/card#me`;
@@ -106,6 +108,98 @@ const input = {
 };
 
 describe("MCP chat tools over the scoped fetch port", () => {
+  it("shares CLI authentication across every chat tool and pod tools, including ACL discovery", async () => {
+    const pod = fakePod();
+    const css = mockCss();
+    const proofs: string[] = [];
+    const anonymous: string[] = [];
+    const chatRoot = `${ROOT}private/chats/`;
+    pod.aclLinks.set(chatRoot, '<owner-permissions>; rel="acl"');
+    const raw: typeof fetch = async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url.startsWith(ISSUER)) return css.fetch(input, init);
+      expect(request.redirect).toBe("manual");
+      expect(request.credentials).toBe("omit");
+      if (!request.url.startsWith(ROOT)) {
+        expect(request.headers.has("authorization")).toBe(false);
+        expect(request.headers.has("dpop")).toBe(false);
+        anonymous.push(request.url);
+        return new Response("public profile");
+      }
+      if (!request.headers.has("authorization")) return new Response(null, { status: 401 });
+      expect(request.headers.get("authorization")).toBe("DPoP fixture-token-1");
+      proofs.push(proofOf(request, "fixture-token-1").jti);
+      return pod.fetch(request.url, {
+        method: request.method,
+        headers: request.headers,
+        body: request.body ? new Uint8Array(await request.arrayBuffer()) : undefined,
+      });
+    };
+    // Prove the fixture requires credentials before exercising authenticated tools.
+    expect(
+      (await raw(chatRoot, { method: "HEAD", redirect: "manual", credentials: "omit" })).status,
+    ).toBe(401);
+    const config = {
+      podRoot: ROOT,
+      webId: OWNER,
+      readOnly: false,
+      clientId: "fixture-id",
+      clientSecret: "fixture-secret",
+      oidcIssuer: ISSUER,
+    };
+    const fetch = await createCliFetch(config, raw);
+    const client = await connect({ ...config, fetch });
+    try {
+      expect((await client.callTool({ name: "chat_save", arguments: input })).isError).toBeFalsy();
+      expect(
+        json(
+          await client.callTool({
+            name: "chat_get",
+            arguments: { provider: "claude", conversationId: input.conversationId },
+          }),
+        ),
+      ).toMatchObject(input);
+      expect(
+        json(await client.callTool({ name: "chat_list", arguments: { provider: "claude" } }))
+          .conversations,
+      ).toHaveLength(1);
+      expect(
+        (await client.callTool({ name: "solid_list", arguments: { container: chatRoot } })).isError,
+      ).toBeFalsy();
+      expect(pod.requests.some((r) => r.method === "HEAD")).toBe(true);
+      expect(pod.resources.has(`${chatRoot}owner-permissions`)).toBe(true);
+      expect(new Set(pod.requests.map((r) => r.method))).toEqual(new Set(["HEAD", "GET", "PUT"]));
+      expect(new Set(proofs).size).toBe(proofs.length);
+      expect(css.stats.tokens).toBe(1);
+      await fetch("https://profile.example/me", {
+        headers: { authorization: "DPoP fixture-token-1", dpop: "fixture" },
+      });
+      expect(anonymous).toEqual(["https://profile.example/me"]);
+      // ACL discovery must fail before sending any request to a foreign ACL.
+      pod.aclLinks.set(chatRoot, '<https://foreign.example/acl>; rel="acl"');
+      expect(
+        (
+          await client.callTool({
+            name: "chat_save",
+            arguments: { ...input, conversationId: "second" },
+          })
+        ).isError,
+      ).toBe(true);
+      expect(anonymous).toHaveLength(1);
+      pod.redirects.set(`${chatRoot}claude/session-1/`, "https://foreign.example/messages");
+      expect(
+        (
+          await client.callTool({
+            name: "chat_get",
+            arguments: { provider: "claude", conversationId: input.conversationId },
+          })
+        ).isError,
+      ).toBe(true);
+      expect(anonymous).toHaveLength(1);
+    } finally {
+      await client.close();
+    }
+  });
   it("saves and gets each provider, replays idempotently, and pages with since", async () => {
     const pod = fakePod();
     const client = await connect({

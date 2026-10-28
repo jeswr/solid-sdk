@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { Grant, GrantStore, OAuthStores, OneTimeStore } from "./types.js";
 
 /** Snapshotting, atomic-in-one-process store. Consumed records remain as replay tombstones. */
@@ -27,6 +28,7 @@ export class MemoryStore<T> implements OneTimeStore<T> {
 /** Single-process grant store with irreversible revocation. */
 export class MemoryGrantStore implements GrantStore {
   private readonly values = new Map<string, Grant>();
+  private readonly revokedSessions = new Set<string>();
 
   async get(id: string): Promise<Grant | undefined> {
     const value = this.values.get(id);
@@ -41,6 +43,14 @@ export class MemoryGrantStore implements GrantStore {
   async revoke(id: string): Promise<void> {
     const value = this.values.get(id);
     if (value) value.revoked = true;
+  }
+
+  async revokeSession(sessionId: string): Promise<void> {
+    this.revokedSessions.add(sessionId);
+  }
+
+  async isSessionRevoked(sessionId: string): Promise<boolean> {
+    return this.revokedSessions.has(sessionId);
   }
 }
 

@@ -1,6 +1,26 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { expect, it, vi } from "vitest";
-import { unique } from "./protocol.js";
+import { MAX_BYTES, readBody, unique } from "./protocol.js";
+
+it.each([
+  false,
+  true,
+])("preserves size rejection when original stream cancellation fails (declared: %s)", async (declared) => {
+  const cancel = vi.fn(async () => {
+    throw new Error("fixture cancellation failure");
+  });
+  const response = new Response(
+    new ReadableStream({
+      start(controller) {
+        controller.enqueue(new Uint8Array(MAX_BYTES + 1));
+      },
+      cancel,
+    }),
+    { headers: declared ? { "content-length": String(MAX_BYTES + 1) } : {} },
+  );
+  await expect(readBody(response)).rejects.toMatchObject({ status: 413 });
+  expect(cancel).toHaveBeenCalledOnce();
+});
 
 it("validates many distinct parameter names without rescanning their values", () => {
   const params = new URLSearchParams();
