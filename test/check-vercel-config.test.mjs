@@ -211,6 +211,60 @@ describe("Vercel config guard", () => {
     expectFailure({ ...fixtures(), [path]: "{" }, `${path}: invalid JSON`);
   });
 
+  const deployableManifests = [
+    { scripts: { build: "custom-build" } },
+    ...["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"].flatMap(
+      (field) => ["next", "vite"].map((framework) => ({ [field]: { [framework]: "*" } })),
+    ),
+  ];
+
+  for (const directory of ["apps/pod-migrator", "apps/new-app/web"]) {
+    it.each(
+      deployableManifests,
+    )(`requires an absent disabling config for unlisted ${directory} with %j`, (manifest) => {
+      const files = { ...fixtures(), [`${directory}/package.json`]: manifest };
+      expectFailure(files, `${directory}/vercel.json: missing or unreadable file`);
+      files[`${directory}/vercel.json`] = { git: { deploymentEnabled: false } };
+      expect(scan(files).status).toBe(0);
+    });
+  }
+
+  it.each([viteApp, nextApp])("rejects a missing config for registered $framework apps", (app) => {
+    const files = fixtures([app]);
+    delete files[`${app.rootDirectory}/vercel.json`];
+    expectFailure(files, `${app.rootDirectory}/vercel.json: missing or unreadable file`);
+  });
+
+  it("leaves non-build app directories outside discovery", () => {
+    const files = {
+      ...fixtures(),
+      "apps/mobile/package.json": { scripts: { test: "vitest run", build: " " } },
+      "apps/example/package.json": { private: true },
+    };
+    expect(scan(files).status).toBe(0);
+  });
+
+  it("rejects an unreadable manifest instead of silently omitting a future app", () => {
+    expectFailure(
+      { ...fixtures(), "apps/new-app/package.json": "{" },
+      "apps/new-app/package.json: invalid JSON",
+    );
+  });
+
+  it("keeps the suite's main-only exception when discovered outside the inventory", () => {
+    const files = {
+      ...fixtures(),
+      "apps/suite/package.json": { dependencies: { next: "*" } },
+      "apps/suite/vercel.json": { git: { deploymentEnabled: { "**": false, main: true } } },
+    };
+    expect(scan(files).status).toBe(0);
+    files["apps/suite/vercel.json"].git.deploymentEnabled = true;
+    expectFailure(
+      files,
+      'apps/suite/vercel.json: git.deploymentEnabled must be { "**": false, "main": true }',
+    );
+  });
+
   it("checks every deployment and accepts Next.js framework-inferred public env", () => {
     const result = scan(fixtures([viteApp, nextApp]));
     expect(result.status).toBe(0);

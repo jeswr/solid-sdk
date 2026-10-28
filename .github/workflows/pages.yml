@@ -7,15 +7,19 @@ on:
     paths:
       - 'apps/**'
       - 'packages/**'
+      - 'tools/**'
+      - 'package.json'
       - 'pnpm-lock.yaml'
-      - 'scripts/build-pages.mjs'
-      - 'scripts/vercel-apps.json'
+      - 'pnpm-workspace.yaml'
+      - 'tsconfig*.json'
+      - 'turbo.json'
+      - 'biome.json'
+      - '.npmrc'
+      - 'scripts/**'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 
 permissions:
-  pages: write
-  id-token: write
   contents: read
 
 concurrency:
@@ -43,6 +47,10 @@ jobs:
 
   deploy:
     needs: build
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     # Manual runs from other branches may build, but only main publishes.
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest

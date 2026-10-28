@@ -3,7 +3,7 @@
 # App hosting
 
 The [Pages workflow](../.github/workflows/pages.yml) builds one static site on pushes
-to `main` that touch apps, packages, the lockfile or deployment tooling. It also supports
+to `main` that touch apps, packages, shared build inputs or deployment tooling. It also supports
 manual runs; only `main` can publish. Each app has its own base path and client identity.
 
 | App | Source | Hosting URL |
@@ -26,7 +26,8 @@ manual runs; only `main` can publish. Each app has its own base path and client 
 Pod Manager, Issues and Coeliac retain any existing deployment until separately replaced;
 they are not included in the static Pages artifact. The future `solid-pod-migrator`
 project (`apps/pod-migrator`, not yet on `main`) must also disable git deployments.
-The Vercel guard checks app configs independently of the deployment inventory.
+The Vercel guard discovers app directories with a build script or Next/Vite dependency
+and requires a disabling config independently of the deployment inventory.
 
 In repository **Settings → Pages → Build and deployment**, set **Source = GitHub Actions**.
 The workflow uses the `github-pages` environment and the Pages artifact/deployment actions;
@@ -58,5 +59,8 @@ and domain-root builds. Browser auth URLs use Vite's `import.meta.env.BASE_URL`.
 
 The assembled `.pages/` directory contains each app's assets, `clientid.jsonld`,
 callback, and a `404.html` copy of its entry point, plus an app index at the site root.
-Because Pages uses a site-wide error page, the root `404.html` selects the app shell
-from the first path segment without changing the requested URL, OAuth query or hash.
+Because Pages uses a site-wide error page, the root `404.html` redirects known app routes
+to their entry point, encoding the full path, query and hash in `__solid_sdk_path`.
+An inline script restores the original URL with `history.replaceState` before the app
+router starts. Deep links therefore render only the app shell and retain OAuth returns
+and autologin fragments.

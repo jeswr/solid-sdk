@@ -7,6 +7,24 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const pagesBase = "/solid-sdk/";
+const routeParameter = "__solid_sdk_path";
+
+function withRouteRestore(html, base) {
+  // This classic script must run before any app/router script in the built head.
+  const restore = `<script>
+    (() => {
+      const base = ${JSON.stringify(base)};
+      const route = new URLSearchParams(location.search).get(${JSON.stringify(routeParameter)});
+      if (route === null || !route.startsWith(base.slice(0, -1))) return;
+      const url = new URL(route, location.origin);
+      if (url.origin === location.origin &&
+          (url.pathname.startsWith(base) || url.pathname === base.slice(0, -1))) {
+        history.replaceState(null, "", url.pathname + url.search + url.hash);
+      }
+    })();
+  </script>`;
+  return html.replace(/<head\b[^>]*>/i, (head) => `${head}\n  ${restore}`);
+}
 
 export function pagesApps(root) {
   return JSON.parse(readFileSync(join(root, "scripts/vercel-apps.json"), "utf8"))
@@ -19,13 +37,15 @@ export function assemblePages(root, apps) {
   const destination = join(root, ".pages");
   rmSync(destination, { recursive: true, force: true });
   mkdirSync(destination, { recursive: true });
-  const pages = {};
   for (const app of apps) {
     const output = join(destination, app.slug);
     cpSync(join(root, app.rootDirectory, "dist"), output, { recursive: true });
-    const html = readFileSync(join(output, "index.html"), "utf8");
+    const html = withRouteRestore(
+      readFileSync(join(output, "index.html"), "utf8"),
+      `${pagesBase}${app.slug}/`,
+    );
+    writeFileSync(join(output, "index.html"), html);
     writeFileSync(join(output, "404.html"), html);
-    pages[app.slug] = html;
   }
   const index = `<!doctype html>
 <!-- AUTHORED-BY Codex GPT-6 -->
@@ -47,21 +67,19 @@ ${apps.map((app) => `        <li><a href="${pagesBase}${app.slug}/">${app.slug}<
 `;
   writeFileSync(join(destination, "index.html"), index);
   // GitHub Pages serves the publishing root's 404.html for every missing path,
-  // including nested apps. Select the built shell without changing the requested
-  // URL, query, or hash (which may contain an OAuth return or an autologin link).
-  // Escape < so a shell's </script> cannot terminate this script literal.
+  // including nested apps. Redirect to the app's real entry point, carrying the
+  // complete route (including OAuth query/hash) for restoration before it starts.
   const fallback = `<script>
-    const pages = ${JSON.stringify(pages).replaceAll("<", "\\u003c")};
+    const slugs = ${JSON.stringify(apps.map((app) => app.slug))};
     const base = ${JSON.stringify(pagesBase)};
     const slug = location.pathname.startsWith(base)
       ? location.pathname.slice(base.length).split("/")[0] : "";
-    if (Object.hasOwn(pages, slug)) {
-      document.open();
-      document.write(pages[slug]);
-      document.close();
+    if (slugs.includes(slug)) {
+      const route = location.pathname + location.search + location.hash;
+      location.replace(base + slug + "/?${routeParameter}=" + encodeURIComponent(route));
     }
   </script>`;
-  writeFileSync(join(destination, "404.html"), index.replace("</body>", `${fallback}\n  </body>`));
+  writeFileSync(join(destination, "404.html"), index.replace("</head>", `${fallback}\n  </head>`));
   writeFileSync(join(destination, ".nojekyll"), "");
 }
 

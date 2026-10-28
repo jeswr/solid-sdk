@@ -34,27 +34,32 @@ function isDirectory(path) {
   }
 }
 
+function matchesGitDeployment(value, suite) {
+  return suite
+    ? value !== null &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        Object.keys(value).length === 2 &&
+        value["**"] === false &&
+        value.main === true
+    : value === false;
+}
+
+function gitDeploymentPolicy(suite) {
+  return suite ? '{ "**": false, "main": true } (main only)' : "false";
+}
+
 function checkGitDeployment(root, app, failures) {
   const path = `${app.rootDirectory}/vercel.json`;
   const config = readJson(root, path, failures);
   if (!config) return;
   // Vercel enables unspecified branches. ** also covers branch names containing /.
   const suite = app.rootDirectory === "apps/suite" && app.project === "solid-suite";
-  const expected = suite ? { "**": false, main: true } : false;
-  const matches = (value) =>
-    expected === false
-      ? value === false
-      : value !== null &&
-        typeof value === "object" &&
-        !Array.isArray(value) &&
-        Object.keys(value).length === 2 &&
-        value["**"] === false &&
-        value.main === true;
-  const policy = suite ? '{ "**": false, "main": true } (main only)' : "false";
-  if (!matches(app.gitDeploymentEnabled)) {
+  const policy = gitDeploymentPolicy(suite);
+  if (!matchesGitDeployment(app.gitDeploymentEnabled, suite)) {
     failures.push(`${app.project}: gitDeploymentEnabled must be ${policy}`);
   }
-  if (!matches(config.git?.deploymentEnabled)) {
+  if (!matchesGitDeployment(config.git?.deploymentEnabled, suite)) {
     failures.push(`${path}: git.deploymentEnabled must be ${policy}`);
   }
   if (suite && config.ignoreCommand !== app.vercelIgnore) {
@@ -274,14 +279,38 @@ function checkVercelConfig(root) {
         checkClientIdBuild(root, app, manifest, failures);
       }
     }
-    // Check future apps (including pod-migrator) even before inventory registration.
-    for (const config of globSync(["apps/*/vercel.json", "apps/*/web/vercel.json"], {
+    // Discover deployable apps even when neither inventory nor config exists yet.
+    const configs = new Set(
+      globSync(["apps/*/vercel.json", "apps/*/web/vercel.json"], {
+        cwd: root,
+      }),
+    );
+    for (const path of globSync(["apps/*/package.json", "apps/*/web/package.json"], {
       cwd: root,
     })) {
+      const directory = path.slice(0, -"/package.json".length);
+      if (directories.has(directory)) continue;
+      const manifest = readJson(root, path, failures);
+      if (!manifest) continue;
+      const hasBuild =
+        typeof manifest.scripts?.build === "string" && manifest.scripts.build.trim() !== "";
+      const hasFramework = [
+        "dependencies",
+        "devDependencies",
+        "peerDependencies",
+        "optionalDependencies",
+      ].some((field) =>
+        ["next", "vite"].some((name) => Object.hasOwn(manifest[field] ?? {}, name)),
+      );
+      if (hasBuild || hasFramework) configs.add(`${directory}/vercel.json`);
+    }
+    // Retain checks for config-only apps as well as newly discovered manifests.
+    for (const config of configs) {
       if (!directories.has(config.slice(0, -"/vercel.json".length))) {
         const value = readJson(root, config, failures);
-        if (value && value.git?.deploymentEnabled !== false) {
-          failures.push(`${config}: git.deploymentEnabled must be false`);
+        const suite = config === "apps/suite/vercel.json";
+        if (value && !matchesGitDeployment(value.git?.deploymentEnabled, suite)) {
+          failures.push(`${config}: git.deploymentEnabled must be ${gitDeploymentPolicy(suite)}`);
         }
       }
     }
