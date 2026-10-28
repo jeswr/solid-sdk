@@ -153,7 +153,7 @@ it.each(["list", "grid"])("Enter on the %s roving item still opens the file", as
   const target = row(view.host);
   await act(async () => target.focus());
   await key(target, "Enter");
-  expect(ui.preview).toEqual({ items, index: 0 });
+  expect(ui.preview).toEqual({ items, index: 0, activationId: expect.any(String) });
   await view.unmount();
 });
 

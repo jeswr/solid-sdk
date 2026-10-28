@@ -53,6 +53,7 @@ export type DriveDialog =
 export interface PreviewState {
   readonly items: readonly DriveItem[];
   readonly index: number;
+  readonly activationId?: string;
 }
 
 interface DriveUiValue {
@@ -305,6 +306,7 @@ export function useDriveActions() {
       if (setPreview) {
         const files = (siblings ?? [item]).filter((entry) => entry.kind === "file");
         setPreview({
+          activationId: crypto.randomUUID(),
           items: files,
           index: Math.max(
             0,

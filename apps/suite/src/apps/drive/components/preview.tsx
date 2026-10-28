@@ -32,7 +32,7 @@ import { encodeRef } from "@/lib/refs";
 import type { DriveClient, DriveItem } from "../lib/client/client";
 import { parseCsvPreview, previewKind } from "../lib/view/view";
 import { useDrive } from "../state/drive-context";
-import { useLiveItem, useResourceVersion } from "../state/resource";
+import { useLiveResource, useResourceVersion } from "../state/resource";
 import { useRecordSharedOpen } from "../state/shared";
 import { captureDriveFocusRemoval, useDriveActions, useDriveUi } from "../state/ui";
 import { DetailsPane } from "./details";
@@ -91,25 +91,40 @@ function valueLabel(iri: string): string {
   return termLabel(iri);
 }
 
-function useLoadedFile(client: DriveClient, item: DriveItem): Loaded {
+function useLoadedFile(
+  client: DriveClient,
+  item: DriveItem,
+  metadataStatus: "loading" | "ready" | "error" | undefined,
+): Loaded {
   const kind = filePreviewKind(item);
   const recordOpen = useRecordSharedOpen();
   const version = useResourceVersion(item.url);
   const [state, setState] = useState<Loaded>({ status: "loading" });
+  // The body is keyed by URL + activation. Metadata refreshes can reload bytes,
+  // but only the first successful load in this opening writes the preference.
+  const recorded = useRef(false);
   // biome-ignore lint/correctness/useExhaustiveDependencies: metadata and version invalidate the resource bytes
   useEffect(() => {
     let live = true;
     let objectUrl: string | undefined;
     setState({ status: "loading" });
+    if (metadataStatus === "loading") return;
+    const recordOnce = (current: DriveItem) => {
+      if (recorded.current) return;
+      recorded.current = true;
+      recordOpen(current);
+    };
     if (kind === "none") {
       setState({ status: "error" });
       // Unsupported formats still count as opened when their metadata is accessible.
-      void client.stat(item.url).then(
-        (current) => {
-          if (live) recordOpen(current);
-        },
-        () => undefined,
-      );
+      if (metadataStatus === "ready") recordOnce(item);
+      else if (metadataStatus === undefined)
+        void client.stat(item.url).then(
+          (current) => {
+            if (live) recordOnce(current);
+          },
+          () => undefined,
+        );
       return () => {
         live = false;
       };
@@ -144,7 +159,7 @@ function useLoadedFile(client: DriveClient, item: DriveItem): Loaded {
     run().then(
       (loaded) => {
         if (!live) return;
-        if (loaded.status !== "error" && loaded.status !== "loading") recordOpen(item);
+        if (loaded.status !== "error" && loaded.status !== "loading") recordOnce(item);
         setState(loaded);
       },
       () => live && setState({ status: "error" }),
@@ -153,7 +168,17 @@ function useLoadedFile(client: DriveClient, item: DriveItem): Loaded {
       live = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [client, item.url, item.etag, item.size, item.contentType, kind, version, recordOpen]);
+  }, [
+    client,
+    item.url,
+    item.etag,
+    item.size,
+    item.contentType,
+    kind,
+    version,
+    recordOpen,
+    metadataStatus,
+  ]);
   return state;
 }
 
@@ -196,10 +221,16 @@ function RdfSummary({ quads }: { quads: Quad[] }) {
   );
 }
 
-export function PreviewBody({ item }: { item: DriveItem }) {
+export function PreviewBody({
+  item,
+  metadataStatus,
+}: {
+  item: DriveItem;
+  metadataStatus?: "loading" | "ready" | "error";
+}) {
   const { client } = useDrive();
   const actions = useDriveActions();
-  const loaded = useLoadedFile(client, item);
+  const loaded = useLoadedFile(client, item, metadataStatus);
   const kind = filePreviewKind(item);
   if (loaded.status === "loading")
     return <Skeleton className="drv-preview-skeleton" aria-label="Loading preview" />;
@@ -373,7 +404,7 @@ export function PreviewDialog() {
   const [detailsOpen, setDetailsOpen] = useState(false);
   const detailsTrigger = useRef<HTMLElement | null>(null);
   const restoreFocus = useRef<ReturnType<typeof captureDriveFocusRemoval> | undefined>(undefined);
-  const item = useLiveItem(preview?.items[preview.index]);
+  const { item, status } = useLiveResource(preview?.items[preview.index], preview?.activationId);
   useEffect(() => {
     if (!preview) return;
     const onKey = (event: KeyboardEvent) => {
@@ -442,7 +473,11 @@ export function PreviewDialog() {
                 <ChevronLeft aria-hidden="true" size={20} />
               </IconButton>
             ) : null}
-            <PreviewBody key={item.url} item={item} />
+            <PreviewBody
+              key={`${preview.activationId ?? ""}:${item.url}`}
+              item={item}
+              metadataStatus={status}
+            />
             {preview.index < preview.items.length - 1 ? (
               <IconButton
                 label="Next file"
@@ -481,7 +516,7 @@ export function PreviewPage({
   parent: string | undefined;
 }) {
   const { driveRoot } = useDrive();
-  const item = useLiveItem(initial);
+  const { item = initial, status } = useLiveResource(initial);
   const back = !parent || parent === driveRoot ? "/drive/my" : `/drive/f/${encodeRef(parent)}`;
   return (
     <section
@@ -500,7 +535,7 @@ export function PreviewPage({
         }
       />
       <div className="drv-preview-body">
-        <PreviewBody item={item} />
+        <PreviewBody key={item.url} item={item} metadataStatus={status} />
       </div>
     </section>
   );

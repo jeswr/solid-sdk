@@ -232,9 +232,22 @@ export function FileBrowser(props: FileBrowserProps) {
   const { preview, setPreview } = ui;
   useEffect(() => {
     if (!items || refreshing || !preview) return;
-    // Preview keeps its navigation order, but adopts refreshed metadata by URL.
+    // Keep hydrated fields when preference rows omit them, and preserve the
+    // preview item itself when only a row's timestamp or object identity changed.
     const byUrl = new Map(items.map((item) => [item.url, item]));
-    const next = preview.items.map((item) => byUrl.get(item.url) ?? item);
+    const next = preview.items.map((item) => {
+      const row = byUrl.get(item.url);
+      if (!row) return item;
+      const merged = row.etag !== undefined && row.etag !== item.etag ? row : { ...item, ...row };
+      return item.name === merged.name &&
+        item.kind === merged.kind &&
+        item.contentType === merged.contentType &&
+        item.size === merged.size &&
+        item.etag === merged.etag &&
+        item.modified?.getTime() === merged.modified?.getTime()
+        ? item
+        : merged;
+    });
     if (next.some((item, index) => item !== preview.items[index]))
       setPreview({ ...preview, items: next });
   }, [items, refreshing, preview, setPreview]);
