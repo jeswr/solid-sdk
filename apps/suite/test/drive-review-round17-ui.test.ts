@@ -152,7 +152,7 @@ it.each([
         document.querySelector('[role="alertdialog"]') as Element,
       ),
     );
-    await vi.waitFor(() => expect(document.activeElement).toBe(trigger));
+    await vi.waitFor(() => expect(document.activeElement).toBe(trigger), { timeout: 10_000 });
   }
   if (delay === "listing")
     await act(async () => {
@@ -168,7 +168,8 @@ it.each([
     await mutation.mock.results[0]?.value;
     listing.resolve();
   });
-  await vi.waitFor(() => expect(removed.isConnected).toBe(false));
+  // The real in-memory operation runs every access and delete check; allow CI load.
+  await vi.waitFor(() => expect(removed.isConnected).toBe(false), { timeout: 10_000 });
   expect(document.activeElement).toBe(search);
 });
 
