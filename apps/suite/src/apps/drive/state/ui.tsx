@@ -22,7 +22,14 @@ import {
 } from "react";
 import { encodeRef } from "@/lib/refs";
 import { accessControl, accessLabel, DriveAccessError } from "../lib/client/access";
-import { type DriveClient, DriveError, type DriveItem, nameOf } from "../lib/client/client";
+import {
+  type DriveClient,
+  DriveError,
+  type DriveItem,
+  DrivePartialFailureError,
+  nameOf,
+} from "../lib/client/client";
+import { DriveDeletePendingError } from "../lib/client/deletion";
 import { isOwnStorage } from "../lib/client/ownership";
 import {
   childUrl,
@@ -39,6 +46,7 @@ import {
 } from "../lib/operations/operations";
 import type { TrashEntry } from "../lib/operations/trash-index";
 import { useDrive } from "./drive-context";
+import { pruneDeleted } from "./prefs";
 import { moveWithValidator } from "./undo";
 
 export type DriveDialog =
@@ -240,7 +248,24 @@ export function useDriveUi(): DriveUiValue {
 }
 
 /** User-facing message for a failed operation. */
+function deletionPending(error: unknown): boolean {
+  return (
+    error instanceof DriveDeletePendingError ||
+    (error instanceof DriveAccessError && deletionPending(error.cause)) ||
+    (error instanceof DrivePartialFailureError && deletionPending(error.cause)) ||
+    (error instanceof TrashRestorePartialError &&
+      error.remaining.some(({ error }) => deletionPending(error)))
+  );
+}
+
+function reportFailure(error: unknown, fallback: string, retry: () => void) {
+  const message = errorMessage(error, fallback);
+  if (deletionPending(error)) toast.error(message, { action: { label: "Retry", onClick: retry } });
+  else toast.error(message);
+}
+
 export function errorMessage(error: unknown, fallback = "Something went wrong"): string {
+  if (deletionPending(error)) return "Still deleting on the server";
   if (
     error instanceof DriveAccessError ||
     error instanceof TrashMovingError ||
@@ -436,11 +461,15 @@ export function useDriveActions() {
         starred: repointStarred(current.starred, result.done),
       }));
       if (result.failed.length > 0) {
-        toast.error(
-          result.done.length === 0
-            ? errorMessage(result.failed[0]?.error, "Couldn't move")
-            : `Moved ${result.done.length} of ${items.length} items`,
-        );
+        const error = result.failed[0]?.error;
+        if (deletionPending(error))
+          reportFailure(error, "Couldn't move", () => void move(items, target, { undoable }));
+        else
+          toast.error(
+            result.done.length === 0
+              ? errorMessage(error, "Couldn't move")
+              : `Moved ${result.done.length} of ${items.length} items`,
+          );
       }
       if (result.done.length === 0) return result;
       // An unreadable/absent validator makes Undo fail closed for that item.
@@ -535,7 +564,7 @@ export function useDriveActions() {
         }
         return url;
       } catch (error) {
-        toast.error(errorMessage(error, "Couldn't rename"));
+        reportFailure(error, "Couldn't rename", () => void rename(item, name));
         return undefined;
       }
     },
@@ -552,7 +581,7 @@ export function useDriveActions() {
         toast.success(`Created ${nameOf(url)}`);
         return url;
       } catch (error) {
-        toast.error(errorMessage(error, "Couldn't make a copy"));
+        reportFailure(error, "Couldn't make a copy", () => void makeCopy(item));
         return undefined;
       }
     },
@@ -568,7 +597,7 @@ export function useDriveActions() {
         toast.success(`Created ${nameOf(url)}`);
         return url;
       } catch (error) {
-        toast.error(errorMessage(error, "Couldn't create the folder"));
+        reportFailure(error, "Couldn't create the folder", () => void newFolder(parent, name));
         return undefined;
       }
     },
@@ -587,7 +616,7 @@ export function useDriveActions() {
       for (const warning of result.warnings ?? []) toast.error(warning.message);
       const first = result.done[0];
       if (result.failed.length > 0)
-        toast.error(errorMessage(result.failed[0]?.error, "Couldn't restore"));
+        reportFailure(result.failed[0]?.error, "Couldn't restore", () => void restore(entries));
       if (first && result.done.length === 1) {
         toast.success(
           first.renamed ? `Restored as ${nameOf(first.url)}` : `Restored ${first.entry.name}`,
@@ -616,7 +645,7 @@ export function useDriveActions() {
         for (const warning of result.warnings ?? []) toast.error(warning.message);
         if (result.failed.length > 0) {
           const failure = result.failed[0]?.error;
-          if (failure instanceof DriveAccessError) {
+          if (failure instanceof DriveAccessError && !deletionPending(failure)) {
             toast.error(errorMessage(failure), {
               action: {
                 label: "Delete forever",
@@ -629,7 +658,10 @@ export function useDriveActions() {
                   }),
               },
             });
-          } else toast.error(errorMessage(failure, "Couldn't move to trash"));
+          } else
+            reportFailure(failure, "Couldn't move to trash", () =>
+              invalidate(trashFolderOf(driveRoot)),
+            );
         }
         const first = result.done[0];
         if (!first) return;
@@ -661,12 +693,23 @@ export function useDriveActions() {
         (tracked) => deleteForever(tracked, driveRoot, entries),
       );
       for (const warning of result.warnings ?? []) toast.error(warning.message);
+      if (result.done.length)
+        updatePrefs((prefs) =>
+          pruneDeleted(
+            prefs,
+            result.done.flatMap((entry) => [entry.original, entry.url]),
+          ),
+        );
       if (result.failed.length > 0)
-        toast.error(errorMessage(result.failed[0]?.error, "Couldn't delete"));
+        reportFailure(
+          result.failed[0]?.error,
+          "Couldn't delete",
+          () => void removeForever(entries),
+        );
       if (result.done.length > 0) toast.success("Deleted for ever");
       return result;
     },
-    [client, driveRoot, invalidate],
+    [client, driveRoot, invalidate, updatePrefs],
   );
 
   const removeSourcesForever = useCallback(
@@ -678,15 +721,23 @@ export function useDriveActions() {
           await client.remove(item.url, { recursive: item.kind === "folder" });
           done.push(item);
         } catch (error) {
-          toast.error(errorMessage(error, "Couldn't delete"));
+          reportFailure(error, "Couldn't delete", () => void removeSourcesForever(items));
         } finally {
           invalidate(item.url);
         }
       }
-      if (done.length) toast.success("Deleted for ever");
+      if (done.length) {
+        updatePrefs((prefs) =>
+          pruneDeleted(
+            prefs,
+            done.map(({ url }) => url),
+          ),
+        );
+        toast.success("Deleted for ever");
+      }
       return { done };
     },
-    [client, invalidate, session.storageUrl],
+    [client, invalidate, session.storageUrl, updatePrefs],
   );
 
   return {

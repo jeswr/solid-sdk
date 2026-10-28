@@ -129,7 +129,7 @@ describe("Drive client against a seeded demo pod", () => {
     expect([...(unvalidated?.dataset ?? [])]).toEqual([...(result?.dataset ?? [])]);
   });
 
-  it.each([401, 403, 409, 410, 412, 500])("maps readRdf HTTP %i failures", async (status) => {
+  it.each([401, 403, 409, 412, 500])("maps readRdf HTTP %i failures", async (status) => {
     const client = stubClient(async () => new Response(null, { status }));
     const url = `${DRIVE}data.ttl`;
     await expect(client.readRdf(url)).rejects.toEqual(
@@ -353,7 +353,6 @@ describe("Drive error handling and foreign server responses", () => {
         () => client.copy(`${DRIVE}missing`, `${DRIVE}copy`, { kind: "preserve-source" }),
         `${DRIVE}missing`,
       ],
-      [() => client.remove(url), url],
     ] as const) {
       await expect(operation()).rejects.toMatchObject({
         name: "DriveError",
@@ -363,6 +362,8 @@ describe("Drive error handling and foreign server responses", () => {
         message: `${kind} (${status}) at ${requestUrl}`,
       });
     }
+    if (status === 404 || status === 410) await client.remove(url);
+    else await expect(client.remove(url)).rejects.toMatchObject({ kind, status });
   });
 
   it("preserves network failures and RdfFetchErrors without a status", async () => {

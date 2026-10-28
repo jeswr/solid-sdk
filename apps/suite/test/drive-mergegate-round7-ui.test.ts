@@ -247,6 +247,12 @@ it("Shared classifies legacy records from URL extensions while declared MIME and
     { url: `${PUBLIC}opaque.txt`, contentType: "application/octet-stream" },
     { url: `${PUBLIC}odd%2Fname.txt` },
   ].map((entry) => ({ ...entry, openedAt: "2026-01-01T00:00:00Z" }));
+  // Aggregate reads now reconcile missing URLs. Keep these MIME fixtures present.
+  env.pod.intercept(async (url, init) =>
+    init?.method === "HEAD" && entries.some((entry) => entry.url === url)
+      ? new Response(null, { status: 200 })
+      : undefined,
+  );
   localStorage.setItem(env.prefsKey, JSON.stringify({ openedShared: entries }));
   const view = await mount(env.tree(h(SharedView)));
   for (const [family, indexes] of [

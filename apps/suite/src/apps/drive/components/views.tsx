@@ -12,6 +12,7 @@ import {
   type DriveClient,
   DriveError,
   type DriveItem,
+  isMissingItem,
   nameOf,
   parentOf,
 } from "../lib/client/client";
@@ -20,6 +21,7 @@ import type { TrashEntry } from "../lib/operations/trash-index";
 import { formatSize } from "../lib/view/view";
 import { useDrive, useFolder } from "../state/drive-context";
 import { useDriveListingFocus } from "../state/listing-focus";
+import { pruneDeleted } from "../state/prefs";
 import { withHydratedMetadata } from "../state/resource";
 import { latestShared, sharedContentType, useRecordSharedOpen } from "../state/shared";
 import { useDriveActions, useDriveUi } from "../state/ui";
@@ -107,7 +109,7 @@ export function FolderRefView() {
 
 /** A cancellable tree scan; results are tied to the root, query and request generation. */
 function useTreeFiles(query?: string) {
-  const { client, driveRoot, changes } = useDrive();
+  const { client, driveRoot, changes, updatePrefs } = useDrive();
   const [snapshot, setSnapshot] = useState<{
     client: DriveClient;
     root: string;
@@ -147,7 +149,14 @@ function useTreeFiles(query?: string) {
       ...client,
       list: async (url, options) => {
         controller.signal.throwIfAborted();
-        const items = await client.list(url, { ...options, signal: controller.signal });
+        const items = await client
+          .list(url, { ...options, signal: controller.signal })
+          .catch((error: unknown) => {
+            controller.signal.throwIfAborted();
+            if (!isMissingItem(error)) throw error;
+            updatePrefs((prefs) => pruneDeleted(prefs, [url]));
+            throw error;
+          });
         controller.signal.throwIfAborted();
         return items;
       },
@@ -167,7 +176,7 @@ function useTreeFiles(query?: string) {
       },
     );
     return () => controller.abort();
-  }, [client, driveRoot, query, tick]);
+  }, [client, driveRoot, query, tick, updatePrefs]);
   useEffect(
     () => (driveRoot ? changes.subscribeSubtree(driveRoot, load) : undefined),
     [driveRoot, changes, load],
@@ -204,7 +213,7 @@ export function RecentView() {
 }
 
 export function StarredView() {
-  const { client, prefs, driveRoot, changes } = useDrive();
+  const { client, prefs, driveRoot, changes, updatePrefs } = useDrive();
   const [snapshot, setSnapshot] = useState<{
     client: DriveClient;
     starred: string;
@@ -228,8 +237,9 @@ export function StarredView() {
       starred,
       ...(previous?.client === client && previous.items?.length ? { items: previous.items } : {}),
     }));
+    const urls = JSON.parse(starred) as string[];
     Promise.allSettled(
-      (JSON.parse(starred) as string[]).map((url) =>
+      urls.map((url) =>
         client.stat(url).then((item): BrowserItem => {
           const parent = parentOf(url);
           return parent ? { ...item, folder: parent } : item;
@@ -239,10 +249,13 @@ export function StarredView() {
       if (!live) return;
       const items: BrowserItem[] = [];
       const errors: unknown[] = [];
-      for (const result of results) {
+      const missing: string[] = [];
+      for (const [i, result] of results.entries()) {
         if (result.status === "fulfilled") items.push(result.value);
+        else if (isMissingItem(result.reason)) missing.push(urls[i] as string);
         else errors.push(result.reason);
       }
+      if (missing.length) updatePrefs((prefs) => pruneDeleted(prefs, missing));
       setSnapshot({
         client,
         starred,
@@ -255,7 +268,7 @@ export function StarredView() {
     return () => {
       live = false;
     };
-  }, [client, starred, version]);
+  }, [client, starred, version, updatePrefs]);
   // Keep controls mounted during same-account refreshes so removal can restore focus.
   const current = snapshot?.client === client ? snapshot : undefined;
   return (
@@ -275,8 +288,8 @@ export function StarredView() {
 }
 
 export function SharedView() {
-  const { client, prefs } = useDrive();
-  const items = useMemo<BrowserItem[]>(
+  const { client, prefs, updatePrefs } = useDrive();
+  const saved = useMemo<BrowserItem[]>(
     () =>
       latestShared(prefs.openedShared).map((entry) => {
         const { url, name, type, openedAt, size, modified } = entry;
@@ -295,10 +308,50 @@ export function SharedView() {
       }),
     [client, prefs.openedShared],
   );
+  const urls = JSON.stringify(saved.map(({ url }) => url));
+  const [snapshot, setSnapshot] = useState<{
+    client: DriveClient;
+    urls: string;
+    missing: string[];
+    error?: unknown;
+  }>();
+  const [version, setVersion] = useState(0);
+  const load = useCallback(() => setVersion((value) => value + 1), []);
+  useEffect(() => {
+    void version;
+    let live = true;
+    const targets = JSON.parse(urls) as string[];
+    Promise.allSettled(targets.map((url) => client.stat(url))).then((results) => {
+      if (!live) return;
+      const missing: string[] = [];
+      const errors: unknown[] = [];
+      for (const [i, result] of results.entries()) {
+        if (result.status === "fulfilled") continue;
+        if (isMissingItem(result.reason)) missing.push(targets[i] as string);
+        else errors.push(result.reason);
+      }
+      if (missing.length) updatePrefs((prefs) => pruneDeleted(prefs, missing));
+      setSnapshot({
+        client,
+        urls,
+        missing,
+        ...(errors.length
+          ? { error: new AggregateError(errors, "Some items couldn't be read.") }
+          : {}),
+      });
+    });
+    return () => {
+      live = false;
+    };
+  }, [client, urls, version, updatePrefs]);
+  const current = snapshot?.client === client && snapshot.urls === urls ? snapshot : undefined;
+  const items = saved.filter(({ url }) => !current?.missing.includes(url));
   return (
     <FileBrowser
       title="Shared with me"
       items={items}
+      error={current?.error}
+      onRetry={load}
       fixedOrder
       showModifiedFilter={false}
       columns={["shared-by", "opened", "host"]}

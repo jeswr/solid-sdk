@@ -31,11 +31,13 @@ import {
   policyArchiveOf,
   requirePolicy,
 } from "./ancestors";
+import { DriveDeletePendingError, deletionControl, rethrowPendingDeletion } from "./deletion";
 import { protectionLedger } from "./protection-ledger";
 import { containerData, relocate, sameGraph } from "./rdf";
 
 export type { ContainerPolicy } from "./ancestors";
 export { policyArchiveOf } from "./ancestors";
+export { DriveDeletePendingError } from "./deletion";
 
 /** Resolve historical ancestor requirements, falling back to verified owner-only access. */
 export interface AncestorPolicy {
@@ -145,6 +147,10 @@ export class DriveError extends Error {
     super(`${kind} (${status}) at ${url}`);
     this.name = "DriveError";
   }
+}
+
+export function isMissingItem(error: unknown): boolean {
+  return error instanceof DriveError && (error.status === 404 || error.status === 410);
 }
 
 /** Copies retained for recovery; a rejected DELETE may have reached the server. */
@@ -284,6 +290,7 @@ export function createSolidDriveClient(options: {
   const http = options.fetch;
   const access = accessControl(http, storageUrl);
   const ledger = protectionLedger(http);
+  const deletion = deletionControl(http, errorFor);
   const protection = async (url: string): Promise<{ protectionRequired?: true }> =>
     (await ledger.get(url)) ? { protectionRequired: true } : {};
   let owner = options.webId;
@@ -385,7 +392,8 @@ export function createSolidDriveClient(options: {
         ? { dataset: result.dataset, etag: result.etag }
         : { dataset: result.dataset };
     } catch (error) {
-      if (error instanceof RdfFetchError && error.status === 404) return undefined;
+      if (error instanceof RdfFetchError && (error.status === 404 || error.status === 410))
+        return undefined;
       if (error instanceof RdfFetchError && error.status !== undefined)
         throw errorFor(error.status, url);
       throw error;
@@ -399,6 +407,12 @@ export function createSolidDriveClient(options: {
     init: RequestInit,
     creating = false,
   ): Promise<Response> => {
+    for (
+      let target: string | undefined = url;
+      target?.startsWith(storageUrl);
+      target = parentOf(target)
+    )
+      await deletion.guard(target);
     await provision.guard(url, creating, new Headers(init.headers).get("if-none-match") === "*");
     return ensureOk(await http(url, init), url);
   };
@@ -445,6 +459,7 @@ export function createSolidDriveClient(options: {
       }),
     error: errorFor,
     owner: () => owner,
+    deleteVersion: (url, etag) => deletion.remove(url, etag),
     ...(options.onPrivateFolder ? { onPrivateFolder: options.onPrivateFolder } : {}),
     ...(options.onProtectionChange ? { onProtectionChange: options.onProtectionChange } : {}),
   });
@@ -503,14 +518,8 @@ export function createSolidDriveClient(options: {
     return etag;
   }
 
-  const deleteVersion = async (url: string, etag: string | undefined) => {
-    const response = await http(url, {
-      method: "DELETE",
-      headers: { "if-match": validator(url, etag) },
-    });
-    if ((response.ok && response.status !== 202) || response.status === 404)
-      await ledger.clear(url);
-    await ensureOk(response, url);
+  const deleteVersion = async (url: string, etag: string | undefined, recovery?: string) => {
+    await deletion.remove(url, validator(url, etag), recovery);
     resources.delete(url);
     responseTypes.delete(url);
   };
@@ -519,11 +528,13 @@ export function createSolidDriveClient(options: {
     source: SourceSnapshot,
     deleted: string[],
     verifyCopy?: (source: SourceSnapshot) => Promise<void>,
+    recovery?: (url: string) => string,
   ) => {
     await verifyCopy?.(source);
     let etag = source.etag;
     if (source.children?.length) {
-      for (const child of source.children) await deleteSnapshot(child, deleted, verifyCopy);
+      for (const child of source.children)
+        await deleteSnapshot(child, deleted, verifyCopy, recovery);
       // Our own child deletions change a container's ETag. Read its new empty
       // representation, then conditionally delete it. Never walk new members.
       const current = await listing(source.url);
@@ -535,7 +546,7 @@ export function createSolidDriveClient(options: {
       etag = current.etag;
       await verifyCopy?.(source);
     }
-    await deleteVersion(source.url, etag);
+    await deleteVersion(source.url, etag, recovery?.(source.url));
     deleted.push(source.url);
   };
 
@@ -632,8 +643,9 @@ export function createSolidDriveClient(options: {
     }
   };
 
-  const rollback = async (created: CreatedResource[]): Promise<string[]> => {
+  const rollback = async (created: CreatedResource[]) => {
     const retained: string[] = [];
+    let pending: DriveDeletePendingError | undefined;
     for (const resource of [...created].reverse()) {
       try {
         let etag = resource.etag;
@@ -643,11 +655,12 @@ export function createSolidDriveClient(options: {
           etag = current.etag;
         }
         await deleteVersion(resource.url, etag);
-      } catch {
+      } catch (error) {
         retained.push(resource.url);
+        if (error instanceof DriveDeletePendingError) pending = error;
       }
     }
-    return retained;
+    return { retained, pending };
   };
 
   const preparePolicies = async (
@@ -795,7 +808,7 @@ export function createSolidDriveClient(options: {
       if (!sameGraph(data, containerData((await listing(to)).dataset, to)))
         throw new DriveError("conflict", 409, to);
     } catch (error) {
-      if (created) await remove(to).catch(() => undefined);
+      if (created) await remove(to).catch(rethrowPendingDeletion);
       throw error;
     }
   };
@@ -814,6 +827,7 @@ export function createSolidDriveClient(options: {
     }
     const ordinaryMove =
       moving && decision.kind === "confirm-move" && !privateOwner && !policyArchiveOf(from);
+    await deletion.guard(from);
     const source = await snapshot(from, moving, true);
     const nodes = snapshots(source);
     // Resolve every node, even for same-folder renames and descendants with own ACLs.
@@ -955,32 +969,43 @@ export function createSolidDriveClient(options: {
           await verifyDestination({ url });
         }
         deleting = true;
-        await deleteSnapshot(source, deleted, async (node) => {
-          await beforeDelete?.();
-          await verifyDestination(node);
-          if (node.access.status === "known") {
-            const current = await access.read(node.access.policy.url);
-            if (
-              current.status !== "known" ||
-              current.policy.etag !== node.access.policy.etag ||
-              !sameGraph(node.access.policy.dataset, current.policy.dataset)
-            )
-              throw new DriveAccessError("Source policy changed");
-          }
-        });
+        await deleteSnapshot(
+          source,
+          deleted,
+          async (node) => {
+            await beforeDelete?.();
+            await verifyDestination(node);
+            if (node.access.status === "known") {
+              const current = await access.read(node.access.policy.url);
+              if (
+                current.status !== "known" ||
+                current.policy.etag !== node.access.policy.etag ||
+                !sameGraph(node.access.policy.dataset, current.policy.dataset)
+              )
+                throw new DriveAccessError("Source policy changed");
+            }
+          },
+          (url) => `${to}${url.slice(from.length)}`,
+        );
       }
     } catch (error) {
       // A network failure during DELETE is ambiguous: keep the recovery copy.
-      const retained =
+      const keep =
         verifyingCopy ||
         deleted.length ||
         (deleting &&
-          (!(error instanceof DriveError) || error.kind === "not-found" || error.status >= 500))
-          ? created.map(({ url }) => url)
-          : await rollback(created);
+          (!(error instanceof DriveError) || error.kind === "not-found" || error.status >= 500));
+      const cleanup = keep ? undefined : await rollback(created);
+      const retained = cleanup ? cleanup.retained : created.map(({ url }) => url);
       if (!deleted.length && !retained.length) throw error;
       const unverified = sourceUrls(source).filter((url) => !deleted.includes(url));
-      throw new DrivePartialFailureError(from, deleted, unverified, retained, error);
+      throw new DrivePartialFailureError(
+        from,
+        deleted,
+        unverified,
+        retained,
+        cleanup?.pending ?? error,
+      );
     }
     const etag = destinations.get(from)?.etag;
     return {
@@ -1014,24 +1039,30 @@ export function createSolidDriveClient(options: {
   };
 
   const remove: DriveClient["remove"] = async (url, opts = {}) => {
-    if (url.endsWith("/") && opts.recursive) {
-      const source = await snapshot(url, true, false);
-      const deleted: string[] = [];
-      try {
-        await deleteSnapshot(source, deleted);
-      } catch (error) {
-        if (deleted.length)
-          throw new DrivePartialFailureError(
-            url,
-            deleted,
-            sourceUrls(source).filter((url) => !deleted.includes(url)),
-            [],
-            error,
-          );
-        throw error;
+    await deletion.guard(url);
+    try {
+      if (url.endsWith("/") && opts.recursive) {
+        const source = await snapshot(url, true, false);
+        const deleted: string[] = [];
+        try {
+          await deleteSnapshot(source, deleted);
+        } catch (error) {
+          if (deleted.length)
+            throw new DrivePartialFailureError(
+              url,
+              deleted,
+              sourceUrls(source).filter((url) => !deleted.includes(url)),
+              [],
+              error,
+            );
+          throw error;
+        }
+      } else {
+        await deleteVersion(url, opts.ifMatch ?? (await stat(url)).etag);
       }
-    } else {
-      await deleteVersion(url, opts.ifMatch ?? (await stat(url)).etag);
+    } catch (error) {
+      if (!isMissingItem(error) || (error as DriveError).url !== url) throw error;
+      await deletion.forget(url);
     }
   };
 

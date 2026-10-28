@@ -311,7 +311,7 @@ describe("Drive data-safety regressions", () => {
     recovery = entry.url;
     const remove = vi.spyOn(client, "remove");
     expect(await deleteForever(client, DRIVE, entries)).toEqual({ done: entries, failed: [] });
-    expect(remove.mock.calls.filter(([url]) => url === entry.url)).toHaveLength(2);
+    expect(remove.mock.calls.filter(([url]) => url === entry.url)).toHaveLength(1);
     expect(pod.has(entry.url)).toBe(false);
     expect(await listTrash(client, DRIVE)).toEqual([]);
   });
@@ -1229,14 +1229,13 @@ describe("Drive data-safety regressions", () => {
 
   it.each([
     "network",
-    "missing",
     "server",
   ])("keeps a recovery copy after an ambiguous source deletion (%s)", async (failure) => {
     const { pod, client } = setup(async (url, init) => {
       if (url === `${FROM}a` && init?.method === "DELETE") {
         await pod.fetch(url, init);
         if (failure === "network") throw new Error("lost response");
-        return new Response(null, { status: failure === "missing" ? 404 : 500 });
+        return new Response(null, { status: 500 });
       }
       return undefined;
     });

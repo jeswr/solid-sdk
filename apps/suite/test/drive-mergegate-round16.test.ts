@@ -99,7 +99,7 @@ it.each([
     return undefined;
   });
   const deleting = client.remove(to, { ifMatch: target.etag as string });
-  if (mode === "deleted" || mode === "pending") await deleting;
+  if (mode === "deleted" || mode === "already gone") await deleting;
   else await expect(deleting).rejects.toThrow();
   const retained = ["failed", "offline", "changed", "pending"].includes(mode);
   expect(f.pod.has(to)).toBe(retained);

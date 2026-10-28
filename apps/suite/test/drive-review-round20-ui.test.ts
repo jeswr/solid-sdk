@@ -120,7 +120,8 @@ it("folder-listing Retry restores listing focus when the listing returns", async
   const view = await setup();
   const listing = vi.spyOn(drive.client, "list").mockRejectedValue(new Error("offline"));
   await act(async () => drive.invalidate(ROOT));
-  const retry = button("Retry", view.host);
+  // Usage can fail at the same time; activate the folder's Retry, not the sidebar's.
+  const retry = button("Retry", view.host.querySelector(".drv-page") as HTMLElement);
   listing.mockRestore();
   await activate(retry);
   await vi.waitFor(() => expect(retry.isConnected).toBe(false));
