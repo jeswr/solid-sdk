@@ -745,7 +745,7 @@ export function GET(request) {
   it("checks the actual manifest independent of the invoking directory", () => {
     const result = runNode([guard], { cwd: tmpdir() });
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("14 deployments checked");
+    expect(result.stdout).toContain("15 deployments checked");
     expect(result.stderr).toBe("");
   });
 });
@@ -758,6 +758,11 @@ describe("Vite app Vercel routes", () => {
       const vite = readFileSync(join(checkout, app.rootDirectory, "vite.config.ts"), "utf8");
       if (app.rootDirectory === "apps/access-manager") {
         expect(vite).not.toMatch(/\bbase\s*:/);
+        return;
+      }
+      if (app.rootDirectory === "apps/pod-migrator") {
+        // Absolute base from CLIENT_BASE_PATH ("/" unless a Pages build sets it).
+        expect(vite).toContain("deploymentBasePath(env.CLIENT_BASE_PATH || env.APP_BASE_PATH)");
         return;
       }
       expect(vite).toContain('base: process.env.VERCEL === "1" ? "/" : "./",');

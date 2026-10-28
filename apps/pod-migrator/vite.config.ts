@@ -129,11 +129,9 @@ export default defineConfig(({ mode, command }) => {
     fileEnvironment(".env.local"),
     fileEnvironment(".env"),
   ]);
-  const origin = deploymentOrigin(
-    env,
-    command === "build" && Boolean(env.APP_ORIGIN || process.env.CI),
-  );
-  const base = deploymentBasePath(env.APP_BASE_PATH);
+  const origin = deploymentOrigin(env, command === "build" && Boolean(env.APP_ORIGIN));
+  // scripts/build-pages.mjs passes the Pages base as CLIENT_BASE_PATH (and --base).
+  const base = deploymentBasePath(env.CLIENT_BASE_PATH || env.APP_BASE_PATH);
   if (mode === "screens" && command === "build")
     throw new Error("Screenshot mocks are development-only.");
   return {
