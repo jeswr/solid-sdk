@@ -292,9 +292,12 @@ it.each([
 });
 
 const word = fc.constantFrom("First item", "Second item", " [] <>& | ` * ", " one\n two\t ", "😀");
+const inlineContent = fc
+  .array(word, { minLength: 1, maxLength: 3 })
+  .map((words) => words.flatMap((value, index) => (index ? [{ type: "hardBreak" }, text(value)] : [text(value)])));
 const paragraph = fc
-  .tuple(word, fc.constantFrom(null, "left", "center", "right", "justify"))
-  .map(([value, textAlign]) => ({ ...p(value), attrs: { textAlign } }));
+  .tuple(inlineContent, fc.constantFrom(null, "left", "center", "right", "justify"))
+  .map(([content, textAlign]) => ({ type: "paragraph", content, attrs: { textAlign } }));
 const list = (child: fc.Arbitrary<JSONContent>): fc.Arbitrary<JSONContent> =>
   fc
     .tuple(
@@ -317,9 +320,11 @@ const list = (child: fc.Arbitrary<JSONContent>): fc.Arbitrary<JSONContent> =>
     }));
 const nestedList = list(list(paragraph));
 
-it("round trips generated GFM lists with multiple paragraphs and nested lists", () => {
-  const plain = word.map((value) => p(value));
-  const generated = list(list(plain));
+it("round trips generated nested lists, tasks and blockquotes with hard breaks, multiple paragraphs and opening thematic breaks", () => {
+  const plain: fc.Arbitrary<JSONContent> = inlineContent.map((content) => ({ type: "paragraph", content }));
+  const containers = (child: fc.Arbitrary<JSONContent>): fc.Arbitrary<JSONContent> =>
+    fc.oneof(list(child), fc.array(child, { minLength: 1, maxLength: 3 }).map((content) => ({ type: "blockquote", content })));
+  const generated = containers(fc.oneof(plain, containers(fc.oneof(plain, containers(plain)))));
   fc.assert(
     fc.property(generated, (value) => {
       const stripAlignment = (node: JSONContent): JSONContent => ({
@@ -327,7 +332,7 @@ it("round trips generated GFM lists with multiple paragraphs and nested lists", 
         ...(node.type === "paragraph" ? { attrs: { textAlign: null } } : {}),
         ...(node.content ? { content: node.content.map(stripAlignment) } : {}),
       });
-      roundTrip(doc(stripAlignment(value)));
+      roundTrip(doc({ type: "horizontalRule" }, stripAlignment(value), { type: "horizontalRule" }, p("Final section")));
     }),
     { seed: 1817, numRuns: 200 },
   );

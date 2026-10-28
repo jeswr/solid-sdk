@@ -338,13 +338,10 @@ function needsHtml(node: JSONContent): boolean {
       /\r/.test(textContent(node))
     );
   const children = node.content ?? [];
-  // The upstream list bridge treats continuation paragraphs as inline tokens.
-  // Keep loose/block-content items in one HTML context, including their parent.
-  if (
-    ["listItem", "taskItem"].includes(String(node.type)) &&
-    children.slice(1).some((child) => !/List$/.test(String(child.type)))
-  )
-    return true;
+  // Containers can hold both Markdown blocks and complete HTML fallbacks.
+  // Prefix their rendered lines rather than forcing all descendants into HTML.
+  if (["blockquote", "bulletList", "orderedList", "taskList"].includes(String(node.type)))
+    return false;
   return (
     node.type !== "doc" &&
     (children.some((child, index) => touchingBlocks(child, children[index + 1])) ||
@@ -375,6 +372,40 @@ function checkRules(node: JSONContent): void {
 const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
   .map((extension) => extension.extend({ addExtensions: () => [] }))
   .map((extension) => {
+    if (["taskList", "orderedList"].includes(extension.name))
+      extension = extension.extend({
+        // Use CommonMark's list lexer: the upstream line-based tokenizers split
+        // hard breaks and continuation blocks away from the first paragraph.
+        markdownTokenizer: { name: extension.name, level: "block", tokenize: () => undefined },
+        markdownTokenName: extension.name === "taskList" ? "docsTaskList" : "list",
+      });
+    if (["bulletList", "orderedList"].includes(extension.name))
+      return extension.extend({
+        parseMarkdown(token: MarkdownToken, helpers: MarkdownParseHelpers) {
+          if (token.type !== "list" || !!token.ordered !== (extension.name === "orderedList"))
+            return [];
+          const groups: JSONContent[] = [];
+          for (const item of token.items as MarkdownToken[]) {
+            const type = item.task ? "taskList" : token.ordered ? "orderedList" : "bulletList";
+            let group = groups.at(-1);
+            if (group?.type !== type) {
+              group = {
+                type,
+                ...(type === "orderedList" ? { attrs: { start: token.start } } : {}),
+                content: [],
+              };
+              groups.push(group);
+            }
+            const content = (helpers.parseBlockChildren as NonNullable<typeof helpers.parseBlockChildren>)(item.tokens as MarkdownToken[]);
+            group.content?.push({
+              type: item.task ? "taskItem" : "listItem",
+              ...(item.task ? { attrs: { checked: item.checked } } : {}),
+              content,
+            });
+          }
+          return groups;
+        },
+      });
     if (extension.name === "link")
       return extension.configure({ isAllowedUri: safeDestination }).extend({
         parseMarkdown(token: MarkdownToken, helpers: MarkdownParseHelpers) {
@@ -583,6 +614,14 @@ function clean(node: JSONContent, dropHighlights: boolean): JSONContent {
 function textContent(node: JSONContent): string {
   return node.text ?? (node.content ?? []).map(textContent).join(" ");
 }
+
+/** Compose containers inside-out, prefixing every physical continuation line. */
+function containerPrefix(content: string, first: string, continuation: string): string {
+  return content.split("\n").map((line, index) =>
+    index === 0 ? first + line : line ? continuation + line : continuation.trimEnd(),
+  ).join("\n");
+}
+
 export function exportMarkdown(json: JSONContent, dropHighlights = false): string {
   // The upstream serializer escapes inline delimiters but leaves block syntax
   // and edge whitespace literal. Protect text before serializing, then restore
@@ -599,6 +638,8 @@ export function exportMarkdown(json: JSONContent, dropHighlights = false): strin
     // cell paragraphs must stay cells rather than becoming HTML placeholders.
     if (!inTable && needsHtml(node))
       return { type: "paragraph", content: [{ type: "text", text: literal(htmlNode(node)) }] };
+    if (node.type === "hardBreak")
+      return { type: "text", text: literal(inTable ? "<br>" : "\\\n") };
     const code = inCode || node.type === "codeBlock";
     const table = inTable || node.type === "table";
     const result = { ...node };
@@ -641,12 +682,28 @@ export function exportMarkdown(json: JSONContent, dropHighlights = false): strin
   };
   const cleaned = clean(json, dropHighlights);
   checkRules(cleaned);
-  return markdown
-    .serialize(protect(cleaned))
-    .replace(
+  const blocks = (content: JSONContent[]): string => content.map((child, index) =>
+    touchingBlocks(child, content[index + 1]) ? htmlNode(child) : render(child),
+  ).join("\n\n");
+  const render = (node: JSONContent): string => {
+    if (needsHtml(node)) return htmlNode(node);
+    const content = node.content ?? [];
+    if (node.type === "doc") return blocks(content);
+    if (node.type === "blockquote") return containerPrefix(blocks(content), "> ", "> ");
+    if (["bulletList", "orderedList", "taskList"].includes(String(node.type)))
+      return content.map((item, index) => {
+        const marker = node.type === "taskList" ? `- [${item.attrs?.checked ? "x" : " "}] `
+          : node.type === "orderedList" ? `${Number(node.attrs?.start ?? 1) + index}. ` : "- ";
+        return containerPrefix(blocks(item.content as JSONContent[]), marker, " ".repeat(marker.length));
+      }).join("\n");
+    if (node.type === "horizontalRule") return "***";
+    // Restore literals before any parent container adds its prefixes.
+    return markdown.serialize(protect(node)).replace(
       new RegExp(`${prefix}(\\d+)END`, "g"),
       (_, index: string) => escapes[Number(index)] as string,
     );
+  };
+  return render(cleaned);
 }
 export function importMarkdown(source: string, fileName: string) {
   if (new TextEncoder().encode(source).byteLength > MAX_IMPORT_BYTES)
