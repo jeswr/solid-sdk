@@ -347,12 +347,15 @@ describe("Drive error handling and foreign server responses", () => {
       new Response(null),
       new Response(null),
       new Response(null), // Existing parent before write.
+      new Response(null), // Recheck after acquiring the ancestor Web Lock.
       new Response(null, { status: 201 }),
       new Response(new Uint8Array([0, 255]), {
         headers: { "x-solid-demo-access-control": "none" },
       }),
       new Response(null), // Existing parent before transfer.
+      new Response(null), // Recheck after acquiring the ancestor Web Lock.
       new Response(null), // Existing parent immediately before payload.
+      new Response(null), // Recheck after acquiring the ancestor Web Lock.
       new Response(null, { status: 201 }),
     ];
     const fetch = vi.fn<typeof globalThis.fetch>(async () => {
