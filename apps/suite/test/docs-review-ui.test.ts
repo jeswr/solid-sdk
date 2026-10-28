@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EditorToolbar } from "../src/apps/docs/components/editor-toolbar";
 import { FileMenu } from "../src/apps/docs/components/file-menu";
 import { ImportDialog } from "../src/apps/docs/components/import-dialog";
+import { DOCX_FORMATTING_WARNING } from "../src/apps/docs/lib/convert/skipped";
 
 let root: Root;
 let host: HTMLDivElement;
@@ -222,4 +223,50 @@ describe("Docs keyboard review regressions", () => {
     }
     await vi.waitFor(() => expect(document.activeElement).toBe(upload));
   });
+});
+
+it.each([
+  false,
+  true,
+])("shows the DOCX formatting warning separately from skipped content (skipped: %s)", async (skipped) => {
+  const done = vi.fn();
+  const close = vi.fn();
+  await act(async () =>
+    root.render(
+      createElement(ImportDialog, {
+        close,
+        replace: true,
+        run: async () => ({
+          skipped: [
+            { label: DOCX_FORMATTING_WARNING, count: 1 },
+            ...(skipped ? [{ label: "Footnotes", count: 2 }] : []),
+          ],
+          done,
+        }),
+      }),
+    ),
+  );
+  const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+  Object.defineProperty(input, "files", {
+    configurable: true,
+    value: [new File(["test"], "external.docx")],
+  });
+  await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+  await act(async () =>
+    [...document.querySelectorAll("button")]
+      .find((button) => button.textContent === "Replace contents")
+      ?.click(),
+  );
+  expect(document.querySelector('[role="status"]')?.textContent).toBe(DOCX_FORMATTING_WARNING);
+  const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+  if (skipped) expect(dialog.textContent).toContain("Footnotes (2) weren't imported");
+  else expect(dialog.textContent).not.toContain("weren't imported");
+  expect(done).not.toHaveBeenCalled();
+  await act(async () =>
+    [...document.querySelectorAll("button")]
+      .find((button) => button.textContent === "Open document")
+      ?.click(),
+  );
+  expect(close).toHaveBeenCalledOnce();
+  expect(done).toHaveBeenCalledOnce();
 });

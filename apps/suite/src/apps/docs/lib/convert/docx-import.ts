@@ -1,10 +1,15 @@
 // AUTHORED-BY Codex
 
+import { generateHTML } from "@tiptap/react";
 import { openArrayBuffer } from "mammoth/lib/zipfile";
 import mammoth from "mammoth/mammoth.browser";
 import { SaxesParser } from "saxes";
+import { baseExtensions } from "../../editor/extensions";
+import { readNumbering } from "./docx-numbering";
+import { embeddedDocument } from "./docx-payload";
+import { WORD } from "./docx-xml";
 import { sanitiseImport } from "./sanitise";
-import { reportSkipped, type SkippedItem } from "./skipped";
+import { DOCX_FORMATTING_WARNING, reportSkipped, type SkippedItem } from "./skipped";
 
 export type { SkippedItem } from "./skipped";
 
@@ -33,7 +38,6 @@ export interface DocxImportOptions {
   uploadImage: (data: ArrayBuffer, contentType: string) => Promise<string>;
   progress: (progress: ImportProgress) => void;
 }
-const WORD = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 
 interface DocxElement {
   type: string;
@@ -45,11 +49,34 @@ interface DocxElement {
 }
 
 /** Build paths using the actual ancestors, including task-list/item attributes. */
-function mapLists(document: DocxElement, styleMap: string[]) {
+function mapLists(
+  document: DocxElement,
+  styleMap: string[],
+  numbering: ReturnType<typeof readNumbering>,
+) {
+  let paragraphIndex = 0;
   function container(element: DocxElement) {
-    const ancestors: string[] = [];
+    const ancestors: { path: string; key: string }[] = [];
     for (const child of element.children ?? []) {
+      const metadata = child.type === "paragraph" ? numbering[paragraphIndex++] : undefined;
       const styleName = child.styleName?.toLowerCase();
+      const indentLevel = Math.round(Number(child.indent?.start) / 720 - 1);
+      const continuation =
+        child.type === "paragraph" &&
+        !child.numbering &&
+        !["task checked", "task unchecked"].includes(styleName ?? "") &&
+        indentLevel >= 0 &&
+        ancestors.length > 0;
+      const mappedStyle = (path: string) => {
+        const styleId = `SuiteList${styleMap.length}`;
+        styleMap.push(`p.${styleId} => ${path}`);
+        child.styleId = styleId;
+      };
+      if (continuation) {
+        ancestors.length = Math.min(indentLevel + 1, ancestors.length);
+        mappedStyle([...ancestors.map((ancestor) => ancestor.path), "p:fresh"].join(" > "));
+        continue;
+      }
       const task = styleName === "task checked" || styleName === "task unchecked";
       if (child.type === "paragraph" && (task || child.numbering)) {
         // Suite task markers use half-inch indentation instead of Word numbering.
@@ -62,20 +89,25 @@ function mapLists(document: DocxElement, styleMap: string[]) {
             ),
           ),
         );
-        const list = task ? "ul[data-type='taskList']" : child.numbering?.isOrdered ? "ol" : "ul";
+        const list = task
+          ? "ul[data-type='taskList']"
+          : child.numbering?.isOrdered
+            ? `ol[start='${metadata?.start ?? 1}']`
+            : "ul";
+        const key = `${list}:${task ? "" : (metadata?.id ?? "")}`;
         const item = task
           ? `li[data-type='taskItem'][data-checked='${styleName === "task checked"}']`
           : "li";
         // A document may start at an indented level without supplying its parents.
         const depth = Math.min(level, ancestors.length);
-        const path = [...ancestors.slice(0, depth), `${list} > ${item}:fresh > p:fresh`].join(
-          " > ",
-        );
-        const styleId = `SuiteList${styleMap.length}`;
-        styleMap.push(`p.${styleId} => ${path}`);
-        child.styleId = styleId;
+        const fresh = ancestors[depth]?.key === key ? "" : ":fresh";
+        const path = [
+          ...ancestors.slice(0, depth).map((ancestor) => ancestor.path),
+          `${list}${fresh} > ${item}:fresh > p:fresh`,
+        ].join(" > ");
+        mappedStyle(path);
         ancestors.length = depth;
-        ancestors.push(`${list} > ${item}`);
+        ancestors.push({ path: `${list} > ${item}`, key });
       } else {
         ancestors.length = 0;
         container(child);
@@ -130,7 +162,23 @@ export function stripUnsupported(xml: string): { xml: string; skipped: SkippedIt
 export async function importDocx(data: ArrayBuffer, options: DocxImportOptions) {
   if (data.byteLength > MAX_IMPORT_BYTES) throw new Error("Choose a file of 50 MB or less");
   const archive = await openArrayBuffer(data);
+  const json = await embeddedDocument(archive);
+  if (json) {
+    options.progress({ completed: 0, total: 0 });
+    return {
+      json,
+      html: generateHTML(json, baseExtensions(globalThis.fetch)),
+      skipped: [] as SkippedItem[],
+    };
+  }
   const inspected = stripUnsupported(await archive.read("word/document.xml", "utf-8"));
+  reportSkipped(inspected.skipped, DOCX_FORMATTING_WARNING);
+  const numbering = readNumbering(
+    inspected.xml,
+    archive.exists("word/numbering.xml")
+      ? await archive.read("word/numbering.xml", "utf-8")
+      : `<w:numbering xmlns:w="${WORD}"/>`,
+  );
   archive.write("word/document.xml", inspected.xml);
   const images: { data: ArrayBuffer; contentType: string; placeholder: string }[] = [];
   const styleMap = [...DOCX_STYLE_MAP];
@@ -138,7 +186,7 @@ export async function importDocx(data: ArrayBuffer, options: DocxImportOptions) 
     { arrayBuffer: await archive.toArrayBuffer() },
     {
       styleMap,
-      transformDocument: (document: DocxElement) => mapLists(document, styleMap),
+      transformDocument: (document: DocxElement) => mapLists(document, styleMap, numbering),
       includeEmbeddedStyleMap: false,
       externalFileAccess: false,
       ignoreEmptyParagraphs: false,
@@ -152,8 +200,8 @@ export async function importDocx(data: ArrayBuffer, options: DocxImportOptions) 
       }),
     },
   );
-  result.messages.forEach(() => {
-    reportSkipped(inspected.skipped, "Unsupported DOCX formatting");
+  result.messages.forEach((message) => {
+    reportSkipped(inspected.skipped, `Unsupported DOCX formatting: ${message.message}`);
   });
   let html = result.value;
   options.progress({ completed: 0, total: images.length });

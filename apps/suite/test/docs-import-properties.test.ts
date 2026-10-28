@@ -4,6 +4,7 @@ import { File as NodeFile } from "node:buffer";
 import { getSchema, type JSONContent } from "@tiptap/react";
 import { Document, Packer, Paragraph } from "docx";
 import fc from "fast-check";
+import { openArrayBuffer } from "mammoth/lib/zipfile";
 import { expect, it, vi } from "vitest";
 import { baseExtensions } from "../src/apps/docs/editor/extensions";
 import { convertImport } from "../src/apps/docs/editor/import-document";
@@ -11,6 +12,7 @@ import { toDocx } from "../src/apps/docs/lib/convert/docx-export";
 import { importDocx } from "../src/apps/docs/lib/convert/docx-import";
 import { importMarkdown } from "../src/apps/docs/lib/convert/markdown";
 import { importHtml, importPlainText, normaliseImport } from "../src/apps/docs/lib/convert/schema";
+import { DOCX_FORMATTING_WARNING } from "../src/apps/docs/lib/convert/skipped";
 import { wordCount } from "../src/apps/docs/lib/editor/logic";
 import type { PodSession } from "../src/lib/session/pod-session";
 
@@ -23,7 +25,7 @@ const listKinds = ["bulletList", "orderedList", "taskList"] as const;
 const codeWhitespace = fc
   .tuple(fc.integer({ min: 2, max: 8 }), fc.integer({ min: 1, max: 3 }))
   .map(([spaces, tabs]) => `printf 'a${" ".repeat(spaces)}b'${"\t".repeat(tabs)}done`);
-async function roundTrip(original: JSONContent) {
+async function roundTrip(original: JSONContent, embedded = true) {
   const data = await Packer.toArrayBuffer(
     await toDocx(original, async () => ({
       data: new Uint8Array([1]),
@@ -32,15 +34,21 @@ async function roundTrip(original: JSONContent) {
       height: 1,
     })),
   );
+  const zip = await openArrayBuffer(data);
+  if (!embedded)
+    zip.write(
+      "docProps/custom.xml",
+      '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties"/>',
+    );
   return convertImport(
-    new NodeFile([data], "roundtrip.docx") as unknown as File,
+    new NodeFile([await zip.toArrayBuffer()], "roundtrip.docx") as unknown as File,
     session,
     async () => "https://pod.test/image.png",
     vi.fn(),
   );
 }
 
-it("DOCX round trips generated documents covering every editor node and mark type, code whitespace and three-level mixed lists", async () => {
+it("DOCX round trips generated documents covering every editor node and mark type, linked code, list continuations, non-1 starts and three-level mixed lists", async () => {
   const visitedNodes = new Set<string>();
   const visitedMarks = new Set<string>();
   const visitedListLevels = new Set<string>();
@@ -52,17 +60,20 @@ it("DOCX round trips generated documents covering every editor node and mark typ
       fc.integer({ min: 1, max: 8 }),
       codeWhitespace,
       fc.integer({ min: 1, max: 3 }),
+      fc.integer({ min: 2, max: 25 }),
       fc.array(fc.constantFrom(...listKinds), { minLength: 2, maxLength: 2 }),
-      async (value, level, checked, indent, code, depth, nestedKinds) => {
+      async (value, level, checked, indent, code, depth, start, nestedKinds) => {
         const list = (type: string, remaining: number): JSONContent => {
           visitedListLevels.add(`${type}:${depth - remaining + 1}`);
           return {
             type,
+            ...(type === "orderedList" ? { attrs: { start } } : {}),
             content: [true, false].map((first) => ({
               type: type === "taskList" ? "taskItem" : "listItem",
               ...(type === "taskList" ? { attrs: { checked: first && checked } } : {}),
               content: [
                 p(`${value} ${first ? "Parent" : "Sibling"} ${remaining}`),
+                p(`${value} continuation`),
                 ...(first && remaining > 1
                   ? [list(nestedKinds[remaining - 2] as string, remaining - 1)]
                   : []),
@@ -75,18 +86,27 @@ it("DOCX round trips generated documents covering every editor node and mark typ
           content: [
             {
               type: "paragraph",
-              content: Object.keys(schema.marks).flatMap((type) => [
+              content: [
                 {
-                  ...text(type === "code" ? code : value),
+                  ...text(code),
                   marks: [
-                    {
-                      type,
-                      ...(type === "link" ? { attrs: { href: "https://example.org/" } } : {}),
-                    },
+                    { type: "code" },
+                    { type: "link", attrs: { href: "https://example.org/" } },
                   ],
                 },
-                { type: "hardBreak" },
-              ]),
+                ...Object.keys(schema.marks).flatMap((type) => [
+                  {
+                    ...text(type === "code" ? code : value),
+                    marks: [
+                      {
+                        type,
+                        ...(type === "link" ? { attrs: { href: "https://example.org/" } } : {}),
+                      },
+                    ],
+                  },
+                  { type: "hardBreak" },
+                ]),
+              ],
             },
             { type: "paragraph" },
             { type: "heading", attrs: { level }, content: [text(value)] },
@@ -127,9 +147,13 @@ it("DOCX round trips generated documents covering every editor node and mark typ
           for (const mark of node.marks) visitedMarks.add(mark.type.name);
         });
         visitedNodes.add("doc");
-        const imported = await roundTrip(original.toJSON());
-        expect(imported.json).toEqual(original.toJSON());
-        expect(imported.skipped).toEqual([]);
+        for (const embedded of [true, false]) {
+          const imported = await roundTrip(original.toJSON(), embedded);
+          expect(imported.json).toEqual(original.toJSON());
+          expect(imported.skipped).toEqual(
+            embedded ? [] : [{ label: DOCX_FORMATTING_WARNING, count: 1 }],
+          );
+        }
       },
     ),
     { seed: 2107, numRuns: 40 },
@@ -243,5 +267,8 @@ it("reports unrecognised DOCX formatting instead of silently dropping it", async
     progress: vi.fn(),
   });
   expect(result.html).toBe("<p>Keep</p>");
-  expect(result.skipped).toEqual([{ label: "Unsupported DOCX formatting", count: 1 }]);
+  expect(result.skipped).toEqual([
+    { label: DOCX_FORMATTING_WARNING, count: 1 },
+    { label: expect.stringMatching(/Unsupported DOCX formatting:.*Unsupported style/), count: 1 },
+  ]);
 });

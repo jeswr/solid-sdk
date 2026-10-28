@@ -12,6 +12,7 @@ import {
 import { useId, useRef, useState } from "react";
 import { validateImportFile } from "../editor/import-document";
 import type { ImportProgress, SkippedItem } from "../lib/convert/docx-import";
+import { DOCX_FORMATTING_WARNING } from "../lib/convert/skipped";
 
 export function ImportDialog({
   replace = false,
@@ -56,6 +57,8 @@ export function ImportDialog({
       setBusy(false);
     }
   };
+  const formattingWarning = result?.skipped.some((item) => item.label === DOCX_FORMATTING_WARNING);
+  const skipped = result?.skipped.filter((item) => item.label !== DOCX_FORMATTING_WARNING) ?? [];
   return (
     <Dialog
       open
@@ -80,26 +83,35 @@ export function ImportDialog({
       >
         <DialogTitle>
           {result
-            ? "Some items weren't imported"
+            ? skipped.length
+              ? "Some items weren't imported"
+              : "Document imported"
             : replace
               ? "Import to replace document"
               : "Import document"}
         </DialogTitle>
         <DialogDescription>
           {result
-            ? "Your document is ready. These unsupported items were skipped."
+            ? skipped.length
+              ? "Your document is ready. These unsupported items were skipped."
+              : "Your document is ready."
             : replace
               ? "Import a DOCX or Markdown file to replace this document's contents. You can undo the replacement."
               : "Upload a DOCX or Markdown file (50 MB maximum) to create a document."}
         </DialogDescription>
         {result ? (
-          <ul>
-            {result.skipped.map((item) => (
-              <li key={item.label}>
-                {item.label} ({item.count}) weren't imported
-              </li>
-            ))}
-          </ul>
+          <>
+            {formattingWarning && <p role="status">{DOCX_FORMATTING_WARNING}</p>}
+            {skipped.length > 0 && (
+              <ul>
+                {skipped.map((item) => (
+                  <li key={item.label}>
+                    {item.label} ({item.count}) weren't imported
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         ) : (
           <>
             <label htmlFor={id}>Document file</label>

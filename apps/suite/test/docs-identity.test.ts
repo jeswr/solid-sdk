@@ -111,7 +111,14 @@ it.each([
           { type: "text/markdown" },
         );
   const imported = await importDocument(file as unknown as File, session, vi.fn());
-  expect(imported.skipped).toEqual(format === "DOCX" ? [{ label: "Footnotes", count: 1 }] : []);
+  expect(imported.skipped).toEqual(
+    format === "DOCX"
+      ? [
+          { label: "Footnotes", count: 1 },
+          { label: "Some formatting may differ from the original", count: 1 },
+        ]
+      : [],
+  );
   const runtime = client();
   await runtime.open(imported.url);
   expect(runtime.title).toBe(format === "DOCX" ? "docs-import" : "Launch plan");

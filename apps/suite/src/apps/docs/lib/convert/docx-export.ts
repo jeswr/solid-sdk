@@ -21,6 +21,7 @@ import {
   WidthType,
 } from "docx";
 import { validLink } from "../editor/logic";
+import { embedDocument } from "./docx-payload";
 
 export interface ExportImage {
   data: Uint8Array<ArrayBuffer>;
@@ -53,7 +54,7 @@ function inline(node: JSONContent, quote: boolean): ParagraphChild[] {
     ...(marks.has("code")
       ? { style: "InlineCode", font: codeFont, shading: { fill: "F2F2F2" } }
       : {}),
-    ...(href ? { style: "Hyperlink" } : {}),
+    ...(href && !marks.has("code") ? { style: "Hyperlink" } : {}),
   };
   const run = new TextRun(options);
   return [href ? new ExternalHyperlink({ link: href, children: [run] }) : run];
@@ -88,6 +89,9 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
       const paragraph: IParagraphOptions = {
         ...(quote ? { style: "Quote", indent: { left: 720 }, border: { left: border(24) } } : {}),
         ...(numbering ? { numbering: { ...numbering, level } } : {}),
+        ...(depth >= 0 && !numbering && !task
+          ? { style: "ListContinuation", indent: { left: 720 * (level + 1) } }
+          : {}),
         ...(task
           ? {
               style: task === "☑ " ? "TaskChecked" : "TaskUnchecked",
@@ -242,6 +246,7 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
       paragraphStyles: [
         { id: "Code", name: "Code", run: { font: codeFont, size: 20 } },
         { id: "Quote", name: "Quote", run: { italics: true } },
+        { id: "ListContinuation", name: "List Continuation" },
         { id: "TaskChecked", name: "Task Checked" },
         { id: "TaskUnchecked", name: "Task Unchecked" },
         { id: "HorizontalRule", name: "Horizontal Rule" },
@@ -281,5 +286,6 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
       ),
     );
   }
+  await embedDocument(document, json);
   return document;
 }

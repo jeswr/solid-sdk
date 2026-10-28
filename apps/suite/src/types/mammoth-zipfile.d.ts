@@ -8,7 +8,8 @@ declare module "mammoth/lib/zipfile" {
   interface Archive {
     exists(name: string): boolean;
     read(name: string, encoding: "utf-8"): Promise<string>;
-    write(name: string, contents: string): void;
+    read(name: string): Promise<Uint8Array<ArrayBuffer>>;
+    write(name: string, contents: string | Uint8Array): void;
     toArrayBuffer(): Promise<ArrayBuffer>;
   }
   export function openArrayBuffer(data: ArrayBuffer): Promise<Archive>;

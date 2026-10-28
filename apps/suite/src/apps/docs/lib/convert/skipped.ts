@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex
+export const DOCX_FORMATTING_WARNING = "Some formatting may differ from the original";
+
 export interface SkippedItem {
   label: string;
   count: number;

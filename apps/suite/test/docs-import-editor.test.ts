@@ -75,7 +75,10 @@ describe("imports through the real editor schema", () => {
       src: "https://pod.test/docs/fixture/assets/pixel.png",
       alt: "Fixture image",
     });
-    expect(result.skipped).toEqual([{ label: "Footnotes", count: 1 }]);
+    expect(result.skipped).toEqual([
+      { label: "Footnotes", count: 1 },
+      { label: "Some formatting may differ from the original", count: 1 },
+    ]);
     expect(upload).toHaveBeenCalledTimes(1);
   });
   it("sets Markdown content into a local Y.Doc and exports it without a pod read", async () => {

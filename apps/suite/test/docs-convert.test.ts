@@ -306,7 +306,9 @@ describe("imports and Markdown", () => {
         ),
       ).json,
     );
-    expect(result.skipped).toEqual([]);
+    expect(result.skipped).toEqual([
+      { label: "Some formatting may differ from the original", count: 1 },
+    ]);
   });
 
   it("preserves an explicitly empty paragraph with HTML", () => {
@@ -377,7 +379,9 @@ describe("imports and Markdown", () => {
     expect(progress.mock.calls.map(([value]) => value)).toEqual(
       [0, 1, 2, 3].map((completed) => ({ completed, total: 3 })),
     );
-    expect(result.skipped).toEqual([]);
+    expect(result.skipped).toEqual([
+      { label: "Some formatting may differ from the original", count: 1 },
+    ]);
   });
   it("keeps all eleven DOCX image URLs distinct when placeholder indexes share prefixes", async () => {
     const source = new Document({
@@ -441,7 +445,10 @@ describe("imports and Markdown", () => {
     expect(result.html).toContain('src="https://pod.test/docs/plan/assets/image.png"');
     expect(result.html).not.toContain("This footnote");
     expect(result.html).not.toContain("footnote-ref");
-    expect(result.skipped).toEqual([{ label: "Footnotes", count: 1 }]);
+    expect(result.skipped).toEqual([
+      { label: "Footnotes", count: 1 },
+      { label: "Some formatting may differ from the original", count: 1 },
+    ]);
     expect(progress.mock.calls.map(([value]) => value)).toEqual([
       { completed: 0, total: 1 },
       { completed: 1, total: 1 },

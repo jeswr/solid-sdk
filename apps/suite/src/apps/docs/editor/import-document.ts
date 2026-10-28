@@ -59,7 +59,9 @@ export async function convertImport(
   const extensions = baseExtensions(session.fetch);
   if (/\.docx$/i.test(file.name)) {
     const result = await importDocx(await file.arrayBuffer(), { uploadImage, progress });
-    const mapped = importHtml(result.html, result.skipped);
+    const mapped = result.json
+      ? { json: result.json, skipped: result.skipped }
+      : importHtml(result.html, result.skipped);
     return {
       ...mapped,
       html: generateHTML(mapped.json, extensions),
