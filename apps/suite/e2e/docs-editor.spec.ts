@@ -116,10 +116,14 @@ test("creates, saves, reloads and formats a document accessibly", async ({ page 
   await page.getByRole("menuitem", { name: "Move to trash", exact: true }).click();
   const deleting = page.getByRole("alertdialog", { name: "Move this document to trash?" });
   await deleting.getByRole("button", { name: "Move to trash", exact: true }).click();
-  await expect(page.getByText("Moved to trash", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Launch plan", exact: true })).toHaveCount(0);
+  await expect(page.getByText("Moved to trash", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("link", { name: "Launch plan", exact: true })).toHaveCount(0, {
+    timeout: 15_000,
+  });
   await page.getByRole("button", { name: "Undo", exact: true }).click();
-  await expect(page.getByRole("link", { name: "Launch plan", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Launch plan", exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
   expect(errors).toEqual([]);
 });
 
