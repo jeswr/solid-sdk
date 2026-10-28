@@ -187,7 +187,7 @@ export function readAcp(
             field === "grants" &&
             !target &&
             dialect === "ess" &&
-            [...all, ...any].some((matcher) => matcher.client.size)
+            [...all, ...any, ...policy.noneOf].some((matcher) => matcher.client.size)
           )
             activeWho = activeWho.map((clause) => [
               ...clause.filter((subject) => subject.kind !== "public"),
@@ -234,7 +234,19 @@ export function readAcp(
           throw new TypeError("Cannot safely place grants from another ACP resource node");
         const exclusions =
           !target && field === "denials"
-            ? [...policy.noneOf].flatMap((matcher) => matcherClauses(matcher, dialect)).flat()
+            ? [...policy.noneOf].flatMap((matcher) =>
+                matcherClauses(matcher, dialect).flatMap((clause) => {
+                  // A named identity already implies login. Any other conjunction is
+                  // narrower than each of its subjects, so it must never become
+                  // separate exemptions; dropping it keeps the denial broad.
+                  const simplified = clause.some((subject) =>
+                    ["agent", "owner", "creator"].includes(subject.kind),
+                  )
+                    ? clause.filter((subject) => subject.kind !== "authenticated")
+                    : clause;
+                  return simplified.length === 1 ? simplified : [];
+                }),
+              )
             : excluded.flat();
         if (modes.size)
           result[field].push({

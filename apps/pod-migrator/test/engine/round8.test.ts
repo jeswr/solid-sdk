@@ -206,4 +206,66 @@ describe("round 8: source client wildcards", () => {
     expect(result.verified).toBe(true);
     expect(await target.permissions(`${target.root}file`)).toEqual(new Set());
   });
+
+  it("never turns a client conjunction in a source denial exclusion into broad exemptions", async () => {
+    const source = new FakePod("https://shared.example/alice/", "acp", undefined, "ess");
+    const target = new FakePod("https://shared.example/bob/", "acp");
+    await source.initialize(await acl(source, source.root));
+    await target.initialize(await acl(target, target.root));
+    const file = `${source.root}file`;
+    source.store(file, "denied to strangers");
+    source.setAcl(file, await acl(source, file));
+    const dataset = (await source.dataset(file)) as Store;
+    const n = (id: string) => new RdfNode(id, dataset, DataFactory);
+    n(source.acl(file)).add(`${ACP}accessControl`, "urn:r8:deny-control");
+    n("urn:r8:deny-control").add(`${ACP}apply`, "urn:r8:grant");
+    n("urn:r8:deny-control").add(`${ACP}apply`, "urn:r8:denial");
+    n("urn:r8:grant").add(`${ACP}allow`, `${ACP}Read`);
+    n("urn:r8:grant").add(`${ACP}allOf`, "urn:r8:public");
+    n("urn:r8:denial").add(`${ACP}deny`, `${ACP}Read`);
+    n("urn:r8:denial").add(`${ACP}allOf`, "urn:r8:public");
+    n("urn:r8:denial").add(`${ACP}noneOf`, "urn:r8:trusted");
+    n("urn:r8:denial").add(`${ACP}noneOf`, "urn:r8:owner");
+    n("urn:r8:public").add(`${ACP}agent`, `${ACP}PublicAgent`);
+    n("urn:r8:trusted").add(`${ACP}agent`, "https://trusted.example/person");
+    n("urn:r8:trusted").add(`${ACP}client`, `${ACP}PublicClient`);
+    n("urn:r8:owner").add(`${ACP}agent`, source.owner);
+    source.setAcl(file, await serialize(dataset));
+    const denial = readAcp(dataset, file, source.acl(file), "ess").denials.find(
+      (rule) => rule.source.node === "urn:r8:denial",
+    );
+    expect(denial?.except.some((subject) => subject.kind === "authenticated")).toBe(false);
+    const options = { source: source.side(), target: target.side() };
+    const plan = await planMigration(options);
+    const result = await executeMigration(finalizePlan(plan, resolve(plan)), options);
+    expect(result.verified).toBe(true);
+    expect(await target.permissions(`${target.root}file`, { agent: stranger })).toEqual(new Set());
+    expect(await target.permissions(`${target.root}file`)).toEqual(new Set());
+  });
+
+  it("requires login for a source grant whose client matcher appears only in noneOf", async () => {
+    const source = new FakePod("https://shared.example/alice/", "acp", undefined, "ess");
+    const target = new FakePod("https://shared.example/bob/", "acp");
+    await source.initialize(await acl(source, source.root));
+    await target.initialize(await acl(target, target.root));
+    const file = `${source.root}file`;
+    source.store(file, "login required");
+    source.setAcl(file, await acl(source, file));
+    const dataset = (await source.dataset(file)) as Store;
+    const n = addRule(dataset, source.acl(file), "accessControl", "allow", `${ACP}Read`);
+    n("urn:r8:policy").add(`${ACP}noneOf`, "urn:r8:client");
+    n("urn:r8:client").add(`${ACP}agent`, `${ACP}PublicAgent`);
+    n("urn:r8:client").add(`${ACP}client`, "https://trusted.example/app");
+    source.setAcl(file, await serialize(dataset));
+    const who = readAcp(dataset, file, source.acl(file), "ess").grants.find(
+      (rule) => rule.source.node === "urn:r8:policy",
+    )?.who;
+    for (const clause of who ?? [])
+      expect(clause.some((subject) => subject.kind === "public")).toBe(false);
+    const options = { source: source.side(), target: target.side() };
+    const plan = await planMigration(options);
+    const result = await executeMigration(finalizePlan(plan, resolve(plan)), options);
+    expect(result.verified).toBe(true);
+    expect(await target.permissions(`${target.root}file`)).toEqual(new Set());
+  });
 });
