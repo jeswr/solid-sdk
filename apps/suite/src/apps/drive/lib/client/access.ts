@@ -7,6 +7,7 @@ import type { Term } from "@rdfjs/types";
 import { DatasetWrapper, NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import { AccessControlResource, AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
+import { readSharing } from "../sharing/sharing";
 import { relocate, sameGraph } from "./rdf";
 
 const ACL = "http://www.w3.org/ns/auth/acl#";
@@ -16,7 +17,7 @@ export class DriveAccessError extends Error {
   readonly kind = "private-access-unavailable";
   constructor(override readonly cause?: unknown) {
     super(
-      "Private access could not be established or verified. Drive stopped the transfer. You can choose Delete forever instead.",
+      "Private access could not be established or verified. Drive can't confirm who can access the item and stopped the transfer. You can choose Delete forever instead.",
     );
   }
 }
@@ -56,6 +57,48 @@ export interface OwnAccess {
   etag: string;
 }
 
+/** Missing discovery is unknown; only a discovered ACL's 404 proves absence. */
+export type AccessState =
+  | { readonly status: "known"; readonly policy: OwnAccess }
+  | { readonly status: "none"; readonly demo: boolean }
+  | { readonly status: "unknown"; readonly cause: unknown };
+
+/** Require certainty before preserving or comparing access. None materializes deny-all. */
+export function requireAccess(state: AccessState, resource: string): OwnAccess {
+  if (state.status === "unknown") throw new DriveAccessError(state.cause);
+  return state.status === "known"
+    ? state.policy
+    : { url: `${resource}.acl`, dataset: new Store(), etag: "" };
+}
+
+export function accessLabel(state: AccessState, resource: string, webId: string): string {
+  if (state.status === "unknown") return "Access unknown";
+  if (state.status === "none") return state.demo ? "Only you (demo pod)" : "No one";
+  try {
+    const sharing = readSharing({
+      access: {
+        resource,
+        documents: [
+          {
+            model: "wac",
+            dataset: state.policy.dataset,
+            source: state.policy.url,
+            governingResource: resource,
+            inherited: false,
+          },
+        ],
+      },
+    });
+    if (sharing.link !== "none") return "Anyone with the link";
+    const others = sharing.people.filter((person) => person.webId !== webId);
+    if (others.length) return `People you've shared with: ${others.length}`;
+    return sharing.people.length ? "Only you" : "No one";
+  } catch {
+    // Conditions, groups and other unrepresentable policies cannot imply exclusivity.
+    return "Access unknown";
+  }
+}
+
 export function accessControl(http: typeof globalThis.fetch, storageUrl: string) {
   function discover(resource: string, headers: Headers): string | undefined {
     // This explicit fixture capability never substitutes for discovery on a real pod.
@@ -74,7 +117,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     }
     return acl;
   }
-  const read = async (url: string): Promise<OwnAccess | undefined> => {
+  const read = async (url: string): Promise<AccessState> => {
     try {
       const result = await fetchRdf(url, { fetch: http });
       if (!result.etag || result.etag.startsWith("W/"))
@@ -98,14 +141,17 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
         ])
           typed.values(`${ACL}${predicate}`);
       }
-      return { url, dataset: result.dataset, etag: result.etag };
+      return { status: "known", policy: { url, dataset: result.dataset, etag: result.etag } };
     } catch (error) {
-      if (error instanceof RdfFetchError && error.status === 404) return undefined;
-      throw new DriveAccessError(error);
+      if (error instanceof RdfFetchError && error.status === 404)
+        return { status: "none", demo: false };
+      return { status: "unknown", cause: error };
     }
   };
   const store = async (url: string, dataset: Store): Promise<OwnAccess> => {
-    const current = await read(url);
+    const state = await read(url);
+    if (state.status === "unknown") throw new DriveAccessError(state.cause);
+    const current = state.status === "known" ? state.policy : undefined;
     const response = await http(url, {
       method: "PUT",
       headers: {
@@ -116,27 +162,40 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     });
     if (!response.ok) throw new DriveAccessError(response.status);
     const saved = await read(url);
-    if (!saved || !sameGraph(dataset, saved.dataset))
+    if (saved.status !== "known" || !sameGraph(dataset, saved.policy.dataset))
       throw new DriveAccessError("Policy verification failed");
-    return saved;
+    return saved.policy;
   };
-  const effective = async (resource: string, inherit = false): Promise<OwnAccess> => {
-    let current: string | undefined = inherit ? parent(resource) : resource;
-    while (current?.startsWith(storageUrl)) {
-      const response = await http(current, { method: "HEAD" });
-      if (!response.ok) throw new DriveAccessError(response.status);
-      const url = discover(current, response.headers);
-      if (!url) throw new DriveAccessError("Access control is unknown");
-      const own = await read(url);
-      if (own) {
-        const policy = projectAccess(own, current, resource, inherit);
-        if (!inherit || policy.dataset.size) return policy;
-      }
-      current = parent(current);
-      inherit = true;
+  const snapshot = async (resource: string, headers: Headers): Promise<AccessState> => {
+    try {
+      if (headers.get("x-solid-demo-access-control") === "none")
+        return { status: "none", demo: true };
+      const url = discover(resource, headers);
+      return url ? await read(url) : { status: "unknown", cause: "ACL Link unavailable" };
+    } catch (cause) {
+      return { status: "unknown", cause };
     }
-    // A known WAC hierarchy with no applicable policy denies everyone.
-    return { url: `${resource}.acl`, dataset: new Store(), etag: "" };
+  };
+  const effective = async (resource: string, inherit = false): Promise<AccessState> => {
+    try {
+      let current: string | undefined = inherit ? parent(resource) : resource;
+      while (current?.startsWith(storageUrl)) {
+        const response = await http(current, { method: "HEAD" });
+        if (!response.ok) throw new DriveAccessError(response.status);
+        const own = await snapshot(current, response.headers);
+        if (own.status === "unknown" || (own.status === "none" && own.demo)) return own;
+        if (own.status === "known") {
+          const policy = projectAccess(own.policy, current, resource, inherit);
+          if (!inherit || policy.dataset.size) return { status: "known", policy };
+        }
+        current = parent(current);
+        inherit = true;
+      }
+      // A known WAC hierarchy with no applicable policy denies everyone.
+      return { status: "none", demo: false };
+    } catch (cause) {
+      return { status: "unknown", cause };
+    }
   };
   return {
     discover,
@@ -147,10 +206,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       projectAccess(own, resource, resource, true).dataset.size > 0,
     read,
     store,
-    async snapshot(resource: string, headers: Headers): Promise<OwnAccess | undefined> {
-      const url = discover(resource, headers);
-      return url ? read(url) : undefined;
-    },
+    snapshot,
     async install(source: OwnAccess, from: string, to: string): Promise<OwnAccess> {
       const response = await http(to, { method: "HEAD" });
       const url = discover(to, response.headers);

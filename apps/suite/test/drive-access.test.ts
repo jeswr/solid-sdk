@@ -1,7 +1,12 @@
 // AUTHORED-BY Codex
 import { DataFactory, Store } from "n3";
 import { expect, it, vi } from "vitest";
-import { accessControl, accessGains, type OwnAccess } from "../src/apps/drive/lib/client/access";
+import {
+  accessControl,
+  accessGains,
+  type OwnAccess,
+  requireAccess,
+} from "../src/apps/drive/lib/client/access";
 import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import {
@@ -75,16 +80,24 @@ it("resolves own accessTo, nearest default/defaultForNew and ignores unrelated a
   ]);
   f.policies.set(`${PRIVATE}.policy`, await turtle(top.dataset));
   const own = await access.effective(PRIVATE);
-  expect(accessGains(policy([]), own)).toEqual([OWNER]);
+  expect(accessGains(policy([]), requireAccess(own, PRIVATE))).toEqual([OWNER]);
   // No applicable default here: the root's public default governs descendants.
-  expect(accessGains(policy([]), await access.effective(`${PRIVATE}secret`))).toContain(
-    "Everyone (public)",
-  );
+  expect(
+    accessGains(
+      policy([]),
+      requireAccess(await access.effective(`${PRIVATE}secret`), `${PRIVATE}secret`),
+    ),
+  ).toContain("Everyone (public)");
   const legacy = policy([{ defaultForNew: [PRIVATE], agent: [OWNER], mode: read }]);
   f.policies.set(`${PRIVATE}.policy`, await turtle(legacy.dataset));
-  expect(accessGains(policy([]), await access.effective(`${PRIVATE}secret`))).toEqual([OWNER]);
+  expect(
+    accessGains(
+      policy([]),
+      requireAccess(await access.effective(`${PRIVATE}secret`), `${PRIVATE}secret`),
+    ),
+  ).toEqual([OWNER]);
   f.policies.clear();
-  expect((await access.effective(ROOT)).dataset.size).toBe(0);
+  expect(await access.effective(ROOT)).toEqual({ status: "none", demo: false });
 });
 it.each([
   "unreadable",
@@ -177,7 +190,7 @@ it("no confirmation handler fails closed on widening", async () => {
       `${PRIVATE}secret`,
       `${PUBLIC}secret`,
     ),
-  ).rejects.toThrow("cancelled");
+  ).rejects.toThrow("can't confirm who can access");
   expect(f.pod.has(`${PUBLIC}secret`)).toBe(false);
 });
 

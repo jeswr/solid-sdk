@@ -21,7 +21,7 @@ import {
   useState,
 } from "react";
 import { encodeRef } from "@/lib/refs";
-import { DriveAccessError } from "../lib/client/access";
+import { accessControl, accessLabel, DriveAccessError } from "../lib/client/access";
 import { DriveError, type DriveItem, nameOf } from "../lib/client/client";
 import {
   copyItem,
@@ -332,15 +332,19 @@ export function useDriveActions() {
     [client],
   );
 
-  const copyLink = useCallback(async (item: DriveItem) => {
-    const link = `${location.origin}${hrefFor(item)}`;
-    try {
-      await navigator.clipboard.writeText(link);
-      toast("Link copied", { description: "Only you can open this link" });
-    } catch {
-      toast.error("Couldn't copy the link");
-    }
-  }, []);
+  const copyLink = useCallback(
+    async (item: DriveItem) => {
+      const link = `${location.origin}${hrefFor(item)}`;
+      try {
+        await navigator.clipboard.writeText(link);
+        const access = await accessControl(session.fetch, session.storageUrl).effective(item.url);
+        toast("Link copied", { description: accessLabel(access, item.url, session.webId) });
+      } catch {
+        toast.error("Couldn't copy the link");
+      }
+    },
+    [session],
+  );
 
   const toggleStar = useCallback(
     (items: readonly DriveItem[]) => {
@@ -414,6 +418,7 @@ export function useDriveActions() {
                 label: "Undo",
                 onClick: async () => {
                   const failed: string[] = [];
+                  let accessError: DriveAccessError | undefined;
                   const restored: { from: string; to: string }[] = [];
                   for (const { from, to, identity } of undo) {
                     try {
@@ -432,7 +437,8 @@ export function useDriveActions() {
                       invalidate(to);
                       invalidate(from);
                       restored.push({ from: to, to: from });
-                    } catch {
+                    } catch (error) {
+                      if (error instanceof DriveAccessError) accessError = error;
                       failed.push(nameOf(from));
                     }
                   }
@@ -442,7 +448,11 @@ export function useDriveActions() {
                       starred: repointStarred(current.starred, restored),
                     }));
                   if (failed.length > 0)
-                    toast.error(`This move cannot be safely undone: ${failed.join(", ")}`);
+                    toast.error(
+                      accessError
+                        ? accessError.message
+                        : `This move cannot be safely undone: ${failed.join(", ")}`,
+                    );
                 },
               },
             }

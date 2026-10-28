@@ -14,12 +14,14 @@ import { Container, Resource } from "@solid/object";
 import { DataFactory, Store } from "n3";
 
 import {
+  type AccessState,
   accessControl,
   accessGains,
   type ConfirmAccess,
   DriveAccessError,
   type OwnAccess,
   privateAcl,
+  requireAccess,
 } from "./access";
 import { containerData, relocate, sameGraph } from "./rdf";
 
@@ -158,9 +160,8 @@ interface SourceSnapshot {
   readonly body?: Blob;
   readonly contentType?: string;
   readonly data?: Store;
-  readonly access?: OwnAccess;
+  readonly access: AccessState;
   readonly demo?: boolean;
-  readonly accessUnknown?: boolean;
   targetAccess?: OwnAccess;
 }
 
@@ -364,24 +365,16 @@ export function createSolidDriveClient(options: {
     url: string,
     requireValidator: boolean,
     bodies: boolean,
-    tolerateAccessErrors = false,
   ): Promise<SourceSnapshot> => {
-    const policy = async (headers: Headers) => {
-      if (!bodies) return {};
-      try {
-        const own = await access.snapshot(url, headers);
-        return own ? { access: own } : {};
-      } catch (error) {
-        if (!tolerateAccessErrors) throw error;
-        return { accessUnknown: true };
-      }
-    };
+    const policy = (headers: Headers): Promise<AccessState> =>
+      bodies
+        ? access.snapshot(url, headers)
+        : Promise.resolve({ status: "unknown", cause: "Not read" });
     if (url.endsWith("/")) {
       const { items, etag, dataset, headers } = await listing(url);
       if (requireValidator) validator(url, etag);
       const children: SourceSnapshot[] = [];
-      for (const child of items)
-        children.push(await snapshot(child.url, requireValidator, bodies, tolerateAccessErrors));
+      for (const child of items) children.push(await snapshot(child.url, requireValidator, bodies));
       const own = await policy(headers);
       return {
         url,
@@ -389,7 +382,7 @@ export function createSolidDriveClient(options: {
         children,
         demo: headers.get("x-solid-demo-access-control") === "none",
         ...(bodies ? { data: containerData(dataset, url) } : {}),
-        ...own,
+        access: own,
       };
     }
     const response = await ensureOk(await http(url, bodies ? undefined : { method: "HEAD" }), url);
@@ -401,7 +394,7 @@ export function createSolidDriveClient(options: {
       etag,
       children: undefined,
       demo: response.headers.get("x-solid-demo-access-control") === "none",
-      ...own,
+      access: own,
       ...(bodies
         ? {
             body: await response.blob(),
@@ -453,7 +446,8 @@ export function createSolidDriveClient(options: {
     created: CreatedResource[],
     copiedAccess: Map<string, OwnAccess>,
   ) => {
-    const policy = source.targetAccess === undefined ? source.access : source.targetAccess;
+    const policy =
+      source.targetAccess ?? (source.access.status === "known" ? source.access.policy : undefined);
     if (source.children) {
       const response = await putFolder(to);
       const resource = { url: to, etag: response.headers.get("etag") ?? undefined };
@@ -530,7 +524,10 @@ export function createSolidDriveClient(options: {
         const archive: Record<string, { resource: string; acl: string; turtle: string }> = {};
         for (const node of snapshots(source)) {
           const destination = `${to}${node.url.slice(from.length)}`;
-          const original = node.access ?? (await access.effective(node.url));
+          const original = requireAccess(
+            node.access.status === "known" ? node.access : await access.effective(node.url),
+            node.url,
+          );
           archive[destination] = {
             resource: node.url,
             acl: original.url,
@@ -561,14 +558,22 @@ export function createSolidDriveClient(options: {
               if (saved === undefined) throw new DriveAccessError("Missing archived policy");
               node.targetAccess =
                 saved === null
-                  ? (node.access ?? (await access.effective(node.url)))
+                  ? requireAccess(
+                      node.access.status === "known"
+                        ? node.access
+                        : await access.effective(node.url),
+                      node.url,
+                    )
                   : {
-                      url: node.access?.url ?? saved.acl,
+                      url: node.access.status === "known" ? node.access.policy.url : saved.acl,
                       etag: "",
                       dataset: relocate(
                         await parseRdf(saved.turtle, "text/turtle", { baseIRI: saved.acl }),
                         [
-                          [saved.acl, node.access?.url ?? saved.acl],
+                          [
+                            saved.acl,
+                            node.access.status === "known" ? node.access.policy.url : saved.acl,
+                          ],
                           [saved.resource, node.url],
                         ],
                       ),
@@ -589,15 +594,19 @@ export function createSolidDriveClient(options: {
       children: [],
       data: containerData(original.dataset, from),
       demo: original.headers.get("x-solid-demo-access-control") === "none",
-      ...(own ? { access: own } : {}),
+      access: own,
     };
+    const effective = own.status === "none" && !own.demo ? await access.effective(from) : own;
+    requireAccess(effective, from);
     await preparePolicies(source, from, to);
-    const policy =
-      source.targetAccess ?? own ?? (source.demo ? undefined : await access.effective(from));
+    const policy = source.demo
+      ? undefined
+      : (source.targetAccess ?? requireAccess(effective, from));
     if (copyPolicy && policy) await access.install(policy, from, to);
     else if (
       policy &&
-      accessGains(access.forResource(policy, from), await access.effective(to)).length
+      accessGains(access.forResource(policy, from), requireAccess(await access.effective(to), to))
+        .length
     )
       throw new DriveAccessError("Existing destination grants wider access");
     const current = await listing(to);
@@ -625,49 +634,64 @@ export function createSolidDriveClient(options: {
       throw new DriveError("conflict", 409, to);
     }
     const ordinaryMove = moving && !privateOwner && !policyArchiveOf(from);
-    const source = await snapshot(from, moving, true, ordinaryMove);
+    const source = await snapshot(from, moving, true);
+    const nodes = snapshots(source);
+    // Resolve every node, even for same-folder renames and descendants with own ACLs.
+    // A missing Link or unreadable ancestor can never stand in for known absence.
+    const effective = new Map<SourceSnapshot, AccessState>();
+    for (const node of nodes) {
+      effective.set(
+        node,
+        node.access.status === "none" && !node.access.demo
+          ? await access.effective(node.url)
+          : node.access,
+      );
+    }
+    const unknown = nodes.some((node) => (effective.get(node) as AccessState).status === "unknown");
+    // Copy, Trash and Restore preserve access, and refuse uncertainty before writes.
+    if (!ordinaryMove && unknown) throw new DriveAccessError("Current access is unknown");
     let keepAccess = !ordinaryMove;
-    if (ordinaryMove && !source.demo) {
-      const unknown = (node: SourceSnapshot): boolean =>
-        !!node.accessUnknown || !!node.children?.some(unknown);
+    if (ordinaryMove && (!source.demo || unknown)) {
       const inherited: SourceSnapshot[] = [];
       const affected = (node: SourceSnapshot, protectedDefaults: boolean) => {
-        if (!node.access && !protectedDefaults) inherited.push(node);
+        if (node.access.status === "none" && !protectedDefaults) inherited.push(node);
         const protectedChildren =
-          protectedDefaults || !!(node.access && access.hasDefaults(node.access, node.url));
+          protectedDefaults ||
+          (node.access.status === "known" && access.hasDefaults(node.access.policy, node.url));
         for (const child of node.children ?? []) affected(child, protectedChildren);
       };
       affected(source, false);
-      if ((inherited.length > 0 && parentOf(from) !== parentOf(to)) || unknown(source)) {
-        let effective: OwnAccess | undefined;
+      if ((inherited.length > 0 && parentOf(from) !== parentOf(to)) || unknown) {
+        let current: OwnAccess | undefined;
         let gains: string[];
         try {
-          if (unknown(source)) throw new DriveAccessError();
-          const top = await access.effective(from);
-          const policies: OwnAccess[] = [];
-          for (const node of inherited)
-            policies.push(node === source ? top : await access.effective(node.url));
-          effective = top;
-          const destination = await access.effective(to, true);
+          if (unknown) throw new DriveAccessError();
+          current = requireAccess(effective.get(source) as AccessState, from);
+          const destination = requireAccess(await access.effective(to, true), to);
           const widened = new Set<string>();
-          for (const current of policies)
-            for (const agent of accessGains(current, destination)) widened.add(agent);
+          for (const node of inherited)
+            for (const agent of accessGains(
+              requireAccess(effective.get(node) as AccessState, node.url),
+              destination,
+            ))
+              widened.add(agent);
           gains = [...widened];
         } catch {
           gains = ["Access could not be determined (including unreadable ACLs or unsupported ACP)"];
         }
         if (gains.length) {
-          const choice = await options.confirmAccess?.({
+          if (!options.confirmAccess)
+            throw new DriveAccessError("Access change requires confirmation");
+          const choice = await options.confirmAccess({
             from,
             to,
             gains,
-            canKeep: !!effective && !unknown(source),
+            canKeep: !!current && !unknown,
           });
-          if (!choice || choice === "cancel") throw new Error("Move cancelled");
+          if (choice === "cancel") throw new Error("Move cancelled");
           if (choice === "keep") {
-            if (!effective || unknown(source))
-              throw new DriveAccessError("Current access is unknown");
-            source.targetAccess = effective;
+            if (!current || unknown) throw new DriveAccessError("Current access is unknown");
+            source.targetAccess = current;
             keepAccess = true;
           }
         }
@@ -677,9 +701,9 @@ export function createSolidDriveClient(options: {
     const copiedAccess = new Map<string, OwnAccess>();
     await preparePolicies(source, from, to, privateOwner);
     if (keepAccess) {
-      for (const node of snapshots(source))
-        if (!node.demo && !node.access && node.targetAccess === undefined)
-          node.targetAccess = await access.effective(node.url);
+      for (const node of nodes)
+        if (!node.demo && node.access.status === "none" && node.targetAccess === undefined)
+          node.targetAccess = requireAccess(effective.get(node) as AccessState, node.url);
     }
     const deleted: string[] = [];
     let deleting = false;
@@ -699,7 +723,11 @@ export function createSolidDriveClient(options: {
       const own = copiedAccess.get(destination.url);
       if (own) {
         const current = await access.read(own.url);
-        if (!current || current.etag !== own.etag || !sameGraph(own.dataset, current.dataset))
+        if (
+          current.status !== "known" ||
+          current.policy.etag !== own.etag ||
+          !sameGraph(own.dataset, current.policy.dataset)
+        )
           throw new DriveAccessError("Destination policy changed");
       }
       verifyingCopy = false;
@@ -749,12 +777,12 @@ export function createSolidDriveClient(options: {
         await deleteSnapshot(source, deleted, async (node) => {
           await beforeDelete?.();
           await verifyDestination(node);
-          if (node.access) {
-            const current = await access.read(node.access.url);
+          if (node.access.status === "known") {
+            const current = await access.read(node.access.policy.url);
             if (
-              !current ||
-              current.etag !== node.access.etag ||
-              !sameGraph(node.access.dataset, current.dataset)
+              current.status !== "known" ||
+              current.policy.etag !== node.access.policy.etag ||
+              !sameGraph(node.access.policy.dataset, current.policy.dataset)
             )
               throw new DriveAccessError("Source policy changed");
           }
