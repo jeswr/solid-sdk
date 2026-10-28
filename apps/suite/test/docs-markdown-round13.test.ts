@@ -4,6 +4,7 @@ import type { JSONContent } from "@tiptap/react";
 import fc from "fast-check";
 import { expect, it } from "vitest";
 import { exportMarkdown, importMarkdown } from "../src/apps/docs/lib/convert/markdown";
+import { markdownText } from "./helpers/docs-markdown-text";
 
 const paragraphs = (values: string[]): JSONContent => ({
   type: "doc",
@@ -105,12 +106,8 @@ it.each([
 });
 
 it("round trips generated paragraphs containing Markdown block and inline syntax", () => {
-  const character = fc.constantFrom(..."abc XYZ0123#>-+*._`[]<>()\\!~=|&\n");
-  const paragraph = fc
-    .array(character, { minLength: 1, maxLength: 60 })
-    .map((chars) => chars.join(""));
   fc.assert(
-    fc.property(fc.array(paragraph, { minLength: 1, maxLength: 6 }), (values) => {
+    fc.property(fc.array(markdownText, { minLength: 1, maxLength: 6 }), (values) => {
       const original = paragraphs(values);
       expect(importMarkdown(exportMarkdown(original), "generated.md").json).toEqual(original);
     }),
@@ -171,9 +168,7 @@ it("round trips generated inline code with backtick runs, edge backticks and edg
 });
 
 it("round trips generated links and images with Markdown punctuation in labels, titles and URLs", () => {
-  const value = fc
-    .array(fc.constantFrom(..."abc []\\\"'()|<>*`&\n\r"), { minLength: 1, maxLength: 30 })
-    .map((chars) => chars.join(""));
+  const value = markdownText;
   const url = fc
     .array(
       fc.constantFrom(

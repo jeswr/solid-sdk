@@ -7,6 +7,7 @@ import { expect, it, vi } from "vitest";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { baseExtensions, editorExtensions } from "../src/apps/docs/editor/extensions";
 import { exportMarkdown, importMarkdown } from "../src/apps/docs/lib/convert/markdown";
+import { markdownText, markdownWhitespace } from "./helpers/docs-markdown-text";
 
 function makeEditor(doc = new Doc()) {
   const editor = new Editor({
@@ -151,12 +152,12 @@ it("round trips random overlapping ranges of every schema mark with edge spaces"
   const { editor, destroy } = makeEditor();
   const sample = fc
     .tuple(
-      fc.constantFrom(" ", "  "),
-      fc.array(fc.constantFrom("one", "two", "three", "!word?", "[text]", "`code`", "a=b", "😀"), {
+      markdownWhitespace,
+      fc.array(markdownText, {
         minLength: 3,
         maxLength: 6,
       }),
-      fc.constantFrom(" ", "  "),
+      markdownWhitespace,
     )
     .chain(([leading, words, trailing]) => {
       const text = `${leading}${words.join(" ")}${trailing}`;

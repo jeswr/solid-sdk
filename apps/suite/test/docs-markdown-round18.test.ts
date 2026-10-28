@@ -12,6 +12,7 @@ import {
   MARKDOWN_MARK_RULES,
   MARKDOWN_NODE_RULES,
 } from "../src/apps/docs/lib/convert/markdown";
+import { markdownText } from "./helpers/docs-markdown-text";
 
 const schema = getSchema(baseExtensions(vi.fn()));
 const text = (value: string): JSONContent => ({ type: "text", text: value });
@@ -304,7 +305,7 @@ it.each([
   expect(overridden.content?.some((node) => node.type === "image")).toBe(false);
 });
 
-const word = fc.constantFrom("First item", "Second item", " [] <>& | ` * ", " one\n two\t ", "😀");
+const word = markdownText;
 const inlineContent = fc
   .array(word, { minLength: 1, maxLength: 3 })
   .map((words) =>

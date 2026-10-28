@@ -24,13 +24,17 @@ function longestRun(text: string, pattern: RegExp): number {
 }
 
 function escapeText(text: string, label: boolean, table: boolean): string {
-  const escaped = text.replace(/^[ \t]+|[ \t]+$|[\\`*_[\]<>!#.+()~=|:@&\-\n\r\t]/gm, (value) =>
-    Array.from(value, (char) => {
-      // Entities avoid the label parser's extra bracket-unescaping pass.
-      return /[ \t\n\r:@&]/.test(char) || (label && /[\\[\]]/.test(char))
-        ? `&#${char.charCodeAt(0)};`
-        : `\\${char}`;
-    }).join(""),
+  const escaped = text.replace(
+    /^[ ]+|[ ]+$|[\\`*_[\]<>!#.+()~=|:@&-]|(?! )[\s\p{Cf}]/gmu,
+    (value) =>
+      Array.from(value, (char) => {
+        // Protect whitespace before Markdown can trim it, expand tabs in lists,
+        // or reinterpret Unicode separators in headings, tasks and tables.
+        // Entities also avoid the label parser's extra bracket-unescaping pass.
+        return /[\s\p{Cf}:@&]/u.test(char) || (label && /[\\[\]]/.test(char))
+          ? `&#${char.codePointAt(0)};`
+          : `\\${char}`;
+      }).join(""),
   );
   return table ? escaped.replace(/ /g, "&#32;") : escaped;
 }
@@ -38,7 +42,7 @@ function escapeText(text: string, label: boolean, table: boolean): string {
 function escapeHtmlText(text: string): string {
   // HTML fallback contents are parsed as HTML, where Markdown escapes are literal.
   // Encode label delimiters too: an HTML span can itself be inside a Markdown link.
-  return text.replace(/[\p{P}\p{S}\t\r\n]/gu, (char) => `&#${char.codePointAt(0)};`);
+  return text.replace(/[\p{P}\p{S}]|(?! )[\s\p{Cf}]/gu, (char) => `&#${char.codePointAt(0)};`);
 }
 
 function encodeUrlControls(url: string): string {
@@ -167,7 +171,12 @@ function serializeInline(nodes: JSONContent[], table: boolean, htmlContext = fal
       const start = position;
       position += value.length;
       if ("text" in branch) return false;
-      if (htmlOnlyMark(branch.mark) || (branch.mark.type === "code" && /[\r\n]/.test(value)))
+      // List lexers expand tabs inside code spans; Unicode line separators also
+      // disrupt heading/table lexers. Keep significant whitespace in HTML.
+      if (
+        htmlOnlyMark(branch.mark) ||
+        (branch.mark.type === "code" && /[^\S ]|\p{Cf}/u.test(value))
+      )
         return true;
       if (branch.children.some((child) => "mark" in child)) return true;
       const next = tree[index + 1];
@@ -338,7 +347,9 @@ function needsHtml(node: JSONContent): boolean {
     return (
       node.attrs?.language === "" ||
       /[`\s]/.test(String(node.attrs?.language ?? "")) ||
-      /[\r\t]/.test(textContent(node))
+      // Container lexers can reinterpret Unicode whitespace (including line
+      // separators) even inside fences. Ordinary spaces and LF are safe.
+      /[^\S \n]|\p{Cf}/u.test(textContent(node))
     );
   const children = node.content ?? [];
   // Containers can hold both Markdown blocks and complete HTML fallbacks.
@@ -399,6 +410,16 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
             // line-based list tokenizers or their shared lexer state.
             const tokenizer = new markdown.instance.Tokenizer();
             tokenizer.lexer = new markdown.instance.Lexer({ gfm: true, tokenizer });
+            // A task marker is independent of its label's first character.
+            // Clone the rules so other lexer instances keep their own grammar.
+            tokenizer.rules = {
+              ...tokenizer.rules,
+              other: {
+                ...tokenizer.rules.other,
+                listIsTask: /^\[[ xX]\](?:[ \t]|$)/,
+                listReplaceTask: /^\[[ xX]\](?:[ \t]|$)/,
+              },
+            };
             const token = tokenizer.list(source);
             if (!token) return;
             return {
