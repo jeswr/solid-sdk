@@ -162,9 +162,15 @@ export function stripUnsupported(xml: string): { xml: string; skipped: SkippedIt
 export async function importDocx(data: ArrayBuffer, options: DocxImportOptions) {
   if (data.byteLength > MAX_IMPORT_BYTES) throw new Error("Choose a file of 50 MB or less");
   const archive = await openArrayBuffer(data);
-  const json = await embeddedDocument(archive);
-  if (json) {
-    options.progress({ completed: 0, total: 0 });
+  const embedded = await embeddedDocument(archive);
+  if (embedded) {
+    const { json, images } = embedded;
+    options.progress({ completed: 0, total: images.length });
+    for (const [index, image] of images.entries()) {
+      const { url } = await uploadImage(image, options);
+      image.node.attrs = { ...image.node.attrs, src: url };
+      options.progress({ completed: index + 1, total: images.length });
+    }
     return {
       json,
       html: generateHTML(json, baseExtensions(globalThis.fetch)),
@@ -206,13 +212,21 @@ export async function importDocx(data: ArrayBuffer, options: DocxImportOptions) 
   let html = result.value;
   options.progress({ completed: 0, total: images.length });
   for (const [index, image] of images.entries()) {
-    const url = await options.uploadImage(image.data, image.contentType);
-    // Escape the replacement through the sanitizer instead of interpolating an attribute.
-    const safe = sanitiseImport(`<img src="${url.replaceAll('"', "&quot;")}" />`);
-    const src = /src="([^"]+)"/.exec(safe)?.[1];
-    if (!src) throw new Error("Invalid uploaded image URL");
+    const { src } = await uploadImage(image, options);
     html = html.replaceAll(image.placeholder, src);
     options.progress({ completed: index + 1, total: images.length });
   }
   return { html: sanitiseImport(html, inspected.skipped), skipped: inspected.skipped };
+}
+
+async function uploadImage(
+  image: { data: ArrayBuffer; contentType: string },
+  options: DocxImportOptions,
+) {
+  const url = await options.uploadImage(image.data, image.contentType);
+  // Validate both import paths alike; escape only the HTML replacement, keeping JSON URLs raw.
+  const safe = sanitiseImport(`<img src="${url.replaceAll('"', "&quot;")}" />`);
+  const src = /src="([^"]+)"/.exec(safe)?.[1];
+  if (!src) throw new Error("Invalid uploaded image URL");
+  return { url, src };
 }

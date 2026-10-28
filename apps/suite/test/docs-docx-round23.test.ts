@@ -296,15 +296,11 @@ it.each([
     vi.fn(),
   );
   expect(result.skipped).toEqual(edited ? [warning] : []);
-  if (edited) {
-    expect(new Uint8Array(upload.mock.calls[0]?.[0] as ArrayBuffer)).toEqual(
-      new Uint8Array([4, 5, 6]),
-    );
-    expect(result.json.content?.[0]?.attrs?.src).toBe("https://pod.test/changed.png");
-  } else {
-    expect(upload).not.toHaveBeenCalled();
-    expect(result.json).toEqual(original);
-  }
+  expect(upload).toHaveBeenCalledTimes(1);
+  expect(new Uint8Array(upload.mock.calls[0]?.[0] as ArrayBuffer)).toEqual(
+    new Uint8Array(edited ? [4, 5, 6] : [1, 2, 3]),
+  );
+  expect(result.json.content?.[0]?.attrs?.src).toBe("https://pod.test/changed.png");
 });
 
 const zipLibrary = createRequire(import.meta.resolve("mammoth"))("jszip") as {

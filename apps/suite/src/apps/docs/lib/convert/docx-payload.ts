@@ -9,7 +9,54 @@ import { importSchema, normaliseImport } from "./schema";
 export const PAYLOAD_PROPERTY = "SuiteDocsDocument";
 const CUSTOM = "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties";
 const VT = "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes";
+const RELATIONSHIPS = "http://schemas.openxmlformats.org/package/2006/relationships";
+const OFFICE_RELATIONSHIPS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+const DRAWING = "http://schemas.openxmlformats.org/drawingml/2006/main";
 type Archive = Awaited<ReturnType<typeof openArrayBuffer>>;
+
+interface EmbeddedImage {
+  node: JSONContent;
+  data: ArrayBuffer;
+  contentType: string;
+}
+interface EmbeddedDocument {
+  json: JSONContent;
+  images: EmbeddedImage[];
+}
+
+function imageNodes(node: JSONContent): JSONContent[] {
+  return node.type === "image" ? [node] : (node.content ?? []).flatMap(imageNodes);
+}
+
+/** Read images in document order, including repeated media and images inside tables/lists. */
+async function packageImages(archive: Archive) {
+  const body = readXml(await archive.read("word/document.xml", "utf-8"));
+  const relationships = descendants(
+    readXml(await archive.read("word/_rels/document.xml.rels", "utf-8")),
+    `${RELATIONSHIPS}:Relationship`,
+  );
+  return descendants(body, `${DRAWING}:blip`).map((blip) => {
+    const id = blip.attrs[`${OFFICE_RELATIONSHIPS}:embed`];
+    const relationship = relationships.find((item) => item.attrs[":Id"] === id);
+    const target = relationship?.attrs[":Target"] ?? "";
+    const contentType = (
+      { png: "image/png", jpg: "image/jpeg", gif: "image/gif", bmp: "image/bmp" } as Record<
+        string,
+        string
+      >
+    )[target.slice(target.lastIndexOf(".") + 1)];
+    // Only Suite-exported, local media parts qualify. Never resolve payload URLs or external rels.
+    if (
+      relationship?.attrs[":Type"] !== `${OFFICE_RELATIONSHIPS}/image` ||
+      relationship.attrs[":TargetMode"] === "External" ||
+      !/^media\/[\w.-]+$/.test(target) ||
+      !contentType ||
+      !archive.exists(`word/${target}`)
+    )
+      throw new Error("Unmatched embedded image");
+    return { path: `word/${target}`, contentType };
+  });
+}
 
 async function digest(value: string | Uint8Array<ArrayBuffer>) {
   const hash = await crypto.subtle.digest(
@@ -80,12 +127,19 @@ export async function embedDocument(document: Document, json: JSONContent) {
   const archive = await openArrayBuffer(await Packer.toArrayBuffer(document));
   document.CustomProperties.addCustomProperty({
     name: PAYLOAD_PROPERTY,
-    value: JSON.stringify({ version: 1, ...(await fingerprints(archive)), json }),
+    value: JSON.stringify({
+      version: 1,
+      ...(await fingerprints(archive)),
+      // Both traversals follow document order. A failed export leaves fewer media entries,
+      // forcing a warned mapped import instead of reviving an unavailable source URL.
+      images: (await packageImages(archive)).map((image) => image.path),
+      json,
+    }),
   });
 }
 
 /** Missing, damaged, stale or incompatible payloads always fall back to visible DOCX content. */
-export async function embeddedDocument(archive: Archive): Promise<JSONContent | undefined> {
+export async function embeddedDocument(archive: Archive): Promise<EmbeddedDocument | undefined> {
   if (!archive.exists("docProps/custom.xml")) return undefined;
   try {
     const properties = readXml(await archive.read("docProps/custom.xml", "utf-8"));
@@ -95,10 +149,30 @@ export async function embeddedDocument(archive: Archive): Promise<JSONContent | 
     if (values.length !== 1) return undefined;
     const payload = JSON.parse((values[0] as XmlElement).text);
     if (payload.version !== 1) return undefined;
+    const json = validated(payload.json);
+    const nodes = imageNodes(json);
+    const media = nodes.length ? await packageImages(archive) : [];
+    if (
+      nodes.length &&
+      (!Array.isArray(payload.images) ||
+        payload.images.length !== nodes.length ||
+        media.length !== nodes.length ||
+        media.some((image, index) => payload.images[index] !== image.path))
+    )
+      return undefined;
     const current = await fingerprints(archive);
     if (payload.textDigest !== current.textDigest || payload.bodyDigest !== current.bodyDigest)
       return undefined;
-    return validated(payload.json);
+    const images: EmbeddedImage[] = [];
+    for (const [index, image] of media.entries()) {
+      const data = await archive.read(image.path);
+      images.push({
+        node: nodes[index] as JSONContent,
+        data: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
+        contentType: image.contentType,
+      });
+    }
+    return { json, images };
   } catch {
     return undefined;
   }
