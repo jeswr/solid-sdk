@@ -5,6 +5,7 @@ import { openArrayBuffer } from "mammoth/lib/zipfile";
 import mammoth from "mammoth/mammoth.browser";
 import { SaxesParser } from "saxes";
 import { baseExtensions } from "../../editor/extensions";
+import { normaliseDestination } from "../editor/destination";
 import { readNumbering } from "./docx-numbering";
 import { embeddedDocument } from "./docx-payload";
 import { WORD } from "./docx-xml";
@@ -174,7 +175,7 @@ export async function importDocx(data: ArrayBuffer, options: DocxImportOptions) 
     return {
       json,
       html: generateHTML(json, baseExtensions(globalThis.fetch)),
-      skipped: [] as SkippedItem[],
+      skipped: embedded.skipped,
     };
   }
   const inspected = stripUnsupported(await archive.read("word/document.xml", "utf-8"));
@@ -223,10 +224,8 @@ async function uploadImage(
   image: { data: ArrayBuffer; contentType: string },
   options: DocxImportOptions,
 ) {
-  const url = await options.uploadImage(image.data, image.contentType);
-  // Validate both import paths alike; escape only the HTML replacement, keeping JSON URLs raw.
-  const safe = sanitiseImport(`<img src="${url.replaceAll('"', "&quot;")}" />`);
-  const src = /src="([^"]+)"/.exec(safe)?.[1];
-  if (!src) throw new Error("Invalid uploaded image URL");
-  return { url, src };
+  const url = normaliseDestination(await options.uploadImage(image.data, image.contentType));
+  if (!url || !/^https?:/.test(url)) throw new Error("Invalid uploaded image URL");
+  // JSON keeps the normalized URL; only the HTML replacement needs entity escaping.
+  return { url, src: url.replaceAll("&", "&amp;") };
 }

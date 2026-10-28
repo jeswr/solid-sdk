@@ -3,6 +3,7 @@
 import type { JSONContent } from "@tiptap/react";
 import { expect, it, vi } from "vitest";
 import { exportMarkdown, importMarkdown } from "../src/apps/docs/lib/convert/markdown";
+import { normaliseImport } from "../src/apps/docs/lib/convert/schema";
 
 function linkedImage(label: string, title: string | null, url: string): JSONContent {
   const original = importMarkdown(
@@ -52,7 +53,7 @@ it.each([
   const original = linkedImage("label", "title", url);
   const exported = exportMarkdown(original);
   expect(exported.match(/\(<https:\/\/pod.test\//g)).toHaveLength(2);
-  expect(importMarkdown(exported, "destinations.md").json).toEqual(original);
+  expect(importMarkdown(exported, "destinations.md").json).toEqual(normaliseImport(original).json);
 });
 
 it("percent-encodes angle brackets and line controls in destinations without losing links or images", () => {
@@ -83,7 +84,9 @@ it("round trips table cells with literal pipes, newlines, HTML, padded code and 
   paragraph.content?.push({ type: "text", text: " code | ", marks: [{ type: "code" }] });
   (cells[0] as JSONContent).content = [paragraph];
   (cells[1] as JSONContent).content = [linked.content?.[1] as JSONContent];
-  expect(importMarkdown(exportMarkdown(original), "table.md").json).toEqual(original);
+  expect(importMarkdown(exportMarkdown(original), "table.md").json).toEqual(
+    normaliseImport(original).json,
+  );
 });
 
 it.each([

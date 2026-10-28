@@ -182,26 +182,6 @@ it.each([
       };
     },
   ],
-  [
-    "unsafe link",
-    (payload: Record<string, unknown>) => {
-      payload.json = {
-        type: "doc",
-        content: [
-          {
-            type: "paragraph",
-            content: [
-              {
-                type: "text",
-                text: "bad",
-                marks: [{ type: "link", attrs: { href: "javascript:bad" } }],
-              },
-            ],
-          },
-        ],
-      };
-    },
-  ],
 ] as const)("rejects embedded %s and imports visible content with a warning", async (_name, change) => {
   const zip = await exported(linkedCode);
   await rewritePayload(zip, change);

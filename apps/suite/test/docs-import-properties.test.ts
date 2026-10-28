@@ -59,11 +59,11 @@ it("Markdown decodes CommonMark entities once in prose, labels, destinations and
       for (const index of [1, 2]) {
         const link = content.child(index).firstChild;
         expect(link?.text).toBe(decoded);
-        expect(link?.marks[0]?.attrs.href).toBe(`https://example.org/${decoded}`);
+        expect(link?.marks[0]?.attrs.href).toBe(encodeURI(`https://example.org/${decoded}`));
         expect(link?.marks[0]?.attrs.title).toBe(decoded);
       }
       expect(content.child(3).attrs).toMatchObject({
-        src: `https://example.org/${decoded}`,
+        src: encodeURI(`https://example.org/${decoded}`),
         alt: decoded,
         title: decoded,
       });

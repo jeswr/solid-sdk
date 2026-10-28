@@ -196,9 +196,9 @@ it("round trips generated links and images with Markdown punctuation in labels, 
     .map((chars) => `https://pod.test/${chars.join("")}end`);
   fc.assert(
     fc.property(value, fc.option(value, { nil: null }), url, (label, title, rawDestination) => {
-      // Angle brackets and line controls have canonical percent-encoded URL
-      // spellings; ordinary spaces and parentheses remain in the document URL.
-      const destination = rawDestination.replace(/[<>\r\n\t]/g, encodeURIComponent);
+      // Document URLs encode disallowed characters, including spaces, while
+      // preserving URI delimiters such as parentheses.
+      const destination = encodeURI(rawDestination);
       const original = importMarkdown(
         "[link](https://pod.test/)\n\n![alt](https://pod.test/)",
         "links.md",

@@ -242,7 +242,9 @@ it("preserves GFM table links with pipes and empty cells", () => {
             cell("tableCell", [
               {
                 ...text("link | text"),
-                marks: [{ type: "link", attrs: { href: "https://example.org/a|b", title: "a|b" } }],
+                marks: [
+                  { type: "link", attrs: { href: "https://example.org/a%7Cb", title: "a|b" } },
+                ],
               },
             ]),
           ],

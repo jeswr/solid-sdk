@@ -41,7 +41,13 @@ const image = (alt: string, src: string, title: string | null = null): JSONConte
   attrs: { alt, src, title },
 });
 
-type Example = { section: string; name: string; markdown: string; content: JSONContent[] };
+type Example = {
+  section: string;
+  name: string;
+  markdown: string;
+  content: JSONContent[];
+  skipped?: string;
+};
 // CommonMark 0.31.2 examples, with expected HTML expressed in the Docs schema.
 // https://spec.commonmark.org/0.31.2/
 // Relative destinations in the Links examples are prefixed with https://example.org:
@@ -180,13 +186,13 @@ const examples: Example[] = [
     section: "entity-and-numeric-character-references",
     name: "link destinations and titles",
     markdown: '[foo](https://example.org/f&ouml;&ouml; "f&ouml;&ouml;")',
-    content: [p(link("foo", "https://example.org/föö", "föö"))],
+    content: [p(link("foo", "https://example.org/f%C3%B6%C3%B6", "föö"))],
   },
   {
     section: "entity-and-numeric-character-references",
     name: "reference destinations and titles",
     markdown: '[foo]\n\n[foo]: https://example.org/f&ouml;&ouml; "f&ouml;&ouml;"',
-    content: [p(link("foo", "https://example.org/föö", "föö"))],
+    content: [p(link("foo", "https://example.org/f%C3%B6%C3%B6", "föö"))],
   },
   {
     section: "entity-and-numeric-character-references",
@@ -300,7 +306,33 @@ const examples: Example[] = [
     section: "links",
     name: "spaces inside an angle destination",
     markdown: "[link](<https://example.org/foo bar>)",
-    content: [p(link("link", "https://example.org/foo bar"))],
+    content: [p(link("link", "https://example.org/foo%20bar"))],
+  },
+  {
+    section: "links",
+    name: "non-ASCII angle destination",
+    markdown: "[link](<https://example.org/ä/合同>)",
+    content: [p(link("link", "https://example.org/%C3%A4/%E5%90%88%E5%90%8C"))],
+  },
+  {
+    section: "links",
+    name: "angle destination preserves existing escapes",
+    markdown: "[link](<https://example.org/foo%20bä%2f>)",
+    content: [p(link("link", "https://example.org/foo%20b%C3%A4%2f"))],
+  },
+  {
+    section: "links",
+    name: "unsafe angle destination retains label without link",
+    markdown: "[link](<javascript:alert(1)>)",
+    content: [p("link")],
+    skipped: "Unsupported marks",
+  },
+  {
+    section: "links",
+    name: "unsafe data destination retains label without link",
+    markdown: "[link](<data:text/html,hello world>)",
+    content: [p("link")],
+    skipped: "Unsupported marks",
   },
   {
     section: "links",
@@ -324,13 +356,13 @@ const examples: Example[] = [
     section: "links",
     name: "backslash before nonpunctuation",
     markdown: String.raw`[link](https://example.org/foo\bar)`,
-    content: [p(link("link", "https://example.org/foo\\bar"))],
+    content: [p(link("link", "https://example.org/foo%5Cbar"))],
   },
   {
     section: "links",
     name: "percent encoding is retained",
     markdown: "[link](https://example.org/foo%20b&auml;)",
-    content: [p(link("link", "https://example.org/foo%20bä"))],
+    content: [p(link("link", "https://example.org/foo%20b%C3%A4"))],
   },
   {
     section: "links",
@@ -398,7 +430,7 @@ const examples: Example[] = [
     section: "backslash-escapes",
     name: "autolinks preserve escapes and references",
     markdown: String.raw`<https://example.org/\&copy;>`,
-    content: [p(link("https://example.org/\\&copy;", "https://example.org/\\&copy;"))],
+    content: [p(link("https://example.org/\\&copy;", "https://example.org/%5C&copy;"))],
   },
   {
     section: "entity-and-numeric-character-references",
@@ -462,9 +494,10 @@ const examples: Example[] = [
   },
 ];
 
-it.each(examples)("CommonMark 0.31.2 $section: $name", ({ markdown, content }) => {
+it.each(examples)("CommonMark 0.31.2 $section: $name", ({ markdown, content, skipped }) => {
   const imported = importMarkdown(markdown, "commonmark.md");
   expect(imported.json).toEqual(schema.nodeFromJSON({ type: "doc", content }).toJSON());
+  if (skipped) expect(imported.skipped).toContainEqual({ label: skipped, count: 1 });
 });
 
 it.each([
@@ -474,7 +507,7 @@ it.each([
 ])("applies CommonMark's ASCII punctuation escape rule in every string context: %j", (punctuation) => {
   const raw = `\\${punctuation}&copy;`;
   const expected = `${punctuation === "«" || punctuation === "φ" ? "\\" : ""}${punctuation}©`;
-  const href = `https://example.org/${expected}`;
+  const href = encodeURI(`https://example.org/${expected}`);
   const imported = importMarkdown(
     `${raw}\n\n[${raw}](https://example.org/${raw} "${raw}")\n\n[${raw}][ref]\n\n[ref]: https://example.org/${raw} "${raw}"\n\n![${raw}](https://example.org/${raw} "${raw}")\n\n~~~ ${raw}\n${raw}\n~~~`,
     "punctuation.md",
@@ -508,7 +541,7 @@ it("decodes escapes and references once from source in prose, labels, destinatio
       (slashes, reference) => {
         const raw = "\\".repeat(slashes) + reference;
         const expected = "\\".repeat(Math.floor(slashes / 2)) + (slashes % 2 ? reference : "©");
-        const href = `https://example.org/${expected}`;
+        const href = encodeURI(`https://example.org/${expected}`);
         const imported = importMarkdown(
           `${raw}\n\n[${raw}](https://example.org/${raw} "${raw}")\n\n[${raw}][ref]\n\n[ref]: https://example.org/${raw} "${raw}"\n\n![${raw}](https://example.org/${raw} "${raw}")\n\n\`${raw}\`\n\n~~~\n${raw}\n~~~\n\n    ${raw}`,
           "escapes.md",

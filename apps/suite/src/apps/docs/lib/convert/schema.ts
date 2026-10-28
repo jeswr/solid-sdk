@@ -1,10 +1,35 @@
 // AUTHORED-BY Codex
 import { generateJSON, getSchema, type JSONContent } from "@tiptap/react";
 import { baseExtensions } from "../../editor/extensions";
+import { normaliseDestination } from "../editor/destination";
 import { sanitiseImport } from "./sanitise";
 import { reportSkipped, type SkippedItem } from "./skipped";
 
 export const importSchema = getSchema(baseExtensions(globalThis.fetch));
+
+/** Apply the same URL policy to mapped imports and embedded document payloads. */
+export function normaliseDestinations(node: JSONContent, skipped: SkippedItem[]): JSONContent {
+  const result = { ...node };
+  if (node.marks)
+    result.marks = node.marks.flatMap((mark) => {
+      if (mark.type !== "link") return [mark];
+      const href = normaliseDestination(String(mark.attrs?.href ?? ""));
+      if (href) return [{ ...mark, attrs: { ...mark.attrs, href } }];
+      reportSkipped(skipped, "Unsafe URLs");
+      return [];
+    });
+  if (node.type === "image") {
+    const src = normaliseDestination(String(node.attrs?.src ?? ""));
+    if (!src || !/^https?:/.test(src)) {
+      reportSkipped(skipped, "Unsafe URLs");
+      return { type: "paragraph" };
+    }
+    result.attrs = { ...node.attrs, src };
+  }
+  if (node.content)
+    result.content = node.content.map((child) => normaliseDestinations(child, skipped));
+  return result;
+}
 
 /** The single boundary between mapped imports and editor/snapshot content. */
 export function normaliseImport(json: JSONContent, skipped: SkippedItem[] = []) {
@@ -53,7 +78,7 @@ export function normaliseImport(json: JSONContent, skipped: SkippedItem[] = []) 
       return [];
     }
   }
-  const mapped = map(json)[0];
+  const mapped = map(normaliseDestinations(json, skipped))[0];
   if (mapped && mapped.type !== "doc") reportSkipped(skipped, "Invalid document root");
   const parsed = importSchema.nodeFromJSON(
     mapped?.type === "doc" && mapped.content?.length

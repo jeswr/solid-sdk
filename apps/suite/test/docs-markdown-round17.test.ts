@@ -61,7 +61,13 @@ it("coalesces identical mark sets and escapes HTML link attributes in nested mar
   const imported = importMarkdown(exported, "attrs.md").json;
   expect(imported.content?.[0]?.content).toMatchObject([
     { text: "before " },
-    { text: "one two", marks: [{ type: "link", attrs: link.attrs }, { type: "bold" }] },
+    {
+      text: "one two",
+      marks: [
+        { type: "link", attrs: { ...link.attrs, href: "https://example.org/a?x=1&y=%22two%22" } },
+        { type: "bold" },
+      ],
+    },
     { text: " after." },
   ]);
 });

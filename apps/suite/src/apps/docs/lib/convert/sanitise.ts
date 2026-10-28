@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex
 import sanitizeHtml from "sanitize-html";
-import { validLink } from "../editor/logic";
+import { normaliseDestination } from "../editor/destination";
 import { reportSkipped, type SkippedItem } from "./skipped";
 
 /** Only the editor's supported HTML surface; no styles, active content or embedded data. */
@@ -61,10 +61,12 @@ export function sanitiseImport(html: string, skipped: SkippedItem[] = []): strin
         }
         for (const key of ["src", "href"]) {
           const url = attribs[key];
-          if (url && (!validLink(url) || (key === "src" && !/^https?:/.test(url)))) {
+          if (url === undefined) continue;
+          const destination = normaliseDestination(url);
+          if (!destination || (key === "src" && !/^https?:/.test(destination))) {
             delete attribs[key];
             reportSkipped(skipped, "Unsafe URLs");
-          }
+          } else attribs[key] = destination;
         }
         return { tagName, attribs };
       },

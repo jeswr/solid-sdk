@@ -2,9 +2,9 @@
 import type { JSONContent } from "@tiptap/react";
 import { type Document, Packer } from "docx";
 import { openArrayBuffer } from "mammoth/lib/zipfile";
-import { validLink } from "../editor/logic";
 import { descendants, readXml, type XmlElement } from "./docx-xml";
-import { importSchema, normaliseImport } from "./schema";
+import { importSchema, normaliseDestinations, normaliseImport } from "./schema";
+import type { SkippedItem } from "./skipped";
 
 export const PAYLOAD_PROPERTY = "SuiteDocsDocument";
 const CUSTOM = "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties";
@@ -22,6 +22,7 @@ interface EmbeddedImage {
 interface EmbeddedDocument {
   json: JSONContent;
   images: EmbeddedImage[];
+  skipped: SkippedItem[];
 }
 
 function imageNodes(node: JSONContent): JSONContent[] {
@@ -98,29 +99,23 @@ async function fingerprints(archive: Archive) {
   };
 }
 
-/** Validate without repairing: an embedded document must be entirely understood by this schema. */
+/** Repair URLs, then require the embedded structure to be entirely understood by this schema. */
 function validated(json: JSONContent) {
-  const parsed = importSchema.nodeFromJSON(json);
+  const skipped: SkippedItem[] = [];
+  const safe = normaliseDestinations(json, skipped);
+  const parsed = importSchema.nodeFromJSON(safe);
   parsed.check();
-  const normalised = normaliseImport(json);
+  const normalised = normaliseImport(safe);
   if (
     normalised.skipped.length ||
     parsed.type.name !== "doc" ||
     JSON.stringify(parsed.toJSON()) !== JSON.stringify(normalised.json)
   )
     throw new Error("Invalid embedded document");
-  parsed.descendants((node) => {
-    if (
-      node.type.name === "image" &&
-      (!validLink(String(node.attrs.src)) || !/^https?:/.test(String(node.attrs.src)))
-    )
-      throw new Error("Unsafe embedded image");
-    for (const mark of node.marks) {
-      if (mark.type.name === "link" && !validLink(String(mark.attrs.href)))
-        throw new Error("Unsafe embedded link");
-    }
-  });
-  return normalised.json;
+  // Image repairs change package-to-node correspondence; use the visible DOCX fallback.
+  if (imageNodes(json).length !== imageNodes(normalised.json).length)
+    throw new Error("Unsafe embedded image");
+  return { json: normalised.json, skipped };
 }
 
 export async function embedDocument(document: Document, json: JSONContent) {
@@ -149,7 +144,7 @@ export async function embeddedDocument(archive: Archive): Promise<EmbeddedDocume
     if (values.length !== 1) return undefined;
     const payload = JSON.parse((values[0] as XmlElement).text);
     if (payload.version !== 1) return undefined;
-    const json = validated(payload.json);
+    const { json, skipped } = validated(payload.json);
     const nodes = imageNodes(json);
     const media = nodes.length ? await packageImages(archive) : [];
     if (
@@ -172,7 +167,7 @@ export async function embeddedDocument(archive: Archive): Promise<EmbeddedDocume
         contentType: image.contentType,
       });
     }
-    return { json, images };
+    return { json, images, skipped };
   } catch {
     return undefined;
   }

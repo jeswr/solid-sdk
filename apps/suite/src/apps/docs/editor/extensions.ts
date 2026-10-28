@@ -7,13 +7,41 @@ import Superscript from "@tiptap/extension-superscript";
 import { TableKit } from "@tiptap/extension-table";
 import TextAlign from "@tiptap/extension-text-align";
 import { CharacterCount, Placeholder } from "@tiptap/extensions";
+import { Plugin } from "@tiptap/pm/state";
 import { Extension } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import type { Doc } from "yjs";
 import { codeWhitespaceTextblocks, compatibleCodeExtensions } from "../lib/editor/code-mark";
+import { normaliseDestination } from "../lib/editor/destination";
 import { validLink } from "../lib/editor/logic";
 import { FindDecorations } from "./find-plugin";
 import { privateImage } from "./private-image";
+
+const PasteDestinations = Extension.create({
+  name: "docsPasteDestinations",
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        props: {
+          transformPastedHTML(html) {
+            // A template preserves clipboard fragments such as table rows and
+            // keeps pasted images inert until the editor's node view handles them.
+            const fragment = document.createElement("template");
+            fragment.innerHTML = html;
+            for (const element of fragment.content.querySelectorAll("a[href], img[src]")) {
+              const key = element.tagName === "A" ? "href" : "src";
+              const destination = normaliseDestination(element.getAttribute(key) as string);
+              if (destination && (key === "href" || /^https?:/.test(destination)))
+                element.setAttribute(key, destination);
+              else element.removeAttribute(key);
+            }
+            return fragment.innerHTML;
+          },
+        },
+      }),
+    ];
+  },
+});
 
 const EditorKeys = Extension.create({
   name: "docsKeys",
@@ -74,6 +102,7 @@ export function baseExtensions(fetchImpl: typeof fetch) {
     privateImage(fetchImpl),
     Placeholder.configure({ placeholder: "Start writing, or type / for ideas…" }),
     CharacterCount,
+    PasteDestinations,
     EditorKeys,
     FindDecorations,
   ];

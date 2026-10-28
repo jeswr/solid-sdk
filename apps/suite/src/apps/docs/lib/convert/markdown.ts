@@ -13,7 +13,7 @@ import {
 } from "@tiptap/react";
 import sanitizeHtml from "sanitize-html";
 import { baseExtensions } from "../../editor/extensions";
-import { validLink } from "../editor/logic";
+import { normaliseDestination } from "../editor/destination";
 import { MAX_IMPORT_BYTES } from "./docx-import";
 import { normaliseImport } from "./schema";
 import { reportSkipped, type SkippedItem } from "./skipped";
@@ -76,7 +76,7 @@ function encodeUrlControls(url: string): string {
   return url.replace(/[<>\r\n\t]/g, encodeURIComponent);
 }
 function safeDestination(url: string): boolean {
-  return !!validLink(encodeUrlControls(url).replace(/ /g, "%20"));
+  return normaliseDestination(url) !== null;
 }
 function destination(url: string): string {
   const escaped = encodeUrlControls(url).replace(/\\/g, "\\\\").replace(/&/g, "&amp;");

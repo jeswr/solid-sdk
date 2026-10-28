@@ -3,7 +3,8 @@
 import { Button, Input, Popover, PopoverAnchor, PopoverContent, toast } from "@jeswr/suite-ui";
 import type { Editor } from "@tiptap/react";
 import { useId, useState } from "react";
-import { validLink, wordCount } from "../lib/editor/logic";
+import { normaliseDestination } from "../lib/editor/destination";
+import { wordCount } from "../lib/editor/logic";
 export function LinkPopover({ editor, close }: { editor: Editor; close: () => void }) {
   const [url, setUrl] = useState(String(editor.getAttributes("link").href ?? ""));
   const [text, setText] = useState("");
@@ -11,6 +12,7 @@ export function LinkPopover({ editor, close }: { editor: Editor; close: () => vo
   const [confirm, setConfirm] = useState(false);
   const id = useId();
   const empty = editor.state.selection.empty;
+  const destination = normaliseDestination(url.trim());
   return (
     <Popover open onOpenChange={(open) => !open && close()}>
       <PopoverAnchor asChild>
@@ -27,7 +29,7 @@ export function LinkPopover({ editor, close }: { editor: Editor; close: () => vo
           className="docs-form"
           onSubmit={(event) => {
             event.preventDefault();
-            const href = validLink(url);
+            const href = destination;
             if (!href) {
               setError(true);
               return;
@@ -49,7 +51,8 @@ export function LinkPopover({ editor, close }: { editor: Editor; close: () => vo
           <label htmlFor={`${id}-url`}>Link address</label>
           <Input
             id={`${id}-url`}
-            type="url"
+            type="text"
+            inputMode="url"
             autoFocus
             value={url}
             aria-invalid={error}
@@ -76,16 +79,16 @@ export function LinkPopover({ editor, close }: { editor: Editor; close: () => vo
             </>
           )}
           <Button type="submit">Apply link</Button>
-          {validLink(url) && (
+          {destination && (
             <Button variant="outline" onClick={() => setConfirm(true)}>
               Open link
             </Button>
           )}
-          {confirm && validLink(url) && (
+          {confirm && destination && (
             <div className="docs-form">
-              <p>Open {new URL(url).hostname || "your mail app"}?</p>
+              <p>Open {new URL(destination).hostname || "your mail app"}?</p>
               <Button asChild>
-                <a href={validLink(url) as string} target="_blank" rel="noopener noreferrer">
+                <a href={destination} target="_blank" rel="noopener noreferrer">
                   Open link in new tab
                 </a>
               </Button>
