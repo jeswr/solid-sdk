@@ -43,6 +43,7 @@ import {
   DCT,
   DEFAULT_FORMAT,
   DOCUMENT_CLASS,
+  NS,
   PD,
   PROV,
   RDF_TYPE,
@@ -104,6 +105,8 @@ export interface Revision {
 
 /** A document as the UI consumes it (plain, serialisable). */
 export interface PodDocument {
+  /** Stable resource identity, retained across renames and log recovery. */
+  instanceId?: string | undefined;
   /** Title — `dct:title`. */
   updateLog?: string | undefined;
   assets?: string | undefined;
@@ -178,6 +181,12 @@ export class RevisionDoc extends TermWrapper {
 
 /** Typed `@rdfjs/wrapper` view of a single document's `#it` subject. */
 export class DocumentDoc extends TermWrapper {
+  get instanceId(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, `${NS.DCT}identifier`, LiteralAs.string);
+  }
+  set instanceId(value: string | undefined) {
+    OptionalAs.object(this, `${NS.DCT}identifier`, value, LiteralFrom.string);
+  }
   get updateLog(): string | undefined {
     return readDocumentValue(this, PD.updateLog, NamedNodeAs.string);
   }
@@ -315,6 +324,7 @@ export function parseDocument(resourceUrl: string, dataset: DatasetCore): PodDoc
   )
     return undefined;
   return {
+    instanceId: doc.instanceId,
     updateLog: doc.updateLog,
     assets: doc.assets,
     comments: doc.comments,
@@ -332,6 +342,7 @@ export function parseDocument(resourceUrl: string, dataset: DatasetCore): PodDoc
 
 /** Input for {@link buildDocument} — the current state plus its prior history. */
 export interface BuildDocumentInput {
+  instanceId?: string | undefined;
   /** Revision author, separate from the original document creator. */
   editor?: string | undefined;
   updateLog?: string | undefined;
@@ -386,6 +397,7 @@ export function buildDocument(resourceUrl: string, input: BuildDocumentInput): S
   }
   const created = input.created === undefined ? now : new Date(input.created);
   const doc = new DocumentDoc(documentSubject(resourceUrl), store, DataFactory).mark();
+  doc.instanceId = input.instanceId;
   doc.updateLog = input.updateLog;
   doc.assets = input.assets;
   doc.comments = input.comments;

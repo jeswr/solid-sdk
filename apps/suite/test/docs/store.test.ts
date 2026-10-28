@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6 — review regression tests
+// AUTHORED-BY Codex — preferences-based index bootstrap
 
 import { RedirectRefusedError } from "@jeswr/guarded-fetch";
+import { DataFactory } from "n3";
 import { assert, describe, expect, it, vi } from "vitest";
 import { buildDocument, parseDocument } from "../../src/apps/docs/lib/model/document.js";
 import {
@@ -19,17 +21,20 @@ import {
   type Snapshot,
   type StoredDocument,
 } from "../../src/apps/docs/lib/model/store.js";
+import { ProfileTypeIndexAnchor } from "../../src/apps/docs/lib/model/type-index.js";
 import { mockFetch, privateIndexPolicy, type RecordedCall, turtleToStore } from "./helpers.js";
 
 const POD = "https://pod.example/";
 const WEBID = `${POD}profile/card#me`;
 const INDEX = `${POD}settings/privateTypeIndex.ttl`;
+const PREFERENCES = `${POD}settings/prefs.ttl`;
 const DOC = `${POD}docs/plan.ttl`;
 const NOW = new Date("2026-10-25T12:00:00Z");
 const WAIT = async () => {};
 
 async function document(title = "Plan", body = "old"): Promise<StoredDocument> {
   const dataset = buildDocument(DOC, {
+    instanceId: "fixture-document",
     title,
     body,
     now: NOW,
@@ -74,7 +79,10 @@ async function server() {
       headers,
       body: typeof init?.body === "string" ? init.body : undefined,
     });
-    const policy = privateIndexPolicy(INDEX, WEBID)[`${method} ${url}`];
+    const policy = {
+      ...privateIndexPolicy(INDEX, WEBID),
+      ...privateIndexPolicy(PREFERENCES, WEBID),
+    }[`${method} ${url}`];
     if (policy)
       return new Response(method === "GET" ? policy.body : null, {
         headers: { "content-type": "text/turtle", ...policy.headers },
@@ -227,7 +235,20 @@ describe("store creation and scope", () => {
       store.create({ title: "Second" }),
     ]);
     expect(profileStatuses.sort()).toEqual([201, 412]);
-    expect(s.resources.get(WEBID)?.body).toContain(INDEX);
+    const profileLinks = new ProfileTypeIndexAnchor(
+      WEBID,
+      turtleToStore(s.resources.get(WEBID)?.body ?? "", WEBID),
+      DataFactory,
+    );
+    expect([...profileLinks.preferencesFiles]).toEqual([PREFERENCES]);
+    expect(profileLinks.privateIndex).toBeUndefined();
+    expect(
+      new ProfileTypeIndexAnchor(
+        WEBID,
+        turtleToStore(s.resources.get(PREFERENCES)?.body ?? "", PREFERENCES),
+        DataFactory,
+      ).privateIndex,
+    ).toBe(INDEX);
     for (const doc of documents) expect(await store.read(doc.url)).toEqual(doc);
   });
   it.each([
@@ -515,6 +536,27 @@ describe("snapshot conflicts", () => {
     ).toEqual(['"v1"']);
     expect(s.resources.get(DOC)).toEqual(remote);
   });
+  it("rejects a replacement discovered during a snapshot 412 retry", async () => {
+    const s = await server();
+    const stored = await document();
+    const replacement = {
+      body: await serializeTurtle(
+        buildDocument(DOC, { title: "Plan", body: "Replacement", instanceId: "replacement" }),
+      ),
+      etag: '"replacement"',
+      contentType: "text/turtle",
+    };
+    s.resources.set(DOC, replacement);
+    await expect(
+      s.store.save(
+        stored,
+        { body: "Offline edits" },
+        { regenerate: () => ({ body: "Offline edits", format: "text/html" }), wait: WAIT },
+      ),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(s.resources.get(DOC)).toEqual(replacement);
+    expect(s.calls.filter((call) => call.method === "PUT")).toHaveLength(1);
+  });
   it("regenerates every retry, uses the fresh ETag, and preserves remote metadata/history", async () => {
     const s = await server();
     const stored = await document();
@@ -660,6 +702,131 @@ describe("snapshot conflicts", () => {
 });
 
 describe("makeCopy", () => {
+  it("refuses to acknowledge a conflicting finalisation when the target cannot be re-read", async () => {
+    const s = await server();
+    let finalising = false;
+    const fetchImpl: typeof fetch = async (input, init) => {
+      if (String(input) === `${POD}docs/plan-copy.ttl`) {
+        if (init?.method === "PUT" && new Headers(init.headers).has("if-match")) {
+          finalising = true;
+          return new Response(null, { status: 412 });
+        }
+        if (finalising) return new Response(null, { status: 403 });
+      }
+      return s.fetchImpl(input, init);
+    };
+    await expect(
+      new DocsStore(POD, WEBID, fetchImpl).makeCopy(await document(), {
+        assets: [],
+        snapshot: () => ({ body: "Recovered body", format: "text/html" }),
+        persistFullState: async () => {},
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+  });
+  it("retains a concurrent edit to a reserved copy when its owner retries", async () => {
+    const s = await server();
+    const source = await document();
+    let reservation: StoredDocument | undefined;
+    const state = {
+      assets: [],
+      snapshot: () => ({ body: "Recovered body", format: "text/html" }),
+      persistFullState: async () => {
+        throw new Error("interrupted");
+      },
+      onReserved: async (copy: StoredDocument) => {
+        reservation = copy;
+      },
+    };
+    await expect(s.store.makeCopy(source, state)).rejects.toThrow("interrupted");
+    assert(reservation);
+    const remote = await s.store.save(
+      reservation,
+      { body: "Another tab's copy edit" },
+      { regenerate: () => ({ body: "Another tab's copy edit", format: "text/html" }) },
+    );
+    await expect(
+      s.store.makeCopy(source, { ...state, reservation, persistFullState: async () => {} }),
+    ).rejects.toBeInstanceOf(ResourceWriteError);
+    expect((await s.store.read(remote.url))?.data.body).toBe("Another tab's copy edit");
+  });
+  it.each(["missing", "empty", "unrelated"])("rejects a %s recovery reservation", async (kind) => {
+    const s = await server();
+    const source = await document();
+    const reservation = { ...source, url: `${POD}docs/reservation.ttl` };
+    if (kind !== "missing")
+      s.resources.set(reservation.url, {
+        body:
+          kind === "empty"
+            ? ""
+            : await serializeTurtle(buildDocument(reservation.url, { title: "Unrelated" })),
+        etag: '"other"',
+        contentType: "text/turtle",
+      });
+    await expect(
+      s.store.makeCopy(source, {
+        reservation,
+        assets: [],
+        snapshot: () => ({ body: "live", format: "text/html" }),
+        persistFullState: async () => {},
+      }),
+    ).rejects.toMatchObject({ status: kind === "missing" ? 404 : 422 });
+  });
+  it.each([
+    "same",
+    "different",
+    "longer",
+    "unreadable",
+    "unavailable",
+  ])("resumes copied assets only when their bytes agree (%s)", async (kind) => {
+    const s = await server();
+    const source = await document();
+    const asset = `${docContainerUrls(DOC).assets}chart.png`;
+    s.resources.set(asset, { body: "png", contentType: "image/png", etag: '"asset"' });
+    let reservation: StoredDocument | undefined;
+    await expect(
+      s.store.makeCopy(source, {
+        assets: [asset],
+        snapshot: () => ({ body: "live", format: "text/html" }),
+        onReserved: async (copy) => {
+          reservation = copy;
+        },
+        persistFullState: async () => {
+          throw new Error("interrupted");
+        },
+      }),
+    ).rejects.toThrow("interrupted");
+    assert(reservation);
+    const target = `${docContainerUrls(reservation.url).assets}chart.png`;
+    if (kind === "different" || kind === "longer")
+      s.resources.set(target, {
+        body: kind === "longer" ? "longer" : "bad",
+        contentType: "image/png",
+        etag: '"changed"',
+      });
+    const fetchImpl: typeof fetch = async (input, init) => {
+      if (
+        String(input) === target &&
+        ((kind === "unreadable" && !init?.method) ||
+          (kind === "unavailable" && init?.method === "PUT"))
+      )
+        return new Response(null, { status: 503 });
+      return s.fetchImpl(input, init);
+    };
+    const retry = new DocsStore(POD, WEBID, fetchImpl).makeCopy(source, {
+      reservation,
+      assets: [asset],
+      snapshot: () => ({ body: "live", format: "text/html" }),
+      persistFullState: async () => {},
+    });
+    if (kind === "same") {
+      expect((await retry).url).toBe(reservation.url);
+      expect(s.resources.get(target)?.body).toBe("png");
+    } else
+      await expect(retry).rejects.toBeInstanceOf(
+        kind === "unreadable" ? ResourceReadError : ResourceWriteError,
+      );
+    expect(s.resources.has(`${POD}docs/plan-copy-2.ttl`)).toBe(false);
+  });
   it.each([
     'W/"reservation"',
     null,
@@ -735,6 +902,7 @@ describe("makeCopy", () => {
       `${POD}docs/plan-copy-2/updates/`,
       expect.any(Function),
       new Map(),
+      copy.data.instanceId,
     );
     expect(s.resources.get(oldContainer)).toEqual(old);
     expect(s.resources.has(`${POD}docs/plan-copy.ttl`)).toBe(false);

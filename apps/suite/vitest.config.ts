@@ -1,10 +1,20 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 export default defineConfig({
+  // Match Next's Yjs singleton when testing the workspace persistence provider.
+  resolve: {
+    alias: {
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
+      yjs: fileURLToPath(new URL("./node_modules/yjs/dist/yjs.mjs", import.meta.url)),
+    },
+  },
   test: {
     environment: "node",
+    server: { deps: { inline: ["@jeswr/y-solid"] } },
     include: ["test/**/*.test.ts"],
+    setupFiles: ["test/drive-locks.setup.ts", "test/setup-web-crypto.ts"],
     // CI safety net: budget tests run slowly under v8 coverage on shared runners (SUITE-T2 bounds them properly).
     testTimeout: 30_000,
     coverage: {
@@ -16,6 +26,8 @@ export default defineConfig({
         "src/apps/photos/lib/model/**/*.ts",
         "src/apps/home/lib/model/**/*.ts",
         "src/apps/docs/lib/model/**/*.ts",
+        "src/apps/docs/lib/editor/**/*.ts",
+        "src/apps/docs/lib/convert/**/*.ts",
         "src/apps/docs/lib/autoformat/**/*.ts",
         "src/apps/health/lib/model/**/*.ts",
         "src/apps/mail/lib/model/**/*.ts",
@@ -93,6 +105,11 @@ export default defineConfig({
         "src/apps/drive/lib/activity/**/*.ts",
         "src/apps/drive/lib/model/**/*.ts",
         "src/apps/mail/lib/threading/**/*.ts",
+        "src/lib/demo-pod/{pod,seed,binaries}.ts",
+        "src/lib/refs.ts",
+        "src/apps/drive/lib/client/**/*.ts",
+        "src/apps/drive/lib/operations/**/*.ts",
+        "src/apps/drive/lib/view/**/*.ts",
         "src/apps/mail/lib/address/**/*.ts",
       ],
       reporter: ["text", "json-summary"],

@@ -6,9 +6,11 @@ import { refuseRedirects } from "@jeswr/guarded-fetch";
 import { termsEqual } from "@jeswr/suite-vocab";
 import { Container, ContainerDataset } from "@solid/object";
 import { DataFactory, Store } from "n3";
+import { applyUpdate, Doc } from "yjs";
 import {
   type BuildDocumentInput,
   buildDocument,
+  DocumentDoc,
   type PodDocument,
   parseDocument,
 } from "./document.js";
@@ -18,9 +20,18 @@ import {
   ResourceWriteError,
   TitleConflictError,
 } from "./errors.js";
-import { DOCS_SLUG, docContainerUrls, isDirectChild, LEGACY_DOCS_SLUG, toSlug } from "./layout.js";
-import { nameFromUrl, readRdf, writeRdf } from "./rdf-io.js";
+import { DocumentReplacedError, sameIncarnation } from "./incarnation.js";
+import {
+  DOCS_SLUG,
+  docContainerUrls,
+  documentUpdateLocation,
+  isDirectChild,
+  LEGACY_DOCS_SLUG,
+  toSlug,
+} from "./layout.js";
+import { nameFromUrl, REVALIDATE_HEADERS, readRdf, serializeTurtle, writeRdf } from "./rdf-io.js";
 import { discoverRegistrations, ensureTypeRegistrations } from "./type-index.js";
+import { DocumentUpdateStore } from "./update-store.js";
 import { DOCUMENT_CLASS, NS, PREFIXES } from "./vocab.js";
 
 export interface StoredDocument {
@@ -51,14 +62,24 @@ export interface SaveOptions {
 }
 /** Callbacks must use one captured editor state so its log, body and format agree. */
 export interface CopyState {
+  /** Resume the same private reservation after an interrupted copy. */
+  reservation?: StoredDocument | undefined;
+  onReserved?: ((copy: StoredDocument) => Promise<void>) | undefined;
+  /** Recovery merges stable local updates with an existing copy's current log. */
+  mergeExisting?: boolean;
   /** Only referenced assets, not every file left in the source container. */
   assets: readonly string[];
+  /** Recovery may resolve an asset from the source incarnation's trash pair. */
+  readAsset?: ((url: string) => Promise<Response>) | undefined;
+  /** Empty mapping targets mean a missing image must become a visible placeholder. */
+  allowMissingAssets?: boolean;
   snapshot: (assetUrls: ReadonlyMap<string, string>) => Snapshot | Promise<Snapshot>;
   /** Persist a clone of the captured state with the same remapped asset references. */
   persistFullState: (
     updates: string,
     fetchImpl: typeof fetch,
     assetUrls: ReadonlyMap<string, string>,
+    instanceId: string | undefined,
   ) => Promise<void>;
 }
 
@@ -96,6 +117,62 @@ export class DocsStore {
     const { dataset, etag } = await readRdf(url, this.fetchImpl);
     const data = parseDocument(url, dataset);
     return data === undefined ? undefined : { url, etag, data };
+  }
+
+  /** Claim only the version that was opened, preserving all existing RDF and history. */
+  async claimIdentity(
+    stored: StoredDocument,
+    instanceId?: string,
+    options: { requireHistory?: boolean; recover?: boolean } = {},
+  ): Promise<StoredDocument> {
+    this.assertScope(stored.url, true);
+    if (stored.data.instanceId) return stored;
+    const joinClaim = (remote: StoredDocument | undefined) => {
+      if (
+        !remote?.data.instanceId ||
+        JSON.stringify({ ...remote.data, instanceId: undefined }) !==
+          JSON.stringify({ ...stored.data, instanceId: undefined })
+      )
+        throw new DocumentReplacedError();
+      return remote;
+    };
+    const { dataset, etag } = await readRdf(stored.url, this.fetchImpl);
+    if (etag !== stored.etag) {
+      const data = parseDocument(stored.url, dataset);
+      return joinClaim(data ? { url: stored.url, etag, data } : undefined);
+    }
+    // Discover in isolation: a legacy log may already own an identity. All
+    // writers (including list renames) must join it before modifying RDF.
+    const container = documentUpdateLocation(stored);
+    const probe = new Doc();
+    try {
+      try {
+        const updates = await new DocumentUpdateStore(
+          container,
+          this.fetchImpl,
+          async () => {},
+          !options.requireHistory,
+        ).loadUpdates();
+        for (const { update } of updates) applyUpdate(probe, update);
+        const recorded = probe.getMap("document").get("instanceId");
+        if (typeof recorded === "string") instanceId = recorded;
+      } catch (error) {
+        if (!options.recover) throw error;
+      }
+    } finally {
+      probe.destroy();
+    }
+    instanceId ??= crypto.randomUUID();
+    new DocumentDoc(`${stored.url}#it`, dataset, DataFactory).instanceId = instanceId;
+    try {
+      const written = await writeRdf(stored.url, dataset, { etag, fetchImpl: this.fetchImpl });
+      return { ...stored, etag: written.etag, data: { ...stored.data, instanceId } };
+    } catch (error) {
+      if (!(error instanceof ResourceWriteError && error.status === 412)) throw error;
+      // Concurrent first opens may join the winner only when identity was the
+      // sole change. Otherwise a fresh open must inspect the new incarnation.
+      return joinClaim(await this.read(stored.url));
+    }
   }
 
   /** Default location plus registered legacy location; legacy rows are read-only. */
@@ -174,6 +251,7 @@ export class DocsStore {
       const dataset = buildDocument(url, {
         ...input,
         ...layout,
+        instanceId: input.instanceId ?? crypto.randomUUID(),
         creator: input.creator ?? this.webId,
       });
       let etag: string | null;
@@ -189,7 +267,21 @@ export class DocsStore {
           prefixes: PREFIXES,
         }));
       } catch (error) {
-        if (error instanceof ResourceWriteError && error.status === 412) continue;
+        if (error instanceof ResourceWriteError && error.status === 412) {
+          if (input.instanceId) {
+            let existing: StoredDocument | undefined;
+            try {
+              existing = await this.read(url);
+            } catch (readError) {
+              if (!(readError instanceof RdfFetchError && readError.status === 404))
+                throw readError;
+            }
+            // A draft may have published its snapshot before losing the first
+            // acknowledgement. Reuse only its persisted allocation identity.
+            if (existing?.data.instanceId === input.instanceId) return existing;
+          }
+          continue;
+        }
         throw error;
       }
       return { url, etag, data: parseDocument(url, dataset) as PodDocument };
@@ -203,6 +295,7 @@ export class DocsStore {
     options: SaveOptions,
   ): Promise<StoredDocument> {
     this.assertScope(stored.url, true);
+    stored = await this.claimIdentity(stored, input.instanceId);
     let current = stored;
     let snapshot: Snapshot = {
       body: input.body ?? stored.data.body,
@@ -214,6 +307,12 @@ export class DocsStore {
     const wait =
       options.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
     for (let attempt = 0; ; attempt++) {
+      // A 412 retry may have read a new document at the same readable slug.
+      if (
+        current !== stored &&
+        (!sameIncarnation(stored, current) || current.data.updateLog !== stored.data.updateLog)
+      )
+        throw new DocumentReplacedError();
       if (
         titleChanged &&
         current.data.title !== stored.data.title &&
@@ -225,6 +324,7 @@ export class DocsStore {
         ...current.data,
         ...input,
         ...snapshot,
+        instanceId: current.data.instanceId,
         title: titleChanged ? localTitle : current.data.title,
         priorRevisions: current.data.revisions,
         editor: this.webId,
@@ -260,41 +360,90 @@ export class DocsStore {
     }
     // Create reserves the name before dependent resources are copied. Failures propagate;
     // no success is returned until the new log, assets and final snapshot are durable.
-    const copy = await this.createAtSlug(
-      {
-        title: `Copy of ${source.data.title}`.slice(0, 200),
-        body: "",
-        format: source.data.format,
-        wasDerivedFrom: `${source.url}#it`,
-      },
-      `${toSlug(nameFromUrl(source.url).slice(0, -4)) || "document"}-copy`,
-    );
+    let copy = state.reservation;
+    if (copy) {
+      this.assertScope(copy.url, true);
+      const current = await this.read(copy.url);
+      if (
+        !current ||
+        !sameIncarnation(copy, current) ||
+        current.data.wasDerivedFrom !== `${source.url}#it`
+      )
+        throw new ResourceReadError(copy.url, 422);
+      // Recovery snapshots come from the merged current log, so use its latest
+      // validator and metadata. Other copies retain the original reservation
+      // and can settle a lost acknowledgement only with identical final bytes.
+      if (state.mergeExisting) copy = current;
+    } else
+      copy = await this.createAtSlug(
+        {
+          title: `Copy of ${source.data.title}`.slice(0, 200),
+          body: "",
+          format: source.data.format,
+          wasDerivedFrom: `${source.url}#it`,
+        },
+        `${toSlug(nameFromUrl(source.url).slice(0, -4)) || "document"}-copy`,
+      );
+    await state.onReserved?.(copy);
     const target = docContainerUrls(copy.url);
     const mapping = new Map<string, string>();
     for (const asset of new Set(state.assets)) {
       const destination = `${target.assets}${new URL(asset).pathname.split("/").at(-1)}`;
-      const response = await this.fetchImpl(asset);
-      if (!response.ok) throw new ResourceReadError(asset, response.status);
+      const response = await (state.readAsset?.(asset) ?? this.fetchImpl(asset));
+      if (!response.ok) {
+        if (state.allowMissingAssets && [404, 410].includes(response.status)) {
+          mapping.set(asset, "");
+          continue;
+        }
+        throw new ResourceReadError(asset, response.status);
+      }
+      const bytes = new Uint8Array(await response.arrayBuffer());
       const written = await this.fetchImpl(destination, {
         method: "PUT",
         headers: {
           "content-type": response.headers.get("content-type") ?? "application/octet-stream",
           "if-none-match": "*",
         },
-        body: await response.arrayBuffer(),
+        body: bytes,
       });
-      if (!written.ok) throw new ResourceWriteError(destination, written.status);
+      if (!written.ok) {
+        // A retry may find an asset copied before the interruption. Reuse only
+        // the same bytes; an unrelated occupant must never be overwritten.
+        if (!state.reservation || written.status !== 412)
+          throw new ResourceWriteError(destination, written.status);
+        const existing = await this.fetchImpl(destination);
+        if (!existing.ok) throw new ResourceReadError(destination, existing.status);
+        const prior = new Uint8Array(await existing.arrayBuffer());
+        if (prior.length !== bytes.length || prior.some((byte, index) => byte !== bytes[index]))
+          throw new ResourceWriteError(destination, 412);
+      }
       mapping.set(asset, destination);
     }
-    await state.persistFullState(target.updateLog, this.fetchImpl, mapping);
+    await state.persistFullState(target.updateLog, this.fetchImpl, mapping, copy.data.instanceId);
     const snapshot = await state.snapshot(mapping);
     // Fresh copy history captures the copied content, never the reservation's empty body.
-    const dataset = buildDocument(copy.url, { ...copy.data, ...snapshot, priorRevisions: [] });
-    const { etag } = await writeRdf(copy.url, dataset, {
-      etag: copy.etag,
-      fetchImpl: this.fetchImpl,
-      prefixes: PREFIXES,
+    const dataset = buildDocument(copy.url, {
+      ...copy.data,
+      ...snapshot,
+      priorRevisions: [],
+      now: new Date(copy.data.modified as string),
     });
+    let etag: string | null;
+    try {
+      ({ etag } = await writeRdf(copy.url, dataset, {
+        etag: copy.etag,
+        fetchImpl: this.fetchImpl,
+        prefixes: PREFIXES,
+      }));
+    } catch (error) {
+      if (!(error instanceof ResourceWriteError && error.status === 412)) throw error;
+      // An earlier final PUT may have committed and lost its acknowledgement.
+      // Only our byte-identical intended snapshot settles that old reservation.
+      const current = await this.fetchImpl(copy.url, { headers: REVALIDATE_HEADERS });
+      if (!current.ok) throw new ResourceReadError(copy.url, current.status);
+      if ((await current.text()) !== (await serializeTurtle(dataset, PREFIXES))) throw error;
+      etag = current.headers.get("etag");
+    }
     return { url: copy.url, etag, data: parseDocument(copy.url, dataset) as PodDocument };
   }
 

@@ -15,4 +15,7 @@ coverage/
 
 # Playwright screenshots / traces written by lanes and e2e runs
 /artifacts/
+
+# Docs browser captures are local verification artifacts
+/apps/suite/e2e/screenshots/
 .pages/
