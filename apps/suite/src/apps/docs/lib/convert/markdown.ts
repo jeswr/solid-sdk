@@ -186,7 +186,7 @@ function serializeInline(nodes: JSONContent[], table: boolean): string {
     if (mark.type === "code") return inlineCode(children.map(treeText).join(""));
     if (mark.type === "link") {
       const attrs = `${destination(String(mark.attrs?.href))}${titleSuffix(String(mark.attrs?.title ?? ""))}`;
-      return `[${value}](${table ? attrs.replace(/\|/g, "&#124;") : attrs})`;
+      return `[${value}](${table ? attrs.replace(/\|/g, "&#x7C;") : attrs})`;
     }
     const delimiter = (emphasisSyntax[mark.type] as { delimiter: string }).delimiter;
     return `${delimiter}${value}${delimiter}`;
