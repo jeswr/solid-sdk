@@ -149,16 +149,21 @@ it("unknown source cannot be kept even if a caller requests Keep", async () => {
   ).rejects.toThrow("Private access");
   expect(f.pod.has(`${PUBLIC}secret`)).toBe(false);
 });
-it("unknown destination can still keep the known source policy", async () => {
+it("unknown destination refuses Keep when its WAC model cannot be identified", async () => {
   const f = await wacPod();
   f.intercept(async (url, init) =>
     url === PUBLIC && init?.method === "HEAD" ? new Response(null) : undefined,
   );
   const confirmAccess = vi.fn(async () => "keep" as const);
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, confirmAccess });
-  await client.move(`${PRIVATE}secret`, `${PUBLIC}secret`, { kind: "confirm-move" });
-  expect(confirmAccess).toHaveBeenCalledWith(expect.objectContaining({ canKeep: true }));
-  expect((await f.anonymous(`${PUBLIC}secret`)).status).toBe(403);
+  await expect(
+    client.move(`${PRIVATE}secret`, `${PUBLIC}secret`, { kind: "confirm-move" }),
+  ).rejects.toThrow("Private access");
+  expect(confirmAccess).toHaveBeenCalledWith(expect.objectContaining({ canKeep: false }));
+  // Knowing the source ACL does not prove that writing WAC at the destination is safe.
+  expect(f.pod.has(`${PRIVATE}secret`)).toBe(true);
+  expect(f.policies.has(`${PUBLIC}secret.policy`)).toBe(false);
+  expect(f.pod.has(`${PUBLIC}secret`)).toBe(false);
 });
 it("moves to equivalent or narrower inherited defaults without prompting; demo pods never prompt", async () => {
   const f = await wacPod();

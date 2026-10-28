@@ -4,15 +4,14 @@ import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { safeHttpIri, serialize } from "@jeswr/rdf-serialize";
 import type { Term } from "@rdfjs/types";
-import { DatasetWrapper, NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
-import { AccessControlResource, AclResource, Authorization } from "@solid/object";
+import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
+import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { readSharing } from "../sharing/sharing";
 import { relocate, sameGraph } from "./rdf";
 
 const ACL = "http://www.w3.org/ns/auth/acl#";
 const ACP_NS = "http://www.w3.org/ns/solid/acp#";
-const ACP = `${ACP_NS}accessControl`;
 export class DriveAccessError extends Error {
   readonly kind = "private-access-unavailable";
   constructor(
@@ -30,16 +29,9 @@ class WritableAuthorization extends Authorization {
     return SetFrom.subjectPredicate(this, predicate, NamedNodeAs.string, NamedNodeFrom.string);
   }
 }
-class PolicyDocument extends DatasetWrapper {
-  get isAcp(): boolean {
-    return (
-      [
-        ...this.instancesOf(`${ACP_NS}AccessControlResource`, AccessControlResource),
-        ...this.subjectsOf(`${ACP_NS}accessControl`, AccessControlResource),
-        ...this.subjectsOf(`${ACP_NS}memberAccessControl`, AccessControlResource),
-      ].length > 0
-    );
-  }
+function rejectAcp(headers: Headers): void {
+  if ([...headers].some(([name, value]) => /^(acp|acr)(-|$)/i.test(name) || value.includes(ACP_NS)))
+    throw new DriveAccessError("ACP privacy cannot be verified by this adapter");
 }
 export function privateAcl(resource: string, webId: string): Store {
   const owner = safeHttpIri(webId);
@@ -107,6 +99,7 @@ export function accessLabel(state: AccessState, resource: string, webId: string)
 
 export function accessControl(http: typeof globalThis.fetch, storageUrl: string) {
   function discover(resource: string, headers: Headers): string | undefined {
+    rejectAcp(headers);
     // This explicit fixture capability never substitutes for discovery on a real pod.
     if (headers.get("x-solid-demo-access-control") === "none") return undefined;
     const links = headers.get("link") ?? "";
@@ -116,24 +109,40 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       if (/;\s*anchor\s*=/i.test(params)) continue;
       const rel = /;\s*rel\s*=\s*(?:"([^"]*)"|([^;\s]+))/i.exec(params);
       const relations = (rel?.[1] ?? rel?.[2] ?? "").split(/\s+/);
-      if (relations.includes(ACP))
-        throw new DriveAccessError("ACP privacy cannot be verified by this adapter");
-      if (relations.includes("acl"))
+      if (relations.includes("acl")) {
+        if (acl) throw new DriveAccessError("Ambiguous ACL discovery");
         acl = assertWithinPodScope(storageUrl, new URL(match[1] as string, resource).href);
+        if (/\.acr\/?$/i.test(new URL(acl).pathname))
+          throw new DriveAccessError("ACP privacy cannot be verified by this adapter");
+      }
     }
     return acl;
   }
   const read = async (url: string): Promise<AccessState> => {
     try {
-      const result = await fetchRdf(url, { fetch: http });
+      const result = await fetchRdf(url, {
+        fetch: async (input, init) => {
+          const response = await http(input, init);
+          rejectAcp(response.headers);
+          return response;
+        },
+      });
       if (!result.etag || result.etag.startsWith("W/"))
         throw new DriveAccessError("Missing policy validator");
       // Some ACP deployments advertise their ACR using the legacy rel="acl".
       // Never PUT a WAC document to an ACP endpoint just because it echoes RDF.
-      if (new PolicyDocument(result.dataset, DataFactory).isAcp)
+      if (
+        [...result.dataset].some((quad) =>
+          [quad.subject, quad.predicate, quad.object, quad.graph].some(
+            (term) => term.termType === "NamedNode" && term.value.startsWith(ACP_NS),
+          ),
+        )
+      )
         throw new DriveAccessError("ACP privacy cannot be verified by this adapter");
       // Validate the known authorization model through its typed reader.
-      for (const rule of new AclResource(result.dataset, DataFactory).authorizations) {
+      const rules = [...new AclResource(result.dataset, DataFactory).authorizations];
+      if (!rules.length) throw new DriveAccessError("WAC model could not be identified");
+      for (const rule of rules) {
         const typed = new WritableAuthorization(rule as Term, result.dataset, DataFactory);
         for (const predicate of [
           "accessTo",
@@ -154,10 +163,14 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       return { status: "unknown", cause: error };
     }
   };
-  const store = async (url: string, dataset: Store): Promise<OwnAccess> => {
+  const store = async (url: string, dataset: Store, resource?: string): Promise<OwnAccess> => {
     const state = await read(url);
     if (state.status === "unknown") throw new DriveAccessError(state.cause);
     const current = state.status === "known" ? state.policy : undefined;
+    if (!current) {
+      if (!resource) throw new DriveAccessError("WAC model could not be identified");
+      requireAccess(await effective(resource), resource);
+    }
     const response = await http(url, {
       method: "PUT",
       headers: {
@@ -167,6 +180,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       body: await serialize([...dataset]),
     });
     if (!response.ok) throw new DriveAccessError(response.status);
+    rejectAcp(response.headers);
     const saved = await read(url);
     if (saved.status !== "known" || !sameGraph(dataset, saved.policy.dataset))
       throw new DriveAccessError("Policy verification failed");
@@ -174,6 +188,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
   };
   const snapshot = async (resource: string, headers: Headers): Promise<AccessState> => {
     try {
+      rejectAcp(headers);
       if (headers.get("x-solid-demo-access-control") === "none")
         return { status: "none", demo: true };
       const url = discover(resource, headers);
@@ -215,6 +230,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     snapshot,
     async install(source: OwnAccess, from: string, to: string): Promise<OwnAccess> {
       const response = await http(to, { method: "HEAD" });
+      if (!response.ok) throw new DriveAccessError(response.status);
       const url = discover(to, response.headers);
       if (!url) throw new DriveAccessError("Destination has no ACL support");
       return store(
@@ -223,16 +239,18 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
           [source.url, url],
           [from, to],
         ]),
+        to,
       );
     },
     async privateFolder(url: string, webId?: string): Promise<void> {
       try {
         const response = await http(url, { method: "HEAD" });
         if (!response.ok) throw new DriveAccessError(response.status);
+        rejectAcp(response.headers);
         if (response.headers.get("x-solid-demo-access-control") === "none") return;
         const acl = discover(url, response.headers);
         if (!acl || !webId) throw new DriveAccessError();
-        await store(acl, privateAcl(url, webId));
+        await store(acl, privateAcl(url, webId), url);
       } catch (error) {
         throw new DriveAccessError(error);
       }

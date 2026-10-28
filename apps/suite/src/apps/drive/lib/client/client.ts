@@ -31,7 +31,8 @@ import {
   policyArchiveOf,
   requirePolicy,
 } from "./ancestors";
-import { deletionControl, isDeletionFailure, rethrowPendingDeletion } from "./deletion";
+import { discardVersion, ownsEmptyContainer } from "./cleanup";
+import { deletionControl, isDeletionFailure } from "./deletion";
 import { protectionLedger } from "./protection-ledger";
 import { containerData, relocate, sameGraph } from "./rdf";
 import { sourceOperation } from "./source-operations";
@@ -214,6 +215,7 @@ interface SourceSnapshot {
 interface CreatedResource {
   readonly url: string;
   etag: string | undefined;
+  data?: Store;
 }
 
 function snapshots(source: SourceSnapshot): SourceSnapshot[] {
@@ -564,7 +566,7 @@ export function createSolidDriveClient(options: {
     const policy =
       source.targetAccess ?? (source.access.status === "known" ? source.access.policy : undefined);
     if (source.children) {
-      const resource: CreatedResource = { url: to, etag: undefined };
+      const resource: CreatedResource = { url: to, etag: undefined, data: new Store() };
       let decision: ContainerPolicy;
       if (policy) decision = { kind: "archived", acl: policy, from: source.url };
       else if (source.demo) decision = { kind: "inherit-verified" };
@@ -600,6 +602,7 @@ export function createSolidDriveClient(options: {
           { kind: "protect-ancestors" },
         );
         resource.etag = saved.etag;
+        resource.data = data;
         const current = await listing(to);
         if (!sameGraph(data, containerData(current.dataset, to)))
           throw new DriveError("conflict", 409, to);
@@ -653,13 +656,30 @@ export function createSolidDriveClient(options: {
     let pending: Error | undefined;
     for (const resource of [...created].reverse()) {
       try {
-        let etag = resource.etag;
         if (resource.url.endsWith("/")) {
-          const current = await listing(resource.url);
-          if (current.items.length) throw new DriveError("conflict", 409, resource.url);
-          etag = current.etag;
+          const expected = resource.data as Store;
+          await discardVersion({
+            url: resource.url,
+            captured: { content: expected, etag: resource.etag },
+            read: async () => {
+              const current = await listing(resource.url);
+              return { content: current.dataset, etag: current.etag };
+            },
+            owns: (data) => ownsEmptyContainer(resource.url, expected, data),
+            remove: (etag) => deleteVersion(resource.url, etag),
+          });
+        } else {
+          await discardVersion({
+            url: resource.url,
+            captured: { content: resource.etag, etag: resource.etag },
+            read: async () => {
+              const current = await stat(resource.url);
+              return { content: current.etag, etag: current.etag };
+            },
+            owns: (etag) => etag === resource.etag,
+            remove: (etag) => deleteVersion(resource.url, etag),
+          });
         }
-        await deleteVersion(resource.url, etag);
       } catch (error) {
         retained.push(resource.url);
         if (isDeletionFailure(error)) pending = error;
@@ -776,12 +796,16 @@ export function createSolidDriveClient(options: {
       ? undefined
       : (source.targetAccess ?? requireAccess(effective, from));
     let created = false;
+    const resource: CreatedResource = { url: to, etag: undefined, data: new Store() };
     try {
       // Resolve the archive before creation, then hold one flight from the
       // durable requirement through empty PUT and ACL installation/verification.
       await provision.folder(
         to,
         policy ? { kind: "archived", acl: policy, from } : { kind: "inherit-verified" },
+        (response) => {
+          resource.etag = response.headers.get("etag") ?? undefined;
+        },
       );
       created = true;
     } catch (error) {
@@ -796,12 +820,14 @@ export function createSolidDriveClient(options: {
       throw new DriveAccessError("Existing destination grants wider access");
     try {
       const current = await listing(to);
+      if (created && !ownsEmptyContainer(to, new Store(), current.dataset))
+        throw new DriveError("conflict", 409, to);
       const data = new Store([
         ...containerData(current.dataset, to),
         ...relocate(source.data as Store, [[from, to]]),
       ]);
       if (sameGraph(containerData(current.dataset, to), data)) return;
-      await write(
+      const saved = await write(
         to,
         await serialize([...data]),
         {
@@ -810,10 +836,15 @@ export function createSolidDriveClient(options: {
         },
         { kind: "protect-ancestors" },
       );
+      resource.etag = saved.etag;
+      resource.data = data;
       if (!sameGraph(data, containerData((await listing(to)).dataset, to)))
         throw new DriveError("conflict", 409, to);
     } catch (error) {
-      if (created) await remove(to).catch(rethrowPendingDeletion);
+      if (created) {
+        const cleanup = await rollback([resource]);
+        if (cleanup.pending) throw cleanup.pending;
+      }
       throw error;
     }
   };
@@ -885,6 +916,8 @@ export function createSolidDriveClient(options: {
                   widened.add(agent);
               gains = [...widened];
             } catch {
+              // Keep requires positive WAC identification at both endpoints.
+              current = undefined;
               gains = [
                 "Access could not be determined (including unreadable ACLs or unsupported ACP)",
               ];
@@ -932,7 +965,7 @@ export function createSolidDriveClient(options: {
             throw new DriveError("conflict", 412, destination.url);
           const own = copiedAccess.get(destination.url);
           if (own) {
-            const current = await access.read(own.url);
+            const current = await access.snapshot(destination.url, response.headers);
             if (
               current.status !== "known" ||
               current.policy.etag !== own.etag ||

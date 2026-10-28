@@ -62,6 +62,12 @@ export function relocate(
 /** RDF equality modulo blank-node labels (a server may relabel on every GET). */
 export function sameGraph(expected: DatasetCore, actual: DatasetCore): boolean {
   if (expected.size !== actual.size) return false;
+  return containsGraph(expected, actual);
+}
+
+/** Inclusion modulo blank-node labels, for a merge into a surviving graph. */
+export function containsGraph(expected: DatasetCore, actual: DatasetCore): boolean {
+  if (expected.size > actual.size) return false;
   const right = [...actual];
   const visit = (quads: Quad[], mapping: Map<string, string>): boolean => {
     const [head, ...tail] = quads;

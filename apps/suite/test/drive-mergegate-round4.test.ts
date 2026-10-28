@@ -84,13 +84,15 @@ it.each([
   expect(f.calls).not.toContainEqual({ url: ROOT, method: "HEAD" });
 });
 
-it("a parsed empty own policy proves No one without consulting ancestors", async () => {
+it("a parsed empty access document stays unknown without consulting ancestors", async () => {
   const f = await wacPod();
   f.policies.set(`${PUBLIC}placeholder.policy`, "");
   const state = await accessControl(f.fetch, ROOT).effective(`${PUBLIC}placeholder`);
-  expect(state).toMatchObject({ status: "known" });
-  expect(accessLabel(state, `${PUBLIC}placeholder`, OWNER)).toBe("No one");
-  expect(requireAccess(state, `${PUBLIC}placeholder`).dataset.size).toBe(0);
+  expect(state).toMatchObject({ status: "unknown" });
+  expect(accessLabel(state, `${PUBLIC}placeholder`, OWNER)).toBe("Access unknown");
+  expect(() => requireAccess(state, `${PUBLIC}placeholder`)).toThrow(
+    "can't confirm who can access",
+  );
   expect(f.calls).toEqual([
     { url: `${PUBLIC}placeholder`, method: "HEAD" },
     { url: `${PUBLIC}placeholder.policy`, method: "GET" },

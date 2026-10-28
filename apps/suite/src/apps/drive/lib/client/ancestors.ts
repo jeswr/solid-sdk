@@ -1,8 +1,8 @@
 // AUTHORED-BY Codex
-import { parseRdf } from "@jeswr/fetch-rdf";
+import { fetchRdf, parseRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { serialize } from "@jeswr/rdf-serialize";
-import type { Store } from "n3";
+import { Store } from "n3";
 import { trashEntries, trashIndexFrom } from "../operations/trash-index";
 import {
   type accessControl,
@@ -12,6 +12,7 @@ import {
   privateAcl,
   requireAccess,
 } from "./access";
+import { discardVersion, ownsEmptyContainer } from "./cleanup";
 import { rethrowPendingDeletion } from "./deletion";
 import { type ProtectionRequirement, protectionLedger } from "./protection-ledger";
 import { relocate, sameGraph } from "./rdf";
@@ -123,7 +124,23 @@ export function ancestorGuard(options: {
     const etag = response.headers.get("etag");
     // Unknown/foreign control documents are not ours to remove with the resource.
     if (etag && (await access.snapshot(url, response.headers)).status !== "unknown") {
-      await options.deleteVersion(url, etag).catch(rethrowPendingDeletion);
+      const empty = new Store();
+      await discardVersion<Store | string>({
+        url,
+        captured: { content: url.endsWith("/") ? empty : "", etag },
+        read: async () => {
+          if (url.endsWith("/")) {
+            const current = await fetchRdf(url, { fetch: http });
+            return { content: current.dataset, etag: current.etag ?? undefined };
+          }
+          const current = await http(url);
+          if (!current.ok) throw options.error(current.status, url);
+          return { content: await current.text(), etag: current.headers.get("etag") ?? undefined };
+        },
+        owns: (content) =>
+          typeof content === "string" ? content === "" : ownsEmptyContainer(url, empty, content),
+        remove: (validator) => options.deleteVersion(url, validator),
+      }).catch(rethrowPendingDeletion);
     }
   };
   // The sole raw creation seam, private to the provisioner. Callers hold this

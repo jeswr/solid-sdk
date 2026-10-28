@@ -205,7 +205,13 @@ describe.each([
       expect(result.done).toHaveLength(terminalDelete(outcome) ? 1 : 0);
       if (operation === "trash") recovery = (await listTrash(client, DRIVE))[0]?.url;
     }
-    expect(requests).toBe(1);
+    // A definitive 412 may retry only after the shared cleanup proves the content is still ours.
+    const expectedRequests =
+      outcome === 412 &&
+      ["copy rollback", "container merge", "slot cleanup", "upload cleanup"].includes(operation)
+        ? 3
+        : 1;
+    expect(requests).toBe(expectedRequests);
     if (terminalDelete(outcome)) {
       if (!["upload cleanup", "copy rollback", "container merge"].includes(operation))
         expect(failure).toBeUndefined();
@@ -255,7 +261,7 @@ describe.each([
         ),
       ).rejects.toMatchObject({ kind: "delete-pending" });
     }
-    expect(requests).toBe(1);
+    expect(requests).toBe(expectedRequests);
     // Complete the old request, then a fresh client must confirm absence before reuse.
     f.intercept(undefined);
     f.after(undefined);
