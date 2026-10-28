@@ -15,6 +15,49 @@ it("round trips an imported escaped heading as a literal paragraph", () => {
   expect(importMarkdown(exportMarkdown(original), "notes.md").json).toEqual(original);
 });
 
+it("round trips a four-backtick code block containing a three-backtick line and literal heading", () => {
+  const original = importMarkdown(
+    "````markdown\nbefore\n```\n# literal heading\n````",
+    "code.md",
+  ).json;
+  expect(original.content).toHaveLength(1);
+  expect(original.content?.[0]?.type).toBe("codeBlock");
+  expect(importMarkdown(exportMarkdown(original), "code.md").json).toEqual(original);
+});
+
+it.each([
+  "a`b",
+  "`",
+  "````",
+  "`before",
+  "after`",
+  "plain",
+])("round trips inline code %j with a delimiter longer than every content run", (value) => {
+  const original: JSONContent = {
+    type: "doc",
+    content: [
+      {
+        type: "paragraph",
+        content: [{ type: "text", text: value, marks: [{ type: "code" }] }],
+      },
+    ],
+  };
+  expect(importMarkdown(exportMarkdown(original), "inline.md").json).toEqual(original);
+});
+
+it("exports empty code blocks with and without language attributes", () => {
+  for (const node of [
+    { type: "codeBlock" },
+    { type: "codeBlock", attrs: { language: "js" } },
+    { type: "codeBlock", attrs: {}, content: [] },
+  ]) {
+    const original: JSONContent = { type: "doc", content: [node] };
+    const exported = exportMarkdown(original);
+    expect(exported).toBe(`\`\`\`${node.attrs?.language ?? ""}\n\n\`\`\``);
+    expect(importMarkdown(exported, "empty.md").json.content?.[0]?.type).toBe("codeBlock");
+  }
+});
+
 it.each([
   "# Notes",
   "> quote",
@@ -60,6 +103,57 @@ it("round trips generated paragraphs containing Markdown block and inline syntax
       expect(importMarkdown(exportMarkdown(original), "generated.md").json).toEqual(original);
     }),
     { seed: 1307, numRuns: 500 },
+  );
+});
+
+it("round trips generated code blocks containing backtick and tilde fence-like lines", () => {
+  const fenceLine = fc
+    .tuple(
+      fc.constantFrom("`", "~"),
+      fc.integer({ min: 1, max: 12 }),
+      fc.constantFrom("", " ", "  ", "   ", "    "),
+      fc.constantFrom("", " trailing", "js"),
+    )
+    .map(([char, length, indent, suffix]) => `${indent}${char.repeat(length)}${suffix}`);
+  fc.assert(
+    fc.property(
+      fc.array(fenceLine, { minLength: 1, maxLength: 8 }),
+      fc.constantFrom("", "js", "markdown linenums=1"),
+      (lines, info) => {
+        const body = ["before", ...lines, "# literal heading", "after"].join("\n");
+        const fence = "`".repeat(15);
+        const original = importMarkdown(`${fence}${info}\n${body}\n${fence}`, "code.md").json;
+        expect(original.content).toHaveLength(1);
+        expect(importMarkdown(exportMarkdown(original), "code.md").json).toEqual(original);
+      },
+    ),
+    { seed: 1407, numRuns: 500 },
+  );
+});
+
+it("round trips generated inline code with backtick runs and edge backticks", () => {
+  fc.assert(
+    fc.property(
+      fc.array(fc.integer({ min: 1, max: 12 }), { minLength: 1, maxLength: 6 }),
+      fc.boolean(),
+      fc.boolean(),
+      (runs, start, end) => {
+        const value = `${start ? "`" : "before"}${runs.map((length) => "`".repeat(length)).join("text")}after${end ? "`" : ""}`;
+        const original = importMarkdown(
+          `Use ${"`".repeat(80)} ${value} ${"`".repeat(80)} here.`,
+          "inline.md",
+        ).json;
+        const exported = exportMarkdown(original);
+        const delimiter = "`".repeat(
+          Math.max(...(value.match(/`+/g) as string[]).map((run) => run.length)) + 1,
+        );
+        expect(exported).toContain(
+          `${delimiter}${start || end ? " " : ""}${value}${start || end ? " " : ""}${delimiter}`,
+        );
+        expect(importMarkdown(exported, "inline.md").json).toEqual(original);
+      },
+    ),
+    { seed: 1417, numRuns: 500 },
   );
 });
 

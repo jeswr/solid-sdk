@@ -189,6 +189,81 @@ function broadcasts() {
   vi.stubGlobal("BroadcastChannel", Channel);
 }
 
+it("saves a title reverted through the input during its pending autosave with broadcasts", async () => {
+  broadcasts();
+  const { pod, session, create, client } = await fixture();
+  const runtime = await create();
+  const source = runtime.stored as StoredDocument;
+  const ui = await titleInput(runtime);
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let paused = false;
+  let saving: Promise<void> | undefined;
+  try {
+    await act(async () => ui.input.focus());
+    await ui.type("B");
+    vi.spyOn(session, "fetch").mockImplementation(async (input, init) => {
+      if (!paused && String(input) === source.url && init?.method === "PUT") {
+        paused = true;
+        await gate;
+      }
+      return pod.fetch(input, init);
+    });
+    saving = runtime.flush();
+    await vi.waitFor(() => expect(paused).toBe(true));
+    await ui.type("Plan");
+    release();
+    await act(async () => saving);
+    await ui.render();
+    expect(ui.input.value).toBe("Plan");
+    expect(runtime.title).toBe("Plan");
+    expect(runtime.state).toBe("saved");
+    expect(runtime.conflict).toBeUndefined();
+    expect((await runtime.store.read(source.url))?.data.title).toBe("Plan");
+    const reopened = client();
+    await reopened.open(source.url);
+    expect(reopened.title).toBe("Plan");
+    expect(reopened.state).toBe("saved");
+  } finally {
+    release();
+    await saving;
+    await ui.close();
+  }
+});
+
+it("reopens explicit revert-to-base intent instead of adopting a remote rename", async () => {
+  broadcasts();
+  const { create, client } = await fixture();
+  const runtime = await create();
+  const source = runtime.stored as StoredDocument;
+  runtime.online = false;
+  const ui = await titleInput(runtime);
+  try {
+    await ui.type("B");
+    await ui.type("Plan");
+    await vi.waitFor(async () => {
+      const edit = JSON.parse(String(await runtime.local?.get("edit")));
+      expect(edit.localTitle).toBe("Plan");
+      expect(edit.baseTitle).toBe("Plan");
+    });
+    await runtime.store.save(
+      source,
+      { title: "Remote title" },
+      { regenerate: () => ({ body: source.data.body, format: "text/html" }) },
+    );
+    const reopened = client();
+    await reopened.open(source.url);
+    expect(reopened.title).toBe("Plan");
+    expect(reopened.conflict?.localTitle).toBe("Plan");
+    expect(reopened.conflict?.remoteTitle).toBe("Remote title");
+    expect((await reopened.store.read(source.url))?.data.title).toBe("Remote title");
+  } finally {
+    await ui.close();
+  }
+});
+
 it.each([
   "draft",
   "existing",

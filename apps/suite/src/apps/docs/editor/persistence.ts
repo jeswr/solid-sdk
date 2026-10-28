@@ -45,6 +45,8 @@ interface PendingEdit {
   title: string;
   baseTitle: string | undefined;
   baseModified: string | undefined;
+  // Explicit intent also preserves a revert to base across reloads. Absent in older mirrors.
+  localTitle?: string | null;
 }
 interface PendingRecovery {
   key: string;
@@ -227,7 +229,9 @@ export class DocumentPersistence {
             previous?.owner !== edit.owner &&
             previousTitle !== edit.title &&
             typeof previousTitle === "string" &&
-            previousTitle !== previous?.baseTitle
+            (previous?.localTitle !== undefined
+              ? previous.localTitle !== null
+              : previousTitle !== previous?.baseTitle)
           )
             return undefined;
           return { pending: 1, title: edit.title, edit: JSON.stringify(edit) };
@@ -257,8 +261,11 @@ export class DocumentPersistence {
         (current) => {
           const edit = this.parseMetadata<PendingEdit>(current.edit);
           const pendingTitle = edit?.title ?? current.title;
-          if (current.pending && pendingTitle !== title && pendingTitle !== edit?.baseTitle)
-            return undefined;
+          const hasTitleIntent =
+            edit?.localTitle !== undefined
+              ? edit.localTitle !== null
+              : pendingTitle !== edit?.baseTitle;
+          if (current.pending && pendingTitle !== title && hasTitleIntent) return undefined;
           return {
             pending: 0,
             ...(mirror === this.draftMirror
@@ -414,6 +421,7 @@ export class DocumentPersistence {
         edit &&
         edit.owner === this.pendingEdit.owner &&
         edit.title === this.pendingEdit.title &&
+        edit.localTitle === this.pendingEdit.localTitle &&
         edit.baseTitle === this.pendingEdit.baseTitle
       )
         return pending;
@@ -433,8 +441,14 @@ export class DocumentPersistence {
         this.title = title;
         this.titleState = {
           base: this.pendingEdit?.baseTitle,
-          local: title === this.pendingEdit?.baseTitle ? null : title,
+          local:
+            this.pendingEdit?.localTitle !== undefined
+              ? this.pendingEdit.localTitle
+              : title === this.pendingEdit?.baseTitle
+                ? null
+                : title,
           remote: this.stored?.data.title ?? "",
+          sequence: (this.titleState?.sequence ?? 0) + 1,
         };
       }
       this.version++;
@@ -793,8 +807,14 @@ export class DocumentPersistence {
     return (
       this.titleState ?? {
         base: this.pendingEdit ? this.pendingEdit.baseTitle : this.stored?.data.title,
-        local: this.pendingEdit && this.title !== this.pendingEdit.baseTitle ? this.title : null,
+        local:
+          this.pendingEdit?.localTitle !== undefined
+            ? this.pendingEdit.localTitle
+            : this.pendingEdit && this.title !== this.pendingEdit.baseTitle
+              ? this.title
+              : null,
         remote: this.stored?.data.title ?? "",
+        sequence: 0,
       }
     );
   }
@@ -809,6 +829,7 @@ export class DocumentPersistence {
     if (this.pendingEdit) {
       this.pendingEdit.title = this.title;
       this.pendingEdit.baseTitle = this.titleState.base;
+      this.pendingEdit.localTitle = this.titleState.local;
     }
   }
   private async metadata<T>(key: string): Promise<T | undefined> {
@@ -932,7 +953,7 @@ export class DocumentPersistence {
     if (this.creation !== "created") void this.flush();
   }
   stageTitle(title: string) {
-    if (this.readOnly || this.title === title) return;
+    if (this.readOnly) return;
     this.titleState = editTitle(this.currentTitleState(), title.slice(0, 200));
     this.title = mergeTitle(this.titleState).title;
     this.markDirty();
@@ -942,10 +963,14 @@ export class DocumentPersistence {
     this.stageTitle(title);
     void this.flush();
   }
-  private async recordTitleSave(stored: StoredDocument, writtenTitle?: string) {
+  private async recordTitleSave(
+    stored: StoredDocument,
+    writtenTitle: string | undefined,
+    sequence: number,
+  ) {
     this.titleState =
       writtenTitle === stored.data.title
-        ? acknowledgeTitle(this.currentTitleState(), stored.data.title)
+        ? acknowledgeTitle(this.currentTitleState(), stored.data.title, sequence)
         : observeTitle(this.currentTitleState(), stored.data.title);
     this.checkTitleConflict();
     if (this.pendingEdit) {
@@ -961,6 +986,7 @@ export class DocumentPersistence {
       owner: this.pendingEdit?.owner ?? this.editOwner,
       title: this.title,
       baseTitle: this.titleState.base,
+      localTitle: this.titleState.local,
       baseModified: this.pendingEdit?.baseModified ?? this.stored?.data.modified,
     };
     this.checkTitleConflict();
@@ -1010,6 +1036,7 @@ export class DocumentPersistence {
         await this.refreshLocalState();
         const version = this.version;
         this.checkTitleConflict();
+        const titleSequence = this.currentTitleState().sequence;
         const titleMerge = this.stored
           ? mergeTitle(this.currentTitleState())
           : { conflict: false, snapshotTitle: this.title };
@@ -1041,7 +1068,7 @@ export class DocumentPersistence {
             }
             const creating = await this.metadata<StoredDocument>("creating");
             this.stored = creating ?? (await this.store.create(allocation));
-            if (!creating) await this.recordTitleSave(this.stored, writtenTitle);
+            if (!creating) await this.recordTitleSave(this.stored, writtenTitle, titleSequence);
             this.creation = "creating";
             if (creating) {
               // Joining another tab's promotion does not establish a pod base
@@ -1092,7 +1119,7 @@ export class DocumentPersistence {
               },
             );
             writingSnapshot = false;
-            await this.recordTitleSave(this.stored, writtenTitle);
+            await this.recordTitleSave(this.stored, writtenTitle, titleSequence);
           }
         } else {
           writingSnapshot = true;
@@ -1108,7 +1135,7 @@ export class DocumentPersistence {
             },
           );
           writingSnapshot = false;
-          await this.recordTitleSave(this.stored, writtenTitle);
+          await this.recordTitleSave(this.stored, writtenTitle, titleSequence);
         }
         if (this.title === title) this.title = (this.stored as StoredDocument).data.title;
         // A concurrent snapshot/recovery may have changed the pointer during save.
@@ -1215,6 +1242,7 @@ export class DocumentPersistence {
       keepMine,
     );
     this.title = mergeTitle(this.titleState).title;
+    const localTitle = this.titleState.local;
     // Apply the explicit title choice to every mirror carrying that intent.
     // Otherwise a retained draft marker would reintroduce the rejected title.
     const rejectedTitle = this.conflict.localTitle;
@@ -1232,6 +1260,7 @@ export class DocumentPersistence {
               ...edit,
               title: this.title,
               baseTitle: remote.data.title,
+              localTitle,
               baseModified: remote.data.modified,
             }),
           };

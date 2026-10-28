@@ -4,13 +4,39 @@ import Image from "@tiptap/extension-image";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { TableKit } from "@tiptap/extension-table";
 import { MarkdownManager } from "@tiptap/markdown";
-import { getSchema, type JSONContent } from "@tiptap/react";
+import { flattenExtensions, getSchema, type JSONContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { validLink } from "../editor/logic";
 import { MAX_IMPORT_BYTES } from "./docx-import";
 
+function longestRun(text: string, pattern: RegExp): number {
+  let longest = 0;
+  for (const match of text.matchAll(pattern)) longest = Math.max(longest, match[0].trim().length);
+  return longest;
+}
+
+// Keep StarterKit's schema/parser, replacing only its code serializers. The
+// inline serializer receives the whole marked span when choosing its delimiter.
+const codeExtensions = flattenExtensions([StarterKit])
+  .filter((extension) => ["codeBlock", "code"].includes(extension.name))
+  .map((extension) =>
+    extension.extend({
+      renderMarkdown(node, helpers, context) {
+        const content = helpers.renderChildren(node.content ?? []);
+        if (extension.name === "codeBlock") {
+          const fence = "`".repeat(Math.max(3, longestRun(content, /^ {0,3}`+/gm) + 1));
+          return `${fence}${node.attrs?.language ?? ""}\n${content}\n${fence}`;
+        }
+        const text = (context.meta as { markText: string }).markText;
+        const delimiter = "`".repeat(longestRun(text, /`+/g) + 1);
+        const padding = text.startsWith("`") || text.endsWith("`") ? " " : "";
+        return `${delimiter}${padding}${content}${padding}${delimiter}`;
+      },
+    }),
+  );
 const extensions = [
-  StarterKit,
+  StarterKit.configure({ code: false, codeBlock: false }),
+  ...codeExtensions,
   TableKit,
   TaskList,
   TaskItem.configure({ nested: true }),
