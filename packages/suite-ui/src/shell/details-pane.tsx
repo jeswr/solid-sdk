@@ -4,6 +4,7 @@
 
 import { X } from "lucide-react";
 import { type ReactNode, useId } from "react";
+import { IconButton } from "../components/ui/icon-button.js";
 
 export interface DetailsPaneProps {
   title: string;
@@ -30,16 +31,16 @@ export function DetailsPane({
       <div className="suite-details-heading">
         <h2 id={titleId}>{title}</h2>
         {onClose && (
-          <button
+          <IconButton
+            variant="ghost"
             type="button"
             data-slot="details-pane-close"
             className="suite-shell-icon-button"
             onClick={onClose}
-            aria-label="Close details"
-            title="Close details (])"
+            label="Close details"
           >
             <X size={20} strokeWidth={1.75} aria-hidden="true" />
-          </button>
+          </IconButton>
         )}
       </div>
       {preview}

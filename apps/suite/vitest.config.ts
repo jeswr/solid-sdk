@@ -21,6 +21,7 @@ export default defineConfig({
       provider: "v8",
       include: [
         "src/apps/calendar/lib/model/**/*.ts",
+        "src/apps/calendar/lib/drag/**/*.ts",
         "src/apps/photos/lib/model/**/*.ts",
         "src/apps/home/lib/model/**/*.ts",
         "src/apps/docs/lib/model/**/*.ts",
@@ -47,6 +48,7 @@ export default defineConfig({
         "src/apps/drive/lib/sharing/**/*.ts",
         "src/apps/drive/lib/upload/**/*.ts",
         "src/apps/chat/lib/text/**/*.ts",
+        "src/apps/chat/lib/search/**/*.ts",
         "src/apps/photos/lib/exif/**/*.ts",
         "src/apps/photos/lib/transform/**/*.ts",
         "src/apps/photos/lib/timeline/**/*.ts",
@@ -66,6 +68,7 @@ export default defineConfig({
         "src/apps/docs/lib/outline/**/*.ts",
         "src/apps/drive/lib/files/**/*.ts",
         "src/apps/sheets/lib/refs/**/*.ts",
+        "src/apps/sheets/lib/structure/**/*.ts",
         "src/apps/sheets/lib/csv/**/*.ts",
         "src/apps/sheets/lib/format/**/*.ts",
         "src/apps/calendar/lib/layout/**/*.ts",

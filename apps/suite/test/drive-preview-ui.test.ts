@@ -7,12 +7,18 @@ import type { DriveItem } from "../src/apps/drive/lib/client/client";
 import { act, click, deferred, h, mount } from "./drive-ui-dom";
 
 const { client, ui } = vi.hoisted(() => ({
-  client: { read: vi.fn(), readRdf: vi.fn() },
+  client: {
+    read: vi.fn(),
+    readRdf: vi.fn(),
+    stat: vi.fn().mockRejectedValue(new Error("Metadata unavailable")),
+  },
   ui: vi.fn(),
 }));
+const changes = { subscribe: () => () => {} };
 vi.mock("../src/apps/drive/state/drive-context", () => ({
   useDrive: () => ({
     client,
+    changes,
     driveRoot: "https://pod.example/drive/",
     session: { webId: "https://pod.example/profile#me" },
   }),

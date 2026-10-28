@@ -78,6 +78,26 @@ export function DriveProvider({ session, children }: { session: PodSession; chil
   const [prefs, updatePrefs] = useDrivePreferences(session.webId);
   const listeners = useRef(new Map<string, Set<() => void>>());
   const subtreeListeners = useRef(new Map<string, Set<() => void>>());
+  const changes = useMemo<DriveContextValue["changes"]>(
+    () => ({
+      subscribe(folder, listener) {
+        const set = listeners.current.get(folder) ?? new Set();
+        set.add(listener);
+        listeners.current.set(folder, set);
+        return () => set.delete(listener);
+      },
+      subscribeSubtree(root, listener) {
+        const set = subtreeListeners.current.get(root) ?? new Set();
+        set.add(listener);
+        subtreeListeners.current.set(root, set);
+        return () => {
+          set.delete(listener);
+          if (set.size === 0) subtreeListeners.current.delete(root);
+        };
+      },
+    }),
+    [],
+  );
 
   const invalidate = useCallback((url: string) => {
     const notify = (folder: string | undefined) => {
@@ -118,25 +138,9 @@ export function DriveProvider({ session, children }: { session: PodSession; chil
       updatePrefs,
       uploads,
       invalidate,
-      changes: {
-        subscribe(folder, listener) {
-          const set = listeners.current.get(folder) ?? new Set();
-          set.add(listener);
-          listeners.current.set(folder, set);
-          return () => set.delete(listener);
-        },
-        subscribeSubtree(root, listener) {
-          const set = subtreeListeners.current.get(root) ?? new Set();
-          set.add(listener);
-          subtreeListeners.current.set(root, set);
-          return () => {
-            set.delete(listener);
-            if (set.size === 0) subtreeListeners.current.delete(root);
-          };
-        },
-      },
+      changes,
     }),
-    [session, client, driveRoot, rootError, prefs, updatePrefs, uploads, invalidate],
+    [session, client, driveRoot, rootError, prefs, updatePrefs, uploads, invalidate, changes],
   );
   return <DriveContext value={value}>{children}</DriveContext>;
 }
