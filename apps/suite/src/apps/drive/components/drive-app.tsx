@@ -28,6 +28,8 @@ function DriveChrome({ children }: { children: ReactNode }) {
   const { client, driveRoot, rootError, changes } = useDrive();
   const ui = useDriveUi();
   const [usage, setUsage] = useState<number>();
+  const [usageFailed, setUsageFailed] = useState(false);
+  const [usageAttempt, setUsageAttempt] = useState(0);
   const [newOpen, setNewOpen] = useState(false);
   const { setDetailsOpen, requestUpload, openDialog, currentFolder } = ui;
 
@@ -44,6 +46,7 @@ function DriveChrome({ children }: { children: ReactNode }) {
     );
   }, [client, driveRoot]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: usageAttempt retries the complete measurement
   useEffect(() => {
     if (!driveRoot) return;
     let live = true;
@@ -52,8 +55,14 @@ function DriveChrome({ children }: { children: ReactNode }) {
     const measure = () => {
       const request = ++generation;
       void measureUsage(client, driveRoot).then(
-        (bytes) => live && request === generation && setUsage(bytes),
-        () => undefined,
+        (bytes) => {
+          if (!live || request !== generation) return;
+          setUsage(bytes);
+          setUsageFailed(false);
+        },
+        () => {
+          if (live && request === generation) setUsageFailed(true);
+        },
       );
     };
     const unsubscribe = changes.subscribeSubtree(driveRoot, () => {
@@ -63,13 +72,14 @@ function DriveChrome({ children }: { children: ReactNode }) {
       timer = setTimeout(measure, 200);
     });
     setUsage(undefined);
+    setUsageFailed(false);
     measure();
     return () => {
       live = false;
       clearTimeout(timer);
       unsubscribe();
     };
-  }, [client, driveRoot, changes]);
+  }, [client, driveRoot, changes, usageAttempt]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -96,7 +106,13 @@ function DriveChrome({ children }: { children: ReactNode }) {
     <SuiteFrame
       app="drive"
       sidebar={
-        <DriveSidebar usage={usage} newMenuOpen={newOpen} onNewMenuOpenChange={setNewOpen} />
+        <DriveSidebar
+          usage={usage}
+          usageFailed={usageFailed}
+          onRetryUsage={() => setUsageAttempt((attempt) => attempt + 1)}
+          newMenuOpen={newOpen}
+          onNewMenuOpenChange={setNewOpen}
+        />
       }
       search={{ placeholder: "Search in Drive", action: "/drive/search", scopeLabel: "in Drive" }}
       actions={

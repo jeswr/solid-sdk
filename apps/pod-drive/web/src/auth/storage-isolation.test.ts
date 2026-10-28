@@ -118,16 +118,18 @@ const deployments: { framework: string; rootDirectory: string; project: string }
 );
 const viteApps = deployments.filter((app) => app.framework === "vite");
 
-describe("all ten Vite apps' persistent browser storage", () => {
+describe("all eleven Vite apps' persistent browser storage", () => {
   it("keeps session databases, DPoP credentials and remembered-account pointers app-specific", () => {
-    expect(viteApps).toHaveLength(10);
+    expect(viteApps).toHaveLength(11);
     const owners = new Map<string, string>();
     for (const app of viteApps) {
       const authRoot = resolve(workspace, app.rootDirectory, "src/auth");
       const files =
         app.rootDirectory === "apps/access-manager"
           ? ["controller.ts"]
-          : ["SessionProvider.tsx", "webid-token-provider.ts"];
+          : app.rootDirectory === "apps/pod-migrator"
+            ? ["connections.ts"]
+            : ["SessionProvider.tsx", "webid-token-provider.ts"];
       const source = files.map((name) => readFileSync(resolve(authRoot, name), "utf8")).join("\n");
       const keys = new Set(
         [
@@ -154,7 +156,11 @@ describe("all ten Vite apps' persistent browser storage", () => {
     const slug = app.project.replace(/^solid-(?:sdk-)?/, "");
     it(`${slug} uses its own theme key before paint and in React`, () => {
       const root = resolve(workspace, app.rootDirectory);
-      const main = readFileSync(resolve(root, "src/main.tsx"), "utf8");
+      // Pod Migrator mounts its ThemeProvider in App.tsx rather than main.tsx.
+      const main = readFileSync(
+        resolve(root, slug === "pod-migrator" ? "src/App.tsx" : "src/main.tsx"),
+        "utf8",
+      );
       expect(main).toContain(`<ThemeProvider storageKey="${slug}:app-shell-theme">`);
       if (slug === "access-manager") {
         expect(readFileSync(resolve(root, "src/demo/DemoApp.tsx"), "utf8")).toContain(

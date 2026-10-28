@@ -205,40 +205,65 @@ export function RecentView() {
 
 export function StarredView() {
   const { client, prefs, driveRoot, changes } = useDrive();
-  const [items, setItems] = useState<BrowserItem[]>();
+  const [snapshot, setSnapshot] = useState<{
+    client: DriveClient;
+    starred: string;
+    items?: BrowserItem[];
+    error?: unknown;
+  }>();
   const [version, setVersion] = useState(0);
+  const load = useCallback(() => setVersion((value) => value + 1), []);
   // Preference notifications parse fresh arrays even when the starred URLs are unchanged.
   const starred = JSON.stringify(prefs.starred);
   // Starred items live anywhere in Drive, so any change there may remove or alter a row.
   useEffect(
-    () =>
-      driveRoot ? changes.subscribeSubtree(driveRoot, () => setVersion((v) => v + 1)) : undefined,
-    [changes, driveRoot],
+    () => (driveRoot ? changes.subscribeSubtree(driveRoot, load) : undefined),
+    [changes, driveRoot, load],
   );
   useEffect(() => {
     void version;
     let live = true;
-    Promise.all(
+    setSnapshot((previous) => ({
+      client,
+      starred,
+      ...(previous?.client === client && previous.items?.length ? { items: previous.items } : {}),
+    }));
+    Promise.allSettled(
       (JSON.parse(starred) as string[]).map((url) =>
-        client.stat(url).then(
-          (item): BrowserItem => {
-            const parent = parentOf(url);
-            return parent ? { ...item, folder: parent } : item;
-          },
-          () => undefined,
-        ),
+        client.stat(url).then((item): BrowserItem => {
+          const parent = parentOf(url);
+          return parent ? { ...item, folder: parent } : item;
+        }),
       ),
-    ).then(
-      (found) => live && setItems(found.filter((item): item is BrowserItem => item !== undefined)),
-    );
+    ).then((results) => {
+      if (!live) return;
+      const items: BrowserItem[] = [];
+      const errors: unknown[] = [];
+      for (const result of results) {
+        if (result.status === "fulfilled") items.push(result.value);
+        else errors.push(result.reason);
+      }
+      setSnapshot({
+        client,
+        starred,
+        ...(errors.length
+          ? { error: new AggregateError(errors, "Some items couldn't be read.") }
+          : {}),
+        ...(items.length || !errors.length ? { items } : {}),
+      });
+    });
     return () => {
       live = false;
     };
   }, [client, starred, version]);
+  // Keep controls mounted during same-account refreshes so removal can restore focus.
+  const current = snapshot?.client === client ? snapshot : undefined;
   return (
     <FileBrowser
       title="Starred"
-      items={items}
+      items={current?.items}
+      error={current?.starred === starred ? current.error : undefined}
+      onRetry={load}
       columns={["location", "modified", "size"]}
       empty={{
         title: "No starred items",

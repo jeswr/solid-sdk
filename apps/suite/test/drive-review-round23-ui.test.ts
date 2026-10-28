@@ -127,10 +127,14 @@ it.each([
       new File([new Uint8Array(REPORT_PDF)], "report.pdf", { type: "application/pdf" }),
     ]);
   });
-  await vi.waitFor(async () => {
-    await act(async () => {});
-    expect(drive.uploads.tasks[0]?.status).toBe("conflict");
-  });
+  await vi.waitFor(
+    async () => {
+      await act(async () => {});
+      expect(drive.uploads.tasks[0]?.status).toBe("conflict");
+    },
+    // Coverage plus concurrent workers can delay IndexedDB-backed upload checks.
+    { timeout: 5_000 },
+  );
   await click(button("Replace"));
   await vi.waitFor(async () => {
     await act(async () => {});

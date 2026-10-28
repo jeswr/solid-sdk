@@ -52,7 +52,7 @@ export interface DriveContextValue {
     subscribe(folder: string, listener: () => void): () => void;
     subscribeSubtree(root: string, listener: () => void): () => void;
   };
-  /** Force a re-list of a folder (and its parent). */
+  /** Revalidate a resource, its parent and any open descendant listings/metadata. */
   readonly invalidate: (url: string) => void;
 }
 
@@ -133,7 +133,8 @@ export function DriveProvider({ session, children }: { session: PodSession; chil
       if (!folder) return;
       for (const listener of listeners.current.get(folder) ?? []) listener();
     };
-    notify(url.endsWith("/") ? url : undefined);
+    if (url.endsWith("/"))
+      for (const folder of listeners.current.keys()) if (folder.startsWith(url)) notify(folder);
     notify(parentOf(url));
     for (const [root, subscribers] of subtreeListeners.current) {
       if (url === root || url.startsWith(root.endsWith("/") ? root : `${root}/`)) {

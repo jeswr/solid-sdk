@@ -243,7 +243,7 @@ function ResultView({ report }: { report: RunReport }) {
 
 export function App({ connections }: { connections: readonly [PodConnection, PodConnection] }) {
   return (
-    <ThemeProvider>
+    <ThemeProvider storageKey="pod-migrator:app-shell-theme">
       <ErrorBoundary>
         <MigrationApp connections={connections} />
       </ErrorBoundary>

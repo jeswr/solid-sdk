@@ -96,7 +96,7 @@ describe("Drive usage", () => {
     expect(await measureUsage(client, `${DRIVE}Archive/`)).toBe(0);
   });
 
-  it("skips unavailable listings and counts missing sizes as zero", async () => {
+  it("rejects unavailable listings and counts missing sizes as zero", async () => {
     const { client } = await setup();
     const list = vi.spyOn(client, "list").mockImplementation(async (url) => {
       if (url !== DRIVE) throw new Error("unreadable folder");
@@ -107,9 +107,15 @@ describe("Drive usage", () => {
         { url: `${DRIVE}empty`, name: "empty", kind: "file", size: 0 },
       ];
     });
-    expect(await measureUsage(client, DRIVE)).toBe(12);
+    await expect(measureUsage(client, DRIVE)).rejects.toThrow("unreadable folder");
     expect(list.mock.calls.map(([url]) => url)).toEqual([DRIVE, `${DRIVE}bad/`]);
-    expect(await measureUsage(client, `${DRIVE}bad/`)).toBe(0);
+    await expect(measureUsage(client, `${DRIVE}bad/`)).rejects.toThrow("unreadable folder");
+    list.mockResolvedValue([
+      { url: NOTES, name: "notes.md", kind: "file", size: 12 },
+      { url: `${DRIVE}unknown`, name: "unknown", kind: "file" },
+      { url: `${DRIVE}empty`, name: "empty", kind: "file", size: 0 },
+    ]);
+    expect(await measureUsage(client, DRIVE)).toBe(12);
   });
 
   it("never visits more than the container budget, even across batches of eight", async () => {
@@ -676,27 +682,24 @@ describe("recent files and name search", () => {
     expect(list).not.toHaveBeenCalled();
   });
 
-  it("skips failing listings and files without modified metadata", async () => {
+  it("rejects failing listings and skips files without modified metadata", async () => {
     const { client } = await setup();
     const list = client.list.bind(client);
+    let failing = true;
     vi.spyOn(client, "list").mockImplementation(async (url) => {
-      if (url === `${DRIVE}Work/`) throw new Error("unreadable folder");
+      if (failing && url === `${DRIVE}Work/`) throw new Error("unreadable folder");
       return (await list(url)).map((entry) => {
         if (entry.url !== NOTES) return entry;
         const { modified: _modified, ...withoutDate } = entry;
         return withoutDate;
       });
     });
-    expect((await recentFiles(client, [DRIVE])).map((entry) => entry.name)).toEqual([
-      "sunset.png",
-      "data.ttl",
-      "hills.png",
-    ]);
-    expect((await searchByName(client, DRIVE, ".")).map((entry) => entry.name)).toEqual([
-      "data.ttl",
-      "notes.md",
-      "hills.png",
-      "sunset.png",
-    ]);
+    await expect(recentFiles(client, [DRIVE])).rejects.toThrow("unreadable folder");
+    await expect(searchByName(client, DRIVE, ".")).rejects.toThrow("unreadable folder");
+    failing = false;
+    expect((await recentFiles(client, [DRIVE])).some((entry) => entry.url === NOTES)).toBe(false);
+    expect((await searchByName(client, DRIVE, ".")).some((entry) => entry.url === NOTES)).toBe(
+      true,
+    );
   });
 });

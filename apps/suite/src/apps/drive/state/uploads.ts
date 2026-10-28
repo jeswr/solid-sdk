@@ -54,13 +54,18 @@ export function targetFolder(folder: string, source: File | DroppedFile): string
 }
 
 interface Batch {
-  id: string;
   choices: Map<string, UploadChoice>;
   retry: Batch | undefined;
 }
 
 function newBatch(): Batch {
-  return { id: crypto.randomUUID(), choices: new Map(), retry: undefined };
+  return { choices: new Map(), retry: undefined };
+}
+
+interface SavedJob {
+  id: string;
+  targetUrl: string;
+  conflictSeen: boolean;
 }
 
 interface Job {
@@ -68,8 +73,9 @@ interface Job {
   file: File;
   root: string;
   policy: "fail" | "confirm" | "upload" | ConflictChoice;
-  replacing: boolean;
-  intentKey: string | undefined;
+  conflictSeen: boolean;
+  targetUrl: string | undefined;
+  storageKey: string | undefined;
   target: DriveItem | undefined;
   batch: Batch;
 }
@@ -77,19 +83,42 @@ interface Job {
 // Creating at a vanished replacement URL needs a separate decision about this
 // folder's access. An approval to replace existing files cannot authorize it.
 function confirmationGroup(job: Job): string {
-  return job.replacing && !job.target ? job.task.folder : "existing";
+  return job.conflictSeen && !job.target ? job.task.folder : "existing";
 }
 
-function forgetReplacement(job: Job) {
+function forgetJob(job: Job) {
   try {
-    if (job.intentKey) sessionStorage.removeItem(job.intentKey);
+    if (job.storageKey) sessionStorage.removeItem(job.storageKey);
   } catch {
-    // Retaining a marker only causes an extra confirmation on a later upload.
+    // Retaining this job only causes an extra confirmation on a later upload.
   }
 }
 
-function rememberReplacement(job: Job) {
-  if (job.replacing && job.intentKey) sessionStorage.setItem(job.intentKey, job.batch.id);
+function rememberJob(job: Job) {
+  if (job.storageKey && job.targetUrl)
+    sessionStorage.setItem(
+      job.storageKey,
+      JSON.stringify({ id: job.task.id, targetUrl: job.targetUrl, conflictSeen: job.conflictSeen }),
+    );
+}
+
+function savedJobs(prefix: string): SavedJob[] {
+  const saved: SavedJob[] = [];
+  for (let index = 0; index < sessionStorage.length; index += 1) {
+    const key = sessionStorage.key(index);
+    if (!key?.startsWith(prefix)) continue;
+    const job: SavedJob = JSON.parse(sessionStorage.getItem(key) as string);
+    if (
+      !job ||
+      typeof job.id !== "string" ||
+      typeof job.targetUrl !== "string" ||
+      typeof job.conflictSeen !== "boolean" ||
+      key !== `${prefix}${job.id}`
+    )
+      throw new Error("Unreadable upload history");
+    saved.push(job);
+  }
+  return saved;
 }
 
 function describe(error: unknown): string {
@@ -106,7 +135,6 @@ export function useUploadQueue(
   accountScope?: string,
 ): UploadQueue {
   const jobs = useRef(new Map<string, Job>());
-  const batches = useRef(new Map<string, Batch>());
   const running = useRef(0);
   const [tasks, setTasks] = useState<UploadTask[]>([]);
 
@@ -148,16 +176,23 @@ export function useUploadQueue(
             if (cause instanceof DriveError && cause.kind === "not-found") return undefined;
             throw cause;
           });
+        if (job.target) job.conflictSeen = true;
+        rememberJob(job);
+        // A failed fresh PUT may never have encountered a resource. Only that
+        // case can resume without a decision after checking the vacant URL.
+        if (!job.target && !job.conflictSeen) {
+          job.policy = "fail";
+          patch(id, { status: "queued" });
+          return;
+        }
         const automatic = allowAutomatic
           ? job.batch.choices.get(confirmationGroup(job))
           : undefined;
-        if (automatic === "replace") job.replacing = true;
-        if (automatic && automatic !== "skip") rememberReplacement(job);
         job.policy = automatic ?? "fail";
         patch(id, {
           status: automatic ? "queued" : "conflict",
           conflictTarget: job.target,
-          missingReplacement: job.replacing && !job.target,
+          missingReplacement: job.conflictSeen && !job.target,
         });
       };
       void (async () => {
@@ -166,10 +201,9 @@ export function useUploadQueue(
             await confirm(true);
             return;
           }
-          if (policy === "replace") job.replacing = true;
-          // Persist intent, never approval or bytes. If storage refuses the
-          // marker, stop before writing rather than losing intent on reload.
-          if (policy !== "skip") rememberReplacement(job);
+          // Persist only this job's history, never an approval or file bytes.
+          // Storage failure stops the attempt before any write.
+          if (policy !== "skip") rememberJob(job);
           const item = await uploadFile(
             client,
             job.task.folder,
@@ -178,7 +212,7 @@ export function useUploadQueue(
             policy === "upload" ? "fail" : policy,
             target,
           );
-          forgetReplacement(job);
+          forgetJob(job);
           patch(
             id,
             item
@@ -191,6 +225,8 @@ export function useUploadQueue(
             (error.kind === "conflict" || (error.kind === "not-found" && policy === "replace"))
           ) {
             try {
+              job.conflictSeen = true;
+              rememberJob(job);
               await confirm(policy === "fail");
             } catch (cause) {
               patch(id, { status: "failed", error: describe(cause) });
@@ -220,38 +256,44 @@ export function useUploadQueue(
       const batch = newBatch();
       for (const source of files) {
         const file = "path" in source ? source.file : source;
-        const id = crypto.randomUUID();
+        let id: string = crypto.randomUUID();
         let target: string | undefined;
-        let intentKey: string | undefined;
+        let targetUrl: string | undefined;
         try {
           target = targetFolder(folder, source);
-          const name = normalizeUploadName(file.name);
-          if (accountScope)
-            intentKey = `suite.drive.upload-replacement.${accountScope}.${childUrl(target, name)}`;
+          targetUrl = childUrl(target, normalizeUploadName(file.name));
         } catch {
           target = undefined;
         }
-        let restored: string | null = null;
+        const prefix = accountScope ? `suite.drive.upload-job.${accountScope}.` : undefined;
+        let resumed = false;
+        let conflictSeen = false;
         let storageFailed = false;
         try {
-          if (intentKey) restored = sessionStorage.getItem(intentKey);
+          const saved = prefix
+            ? savedJobs(prefix).filter((job) => job.targetUrl === targetUrl)
+            : [];
+          const active = [...jobs.current.values()].filter((job) => job.targetUrl === targetUrl);
+          resumed = saved.length > 0 || active.length > 0;
+          conflictSeen = [...saved, ...active].some((job) => job.conflictSeen);
+          // Reattach a reselected file to its own persisted job after reload.
+          // A duplicate of an active job gets a separate id and storage record.
+          const restored = saved.find((job) => !jobs.current.has(job.id));
+          if (restored) id = restored.id;
         } catch {
-          // An unreadable marker cannot prove this is a new upload.
+          // Unreadable history cannot prove this is a never-attempted upload.
           storageFailed = true;
+          conflictSeen = true;
         }
-        let jobBatch = batch;
-        if (restored) {
-          jobBatch = batches.current.get(restored) ?? newBatch();
-          batches.current.set(restored, jobBatch);
-        }
-        jobs.current.set(id, {
+        const job: Job = {
           file,
           root: folder,
-          policy: restored ? "confirm" : "fail",
-          replacing: !!restored || storageFailed,
-          intentKey,
+          policy: resumed ? "confirm" : "fail",
+          conflictSeen,
+          targetUrl,
+          storageKey: prefix ? `${prefix}${id}` : undefined,
           target: undefined,
-          batch: jobBatch,
+          batch,
           task:
             target && !storageFailed
               ? { id, name: file.name, folder: target, size: file.size, status: "queued" }
@@ -263,7 +305,13 @@ export function useUploadQueue(
                   status: "failed",
                   error: storageFailed ? "Upload failed" : "This name can't be uploaded",
                 },
-        });
+        };
+        try {
+          if (!storageFailed) rememberJob(job);
+        } catch (error) {
+          job.task = { ...job.task, status: "failed", error: describe(error) };
+        }
+        jobs.current.set(id, job);
       }
       publish();
       pump();
@@ -286,14 +334,7 @@ export function useUploadQueue(
         ) {
           if (applyToAll) job.batch.choices.set(group, choice);
           job.policy = choice;
-          if (choice === "replace") job.replacing = true;
-          try {
-            // Include approved siblings still queued behind the concurrency limit.
-            if (choice !== "skip") rememberReplacement(job);
-            job.task = { ...job.task, status: "queued" };
-          } catch (error) {
-            job.task = { ...job.task, status: "failed", error: describe(error) };
-          }
+          job.task = { ...job.task, status: "queued" };
         }
       }
       publish();
@@ -310,7 +351,7 @@ export function useUploadQueue(
       // shared without carrying an earlier attempt's approval into this retry.
       job.batch.retry ??= newBatch();
       job.batch = job.batch.retry;
-      job.policy = job.replacing ? "confirm" : "fail";
+      job.policy = "confirm";
       job.target = undefined;
       patch(id, { status: "queued", error: undefined, conflictTarget: undefined });
       pump();
@@ -322,7 +363,7 @@ export function useUploadQueue(
     (id: string) => {
       const job = jobs.current.get(id);
       if (job && job.task.status !== "uploading") {
-        forgetReplacement(job);
+        forgetJob(job);
         jobs.current.delete(id);
       }
       publish();

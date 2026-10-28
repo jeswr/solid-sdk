@@ -15,6 +15,7 @@ export default defineConfig({
     setupFiles: ["./test/setup-web-locks.ts"],
     server: { deps: { inline: ["@jeswr/y-solid"] } },
     include: ["test/**/*.test.ts"],
+    setupFiles: ["test/drive-locks.setup.ts"],
     // CI safety net: budget tests run slowly under v8 coverage on shared runners (SUITE-T2 bounds them properly).
     testTimeout: 30_000,
     coverage: {

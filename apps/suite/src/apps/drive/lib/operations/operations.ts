@@ -1211,12 +1211,7 @@ export async function recentFiles(
     const batch = frontier.splice(0, Math.min(concurrency, maxContainers - visited));
     visited += batch.length;
     const listings = await Promise.all(
-      batch.map(({ url, depth }) =>
-        client.list(url).then(
-          (items) => ({ url, depth, items }),
-          () => ({ url, depth, items: [] as DriveItem[] }),
-        ),
-      ),
+      batch.map(({ url, depth }) => client.list(url).then((items) => ({ url, depth, items }))),
     );
     const next: { url: string; depth: number }[] = [];
     for (const { url, depth, items } of listings) {
@@ -1253,12 +1248,7 @@ export async function searchByName(
     const batch = frontier.splice(0, 8);
     visited += batch.length;
     const listings = await Promise.all(
-      batch.map((url) =>
-        client.list(url).then(
-          (items) => ({ url, items }),
-          () => ({ url, items: [] as DriveItem[] }),
-        ),
-      ),
+      batch.map((url) => client.list(url).then((items) => ({ url, items }))),
     );
     for (const { url, items } of listings) {
       for (const item of items) {
@@ -1284,7 +1274,7 @@ export async function measureUsage(
   while (frontier.length > 0 && visited < maxContainers) {
     const batch = frontier.splice(0, Math.min(8, maxContainers - visited));
     visited += batch.length;
-    const listings = await Promise.all(batch.map((url) => client.list(url).catch(() => [])));
+    const listings = await Promise.all(batch.map((url) => client.list(url)));
     for (const item of listings.flat()) {
       if (item.kind === "folder") frontier.push(item.url);
       else total += item.size ?? 0;
