@@ -35,18 +35,32 @@ export function detectImplementation(
   return undefined;
 }
 
+// Literal keys: every app shares the jeswr.github.io origin, and the workspace
+// storage-isolation test audits these strings for uniqueness.
+const storageKeys = {
+  source: {
+    dbName: "pod-migrator:source:sessions",
+    rememberedAccountsKey: "pod-migrator:source:remembered-account",
+    recentAccountsKey: "pod-migrator:source:recent-accounts",
+    redirectFlowKey: "pod-migrator:source:redirect-flow",
+    redirectSentinelKey: "pod-migrator:source:redirect-sentinel",
+  },
+  target: {
+    dbName: "pod-migrator:target:sessions",
+    rememberedAccountsKey: "pod-migrator:target:remembered-account",
+    recentAccountsKey: "pod-migrator:target:recent-accounts",
+    redirectFlowKey: "pod-migrator:target:redirect-flow",
+    redirectSentinelKey: "pod-migrator:target:redirect-sentinel",
+  },
+} as const satisfies Record<ConnectionId, Partial<SolidAuthConfig>>;
+
 export function authConfig(id: ConnectionId, origin: string, base = "/"): SolidAuthConfig {
-  const prefix = `pod-migrator:${id}`;
   const redirectUri = new URL(`${base}callback/${id}`, origin).href;
   return {
     callbackUri: redirectUri,
     redirectUri,
     clientId: new URL(`${base}clientid.jsonld`, origin).href,
-    dbName: `${prefix}:sessions`,
-    rememberedAccountsKey: `${prefix}:remembered`,
-    recentAccountsKey: `${prefix}:recent`,
-    redirectFlowKey: `${prefix}:redirect-flow`,
-    redirectSentinelKey: `${prefix}:redirect-sentinel`,
+    ...storageKeys[id],
     patchGlobalFetch: false,
     includeIssuerOrigin: false,
     // Only the authenticated WebID's own origin can serve a private profile.

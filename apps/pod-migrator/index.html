@@ -10,8 +10,8 @@
     <title>Pod Migrator — A new home for your Solid data</title>
     <script>
       // AUTHORED-BY Codex GPT-6
-      // Matches app-shell's themeScript() and ThemeProvider's default storage key.
-      (() => { try { const t = localStorage.getItem("app-shell-theme"); const d = t === "dark" || ((t === null || t === "system") && matchMedia("(prefers-color-scheme: dark)").matches); document.documentElement.classList.toggle("dark", d); document.documentElement.style.colorScheme = d ? "dark" : "light"; } catch {} })();
+      // Matches app-shell's themeScript() and the app's ThemeProvider storage key.
+      (() => { try { const t = localStorage.getItem("pod-migrator:app-shell-theme"); const d = t === "dark" || ((t === null || t === "system") && window.matchMedia("(prefers-color-scheme: dark)").matches); document.documentElement.classList.toggle("dark", d); document.documentElement.style.colorScheme = d ? "dark" : "light"; } catch {} })();
     </script>
   </head>
   <body>
