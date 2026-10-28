@@ -9,6 +9,7 @@ import {
   type JSONContent,
   type MarkdownLexerConfiguration,
   type MarkdownParseHelpers,
+  type MarkdownRendererHelpers,
   type MarkdownToken,
 } from "@tiptap/react";
 import { baseExtensions } from "../../editor/extensions";
@@ -381,6 +382,90 @@ function checkRules(node: JSONContent): void {
   for (const child of node.content ?? []) checkRules(child);
 }
 
+/** CommonMark tab stops apply to indentation, never to the remainder of a line. */
+function indentation(line: string, start: number): number {
+  let column = start;
+  for (const char of line) {
+    if (char === " ") column++;
+    else if (char === "\t") column += 4 - (column % 4);
+    else break;
+  }
+  return column - start;
+}
+
+function stripIndent(line: string, columns: number, start: number): string {
+  let column = start;
+  let offset = 0;
+  while (offset < line.length && column < start + columns) {
+    const char = line[offset];
+    if (char === " ") column++;
+    else if (char === "\t") column += 4 - (column % 4);
+    else break;
+    offset++;
+  }
+  // A container can consume only part of a structural tab. Its unused columns
+  // become indentation; tabs after that boundary remain original characters.
+  return " ".repeat(Math.max(0, column - start - columns)) + line.slice(offset);
+}
+
+// Tab stops retain their original column while nested containers are removed.
+let containerColumn = 0;
+function atColumn<T>(column: number, parse: () => T): T {
+  const previous = containerColumn;
+  containerColumn = column;
+  try {
+    return parse();
+  } finally {
+    containerColumn = previous;
+  }
+}
+
+/** A disposable view for boundary detection; content always comes from source. */
+function containerBoundaries(source: string): string {
+  return source
+    .split("\n")
+    .map((line) => {
+      const prefix = (/^[ \t]*(?:(?:[*+-]|\d{1,9}[.)])[ \t]+)?/.exec(line) as RegExpExecArray)[0];
+      let column = containerColumn;
+      const expanded = prefix.replace(/./g, (char) => {
+        const width = char === "\t" ? 4 - (column % 4) : 1;
+        column += width;
+        return char === "\t" ? " ".repeat(width) : char;
+      });
+      return expanded + line.slice(prefix.length);
+    })
+    .join("\n");
+}
+
+function listItemSource(raw: string): { text: string; indent: number } {
+  const lines = raw.replace(/\n$/, "").split("\n");
+  const first = lines[0] as string;
+  const marker = /^([ \t]*)([*+-]|\d{1,9}[.)])/.exec(first) as RegExpExecArray;
+  const after = first.slice(marker[0].length);
+  const markerWidth = indentation(first, containerColumn) + (marker[2] as string).length;
+  const start = containerColumn + markerWidth;
+  const padding = indentation(after, start);
+  const width = padding > 4 || !after.replace(/^[ \t]*/, "") ? 1 : padding;
+  const indent = markerWidth + width;
+  return {
+    indent,
+    text: [
+      stripIndent(after, width, start),
+      ...lines
+        .slice(1)
+        .map((line) =>
+          indentation(line, containerColumn) >= indent
+            ? stripIndent(line, indent, containerColumn)
+            : line,
+        ),
+    ].join("\n"),
+  };
+}
+
+// JavaScript's multiline ^ also matches Unicode line/paragraph separators.
+// CommonMark container prefixes begin only at the start of input or after LF.
+const quotePrefix = /(?<=^|\n) {0,3}>[ \t]?/g;
+
 // Use exactly the live editor's nodes, marks and attributes. Only Markdown
 // handlers are overridden; HTML parsing still comes from the editor schema.
 const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
@@ -406,6 +491,7 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
           level: "block",
           start: () => -1,
           tokenize(source: string, _tokens: MarkdownToken[], lexer: MarkdownLexerConfiguration) {
+            if (!/^[ \t]*(?:[*+-]|\d{1,9}[.)])(?=[ \t]|\n|$)/.test(source)) return;
             // Delegate list boundaries to CommonMark without the upstream
             // line-based list tokenizers or their shared lexer state.
             const tokenizer = new markdown.instance.Tokenizer();
@@ -416,21 +502,37 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
               ...tokenizer.rules,
               other: {
                 ...tokenizer.rules.other,
+                blockquoteSetextReplace2: quotePrefix,
                 listIsTask: /^\[[ xX]\](?:[ \t]|$)/,
                 listReplaceTask: /^\[[ xX]\](?:[ \t]|$)/,
               },
             };
-            const token = tokenizer.list(source);
+            const token = tokenizer.list(containerBoundaries(source));
             if (!token) return;
+            // Marked expands every tab in item.text and trimEnd() also drops
+            // code's trailing whitespace. Use it only for container boundaries;
+            // recover the content from its untouched source instead.
+            const lines = source.split("\n");
+            let lineOffset = 0;
+            for (const item of token.items) {
+              const newline = item.raw.endsWith("\n") ? "\n" : "";
+              const count = item.raw.replace(/\n$/, "").split("\n").length;
+              item.raw = lines.slice(lineOffset, lineOffset + count).join("\n") + newline;
+              lineOffset += count;
+            }
+            token.raw = lines.slice(0, lineOffset).join("\n");
             return {
               ...token,
               type: "docsList",
-              items: token.items.map((item) => ({
-                ...item,
-                // CommonMark already removed the list's content offset.
-                // Keep all remaining indentation, including fenced code lines.
-                tokens: lexer.blockTokens(item.text),
-              })),
+              items: token.items.map((item) => {
+                const { text: original, indent } = listItemSource(item.raw);
+                const text = item.task ? original.replace(/^\[[ xX]\](?:[ \t]|$)/, "") : original;
+                return {
+                  ...item,
+                  text,
+                  tokens: atColumn(containerColumn + indent, () => lexer.blockTokens(text)),
+                };
+              }),
             };
           },
         },
@@ -475,9 +577,26 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
           );
         },
       });
+    if (extension.name === "code")
+      return extension.extend({
+        parseMarkdown(token: MarkdownToken, helpers: MarkdownParseHelpers) {
+          if (/\n/.test(token.raw as string))
+            reportSkipped(mappingSkipped, "Code span line breaks converted to spaces");
+          return helpers.applyMark("code", [{ type: "text", text: token.text as string }]);
+        },
+      });
     if (extension.name === "codeBlock")
       return extension.extend({
-        renderMarkdown(node, helpers) {
+        // Marked already classified this block. Tiptap's raw.startsWith fence
+        // guard rejects valid fences with indentation, including structural tabs.
+        parseMarkdown(token: MarkdownToken, helpers: MarkdownParseHelpers) {
+          return helpers.createNode(
+            "codeBlock",
+            { language: token.lang || null },
+            token.text ? [helpers.createTextNode(token.text)] : [],
+          );
+        },
+        renderMarkdown(node: JSONContent, helpers: MarkdownRendererHelpers) {
           const content = helpers.renderChildren(node.content ?? []);
           const fence = "`".repeat(Math.max(3, longestRun(content, /^ {0,3}`+/gm) + 1));
           return `${fence}${node.attrs?.language ?? ""}\n${content}\n${fence}`;
@@ -627,6 +746,80 @@ const markdown = new MarkdownManager({
     }),
   ],
   markedOptions: { gfm: true },
+});
+markdown.instance.use({
+  tokenizer: {
+    blockquote(source) {
+      if (!/^[ \t]*>/.test(source)) return;
+      // Boundary detection uses a separate lexer. Re-entering this configured
+      // lexer here would parse each nested quote twice at every depth.
+      const tokenizer = new markdown.instance.Tokenizer();
+      tokenizer.lexer = new markdown.instance.Lexer({ gfm: true, tokenizer });
+      tokenizer.rules = {
+        ...tokenizer.rules,
+        other: { ...tokenizer.rules.other, blockquoteSetextReplace2: quotePrefix },
+      };
+      // The code tokenizer already handled indentation of four or more columns;
+      // a remaining quote prefix always matches, and its raw excludes final LF.
+      const token = tokenizer.blockquote(containerBoundaries(source)) as NonNullable<
+        ReturnType<typeof tokenizer.blockquote>
+      >;
+      const count = token.raw.split("\n").length;
+      token.raw = source.split("\n").slice(0, count).join("\n");
+      const marker = (/^[ \t]*>[ \t]?/.exec(token.raw) as RegExpExecArray)[0];
+      const indent = indentation(marker, containerColumn) + 1 + (marker.endsWith(">") ? 0 : 1);
+      const text = token.raw
+        .replace(this.rules.other.blockquoteSetextReplace, "\n    $1")
+        .replace(/(?<=^|\n)[ \t]*>[ \t]?/g, (prefix) => {
+          const leading = indentation(prefix, containerColumn);
+          if (leading > 3) return prefix;
+          return stripIndent(
+            prefix.slice(prefix.indexOf(">") + 1),
+            1,
+            containerColumn + leading + 1,
+          );
+        });
+      const top = this.lexer.state.top;
+      this.lexer.state.top = true;
+      token.tokens = atColumn(containerColumn + indent, () => this.lexer.blockTokens(text));
+      this.lexer.state.top = top;
+      token.text = text;
+      return token;
+    },
+    code(source) {
+      if (indentation(source, containerColumn) < 4) return;
+      // Blank lines were consumed by the lexer before this indentation check.
+      const token = markdown.instance.Tokenizer.prototype.code.call(this, source) as NonNullable<
+        ReturnType<typeof this.code>
+      >;
+      token.text = token.raw
+        .split("\n")
+        .map((line) => stripIndent(line, 4, containerColumn))
+        .join("\n")
+        .replace(/\n+$/, "");
+      return token;
+    },
+    fences(source) {
+      if (!/^[ \t]*(?:`{3,}|~{3,})/.test(source)) return;
+      const boundaries = containerBoundaries(source);
+      const token = markdown.instance.Tokenizer.prototype.fences.call(this, boundaries);
+      if (!token) return;
+      const match = this.rules.block.fences.exec(boundaries) as RegExpExecArray;
+      const lines = source.split("\n");
+      const newline = token.raw.endsWith("\n") ? "\n" : "";
+      const count = token.raw.replace(/\n$/, "").split("\n").length;
+      token.raw = lines.slice(0, count).join("\n") + newline;
+      const body = match[3] ?? "";
+      const indent = indentation(source, containerColumn);
+      token.text = body
+        ? lines
+            .slice(1, body.split("\n").length + 1)
+            .map((line) => stripIndent(line, indent, containerColumn))
+            .join("\n")
+        : "";
+      return token;
+    },
+  },
 });
 const schema = getSchema(extensions);
 export const MARKDOWN_NOTES =
@@ -844,6 +1037,7 @@ export function importMarkdown(source: string, fileName: string) {
   // Parse into the schema's inert nodes, then sanitize URLs and strip unsupported attrs.
   // Sanitizing the Markdown source as HTML would destroy code samples and autolinks.
   mappingSkipped = [];
+  if (/\r/.test(body)) reportSkipped(mappingSkipped, "Carriage returns converted to line feeds");
   const json = clean(markdown.parse(body), false, mappingSkipped);
   if (!json.content?.length) json.content = [{ type: "paragraph" }];
   return { title: title.slice(0, 200), ...normaliseImport(json, mappingSkipped) };
