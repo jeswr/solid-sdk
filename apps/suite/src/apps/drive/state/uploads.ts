@@ -23,7 +23,8 @@ export interface UploadTask {
   readonly size: number;
   readonly status: UploadStatus;
   readonly url?: string;
-  readonly error?: string;
+  readonly error?: string | undefined;
+  readonly conflictTarget?: DriveItem | undefined;
 }
 
 export interface UploadQueue {
@@ -50,12 +51,18 @@ export function targetFolder(folder: string, source: File | DroppedFile): string
   );
 }
 
+interface Batch {
+  choice: ConflictChoice | undefined;
+  retry: Batch | undefined;
+}
+
 interface Job {
   task: UploadTask;
   file: File;
   root: string;
   policy: "fail" | ConflictChoice;
   target: DriveItem | undefined;
+  batch: Batch;
 }
 
 function describe(error: unknown): string {
@@ -72,7 +79,6 @@ export function useUploadQueue(
 ): UploadQueue {
   const jobs = useRef(new Map<string, Job>());
   const running = useRef(0);
-  const blanket = useRef<ConflictChoice | undefined>(undefined);
   const [tasks, setTasks] = useState<UploadTask[]>([]);
 
   const publish = useCallback(
@@ -95,23 +101,27 @@ export function useUploadQueue(
       if (job.task.status !== "queued") continue;
       running.current += 1;
       const { id } = job.task;
-      patch(id, { status: "uploading" });
-      uploadFile(client, job.task.folder, job.file, job.task.name, job.policy, job.target)
+      const { policy, target } = job;
+      // A choice authorizes one attempt. ETags validate bytes, not identity or access.
+      job.policy = "fail";
+      job.target = undefined;
+      patch(id, { status: "uploading", error: undefined, conflictTarget: undefined });
+      uploadFile(client, job.task.folder, job.file, job.task.name, policy, target)
         .then(
           (item) =>
             patch(
               id,
-              item ? { status: "done", url: item.url, name: item.name } : { status: "skipped" },
+              item
+                ? { status: "done", url: item.url, name: item.name, error: undefined }
+                : { status: "skipped", error: undefined },
             ),
           async (error: unknown) => {
             if (
               error instanceof DriveError &&
-              (error.kind === "conflict" ||
-                (error.kind === "not-found" && job.policy === "replace"))
+              (error.kind === "conflict" || (error.kind === "not-found" && policy === "replace"))
             ) {
               // Snapshot before presenting the prompt, never when executing its
               // decision. A changed approved target needs another explicit choice.
-              const automatic = job.policy === "fail" ? blanket.current : undefined;
               try {
                 job.target = await client
                   .stat(childUrl(job.task.folder, normalizeUploadName(job.task.name)))
@@ -123,8 +133,13 @@ export function useUploadQueue(
                 patch(id, { status: "failed", error: describe(cause) });
                 return;
               }
+              // An Apply to all choice may arrive while this lookup is in flight.
+              const automatic = policy === "fail" ? job.batch.choice : undefined;
               job.policy = automatic ?? "fail";
-              patch(id, { status: automatic ? "queued" : "conflict" });
+              patch(id, {
+                status: automatic ? "queued" : "conflict",
+                conflictTarget: job.target,
+              });
             } else patch(id, { status: "failed", error: describe(error) });
           },
         )
@@ -148,7 +163,7 @@ export function useUploadQueue(
 
   const enqueue = useCallback(
     (folder: string, files: Iterable<File | DroppedFile>) => {
-      blanket.current = undefined;
+      const batch: Batch = { choice: undefined, retry: undefined };
       for (const source of files) {
         const file = "path" in source ? source.file : source;
         const id = crypto.randomUUID();
@@ -163,6 +178,7 @@ export function useUploadQueue(
           root: folder,
           policy: "fail",
           target: undefined,
+          batch,
           task: target
             ? { id, name: file.name, folder: target, size: file.size, status: "queued" }
             : {
@@ -183,9 +199,11 @@ export function useUploadQueue(
 
   const resolve = useCallback(
     (id: string, choice: ConflictChoice, applyToAll = false) => {
-      if (applyToAll) blanket.current = choice;
+      const selected = jobs.current.get(id);
+      if (selected?.task.status !== "conflict") return;
       for (const job of jobs.current.values()) {
         if (job.task.status === "conflict" && (job.task.id === id || applyToAll)) {
+          if (applyToAll) job.batch.choice = choice;
           job.policy = choice;
           job.task = { ...job.task, status: "queued" };
         }
@@ -198,8 +216,15 @@ export function useUploadQueue(
 
   const retry = useCallback(
     (id: string) => {
-      if (jobs.current.get(id)?.task.status !== "failed") return;
-      patch(id, { status: "queued" });
+      const job = jobs.current.get(id);
+      if (job?.task.status !== "failed") return;
+      // Failed siblings enter the same fresh batch, so renewed Apply to all is
+      // shared without carrying an earlier attempt's approval into this retry.
+      job.batch.retry ??= { choice: undefined, retry: undefined };
+      job.batch = job.batch.retry;
+      job.policy = "fail";
+      job.target = undefined;
+      patch(id, { status: "queued", error: undefined, conflictTarget: undefined });
       pump();
     },
     [patch, pump],

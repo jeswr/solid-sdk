@@ -35,6 +35,8 @@ import { formatFileSize } from "../lib/files";
 import { getMoveValidity } from "../lib/list";
 import { extensionChange, isHidden, validateName } from "../lib/operations/operations";
 import type { TrashEntry } from "../lib/operations/trash-index";
+import { formatModified, formatSize, friendlyType } from "../lib/view/view";
+import { useAccessLabel } from "../state/access";
 import { useDrive } from "../state/drive-context";
 import { captureDriveFocusRemoval, useDriveActions, useDriveUi } from "../state/ui";
 
@@ -545,6 +547,34 @@ function TrashConfirmDialog({
   );
 }
 
+function UploadConflictDetails({ item }: { item: DriveItem }) {
+  const access = useAccessLabel(item.url);
+  return (
+    <dl className="drv-facts">
+      <div>
+        <dt>Existing file</dt>
+        <dd>{item.name}</dd>
+      </div>
+      <div>
+        <dt>Type</dt>
+        <dd>{friendlyType(item)}</dd>
+      </div>
+      <div>
+        <dt>Size</dt>
+        <dd>{formatSize(item)}</dd>
+      </div>
+      <div>
+        <dt>Modified</dt>
+        <dd>{formatModified(item.modified)}</dd>
+      </div>
+      <div>
+        <dt>Who has access</dt>
+        <dd>{access}</dd>
+      </div>
+    </dl>
+  );
+}
+
 function UploadConflictDialog() {
   const { uploads } = useDrive();
   const conflicts = uploads.tasks.filter((task) => task.status === "conflict");
@@ -576,6 +606,7 @@ function UploadConflictDialog() {
           <DialogTitle>Upload options</DialogTitle>
           <DialogDescription>A file named "{current.name}" already exists</DialogDescription>
         </DialogHeader>
+        {current.conflictTarget ? <UploadConflictDetails item={current.conflictTarget} /> : null}
         {conflicts.length > 1 ? (
           <div className="drv-checkbox-row">
             <Checkbox

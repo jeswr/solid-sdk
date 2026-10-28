@@ -110,7 +110,8 @@ export function contentTypeFor(name: string, declared?: string): string {
 
 /**
  * Upload one file. `"fail"` reports a conflict as {@link DriveError} `conflict`
- * so the UI can ask; `"replace"` requires the target observed before that decision;
+ * so the UI can ask; `"replace"` requires the target observed before that decision
+ * for this attempt. Callers must obtain a new decision before retrying a replacement;
  * `"keep-both"` saves as `name (n).ext` with the first free n.
  */
 export async function uploadFile(
@@ -134,8 +135,8 @@ export async function uploadFile(
   if (policy === "skip") return undefined;
   const url = childUrl(folderUrl, name);
   if (policy === "replace") {
-    // A new HEAD would approve a different resource on Retry or after a delayed
-    // conflict decision. Keep the exact validator across every execution.
+    // Bind this attempt to the confirmed body validator. ETags do not identify
+    // resources or their access; the queue must renew the decision on Retry.
     if (
       approvedTarget?.url !== url ||
       !approvedTarget.etag ||

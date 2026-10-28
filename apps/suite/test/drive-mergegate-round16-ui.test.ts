@@ -30,7 +30,7 @@ async function mountedQueue(client: DriveClient) {
 it.each([
   false,
   true,
-])("Retry keeps the approved replacement ETag and prompts before overwriting a different public file (apply to all: %s)", async (applyToAll) => {
+])("Retry discards replacement approval and prompts before overwriting a different public file (apply to all: %s)", async (applyToAll) => {
   const f = await wacPod();
   const url = `${PUBLIC}report.txt`;
   await f.fetch(url, { method: "PUT", body: "owner's original" });
@@ -72,7 +72,7 @@ it.each([
   });
   expect(await (await f.anonymous(url)).text()).toBe("public replacement");
   expect(queue.current.tasks[0]?.status).toBe("conflict");
-  expect(writes).toEqual([approved, approved]);
+  expect(writes).toEqual([approved, null]);
   expect(f.exposures).toEqual([]);
   await act(async () => queue.current.resolve(id, "skip"));
   await settled("skipped");
@@ -108,7 +108,7 @@ it.each([
   "unchanged",
   "missing",
   "404 response",
-])("Retry preserves replacement approval when the target is %s", async (change) => {
+])("Retry rechecks the target when it is %s", async (change) => {
   const f = await wacPod();
   const url = `${PUBLIC}placeholder`;
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });
@@ -128,13 +128,18 @@ it.each([
   f.intercept(async (target, init) => {
     if (target === url && init?.method === "PUT") {
       writes.push(new Headers(init.headers).get("if-match"));
-      if (change === "404 response") return new Response(null, { status: 404 });
+      if (change === "404 response" && new Headers(init.headers).has("if-match"))
+        return new Response(null, { status: 404 });
     }
     return undefined;
   });
   await act(async () => queue.current.retry(id));
-  await queue.settled(change === "unchanged" ? "done" : "conflict");
-  expect(writes).toEqual([approved]);
-  if (change === "unchanged") expect(await (await client.read(url)).text()).toBe("new contents");
-  if (change === "missing") expect(f.pod.has(url)).toBe(false);
+  await queue.settled(change === "missing" ? "done" : "conflict");
+  expect(writes).toEqual([null]);
+  if (change !== "missing") {
+    await act(async () => queue.current.resolve(id, "replace"));
+    await queue.settled(change === "unchanged" ? "done" : "conflict");
+    expect(writes).toEqual([null, approved]);
+  }
+  if (change !== "404 response") expect(await (await client.read(url)).text()).toBe("new contents");
 });
