@@ -103,7 +103,7 @@ describe("imports through the real editor schema", () => {
       expect(exported).toContain("# Plan");
       expect(exported).toContain("- [x] Ready");
       expect(exported).toContain("Alice");
-      expect(exported).toContain("==Important==");
+      expect(exported).toContain("<mark>Important</mark>");
       expect(session.fetch).not.toHaveBeenCalled();
       // The same exported file can replace the live document without changing structure.
       const before = editor.getJSON();

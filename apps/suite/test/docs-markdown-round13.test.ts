@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // AUTHORED-BY Codex
 import type { JSONContent } from "@tiptap/react";
 import fc from "fast-check";
@@ -6,7 +7,11 @@ import { exportMarkdown, importMarkdown } from "../src/apps/docs/lib/convert/mar
 
 const paragraphs = (values: string[]): JSONContent => ({
   type: "doc",
-  content: values.map((text) => ({ type: "paragraph", content: [{ type: "text", text }] })),
+  content: values.map((text) => ({
+    type: "paragraph",
+    attrs: { textAlign: null },
+    content: [{ type: "text", text }],
+  })),
 });
 
 it("round trips an imported escaped heading as a literal paragraph", () => {
@@ -44,6 +49,7 @@ it.each([
     content: [
       {
         type: "paragraph",
+        attrs: { textAlign: null },
         content: [{ type: "text", text: value, marks: [{ type: "code" }] }],
       },
     ],
@@ -247,5 +253,5 @@ it("escapes text around block images and exports image-only list items", () => {
       type: "doc",
       content: [{ type: "bulletList", content: [{ type: "listItem", content: [image] }] }],
     }),
-  ).toContain("![Photo](https://pod.test/image.png)");
+  ).toContain('src="https://pod.test/image.png"');
 });

@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 // AUTHORED-BY Codex
-import { Editor, type JSONContent } from "@tiptap/react";
+import { Editor, getSchema, type JSONContent } from "@tiptap/react";
 import { yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
 import fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
-import { editorExtensions } from "../src/apps/docs/editor/extensions";
+import { baseExtensions, editorExtensions } from "../src/apps/docs/editor/extensions";
 import { exportMarkdown, importMarkdown } from "../src/apps/docs/lib/convert/markdown";
 
 function makeEditor(doc = new Doc()) {
@@ -146,7 +146,8 @@ it("preserves italics on ef when bold and highlight end inside an italic run", (
   }
 });
 
-it("round trips random overlapping bold, italic, strike, code, highlight and link ranges with edge spaces", () => {
+it("round trips random overlapping ranges of every schema mark with edge spaces", () => {
+  const types = Object.keys(getSchema(baseExtensions(vi.fn())).marks);
   const { editor, destroy } = makeEditor();
   const sample = fc
     .tuple(
@@ -163,7 +164,10 @@ it("round trips random overlapping bold, italic, strike, code, highlight and lin
         fc.integer({ min: 0, max: text.length }),
         fc.integer({ min: 0, max: text.length }),
       );
-      return fc.tuple(fc.constant(text), fc.array(range, { minLength: 6, maxLength: 6 }));
+      return fc.tuple(
+        fc.constant(text),
+        fc.array(range, { minLength: types.length, maxLength: types.length }),
+      );
     });
   try {
     fc.assert(
@@ -172,7 +176,6 @@ it("round trips random overlapping bold, italic, strike, code, highlight and lin
           type: "doc",
           content: [{ type: "paragraph", content: [{ type: "text", text }] }],
         });
-        const types = ["bold", "italic", "strike", "code", "highlight", "link"];
         ranges.forEach(([a, b], index) => {
           editor
             .chain()
@@ -202,4 +205,4 @@ it("round trips random overlapping bold, italic, strike, code, highlight and lin
   } finally {
     destroy();
   }
-});
+}, 60_000);

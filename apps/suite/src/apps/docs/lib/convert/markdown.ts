@@ -1,20 +1,16 @@
 // AUTHORED-BY Codex
-import Highlight from "@tiptap/extension-highlight";
-import Image from "@tiptap/extension-image";
-import { TaskItem, TaskList } from "@tiptap/extension-list";
-import { TableKit } from "@tiptap/extension-table";
 import { MarkdownManager } from "@tiptap/markdown";
-import { DOMParser as SchemaDOMParser } from "@tiptap/pm/model";
+import { DOMParser as SchemaDOMParser, type TagParseRule } from "@tiptap/pm/model";
 import {
   decodeHtmlEntities,
   Extension,
   flattenExtensions,
   getSchema,
   type JSONContent,
+  type MarkdownParseHelpers,
   type MarkdownToken,
 } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import { compatibleCodeExtensions } from "../editor/code-mark";
+import { baseExtensions } from "../../editor/extensions";
 import { validLink } from "../editor/logic";
 import { MAX_IMPORT_BYTES } from "./docx-import";
 
@@ -74,25 +70,55 @@ function inlineCode(text: string): string {
   return `${delimiter}${padding}${text}${padding}${delimiter}`;
 }
 
-const emphasisSyntax: Record<string, { delimiter: string; tag: string }> = {
-  bold: { delimiter: "**", tag: "strong" },
-  italic: { delimiter: "*", tag: "em" },
-  strike: { delimiter: "~~", tag: "del" },
-  highlight: { delimiter: "==", tag: "mark" },
+// Attribute inventories are checked against the live editor schema in tests.
+// A new schema type/attribute needs an explicit export decision here.
+export const MARKDOWN_NODE_RULES: Record<string, { tag: string; attributes: string[] }> = {
+  doc: { tag: "", attributes: [] },
+  text: { tag: "", attributes: [] },
+  paragraph: { tag: "p", attributes: ["textAlign"] },
+  heading: { tag: "h", attributes: ["textAlign", "level"] },
+  blockquote: { tag: "blockquote", attributes: [] },
+  bulletList: { tag: "ul", attributes: [] },
+  orderedList: { tag: "ol", attributes: ["start", "type"] },
+  listItem: { tag: "li", attributes: [] },
+  taskList: { tag: "ul", attributes: [] },
+  taskItem: { tag: "li", attributes: ["checked"] },
+  codeBlock: { tag: "pre", attributes: ["language"] },
+  hardBreak: { tag: "br", attributes: [] },
+  horizontalRule: { tag: "hr", attributes: [] },
+  image: { tag: "img", attributes: ["src", "alt", "title", "width", "height"] },
+  table: { tag: "table", attributes: [] },
+  tableRow: { tag: "tr", attributes: [] },
+  tableCell: { tag: "td", attributes: ["colspan", "rowspan", "colwidth", "align"] },
+  tableHeader: { tag: "th", attributes: ["colspan", "rowspan", "colwidth", "align"] },
+};
+export const MARKDOWN_MARK_RULES: Record<
+  string,
+  { delimiter?: string; tag: string; attributes: string[] }
+> = {
+  link: { tag: "a", attributes: ["href", "target", "rel", "class", "title"] },
+  bold: { delimiter: "**", tag: "strong", attributes: [] },
+  italic: { delimiter: "*", tag: "em", attributes: [] },
+  strike: { delimiter: "~~", tag: "del", attributes: [] },
+  highlight: { tag: "mark", attributes: [] },
+  underline: { tag: "u", attributes: [] },
+  subscript: { tag: "sub", attributes: [] },
+  superscript: { tag: "sup", attributes: [] },
+  code: { tag: "code", attributes: [] },
 };
 
 type InlineMark = NonNullable<JSONContent["marks"]>[number];
 type InlineTree = { text: string } | { mark: InlineMark; children: InlineTree[] };
-const markPriority = ["link", "bold", "italic", "strike", "highlight", "code"];
+const markPriority = Object.keys(MARKDOWN_MARK_RULES);
 
 /** Turn identical-mark runs into a tree, closing/reopening at the common prefix. */
 function inlineTree(nodes: JSONContent[]): InlineTree[] {
   const roots: InlineTree[] = [];
   let stack: Extract<InlineTree, { mark: InlineMark }>[] = [];
   for (const node of nodes) {
-    const marks = (node.marks ?? [])
-      .filter((mark) => markPriority.includes(mark.type))
-      .toSorted((a, b) => markPriority.indexOf(a.type) - markPriority.indexOf(b.type));
+    const marks = (node.marks ?? []).toSorted(
+      (a, b) => markPriority.indexOf(a.type) - markPriority.indexOf(b.type),
+    );
     let common = 0;
     while (
       common < stack.length &&
@@ -123,7 +149,7 @@ function htmlAttribute(text: string): string {
   return text.replace(/[&"<>|\r\n\t]/g, (char) => `&#${char.charCodeAt(0)};`);
 }
 
-function serializeInline(nodes: JSONContent[], table: boolean): string {
+function serializeInline(nodes: JSONContent[], table: boolean, htmlContext = false): string {
   const tree = inlineTree(nodes);
   const text = tree.map(treeText).join("");
   const punctuation = (char: string) => /[\p{P}\p{S}]/u.test(char);
@@ -131,149 +157,337 @@ function serializeInline(nodes: JSONContent[], table: boolean): string {
   let position = 0;
   // A connected sequence of nested/touching marks uses one HTML context. Mixing
   // Markdown into HTML would make the HTML parser treat delimiters as text.
-  const html = tree.some((branch, index) => {
-    const value = treeText(branch);
-    const start = position;
-    position += value.length;
-    if ("text" in branch) return false;
-    if (branch.children.some((child) => "mark" in child)) return true;
-    const next = tree[index + 1];
-    if (
-      next &&
-      "mark" in next &&
-      emphasisSyntax[branch.mark.type] &&
-      emphasisSyntax[next.mark.type]
-    )
-      return true;
-    if (branch.mark.type === "code" || branch.mark.type === "link") return false;
-    const first = Array.from(value)[0] ?? "";
-    const last = Array.from(value).at(-1) ?? "";
-    const before = Array.from(text.slice(0, start)).at(-1) ?? "";
-    const after = Array.from(text.slice(position))[0] ?? "";
-    return (
-      value.trim() !== value ||
-      !value ||
-      first.length > 1 ||
-      last.length > 1 ||
-      before.length > 1 ||
-      after.length > 1 ||
-      (punctuation(first) && !whitespace(before) && !punctuation(before)) ||
-      (punctuation(last) && !whitespace(after) && !punctuation(after)) ||
-      (branch.mark.type === "highlight" && value.includes("="))
-    );
-  });
+  const html =
+    htmlContext ||
+    tree.some((branch, index) => {
+      const value = treeText(branch);
+      const start = position;
+      position += value.length;
+      if ("text" in branch) return false;
+      if (htmlOnlyMark(branch.mark) || (branch.mark.type === "code" && /[\r\n]/.test(value)))
+        return true;
+      if (branch.children.some((child) => "mark" in child)) return true;
+      const next = tree[index + 1];
+      if (
+        next &&
+        "mark" in next &&
+        MARKDOWN_MARK_RULES[branch.mark.type]?.delimiter &&
+        MARKDOWN_MARK_RULES[next.mark.type]?.delimiter
+      )
+        return true;
+      if (branch.mark.type === "code" || branch.mark.type === "link") return false;
+      const first = Array.from(value)[0] ?? "";
+      const last = Array.from(value).at(-1) ?? "";
+      const before = Array.from(text.slice(0, start)).at(-1) ?? "";
+      const after = Array.from(text.slice(position))[0] ?? "";
+      return (
+        value.trim() !== value ||
+        !value ||
+        first.length > 1 ||
+        last.length > 1 ||
+        before.length > 1 ||
+        after.length > 1 ||
+        (punctuation(first) && !whitespace(before) && !punctuation(before)) ||
+        (punctuation(last) && !whitespace(after) && !punctuation(after))
+      );
+    });
   const render = (branch: InlineTree, label = false): string => {
     if ("text" in branch)
       return html ? escapeHtmlText(branch.text) : escapeText(branch.text, label, table);
     const { mark, children } = branch;
     const value = children.map((child) => render(child, mark.type === "link")).join("");
-    if (html) {
-      if (mark.type === "link") {
-        const attrs: Record<string, unknown> = {
-          ...mark.attrs,
-          href: encodeUrlControls(String(mark.attrs?.href)),
-        };
-        const attributes = ["href", "title", "target", "rel", "class"]
-          .filter((key) => attrs[key] != null)
-          .map((key) => ` ${key}="${htmlAttribute(String(attrs[key]))}"`)
-          .join("");
-        return `<a${attributes}>${value}</a>`;
-      }
-      const tag =
-        mark.type === "code" ? "code" : (emphasisSyntax[mark.type] as { tag: string }).tag;
-      return `<${tag}>${value}</${tag}>`;
-    }
+    if (html) return htmlMark(mark, value);
     if (mark.type === "code") return inlineCode(children.map(treeText).join(""));
     if (mark.type === "link") {
       const attrs = `${destination(String(mark.attrs?.href))}${titleSuffix(String(mark.attrs?.title ?? ""))}`;
       return `[${value}](${table ? attrs.replace(/\|/g, "&#x7C;") : attrs})`;
     }
-    const delimiter = (emphasisSyntax[mark.type] as { delimiter: string }).delimiter;
+    const delimiter = MARKDOWN_MARK_RULES[mark.type]?.delimiter as string;
     return `${delimiter}${value}${delimiter}`;
   };
   const result = tree.map((branch) => render(branch)).join("");
   // The wrapper preserves paragraph-edge whitespace and keeps the entire HTML
   // fragment in one parse, including spaces between adjacent inline elements.
-  return html ? `<span>${result}</span>` : result;
+  return html && !htmlContext ? `<span>${result}</span>` : result;
 }
 
-// These serializers receive protected, context-escaped attributes from export.
-// Keep StarterKit's schema while decoding entities in parsed URL/title attrs.
-const customExtensions = flattenExtensions([StarterKit, Highlight])
-  .filter((extension) =>
-    ["codeBlock", "link", ...Object.keys(emphasisSyntax)].includes(extension.name),
+function htmlOnlyMark(mark: InlineMark): boolean {
+  if (!["link", "code"].includes(mark.type)) return !MARKDOWN_MARK_RULES[mark.type]?.delimiter;
+  return (
+    mark.type === "link" &&
+    (mark.attrs?.title === "" ||
+      ["target", "rel", "class"].some(
+        (key) =>
+          mark.attrs?.[key] !== undefined &&
+          mark.attrs[key] !== schema.marks.link?.spec.attrs?.[key]?.default,
+      ))
+  );
+}
+
+function attributes(values: Record<string, unknown>): string {
+  return Object.entries(values)
+    .filter(([, value]) => value != null)
+    .map(([key, value]) => ` ${key}="${htmlAttribute(String(value))}"`)
+    .join("");
+}
+
+function htmlMark(mark: InlineMark, value: string): string {
+  const rule = MARKDOWN_MARK_RULES[mark.type] as { tag: string; attributes: string[] };
+  const attrs = Object.fromEntries(rule.attributes.map((key) => [key, mark.attrs?.[key]]));
+  if (mark.type === "link") attrs.href = encodeUrlControls(String(attrs.href));
+  return `<${rule.tag}${attributes(attrs)}${exactAttributes(mark, true)}>${value}</${rule.tag}>`;
+}
+
+// HTML attributes cannot distinguish numbers from strings, or an explicit null
+// from a missing attribute with a non-null schema default. Retain those values
+// alongside ordinary HTML; import only accepts attributes declared by the schema.
+function exactAttributes(node: JSONContent | InlineMark, mark = false): string {
+  const type = (mark ? schema.marks : schema.nodes)[node.type as string];
+  const attrs = Object.fromEntries(
+    Object.entries(node.attrs ?? {}).filter(
+      ([key, value]) => value !== type?.spec.attrs?.[key]?.default,
+    ),
+  );
+  return Object.keys(attrs).length ? attributes({ "data-docs-attrs": JSON.stringify(attrs) }) : "";
+}
+
+function htmlNode(node: JSONContent): string {
+  if (node.type === "text") return serializeInline([node], false, true);
+  const rule = MARKDOWN_NODE_RULES[node.type as string] as { tag: string };
+  const tag = node.type === "heading" ? `h${node.attrs?.level}` : rule.tag;
+  const attrs: Record<string, unknown> = {};
+  if (node.attrs?.textAlign != null) attrs.style = `text-align: ${node.attrs.textAlign}`;
+  if (node.type === "orderedList")
+    Object.assign(attrs, { start: node.attrs?.start, type: node.attrs?.type });
+  if (node.type === "taskList" || node.type === "taskItem") attrs["data-type"] = node.type;
+  if (node.type === "taskItem") attrs["data-checked"] = node.attrs?.checked ?? false;
+  if (["tableCell", "tableHeader"].includes(String(node.type))) {
+    for (const key of ["colspan", "rowspan", "colwidth", "align"]) attrs[key] = node.attrs?.[key];
+  }
+  if (node.type === "image") {
+    for (const key of ["src", "alt", "title", "width", "height"]) attrs[key] = node.attrs?.[key];
+    attrs.src = encodeUrlControls(String(attrs.src));
+  }
+  let body = (node.content ?? []).map(htmlNode).join("");
+  if (node.type === "codeBlock") {
+    body = `<code${attributes({ class: node.attrs?.language ? `language-${node.attrs.language}` : null })}>${body}</code>`;
+  }
+  const opening = `<${tag}${attributes(attrs)}${exactAttributes(node)}>`;
+  const closing = !["br", "hr", "img"].includes(tag) ? `</${tag}>` : "";
+  let result = opening + body + closing;
+  for (const mark of node.marks ?? []) result = htmlMark(mark, result);
+  return result;
+}
+
+function gfmTable(node: JSONContent): boolean {
+  const rows = node.content ?? [];
+  const width = rows[0]?.content?.length;
+  return (
+    !!width &&
+    rows.every(
+      (row, rowIndex) =>
+        row.content?.length === width &&
+        row.content.every((cell, index) => {
+          const attrs = cell.attrs;
+          const paragraph = cell.content?.[0];
+          return (
+            cell.type === (rowIndex === 0 ? "tableHeader" : "tableCell") &&
+            (attrs?.colspan ?? 1) === 1 &&
+            (attrs?.rowspan ?? 1) === 1 &&
+            attrs?.colwidth == null &&
+            (attrs?.align ?? null) === (rows[0]?.content?.[index]?.attrs?.align ?? null) &&
+            cell.content?.length === 1 &&
+            paragraph?.type === "paragraph" &&
+            paragraph.attrs?.textAlign == null &&
+            !(paragraph.content ?? []).some(needsHtml)
+          );
+        }),
+    )
+  );
+}
+
+function needsHtml(node: JSONContent): boolean {
+  if (node.type === "text") return false;
+  if (node.marks?.length || node.attrs?.textAlign != null) return true;
+  if (node.type === "table") return !gfmTable(node);
+  if (["paragraph", "heading"].includes(String(node.type)) && !node.content?.length) return true;
+  if (
+    ["paragraph", "heading"].includes(String(node.type)) &&
+    node.content?.some(
+      (child, index, content) =>
+        child.type === "hardBreak" &&
+        (node.type === "heading" ||
+          index === 0 ||
+          index === content.length - 1 ||
+          content[index + 1]?.type === "hardBreak"),
+    )
   )
+    return true;
+  if (node.type === "image")
+    return (
+      node.attrs?.width != null ||
+      node.attrs?.height != null ||
+      node.attrs?.alt === null ||
+      node.attrs?.title === ""
+    );
+  if (node.type === "orderedList" && node.attrs?.type != null) return true;
+  if (node.type === "codeBlock")
+    return (
+      node.attrs?.language === "" ||
+      /[`\s]/.test(String(node.attrs?.language ?? "")) ||
+      /\r/.test(textContent(node))
+    );
+  const children = node.content ?? [];
+  // The upstream list bridge treats continuation paragraphs as inline tokens.
+  // Keep loose/block-content items in one HTML context, including their parent.
+  if (
+    ["listItem", "taskItem"].includes(String(node.type)) &&
+    children.slice(1).some((child) => !/List$/.test(String(child.type)))
+  )
+    return true;
+  return (
+    node.type !== "doc" &&
+    (children.some((child, index) => touchingBlocks(child, children[index + 1])) ||
+      children.some(needsHtml))
+  );
+}
+
+function touchingBlocks(node: JSONContent, next: JSONContent | undefined): boolean {
+  return (
+    !!next &&
+    ((/List$/.test(String(node.type)) && /List$/.test(String(next.type))) ||
+      (node.type === "blockquote" && next.type === "blockquote"))
+  );
+}
+
+function checkRules(node: JSONContent): void {
+  if (!MARKDOWN_NODE_RULES[node.type as string])
+    throw new Error(`No Markdown export rule for node ${node.type}`);
+  for (const mark of node.marks ?? []) {
+    if (!MARKDOWN_MARK_RULES[mark.type])
+      throw new Error(`No Markdown export rule for mark ${mark.type}`);
+  }
+  for (const child of node.content ?? []) checkRules(child);
+}
+
+// Use exactly the live editor's nodes, marks and attributes. Only Markdown
+// handlers are overridden; HTML parsing still comes from the editor schema.
+const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
+  .map((extension) => extension.extend({ addExtensions: () => [] }))
   .map((extension) => {
-    const syntax = emphasisSyntax[extension.name];
-    if (syntax) return extension;
-    return extension.name === "link"
-      ? extension.extend({
-          parseMarkdown(token, helpers) {
-            // Marked supplies inline tokens for every link, including empty labels.
-            return helpers.applyMark(
-              "link",
-              helpers.parseInline(token.tokens as NonNullable<typeof token.tokens>),
-              {
-                href: decodeHtmlEntities(token.href),
-                title: token.title ? decodeHtmlEntities(token.title) : null,
-              },
-            );
-          },
-        })
-      : extension.extend({
-          renderMarkdown(node, helpers) {
-            const content = helpers.renderChildren(node.content ?? []);
-            const fence = "`".repeat(Math.max(3, longestRun(content, /^ {0,3}`+/gm) + 1));
-            return `${fence}${node.attrs?.language ?? ""}\n${content}\n${fence}`;
-          },
-        });
-  });
-const extensions = [
-  StarterKit.configure({
-    link: false,
-    codeBlock: false,
-    code: false,
-    bold: false,
-    italic: false,
-    strike: false,
-  }),
-  ...compatibleCodeExtensions,
-  ...customExtensions,
-  TableKit,
-  TaskList,
-  TaskItem.configure({ nested: true }),
-  Image.extend({
-    parseMarkdown(token, helpers) {
-      return helpers.createNode("image", {
-        src: decodeHtmlEntities(token.href),
-        alt: helpers
-          .parseInline(token.tokens as NonNullable<typeof token.tokens>)
-          .map(textContent)
-          .join(""),
-        title: token.title ? decodeHtmlEntities(token.title) : null,
+    if (extension.name === "link")
+      return extension.configure({ isAllowedUri: safeDestination }).extend({
+        parseMarkdown(token: MarkdownToken, helpers: MarkdownParseHelpers) {
+          return helpers.applyMark(
+            "link",
+            helpers.parseInline(token.tokens as NonNullable<typeof token.tokens>),
+            {
+              href: decodeHtmlEntities(token.href),
+              title: token.title ? decodeHtmlEntities(token.title) : null,
+            },
+          );
+        },
       });
-    },
-    renderMarkdown(node) {
-      return `![${node.attrs?.alt}](${node.attrs?.src}${node.attrs?.title})`;
-    },
-  }),
-];
+    if (extension.name === "codeBlock")
+      return extension.extend({
+        renderMarkdown(node, helpers) {
+          const content = helpers.renderChildren(node.content ?? []);
+          const fence = "`".repeat(Math.max(3, longestRun(content, /^ {0,3}`+/gm) + 1));
+          return `${fence}${node.attrs?.language ?? ""}\n${content}\n${fence}`;
+        },
+      });
+    if (extension.type === "node" && extension.name === "image")
+      return extension.extend({
+        parseHTML() {
+          return [
+            {
+              tag: "img[src]",
+              getAttrs: (element: HTMLElement) => {
+                const src = element.getAttribute("src") as string;
+                return /^https?:/.test(src) && safeDestination(src) ? null : false;
+              },
+            },
+          ];
+        },
+        parseMarkdown(token: MarkdownToken, helpers: MarkdownParseHelpers) {
+          return helpers.createNode("image", {
+            src: decodeHtmlEntities(token.href),
+            alt: helpers
+              .parseInline(token.tokens as NonNullable<typeof token.tokens>)
+              .map(textContent)
+              .join(""),
+            title: token.title ? decodeHtmlEntities(token.title) : null,
+          });
+        },
+        renderMarkdown(node: JSONContent) {
+          return `![${node.attrs?.alt}](${node.attrs?.src}${node.attrs?.title})`;
+        },
+      });
+    return extension;
+  });
 function parseHtml(token: MarkdownToken): JSONContent[] {
   if (typeof window === "undefined") return [];
-  const dom = new window.DOMParser().parseFromString(token.text as string, "text/html");
-  const parser = SchemaDOMParser.fromSchema(schema);
+  const dom = new window.DOMParser().parseFromString((token.text as string).trimEnd(), "text/html");
+  const rules = SchemaDOMParser.fromSchema(schema).rules;
+  const parser = new SchemaDOMParser(
+    schema,
+    rules.map((rule) => {
+      if (!rule.tag) return rule;
+      // Tiptap injects getAttrs into every tag rule, merging its declared attrs.
+      const original = rule.getAttrs as NonNullable<TagParseRule["getAttrs"]>;
+      return {
+        ...rule,
+        getAttrs(element: HTMLElement) {
+          const attrs = original(element);
+          if (attrs === false) return false;
+          const encoded = element.getAttribute("data-docs-attrs");
+          if (!encoded) return attrs;
+          let stored: unknown;
+          try {
+            stored = JSON.parse(encoded);
+          } catch {
+            return attrs;
+          }
+          const type = rule.node ? schema.nodes[rule.node] : schema.marks[rule.mark as string];
+          const accepted = Object.fromEntries(
+            Object.entries(type?.spec.attrs ?? {})
+              .filter(
+                ([key]) =>
+                  stored !== null && typeof stored === "object" && Object.hasOwn(stored, key),
+              )
+              .map(([key]) => [key, (stored as Record<string, unknown>)[key]]),
+          );
+          return { ...attrs, ...accepted };
+        },
+      };
+    }),
+  );
   // Keep unrecognized HTML inert, matching the upstream importer's fallback.
   const unknown = Array.from(dom.body.querySelectorAll("*")).some(
     (element) =>
-      element.tagName !== "SPAN" &&
+      !["SPAN", "TBODY", "THEAD", "TFOOT"].includes(element.tagName) &&
       !parser.rules.some((rule) => "tag" in rule && !!rule.tag && element.matches(rule.tag)),
   );
   if (unknown) return token.block ? [] : [{ type: "text", text: token.text as string }];
+  // ProseMirror normalizes CR/CRLF even with preserveWhitespace: "full".
+  // Protect decoded carriage returns before it sees the DOM, avoiding literal
+  // sentinel collisions, then restore them in the parsed text nodes.
+  let carriage = "DOCSCARRIAGERETURN";
+  while (dom.body.textContent?.includes(carriage)) carriage += "X";
+  const walker = dom.createTreeWalker(dom.body, window.NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    node.textContent = (node.textContent as string).replace(/\r/g, carriage);
+  }
   const parsed = parser
     .parse(dom.body, {
       preserveWhitespace: "full",
     })
     .toJSON() as JSONContent;
+  const restore = (node: JSONContent) => {
+    if (node.text) node.text = node.text.replaceAll(carriage, "\r");
+    for (const child of node.content ?? []) restore(child);
+  };
+  restore(parsed);
   const content = parsed.content as JSONContent[];
   return token.block
     ? content
@@ -290,7 +504,7 @@ const inlineHtml = Extension.create({
     start: (source: string) => source.indexOf("<"),
     tokenize(source) {
       if (typeof window === "undefined") return;
-      const opening = /^<(a|b|strong|em|i|s|strike|del|code|mark|span)\b/i.exec(source);
+      const opening = /^<(a|b|strong|em|i|s|strike|del|code|mark|u|sub|sup|span)\b/i.exec(source);
       if (!opening) return;
       const tags = /<\/?([a-z][\w-]*)\b(?:[^<>"']|"[^"]*"|'[^']*')*>/gi;
       let depth = 0;
@@ -320,7 +534,7 @@ const markdown = new MarkdownManager({
 });
 const schema = getSchema(extensions);
 export const MARKDOWN_NOTES =
-  "Underline and alignment are omitted. Nested tables are flattened. Highlights use ==text==. Images link to their absolute URL.";
+  "Formatting uses GFM where lossless and HTML for richer content. Images link to their absolute URL.";
 
 /** Markdown images are inline tokens; the editor's images are block nodes. */
 function splitImages(node: JSONContent): JSONContent[] {
@@ -342,16 +556,12 @@ function splitImages(node: JSONContent): JSONContent[] {
   return blocks.length ? blocks : [node];
 }
 
-function clean(node: JSONContent, dropHighlights: boolean, tableDepth = 0): JSONContent {
+function clean(node: JSONContent, dropHighlights: boolean): JSONContent {
   const result = { ...node };
-  if (result.attrs) {
-    result.attrs = { ...result.attrs };
-    delete result.attrs.textAlign;
-  }
   if (result.marks)
     result.marks = result.marks.filter(
       (mark) =>
-        !["underline", "comment"].includes(mark.type) &&
+        mark.type !== "comment" &&
         !(dropHighlights && mark.type === "highlight") &&
         (mark.type !== "link" || safeDestination(String(mark.attrs?.href))),
     );
@@ -361,13 +571,8 @@ function clean(node: JSONContent, dropHighlights: boolean, tableDepth = 0): JSON
   ) {
     return { type: "paragraph" };
   }
-  if (result.type === "table" && tableDepth > 0) {
-    return { type: "paragraph", content: [{ type: "text", text: textContent(result) }] };
-  }
   if (result.content)
-    result.content = result.content.flatMap((child) =>
-      splitImages(clean(child, dropHighlights, tableDepth + (result.type === "table" ? 1 : 0))),
-    );
+    result.content = result.content.flatMap((child) => splitImages(clean(child, dropHighlights)));
   if (
     ["listItem", "taskItem"].includes(String(result.type)) &&
     result.content?.[0]?.type === "image"
@@ -390,25 +595,25 @@ export function exportMarkdown(json: JSONContent, dropHighlights = false): strin
   const escapes: string[] = [];
   const literal = (text: string) => `${prefix}${escapes.push(text) - 1}END`;
   const protect = (node: JSONContent, inCode = false, inTable = false): JSONContent => {
+    // A GFM table has already been checked as a whole. In particular, its empty
+    // cell paragraphs must stay cells rather than becoming HTML placeholders.
+    if (!inTable && needsHtml(node))
+      return { type: "paragraph", content: [{ type: "text", text: literal(htmlNode(node)) }] };
     const code = inCode || node.type === "codeBlock";
     const table = inTable || node.type === "table";
-    const attribute = (text: string) =>
-      literal(table ? text.replace(/\|/g, (char) => `&#${char.charCodeAt(0)};`) : text);
     const result = { ...node };
     if (node.type === "image") {
       result.attrs = {
         ...node.attrs,
         alt: literal(escapeText(String(node.attrs?.alt ?? ""), true, table)),
-        src: attribute(destination(String(node.attrs?.src))),
-        title: attribute(titleSuffix(String(node.attrs?.title ?? ""))),
+        src: literal(destination(String(node.attrs?.src))),
+        title: literal(titleSuffix(String(node.attrs?.title ?? ""))),
       };
     }
     if (node.type === "codeBlock" && node.attrs?.language) {
       result.attrs = {
         ...node.attrs,
-        language: literal(
-          String(node.attrs.language).replace(/[`\r\n]/g, (char) => `&#${char.charCodeAt(0)};`),
-        ),
+        language: literal(String(node.attrs.language)),
       };
     }
     if (node.content) {
@@ -418,11 +623,15 @@ export function exportMarkdown(json: JSONContent, dropHighlights = false): strin
         if (run.length) content.push({ type: "text", text: literal(serializeInline(run, table)) });
         run = [];
       };
-      for (const child of node.content) {
+      for (const [index, child] of node.content.entries()) {
         if (!code && child.type === "text") run.push(child);
         else {
           flush();
-          content.push(protect(child, code, table));
+          content.push(
+            touchingBlocks(child, node.content[index + 1])
+              ? { type: "paragraph", content: [{ type: "text", text: literal(htmlNode(child)) }] }
+              : protect(child, code, table),
+          );
         }
       }
       flush();
@@ -430,8 +639,10 @@ export function exportMarkdown(json: JSONContent, dropHighlights = false): strin
     }
     return result;
   };
+  const cleaned = clean(json, dropHighlights);
+  checkRules(cleaned);
   return markdown
-    .serialize(protect(clean(json, dropHighlights)))
+    .serialize(protect(cleaned))
     .replace(
       new RegExp(`${prefix}(\\d+)END`, "g"),
       (_, index: string) => escapes[Number(index)] as string,

@@ -1,6 +1,7 @@
+// @vitest-environment jsdom
 // AUTHORED-BY Codex
 import type { JSONContent } from "@tiptap/react";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { exportMarkdown, importMarkdown } from "../src/apps/docs/lib/convert/markdown";
 
 function linkedImage(label: string, title: string | null, url: string): JSONContent {
@@ -92,7 +93,7 @@ it.each([
 ])("exports literal HTML blocks as inert paragraph text: %j", (text) => {
   const original: JSONContent = {
     type: "doc",
-    content: [{ type: "paragraph", content: [{ type: "text", text }] }],
+    content: [{ type: "paragraph", attrs: { textAlign: null }, content: [{ type: "text", text }] }],
   };
   const exported = exportMarkdown(original);
   expect(exported).not.toMatch(/(^|[^\\])</);
@@ -110,14 +111,20 @@ it("keeps a code-block info string from injecting a fence or an HTML block", () 
       },
     ],
   });
-  expect(exported.split("\n")).toHaveLength(3);
+  expect(exported.split("\n")).toHaveLength(1);
+  expect(exported).toContain("<pre");
   expect(importMarkdown(exported, "code.md").json.content?.map((node) => node.type)).toEqual([
     "codeBlock",
   ]);
 });
 
 it("keeps server-side HTML imports inert when no DOM parser is available", () => {
+  vi.stubGlobal("window", undefined);
   expect(
     importMarkdown("<p> literal </p>", "server.md").json.content?.[0]?.content?.[0]?.text,
   ).toBe("<p> literal </p>");
+  expect(importMarkdown("<sub>x</sub>", "server.md").json.content?.[0]?.content?.[0]?.text).toBe(
+    "<sub>x</sub>",
+  );
+  vi.unstubAllGlobals();
 });

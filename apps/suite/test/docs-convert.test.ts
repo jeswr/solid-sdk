@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // AUTHORED-BY Codex
 import { readFile } from "node:fs/promises";
 import type { JSONContent } from "@tiptap/react";
@@ -182,7 +183,7 @@ describe("DOCX mapping rows", () => {
     expect((await xml({ type: "doc" })).body).toContain("w:sectPr");
   });
   it("embeds images with aspect ratio/alt text and emits an unavailable fallback", async () => {
-    const fixture = await readFile(new URL("../e2e/fixtures/docs-import.docx", import.meta.url));
+    const fixture = await readFile("e2e/fixtures/docs-import.docx");
     const zip = await openArrayBuffer(Uint8Array.from(fixture).buffer);
     expect(zip.exists("word/document.xml")).toBe(true);
     const image = vi.fn(async () => ({
@@ -242,8 +243,8 @@ describe("DOCX mapping rows", () => {
 });
 
 describe("imports and Markdown", () => {
-  it("exports an explicitly empty paragraph as empty Markdown", () => {
-    expect(exportMarkdown(doc({ type: "paragraph", content: [] }))).toBe("");
+  it("preserves an explicitly empty paragraph with HTML", () => {
+    expect(exportMarkdown(doc({ type: "paragraph", content: [] }))).toBe("<p></p>");
   });
   it("applies every style map and uploads multiple extracted images strictly in sequence", async () => {
     const names = [
@@ -350,9 +351,7 @@ describe("imports and Markdown", () => {
     });
     expect(result.html).toBe("<p>Text only</p>");
     expect(progress).toHaveBeenCalledWith({ completed: 0, total: 0 });
-    const file = Uint8Array.from(
-      await readFile(new URL("../e2e/fixtures/docs-import.docx", import.meta.url)),
-    ).buffer;
+    const file = Uint8Array.from(await readFile("e2e/fixtures/docs-import.docx")).buffer;
     await expect(
       importDocx(file, { uploadImage: async () => "javascript:alert(1)", progress }),
     ).rejects.toThrow("Invalid uploaded image URL");
@@ -366,7 +365,7 @@ describe("imports and Markdown", () => {
     ).rejects.toThrow("upload failed");
   });
   it("imports the real image/footnote fixture with sequential progress", async () => {
-    const bytes = await readFile(new URL("../e2e/fixtures/docs-import.docx", import.meta.url));
+    const bytes = await readFile("e2e/fixtures/docs-import.docx");
     const progress = vi.fn();
     const uploadImage = vi.fn(async () => "https://pod.test/docs/plan/assets/image.png");
     const result = await importDocx(Uint8Array.from(bytes).buffer, { uploadImage, progress });
@@ -406,7 +405,7 @@ describe("imports and Markdown", () => {
       ),
     ).toBe("<p>Hi<a>x</a><img /></p>");
   });
-  it("round trips headings, GFM tables, tasks, marks, images and documented losses", () => {
+  it("round trips aligned headings, tasks, HTML marks and GFM images", () => {
     const json = doc(
       { type: "heading", attrs: { level: 1, textAlign: "center" }, content: [text("Plan")] },
       {
@@ -425,25 +424,25 @@ describe("imports and Markdown", () => {
       { type: "image", attrs: { src: "https://pod.test/photo.png", alt: "Photo" } },
     );
     const md = exportMarkdown(json);
-    expect(md).toContain("# Plan");
+    expect(md).toContain('<h1 style="text-align: center"');
     expect(md).toContain("- [x] Done");
-    expect(md).toContain("==marked==");
+    expect(md).toContain("<mark><u>marked</u></mark>");
     expect(md).toContain("![Photo](https://pod.test/photo.png)");
-    expect(exportMarkdown(json, true)).not.toContain("==");
+    expect(exportMarkdown(json, true)).not.toContain("<mark>");
     const parsed = importMarkdown(`---\ntitle: "Imported plan"\n---\n${md}`, "other.md");
     expect(parsed.title).toBe("Imported plan");
     expect(exportMarkdown(parsed.json)).toBe(md);
     expect(importMarkdown("---\r\nother: x\r\n---\r\n# Body", "File.MARKDOWN").title).toBe("File");
     expect(importMarkdown("\uFEFF# Body", "x.md").title).toBe("x");
-    expect(MARKDOWN_NOTES).toContain("Underline and alignment");
+    expect(MARKDOWN_NOTES).toContain("HTML for richer content");
   });
-  it("drops unsafe links/images and flattens nested tables", () => {
-    expect(exportMarkdown(doc({ type: "image", attrs: { src: "data:bad" } }))).toBe("");
+  it("drops unsafe links/images and preserves nested tables", () => {
+    expect(exportMarkdown(doc({ type: "image", attrs: { src: "data:bad" } }))).toBe("<p></p>");
     expect(
       exportMarkdown(
         doc({ type: "image", attrs: { src: "https://user:pass@pod.test/photo.png" } }),
       ),
-    ).toBe("");
+    ).toBe("<p></p>");
     const table: JSONContent = {
       type: "table",
       content: [
