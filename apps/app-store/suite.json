@@ -15,7 +15,8 @@
     "jsonld": "jsonld ^8.x",
     "test": "vitest ^4.x",
     "lint": "@biomejs/biome ^2.x",
-    "node": ">=20.12"
+    "node": ">=20.12",
+    "deploy": "GitHub Pages: https://jeswr.github.io/solid-sdk/app-store/; Vercel git deployments disabled"
   },
   "dependsOn": [
     "app-shell",

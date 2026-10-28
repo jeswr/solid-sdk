@@ -1,10 +1,11 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6
 //
 // catalog.test.ts — the pure catalog helpers (live filter, query match, category
 // grouping) AND a consistency check of the committed apps.json against the spec.
 // The catalog is the COMPLETE directory of the suite's user-facing apps: the 8 vite
-// pod-apps + Solid Issues + Pod Manager (suite-hosted on solid-test.jeswr.org, with
-// an autologin/prefill deep-link), PLUS the externally-hosted live apps (the OSS
+// pod-apps on Pages + Solid Issues + Pod Manager (with an autologin/prefill deep-link),
+// PLUS Access Manager on Pages and the externally-hosted live apps (the OSS
 // forks + standalone apps on Vercel / jeswr.org, which carry NO identity deep-link so
 // they launch as a plain "Open" link, launch: "none"), PLUS the not-yet-deployed apps
 // (finance products, the FDC3 demo, the deploy-deferred forks) rendered "Coming soon".
@@ -39,15 +40,23 @@ describe("apps.json — the committed catalog matches the build spec", () => {
     }
   });
 
-  it("suite-hosted live apps use an autologin/prefill deep-link on solid-test.jeswr.org; external live apps use launch 'none'", () => {
+  it("Pages apps keep their base paths; legacy deep-link targets keep their suite host", () => {
     for (const app of catalog.filter(isLive)) {
-      const host = new URL(app.deployedUrl as string).host;
-      if (app.launch === "none") {
+      const url = new URL(app.deployedUrl as string);
+      const pagesSlug =
+        app.id === "solid-access-manager"
+          ? "access-manager"
+          : app.id.startsWith("pod-")
+            ? app.id
+            : null;
+      if (pagesSlug) {
+        expect(url.href, app.id).toBe(`https://jeswr.github.io/solid-sdk/${pagesSlug}/`);
+      } else if (app.launch === "none") {
         // Externally-hosted (fork / standalone) — a plain Open link, off the suite domain.
-        expect(host.endsWith("solid-test.jeswr.org"), app.id).toBe(false);
+        expect(url.host.endsWith("solid-test.jeswr.org"), app.id).toBe(false);
       } else {
         // Suite-hosted deep-link target.
-        expect(host.endsWith("solid-test.jeswr.org"), app.id).toBe(true);
+        expect(url.host.endsWith("solid-test.jeswr.org"), app.id).toBe(true);
       }
     }
   });
