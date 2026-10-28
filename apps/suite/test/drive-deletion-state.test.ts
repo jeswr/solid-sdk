@@ -52,9 +52,7 @@ it("pending source and recovery requirements survive module reload and transport
   expect(await freshLedger(transport).get(source)).toBeUndefined();
 });
 
-it.each([
-  202, 205, 302, 408,
-])("a non-terminal DELETE %s is pending until confirmed", async (status) => {
+it.each([202, 302, 408])("a non-terminal DELETE %s is pending until confirmed", async (status) => {
   const url = "https://delete.test/file";
   const http = vi.fn<typeof fetch>(
     async (_input, init) =>

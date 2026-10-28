@@ -60,6 +60,9 @@ export function deletionControl(http: typeof fetch, error: (status: number, url:
     if (
       response.status === 200 ||
       response.status === 204 ||
+      // The demo pod's Reset Content response also confirms completion. A
+      // later HEAD must not keep this operation's own deletion intent alive.
+      response.status === 205 ||
       response.status === 404 ||
       response.status === 410 ||
       (response.ok && (await absent(url)))
