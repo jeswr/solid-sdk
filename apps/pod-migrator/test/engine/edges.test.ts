@@ -24,6 +24,7 @@ function transformed(
   return {
     root: pod.root,
     ownerWebId: pod.owner,
+    implementation: pod.implementation,
     http: createPodHttp({
       root: pod.root,
       fetch: async (url, init) =>

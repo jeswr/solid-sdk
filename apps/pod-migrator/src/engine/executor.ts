@@ -3,7 +3,7 @@ import { extractMediaType, parseRdf, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fe
 import { Group } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { readAccess, writeAccess } from "./access.js";
-import { executions } from "./planner.js";
+import { executions, proveExecutionPhases } from "./planner.js";
 import {
   assertNotWider,
   effectivePolicy,
@@ -69,7 +69,8 @@ export async function executeMigration(
     if (
       opts[name].http !== state[name].http ||
       opts[name].root !== state[name].root ||
-      opts[name].ownerWebId !== state[name].ownerWebId
+      opts[name].ownerWebId !== state[name].ownerWebId ||
+      opts[name].implementation !== state[name].implementation
     )
       throw new TypeError("Execution sessions differ from planning sessions");
   executions.delete(executable); // A plan is single-use, including cancelled/failed attempts.
@@ -260,6 +261,7 @@ export async function executeMigration(
         throw new TypeError("Root access document changed after review");
       if (doc?.etag) aclEtags.set(current, doc.etag);
     }
+    proveExecutionPhases(state, resources, targetDocs);
     const containers = active
       .filter((e) => e.state.resource.kind === "container")
       .sort((a, b) => a.state.resource.targetUrl.length - b.state.resource.targetUrl.length);

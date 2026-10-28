@@ -101,6 +101,7 @@ export async function createAccount(
     side: {
       root: podRoot,
       ownerWebId: webId,
+      implementation: "css",
       http: createPodHttp({ root: podRoot, fetch: authenticated, allowInsecureLoopback: true }),
     },
   };

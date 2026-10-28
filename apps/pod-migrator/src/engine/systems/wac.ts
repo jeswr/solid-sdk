@@ -5,14 +5,21 @@ import { DataFactory, Store } from "n3";
 import { ACL, FOAF, modeIri, RDF, RdfNode, readModes, serialize } from "../rdf.js";
 import type { EffectivePolicy, Grant, Subject } from "../types.js";
 
-export function readWac(dataset: DatasetCore, resource: string, url: string): EffectivePolicy {
+export function readWac(
+  dataset: DatasetCore,
+  resource: string,
+  url: string,
+  implementation?: "css" | "ess" | "nss",
+  target = false,
+): EffectivePolicy {
   const grants: Grant[] = [];
   for (const auth of new AclResource(dataset, DataFactory).authorizations) {
     const node = new RdfNode(auth as unknown as import("@rdfjs/types").Term, dataset, DataFactory);
     const own = node.iris(`${ACL}accessTo`).includes(resource);
-    const members = [...node.iris(`${ACL}default`), ...node.iris(`${ACL}defaultForNew`)].includes(
-      resource,
-    );
+    const legacy = node.iris(`${ACL}defaultForNew`).includes(resource);
+    if (legacy && implementation !== "nss")
+      throw new TypeError("acl:defaultForNew grants require an established NSS source dialect");
+    const members = node.iris(`${ACL}default`).includes(resource) || legacy;
     if (!own && !members) continue;
     const subjects: Subject[] = node.iris(`${ACL}agent`).map((webId) => ({ kind: "agent", webId }));
     for (const value of node.iris(`${ACL}agentClass`)) {
@@ -21,7 +28,9 @@ export function readWac(dataset: DatasetCore, resource: string, url: string): Ef
       else throw new TypeError("Unsupported WAC agent class");
     }
     for (const group of node.iris(`${ACL}agentGroup`)) subjects.push({ kind: "group", group });
-    const origins = node.iris(`${ACL}origin`);
+    // Source: a possibly enforced condition narrows the grant. Target: CSS ignores it,
+    // so it must never mask actual access during planning or verification.
+    const origins = target ? [] : node.iris(`${ACL}origin`);
     const who = subjects.flatMap((subject) =>
       origins.length
         ? origins.map((origin) => [subject, { kind: "origin", origin } as Subject])
@@ -74,8 +83,7 @@ export async function writeWac(
             auth.add(`${ACL}agentGroup`, subject.group);
             break;
           case "origin":
-            auth.add(`${ACL}origin`, subject.origin);
-            break;
+            throw new TypeError("WAC targets do not establish enforcement of origin restrictions");
           default:
             throw new TypeError("Unsupported WAC subject");
         }

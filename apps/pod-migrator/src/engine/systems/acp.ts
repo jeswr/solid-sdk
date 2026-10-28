@@ -8,13 +8,6 @@ export class PolicyTooComplex extends Error {
   override name = "PolicyTooComplex";
 }
 export type AcpDialect = "css" | "ess";
-export function acpDialect(dataset: DatasetCore): AcpDialect {
-  return [...dataset].some((q) =>
-    [`${ACP}Read`, `${ACP}Write`, `${ACP}Append`].includes(q.object.value),
-  )
-    ? "ess"
-    : "css";
-}
 function product(left: Subject[][], right: Subject[][]): Subject[][] {
   if (left.length * right.length > 64) throw new PolicyTooComplex("ACP policy exceeds 64 clauses");
   return left.flatMap((a) => right.map((b) => [...a, ...b]));
@@ -47,7 +40,21 @@ function matcherClauses(matcher: Matcher): Subject[][] {
     }
   return present ? result : [];
 }
-export function readAcp(dataset: DatasetCore, resource: string, url: string): EffectivePolicy {
+/**
+ * CSS 7.2 AcpReader + AuthAuxiliaryReader use acl:* modes and resource Control.
+ * The explicit ESS dialect accepts the separately documented PodSpaces forms:
+ * acp:* modes, a typed root without acp:resource, and ACR-self/acp:access Read+Write
+ * as Control. Editable RDF is not evidence that a server implements these forms.
+ * Unknown/CSS source grants using them fail closed; denials use their broadest
+ * plausible scope. Target reads reject ambiguous denials instead of trusting them.
+ */
+export function readAcp(
+  dataset: DatasetCore,
+  resource: string,
+  url: string,
+  dialect?: AcpDialect,
+  target = false,
+): EffectivePolicy {
   const result: EffectivePolicy = { grants: [], denials: [] };
   // CSS enumerates EVERY acp:resource statement, not only the requested IRI.
   // Track the entire reachable graph so detached/unknown controls fail closed.
@@ -82,6 +89,7 @@ export function readAcp(dataset: DatasetCore, resource: string, url: string): Ef
       appliesTo: Grant["appliesTo"],
       control = false,
       foreign = false,
+      fallback = false,
     ): void {
       visit(policy, ["allow", "deny", "allOf", "anyOf", "noneOf"]);
       const all = [...policy.allOf];
@@ -106,7 +114,30 @@ export function readAcp(dataset: DatasetCore, resource: string, url: string): Ef
         ["grants", policy.allow],
         ["denials", policy.deny],
       ] as const) {
-        const modes = convert(values);
+        const rawModes = [...values];
+        const modes = convert(rawModes);
+        const uncertain =
+          dialect !== "ess" &&
+          (control || fallback || rawModes.some((value) => value.startsWith(ACP)));
+        if (modes.size && uncertain && (target || field === "grants"))
+          throw new TypeError(
+            "Unsupported ACP grant or target restriction requires an established ESS dialect",
+          );
+        // CSS supplies neither owner, creator nor vc in AcpReader.createContext.
+        // Such an exclusion can narrow a grant, but cannot weaken a source denial
+        // or be trusted to restrict existing target permissions.
+        const uncertainRole = (subject: Subject) =>
+          subject.kind === "owner" || subject.kind === "creator" || subject.kind === "vc";
+        if (target && dialect !== "ess" && [...who.flat(), ...excluded.flat()].some(uncertainRole))
+          throw new TypeError("Target ACP owner/creator/vc matcher enforcement is not established");
+        const canonical = rawModes.map((mode) => mode.replace(ACP, ACL));
+        if (
+          target &&
+          !control &&
+          field === "denials" &&
+          canonical.includes(`${ACL}Append`) !== canonical.includes(`${ACL}Write`)
+        )
+          throw new TypeError("Target ACP Write/Append denial implication is ambiguous");
         if (control) {
           const hasControl =
             field === "grants"
@@ -121,7 +152,10 @@ export function readAcp(dataset: DatasetCore, resource: string, url: string): Ef
           result[field].push({
             modes,
             who,
-            except: excluded.flat(),
+            except:
+              field === "denials" && !target
+                ? excluded.flat().filter((subject) => !uncertainRole(subject))
+                : excluded.flat(),
             appliesTo,
             source: { url, node: policy.value },
           });
@@ -135,11 +169,13 @@ export function readAcp(dataset: DatasetCore, resource: string, url: string): Ef
           own ? "resource" : auxiliary ? "resource" : "both",
           !own && auxiliary,
           !own && !auxiliary,
+          !resources.length,
         );
     }
     for (const ac of acr.memberAccessControl) {
       visit(ac, ["apply"]);
-      for (const policy of ac.apply) addPolicy(policy, own ? "members" : "both", false, !own);
+      for (const policy of ac.apply)
+        addPolicy(policy, own ? "members" : "both", false, !own, !resources.length);
     }
     for (const policy of node.nodes(`${ACP}access`))
       addPolicy(
@@ -147,6 +183,7 @@ export function readAcp(dataset: DatasetCore, resource: string, url: string): Ef
         "resource",
         true,
         !own && !auxiliary,
+        !resources.length,
       );
   }
   for (const quad of dataset)
@@ -170,9 +207,6 @@ export async function writeAcp(
   const acr = new RdfNode(url, dataset, DataFactory);
   acr.add(`${RDF}type`, `${ACP}AccessControlResource`);
   acr.add(`${ACP}resource`, resource);
-  // CSS evaluates ACL-mode policies for the ACR URL itself; ESS uses acp:access.
-  const ownerControl = new RdfNode(`${nodePrefix}#acr-owner`, dataset, DataFactory);
-  ownerControl.add(`${ACP}resource`, url);
   let index = 0;
   function matcher(subject: Subject): string {
     const node = new RdfNode(`${nodePrefix}#matcher-${index++}`, dataset, DataFactory);
@@ -213,6 +247,10 @@ export async function writeAcp(
   ] as const)
     for (const rule of rules)
       for (const clause of rule.who) {
+        if (field === "deny" && rule.modes.has("append") !== rule.modes.has("write"))
+          throw new TypeError(
+            "ACP denials must deny both Write and Append to prevent derived Append access",
+          );
         const p = new RdfNode(`${nodePrefix}#policy-${index++}`, dataset, DataFactory);
         const ac = new RdfNode(`${nodePrefix}#control-${index++}`, dataset, DataFactory);
         p.add(`${RDF}type`, `${ACP}Policy`);
@@ -225,7 +263,7 @@ export async function writeAcp(
         }
         if (rule.appliesTo !== "members") acr.add(`${ACP}accessControl`, ac.value);
         if (rule.appliesTo !== "resource") acr.add(`${ACP}memberAccessControl`, ac.value);
-        if (rule.modes.has("control")) {
+        if (dialect === "ess" && rule.modes.has("control")) {
           // ACR edit permissions use the same conditions as the resource's Control grant.
           const controlPolicy = new RdfNode(
             `${nodePrefix}#acr-policy-${index++}`,
@@ -234,12 +272,9 @@ export async function writeAcp(
           );
           for (const subject of clause) controlPolicy.add(`${ACP}allOf`, matcher(subject));
           for (const subject of rule.except) controlPolicy.add(`${ACP}noneOf`, matcher(subject));
-          controlPolicy.add(ACP + field, `${dialect === "ess" ? ACP : ACL}Read`);
-          controlPolicy.add(ACP + field, `${dialect === "ess" ? ACP : ACL}Write`);
+          controlPolicy.add(ACP + field, `${ACP}Read`);
+          controlPolicy.add(ACP + field, `${ACP}Write`);
           acr.add(`${ACP}access`, controlPolicy.value);
-          const access = new RdfNode(`${nodePrefix}#acr-control-${index++}`, dataset, DataFactory);
-          access.add(`${ACP}apply`, controlPolicy.value);
-          ownerControl.add(`${ACP}accessControl`, access.value);
         }
       }
   return serialize(dataset);

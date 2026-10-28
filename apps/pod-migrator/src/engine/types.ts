@@ -15,6 +15,8 @@ export interface PodSide {
   root: string;
   ownerWebId: string;
   http: PodHttp;
+  /** Established by the caller independently of editable access RDF; never inferred from mode IRIs. */
+  implementation?: "css" | "ess" | "nss";
 }
 export type ReportKind =
   | "group-unsupported"

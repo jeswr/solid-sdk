@@ -6,7 +6,7 @@ import {
   Container,
   Group,
   type Matcher,
-  type Policy,
+  Policy,
 } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { createPodHttp } from "../../src/engine/pod-http.js";
@@ -42,14 +42,21 @@ export class FakePod {
   readonly root: string;
   readonly owner: string;
   readonly system: "wac" | "acp";
+  readonly implementation: "css" | "ess" | "nss";
   afterWrite?: (url: string) => void | Promise<void>;
   /** CSS PutOperationHandler returns 201/205 without representation ETags. */
   writeEtags = true;
   next = 0;
-  constructor(root: string, system: "wac" | "acp", owner = `${root}profile/card#me`) {
+  constructor(
+    root: string,
+    system: "wac" | "acp",
+    owner = `${root}profile/card#me`,
+    implementation: "css" | "ess" | "nss" = "css",
+  ) {
     this.root = root;
     this.system = system;
     this.owner = owner;
+    this.implementation = implementation;
   }
   acl(url: string): string {
     return this.aclOverrides.get(url) ?? url + (this.system === "wac" ? ".acl" : ".acr");
@@ -78,6 +85,7 @@ export class FakePod {
       root: this.root,
       ownerWebId: this.owner,
       http: createPodHttp({ root: this.root, fetch: this.fetch }),
+      implementation: this.implementation,
     };
   }
   async dataset(url: string): Promise<Store | undefined> {
@@ -108,8 +116,10 @@ export class FakePod {
             dataset,
             DataFactory,
           );
-          if (!node.iris(ACL + (url === ancestor ? "accessTo" : "default")).includes(ancestor))
-            continue;
+          const scopes = node.iris(ACL + (url === ancestor ? "accessTo" : "default"));
+          if (url !== ancestor && this.implementation === "nss")
+            scopes.push(...node.iris(`${ACL}defaultForNew`));
+          if (!scopes.includes(ancestor)) continue;
           const groupMatches = await Promise.all(
             node.iris(`${ACL}agentGroup`).map(async (group) => {
               if (identity.groups?.includes(group)) return true;
@@ -130,7 +140,12 @@ export class FakePod {
               node.iris(`${ACL}agentClass`).includes(`${ACL}AuthenticatedAgent`)) ||
             groupMatches.some(Boolean);
           const origins = node.iris(`${ACL}origin`);
-          if (matches && (!origins.length || origins.includes(identity.origin ?? "")))
+          if (
+            matches &&
+            (this.implementation === "css" ||
+              !origins.length ||
+              origins.includes(identity.origin ?? ""))
+          )
             for (const mode of node.iris(`${ACL}mode`)) allowed.add(mode);
         }
         break; // nearest-ACL replacement, including an empty ACL
@@ -148,17 +163,19 @@ export class FakePod {
                 agent === `${ACP}PublicAgent` ||
                 agent === identity.agent ||
                 (!!identity.agent && agent === `${ACP}AuthenticatedAgent`) ||
-                ((agent === `${ACP}OwnerAgent` || agent === `${ACP}CreatorAgent`) &&
+                (this.implementation === "ess" &&
+                  (agent === `${ACP}OwnerAgent` || agent === `${ACP}CreatorAgent`) &&
                   identity.agent === this.owner),
             )) &&
           (!clients.length ||
             clients.includes(`${ACP}PublicClient`) ||
             clients.includes(identity.client ?? "")) &&
           (!issuers.length || issuers.includes(identity.issuer ?? "")) &&
-          (!vcs.length || vcs.some((vc) => identity.vc?.includes(vc)))
+          (!vcs.length ||
+            (this.implementation === "ess" && vcs.some((vc) => identity.vc?.includes(vc))))
         );
       };
-      const apply = (policy: Policy) => {
+      const apply = (policy: Policy, control = false) => {
         const all = [...policy.allOf];
         const any = [...policy.anyOf];
         const none = [...policy.noneOf];
@@ -168,14 +185,60 @@ export class FakePod {
           (!any.length || any.some(matcherMatches)) &&
           !none.some(matcherMatches)
         ) {
-          for (const mode of policy.allow) allowed.add(mode.replace(ACP, ACL));
-          for (const mode of policy.deny) denied.add(mode.replace(ACP, ACL));
+          const convert = (values: Iterable<string>) =>
+            [...values].map((mode) =>
+              this.implementation === "ess" ? mode.replace(ACP, ACL) : mode,
+            );
+          const grants = convert(policy.allow);
+          const denials = convert(policy.deny);
+          if (control) {
+            if (grants.includes(`${ACL}Read`) && grants.includes(`${ACL}Write`))
+              allowed.add(`${ACL}Control`);
+            if (denials.includes(`${ACL}Read`) || denials.includes(`${ACL}Write`))
+              denied.add(`${ACL}Control`);
+          } else {
+            for (const mode of grants) allowed.add(mode);
+            for (const mode of denials) denied.add(mode);
+          }
         }
       };
       for (const q of dataset.match(null, DataFactory.namedNode(`${ACP}resource`), null)) {
         const acr = new AccessControlResource(q.subject, dataset, DataFactory);
         for (const control of url === q.object.value ? acr.accessControl : acr.memberAccessControl)
           for (const policy of control.apply) apply(policy);
+        if (this.implementation === "ess" && q.object.value === this.acl(url))
+          for (const control of acr.accessControl)
+            for (const policy of control.apply) apply(policy, true);
+      }
+      if (this.implementation === "ess") {
+        const roots = new Set(
+          [
+            ...dataset.match(
+              null,
+              DataFactory.namedNode(`${ACP}resource`),
+              DataFactory.namedNode(ancestor),
+            ),
+            ...dataset.match(
+              null,
+              DataFactory.namedNode(`${RDF}type`),
+              DataFactory.namedNode(`${ACP}AccessControlResource`),
+            ),
+          ].map((q) => q.subject),
+        );
+        for (const term of roots) {
+          const node = new RdfNode(term, dataset, DataFactory);
+          if (!node.iris(`${ACP}resource`).length) {
+            const acr = new AccessControlResource(term, dataset, DataFactory);
+            for (const control of url === ancestor ? acr.accessControl : acr.memberAccessControl)
+              for (const policy of control.apply) apply(policy);
+          }
+          if (url === ancestor)
+            for (const p of node.nodes(`${ACP}access`))
+              apply(
+                new Policy(p as unknown as import("@rdfjs/types").Term, dataset, DataFactory),
+                true,
+              );
+        }
       }
     }
     for (const mode of denied) allowed.delete(mode);

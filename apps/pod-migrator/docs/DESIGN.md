@@ -142,10 +142,15 @@ otherwise. Filtering the document down to the current resource's node is unsafe.
 reader retains foreign-node denials conservatively for both resource and member scope, even
 where placement is uncertain. Foreign grants that cannot be placed faithfully, detached
 constructs, unknown ACP predicates, and ambiguous resource bindings make the document unknown
-(owner-only/skip/abort). ACR-self policies remain mapped to Control. `acp:PublicClient` matches
+(owner-only/skip/abort). ACR-self policies map to Control only for an independently established
+ESS source. CSS derives ACR access from Control on the protected resource through
+`AuthAuxiliaryReader`; ineffective ACR-self or `acp:access` grants must never become destination
+Control. `acp:PublicClient` matches
 any client context. Target documents must have exclusive resource/ACR-self scopes on read and
 verification: conservative denials cannot mask a broader server-effective grant. Typed ESS
-ACR roots without `acp:resource` are supported only without competing resource bindings.
+ACR roots without `acp:resource` are supported only for an established ESS source and without
+competing resource bindings. ESS mode IRIs must likewise never identify the server dialect:
+CSS ignores `acp:Read`/`Write`/`Append` modes. Uncertain denials remain restrictive.
 
 ## 4. Detecting the system
 
@@ -157,6 +162,43 @@ still copy data with everything owner-only).
 
 ## 5. Translation rules
 
+**Read SOURCE conservatively, write only established TARGET semantics, and prove the documents
+that will actually exist.** Whenever server implementations disagree (ESS/CSS/NSS dialects,
+legacy predicates, ACR-self policies, `acp:access`, `acp:Read`-style modes, typed ACRs without
+`acp:resource`), an uncertain grant counts as not granted and produces a report item offering
+skip/abort. An uncertain denial or exclusion counts as applying. A document whose grants cannot
+be interpreted safely is reported as `acl-unreadable`, with owner-only/skip/abort; its descendants
+also fail closed. `acl:defaultForNew` requires an independently established NSS source. Without
+that evidence it cannot be promoted to an inherited grant, because CSS 7.2 reads only `acl:default`.
+
+`PodSide.implementation` is an optional, trusted caller assertion (`css`, `ess`, `nss`), established
+independently of editable access RDF. An unknown source uses conservative readings; ACP target
+writes require established CSS or ESS semantics and otherwise offer only abort. Never infer ESS
+from an `acp:*` mode IRI. Source ESS variants are isolated in `systems/acp.ts`; live PodSpaces
+validation still requires a real account. Existing target restrictions that cannot be proven
+effective are refused, so an ignored denial cannot mask a broader target grant.
+
+Never rely on a condition the target might not enforce. In particular CSS 7.2's configured WAC
+checker chain ignores `acl:origin`: origin-restricted grants are unsupported on **every WAC and
+ACP target**, with skip/abort. Preserving the condition's RDF text is not a safe translation.
+CSS ACP output uses resource `acl:Control`; it does not emit ineffective ACR-self or `acp:access`
+controls. Only established CSS 7.2 enforcement or the explicitly selected ESS behavior documented
+in `systems/acp.ts` may be written.
+
+The target proof replays empty creation, owner-only locking, content copying and bottom-up
+granting in executor order. It recomputes effective permissions from the access documents left
+after **each** mutation, for every affected resource. Replacing a document removes its old grants,
+denials and exclusions from all descendant proofs. Repeat this proof against freshly read target
+documents before the first write; semantically equal initial permissions can conceal changed
+ancestor policies behind a denial that will be replaced. Existing paths kept by skip/overwrite and
+root merges retain their actual documents. No proof may rely on an orphan ACR denial after locking
+has replaced that ACR. Every partial execution state must remain safe.
+
+CSS applies Write→Append implication after ACP denial subtraction. To keep this representable,
+translated denials of either mode deny both; existing target denials of just one mode are refused.
+CSS supplies no owner/creator/VC matcher context: uncertain exclusions cannot weaken a source
+denial and cannot be relied on as target restrictions.
+
 Translation works on effective policies, never on raw documents. The target owner (the WebID
 signed in on the target) always gets `read`, `write`, `control` on everything written, so the
 migration can never lock the user out; this is not a widening because the owner already
@@ -166,7 +208,7 @@ controls the target pod.
 |---|---|---|---|
 | agent, public, authenticated | same | same | — |
 | WAC `agentGroup` | same | no equivalent | `group-unsupported`: **skip** (drop the grant) / **expand** to the group's current members, read at plan time, shown as a list, with a warning that later membership changes won't follow / **abort** |
-| WAC `acl:origin` | same | no equivalent (`acp:client` is a client id, not an origin) | `origin-unsupported`: **skip** / **abort**. Dropping the origin condition would widen, so it is never offered |
+| WAC `acl:origin` | enforcement unestablished (CSS ignores it) | no equivalent (`acp:client` is a client id, not an origin) | `origin-unsupported`: **skip** / **abort**. Drop the affected grant clause; never retain or remove only the condition |
 | ACP `client`, `issuer`, `vc` in a clause | no equivalent | same | `condition-unsupported`: **skip the clause** / **abort**. Never drop just the condition |
 | ACP `noneOf` exclusions | no equivalent | same | `exclusion-unsupported`: **skip the grant** / **abort** |
 | ACP `deny` | subtract it when the denial's subjects exactly cover a grant's clause; otherwise | same | `deny-unsupported`: **drop every grant the denial overlaps** (narrowest) / **abort** |

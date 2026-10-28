@@ -39,7 +39,7 @@ export async function acl(
   const model = unionPolicies(ownerPolicy(pod.owner, members), extra);
   return pod.system === "wac"
     ? writeWac(model, resource, pod.acl(resource))
-    : writeAcp(model, resource, pod.acl(resource));
+    : writeAcp(model, resource, pod.acl(resource), pod.implementation === "ess" ? "ess" : "css");
 }
 export async function pods(
   from: "wac" | "acp" = "wac",

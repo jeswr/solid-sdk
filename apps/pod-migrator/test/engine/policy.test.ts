@@ -59,7 +59,10 @@ describe("every translation-table construct", () => {
     expect(
       translated(policy(grant([[agent, origin], [agent]])), "acp").policy.grants[0]?.who,
     ).toEqual([[agent]]);
-    expect(translated(policy(grant([[agent, origin]])), "wac").report).toEqual([]);
+    expect(translated(policy(grant([[agent, origin]])), "wac").report[0]?.kind).toBe(
+      "origin-unsupported",
+    );
+    expect(translated(policy(grant([[agent, origin]])), "wac").policy.grants).toEqual([]);
     for (const condition of [
       { kind: "client", clientId: "https://app.example/id" },
       { kind: "issuer", issuer: "https://issuer.example" },

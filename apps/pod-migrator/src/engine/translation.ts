@@ -116,16 +116,16 @@ export function translatePolicy(
         return subject;
       }),
     );
+    if (clauses.some((c) => c.some((s) => s.kind === "origin"))) {
+      choose(
+        "origin-unsupported",
+        "Origin enforcement is not established on any target; CSS 7.2 ignores acl:origin. Each origin-restricted clause is omitted.",
+        ["skip", "abort"],
+        `${ruleIndex}`,
+      );
+      clauses = clauses.filter((c) => !c.some((s) => s.kind === "origin"));
+    }
     if (target === "acp") {
-      if (clauses.some((c) => c.some((s) => s.kind === "origin"))) {
-        choose(
-          "origin-unsupported",
-          "ACP has no origin restriction. Each origin-restricted clause is omitted.",
-          ["skip", "abort"],
-          `${ruleIndex}`,
-        );
-        clauses = clauses.filter((c) => !c.some((s) => s.kind === "origin"));
-      }
       for (const group of new Set(
         clauses
           .flat()
@@ -257,6 +257,10 @@ export function translatePolicy(
       } else
         policy.denials.push({
           ...rule,
+          modes:
+            rule.modes.has("append") || rule.modes.has("write")
+              ? new Set([...rule.modes, "write", "append"])
+              : rule.modes,
           who: rule.who.map((clause) =>
             clause.map((subject) =>
               subject.kind === "owner" ? { kind: "agent", webId: context.sourceOwner } : subject,

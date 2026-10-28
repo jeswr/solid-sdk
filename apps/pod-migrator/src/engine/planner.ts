@@ -13,7 +13,7 @@ import {
   unionPolicies,
 } from "./policy.js";
 import { aclLink, links, parent, parse, requireOk } from "./rdf.js";
-import { type AcpDialect, acpDialect, PolicyTooComplex } from "./systems/acp.js";
+import { type AcpDialect, PolicyTooComplex } from "./systems/acp.js";
 import { assertSpecificAccess, targetAccessLinks } from "./target-access.js";
 import { reportItem, type TranslationContext, translatePolicy } from "./translation.js";
 import {
@@ -37,7 +37,6 @@ export interface ResourceState {
   exists: boolean;
   targetDocument?: AccessDocument;
   targetEffective: EffectivePolicy;
-  targetInherited: EffectivePolicy;
   targetEtag?: string;
   targetUnreadable: boolean;
 }
@@ -51,6 +50,7 @@ export interface PlanState {
   dialect: AcpDialect;
   rewriteIris: boolean;
   snapshot: string;
+  targetDocuments: Map<string, AccessDocument | undefined>;
 }
 export interface ExecutionState {
   state: PlanState;
@@ -170,14 +170,21 @@ export async function planMigration(opts: {
     );
   const resources = discovered.filter((item) => !isAuxiliary(item.resource.sourceUrl));
   const sourceSystem = await detectAccessSystem(source, opts.signal);
-  const targetSystem = await detectAccessSystem(target, opts.signal);
+  const detectedTargetSystem = await detectAccessSystem(target, opts.signal);
+  // ACP dialect changes Control enforcement; RDF vocabulary cannot identify the server.
+  const targetSystem =
+    detectedTargetSystem === "acp" &&
+    target.implementation !== "css" &&
+    target.implementation !== "ess"
+      ? "unknown"
+      : detectedTargetSystem;
   if (sourceSystem === "unknown" || targetSystem === "unknown")
     report.push(
       reportItem(
         "acl-system-unknown",
         source.root,
         targetSystem === "unknown"
-          ? "The target access system cannot be locked safely; execution must stop until it is identifiable."
+          ? "The target access system or ACP implementation cannot be established independently of access RDF; execution must stop until it is identifiable."
           : "The source access system is unknown. All copied resources will remain owner-only.",
         targetSystem === "unknown" ? ["abort"] : ["owner-only", "abort"],
       ),
@@ -306,9 +313,6 @@ export async function planMigration(opts: {
       target.root,
       targetDocs,
     );
-    const ownless = new Map(targetDocs);
-    ownless.delete(resource.targetUrl);
-    const targetInherited = effectivePolicy(targetSystem, resource.targetUrl, target.root, ownless);
     const exists = (targetHeads.get(resource.targetUrl) as Response).ok;
     let targetUnreadable = hasError(resource.targetUrl, target.root, targetErrors);
     const targetAcl = targetInventory.get(resource.targetUrl);
@@ -404,21 +408,12 @@ export async function planMigration(opts: {
       exists,
       targetDocument: targetDocs.get(resource.targetUrl),
       targetEffective,
-      targetInherited,
       targetEtag:
         (targetHeads.get(resource.targetUrl) as Response).headers.get("etag") ?? undefined,
       targetUnreadable,
     });
   }
-  const rootDoc = targetDocs.get(target.root);
-  const dialect = rootDoc
-    ? acpDialect(
-        await parse(
-          new Response(rootDoc.turtle, { headers: { "content-type": "text/turtle" } }),
-          rootDoc.url,
-        ),
-      )
-    : "css";
+  const dialect = target.implementation === "ess" ? "ess" : "css";
   const plan: MigrationPlan = {
     sourceSystem,
     targetSystem,
@@ -443,6 +438,7 @@ export async function planMigration(opts: {
     dialect,
     rewriteIris: opts.rewriteIris ?? false,
     snapshot: JSON.stringify(plan),
+    targetDocuments: targetDocs,
   });
   opts.onProgress?.({ phase: "plan", done: resources.length, total: resources.length });
   return plan;
@@ -528,26 +524,6 @@ export function finalizePlan(plan: MigrationPlan, resolutions: Resolutions): Exe
             ownerPolicy(state.target.ownerWebId, resource.kind === "container"),
           );
     if (!skip) {
-      const context = {
-        sourceOwner: state.source.ownerWebId,
-        targetOwner: state.target.ownerWebId,
-        groups: state.groups,
-      };
-      const actual =
-        existingDecision === "overwrite"
-          ? resourceState.targetEffective
-          : protectedDecision === "merge"
-            ? unionPolicies(resourceState.targetEffective, scopePolicy(policy, "resource"))
-            : plan.targetSystem === "acp"
-              ? unionPolicies(policy, resourceState.targetInherited)
-              : policy;
-      assertNotWider(resourceState.sourceEffective, scopePolicy(actual, "resource"), context);
-      assertNotWider(scopePolicy(actual, "resource"), ownerPolicy(state.target.ownerWebId));
-      // A write under an existing ancestor must be safe even before its own ACL exists.
-      if (!resourceState.exists) {
-        assertNotWider(resourceState.sourceEffective, resourceState.targetEffective, context);
-        assertNotWider(resourceState.targetEffective, ownerPolicy(state.target.ownerWebId));
-      }
       if (protectedDecision === "merge" && !resourceState.targetDocument?.etag)
         throw new TypeError("Root merge requires an access-document ETag");
       if (existingDecision === "overwrite" && !resourceState.targetEtag)
@@ -560,36 +536,68 @@ export function finalizePlan(plan: MigrationPlan, resolutions: Resolutions): Exe
       decision: protectedDecision ?? existingDecision,
     };
   });
-  if (state.targetSystem === "acp")
-    for (const entry of selected.filter((entry) => !entry.skipped)) {
-      const inherited = selected
-        .filter(
-          (other) =>
-            !other.skipped &&
-            other !== entry &&
-            other.decision !== "merge" &&
-            other.state.resource.kind === "container" &&
-            entry.state.resource.targetUrl.startsWith(other.state.resource.targetUrl),
-        )
-        .map((other) => scopePolicy(other.policy, "members"));
-      assertNotWider(
-        entry.state.sourceEffective,
-        unionPolicies(
-          scopePolicy(entry.policy, "resource"),
-          entry.state.targetInherited,
-          ...inherited,
-        ),
-        {
-          sourceOwner: state.source.ownerWebId,
-          targetOwner: state.target.ownerWebId,
-          groups: state.groups,
-        },
-      );
-    }
+  proveExecutionPhases(state, selected, state.targetDocuments);
   const executable: ExecutablePlan = Object.freeze({
     plan: structuredClone(plan),
     resolutions: Object.freeze({ ...resolutions }),
   });
   executions.set(executable, { state, resources: structuredClone(selected) });
   return executable;
+}
+
+export function proveExecutionPhases(
+  state: PlanState,
+  selected: ExecutionState["resources"],
+  targetDocuments: ReadonlyMap<string, AccessDocument | undefined>,
+): void {
+  // Replay the executor's access-document mutations. Replacing a document removes
+  // ALL its old grants, denials and exclusions from every descendant's proof.
+  const active = selected.filter((entry) => !entry.skipped);
+  const documents = new Map<string, Pick<AccessDocument, "policy"> | undefined>(targetDocuments);
+  const present = new Set(active.filter((entry) => entry.state.exists));
+  const context = {
+    sourceOwner: state.source.ownerWebId,
+    targetOwner: state.target.ownerWebId,
+    groups: state.groups,
+  };
+  const prove = () => {
+    for (const entry of present) {
+      const actual = effectivePolicy(
+        state.targetSystem,
+        entry.state.resource.targetUrl,
+        state.target.root,
+        documents,
+      );
+      assertNotWider(entry.state.sourceEffective, actual, context);
+      assertNotWider(actual, ownerPolicy(state.target.ownerWebId));
+    }
+  };
+  prove();
+  const containers = active
+    .filter((entry) => entry.state.resource.kind === "container")
+    .sort((a, b) => a.state.resource.targetUrl.length - b.state.resource.targetUrl.length);
+  const files = active.filter((entry) => entry.state.resource.kind === "resource");
+  for (const entry of [...containers, ...files]) {
+    if (entry.state.exists) continue;
+    present.add(entry);
+    prove(); // Empty creation, including any pre-existing orphan access document.
+    documents.set(entry.state.resource.targetUrl, {
+      policy: ownerPolicy(state.target.ownerWebId, entry.state.resource.kind === "container"),
+    });
+    prove(); // Lock, before any descendant creation or content copy.
+  }
+  for (const entry of active
+    .filter((entry) => entry.decision !== "overwrite")
+    .sort((a, b) => b.state.resource.targetUrl.length - a.state.resource.targetUrl.length)) {
+    documents.set(entry.state.resource.targetUrl, {
+      policy:
+        entry.decision === "merge"
+          ? unionPolicies(
+              (entry.state.targetDocument as AccessDocument).policy,
+              scopePolicy(entry.policy, "resource"),
+            )
+          : entry.policy,
+    });
+    prove(); // Grant bottom up; validate all resources, not only the changed node.
+  }
 }

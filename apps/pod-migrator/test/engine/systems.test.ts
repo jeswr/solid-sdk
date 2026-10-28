@@ -15,7 +15,7 @@ import {
   safeIri,
   serialize,
 } from "../../src/engine/rdf.js";
-import { acpDialect, PolicyTooComplex, readAcp, writeAcp } from "../../src/engine/systems/acp.js";
+import { PolicyTooComplex, readAcp, writeAcp } from "../../src/engine/systems/acp.js";
 import { readWac, writeWac } from "../../src/engine/systems/wac.js";
 import type { Subject } from "../../src/engine/types.js";
 import { grant, pods, policy, stranger } from "./helpers.js";
@@ -52,8 +52,25 @@ describe("RDF and WAC", () => {
         appliesTo: "both",
       }),
     );
-    const turtle = await writeWac(source, resource, url);
+    await expect(writeWac(source, resource, url)).rejects.toThrow("origin restrictions");
+    const turtle = await writeWac(
+      policy(
+        grant(
+          subjects.map((clause) => clause.filter((s) => s.kind !== "origin")),
+          {
+            modes: new Set(["write", "append", "read", "control"]),
+            appliesTo: "both",
+          },
+        ),
+      ),
+      resource,
+      url,
+    );
     const dataset = await parsed(turtle);
+    new RdfNode(`${url}#authorization-0`, dataset, DataFactory).add(
+      `${ACL}origin`,
+      "https://app.example",
+    );
     const read = readWac(dataset, resource, url);
     expect(policiesEqual(source, read)).toBe(true);
     expect(read.grants[0]?.appliesTo).toBe("both");
@@ -74,7 +91,8 @@ describe("RDF and WAC", () => {
       [`${ACL}agentClass`]: ["urn:unknown-class"],
       [`${ACL}mode`]: [`${ACL}Read`],
     });
-    expect(() => readWac(dataset, resource, url)).toThrow("class");
+    expect(() => readWac(dataset, resource, url)).toThrow("NSS");
+    expect(() => readWac(dataset, resource, url, "nss")).toThrow("class");
     const malformed = await parsed(
       '@prefix acl: <http://www.w3.org/ns/auth/acl#>. <#a> a acl:Authorization; acl:accessTo <https://pod.example/folder/>; acl:mode "Read".',
     );
@@ -150,7 +168,17 @@ describe("ACP expressions and writers", () => {
         { kind: "vc", vcType: "urn:vc" },
       ];
       const source = unionPolicies(
-        ownerPolicy(stranger, true),
+        dialect === "css"
+          ? ownerPolicy(stranger, true)
+          : unionPolicies(
+              ownerPolicy(stranger),
+              policy(
+                grant([[{ kind: "agent", webId: stranger }]], {
+                  modes: new Set(["read", "write", "append"]),
+                  appliesTo: "members",
+                }),
+              ),
+            ),
         policy(
           grant(
             subjects.map((s) => [s]),
@@ -161,15 +189,15 @@ describe("ACP expressions and writers", () => {
       source.denials.push(
         grant([[{ kind: "client", clientId: "urn:client" }]], {
           modes: new Set(["control"]),
-          appliesTo: "both",
+          appliesTo: dialect === "css" ? "both" : "resource",
+          except: [{ kind: "agent", webId: "urn:excluded-control" }],
         }),
       );
       const turtle = await writeAcp(source, resource, url, dialect);
       const dataset = await parsed(turtle);
-      const actual = readAcp(dataset, resource, url);
+      const actual = readAcp(dataset, resource, url, dialect);
       expect(policiesEqual(source, actual)).toBe(true);
-      expect(acpDialect(dataset)).toBe(dialect);
-      expect(turtle).toContain("acr-policy");
+      expect(turtle.includes("acr-policy")).toBe(dialect === "ess");
     }
     await expect(
       writeAcp(policy(grant([[{ kind: "group", group: "urn:group" }]])), resource, url),
@@ -222,12 +250,13 @@ describe("ACP expressions and writers", () => {
       [`${ACP}allow`]: [`${ACL}Read`],
       [`${ACP}allOf`]: ["urn:matcher"],
     });
-    expect(readAcp(dataset, resource, url).grants[0]?.who).toEqual([]);
+    expect(() => readAcp(dataset, resource, url)).toThrow("ESS");
+    expect(readAcp(dataset, resource, url, "ess").grants[0]?.who).toEqual([]);
     const matcher = node("urn:matcher", { [`${ACP}agent`]: [`${ACP}PublicAgent`] });
-    expect(readAcp(dataset, resource, url).grants[0]?.who).toEqual([[{ kind: "public" }]]);
+    expect(readAcp(dataset, resource, url, "ess").grants[0]?.who).toEqual([[{ kind: "public" }]]);
     p.add(`${ACP}noneOf`, "urn:exclusion");
     node("urn:exclusion", { [`${ACP}agent`]: [stranger], [`${ACP}client`]: ["urn:client"] });
-    expect(() => readAcp(dataset, resource, url)).toThrow(PolicyTooComplex);
+    expect(() => readAcp(dataset, resource, url, "ess")).toThrow(PolicyTooComplex);
     for (const q of [
       ...dataset.match(DataFactory.namedNode("urn:policy"), DataFactory.namedNode(`${ACP}noneOf`)),
     ])

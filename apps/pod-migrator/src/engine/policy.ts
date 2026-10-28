@@ -28,7 +28,7 @@ export function effectivePolicy(
   system: AccessSystem,
   url: string,
   root: string,
-  documents: ReadonlyMap<string, AccessDocument | undefined>,
+  documents: ReadonlyMap<string, Pick<AccessDocument, "policy"> | undefined>,
 ): EffectivePolicy {
   const found: EffectivePolicy[] = [];
   let current: string | undefined = url;

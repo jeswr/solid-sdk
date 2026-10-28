@@ -70,7 +70,16 @@ export async function readAccess(
   const dataset = await parse(new Response(turtle, { headers: response.headers }), url);
   if (system === "unknown") throw new TypeError("Cannot read unknown access system");
   const document: AccessDocument = {
-    policy: system === "wac" ? readWac(dataset, resource, url) : readAcp(dataset, resource, url),
+    policy:
+      system === "wac"
+        ? readWac(dataset, resource, url, side.implementation, requireSpecific)
+        : readAcp(
+            dataset,
+            resource,
+            url,
+            side.implementation === "ess" ? "ess" : "css",
+            requireSpecific,
+          ),
     url,
     // All later scope checks and merges consume Turtle, even if the server
     // returned JSON-LD despite our Accept preference.
@@ -112,7 +121,9 @@ export async function writeAccess(
     turtle = await serialize(dataset);
   }
   const emitted =
-    system === "wac" ? readWac(dataset, resource, url) : readAcp(dataset, resource, url);
+    system === "wac"
+      ? readWac(dataset, resource, url, side.implementation, true)
+      : readAcp(dataset, resource, url, dialect, true);
   for (const scope of ["resource", "members"] as const)
     if (!policiesEqual(scopePolicy(policy, scope), scopePolicy(emitted, scope)))
       throw new TypeError("Serialized access policy differs from the plan");
