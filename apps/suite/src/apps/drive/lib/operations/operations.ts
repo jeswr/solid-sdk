@@ -274,13 +274,38 @@ function indexUrlOf(driveRoot: string): string {
   return `${trashFolderOf(driveRoot)}index.ttl`;
 }
 
-/** Apply `change` to the trash index with a conditional write; one retry on 412. */
+const indexUpdates = new Map<string, Promise<void>>();
+
+/** Serialize this tab's bookkeeping across operations and live reconciliation.
+ * Source reservations deliberately refuse duplicate user operations; independent
+ * items sharing an index must wait for its read/modify/write instead. Conditional
+ * writes still detect changes from other tabs and uncoordinated clients.
+ */
 async function updateIndex(
   client: DriveClient,
   driveRoot: string,
   change: (index: ReturnType<typeof emptyTrashIndex>) => void,
 ): Promise<void> {
   const url = indexUrlOf(driveRoot);
+  const pending = (indexUpdates.get(url) ?? Promise.resolve()).then(() =>
+    updateIndexUnlocked(client, url, change),
+  );
+  // A refused update must not poison later bookkeeping for this Drive.
+  const settled = pending.catch(() => undefined);
+  indexUpdates.set(url, settled);
+  try {
+    await pending;
+  } finally {
+    if (indexUpdates.get(url) === settled) indexUpdates.delete(url);
+  }
+}
+
+/** Apply `change` with a conditional write; one retry on 412. */
+async function updateIndexUnlocked(
+  client: DriveClient,
+  url: string,
+  change: (index: ReturnType<typeof emptyTrashIndex>) => void,
+): Promise<void> {
   for (let attempt = 0; ; attempt += 1) {
     const current = await client.readRdf(url);
     const index = current ? trashIndexFrom(current.dataset) : emptyTrashIndex();

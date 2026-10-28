@@ -83,16 +83,16 @@ export function getDemoPod(): Promise<DemoPod> {
     const db = await openDb();
     let stored = db ? await readStored(db) : undefined;
     const seed = stored ? undefined : await buildDemoSeed(Date.now());
-    const fresh = () => createDemoPod({ root: DEMO_ROOT, ...(seed ? { seed } : {}), latency: 60 });
-    let view = stored
-      ? createDemoPod({ root: DEMO_ROOT, snapshot: stored.snapshot, latency: 60 })
-      : fresh();
+    // This facade already performs asynchronous IndexedDB IO. Adding simulated
+    // network latency to each request compounds across Drive's access rechecks
+    // and can delay a local restore beyond the UI's acceptance deadline.
+    const fresh = () => createDemoPod({ root: DEMO_ROOT, ...(seed ? { seed } : {}) });
+    let view = stored ? createDemoPod({ root: DEMO_ROOT, snapshot: stored.snapshot }) : fresh();
     if (!db) return view;
     if (!stored) {
       if (!(await commit(db, undefined, view.snapshot()))) {
         stored = await readStored(db);
-        if (stored)
-          view = createDemoPod({ root: DEMO_ROOT, snapshot: stored.snapshot, latency: 60 });
+        if (stored) view = createDemoPod({ root: DEMO_ROOT, snapshot: stored.snapshot });
       }
     }
 
@@ -112,8 +112,8 @@ export function getDemoPod(): Promise<DemoPod> {
     const reload = async () => {
       const latest = await readStored(db);
       view = latest
-        ? createDemoPod({ root: DEMO_ROOT, snapshot: latest.snapshot, latency: 60 })
-        : createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(Date.now()), latency: 60 });
+        ? createDemoPod({ root: DEMO_ROOT, snapshot: latest.snapshot })
+        : createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(Date.now()) });
     };
     if (channel)
       channel.onmessage = (event: MessageEvent<unknown>) => {
@@ -151,11 +151,10 @@ export function getDemoPod(): Promise<DemoPod> {
         for (;;) {
           const latest = await readStored(db);
           const trial = latest
-            ? createDemoPod({ root: DEMO_ROOT, snapshot: latest.snapshot, latency: 60 })
+            ? createDemoPod({ root: DEMO_ROOT, snapshot: latest.snapshot })
             : createDemoPod({
                 root: DEMO_ROOT,
                 seed: await buildDemoSeed(Date.now()),
-                latency: 60,
               });
           const changed: string[] = [];
           trial.subscribe((url) => changed.push(url));

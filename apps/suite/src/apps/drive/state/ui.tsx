@@ -631,22 +631,27 @@ export function useDriveActions() {
   const restore = useCallback(
     async (entries: readonly TrashEntry[]) => {
       if (!driveRoot) return;
-      const result = await refreshAfter(
-        client,
-        invalidate,
-        entries.flatMap((entry) => [entry.url, entry.original]),
-        (tracked) => restoreItems(tracked, driveRoot, entries),
-      );
-      for (const warning of result.warnings ?? []) toast.error(warning.message);
-      const first = result.done[0];
-      if (result.failed.length > 0)
-        reportFailure(result.failed[0]?.error, "Couldn't restore", client, invalidate);
-      if (first && result.done.length === 1) {
-        toast.success(
-          first.renamed ? `Restored as ${nameOf(first.url)}` : `Restored ${first.entry.name}`,
+      try {
+        const result = await refreshAfter(
+          client,
+          invalidate,
+          entries.flatMap((entry) => [entry.url, entry.original]),
+          (tracked) => restoreItems(tracked, driveRoot, entries),
         );
-      } else if (result.done.length > 1) toast.success(`Restored ${result.done.length} items`);
-      return result;
+        for (const warning of result.warnings ?? []) toast.error(warning.message);
+        const first = result.done[0];
+        if (result.failed.length > 0)
+          reportFailure(result.failed[0]?.error, "Couldn't restore", client, invalidate);
+        if (first && result.done.length === 1) {
+          toast.success(
+            first.renamed ? `Restored as ${nameOf(first.url)}` : `Restored ${first.entry.name}`,
+          );
+        } else if (result.done.length > 1) toast.success(`Restored ${result.done.length} items`);
+        return result;
+      } catch (error) {
+        reportFailure(error, "Couldn't restore", client, invalidate);
+        return undefined;
+      }
     },
     [client, driveRoot, invalidate],
   );
