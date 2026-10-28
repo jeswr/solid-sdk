@@ -35,7 +35,7 @@ class InactiveLogError extends Error {}
 interface PendingEdit {
   owner?: string;
   title: string;
-  baseTitle: string;
+  baseTitle: string | undefined;
   baseModified: string | undefined;
 }
 interface PendingRecovery {
@@ -339,6 +339,50 @@ export class DocumentPersistence {
         await mirror.destroy();
         doc.destroy();
       }
+    }
+  }
+  private async recoverRetiredMirrors() {
+    if (this.creation !== "created" || !this.stored || !this.local) return;
+    // The first promotion has not finished linking or caching its own mirror.
+    // Only a hydrated publisher can distinguish it from retired generations.
+    if (!(await this.metadata("stored"))) return;
+    const url = this.stored.url;
+    const seen = new Set<string>();
+    let name = url;
+    // A retired tab can write after recovery has finished. Walk the durable
+    // forward chain on every publisher, even when no broadcast reached us.
+    while (name !== this.local.name && !seen.has(name)) {
+      seen.add(name);
+      const doc = new Doc();
+      const mirror = new IndexeddbPersistence(name, doc);
+      let pending: boolean;
+      let next: unknown;
+      try {
+        await mirror.whenSynced;
+        pending = Boolean(await mirror.get("pending"));
+        next = await mirror.get("nextMirror");
+      } finally {
+        await mirror.destroy();
+        doc.destroy();
+      }
+      if (pending && !Array.from(this.previousMirrors).some((mirror) => mirror.name === name)) {
+        // Reuse the opener's incarnation checks and durable recovery reservation
+        // on a separate Y.Doc: retired histories must not seed the active log.
+        const recovery = new DocumentPersistence(this.session);
+        try {
+          await recovery.open(url);
+          if (recovery.conflict) throw recovery.conflict;
+          if (recovery.recoveredCopy) {
+            this.recoveredCopy = recovery.recoveredCopy;
+            await this.cacheStored();
+          }
+        } finally {
+          recovery.online = false;
+          await recovery.destroy();
+        }
+      }
+      if (typeof next !== "string") break;
+      name = next;
     }
   }
   private async readPending(assertOpen = true, mirror = this.local): Promise<boolean> {
@@ -852,17 +896,19 @@ export class DocumentPersistence {
     this.markDirty();
     if (this.creation !== "created") void this.flush();
   }
-  rename(title: string) {
+  rename(title: string, baseTitle = this.stored?.data.title) {
     if (this.readOnly || this.title === title) return;
     this.title = title.slice(0, 200);
-    this.markDirty();
+    this.markDirty(baseTitle);
     void this.flush();
   }
-  private markDirty() {
+  private markDirty(baseTitle = this.stored?.data.title) {
     this.pendingEdit = {
       owner: this.pendingEdit?.owner ?? this.editOwner,
       title: this.title,
-      baseTitle: this.pendingEdit?.baseTitle ?? this.stored?.data.title ?? this.title,
+      // A never-promoted draft has no pod baseline. Its first typed title is
+      // local intent, including when another tab has already promoted it.
+      baseTitle: this.pendingEdit ? this.pendingEdit.baseTitle : baseTitle,
       baseModified: this.pendingEdit?.baseModified ?? this.stored?.data.modified,
     };
     this.version++;
@@ -901,6 +947,7 @@ export class DocumentPersistence {
       await this.refreshLocalState();
       if (this.creation === "draft" && this.version === this.savedVersion) return;
       if (this.creation === "created") await this.reconcileProvider(this.stopped);
+      await this.recoverRetiredMirrors();
       if (this.savedVersion === this.version) {
         await this.persistUpdates();
         await this.cacheStored();
@@ -927,10 +974,15 @@ export class DocumentPersistence {
                 mirror.set("allocation", JSON.stringify(allocation)),
               );
             }
-            this.stored =
-              (await this.metadata<StoredDocument>("creating")) ??
-              (await this.store.create(allocation));
+            const creating = await this.metadata<StoredDocument>("creating");
+            this.stored = creating ?? (await this.store.create(allocation));
             this.creation = "creating";
+            if (creating) {
+              // Joining another tab's promotion does not establish a pod base
+              // for the title this tab typed while it still held a blank draft.
+              this.checkTitleConflict();
+              if (this.conflict) throw this.conflict;
+            }
             await this.local?.set("creating", JSON.stringify(this.stored));
           }
           const stored = this.stored as StoredDocument;
@@ -1057,6 +1109,7 @@ export class DocumentPersistence {
     this.notify();
   }
   private async persistUpdates() {
+    await this.recoverRetiredMirrors();
     await this.refreshLocalState();
     // Upgrade identity-free logs only on save, retaining an existing snapshot
     // identity (or the log's identity when migrating an older snapshot).
@@ -1089,6 +1142,30 @@ export class DocumentPersistence {
       return;
     }
     if (!keepMine) this.title = remote.data.title;
+    // Apply the explicit title choice to every mirror carrying that intent.
+    // Otherwise a retained draft marker would reintroduce the rejected title.
+    const rejectedTitle = this.conflict.localTitle;
+    for (const mirror of [this.local, ...this.previousMirrors]) {
+      if (!mirror) continue;
+      await updateMirrorMetadata(
+        mirror,
+        (current) => {
+          const edit = this.parseMetadata<PendingEdit>(current.edit);
+          if (!current.pending || (edit?.title ?? current.title) !== rejectedTitle)
+            return undefined;
+          return {
+            title: this.title,
+            edit: JSON.stringify({
+              ...edit,
+              title: this.title,
+              baseTitle: remote.data.title,
+              baseModified: remote.data.modified,
+            }),
+          };
+        },
+        () => true,
+      );
+    }
     this.stored = remote;
     this.pendingEdit = undefined;
     this.conflict = undefined;
