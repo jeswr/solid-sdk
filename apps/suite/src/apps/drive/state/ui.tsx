@@ -435,6 +435,12 @@ export function useDriveActions() {
                         {
                           storageUrl: session.storageUrl,
                           fetch: session.fetch,
+                          webId: session.webId,
+                          onPrivateFolder: (url) =>
+                            toast(`${nameOf(url)} was restored as private`, {
+                              description:
+                                "Its original access was unknown. Only you can access this folder and new files in it.",
+                            }),
                           ...(client.confirmAccess ? { confirmAccess: client.confirmAccess } : {}),
                         },
                         to,

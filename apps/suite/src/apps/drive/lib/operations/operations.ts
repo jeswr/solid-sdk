@@ -613,6 +613,11 @@ async function runTrash(
     try {
       await client.move(entry.original, entry.url, {
         ...(options.webId ? { privateOwner: options.webId } : {}),
+        archiveContainers: async (archive) => {
+          await updateIndex(client, driveRoot, (index) => {
+            index.record(entry.url).containerAcls = archive;
+          });
+        },
         beforeDelete: async () => {
           await requireTrashEntry(client, driveRoot, entry, true, owner);
           await client.stat(entry.url);
@@ -825,7 +830,7 @@ export async function restoreItems(
         target = childUrl(parent, restoredName(entry.name), folder);
         renamed = true;
       }
-      // Moving recreates missing parent folders (PUT creates intermediate containers).
+      // The client verifies original or owner-only ACLs on missing ancestors first.
       const { url } = await client.move(entry.url, target);
       if (await recoveryStatus(client, driveRoot, entry))
         await client.remove(recoveryMarker(driveRoot, entry));

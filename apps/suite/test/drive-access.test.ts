@@ -150,7 +150,7 @@ it("unknown source cannot be kept even if a caller requests Keep", async () => {
 it("unknown destination can still keep the known source policy", async () => {
   const f = await wacPod();
   f.intercept(async (url, init) =>
-    url === PUBLIC && init?.method === "HEAD" ? new Response(null, { status: 403 }) : undefined,
+    url === PUBLIC && init?.method === "HEAD" ? new Response(null) : undefined,
   );
   const confirmAccess = vi.fn(async () => "keep" as const);
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, confirmAccess });

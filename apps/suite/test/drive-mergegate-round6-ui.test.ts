@@ -44,6 +44,8 @@ it.each([
   const shared = surface.startsWith("Shared");
   const foreign = surface !== "Recent";
   const storageUrl = foreign ? `${ROOT}alice/` : ROOT;
+  // A real session's storage root exists before Drive provisions its own root.
+  if (foreign) await pod.pod.fetch(storageUrl, { method: "PUT" });
   const webId = foreign ? `${storageUrl}profile#me` : OWNER;
   const url = `${PUBLIC}placeholder`;
   expect((await pod.anonymous(url)).status).toBe(200);

@@ -127,7 +127,10 @@ it.each([
       new File([new Uint8Array(REPORT_PDF)], "report.pdf", { type: "application/pdf" }),
     ]);
   });
-  expect(drive.uploads.tasks[0]?.status).toBe("conflict");
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(drive.uploads.tasks[0]?.status).toBe("conflict");
+  });
   await click(button("Replace"));
   await vi.waitFor(async () => {
     await act(async () => {});

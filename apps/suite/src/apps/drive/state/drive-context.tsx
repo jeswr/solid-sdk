@@ -8,6 +8,7 @@
  * queue. Screens read it through {@link useDrive} and {@link useFolder}.
  */
 
+import { toast } from "@jeswr/suite-ui";
 import { termsEqual } from "@jeswr/suite-vocab";
 import {
   createContext,
@@ -29,6 +30,7 @@ import {
   type DriveClient,
   DriveError,
   type DriveItem,
+  nameOf,
   parentOf,
 } from "../lib/client/client";
 import { DRIVE_ROOT_CLASS } from "../lib/constants";
@@ -106,6 +108,12 @@ export function DriveProvider({ session, children }: { session: PodSession; chil
         storageUrl: session.storageUrl,
         fetch: session.fetch,
         confirmAccess,
+        webId: session.webId,
+        onPrivateFolder: (url) =>
+          toast(`${nameOf(url)} was restored as private`, {
+            description:
+              "Its original access was unknown. Only you can access this folder and new files in it.",
+          }),
       }),
     [session, confirmAccess],
   );

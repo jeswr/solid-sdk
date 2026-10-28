@@ -298,7 +298,11 @@ describe("Drive error handling and foreign server responses", () => {
     [412, "conflict"],
     [500, "failed"],
   ])("maps HTTP %i for both RDF listings and direct requests", async (status, kind) => {
-    const client = stubClient(async () => new Response(null, { status }));
+    const client = stubClient(async (input, init) =>
+      String(input) === DRIVE && init?.method === "HEAD"
+        ? new Response(null)
+        : new Response(null, { status }),
+    );
     const url = `${DRIVE}missing/`;
     for (const [operation, requestUrl] of [
       [() => client.list(url), url],
@@ -342,10 +346,13 @@ describe("Drive error handling and foreign server responses", () => {
     const responses = [
       new Response(null),
       new Response(null),
+      new Response(null), // Existing parent before write.
       new Response(null, { status: 201 }),
       new Response(new Uint8Array([0, 255]), {
         headers: { "x-solid-demo-access-control": "none" },
       }),
+      new Response(null), // Existing parent before transfer.
+      new Response(null), // Existing parent immediately before payload.
       new Response(null, { status: 201 }),
     ];
     const fetch = vi.fn<typeof globalThis.fetch>(async () => {
@@ -367,7 +374,7 @@ describe("Drive error handling and foreign server responses", () => {
         body: expect.any(Blob),
       }),
     );
-    const copiedBody = fetch.mock.calls[4]?.[1]?.body as Blob;
+    const copiedBody = fetch.mock.lastCall?.[1]?.body as Blob;
     expect(new Uint8Array(await copiedBody.arrayBuffer())).toEqual(new Uint8Array([0, 255]));
     expect(responses).toHaveLength(0);
   });

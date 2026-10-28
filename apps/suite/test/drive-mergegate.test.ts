@@ -132,7 +132,7 @@ function fixture() {
       });
     return new Response(response.body, { status: response.status, headers });
   };
-  const client = createSolidDriveClient({ storageUrl: ROOT, fetch });
+  const client = createSolidDriveClient({ storageUrl: ROOT, fetch, webId: OWNER });
   return {
     pod,
     client,
