@@ -62,7 +62,7 @@ it("round19 preserves a checklist Shift+Enter through Markdown replace and snaps
     ]);
   });
   // StarterKit's trailingNode adds an editable paragraph after the checklist.
-  expect(downloaded).toBe("- [ ] First line\\\n      Second line\n\n<p></p>");
+  expect(downloaded).toBe("- [ ] First line\\\n  Second line\n\n<p></p>");
   expect(downloaded).not.toMatch(/ +$/m);
 });
 
@@ -78,7 +78,7 @@ it("keeps a leading thematic-break section when its content is not a YAML mappin
 });
 
 it("keeps paragraph inline tokens across repeated imports before and after a task list", () => {
-  const source = "Before\n\n- [ ] First\\\n      Second\n\nAfter";
+  const source = "Before\n\n- [ ] First\\\n  Second\n\nAfter";
   for (let run = 0; run < 3; run++) {
     const json = importMarkdown(source, "repeat.md").json;
     expect(json.content?.[0]?.content).toEqual([{ type: "text", text: "Before" }]);
@@ -93,9 +93,9 @@ it("preserves loose task continuations, nested quotes, fenced code and HTML tabl
       '<blockquote><ul data-type="taskList"><li data-type="taskItem" data-checked="true"><p>First<br>Second</p><p>Another paragraph</p><blockquote><ol start="12"><li><p>Nested<br>Continuation</p><pre><code>first\nsecond</code></pre><table><tr><td><p>One</p><p>Two</p></td></tr></table></li></ol></blockquote></li><li data-type="taskItem" data-checked="false"><p>Next task</p></li></ul></blockquote>',
     );
   });
-  expect(downloaded).toContain("> - [x] First\\\n>       Second\n>\n>       Another paragraph");
-  expect(downloaded).toContain(">       >     second");
-  expect(downloaded).toContain(">       >     <table>");
+  expect(downloaded).toContain("> - [x] First\\\n>   Second\n>\n>   Another paragraph");
+  expect(downloaded).toContain(">   >     second");
+  expect(downloaded).toContain(">   >     <table>");
   expect(downloaded).not.toMatch(/ +$/m);
 });
 

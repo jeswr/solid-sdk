@@ -313,16 +313,23 @@ const inlineContent = fc
 const paragraph = fc
   .tuple(inlineContent, fc.constantFrom(null, "left", "center", "right", "justify"))
   .map(([content, textAlign]) => ({ type: "paragraph", content, attrs: { textAlign } }));
-const list = (child: fc.Arbitrary<JSONContent>): fc.Arbitrary<JSONContent> =>
+const list = (child: fc.Arbitrary<JSONContent>, minChildren = 0): fc.Arbitrary<JSONContent> =>
   fc
     .tuple(
       fc.constantFrom("bulletList", "orderedList", "taskList"),
       fc.integer({ min: 1, max: 12 }),
       fc.constantFrom(null, "a", "I"),
-      fc.array(fc.tuple(paragraph, fc.boolean(), fc.array(child, { maxLength: 2 })), {
-        minLength: 1,
-        maxLength: 2,
-      }),
+      fc.array(
+        fc.tuple(
+          paragraph,
+          fc.boolean(),
+          fc.array(child, { minLength: minChildren, maxLength: 2 }),
+        ),
+        {
+          minLength: 1,
+          maxLength: 2,
+        },
+      ),
     )
     .map(([type, start, style, items]) => ({
       type,
@@ -335,10 +342,17 @@ const list = (child: fc.Arbitrary<JSONContent>): fc.Arbitrary<JSONContent> =>
     }));
 const nestedList = list(list(paragraph));
 
-it("round trips generated nested lists, tasks and blockquotes with hard breaks, multiple paragraphs and opening thematic breaks", () => {
+it("round trips generated nested lists, tasks and blockquotes with indented code lines, hard breaks, multiple paragraphs and opening thematic breaks", () => {
+  const indentedCode: fc.Arbitrary<JSONContent> = fc
+    .tuple(word, fc.integer({ min: 1, max: 8 }), fc.integer({ min: 1, max: 8 }))
+    .map(([value, firstIndent, secondIndent]) => ({
+      type: "codeBlock",
+      attrs: { language: "python" },
+      content: [text(`${" ".repeat(firstIndent)}${value}\n${" ".repeat(secondIndent)}launch()`)],
+    }));
   const plain: fc.Arbitrary<JSONContent> = fc.oneof(
     inlineContent.map((content) => ({ type: "paragraph", content })),
-    word.map((value) => ({ type: "codeBlock", content: [text(`${value}\nsecond line`)] })),
+    indentedCode,
     word.map((value) => ({
       type: "table",
       content: [
@@ -349,16 +363,20 @@ it("round trips generated nested lists, tasks and blockquotes with hard breaks, 
       ],
     })),
   );
-  const containers = (child: fc.Arbitrary<JSONContent>): fc.Arbitrary<JSONContent> =>
+  const containers = (
+    child: fc.Arbitrary<JSONContent>,
+    minChildren = 0,
+  ): fc.Arbitrary<JSONContent> =>
     fc.oneof(
-      list(child),
+      list(child, minChildren),
       fc
         .array(child, { minLength: 1, maxLength: 3 })
         .map((content) => ({ type: "blockquote", content })),
     );
   const generated = containers(fc.oneof(plain, containers(fc.oneof(plain, containers(plain)))));
+  const nestedCode = containers(containers(indentedCode, 1), 1);
   fc.assert(
-    fc.property(generated, (value) => {
+    fc.property(generated, nestedCode, (value, code) => {
       const stripAlignment = (node: JSONContent): JSONContent => ({
         ...node,
         ...(node.type === "paragraph" ? { attrs: { textAlign: null } } : {}),
@@ -368,6 +386,8 @@ it("round trips generated nested lists, tasks and blockquotes with hard breaks, 
         doc(
           { type: "horizontalRule" },
           stripAlignment(value),
+          { type: "horizontalRule" },
+          stripAlignment(code),
           { type: "horizontalRule" },
           p("Final section"),
         ),

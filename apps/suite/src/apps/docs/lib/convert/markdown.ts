@@ -404,11 +404,9 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
               type: "docsList",
               items: token.items.map((item) => ({
                 ...item,
-                // Suite aligns task content after "- [ ] ". CommonMark only
-                // removes the bullet width; remove the checkbox width too.
-                tokens: lexer.blockTokens(
-                  item.task ? item.text.replace(/\n {4}/g, "\n") : item.text,
-                ),
+                // CommonMark already removed the list's content offset.
+                // Keep all remaining indentation, including fenced code lines.
+                tokens: lexer.blockTokens(item.text),
               })),
             };
           },
@@ -737,7 +735,8 @@ export function exportMarkdown(json: JSONContent, dropHighlights = false): strin
           return containerPrefix(
             blocks(item.content as JSONContent[]),
             marker,
-            " ".repeat(marker.length),
+            // A task checkbox is inline content, outside the list marker width.
+            " ".repeat(node.type === "taskList" ? 2 : marker.length),
           );
         })
         .join("\n");
