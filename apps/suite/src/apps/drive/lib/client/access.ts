@@ -15,9 +15,13 @@ const ACP_NS = "http://www.w3.org/ns/solid/acp#";
 const ACP = `${ACP_NS}accessControl`;
 export class DriveAccessError extends Error {
   readonly kind = "private-access-unavailable";
-  constructor(override readonly cause?: unknown) {
+  constructor(
+    override readonly cause?: unknown,
+    detail?: string,
+  ) {
     super(
-      "Private access could not be established or verified. Drive can't confirm who can access the item and stopped the transfer. You can choose Delete forever instead.",
+      "Private access could not be established or verified. Drive can't confirm who can access the item and stopped the transfer. You can choose Delete forever instead." +
+        (detail ? ` ${detail}` : ""),
     );
   }
 }

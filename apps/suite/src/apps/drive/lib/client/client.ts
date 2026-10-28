@@ -348,12 +348,22 @@ export function createSolidDriveClient(options: {
     }
   };
 
+  // The only payload/container PUT seam. A provisioner may skip only its own
+  // unfinished ACL while creating the empty container, never its ancestors'.
+  const guardedWrite = async (
+    url: string,
+    init: RequestInit,
+    creating = false,
+  ): Promise<Response> => {
+    await provision.guard(url, creating);
+    return ensureOk(await http(url, init), url);
+  };
+
   const write: DriveClient["write"] = async (url, body, opts) => {
-    await ensureParents(url);
     const headers: Record<string, string> = { "content-type": opts.contentType };
     if (opts.ifNoneMatch) headers["if-none-match"] = opts.ifNoneMatch;
     if (opts.ifMatch) headers["if-match"] = opts.ifMatch;
-    const response = await ensureOk(await http(url, { method: "PUT", headers, body }), url);
+    const response = await guardedWrite(url, { method: "PUT", headers, body });
     // A replacement supersedes the previous listing's declarations before its refresh completes.
     resources.delete(url);
     responseTypes.delete(url);
@@ -362,32 +372,33 @@ export function createSolidDriveClient(options: {
   };
 
   const rawPutFolder = async (target: string): Promise<Response> => {
-    return ensureOk(
-      await http(target, {
+    return guardedWrite(
+      target,
+      {
         method: "PUT",
         headers: {
           "content-type": "text/turtle",
           "if-none-match": "*",
           link: '<http://www.w3.org/ns/ldp#BasicContainer>; rel="type"',
         },
-      }),
-      target,
+      },
+      true,
     );
   };
 
-  const ensureParents = ancestorGuard({
+  const provision = ancestorGuard({
     storageUrl,
     http,
     access,
     readRdf,
     putFolder: rawPutFolder,
+    error: errorFor,
     owner: () => owner,
     ...(options.onPrivateFolder ? { onPrivateFolder: options.onPrivateFolder } : {}),
   });
   const putFolder = async (url: string): Promise<Response> => {
     const target = url.endsWith("/") ? url : `${url}/`;
-    await ensureParents(target);
-    return rawPutFolder(target);
+    return (await provision.folder(target)).response;
   };
 
   const createFolder: DriveClient["createFolder"] = async (url) => {
@@ -485,10 +496,12 @@ export function createSolidDriveClient(options: {
     const policy =
       source.targetAccess ?? (source.access.status === "known" ? source.access.policy : undefined);
     if (source.children) {
-      const response = await putFolder(to);
-      const resource = { url: to, etag: response.headers.get("etag") ?? undefined };
-      created.push(resource);
-      if (policy) copiedAccess.set(to, await access.install(policy, source.url, to));
+      const resource: CreatedResource = { url: to, etag: undefined };
+      const result = await provision.folder(to, policy, source.url, (response) => {
+        resource.etag = response.headers.get("etag") ?? undefined;
+        created.push(resource);
+      });
+      if (result.policy) copiedAccess.set(to, result.policy);
       const data = relocate(source.data as Store, [[source.url, to]]);
       if (data.size) {
         const saved = await write(to, await serialize([...data]), {
@@ -647,7 +660,7 @@ export function createSolidDriveClient(options: {
     const policy = source.demo
       ? undefined
       : (source.targetAccess ?? requireAccess(effective, from));
-    if (copyPolicy && policy) await access.install(policy, from, to);
+    if (copyPolicy && policy) await provision.protect(to, policy, from);
     else if (
       policy &&
       accessGains(access.forResource(policy, from), requireAccess(await access.effective(to), to))
@@ -696,7 +709,7 @@ export function createSolidDriveClient(options: {
     const unknown = nodes.some((node) => (effective.get(node) as AccessState).status === "unknown");
     // Copy, Trash and Restore preserve access, and refuse uncertainty before writes.
     if (!ordinaryMove && unknown) throw new DriveAccessError("Current access is unknown");
-    await ensureParents(to);
+    await provision.guard(to, true);
     let keepAccess = !ordinaryMove;
     if (ordinaryMove && (!source.demo || unknown)) {
       const inherited: SourceSnapshot[] = [];
@@ -913,13 +926,15 @@ export function createSolidDriveClient(options: {
       if (webId) owner = webId;
       const response = await http(url, { method: "HEAD" });
       if (response.headers.get("x-solid-demo-access-control") === "none") return;
+      if (!webId) throw new DriveAccessError("Owner WebID unavailable");
+      const policy: OwnAccess = { url: `${url}.acl`, etag: "", dataset: privateAcl(url, webId) };
       try {
-        await createFolder(url);
+        await provision.folder(url, policy);
       } catch (error) {
         if (!(error instanceof DriveError && error.kind === "conflict"))
           throw new DriveAccessError(error);
+        await provision.protect(url, policy);
       }
-      await access.privateFolder(url, webId);
     },
     copy,
     move,

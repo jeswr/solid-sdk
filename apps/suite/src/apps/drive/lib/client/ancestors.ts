@@ -1,17 +1,19 @@
 // AUTHORED-BY Codex
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
+import { serialize } from "@jeswr/rdf-serialize";
 import type { Store } from "n3";
 import { trashEntries, trashIndexFrom } from "../operations/trash-index";
 import { type accessControl, DriveAccessError, type OwnAccess, privateAcl } from "./access";
+import { type ProtectionRequirement, protectionLedger } from "./protection-ledger";
 import { relocate, sameGraph } from "./rdf";
 
 // Shared by all clients in this tab, including the fresh client used by undo.
 const provisioning = new Map<string, Promise<void>>();
 
-function singleFlight(url: string, work: () => Promise<void>): Promise<void> {
+function singleFlight(url: string, work: () => Promise<void>, join = true): Promise<void> {
   const current = provisioning.get(url);
-  if (current) return current;
+  if (current) return join ? current : current.then(() => singleFlight(url, work, false));
   // Publish before the first request, and retain failures through empty-folder cleanup.
   const pending = Promise.resolve()
     .then(async () => {
@@ -47,10 +49,58 @@ export function ancestorGuard(options: {
   access: ReturnType<typeof accessControl>;
   readRdf: (url: string) => Promise<{ dataset: Store } | undefined>;
   putFolder: (url: string) => Promise<Response>;
+  error: (status: number, url: string) => Error;
   owner: () => string | undefined;
   onPrivateFolder?: (url: string) => void;
 }) {
   const { http, storageUrl, access } = options;
+  const ledger = protectionLedger(http);
+  const requirementFor = async (
+    policy: OwnAccess,
+    from: string,
+  ): Promise<ProtectionRequirement> => ({
+    acl: policy.url,
+    from,
+    turtle: await serialize([...policy.dataset]),
+  });
+  const policyFor = async (required: ProtectionRequirement): Promise<OwnAccess> => ({
+    url: required.acl,
+    etag: "",
+    dataset: await parseRdf(required.turtle, "text/turtle", { baseIRI: required.acl }),
+  });
+  const verify = async (url: string, headers: Headers, required: ProtectionRequirement) => {
+    const policy = await policyFor(required);
+    const own = await access.snapshot(url, headers);
+    if (own.status === "none" && !own.demo) {
+      await access.install(policy, required.from, url);
+    } else if (
+      own.status !== "known" ||
+      !sameGraph(
+        relocate(policy.dataset, [
+          [policy.url, own.policy.url],
+          [required.from, url],
+        ]),
+        own.policy.dataset,
+      )
+    ) {
+      throw new DriveAccessError(
+        own,
+        "This folder still requires protection. Check that pod CORS exposes Link and ETag, then retry.",
+      );
+    }
+    await ledger.clear(url);
+  };
+  const install = async (url: string, policy: OwnAccess, from: string) => {
+    const saved = await access.install(policy, from, url);
+    await ledger.clear(url);
+    return saved;
+  };
+  const cleanup = async (url: string, response: Response) => {
+    const etag = response.headers.get("etag");
+    // Unknown/foreign control documents are not ours to remove with the folder.
+    if (etag && (await access.snapshot(url, response.headers)).status !== "unknown")
+      await http(url, { method: "DELETE", headers: { "if-match": etag } }).catch(() => undefined);
+  };
   const archived = async (url: string): Promise<OwnAccess | undefined> => {
     // Unreadable/malformed historical metadata is unknown access, never permission to inherit.
     try {
@@ -92,7 +142,7 @@ export function ancestorGuard(options: {
     }
     return undefined;
   };
-  return async (destination: string): Promise<void> => {
+  const guard = async (destination: string, creating = false): Promise<void> => {
     assertWithinPodScope(storageUrl, destination);
     let url = parent(destination);
     const missing: string[] = [];
@@ -113,14 +163,15 @@ export function ancestorGuard(options: {
           missing.unshift(url);
         }
       }
-      if (url === storageUrl) break;
       containers.unshift(url);
+      if (url === storageUrl) break;
       url = parent(url);
     }
     // Decide ALL policies before creating even an empty ancestor.
     const plans: { url: string; policy: OwnAccess; private: boolean }[] = [];
     for (const container of missing) {
-      const original = await archived(container);
+      const required = await ledger.get(container);
+      const original = required ? await policyFor(required) : await archived(container);
       const owner = options.owner();
       if (!original && !owner) throw new DriveAccessError("Owner WebID unavailable");
       plans.push({
@@ -137,10 +188,13 @@ export function ancestorGuard(options: {
       const plan = plans.find((candidate) => candidate.url === container);
       // Recheck existing ancestors too: a delayed HEAD can outlive failed provisioning.
       await singleFlight(container, async () => {
+        const required = await ledger.get(container);
+        if (container === storageUrl && !required) return;
         // A different tab may have created (or removed) this ancestor while we waited.
         const current = await http(container, { method: "HEAD" });
         if (current.ok) {
-          if (plan) {
+          if (required) await verify(container, current.headers, required);
+          else if (plan) {
             const own = await access.snapshot(container, current.headers);
             if (
               own.status !== "known" ||
@@ -153,22 +207,109 @@ export function ancestorGuard(options: {
           }
           return;
         }
-        if (current.status !== 404 || !plan)
+        if (current.status !== 404 || (!plan && !required))
           throw new DriveAccessError("Ancestor changed before provisioning");
+        const policy = required
+          ? await policyFor(required)
+          : (plan as (typeof plans)[number]).policy;
+        const from = required?.from ?? container;
+        await ledger.set(container, required ?? (await requirementFor(policy, from)));
         // Conditional creation refuses uncoordinated races; never replace their ACLs.
         const response = await options.putFolder(container);
         try {
-          await access.install(plan.policy, container, container);
+          await install(container, policy, from);
         } catch (error) {
-          const etag = response.headers.get("etag");
-          if (etag)
-            await http(container, { method: "DELETE", headers: { "if-match": etag } }).catch(
-              () => undefined,
-            );
+          await cleanup(container, response);
           throw error;
         }
-        if (plan.private && !container.includes("/.trash/")) options.onPrivateFolder?.(container);
+        if (plan?.private && !container.includes("/.trash/")) options.onPrivateFolder?.(container);
       });
     }
+    // Container metadata writes also need their own protection, not just their parents'.
+    // Only the provisioner holding this container's flight may skip its own unfinished ACL.
+    if (!creating && destination.endsWith("/")) {
+      await provisioning.get(destination);
+      await singleFlight(destination, async () => {
+        const required = await ledger.get(destination);
+        if (required) {
+          const response = await http(destination, { method: "HEAD" });
+          if (!response.ok) throw new DriveAccessError("Required folder is unavailable");
+          await verify(destination, response.headers, required);
+        }
+      });
+    }
+  };
+  return {
+    guard,
+    async folder(
+      url: string,
+      policy?: OwnAccess,
+      from = url,
+      onCreated?: (response: Response) => void,
+    ): Promise<{ response: Response; policy?: OwnAccess }> {
+      await guard(url, true);
+      let result: { response: Response; policy?: OwnAccess } | undefined;
+      await singleFlight(
+        url,
+        async () => {
+          const current = await http(url, { method: "HEAD" });
+          const required = await ledger.get(url);
+          if (required && current.ok) await verify(url, current.headers, required);
+          // A conflict on an already-existing folder is not a failed provisioning
+          // flight: concurrent writers may still use its verified protection.
+          if (current.ok) return;
+          if (current.status !== 404) throw options.error(current.status, url);
+          const remembered = required
+            ? { policy: await policyFor(required), from: required.from }
+            : undefined;
+          if (
+            remembered &&
+            policy &&
+            !sameGraph(
+              relocate(remembered.policy.dataset, [
+                [remembered.policy.url, `${url}.acl`],
+                [remembered.from, url],
+              ]),
+              relocate(policy.dataset, [
+                [policy.url, `${url}.acl`],
+                [from, url],
+              ]),
+            )
+          )
+            throw new DriveAccessError("Folder has a different unfinished protection requirement");
+          const creationPolicy = remembered?.policy ?? policy;
+          const creationFrom = remembered ? remembered.from : from;
+          // Do not record a new policy for a pre-existing folder: the conditional PUT
+          // must conflict without changing the protection requirement of another writer.
+          if (creationPolicy)
+            await ledger.set(url, required ?? (await requirementFor(creationPolicy, creationFrom)));
+          const response = await options.putFolder(url);
+          onCreated?.(response);
+          try {
+            const saved = creationPolicy
+              ? await install(url, creationPolicy, creationFrom)
+              : undefined;
+            result = { response, ...(saved ? { policy: saved } : {}) };
+          } catch (error) {
+            await cleanup(url, response);
+            throw error;
+          }
+        },
+        false,
+      );
+      if (!result) throw options.error(412, url);
+      return result;
+    },
+    async protect(url: string, policy: OwnAccess, from = url): Promise<void> {
+      await guard(url, true);
+      await singleFlight(
+        url,
+        async () => {
+          await ledger.set(url, await requirementFor(policy, from));
+          await install(url, policy, from);
+        },
+        false,
+      );
+    },
   };
 }

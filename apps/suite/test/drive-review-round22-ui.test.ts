@@ -181,7 +181,10 @@ it.each([
 ])("refreshes usage after permanently removing 2 MB through %s", async (action) => {
   const { view } = await setup("x".repeat(2_000_000));
   await settleUsage(view.host);
-  vi.useFakeTimers();
+  // IndexedDB's setImmediate scheduler must keep committing while UI time is frozen.
+  vi.useFakeTimers({
+    toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"],
+  });
   expect(view.host.querySelector(".drv-usage")?.textContent).toBe("2 MB used");
   const item = await drive.client.stat(FILE);
   await act(async () => {
@@ -275,7 +278,9 @@ it("ignores superseded metadata responses in cached Details", async () => {
 it("debounces subtree usage changes and ignores superseded measurements", async () => {
   const { view } = await setup();
   await settleUsage(view.host);
-  vi.useFakeTimers();
+  vi.useFakeTimers({
+    toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"],
+  });
   const stale = deferred<number>();
   const measure = vi
     .spyOn(operations, "measureUsage")
@@ -306,7 +311,9 @@ it("debounces subtree usage changes and ignores superseded measurements", async 
 it("keeps usage debounced while the upload queue publishes progress", async () => {
   const { view, fetch, pod } = await setup();
   await settleUsage(view.host);
-  vi.useFakeTimers();
+  vi.useFakeTimers({
+    toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"],
+  });
   const pending = deferred<void>();
   fetch.mockImplementation(async (input, init) => {
     if (init?.method === "PUT") await pending.promise;
