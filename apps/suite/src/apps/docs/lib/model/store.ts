@@ -65,6 +65,8 @@ export interface CopyState {
   /** Resume the same private reservation after an interrupted copy. */
   reservation?: StoredDocument | undefined;
   onReserved?: ((copy: StoredDocument) => Promise<void>) | undefined;
+  /** Recovery merges stable local updates with an existing copy's current log. */
+  mergeExisting?: boolean;
   /** Only referenced assets, not every file left in the source container. */
   assets: readonly string[];
   /** Recovery may resolve an asset from the source incarnation's trash pair. */
@@ -368,9 +370,10 @@ export class DocsStore {
         current.data.wasDerivedFrom !== `${source.url}#it`
       )
         throw new ResourceReadError(copy.url, 422);
-      // Keep the reservation's validator: another client editing the visible
-      // copy must cause a conflict rather than being overwritten by a retry.
-      // Keep the reserved metadata too: retries must generate identical final bytes.
+      // Recovery snapshots come from the merged current log, so use its latest
+      // validator and metadata. Other copies retain the original reservation
+      // and can settle a lost acknowledgement only with identical final bytes.
+      if (state.mergeExisting) copy = current;
     } else
       copy = await this.createAtSlug(
         {

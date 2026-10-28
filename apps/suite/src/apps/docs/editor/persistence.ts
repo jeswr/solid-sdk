@@ -43,6 +43,7 @@ interface PendingRecovery {
   source: StoredDocument;
   json: JSONContent;
   reservation?: StoredDocument;
+  update?: number[];
 }
 
 /** One owner for the CRDT, mirrors and serial snapshot queue, independent of React mounts. */
@@ -190,9 +191,9 @@ export class DocumentPersistence {
       ),
     );
   }
-  private async clearPending(title: string) {
+  private async clearPending(title: string, confirmed?: Uint8Array) {
     const generation = this.mirrorGeneration;
-    await this.withMirror((mirror) =>
+    return this.withMirror((mirror) =>
       updateMirrorMetadata(
         mirror,
         (current) => {
@@ -200,6 +201,7 @@ export class DocumentPersistence {
           return pending === title ? { pending: 0 } : undefined;
         },
         () => generation === this.mirrorGeneration,
+        confirmed,
       ),
     );
   }
@@ -237,8 +239,13 @@ export class DocumentPersistence {
     this.assertActive();
     if (pending) {
       this.pendingEdit = await this.metadata<PendingEdit>("edit");
-      this.pendingRecovery = await this.metadata<PendingRecovery>(
-        `recovery:${this.pendingEdit?.owner ?? this.editOwner}`,
+      // The last pending edit may belong to another tab. Its owner is not
+      // necessarily the one that already reserved this incarnation's copy.
+      const recoveryKey: unknown = await this.local?.get("activeRecovery");
+      this.pendingRecovery ??= await this.metadata<PendingRecovery>(
+        typeof recoveryKey === "string" && recoveryKey
+          ? recoveryKey
+          : `recovery:${this.pendingEdit?.owner ?? this.editOwner}`,
       );
       const title = this.pendingEdit?.title ?? (await this.local?.get("title"));
       if (typeof title === "string") this.title = title;
@@ -248,40 +255,43 @@ export class DocumentPersistence {
     return pending;
   }
   private async preserveRetiredEdits(remote: StoredDocument) {
-    // A recovered snapshot has new CRDT identities. Keep local intent in its
-    // own durable document; merging either history would duplicate the body.
+    // Pull every tab's persisted updates before capturing local intent. The
+    // IndexedDB provider does not broadcast edits into other tabs' live docs.
+    await this.withMirror((mirror) => storeState(mirror, true));
+    if (this.version === this.savedVersion) await this.readPending();
     while (this.version !== this.savedVersion) {
+      await this.withMirror((mirror) => storeState(mirror, true));
       const version = this.version;
       const source = this.stored ?? remote;
       const json = yDocToProsemirrorJSON(this.doc) as JSONContent;
-      // Rebuild local intent on every attempt. Reuse our untouched reservation,
-      // but never overwrite a copy whose snapshot has since changed.
+      const confirmed = encodeStateAsUpdate(this.doc);
       const prior = this.pendingRecovery;
-      let reservation = prior?.reservation;
-      if (
-        reservation &&
-        (prior?.title !== this.title || JSON.stringify(prior.json) !== JSON.stringify(json))
-      ) {
-        const current = await this.store.read(reservation.url);
-        if (!current || current.etag !== reservation.etag || !sameIncarnation(reservation, current))
-          reservation = undefined;
-      }
       this.pendingRecovery = {
-        key: `recovery:${this.pendingEdit?.owner ?? this.editOwner}`,
+        key: prior?.key ?? `recovery:${this.pendingEdit?.owner ?? this.editOwner}`,
         title: this.title,
         source: {
           ...source,
           data: { ...source.data, title: `Recovered edits — ${this.title}`.slice(0, 190) },
         },
         json,
-        ...(reservation ? { reservation } : {}),
+        ...(prior?.reservation ? { reservation: prior.reservation } : {}),
+        ...(prior?.update ? { update: prior.update } : {}),
       };
       const recovery = this.pendingRecovery;
       const remember = () =>
-        this.withMirror((mirror) => mirror.set(recovery.key, JSON.stringify(recovery)));
+        this.withMirror(async (mirror) => {
+          await mirror.set(recovery.key, JSON.stringify(recovery));
+          await mirror.set("activeRecovery", recovery.key);
+        });
       await remember();
       const copy = await copyDocument(this.store, recovery.source, this.session, recovery.json, {
-        recovery: true,
+        recovery: {
+          update: recovery.update,
+          onUpdate: async (update) => {
+            recovery.update = update;
+            await remember();
+          },
+        },
         reservation: recovery.reservation,
         onReserved: async (reserved) => {
           recovery.reservation = reserved;
@@ -289,17 +299,26 @@ export class DocumentPersistence {
         },
       });
       this.recoveredCopy = copy.url;
-      this.pendingRecovery = undefined;
-      await this.withMirror(async (mirror) => {
-        await mirror.set("recoveredCopy", copy.url);
-        await mirror.set(recovery.key, "");
-      });
+      recovery.reservation = copy;
+      await remember();
+      await this.withMirror((mirror) => mirror.set("recoveredCopy", copy.url));
+      await this.withMirror((mirror) => storeState(mirror, true));
       if (this.version !== version) continue;
       if (this.title !== recovery.title) continue;
       if (JSON.stringify(yDocToProsemirrorJSON(this.doc)) !== JSON.stringify(recovery.json))
         continue;
-      await this.clearPending(this.title);
+      // Compare the persisted updates and clear the marker in one transaction;
+      // a closed tab's late write must stay pending until it too is recovered.
+      if (!(await this.clearPending(this.title, confirmed))) {
+        await this.readPending();
+        continue;
+      }
       if (this.version !== version) continue;
+      this.pendingRecovery = undefined;
+      await this.withMirror(async (mirror) => {
+        await mirror.set(recovery.key, "");
+        await mirror.set("activeRecovery", "");
+      });
       this.savedVersion = version;
       this.pendingEdit = undefined;
     }

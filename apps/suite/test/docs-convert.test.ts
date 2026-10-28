@@ -242,6 +242,9 @@ describe("DOCX mapping rows", () => {
 });
 
 describe("imports and Markdown", () => {
+  it("exports an explicitly empty paragraph as empty Markdown", () => {
+    expect(exportMarkdown(doc({ type: "paragraph", content: [] }))).toBe("");
+  });
   it("applies every style map and uploads multiple extracted images strictly in sequence", async () => {
     const names = [
       "Title",

@@ -9,11 +9,38 @@ import StarterKit from "@tiptap/starter-kit";
 import { validLink } from "../editor/logic";
 import { MAX_IMPORT_BYTES } from "./docx-import";
 
-const extensions = [StarterKit, TableKit, TaskList, TaskItem, Image, Highlight];
+const extensions = [
+  StarterKit,
+  TableKit,
+  TaskList,
+  TaskItem.configure({ nested: true }),
+  Image,
+  Highlight,
+];
 const markdown = new MarkdownManager({ extensions, markedOptions: { gfm: true } });
 const schema = getSchema(extensions);
 export const MARKDOWN_NOTES =
   "Underline and alignment are omitted. Nested tables are flattened. Highlights use ==text==. Images link to their absolute URL.";
+
+/** Markdown images are inline tokens; the editor's images are block nodes. */
+function splitImages(node: JSONContent): JSONContent[] {
+  if (!["paragraph", "heading"].includes(String(node.type)) || !node.content) return [node];
+  const blocks: JSONContent[] = [];
+  let inline: JSONContent[] = [];
+  const flush = () => {
+    if (inline.length) blocks.push({ ...node, content: inline });
+    inline = [];
+  };
+  for (const child of node.content) {
+    // Sanitizing an unsafe image also produces a block (an empty paragraph).
+    if (["image", "paragraph"].includes(String(child.type))) {
+      flush();
+      blocks.push(child);
+    } else inline.push(child);
+  }
+  flush();
+  return blocks.length ? blocks : [node];
+}
 
 function clean(node: JSONContent, dropHighlights: boolean, tableDepth = 0): JSONContent {
   const result = { ...node };
@@ -38,9 +65,14 @@ function clean(node: JSONContent, dropHighlights: boolean, tableDepth = 0): JSON
     return { type: "paragraph", content: [{ type: "text", text: textContent(result) }] };
   }
   if (result.content)
-    result.content = result.content.map((child) =>
-      clean(child, dropHighlights, tableDepth + (result.type === "table" ? 1 : 0)),
+    result.content = result.content.flatMap((child) =>
+      splitImages(clean(child, dropHighlights, tableDepth + (result.type === "table" ? 1 : 0))),
     );
+  if (
+    ["listItem", "taskItem"].includes(String(result.type)) &&
+    result.content?.[0]?.type === "image"
+  )
+    result.content.unshift({ type: "paragraph" });
   return result;
 }
 function textContent(node: JSONContent): string {

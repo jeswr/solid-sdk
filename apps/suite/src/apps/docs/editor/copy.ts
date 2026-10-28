@@ -4,7 +4,11 @@ import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { SolidPersistence } from "@jeswr/y-solid";
 import { generateHTML, generateJSON, getSchema, type JSONContent } from "@tiptap/react";
-import { prosemirrorJSONToYDoc, yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
+import {
+  prosemirrorJSONToYDoc,
+  prosemirrorToYXmlFragment,
+  yDocToProsemirrorJSON,
+} from "@tiptap/y-tiptap";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import type { PodSession } from "@/lib/session/pod-session";
 import { trashIndexFrom } from "../../drive/lib/operations/trash-index";
@@ -67,7 +71,12 @@ export async function copyDocument(
   stored: StoredDocument,
   session: PodSession,
   live?: JSONContent,
-  options: Pick<CopyState, "reservation" | "onReserved"> & { recovery?: boolean } = {},
+  options: Pick<CopyState, "reservation" | "onReserved"> & {
+    recovery?: {
+      update: number[] | undefined;
+      onUpdate: (update: number[]) => Promise<void>;
+    };
+  } = {},
 ) {
   const extensions = baseExtensions(session.fetch);
   const captured = structuredClone(live ?? generateJSON(stored.data.body, extensions));
@@ -94,9 +103,11 @@ export async function copyDocument(
     return json;
   };
   let trash: Promise<string | undefined> | undefined;
+  let merged: JSONContent | undefined;
   const recoveryFetch = createPodScopedFetch(session.storageUrl, { fetch: session.fetch });
   return store.makeCopy(stored, {
     ...options,
+    mergeExisting: !!options.recovery,
     assets,
     ...(options.recovery
       ? {
@@ -124,7 +135,7 @@ export async function copyDocument(
         }
       : {}),
     snapshot: (mapping) => {
-      const json = remap(mapping);
+      const json = merged ?? remap(mapping);
       return {
         body: generateHTML(json, extensions),
         format: "text/html",
@@ -155,21 +166,36 @@ export async function copyDocument(
       try {
         await provider.whenSynced;
         if (instanceId) doc.getMap("document").set("instanceId", instanceId);
-        // Retrying a reservation must reuse its identities, including after an
-        // append succeeded but its acknowledgement or final snapshot failed.
         const content = remap(mapping);
         const fragment = doc.getXmlFragment("prosemirror");
-        if (
-          !fragment.length ||
-          (options.recovery &&
-            JSON.stringify(yDocToProsemirrorJSON(doc)) !== JSON.stringify(content))
-        ) {
-          fragment.delete(0, fragment.length);
+        if (options.recovery) {
+          // Translate local intent on its own durable CRDT, never on the copy's
+          // live history. Retries reuse these identities and append commutative
+          // updates, retaining edits made to the visible copy by other clients.
+          const intent = new Doc();
+          try {
+            if (options.recovery.update)
+              applyUpdate(intent, new Uint8Array(options.recovery.update));
+            prosemirrorToYXmlFragment(
+              getSchema(extensions).nodeFromJSON(content),
+              intent.getXmlFragment("prosemirror"),
+            );
+            if (instanceId) intent.getMap("document").set("instanceId", instanceId);
+            const update = encodeStateAsUpdate(intent);
+            // Persist before the append: a lost acknowledgement must not cause
+            // the next attempt to seed fresh identities and duplicate content.
+            await options.recovery.onUpdate(Array.from(update));
+            applyUpdate(doc, update);
+          } finally {
+            intent.destroy();
+          }
+        } else if (!fragment.length) {
           const seed = prosemirrorJSONToYDoc(getSchema(extensions), content, "prosemirror");
           applyUpdate(doc, encodeStateAsUpdate(seed));
           seed.destroy();
         }
         await provider.persistFullState();
+        if (options.recovery) merged = yDocToProsemirrorJSON(doc) as JSONContent;
       } finally {
         provider.destroy();
         doc.destroy();
