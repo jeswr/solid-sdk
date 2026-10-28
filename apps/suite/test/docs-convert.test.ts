@@ -172,7 +172,7 @@ describe("DOCX mapping rows", () => {
     for (const value of [
       'w:left="720"',
       'w:sz="24"',
-      "<w:i/>",
+      'w:val="Quote"',
       'w:fill="F2F2F2"',
       'w:val="20"',
       "<w:keepLines/>",

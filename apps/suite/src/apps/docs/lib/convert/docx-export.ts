@@ -13,6 +13,7 @@ import {
   LevelFormat,
   Paragraph,
   type ParagraphChild,
+  Tab,
   Table,
   TableCell,
   TableRow,
@@ -43,13 +44,15 @@ function inline(node: JSONContent, quote: boolean): ParagraphChild[] {
   const options: IRunOptions = {
     text: node.text ?? "",
     bold: marks.has("bold"),
-    italics: quote || marks.has("italic"),
+    italics: marks.has("italic"),
     strike: marks.has("strike"),
     subScript: marks.has("subscript"),
     superScript: marks.has("superscript"),
     ...(marks.has("underline") ? { underline: {} } : {}),
     ...(marks.has("highlight") ? { highlight: "yellow" } : {}),
-    ...(marks.has("code") ? { font: codeFont, shading: { fill: "F2F2F2" } } : {}),
+    ...(marks.has("code")
+      ? { style: "InlineCode", font: codeFont, shading: { fill: "F2F2F2" } }
+      : {}),
     ...(href ? { style: "Hyperlink" } : {}),
   };
   const run = new TextRun(options);
@@ -83,9 +86,14 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
       const content = children(node);
       const level = Math.min(Math.max(0, depth), 8);
       const paragraph: IParagraphOptions = {
-        ...(quote ? { indent: { left: 720 }, border: { left: border(24) } } : {}),
+        ...(quote ? { style: "Quote", indent: { left: 720 }, border: { left: border(24) } } : {}),
         ...(numbering ? { numbering: { ...numbering, level } } : {}),
-        ...(task ? { indent: { left: 720 * (level + 1) } } : {}),
+        ...(task
+          ? {
+              style: task === "☑ " ? "TaskChecked" : "TaskUnchecked",
+              indent: { left: 720 * (level + 1) },
+            }
+          : {}),
       };
       switch (node.type) {
         case "paragraph":
@@ -105,7 +113,7 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
                 ? { heading: headings[Number(node.attrs?.level) - 1] ?? HeadingLevel.HEADING_3 }
                 : {}),
               children: [
-                ...(task ? [new TextRun(task)] : []),
+                ...(task ? [new TextRun({ text: task, style: "TaskMarker" })] : []),
                 ...content.flatMap((child) => inline(child, quote)),
               ],
             }),
@@ -141,22 +149,30 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
           result.push(...(await blocks(content, depth, true)));
           break;
         case "codeBlock":
-          for (const line of content
-            .map((child) => child.text ?? "")
-            .join("")
-            .split("\n")) {
-            result.push(
-              new Paragraph({
-                ...paragraph,
-                keepLines: true,
-                shading: { fill: "F2F2F2" },
-                children: [new TextRun({ text: line, font: codeFont, size: 20 })],
-              }),
-            );
-          }
+          result.push(
+            new Paragraph({
+              ...paragraph,
+              style: "Code",
+              keepLines: true,
+              shading: { fill: "F2F2F2" },
+              children: content
+                .map((child) => child.text ?? "")
+                .join("")
+                .split("\n")
+                .flatMap((line, lineIndex) => [
+                  ...(lineIndex ? [new TextRun({ break: 1 })] : []),
+                  ...line
+                    .split("\t")
+                    .flatMap((text, index) => [
+                      ...(index ? [new TextRun({ children: [new Tab()] })] : []),
+                      new TextRun({ text, font: codeFont, size: 20 }),
+                    ]),
+                ]),
+            }),
+          );
           break;
         case "horizontalRule":
-          result.push(new Paragraph({ border: { bottom: border(48) } }));
+          result.push(new Paragraph({ style: "HorizontalRule", border: { bottom: border(48) } }));
           break;
         case "image": {
           const alt = String(node.attrs?.alt ?? "");
@@ -204,7 +220,9 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
             }
             rows.push(
               new TableRow({
-                tableHeader: children(row).every((cell) => cell.type === "tableHeader"),
+                ...(children(row).every((cell) => cell.type === "tableHeader")
+                  ? { tableHeader: true }
+                  : {}),
                 children: cells,
               }),
             );
@@ -221,6 +239,17 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
   const document = new Document({
     numbering: { config },
     styles: {
+      paragraphStyles: [
+        { id: "Code", name: "Code", run: { font: codeFont, size: 20 } },
+        { id: "Quote", name: "Quote", run: { italics: true } },
+        { id: "TaskChecked", name: "Task Checked" },
+        { id: "TaskUnchecked", name: "Task Unchecked" },
+        { id: "HorizontalRule", name: "Horizontal Rule" },
+      ],
+      characterStyles: [
+        { id: "InlineCode", name: "Inline Code", run: { font: codeFont } },
+        { id: "TaskMarker", name: "Task Marker" },
+      ],
       default: {
         document: { run: { font: "Source Serif 4", size: 22 } },
         heading1: { run: { font: "Onest", size: 48, bold: true } },

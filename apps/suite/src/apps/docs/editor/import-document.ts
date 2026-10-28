@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex
 import { SolidPersistence } from "@jeswr/y-solid";
-import { generateHTML, generateJSON, getSchema, type JSONContent } from "@tiptap/react";
+import { generateHTML, getSchema } from "@tiptap/react";
 import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
 import { IndexeddbPersistence, storeState } from "y-indexeddb";
 import type { PodSession } from "@/lib/session/pod-session";
 import { type ImportProgress, importDocx, MAX_IMPORT_BYTES } from "../lib/convert/docx-import";
 import { importMarkdown } from "../lib/convert/markdown";
+import { importHtml } from "../lib/convert/schema";
 import { wordCount } from "../lib/editor/logic";
 import { createDocsStore, docContainerUrls, type StoredDocument } from "../lib/model";
 import {
@@ -58,11 +59,15 @@ export async function convertImport(
   const extensions = baseExtensions(session.fetch);
   if (/\.docx$/i.test(file.name)) {
     const result = await importDocx(await file.arrayBuffer(), { uploadImage, progress });
-    const json: JSONContent = generateJSON(result.html, extensions);
-    return { ...result, json, title: file.name.replace(/\.docx$/i, "").slice(0, 200) };
+    const mapped = importHtml(result.html, result.skipped);
+    return {
+      ...mapped,
+      html: generateHTML(mapped.json, extensions),
+      title: file.name.replace(/\.docx$/i, "").slice(0, 200),
+    };
   }
   const result = importMarkdown(await file.text(), file.name);
-  return { ...result, html: generateHTML(result.json, extensions), skipped: [] };
+  return { ...result, html: generateHTML(result.json, extensions) };
 }
 
 /** Shared entry for Upload and Drive's Open with Docs. Returns the created pod resource. */

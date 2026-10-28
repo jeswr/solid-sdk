@@ -14,6 +14,8 @@ import {
 import { baseExtensions } from "../../editor/extensions";
 import { validLink } from "../editor/logic";
 import { MAX_IMPORT_BYTES } from "./docx-import";
+import { normaliseImport } from "./schema";
+import { reportSkipped, type SkippedItem } from "./skipped";
 
 function longestRun(text: string, pattern: RegExp): number {
   let longest = 0;
@@ -489,9 +491,14 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
       });
     return extension;
   });
+// MarkdownManager parses synchronously; this report belongs to the current import.
+let mappingSkipped: SkippedItem[] = [];
 function parseHtml(token: MarkdownToken): JSONContent[] {
   if (typeof window === "undefined") return [];
-  const dom = new window.DOMParser().parseFromString((token.text as string).trimEnd(), "text/html");
+  const dom = new window.DOMParser().parseFromString(
+    (token.text as string).trimEnd().replace(/(<\/?h)[4-6](?=[\s>])/gi, "$13"),
+    "text/html",
+  );
   const rules = SchemaDOMParser.fromSchema(schema).rules;
   const parser = new SchemaDOMParser(
     schema,
@@ -527,12 +534,16 @@ function parseHtml(token: MarkdownToken): JSONContent[] {
     }),
   );
   // Keep unrecognized HTML inert, matching the upstream importer's fallback.
+  if (dom.head.childElementCount) reportSkipped(mappingSkipped, "Unsupported HTML");
   const unknown = Array.from(dom.body.querySelectorAll("*")).some(
     (element) =>
       !["SPAN", "TBODY", "THEAD", "TFOOT"].includes(element.tagName) &&
       !parser.rules.some((rule) => "tag" in rule && !!rule.tag && element.matches(rule.tag)),
   );
-  if (unknown) return token.block ? [] : [{ type: "text", text: token.text as string }];
+  if (unknown) {
+    if (token.block) reportSkipped(mappingSkipped, "Unsupported HTML");
+    return token.block ? [] : [{ type: "text", text: token.text as string }];
+  }
   // ProseMirror normalizes CR/CRLF even with preserveWhitespace: "full".
   // Protect decoded carriage returns before it sees the DOM, avoiding literal
   // sentinel collisions, then restore them in the parsed text nodes.
@@ -620,23 +631,32 @@ function splitImages(node: JSONContent): JSONContent[] {
   return blocks.length ? blocks : [node];
 }
 
-function clean(node: JSONContent, dropHighlights: boolean): JSONContent {
+function clean(
+  node: JSONContent,
+  dropHighlights: boolean,
+  skipped: SkippedItem[] = [],
+): JSONContent {
   const result = { ...node };
   if (result.marks)
-    result.marks = result.marks.filter(
-      (mark) =>
+    result.marks = result.marks.filter((mark) => {
+      const keep =
         mark.type !== "comment" &&
         !(dropHighlights && mark.type === "highlight") &&
-        (mark.type !== "link" || safeDestination(String(mark.attrs?.href))),
-    );
+        (mark.type !== "link" || safeDestination(String(mark.attrs?.href)));
+      if (!keep) reportSkipped(skipped, "Unsupported marks");
+      return keep;
+    });
   if (
     result.type === "image" &&
     (!/^https?:\/\//.test(String(result.attrs?.src)) || !safeDestination(String(result.attrs?.src)))
   ) {
+    reportSkipped(skipped, "Unsafe images");
     return { type: "paragraph" };
   }
   if (result.content)
-    result.content = result.content.flatMap((child) => splitImages(clean(child, dropHighlights)));
+    result.content = result.content.flatMap((child) =>
+      splitImages(clean(child, dropHighlights, skipped)),
+    );
   if (
     ["listItem", "taskItem"].includes(String(result.type)) &&
     result.content?.[0]?.type === "image"
@@ -802,9 +822,8 @@ export function importMarkdown(source: string, fileName: string) {
   }
   // Parse into the schema's inert nodes, then sanitize URLs and strip unsupported attrs.
   // Sanitizing the Markdown source as HTML would destroy code samples and autolinks.
-  const json = clean(markdown.parse(body), false);
+  mappingSkipped = [];
+  const json = clean(markdown.parse(body), false, mappingSkipped);
   if (!json.content?.length) json.content = [{ type: "paragraph" }];
-  const parsed = schema.nodeFromJSON(json);
-  parsed.check();
-  return { title: title.slice(0, 200), json: parsed.toJSON() as JSONContent };
+  return { title: title.slice(0, 200), ...normaliseImport(json, mappingSkipped) };
 }

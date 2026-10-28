@@ -39,6 +39,7 @@ import { updateMirrorMetadata } from "./mirror-metadata";
 import { DocumentUpdateStore } from "./update-store";
 
 class InactiveLogError extends Error {}
+class InvalidSnapshotError extends Error {}
 
 interface PendingEdit {
   owner?: string;
@@ -89,6 +90,7 @@ export class DocumentPersistence {
   private destroyed: Promise<void> | undefined;
   private version = 0;
   private savedVersion = 0;
+  private invalidVersion: number | undefined;
   private tail: Promise<void> | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private stopped = false;
@@ -146,10 +148,10 @@ export class DocumentPersistence {
             this.notify();
             return this.flush();
           })
-          .catch(() => {
+          .catch((error: unknown) => {
             if (this.stopped) return;
-            this.state = "retrying";
-            this.scheduleRetry();
+            this.state = error instanceof InvalidSnapshotError ? "failed" : "retrying";
+            if (this.state === "retrying") this.scheduleRetry();
             this.notify();
           });
       };
@@ -284,7 +286,13 @@ export class DocumentPersistence {
   }
   private captureDoc() {
     this.json = yDocToProsemirrorJSON(this.doc) as JSONContent;
-    this.body = generateHTML(this.json, baseExtensions(this.session.fetch));
+    try {
+      this.body = generateHTML(this.json, baseExtensions(this.session.fetch));
+    } catch {
+      throw new InvalidSnapshotError(
+        "The document contains unsupported content and couldn't be saved",
+      );
+    }
   }
   /** All publishers refresh the same durable state, including retired draft mirrors. */
   private async refreshLocalState(adoptPending = true) {
@@ -948,7 +956,13 @@ export class DocumentPersistence {
   change(body: string, json: JSONContent) {
     if (this.readOnly) return;
     this.capture(body, json);
-    if (this.creation === "draft" && !this.title) this.title = deriveTitle(json);
+    if (this.creation === "draft" && !this.title) {
+      try {
+        this.title = deriveTitle(json);
+      } catch {
+        this.title = "Untitled document";
+      }
+    }
     this.markDirty();
     if (this.creation !== "created") void this.flush();
   }
@@ -1010,6 +1024,7 @@ export class DocumentPersistence {
     if (this.timer) clearTimeout(this.timer);
     if (this.readOnly || !this.online) return;
     if (this.tail) return this.tail;
+    if (this.invalidVersion === this.version) return;
     const write = () => this.write();
     this.tail = (
       this.creation === "created"
@@ -1019,6 +1034,21 @@ export class DocumentPersistence {
       this.tail = undefined;
     });
     return this.tail;
+  }
+  private snapshot() {
+    try {
+      // A title can be saved before the editor creates its initial empty paragraph.
+      const json =
+        this.json.type === "doc" && !this.json.content?.length
+          ? { type: "doc", content: [{ type: "paragraph" }] }
+          : this.json;
+      getSchema(baseExtensions(this.session.fetch)).nodeFromJSON(json).check();
+      return { body: this.body, format: "text/html", wordCount: wordCount(json).words };
+    } catch {
+      throw new InvalidSnapshotError(
+        "The document contains unsupported content and couldn't be saved",
+      );
+    }
   }
   private async write(replacements = 0): Promise<void> {
     let writingSnapshot = false;
@@ -1048,11 +1078,7 @@ export class DocumentPersistence {
           (this.currentTitleState().local !== null || title !== this.stored?.data.title)
             ? title
             : undefined;
-        const snapshot = {
-          body: this.body,
-          format: "text/html",
-          wordCount: wordCount(this.json).words,
-        };
+        const snapshot = this.snapshot();
         this.state = "saving";
         this.notify();
         if (this.creation !== "created") {
@@ -1111,11 +1137,7 @@ export class DocumentPersistence {
               stored,
               { ...snapshot, title },
               {
-                regenerate: () => ({
-                  body: this.body,
-                  format: "text/html",
-                  wordCount: wordCount(this.json).words,
-                }),
+                regenerate: () => this.snapshot(),
               },
             );
             writingSnapshot = false;
@@ -1127,11 +1149,7 @@ export class DocumentPersistence {
             this.stored as StoredDocument,
             { ...snapshot, title, instanceId: this.recordIdentity() },
             {
-              regenerate: () => ({
-                body: this.body,
-                format: "text/html",
-                wordCount: wordCount(this.json).words,
-              }),
+              regenerate: () => this.snapshot(),
             },
           );
           writingSnapshot = false;
@@ -1195,8 +1213,10 @@ export class DocumentPersistence {
         if (writingSnapshot && this.creation === "created") return this.write(replacements);
         this.state = "failed";
       } else {
+        if (error instanceof InvalidSnapshotError) this.invalidVersion = this.version;
         this.state =
-          error instanceof ResourceWriteError && [403, 413, 507].includes(error.status)
+          error instanceof InvalidSnapshotError ||
+          (error instanceof ResourceWriteError && [403, 413, 507].includes(error.status))
             ? "failed"
             : "retrying";
         if (this.state === "retrying" && !this.stopped) this.scheduleRetry();
@@ -1295,10 +1315,10 @@ export class DocumentPersistence {
       this.assertActive();
       if (this.provider && this.version !== this.savedVersion) this.needsFullState = true;
       await this.flush();
-    } catch {
+    } catch (error: unknown) {
       if (this.stopped) return;
-      this.state = "retrying";
-      this.scheduleRetry();
+      this.state = error instanceof InvalidSnapshotError ? "failed" : "retrying";
+      if (this.state === "retrying") this.scheduleRetry();
       this.notify();
     }
   }

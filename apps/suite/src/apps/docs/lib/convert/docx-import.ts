@@ -4,9 +4,21 @@ import { openArrayBuffer } from "mammoth/lib/zipfile";
 import mammoth from "mammoth/mammoth.browser";
 import { SaxesParser } from "saxes";
 import { sanitiseImport } from "./sanitise";
+import { reportSkipped, type SkippedItem } from "./skipped";
+
+export type { SkippedItem } from "./skipped";
 
 export const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
 export const DOCX_STYLE_MAP = [
+  // Suite exports one paragraph per code block; fresh keeps adjacent blocks separate.
+  "p.Code => pre:fresh",
+  "p[style-name='Horizontal Rule'] => hr:fresh",
+  "p[style-name='Task Checked'] => ul[data-type='taskList'] > li[data-type='taskItem'][data-checked='true']:fresh > p:fresh",
+  "p[style-name='Task Unchecked'] => ul[data-type='taskList'] > li[data-type='taskItem'][data-checked='false']:fresh > p:fresh",
+  "r[style-name='Task Marker'] => !",
+  "r[style-name='Inline Code'] => code",
+  "u => u",
+  "highlight => mark",
   "p[style-name='Title'] => h1:fresh",
   ...[1, 2, 3, 4, 5, 6].map(
     (level) => `p[style-name='Heading ${level}'] => h${Math.min(level, 3)}:fresh`,
@@ -18,10 +30,6 @@ export const DOCX_STYLE_MAP = [
 export interface ImportProgress {
   completed: number;
   total: number;
-}
-export interface SkippedItem {
-  label: string;
-  count: number;
 }
 export interface DocxImportOptions {
   uploadImage: (data: ArrayBuffer, contentType: string) => Promise<string>;
@@ -81,6 +89,7 @@ export async function importDocx(data: ArrayBuffer, options: DocxImportOptions) 
       styleMap: DOCX_STYLE_MAP,
       includeEmbeddedStyleMap: false,
       externalFileAccess: false,
+      ignoreEmptyParagraphs: false,
       convertImage: mammoth.images.imgElement(async (image) => {
         const placeholder = `https://docs.invalid/import-image/${images.length}/end`;
         // Reserve the index before awaiting: mammoth may convert images concurrently.
@@ -91,6 +100,9 @@ export async function importDocx(data: ArrayBuffer, options: DocxImportOptions) 
       }),
     },
   );
+  result.messages.forEach(() => {
+    reportSkipped(inspected.skipped, "Unsupported DOCX formatting");
+  });
   let html = result.value;
   options.progress({ completed: 0, total: images.length });
   for (const [index, image] of images.entries()) {
@@ -102,5 +114,5 @@ export async function importDocx(data: ArrayBuffer, options: DocxImportOptions) 
     html = html.replaceAll(image.placeholder, src);
     options.progress({ completed: index + 1, total: images.length });
   }
-  return { html: sanitiseImport(html), skipped: inspected.skipped };
+  return { html: sanitiseImport(html, inspected.skipped), skipped: inspected.skipped };
 }
