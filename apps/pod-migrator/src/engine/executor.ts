@@ -13,6 +13,7 @@ import {
   unionPolicies,
 } from "./policy.js";
 import { aclLink, parent, parse, requireOk, requireRepresentation, serialize } from "./rdf.js";
+import { assertSpecificAccess, targetAccessLinks } from "./target-access.js";
 import type {
   AccessDocument,
   EffectivePolicy,
@@ -108,8 +109,9 @@ export async function executeMigration(
     groups: state.groups,
   };
   const aclUrls = new Map<string, string>();
+  let targetInventory = new Map<string, string>();
   const aclEtags = new Map<string, string>();
-  const bytesCopied = new Map<string, Uint8Array>();
+  const bytesCopied = new Map<string, { bytes: Uint8Array; contentType: string }>();
   const written = new Map<string, EffectivePolicy>();
   const checkCancel = () => opts.signal?.throwIfAborted();
   async function currentDocuments(
@@ -123,7 +125,10 @@ export async function executeMigration(
       let url: string | undefined = resource;
       while (url !== undefined) {
         if (!docs.has(url)) {
-          docs.set(url, await readAccess(side, url, system, opts.signal));
+          docs.set(
+            url,
+            await readAccess(side, url, system, opts.signal, undefined, side === state.target),
+          );
         }
         url = parent(url, side.root);
       }
@@ -137,7 +142,34 @@ export async function executeMigration(
   ): Promise<void> {
     const acl = aclUrls.get(url);
     if (!acl) throw new TypeError("Target has no discoverable ACL link");
-    const etag = aclEtags.get(url);
+    // Rediscover after every creation and immediately before each ACL PUT.
+    // A server may change its advertisement once the new resource exists.
+    await assertSpecificAccess(url, acl, targetInventory);
+    const head = await state.target.http.head(url);
+    const advertised = aclLink(head, url, state.target.root);
+    if (advertised) await assertSpecificAccess(url, advertised, targetInventory);
+    if (advertised !== acl) throw new TypeError("Target access document changed before write");
+    requireOk(head);
+    const document = await readAccess(state.target, url, state.targetSystem, undefined, acl, true);
+    await assertSpecificAccess(url, acl, targetInventory, document);
+    let etag = aclEtags.get(url);
+    if (!etag && document) {
+      // CSS PUT replies (201 and 205) have no ETag. Recover it from the
+      // negotiated ACL read, after checking our previous write still holds.
+      const previous = written.get(url);
+      if (
+        previous &&
+        (["resource", "members"] as const).some(
+          (scope) =>
+            !policiesEqual(scopePolicy(previous, scope), scopePolicy(document.policy, scope)),
+        )
+      )
+        throw new TypeError("Target access document changed after write");
+      etag = document.etag ?? undefined;
+      if (!etag) throw new TypeError("Safe access writes require an ETag");
+    }
+    if (written.has(url) && !document)
+      throw new TypeError("Target access document disappeared after write");
     const response = await writeAccess(
       state.target,
       url,
@@ -168,6 +200,16 @@ export async function executeMigration(
       active.map((e) => e.state.resource.targetUrl),
       state.targetSystem,
     );
+    targetInventory = await targetAccessLinks(state.target, opts.signal);
+    for (const entry of active) {
+      const resource = entry.state.resource.targetUrl;
+      const acl = aclLink(
+        await state.target.http.head(resource, { signal: opts.signal }),
+        resource,
+        state.target.root,
+      );
+      if (acl) targetInventory.set(resource, acl);
+    }
     for (const [group, expected] of state.groups) {
       const url = group.split("#")[0] as string;
       const dataset = await parse(
@@ -209,7 +251,10 @@ export async function executeMigration(
             : entry.policy;
       assertNotWider(sourceEffective, scopePolicy(actualPolicy, "resource"), context);
       const acl = aclLink(head, current, state.target.root);
-      if (acl) aclUrls.set(current, acl);
+      if (acl) {
+        await assertSpecificAccess(current, acl, targetInventory, targetDocs.get(current));
+        aclUrls.set(current, acl);
+      }
       const doc = targetDocs.get(current);
       if (entry.decision === "merge" && doc?.etag !== entry.state.targetDocument?.etag)
         throw new TypeError("Root access document changed after review");
@@ -231,7 +276,10 @@ export async function executeMigration(
         const acl =
           aclLink(response, current, state.target.root) ??
           aclLink(await state.target.http.head(current), current, state.target.root);
-        if (acl) aclUrls.set(current, acl);
+        if (acl) {
+          targetInventory.set(current, acl);
+          aclUrls.set(current, acl);
+        }
         await writeAcl(current, ownerPolicy(state.target.ownerWebId, true));
       }
       progress("lock", index + 1, containers.length, current);
@@ -271,16 +319,24 @@ export async function executeMigration(
           await state.target.http.put(current, new Uint8Array(), { contentType, ifNoneMatch: "*" }),
         );
         etag = placeholder.headers.get("etag") ?? undefined;
-        const acl =
-          aclLink(placeholder, current, state.target.root) ??
-          aclLink(await state.target.http.head(current), current, state.target.root);
-        if (acl) aclUrls.set(current, acl);
+        // CSS answers a create with 201 and no ETag: read it from the empty placeholder.
+        let acl = aclLink(placeholder, current, state.target.root);
+        if (!etag || !acl) {
+          const head = await state.target.http.head(current);
+          if (!etag && head.ok && head.headers.get("content-length") === "0")
+            etag = head.headers.get("etag") ?? undefined;
+          acl ??= aclLink(head, current, state.target.root);
+        }
+        if (acl) {
+          targetInventory.set(current, acl);
+          aclUrls.set(current, acl);
+        }
         await writeAcl(current, ownerPolicy(state.target.ownerWebId));
       }
       if (!etag) throw new TypeError("Safe content writes require an ETag");
       checkCancel();
       requireOk(await state.target.http.put(current, bytes, { contentType, ifMatch: etag }));
-      bytesCopied.set(current, bytes);
+      bytesCopied.set(current, { bytes, contentType });
       result.copied.push(current);
       log("info", `Copied ${current}`);
       progress("copy", index + 1, files.length, current);
@@ -322,7 +378,14 @@ export async function executeMigration(
       current = entry.state.resource.targetUrl;
       const expected = written.get(current);
       if (expected) {
-        const actual = await readAccess(state.target, current, state.targetSystem, opts.signal);
+        const actual = await readAccess(
+          state.target,
+          current,
+          state.targetSystem,
+          opts.signal,
+          undefined,
+          true,
+        );
         if (
           !actual ||
           !policiesEqual(
@@ -333,17 +396,33 @@ export async function executeMigration(
         )
           throw new TypeError("Access verification failed");
       }
-      const bytes = bytesCopied.get(current);
-      if (bytes) {
-        const actual = new Uint8Array(
-          await requireRepresentation(
-            await state.target.http.get(current, { signal: opts.signal }),
-          ).arrayBuffer(),
+      const copied = bytesCopied.get(current);
+      if (copied) {
+        const response = requireRepresentation(
+          await state.target.http.get(current, {
+            accept: copied.contentType,
+            signal: opts.signal,
+          }),
         );
+        if (
+          extractMediaType(response.headers.get("content-type")) !==
+          extractMediaType(copied.contentType)
+        )
+          throw new TypeError("Content type verification failed");
+        const actual = new Uint8Array(await response.arrayBuffer());
+        const { bytes } = copied;
         if (actual.length !== bytes.length || actual.some((value, i) => value !== bytes[i]))
           throw new TypeError("Content verification failed");
       }
       progress("verify", index + 1, active.length, current);
+    }
+    current = state.target.root;
+    try {
+      const rootDocuments = await currentDocuments(state.target, [current], state.targetSystem);
+      const rootPolicy = effectivePolicy(state.targetSystem, current, current, rootDocuments);
+      assertNotWider(rootPolicy, ownerPolicy(state.target.ownerWebId));
+    } catch {
+      throw new TypeError("Target owner no longer controls the root");
     }
     result.verified = true;
     log("info", "Migration verified");

@@ -6,4 +6,6 @@ import "./styles.css";
 
 const element = document.getElementById("root");
 if (!element) throw new Error("Missing root element");
-createRoot(element).render(<App connections={createConnections(location.origin)} />);
+createRoot(element).render(
+  <App connections={createConnections(location.origin, import.meta.env.BASE_URL)} />,
+);

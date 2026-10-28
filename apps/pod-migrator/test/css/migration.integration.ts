@@ -18,7 +18,14 @@ import {
 import { type CssAccount, createAccount } from "./account.js";
 import { boundedFetch } from "./auth.js";
 import { ownerRule, putFixture, type SourceFixture, seedSource, setAccess } from "./fixtures.js";
-import { accessLink, appendProbeBody, assertSubset, observeWrites, probeAccess } from "./probe.js";
+import {
+  accessLink,
+  affectedPaths,
+  appendProbeBody,
+  assertSubset,
+  observeWrites,
+  probeAccess,
+} from "./probe.js";
 import { type CssServer, type System, startServer } from "./server.js";
 
 interface Scenario {
@@ -153,7 +160,9 @@ describe.sequential("real CSS 7.2 migration security", () => {
         assert.equal((await fixture.side.http.get(unreadableAcl)).status, 403);
       } else {
         assert.deepEqual(baseline.get("deny.ttl")?.[namedIndex], new Set(["append"]));
-        assert.deepEqual(baseline.get("client.ttl")?.[namedIndex], new Set(["read"]));
+        // The harness's opaque credential label differs from the fixture's
+        // absolute client IRI. Removing the client condition would expose Read.
+        assert.deepEqual(baseline.get("client.ttl")?.[namedIndex], new Set());
         assert.deepEqual(baseline.get("exclusion.ttl")?.[namedIndex], new Set());
       }
       console.log(
@@ -225,13 +234,13 @@ describe.sequential("real CSS 7.2 migration security", () => {
         destination.podRoot,
         `${destination.podRoot}conflict.json`,
       ]);
-      const onProgress = async () => {
+      const onProgress = async (written: string) => {
         if (!auditEnabled) return;
         auditedWrites++;
         try {
-          // Check EVERY existing migrated resource after EVERY write. Parent
-          // changes can widen descendants other than the resource just written.
-          for (const path of source.paths) {
+          // Fence EVERY write. Parent ACL changes must recheck every existing
+          // descendant; a file write cannot change unrelated resources' access.
+          for (const path of affectedPaths(source.paths, destination.podRoot, written, aclUrls)) {
             const url = destination.podRoot + path;
             if (!existing.has(url)) continue;
             let acl = aclUrls.get(url);
@@ -260,7 +269,7 @@ describe.sequential("real CSS 7.2 migration security", () => {
       };
       const observed = observeWrites(destination.side.http, async (event) => {
         if (event.status >= 200 && event.status < 300 && event.current) existing.add(event.current);
-        await onProgress();
+        await onProgress(event.current as string);
       });
       const targetSide = { ...destination.side, http: observed.http };
       const options = {
@@ -422,7 +431,9 @@ describe.sequential("real CSS 7.2 migration security", () => {
       await append.arrayBuffer();
       const changed = await destination.fetch(shared);
       const etag = changed.headers.get("etag");
-      const graph = await parseRdf(await changed.text(), changed.headers.get("content-type"), {
+      const changedText = await changed.text();
+      if (process.env.CSS_DEBUG) console.log(`[APPENDED BODY]\n${changedText}`);
+      const graph = await parseRdf(changedText, changed.headers.get("content-type"), {
         baseIRI: shared,
       });
       expect(

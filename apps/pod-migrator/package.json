@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:pages": "APP_ORIGIN=https://jeswr.github.io APP_BASE_PATH=/solid-sdk/pod-migrator/ vite build",
     "preview": "vite preview",
     "lint": "biome check src test vite.config.ts vitest.config.ts",
     "lint:fix": "biome check --write src test vite.config.ts vitest.config.ts",

@@ -14,6 +14,7 @@ import {
 } from "./policy.js";
 import { aclLink, links, parent, parse, requireOk } from "./rdf.js";
 import { type AcpDialect, acpDialect, PolicyTooComplex } from "./systems/acp.js";
+import { assertSpecificAccess, targetAccessLinks } from "./target-access.js";
 import { reportItem, type TranslationContext, translatePolicy } from "./translation.js";
 import {
   type AccessDocument,
@@ -225,7 +226,10 @@ export async function planMigration(opts: {
         targetHeads.set(url, head);
         if (targetSystem !== "unknown")
           try {
-            targetDocs.set(url, await readAccess(target, url, targetSystem, opts.signal));
+            targetDocs.set(
+              url,
+              await readAccess(target, url, targetSystem, opts.signal, undefined, true),
+            );
           } catch {
             opts.signal?.throwIfAborted();
             targetErrors.add(url);
@@ -257,12 +261,18 @@ export async function planMigration(opts: {
           opts.signal?.throwIfAborted();
         }
       }
-  const protectedAuxiliaries = new Set(
-    [...targetHeads].flatMap(([url, response]) => [
+  const targetInventory = await targetAccessLinks(target, opts.signal);
+  for (const [url, head] of targetHeads) {
+    const acl = aclLink(head, url, target.root);
+    if (acl) targetInventory.set(url, acl);
+  }
+  const protectedAuxiliaries = new Set([
+    ...targetInventory.values(),
+    ...[...targetHeads].flatMap(([url, response]) => [
       ...links(response, url, "acl"),
       ...links(response, url, "describedby"),
     ]),
-  );
+  ]);
   const states: ResourceState[] = [];
   const hasError = (url: string, root: string, errors: Set<string>) => {
     let current: string | undefined = url;
@@ -300,7 +310,20 @@ export async function planMigration(opts: {
     ownless.delete(resource.targetUrl);
     const targetInherited = effectivePolicy(targetSystem, resource.targetUrl, target.root, ownless);
     const exists = (targetHeads.get(resource.targetUrl) as Response).ok;
-    const targetUnreadable = hasError(resource.targetUrl, target.root, targetErrors);
+    let targetUnreadable = hasError(resource.targetUrl, target.root, targetErrors);
+    const targetAcl = targetInventory.get(resource.targetUrl);
+    if (targetAcl) {
+      try {
+        await assertSpecificAccess(
+          resource.targetUrl,
+          targetAcl,
+          targetInventory,
+          targetDocs.get(resource.targetUrl),
+        );
+      } catch {
+        targetUnreadable = true;
+      }
+    }
     if (
       resource.targetUrl === target.root ||
       protectedAuxiliaries.has(resource.targetUrl) ||
@@ -332,7 +355,7 @@ export async function planMigration(opts: {
         reportItem(
           "acl-unreadable",
           resource.sourceUrl,
-          "Target ancestor permissions are unreadable. This path cannot be written safely.",
+          "Target access controls are unreadable or shared with another resource. This path cannot be written safely.",
           ["skip", "abort"],
           "target",
         ),

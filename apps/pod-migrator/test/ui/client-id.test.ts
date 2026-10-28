@@ -1,53 +1,48 @@
 // AUTHORED-BY Codex GPT-6
-import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
-import { clientIdDocument, deploymentOrigin, originEnvironment } from "../../vite.config.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  clientDocumentPlugin,
+  clientIdDocument,
+  deploymentBasePath,
+  deploymentOrigin,
+  originEnvironment,
+} from "../../vite.config.js";
 
 describe("static client identifier document", () => {
-  it("resolves the origin per env layer and ignores empty shell values", () => {
-    const layers = [
-      { APP_ORIGIN: "" },
+  it("merges environment fields independently, in precedence order, ignoring empty values", () => {
+    const env = originEnvironment([
+      { APP_ORIGIN: "", APP_BASE_PATH: "/solid-sdk/pod-migrator/" },
       { APP_ORIGIN: "https://local-file.example" },
-      { APP_ORIGIN: "https://base-file.example" },
-    ];
-    expect(deploymentOrigin(originEnvironment(layers), true)).toBe("https://local-file.example");
+      { APP_ORIGIN: "https://base-file.example", APP_BASE_PATH: "/" },
+    ]);
+    expect(deploymentOrigin(env, true)).toBe("https://local-file.example");
+    expect(env.APP_BASE_PATH).toBe("/solid-sdk/pod-migrator/");
     expect(
-      deploymentOrigin(originEnvironment([{ VERCEL_URL: "preview.vercel.app" }, ...layers]), true),
-    ).toBe("https://preview.vercel.app");
-    expect(
-      deploymentOrigin(
-        originEnvironment([{ APP_ORIGIN: "https://shell.example" }, ...layers]),
-        true,
-      ),
+      deploymentOrigin(originEnvironment([{ APP_ORIGIN: "https://shell.example" }, env]), true),
     ).toBe("https://shell.example");
   });
-  it("uses one deployment origin for the client and both callback paths", () => {
-    const origin = deploymentOrigin(
-      { APP_ORIGIN: "https://migrate.example/", VERCEL_URL: "preview.vercel.app" },
-      true,
-    );
-    expect(clientIdDocument(origin)).toEqual({
+
+  it("uses one deployment origin and base for the client and both callback paths", () => {
+    const origin = deploymentOrigin({ APP_ORIGIN: "https://jeswr.github.io/" }, true);
+    expect(clientIdDocument(origin, "/solid-sdk/pod-migrator/")).toEqual({
       "@context": ["https://www.w3.org/ns/solid/oidc-context.jsonld"],
-      client_id: "https://migrate.example/clientid.jsonld",
+      client_id: "https://jeswr.github.io/solid-sdk/pod-migrator/clientid.jsonld",
       client_name: "Pod Migrator",
-      client_uri: "https://migrate.example/",
+      client_uri: "https://jeswr.github.io/solid-sdk/pod-migrator/",
       redirect_uris: [
-        "https://migrate.example/callback/source",
-        "https://migrate.example/callback/target",
+        "https://jeswr.github.io/solid-sdk/pod-migrator/callback/source",
+        "https://jeswr.github.io/solid-sdk/pod-migrator/callback/target",
       ],
       scope: "openid webid offline_access",
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       token_endpoint_auth_method: "none",
     });
-    expect(deploymentOrigin({ VERCEL_URL: "preview.vercel.app" }, true)).toBe(
-      "https://preview.vercel.app",
-    );
-    expect(deploymentOrigin({ APP_ORIGIN: "", VERCEL_URL: "preview.vercel.app" }, true)).toBe(
-      "https://preview.vercel.app",
-    );
+    expect(clientIdDocument(origin).client_id).toBe("https://jeswr.github.io/clientid.jsonld");
     expect(deploymentOrigin({})).toBe("http://localhost:5173");
     expect(() => deploymentOrigin({}, true)).toThrow("Set APP_ORIGIN");
+    expect(() => deploymentOrigin({ APP_ORIGIN: "http://localhost:5173" }, true)).toThrow();
+    expect(deploymentOrigin({ APP_ORIGIN: "http://localhost:5173" })).toBe("http://localhost:5173");
   });
 
   it.each([
@@ -61,18 +56,46 @@ describe("static client identifier document", () => {
     expect(() => deploymentOrigin({ APP_ORIGIN: origin }, true)).toThrow();
   });
 
-  it("serves JSON-LD with CORS and rewrites both callback routes to the SPA", () => {
-    const config = JSON.parse(readFileSync(new URL("../../vercel.json", import.meta.url), "utf8"));
-    const headers = config.headers.find(
-      (entry: { source: string }) => entry.source === "/clientid.jsonld",
-    ).headers;
-    expect(headers).toContainEqual({ key: "Content-Type", value: "application/ld+json" });
-    expect(headers).toContainEqual({ key: "Access-Control-Allow-Origin", value: "*" });
-    const rule = config.rewrites[0];
-    const pattern = new RegExp(`^${rule.source}$`);
-    expect(pattern.test("/callback/source")).toBe(true);
-    expect(pattern.test("/callback/target")).toBe(true);
-    expect(pattern.test("/clientid.jsonld")).toBe(false);
-    expect(rule.destination).toBe("/index.html");
+  it("requires a safe absolute base with a trailing slash", () => {
+    expect(deploymentBasePath()).toBe("/");
+    expect(deploymentBasePath("/solid-sdk/pod-migrator/")).toBe("/solid-sdk/pod-migrator/");
+    for (const path of [
+      "",
+      "relative/",
+      "//evil/",
+      "/path",
+      "/../",
+      "/%2f/",
+      "/a/?x",
+      "/a/#x",
+      "/a\\/",
+    ])
+      expect(() => deploymentBasePath(path)).toThrow("APP_BASE_PATH");
+  });
+
+  it("emits an identical static 404 entry and the base-aware client document", () => {
+    const plugin = clientDocumentPlugin("https://jeswr.github.io", "/solid-sdk/pod-migrator/");
+    const emitFile = vi.fn();
+    const hook = plugin.generateBundle;
+    if (!hook || typeof hook !== "object") throw new Error("Expected an ordered build hook");
+    const run = hook.handler as unknown as (
+      this: { emitFile: typeof emitFile },
+      options: unknown,
+      bundle: unknown,
+    ) => void;
+    const html = '<html><script src="/solid-sdk/pod-migrator/assets/app.js"></script></html>';
+    run.call({ emitFile }, {}, { "index.html": { type: "asset", source: html } });
+    expect(emitFile).toHaveBeenCalledWith({ type: "asset", fileName: "404.html", source: html });
+    for (const id of ["source", "target"])
+      expect(emitFile).toHaveBeenCalledWith({
+        type: "asset",
+        fileName: `callback/${id}/index.html`,
+        source: html,
+      });
+    const cid = emitFile.mock.calls.find(([asset]) => asset.fileName === "clientid.jsonld")?.[0];
+    expect(JSON.parse(cid.source)).toEqual(
+      clientIdDocument("https://jeswr.github.io", "/solid-sdk/pod-migrator/"),
+    );
+    expect(() => run.call({ emitFile }, {}, {})).toThrow("Missing built index.html");
   });
 });

@@ -14,13 +14,13 @@ export interface ConnectionState {
   error: string | null;
 }
 
-export function authConfig(id: ConnectionId, origin: string): SolidAuthConfig {
+export function authConfig(id: ConnectionId, origin: string, base = "/"): SolidAuthConfig {
   const prefix = `pod-migrator:${id}`;
-  const redirectUri = new URL(`/callback/${id}`, origin).href;
+  const redirectUri = new URL(`${base}callback/${id}`, origin).href;
   return {
     callbackUri: redirectUri,
     redirectUri,
-    clientId: new URL("/clientid.jsonld", origin).href,
+    clientId: new URL(`${base}clientid.jsonld`, origin).href,
     dbName: `${prefix}:sessions`,
     rememberedAccountsKey: `${prefix}:remembered`,
     recentAccountsKey: `${prefix}:recent`,
@@ -51,7 +51,11 @@ export class PodConnection {
   private generation = 0;
   private initialization: Promise<void> | undefined;
 
-  constructor(id: ConnectionId, auth: SolidAuth) {
+  constructor(
+    id: ConnectionId,
+    auth: SolidAuth,
+    private readonly base = "/",
+  ) {
     this.id = id;
     this.auth = auth;
   }
@@ -75,7 +79,11 @@ export class PodConnection {
   private async initializeOnce(url: string): Promise<void> {
     const generation = ++this.generation;
     try {
-      if (new URL(url).pathname === `/callback/${this.id}`) {
+      if (
+        [`${this.base}callback/${this.id}`, `${this.base}callback/${this.id}/`].includes(
+          new URL(url).pathname,
+        )
+      ) {
         const redirect = await this.auth.handleRedirect(url);
         if (generation !== this.generation) return;
         if (redirect.outcome === "error") throw new Error("Sign-in was not completed. Try again.");
@@ -223,9 +231,9 @@ export class PodConnection {
   }
 }
 
-export function createConnections(origin: string): [PodConnection, PodConnection] {
+export function createConnections(origin: string, base = "/"): [PodConnection, PodConnection] {
   return ["source", "target"].map((id) => {
     const side = id as ConnectionId;
-    return new PodConnection(side, createSolidAuth(authConfig(side, origin)));
+    return new PodConnection(side, createSolidAuth(authConfig(side, origin, base)), base);
   }) as [PodConnection, PodConnection];
 }

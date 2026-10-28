@@ -56,8 +56,11 @@ faithful resources; reviewed losses must remain subsets of the source.
 The engine's `onProgress` callback is synchronous and does not cover each
 individual PUT. The harness therefore fences **every target transport write**
 with an awaited `onProgress` observer and also records the engine's own progress
-events. The observer probes every existing migrated resource after every write,
-including empty placeholders, initial locks, content copies, and final grants.
+events. The observer probes the changed resource after every write, including
+empty placeholders, initial locks, content copies, and final grants. A container
+write also probes every existing descendant, since parent controls can widen them.
+Unknown write URLs trigger a full audit. Previously checked unrelated resources
+need no repeated probes; final verification still covers the entire migrated tree.
 It checks anonymous access and both stranger identities before the executor can
 issue its next write. Observer errors fail execution and are rethrown by the
 test even if the engine returns them in its result.
@@ -81,6 +84,14 @@ The WAC source therefore uses a delegated migration session with Control on the
 tree and body access without Control on the unreadable-ACL fixture. This exercises
 a real HTTP 403 and both skip and owner-only resolutions. The actual pod owner
 keeps recovery access; the target owner must retain Control everywhere.
+CSS client-credential IDs are opaque labels, whereas RDF IRI-valued `acp:client` matchers
+resolve relative values against the ACR URL. The `client.ttl` fixture explicitly uses that
+absolute IRI; these harness tokens carry the bare label and must have no Read there. Removing
+the client condition would expose Read and fail the comparison. Offline tests prove both
+positive matching with the resolved IRI and negative matching with the actual label, and
+check exact issuer matching (including trailing slashes). This harness does not claim a live
+positive client-IRI grant for CSS's opaque client-credential tokens. Named WebIDs remain the
+same identities across both servers; target issuers and target owners are never substituted.
 ESS/PodSpaces and its UMA behavior are outside this local CSS suite.
 
 The live file uses `.integration.ts`, excluded by the default app test glob.

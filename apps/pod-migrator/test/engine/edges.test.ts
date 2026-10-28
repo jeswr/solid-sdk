@@ -148,7 +148,10 @@ describe("adversarial transport, metadata and planning edges", () => {
     ).toEqual(["skip", "abort"]);
     expect(report.report.filter((i) => i.kind === "acl-unreadable")).toHaveLength(2);
     const result = await executeMigration(finalizePlan(report, resolve(report)), options);
-    expect(result.verified).toBe(true);
+    // An unreadable root can no longer produce a verified result: owner Control
+    // must be proven even when review skips every resource.
+    expect(result.verified).toBe(false);
+    expect(result.failed[0]?.error).toContain("no longer controls the root");
     expect(target.requests.some((r) => r.method === "PUT")).toBe(false);
   });
   it("protects percent-encoded aliases of the target WebID document", async () => {
@@ -257,9 +260,8 @@ describe("execution failure containment and verification", () => {
           return without(response, "link");
         if (failure === "fallback-link" && method === "PUT" && requestUrl === url)
           return without(response, "link");
-        if (failure === "missing-etag" && method === "PUT" && requestUrl === url)
-          return without(response, "etag");
-        if (failure === "acl-etag" && method === "PUT" && requestUrl === target.acl(url))
+        if (failure === "missing-etag" && requestUrl === url) return without(response, "etag");
+        if (failure === "acl-etag" && requestUrl === target.acl(url))
           return without(response, "etag");
         if (
           ["short-content", "wrong-content"].includes(failure) &&
@@ -385,10 +387,10 @@ it("does not copy encoded auxiliaries or data mapped onto an advertised target A
   source.store(`${source.root}forged%2Eacl`, "unsafe ACL");
   source.store(`${source.root}forged.%41CR`, "unsafe ACR");
   source.store(`${source.root}permissions`, "unsafe ACR content");
-  const previous = target.access.get(target.acl(target.root));
   target.access.delete(target.acl(target.root));
   target.aclOverrides.set(target.root, `${target.root}permissions`);
-  if (previous) target.access.set(target.acl(target.root), previous);
+  target.setAcl(target.root, await acl(target, target.root));
+  const previous = target.access.get(target.acl(target.root));
   const options = { source: source.side(), target: target.side() };
   const plan = await planMigration(options);
   expect(plan.report.filter((item) => item.kind === "metadata-skipped")).toHaveLength(2);

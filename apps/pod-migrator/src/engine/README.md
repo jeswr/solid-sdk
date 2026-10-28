@@ -8,8 +8,7 @@ not widen access. Executable plans carry a private snapshot, are bound to the or
 sessions, and are single-use. Downloaded JSON is a report, not a resumable executable plan.
 
 The offline CSS 7.2 and `@solid/access-control-policy` implementations resolve ambiguities in
-DESIGN.md as follows. These notes are colocated with the engine because this lane does not own
-the design document.
+DESIGN.md as follows. These notes are colocated with the engine and reflected in the design document.
 
 - ACP matcher values are ORed within one attribute; different attributes are ANDed. The design's
   statement that all matcher attributes are alternatives would widen access. The reader preserves
@@ -18,6 +17,13 @@ the design document.
 - CSS uses ACL mode IRIs in ACP policies and evaluates policies protecting the ACR URL itself.
   ESS-style ACP mode IRIs and `acp:access` policies are supported separately in `systems/acp.ts`.
   The root document determines the dialect. Live PodSpaces behavior still needs account testing.
+- CSS selects policies from every `acp:resource` statement, choosing access controls for
+  matching IRIs and member controls otherwise. Foreign-node denials are conservatively retained;
+  unplaceable grants and unknown/detached constructs fail closed. Target scopes must be exclusive
+  during parsing and verification, preventing an ineffective denial from masking a broader grant.
+- Target inventory includes existing siblings and the profile even when review skips them. Shared
+  access URLs and foreign resource bindings are refused before ACL PUTs, including newly created
+  placeholders. Final verification proves the owner retains root access including Control.
 - A WAC 404 means that an own ACL is absent, so the nearest ancestor's defaults apply. ACP 404s
   contribute no own controls. A 403, parsing failure, or failed request makes the policy unknown;
   it never causes permissive inheritance. Uncertainty propagates conservatively to descendants.

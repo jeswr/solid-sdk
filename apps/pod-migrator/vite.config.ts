@@ -9,7 +9,14 @@ import { defineConfig, type Plugin } from "vite";
 type OriginEnvironment = Record<string, string | undefined>;
 
 export function originEnvironment(layers: OriginEnvironment[]): OriginEnvironment {
-  return layers.find((layer) => layer.APP_ORIGIN?.trim() || layer.VERCEL_URL?.trim()) ?? {};
+  return Object.assign(
+    {},
+    ...layers
+      .toReversed()
+      .map((layer) =>
+        Object.fromEntries(Object.entries(layer).filter(([, value]) => value?.trim())),
+      ),
+  );
 }
 
 function fileEnvironment(name: string): OriginEnvironment {
@@ -25,9 +32,8 @@ export function deploymentOrigin(
   env: Record<string, string | undefined>,
   production = false,
 ): string {
-  const raw =
-    env.APP_ORIGIN?.trim() || (env.VERCEL_URL?.trim() ? `https://${env.VERCEL_URL.trim()}` : "");
-  if (!raw && production) throw new Error("Set APP_ORIGIN or VERCEL_URL for a deployable build.");
+  const raw = env.APP_ORIGIN?.trim();
+  if (!raw && production) throw new Error("Set APP_ORIGIN for a deployable build.");
   const url = new URL(raw || "http://localhost:5173");
   const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
   if (
@@ -45,13 +51,22 @@ export function deploymentOrigin(
   return url.origin;
 }
 
-export function clientIdDocument(origin: string) {
+export function deploymentBasePath(value = "/"): string {
+  if (!/^\/(?:[a-zA-Z0-9_-]+\/)*$/.test(value))
+    throw new Error(
+      "APP_BASE_PATH must be an absolute path with a trailing slash and plain path segments.",
+    );
+  return value;
+}
+
+export function clientIdDocument(origin: string, base = "/") {
+  const app = `${origin}${deploymentBasePath(base)}`;
   return {
     "@context": ["https://www.w3.org/ns/solid/oidc-context.jsonld"],
-    client_id: `${origin}/clientid.jsonld`,
+    client_id: `${app}clientid.jsonld`,
     client_name: "Pod Migrator",
-    client_uri: `${origin}/`,
-    redirect_uris: [`${origin}/callback/source`, `${origin}/callback/target`],
+    client_uri: app,
+    redirect_uris: [`${app}callback/source`, `${app}callback/target`],
     scope: "openid webid offline_access",
     grant_types: ["authorization_code", "refresh_token"],
     response_types: ["code"],
@@ -59,13 +74,13 @@ export function clientIdDocument(origin: string) {
   };
 }
 
-export function clientDocumentPlugin(origin: string): Plugin {
-  const body = `${JSON.stringify(clientIdDocument(origin), null, 2)}\n`;
+export function clientDocumentPlugin(origin: string, base = "/"): Plugin {
+  const body = `${JSON.stringify(clientIdDocument(origin, base), null, 2)}\n`;
   return {
     name: "pod-migrator-client-document",
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
-        if (request.url?.split("?")[0] !== "/clientid.jsonld") {
+        if (request.url?.split("?")[0] !== `${base}clientid.jsonld`) {
           next();
           return;
         }
@@ -75,8 +90,19 @@ export function clientDocumentPlugin(origin: string): Plugin {
         response.end(body);
       });
     },
-    generateBundle() {
-      this.emitFile({ type: "asset", fileName: "clientid.jsonld", source: body });
+    generateBundle: {
+      order: "post",
+      handler(_options, bundle) {
+        const index = bundle["index.html"];
+        if (index?.type !== "asset") throw new Error("Missing built index.html");
+        for (const fileName of [
+          "404.html",
+          "callback/source/index.html",
+          "callback/target/index.html",
+        ])
+          this.emitFile({ type: "asset", fileName, source: index.source });
+        this.emitFile({ type: "asset", fileName: "clientid.jsonld", source: body });
+      },
     },
   };
 }
@@ -103,14 +129,19 @@ export default defineConfig(({ mode, command }) => {
     fileEnvironment(".env.local"),
     fileEnvironment(".env"),
   ]);
-  const origin = deploymentOrigin(env, command === "build" && Boolean(process.env.VERCEL));
+  const origin = deploymentOrigin(
+    env,
+    command === "build" && Boolean(env.APP_ORIGIN || process.env.CI),
+  );
+  const base = deploymentBasePath(env.APP_BASE_PATH);
   if (mode === "screens" && command === "build")
     throw new Error("Screenshot mocks are development-only.");
   return {
+    base,
     plugins: [
       react(),
       tailwindcss(),
-      clientDocumentPlugin(origin),
+      clientDocumentPlugin(origin, base),
       ...(mode === "screens" ? [screenshotMocks()] : []),
     ],
   };

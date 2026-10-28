@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Pod Migrator design
 
@@ -16,8 +17,8 @@ strictly narrower, or stops. It never substitutes something broader.
 
 The app holds two independent `createSolidAuth()` instances from `@jeswr/solid-auth-core`,
 `source` and `target`. Each has its own `dbName`, `rememberedAccountsKey`, `recentAccountsKey`,
-`redirectFlowKey`, `redirectSentinelKey` and `redirectUri` (`/callback/source`,
-`/callback/target`), and `patchGlobalFetch: false`, so neither touches the global fetch and the
+`redirectFlowKey`, `redirectSentinelKey` and `redirectUri` (`<base>callback/source`,
+`<base>callback/target`, with `APP_BASE_PATH` defaulting to `/`), and `patchGlobalFetch: false`, so neither touches the global fetch and the
 two credentials can never be confused.
 
 Each instance is armed with `includeIssuerOrigin: false`. After login the app reads the
@@ -52,8 +53,10 @@ Data crosses from source to target only as bytes plus a content type. No header,
    advertised ACL) become report items.
 3. **Plan** (pure). Compute each source resource's effective permissions, translate them to the
    target's system, and collect every place the translation is not faithful as a `ReportItem`.
-   Also check the target: existing resources at the same path, the target's own root ACL and
-   WebID profile document.
+   Also inventory the existing target tree and the target's own root ACL and
+   WebID profile document, including paths outside the migration. ACL/ACR URLs shared by
+   resources, or documents binding another resource, are unsafe: offer skip/abort. An unreadable
+   target inventory stops planning because exclusivity cannot be established.
 4. **Review** (UI). Show the plan: resource counts, bytes, and every report item with its
    options. Nothing has been written yet. The user resolves each item or aborts. Resolutions can
    be applied in bulk per item kind.
@@ -63,7 +66,8 @@ Data crosses from source to target only as bytes plus a content type. No header,
      nothing else). Before writing any resource directly into a target container that already
      existed before the migration, first create it empty, lock it owner-only, then write its
      content.
-   - *Copy.* PUT each resource's bytes with its content type and `If-None-Match: *` (never
+   - *Copy.* Create each new resource's empty placeholder with its content type and
+     `If-None-Match: *`, lock it, then PUT its bytes with the placeholder's ETag in `If-Match` (never
      overwrite unless the user chose "overwrite" for that path). RDF documents may optionally have
      source-pod IRIs rewritten to target-pod IRIs (parse with `@jeswr/fetch-rdf`, rewrite terms,
      serialise with `n3.Writer`); off by default the bytes are copied verbatim.
@@ -71,7 +75,8 @@ Data crosses from source to target only as bytes plus a content type. No header,
      members). Every intermediate state is a subset of the final state, which is a subset of the
      source.
 6. **Verify.** Re-read each written ACL/ACR, re-parse it, and compare it with the planned rules.
-   Read back each copied resource's size or hash. Produce a final report (downloadable JSON).
+   Read back each copied resource with its copied media type in `Accept`; compare its bytes and
+   media type. Produce a final report (downloadable JSON).
 
 Cancel is available at every step. A cancel during execute stops after the in-flight request;
 everything already copied stays owner-only or at its final, never-wider state, and the report
@@ -122,13 +127,25 @@ Per the ACP spec: an ACR's `acp:accessControl` applies to the resource, `acp:mem
 to all descendants and is **additive**: a descendant cannot remove an ancestor's member
 controls. Each access control applies policies; a policy has `acp:allow` / `acp:deny` modes and
 `acp:allOf` (all matchers must match), `acp:anyOf` (at least one), `acp:noneOf` (none). A
-matcher matches when any of its `acp:agent` / `acp:client` / `acp:issuer` / `acp:vc` values
-match; `acp:agent` may be `acp:PublicAgent`, `acp:AuthenticatedAgent`, `acp:CreatorAgent`,
+matcher ORs the values within each of `acp:agent`, `acp:client`, `acp:issuer`, and `acp:vc`,
+and ANDs the different attributes that are present (as CSS's reference evaluator does).
+`acp:agent` may be `acp:PublicAgent`, `acp:AuthenticatedAgent`, `acp:CreatorAgent`,
 `acp:OwnerAgent`. A mode is granted when an applicable policy allows it and no applicable
 policy denies it. Control is access to the ACR itself (`acp:access` / control mode as the
 server implements it; verify against both the spec copy and CSS's ACP implementation).
 Translate `allOf`/`anyOf`/`noneOf` into the `who`/`except` normal form; a policy whose
 expansion exceeds 64 clauses is a report item (`too-complex`) rather than silently truncated.
+
+CSS evaluates every `acp:resource` statement in each ancestor ACR. For each statement it
+selects `accessControl` when that IRI equals the requested target and `memberAccessControl`
+otherwise. Filtering the document down to the current resource's node is unsafe. The source
+reader retains foreign-node denials conservatively for both resource and member scope, even
+where placement is uncertain. Foreign grants that cannot be placed faithfully, detached
+constructs, unknown ACP predicates, and ambiguous resource bindings make the document unknown
+(owner-only/skip/abort). ACR-self policies remain mapped to Control. `acp:PublicClient` matches
+any client context. Target documents must have exclusive resource/ACR-self scopes on read and
+verification: conservative denials cannot mask a broader server-effective grant. Typed ESS
+ACR roots without `acp:resource` are supported only without competing resource bindings.
 
 ## 4. Detecting the system
 
@@ -174,7 +191,22 @@ Serialise with `n3.Writer` only, never by string concatenation. WAC: one `acl:Au
 per (subject set, modes, scope). ACP: one policy + matcher per grant clause, attached with
 `acp:accessControl` and, where planned, `acp:memberAccessControl`. ACR writes go to the ACR URL
 from the resource's `Link rel="acl"`; ESS and CSS both accept PUT of Turtle there. Never write an
-ACL/ACR that lacks the owner's Control.
+ACL/ACR that lacks the owner's Control. Never write an access URL advertised for another
+resource, including a skipped root, profile or existing sibling. Recheck the advertisement
+and the current document's resource bindings immediately before each access PUT; apply the
+same guard when an empty placeholder first reveals its ACL URL. A safe refusal may leave an
+empty placeholder with its already-proven safe inherited permissions, but never copies content
+through an unsafe access URL. Verification checks target document scopes and the owner's root
+permissions, including Control, before claiming success.
+
+CSS 7.2's `PutOperationHandler` returns 201/205 without an ETag for content and access
+documents. An empty placeholder's ETag may be recovered by HEAD only when its content length
+is zero. Before replacing an already written access document, recover a missing response ETag
+from the fresh negotiated read only if both its resource and member policies still equal the
+previously written policy. Missing validators, changed policies, and deleted access documents
+stop execution; never retry a failed condition unconditionally. A pre-existing specific access
+document, including a server-created default, is replaced using its read ETag. Access reads
+parse the returned media type and normalize to Turtle for later scope checks and merges.
 
 ## 7. Testing
 
@@ -193,3 +225,13 @@ ACL/ACR that lacks the owner's Control.
 PodSpaces itself can only be tested with a real account; ESS specifics (ACR URL form, any extra
 policies it requires) are isolated in `src/engine/systems/acp.ts` so they can be adjusted after
 a live run.
+
+## 8. Static hosting
+
+`APP_ORIGIN` is an origin without a path; deployable builds (`APP_ORIGIN` set or CI) require
+HTTPS. `APP_BASE_PATH` defaults to `/` and is an absolute path ending in `/`. Vite assets,
+icons, the Client Identifier Document, both registered redirect URIs and callback detection
+share this base. `build:pages` builds for `https://jeswr.github.io/solid-sdk/pod-migrator/`.
+The client document's URL equals its `client_id`. Emit `404.html` and static callback entry
+pages as copies of the built index, keeping absolute base-prefixed assets. Callback directory
+trailing slashes are accepted without changing the redirect URI persisted for token exchange.

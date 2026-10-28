@@ -197,7 +197,14 @@ export async function seedSource(
     "private/caf%C3%A9%20%E6%BC%A2%E5%AD%97.txt",
     encode("spaces and Unicode: café 漢字 🌱\n"),
   );
-  files.set("shared.ttl", encode(await turtle(rdfStore)));
+  // CSS 7.2 sends a Content-Length counted in characters, not bytes, for Turtle it re-serialises
+  // after a PATCH, truncating non-ASCII documents. The append probe PATCHes shared.ttl, so keep
+  // it ASCII; note.ttl and the Unicode file name still cover non-ASCII content.
+  const sharedStore = new Store();
+  const shared = new FixtureNode("urn:migration:shared", sharedStore, DataFactory);
+  shared.iri(`${RDF}type`, "http://schema.org/Note");
+  shared.text("http://schema.org/text", "Shared with the stranger\nsecond line");
+  files.set("shared.ttl", encode(await turtle(sharedStore)));
   files.set("authenticated/info.json", encode('{"authenticated":true}\n'));
   files.set("conflict.json", encode('{"version":"source"}\n'));
   if (system === "wac") {
@@ -249,8 +256,14 @@ export async function seedSource(
       { public: true, allow: ["read", "append"] },
       { agent: stranger.webId, deny: ["read"] },
     ]);
+    // CSS credentials use an opaque label, not an absolute RDF IRI. Bind the
+    // matcher to its explicit resolved IRI; these sessions must NOT match it.
     await set("client.ttl", [
-      { agent: stranger.webId, client: stranger.clientId, allow: ["read"] },
+      {
+        agent: stranger.webId,
+        client: new URL(stranger.clientId, `${root}client.ttl.acr`).href,
+        allow: ["read"],
+      },
     ]);
     await set("exclusion.ttl", [
       { authenticated: true, exceptAgent: stranger.webId, allow: ["read"] },

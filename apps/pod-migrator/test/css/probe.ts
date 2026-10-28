@@ -99,6 +99,23 @@ export function assertSubset(source: ReadonlySet<Mode>, target: ReadonlySet<Mode
   for (const mode of target) assert.ok(source.has(mode), `${label}: target widened ${mode}`);
 }
 
+/** A container's controls affect its entire subtree. Unknown writes require a full audit. */
+export function affectedPaths(
+  paths: readonly string[],
+  root: string,
+  written: string,
+  acls: ReadonlyMap<string, string>,
+): string[] {
+  const resource = paths
+    .map((path) => root + path)
+    .find((url) => url === written || acls.get(url) === written);
+  if (!resource) return [...paths];
+  return paths.filter((path) => {
+    const url = root + path;
+    return url === resource || (resource.endsWith("/") && url.startsWith(resource));
+  });
+}
+
 export interface WriteProgress extends Progress {
   method: "PUT" | "DELETE";
   status: number;

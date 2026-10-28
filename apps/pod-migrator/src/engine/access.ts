@@ -14,6 +14,7 @@ import {
 } from "./rdf.js";
 import { type AcpDialect, readAcp, writeAcp } from "./systems/acp.js";
 import { readWac, writeWac } from "./systems/wac.js";
+import { assertSpecificAccess } from "./target-access.js";
 import type { AccessDocument, AccessSystem, EffectivePolicy, PodSide } from "./types.js";
 export async function detectAccessSystem(
   side: PodSide,
@@ -57,6 +58,7 @@ export async function readAccess(
   system: AccessSystem,
   signal?: AbortSignal,
   advertised?: string,
+  requireSpecific = false,
 ): Promise<AccessDocument | undefined> {
   const url =
     advertised ?? aclLink(await side.http.head(resource, { signal }), resource, side.root);
@@ -67,12 +69,16 @@ export async function readAccess(
   const turtle = await requireRepresentation(response).text();
   const dataset = await parse(new Response(turtle, { headers: response.headers }), url);
   if (system === "unknown") throw new TypeError("Cannot read unknown access system");
-  return {
+  const document: AccessDocument = {
     policy: system === "wac" ? readWac(dataset, resource, url) : readAcp(dataset, resource, url),
     url,
-    turtle,
+    // All later scope checks and merges consume Turtle, even if the server
+    // returned JSON-LD despite our Accept preference.
+    turtle: await serialize(dataset),
     etag: response.headers.get("etag"),
   };
+  if (requireSpecific) await assertSpecificAccess(resource, url, new Map(), document);
+  return document;
 }
 export async function writeAccess(
   side: PodSide,

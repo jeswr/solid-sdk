@@ -43,6 +43,8 @@ export class FakePod {
   readonly owner: string;
   readonly system: "wac" | "acp";
   afterWrite?: (url: string) => void | Promise<void>;
+  /** CSS PutOperationHandler returns 201/205 without representation ETags. */
+  writeEtags = true;
   next = 0;
   constructor(root: string, system: "wac" | "acp", owner = `${root}profile/card#me`) {
     this.root = root;
@@ -149,7 +151,9 @@ export class FakePod {
                 ((agent === `${ACP}OwnerAgent` || agent === `${ACP}CreatorAgent`) &&
                   identity.agent === this.owner),
             )) &&
-          (!clients.length || clients.includes(identity.client ?? "")) &&
+          (!clients.length ||
+            clients.includes(`${ACP}PublicClient`) ||
+            clients.includes(identity.client ?? "")) &&
           (!issuers.length || issuers.includes(identity.issuer ?? "")) &&
           (!vcs.length || vcs.some((vc) => identity.vc?.includes(vc)))
         );
@@ -168,13 +172,9 @@ export class FakePod {
           for (const mode of policy.deny) denied.add(mode.replace(ACP, ACL));
         }
       };
-      for (const q of dataset.match(
-        null,
-        DataFactory.namedNode(`${ACP}resource`),
-        DataFactory.namedNode(ancestor),
-      )) {
+      for (const q of dataset.match(null, DataFactory.namedNode(`${ACP}resource`), null)) {
         const acr = new AccessControlResource(q.subject, dataset, DataFactory);
-        for (const control of url === ancestor ? acr.accessControl : acr.memberAccessControl)
+        for (const control of url === q.object.value ? acr.accessControl : acr.memberAccessControl)
           for (const policy of control.apply) apply(policy);
       }
     }
@@ -197,7 +197,11 @@ export class FakePod {
     if (forced) return forced();
     const status = this.denied.get(`${method} ${url}`);
     if (status) return new Response(null, { status });
-    const overridden = [...this.aclOverrides].find(([, acl]) => acl === url)?.[0];
+    const canonical =
+      url.endsWith(this.system === "wac" ? ".acl" : ".acr") && this.data.has(url.slice(0, -4));
+    const overridden = canonical
+      ? url.slice(0, -4)
+      : [...this.aclOverrides].find(([, acl]) => acl === url)?.[0];
     const auxiliary =
       overridden !== undefined || url.endsWith(this.system === "wac" ? ".acl" : ".acr");
     const resource = overridden ?? (auxiliary ? url.slice(0, -4) : url);
@@ -243,7 +247,8 @@ export class FakePod {
         etag: `"v${++this.next}"`,
       };
       (auxiliary ? this.access : this.data).set(url, next);
-      responseHeaders.set("etag", next.etag);
+      if (this.writeEtags) responseHeaders.set("etag", next.etag);
+      else responseHeaders.delete("etag");
       await this.afterWrite?.(url);
       return new Response(null, { status: stored ? 205 : 201, headers: responseHeaders });
     }

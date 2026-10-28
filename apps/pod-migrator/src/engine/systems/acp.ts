@@ -30,7 +30,9 @@ function matcherClauses(matcher: Matcher): Subject[][] {
       if (webId === `${ACP}CreatorAgent`) return { kind: "creator" };
       return { kind: "agent", webId };
     }),
-    [...matcher.client].map((clientId) => ({ kind: "client", clientId })),
+    [...matcher.client].map((clientId) =>
+      clientId === `${ACP}PublicClient` ? { kind: "public" } : { kind: "client", clientId },
+    ),
     [...matcher.issuer].map((issuer) => ({ kind: "issuer", issuer })),
     [...matcher.vc].map((vcType) => ({ kind: "vc", vcType })),
   ];
@@ -47,29 +49,45 @@ function matcherClauses(matcher: Matcher): Subject[][] {
 }
 export function readAcp(dataset: DatasetCore, resource: string, url: string): EffectivePolicy {
   const result: EffectivePolicy = { grants: [], denials: [] };
-  const roots = new Set(
-    [
-      ...dataset.match(
-        null,
-        DataFactory.namedNode(`${ACP}resource`),
-        DataFactory.namedNode(resource),
-      ),
-    ].map((q) => q.subject),
-  );
-  // ESS ACRs can identify themselves by type instead of acp:resource.
-  if (!roots.size)
-    for (const q of dataset.match(
-      null,
-      DataFactory.namedNode(`${RDF}type`),
-      DataFactory.namedNode(`${ACP}AccessControlResource`),
-    ))
-      roots.add(q.subject);
-  for (const term of roots) {
+  // CSS enumerates EVERY acp:resource statement, not only the requested IRI.
+  // Track the entire reachable graph so detached/unknown controls fail closed.
+  const key = (term: { termType: string; value: string }) =>
+    JSON.stringify([term.termType, term.value]);
+  const visited = new Set<string>();
+  const visit = (term: { termType: string; value: string }, predicates: string[]) => {
+    for (const name of predicates) visited.add(`${key(term)}:${ACP}${name}`);
+  };
+  const roots = new Map<string, import("@rdfjs/types").Term>();
+  for (const q of dataset.match(null, DataFactory.namedNode(`${ACP}resource`)))
+    roots.set(key(q.subject), q.subject);
+  const hasResourceStatements = roots.size > 0;
+  for (const q of dataset.match(
+    null,
+    DataFactory.namedNode(`${RDF}type`),
+    DataFactory.namedNode(`${ACP}AccessControlResource`),
+  ))
+    roots.set(key(q.subject), q.subject);
+  for (const term of roots.values()) {
+    visit(term, ["resource", "accessControl", "memberAccessControl", "access"]);
     const acr = new AccessControlResource(term, dataset, DataFactory);
     const node = new RdfNode(term, dataset, DataFactory);
-    function addPolicy(policy: Policy, appliesTo: Grant["appliesTo"], control = false): void {
+    const resources = node.iris(`${ACP}resource`);
+    if (!resources.length && hasResourceStatements)
+      throw new TypeError("Unplaced ACP resource node");
+    if (resources.length > 1) throw new TypeError("Ambiguous ACP resource scope");
+    const own = !resources.length || resources[0] === resource;
+    const auxiliary = resources[0] === url;
+    function addPolicy(
+      policy: Policy,
+      appliesTo: Grant["appliesTo"],
+      control = false,
+      foreign = false,
+    ): void {
+      visit(policy, ["allow", "deny", "allOf", "anyOf", "noneOf"]);
       const all = [...policy.allOf];
       const any = [...policy.anyOf];
+      for (const matcher of [...all, ...any, ...policy.noneOf])
+        visit(matcher, ["agent", "client", "issuer", "vc"]);
       if (!all.length && !any.length) return;
       let who: Subject[][] = [[]];
       for (const matcher of all) who = product(who, matcherClauses(matcher));
@@ -97,6 +115,8 @@ export function readAcp(dataset: DatasetCore, resource: string, url: string): Ef
           modes.clear();
           if (hasControl) modes.add("control");
         }
+        if (modes.size && foreign && field === "grants")
+          throw new TypeError("Cannot safely place grants from another ACP resource node");
         if (modes.size)
           result[field].push({
             modes,
@@ -107,17 +127,35 @@ export function readAcp(dataset: DatasetCore, resource: string, url: string): Ef
           });
       }
     }
-    for (const ac of acr.accessControl)
-      for (const policy of ac.apply) addPolicy(policy, "resource");
-    for (const ac of acr.memberAccessControl)
-      for (const policy of ac.apply) addPolicy(policy, "members");
+    for (const ac of acr.accessControl) {
+      visit(ac, ["apply"]);
+      for (const policy of ac.apply)
+        addPolicy(
+          policy,
+          own ? "resource" : auxiliary ? "resource" : "both",
+          !own && auxiliary,
+          !own && !auxiliary,
+        );
+    }
+    for (const ac of acr.memberAccessControl) {
+      visit(ac, ["apply"]);
+      for (const policy of ac.apply) addPolicy(policy, own ? "members" : "both", false, !own);
+    }
     for (const policy of node.nodes(`${ACP}access`))
       addPolicy(
         new Policy(policy as unknown as import("@rdfjs/types").Term, dataset, DataFactory),
         "resource",
         true,
+        !own && !auxiliary,
       );
   }
+  for (const quad of dataset)
+    if (
+      quad.predicate.value.startsWith(ACP) &&
+      !visited.has(`${key(quad.subject)}:${quad.predicate.value}`)
+    )
+      throw new TypeError("Unplaced or unknown ACP construct");
+
   return result;
 }
 

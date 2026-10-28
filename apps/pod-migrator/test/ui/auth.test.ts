@@ -38,6 +38,25 @@ describe("independent sign-ins", () => {
     expect(authConfig("source", "https://migrate.example").includeWebIdOrigin).toBe(true);
   });
 
+  it("registers and handles callbacks under the GitHub Pages base", async () => {
+    const base = "/solid-sdk/pod-migrator/";
+    vi.mocked(createSolidAuth).mockImplementation(() => fakeAuth(null));
+    const connections = createConnections("https://jeswr.github.io", base);
+    const configs = vi.mocked(createSolidAuth).mock.calls.map(([config]) => config);
+    for (const [index, id] of ["source", "target"].entries()) {
+      expect(configs[index]?.redirectUri).toBe(`https://jeswr.github.io${base}callback/${id}`);
+      expect(configs[index]?.callbackUri).toBe(configs[index]?.redirectUri);
+      expect(configs[index]?.clientId).toBe(`https://jeswr.github.io${base}clientid.jsonld`);
+    }
+    await Promise.all(
+      connections.map((connection) =>
+        connection.initialize(`https://jeswr.github.io${base}callback/target/?code=x&state=y`),
+      ),
+    );
+    expect(connections[0].auth.handleRedirect).not.toHaveBeenCalled();
+    expect(connections[1].auth.handleRedirect).toHaveBeenCalledOnce();
+  });
+
   it("handles the callback only for its own side, before restore", async () => {
     const source = fakeAuth();
     const target = fakeAuth(null);

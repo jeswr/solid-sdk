@@ -14,6 +14,7 @@ import { cssComponentState } from "./component-state.mjs";
 import { fixtureAccess, ownerRule } from "./fixtures.js";
 import {
   accessLink,
+  affectedPaths,
   appendProbeBody,
   assertSubset,
   conditionalAccess,
@@ -443,6 +444,52 @@ describe("offline effective-access and write auditing", () => {
 });
 
 describe("shipped CSS configuration and independent seed documents", () => {
+  it("CSS PUT handlers omit ETags for creates and replacements", async () => {
+    const requireCss = createRequire(join(cssDirectory, "package.json"));
+    const { PutOperationHandler } = requireCss("./dist/http/ldp/PutOperationHandler.js");
+    for (const exists of [false, true]) {
+      const setRepresentation = vi.fn();
+      const handler = new PutOperationHandler(
+        { hasResource: async () => exists, setRepresentation },
+        { isAuxiliaryIdentifier: () => false },
+      );
+      const response = await handler.handle({
+        operation: {
+          target: { path: `${base}file` },
+          body: { metadata: { contentType: "text/plain" } },
+        },
+      });
+      expect(response.statusCode).toBe(exists ? 205 : 201);
+      expect(
+        response.metadata?.get(DataFactory.namedNode("http://www.w3.org/2011/http-headers#etag")),
+      ).toBeUndefined();
+      expect(
+        [...(response.metadata?.quads() ?? [])].some((q: { predicate: { value: string } }) =>
+          q.predicate.value.endsWith("etag"),
+        ),
+      ).toBe(false);
+      expect(setRepresentation).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("audits changed files and complete container subtrees, with a full fallback for unknown writes", () => {
+    const paths = [
+      "",
+      "folder/",
+      "folder/nested/",
+      "folder/nested/file",
+      "folder/other",
+      "folder-sibling/file",
+    ];
+    const acls = new Map(paths.map((path) => [base + path, `${base}${path}.acr`]));
+    expect(affectedPaths(paths, base, `${base}folder/nested/file.acr`, acls)).toEqual([
+      "folder/nested/file",
+    ]);
+    expect(affectedPaths(paths, base, `${base}folder/.acr`, acls)).toEqual(paths.slice(1, 5));
+    expect(affectedPaths(paths, base, `${base}folder/nested/`, acls)).toEqual(paths.slice(2, 4));
+    expect(affectedPaths(paths, base, `${base}.acr`, acls)).toEqual(paths);
+    expect(affectedPaths(paths, base, `${base}unmapped.acr`, acls)).toEqual(paths);
+  });
   it("isolates CSS 7.2 component discovery from other workspace versions and remote contexts", async () => {
     const state = await cssComponentState(cssDirectory);
     expect(Object.values(state.componentModules)).toEqual([
@@ -523,6 +570,54 @@ describe("shipped CSS configuration and independent seed documents", () => {
     expect(text).toContain("http://www.w3.org/ns/auth/acl#default");
     expect(text).toContain("urn:group");
     expect(text).toContain("https://app.test");
+  });
+
+  it("distinguishes opaque token client labels from RDF-resolved client IRIs and matches issuers exactly", async () => {
+    const resource = `${base}pod/client.ttl`;
+    const acl = `${resource}.acr`;
+    const label = "pod-migrator-integration_uuid";
+    const text = await fixtureAccess("acp", resource, acl, [
+      { agent: "urn:stranger", client: label, allow: ["read"] },
+    ]);
+    const graph = await parseRdf(text, "text/turtle", { baseIRI: acl });
+    const requireCss = createRequire(join(cssDirectory, "package.json"));
+    const { getAccessControlledResources } = requireCss("./dist/authorization/AcpUtil.js");
+    const { AcpReader } = requireCss("./dist/authorization/AcpReader.js");
+    const { allowAccessModes } = requireCss("@solid/access-control-policy");
+    const reader = new AcpReader({}, {}, {});
+    const policies = [
+      ...reader.getEffectivePolicies({ path: resource }, [...getAccessControlledResources(graph)]),
+    ];
+    const context = reader.createContext(
+      { path: resource },
+      {
+        agent: { webId: "urn:stranger" },
+        client: { clientId: label },
+        issuer: { url: base },
+      },
+    );
+    expect(context).toEqual({
+      target: resource,
+      agent: "urn:stranger",
+      client: label,
+      issuer: base,
+    });
+    const read = "http://www.w3.org/ns/auth/acl#Read";
+    expect(allowAccessModes(policies, context).has(read)).toBe(false);
+    expect(
+      allowAccessModes(policies, { ...context, client: new URL(label, acl).href }).has(read),
+    ).toBe(true);
+    policies[0].allOf[0].issuer = [base];
+    expect(
+      allowAccessModes(policies, { ...context, client: new URL(label, acl).href }).has(read),
+    ).toBe(true);
+    expect(
+      allowAccessModes(policies, {
+        ...context,
+        client: new URL(label, acl).href,
+        issuer: base.slice(0, -1),
+      }).has(read),
+    ).toBe(false);
   });
 
   it("CSS's own ACP reader evaluates seeded deny/client/exclusion/member controls", async () => {
