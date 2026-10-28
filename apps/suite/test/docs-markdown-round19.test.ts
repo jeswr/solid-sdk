@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // AUTHORED-BY Codex
-import { Editor } from "@tiptap/react";
+import { Editor, type JSONContent } from "@tiptap/react";
 import { yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
 import { expect, it, vi } from "vitest";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
@@ -52,7 +52,8 @@ it("round19 preserves a checklist Shift+Enter through Markdown replace and snaps
     editor.commands.setTextSelection(13);
     editor.commands.setHardBreak();
     editor.commands.insertContent("Second line");
-    expect(editor.getJSON().content?.[0]?.content?.[0]?.content?.[0]?.content).toEqual([
+    const json: JSONContent = editor.getJSON();
+    expect(json.content?.[0]?.content?.[0]?.content?.[0]?.content).toEqual([
       { type: "text", text: "First line" },
       { type: "hardBreak" },
       { type: "text", text: "Second line" },
