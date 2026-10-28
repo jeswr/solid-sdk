@@ -39,7 +39,8 @@ export function effectivePolicy(
   const explicitEssGrants =
     system === "acp" &&
     sourceImplementation === "ess" &&
-    (documents.get(url)?.policy.grants.some((rule) => rule.appliesTo !== "members") ?? false);
+    (documents.get(url)?.policy.explicit === true ||
+      (documents.get(url)?.policy.grants.some((rule) => rule.appliesTo !== "members") ?? false));
   let current: string | undefined = url;
   while (current !== undefined) {
     const doc = documents.get(current);

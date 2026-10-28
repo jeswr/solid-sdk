@@ -236,7 +236,7 @@ describe("ACP expressions and writers", () => {
     onlyNone.node(url, { [`${ACP}resource`]: [resource], [`${ACP}accessControl`]: ["urn:c"] });
     onlyNone.node("urn:c", { [`${ACP}apply`]: ["urn:p"] });
     onlyNone.node("urn:p", { [`${ACP}allow`]: [`${ACL}Read`], [`${ACP}noneOf`]: ["urn:no"] });
-    expect(readAcp(onlyNone.dataset, resource, url)).toEqual(emptyPolicy());
+    expect(readAcp(onlyNone.dataset, resource, url)).toEqual({ ...emptyPolicy(), explicit: true });
   });
   it("uses the ESS typed ACR fallback, empty matchers grant nothing, and bounds expansion", () => {
     const { dataset, node } = graph();

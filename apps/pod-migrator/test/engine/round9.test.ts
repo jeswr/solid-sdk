@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6
-import { DataFactory, type Store } from "n3";
+import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
 import { ACL, ACP, RdfNode, serialize } from "../../src/engine/rdf.js";
@@ -233,6 +233,27 @@ describe.each([
         mode(scope),
       ),
     ).toBe(false);
+  });
+  it.each(
+    targets,
+  )("suppresses ancestor grants under a denial-only child ACR for CSS %s", async (target) => {
+    const f = await fixture(scope, target);
+    f.add("urn:r9:grant", "allow").add(`${ACP}allOf`, "urn:r9:public");
+    atom(f, "urn:r9:public", "PublicAgent");
+    const child = new Store();
+    const n = (id: string) => new RdfNode(id, child, DataFactory);
+    n(f.source.acl(f.file)).add(`${ACP}resource`, f.file);
+    n(f.source.acl(f.file)).add(`${ACP}accessControl`, "urn:child:control");
+    n("urn:child:control").add(`${ACP}apply`, "urn:child:deny");
+    n("urn:child:deny").add(`${ACP}deny`, `${ACP}Append`);
+    n("urn:child:deny").add(`${ACP}allOf`, "urn:child:stranger");
+    n("urn:child:stranger").add(`${ACP}agent`, stranger);
+    f.source.setAcl(f.file, await serialize(child));
+    await migrate(f);
+    for (const identity of [{}, { agent: stranger }])
+      expect(
+        (await cssAccess(f.target, `${f.target.root}folder/file`, identity)).has(mode(scope)),
+      ).toBe(false);
   });
   it.each(
     targets,

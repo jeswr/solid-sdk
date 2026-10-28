@@ -121,6 +121,8 @@ export type Denial = Grant;
 export interface EffectivePolicy {
   grants: Grant[];
   denials: Denial[];
+  /** An ACP document attached at least one policy that can apply to the resource itself. */
+  explicit?: boolean;
 }
 export interface AccessDocument {
   policy: EffectivePolicy;

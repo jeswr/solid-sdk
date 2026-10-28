@@ -113,6 +113,9 @@ export function readAcp(
       fallback = false,
     ): void {
       visit(policy, ["allow", "deny", "allOf", "anyOf", "noneOf"]);
+      // Recorded before any filtering: denial-only, noneOf-only and inactive
+      // policies still make the resource's own ACR explicit.
+      if (appliesTo !== "members") result.explicit = true;
       const all = [...policy.allOf];
       const any = [...policy.anyOf];
       for (const matcher of [...all, ...any, ...policy.noneOf]) {
