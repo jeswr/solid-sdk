@@ -33,6 +33,7 @@ export function privateImage(fetchImpl: typeof fetch) {
         let objectUrl: string | undefined;
         let alive = true;
         const abort = new AbortController();
+        dom.dataset.docsImageState = "loading";
         dom.alt = String(node.attrs.alt ?? "");
         dom.className = "docs-private-image";
         dom.style.width = node.attrs.width ? `${node.attrs.width}px` : "100%";
@@ -42,17 +43,20 @@ export function privateImage(fetchImpl: typeof fetch) {
             .then(async (response) => {
               if (!response.ok) throw new Error("Image unavailable");
               const blob = await response.blob();
-              if (alive && blob.type.startsWith("image/")) {
+              if (!blob.type.startsWith("image/")) throw new Error("Image unavailable");
+              if (alive) {
                 objectUrl = URL.createObjectURL(blob);
                 dom.src = objectUrl;
               }
             })
             .catch(() => {
+              if (!alive) return;
+              dom.dataset.docsImageState = "error";
               dom.alt = node.attrs.alt
                 ? `Image unavailable: ${node.attrs.alt}`
                 : "Image unavailable";
             });
-        }
+        } else dom.dataset.docsImageState = "error";
         return {
           dom,
           destroy() {

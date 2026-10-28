@@ -58,6 +58,10 @@ export class DocumentPersistence {
   local: IndexeddbPersistence | undefined;
   provider: SolidPersistence | undefined;
   stored: StoredDocument | undefined;
+  /** The last snapshot this publisher wrote, distinct from remote reconciliation. */
+  lastTitleSave: StoredDocument | undefined;
+  /** A foreign rename remains observable even if a later body save includes it. */
+  lastRemoteTitle: StoredDocument | undefined;
   title = "";
   body = "<p></p>";
   json: JSONContent = { type: "doc", content: [{ type: "paragraph" }] };
@@ -289,18 +293,19 @@ export class DocumentPersistence {
     }
   }
   private async loadPreviousMirrors() {
-    const names = await this.metadata<unknown>("previousMirrors");
-    if (!Array.isArray(names)) return;
-    for (const name of names) {
-      if (
-        typeof name !== "string" ||
-        name === this.local?.name ||
-        Array.from(this.previousMirrors).some((mirror) => mirror.name === name)
-      )
-        continue;
-      const mirror = this.createMirror(name);
-      this.previousMirrors.add(mirror);
-      await mirror.whenSynced;
+    const mirrors = [this.local, ...this.previousMirrors];
+    const seen = new Set(mirrors.map((mirror) => mirror?.name));
+    for (const parent of mirrors) {
+      const names = this.parseMetadata<unknown>(await parent?.get("previousMirrors"));
+      if (!Array.isArray(names)) continue;
+      for (const name of names) {
+        if (typeof name !== "string" || seen.has(name)) continue;
+        seen.add(name);
+        const mirror = this.createMirror(name);
+        this.previousMirrors.add(mirror);
+        mirrors.push(mirror);
+        await mirror.whenSynced;
+      }
     }
   }
   private async rememberPreviousMirrors() {
@@ -348,19 +353,22 @@ export class DocumentPersistence {
     if (!(await this.metadata("stored"))) return;
     const url = this.stored.url;
     const seen = new Set<string>();
-    let name = url;
+    const names = [url];
     // A retired tab can write after recovery has finished. Walk the durable
     // forward chain on every publisher, even when no broadcast reached us.
-    while (name !== this.local.name && !seen.has(name)) {
+    for (const name of names) {
+      if (name === this.local.name || seen.has(name)) continue;
       seen.add(name);
       const doc = new Doc();
       const mirror = new IndexeddbPersistence(name, doc);
       let pending: boolean;
       let next: unknown;
+      let previous: unknown;
       try {
         await mirror.whenSynced;
         pending = Boolean(await mirror.get("pending"));
         next = await mirror.get("nextMirror");
+        previous = this.parseMetadata<unknown>(await mirror.get("previousMirrors"));
       } finally {
         await mirror.destroy();
         doc.destroy();
@@ -381,8 +389,9 @@ export class DocumentPersistence {
           await recovery.destroy();
         }
       }
-      if (typeof next !== "string") break;
-      name = next;
+      if (typeof next === "string") names.push(next);
+      if (Array.isArray(previous))
+        for (const parent of previous) if (typeof parent === "string") names.push(parent);
     }
   }
   private async readPending(assertOpen = true, mirror = this.local): Promise<boolean> {
@@ -827,6 +836,12 @@ export class DocumentPersistence {
   }
   private async reconcileProvider(allowStopped = false) {
     const remote = await this.activeDocument();
+    const known = this.stored as StoredDocument;
+    if (
+      (remote.etag !== known.etag || !sameIncarnation(known, remote)) &&
+      remote.data.title !== known.data.title
+    )
+      this.lastRemoteTitle = remote;
     const previous = this.provider?.store.container ?? this.updateContainer();
     const active = remote.data.updateLog ?? docContainerUrls(remote.url).updateLog;
     if (previous !== active || !sameIncarnation(this.stored as StoredDocument, remote)) {
@@ -902,6 +917,16 @@ export class DocumentPersistence {
     this.markDirty(baseTitle);
     void this.flush();
   }
+  private async recordTitleSave(stored: StoredDocument) {
+    this.lastTitleSave = stored;
+    if (this.pendingEdit) {
+      if (this.pendingEdit.title === this.pendingEdit.baseTitle)
+        this.pendingEdit.title = stored.data.title;
+      this.pendingEdit.baseTitle = stored.data.title;
+      this.pendingEdit.baseModified = stored.data.modified;
+      await this.writePending();
+    }
+  }
   private markDirty(baseTitle = this.stored?.data.title) {
     this.pendingEdit = {
       owner: this.pendingEdit?.owner ?? this.editOwner,
@@ -976,6 +1001,7 @@ export class DocumentPersistence {
             }
             const creating = await this.metadata<StoredDocument>("creating");
             this.stored = creating ?? (await this.store.create(allocation));
+            if (!creating) await this.recordTitleSave(this.stored);
             this.creation = "creating";
             if (creating) {
               // Joining another tab's promotion does not establish a pod base
@@ -1028,6 +1054,7 @@ export class DocumentPersistence {
                 }),
               },
             );
+            await this.recordTitleSave(this.stored);
           }
         } else {
           this.stored = await this.store.save(
@@ -1041,6 +1068,7 @@ export class DocumentPersistence {
               }),
             },
           );
+          await this.recordTitleSave(this.stored);
         }
         if (this.title === title) this.title = (this.stored as StoredDocument).data.title;
         // A concurrent snapshot/recovery may have changed the pointer during save.

@@ -28,6 +28,7 @@ import { downloadDocument } from "../editor/export-document";
 import { editorExtensions } from "../editor/extensions";
 import { convertImport, uploadImportImage } from "../editor/import-document";
 import type { DocumentPersistence } from "../editor/persistence";
+import { printDocument } from "../editor/print-document";
 import { podScopedFetch } from "../editor/private-image";
 import { useDocument } from "../hooks/use-document";
 import { useNow } from "../hooks/use-now";
@@ -41,6 +42,7 @@ import {
   validateImage,
   wordCount,
 } from "../lib/editor/logic";
+import { sameIncarnation } from "../lib/model/incarnation";
 import { DocsError, DocsSidebar, DocumentSkeleton, Hint } from "./common";
 import { DeleteDialog } from "./delete-dialog";
 import { CountPopover, LinkPopover } from "./editor-popovers";
@@ -104,7 +106,13 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const userEdited = useRef(false);
   const [title, setTitle] = useState(runtime.title);
-  const titleEdit = useRef({ value: runtime.title, dirty: false });
+  const titleEdit = useRef({
+    value: runtime.title,
+    dirty: false,
+    stored: runtime.stored,
+    ownSave: runtime.lastTitleSave,
+    remoteTitle: runtime.lastRemoteTitle,
+  });
   const [revision, setRevision] = useState(0);
   const [, updateSelection] = useState(0);
   const [mac, setMac] = useState(false);
@@ -207,14 +215,52 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
   }, []);
   useEffect(() => {
     const edit = titleEdit.current;
+    const remote = runtime.lastRemoteTitle;
+    if (
+      document.activeElement === titleRef.current &&
+      edit.dirty &&
+      remote &&
+      remote !== edit.remoteTitle &&
+      remote.data.title !== edit.value &&
+      remote.data.title !== title
+    ) {
+      // A body save can include a remote rename before React sees that rename.
+      edit.remoteTitle = remote;
+      edit.ownSave = runtime.lastTitleSave;
+      runtime.rename(title.trim() || "Untitled document", edit.value);
+      return;
+    }
+    edit.remoteTitle = remote;
+    if (runtime.lastTitleSave && edit.ownSave !== runtime.lastTitleSave) {
+      // Acknowledge this tab's writes even while the same focus session continues.
+      edit.ownSave = runtime.lastTitleSave;
+      edit.stored = runtime.lastTitleSave;
+      edit.value = runtime.lastTitleSave.data.title;
+      edit.dirty = title !== edit.value;
+    }
     if (document.activeElement !== titleRef.current || !edit.dirty) {
       edit.value = runtime.title;
+      edit.stored = runtime.stored;
       setTitle(runtime.title);
-    } else if (runtime.title !== edit.value && runtime.title !== title) {
+    } else if (
+      runtime.stored &&
+      (!edit.stored ||
+        runtime.stored.etag !== edit.stored.etag ||
+        !sameIncarnation(edit.stored, runtime.stored)) &&
+      runtime.stored.data.title !== edit.value &&
+      runtime.stored.data.title !== title
+    ) {
       // Keep the baseline the user actually edited, even after reconciliation.
       runtime.rename(title.trim() || "Untitled document", edit.value);
     }
-  }, [runtime, runtime.title, title]);
+  }, [
+    runtime,
+    runtime.title,
+    runtime.stored,
+    runtime.lastTitleSave,
+    runtime.lastRemoteTitle,
+    title,
+  ]);
   useEffect(() => {
     document.title = `${title || "Untitled document"} · Docs · Solid Suite`;
   }, [title]);
@@ -254,8 +300,12 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
   useEffect(() => {
     if (!editor || params.get("print") !== "1" || printed.current) return;
     printed.current = true;
-    const frame = requestAnimationFrame(() => window.print());
+    const abort = new AbortController();
+    const frame = requestAnimationFrame(() => {
+      void printDocument(editor.view.dom, abort.signal);
+    });
     return () => {
+      abort.abort();
       cancelAnimationFrame(frame);
       printed.current = false;
     };
@@ -355,7 +405,13 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
               className="docs-title-input"
               value={title}
               onFocus={(event) => {
-                titleEdit.current = { value: event.currentTarget.value, dirty: false };
+                titleEdit.current = {
+                  value: event.currentTarget.value,
+                  dirty: false,
+                  stored: runtime.stored,
+                  ownSave: runtime.lastTitleSave,
+                  remoteTitle: runtime.lastRemoteTitle,
+                };
               }}
               onChange={(event) => {
                 titleEdit.current.dirty = event.target.value !== titleEdit.current.value;
@@ -425,7 +481,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
                   toast.success(`Downloaded ${name}`);
                 })
               }
-              print={() => window.print()}
+              print={() => editor && void printDocument(editor.view.dom)}
               importFile={() => setImporting(true)}
               draft={!runtime.stored}
               readOnly={runtime.readOnly}
