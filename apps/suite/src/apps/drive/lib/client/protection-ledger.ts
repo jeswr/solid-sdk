@@ -20,6 +20,8 @@ export function protectionLedger(http: typeof fetch) {
 export interface DeletionRequirement {
   readonly sources: readonly string[];
   readonly recovery?: string;
+  /** Validator used by this DELETE; older records may not have captured it. */
+  readonly etag?: string;
 }
 
 /** Separate keys in the same durable store, committed before sending DELETE. */
@@ -68,6 +70,15 @@ function durableLedger<T>(http: typeof fetch, prefix: string) {
     }
   };
   return {
+    async keys(): Promise<string[]> {
+      const keys =
+        typeof indexedDB === "undefined"
+          ? [...local().keys()]
+          : await transact("readonly", (store) => store.getAllKeys());
+      return keys
+        .filter((key): key is string => typeof key === "string" && key.startsWith(prefix))
+        .map((key) => key.slice(prefix.length));
+    },
     async get(url: string): Promise<T | undefined> {
       const key = prefix + url;
       return typeof indexedDB === "undefined"

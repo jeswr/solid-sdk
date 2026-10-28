@@ -418,7 +418,7 @@ it.each([
     storageUrl: drive.session.storageUrl,
     fetch: async (url, init) =>
       String(url) === `${ROOT}Folder/b` && init?.method === "DELETE"
-        ? new Response(null, { status: 403 })
+        ? new Response(null, { status: 503 })
         : pod.fetch(url, init),
   });
   drive.client = client;

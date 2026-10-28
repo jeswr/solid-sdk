@@ -239,9 +239,7 @@ describe("Drive data-safety regressions", () => {
         {
           url: `${entry.url}b`,
           error:
-            mode === "changed"
-              ? { kind: "delete-pending", cause: { kind: "conflict", status: 412 } }
-              : { kind: "missing-validator" },
+            mode === "changed" ? { kind: "conflict", status: 412 } : { kind: "missing-validator" },
         },
       ],
     });
@@ -1202,7 +1200,7 @@ describe("Drive data-safety regressions", () => {
       url === failed && init?.method === "DELETE" ? new Response(null, { status: 403 }) : undefined,
     );
     await expect(client.remove(FROM, { recursive: true })).rejects.toMatchObject({
-      kind: partial ? "partial-failure" : "delete-pending",
+      kind: partial ? "partial-failure" : "forbidden",
     });
     expect(pod.has(failed)).toBe(true);
   });
@@ -1351,7 +1349,7 @@ describe("Drive data-safety regressions", () => {
     await expect(client.move(`${FROM}a`, `${TO}a`, { kind: "confirm-move" })).rejects.toMatchObject(
       {
         kind: "partial-failure",
-        cause: { kind: "delete-pending", cause: { kind: "conflict", status: 412 } },
+        cause: { kind: "conflict", status: 412 },
       },
     );
     expect(await (await client.read(`${FROM}a`)).text()).toBe("new edit");

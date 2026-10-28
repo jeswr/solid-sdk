@@ -3,7 +3,12 @@ import type { ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { deletionLedger } from "../src/apps/drive/lib/client/protection-ledger";
 import type { PodSession } from "../src/lib/session/pod-session";
-import { deleteOutcomes, terminalDelete, unknownDelete } from "./drive-delete-outcomes";
+import {
+  deleteOutcomes,
+  refusedDelete,
+  terminalDelete,
+  unknownDelete,
+} from "./drive-delete-outcomes";
 import { act, click, h, mount } from "./drive-ui-dom";
 import { DRIVE, OWNER, PRIVATE, ROOT, wacPod } from "./drive-wac-pod";
 
@@ -165,6 +170,15 @@ it.each(
     expect(f.pod.has(entry.url)).toBe(false);
     expect(await listTrash(drive.client, DRIVE)).toEqual([]);
     expect(await deletionLedger(f.fetch).get(entry.url)).toBeUndefined();
+  } else if (refusedDelete(outcome)) {
+    await vi.waitFor(() => expect(toast.error).toHaveBeenCalled());
+    expect(toast.error).not.toHaveBeenCalledWith("Still deleting on the server", expect.anything());
+    expect(toast.success).not.toHaveBeenCalled();
+    expect(f.pod.has(entry.url)).toBe(true);
+    expect(await deletionLedger(f.fetch).get(entry.url)).toBeUndefined();
+    f.intercept(undefined);
+    await act(async () => actions.removeForever([entry]));
+    expect(await listTrash(drive.client, DRIVE)).toEqual([]);
   } else {
     await vi.waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(
@@ -175,7 +189,10 @@ it.each(
     expect(toast.success).not.toHaveBeenCalled();
     expect(f.pod.has(entry.url)).toBe(true);
     expect(await listTrash(drive.client, DRIVE)).toHaveLength(1);
-    expect(await deletionLedger(f.fetch).get(entry.url)).toEqual({ sources: [entry.url] });
+    expect(await deletionLedger(f.fetch).get(entry.url)).toEqual({
+      sources: [entry.url],
+      etag: expect.any(String),
+    });
     await expect(drive.client.remove(entry.url)).rejects.toMatchObject({ kind: "delete-pending" });
     f.intercept(undefined);
     expect((await f.fetch(entry.url, { method: "DELETE" })).ok).toBe(true);

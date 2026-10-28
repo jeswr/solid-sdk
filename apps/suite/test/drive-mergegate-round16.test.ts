@@ -103,7 +103,7 @@ it.each([
     await expect(deleting).rejects.toMatchObject({ kind: "delete-pending" });
     f.intercept(undefined);
     await f.fetch(to, { method: "DELETE" });
-    await client.remove(to, { ifMatch: target.etag as string });
+    await client.remove(to);
   } else if (mode === "already gone") await deleting;
   else await expect(deleting).rejects.toThrow();
   const retained = ["failed", "offline", "changed", "pending"].includes(mode);

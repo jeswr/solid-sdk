@@ -29,7 +29,11 @@ it("pending source and recovery requirements survive module reload and transport
   await expect(client.move(source, recovery, { kind: "preserve-source" })).rejects.toMatchObject({
     kind: "partial-failure",
   });
-  expect(await deletionLedger(f.fetch).get(source)).toEqual({ sources: [source], recovery });
+  expect(await deletionLedger(f.fetch).get(source)).toEqual({
+    sources: [source],
+    recovery,
+    etag: expect.any(String),
+  });
   vi.resetModules();
   const { createSolidDriveClient: create } = await import("../src/apps/drive/lib/client/client");
   const { deletionLedger: freshLedger } = await import(
@@ -52,9 +56,7 @@ it("pending source and recovery requirements survive module reload and transport
   expect(await freshLedger(transport).get(source)).toBeUndefined();
 });
 
-it.each([
-  202, 205, 302, 408,
-])("a non-terminal DELETE %s is pending until confirmed", async (status) => {
+it.each([202, 302, 408])("a non-terminal DELETE %s is pending until confirmed", async (status) => {
   const url = "https://delete.test/file";
   const http = vi.fn<typeof fetch>(
     async (_input, init) =>
@@ -86,7 +88,7 @@ it("absence confirmation retires deletion state without discarding a provisioner
 });
 
 it.each([
-  403, 503,
+  503,
 ])("an uncertain DELETE %s retains both guards and its error as the cause", async (status) => {
   const url = "https://delete.test/source";
   const recovery = "https://delete.test/recovery";
@@ -96,7 +98,11 @@ it.each([
     kind: "delete-pending",
     cause: { message: `Rejected ${status}` },
   });
-  expect(await deletionLedger(http).get(url)).toEqual({ sources: [url], recovery });
+  expect(await deletionLedger(http).get(url)).toEqual({
+    sources: [url],
+    etag: '"original"',
+    recovery,
+  });
   expect(await deletionLedger(http).get(recovery)).toEqual({ sources: [url] });
   await expect(control.remove(url, '"original"')).rejects.toMatchObject({ kind: "delete-pending" });
 });

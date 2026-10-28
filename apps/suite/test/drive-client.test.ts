@@ -295,7 +295,7 @@ describe("Drive client against a seeded demo pod", () => {
 
   it.each([
     403, 409, 412,
-  ])("retains a copied move and both guards after an uncertain DELETE %s", async (status) => {
+  ])("retains a copied move and surfaces a definitive DELETE refusal %s", async (status) => {
     const { pod } = await setup();
     const from = `${DRIVE}notes.md`;
     const to = `${DRIVE}destination.md`;
@@ -312,7 +312,7 @@ describe("Drive client against a seeded demo pod", () => {
       kind: "partial-failure",
       status: 409,
       url: from,
-      cause: { kind: "delete-pending", cause: { status } },
+      cause: { status },
     });
     expect(requests).toEqual([from]);
     expect(pod.has(from)).toBe(true);

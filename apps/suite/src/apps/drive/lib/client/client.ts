@@ -31,7 +31,7 @@ import {
   policyArchiveOf,
   requirePolicy,
 } from "./ancestors";
-import { DriveDeletePendingError, deletionControl, rethrowPendingDeletion } from "./deletion";
+import { deletionControl, isDeletionFailure, rethrowPendingDeletion } from "./deletion";
 import { protectionLedger } from "./protection-ledger";
 import { containerData, relocate, sameGraph } from "./rdf";
 
@@ -125,6 +125,8 @@ export interface DriveClient {
   ): Promise<MoveResult>;
   /** Non-recursive `ifMatch` deletes exactly that version without refreshing its validator. */
   remove(url: string, options?: { recursive?: boolean; ifMatch?: string }): Promise<void>;
+  /** Re-read durable deletion guards on load or Retry without sending DELETE. */
+  recheckDeletions?(): Promise<readonly string[]>;
 }
 
 export type DriveErrorKind =
@@ -645,7 +647,7 @@ export function createSolidDriveClient(options: {
 
   const rollback = async (created: CreatedResource[]) => {
     const retained: string[] = [];
-    let pending: DriveDeletePendingError | undefined;
+    let pending: Error | undefined;
     for (const resource of [...created].reverse()) {
       try {
         let etag = resource.etag;
@@ -657,7 +659,7 @@ export function createSolidDriveClient(options: {
         await deleteVersion(resource.url, etag);
       } catch (error) {
         retained.push(resource.url);
-        if (error instanceof DriveDeletePendingError) pending = error;
+        if (isDeletionFailure(error)) pending = error;
       }
     }
     return { retained, pending };
@@ -989,12 +991,8 @@ export function createSolidDriveClient(options: {
         );
       }
     } catch (error) {
-      // A network failure during DELETE is ambiguous: keep the recovery copy.
-      const keep =
-        verifyingCopy ||
-        deleted.length ||
-        (deleting &&
-          (!(error instanceof DriveError) || error.kind === "not-found" || error.status >= 500));
+      // Once deletion starts, even a definitive refusal retains the recovery copy.
+      const keep = verifyingCopy || deleting || deleted.length;
       const cleanup = keep ? undefined : await rollback(created);
       const retained = cleanup ? cleanup.retained : created.map(({ url }) => url);
       if (!deleted.length && !retained.length) throw error;
@@ -1096,5 +1094,6 @@ export function createSolidDriveClient(options: {
     copy,
     move,
     remove,
+    recheckDeletions: () => deletion.recheck(storageUrl),
   };
 }

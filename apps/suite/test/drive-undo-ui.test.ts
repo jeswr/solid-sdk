@@ -97,7 +97,7 @@ it("Undo retains its recovery copy when the source changes during DELETE", async
     moveWithValidator({ storageUrl: ROOT, fetch }, SOURCE, TARGET, '"moved"'),
   ).rejects.toMatchObject({
     kind: "partial-failure",
-    cause: { kind: "delete-pending", cause: { status: 412 } },
+    cause: { kind: "conflict", status: 412 },
   });
   expect(files.get(SOURCE)?.body).toBe("other");
   expect(files.get(TARGET)?.body).toBe("original");
