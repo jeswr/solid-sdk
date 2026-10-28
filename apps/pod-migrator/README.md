@@ -5,6 +5,15 @@ An experimental React 19 app for copying a Solid pod and reviewing how permissio
 
 Two independent sign-ins use `@jeswr/solid-auth-core`, with separate session databases, storage keys, and full-page callbacks at `<base>callback/source` and `<base>callback/target` (base defaults to `/`). Enter a WebID or select identity provider mode; quick picks cover Inrupt PodSpaces and solidcommunity.net. Storage comes from the authenticated WebID subject’s `pim:storage`, with a required choice when several roots exist. Swapping direction keeps each account bound to its original credentials.
 
+Each connection detects the storage implementation separately from its access-control language.
+An HTTPS storage hostname under `*.inrupt.com` at the default port establishes ESS; CSS and NSS
+require a successful storage-root response with an exposed `X-Powered-By` header identifying
+`Community Solid Server` (optionally `/version`) or `solid-server/version`. Detection tries HEAD,
+then GET if the header is unavailable or HEAD is unsupported. The login issuer, including
+`https://login.inrupt.com/`, cannot identify the storage implementation: an Inrupt account may
+own a pod hosted elsewhere. Without storage evidence the implementation stays unknown, and
+ACP targets are blocked until CSS or ESS semantics can be established.
+
 From the workspace root, with Node 24 on PATH:
 
 ```sh
