@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6 — review regression tests
+// AUTHORED-BY Codex — preferences-based index bootstrap
 
 import { RedirectRefusedError } from "@jeswr/guarded-fetch";
+import { DataFactory } from "n3";
 import { assert, describe, expect, it, vi } from "vitest";
 import { buildDocument, parseDocument } from "../../src/apps/docs/lib/model/document.js";
 import {
@@ -19,11 +21,13 @@ import {
   type Snapshot,
   type StoredDocument,
 } from "../../src/apps/docs/lib/model/store.js";
+import { ProfileTypeIndexAnchor } from "../../src/apps/docs/lib/model/type-index.js";
 import { mockFetch, privateIndexPolicy, type RecordedCall, turtleToStore } from "./helpers.js";
 
 const POD = "https://pod.example/";
 const WEBID = `${POD}profile/card#me`;
 const INDEX = `${POD}settings/privateTypeIndex.ttl`;
+const PREFERENCES = `${POD}settings/prefs.ttl`;
 const DOC = `${POD}docs/plan.ttl`;
 const NOW = new Date("2026-10-25T12:00:00Z");
 const WAIT = async () => {};
@@ -74,7 +78,10 @@ async function server() {
       headers,
       body: typeof init?.body === "string" ? init.body : undefined,
     });
-    const policy = privateIndexPolicy(INDEX, WEBID)[`${method} ${url}`];
+    const policy = {
+      ...privateIndexPolicy(INDEX, WEBID),
+      ...privateIndexPolicy(PREFERENCES, WEBID),
+    }[`${method} ${url}`];
     if (policy)
       return new Response(method === "GET" ? policy.body : null, {
         headers: { "content-type": "text/turtle", ...policy.headers },
@@ -227,7 +234,20 @@ describe("store creation and scope", () => {
       store.create({ title: "Second" }),
     ]);
     expect(profileStatuses.sort()).toEqual([201, 412]);
-    expect(s.resources.get(WEBID)?.body).toContain(INDEX);
+    const profileLinks = new ProfileTypeIndexAnchor(
+      WEBID,
+      turtleToStore(s.resources.get(WEBID)?.body ?? "", WEBID),
+      DataFactory,
+    );
+    expect([...profileLinks.preferencesFiles]).toEqual([PREFERENCES]);
+    expect(profileLinks.privateIndex).toBeUndefined();
+    expect(
+      new ProfileTypeIndexAnchor(
+        WEBID,
+        turtleToStore(s.resources.get(PREFERENCES)?.body ?? "", PREFERENCES),
+        DataFactory,
+      ).privateIndex,
+    ).toBe(INDEX);
     for (const doc of documents) expect(await store.read(doc.url)).toEqual(doc);
   });
   it.each([

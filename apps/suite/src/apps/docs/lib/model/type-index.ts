@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6 — recover missing linked indexes
+// AUTHORED-BY Codex — preferences and extended-profile discovery
 // Ported from apps/pod-docs/src/type-index.ts.
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
@@ -38,9 +39,34 @@ import { verifyPrivateIndexAccess } from "./type-index-access.js";
 import { NS, RDF_TYPE } from "./vocab.js";
 
 const SOLID = NS.SOLID;
+const PREFERENCES_FILE = "http://www.w3.org/ns/pim/space#preferencesFile";
 
 /** One `solid:TypeRegistration` entry in a type-index document. */
 export class TypeRegistration extends TermWrapper {
+  get forClasses(): Set<string> {
+    return SetFrom.subjectPredicate(
+      this,
+      `${SOLID}forClass`,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
+  }
+  get instances(): Set<string> {
+    return SetFrom.subjectPredicate(
+      this,
+      `${SOLID}instance`,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
+  }
+  get instanceContainers(): Set<string> {
+    return SetFrom.subjectPredicate(
+      this,
+      `${SOLID}instanceContainer`,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
+  }
   get forClass(): string | undefined {
     return OptionalFrom.subjectPredicate(this, `${SOLID}forClass`, NamedNodeAs.string);
   }
@@ -82,9 +108,14 @@ export class TypeIndexDataset extends DatasetWrapper {
   all(): RegisteredLocation[] {
     const out: RegisteredLocation[] = [];
     for (const reg of this.registrations) {
-      const forClass = reg.forClass;
-      if (!forClass) continue;
-      out.push({ forClass, instance: reg.instance, container: reg.instanceContainer });
+      const instances = [...reg.instances];
+      const containers = [...reg.instanceContainers];
+      for (const forClass of reg.forClasses) {
+        for (const instance of instances) out.push({ forClass, instance, container: undefined });
+        for (const container of containers) out.push({ forClass, instance: undefined, container });
+        if (!instances.length && !containers.length)
+          out.push({ forClass, instance: undefined, container: undefined });
+      }
     }
     return out;
   }
@@ -101,6 +132,47 @@ export interface TypeIndexLinks {
 
 /** The WebID subject's type-index links, readable AND (privateIndex) writable. */
 export class ProfileTypeIndexAnchor extends TermWrapper {
+  get publicIndexes(): Set<string> {
+    return SetFrom.subjectPredicate(
+      this,
+      `${SOLID}publicTypeIndex`,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
+  }
+  get privateIndexes(): Set<string> {
+    return SetFrom.subjectPredicate(
+      this,
+      `${SOLID}privateTypeIndex`,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
+  }
+  /** pim: and space: name the same vocabulary; either prefix resolves here. */
+  get preferencesFiles(): Set<string> {
+    return SetFrom.subjectPredicate(
+      this,
+      PREFERENCES_FILE,
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
+  }
+  get extendedProfiles(): string[] {
+    return [
+      ...SetFrom.subjectPredicate(
+        this,
+        "http://www.w3.org/2000/01/rdf-schema#seeAlso",
+        NamedNodeAs.string,
+        NamedNodeFrom.string,
+      ),
+      ...SetFrom.subjectPredicate(
+        this,
+        "http://xmlns.com/foaf/0.1/isPrimaryTopicOf",
+        NamedNodeAs.string,
+        NamedNodeFrom.string,
+      ),
+    ];
+  }
   get publicIndex(): string | undefined {
     return OptionalFrom.subjectPredicate(this, `${SOLID}publicTypeIndex`, NamedNodeAs.string);
   }
@@ -142,7 +214,7 @@ export interface EnsureRegistrationsResult {
   indexUrl: string;
   /** How many registrations were newly added (0 = all already present). */
   added: number;
-  /** True when private index bootstrap ran (linking it from the profile if needed). */
+  /** True when private index bootstrap ran (linking it from preferences if needed). */
   bootstrapped: boolean;
 }
 
@@ -153,6 +225,64 @@ function documentUrl(webId: string): string {
   const u = new URL(webId);
   u.hash = "";
   return u.toString();
+}
+
+/** Follow the WebID's extended profiles, then its Preferences Documents.
+ * Only the WebID subject supplies index links. Every linked document is scoped,
+ * fragments/cycles are de-duplicated, and an incomplete graph cannot prove absence.
+ */
+async function discoverProfileLinks(
+  webId: string,
+  profile: DatasetCore,
+  fetchImpl: typeof fetch,
+  podRoot: string,
+  requireReadable: boolean,
+): Promise<{ publicIndexes: string[]; privateIndexes: string[]; preferences: string[] }> {
+  const scopedFetch = createPodScopedFetch(podRoot, { fetch: fetchImpl });
+  const documents = new Map<string, DatasetCore | undefined>([[documentUrl(webId), profile]]);
+  const publicIndexes = new Set<string>();
+  const privateIndexes = new Set<string>();
+  const preferences = new Set<string>();
+  const checked = (url: string) => documentUrl(assertWithinPodScope(podRoot, url));
+  const read = async (url: string): Promise<DatasetCore | undefined> => {
+    if (documents.has(url)) return documents.get(url);
+    if (documents.size >= 32) throw new Error("Too many linked Type Index profile documents.");
+    let dataset: DatasetCore | undefined;
+    try {
+      dataset = (await readRdf(url, scopedFetch)).dataset;
+    } catch (error) {
+      if (
+        !(
+          error instanceof RdfFetchError &&
+          (error.status === 404 || (!requireReadable && error.status === 403))
+        )
+      )
+        throw error;
+    }
+    documents.set(url, dataset);
+    return dataset;
+  };
+  const profiles = new Set([documentUrl(webId)]);
+  for (const url of profiles) {
+    const dataset = await read(url);
+    if (!dataset) continue;
+    const anchor = new ProfileTypeIndexAnchor(webId, dataset, DataFactory);
+    for (const index of anchor.publicIndexes) publicIndexes.add(checked(index));
+    for (const index of anchor.privateIndexes) privateIndexes.add(checked(index));
+    for (const prefs of anchor.preferencesFiles) preferences.add(checked(prefs));
+    for (const extended of anchor.extendedProfiles) profiles.add(checked(extended));
+  }
+  for (const url of preferences) {
+    const dataset = await read(url);
+    if (!dataset) continue;
+    for (const index of new ProfileTypeIndexAnchor(webId, dataset, DataFactory).privateIndexes)
+      privateIndexes.add(checked(index));
+  }
+  return {
+    publicIndexes: [...publicIndexes],
+    privateIndexes: [...privateIndexes],
+    preferences: [...preferences],
+  };
 }
 
 /** Deterministic fragment for a registration (FNV-1a over class|container). */
@@ -188,7 +318,7 @@ async function createIndexDocument(indexUrl: string, fetchImpl: typeof fetch): P
  *
  * Uses only the private index; bootstraps
  * `settings/privateTypeIndex.ttl` under the pod root — and links it from the
- * profile — when no private index exists. A linked index returning 404 is created
+ * Preferences Document — when no private index exists. A linked index returning 404 is created
  * at its advertised URL. Idempotent: existing registrations are left untouched.
  *
  * @param fetchImpl - required account-scoped fetch implementation.
@@ -208,25 +338,58 @@ export async function ensureTypeRegistrations(opts: {
 
   let indexUrl: string;
   let bootstrapped = false;
-  // Linking races with other first-use clients too: always re-read the profile
-  // after a conflict and prefer the link that the other writer established.
+  // Re-discover after a conflict, including preferences and extended profiles,
+  // so a competing client's established private index wins over our fallback.
   for (let attempt = 0; ; attempt++) {
     const { dataset: profileDs, etag: profileEtag } = await readRdf(webId, profileFetch);
-    const linked = typeIndexLinks(webId, profileDs).privateIndex;
+    const links = await discoverProfileLinks(webId, profileDs, fetchImpl, podRoot, true);
+    const linked = links.privateIndexes[0];
     if (linked) {
       indexUrl = assertWithinPodScope(podRoot, linked);
       break;
     }
-    indexUrl = new URL("settings/privateTypeIndex.ttl", podRoot).toString();
-    await createIndexDocument(indexUrl, fetchImpl);
-    bootstrapped = true;
-    await verifyPrivateIndexAccess(indexUrl, webId, podRoot, fetchImpl);
-    new ProfileTypeIndexAnchor(webId, profileDs, DataFactory).privateIndex = indexUrl;
     try {
-      await writeRdf(documentUrl(webId), profileDs, {
-        etag: profileEtag,
-        fetchImpl: profileFetch,
-      });
+      const preferencesUrl = links.preferences[0] ?? new URL("settings/prefs.ttl", podRoot).href;
+      let preferencesDs: DatasetCore;
+      let preferencesEtag: string | null = null;
+      let missing = false;
+      try {
+        const fetched = await readRdf(preferencesUrl, fetchImpl);
+        preferencesDs = fetched.dataset;
+        preferencesEtag = fetched.etag;
+      } catch (error) {
+        if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
+        preferencesDs = new Store();
+        missing = true;
+      }
+      const anchor = new ProfileTypeIndexAnchor(webId, preferencesDs, DataFactory);
+      const existing = anchor.privateIndex;
+      indexUrl = existing
+        ? documentUrl(assertWithinPodScope(podRoot, existing))
+        : new URL("settings/privateTypeIndex.ttl", podRoot).href;
+      if (!existing) {
+        await createIndexDocument(indexUrl, fetchImpl);
+        bootstrapped = true;
+      }
+      await verifyPrivateIndexAccess(indexUrl, webId, podRoot, fetchImpl);
+      await verifyPrivateIndexAccess(preferencesUrl, webId, podRoot, fetchImpl);
+      if (!existing) {
+        anchor.privateIndex = indexUrl;
+        await writeRdf(preferencesUrl, preferencesDs, {
+          etag: preferencesEtag,
+          createOnly: missing,
+          fetchImpl,
+        });
+      }
+      if (!links.preferences.length) {
+        new ProfileTypeIndexAnchor(webId, profileDs, DataFactory).preferencesFiles.add(
+          preferencesUrl,
+        );
+        await writeRdf(documentUrl(webId), profileDs, {
+          etag: profileEtag,
+          fetchImpl: profileFetch,
+        });
+      }
       break;
     } catch (error) {
       if (!(error instanceof ResourceWriteError && error.status === 412) || attempt >= 3)
@@ -294,9 +457,8 @@ export async function discoverRegistrations(
   podRoot: string,
   requireReadable = false,
 ): Promise<RegisteredLocation[]> {
-  const links = typeIndexLinks(webId, profile);
-  const urls = [links.publicIndex, links.privateIndex].filter((u): u is string => Boolean(u));
-  const checked = urls.map((url) => assertWithinPodScope(podRoot, url));
+  const links = await discoverProfileLinks(webId, profile, fetchImpl, podRoot, requireReadable);
+  const checked = new Set([...links.publicIndexes, ...links.privateIndexes]);
   const scopedFetch = createPodScopedFetch(podRoot, { fetch: fetchImpl });
   const out: RegisteredLocation[] = [];
   for (const url of checked) {

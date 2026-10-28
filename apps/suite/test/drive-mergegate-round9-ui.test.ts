@@ -44,7 +44,23 @@ import { DriveUiProvider } from "../src/apps/drive/state/ui";
 const SOLID = "http://www.w3.org/ns/solid/terms#";
 const PRIVATE_INDEX = `${ROOT}settings/privateTypeIndex.ttl`;
 const PUBLIC_INDEX = `${ROOT}settings/publicTypeIndex.ttl`;
+const PREFERENCES = `${ROOT}settings/preferences.ttl`;
+const EXTENDED_PROFILE = `${ROOT}extended-profile.ttl`;
+const CUSTOM_INDEX = `${ROOT}settings/existing-drive-index.ttl`;
 const DOCUMENTS = `${ROOT}Documents/`;
+const DISCOVERY_PATHS = [
+  "public",
+  "private",
+  "pim preferences",
+  "space preferences",
+  "seeAlso public",
+  "seeAlso private",
+  "seeAlso preferences",
+  "isPrimaryTopicOf public",
+  "isPrimaryTopicOf private",
+  "isPrimaryTopicOf preferences",
+] as const;
+type DiscoveryPath = (typeof DISCOVERY_PATHS)[number];
 let session: PodSession;
 let drive: ReturnType<typeof useDrive>;
 function Probe() {
@@ -52,8 +68,12 @@ function Probe() {
   return null;
 }
 
-async function fixture(registered?: "public" | "private") {
+async function fixture(registered?: DiscoveryPath, register = true, instance = false) {
   const pod = await wacPod();
+  const privateIndex =
+    registered && registered !== "public" && registered !== "private"
+      ? CUSTOM_INDEX
+      : PRIVATE_INDEX;
   const put = async (url: string, body: string, contentType = "text/turtle") => {
     const response = await pod.fetch(url, {
       method: "PUT",
@@ -64,26 +84,48 @@ async function fixture(registered?: "public" | "private") {
   };
   const profile = new Store();
   const me = new WacFields(OWNER, profile, DataFactory);
-  me.iris(`${SOLID}publicTypeIndex`).add(PUBLIC_INDEX);
-  me.iris(`${SOLID}privateTypeIndex`).add(PRIVATE_INDEX);
+  const extended = new Store();
+  const extendedLink = registered?.startsWith("seeAlso")
+    ? "http://www.w3.org/2000/01/rdf-schema#seeAlso"
+    : registered?.startsWith("isPrimaryTopicOf")
+      ? "http://xmlns.com/foaf/0.1/isPrimaryTopicOf"
+      : undefined;
+  const anchor = extendedLink ? new WacFields(OWNER, extended, DataFactory) : me;
+  if (extendedLink) me.iris(extendedLink).add(EXTENDED_PROFILE);
+  anchor.iris(`${SOLID}publicTypeIndex`).add(PUBLIC_INDEX);
+  if (registered?.endsWith("preferences")) {
+    anchor.iris("http://www.w3.org/ns/pim/space#preferencesFile").add(PREFERENCES);
+    const preferences = new Store();
+    new WacFields(OWNER, preferences, DataFactory)
+      .iris(`${SOLID}privateTypeIndex`)
+      .add(privateIndex);
+    await put(PREFERENCES, await turtle(preferences));
+    pod.policies.set(`${PREFERENCES}.policy`, await aclBody(PREFERENCES));
+  } else anchor.iris(`${SOLID}privateTypeIndex`).add(privateIndex);
+  if (extendedLink) await put(EXTENDED_PROFILE, await turtle(extended));
   await put(OWNER.split("#")[0] as string, await turtle(profile));
   for (const [kind, url] of [
     ["public", PUBLIC_INDEX],
-    ["private", PRIVATE_INDEX],
+    ["private", privateIndex],
   ] as const) {
     const index = new Store();
     new TypeIndexDocument(url, index, DataFactory).markUnlistedIndex();
-    if (registered === kind) {
+    if (
+      register &&
+      registered &&
+      (registered.endsWith("public") ? kind === "public" : kind === "private")
+    ) {
       const registration = new TypeRegistration(DataFactory.blankNode(), index, DataFactory);
       registration.markRegistration();
       registration.forClass = DRIVE_ROOT_CLASS;
-      registration.instanceContainer = DOCUMENTS;
+      if (instance) registration.instance = DOCUMENTS;
+      else registration.instanceContainer = DOCUMENTS;
     }
     await put(url, await turtle(index));
   }
   // The selected private index really has owner-only WAC, even though the storage is public.
-  pod.policies.set(`${PRIVATE_INDEX}.policy`, await aclBody(PRIVATE_INDEX));
-  if (registered) await put(`${DOCUMENTS}report.txt`, "Existing report", "text/plain");
+  pod.policies.set(`${privateIndex}.policy`, await aclBody(privateIndex));
+  if (registered && register) await put(`${DOCUMENTS}report.txt`, "Existing report", "text/plain");
   session = {
     mode: "demo",
     webId: OWNER,
@@ -94,7 +136,7 @@ async function fixture(registered?: "public" | "private") {
     reset: vi.fn(),
   };
   pod.calls.length = 0;
-  return pod;
+  return { ...pod, privateIndex };
 }
 
 function tree(view: ReturnType<typeof h> = h(FolderView)) {
@@ -106,7 +148,7 @@ function tree(view: ReturnType<typeof h> = h(FolderView)) {
 
 async function roots(pod: Awaited<ReturnType<typeof fixture>>) {
   const locations = [];
-  for (const url of [PUBLIC_INDEX, PRIVATE_INDEX]) {
+  for (const url of [PUBLIC_INDEX, pod.privateIndex]) {
     const { dataset } = await fetchRdf(url, { fetch: pod.fetch });
     locations.push(...new TypeIndexDataset(dataset, DataFactory).locate(DRIVE_ROOT_CLASS));
   }
@@ -122,9 +164,23 @@ async function removeFallback(pod: Awaited<ReturnType<typeof fixture>>) {
 beforeEach(() => localStorage.clear());
 
 it.each([
-  "public",
-  "private",
-] as const)("uses the existing %s DriveRoot registration in My Drive, Recent and search without registering again", async (index) => {
+  ["pim preferences", PREFERENCES],
+  ["seeAlso private", EXTENDED_PROFILE],
+] as const)("an unreadable %s document prevents fallback creation", async (path, url) => {
+  const pod = await fixture(path);
+  pod.intercept(async (target, init) =>
+    target === url && !init?.method ? new Response(null, { status: 403 }) : undefined,
+  );
+  const view = await mount(h(DriveApp, null, h(FolderView)));
+  expect(view.host.querySelector('[role="alert"]')?.textContent).toContain(
+    "Can't read your Drive type index",
+  );
+  expect(pod.calls.filter((call) => call.method === "PUT")).toEqual([]);
+});
+
+it.each(
+  DISCOVERY_PATHS,
+)("uses the existing %s DriveRoot registration in My Drive, Recent and search without registering again", async (index) => {
   const pod = await fixture(index);
   const view = await mount(tree());
   expect(drive.driveRoot).toBe(DOCUMENTS);
@@ -134,7 +190,32 @@ it.each([
     expect(view.host.textContent).not.toContain("Your Drive is empty");
   }
   expect(pod.calls.filter((call) => call.method === "PUT")).toEqual([]);
+  expect(pod.calls.some((call) => call.url.startsWith(DRIVE))).toBe(false);
   expect(await roots(pod)).toHaveLength(1);
+});
+
+it.each(
+  DISCOVERY_PATHS,
+)("uses a solid:instance DriveRoot container via %s without creating a fallback", async (path) => {
+  const pod = await fixture(path, true, true);
+  const view = await mount(tree());
+  expect(drive.driveRoot).toBe(DOCUMENTS);
+  expect(view.host.querySelector(`[data-url="${DOCUMENTS}report.txt"]`)).not.toBeNull();
+  expect(pod.calls.filter((call) => call.method === "PUT")).toEqual([]);
+});
+
+it.each(
+  DISCOVERY_PATHS,
+)("registers a missing DriveRoot in the existing private index via %s", async (path) => {
+  const pod = await fixture(path, false);
+  await removeFallback(pod);
+  await mount(tree());
+  expect(drive.driveRoot).toBe(DRIVE);
+  expect(await roots(pod)).toEqual([expect.objectContaining({ container: DRIVE })]);
+  expect(pod.calls.filter((call) => call.method === "PUT").map((call) => call.url)).toEqual([
+    DRIVE,
+    pod.privateIndex,
+  ]);
 });
 
 it("chooses the first DriveRoot container in public-then-private order, including legacy classes", async () => {

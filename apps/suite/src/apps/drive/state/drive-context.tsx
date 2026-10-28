@@ -70,11 +70,15 @@ async function resolveDriveRoot(client: DriveClient, session: PodSession): Promi
       session.storageUrl,
     );
     // Reuse the first DriveRoot container in discovery order (public, then private).
-    // Other classes and solid:instance resources do not designate a Drive root.
+    // A DriveRoot can also be registered as an instance of the root container.
+    // Resource instances without a trailing slash cannot serve as a folder.
     const existing = locations.find(
-      (location) => termsEqual(location.forClass, DRIVE_ROOT_CLASS) && location.container,
-    )?.container;
-    if (existing) return existing;
+      (location) =>
+        termsEqual(location.forClass, DRIVE_ROOT_CLASS) &&
+        (location.container || location.instance?.endsWith("/")),
+    );
+    const root = existing?.container ?? existing?.instance;
+    if (root) return root;
   } catch (cause) {
     throw new DriveRootDiscoveryError(cause);
   }
