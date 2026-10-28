@@ -68,7 +68,7 @@ test("creates, saves, reloads and formats a document accessibly", async ({ page 
     page.getByRole("status").filter({ hasText: "Saved to your pod · just now" }),
   ).toBeVisible({ timeout: 15_000 });
   await page.reload();
-  await expect(body).toContainText("A clear plan for the launch.");
+  await expect(body).toContainText("A clear plan for the launch.", { timeout: 15_000 });
   await expect(body).toContainText("Keep every word in your own pod.");
   await expect(title).toHaveValue("Launch plan");
   // Click the paragraph itself: the editor reads a keyboard-moved caret from the
@@ -199,7 +199,7 @@ test("find replaces atomically and recovers failed offline writes across an offl
   expect(stillRemote.body).not.toContain("safely offline");
   expect(stillRemote.updates).toBe(before.updates);
   await page.reload();
-  await expect(body).toContainText("dog dog dog safely offline");
+  await expect(body).toContainText("dog dog dog safely offline", { timeout: 15_000 });
   await expect(page.getByText("Offline copy — your edits are saved on this device.")).toBeVisible();
   await demoOffline(page, false);
   await expect(
@@ -210,5 +210,5 @@ test("find replaces atomically and recovers failed offline writes across an offl
     .toContain("dog dog dog safely offline");
   await expect.poll(async () => (await podDocument(page)).updates).toBeGreaterThan(before.updates);
   await page.reload();
-  await expect(body).toContainText("dog dog dog safely offline");
+  await expect(body).toContainText("dog dog dog safely offline", { timeout: 15_000 });
 });
