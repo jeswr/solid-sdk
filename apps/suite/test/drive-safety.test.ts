@@ -176,7 +176,14 @@ describe("Drive data-safety regressions", () => {
     const deletion = fetch.mock.calls.findIndex(
       ([url, init]) => url === `${entry.url}b` && init?.method === "DELETE",
     );
-    const preceding = fetch.mock.calls[deletion - 1];
+    const preceding = fetch.mock.calls
+      .slice(0, deletion)
+      .findLast(
+        ([url, init]) =>
+          url === `${FROM}b` &&
+          init?.method === "HEAD" &&
+          new Headers(init.headers).has("if-match"),
+      );
     expect(preceding?.[0]).toBe(`${FROM}b`);
     expect(preceding?.[1]?.method).toBe("HEAD");
     expect(new Headers(preceding?.[1]?.headers).get("if-match")).toBe(comparedEtag);

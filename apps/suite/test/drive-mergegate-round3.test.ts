@@ -27,7 +27,7 @@ it("same-folder rename with a hidden ACL Link refuses before writes and retains 
   expect(f.exposures).toEqual([]);
 });
 
-it("same-folder rename with hidden ACL Link requires explicit unknown-access confirmation", async () => {
+it("same-folder rename with hidden ACL Link cannot authorize unknown access", async () => {
   const f = await wacPod();
   const from = `${PUBLIC}secret`,
     to = `${PUBLIC}renamed`;
@@ -41,13 +41,8 @@ it("same-folder rename with hidden ACL Link requires explicit unknown-access con
   });
   const confirmAccess = vi.fn(async () => "cancel" as const);
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, confirmAccess });
-  await expect(client.move(from, to, { kind: "confirm-move" })).rejects.toThrow("cancelled");
-  expect(confirmAccess).toHaveBeenCalledWith(
-    expect.objectContaining({
-      canKeep: false,
-      gains: [expect.stringContaining("could not be determined")],
-    }),
-  );
+  await expect(client.move(from, to, { kind: "confirm-move" })).rejects.toThrow("Private access");
+  expect(confirmAccess).not.toHaveBeenCalled();
   expect(f.pod.has(from)).toBe(true);
   expect(f.pod.has(to)).toBe(false);
 });
@@ -91,12 +86,12 @@ it("same-folder rename checks unknown effective access even when own ACL is posi
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, confirmAccess });
   await expect(
     client.move(`${PUBLIC}placeholder`, `${PUBLIC}renamed`, { kind: "confirm-move" }),
-  ).rejects.toThrow("cancelled");
-  expect(confirmAccess).toHaveBeenCalledWith(expect.objectContaining({ canKeep: false }));
+  ).rejects.toThrow("Private access");
+  expect(confirmAccess).not.toHaveBeenCalled();
   expect(f.calls.some(({ method }) => ["PUT", "DELETE"].includes(method))).toBe(false);
 });
 
-it("explicitly confirmed unknown same-folder rename can use destination access", async () => {
+it("explicit confirmation cannot authorize unknown same-folder rename", async () => {
   const f = await wacPod();
   const from = `${PUBLIC}placeholder`,
     to = `${PUBLIC}renamed`;
@@ -108,9 +103,10 @@ it("explicitly confirmed unknown same-folder rename can use destination access",
   });
   const confirmAccess = vi.fn(async () => "move" as const);
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, confirmAccess });
-  await client.move(from, to, { kind: "confirm-move" });
-  expect(confirmAccess).toHaveBeenCalledWith(expect.objectContaining({ canKeep: false }));
-  expect((await f.anonymous(to)).status).toBe(200);
+  await expect(client.move(from, to, { kind: "confirm-move" })).rejects.toThrow("Private access");
+  expect(confirmAccess).not.toHaveBeenCalled();
+  expect(f.pod.has(to)).toBe(false);
+  expect(f.pod.has(from)).toBe(true);
 });
 
 it.each([

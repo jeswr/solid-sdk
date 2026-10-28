@@ -19,7 +19,7 @@ export class DriveAccessError extends Error {
     detail?: string,
   ) {
     super(
-      "Private access could not be established or verified. Drive can't confirm who can access the item and stopped the transfer. You can choose Delete forever instead." +
+      "Private access could not be established or verified. Drive can't confirm who can access the item and stopped the transfer. Retry once its access can be verified." +
         (detail ? ` ${detail}` : ""),
     );
   }
@@ -122,7 +122,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     try {
       const result = await fetchRdf(url, {
         fetch: async (input, init) => {
-          const response = await http(input, init);
+          const response = await http(input, { ...init, cache: "no-store" });
           rejectAcp(response.headers);
           return response;
         },
@@ -197,12 +197,26 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       return { status: "unknown", cause };
     }
   };
-  const effective = async (resource: string, inherit = false): Promise<AccessState> => {
+  const effective = async (
+    resource: string,
+    inherit = false,
+    allowAbsent = false,
+  ): Promise<AccessState> => {
     try {
       let current: string | undefined = inherit ? parent(resource) : resource;
       while (current?.startsWith(storageUrl)) {
-        const response = await http(current, { method: "HEAD" });
-        if (!response.ok) throw new DriveAccessError(response.status);
+        const response = await http(current, { method: "HEAD", cache: "no-store" });
+        if (!response.ok && !(allowAbsent && response.status === 404))
+          throw new DriveAccessError(response.status);
+        if (
+          response.status === 404 &&
+          response.headers.get("x-solid-demo-access-control") !== "none" &&
+          !discover(current, response.headers)
+        ) {
+          current = parent(current);
+          inherit = true;
+          continue;
+        }
         const own = await snapshot(current, response.headers);
         if (own.status === "unknown" || (own.status === "none" && own.demo)) return own;
         if (own.status === "known") {
@@ -231,7 +245,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     store,
     snapshot,
     async install(source: OwnAccess, from: string, to: string): Promise<OwnAccess> {
-      const response = await http(to, { method: "HEAD" });
+      const response = await http(to, { method: "HEAD", cache: "no-store" });
       if (!response.ok) throw new DriveAccessError(response.status);
       const url = discover(to, response.headers);
       if (!url) throw new DriveAccessError("Destination has no ACL support");
@@ -246,7 +260,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     },
     async privateFolder(url: string, webId?: string): Promise<void> {
       try {
-        const response = await http(url, { method: "HEAD" });
+        const response = await http(url, { method: "HEAD", cache: "no-store" });
         if (!response.ok) throw new DriveAccessError(response.status);
         rejectAcp(response.headers);
         if (response.headers.get("x-solid-demo-access-control") === "none") return;
@@ -259,6 +273,83 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     },
   };
 }
+
+export class DriveAccessChangedError extends DriveAccessError {
+  constructor(readonly gains: readonly string[]) {
+    super("Bound access changed");
+  }
+}
+
+/** A policy decision is bound to BOTH endpoints, never to a previously discovered ACL URL.
+ * Every check starts discovery again, including own ACLs installed since preflight.
+ * Only an explicitly selected, verified policy installation may change the destination baseline.
+ */
+export async function bindAccess(
+  access: ReturnType<typeof accessControl>,
+  from: string,
+  to: string,
+  destinationOnly = false,
+) {
+  const resolve = async (url: string) => ({
+    resource: requireAccess(await access.effective(url, false, true), url),
+    defaults: url.endsWith("/")
+      ? requireAccess(await access.effective(`${url}.access-binding`, true, true), url)
+      : undefined,
+  });
+  let source = await resolve(from);
+  let destination = from === to ? source : await resolve(to);
+  const retired = new Set<string>();
+  const binding = {
+    source: source.resource,
+    destination: destination.resource,
+    retire: (url: string) => retired.add(url),
+    /** Re-resolve before removing our unchecked write, even if verification fails.
+     * The caller must supply a conditional rollback of its captured PUT identity;
+     * an access failure must not strand confidential bytes in a widened copy.
+     */
+    async rollback<T>(work: () => Promise<T>): Promise<T> {
+      await binding.recheck().catch(() => undefined);
+      return work();
+    },
+    installed(policy: OwnAccess) {
+      const defaults = access.defaults(policy, to);
+      destination = {
+        resource: access.forResource(policy, to),
+        defaults: to.endsWith("/") && defaults.dataset.size ? defaults : destination.defaults,
+      };
+      if (from === to) source = destination;
+    },
+    async recheck(): Promise<void> {
+      const currentSource = retired.has(from) ? undefined : await resolve(from);
+      const currentDestination = retired.has(to) ? undefined : await resolve(to);
+      const gains = new Set<string>();
+      let changed = false;
+      for (const [before, current, isSource] of [
+        [source, currentSource, !destinationOnly],
+        [destination, currentDestination, false],
+      ] as const) {
+        if (!current) continue;
+        for (const key of ["resource", "defaults"] as const) {
+          const previous = before[key];
+          const next = current[key];
+          if (!previous || !next) continue;
+          const wider = accessGains(previous, next);
+          const narrower = isSource ? accessGains(next, previous) : [];
+          if (previous.url !== next.url || wider.length || narrower.length) changed = true;
+          for (const agent of wider) gains.add(agent);
+          for (const agent of narrower) gains.add(agent);
+          // Narrowing the source can make a previously safe destination wider.
+          if (narrower.length && currentDestination)
+            for (const agent of accessGains(next, currentDestination.resource)) gains.add(agent);
+        }
+      }
+      if (changed) throw new DriveAccessChangedError([...gains]);
+    },
+  };
+  return binding;
+}
+
+export type AccessBinding = Awaited<ReturnType<typeof bindAccess>>;
 
 function parent(resource: string): string | undefined {
   if (new URL(resource).pathname === "/") return undefined;

@@ -74,7 +74,12 @@ export function deletionControl(http: typeof fetch, error: (status: number, url:
     }
     if (unresolved) throw new DriveDeletePendingError(unresolved);
   };
-  const remove = async (url: string, etag: string, recovery?: string) => {
+  const remove = async (
+    url: string,
+    etag: string,
+    recovery?: string,
+    verifyAccess?: () => Promise<void>,
+  ) => {
     await guard(url);
     // Persist both sides before the request: reload or response loss cannot turn
     // a retained copy into a disposable duplicate while its source is deleting.
@@ -85,6 +90,12 @@ export function deletionControl(http: typeof fetch, error: (status: number, url:
       ...(recovery ? { recovery } : {}),
     };
     await pending.add(record);
+    try {
+      await verifyAccess?.();
+    } catch (error) {
+      await retire(record);
+      throw error;
+    }
     let response: Response;
     try {
       response = await http(url, { method: "DELETE", headers: { "if-match": etag } });

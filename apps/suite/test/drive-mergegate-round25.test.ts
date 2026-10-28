@@ -1,11 +1,10 @@
 // AUTHORED-BY Codex
 import { parseRdf } from "@jeswr/fetch-rdf";
-import { DataFactory, Store } from "n3";
+import { DataFactory } from "n3";
 import { afterEach, expect, it, vi } from "vitest";
 import { accessControl } from "../src/apps/drive/lib/client/access";
 import { createSolidDriveClient, parentOf } from "../src/apps/drive/lib/client/client";
 import { protectionLedger } from "../src/apps/drive/lib/client/protection-ledger";
-import { containerData } from "../src/apps/drive/lib/client/rdf";
 import {
   deleteForever,
   listTrash,
@@ -13,6 +12,7 @@ import {
   trashItems,
   uploadFile,
 } from "../src/apps/drive/lib/operations/operations";
+import { rdfPod } from "./drive-rdf-pod";
 import {
   aclBody,
   DRIVE,
@@ -22,50 +22,10 @@ import {
   ROOT,
   turtle,
   WacFields,
-  wacPod,
+  type wacPod,
 } from "./drive-wac-pod";
 
 afterEach(() => vi.restoreAllMocks());
-
-/** Persist application container RDF and bind its edits to the response validator. */
-async function rdfPod() {
-  const f = await wacPod();
-  const raw = f.pod.fetch;
-  const graphs = new Map<string, Store>();
-  const revisions = new Map<string, number>();
-  const folderFetch: typeof fetch = async (input, init) => {
-    const url = String(input);
-    if (!url.endsWith("/")) return raw(input, init);
-    const method = init?.method ?? "GET";
-    const prior = await raw(url, { method: "HEAD" });
-    const tag = (etag: string | null) => `"${etag?.slice(1, -1)}-rdf-${revisions.get(url) ?? 0}"`;
-    const headers = new Headers(init?.headers);
-    if (headers.has("if-match") && headers.get("if-match") !== tag(prior.headers.get("etag")))
-      return new Response(null, { status: 412 });
-    headers.delete("if-match");
-    const response = await raw(input, { ...init, headers });
-    if (!response.ok) return response;
-    if (method === "PUT") {
-      graphs.set(url, containerData(await parseRdf(String(init?.body ?? ""), "text/turtle"), url));
-      revisions.set(url, (revisions.get(url) ?? 0) + 1);
-    }
-    if (method === "DELETE") {
-      graphs.delete(url);
-      return response;
-    }
-    const out = new Headers(response.headers);
-    out.set("etag", tag(response.headers.get("etag")));
-    if (method !== "GET")
-      return new Response(response.body, { status: response.status, headers: out });
-    const dataset = new Store([
-      ...(await parseRdf(await response.text(), "text/turtle")),
-      ...(graphs.get(url) ?? []),
-    ]);
-    return new Response(await turtle(dataset), { status: response.status, headers: out });
-  };
-  Object.defineProperty(f.pod, "fetch", { value: folderFetch });
-  return f;
-}
 
 async function editFolder(f: Awaited<ReturnType<typeof wacPod>>, url: string) {
   const response = await f.pod.fetch(url);
@@ -212,13 +172,7 @@ it.each(
   if (operation === "Trash" || operation === "Restore")
     expect(outcome).toMatchObject({ done: [], failed: [expect.anything()] });
   else expect(outcome).toBeInstanceOf(Error);
-  if (operation === "confirmed move")
-    expect(confirmAccess).toHaveBeenCalledWith(
-      expect.objectContaining({
-        canKeep: false,
-        gains: [expect.stringContaining("Access could not be determined")],
-      }),
-    );
+  expect(confirmAccess).not.toHaveBeenCalled();
   expect(f.pod.has(operation === "Restore" ? affected : source)).toBe(true);
   expect(f.calls).not.toContainEqual({ url: `${affected}.policy`, method: "PUT" });
 });

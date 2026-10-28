@@ -870,7 +870,7 @@ async function restoreMissing(
     if (from.endsWith("/")) {
       const original = await client.readRdf(from);
       if (!original) throw new DriveError("not-found", 404, from);
-      await client.mergeContainer(from, to, { kind: "preserve-source" });
+      const merged = await client.mergeContainer(from, to, { kind: "preserve-source" });
       const remaining: { url: string; error: unknown }[] = [];
       for (const child of await client.list(from))
         remaining.push(
@@ -900,6 +900,7 @@ async function restoreMissing(
               !containsGraph(relocate(data, [[from, to]]), containerData(survivor.dataset, to))
             )
               throw new DriveError("conflict", 412, to);
+            await merged.recheck();
             await client.remove(from, { ifMatch: etag });
           },
         });
@@ -908,6 +909,7 @@ async function restoreMissing(
     }
     if (await exists(client, to)) {
       if (!settled) throw new TrashMovingError();
+      const access = await client.bindAccess?.(from, to);
       const compared = await sameRecoveryFile(client, from, to);
       if (!compared.same) throw new DriveError("conflict", 412, to);
       if (!compared.etag || compared.etag.startsWith("W/"))
@@ -919,6 +921,7 @@ async function restoreMissing(
       if (survivor.etag !== compared.survivorEtag) throw new DriveError("conflict", 412, to);
       // Without an atomic server operation, the survivor can still disappear between
       // this verification and the recovery DELETE. Keep that cross-resource window small.
+      await access?.recheck();
       await client.remove(from, { ifMatch: compared.etag });
       return [];
     }
@@ -1035,6 +1038,7 @@ async function deleteForeverUnlocked(
     try {
       slotOf(driveRoot, entry);
       await requireTrashEntry(client, driveRoot, entry);
+      await client.bindAccess?.(entry.url, indexUrlOf(driveRoot));
       const archive = await capturePolicyArchive(client, entry.url);
       await removeTrashItem(client, entry.url);
       await removeRecoveryMarker(client, driveRoot, entry);

@@ -362,7 +362,7 @@ it.each([
   );
   expect(result.failed[0]?.error).toMatchObject({
     kind: "private-access-unavailable",
-    message: expect.stringContaining("Delete forever"),
+    message: expect.stringContaining("Retry once its access can be verified"),
   });
   expect(f.pod.has(`${FROM}a`)).toBe(true);
   expect(f.pod.has(INDEX)).toBe(false);

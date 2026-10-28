@@ -20,7 +20,8 @@ function transport(
     const url = String(input);
     const method = init?.method ?? "GET";
     const headers = new Headers(init?.headers);
-    if (url === `${ROOT}drive/` && method === "HEAD") return new Response(null);
+    if (url === `${ROOT}drive/` && method === "HEAD")
+      return new Response(null, { headers: { "x-solid-demo-access-control": "none" } });
     if (method === "DELETE" && url === SOURCE) options.beforeDelete?.(files);
     const current = files.get(url);
     const ifMatch = headers.get("if-match");

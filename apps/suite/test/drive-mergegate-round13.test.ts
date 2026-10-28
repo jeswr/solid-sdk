@@ -215,7 +215,7 @@ it("every Drive payload PUT/POST/PATCH is sent through guardedWrite", () => {
     };
     visit(source);
   }
-  expect(mutations).toEqual(["PUT", "PUT"]);
+  expect(mutations).toEqual(["PUT", "PUT", "PUT", "PUT"]);
 });
 async function trashedFolder() {
   const f = await wacPod();
@@ -242,7 +242,12 @@ it("commits protection before container creation and retains it until ACL verifi
     return undefined;
   });
   f.after(async (url, method, response) => {
-    if (url === `${PRIVATE}.policy` && method === "GET" && response.ok) {
+    if (
+      url === `${PRIVATE}.policy` &&
+      method === "GET" &&
+      response.ok &&
+      !beforeVerify.mock.calls.length
+    ) {
       expect(await ledger.get(PRIVATE)).toBeDefined();
       beforeVerify();
     }

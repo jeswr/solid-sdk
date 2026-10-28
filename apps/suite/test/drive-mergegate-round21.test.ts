@@ -52,7 +52,8 @@ it.each([200, 204, 404, 410])("DELETE %s is terminal without polling", async (st
   );
   const before = f.calls.length;
   await client.remove(url, { ifMatch: target.etag as string });
-  expect(f.calls.slice(before).filter(({ method }) => method === "HEAD")).toEqual([]);
+  const removed = f.calls.findIndex((call, index) => index >= before && call.method === "DELETE");
+  expect(f.calls.slice(removed + 1).filter(({ method }) => method === "HEAD")).toEqual([]);
 });
 
 it.each(["immediate", "later", "410"])("202 confirms deletion through HEAD: %s", async (mode) => {

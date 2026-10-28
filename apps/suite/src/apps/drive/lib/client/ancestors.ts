@@ -7,6 +7,7 @@ import { trashEntries, trashIndexFrom } from "../operations/trash-index";
 import {
   type accessControl,
   accessGains,
+  bindAccess,
   DriveAccessError,
   type OwnAccess,
   privateAcl,
@@ -150,20 +151,28 @@ export function ancestorGuard(options: {
     decision: Exclude<ContainerPolicy, { kind: "owner-only" }>,
     onCreated?: (response: Response) => void,
     put = () => options.putFolder(url),
+    verifyAccess?: () => Promise<void>,
   ): Promise<{ response: Response; policy?: OwnAccess }> => {
+    const binding = await bindAccess(access, url, url, true);
     try {
       if (decision.kind === "archived")
         await ledger.set(url, await requirementFor(decision.acl, decision.from));
+      await verifyAccess?.();
+      await binding.recheck();
       const response = await put();
       onCreated?.(response);
       try {
+        await verifyAccess?.();
+        await binding.recheck();
         const policy =
           decision.kind === "archived"
             ? await install(url, decision.acl, decision.from)
             : undefined;
+        if (policy) binding.installed(policy);
+        await binding.recheck();
         return { response, ...(policy ? { policy } : {}) };
       } catch (error) {
-        await cleanup(url, response);
+        await binding.rollback(() => cleanup(url, response));
         throw error;
       }
     } finally {
@@ -325,6 +334,7 @@ export function ancestorGuard(options: {
     decision: ContainerPolicy,
     onCreated?: (response: Response) => void,
     put?: () => Promise<Response>,
+    verifyAccess?: () => Promise<void>,
   ): Promise<{ response: Response; policy?: OwnAccess }> => {
     requirePolicy(decision, ["inherit-verified", "archived", "owner-only"]);
     const from = decision.kind === "archived" ? decision.from : url;
@@ -375,6 +385,7 @@ export function ancestorGuard(options: {
           policy ? { kind: "archived", acl: policy, from } : { kind: "inherit-verified" },
           onCreated,
           put,
+          verifyAccess,
         );
       },
       false,
@@ -392,12 +403,14 @@ export function ancestorGuard(options: {
       from: string,
       put: () => Promise<Response>,
       onCreated: (response: Response) => void,
+      verifyAccess?: () => Promise<void>,
     ) =>
       resource(
         url,
         policy ? { kind: "archived", acl: policy, from } : { kind: "inherit-verified" },
         onCreated,
         put,
+        verifyAccess,
       ),
     async protect(url: string, policy: OwnAccess, from = url): Promise<void> {
       await guard(url, true);

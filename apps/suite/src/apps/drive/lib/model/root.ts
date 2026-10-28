@@ -4,6 +4,7 @@ import { type FetchedRdf, fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch, normalizePodBase } from "@jeswr/guarded-fetch";
 import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { accessControl, bindAccess } from "../client/access.js";
 import { DriveContainer, DriveResource } from "./model.js";
 import { driveRootPatch } from "./patch.js";
 import { iri, quadsToTurtle } from "./serialize.js";
@@ -74,6 +75,7 @@ export async function ensureDriveRoot(
   indexEtag(index.etag);
 
   const rootUrl = new URL("drive/", storage).href;
+  const binding = await bindAccess(accessControl(scopedFetch, storage), indexUrl, rootUrl);
   let rootEtag: string | undefined;
   // A marker written by this call cannot itself prove ownership, including on resume().
   let markingIdentity: RootIdentity | undefined;
@@ -86,7 +88,8 @@ export async function ensureDriveRoot(
   }
 
   async function createRoot(): Promise<Response> {
-    return scopedFetch(rootUrl, {
+    await binding.recheck();
+    const response = await scopedFetch(rootUrl, {
       method: "PUT",
       headers: {
         "Content-Type": "text/turtle",
@@ -95,6 +98,8 @@ export async function ensureDriveRoot(
       },
       body: "",
     });
+    if (response.ok) await binding.recheck();
+    return response;
   }
 
   async function readRoot(): Promise<FetchedRdf> {
@@ -203,6 +208,7 @@ export async function ensureDriveRoot(
           }
         }
         markingIdentity = identity;
+        await binding.recheck();
         const patched = await scopedFetch(patchUrl, {
           method: "PATCH",
           headers: { "Content-Type": "text/n3", ...precondition },
@@ -218,6 +224,7 @@ export async function ensureDriveRoot(
           }
         }
         if (!patched.ok) throw new DriveWriteError(patched.status, patchUrl);
+        await binding.recheck();
         const verified = await fetchRdf(rootUrl, { fetch: scopedFetch });
         const root = validateRoot(verified);
         if (!root.isDriveRoot) {
@@ -272,6 +279,7 @@ export async function ensureDriveRoot(
       registrationUrl.hash += "-drive";
     }
     dataset.addQuads(buildDriveRootRegistration(registrationUrl.href, rootUrl));
+    await binding.recheck();
     const response = await scopedFetch(indexUrl, {
       method: "PUT",
       headers: { "Content-Type": "text/turtle", "If-Match": etag },
@@ -279,6 +287,7 @@ export async function ensureDriveRoot(
     });
     if (response.status === 412 && retry) return register(false);
     if (!response.ok) throw new DriveWriteError(response.status, indexUrl);
+    await binding.recheck();
   }
   await register(true);
   return rootUrl;
