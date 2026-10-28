@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex
 import { Blob as NodeBlob } from "node:buffer";
 import { SolidPersistence, SolidUpdateStore } from "@jeswr/y-solid";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement, XmlText } from "yjs";
 import { rowExportJson } from "../src/apps/docs/editor/export-document";
 import { deleteDocument } from "../src/apps/docs/editor/operations";
@@ -14,6 +14,8 @@ import type { PodSession } from "../src/lib/session/pod-session";
 // Browser IndexedDB is exercised by Playwright; the Node tests inspect mirror metadata.
 const connections = vi.hoisted(() => new Set<object>());
 const mirrors = vi.hoisted(() => new Map<string, Map<string, unknown>>());
+// These adapter tests exercise reconnect without cross-tab notifications.
+beforeEach(() => vi.stubGlobal("BroadcastChannel", undefined));
 vi.mock("y-indexeddb", () => ({
   IndexeddbPersistence: class {
     whenSynced = Promise.resolve(this);
@@ -666,7 +668,10 @@ describe("Docs persistence review regressions", () => {
     runtime.rename("Cached title");
     await runtime.flush();
     runtime.online = false;
-    runtime.doc.getXmlFragment("prosemirror").insert(1, [new XmlElement("offline")]);
+    const paragraph = runtime.doc.getXmlFragment("prosemirror").get(0) as XmlElement;
+    const text = new XmlText();
+    paragraph.insert(0, [text]);
+    text.insert(0, "Durable offline");
     runtime.change("<p>Durable offline</p>", json("Durable offline"));
     await runtime.destroy();
     f.intercept(async () => {

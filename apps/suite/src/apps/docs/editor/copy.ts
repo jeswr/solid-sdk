@@ -3,7 +3,7 @@
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { SolidPersistence } from "@jeswr/y-solid";
-import { generateHTML, generateJSON, getSchema, type JSONContent } from "@tiptap/react";
+import { generateHTML, getSchema, type JSONContent } from "@tiptap/react";
 import {
   prosemirrorJSONToYDoc,
   prosemirrorToYXmlFragment,
@@ -24,6 +24,7 @@ import {
 } from "../lib/model";
 import { DocumentReplacedError, sameIncarnation } from "../lib/model/incarnation";
 import { baseExtensions } from "./extensions";
+import { loadDocumentContent } from "./persistence";
 import { DocumentUpdateStore } from "./update-store";
 
 /** Resolve only a reciprocal trash pair belonging to the retired incarnation. */
@@ -79,7 +80,9 @@ export async function copyDocument(
   } = {},
 ) {
   const extensions = baseExtensions(session.fetch);
-  const captured = structuredClone(live ?? generateJSON(stored.data.body, extensions));
+  const captured = structuredClone(
+    live ?? (await loadDocumentContent(stored.url, session, stored)),
+  );
   const assets: string[] = [];
   function visit(node: JSONContent, mapping?: ReadonlyMap<string, string>) {
     if (node.type === "image" && node.attrs?.src) {

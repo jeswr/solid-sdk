@@ -26,6 +26,7 @@ import {
 import { copyDocument } from "./copy";
 import { draftMirrorName, withDraftLock } from "./drafts";
 import { baseExtensions } from "./extensions";
+import { loadPersistedLocalState } from "./local-state";
 import { updateMirrorMetadata } from "./mirror-metadata";
 import { DocumentUpdateStore } from "./update-store";
 
@@ -68,6 +69,8 @@ export class DocumentPersistence {
   trashed = false;
   private creation: "draft" | "creating" | "created" = "draft";
   private draftMirror: IndexeddbPersistence | undefined;
+  private readonly previousMirrors = new Set<IndexeddbPersistence>();
+  private readonly mirrorChannels = new WeakMap<IndexeddbPersistence, BroadcastChannel>();
   private pendingEdit: PendingEdit | undefined;
   private pendingRecovery: PendingRecovery | undefined;
   private readonly editOwner = crypto.randomUUID();
@@ -78,6 +81,7 @@ export class DocumentPersistence {
   private tail: Promise<void> | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private stopped = false;
+  private opened = false;
   private needsFullState = false;
   private providerError: Error | undefined;
   private updates = 0;
@@ -113,6 +117,37 @@ export class DocumentPersistence {
   private createMirror(name: string) {
     const generation = this.mirrorGeneration;
     const mirror = new IndexeddbPersistence(name, this.doc);
+    if (typeof BroadcastChannel !== "undefined") {
+      const channel = new BroadcastChannel(
+        `suite.docs:${JSON.stringify([this.session.webId, name])}`,
+      );
+      this.mirrorChannels.set(mirror, channel);
+      channel.onmessage = () => {
+        if (
+          !this.opened ||
+          this.stopped ||
+          (mirror !== this.local && !this.previousMirrors.has(mirror))
+        )
+          return;
+        void this.refreshLocalState()
+          .then(() => {
+            if (this.stopped) return;
+            this.notify();
+            return this.flush();
+          })
+          .catch(() => {
+            if (this.stopped) return;
+            this.state = "retrying";
+            this.scheduleRetry();
+            this.notify();
+          });
+      };
+      const destroy = mirror.destroy.bind(mirror);
+      mirror.destroy = () => {
+        channel.close();
+        return destroy();
+      };
+    }
     const save = mirror._storeUpdate;
     this.doc.off("update", save);
     mirror._storeUpdate = (update, origin: unknown) => {
@@ -159,7 +194,8 @@ export class DocumentPersistence {
     const mirror = this.local;
     if (!mirror) return undefined;
     try {
-      return await action(mirror);
+      const result = await action(mirror);
+      return generation === this.mirrorGeneration ? result : undefined;
     } catch (error) {
       if (generation !== this.mirrorGeneration) return undefined;
       if (!(error instanceof DOMException && error.name === "InvalidStateError")) throw error;
@@ -190,10 +226,12 @@ export class DocumentPersistence {
         () => generation === this.mirrorGeneration,
       ),
     );
+    if (!this.stopped && generation === this.mirrorGeneration && this.local)
+      this.mirrorChannels.get(this.local)?.postMessage(null);
   }
-  private async clearPending(title: string, confirmed?: Uint8Array) {
+  private async clearPending(title: string, confirmed: Uint8Array) {
     const generation = this.mirrorGeneration;
-    return this.withMirror((mirror) =>
+    let cleared = await this.withMirror((mirror) =>
       updateMirrorMetadata(
         mirror,
         (current) => {
@@ -202,6 +240,75 @@ export class DocumentPersistence {
         },
         () => generation === this.mirrorGeneration,
         confirmed,
+      ),
+    );
+    for (const mirror of this.previousMirrors) {
+      const acknowledged = await updateMirrorMetadata(
+        mirror,
+        (current) => {
+          const edit = this.parseMetadata<PendingEdit>(current.edit);
+          const pendingTitle = edit?.title ?? current.title;
+          if (current.pending && pendingTitle !== title && pendingTitle !== edit?.baseTitle)
+            return undefined;
+          return {
+            pending: 0,
+            ...(mirror === this.draftMirror
+              ? { promoted: (this.stored as StoredDocument).url }
+              : {}),
+          };
+        },
+        () => generation === this.mirrorGeneration,
+        confirmed,
+      );
+      if (acknowledged) {
+        if (mirror === this.draftMirror) this.draftMirror = undefined;
+      } else cleared = false;
+    }
+    return cleared;
+  }
+  private captureDoc() {
+    this.json = yDocToProsemirrorJSON(this.doc) as JSONContent;
+    this.body = generateHTML(this.json, baseExtensions(this.session.fetch));
+  }
+  /** All publishers refresh the same durable state, including retired draft mirrors. */
+  private async refreshLocalState(adoptPending = true) {
+    const before = this.updates;
+    await this.loadPreviousMirrors();
+    const changed = await this.withMirror((mirror) => loadPersistedLocalState(this.doc, mirror));
+    if (adoptPending && this.version === this.savedVersion) await this.readPending(false);
+    let merged = changed;
+    for (const mirror of this.previousMirrors) {
+      merged = (await loadPersistedLocalState(this.doc, mirror)) || merged;
+      if (adoptPending && this.version === this.savedVersion) await this.readPending(false, mirror);
+    }
+    if (merged || this.updates !== before) {
+      this.captureDoc();
+      this.version++;
+      this.needsFullState = true;
+      this.state = "saving";
+    }
+  }
+  private async loadPreviousMirrors() {
+    const names = await this.metadata<unknown>("previousMirrors");
+    if (!Array.isArray(names)) return;
+    for (const name of names) {
+      if (
+        typeof name !== "string" ||
+        name === this.local?.name ||
+        Array.from(this.previousMirrors).some((mirror) => mirror.name === name)
+      )
+        continue;
+      const mirror = this.createMirror(name);
+      this.previousMirrors.add(mirror);
+      await mirror.whenSynced;
+    }
+  }
+  private async rememberPreviousMirrors() {
+    await this.loadPreviousMirrors();
+    await this.withMirror((mirror) =>
+      mirror.set(
+        "previousMirrors",
+        JSON.stringify(Array.from(this.previousMirrors, (previous) => previous.name)),
       ),
     );
   }
@@ -234,33 +341,37 @@ export class DocumentPersistence {
       }
     }
   }
-  private async readPending() {
-    const pending = await this.local?.get("pending");
-    this.assertActive();
+  private async readPending(assertOpen = true, mirror = this.local): Promise<boolean> {
+    const pending = Boolean(await mirror?.get("pending"));
+    if (assertOpen) this.assertActive();
     if (pending) {
-      this.pendingEdit = await this.metadata<PendingEdit>("edit");
+      this.pendingEdit = this.parseMetadata<PendingEdit>(await mirror?.get("edit"));
       // The last pending edit may belong to another tab. Its owner is not
       // necessarily the one that already reserved this incarnation's copy.
-      const recoveryKey: unknown = await this.local?.get("activeRecovery");
-      this.pendingRecovery ??= await this.metadata<PendingRecovery>(
-        typeof recoveryKey === "string" && recoveryKey
-          ? recoveryKey
-          : `recovery:${this.pendingEdit?.owner ?? this.editOwner}`,
+      const recoveryKey: unknown = await mirror?.get("activeRecovery");
+      this.pendingRecovery ??= this.parseMetadata<PendingRecovery>(
+        await mirror?.get(
+          typeof recoveryKey === "string" && recoveryKey
+            ? recoveryKey
+            : `recovery:${this.pendingEdit?.owner ?? this.editOwner}`,
+        ),
       );
-      const title = this.pendingEdit?.title ?? (await this.local?.get("title"));
+      const title = this.pendingEdit?.title ?? (await mirror?.get("title"));
       if (typeof title === "string") this.title = title;
       this.version++;
       this.needsFullState = true;
+    } else if (mirror === this.local) {
+      for (const previous of this.previousMirrors) {
+        const pending = await this.readPending(assertOpen, previous);
+        if (pending) return pending;
+      }
     }
     return pending;
   }
   private async preserveRetiredEdits(remote: StoredDocument) {
-    // Pull every tab's persisted updates before capturing local intent. The
-    // IndexedDB provider does not broadcast edits into other tabs' live docs.
-    await this.withMirror((mirror) => storeState(mirror, true));
-    if (this.version === this.savedVersion) await this.readPending();
+    await this.refreshLocalState();
     while (this.version !== this.savedVersion) {
-      await this.withMirror((mirror) => storeState(mirror, true));
+      await this.refreshLocalState();
       const version = this.version;
       const source = this.stored ?? remote;
       const json = yDocToProsemirrorJSON(this.doc) as JSONContent;
@@ -302,7 +413,7 @@ export class DocumentPersistence {
       recovery.reservation = copy;
       await remember();
       await this.withMirror((mirror) => mirror.set("recoveredCopy", copy.url));
-      await this.withMirror((mirror) => storeState(mirror, true));
+      await this.refreshLocalState();
       if (this.version !== version) continue;
       if (this.title !== recovery.title) continue;
       if (JSON.stringify(yDocToProsemirrorJSON(this.doc)) !== JSON.stringify(recovery.json))
@@ -345,6 +456,8 @@ export class DocumentPersistence {
         await this.preserveRetiredEdits(remote);
       }
       this.mirrorGeneration++;
+      for (const mirror of this.previousMirrors) await mirror.destroy();
+      this.previousMirrors.clear();
       this.doc.destroy();
       this.doc = new Doc();
       this.trackUpdates();
@@ -388,6 +501,8 @@ export class DocumentPersistence {
       this.local = this.createMirror(url ?? draftMirrorName(this.session.webId, this.draftId));
       await this.local.whenSynced;
       this.assertActive();
+      await this.loadPreviousMirrors();
+      this.assertActive();
       if (!url) {
         const promoted: unknown = await this.local.get("promoted");
         if (typeof promoted === "string") {
@@ -408,12 +523,16 @@ export class DocumentPersistence {
         const next: unknown = await this.local.get("nextMirror");
         if (typeof next !== "string") break;
         await this.local.destroy();
+        for (const mirror of this.previousMirrors) await mirror.destroy();
+        this.previousMirrors.clear();
         this.mirrorGeneration++;
         this.doc.destroy();
         this.doc = new Doc();
         this.trackUpdates();
         this.local = this.createMirror(next);
         await this.local.whenSynced;
+        this.assertActive();
+        await this.loadPreviousMirrors();
         this.assertActive();
         pending = await this.readPending();
       }
@@ -426,6 +545,7 @@ export class DocumentPersistence {
         }
         this.json = yDocToProsemirrorJSON(this.doc) as JSONContent;
         this.body = generateHTML(this.json, baseExtensions(this.session.fetch));
+        this.opened = true;
         return;
       }
       cached = await this.metadata<{ webId: string; document: StoredDocument }>("stored");
@@ -516,14 +636,10 @@ export class DocumentPersistence {
         else pending = await this.readPending();
         await storeState(this.local, true);
         if (previous) {
-          const edit = this.pendingEdit;
-          await updateMirrorMetadata(
-            previous,
-            (current) => (current.edit === JSON.stringify(edit) ? { pending: 0 } : undefined),
-            () => !this.stopped,
-          );
-          await previous.destroy();
+          if (pending) this.previousMirrors.add(previous);
+          else await previous.destroy();
         }
+        await this.rememberPreviousMirrors();
       }
       await this.linkMirror(url, name);
     }
@@ -555,12 +671,17 @@ export class DocumentPersistence {
     this.recoveredCopy ??= (await this.local?.get("recoveredCopy")) as string | undefined;
     await this.cacheStored();
     this.assertActive();
+    if (!this.readOnly) {
+      await this.refreshLocalState();
+      if (this.version !== this.savedVersion) this.captureDoc();
+    }
     if (this.offlineCopy) this.scheduleRetry();
     this.state = this.conflict
       ? "failed"
       : this.version !== this.savedVersion || (this.provider && !this.provider.synced)
         ? "saving"
         : "saved";
+    this.opened = true;
   }
   private seedSnapshot() {
     const extensions = baseExtensions(this.session.fetch);
@@ -660,7 +781,7 @@ export class DocumentPersistence {
       throw error;
     }
   }
-  private async reconcileProvider() {
+  private async reconcileProvider(allowStopped = false) {
     const remote = await this.activeDocument();
     const previous = this.provider?.store.container ?? this.updateContainer();
     const active = remote.data.updateLog ?? docContainerUrls(remote.url).updateLog;
@@ -690,14 +811,14 @@ export class DocumentPersistence {
       this.provider?.destroy();
       await this.provider?.flush();
       this.needsFullState = true;
-      this.attachProvider(container, false);
+      this.attachProvider(container, false, allowStopped);
       await this.provider?.whenSynced;
       if (this.providerError) throw this.providerError;
     }
     this.trashed = false;
   }
-  private attachProvider(container: string, allowEmpty = true) {
-    this.assertActive();
+  private attachProvider(container: string, allowEmpty = true, allowStopped = false) {
+    if (!allowStopped) this.assertActive();
     this.provider?.destroy();
     this.providerError = undefined;
     const expected = this.stored as StoredDocument;
@@ -763,7 +884,6 @@ export class DocumentPersistence {
   async flush(): Promise<void> {
     if (this.timer) clearTimeout(this.timer);
     if (this.readOnly || !this.online || this.conflict) return;
-    if (this.creation === "draft" && this.version === this.savedVersion) return;
     if (this.tail) return this.tail;
     const write = () => this.write();
     this.tail = (
@@ -778,12 +898,15 @@ export class DocumentPersistence {
   private async write(replacements = 0): Promise<void> {
     try {
       await this.mirrorRestart;
-      if (this.creation === "created") await this.reconcileProvider();
+      await this.refreshLocalState();
+      if (this.creation === "draft" && this.version === this.savedVersion) return;
+      if (this.creation === "created") await this.reconcileProvider(this.stopped);
       if (this.savedVersion === this.version) {
         await this.persistUpdates();
         await this.cacheStored();
       }
       while (this.savedVersion !== this.version) {
+        await this.refreshLocalState();
         const version = this.version;
         const title = this.title || "Untitled document";
         const snapshot = {
@@ -816,31 +939,28 @@ export class DocumentPersistence {
           const mirrorName = incarnationMirror(stored, this.updateContainer());
           if (this.local?.name !== mirrorName) {
             this.draftMirror = this.local;
+            if (this.draftMirror) this.previousMirrors.add(this.draftMirror);
             this.local = this.createMirror(mirrorName);
           }
           await this.local.whenSynced;
+          // A tab can keep editing the draft after promotion. Retain its
+          // mirror and lineage so reconnects and reloads still discover it.
+          await this.rememberPreviousMirrors();
           // Title edits may have arrived while create() was in flight. Move
-          // their baseline and pending marker before deleting the draft mirror.
+          // their baseline and pending marker before acknowledging promotion.
           if (this.pendingEdit) {
             this.pendingEdit.baseTitle = stored.data.title;
             this.pendingEdit.baseModified = stored.data.modified;
             await this.writePending();
           }
           if (!this.provider?.synced) {
-            this.attachProvider(this.updateContainer());
+            this.attachProvider(this.updateContainer(), true, this.stopped);
             await this.provider?.whenSynced;
           }
+          await this.refreshLocalState();
           await this.provider?.persistFullState();
           this.needsFullState = false;
           this.providerError = undefined;
-          if (this.draftMirror) {
-            // Retain a durable promotion receipt: reloading the old draft URL
-            // joins this incarnation rather than creating another document.
-            await this.draftMirror.set("promoted", stored.url);
-            await this.draftMirror.set("pending", 0);
-            await this.draftMirror.destroy();
-            this.draftMirror = undefined;
-          }
           this.creation = "created";
           await this.linkMirror(stored.url, this.local.name);
           this.onCreated(stored.url);
@@ -872,15 +992,32 @@ export class DocumentPersistence {
         }
         if (this.title === title) this.title = (this.stored as StoredDocument).data.title;
         // A concurrent snapshot/recovery may have changed the pointer during save.
-        await this.reconcileProvider();
-        await this.persistUpdates();
+        await this.reconcileProvider(this.stopped);
+        const confirmed = await this.persistUpdates();
         await this.withMirror((mirror) => storeState(mirror, true));
         await this.cacheStored();
         this.savedVersion = version;
         this.lastSaved = Date.now();
         if (this.version === version) {
-          await this.clearPending((this.stored as StoredDocument).data.title);
-          this.pendingEdit = undefined;
+          if (!confirmed) throw new Error("Document updates were not persisted");
+          const cleared = await this.clearPending(
+            (this.stored as StoredDocument).data.title,
+            confirmed,
+          );
+          if (cleared) this.pendingEdit = undefined;
+          else {
+            await this.refreshLocalState(false);
+            const current = encodeStateAsUpdate(this.doc);
+            if (
+              this.version === this.savedVersion &&
+              (current.length !== confirmed.length ||
+                current.some((byte, index) => byte !== confirmed[index]))
+            ) {
+              this.captureDoc();
+              this.version++;
+              this.needsFullState = true;
+            }
+          }
         }
       }
       this.state = "saved";
@@ -920,9 +1057,11 @@ export class DocumentPersistence {
     this.notify();
   }
   private async persistUpdates() {
+    await this.refreshLocalState();
     // Upgrade identity-free logs only on save, retaining an existing snapshot
     // identity (or the log's identity when migrating an older snapshot).
     if (this.stored?.data.instanceId) this.recordIdentity();
+    const confirmed = encodeStateAsUpdate(this.doc);
     await this.provider?.flush();
     if (this.providerError || this.needsFullState) {
       // Failed or retired incremental writes remain in IndexedDB. Merge the
@@ -934,9 +1073,11 @@ export class DocumentPersistence {
     await this.provider?.flush();
     if (this.providerError) throw this.providerError;
     if (this.provider) await this.checkLog(this.provider.store.container);
+    return this.provider ? confirmed : undefined;
   }
   async resolveTitle(keepMine: boolean) {
     if (!this.stored || !this.conflict) return;
+    await this.refreshLocalState();
     const remote = await this.store.read(this.stored.url);
     if (!remote) return;
     if (
@@ -969,6 +1110,7 @@ export class DocumentPersistence {
     }
     this.online = true;
     try {
+      await this.refreshLocalState();
       if (this.creation === "created" && !this.readOnly) await this.reconcileProvider();
       await this.provider?.sync();
       this.assertActive();
@@ -990,15 +1132,34 @@ export class DocumentPersistence {
       try {
         await this.mirrorRestart;
         await this.tail;
-        if (this.creation === "created") await this.flush();
+        if (this.opened) await this.flush();
         await this.provider?.flush();
       } finally {
         this.provider?.destroy();
         await this.local?.destroy();
         await this.draftMirror?.destroy();
+        for (const mirror of this.previousMirrors) await mirror.destroy();
         this.doc.destroy();
       }
     })();
     return this.destroyed;
+  }
+}
+
+/** Shared non-editor loader: validate the incarnation and replay its durable log. */
+export async function loadDocumentContent(
+  resource: string,
+  session: PodSession,
+  expected?: StoredDocument,
+): Promise<JSONContent> {
+  const runtime = new DocumentPersistence(session);
+  try {
+    await runtime.open(resource);
+    if (expected && !sameIncarnation(expected, runtime.stored as StoredDocument))
+      throw new DocumentReplacedError();
+    return yDocToProsemirrorJSON(runtime.doc) as JSONContent;
+  } finally {
+    runtime.online = false;
+    await runtime.destroy();
   }
 }

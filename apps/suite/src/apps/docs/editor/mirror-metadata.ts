@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex
 import type { IndexeddbPersistence } from "y-indexeddb";
-import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
+import { applyUpdate, Doc, encodeStateAsUpdate, equalSnapshots, snapshot } from "yjs";
 
 type Metadata = Record<"pending" | "title" | "edit", unknown>;
 /** Keep the comparison and writes in one cross-tab IndexedDB transaction. */
@@ -15,7 +15,12 @@ export async function updateMirrorMetadata(
     const probe = new Doc();
     try {
       applyUpdate(probe, confirmed);
+      const durable = snapshot(probe);
       for (const update of updates) applyUpdate(probe, update);
+      // A state vector must cover every client's clock. Deletion-only updates
+      // do not advance those clocks, so compare the delete sets as well.
+      if (!equalSnapshots(durable, snapshot(probe))) return false;
+      // Unintegrated structs have no clock in the vector yet. Retain them too.
       const merged = encodeStateAsUpdate(probe);
       return (
         merged.length === confirmed.length &&

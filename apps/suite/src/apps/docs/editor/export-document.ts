@@ -1,12 +1,11 @@
 // AUTHORED-BY Codex
 import type { JSONContent } from "@tiptap/react";
-import { yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
 import { Packer } from "docx";
 import type { PodSession } from "@/lib/session/pod-session";
 import { type ExportImage, toDocx } from "../lib/convert/docx-export";
 import { exportMarkdown } from "../lib/convert/markdown";
 import { validLink } from "../lib/editor/logic";
-import { DocumentPersistence } from "./persistence";
+import { loadDocumentContent } from "./persistence";
 import { podScopedFetch } from "./private-image";
 
 export type DownloadFormat = "docx" | "md";
@@ -67,14 +66,5 @@ export async function downloadDocument(
 
 /** Use the editor's incarnation validation before reading cached or pending content. */
 export async function rowExportJson(resource: string, session: PodSession): Promise<JSONContent> {
-  const runtime = new DocumentPersistence(session);
-  try {
-    await runtime.open(resource);
-    return yDocToProsemirrorJSON(runtime.doc, "prosemirror") as JSONContent;
-  } finally {
-    // No editor captured a render here. Retain pending edits for its writer;
-    // teardown must not save the old snapshot or acknowledge those edits.
-    runtime.online = false;
-    await runtime.destroy();
-  }
+  return loadDocumentContent(resource, session);
 }
