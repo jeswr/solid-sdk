@@ -396,7 +396,9 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
               };
               groups.push(group);
             }
-            const content = (helpers.parseBlockChildren as NonNullable<typeof helpers.parseBlockChildren>)(item.tokens as MarkdownToken[]);
+            const content = (
+              helpers.parseBlockChildren as NonNullable<typeof helpers.parseBlockChildren>
+            )(item.tokens as MarkdownToken[]);
             group.content?.push({
               type: item.task ? "taskItem" : "listItem",
               ...(item.task ? { attrs: { checked: item.checked } } : {}),
@@ -617,9 +619,12 @@ function textContent(node: JSONContent): string {
 
 /** Compose containers inside-out, prefixing every physical continuation line. */
 function containerPrefix(content: string, first: string, continuation: string): string {
-  return content.split("\n").map((line, index) =>
-    index === 0 ? first + line : line ? continuation + line : continuation.trimEnd(),
-  ).join("\n");
+  return content
+    .split("\n")
+    .map((line, index) =>
+      index === 0 ? first + line : line ? continuation + line : continuation.trimEnd(),
+    )
+    .join("\n");
 }
 
 export function exportMarkdown(json: JSONContent, dropHighlights = false): string {
@@ -682,26 +687,41 @@ export function exportMarkdown(json: JSONContent, dropHighlights = false): strin
   };
   const cleaned = clean(json, dropHighlights);
   checkRules(cleaned);
-  const blocks = (content: JSONContent[]): string => content.map((child, index) =>
-    touchingBlocks(child, content[index + 1]) ? htmlNode(child) : render(child),
-  ).join("\n\n");
+  const blocks = (content: JSONContent[]): string =>
+    content
+      .map((child, index) =>
+        touchingBlocks(child, content[index + 1]) ? htmlNode(child) : render(child),
+      )
+      .join("\n\n");
   const render = (node: JSONContent): string => {
     if (needsHtml(node)) return htmlNode(node);
     const content = node.content ?? [];
     if (node.type === "doc") return blocks(content);
     if (node.type === "blockquote") return containerPrefix(blocks(content), "> ", "> ");
     if (["bulletList", "orderedList", "taskList"].includes(String(node.type)))
-      return content.map((item, index) => {
-        const marker = node.type === "taskList" ? `- [${item.attrs?.checked ? "x" : " "}] `
-          : node.type === "orderedList" ? `${Number(node.attrs?.start ?? 1) + index}. ` : "- ";
-        return containerPrefix(blocks(item.content as JSONContent[]), marker, " ".repeat(marker.length));
-      }).join("\n");
+      return content
+        .map((item, index) => {
+          const marker =
+            node.type === "taskList"
+              ? `- [${item.attrs?.checked ? "x" : " "}] `
+              : node.type === "orderedList"
+                ? `${Number(node.attrs?.start ?? 1) + index}. `
+                : "- ";
+          return containerPrefix(
+            blocks(item.content as JSONContent[]),
+            marker,
+            " ".repeat(marker.length),
+          );
+        })
+        .join("\n");
     if (node.type === "horizontalRule") return "***";
     // Restore literals before any parent container adds its prefixes.
-    return markdown.serialize(protect(node)).replace(
-      new RegExp(`${prefix}(\\d+)END`, "g"),
-      (_, index: string) => escapes[Number(index)] as string,
-    );
+    return markdown
+      .serialize(protect(node))
+      .replace(
+        new RegExp(`${prefix}(\\d+)END`, "g"),
+        (_, index: string) => escapes[Number(index)] as string,
+      );
   };
   return render(cleaned);
 }
