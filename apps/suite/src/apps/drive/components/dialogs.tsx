@@ -29,7 +29,15 @@ import {
   Label,
 } from "@jeswr/suite-ui";
 import { ChevronRight, Folder, HardDrive } from "lucide-react";
-import { type FormEvent, type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
+import {
+  type FormEvent,
+  type KeyboardEvent,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { type DriveItem, nameOf, parentOf } from "../lib/client/client";
 import { formatFileSize } from "../lib/files";
 import { getMoveValidity } from "../lib/list";
@@ -222,26 +230,35 @@ function MoveDialog({
   const { client, driveRoot } = useDrive();
   const actions = useDriveActions();
   const items = dialog?.kind === "move" ? dialog.items : [];
-  const [nodes, setNodes] = useState<Record<string, TreeNode[] | "loading">>({});
+  const [nodes, setNodes] = useState<Record<string, TreeNode[] | "loading" | "error">>({});
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [target, setTarget] = useState(driveRoot);
   const [busy, setBusy] = useState(false);
   const tree = useRef<HTMLDivElement>(null);
   const generation = useRef(0);
 
-  const load = async (url: string) => {
-    if (nodes[url]) return;
-    const request = generation.current;
-    setNodes((current) => ({ ...current, [url]: "loading" }));
-    const children = await client.list(url).catch(() => []);
-    if (request !== generation.current) return;
-    setNodes((current) => ({
-      ...current,
-      [url]: children
-        .filter((child) => child.kind === "folder" && !isHidden(child))
-        .sort((a, b) => a.name.localeCompare(b.name))
-        .map((child) => ({ url: child.url, name: child.name })),
-    }));
+  const readNodes = useCallback(
+    async (url: string, request: number) => {
+      setNodes((current) => ({ ...current, [url]: "loading" }));
+      try {
+        const children = await client.list(url);
+        if (request !== generation.current) return;
+        setNodes((current) => ({
+          ...current,
+          [url]: children
+            .filter((child) => child.kind === "folder" && !isHidden(child))
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .map((child) => ({ url: child.url, name: child.name })),
+        }));
+      } catch {
+        if (request === generation.current) setNodes((current) => ({ ...current, [url]: "error" }));
+      }
+    },
+    [client],
+  );
+  const load = (url: string) => {
+    if (nodes[url] && nodes[url] !== "error") return;
+    void readNodes(url, generation.current);
   };
 
   useEffect(() => {
@@ -250,21 +267,11 @@ function MoveDialog({
     setNodes({});
     setExpanded(new Set([driveRoot]));
     setTarget(driveRoot);
-    void (async () => {
-      setNodes({ [driveRoot]: "loading" });
-      const children = await client.list(driveRoot).catch(() => []);
-      if (request !== generation.current) return;
-      setNodes({
-        [driveRoot]: children
-          .filter((child) => child.kind === "folder" && !isHidden(child))
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .map((child) => ({ url: child.url, name: child.name })),
-      });
-    })();
+    void readNodes(driveRoot, request);
     return () => {
       ++generation.current;
     };
-  }, [open, driveRoot, client]);
+  }, [open, driveRoot, readNodes]);
 
   const validity = (url: string): { valid: true } | { valid: false; reason: string } => {
     if (items.length === 0) return { valid: false, reason: "none" };
@@ -392,6 +399,13 @@ function MoveDialog({
           <div role="group">
             {children === "loading" || children === undefined ? (
               <div className="drv-tree-loading">Loading…</div>
+            ) : children === "error" ? (
+              <div role="alert">
+                <p>Couldn't read this folder.</p>
+                <Button variant="outline" onClick={() => load(url)}>
+                  Retry
+                </Button>
+              </div>
             ) : (
               children.map((child) => renderNode(child.url, child.name, level + 1))
             )}

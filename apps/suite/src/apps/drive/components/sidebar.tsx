@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex
 "use client";
 /** Drive sidebar (04-drive §2.1): New menu, navigation, usage and demo reset. */
 
@@ -95,10 +96,14 @@ export function NewMenu({
 
 export function DriveSidebar({
   usage,
+  usageFailed,
+  onRetryUsage,
   newMenuOpen,
   onNewMenuOpenChange,
 }: {
   usage: number | undefined;
+  usageFailed?: boolean;
+  onRetryUsage?: () => void;
   newMenuOpen?: boolean;
   onNewMenuOpenChange?: (open: boolean) => void;
 }) {
@@ -129,9 +134,20 @@ export function DriveSidebar({
         </ul>
       </nav>
       <div className="drv-sidebar-foot">
-        <p className="drv-usage">
-          {usage === undefined ? "Measuring usage…" : `${formatUsage(usage)} used`}
-        </p>
+        <div className="drv-usage" role={usageFailed ? "alert" : undefined}>
+          {usageFailed ? (
+            <>
+              <p>Couldn't measure usage.</p>
+              <Button variant="outline" size="sm" onClick={onRetryUsage}>
+                Retry
+              </Button>
+            </>
+          ) : usage === undefined ? (
+            "Measuring usage…"
+          ) : (
+            `${formatUsage(usage)} used`
+          )}
+        </div>
         {session.mode === "demo" ? (
           <div className="drv-demo">
             <p>

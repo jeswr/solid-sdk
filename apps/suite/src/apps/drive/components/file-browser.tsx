@@ -924,6 +924,16 @@ export function FileBrowser(props: FileBrowserProps) {
         onKeyDown={onKeyDown}
         {...contentDropProps}
       >
+        {error && items ? (
+          <div role="alert" className="drv-banner">
+            <p>Some items couldn't be read.</p>
+            {onRetry ? (
+              <Button variant="outline" onClick={onRetry}>
+                Retry
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
         {body}
         {dropping && folder ? (
           <div className="drv-drop-overlay" aria-hidden="true">

@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
 import { restoreItems, trashItems } from "../src/apps/drive/lib/operations/operations";
 import { moveWithValidator } from "../src/apps/drive/state/undo";
+import { exclusiveLocks } from "./drive-locks";
 import { aclBody, DRIVE, OWNER, PRIVATE, PUBLIC, ROOT, wacPod } from "./drive-wac-pod";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -124,20 +125,15 @@ async function otherTab(f: Awaited<ReturnType<typeof wacPod>>) {
 }
 
 function webLocks(enter: (name: string, index: number) => Promise<void> = async () => {}) {
-  const queues = new Map<string, Promise<void>>();
+  const locks = exclusiveLocks();
   const counts = new Map<string, number>();
   const request = vi.fn((name: string, work: () => Promise<void>) => {
     const index = (counts.get(name) ?? 0) + 1;
     counts.set(name, index);
-    const previous = queues.get(name) ?? Promise.resolve();
-    const pending = previous
-      .catch(() => undefined)
-      .then(async () => {
-        await enter(name, index);
-        await work();
-      });
-    queues.set(name, pending);
-    return pending;
+    return locks.request(name, async () => {
+      await enter(name, index);
+      await work();
+    });
   });
   vi.stubGlobal("navigator", { locks: { request } });
   return request;
