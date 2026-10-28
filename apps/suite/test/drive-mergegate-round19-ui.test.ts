@@ -309,7 +309,7 @@ it("a partial move failure refreshes both listings and revalidates Details and p
     if (url === from && init?.method === "DELETE") {
       expect((await env.f.pod.fetch(url, init)).ok).toBe(true);
       env.f.policies.delete(`${url}.policy`);
-      return new Response(null, { status: 503 });
+      throw new TypeError("Lost DELETE response");
     }
     return undefined;
   });
@@ -319,7 +319,7 @@ it("a partial move failure refreshes both listings and revalidates Details and p
   });
   expect(result?.done).toEqual([]);
   expect(result?.failed).toHaveLength(1);
-  expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("Couldn't move"));
+  expect(toast.error).toHaveBeenCalledWith("Still deleting on the server", expect.anything());
   expect((await env.f.pod.fetch(from)).status).toBe(404);
   expect(await (await env.f.fetch(to)).text()).toBe("original");
   await vi.waitFor(async () => {

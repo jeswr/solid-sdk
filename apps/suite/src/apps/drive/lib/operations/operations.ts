@@ -750,6 +750,15 @@ async function removePolicyArchive(client: DriveClient, url: string): Promise<vo
   if (await exists(client, archive)) await client.remove(archive);
 }
 
+/** Foreign slot members belong to another writer; leave their container intact. */
+async function removeEmptySlot(client: DriveClient, slot: string): Promise<void> {
+  try {
+    if ((await client.list(slot)).length === 0) await client.remove(slot);
+  } catch (error) {
+    rethrowPendingDeletion(error);
+  }
+}
+
 function restoredName(name: string): string {
   const dot = name.lastIndexOf(".");
   return dot > 0 ? `${name.slice(0, dot)} (restored)${name.slice(dot)}` : `${name} (restored)`;
@@ -838,7 +847,7 @@ export async function restoreItems(
         if (await recoveryStatus(client, driveRoot, entry))
           await client.remove(recoveryMarker(driveRoot, entry));
         await removePolicyArchive(client, entry.url);
-        await client.remove(slot).catch(rethrowPendingDeletion);
+        await removeEmptySlot(client, slot);
         result.done.push({ entry, url: entry.original, renamed: false });
         continue;
       }
@@ -863,7 +872,7 @@ export async function restoreItems(
         await client.remove(recoveryMarker(driveRoot, entry));
       // The slot may contain another writer's resources; only remove it empty.
       await removePolicyArchive(client, entry.url);
-      await client.remove(slot).catch(rethrowPendingDeletion);
+      await removeEmptySlot(client, slot);
       result.done.push({ entry, url, renamed });
     } catch (error) {
       result.failed.push({ url: entry.url, error });
@@ -891,7 +900,7 @@ export async function deleteForever(
       if (await recoveryStatus(client, driveRoot, entry))
         await client.remove(recoveryMarker(driveRoot, entry));
       await removePolicyArchive(client, entry.url);
-      await client.remove(slotOf(driveRoot, entry)).catch(rethrowPendingDeletion);
+      await removeEmptySlot(client, slotOf(driveRoot, entry));
       result.done.push(entry);
     } catch (error) {
       result.failed.push({ url: entry.url, error });

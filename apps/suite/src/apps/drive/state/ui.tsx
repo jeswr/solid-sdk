@@ -27,6 +27,7 @@ import {
   DriveError,
   type DriveItem,
   DrivePartialFailureError,
+  isMissingItem,
   nameOf,
 } from "../lib/client/client";
 import { DriveDeletePendingError } from "../lib/client/deletion";
@@ -693,13 +694,13 @@ export function useDriveActions() {
         (tracked) => deleteForever(tracked, driveRoot, entries),
       );
       for (const warning of result.warnings ?? []) toast.error(warning.message);
-      if (result.done.length)
-        updatePrefs((prefs) =>
-          pruneDeleted(
-            prefs,
-            result.done.flatMap((entry) => [entry.original, entry.url]),
-          ),
+      if (result.done.length) {
+        const absent = await confirmedAbsent(
+          client,
+          result.done.flatMap((entry) => [entry.original, entry.url]),
         );
+        updatePrefs((prefs) => pruneDeleted(prefs, absent));
+      }
       if (result.failed.length > 0)
         reportFailure(
           result.failed[0]?.error,
@@ -727,12 +728,11 @@ export function useDriveActions() {
         }
       }
       if (done.length) {
-        updatePrefs((prefs) =>
-          pruneDeleted(
-            prefs,
-            done.map(({ url }) => url),
-          ),
+        const absent = await confirmedAbsent(
+          client,
+          done.map(({ url }) => url),
         );
+        updatePrefs((prefs) => pruneDeleted(prefs, absent));
         toast.success("Deleted for ever");
       }
       return { done };
@@ -758,3 +758,19 @@ export function useDriveActions() {
 }
 
 export type DriveActions = ReturnType<typeof useDriveActions>;
+
+/** A deleted recovery copy says nothing about the resource at its original URL. */
+async function confirmedAbsent(client: DriveClient, urls: readonly string[]): Promise<string[]> {
+  const absent = await Promise.all(
+    urls.map(async (url) => {
+      try {
+        await client.stat(url);
+        return [];
+      } catch (error) {
+        // Unreadable resources and failed reads keep all of their preferences.
+        return isMissingItem(error) ? [url] : [];
+      }
+    }),
+  );
+  return absent.flat();
+}

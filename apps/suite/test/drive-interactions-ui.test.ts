@@ -406,7 +406,7 @@ it("an initial Trash listing failure shows Retry without an empty state", async 
 it.each([
   "delete-forever",
   "empty-trash",
-] as const)("%s clears partial recovery only after confirmation", async (kind) => {
+] as const)("%s retains partial recovery until the original DELETE is confirmed", async (kind) => {
   const pod = createDemoPod({
     root: drive.session.storageUrl,
     seed: [
@@ -442,9 +442,19 @@ it.each([
   if (!confirm) throw new Error("Missing confirmation");
   await click(confirm);
   expect(remove).toHaveBeenCalledTimes(1);
+  await vi.waitFor(() =>
+    expect(mocks.toast.error).toHaveBeenCalledWith(
+      "Still deleting on the server",
+      expect.anything(),
+    ),
+  );
+  expect(await operations.listTrash(client, ROOT)).toHaveLength(1);
+  expect(pod.has(`${entries[0]?.url}b`)).toBe(true);
+  expect(await (await client.read(`${ROOT}Folder/b`)).text()).toBe("B");
+  await pod.fetch(`${ROOT}Folder/b`, { method: "DELETE" });
+  await act(async () => actions.removeForever(entries));
   expect(await operations.listTrash(client, ROOT)).toEqual([]);
   expect(pod.has(entries[0]?.url as string)).toBe(false);
-  expect(await (await client.read(`${ROOT}Folder/b`)).text()).toBe("B");
   await view.unmount();
 });
 

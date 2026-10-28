@@ -12,7 +12,7 @@ export class DriveDeletePendingError extends Error {
   }
 }
 
-/** Housekeeping may ignore a rejected delete, but must expose an accepted one. */
+/** Housekeeping must expose any DELETE whose completion is still unknown. */
 export function rethrowPendingDeletion(error: unknown): void {
   if (error instanceof DriveDeletePendingError) throw error;
 }
@@ -56,23 +56,26 @@ export function deletionControl(http: typeof fetch, error: (status: number, url:
     // a retained copy into a disposable duplicate while its source is deleting.
     await pending.set(url, { sources: [url], ...(recovery ? { recovery } : {}) });
     if (recovery) await pending.set(recovery, { sources: [url] });
-    const response = await http(url, { method: "DELETE", headers: { "if-match": etag } });
+    let response: Response;
+    try {
+      response = await http(url, { method: "DELETE", headers: { "if-match": etag } });
+    } catch (cause) {
+      // Response loss, aborts and timeouts do not establish whether DELETE ran.
+      throw new DriveDeletePendingError(url, { cause });
+    }
     if (
       response.status === 200 ||
       response.status === 204 ||
       response.status === 404 ||
       response.status === 410 ||
-      (response.ok && (await absent(url)))
+      (await absent(url))
     ) {
       await forget(url);
       return;
     }
-    if (response.status >= 400 && response.status !== 408) {
-      await pending.clear(url);
-      if (recovery) await pending.clear(recovery);
-      throw error(response.status, url);
-    }
-    throw new DriveDeletePendingError(url);
+    // Only a terminal receipt or an absent re-read retires either guard. Even
+    // an error response can follow an upstream request that is still running.
+    throw new DriveDeletePendingError(url, { cause: error(response.status, url) });
   };
   return { guard, remove, forget };
 }

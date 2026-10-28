@@ -809,7 +809,9 @@ it.each([
   );
   await expect(
     f.client.mergeContainer(FROM, TO, { kind: "preserve-source" }),
-  ).rejects.toMatchObject({ status: 503 });
+  ).rejects.toMatchObject(
+    cleanupFails ? { kind: "delete-pending", cause: { status: 503 } } : { status: 503 },
+  );
   expect(f.pod.has(TO)).toBe(cleanupFails);
   expect(f.pod.has(FROM)).toBe(true);
   expect(f.metadata.get(FROM)).toBe(await turtle(data));

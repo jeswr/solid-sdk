@@ -85,20 +85,22 @@ it("Undo protects replacement source and destination resources during failed-mov
   ).rejects.toThrow();
   expect(files.get(SOURCE)?.body).toBe("other source");
   expect(files.get(TARGET)?.body).toBe("other target");
-  const rollback = fetch.mock.calls.find(
-    ([url, init]) => String(url) === TARGET && init?.method === "DELETE",
-  );
-  expect(new Headers(rollback?.[1]?.headers).get("if-match")).toBe('"created"');
+  expect(
+    fetch.mock.calls.some(([url, init]) => String(url) === TARGET && init?.method === "DELETE"),
+  ).toBe(false);
 });
-it("Undo rolls back only its own copy when the source changes mid-move", async () => {
+it("Undo retains its recovery copy when the source changes during DELETE", async () => {
   const { files, fetch } = transport({
     beforeDelete: (resources) => resources.set(SOURCE, { etag: '"replacement"', body: "other" }),
   });
   await expect(
     moveWithValidator({ storageUrl: ROOT, fetch }, SOURCE, TARGET, '"moved"'),
-  ).rejects.toMatchObject({ status: 412 });
+  ).rejects.toMatchObject({
+    kind: "partial-failure",
+    cause: { kind: "delete-pending", cause: { status: 412 } },
+  });
   expect(files.get(SOURCE)?.body).toBe("other");
-  expect(files.has(TARGET)).toBe(false);
+  expect(files.get(TARGET)?.body).toBe("original");
 });
 it("Undo keeps the source and recovery copy when the destination PUT omits its validator", async () => {
   const { files, fetch } = transport({
