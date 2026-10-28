@@ -63,6 +63,79 @@ function replace(runtime: DocumentPersistence, json: JSONContent, html: string) 
   runtime.change(html, json);
 }
 
+async function expectDocxReplacement(content: JSONContent[]) {
+  const { session, client } = await fixture();
+  const original = schema.nodeFromJSON({ type: "doc", content }).toJSON();
+  const runtime = client();
+  await runtime.open();
+  runtime.title = "Round22 replacement";
+  replace(
+    runtime,
+    schema.nodeFromJSON({ type: "doc", content: [{ type: "paragraph" }] }).toJSON(),
+    "<p></p>",
+  );
+  await runtime.flush();
+  const url = runtime.stored?.url as string;
+  const data = await Packer.toArrayBuffer(await toDocx(original, vi.fn()));
+  const converted = await convertImport(
+    new NodeFile([data], "round22.docx") as unknown as File,
+    session,
+    vi.fn(),
+    vi.fn(),
+  );
+  expect(converted.skipped).toEqual([]);
+  expect(converted.json).toEqual(original);
+  replace(runtime, converted.json, converted.html);
+  await runtime.flush();
+  expect(runtime.state).toBe("saved");
+  expect(
+    generateJSON(
+      (await runtime.store.read(url))?.data.body as string,
+      baseExtensions(session.fetch),
+    ),
+  ).toEqual(original);
+  await runtime.destroy();
+  const reopened = client();
+  await reopened.open(url);
+  expect(schema.nodeFromJSON(yDocToProsemirrorJSON(reopened.doc)).toJSON()).toEqual(original);
+}
+
+it.each([
+  "printf 'a  b'",
+  "  printf\t'a   b'\t\t  ",
+])("round22 DOCX inline code preserves spaces and tabs through replacement, snapshot and reopen: %j", async (code) => {
+  await expectDocxReplacement([
+    {
+      type: "paragraph",
+      content: [
+        { type: "text", text: "Run " },
+        { type: "text", text: code, marks: [{ type: "code" }] },
+        { type: "text", text: " now" },
+      ],
+    },
+  ]);
+});
+
+it("round22 DOCX checklist preserves Parent, indented Child and Sibling through replacement, snapshot and reopen", async () => {
+  const item = (value: string, checked: boolean, child?: JSONContent): JSONContent => ({
+    type: "taskItem",
+    attrs: { checked },
+    content: [
+      { type: "paragraph", content: [{ type: "text", text: value }] },
+      ...(child ? [child] : []),
+    ],
+  });
+  await expectDocxReplacement([
+    {
+      type: "taskList",
+      content: [
+        item("Parent", false, { type: "taskList", content: [item("Child", true)] }),
+        item("Sibling", false),
+      ],
+    },
+  ]);
+});
+
 it("round21 clamps Markdown H4 for upload, replacement, pod snapshot and reopen", async () => {
   const { session, client } = await fixture();
   const file = new NodeFile(["#### Detail\n\nBody"], "detail.md") as unknown as File;

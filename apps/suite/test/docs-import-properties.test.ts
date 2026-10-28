@@ -19,6 +19,10 @@ const schema = getSchema(baseExtensions(session.fetch));
 const text = (text: string): JSONContent => ({ type: "text", text });
 const p = (value: string): JSONContent => ({ type: "paragraph", content: [text(value)] });
 const word = fc.constantFrom("First item", "Second item", "punctuation <>& []", "😀");
+const listKinds = ["bulletList", "orderedList", "taskList"] as const;
+const codeWhitespace = fc
+  .tuple(fc.integer({ min: 2, max: 8 }), fc.integer({ min: 1, max: 3 }))
+  .map(([spaces, tabs]) => `printf 'a${" ".repeat(spaces)}b'${"\t".repeat(tabs)}done`);
 async function roundTrip(original: JSONContent) {
   const data = await Packer.toArrayBuffer(
     await toDocx(original, async () => ({
@@ -36,16 +40,36 @@ async function roundTrip(original: JSONContent) {
   );
 }
 
-it("DOCX round trips generated documents covering every editor node and mark type", async () => {
+it("DOCX round trips generated documents covering every editor node and mark type, code whitespace and three-level mixed lists", async () => {
   const visitedNodes = new Set<string>();
   const visitedMarks = new Set<string>();
+  const visitedListLevels = new Set<string>();
   await fc.assert(
     fc.asyncProperty(
       word,
       fc.integer({ min: 1, max: 3 }),
       fc.boolean(),
       fc.integer({ min: 1, max: 8 }),
-      async (value, level, checked, indent) => {
+      codeWhitespace,
+      fc.integer({ min: 1, max: 3 }),
+      fc.array(fc.constantFrom(...listKinds), { minLength: 2, maxLength: 2 }),
+      async (value, level, checked, indent, code, depth, nestedKinds) => {
+        const list = (type: string, remaining: number): JSONContent => {
+          visitedListLevels.add(`${type}:${depth - remaining + 1}`);
+          return {
+            type,
+            content: [true, false].map((first) => ({
+              type: type === "taskList" ? "taskItem" : "listItem",
+              ...(type === "taskList" ? { attrs: { checked: first && checked } } : {}),
+              content: [
+                p(`${value} ${first ? "Parent" : "Sibling"} ${remaining}`),
+                ...(first && remaining > 1
+                  ? [list(nestedKinds[remaining - 2] as string, remaining - 1)]
+                  : []),
+              ],
+            })),
+          };
+        };
         const original = schema.nodeFromJSON({
           type: "doc",
           content: [
@@ -53,7 +77,7 @@ it("DOCX round trips generated documents covering every editor node and mark typ
               type: "paragraph",
               content: Object.keys(schema.marks).flatMap((type) => [
                 {
-                  ...text(value),
+                  ...text(type === "code" ? code : value),
                   marks: [
                     {
                       type,
@@ -67,16 +91,7 @@ it("DOCX round trips generated documents covering every editor node and mark typ
             { type: "paragraph" },
             { type: "heading", attrs: { level }, content: [text(value)] },
             { type: "blockquote", content: [p(value)] },
-            ...["bulletList", "orderedList", "taskList"].map((type) => ({
-              type,
-              content: [
-                {
-                  type: type === "taskList" ? "taskItem" : "listItem",
-                  ...(type === "taskList" ? { attrs: { checked } } : {}),
-                  content: [p(value)],
-                },
-              ],
-            })),
+            ...listKinds.map((type) => list(type, depth)),
             { type: "horizontalRule" },
             {
               type: "codeBlock",
@@ -121,6 +136,27 @@ it("DOCX round trips generated documents covering every editor node and mark typ
   );
   expect([...visitedNodes].sort()).toEqual(Object.keys(schema.nodes).sort());
   expect([...visitedMarks].sort()).toEqual(Object.keys(schema.marks).sort());
+  expect([...visitedListLevels].sort()).toEqual(
+    listKinds.flatMap((type) => [1, 2, 3].map((level) => `${type}:${level}`)).sort(),
+  );
+});
+
+it.each([
+  "p",
+  "h1",
+  "h2",
+  "h3",
+])("preserves code whitespace at %s boundaries while ordinary HTML still collapses spaces", (tag) => {
+  const source = `<${tag}><code>  printf\t'a  b'\t\t  </code></${tag}><p>  ordinary   prose  </p>`;
+  const imported = importHtml(source);
+  const [code, prose] = imported.json.content ?? [];
+  expect(code?.content?.[0]).toEqual({
+    type: "text",
+    text: "  printf\t'a  b'\t\t  ",
+    marks: [{ type: "code" }],
+  });
+  expect(prose?.content?.[0]?.text).toBe("ordinary prose");
+  expect(imported.skipped).toEqual([]);
 });
 
 it("all importers return schema-valid documents for random input", async () => {

@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex
 import { readFile } from "node:fs/promises";
 import type { JSONContent } from "@tiptap/react";
-import { Document, ImageRun, Packer, Paragraph, TextRun } from "docx";
+import { Document, ImageRun, LevelFormat, Packer, Paragraph, TextRun } from "docx";
 import { openArrayBuffer } from "mammoth/lib/zipfile";
 import { describe, expect, it, vi } from "vitest";
 import { PAGE_WIDTH, toDocx } from "../src/apps/docs/lib/convert/docx-export";
@@ -18,6 +18,7 @@ import {
   MARKDOWN_NOTES,
 } from "../src/apps/docs/lib/convert/markdown";
 import { sanitiseImport } from "../src/apps/docs/lib/convert/sanitise";
+import { importHtml, normaliseImport } from "../src/apps/docs/lib/convert/schema";
 
 const text = (value: string): JSONContent => ({ type: "text", text: value });
 const p = (value: string): JSONContent => ({ type: "paragraph", content: [text(value)] });
@@ -243,6 +244,71 @@ describe("DOCX mapping rows", () => {
 });
 
 describe("imports and Markdown", () => {
+  it("maps task numbering levels before indentation and handles missing indentation and orphan levels", async () => {
+    const source = new Document({
+      styles: {
+        paragraphStyles: [
+          { id: "TaskChecked", name: "task CHECKED" },
+          { id: "TaskUnchecked", name: "Task Unchecked" },
+        ],
+      },
+      numbering: {
+        config: [
+          {
+            reference: "tasks",
+            levels: [0, 1].map((level) => ({ level, format: LevelFormat.BULLET, text: "•" })),
+          },
+        ],
+      },
+      sections: [
+        {
+          children: [
+            new Paragraph({ text: "Parent", style: "TaskUnchecked" }),
+            new Paragraph({
+              text: "Child",
+              style: "TaskChecked",
+              numbering: { reference: "tasks", level: 1 },
+              indent: { left: 7200 },
+            }),
+            new Paragraph({
+              text: "Sibling",
+              style: "TaskUnchecked",
+              numbering: { reference: "tasks", level: 0 },
+              indent: { left: 2160 },
+            }),
+            new Paragraph("Gap"),
+            new Paragraph({ text: "Orphan", style: "TaskChecked", indent: { left: 2160 } }),
+          ],
+        },
+      ],
+    });
+    const result = await importDocx(await Packer.toArrayBuffer(source), {
+      progress: vi.fn(),
+      uploadImage: noImage,
+    });
+    const item = (value: string, checked: boolean, nested?: JSONContent): JSONContent => ({
+      type: "taskItem",
+      attrs: { checked },
+      content: [p(value), ...(nested ? [nested] : [])],
+    });
+    expect(importHtml(result.html).json).toEqual(
+      normaliseImport(
+        doc(
+          {
+            type: "taskList",
+            content: [
+              item("Parent", false, { type: "taskList", content: [item("Child", true)] }),
+              item("Sibling", false),
+            ],
+          },
+          p("Gap"),
+          { type: "taskList", content: [item("Orphan", true)] },
+        ),
+      ).json,
+    );
+    expect(result.skipped).toEqual([]);
+  });
+
   it("preserves an explicitly empty paragraph with HTML", () => {
     expect(exportMarkdown(doc({ type: "paragraph", content: [] }))).toBe("<p></p>");
   });

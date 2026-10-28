@@ -13,8 +13,6 @@ export const DOCX_STYLE_MAP = [
   // Suite exports one paragraph per code block; fresh keeps adjacent blocks separate.
   "p.Code => pre:fresh",
   "p[style-name='Horizontal Rule'] => hr:fresh",
-  "p[style-name='Task Checked'] => ul[data-type='taskList'] > li[data-type='taskItem'][data-checked='true']:fresh > p:fresh",
-  "p[style-name='Task Unchecked'] => ul[data-type='taskList'] > li[data-type='taskItem'][data-checked='false']:fresh > p:fresh",
   "r[style-name='Task Marker'] => !",
   "r[style-name='Inline Code'] => code",
   "u => u",
@@ -36,6 +34,58 @@ export interface DocxImportOptions {
   progress: (progress: ImportProgress) => void;
 }
 const WORD = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+
+interface DocxElement {
+  type: string;
+  children?: DocxElement[];
+  styleId?: string | null;
+  styleName?: string | null;
+  numbering?: { level: string; isOrdered: boolean } | null;
+  indent?: { start: string | null };
+}
+
+/** Build paths using the actual ancestors, including task-list/item attributes. */
+function mapLists(document: DocxElement, styleMap: string[]) {
+  function container(element: DocxElement) {
+    const ancestors: string[] = [];
+    for (const child of element.children ?? []) {
+      const styleName = child.styleName?.toLowerCase();
+      const task = styleName === "task checked" || styleName === "task unchecked";
+      if (child.type === "paragraph" && (task || child.numbering)) {
+        // Suite task markers use half-inch indentation instead of Word numbering.
+        const level = Math.min(
+          8,
+          Math.max(
+            0,
+            Math.round(
+              Number(child.numbering?.level ?? Number(child.indent?.start) / 720 - 1) || 0,
+            ),
+          ),
+        );
+        const list = task ? "ul[data-type='taskList']" : child.numbering?.isOrdered ? "ol" : "ul";
+        const item = task
+          ? `li[data-type='taskItem'][data-checked='${styleName === "task checked"}']`
+          : "li";
+        // A document may start at an indented level without supplying its parents.
+        const depth = Math.min(level, ancestors.length);
+        const path = [...ancestors.slice(0, depth), `${list} > ${item}:fresh > p:fresh`].join(
+          " > ",
+        );
+        const styleId = `SuiteList${styleMap.length}`;
+        styleMap.push(`p.${styleId} => ${path}`);
+        child.styleId = styleId;
+        ancestors.length = depth;
+        ancestors.push(`${list} > ${item}`);
+      } else {
+        ancestors.length = 0;
+        container(child);
+      }
+    }
+  }
+  container(document);
+  return document;
+}
+
 const skippedTags: Record<string, string> = {
   footnoteReference: "Footnotes",
   endnoteReference: "Endnotes",
@@ -83,10 +133,12 @@ export async function importDocx(data: ArrayBuffer, options: DocxImportOptions) 
   const inspected = stripUnsupported(await archive.read("word/document.xml", "utf-8"));
   archive.write("word/document.xml", inspected.xml);
   const images: { data: ArrayBuffer; contentType: string; placeholder: string }[] = [];
+  const styleMap = [...DOCX_STYLE_MAP];
   const result = await mammoth.convertToHtml(
     { arrayBuffer: await archive.toArrayBuffer() },
     {
-      styleMap: DOCX_STYLE_MAP,
+      styleMap,
+      transformDocument: (document: DocxElement) => mapLists(document, styleMap),
       includeEmbeddedStyleMap: false,
       externalFileAccess: false,
       ignoreEmptyParagraphs: false,
