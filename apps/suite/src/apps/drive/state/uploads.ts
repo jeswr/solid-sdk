@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex
 "use client";
 import { DriveDeletePendingError } from "../lib/client/deletion";
+import { DriveOperationInProgressError } from "../lib/client/source-operations";
 /**
  * The upload queue behind the upload dock (04-drive §2.6): up to three files
  * upload at once; a name clash pauses that file until the user picks
@@ -123,7 +124,8 @@ function savedJobs(prefix: string): SavedJob[] {
 }
 
 function describe(error: unknown): string {
-  if (error instanceof DriveDeletePendingError) return error.message;
+  if (error instanceof DriveDeletePendingError || error instanceof DriveOperationInProgressError)
+    return error.message;
   if (error instanceof DriveError) {
     if (error.kind === "forbidden") return "You don't have permission to upload here";
     if (error.kind === "unauthenticated") return "Sign in again to upload";

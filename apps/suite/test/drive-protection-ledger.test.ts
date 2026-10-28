@@ -33,12 +33,30 @@ it("commits requirements in IndexedDB, shares across reloads, and durably clears
   expect(await ledger.get(url)).toBeUndefined();
 });
 
+it("enumerates durable string keys while ignoring unrelated non-string IndexedDB keys", async () => {
+  vi.stubGlobal("indexedDB", new IDBFactory());
+  const ledger = protectionLedger(fetch);
+  await ledger.set(url, required);
+  const db = await new Promise<IDBDatabase>((resolve) => {
+    const request = indexedDB.open("solid-drive-protection", 1);
+    request.onsuccess = () => resolve(request.result);
+  });
+  const tx = db.transaction("requirements", "readwrite");
+  tx.objectStore("requirements").put("unrelated", 1);
+  await new Promise<void>((resolve) => {
+    tx.oncomplete = () => resolve();
+  });
+  db.close();
+  expect(await ledger.keys()).toEqual([url]);
+});
+
 it("isolates non-browser transports and refuses non-durable browser provisioning", async () => {
   vi.stubGlobal("indexedDB", undefined);
   vi.stubGlobal("window", undefined);
   const transport: typeof fetch = async () => new Response();
   const ledger = protectionLedger(transport);
   await ledger.set(url, required);
+  expect(await ledger.keys()).toEqual([url]);
   expect(await protectionLedger(transport).get(url)).toEqual(required);
   expect(await protectionLedger(fetch).get(url)).toBeUndefined();
   await ledger.clear(url);
@@ -47,6 +65,7 @@ it("isolates non-browser transports and refuses non-durable browser provisioning
   await expect(ledger.set(url, required)).rejects.toThrow(/could not be established or verified/);
   await expect(ledger.get(url)).rejects.toThrow(/could not be established or verified/);
   await expect(ledger.clear(url)).rejects.toThrow(/could not be established or verified/);
+  await expect(ledger.keys()).rejects.toThrow(/could not be established or verified/);
 });
 
 it.each(["error", "blocked"])("fails closed when IndexedDB open reports %s", async (mode) => {

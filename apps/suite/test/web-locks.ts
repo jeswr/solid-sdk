@@ -1,30 +1,32 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
+import { exclusiveLocks } from "./drive-locks";
+
 /** Browser-style exclusive locks: a nested request queues behind its caller. */
 export function exclusiveWebLocks() {
-  const queues = new Map<string, Promise<void>>();
+  const locks = exclusiveLocks();
   const held = new Set<string>();
   const nested: { name: string; held: string[] }[] = [];
-  const request = <T>(name: string, work: (lock: Lock) => T | PromiseLike<T>) => {
+  const request = <T>(
+    name: string,
+    options: LockOptions | ((lock: Lock | null) => T | PromiseLike<T>),
+    callback?: (lock: Lock | null) => T | PromiseLike<T>,
+  ) => {
+    const work = typeof options === "function" ? options : callback;
+    if (!work) throw new Error("Missing Web Lock callback");
     if (held.size) nested.push({ name, held: [...held] });
-    const previous = queues.get(name) ?? Promise.resolve();
-    const pending = previous.then(async () => {
+    const run = async (lock: Lock | null) => {
+      if (!lock) return work(null);
       held.add(name);
       try {
-        return await work({ name, mode: "exclusive" });
+        return await work(lock);
       } finally {
         held.delete(name);
       }
-    });
-    // Rejections release the lock just as fulfillment does.
-    const released = pending.then(
-      () => {},
-      () => {},
-    );
-    queues.set(name, released);
-    void released.then(() => {
-      if (queues.get(name) === released) queues.delete(name);
-    });
-    return pending;
+    };
+    return typeof options === "function"
+      ? locks.request(name, run)
+      : locks.request(name, options, run);
   };
   return { request, nested };
 }

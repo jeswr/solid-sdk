@@ -90,6 +90,10 @@ it.each([
     return found;
   };
   await click(button(action));
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(button(action).disabled).toBe(false);
+  });
   expect(banner()?.textContent).toContain("This file's sharing could not be secured");
   expect(await protectionLedger(f.fetch).get(to)).toBeDefined();
   await rendered.unmount();
@@ -100,10 +104,14 @@ it.each([
   expect(preview.host.textContent).toContain("This file's sharing could not be secured");
   await preview.unmount();
   f.intercept(undefined);
+  if (action === "Delete") await f.fetch(to, { method: "DELETE" });
   await act(async () => {
     await click(button(action));
   });
-  expect(banner()).toBeNull();
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(banner()).toBeNull();
+  });
   expect(drive.invalidate).toHaveBeenCalledWith(to);
   if (action === "Retry") {
     expect(await protectionLedger(f.fetch).get(to)).toBeUndefined();

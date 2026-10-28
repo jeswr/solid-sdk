@@ -1,5 +1,17 @@
 // AUTHORED-BY Codex
-import { deletionLedger, protectionLedger } from "./protection-ledger";
+import { type DeletionRequest, deletionLedger, protectionLedger } from "./protection-ledger";
+
+export type DeleteOutcome = "done" | "not-performed" | "unknown";
+const refusedRequests = new WeakSet<Error>();
+
+/** A refusal of a precondition is definitive; acceptance is not completion. */
+export function classifyDelete(status: number | undefined): DeleteOutcome {
+  if (status === undefined) return "unknown";
+  if ((status >= 200 && status < 300 && status !== 202) || status === 404 || status === 410)
+    return "done";
+  if (status >= 400 && status < 500 && status !== 408 && status !== 429) return "not-performed";
+  return "unknown";
+}
 
 export class DriveDeletePendingError extends Error {
   readonly kind = "delete-pending";
@@ -12,70 +24,98 @@ export class DriveDeletePendingError extends Error {
   }
 }
 
-/** Housekeeping may ignore a rejected delete, but must expose an accepted one. */
+/** Housekeeping must surface DELETE refusals as well as unresolved requests. */
+export function isDeletionFailure(error: unknown): error is Error {
+  return (
+    error instanceof DriveDeletePendingError ||
+    (error instanceof Error && refusedRequests.has(error))
+  );
+}
+
 export function rethrowPendingDeletion(error: unknown): void {
-  if (error instanceof DriveDeletePendingError) throw error;
+  if (isDeletionFailure(error)) throw error;
 }
 
 /** Accepted/ambiguous deletes must settle before either endpoint can be reused. */
 export function deletionControl(http: typeof fetch, error: (status: number, url: string) => Error) {
   const pending = deletionLedger(http);
   const protection = protectionLedger(http);
-  const forget = async (url: string, clearProtection = true) => {
-    const record = await pending.get(url);
-    // A failed provisioner's archive still governs recreation of a missing
-    // ancestor. Only a confirmed DELETE caller retires that ACL requirement.
-    if (clearProtection) await protection.clear(url);
-    await pending.clear(url);
-    if (record?.recovery) await pending.clear(record.recovery);
+  const refusal = (status: number, url: string) => {
+    const rejected = error(status, url);
+    refusedRequests.add(rejected);
+    return rejected;
   };
-  const absent = async (url: string) => {
-    for (const delay of [0, 25, 75]) {
-      if (delay) await new Promise<void>((resolve) => setTimeout(resolve, delay));
-      try {
-        const response = await http(url, { method: "HEAD", cache: "no-store" });
-        if (response.status === 404 || response.status === 410) return true;
-      } catch {
-        // A lost read cannot establish completion. Keep all durable requirements.
-      }
+  const retire = async (record: DeletionRequest, clearProtection = false) => {
+    if (clearProtection) await protection.clear(record.source);
+    await pending.retire(record);
+  };
+  const forget = async (url: string) => {
+    await guard(url);
+    await protection.clear(url);
+  };
+  const reread = async (record: DeletionRequest): Promise<DeleteOutcome> => {
+    try {
+      const response = await http(record.source, { method: "HEAD", cache: "no-store" });
+      if (response.status === 404 || response.status === 410) return "done";
+      const etag = response.headers.get("etag");
+      if (response.ok && record.etag && etag && !etag.startsWith("W/") && etag !== record.etag)
+        return "not-performed";
+    } catch {
+      // A lost read cannot establish completion. Keep the independent record.
     }
-    return false;
+    return "unknown";
   };
   const guard = async (url: string) => {
-    const requirement = await pending.get(url);
-    if (!requirement) return;
-    for (const source of requirement.sources) {
-      if (!(await absent(source))) throw new DriveDeletePendingError(source);
-      await forget(source, false);
+    let unresolved: string | undefined;
+    for (const record of await pending.records()) {
+      if (record.source !== url && record.recovery !== url) continue;
+      if ((await reread(record)) === "unknown") unresolved = record.source;
+      else await retire(record);
     }
-    await pending.clear(url);
+    if (unresolved) throw new DriveDeletePendingError(unresolved);
   };
   const remove = async (url: string, etag: string, recovery?: string) => {
     await guard(url);
     // Persist both sides before the request: reload or response loss cannot turn
     // a retained copy into a disposable duplicate while its source is deleting.
-    await pending.set(url, { sources: [url], ...(recovery ? { recovery } : {}) });
-    if (recovery) await pending.set(recovery, { sources: [url] });
-    const response = await http(url, { method: "DELETE", headers: { "if-match": etag } });
-    if (
-      response.status === 200 ||
-      response.status === 204 ||
-      // The demo pod's Reset Content response also confirms completion. A
-      // later HEAD must not keep this operation's own deletion intent alive.
-      response.status === 205 ||
-      response.status === 404 ||
-      response.status === 410 ||
-      (response.ok && (await absent(url)))
-    ) {
-      await forget(url);
+    const record: DeletionRequest = {
+      id: crypto.randomUUID(),
+      source: url,
+      etag,
+      ...(recovery ? { recovery } : {}),
+    };
+    await pending.add(record);
+    let response: Response;
+    try {
+      response = await http(url, { method: "DELETE", headers: { "if-match": etag } });
+    } catch (cause) {
+      // Response loss, aborts and timeouts do not establish whether DELETE ran.
+      throw new DriveDeletePendingError(url, { cause });
+    }
+    let outcome = classifyDelete(response.status);
+    if (outcome === "not-performed") {
+      await retire(record);
+      throw refusal(response.status, url);
+    }
+    if (outcome === "unknown") outcome = await reread(record);
+    if (outcome === "done") {
+      await retire(record, true);
       return;
     }
-    if (response.status >= 400 && response.status !== 408) {
-      await pending.clear(url);
-      if (recovery) await pending.clear(recovery);
-      throw error(response.status, url);
+    if (outcome === "not-performed") {
+      await retire(record);
+      throw refusal(412, url);
     }
-    throw new DriveDeletePendingError(url);
+    throw new DriveDeletePendingError(url, { cause: error(response.status, url) });
   };
-  return { guard, remove, forget };
+  const recheck = async (root: string): Promise<readonly string[]> => {
+    const unresolved = new Set<string>();
+    for (const record of await pending.records()) {
+      if (!record.source.startsWith(root)) continue;
+      if ((await reread(record)) === "unknown") unresolved.add(record.source);
+      else await retire(record);
+    }
+    return [...unresolved];
+  };
+  return { guard, remove, forget, recheck };
 }

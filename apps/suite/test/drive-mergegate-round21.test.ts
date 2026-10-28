@@ -74,8 +74,12 @@ it.each(["immediate", "later", "410"])("202 confirms deletion through HEAD: %s",
     }
     return response;
   });
+  if (mode === "later") {
+    await expect(client.remove(url)).rejects.toMatchObject({ kind: "delete-pending" });
+    await expect(client.remove(url)).rejects.toMatchObject({ kind: "delete-pending" });
+  }
   await client.remove(url);
-  expect(reads).toBe(mode === "later" ? 3 : 1);
+  expect(reads).toBe(mode === "later" ? 4 : 1);
   expect(f.pod.has(url)).toBe(false);
 });
 
@@ -83,7 +87,6 @@ it.each([
   "exists",
   "offline",
   "503",
-  "201",
 ])("unconfirmed DELETE retains the moved duplicate: %s", async (mode) => {
   const f = await wacPod();
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });
@@ -95,7 +98,7 @@ it.each([
     if (url !== source) return undefined;
     if (init?.method === "DELETE") {
       deleting = true;
-      return new Response(null, { status: mode === "201" ? 201 : 202 });
+      return new Response(null, { status: 202 });
     }
     if (deleting && init?.method === "HEAD") {
       reads++;
@@ -110,7 +113,7 @@ it.each([
     retainedDestinations: [to],
     cause: { kind: "delete-pending", message: "Still deleting on the server" },
   });
-  expect(reads).toBe(3);
+  expect(reads).toBe(1);
   expect(f.pod.has(source)).toBe(true);
   expect(f.pod.has(to)).toBe(true);
   const fresh = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });

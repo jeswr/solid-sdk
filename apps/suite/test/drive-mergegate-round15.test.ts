@@ -35,7 +35,7 @@ it.each([
   { fail: true, upload: false },
   { fail: false, upload: true },
   { fail: true, upload: true },
-])("copy then immediate Replace waits for file ACL verification ($fail, upload: $upload)", async ({
+])("copy refuses immediate Replace until file ACL verification finishes ($fail, upload: $upload)", async ({
   fail,
   upload,
 }) => {
@@ -73,12 +73,9 @@ it.each([
         { contentType: "text/plain" },
         { kind: "protect-ancestors" },
       );
-  const settled = vi.fn();
-  void replacing.then(settled, settled);
   const done = Promise.allSettled([copying, replacing]);
   try {
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    expect(settled).not.toHaveBeenCalled();
+    await expect(replacing).rejects.toMatchObject({ kind: "operation-in-progress" });
     expect(beforePut).toHaveLength(1);
     expect(beforePut[0]).toBeDefined();
     expect(await (await f.anonymous(to)).text()).not.toBe("secret contents");
@@ -87,9 +84,25 @@ it.each([
     await done;
     await copyResult;
   }
-  const result = (await done)[1];
-  if (fail) expect(result?.status).toBe("rejected");
-  else if (result?.status === "rejected") expect(result.reason).toMatchObject({ kind: "conflict" });
+  if (!fail) {
+    if (upload)
+      await uploadFile(
+        fresh,
+        PUBLIC,
+        new Blob(["secret contents"]),
+        "copy.txt",
+        "replace",
+        await fresh.stat(to),
+      );
+    else
+      await fresh.write(
+        to,
+        "secret contents",
+        { contentType: "text/plain" },
+        { kind: "protect-ancestors" },
+      );
+    expect((await f.anonymous(to)).status).toBe(403);
+  }
   expect(f.exposures).toEqual([]);
 });
 

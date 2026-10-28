@@ -28,7 +28,16 @@ it("every exported container-creating client method requires a policy at type an
     // @ts-expect-error Trash provisioning must explicitly require owner-only access.
     prepareTrash: () => client.prepareTrash(PRIVATE),
   };
-  const otherMethods = ["list", "stat", "read", "readVersion", "readRdf", "remove"];
+  const otherMethods = [
+    "list",
+    "stat",
+    "read",
+    "readVersion",
+    "readRdf",
+    "remove",
+    "recheckDeletions",
+    "exclusive",
+  ];
   expect(
     Object.keys(client)
       .filter((key) => typeof client[key as keyof typeof client] === "function")

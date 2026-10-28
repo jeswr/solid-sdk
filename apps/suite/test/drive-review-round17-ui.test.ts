@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 
 import type { ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
@@ -146,13 +147,18 @@ it.each([
         });
   await activate(trigger);
   if (action === "delete") {
+    const returnedFocus = deferred<void>();
+    trigger.addEventListener("focus", () => returnedFocus.resolve(), { once: true });
     await activate(
       button(
         source === "empty-trash" ? "Empty trash" : label,
         document.querySelector('[role="alertdialog"]') as Element,
       ),
     );
-    await vi.waitFor(() => expect(document.activeElement).toBe(trigger));
+    // Radix restores focus from a scheduled close callback. Observe that
+    // lifecycle event, independent of the runner's polling/time budget.
+    await returnedFocus.promise;
+    expect(document.activeElement).toBe(trigger);
   }
   if (delay === "listing")
     await act(async () => {
@@ -163,12 +169,25 @@ it.each([
     'input[type="search"]',
   ) as HTMLInputElement;
   await focus(search);
-  await act(async () => {
-    pending.resolve();
-    await mutation.mock.results[0]?.value;
-    listing.resolve();
+  const removedFromDom = deferred<void>();
+  const observer = new MutationObserver(() => {
+    if (!removed.isConnected) removedFromDom.resolve();
   });
-  await vi.waitFor(() => expect(removed.isConnected).toBe(false));
+  observer.observe(view.host, { childList: true, subtree: true });
+  try {
+    await act(async () => {
+      pending.resolve();
+      const result = await mutation.mock.results[0]?.value;
+      expect(result?.failed).toEqual([]);
+      listing.resolve();
+    });
+    // Notification-driven listing renders may finish after the operation.
+    if (removed.isConnected) await removedFromDom.promise;
+    await act(async () => {});
+    expect(removed.isConnected).toBe(false);
+  } finally {
+    observer.disconnect();
+  }
   expect(document.activeElement).toBe(search);
 });
 

@@ -127,14 +127,25 @@ async function otherTab(f: Awaited<ReturnType<typeof wacPod>>) {
 function webLocks(enter: (name: string, index: number) => Promise<void> = async () => {}) {
   const locks = exclusiveLocks();
   const counts = new Map<string, number>();
-  const request = vi.fn((name: string, work: () => Promise<void>) => {
-    const index = (counts.get(name) ?? 0) + 1;
-    counts.set(name, index);
-    return locks.request(name, async () => {
-      await enter(name, index);
-      await work();
-    });
-  });
+  const request = vi.fn(
+    (
+      name: string,
+      options: LockOptions | ((lock: Lock | null) => unknown),
+      callback?: (lock: Lock | null) => unknown,
+    ) => {
+      const work = typeof options === "function" ? options : callback;
+      if (!work) throw new Error("Missing Web Lock callback");
+      const index = (counts.get(name) ?? 0) + 1;
+      counts.set(name, index);
+      const guarded = async (lock: Lock | null) => {
+        await enter(name, index);
+        return work(lock);
+      };
+      return typeof options === "function"
+        ? locks.request(name, guarded)
+        : locks.request(name, options, guarded);
+    },
+  );
   vi.stubGlobal("navigator", { locks: { request } });
   return request;
 }

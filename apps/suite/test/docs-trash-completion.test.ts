@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Doc } from "yjs";
 import { buildDocument, docContainerUrls, serializeTurtle } from "../src/apps/docs/lib/model";
 import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
 import { deletionLedger } from "../src/apps/drive/lib/client/protection-ledger";
-import { trashItems } from "../src/apps/drive/lib/operations/operations";
+import { restoreItems, trashItems } from "../src/apps/drive/lib/operations/operations";
 import { trashEntries, trashIndexFrom } from "../src/apps/drive/lib/operations/trash-index";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { DEMO_ROOT } from "../src/lib/demo-pod/seed";
@@ -118,6 +119,66 @@ it("Drive folder trash completes nested DELETE 205 responses without waiting for
   expect(await deletionLedger(http).get(source)).toBeUndefined();
   expect(await deletionLedger(http).get(entry.url)).toBeUndefined();
 }, 2_000);
+
+it.each([
+  "snapshot",
+  "companion",
+])("restoring only the %s reserves the discovered pair through snapshot and index settlement", async (selection) => {
+  const { pod, client, session, http } = await fixture();
+  const trashed = await trashItems(
+    client,
+    DRIVE,
+    await Promise.all([client.stat(DOC), client.stat(layout.container)]),
+    { webId: session.webId },
+  );
+  expect(trashed.failed).toEqual([]);
+  const [snapshot, companion] = trashed.done;
+  if (!snapshot || !companion) throw new Error("Missing document pair");
+  await pod.fetch(DOC, { method: "PUT", body: "another document incarnation" });
+  const target = `${ROOT}docs/plan%20(restored).ttl`;
+  let reached!: () => void;
+  let release!: () => void;
+  const writing = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  http.mockImplementation(async (input, init) => {
+    if (String(input) === target && init?.method === "PUT") {
+      reached();
+      await gate;
+    }
+    return pod.fetch(input, init);
+  });
+  const restoring = restoreItems(client, DRIVE, [selection === "snapshot" ? snapshot : companion]);
+  try {
+    await Promise.race([
+      writing,
+      restoring.then(() => {
+        throw new Error("Restore settled before writing its renamed snapshot");
+      }),
+    ]);
+    for (const entry of [snapshot, companion]) {
+      await expect(client.remove(entry.original)).rejects.toMatchObject({
+        kind: "operation-in-progress",
+      });
+      await expect(client.remove(entry.url)).rejects.toMatchObject({
+        kind: "operation-in-progress",
+      });
+    }
+    // Folder restoration has finished, but the snapshot is not advertised yet.
+    expect(pod.has(docContainerUrls(target).container)).toBe(true);
+    expect(pod.has(target)).toBe(false);
+  } finally {
+    release();
+    const result = await restoring;
+    expect(result.failed).toEqual([]);
+    expect(result.done).toHaveLength(2);
+  }
+  expect(await (await client.read(DOC)).text()).toBe("another document incarnation");
+  expect(pod.has(target)).toBe(true);
+});
 
 it("Docs dialog completes against the durable browser demo pod under strict Web Locks", async () => {
   vi.stubGlobal("BroadcastChannel", undefined);

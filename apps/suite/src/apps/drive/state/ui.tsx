@@ -27,10 +27,12 @@ import {
   DriveError,
   type DriveItem,
   DrivePartialFailureError,
+  isMissingItem,
   nameOf,
 } from "../lib/client/client";
 import { DriveDeletePendingError } from "../lib/client/deletion";
 import { isOwnStorage } from "../lib/client/ownership";
+import { DriveOperationInProgressError } from "../lib/client/source-operations";
 import {
   childUrl,
   copyItem,
@@ -258,15 +260,36 @@ function deletionPending(error: unknown): boolean {
   );
 }
 
-function reportFailure(error: unknown, fallback: string, retry: () => void) {
+function reportFailure(
+  error: unknown,
+  fallback: string,
+  client: DriveClient,
+  invalidate: (url: string) => void,
+) {
   const message = errorMessage(error, fallback);
-  if (deletionPending(error)) toast.error(message, { action: { label: "Retry", onClick: retry } });
+  if (deletionPending(error))
+    toast.error(message, {
+      action: {
+        label: "Retry",
+        onClick: async () => {
+          try {
+            const unresolved = await client.recheckDeletions?.();
+            invalidate(client.storageUrl);
+            if (unresolved?.length) reportFailure(error, fallback, client, invalidate);
+          } catch (cause) {
+            toast.error(errorMessage(cause));
+          }
+        },
+      },
+    });
   else toast.error(message);
 }
 
 export function errorMessage(error: unknown, fallback = "Something went wrong"): string {
   if (deletionPending(error)) return "Still deleting on the server";
+  if (error instanceof DrivePartialFailureError) return errorMessage(error.cause, fallback);
   if (
+    error instanceof DriveOperationInProgressError ||
     error instanceof DriveAccessError ||
     error instanceof TrashMovingError ||
     error instanceof TrashRestorePartialError
@@ -275,7 +298,9 @@ export function errorMessage(error: unknown, fallback = "Something went wrong"):
   if (error instanceof DriveError) {
     switch (error.kind) {
       case "conflict":
-        return "An item with that name already exists";
+        return error.status === 412
+          ? "This item changed. Refresh and try again."
+          : "An item with that name already exists";
       case "forbidden":
         return "You don't have permission to do that";
       case "not-found":
@@ -327,24 +352,24 @@ async function refreshAfter<T>(
   const touched = new Set(urls);
   const tracked: DriveClient = {
     ...client,
-    copy: (from, to, policy) => {
+    copy(from, to, policy) {
       touched.add(from);
       touched.add(to);
-      return client.copy(from, to, policy);
+      return client.copy.call(this, from, to, policy);
     },
-    move: (from, to, policy, options) => {
+    move(from, to, policy, options) {
       touched.add(from);
       touched.add(to);
-      return client.move(from, to, policy, options);
+      return client.move.call(this, from, to, policy, options);
     },
-    mergeContainer: (from, to, policy) => {
+    mergeContainer(from, to, policy) {
       touched.add(from);
       touched.add(to);
-      return client.mergeContainer(from, to, policy);
+      return client.mergeContainer.call(this, from, to, policy);
     },
-    remove: (url, options) => {
+    remove(url, options) {
       touched.add(url);
-      return client.remove(url, options);
+      return client.remove.call(this, url, options);
     },
   };
   try {
@@ -462,8 +487,7 @@ export function useDriveActions() {
       }));
       if (result.failed.length > 0) {
         const error = result.failed[0]?.error;
-        if (deletionPending(error))
-          reportFailure(error, "Couldn't move", () => void move(items, target, { undoable }));
+        if (deletionPending(error)) reportFailure(error, "Couldn't move", client, invalidate);
         else
           toast.error(
             result.done.length === 0
@@ -564,7 +588,7 @@ export function useDriveActions() {
         }
         return url;
       } catch (error) {
-        reportFailure(error, "Couldn't rename", () => void rename(item, name));
+        reportFailure(error, "Couldn't rename", client, invalidate);
         return undefined;
       }
     },
@@ -581,7 +605,7 @@ export function useDriveActions() {
         toast.success(`Created ${nameOf(url)}`);
         return url;
       } catch (error) {
-        reportFailure(error, "Couldn't make a copy", () => void makeCopy(item));
+        reportFailure(error, "Couldn't make a copy", client, invalidate);
         return undefined;
       }
     },
@@ -597,7 +621,7 @@ export function useDriveActions() {
         toast.success(`Created ${nameOf(url)}`);
         return url;
       } catch (error) {
-        reportFailure(error, "Couldn't create the folder", () => void newFolder(parent, name));
+        reportFailure(error, "Couldn't create the folder", client, invalidate);
         return undefined;
       }
     },
@@ -616,7 +640,7 @@ export function useDriveActions() {
       for (const warning of result.warnings ?? []) toast.error(warning.message);
       const first = result.done[0];
       if (result.failed.length > 0)
-        reportFailure(result.failed[0]?.error, "Couldn't restore", () => void restore(entries));
+        reportFailure(result.failed[0]?.error, "Couldn't restore", client, invalidate);
       if (first && result.done.length === 1) {
         toast.success(
           first.renamed ? `Restored as ${nameOf(first.url)}` : `Restored ${first.entry.name}`,
@@ -658,10 +682,7 @@ export function useDriveActions() {
                   }),
               },
             });
-          } else
-            reportFailure(failure, "Couldn't move to trash", () =>
-              invalidate(trashFolderOf(driveRoot)),
-            );
+          } else reportFailure(failure, "Couldn't move to trash", client, invalidate);
         }
         const first = result.done[0];
         if (!first) return;
@@ -693,19 +714,15 @@ export function useDriveActions() {
         (tracked) => deleteForever(tracked, driveRoot, entries),
       );
       for (const warning of result.warnings ?? []) toast.error(warning.message);
-      if (result.done.length)
-        updatePrefs((prefs) =>
-          pruneDeleted(
-            prefs,
-            result.done.flatMap((entry) => [entry.original, entry.url]),
-          ),
+      if (result.done.length) {
+        const absent = await confirmedAbsent(
+          client,
+          result.done.flatMap((entry) => [entry.original, entry.url]),
         );
+        updatePrefs((prefs) => pruneDeleted(prefs, absent));
+      }
       if (result.failed.length > 0)
-        reportFailure(
-          result.failed[0]?.error,
-          "Couldn't delete",
-          () => void removeForever(entries),
-        );
+        reportFailure(result.failed[0]?.error, "Couldn't delete", client, invalidate);
       if (result.done.length > 0) toast.success("Deleted for ever");
       return result;
     },
@@ -721,18 +738,17 @@ export function useDriveActions() {
           await client.remove(item.url, { recursive: item.kind === "folder" });
           done.push(item);
         } catch (error) {
-          reportFailure(error, "Couldn't delete", () => void removeSourcesForever(items));
+          reportFailure(error, "Couldn't delete", client, invalidate);
         } finally {
           invalidate(item.url);
         }
       }
       if (done.length) {
-        updatePrefs((prefs) =>
-          pruneDeleted(
-            prefs,
-            done.map(({ url }) => url),
-          ),
+        const absent = await confirmedAbsent(
+          client,
+          done.map(({ url }) => url),
         );
+        updatePrefs((prefs) => pruneDeleted(prefs, absent));
         toast.success("Deleted for ever");
       }
       return { done };
@@ -758,3 +774,19 @@ export function useDriveActions() {
 }
 
 export type DriveActions = ReturnType<typeof useDriveActions>;
+
+/** A deleted recovery copy says nothing about the resource at its original URL. */
+async function confirmedAbsent(client: DriveClient, urls: readonly string[]): Promise<string[]> {
+  const absent = await Promise.all(
+    urls.map(async (url) => {
+      try {
+        await client.stat(url);
+        return [];
+      } catch (error) {
+        // Unreadable resources and failed reads keep all of their preferences.
+        return isMissingItem(error) ? [url] : [];
+      }
+    }),
+  );
+  return absent.flat();
+}

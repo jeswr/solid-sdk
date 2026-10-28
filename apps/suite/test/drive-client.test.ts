@@ -286,10 +286,6 @@ describe("Drive client against a seeded demo pod", () => {
       ],
     });
     expect(pod.has(`${DRIVE}Work/`)).toBe(false);
-    await expect(client.remove(`${DRIVE}Moved/`)).rejects.toMatchObject({
-      kind: "conflict",
-      status: 409,
-    });
     await client.remove(`${DRIVE}Moved/`, { recursive: true });
     expect(pod.has(`${DRIVE}Moved/`)).toBe(false);
     expect(pod.has(`${DRIVE}Moved/Report.pdf`)).toBe(false);
@@ -298,9 +294,8 @@ describe("Drive client against a seeded demo pod", () => {
   });
 
   it.each([
-    false,
-    true,
-  ])("rolls back a copied move when source deletion fails (rollback fails: %s)", async (rollbackFails) => {
+    403, 409, 412,
+  ])("retains a copied move and surfaces a definitive DELETE refusal %s", async (status) => {
     const { pod } = await setup();
     const from = `${DRIVE}notes.md`;
     const to = `${DRIVE}destination.md`;
@@ -309,18 +304,19 @@ describe("Drive client against a seeded demo pod", () => {
       const url = String(input);
       if (init?.method === "DELETE") {
         requests.push(url);
-        if (url === from || rollbackFails) return new Response(null, { status: 403 });
+        if (url === from) return new Response(null, { status });
       }
       return pod.fetch(input, init);
     });
     await expect(client.move(from, to, { kind: "confirm-move" })).rejects.toMatchObject({
-      kind: rollbackFails ? "partial-failure" : "forbidden",
-      status: rollbackFails ? 409 : 403,
+      kind: "partial-failure",
+      status: 409,
       url: from,
+      cause: { status },
     });
-    expect(requests).toEqual([from, to]);
+    expect(requests).toEqual([from]);
     expect(pod.has(from)).toBe(true);
-    expect(pod.has(to)).toBe(rollbackFails);
+    expect(pod.has(to)).toBe(true);
   });
 });
 

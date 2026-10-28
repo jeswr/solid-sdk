@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { afterEach, expect, it, vi } from "vitest";
 import { deleteDocument, restoreDocument } from "../src/apps/docs/editor/operations";
 import { buildDocument, docContainerUrls, serializeTurtle } from "../src/apps/docs/lib/model";
@@ -28,7 +29,11 @@ it("folder provisioning never requests another flight while holding its resource
   vi.stubGlobal("navigator", { locks });
   const { client } = await fixture();
   await client.copy(`${DRIVE}folder/`, `${DRIVE}copy/`, { kind: "preserve-source" });
-  expect(locks.nested).toEqual([]);
+  expect(
+    locks.nested.filter(({ held }) =>
+      held.some((name) => name.startsWith("solid-drive:ancestor:")),
+    ),
+  ).toEqual([]);
 }, 3_000);
 
 it("a history read cannot hold a folder flight needed by a pending file restore", async () => {
@@ -84,7 +89,13 @@ it.each([
   if (policy === "inherited")
     await client.createFolder(`${PUBLIC}new/`, { kind: "inherit-verified" });
   else await client.copy(PRIVATE, `${WAC_DRIVE}copy/`, { kind: "preserve-source" });
-  expect(locks.nested).toEqual([]);
+  // Source reservations intentionally contain provisioning. Provisioning
+  // itself must never enter a second flight while holding an ancestor lock.
+  expect(
+    locks.nested.filter(({ held }) =>
+      held.some((name) => name.startsWith("solid-drive:ancestor:")),
+    ),
+  ).toEqual([]);
   expect(f.exposures).toEqual([]);
 }, 3_000);
 

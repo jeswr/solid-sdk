@@ -164,6 +164,30 @@ export function DriveProvider({ session, children }: { session: PodSession; chil
 
   useEffect(() => {
     let live = true;
+    const check = async () => {
+      try {
+        const unresolved = await client.recheckDeletions?.();
+        if (!live) return;
+        invalidate(session.storageUrl);
+        if (unresolved?.length)
+          toast.error("Still deleting on the server", {
+            action: { label: "Retry", onClick: () => void check() },
+          });
+      } catch {
+        if (live)
+          toast.error("Couldn't check pending deletions", {
+            action: { label: "Retry", onClick: () => void check() },
+          });
+      }
+    };
+    void check();
+    return () => {
+      live = false;
+    };
+  }, [client, invalidate, session.storageUrl]);
+
+  useEffect(() => {
+    let live = true;
     resolveDriveRoot(client, session).then(
       (root) => live && setDriveRoot(root),
       (error: unknown) => live && setRootError(error),

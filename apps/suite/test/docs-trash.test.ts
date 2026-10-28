@@ -11,7 +11,11 @@ import {
   parseDocument,
   serializeTurtle,
 } from "../src/apps/docs/lib/model";
-import { createSolidDriveClient, DriveError } from "../src/apps/drive/lib/client/client";
+import {
+  createSolidDriveClient,
+  type DriveClient,
+  DriveError,
+} from "../src/apps/drive/lib/client/client";
 import { listTrash, restoreItems, trashItems } from "../src/apps/drive/lib/operations/operations";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import type { PodSession } from "../src/lib/session/pod-session";
@@ -102,8 +106,8 @@ describe("Docs uses Drive trash records", () => {
           return { ...version, etag: 'W/"source"' };
         return version;
       },
-      write: async (...args: Parameters<typeof client.write>) => {
-        const written = await client.write(...args);
+      async write(this: DriveClient, ...args: Parameters<typeof client.write>) {
+        const written = await client.write.apply(this, args);
         if (args[0] === target && failure === "write-validator") return {};
         if (args[0] === target && failure === "weak-write") return { etag: 'W/"written"' };
         return written;
@@ -114,14 +118,31 @@ describe("Docs uses Drive trash records", () => {
           ? { ...item, etag: '"changed"' }
           : item;
       },
-      move: async (...args: Parameters<typeof client.move>) => {
+      async move(this: DriveClient, ...args: Parameters<typeof client.move>) {
         if (args[0] === trashed.done[1]?.url && failure === "companion")
           throw new Error("companion unavailable");
-        return client.move(...args);
+        return client.move.apply(this, args);
       },
     };
     const restored = await restoreItems(interrupted, DRIVE, trashed.done);
-    expect(restored.failed.some(({ url }) => url === trashed.done[0]?.url)).toBe(true);
+    const rejected = restored.failed.find(({ url }) => url === trashed.done[0]?.url);
+    expect(rejected).toBeDefined();
+    if (failure === "companion")
+      expect(rejected?.error).toMatchObject({
+        remaining: [{ error: { message: "companion unavailable" } }],
+      });
+    else
+      expect(rejected?.error).toMatchObject({
+        kind:
+          failure === "source-read"
+            ? "not-found"
+            : failure === "changed-target"
+              ? "conflict"
+              : "missing-validator",
+        url: ["source-read", "source-validator", "weak-source"].includes(failure)
+          ? trashed.done[0]?.url
+          : target,
+      });
     expect((await pod.fetch(trashed.done[0]?.url as string)).ok).toBe(true);
     expect(await (await pod.fetch(DOC)).text()).toContain("Replacement");
     if (failure === "source-read") expect(restored.done).toEqual([]);
@@ -157,11 +178,11 @@ describe("Docs uses Drive trash records", () => {
     });
     const racing = {
       ...client,
-      move: async (...args: Parameters<typeof client.move>) => {
-        if (args[0] !== trashed.done[0]?.url) return client.move(...args);
+      async move(...args: Parameters<typeof client.move>) {
+        if (args[0] !== trashed.done[0]?.url) return client.move.apply(this, args);
         moving = true;
         try {
-          return await client.move(...args);
+          return await client.move.apply(this, args);
         } finally {
           release();
         }
@@ -564,8 +585,9 @@ it("bounds Docs trash and Undo requests by compacting the typed Yjs log without 
   // Lease checks and resource protection still apply on the demo pod; its
   // explicit capability lets us omit redundant ancestor HEADs and ACL history.
   // Definitive 205 DELETE responses retire their intents without confirmation HEADs.
+  // Each restored slot is listed once before removing its empty container.
   expect(results).toEqual([
-    { trash: { requests: 612, mutations: 132 }, undo: { requests: 416, mutations: 133 } },
-    { trash: { requests: 253, mutations: 73 }, undo: { requests: 50, mutations: 11 } },
+    { trash: { requests: 612, mutations: 132 }, undo: { requests: 418, mutations: 133 } },
+    { trash: { requests: 253, mutations: 73 }, undo: { requests: 52, mutations: 11 } },
   ]);
 });

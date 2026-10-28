@@ -1,7 +1,11 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createSolidDriveClient, DriveError } from "../src/apps/drive/lib/client/client";
+import {
+  createSolidDriveClient,
+  type DriveClient,
+  DriveError,
+} from "../src/apps/drive/lib/client/client";
 import {
   type BatchResult,
   copyItem,
@@ -46,6 +50,29 @@ function setup(
   return { pod, fetch, client };
 }
 
+/** Stop before the second child DELETE, so survivor/recovery comparisons are settled. */
+function setupPartial(intercept?: Parameters<typeof setup>[0]) {
+  const fixture = setup(intercept);
+  const { client, pod } = fixture;
+  const move = client.move;
+  vi.spyOn(client, "move").mockImplementation(function (
+    this: DriveClient,
+    from,
+    to,
+    policy,
+    options,
+  ) {
+    return move.call(this, from, to, policy, {
+      ...options,
+      beforeDelete: async () => {
+        await options?.beforeDelete?.();
+        if (from === FROM && !pod.has(`${FROM}a`)) throw new Error("Stopped before second DELETE");
+      },
+    });
+  });
+  return fixture;
+}
+
 afterEach(() => vi.restoreAllMocks());
 
 describe("Drive data-safety regressions", () => {
@@ -73,11 +100,11 @@ describe("Drive data-safety regressions", () => {
       );
     let active = 0;
     let peak = 0;
-    const move = client.move.bind(client);
-    vi.spyOn(client, "move").mockImplementation(async (...args) => {
+    const move = client.move;
+    vi.spyOn(client, "move").mockImplementation(async function (this: DriveClient, ...args) {
       peak = Math.max(peak, ++active);
       try {
-        return await move(...args);
+        return await move.apply(this, args);
       } finally {
         active--;
       }
@@ -138,9 +165,7 @@ describe("Drive data-safety regressions", () => {
   ])("partial restore retains recovery when the compared survivor is no longer verifiable (%s)", async (mode) => {
     let restoring = false;
     let comparedEtag: string | null = null;
-    const { pod, client, fetch } = setup(async (url, init) => {
-      if (url === `${FROM}b` && init?.method === "DELETE")
-        return new Response(null, { status: 403 });
+    const { pod, client, fetch } = setupPartial(async (url, init) => {
       if (!restoring || url !== `${FROM}b`) return undefined;
       if (!init?.method || init.method === "GET") {
         // Capture the response before the other client removes or changes it.
@@ -199,9 +224,7 @@ describe("Drive data-safety regressions", () => {
   it("partial restore rechecks the comparison GET's survivor version immediately before recovery deletion", async () => {
     let restoring = false;
     let comparedEtag: string | null = null;
-    const { pod, client, fetch } = setup(async (url, init) => {
-      if (url === `${FROM}b` && init?.method === "DELETE")
-        return new Response(null, { status: 403 });
+    const { pod, client, fetch } = setupPartial(async (url, init) => {
       if (!restoring || url !== `${FROM}b`) return undefined;
       if (!init?.method || init.method === "GET") {
         // A new identical version after the earlier stat must use this GET's ETag.
@@ -244,9 +267,7 @@ describe("Drive data-safety regressions", () => {
 
   it("partial restore compares bytes when different URLs issue equal ETags", async () => {
     let collide = false;
-    const { pod, client } = setup(async (url, init) => {
-      if (url === `${FROM}b` && init?.method === "DELETE")
-        return new Response(null, { status: 403 });
+    const { pod, client } = setupPartial(async (url, init) => {
       if (collide && url.endsWith("/b")) {
         // Model resource-local tags, including the server accepting its own tag.
         const headers = new Headers(init?.headers);
@@ -281,9 +302,7 @@ describe("Drive data-safety regressions", () => {
   ])("partial restore preserves a recovery version it cannot conditionally delete (%s)", async (mode) => {
     let recovery: string | undefined;
     let comparedEtag: string | null = null;
-    const { pod, client, fetch } = setup(async (url, init) => {
-      if (url === `${FROM}b` && init?.method === "DELETE")
-        return new Response(null, { status: 403 });
+    const { pod, client, fetch } = setupPartial(async (url, init) => {
       if (url === recovery && (!init?.method || init.method === "GET")) {
         const response = await pod.fetch(url, init);
         comparedEtag = response.headers.get("etag");
@@ -309,7 +328,8 @@ describe("Drive data-safety regressions", () => {
       remaining: [
         {
           url: `${entry.url}b`,
-          error: { kind: mode === "changed" ? "conflict" : "missing-validator" },
+          error:
+            mode === "changed" ? { kind: "conflict", status: 412 } : { kind: "missing-validator" },
         },
       ],
     });
@@ -333,9 +353,7 @@ describe("Drive data-safety regressions", () => {
   ])("permanent deletion retries a vanished descendant and retains unfinished records (second race: %s)", async (twice) => {
     let recovery: string | undefined;
     let vanished = 0;
-    const { pod, client } = setup(async (url, init) => {
-      if (url === `${FROM}b` && init?.method === "DELETE")
-        return new Response(null, { status: 403 });
+    const { pod, client } = setupPartial(async (url, init) => {
       if (
         recovery &&
         url !== recovery &&
@@ -467,9 +485,9 @@ describe("Drive data-safety regressions", () => {
       },
       { kind: "protect-ancestors" },
     );
-    const copy = client.copy.bind(client);
-    vi.spyOn(client, "move").mockImplementation(async (from, to) => {
-      await copy(from, to, { kind: "preserve-source" });
+    const copy = client.copy;
+    vi.spyOn(client, "move").mockImplementation(async function (this: DriveClient, from, to) {
+      await copy.call(this, from, to, { kind: "preserve-source" });
       throw new Error("interrupted before deletion");
     });
     await trashItems(client, DRIVE, [await client.stat(kind === "file" ? `${FROM}a` : FROM)]);
@@ -488,11 +506,7 @@ describe("Drive data-safety regressions", () => {
   });
 
   it("partial restore finishes with unchanged survivors and clears the recovery slot", async () => {
-    const { pod, client } = setup(async (url, init) =>
-      url === `${FROM}b` && init?.method === "DELETE"
-        ? new Response(null, { status: 403 })
-        : undefined,
-    );
+    const { pod, client } = setupPartial();
     await trashItems(client, DRIVE, [await client.stat(FROM)]);
     const entries = await listTrash(client, DRIVE);
     const entry = entries[0];
@@ -508,11 +522,7 @@ describe("Drive data-safety regressions", () => {
   });
 
   it("confirmed deletion can clear partial recovery without touching surviving originals", async () => {
-    const { pod, client } = setup(async (url, init) =>
-      url === `${FROM}b` && init?.method === "DELETE"
-        ? new Response(null, { status: 403 })
-        : undefined,
-    );
+    const { pod, client } = setupPartial();
     await trashItems(client, DRIVE, [await client.stat(FROM)]);
     const entries = await listTrash(client, DRIVE);
     expect(entries).toHaveLength(1);
@@ -531,9 +541,9 @@ describe("Drive data-safety regressions", () => {
     const { client } = setup();
     const source = `${FROM}a`;
     const initial = await client.stat(source);
-    const copy = client.copy.bind(client);
-    vi.spyOn(client, "move").mockImplementation(async (from, to) => {
-      await copy(from, to, { kind: "preserve-source" });
+    const copy = client.copy;
+    vi.spyOn(client, "move").mockImplementation(async function (this: DriveClient, from, to) {
+      await copy.call(this, from, to, { kind: "preserve-source" });
       throw new Error("interrupted");
     });
     const stat = client.stat.bind(client);
@@ -596,11 +606,7 @@ describe("Drive data-safety regressions", () => {
   });
 
   it("automatic expiry preserves partial recovery until a user confirms deletion", async () => {
-    const { client } = setup(async (url, init) =>
-      url === `${FROM}b` && init?.method === "DELETE"
-        ? new Response(null, { status: 403 })
-        : undefined,
-    );
+    const { client } = setupPartial();
     await trashItems(client, DRIVE, [await client.stat(FROM)], { now: new Date(0) });
     expect(await purgeExpired(client, DRIVE, { now: NOW })).toEqual({ done: [], failed: [] });
     const entries = await listTrash(client, DRIVE);
@@ -630,11 +636,7 @@ describe("Drive data-safety regressions", () => {
   });
 
   it("partial restore drains unchanged survivors while preserving foreign slot resources", async () => {
-    const { pod, client } = setup(async (url, init) =>
-      url === `${FROM}b` && init?.method === "DELETE"
-        ? new Response(null, { status: 403 })
-        : undefined,
-    );
+    const { pod, client } = setupPartial();
     await trashItems(client, DRIVE, [await client.stat(FROM)]);
     const entries = await listTrash(client, DRIVE);
     const entry = entries[0];
@@ -689,11 +691,7 @@ describe("Drive data-safety regressions", () => {
   });
 
   it("partial restore retains the only recovery copy when an original URL is occupied", async () => {
-    const { pod, client } = setup(async (url, init) =>
-      url === `${FROM}b` && init?.method === "DELETE"
-        ? new Response(null, { status: 403 })
-        : undefined,
-    );
+    const { pod, client } = setupPartial();
     await trashItems(client, DRIVE, [await client.stat(FROM)]);
     const [entry] = await listTrash(client, DRIVE);
     if (!entry) throw new Error("Missing partial recovery copy");
@@ -719,11 +717,9 @@ describe("Drive data-safety regressions", () => {
 
   it("reconciles a stranded pending tree and permits restore even when partial index saves fail", async () => {
     let writes = 0;
-    const { client } = setup(async (url, init) => {
+    const { client } = setupPartial(async (url, init) => {
       if (url === INDEX && init?.method === "PUT" && ++writes > 1)
         return new Response(null, { status: 500 });
-      if (url === `${FROM}b` && init?.method === "DELETE")
-        return new Response(null, { status: 403 });
       return undefined;
     });
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
@@ -763,9 +759,9 @@ describe("Drive data-safety regressions", () => {
       },
       { kind: "protect-ancestors" },
     );
-    const copy = client.copy.bind(client);
-    vi.spyOn(client, "move").mockImplementation(async (from, to) => {
-      await copy(from, to, { kind: "preserve-source" });
+    const copy = client.copy;
+    vi.spyOn(client, "move").mockImplementation(async function (this: DriveClient, from, to) {
+      await copy.call(this, from, to, { kind: "preserve-source" });
       throw new Error("interrupted before deletion");
     });
     await trashItems(client, DRIVE, [await client.stat(FROM)]);
@@ -781,9 +777,9 @@ describe("Drive data-safety regressions", () => {
 
   it("keeps matching pending file copies hidden as in-flight", async () => {
     const { client } = setup();
-    const copy = client.copy.bind(client);
-    vi.spyOn(client, "move").mockImplementation(async (from, to) => {
-      await copy(from, to, { kind: "preserve-source" });
+    const copy = client.copy;
+    vi.spyOn(client, "move").mockImplementation(async function (this: DriveClient, from, to) {
+      await copy.call(this, from, to, { kind: "preserve-source" });
       throw new Error("interrupted before deletion");
     });
     await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
@@ -793,13 +789,11 @@ describe("Drive data-safety regressions", () => {
   it("keeps recovery visible if both index promotion and the fallback receipt fail, and refuses to drain it", async () => {
     let writes = 0;
     let failReceipt = false;
-    const { client } = setup(async (url, init) => {
+    const { client } = setupPartial(async (url, init) => {
       if (url === INDEX && init?.method === "PUT" && ++writes > 1)
         return new Response(null, { status: 500 });
       if (failReceipt && url.endsWith("/partial.ttl") && init?.method === "PUT")
         return new Response(null, { status: 500 });
-      if (url === `${FROM}b` && init?.method === "DELETE")
-        return new Response(null, { status: 403 });
       return undefined;
     });
     failReceipt = true;
@@ -940,11 +934,7 @@ describe("Drive data-safety regressions", () => {
   });
 
   it("lists partial folder trash and restores only missing children without overwriting survivors", async () => {
-    const { pod, client, fetch } = setup(async (url, init) =>
-      url === `${FROM}b` && init?.method === "DELETE"
-        ? new Response(null, { status: 403 })
-        : undefined,
-    );
+    const { pod, client, fetch } = setupPartial();
     const result = await trashItems(client, DRIVE, [await client.stat(FROM)]);
     expect(result.failed).toHaveLength(1);
     expect(pod.has(`${FROM}a`)).toBe(false);
@@ -982,9 +972,7 @@ describe("Drive data-safety regressions", () => {
   ])("restores partial trees safely through %s and keeps recovery on failure", async (failure) => {
     let restoring = false;
     let intervened = false;
-    const { pod, client } = setup(async (url, init) => {
-      if (!restoring && url === `${FROM}b` && init?.method === "DELETE")
-        return new Response(null, { status: 403 });
+    const { pod, client } = setupPartial(async (url, init) => {
       if (
         restoring &&
         !intervened &&
@@ -1091,8 +1079,8 @@ describe("Drive data-safety regressions", () => {
     expect(observed?.result.done).toEqual([]);
     if (operation !== "purge")
       expect(observed?.result.failed[0]?.error).toMatchObject({
-        kind: "trash-moving",
-        message: expect.stringContaining("moving"),
+        kind: "operation-in-progress",
+        message: expect.stringContaining("already in progress"),
       });
   });
 
@@ -1311,12 +1299,16 @@ describe("Drive data-safety regressions", () => {
     "network",
     "server",
   ])("keeps a recovery copy after an ambiguous source deletion (%s)", async (failure) => {
+    let deleting = false;
     const { pod, client } = setup(async (url, init) => {
       if (url === `${FROM}a` && init?.method === "DELETE") {
+        deleting = true;
         await pod.fetch(url, init);
         if (failure === "network") throw new Error("lost response");
         return new Response(null, { status: 500 });
       }
+      if (deleting && url === `${FROM}a` && init?.method === "HEAD")
+        return new Response(null, { status: 200 });
       return undefined;
     });
     await expect(client.move(`${FROM}a`, `${TO}a`, { kind: "confirm-move" })).rejects.toMatchObject(
@@ -1453,8 +1445,8 @@ describe("Drive data-safety regressions", () => {
     });
     await expect(client.move(`${FROM}a`, `${TO}a`, { kind: "confirm-move" })).rejects.toMatchObject(
       {
-        kind: "conflict",
-        status: 412,
+        kind: "partial-failure",
+        cause: { kind: "conflict", status: 412 },
       },
     );
     expect(await (await client.read(`${FROM}a`)).text()).toBe("new edit");

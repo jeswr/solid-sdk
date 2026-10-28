@@ -342,8 +342,9 @@ it.each([
   const commits = vi.spyOn(IDBObjectStore.prototype, "put");
   // Preserve the existing write budgets, accounting separately for durable deletion intents.
   const deletionIntents = () =>
-    commits.mock.calls.filter(([, key]) => typeof key === "string" && key.startsWith("delete:"))
-      .length;
+    commits.mock.calls.filter(
+      ([, key]) => typeof key === "string" && key.startsWith("delete-request:"),
+    ).length;
   const podCommits = () => commits.mock.calls.length - deletionIntents();
   const session = {
     storageUrl: DEMO_ROOT,
@@ -370,8 +371,8 @@ it.each([
   });
   expect(trashCommits).toBeLessThanOrEqual(16);
   expect(podCommits()).toBeLessThanOrEqual(11);
-  // Four compacted resources each record source and recovery; Undo also removes two slots.
-  expect(trashDeletionIntents).toBe(8);
-  expect(deletionIntents()).toBe(10);
+  // Each request records both endpoints together; Undo also removes two slots.
+  expect(trashDeletionIntents).toBe(4);
+  expect(deletionIntents()).toBe(6);
   doc.destroy();
 });

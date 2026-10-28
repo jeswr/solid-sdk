@@ -406,7 +406,7 @@ it("an initial Trash listing failure shows Retry without an empty state", async 
 it.each([
   "delete-forever",
   "empty-trash",
-] as const)("%s clears partial recovery only after confirmation", async (kind) => {
+] as const)("%s retains partial recovery until the original DELETE is confirmed", async (kind) => {
   const pod = createDemoPod({
     root: drive.session.storageUrl,
     seed: [
@@ -418,7 +418,7 @@ it.each([
     storageUrl: drive.session.storageUrl,
     fetch: async (url, init) =>
       String(url) === `${ROOT}Folder/b` && init?.method === "DELETE"
-        ? new Response(null, { status: 403 })
+        ? new Response(null, { status: 503 })
         : pod.fetch(url, init),
   });
   drive.client = client;
@@ -442,9 +442,19 @@ it.each([
   if (!confirm) throw new Error("Missing confirmation");
   await click(confirm);
   expect(remove).toHaveBeenCalledTimes(1);
+  await vi.waitFor(() =>
+    expect(mocks.toast.error).toHaveBeenCalledWith(
+      "Still deleting on the server",
+      expect.anything(),
+    ),
+  );
+  expect(await operations.listTrash(client, ROOT)).toHaveLength(1);
+  expect(pod.has(`${entries[0]?.url}b`)).toBe(true);
+  expect(await (await client.read(`${ROOT}Folder/b`)).text()).toBe("B");
+  await pod.fetch(`${ROOT}Folder/b`, { method: "DELETE" });
+  await act(async () => actions.removeForever(entries));
   expect(await operations.listTrash(client, ROOT)).toEqual([]);
   expect(pod.has(entries[0]?.url as string)).toBe(false);
-  expect(await (await client.read(`${ROOT}Folder/b`)).text()).toBe("B");
   await view.unmount();
 });
 
@@ -614,17 +624,13 @@ it("Undo uses the move response validator even if a replacement is present befor
       if (String(input) === destination && init?.method === "PUT")
         copiedEtag = response.headers.get("etag");
       if (String(input) === original.url && init?.method === "DELETE") {
-        // Interleave another tab after the DELETE commits, before move returns.
-        await otherTab.move(destination, `${ROOT}elsewhere.txt`, { kind: "confirm-move" });
-        await otherTab.write(
-          destination,
-          "unrelated",
-          {
-            contentType: "text/plain",
-            ifNoneMatch: "*",
-          },
-          { kind: "protect-ancestors" },
-        );
+        // An external client does not participate in Drive's Web Locks.
+        await pod.fetch(`${ROOT}elsewhere.txt`, { method: "PUT", body: "original" });
+        await pod.fetch(destination, {
+          method: "PUT",
+          body: "unrelated",
+          headers: { "content-type": "text/plain" },
+        });
       }
       return response;
     },

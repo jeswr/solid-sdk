@@ -129,6 +129,11 @@ it.each([
       ? new Response(null, { status: 503 })
       : undefined,
   );
+  // Keep an ACL requirement without ever dispatching cleanup DELETE.
+  f.after(async (url, method, response) => {
+    if (url === PRIVATE && method === "PUT") response.headers.delete("etag");
+    return response;
+  });
   await expect(
     client.write(
       `${PRIVATE}first`,
@@ -138,6 +143,7 @@ it.each([
     ),
   ).rejects.toThrow();
   f.intercept(undefined);
+  f.after(undefined);
   if (operation === "missing metadata target") {
     await f.pod.fetch(PRIVATE, { method: "DELETE" });
     await expect(
@@ -387,11 +393,16 @@ it.each([
   vi.resetModules();
   const { createSolidDriveClient: create } = await import("../src/apps/drive/lib/client/client");
   const reloaded = create({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });
-  await expect(upload(reloaded, "retry")).rejects.toThrow(/could not be established or verified/);
+  await expect(upload(reloaded, "retry")).rejects.toThrow(
+    mode === "ACL and cleanup failure"
+      ? "Still deleting on the server"
+      : /could not be established or verified/,
+  );
   expect(f.pod.has(`${PRIVATE}retry`)).toBe(false);
   expect(f.exposures).toEqual([]);
   f.intercept(undefined);
   f.after(undefined);
+  if (mode === "ACL and cleanup failure") await f.fetch(PRIVATE, { method: "DELETE" });
   await upload(reloaded, "repaired");
   expect((await f.anonymous(`${PRIVATE}repaired`)).status).toBe(403);
   expect(f.exposures).toEqual([]);

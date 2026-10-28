@@ -29,7 +29,11 @@ it("pending source and recovery requirements survive module reload and transport
   await expect(client.move(source, recovery, { kind: "preserve-source" })).rejects.toMatchObject({
     kind: "partial-failure",
   });
-  expect(await deletionLedger(f.fetch).get(source)).toEqual({ sources: [source], recovery });
+  expect(await deletionLedger(f.fetch).get(source)).toEqual({
+    sources: [source],
+    recovery,
+    etag: expect.any(String),
+  });
   vi.resetModules();
   const { createSolidDriveClient: create } = await import("../src/apps/drive/lib/client/client");
   const { deletionLedger: freshLedger } = await import(
@@ -84,14 +88,21 @@ it("absence confirmation retires deletion state without discarding a provisioner
 });
 
 it.each([
-  403, 503,
-])("a rejected DELETE %s leaves payloads intact and releases its pending intent", async (status) => {
+  503,
+])("an uncertain DELETE %s retains both guards and its error as the cause", async (status) => {
   const url = "https://delete.test/source";
   const recovery = "https://delete.test/recovery";
   const http: typeof fetch = async () => new Response(null, { status });
   const control = deletionControl(http, (status) => new Error(`Rejected ${status}`));
-  await expect(control.remove(url, '"original"', recovery)).rejects.toThrow(`Rejected ${status}`);
-  expect(await deletionLedger(http).get(url)).toBeUndefined();
-  expect(await deletionLedger(http).get(recovery)).toBeUndefined();
-  await expect(control.remove(url, '"original"')).rejects.toThrow(`Rejected ${status}`);
+  await expect(control.remove(url, '"original"', recovery)).rejects.toMatchObject({
+    kind: "delete-pending",
+    cause: { message: `Rejected ${status}` },
+  });
+  expect(await deletionLedger(http).get(url)).toEqual({
+    sources: [url],
+    etag: '"original"',
+    recovery,
+  });
+  expect(await deletionLedger(http).get(recovery)).toEqual({ sources: [url] });
+  await expect(control.remove(url, '"original"')).rejects.toMatchObject({ kind: "delete-pending" });
 });

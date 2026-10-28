@@ -25,6 +25,7 @@ import {
   policyArchiveOf,
 } from "../client/client";
 import { rethrowPendingDeletion } from "../client/deletion";
+import { DriveOperationInProgressError } from "../client/source-operations";
 import { guessContentType } from "../files";
 import { keepBothName, normalizeUploadName } from "../upload";
 import {
@@ -575,6 +576,34 @@ export async function trashItems(
   items: readonly DriveItem[],
   options: { webId?: string; now?: Date } = {},
 ): Promise<BatchResult<TrashEntry>> {
+  return exclusiveBatch(
+    client,
+    items.map(({ url }) => url),
+    (scoped) => trashItemsUnlocked(scoped, driveRoot, items, options),
+  );
+}
+
+/** Hold reservations through index settlement; nested client calls reuse this explicit scope. */
+async function exclusiveBatch<T>(
+  client: DriveClient,
+  urls: readonly string[],
+  work: (scoped: DriveClient) => Promise<BatchResult<T>>,
+  failureUrls: readonly string[] = urls,
+): Promise<BatchResult<T>> {
+  try {
+    return await (client.exclusive ? client.exclusive(urls, work) : work(client));
+  } catch (error) {
+    if (!(error instanceof DriveOperationInProgressError)) throw error;
+    return { done: [], failed: failureUrls.map((url) => ({ url, error })) };
+  }
+}
+
+async function trashItemsUnlocked(
+  client: DriveClient,
+  driveRoot: string,
+  items: readonly DriveItem[],
+  options: { webId?: string; now?: Date } = {},
+): Promise<BatchResult<TrashEntry>> {
   const owner = `urn:uuid:${crypto.randomUUID()}`;
   liveTransfers.add(owner);
   let renewing: Promise<void> = Promise.resolve();
@@ -787,6 +816,15 @@ async function removePolicyArchive(client: DriveClient, url: string): Promise<vo
   if (await exists(client, archive)) await client.remove(archive);
 }
 
+/** Foreign slot members belong to another writer; leave their container intact. */
+async function removeEmptySlot(client: DriveClient, slot: string): Promise<void> {
+  try {
+    if ((await client.list(slot)).length === 0) await client.remove(slot);
+  } catch (error) {
+    rethrowPendingDeletion(error);
+  }
+}
+
 function restoredName(name: string): string {
   const dot = name.lastIndexOf(".");
   return dot > 0 ? `${name.slice(0, dot)} (restored)${name.slice(dot)}` : `${name} (restored)`;
@@ -881,10 +919,19 @@ export async function restoreItems(
   driveRoot: string,
   entries: readonly TrashEntry[],
 ): Promise<BatchResult<{ entry: TrashEntry; url: string; renamed: boolean }>> {
-  const result: BatchResult<{ entry: TrashEntry; url: string; renamed: boolean }> = {
-    done: [],
-    failed: [],
-  };
+  return exclusiveBatch(
+    client,
+    entries.flatMap((entry) => [entry.url, entry.original]),
+    (scoped) => restoreItemsUnlocked(scoped, driveRoot, entries),
+    entries.map((entry) => entry.url),
+  );
+}
+
+async function restoreItemsUnlocked(
+  client: DriveClient,
+  driveRoot: string,
+  entries: readonly TrashEntry[],
+): Promise<BatchResult<{ entry: TrashEntry; url: string; renamed: boolean }>> {
   // Selecting either half restores the pair. The trash index, rather than the
   // selected batch, owns the relationship and its persisted destinations.
   const selected = new Map(entries.map((entry) => [entry.url, entry]));
@@ -931,6 +978,26 @@ export async function restoreItems(
     } catch (error) {
       return { done: [], failed: entries.map((entry) => ({ url: entry.url, error })) };
     }
+  // Pair discovery can add an unselected companion. Extend the explicit scope
+  // through index settlement, reusing reservations already held by our caller.
+  return exclusiveBatch(
+    client,
+    entries.flatMap((entry) => [entry.url, entry.original]),
+    (scoped) => restoreEntriesUnlocked(scoped, driveRoot, entries, pairings),
+    entries.map((entry) => entry.url),
+  );
+}
+
+async function restoreEntriesUnlocked(
+  client: DriveClient,
+  driveRoot: string,
+  entries: readonly TrashEntry[],
+  pairings: ReadonlyMap<string, string>,
+): Promise<BatchResult<{ entry: TrashEntry; url: string; renamed: boolean }>> {
+  const result: BatchResult<{ entry: TrashEntry; url: string; renamed: boolean }> = {
+    done: [],
+    failed: [],
+  };
   // Classify the complete batch while all trash resources are still present.
   // Cache the snapshot bytes and validator once, including for renamed pairs.
   const snapshots = new Map<
@@ -1069,7 +1136,7 @@ export async function restoreItems(
         if (await recoveryStatus(client, driveRoot, entry))
           await client.remove(recoveryMarker(driveRoot, entry));
         await removePolicyArchive(client, entry.url);
-        await client.remove(slot).catch(rethrowPendingDeletion);
+        await removeEmptySlot(client, slot);
         outcome.done.push({ entry, url: entry.original, renamed: false });
         outcomes.set(entry, outcome);
         return outcome;
@@ -1103,7 +1170,7 @@ export async function restoreItems(
         await client.remove(recoveryMarker(driveRoot, entry));
       // The slot may contain another writer's resources; only remove it empty.
       await removePolicyArchive(client, entry.url);
-      await client.remove(slot).catch(rethrowPendingDeletion);
+      await removeEmptySlot(client, slot);
       outcome.done.push({ entry, url: target, renamed });
     } catch (error) {
       outcome.failed.push({ url: entry.url, error });
@@ -1138,6 +1205,18 @@ export async function deleteForever(
   driveRoot: string,
   entries: readonly TrashEntry[],
 ): Promise<BatchResult<TrashEntry>> {
+  return exclusiveBatch(
+    client,
+    entries.map((entry) => entry.url),
+    (scoped) => deleteForeverUnlocked(scoped, driveRoot, entries),
+  );
+}
+
+async function deleteForeverUnlocked(
+  client: DriveClient,
+  driveRoot: string,
+  entries: readonly TrashEntry[],
+): Promise<BatchResult<TrashEntry>> {
   const result: BatchResult<TrashEntry> = { done: [], failed: [] };
   for (const entry of entries) {
     try {
@@ -1147,7 +1226,7 @@ export async function deleteForever(
       if (await recoveryStatus(client, driveRoot, entry))
         await client.remove(recoveryMarker(driveRoot, entry));
       await removePolicyArchive(client, entry.url);
-      await client.remove(slotOf(driveRoot, entry)).catch(rethrowPendingDeletion);
+      await removeEmptySlot(client, slotOf(driveRoot, entry));
       result.done.push(entry);
     } catch (error) {
       result.failed.push({ url: entry.url, error });
