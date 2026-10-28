@@ -115,3 +115,9 @@ it("keeps a code-block info string from injecting a fence or an HTML block", () 
     "codeBlock",
   ]);
 });
+
+it("keeps server-side HTML imports inert when no DOM parser is available", () => {
+  expect(
+    importMarkdown("<p> literal </p>", "server.md").json.content?.[0]?.content?.[0]?.text,
+  ).toBe("<p> literal </p>");
+});

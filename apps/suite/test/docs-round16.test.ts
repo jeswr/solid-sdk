@@ -41,7 +41,7 @@ it("downloads and replaces bold text with a leading space without literal asteri
     const exported = exportMarkdown(editor.getJSON());
     editor.commands.setContent(importMarkdown(exported, "again.md").json);
     expect(editor.getText()).toBe("foo cat");
-    expect(editor.view.dom.querySelector("strong")?.textContent).toBe("cat");
+    expect(editor.view.dom.querySelector("strong")?.textContent).toBe(" cat");
     editor.state.doc.check();
   } finally {
     destroy();
@@ -78,7 +78,9 @@ it.each([
           };
           editor.commands.setContent(importMarkdown(exportMarkdown(original), "marks.md").json);
           expect(editor.getText()).toBe(`${before}${leading}${core}${trailing}${after}`);
-          expect(editor.view.dom.querySelector(tag)?.textContent).toBe(core);
+          expect(editor.view.dom.querySelector(tag)?.textContent).toBe(
+            `${leading}${core}${trailing}`,
+          );
           editor.state.doc.check();
         },
       ),
@@ -189,7 +191,7 @@ it.each([
   }
 });
 
-it("moves whitespace-only mark runs and whitespace-only edge nodes outside delimiters", () => {
+it("preserves whitespace-only mark runs and whitespace-only edge nodes using HTML", () => {
   const { editor, destroy } = makeEditor();
   try {
     const original: JSONContent = {
@@ -212,8 +214,10 @@ it("moves whitespace-only mark runs and whitespace-only edge nodes outside delim
     };
     editor.commands.setContent(importMarkdown(exportMarkdown(original), "spaces.md").json);
     expect(editor.getText()).toBe(" \t   cat  ");
-    expect(editor.view.dom.querySelector("em")).toBeNull();
-    expect(editor.view.dom.querySelector("strong")?.textContent).toBe("cat");
+    expect(editor.view.dom.querySelector("em")?.textContent).toBe(" \t ");
+    expect(
+      Array.from(editor.view.dom.querySelectorAll("strong"), (node) => node.textContent).join(""),
+    ).toBe("  cat  ");
   } finally {
     destroy();
   }
