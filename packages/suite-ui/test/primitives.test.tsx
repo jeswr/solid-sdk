@@ -1,10 +1,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
 import { useState } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  Breadcrumbs,
+  type BreadcrumbsItem,
   Button,
   Calendar,
   ContextMenu,
@@ -338,4 +344,25 @@ it("opens a context menu from Shift+F10", async () => {
     shiftKey: true,
   });
   expect(await screen.findByRole("menu")).toBeDefined();
+});
+
+it("exports primitive and responsive breadcrumbs together without hiding the primitive item", () => {
+  const items: BreadcrumbsItem[] = [{ id: "drive", label: "Drive", href: "/drive" }];
+  render(
+    <>
+      <Breadcrumb aria-label="Primitive path">
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink href="/drive">Drive</BreadcrumbLink>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
+      <Breadcrumbs label="Responsive path" items={items} />
+    </>,
+  );
+  for (const name of ["Primitive path", "Responsive path"]) {
+    const path = screen.getByRole("navigation", { name });
+    expect(within(path).getByRole("link", { name: "Drive" }).getAttribute("href")).toBe("/drive");
+    expect(within(path).getByRole("listitem")).toBeTruthy();
+  }
 });
