@@ -49,6 +49,7 @@ export async function fixtureAccess(
   resource: string,
   acl: string,
   rules: FixtureRule[],
+  legacyAcrSelf = false,
 ): Promise<string> {
   const store = new Store();
   const node = (iri: string) => new FixtureNode(iri, store, DataFactory);
@@ -96,9 +97,10 @@ export async function fixtureAccess(
     }
     for (const mode of rule.allow ?? []) entry.iri(`${ACP}allow`, modeIri(mode));
     for (const mode of rule.deny ?? []) entry.iri(`${ACP}deny`, modeIri(mode));
-    if (rule.allow?.includes("control")) {
-      // CSS evaluates an acp:resource entry for the ACR itself. Also include
-      // acp:access so the fixture represents the corresponding ACR semantics.
+    if (legacyAcrSelf && rule.allow?.includes("control")) {
+      // Deliberately ambiguous round-3 fixture, retained for refusal regressions.
+      // CSS authorizes ACR operations through resource acl:Control; these extra
+      // ESS-style constructs do not establish Control on CSS.
       const acr = node(`${id}-acr`);
       acr.iri(`${ACP}resource`, acl);
       acr.iri(`${ACP}accessControl`, access.value);
@@ -168,6 +170,7 @@ export async function seedSource(
   const side: PodSide = {
     root,
     ownerWebId: account.webId,
+    implementation: "css",
     http: createPodHttp({ root, fetch: account.fetch, allowInsecureLoopback: true }),
   };
   await putFixture(account.side, "migration/", "");
@@ -290,6 +293,7 @@ export async function seedSource(
     ? {
         root,
         ownerWebId: reader.webId,
+        implementation: "css" as const,
         http: createPodHttp({ root, fetch: reader.fetch, allowInsecureLoopback: true }),
       }
     : side;

@@ -55,7 +55,9 @@ export function ConnectionCard({
           <select
             value={state.root ?? ""}
             disabled={disabled || pending}
-            onChange={(event) => connection.selectStorage(event.target.value)}
+            onChange={(event) => {
+              void connection.selectStorage(event.target.value);
+            }}
           >
             <option value="" disabled>
               Select a storage location
@@ -72,8 +74,29 @@ export function ConnectionCard({
         <div className="storage-location">
           <span className="muted">Storage location</span>
           <p>{state.root}</p>
+          <span className="muted">Server type</span>
+          <p>
+            {state.implementation === "ess"
+              ? "Enterprise Solid Server (ESS)"
+              : state.implementation === "css"
+                ? "Community Solid Server (CSS)"
+                : state.implementation === "nss"
+                  ? "Node Solid Server (NSS)"
+                  : "Unknown"}
+          </p>
         </div>
       )}
+      {state.root &&
+        side === "target" &&
+        state.accessSystem === "acp" &&
+        state.implementation !== "css" &&
+        state.implementation !== "ess" && (
+          <p className="notice" role="status">
+            This pod uses ACP permissions, but its server type could not be confirmed. Migration
+            into it is blocked to keep your permissions safe. Ask your provider to expose the
+            X-Powered-By response header through CORS, then reconnect, or choose another target pod.
+          </p>
+        )}
       {state.error && (
         <p className="notice error" role="alert">
           {state.error}

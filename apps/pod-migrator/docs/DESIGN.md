@@ -157,8 +157,21 @@ CSS ignores `acp:Read`/`Write`/`Append` modes. Uncertain denials remain restrict
 Follow `Link: <…>; rel="acl"` from the root. If that resource is advertised as
 `acp:AccessControlResource` (Link `type`) or parses to triples using the ACP namespace, the side
 is ACP; if it uses `acl:Authorization`, WAC. If the root has no ACL link, or the two signals
-conflict, the side is `unknown` and the plan refuses to translate permissions (the user can
-still copy data with everything owner-only).
+conflict, the side is `unknown` and the plan refuses to translate permissions. An unknown
+source may be copied owner-only into an established target system; an unknown target must abort.
+
+Access-control language and server implementation are separate discoveries. On each storage
+selection, the browser establishes `PodSide.implementation` from non-RDF evidence: an HTTPS
+storage hostname under `*.inrupt.com` (default port) establishes ESS. An OIDC issuer, including
+the live session's `https://login.inrupt.com/`, identifies the login provider and cannot
+establish where the pod is hosted or its implementation. Otherwise a
+successful root HEAD response's exposed `X-Powered-By: Community Solid Server` (optionally
+with `/version`) establishes CSS, and `solid-server/version` establishes NSS. If HEAD supplies
+no usable header (or is unsupported), try a root GET. Redirects, failures, unavailable CORS
+headers, RDF claims and page/user input cannot establish the implementation. Otherwise it
+remains unknown. Each connection card shows the result; unknown ACP targets explain why they
+are blocked and how to reconnect after the provider exposes its header or choose another pod.
+Detection is repeated for each session/storage selection, with stale results discarded.
 
 ## 5. Translation rules
 
@@ -216,10 +229,12 @@ controls the target pod.
 | Grant to the source owner's WebID | kept verbatim (it is the same person, and they may still use that WebID) | same | info item |
 | WAC child ACL narrower than an inherited default | write the child ACL | ACP inheritance is additive, so the parent's member rules would reach the child | `inheritance-narrowed`: **per-resource** (no member controls on that parent; every existing descendant gets its own explicit controls; new files added later inherit nothing) / **abort** |
 | ACP member controls + own controls | child ACL = union of own and inherited | same | — |
-| Unreadable ACL/ACR | — | — | `acl-unreadable`: **owner-only** / **skip the resource** / **abort** |
-| Unknown access-control system on either side | — | — | `acl-system-unknown`: **owner-only for everything** / **abort** |
+| Unreadable source ACL/ACR | — | — | `acl-unreadable`: **owner-only** / **skip the resource** / **abort** |
+| Unreadable, ambiguous or shared target ACL/ACR | — | — | `acl-unreadable`: **skip the resource** / **abort**. Owner-only cannot remove unproven existing restrictions or additive ancestor grants |
+| Unknown source access-control system | — | — | `acl-system-unknown`: **owner-only for everything** / **abort** |
+| Unknown target access-control system or unestablished ACP implementation | — | — | `acl-system-unknown`: **abort** |
 | Target path already exists | — | — | `target-exists`: **skip** / **overwrite content, keep target permissions** / **abort** |
-| Target WebID profile document, target root ACL/ACR | never overwritten | never overwritten | `protected-target`: **skip** / **merge grants** (root only: add the translated root grants to the existing root ACL, keeping its owner Control) / **abort** |
+| Target WebID profile document, target root ACL/ACR | never overwritten | never overwritten | `protected-target`: **skip** / **merge grants** (root only, when the existing controls are readable, exclusive and proven safe: add translated root grants while keeping owner Control) / **abort** |
 | Source `.meta` / description resources | not copied | not copied | info item |
 
 Each report item records the source URL, the source rule text (the triples involved, as Turtle),
@@ -239,7 +254,9 @@ and the current document's resource bindings immediately before each access PUT;
 same guard when an empty placeholder first reveals its ACL URL. A safe refusal may leave an
 empty placeholder with its already-proven safe inherited permissions, but never copies content
 through an unsafe access URL. Verification checks target document scopes and the owner's root
-permissions, including Control, before claiming success.
+permissions, including Control, before claiming success. A root read/parse failure preserves
+its actual cause; only a readable policy without the required owner permissions produces the
+owner-Control-loss diagnostic. Unsupported mixed-dialect documents still fail closed.
 
 CSS 7.2's `PutOperationHandler` returns 201/205 without an ETag for content and access
 documents. An empty placeholder's ETag may be recovered by HEAD only when its content length

@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../src/App.js";
 import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
-import { fakeConnections, samplePlan, sourceRoot, targetRoot } from "./fixtures.js";
+import { fakeConnections, profileTurtle, samplePlan, sourceRoot, targetRoot } from "./fixtures.js";
 
 vi.mock("../../src/engine/index.js", () => ({
   createPodHttp: vi.fn(({ root }) => ({ root })),
@@ -59,6 +59,53 @@ function chooseAll() {
 }
 
 describe("review gating", () => {
+  it("passes the detected implementations with both physical sessions, including after swapping", async () => {
+    const essRoot = "https://storage.inrupt.com/bob/";
+    const connections = fakeConnections();
+    vi.spyOn(connections[1].auth, "publicFetch").mockImplementation(
+      async () =>
+        new Response(profileTurtle.replace(`<${targetRoot}>`, `<${essRoot}>`), {
+          headers: { "content-type": "text/turtle" },
+        }),
+    );
+    render(<App connections={connections} />);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Continue to target/ })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Continue to target/ }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /Continue to options/ })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Continue to options/ }));
+    expect(
+      within(screen.getByRole("region", { name: "source connection" })).getByText(
+        "Community Solid Server (CSS)",
+      ),
+    ).toBeVisible();
+    expect(
+      within(screen.getByRole("region", { name: "target connection" })).getByText(
+        "Enterprise Solid Server (ESS)",
+      ),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: /Create migration plan/ }));
+    await screen.findByRole("button", { name: "Start migration" });
+    expect(planMigration).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        source: expect.objectContaining({ root: sourceRoot, implementation: "css" }),
+        target: expect.objectContaining({ root: essRoot, implementation: "ess" }),
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Back to options" }));
+    fireEvent.click(screen.getByRole("button", { name: /Swap source and target/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Create migration plan/ }));
+    await screen.findByRole("button", { name: "Start migration" });
+    expect(planMigration).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        source: expect.objectContaining({ root: essRoot, implementation: "ess" }),
+        target: expect.objectContaining({ root: sourceRoot, implementation: "css" }),
+      }),
+    );
+  });
   it("requires both connections before proceeding", async () => {
     const connections = fakeConnections();
     vi.spyOn(connections[0], "initialize").mockResolvedValue();

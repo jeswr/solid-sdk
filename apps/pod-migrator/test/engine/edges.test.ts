@@ -152,7 +152,7 @@ describe("adversarial transport, metadata and planning edges", () => {
     // An unreadable root can no longer produce a verified result: owner Control
     // must be proven even when review skips every resource.
     expect(result.verified).toBe(false);
-    expect(result.failed[0]?.error).toContain("no longer controls the root");
+    expect(result.failed[0]?.error).toBe("Pod request failed (403)");
     expect(target.requests.some((r) => r.method === "PUT")).toBe(false);
   });
   it("protects percent-encoded aliases of the target WebID document", async () => {

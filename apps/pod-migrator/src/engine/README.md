@@ -24,9 +24,13 @@ DESIGN.md as follows. These notes are colocated with the engine and reflected in
   ESS source forms are accepted only with independently established ESS semantics, documented in
   `systems/acp.ts`. `PodSide.implementation` is a trusted caller assertion, never inferred from
   editable RDF or mode IRIs. ACP target writes without established CSS/ESS semantics abort.
-  Live PodSpaces behavior still needs account testing; the browser connection currently leaves
-  implementation unestablished, so ACP target writes fail closed until a trusted integration
-  supplies that assertion. Missing owner Control at creation also fails closed on ESS.
+  The browser establishes ESS from the selected HTTPS `*.inrupt.com` storage host or the live
+  auth session's exact `https://login.inrupt.com/` issuer; CSS/NSS require an exposed root
+  `X-Powered-By` header. Login/page input and RDF claims cannot set implementation. Unknown
+  sources retain conservative readings; unknown ACP targets explain the refusal and abort.
+  Live PodSpaces behavior still needs account testing. Its ACP-namespace modes, typed ACR
+  roots and ACR-self/`acp:access` Control handling remain isolated in `systems/acp.ts`.
+  Missing owner Control at creation also fails closed on ESS.
 - **Writing TARGET:** never rely on a condition the target might not enforce. CSS 7.2's configured
   WAC checker chain ignores `acl:origin`, so origin-restricted grants are unsupported on every
   WAC and ACP target: skip the affected clause or abort, never preserve or remove only its origin.
@@ -47,6 +51,7 @@ DESIGN.md as follows. These notes are colocated with the engine and reflected in
 - Target inventory includes existing siblings and the profile even when review skips them. Shared
   access URLs and foreign resource bindings are refused before ACL PUTs, including newly created
   placeholders. Final verification proves the owner retains root access including Control.
+  Root read/parse refusals preserve their underlying diagnostic; they do not claim Control loss.
 - A WAC 404 means that an own ACL is absent, so the nearest ancestor's defaults apply. ACP 404s
   contribute no own controls. A 403, parsing failure, or failed request makes the policy unknown;
   it never causes permissive inheritance. Uncertainty propagates conservatively to descendants.

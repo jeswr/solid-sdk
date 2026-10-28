@@ -4,6 +4,9 @@ import { normalizePodBase } from "@jeswr/guarded-fetch";
 import { createSolidAuth, type SolidAuth, type SolidAuthConfig } from "@jeswr/solid-auth-core";
 import { Agent } from "@solid/object";
 import { DataFactory } from "n3";
+import { detectAccessSystem } from "../engine/access.js";
+import { createPodHttp } from "../engine/pod-http.js";
+import type { AccessSystem, PodSide } from "../engine/types.js";
 
 export type ConnectionId = "source" | "target";
 export interface ConnectionState {
@@ -11,7 +14,25 @@ export interface ConnectionState {
   webId: string | null;
   roots: string[];
   root: string | null;
+  implementation: PodSide["implementation"];
+  accessSystem: AccessSystem;
   error: string | null;
+}
+
+/** Only call with the selected authenticated storage and its response header.
+ * An issuer identifies the login provider, not the storage implementation.
+ * Profile RDF and login/page input are not evidence.
+ */
+export function detectImplementation(
+  root: string,
+  poweredBy: string | null,
+): PodSide["implementation"] {
+  const storage = new URL(root);
+  if (storage.protocol !== "https:" || storage.username || storage.password) return undefined;
+  if (storage.hostname.endsWith(".inrupt.com") && storage.port === "") return "ess";
+  if (/^Community Solid Server(?:\/[^\s,]+)?$/i.test(poweredBy?.trim() ?? "")) return "css";
+  if (/^solid-server\/[^\s,]+$/i.test(poweredBy?.trim() ?? "")) return "nss";
+  return undefined;
 }
 
 export function authConfig(id: ConnectionId, origin: string, base = "/"): SolidAuthConfig {
@@ -39,6 +60,8 @@ const emptyState = (): ConnectionState => ({
   webId: null,
   roots: [],
   root: null,
+  implementation: undefined,
+  accessSystem: "unknown",
   error: null,
 });
 
@@ -178,8 +201,8 @@ export class PodConnection {
       });
       const unique = [...new Set(roots)];
       if (unique.length === 0) throw new Error("No storage roots");
-      this.publish({ status: "choose-storage", webId, roots: unique, root: null, error: null });
-      if (unique.length === 1 && unique[0]) this.selectStorage(unique[0]);
+      this.publish({ ...emptyState(), status: "choose-storage", webId, roots: unique });
+      if (unique.length === 1 && unique[0]) await this.selectStorage(unique[0]);
     } catch {
       if (generation === this.generation && this.auth.webId === webId) {
         this.publish({
@@ -193,13 +216,15 @@ export class PodConnection {
     }
   }
 
-  selectStorage(root: string): void {
+  async selectStorage(root: string): Promise<void> {
     if (
       !this.state.webId ||
       this.auth.webId !== this.state.webId ||
       !this.state.roots.includes(root)
     )
       return;
+    const generation = ++this.generation;
+    const webId = this.state.webId;
     if (!this.auth.reArmAllowedOrigins([new URL(root).origin])) {
       this.publish({
         ...this.state,
@@ -209,7 +234,43 @@ export class PodConnection {
       });
       return;
     }
-    this.publish({ ...this.state, status: "connected", root, error: null });
+    this.publish({
+      ...this.state,
+      status: "loading",
+      root: null,
+      implementation: undefined,
+      accessSystem: "unknown",
+      error: null,
+    });
+    const authenticatedFetch = this.auth.authenticatedFetch;
+    const http = createPodHttp({
+      root,
+      fetch: (input, init) => authenticatedFetch(input, { ...init, credentials: "omit" }),
+    });
+    const signal = AbortSignal.timeout(10_000);
+    let implementation = detectImplementation(root, null);
+    let accessSystem: AccessSystem = "unknown";
+    try {
+      const head = await http.head(root, { signal });
+      if (generation !== this.generation || this.auth.webId !== webId) return;
+      if (head.ok) implementation ??= detectImplementation(root, head.headers.get("x-powered-by"));
+      if (!implementation && (head.ok || head.status === 405 || head.status === 501)) {
+        const response = await http.get(root, { signal });
+        if (response.ok)
+          implementation = detectImplementation(root, response.headers.get("x-powered-by"));
+        await response.body?.cancel();
+      }
+      if (generation !== this.generation || this.auth.webId !== webId) return;
+      accessSystem = await detectAccessSystem(
+        { root, ownerWebId: webId, implementation, http },
+        signal,
+      );
+    } catch {
+      // Missing CORS exposure, errors and redirects supply no header evidence.
+      // Storage host evidence is retained; the engine still checks permissions.
+    }
+    if (generation !== this.generation || this.auth.webId !== webId) return;
+    this.publish({ ...this.state, status: "connected", root, implementation, accessSystem });
   }
 
   async logout(): Promise<void> {

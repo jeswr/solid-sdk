@@ -301,13 +301,14 @@ function MigrationApp({ connections }: { connections: readonly [PodConnection, P
         ? {
             root: sourceState.root,
             ownerWebId: sourceState.webId,
+            implementation: sourceState.implementation,
             http: createPodHttp({
               root: sourceState.root,
               fetch: sourceConnection.auth.authenticatedFetch,
             }),
           }
         : null,
-    [sourceState.root, sourceState.webId, sourceConnection],
+    [sourceState.root, sourceState.webId, sourceState.implementation, sourceConnection],
   );
   const target = useMemo<PodSide | null>(
     () =>
@@ -315,13 +316,14 @@ function MigrationApp({ connections }: { connections: readonly [PodConnection, P
         ? {
             root: targetState.root,
             ownerWebId: targetState.webId,
+            implementation: targetState.implementation,
             http: createPodHttp({
               root: targetState.root,
               fetch: targetConnection.auth.authenticatedFetch,
             }),
           }
         : null,
-    [targetState.root, targetState.webId, targetConnection],
+    [targetState.root, targetState.webId, targetState.implementation, targetConnection],
   );
 
   // Invalidate reviewed decisions whenever credentials, storage, or direction change.

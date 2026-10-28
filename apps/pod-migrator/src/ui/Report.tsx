@@ -30,6 +30,13 @@ export function PlanReport({
   const kinds = [...new Set(plan.report.map((item) => item.kind))];
   return (
     <div className="report-groups">
+      {plan.targetSystem === "unknown" && (
+        <p className="notice" role="alert">
+          The destination’s permission system or server type could not be confirmed, so this
+          migration cannot run safely. Go back to options to reconnect or choose another target. For
+          an ACP pod, ask your provider to expose the X-Powered-By response header through CORS.
+        </p>
+      )}
       {kinds.map((kind) => {
         const items = plan.report.filter((item) => item.kind === kind);
         return (

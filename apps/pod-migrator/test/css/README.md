@@ -94,6 +94,16 @@ positive client-IRI grant for CSS's opaque client-credential tokens. Named WebID
 same identities across both servers; target issuers and target owners are never substituted.
 ESS/PodSpaces and its UMA behavior are outside this local CSS suite.
 
+CSS fixtures use resource `acl:Control`, without ESS-style ACR-self/`acp:access` grants.
+The earlier mixed-dialect fixtures triggered the engine's intentional refusal, hiding ACP
+translation decisions and disabling target merge/owner-only choices. A dedicated live
+regression keeps that mixed document: the plan offers only skip/abort for its target paths,
+execution makes zero writes, and real ACR GET (200) and nonmatching conditional PUT (412)
+requests prove both the owner and a separate delegate retain Control. The engine reports the
+actual parse refusal instead of incorrectly reporting owner lock-out. Legitimate CSS fixtures
+exercise merge, overwrite, group expansion, source owner-only, denial narrowing and every other
+option; unsafe target documents still never offer owner-only or merge.
+
 The live file uses `.integration.ts`, excluded by the default app test glob.
 Offline helpers use `.test.ts` and also run in the default app tests. They can be
 run independently without opening any listening sockets:
@@ -102,7 +112,7 @@ run independently without opening any listening sockets:
 pnpm --filter @jeswr/app-pod-migrator run test:css helpers.test.ts
 ```
 
-The authoring sandbox cannot listen on sockets. Offline checks validate crypto,
-HTTP request construction, probes, observation ordering, shipped config imports,
-and the independent fixtures against CSS's own ACP evaluator. A reviewer with
-loopback sockets must run the full command above to validate the live scenarios.
+The full command has been run against both local servers with loopback sockets.
+Offline checks additionally validate crypto, HTTP request construction, probes,
+observation ordering, shipped config imports, and independent fixtures against CSS's
+own ACP evaluator.

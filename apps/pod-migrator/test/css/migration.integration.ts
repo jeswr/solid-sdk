@@ -17,7 +17,14 @@ import {
 } from "../../src/engine/index.js";
 import { type CssAccount, createAccount } from "./account.js";
 import { boundedFetch } from "./auth.js";
-import { ownerRule, putFixture, type SourceFixture, seedSource, setAccess } from "./fixtures.js";
+import {
+  fixtureAccess,
+  ownerRule,
+  putFixture,
+  type SourceFixture,
+  seedSource,
+  setAccess,
+} from "./fixtures.js";
 import {
   accessLink,
   affectedPaths,
@@ -217,6 +224,74 @@ describe.sequential("real CSS 7.2 migration security", () => {
     }
     return choices;
   }
+
+  it("distinguishes a refused mixed-dialect root from actual CSS Control loss", async () => {
+    const destination = await target("acp");
+    const delegate = strangers.get("acp") as CssAccount;
+    const root = destination.podRoot;
+    const acl = accessLink(await destination.side.http.head(root), root);
+    const mixed = await fixtureAccess(
+      "acp",
+      root,
+      acl,
+      [ownerRule(destination.webId, true), ownerRule(delegate.webId, true)],
+      true,
+    );
+    expect((await destination.side.http.put(acl, mixed, { contentType: "text/turtle" })).ok).toBe(
+      true,
+    );
+    const observed = observeWrites(destination.side.http, async () => {});
+    const options = {
+      source: (sources.get("wac") as SourceFixture).side,
+      target: { ...destination.side, http: observed.http },
+    };
+    const plan = await planMigration(options);
+    expect(
+      plan.report.find((item) => item.kind === "protected-target")?.options.map((o) => o.id),
+    ).toEqual(["skip", "abort"]);
+    const targetRefusals = plan.report.filter((item) =>
+      item.explanation.startsWith("Target access"),
+    );
+    expect(targetRefusals.length).toBeGreaterThan(1);
+    for (const item of targetRefusals)
+      expect(item.options.map((o) => o.id)).toEqual(["skip", "abort"]);
+    // Every target path is refused, so explicitly skip the unreadable target
+    // items; owner-only remains a valid option only for unreadable SOURCE rules.
+    const choices = Object.fromEntries(
+      plan.report.map((item) => [
+        item.id,
+        item.options.some((o) => o.id === "skip") ? "skip" : item.recommended,
+      ]),
+    );
+    const before = await destination.fetch(acl);
+    const etag = before.headers.get("etag");
+    const bytes = await before.text();
+    const result = await executeMigration(finalizePlan(plan, choices), options);
+    expect(result.verified).toBe(false);
+    expect(result.failed[0]?.error).toContain("established ESS dialect");
+    expect(result.copied).toEqual([]);
+    expect(observed.writes).toEqual([]);
+    const after = await destination.fetch(acl);
+    expect(after.headers.get("etag")).toBe(etag);
+    expect(await after.text()).toBe(bytes);
+    // The delegate is not CSS's recovery-enabled pod owner. Real ACR GET and
+    // conditional PUT prove resource Control survived, independently of parsing.
+    for (const actor of [destination.fetch, delegate.fetch]) {
+      const read = await actor(acl, { headers: { accept: "text/turtle" } });
+      expect(read.status).toBe(200);
+      await read.arrayBuffer();
+      const edit = await actor(acl, {
+        method: "PUT",
+        headers: { "content-type": "text/turtle", "if-match": '"never-match-control-proof"' },
+        body: "",
+      });
+      expect(edit.status).toBe(412);
+      await edit.arrayBuffer();
+    }
+    console.log(
+      "[CONTROL PROOF] mixed CSS root refused by parser; owner + delegate ACR GET=200, conditional PUT=412; zero migration writes",
+    );
+  });
 
   for (const scenario of scenarios)
     it(scenario.name, async () => {

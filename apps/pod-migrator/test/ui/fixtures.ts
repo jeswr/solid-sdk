@@ -27,11 +27,12 @@ export function fakeAuth(webId: string | null = sourceWebId): FakeAuth {
       .mockImplementation(
         async () => new Response(profileTurtle, { headers: { "content-type": "text/turtle" } }),
       ),
-    authenticatedFetch: vi
-      .fn<typeof fetch>()
-      .mockImplementation(
-        async () => new Response(profileTurtle, { headers: { "content-type": "text/turtle" } }),
-      ),
+    authenticatedFetch: vi.fn<typeof fetch>().mockImplementation(
+      async () =>
+        new Response(profileTurtle, {
+          headers: { "content-type": "text/turtle", "x-powered-by": "Community Solid Server" },
+        }),
+    ),
     restore: vi
       .fn()
       .mockResolvedValue(webId ? { outcome: "restored", webId } : { outcome: "login" }),

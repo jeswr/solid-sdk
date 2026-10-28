@@ -419,9 +419,11 @@ export async function executeMigration(
       progress("verify", index + 1, active.length, current);
     }
     current = state.target.root;
+    // A read/parse refusal is not evidence that the owner lost Control. Preserve
+    // its cause, and reserve the lock-out diagnostic for a readable policy.
+    const rootDocuments = await currentDocuments(state.target, [current], state.targetSystem);
+    const rootPolicy = effectivePolicy(state.targetSystem, current, current, rootDocuments);
     try {
-      const rootDocuments = await currentDocuments(state.target, [current], state.targetSystem);
-      const rootPolicy = effectivePolicy(state.targetSystem, current, current, rootDocuments);
       assertNotWider(rootPolicy, ownerPolicy(state.target.ownerWebId));
     } catch {
       throw new TypeError("Target owner no longer controls the root");

@@ -4,6 +4,11 @@ import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
 
 test("connection, options, review, run, and result screens", async ({ page }, info) => {
+  await page.route("**/*", (route) =>
+    ["127.0.0.1", "localhost"].includes(new URL(route.request().url()).hostname)
+      ? route.continue()
+      : route.abort(),
+  );
   const directory = fileURLToPath(new URL("./screens/", import.meta.url));
   await mkdir(directory, { recursive: true });
   const capture = async (screen: string) => {

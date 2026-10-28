@@ -15,10 +15,15 @@ export function createConnections(): [PodConnection, PodConnection] {
         ? "<https://alice.solidcommunity.net/profile/card#me> <http://www.w3.org/ns/pim/space#storage> <https://alice.solidcommunity.net/>."
         : "<https://id.example/alice#me> <http://www.w3.org/ns/pim/space#storage> <https://storage.example/pods/alice/>.";
     const publicFetch: typeof fetch = async () =>
-      new Response(turtle, { headers: { "content-type": "text/turtle" } });
+      new Response(turtle, {
+        headers: {
+          "content-type": "text/turtle",
+          ...(side === "source" ? { "x-powered-by": "Community Solid Server" } : {}),
+        },
+      });
     const auth = {
       webId: signedOut ? null : webId,
-      issuer: "https://identity.example",
+      issuer: side === "target" ? "https://login.inrupt.com/" : "https://identity.example",
       publicFetch,
       authenticatedFetch: publicFetch,
       restore: async () =>

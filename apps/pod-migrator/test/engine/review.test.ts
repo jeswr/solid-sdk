@@ -6,6 +6,7 @@ import { executeMigration, finalizePlan, planMigration } from "../../src/engine/
 import { policiesEqual, scopePolicy } from "../../src/engine/policy.js";
 import { ACL, ACP, parse, RDF, RdfNode, serialize } from "../../src/engine/rdf.js";
 import { readAcp } from "../../src/engine/systems/acp.js";
+import { writeWac } from "../../src/engine/systems/wac.js";
 import { acl, grant, pods, policy, resolve, stranger } from "./helpers.js";
 
 const requireCss = createRequire(import.meta.url);
@@ -290,6 +291,37 @@ describe("review regressions: exclusive target access documents", () => {
     const plan = await planMigration(options);
     const result = await executeMigration(finalizePlan(plan, resolve(plan)), options);
     expect(result.verified).toBe(false);
-    expect(result.failed[0]?.error).toContain("no longer controls the root");
+    expect(result.failed[0]?.error).toBe("Pod request failed (403)");
+  });
+
+  it("reports actual Control loss when recovery still allows the root ACL to be read", async () => {
+    const { source, target } = await pods("wac", "wac");
+    source.store(`${source.root}file`, "secret");
+    const withoutControl = await writeWac(
+      policy(
+        grant([[{ kind: "agent", webId: target.owner }]], {
+          modes: new Set(["read", "write", "append"]),
+        }),
+      ),
+      target.root,
+      target.acl(target.root),
+    );
+    const options = {
+      source: source.side(),
+      target: target.side(),
+      onProgress(event: { phase: string }) {
+        if (event.phase !== "verify") return;
+        target.setAcl(target.root, withoutControl);
+        // Model CSS's recovery read independently of the policy under test.
+        target.responses.set(
+          `GET ${target.acl(target.root)}`,
+          () => new Response(withoutControl, { headers: { "content-type": "text/turtle" } }),
+        );
+      },
+    };
+    const plan = await planMigration(options);
+    const result = await executeMigration(finalizePlan(plan, resolve(plan)), options);
+    expect(result.verified).toBe(false);
+    expect(result.failed[0]?.error).toBe("Target owner no longer controls the root");
   });
 });
