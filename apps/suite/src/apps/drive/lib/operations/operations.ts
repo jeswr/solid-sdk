@@ -18,11 +18,13 @@ import {
   DriveError,
   type DriveItem,
   DrivePartialFailureError,
+  isMissingItem,
   type MoveResult,
   nameOf,
   parentOf,
   policyArchiveOf,
 } from "../client/client";
+import { rethrowPendingDeletion } from "../client/deletion";
 import { guessContentType } from "../files";
 import { keepBothName, normalizeUploadName } from "../upload";
 import {
@@ -457,7 +459,16 @@ async function reconcilePending(
 async function recoveryItems(client: DriveClient, url: string): Promise<string[]> {
   if (!url.endsWith("/")) return [url];
   const children = await client.list(url);
-  return (await Promise.all(children.map((child) => recoveryItems(client, child.url)))).flat();
+  return (
+    await Promise.all(
+      children.map((child) =>
+        recoveryItems(client, child.url).catch((error: unknown) => {
+          if (isMissingItem(error)) return [];
+          throw error;
+        }),
+      ),
+    )
+  ).flat();
 }
 
 /** Never trust a stale caller's copy of the index's transfer state. */
@@ -537,11 +548,16 @@ export async function listTrash(
       missing.push(entry.url);
       continue;
     }
-    entries.push(
-      status === "partial"
-        ? { ...entry, status, remaining: await recoveryItems(client, entry.url) }
-        : entry,
-    );
+    try {
+      entries.push(
+        status === "partial"
+          ? { ...entry, status, remaining: await recoveryItems(client, entry.url) }
+          : entry,
+      );
+    } catch (error) {
+      if (!isMissingItem(error)) throw error;
+      missing.push(entry.url);
+    }
   }
   const reconciled = await removeCompletedRecords(
     client,
@@ -1053,7 +1069,7 @@ export async function restoreItems(
         if (await recoveryStatus(client, driveRoot, entry))
           await client.remove(recoveryMarker(driveRoot, entry));
         await removePolicyArchive(client, entry.url);
-        await client.remove(slot).catch(() => undefined);
+        await client.remove(slot).catch(rethrowPendingDeletion);
         outcome.done.push({ entry, url: entry.original, renamed: false });
         outcomes.set(entry, outcome);
         return outcome;
@@ -1087,7 +1103,7 @@ export async function restoreItems(
         await client.remove(recoveryMarker(driveRoot, entry));
       // The slot may contain another writer's resources; only remove it empty.
       await removePolicyArchive(client, entry.url);
-      await client.remove(slot).catch(() => undefined);
+      await client.remove(slot).catch(rethrowPendingDeletion);
       outcome.done.push({ entry, url: target, renamed });
     } catch (error) {
       outcome.failed.push({ url: entry.url, error });
@@ -1131,7 +1147,7 @@ export async function deleteForever(
       if (await recoveryStatus(client, driveRoot, entry))
         await client.remove(recoveryMarker(driveRoot, entry));
       await removePolicyArchive(client, entry.url);
-      await client.remove(slotOf(driveRoot, entry)).catch(() => undefined);
+      await client.remove(slotOf(driveRoot, entry)).catch(rethrowPendingDeletion);
       result.done.push(entry);
     } catch (error) {
       result.failed.push({ url: entry.url, error });
@@ -1166,6 +1182,21 @@ async function removeTrashItem(client: DriveClient, url: string): Promise<void> 
 }
 
 const DAY = 86_400_000;
+
+/** Missing members are stale traversal entries; other read failures remain retryable. */
+async function aggregateListing(
+  client: DriveClient,
+  url: string,
+  missing: Set<string>,
+): Promise<DriveItem[]> {
+  try {
+    return await client.list(url);
+  } catch (error) {
+    if (!isMissingItem(error)) throw error;
+    missing.add(url);
+    return [];
+  }
+}
 
 /** Delete items trashed more than `days` ago (max `limit` per run). Online only. */
 export async function purgeExpired(
@@ -1205,13 +1236,16 @@ export async function recentFiles(
   const concurrency = options.concurrency ?? 8;
   const files: (DriveItem & { folder: string; modified: Date })[] = [];
   const seen = new Set<string>();
+  const missing = new Set<string>();
   let frontier = roots.map((url) => ({ url, depth: 0 }));
   let visited = 0;
   while (frontier.length > 0 && visited < maxContainers) {
     const batch = frontier.splice(0, Math.min(concurrency, maxContainers - visited));
     visited += batch.length;
     const listings = await Promise.all(
-      batch.map(({ url, depth }) => client.list(url).then((items) => ({ url, depth, items }))),
+      batch.map(({ url, depth }) =>
+        aggregateListing(client, url, missing).then((items) => ({ url, depth, items })),
+      ),
     );
     const next: { url: string; depth: number }[] = [];
     for (const { url, depth, items } of listings) {
@@ -1242,13 +1276,14 @@ export async function searchByName(
   const needle = query.trim().toLocaleLowerCase();
   if (!needle) return [];
   const out: (DriveItem & { folder: string })[] = [];
+  const missing = new Set<string>();
   const frontier = [root];
   let visited = 0;
   while (frontier.length > 0 && visited < 400) {
     const batch = frontier.splice(0, 8);
     visited += batch.length;
     const listings = await Promise.all(
-      batch.map((url) => client.list(url).then((items) => ({ url, items }))),
+      batch.map((url) => aggregateListing(client, url, missing).then((items) => ({ url, items }))),
     );
     for (const { url, items } of listings) {
       for (const item of items) {
@@ -1258,7 +1293,7 @@ export async function searchByName(
       }
     }
   }
-  return out.slice(0, options.limit ?? 100);
+  return out.filter((item) => !missing.has(item.url)).slice(0, options.limit ?? 100);
 }
 
 /** Bytes used by files under `root` (hidden names included: trash counts). */
@@ -1271,10 +1306,11 @@ export async function measureUsage(
   let total = 0;
   const frontier = [root];
   let visited = 0;
+  const missing = new Set<string>();
   while (frontier.length > 0 && visited < maxContainers) {
     const batch = frontier.splice(0, Math.min(8, maxContainers - visited));
     visited += batch.length;
-    const listings = await Promise.all(batch.map((url) => client.list(url)));
+    const listings = await Promise.all(batch.map((url) => aggregateListing(client, url, missing)));
     for (const item of listings.flat()) {
       if (item.kind === "folder") frontier.push(item.url);
       else total += item.size ?? 0;

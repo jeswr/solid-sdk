@@ -4,6 +4,7 @@
 import { Button, toast } from "@jeswr/suite-ui";
 import { useState } from "react";
 import type { DriveItem } from "../lib/client/client";
+import { DriveDeletePendingError } from "../lib/client/deletion";
 import { useDrive } from "../state/drive-context";
 
 /** Keep failed provisioning visible until the policy verifies or the item is deleted. */
@@ -19,8 +20,12 @@ export function ProtectionBanner({ item }: { item: DriveItem }) {
       else await client.read(item.url);
       setResolved(true);
       invalidate(item.url);
-    } catch {
-      toast.error("Sharing is still unsecured. Retry or delete this item.");
+    } catch (error) {
+      toast.error(
+        error instanceof DriveDeletePendingError
+          ? error.message
+          : "Sharing is still unsecured. Retry or delete this item.",
+      );
     } finally {
       setBusy(false);
     }

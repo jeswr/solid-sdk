@@ -12,6 +12,7 @@ import {
   privateAcl,
   requireAccess,
 } from "./access";
+import { rethrowPendingDeletion } from "./deletion";
 import { type ProtectionRequirement, protectionLedger } from "./protection-ledger";
 import { relocate, sameGraph } from "./rdf";
 
@@ -72,6 +73,7 @@ export function ancestorGuard(options: {
   putFolder: (url: string) => Promise<Response>;
   error: (status: number, url: string) => Error;
   owner: () => string | undefined;
+  deleteVersion: (url: string, etag: string) => Promise<void>;
   onPrivateFolder?: (url: string) => void;
   onProtectionChange?: (url: string) => void;
 }) {
@@ -121,11 +123,7 @@ export function ancestorGuard(options: {
     const etag = response.headers.get("etag");
     // Unknown/foreign control documents are not ours to remove with the resource.
     if (etag && (await access.snapshot(url, response.headers)).status !== "unknown") {
-      const deleted = await http(url, { method: "DELETE", headers: { "if-match": etag } }).catch(
-        () => undefined,
-      );
-      if ((deleted?.ok && deleted.status !== 202) || deleted?.status === 404)
-        await ledger.clear(url);
+      await options.deleteVersion(url, etag).catch(rethrowPendingDeletion);
     }
   };
   // The sole raw creation seam, private to the provisioner. Callers hold this

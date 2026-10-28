@@ -563,8 +563,9 @@ it("bounds Docs trash and Undo requests by compacting the typed Yjs log without 
   expect(updates).toHaveLength(62);
   // Lease checks and resource protection still apply on the demo pod; its
   // explicit capability lets us omit redundant ancestor HEADs and ACL history.
+  // Each 205 DELETE now also needs a HEAD confirming absence, including slot cleanup.
   expect(results).toEqual([
-    { trash: { requests: 612, mutations: 132 }, undo: { requests: 416, mutations: 133 } },
-    { trash: { requests: 253, mutations: 73 }, undo: { requests: 50, mutations: 11 } },
+    { trash: { requests: 677, mutations: 132 }, undo: { requests: 483, mutations: 133 } },
+    { trash: { requests: 257, mutations: 73 }, undo: { requests: 56, mutations: 11 } },
   ]);
 });

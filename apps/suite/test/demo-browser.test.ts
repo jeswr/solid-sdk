@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
 import { afterEach, expect, it, vi } from "vitest";
 import { Doc } from "yjs";
@@ -339,6 +340,11 @@ it.each([
   await stored({ revision: "profile", snapshot: pod.snapshot() });
   const browser = await (await tab()).getDemoPod();
   const commits = vi.spyOn(IDBObjectStore.prototype, "put");
+  // Preserve the existing write budgets, accounting separately for durable deletion intents.
+  const deletionIntents = () =>
+    commits.mock.calls.filter(([, key]) => typeof key === "string" && key.startsWith("delete:"))
+      .length;
+  const podCommits = () => commits.mock.calls.length - deletionIntents();
   const session = {
     storageUrl: DEMO_ROOT,
     webId: `${DEMO_ROOT}profile#me`,
@@ -347,7 +353,8 @@ it.each([
   const start = performance.now();
   const result = await deleteDocument(`${DEMO_ROOT}docs/plan.ttl`, session);
   const trashTime = performance.now() - start;
-  const trashCommits = commits.mock.calls.length;
+  const trashCommits = podCommits();
+  const trashDeletionIntents = deletionIntents();
   expect(result.failed).toEqual([]);
   commits.mockClear();
   const undoStart = performance.now();
@@ -357,9 +364,14 @@ it.each([
     trashTime,
     undoTime: performance.now() - undoStart,
     trashCommits,
-    undoCommits: commits.mock.calls.length,
+    undoCommits: podCommits(),
+    trashDeletionIntents,
+    undoDeletionIntents: deletionIntents(),
   });
   expect(trashCommits).toBeLessThanOrEqual(16);
-  expect(commits.mock.calls.length).toBeLessThanOrEqual(11);
+  expect(podCommits()).toBeLessThanOrEqual(11);
+  // Four compacted resources each record source and recovery; Undo also removes two slots.
+  expect(trashDeletionIntents).toBe(8);
+  expect(deletionIntents()).toBe(10);
   doc.destroy();
 });

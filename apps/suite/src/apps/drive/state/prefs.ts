@@ -31,6 +31,17 @@ export const drivePreferencesSchema = z.object({
 });
 export type DrivePreferences = z.infer<typeof drivePreferencesSchema>;
 
+/** Remove an absent resource and, for containers, every descendant reference. */
+export function pruneDeleted(prefs: DrivePreferences, urls: readonly string[]): DrivePreferences {
+  const keep = (candidate: string) =>
+    !urls.some((url) => candidate === url || (url.endsWith("/") && candidate.startsWith(url)));
+  return {
+    ...prefs,
+    starred: prefs.starred.filter(keep),
+    openedShared: prefs.openedShared.filter(({ url }) => keep(url)),
+  };
+}
+
 const DEFAULTS = drivePreferencesSchema.parse({});
 const listeners = new Set<() => void>();
 /** Preferences that storage refused to save, kept for the rest of the session. */

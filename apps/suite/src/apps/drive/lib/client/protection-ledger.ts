@@ -8,12 +8,26 @@ export interface ProtectionRequirement {
 }
 
 // Non-browser transports have no durable store. Keep their independent pods isolated.
-const memory = new WeakMap<typeof fetch, Map<string, ProtectionRequirement>>();
+const memory = new WeakMap<typeof fetch, Map<string, unknown>>();
 const DATABASE = "solid-drive-protection";
 const STORE = "requirements";
 
 /** A committed requirement must precede creation; failed/ambiguous cleanup never clears it. */
 export function protectionLedger(http: typeof fetch) {
+  return durableLedger<ProtectionRequirement>(http, "");
+}
+
+export interface DeletionRequirement {
+  readonly sources: readonly string[];
+  readonly recovery?: string;
+}
+
+/** Separate keys in the same durable store, committed before sending DELETE. */
+export function deletionLedger(http: typeof fetch) {
+  return durableLedger<DeletionRequirement>(http, "delete:");
+}
+
+function durableLedger<T>(http: typeof fetch, prefix: string) {
   let fallback = memory.get(http);
   if (!fallback) {
     fallback = new Map();
@@ -54,19 +68,22 @@ export function protectionLedger(http: typeof fetch) {
     }
   };
   return {
-    async get(url: string): Promise<ProtectionRequirement | undefined> {
+    async get(url: string): Promise<T | undefined> {
+      const key = prefix + url;
       return typeof indexedDB === "undefined"
-        ? local().get(url)
-        : transact("readonly", (store) => store.get(url));
+        ? (local().get(key) as T | undefined)
+        : transact("readonly", (store) => store.get(key));
     },
-    async set(url: string, requirement: ProtectionRequirement): Promise<void> {
+    async set(url: string, requirement: T): Promise<void> {
+      const key = prefix + url;
       if (typeof indexedDB === "undefined") {
-        local().set(url, requirement);
-      } else await transact("readwrite", (store) => store.put(requirement, url));
+        local().set(key, requirement);
+      } else await transact("readwrite", (store) => store.put(requirement, key));
     },
     async clear(url: string): Promise<void> {
-      if (typeof indexedDB === "undefined") local().delete(url);
-      else await transact("readwrite", (store) => store.delete(url));
+      const key = prefix + url;
+      if (typeof indexedDB === "undefined") local().delete(key);
+      else await transact("readwrite", (store) => store.delete(key));
     },
   };
 }

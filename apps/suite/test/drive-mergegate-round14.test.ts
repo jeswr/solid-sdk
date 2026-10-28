@@ -45,6 +45,7 @@ it("every exported container-creating client method requires a policy at type an
     putFolder,
     error: () => new Error(),
     owner: () => OWNER,
+    deleteVersion: async () => {},
   });
   // @ts-expect-error The internal provisioning flight also has no policy default.
   await expect(provision.folder(PRIVATE)).rejects.toThrow(/Explicit container policy required/);
