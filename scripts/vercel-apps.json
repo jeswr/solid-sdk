@@ -127,5 +127,14 @@
     "framework": "next",
     "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-coeliac",
     "gitDeploymentEnabled": false
+  },
+  {
+    "project": "solid-pod-migrator",
+    "rootDirectory": "apps/pod-migrator",
+    "package": "@jeswr/app-pod-migrator",
+    "framework": "vite",
+    "originEnv": "APP_ORIGIN",
+    "vercelIgnore": "node ../../scripts/vercel-ignore-build.mjs @jeswr/app-pod-migrator",
+    "gitDeploymentEnabled": false
   }
 ]
