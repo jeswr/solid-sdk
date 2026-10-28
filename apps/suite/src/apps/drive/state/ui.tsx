@@ -23,6 +23,7 @@ import {
 import { encodeRef } from "@/lib/refs";
 import { accessControl, accessLabel, DriveAccessError } from "../lib/client/access";
 import { DriveError, type DriveItem, nameOf } from "../lib/client/client";
+import { isOwnStorage } from "../lib/client/ownership";
 import {
   copyItem,
   createFolder,
@@ -369,6 +370,11 @@ export function useDriveActions() {
 
   const move = useCallback(
     async (items: readonly DriveItem[], target: string, { undoable = true } = {}) => {
+      if (
+        !isOwnStorage(target, session.storageUrl) ||
+        items.some((item) => !isOwnStorage(item.url, session.storageUrl))
+      )
+        return;
       const pending = toast.loading(
         items.length === 1 ? `Moving ${items[0]?.name}…` : `Moving ${items.length} items…`,
       );
@@ -465,6 +471,7 @@ export function useDriveActions() {
 
   const rename = useCallback(
     async (item: DriveItem, name: string) => {
+      if (!isOwnStorage(item.url, session.storageUrl)) return;
       try {
         const url = await renameItem(client, item, name);
         invalidate(item.url);
@@ -482,11 +489,12 @@ export function useDriveActions() {
         return undefined;
       }
     },
-    [client, invalidate, updatePrefs],
+    [client, invalidate, updatePrefs, session.storageUrl],
   );
 
   const makeCopy = useCallback(
     async (item: DriveItem) => {
+      if (!isOwnStorage(item.url, session.storageUrl)) return;
       try {
         const url = await copyItem(client, item.url);
         invalidate(url);
@@ -497,11 +505,12 @@ export function useDriveActions() {
         return undefined;
       }
     },
-    [client, invalidate],
+    [client, invalidate, session.storageUrl],
   );
 
   const newFolder = useCallback(
     async (parent: string, name: string) => {
+      if (!isOwnStorage(parent, session.storageUrl)) return;
       try {
         const url = await createFolder(client, parent, name);
         invalidate(url);
@@ -512,7 +521,7 @@ export function useDriveActions() {
         return undefined;
       }
     },
-    [client, invalidate],
+    [client, invalidate, session.storageUrl],
   );
 
   const restore = useCallback(
@@ -544,7 +553,12 @@ export function useDriveActions() {
 
   const trash = useCallback(
     async (items: readonly DriveItem[]) => {
-      if (!driveRoot || items.length === 0) return;
+      if (
+        !driveRoot ||
+        items.length === 0 ||
+        items.some((item) => !isOwnStorage(item.url, session.storageUrl))
+      )
+        return;
       try {
         const result = await trashItems(client, driveRoot, items, { webId: session.webId });
         for (const warning of result.warnings ?? []) toast.error(warning.message);
@@ -586,7 +600,7 @@ export function useDriveActions() {
         toast.error(errorMessage(error, "Couldn't move to trash"));
       }
     },
-    [client, driveRoot, invalidate, restore, session.webId, openDialog],
+    [client, driveRoot, invalidate, restore, session.webId, session.storageUrl, openDialog],
   );
 
   const removeForever = useCallback(
@@ -605,6 +619,7 @@ export function useDriveActions() {
 
   const removeSourcesForever = useCallback(
     async (items: readonly DriveItem[]) => {
+      if (items.some((item) => !isOwnStorage(item.url, session.storageUrl))) return;
       const done: DriveItem[] = [];
       for (const item of items) {
         try {
@@ -618,7 +633,7 @@ export function useDriveActions() {
       if (done.length) toast.success("Deleted for ever");
       return { done };
     },
-    [client, invalidate],
+    [client, invalidate, session.storageUrl],
   );
 
   return {

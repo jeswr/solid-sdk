@@ -33,6 +33,7 @@ import type { DriveClient, DriveItem } from "../lib/client/client";
 import { parseCsvPreview, previewKind } from "../lib/view/view";
 import { useDrive } from "../state/drive-context";
 import { useLiveItem, useResourceVersion } from "../state/resource";
+import { useRecordSharedOpen } from "../state/shared";
 import { captureDriveFocusRemoval, useDriveActions, useDriveUi } from "../state/ui";
 import { DetailsPane } from "./details";
 import { ItemIcon } from "./item-icon";
@@ -92,6 +93,7 @@ function valueLabel(iri: string): string {
 
 function useLoadedFile(client: DriveClient, item: DriveItem): Loaded {
   const kind = filePreviewKind(item);
+  const recordOpen = useRecordSharedOpen();
   const version = useResourceVersion(item.url);
   const [state, setState] = useState<Loaded>({ status: "loading" });
   // biome-ignore lint/correctness/useExhaustiveDependencies: metadata and version invalidate the resource bytes
@@ -101,12 +103,21 @@ function useLoadedFile(client: DriveClient, item: DriveItem): Loaded {
     setState({ status: "loading" });
     if (kind === "none") {
       setState({ status: "error" });
-      return;
+      // Unsupported formats still count as opened when their metadata is accessible.
+      void client.stat(item.url).then(
+        (current) => {
+          if (live) recordOpen(current);
+        },
+        () => undefined,
+      );
+      return () => {
+        live = false;
+      };
     }
-    const run = async () => {
+    const run = async (): Promise<Loaded> => {
       if (kind === "rdf") {
         const result = await client.readRdf(item.url);
-        return { status: "rdf", quads: result ? [...result.dataset] : [] } as const;
+        return result ? { status: "rdf", quads: [...result.dataset] } : { status: "error" };
       }
       const blob = await client.read(item.url);
       if (kind === "text" || kind === "markdown" || kind === "csv") {
@@ -131,14 +142,18 @@ function useLoadedFile(client: DriveClient, item: DriveItem): Loaded {
       return { status: "blob", url: objectUrl } as const;
     };
     run().then(
-      (loaded) => live && setState(loaded),
+      (loaded) => {
+        if (!live) return;
+        if (loaded.status !== "error" && loaded.status !== "loading") recordOpen(item);
+        setState(loaded);
+      },
       () => live && setState({ status: "error" }),
     );
     return () => {
       live = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [client, item.url, item.etag, item.size, item.contentType, kind, version]);
+  }, [client, item.url, item.etag, item.size, item.contentType, kind, version, recordOpen]);
   return state;
 }
 

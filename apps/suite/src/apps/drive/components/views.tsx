@@ -20,6 +20,7 @@ import type { TrashEntry } from "../lib/operations/trash-index";
 import { formatSize } from "../lib/view/view";
 import { useDrive, useFolder } from "../state/drive-context";
 import { useDriveListingFocus } from "../state/listing-focus";
+import { latestShared, useRecordSharedOpen } from "../state/shared";
 import { useDriveActions, useDriveUi } from "../state/ui";
 import { Breadcrumbs } from "./breadcrumbs";
 import { type BrowserItem, FileBrowser } from "./file-browser";
@@ -42,6 +43,11 @@ export function FolderView({ url }: { url?: string }) {
   const folder = url ?? driveRoot;
   const listing = useFolder(folder);
   const isRoot = folder === driveRoot;
+  const recordOpen = useRecordSharedOpen();
+  useEffect(() => {
+    if (folder && listing.status === "ready")
+      recordOpen({ url: folder, name: nameOf(folder), kind: "folder" });
+  }, [folder, listing.status, recordOpen]);
   if (
     listing.status === "error" &&
     listing.error instanceof DriveError &&
@@ -245,10 +251,11 @@ export function SharedView() {
   const { prefs } = useDrive();
   const items = useMemo<BrowserItem[]>(
     () =>
-      prefs.openedShared.map(({ url }) => ({
+      latestShared(prefs.openedShared).map(({ url, name, type, openedAt }) => ({
         url,
-        name: nameOf(url),
-        kind: url.endsWith("/") ? "folder" : "file",
+        name: name ?? nameOf(url),
+        kind: type ?? (url.endsWith("/") ? "folder" : "file"),
+        openedAt: new Date(openedAt),
       })),
     [prefs.openedShared],
   );
@@ -256,7 +263,9 @@ export function SharedView() {
     <FileBrowser
       title="Shared with me"
       items={items}
-      columns={["modified"]}
+      fixedOrder
+      showModifiedFilter={false}
+      columns={["shared-by", "opened", "host"]}
       banner={
         <Alert className="drv-banner">
           <Users aria-hidden="true" size={16} />

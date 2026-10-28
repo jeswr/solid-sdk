@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex
 import { describe, expect, it } from "vitest";
 import { drivePreferencesSchema } from "../../src/apps/drive/lib/model/prefs.js";
 
@@ -21,7 +22,12 @@ describe("Drive preferences", () => {
     const stored = {
       starred: ["https://other.example/file"],
       openedShared: [
-        { url: "https://other.example/folder/", openedAt: "2026-10-25T10:00:00+01:00" },
+        {
+          url: "https://other.example/folder/",
+          name: "Shared folder",
+          type: "folder",
+          openedAt: "2026-10-25T10:00:00+01:00",
+        },
       ],
       view: "grid",
       sort: { key, dir: "desc" },

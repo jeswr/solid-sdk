@@ -20,7 +20,7 @@ vi.mock("../src/apps/drive/state/drive-context", () => ({
     client,
     changes,
     driveRoot: "https://pod.example/drive/",
-    session: { webId: "https://pod.example/profile#me" },
+    session: { webId: "https://pod.example/profile#me", storageUrl: "https://pod.example/" },
   }),
 }));
 vi.mock("../src/apps/drive/state/ui", async (original) => ({

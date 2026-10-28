@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex
 "use client";
 /**
  * Drive preferences (04-drive §5.2 prefs schema) kept in localStorage per
@@ -10,7 +11,16 @@ import { z } from "zod";
 
 export const drivePreferencesSchema = z.object({
   starred: z.array(z.string()).default([]),
-  openedShared: z.array(z.object({ url: z.string(), openedAt: z.string() })).default([]),
+  openedShared: z
+    .array(
+      z.object({
+        url: z.string(),
+        openedAt: z.string(),
+        name: z.string().optional(),
+        type: z.enum(["file", "folder"]).optional(),
+      }),
+    )
+    .default([]),
   view: z.enum(["list", "grid"]).default("list"),
   sort: z
     .object({ key: z.enum(["name", "modified", "size"]), dir: z.enum(["asc", "desc"]) })

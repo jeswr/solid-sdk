@@ -53,6 +53,7 @@ import {
 } from "react";
 import { encodeRef } from "@/lib/refs";
 import { type DriveItem, nameOf, parentOf } from "../lib/client/client";
+import { isOwnStorage } from "../lib/client/ownership";
 import {
   createSelection,
   type SelectionState,
@@ -71,12 +72,20 @@ import {
 import { useDrive } from "../state/drive-context";
 import { readDrop } from "../state/dropped-files";
 import { useDriveListingFocus } from "../state/listing-focus";
+import { OwnerLabel } from "../state/ownership";
 import { errorMessage, focusDriveListing, useDriveActions, useDriveUi } from "../state/ui";
 import { ItemIcon } from "./item-icon";
 import { ContextEntries, DropdownEntries, useItemMenu } from "./item-menu";
 
-export type BrowserItem = DriveItem & { readonly folder?: string };
-export type BrowserColumn = "owner" | "modified" | "size" | "location";
+export type BrowserItem = DriveItem & { readonly folder?: string; readonly openedAt?: Date };
+export type BrowserColumn =
+  | "owner"
+  | "modified"
+  | "size"
+  | "location"
+  | "shared-by"
+  | "opened"
+  | "host";
 
 export interface EmptyCopy {
   readonly title: string;
@@ -169,7 +178,7 @@ function reconcileSelection(
 
 export function FileBrowser(props: FileBrowserProps) {
   const { title, items, error, onRetry, folder, columns, empty, fixedOrder, refreshing } = props;
-  const { prefs, updatePrefs, uploads, driveRoot } = useDrive();
+  const { prefs, updatePrefs, uploads, driveRoot, session } = useDrive();
   const ui = useDriveUi();
   const actions = useDriveActions();
   const router = useRouter();
@@ -183,6 +192,7 @@ export function FileBrowser(props: FileBrowserProps) {
   const folderInput = useRef<HTMLInputElement>(null);
   const container = useRef<HTMLDivElement>(null);
   const view = prefs.view;
+  const shared = columns.includes("opened");
 
   const visible = useMemo(
     () =>
@@ -192,9 +202,11 @@ export function FileBrowser(props: FileBrowserProps) {
             modified: filters.modified,
             sort: fixedOrder ? { key: "modified", dir: "desc" } : prefs.sort,
             foldersFirst: !fixedOrder,
-          })
+          }).sort((a, b) =>
+            shared ? (b.openedAt?.getTime() ?? 0) - (a.openedAt?.getTime() ?? 0) : 0,
+          )
         : [],
-    [items, filters.types, filters.modified, prefs.sort, fixedOrder],
+    [items, filters.types, filters.modified, prefs.sort, fixedOrder, shared],
   );
   const ids = useMemo(() => visible.map((item) => item.url), [visible]);
   const selection = useMemo(
@@ -227,15 +239,21 @@ export function FileBrowser(props: FileBrowserProps) {
       setPreview({ ...preview, items: next });
   }, [items, refreshing, preview, setPreview]);
   useEffect(() => {
-    setCurrentFolder(folder);
+    setCurrentFolder(folder && isOwnStorage(folder, session.storageUrl) ? folder : undefined);
     return () => setCurrentFolder(undefined);
-  }, [folder, setCurrentFolder]);
+  }, [folder, setCurrentFolder, session.storageUrl]);
   const lastUpload = useRef(uploadRequest?.id ?? 0);
   useEffect(() => {
-    if (!uploadRequest || uploadRequest.id === lastUpload.current || !folder) return;
+    if (
+      !uploadRequest ||
+      uploadRequest.id === lastUpload.current ||
+      !folder ||
+      !isOwnStorage(folder, session.storageUrl)
+    )
+      return;
     lastUpload.current = uploadRequest.id;
     (uploadRequest.folder ? folderInput : fileInput).current?.click();
-  }, [uploadRequest, folder]);
+  }, [uploadRequest, folder, session.storageUrl]);
 
   const dispatch = useCallback(
     (action: Parameters<typeof selectionReducer>[1]) =>
@@ -267,6 +285,10 @@ export function FileBrowser(props: FileBrowserProps) {
     if (row) row.focus();
     else requestAnimationFrame(() => (find() ?? container.current)?.focus());
   }, [view]);
+
+  const writable = (targets: readonly DriveItem[]) =>
+    targets.every((item) => isOwnStorage(item.url, session.storageUrl));
+  const writableFolder = folder && isOwnStorage(folder, session.storageUrl) ? folder : undefined;
 
   const targetsFor = useCallback(
     (item: BrowserItem) => (selection.selected.includes(item.url) ? selected : [item]),
@@ -354,10 +376,12 @@ export function FileBrowser(props: FileBrowserProps) {
         event.preventDefault();
         ui.setDetailsItems(targets);
         return ui.setDetailsOpen((open) => !open);
-      case (event.key === "F2" || (event.key === "n" && !mod)) && targets.length === 1:
+      case (event.key === "F2" || (event.key === "n" && !mod)) &&
+        targets.length === 1 &&
+        writable(targets):
         event.preventDefault();
         return ui.openDialog({ kind: "rename", item: targets[0] as DriveItem });
-      case event.key === "m" && !mod && targets.length > 0:
+      case event.key === "m" && !mod && targets.length > 0 && writable(targets):
         event.preventDefault();
         return ui.openDialog({ kind: "move", items: [...targets] });
       case event.key === "s" && !mod && targets.length > 0:
@@ -383,6 +407,10 @@ export function FileBrowser(props: FileBrowserProps) {
 
   const onDragStart = (event: DragEvent, item: BrowserItem) => {
     const targets = targetsFor(item);
+    if (!writable(targets)) {
+      event.preventDefault();
+      return;
+    }
     event.dataTransfer.setData(DRAG_TYPE, JSON.stringify(targets.map((t) => t.url)));
     event.dataTransfer.effectAllowed = "move";
   };
@@ -403,7 +431,7 @@ export function FileBrowser(props: FileBrowserProps) {
     );
 
   const folderDropProps = (item: BrowserItem) =>
-    item.kind === "folder"
+    item.kind === "folder" && isOwnStorage(item.url, session.storageUrl)
       ? {
           onDragOver: (event: DragEvent) => {
             const types = [...event.dataTransfer.types];
@@ -428,7 +456,7 @@ export function FileBrowser(props: FileBrowserProps) {
         }
       : {};
 
-  const contentDropProps = folder
+  const contentDropProps = writableFolder
     ? {
         onDragOver: (event: DragEvent) => {
           if (!hasFiles(event)) return;
@@ -442,7 +470,7 @@ export function FileBrowser(props: FileBrowserProps) {
           if (!hasFiles(event)) return;
           event.preventDefault();
           setDropping(false);
-          dropUpload(folder, event.dataTransfer);
+          dropUpload(writableFolder, event.dataTransfer);
         },
       }
     : {};
@@ -473,7 +501,7 @@ export function FileBrowser(props: FileBrowserProps) {
       />
     ) : (
       <div className="drv-toolbar" role="toolbar" aria-label="Folder actions">
-        {folder ? (
+        {writableFolder ? (
           <>
             <Button size="sm" variant="outline" onClick={() => fileInput.current?.click()}>
               <Upload aria-hidden="true" size={16} /> Upload
@@ -481,7 +509,7 @@ export function FileBrowser(props: FileBrowserProps) {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => ui.openDialog({ kind: "new-folder", parent: folder })}
+              onClick={() => ui.openDialog({ kind: "new-folder", parent: writableFolder })}
             >
               <FolderPlus aria-hidden="true" size={16} /> New folder
             </Button>
@@ -723,6 +751,9 @@ export function FileBrowser(props: FileBrowserProps) {
                 Owner
               </th>
             ) : null}
+            {columns.includes("shared-by") ? <th scope="col">Shared by</th> : null}
+            {columns.includes("opened") ? <th scope="col">Opened</th> : null}
+            {columns.includes("host") ? <th scope="col">Location</th> : null}
             {columns.includes("modified") ? (
               <th scope="col" className="drv-col-modified">
                 Modified
@@ -816,7 +847,18 @@ export function FileBrowser(props: FileBrowserProps) {
                         )}
                       </td>
                     ) : null}
-                    {columns.includes("owner") ? <td className="drv-col-owner">Me</td> : null}
+                    {columns.includes("owner") ? (
+                      <td className="drv-col-owner">
+                        <OwnerLabel url={item.url} />
+                      </td>
+                    ) : null}
+                    {columns.includes("shared-by") ? (
+                      <td>
+                        <OwnerLabel url={item.url} fallback={new URL(item.url).host} />
+                      </td>
+                    ) : null}
+                    {columns.includes("opened") ? <td>{formatModified(item.openedAt)}</td> : null}
+                    {columns.includes("host") ? <td>{new URL(item.url).host}</td> : null}
                     {columns.includes("modified") ? (
                       <td className="drv-col-modified">{formatModified(item.modified)}</td>
                     ) : null}
@@ -871,7 +913,7 @@ export function FileBrowser(props: FileBrowserProps) {
         ) : null}
       </div>
       {props.footer}
-      {folder ? (
+      {writableFolder ? (
         <>
           <input
             ref={fileInput}
@@ -880,7 +922,7 @@ export function FileBrowser(props: FileBrowserProps) {
             hidden
             data-testid="drive-upload-input"
             onChange={(event) => {
-              if (event.target.files) uploads.enqueue(folder, event.target.files);
+              if (event.target.files) uploads.enqueue(writableFolder, event.target.files);
               event.target.value = "";
             }}
           />
@@ -891,7 +933,7 @@ export function FileBrowser(props: FileBrowserProps) {
             data-testid="drive-folder-upload-input"
             {...({ webkitdirectory: "" } as Record<string, string>)}
             onChange={(event) => {
-              if (event.target.files) uploads.enqueue(folder, event.target.files);
+              if (event.target.files) uploads.enqueue(writableFolder, event.target.files);
               event.target.value = "";
             }}
           />
@@ -982,7 +1024,13 @@ function SelectionBar({
       <div className="drv-toolbar-end">
         {primary.map((entry) =>
           entry === "separator" ? null : (
-            <IconButton key={entry.id} label={entry.label} variant="ghost" onClick={entry.onSelect}>
+            <IconButton
+              key={entry.id}
+              label={entry.label}
+              variant="ghost"
+              disabled={entry.disabled ?? false}
+              onClick={entry.onSelect}
+            >
               <entry.icon aria-hidden="true" size={18} />
             </IconButton>
           ),
