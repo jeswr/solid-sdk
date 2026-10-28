@@ -421,4 +421,35 @@ describe("round 10: auxiliary ACR nodes", () => {
         (await cssAccess(f.target, `${f.target.root}folder/file`, identity)).has("control"),
       ).toBe(false);
   });
+
+  it.each(
+    targets.flatMap((target) =>
+      ["shadow", "foreign", "blank"].map((subject) => [target, subject] as const),
+    ),
+  )("refuses direct access on a %s secondary %s subject bound to the resource", async (target, kind) => {
+    const f = await fixture("accessControl", target);
+    const subject =
+      kind === "shadow"
+        ? DataFactory.namedNode(`${f.source.acl(f.file)}#shadow`)
+        : kind === "foreign"
+          ? DataFactory.namedNode("https://elsewhere.example/acr")
+          : DataFactory.blankNode("shadow");
+    const add = (s: typeof subject, p: string, o: string) =>
+      f.dataset.addQuad(s, DataFactory.namedNode(p), DataFactory.namedNode(o));
+    add(subject, `${ACP}resource`, f.file);
+    add(subject, `${ACP}access`, "urn:r11:public");
+    f.n("urn:r11:public").add(`${ACP}allow`, `${ACP}Read`);
+    f.n("urn:r11:public").add(`${ACP}allow`, `${ACP}Write`);
+    f.n("urn:r11:public").add(`${ACP}allOf`, "urn:r11:anyone");
+    f.n("urn:r11:anyone").add(`${ACP}agent`, `${ACP}PublicAgent`);
+    expect(() => readAcp(f.dataset, f.file, f.source.acl(f.file), "ess")).toThrow();
+    f.source.setAcl(f.resource, await serialize(f.dataset));
+    const options = { source: f.source.side(), target: f.target.side() };
+    const plan = await planMigration(options);
+    await executeMigration(finalizePlan(plan, resolve(plan)), options).catch(() => undefined);
+    for (const identity of [{}, { agent: stranger }])
+      expect(
+        (await cssAccess(f.target, `${f.target.root}folder/file`, identity)).has("control"),
+      ).toBe(false);
+  });
 });
