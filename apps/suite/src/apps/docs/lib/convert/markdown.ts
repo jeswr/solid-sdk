@@ -18,13 +18,16 @@ import { MAX_IMPORT_BYTES } from "./docx-import";
 import { normaliseImport } from "./schema";
 import { reportSkipped, type SkippedItem } from "./skipped";
 
-// CommonMark requires semicolons and bounds numeric references. Use the installed
-// HTML parser's full HTML5 entity table (including multi-codepoint names and
-// invalid numeric replacements), rather than Tiptap's small entity decoder.
-function decodeMarkdownEntities(value: string): string {
+// Decode source, never an already-unescaped token. A single pass gives escaped
+// punctuation priority over references: \&copy; stays &copy;, \\&copy; becomes \©,
+// and &amp;copy; is not decoded twice. Call only in CommonMark string contexts;
+// code, autolinks and raw HTML have their own rules.
+// The installed HTML parser supplies the complete HTML5 named-reference table.
+function decodeMarkdownString(value: string): string {
   return value.replace(
-    /&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-zA-Z][a-zA-Z0-9]*);/g,
-    (reference) => {
+    /\\([!-/:-@[-`{-~])|&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-zA-Z][a-zA-Z0-9]*);/g,
+    (reference, punctuation: string | undefined) => {
+      if (punctuation) return punctuation;
       let decoded = "";
       // The matched reference cannot contain quotes or markup. Reading a decoded
       // attribute avoids interpreting decoded '<' or '&' as another round of HTML.
@@ -54,7 +57,7 @@ function escapeText(text: string, label: boolean, table: boolean): string {
       Array.from(value, (char) => {
         // Protect whitespace before Markdown can trim it, expand tabs in lists,
         // or reinterpret Unicode separators in headings, tasks and tables.
-        // Entities also avoid the label parser's extra bracket-unescaping pass.
+        // Entities keep label delimiters inert during boundary recognition.
         return /[\s\p{Cf}:@&]/u.test(char) || (label && /[\\[\]]/.test(char))
           ? `&#${char.codePointAt(0)};`
           : `\\${char}`;
@@ -594,8 +597,8 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
             "link",
             helpers.parseInline(token.tokens as NonNullable<typeof token.tokens>),
             {
-              href: decodeMarkdownEntities(token.href as string),
-              title: token.title ? decodeMarkdownEntities(token.title as string) : null,
+              href: token.href,
+              title: token.title || null,
             },
           );
         },
@@ -640,12 +643,12 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
         },
         parseMarkdown(token: MarkdownToken, helpers: MarkdownParseHelpers) {
           return helpers.createNode("image", {
-            src: decodeMarkdownEntities(token.href as string),
+            src: token.href,
             alt: helpers
               .parseInline(token.tokens as NonNullable<typeof token.tokens>)
               .map(textContent)
               .join(""),
-            title: token.title ? decodeMarkdownEntities(token.title as string) : null,
+            title: token.title || null,
           });
         },
         renderMarkdown(node: JSONContent) {
@@ -774,7 +777,7 @@ const markdown = new MarkdownManager({
             source,
           );
           if (!match) return;
-          return { type: "docsEntity", raw: match[0], text: decodeMarkdownEntities(match[0]) };
+          return { type: "docsEntity", raw: match[0], text: decodeMarkdownString(match[0]) };
         },
       },
       parseMarkdown: (token, helpers) => helpers.createTextNode(token.text as string),
@@ -790,6 +793,58 @@ const markdown = new MarkdownManager({
 });
 markdown.instance.use({
   tokenizer: {
+    link(source) {
+      // Keep marked's boundary recognition, but suppress its early attribute
+      // unescaping and extra label-bracket unescaping. Inline label parsing uses
+      // the real lexer and performs its own single escape/reference pass.
+      const rules = {
+        ...this.rules,
+        inline: { ...this.rules.inline, anyPunctuation: /(?!)/g },
+        other: { ...this.rules.other, outputLinkReplace: /(?!)/g },
+      };
+      const token = markdown.instance.Tokenizer.prototype.link.call({ ...this, rules }, source);
+      if (!token) return;
+      token.href = decodeMarkdownString(token.href);
+      token.title = token.title ? decodeMarkdownString(token.title) : null;
+      return token;
+    },
+    def(source) {
+      const rules = {
+        ...this.rules,
+        inline: { ...this.rules.inline, anyPunctuation: /(?!)/g },
+      };
+      const token = markdown.instance.Tokenizer.prototype.def.call({ ...this, rules }, source);
+      if (!token) return;
+      token.href = decodeMarkdownString(token.href);
+      token.title = token.title ? decodeMarkdownString(token.title) : token.title;
+      return token;
+    },
+    reflink(source, links) {
+      const rules = {
+        ...this.rules,
+        other: { ...this.rules.other, outputLinkReplace: /(?!)/g },
+      };
+      // Definitions already contain decoded attributes. Do not decode them again.
+      return markdown.instance.Tokenizer.prototype.reflink.call({ ...this, rules }, source, links);
+    },
+    autolink(source) {
+      const token = markdown.instance.Tokenizer.prototype.autolink.call(this, source);
+      if (!token) return;
+      // CommonMark autolinks do not interpret escapes or character references.
+      // Bypass Tiptap's unconditional entity decoding of ordinary text tokens.
+      token.tokens = [{ type: "docsEntity", raw: token.text, text: token.text }];
+      return token;
+    },
+    inlineText(source) {
+      const token = markdown.instance.Tokenizer.prototype.inlineText.call(
+        this,
+        source,
+      ) as NonNullable<ReturnType<typeof this.inlineText>>;
+      // CommonMark discards whitespace on either side of a soft line break.
+      // Doing this in prose tokens leaves multiline code spans untouched.
+      token.text = token.text.replace(/[ \t]*\n[ \t]*/g, "\n");
+      return token;
+    },
     blockquote(source) {
       if (!/^[ \t]*>/.test(source)) return;
       // Boundary detection uses a separate lexer. Re-entering this configured
@@ -846,6 +901,7 @@ markdown.instance.use({
       const token = markdown.instance.Tokenizer.prototype.fences.call(this, boundaries);
       if (!token) return;
       const match = this.rules.block.fences.exec(boundaries) as RegExpExecArray;
+      token.lang = decodeMarkdownString((match[2] as string).trim());
       const lines = source.split("\n");
       const newline = token.raw.endsWith("\n") ? "\n" : "";
       const count = token.raw.replace(/\n$/, "").split("\n").length;
@@ -963,7 +1019,7 @@ export function exportMarkdown(json: JSONContent, dropHighlights = false): strin
     if (node.type === "codeBlock" && node.attrs?.language) {
       result.attrs = {
         ...node.attrs,
-        language: literal(String(node.attrs.language)),
+        language: literal(escapeText(String(node.attrs.language), false, false)),
       };
     }
     if (node.content) {

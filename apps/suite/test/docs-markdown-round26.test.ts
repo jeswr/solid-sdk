@@ -204,7 +204,8 @@ it("preserves code in bare quotes and quote-like text in lazy continuations", ()
         type: "paragraph",
         content: [
           { type: "text", text, marks: [{ type: "code" }] },
-          { type: "text", text: "\n    > " },
+          // CommonMark ignores indentation after a soft break, outside code.
+          { type: "text", text: "\n> " },
           { type: "text", text, marks: [{ type: "code" }] },
         ],
       },
