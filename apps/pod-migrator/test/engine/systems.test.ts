@@ -163,8 +163,7 @@ describe("ACP expressions and writers", () => {
         { kind: "authenticated" },
         ...(dialect === "ess" ? ([{ kind: "owner" }, { kind: "creator" }] as Subject[]) : []),
         { kind: "client", clientId: "urn:client" },
-        { kind: "issuer", issuer: "urn:issuer" },
-        ...(dialect === "ess" ? ([{ kind: "vc", vcType: "urn:vc" }] as Subject[]) : []),
+        ...(dialect === "css" ? ([{ kind: "issuer", issuer: "urn:issuer" }] as Subject[]) : []),
       ];
       const source = unionPolicies(
         dialect === "css"

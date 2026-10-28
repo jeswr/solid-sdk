@@ -19,6 +19,15 @@ DESIGN.md as follows. These notes are colocated with the engine and reflected in
   document offers owner-only/skip/abort); an uncertain denial or exclusion counts as applying.
   This includes ESS/CSS/NSS differences, legacy `acl:defaultForNew`, ACR-self policies,
   `acp:access`, ACP-namespace modes and typed ACRs without `acp:resource`.
+- **Reading existing TARGET:** take the widest plausible permissions on the resource and every
+  applicable ancestor, during planning, the fresh phase proof and verification. An unsupported
+  grant shape refuses the path with skip/abort; it never silently loses a possible grant.
+  Separate ESS agent/client matchers, VC-only policies, unestablished issuer/VC conditions and
+  unknown conditions are refused. Existing owner/creator role matchers require trusted metadata;
+  there is no trusted creator channel yet, so these documents are refused. A creator is never
+  automatically the target owner. Only provably applicable target denials may restrict the proof.
+  ESS resource Control denials are ignored: they cannot restrict inherited `memberAccess` ACR
+  permissions. Partial ACR permissions are refused rather than conflated with full Control.
 - CSS 7.2 uses ACL mode IRIs and resource Control. Its configured `AuthAuxiliaryReader` derives
   ACR access from that Control; ACR-self Read/Write and `acp:access` do not grant resource Control.
   ESS source forms are accepted only with independently established ESS semantics, documented in
@@ -46,9 +55,13 @@ DESIGN.md as follows. These notes are colocated with the engine and reflected in
   CSS supplies no owner/creator/VC matcher context; uncertain exclusions cannot weaken a
   source denial, and cannot be trusted as target restrictions.
   Source grant clauses requiring absent CSS context are dropped and reported, while active
-  alternatives survive. ESS grants require agent matchers alongside client conditions;
-  emitted conditional matchers explicitly include `PublicAgent`. Unsupported VC restrictions
-  on CSS targets cause the affected grant or possibly denied modes to be omitted.
+  alternatives survive. Source ESS grants use a conservative agent-matcher subset; target
+  documents outside that subset are refused. Emitted supported client matchers explicitly
+  include `PublicAgent`. ESS issuer matching and generic VC equality are unestablished, so
+  affected source clauses and target grant clauses are omitted with a report. Target grant
+  exclusions using those conditions omit the whole grant; target denials remove the condition
+  or exclusion and apply unconditionally with respect to it. CSS VC restrictions cause the
+  affected grant or possibly denied modes to be omitted.
 - CSS selects policies from every `acp:resource` statement, choosing access controls for
   matching IRIs and member controls otherwise. Foreign-node denials are conservatively retained;
   unplaceable grants and unknown/detached constructs fail closed. Target scopes must be exclusive
@@ -112,5 +125,9 @@ precedence are evaluated independently of the engine's readers and proof code. T
 stranger access after each write, ownership, stale plans, path/redirect fences, conditional
 writes, cancellation, every translation construct, RDF rewriting, and read-back verification.
 The engine coverage gate requires 100% lines, branches, functions, and statements.
-The design's implementation matrix is backed by 560 source-dialect × target-dialect cases,
+The design's implementation matrix is backed by 640 source-dialect × target-dialect cases
+and 320 existing-target cases (resource/ancestor controls, collaborator-created resources),
 with installed CSS readers/evaluator as the CSS oracle and explicit ESS/NSS fixtures.
+The fake retains creator metadata, handles policy-level ESS client conditions and VC-only
+policies, and does not apply resource Control denials to separate ACR permissions. Unestablished
+ESS issuer conditions are ignored by the oracle; a fake cannot establish target enforcement.

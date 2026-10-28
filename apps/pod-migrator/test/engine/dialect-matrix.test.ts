@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6
-import { createRequire } from "node:module";
+import { createRequire, registerHooks } from "node:module";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
@@ -9,7 +9,18 @@ import { FakePod, type Identity } from "./fake-pod.js";
 import { acl, resolve, stranger } from "./helpers.js";
 
 const requireCss = createRequire(import.meta.url);
-const { allowAccessModes } = requireCss("@solid/access-control-policy");
+// Enforce strict pnpm dependency ownership even when this checkout happens to
+// expose the transitive evaluator to the app through a flatter node_modules.
+const strictLayout = registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === "@solid/access-control-policy" && context.parentURL === import.meta.url)
+      throw new Error("The app cannot resolve CSS's transitive evaluator directly");
+    return nextResolve(specifier, context);
+  },
+});
+const { allowAccessModes } = createRequire(
+  requireCss.resolve("@solid/community-server/package.json"),
+)("@solid/access-control-policy");
 const { getAccessControlledResources } = requireCss(
   "@solid/community-server/dist/authorization/AcpUtil.js",
 );
@@ -26,6 +37,7 @@ const { AgentGroupAccessChecker } = requireCss(
 const { BooleanHandler } = requireCss(
   "@solid/community-server/dist/util/handlers/BooleanHandler.js",
 );
+strictLayout.deregister();
 
 const dialects = ["css-wac", "css-acp", "ess", "nss"] as const;
 type Dialect = (typeof dialects)[number];
@@ -39,8 +51,10 @@ const constructs = [
   "creator",
   "client-only",
   "client-agent",
+  "client-separate",
   "issuer",
   "vc",
+  "vc-only",
   "origin",
   "allOf",
   "anyOf",
@@ -65,6 +79,9 @@ const constructs = [
   "resource-control-mode",
   "noneOf-client-only",
   "deny-client-only",
+  "deny-issuer",
+  "noneOf-issuer",
+  "deny-except-issuer",
 ] as const;
 type Construct = (typeof constructs)[number];
 const other = "https://people.example/other#me";
@@ -152,12 +169,18 @@ async function cssAccess(pod: FakePod, url: string, identity: Identity): Promise
 }
 
 /** Author hostile source RDF independently; unsupported language constructs are inert. */
-async function fixture(source: FakePod, construct: Construct): Promise<void> {
-  const folder = `${source.root}folder/`;
+async function fixture(
+  source: FakePod,
+  construct: Construct,
+  existing?: "resource" | "ancestor",
+): Promise<void> {
+  const folder = existing ? source.root : `${source.root}folder/`;
   const file = `${folder}file`;
   source.store(folder, "", "text/turtle");
   source.store(file, "secret");
-  const member = ["member-scope", "defaultForNew", "memberAccess"].includes(construct);
+  const member = existing
+    ? existing === "ancestor"
+    : ["member-scope", "defaultForNew", "memberAccess"].includes(construct);
   const resource = member ? folder : file;
   source.setAcl(resource, await acl(source, resource));
   const dataset = (await source.dataset(resource)) as Store;
@@ -247,7 +270,7 @@ async function fixture(source: FakePod, construct: Construct): Promise<void> {
     rule.add(`${ACP}allOf`, matcher.value);
     matcher.add(
       `${ACP}agent`,
-      principal === "agent" || construct === "client-agent"
+      principal === "agent" || construct === "client-agent" || construct === "client-separate"
         ? stranger
         : principal === "authenticated"
           ? `${ACP}AuthenticatedAgent`
@@ -271,8 +294,20 @@ async function fixture(source: FakePod, construct: Construct): Promise<void> {
       matcher.add(`${ACP}client`, client);
       matcher.add(`${ACP}agent`, stranger);
     }
+    if (construct === "client-separate") {
+      rule.add(`${ACP}allOf`, "urn:matrix:separate-client");
+      n("urn:matrix:separate-client").add(`${ACP}client`, client);
+    }
     if (construct === "issuer") matcher.add(`${ACP}issuer`, issuer);
-    if (construct === "vc") matcher.add(`${ACP}vc`, vc);
+    if (construct === "vc" || construct === "vc-only") matcher.add(`${ACP}vc`, vc);
+    if (construct === "vc-only")
+      for (const q of [
+        ...dataset.match(
+          DataFactory.namedNode(matcher.value),
+          DataFactory.namedNode(`${ACP}agent`),
+        ),
+      ])
+        dataset.delete(q);
     if (construct === "allOf" || construct === "anyOf") {
       if (construct === "anyOf")
         for (const q of [
@@ -296,11 +331,18 @@ async function fixture(source: FakePod, construct: Construct): Promise<void> {
         "deny-write",
         "noneOf-client-only",
         "deny-client-only",
+        "deny-issuer",
+        "noneOf-issuer",
+        "deny-except-issuer",
       ].includes(construct)
     ) {
       const excluded = n("urn:matrix:excluded");
-      excluded.add(`${ACP}agent`, construct.includes("vc") ? `${ACP}PublicAgent` : other);
+      excluded.add(
+        `${ACP}agent`,
+        construct.includes("vc") || construct.includes("issuer") ? `${ACP}PublicAgent` : other,
+      );
       if (construct.includes("vc")) excluded.add(`${ACP}vc`, vc);
+      if (construct.includes("issuer")) excluded.add(`${ACP}issuer`, issuer);
       if (construct.includes("client-only")) {
         for (const q of [
           ...dataset.match(
@@ -326,8 +368,11 @@ async function fixture(source: FakePod, construct: Construct): Promise<void> {
                 ? "Write"
                 : "Read"),
         );
-        denial.add(`${ACP}allOf`, construct === "deny-except-vc" ? matcher.value : excluded.value);
-        if (construct === "deny-except-vc") denial.add(`${ACP}noneOf`, excluded.value);
+        denial.add(
+          `${ACP}allOf`,
+          construct.startsWith("deny-except-") ? matcher.value : excluded.value,
+        );
+        if (construct.startsWith("deny-except-")) denial.add(`${ACP}noneOf`, excluded.value);
         if (construct === "deny-append" || construct === "deny-write")
           rule.add(`${ACP}allow`, `${ACL}Write`);
       }
@@ -361,9 +406,32 @@ async function fixture(source: FakePod, construct: Construct): Promise<void> {
           dataset.delete(q);
       }
     }
-    if (construct === "typed-acr")
-      for (const q of [...dataset.match(null, DataFactory.namedNode(`${ACP}resource`))])
+    if (construct === "typed-acr") {
+      // Keep a separate explicitly bound owner policy on existing CSS ancestors:
+      // the unsupported typed node must be readable to test planning's refusal.
+      if (existing)
+        for (const q of [
+          ...dataset.match(
+            DataFactory.namedNode(root.value),
+            DataFactory.namedNode(`${ACP}accessControl`),
+          ),
+          ...dataset.match(
+            DataFactory.namedNode(root.value),
+            DataFactory.namedNode(`${ACP}memberAccessControl`),
+          ),
+        ]) {
+          if (q.object.value === "urn:matrix:control") continue;
+          n("urn:matrix:readable-owner").add(`${ACP}resource`, resource);
+          n("urn:matrix:readable-owner").add(q.predicate.value, q.object.value);
+        }
+      for (const q of [
+        ...dataset.match(
+          DataFactory.namedNode(root.value),
+          DataFactory.namedNode(`${ACP}resource`),
+        ),
+      ])
         dataset.delete(q);
+    }
   }
   source.setAcl(resource, await serialize(dataset));
 }
@@ -436,6 +504,73 @@ describe.each(dialects)("dialect safety matrix: source %s", (from) => {
         expect(await cssAccess(target, `${target.root}folder/file`, matching)).toEqual(
           original.get("folder/file:3"),
         );
+    });
+  });
+});
+
+describe.each(dialects)("existing-target matrix: %s", (dialect) => {
+  describe.each(["resource", "ancestor"] as const)("collaborator-created %s", (placement) => {
+    it.each(
+      constructs,
+    )("%s: retained controls cannot expose private replacement content", async (construct) => {
+      const source = pod("css-wac", "alice");
+      const target = pod(dialect, "bob");
+      await source.initialize(await acl(source, source.root));
+      await target.initialize(await acl(target, target.root));
+      source.store(`${source.root}file`, "private replacement");
+      await fixture(target, construct, placement);
+      target.creators.set(target.root, stranger);
+      target.creators.set(`${target.root}file`, stranger);
+      const file = `${target.root}file`;
+      const old = target.data.get(file);
+      const originalAccess = new Map(target.access);
+      const probes = [...identities, { ...matching, agent: target.owner }];
+      let observations = 0;
+      const check = async () => {
+        if (new TextDecoder().decode(target.data.get(file)?.bytes) !== "private replacement")
+          return;
+        for (const identity of probes) {
+          if (identity.agent === target.owner) continue;
+          expect(
+            await cssAccess(target, file, identity),
+            `${dialect}, ${placement}, ${construct}, ${JSON.stringify(identity)}`,
+          ).toEqual(new Set());
+          observations++;
+        }
+      };
+      target.afterWrite = check;
+      const options = { source: source.side(), target: target.side() };
+      const plan = await planMigration(options);
+      const decisions = resolve(plan);
+      for (const item of plan.report)
+        if (
+          item.kind === "target-exists" &&
+          item.options.some((option) => option.id === "overwrite")
+        )
+          (decisions as Record<string, string>)[item.id] = "overwrite";
+      let executable: ReturnType<typeof finalizePlan>;
+      try {
+        executable = finalizePlan(plan, decisions);
+      } catch (error) {
+        expect(String(error)).toMatch(/widens|too complex/);
+        expect(target.data.get(file)).toEqual(old);
+        expect(target.access).toEqual(originalAccess);
+        expect(target.requests.filter((request) => request.method === "PUT")).toEqual([]);
+        return;
+      }
+      const result = await executeMigration(executable, options);
+      await check();
+      if (result.copied.includes(file)) {
+        expect(result.failed).toEqual([]);
+        expect(result.verified).toBe(true);
+        expect(observations).toBeGreaterThan(0);
+      } else {
+        expect(result.skipped.some((entry) => entry.url === `${source.root}file`)).toBe(true);
+        expect(plan.report.some((item) => item.kind === "acl-unreadable")).toBe(true);
+        expect(target.data.get(file)).toEqual(old);
+        expect(target.access).toEqual(originalAccess);
+        expect(target.requests.filter((request) => request.method === "PUT")).toEqual([]);
+      }
     });
   });
 });

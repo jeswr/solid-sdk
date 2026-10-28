@@ -117,7 +117,7 @@ export function assertNotWider(
   const assignment = new Map<string, boolean>();
   function subjectValue(subject: Subject, side: "source" | "target"): Tri {
     if (subject.kind === "public") return true;
-    if (subject.kind === "owner" || (subject.kind === "creator" && side === "target")) {
+    if (subject.kind === "owner") {
       const webId = side === "target" ? context.targetOwner : context.sourceOwner;
       if (webId) return subjectValue({ kind: "agent", webId }, side);
     }

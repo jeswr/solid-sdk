@@ -12,8 +12,34 @@ export function readWac(
   implementation?: "css" | "ess" | "nss",
   target = false,
 ): EffectivePolicy {
+  const authorizations = [...new AclResource(dataset, DataFactory).authorizations];
+  if (target) {
+    const known = new Set([
+      `${RDF}type`,
+      ...[
+        "accessTo",
+        "default",
+        "defaultForNew",
+        "mode",
+        "agent",
+        "agentClass",
+        "agentGroup",
+        "origin",
+      ].map((name) => ACL + name),
+    ]);
+    const nodes = new Set(
+      authorizations.map((auth) => JSON.stringify([auth.termType, auth.value])),
+    );
+    for (const quad of dataset)
+      if (
+        !known.has(quad.predicate.value) &&
+        (quad.predicate.value.startsWith(ACL) ||
+          nodes.has(JSON.stringify([quad.subject.termType, quad.subject.value])))
+      )
+        throw new TypeError("Unplaced or unknown WAC construct");
+  }
   const grants: Grant[] = [];
-  for (const auth of new AclResource(dataset, DataFactory).authorizations) {
+  for (const auth of authorizations) {
     const node = new RdfNode(auth as unknown as import("@rdfjs/types").Term, dataset, DataFactory);
     const own = node.iris(`${ACL}accessTo`).includes(resource);
     const legacy = node.iris(`${ACL}defaultForNew`).includes(resource);

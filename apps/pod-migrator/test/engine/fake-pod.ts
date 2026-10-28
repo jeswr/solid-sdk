@@ -37,6 +37,8 @@ export class FakePod {
   readonly requests: RecordedRequest[] = [];
   readonly access = new Map<string, Stored>();
   readonly aclOverrides = new Map<string, string>();
+  /** Server-owned creation metadata; overwriting content never changes the creator. */
+  readonly creators = new Map<string, string>();
   readonly denied = new Map<string, number>();
   readonly responses = new Map<string, () => Response>();
   readonly root: string;
@@ -64,6 +66,7 @@ export class FakePod {
     return this.aclOverrides.get(url) ?? url + (this.system === "wac" ? ".acl" : ".acr");
   }
   store(url: string, body: string | Uint8Array, type = "text/plain"): void {
+    if (!this.data.has(url)) this.creators.set(url, this.owner);
     this.data.set(url, {
       bytes: typeof body === "string" ? new TextEncoder().encode(body) : body,
       type,
@@ -171,7 +174,6 @@ export class FakePod {
         const issuers = [...matcher.issuer];
         const vcs = [...matcher.vc];
         return (
-          (this.implementation !== "ess" || agents.length > 0) &&
           agents.length + clients.length + issuers.length + vcs.length > 0 &&
           (!agents.length ||
             agents.some(
@@ -180,13 +182,17 @@ export class FakePod {
                 agent === identity.agent ||
                 (!!identity.agent && agent === `${ACP}AuthenticatedAgent`) ||
                 (this.implementation === "ess" &&
-                  (agent === `${ACP}OwnerAgent` || agent === `${ACP}CreatorAgent`) &&
-                  identity.agent === this.owner),
+                  ((agent === `${ACP}OwnerAgent` && identity.agent === this.owner) ||
+                    (agent === `${ACP}CreatorAgent` && identity.agent === this.creators.get(url)))),
             )) &&
           (!clients.length ||
             clients.includes(`${ACP}PublicClient`) ||
             clients.includes(identity.client ?? "")) &&
-          (!issuers.length || issuers.includes(identity.issuer ?? "")) &&
+          // ESS issuer enforcement is unestablished. Model a server ignoring it,
+          // so retaining unsupported RDF can never manufacture safety evidence.
+          (this.implementation === "ess" ||
+            !issuers.length ||
+            issuers.includes(identity.issuer ?? "")) &&
           (!vcs.length ||
             (this.implementation === "ess" && vcs.some((vc) => identity.vc?.includes(vc))))
         );
@@ -199,6 +205,10 @@ export class FakePod {
           all.length + any.length > 0 &&
           all.every(matcherMatches) &&
           (!any.length || any.some(matcherMatches)) &&
+          // ESS client-only policies are inactive; an agent in another required
+          // matcher (or a VC policy) supplies the policy's identity requirement.
+          (this.implementation !== "ess" ||
+            [...all, ...any].some((matcher) => matcher.agent.size || matcher.vc.size)) &&
           !none.some(matcherMatches)
         ) {
           const convert = (values: Iterable<string>) =>
@@ -208,14 +218,13 @@ export class FakePod {
           const grants = convert(policy.allow);
           const denials = convert(policy.deny);
           if (control) {
-            if (grants.includes(`${ACL}Read`) && grants.includes(`${ACL}Write`))
-              allowed.add(`${ACL}Control`);
-            if (denials.includes(`${ACL}Read`) || denials.includes(`${ACL}Write`))
-              denied.add(`${ACL}Control`);
+            if (grants.includes(`${ACL}Write`)) allowed.add(`${ACL}Control`);
+            if (denials.includes(`${ACL}Write`)) denied.add(`${ACL}Control`);
           } else {
             for (const mode of grants)
               if (this.implementation !== "ess" || mode !== `${ACL}Control`) allowed.add(mode);
-            for (const mode of denials) denied.add(mode);
+            for (const mode of denials)
+              if (this.implementation !== "ess" || mode !== `${ACL}Control`) denied.add(mode);
           }
         }
       };
@@ -326,6 +335,7 @@ export class FakePod {
         etag: `"v${++this.next}"`,
       };
       (auxiliary ? this.access : this.data).set(url, next);
+      if (!auxiliary && !stored && identity.agent) this.creators.set(url, identity.agent);
       if (this.writeEtags) responseHeaders.set("etag", next.etag);
       else responseHeaders.delete("etag");
       await this.afterWrite?.(url);

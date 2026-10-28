@@ -67,6 +67,10 @@ export function translatePolicy(
 ): { policy: EffectivePolicy; report: ReportItem[] } {
   const policy = emptyPolicy();
   const report: ReportItem[] = [];
+  const unestablished = (subject: Subject) =>
+    (context.targetImplementation === "css" && subject.kind === "vc") ||
+    (context.targetImplementation === "ess" &&
+      (subject.kind === "issuer" || subject.kind === "vc"));
   let sourceRuleTurtle = context.sourceRuleTurtle;
   const choose = (
     kind: ReportKind,
@@ -87,16 +91,12 @@ export function translatePolicy(
   };
   for (const [ruleIndex, original] of source.grants.entries()) {
     sourceRuleTurtle = context.sourceRules?.get(original.source.url) ?? context.sourceRuleTurtle;
-    if (
-      target === "acp" &&
-      context.targetImplementation === "css" &&
-      original.except.some((subject) => subject.kind === "vc")
-    ) {
+    if (target === "acp" && original.except.some(unestablished)) {
       choose(
         "exclusion-unsupported",
-        "CSS cannot enforce credential exclusions. Omit the entire grant.",
+        "Target enforcement of this issuer or credential exclusion is not established. Omit the entire grant.",
         ["skip", "abort"],
-        `${ruleIndex}:vc`,
+        `${ruleIndex}:unestablished`,
       );
       continue;
     }
@@ -140,17 +140,14 @@ export function translatePolicy(
       clauses = clauses.filter((c) => !c.some((s) => s.kind === "origin"));
     }
     if (target === "acp") {
-      if (
-        context.targetImplementation === "css" &&
-        clauses.some((clause) => clause.some((subject) => subject.kind === "vc"))
-      ) {
+      if (clauses.some((clause) => clause.some(unestablished))) {
         choose(
           "condition-unsupported",
-          "CSS supplies no credential context. Omit credential-conditioned clauses.",
+          "Target enforcement of this issuer or credential condition is not established. Omit the affected clauses.",
           ["skip", "abort"],
-          `${ruleIndex}:vc`,
+          `${ruleIndex}:unestablished`,
         );
-        clauses = clauses.filter((clause) => !clause.some((subject) => subject.kind === "vc"));
+        clauses = clauses.filter((clause) => !clause.some(unestablished));
       }
       for (const group of new Set(
         clauses
@@ -269,6 +266,17 @@ export function translatePolicy(
   }
   if (target === "acp") {
     for (const [index, rule] of source.denials.entries()) {
+      sourceRuleTurtle = context.sourceRules?.get(rule.source.url) ?? context.sourceRuleTurtle;
+      if (
+        context.targetImplementation === "ess" &&
+        [...rule.who.flat(), ...rule.except].some(unestablished)
+      )
+        choose(
+          "deny-unsupported",
+          "ESS issuer and credential enforcement is not established. Apply this denial without those conditions or exclusions.",
+          ["drop-overlapping", "abort"],
+          `unestablished:${index}`,
+        );
       if (
         rule.who
           .flat()
@@ -295,19 +303,18 @@ export function translatePolicy(
             rule.modes.has("append") || rule.modes.has("write")
               ? new Set([...rule.modes, "write", "append"])
               : rule.modes,
-          who: rule.who.map((clause) =>
-            clause.map((subject) =>
-              subject.kind === "owner" ? { kind: "agent", webId: context.sourceOwner } : subject,
-            ),
-          ),
+          who: rule.who.map((clause) => {
+            const subjects = clause
+              .filter((subject) => !unestablished(subject))
+              .map<Subject>((subject) =>
+                subject.kind === "owner" ? { kind: "agent", webId: context.sourceOwner } : subject,
+              );
+            return subjects.length ? subjects : [{ kind: "public" }];
+          }),
           appliesTo: "resource",
           except: [
             ...rule.except
-              .filter(
-                (subject) =>
-                  subject.kind !== "creator" &&
-                  !(context.targetImplementation === "css" && subject.kind === "vc"),
-              )
+              .filter((subject) => subject.kind !== "creator" && !unestablished(subject))
               .map((subject) =>
                 subject.kind === "owner"
                   ? { kind: "agent" as const, webId: context.sourceOwner }
