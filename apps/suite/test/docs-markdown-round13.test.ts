@@ -248,10 +248,13 @@ it("escapes text around block images and exports image-only list items", () => {
   expect(result.content?.map((node) => node.type)).toEqual(["paragraph", "image", "paragraph"]);
   expect(result.content?.[0]?.content?.[0]?.text).toBe("# before");
   expect(result.content?.[2]?.content?.[0]?.text).toBe("+ after");
-  expect(
-    exportMarkdown({
-      type: "doc",
-      content: [{ type: "bulletList", content: [{ type: "listItem", content: [image] }] }],
-    }),
-  ).toContain('src="https://pod.test/image.png"');
+  const list = exportMarkdown({
+    type: "doc",
+    content: [{ type: "bulletList", content: [{ type: "listItem", content: [image] }] }],
+  });
+  expect(list).toContain("![Photo](https://pod.test/image.png)");
+  expect(importMarkdown(list, "images.md").json.content?.[0]?.content?.[0]?.content).toMatchObject([
+    { type: "paragraph" },
+    image,
+  ]);
 });

@@ -255,10 +255,23 @@ it("preserves GFM table links with pipes and empty cells", () => {
 
 it("uses schema defaults for omitted task attributes and empty HTML tables", () => {
   expect(
-    exportMarkdown(
+    roundTrip(
       doc({ type: "taskList", content: [{ type: "taskItem", content: [{ type: "paragraph" }] }] }),
     ),
-  ).toContain('data-checked="false"');
+  ).toBe("- [ ] <p></p>");
+  const task: JSONContent = {
+    type: "taskList",
+    content: [{ type: "taskItem", content: [p()] }],
+  };
+  const adjacent = doc(task, task);
+  const exported = exportMarkdown(adjacent);
+  expect(exported).toContain('data-checked="false"');
+  expect(importMarkdown(exported, "tasks.md").json).toEqual(schema.nodeFromJSON(adjacent).toJSON());
+  const ordered = doc({ type: "orderedList", content: [{ type: "listItem", content: [p()] }] });
+  expect(exportMarkdown(ordered)).toBe("1. Text");
+  expect(importMarkdown(exportMarkdown(ordered), "ordered.md").json).toEqual(
+    schema.nodeFromJSON(ordered).toJSON(),
+  );
   expect(exportMarkdown(doc({ type: "table" }))).toBe("<table></table>");
 });
 
@@ -323,10 +336,19 @@ const list = (child: fc.Arbitrary<JSONContent>): fc.Arbitrary<JSONContent> =>
 const nestedList = list(list(paragraph));
 
 it("round trips generated nested lists, tasks and blockquotes with hard breaks, multiple paragraphs and opening thematic breaks", () => {
-  const plain: fc.Arbitrary<JSONContent> = inlineContent.map((content) => ({
-    type: "paragraph",
-    content,
-  }));
+  const plain: fc.Arbitrary<JSONContent> = fc.oneof(
+    inlineContent.map((content) => ({ type: "paragraph", content })),
+    word.map((value) => ({ type: "codeBlock", content: [text(`${value}\nsecond line`)] })),
+    word.map((value) => ({
+      type: "table",
+      content: [
+        {
+          type: "tableRow",
+          content: [{ type: "tableCell", content: [p(value), p("Second paragraph")] }],
+        },
+      ],
+    })),
+  );
   const containers = (child: fc.Arbitrary<JSONContent>): fc.Arbitrary<JSONContent> =>
     fc.oneof(
       list(child),

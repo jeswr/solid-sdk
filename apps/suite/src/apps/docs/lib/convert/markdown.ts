@@ -7,6 +7,7 @@ import {
   flattenExtensions,
   getSchema,
   type JSONContent,
+  type MarkdownLexerConfiguration,
   type MarkdownParseHelpers,
   type MarkdownToken,
 } from "@tiptap/react";
@@ -335,7 +336,7 @@ function needsHtml(node: JSONContent): boolean {
     return (
       node.attrs?.language === "" ||
       /[`\s]/.test(String(node.attrs?.language ?? "")) ||
-      /\r/.test(textContent(node))
+      /[\r\t]/.test(textContent(node))
     );
   const children = node.content ?? [];
   // Containers can hold both Markdown blocks and complete HTML fallbacks.
@@ -376,22 +377,53 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
       extension = extension.extend({
         // Use CommonMark's list lexer: the upstream line-based tokenizers split
         // hard breaks and continuation blocks away from the first paragraph.
-        markdownTokenizer: { name: extension.name, level: "block", tokenize: () => undefined },
+        markdownTokenizer: {
+          name: extension.name,
+          level: "block",
+          start: () => -1,
+          tokenize: () => undefined,
+        },
         markdownTokenName: extension.name === "taskList" ? "docsTaskList" : "list",
       });
-    if (["bulletList", "orderedList"].includes(extension.name))
+    if (extension.name === "bulletList")
       return extension.extend({
+        markdownTokenName: "docsList",
+        markdownTokenizer: {
+          name: "docsList",
+          level: "block",
+          start: () => -1,
+          tokenize(source: string, _tokens: MarkdownToken[], lexer: MarkdownLexerConfiguration) {
+            // Delegate list boundaries to CommonMark without the upstream
+            // line-based list tokenizers or their shared lexer state.
+            const tokenizer = new markdown.instance.Tokenizer();
+            tokenizer.lexer = new markdown.instance.Lexer({ gfm: true, tokenizer });
+            const token = tokenizer.list(source);
+            if (!token) return;
+            return {
+              ...token,
+              type: "docsList",
+              items: token.items.map((item) => ({
+                ...item,
+                // Suite aligns task content after "- [ ] ". CommonMark only
+                // removes the bullet width; remove the checkbox width too.
+                tokens: lexer.blockTokens(
+                  item.task ? item.text.replace(/\n {4}/g, "\n") : item.text,
+                ),
+              })),
+            };
+          },
+        },
         parseMarkdown(token: MarkdownToken, helpers: MarkdownParseHelpers) {
-          if (token.type !== "list" || !!token.ordered !== (extension.name === "orderedList"))
-            return [];
           const groups: JSONContent[] = [];
-          for (const item of token.items as MarkdownToken[]) {
+          for (const [index, item] of (token.items as MarkdownToken[]).entries()) {
             const type = item.task ? "taskList" : token.ordered ? "orderedList" : "bulletList";
             let group = groups.at(-1);
             if (group?.type !== type) {
               group = {
                 type,
-                ...(type === "orderedList" ? { attrs: { start: token.start } } : {}),
+                ...(type === "orderedList"
+                  ? { attrs: { start: Number(token.start) + index } }
+                  : {}),
                 content: [],
               };
               groups.push(group);
@@ -399,6 +431,7 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
             const content = (
               helpers.parseBlockChildren as NonNullable<typeof helpers.parseBlockChildren>
             )(item.tokens as MarkdownToken[]);
+            if (content[0]?.type !== "paragraph") content.unshift({ type: "paragraph" });
             group.content?.push({
               type: item.task ? "taskItem" : "listItem",
               ...(item.task ? { attrs: { checked: item.checked } } : {}),
@@ -639,10 +672,8 @@ export function exportMarkdown(json: JSONContent, dropHighlights = false): strin
   const escapes: string[] = [];
   const literal = (text: string) => `${prefix}${escapes.push(text) - 1}END`;
   const protect = (node: JSONContent, inCode = false, inTable = false): JSONContent => {
-    // A GFM table has already been checked as a whole. In particular, its empty
-    // cell paragraphs must stay cells rather than becoming HTML placeholders.
-    if (!inTable && needsHtml(node))
-      return { type: "paragraph", content: [{ type: "text", text: literal(htmlNode(node)) }] };
+    // render() already handled HTML fallbacks and container boundaries. A GFM
+    // table's empty cell paragraphs must stay cells rather than placeholders.
     if (node.type === "hardBreak")
       return { type: "text", text: literal(inTable ? "<br>" : "\\\n") };
     const code = inCode || node.type === "codeBlock";
@@ -669,15 +700,11 @@ export function exportMarkdown(json: JSONContent, dropHighlights = false): strin
         if (run.length) content.push({ type: "text", text: literal(serializeInline(run, table)) });
         run = [];
       };
-      for (const [index, child] of node.content.entries()) {
+      for (const child of node.content) {
         if (!code && child.type === "text") run.push(child);
         else {
           flush();
-          content.push(
-            touchingBlocks(child, node.content[index + 1])
-              ? { type: "paragraph", content: [{ type: "text", text: literal(htmlNode(child)) }] }
-              : protect(child, code, table),
-          );
+          content.push(protect(child, code, table));
         }
       }
       flush();
@@ -725,20 +752,59 @@ export function exportMarkdown(json: JSONContent, dropHighlights = false): strin
   };
   return render(cleaned);
 }
+
+/**
+ * Dependency-free, conservative YAML subset: flat scalar mappings and JSON
+ * flow values. Unsupported YAML stays visible as Markdown rather than being
+ * silently discarded. In particular, a delimited scalar is never metadata.
+ */
+function frontMatterMapping(source: string): Map<string, unknown> | undefined {
+  const entries = new Map<string, unknown>();
+  for (const line of source.split(/\r?\n/)) {
+    if (!line.trim() || /^\s*#/.test(line)) continue;
+    const pair = /^([\w-]+):(?:[ \t]+(.*)|[ \t]*)$/.exec(line);
+    if (!pair || entries.has(pair[1] as string)) return;
+    const key = pair[1] as string;
+    const input = (pair[2] ?? "").trim();
+    const quoted = /^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*')(?:[ \t]+#.*)?$/.exec(input);
+    if (/^["']/.test(input) && !quoted) return;
+    const raw = quoted ? (quoted[1] as string) : input.replace(/(?:^|[ \t]+)#.*$/, "").trim();
+    let value: unknown = raw;
+    if (/^["[{]/.test(raw)) {
+      try {
+        value = JSON.parse(raw);
+      } catch {
+        return;
+      }
+    } else if (raw.startsWith("'")) {
+      value = raw.slice(1, -1).replaceAll("''", "'");
+    } else {
+      // Reserved indicators, mapping separators and unsupported YAML features
+      // cannot be accepted as plain scalar values.
+      if (/^[!&*\]}|>@`%]|^[-?:](?:\s|$)|:(?:\s|$)/.test(raw)) return;
+      if (/^(?:null|~|true|false|[-+]?\d+(?:\.\d+)?)$/i.test(raw) || !raw) value = null;
+    }
+    entries.set(key, value);
+  }
+  return entries.size ? entries : undefined;
+}
+
 export function importMarkdown(source: string, fileName: string) {
   if (new TextEncoder().encode(source).byteLength > MAX_IMPORT_BYTES)
     throw new Error("Choose a file of 50 MB or less");
   let title = fileName.replace(/\.(md|markdown)$/i, "");
   let body = source.replace(/^\uFEFF/, "");
-  const frontMatter = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(body);
-  if (frontMatter) {
-    const value = /^title:\s*(.+)$/m.exec(String(frontMatter[1]))?.[1]?.trim();
-    if (value) title = value.replace(/^(['"])(.*)\1$/, "$2");
+  const frontMatter = /^---\r?\n([\s\S]*?)\r?\n(?:---|\.\.\.)(?:\r?\n|$)/.exec(body);
+  const metadata = frontMatter && frontMatterMapping(frontMatter[1] as string);
+  if (frontMatter && metadata) {
+    const value = metadata.get("title");
+    if (typeof value === "string" && value) title = value;
     body = body.slice(frontMatter[0].length);
   }
   // Parse into the schema's inert nodes, then sanitize URLs and strip unsupported attrs.
   // Sanitizing the Markdown source as HTML would destroy code samples and autolinks.
   const json = clean(markdown.parse(body), false);
+  if (!json.content?.length) json.content = [{ type: "paragraph" }];
   const parsed = schema.nodeFromJSON(json);
   parsed.check();
   return { title: title.slice(0, 200), json: parsed.toJSON() as JSONContent };
