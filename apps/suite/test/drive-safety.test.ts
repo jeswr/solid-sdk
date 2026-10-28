@@ -1,6 +1,10 @@
 // AUTHORED-BY Codex
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createSolidDriveClient, DriveError } from "../src/apps/drive/lib/client/client";
+import {
+  createSolidDriveClient,
+  type DriveClient,
+  DriveError,
+} from "../src/apps/drive/lib/client/client";
 import {
   type BatchResult,
   copyItem,
@@ -49,16 +53,22 @@ function setup(
 function setupPartial(intercept?: Parameters<typeof setup>[0]) {
   const fixture = setup(intercept);
   const { client, pod } = fixture;
-  const move = client.move.bind(client);
-  vi.spyOn(client, "move").mockImplementation((from, to, policy, options) =>
-    move(from, to, policy, {
+  const move = client.move;
+  vi.spyOn(client, "move").mockImplementation(function (
+    this: DriveClient,
+    from,
+    to,
+    policy,
+    options,
+  ) {
+    return move.call(this, from, to, policy, {
       ...options,
       beforeDelete: async () => {
         await options?.beforeDelete?.();
         if (from === FROM && !pod.has(`${FROM}a`)) throw new Error("Stopped before second DELETE");
       },
-    }),
-  );
+    });
+  });
   return fixture;
 }
 
@@ -395,9 +405,9 @@ describe("Drive data-safety regressions", () => {
       },
       { kind: "protect-ancestors" },
     );
-    const copy = client.copy.bind(client);
-    vi.spyOn(client, "move").mockImplementation(async (from, to) => {
-      await copy(from, to, { kind: "preserve-source" });
+    const copy = client.copy;
+    vi.spyOn(client, "move").mockImplementation(async function (this: DriveClient, from, to) {
+      await copy.call(this, from, to, { kind: "preserve-source" });
       throw new Error("interrupted before deletion");
     });
     await trashItems(client, DRIVE, [await client.stat(kind === "file" ? `${FROM}a` : FROM)]);
@@ -451,9 +461,9 @@ describe("Drive data-safety regressions", () => {
     const { client } = setup();
     const source = `${FROM}a`;
     const initial = await client.stat(source);
-    const copy = client.copy.bind(client);
-    vi.spyOn(client, "move").mockImplementation(async (from, to) => {
-      await copy(from, to, { kind: "preserve-source" });
+    const copy = client.copy;
+    vi.spyOn(client, "move").mockImplementation(async function (this: DriveClient, from, to) {
+      await copy.call(this, from, to, { kind: "preserve-source" });
       throw new Error("interrupted");
     });
     const stat = client.stat.bind(client);
@@ -669,9 +679,9 @@ describe("Drive data-safety regressions", () => {
       },
       { kind: "protect-ancestors" },
     );
-    const copy = client.copy.bind(client);
-    vi.spyOn(client, "move").mockImplementation(async (from, to) => {
-      await copy(from, to, { kind: "preserve-source" });
+    const copy = client.copy;
+    vi.spyOn(client, "move").mockImplementation(async function (this: DriveClient, from, to) {
+      await copy.call(this, from, to, { kind: "preserve-source" });
       throw new Error("interrupted before deletion");
     });
     await trashItems(client, DRIVE, [await client.stat(FROM)]);
@@ -687,9 +697,9 @@ describe("Drive data-safety regressions", () => {
 
   it("keeps matching pending file copies hidden as in-flight", async () => {
     const { client } = setup();
-    const copy = client.copy.bind(client);
-    vi.spyOn(client, "move").mockImplementation(async (from, to) => {
-      await copy(from, to, { kind: "preserve-source" });
+    const copy = client.copy;
+    vi.spyOn(client, "move").mockImplementation(async function (this: DriveClient, from, to) {
+      await copy.call(this, from, to, { kind: "preserve-source" });
       throw new Error("interrupted before deletion");
     });
     await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
@@ -989,8 +999,8 @@ describe("Drive data-safety regressions", () => {
     expect(observed?.result.done).toEqual([]);
     if (operation !== "purge")
       expect(observed?.result.failed[0]?.error).toMatchObject({
-        kind: "trash-moving",
-        message: expect.stringContaining("moving"),
+        kind: "operation-in-progress",
+        message: expect.stringContaining("already in progress"),
       });
   });
 

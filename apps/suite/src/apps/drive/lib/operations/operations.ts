@@ -19,6 +19,7 @@ import {
   policyArchiveOf,
 } from "../client/client";
 import { rethrowPendingDeletion } from "../client/deletion";
+import { DriveOperationInProgressError } from "../client/source-operations";
 import { guessContentType } from "../files";
 import { keepBothName, normalizeUploadName } from "../upload";
 import {
@@ -566,6 +567,34 @@ export async function trashItems(
   items: readonly DriveItem[],
   options: { webId?: string; now?: Date } = {},
 ): Promise<BatchResult<TrashEntry>> {
+  return exclusiveBatch(
+    client,
+    items.map(({ url }) => url),
+    (scoped) => trashItemsUnlocked(scoped, driveRoot, items, options),
+  );
+}
+
+/** Hold reservations through index settlement; nested client calls reuse this explicit scope. */
+async function exclusiveBatch<T>(
+  client: DriveClient,
+  urls: readonly string[],
+  work: (scoped: DriveClient) => Promise<BatchResult<T>>,
+  failureUrls: readonly string[] = urls,
+): Promise<BatchResult<T>> {
+  try {
+    return await (client.exclusive ? client.exclusive(urls, work) : work(client));
+  } catch (error) {
+    if (!(error instanceof DriveOperationInProgressError)) throw error;
+    return { done: [], failed: failureUrls.map((url) => ({ url, error })) };
+  }
+}
+
+async function trashItemsUnlocked(
+  client: DriveClient,
+  driveRoot: string,
+  items: readonly DriveItem[],
+  options: { webId?: string; now?: Date } = {},
+): Promise<BatchResult<TrashEntry>> {
   const owner = `urn:uuid:${crypto.randomUUID()}`;
   liveTransfers.add(owner);
   let renewing: Promise<void> = Promise.resolve();
@@ -826,6 +855,19 @@ export async function restoreItems(
   driveRoot: string,
   entries: readonly TrashEntry[],
 ): Promise<BatchResult<{ entry: TrashEntry; url: string; renamed: boolean }>> {
+  return exclusiveBatch(
+    client,
+    entries.flatMap((entry) => [entry.url, entry.original]),
+    (scoped) => restoreItemsUnlocked(scoped, driveRoot, entries),
+    entries.map((entry) => entry.url),
+  );
+}
+
+async function restoreItemsUnlocked(
+  client: DriveClient,
+  driveRoot: string,
+  entries: readonly TrashEntry[],
+): Promise<BatchResult<{ entry: TrashEntry; url: string; renamed: boolean }>> {
   const result: BatchResult<{ entry: TrashEntry; url: string; renamed: boolean }> = {
     done: [],
     failed: [],
@@ -887,6 +929,18 @@ export async function restoreItems(
 }
 
 export async function deleteForever(
+  client: DriveClient,
+  driveRoot: string,
+  entries: readonly TrashEntry[],
+): Promise<BatchResult<TrashEntry>> {
+  return exclusiveBatch(
+    client,
+    entries.map((entry) => entry.url),
+    (scoped) => deleteForeverUnlocked(scoped, driveRoot, entries),
+  );
+}
+
+async function deleteForeverUnlocked(
   client: DriveClient,
   driveRoot: string,
   entries: readonly TrashEntry[],

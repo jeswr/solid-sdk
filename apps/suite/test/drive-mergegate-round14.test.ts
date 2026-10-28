@@ -36,6 +36,7 @@ it("every exported container-creating client method requires a policy at type an
     "readRdf",
     "remove",
     "recheckDeletions",
+    "exclusive",
   ];
   expect(
     Object.keys(client)

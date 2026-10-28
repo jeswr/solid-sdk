@@ -176,7 +176,7 @@ describe("PR 143 merge-gate regressions", () => {
     const client = createSolidDriveClient({ storageUrl: ROOT, fetch });
     const moved = await trashItems(client, DRIVE, [await client.stat(FROM)]);
     expect(visible).toEqual([]);
-    expect(restored?.failed[0]?.error).toMatchObject({ kind: "trash-moving" });
+    expect(restored?.failed[0]?.error).toMatchObject({ kind: "operation-in-progress" });
     expect(moved.failed).toEqual([]);
     expect(await (await client.read(`${moved.done[0]?.url}b`)).text()).toBe("B");
   });

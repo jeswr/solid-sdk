@@ -5,7 +5,15 @@ import { clearTimeout, setTimeout } from "node:timers";
 export function exclusiveLocks(timeoutMs = 2_000) {
   const queues = new Map<string, Promise<void>>();
   return {
-    request<T>(name: string, work: (lock: Lock) => T | PromiseLike<T>): Promise<T> {
+    request<T>(
+      name: string,
+      options: LockOptions | ((lock: Lock | null) => T | PromiseLike<T>),
+      callback?: (lock: Lock | null) => T | PromiseLike<T>,
+    ): Promise<T> {
+      const work = typeof options === "function" ? options : callback;
+      if (!work) throw new Error("Missing Web Lock callback");
+      if (typeof options !== "function" && options.ifAvailable && queues.has(name))
+        return Promise.resolve(work(null));
       const previous = queues.get(name) ?? Promise.resolve();
       let release!: () => void;
       const held = new Promise<void>((resolve) => {

@@ -32,6 +32,7 @@ import {
 } from "../lib/client/client";
 import { DriveDeletePendingError } from "../lib/client/deletion";
 import { isOwnStorage } from "../lib/client/ownership";
+import { DriveOperationInProgressError } from "../lib/client/source-operations";
 import {
   childUrl,
   copyItem,
@@ -288,6 +289,7 @@ export function errorMessage(error: unknown, fallback = "Something went wrong"):
   if (deletionPending(error)) return "Still deleting on the server";
   if (error instanceof DrivePartialFailureError) return errorMessage(error.cause, fallback);
   if (
+    error instanceof DriveOperationInProgressError ||
     error instanceof DriveAccessError ||
     error instanceof TrashMovingError ||
     error instanceof TrashRestorePartialError
@@ -350,24 +352,24 @@ async function refreshAfter<T>(
   const touched = new Set(urls);
   const tracked: DriveClient = {
     ...client,
-    copy: (from, to, policy) => {
+    copy(from, to, policy) {
       touched.add(from);
       touched.add(to);
-      return client.copy(from, to, policy);
+      return client.copy.call(this, from, to, policy);
     },
-    move: (from, to, policy, options) => {
+    move(from, to, policy, options) {
       touched.add(from);
       touched.add(to);
-      return client.move(from, to, policy, options);
+      return client.move.call(this, from, to, policy, options);
     },
-    mergeContainer: (from, to, policy) => {
+    mergeContainer(from, to, policy) {
       touched.add(from);
       touched.add(to);
-      return client.mergeContainer(from, to, policy);
+      return client.mergeContainer.call(this, from, to, policy);
     },
-    remove: (url, options) => {
+    remove(url, options) {
       touched.add(url);
-      return client.remove(url, options);
+      return client.remove.call(this, url, options);
     },
   };
   try {

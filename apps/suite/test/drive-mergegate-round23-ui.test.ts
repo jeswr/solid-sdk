@@ -111,13 +111,18 @@ it("a replacement finishing during Trash surfaces 412 and releases both endpoint
     if (url === source && method === "PUT" && response.ok) putFinished();
     return response;
   });
-  await act(async () =>
-    drive.uploads.enqueue(PRIVATE, [new File(["replacement"], "secret", { type: "text/plain" })]),
-  );
-  await vi.waitFor(() => expect(drive.uploads.tasks[0]?.status).toBe("conflict"));
-  await act(async () => drive.uploads.resolve(drive.uploads.tasks[0]?.id as string, "replace"));
+  // External writers bypass Drive's source reservations and still need validators.
+  const replacement = f.fetch(source, {
+    method: "PUT",
+    body: "replacement",
+    headers: {
+      "content-type": "text/plain",
+      "if-match": (await drive.client.stat(source)).etag as string,
+    },
+  });
   await act(async () => reached);
   await act(async () => actions.trash([await drive.client.stat(source)]));
+  await replacement;
   expect(toast.error).toHaveBeenCalledWith("This item changed. Refresh and try again.");
   expect(await (await drive.client.read(source)).text()).toBe("replacement");
   const [entry] = await listTrash(drive.client, DRIVE);

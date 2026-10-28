@@ -624,17 +624,13 @@ it("Undo uses the move response validator even if a replacement is present befor
       if (String(input) === destination && init?.method === "PUT")
         copiedEtag = response.headers.get("etag");
       if (String(input) === original.url && init?.method === "DELETE") {
-        // Interleave another tab after the DELETE commits, before move returns.
-        await otherTab.move(destination, `${ROOT}elsewhere.txt`, { kind: "confirm-move" });
-        await otherTab.write(
-          destination,
-          "unrelated",
-          {
-            contentType: "text/plain",
-            ifNoneMatch: "*",
-          },
-          { kind: "protect-ancestors" },
-        );
+        // An external client does not participate in Drive's Web Locks.
+        await pod.fetch(`${ROOT}elsewhere.txt`, { method: "PUT", body: "original" });
+        await pod.fetch(destination, {
+          method: "PUT",
+          body: "unrelated",
+          headers: { "content-type": "text/plain" },
+        });
       }
       return response;
     },

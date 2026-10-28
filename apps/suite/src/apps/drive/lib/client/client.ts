@@ -34,6 +34,7 @@ import {
 import { deletionControl, isDeletionFailure, rethrowPendingDeletion } from "./deletion";
 import { protectionLedger } from "./protection-ledger";
 import { containerData, relocate, sameGraph } from "./rdf";
+import { sourceOperation } from "./source-operations";
 
 export type { ContainerPolicy } from "./ancestors";
 export { policyArchiveOf } from "./ancestors";
@@ -86,6 +87,8 @@ export interface MoveResource {
 
 export interface DriveClient {
   readonly storageUrl: string;
+  /** Run one logical operation with a scoped client that already owns these URLs. */
+  exclusive?<T>(urls: readonly string[], work: (client: DriveClient) => Promise<T>): Promise<T>;
   readonly confirmAccess?: ConfirmAccess;
   /** Children of a folder (hidden dot-names included; the UI filters them). */
   list(folderUrl: string, options?: { signal?: AbortSignal }): Promise<DriveItem[]>;
@@ -820,9 +823,10 @@ export function createSolidDriveClient(options: {
     to: string,
     moving: boolean,
     decision: MovePolicy,
-    beforeDelete?: () => Promise<void>,
-    privateOwner?: string,
-    archiveContainers?: (archive: string) => Promise<void>,
+    beforeDelete: (() => Promise<void>) | undefined,
+    privateOwner: string | undefined,
+    archiveContainers: ((archive: string) => Promise<void>) | undefined,
+    held: ReadonlySet<string>,
   ) => {
     if (from.endsWith("/") !== to.endsWith("/") || (from.endsWith("/") && to.startsWith(from))) {
       throw new DriveError("conflict", 409, to);
@@ -831,199 +835,222 @@ export function createSolidDriveClient(options: {
       moving && decision.kind === "confirm-move" && !privateOwner && !policyArchiveOf(from);
     await deletion.guard(from);
     const source = await snapshot(from, moving, true);
-    const nodes = snapshots(source);
-    // Resolve every node, even for same-folder renames and descendants with own ACLs.
-    // A missing Link or unreadable ancestor can never stand in for known absence.
-    const effective = new Map<SourceSnapshot, AccessState>();
-    for (const node of nodes) {
-      const state =
-        node.access.status === "none" && !node.access.demo
-          ? await access.effective(node.url)
-          : node.access;
-      effective.set(node, state);
-      if (state.status === "known") node.inheritedAccess = state.policy;
-    }
-    const unknown = nodes.some((node) => (effective.get(node) as AccessState).status === "unknown");
-    // Copy, Trash and Restore preserve access, and refuse uncertainty before writes.
-    if (!ordinaryMove && unknown) throw new DriveAccessError("Current access is unknown");
-    await provision.guard(to, true);
-    let keepAccess = !ordinaryMove;
-    if (ordinaryMove && (!source.demo || unknown)) {
-      const inherited: SourceSnapshot[] = [];
-      const affected = (node: SourceSnapshot, protectedDefaults: boolean) => {
-        if (node.access.status === "none" && !protectedDefaults) inherited.push(node);
-        const protectedChildren =
-          protectedDefaults ||
-          (node.access.status === "known" && access.hasDefaults(node.access.policy, node.url));
-        for (const child of node.children ?? []) affected(child, protectedChildren);
-      };
-      affected(source, false);
-      if ((inherited.length > 0 && parentOf(from) !== parentOf(to)) || unknown) {
-        let current: OwnAccess | undefined;
-        let gains: string[];
-        try {
-          if (unknown) throw new DriveAccessError();
-          current = requireAccess(effective.get(source) as AccessState, from);
-          const destination = requireAccess(await access.effective(to, true), to);
-          const widened = new Set<string>();
-          for (const node of inherited)
-            for (const agent of accessGains(
-              requireAccess(effective.get(node) as AccessState, node.url),
-              destination,
-            ))
-              widened.add(agent);
-          gains = [...widened];
-        } catch {
-          gains = ["Access could not be determined (including unreadable ACLs or unsupported ACP)"];
+    // Reserve the captured tree before copying or removing any node. Child
+    // cleanup shares the flight, including rollback after a failed copy.
+    return sourceOperation(
+      sourceUrls(source).flatMap((url) => [url, `${to}${url.slice(from.length)}`]),
+      async () => {
+        const nodes = snapshots(source);
+        // Resolve every node, even for same-folder renames and descendants with own ACLs.
+        // A missing Link or unreadable ancestor can never stand in for known absence.
+        const effective = new Map<SourceSnapshot, AccessState>();
+        for (const node of nodes) {
+          const state =
+            node.access.status === "none" && !node.access.demo
+              ? await access.effective(node.url)
+              : node.access;
+          effective.set(node, state);
+          if (state.status === "known") node.inheritedAccess = state.policy;
         }
-        if (gains.length) {
-          if (!options.confirmAccess)
-            throw new DriveAccessError("Access change requires confirmation");
-          const choice = await options.confirmAccess({
-            from,
-            to,
-            gains,
-            canKeep: !!current && !unknown,
-          });
-          if (choice === "cancel") throw new Error("Move cancelled");
-          if (choice === "keep") {
-            if (!current || unknown) throw new DriveAccessError("Current access is unknown");
-            source.targetAccess = current;
-            keepAccess = true;
-          }
-        }
-      }
-    }
-    const created: CreatedResource[] = [];
-    const copiedAccess = new Map<string, OwnAccess>();
-    await preparePolicies(source, from, to, privateOwner, archiveContainers);
-    if (keepAccess) {
-      for (const node of nodes)
-        if (!node.demo && node.access.status === "none" && node.targetAccess === undefined)
-          node.targetAccess = requireAccess(effective.get(node) as AccessState, node.url);
-    }
-    const deleted: string[] = [];
-    let deleting = false;
-    let verifyingCopy = false;
-    const destinations = new Map<string, MoveResource>();
-    const verifyDestination = async (source: Pick<SourceSnapshot, "url">) => {
-      const destination = destinations.get(source.url) as CreatedResource;
-      verifyingCopy = true;
-      const etag = validator(destination.url, destination.etag);
-      const response = await ensureOk(
-        await http(destination.url, { method: "HEAD", headers: { "if-match": etag } }),
-        destination.url,
-      );
-      // Also check servers that ignore HEAD preconditions.
-      if (response.headers.get("etag") !== etag)
-        throw new DriveError("conflict", 412, destination.url);
-      const own = copiedAccess.get(destination.url);
-      if (own) {
-        const current = await access.read(own.url);
-        if (
-          current.status !== "known" ||
-          current.policy.etag !== own.etag ||
-          !sameGraph(own.dataset, current.policy.dataset)
-        )
-          throw new DriveAccessError("Destination policy changed");
-      }
-      verifyingCopy = false;
-    };
-    try {
-      await copySnapshot(source, to, created, copiedAccess);
-      if (moving) {
-        await beforeDelete?.();
-        verifyingCopy = true;
-        const capture = async (node: SourceSnapshot) => {
-          const url = `${to}${node.url.slice(from.length)}`;
-          const copied = created.find((resource) => resource.url === url) as CreatedResource;
-          // A later HEAD must never invent an identity missing from the PUT.
-          const copiedEtag = validator(url, copied.etag);
-          if (node.children) {
-            // Populating a container changes its creation validator. Bind its
-            // final listing to the expected children, whose PUT identities are
-            // independently checked before any source deletion.
-            const current = await listing(url);
-            const expected = new Set(
-              node.children.map((child) => `${url}${child.url.slice(node.url.length)}`),
-            );
-            if (
-              !sameGraph(
-                relocate(node.data as Store, [[node.url, url]]),
-                containerData(current.dataset, url),
-              ) ||
-              current.items.length !== expected.size ||
-              current.items.some((item) => !expected.has(item.url))
-            )
-              throw new DriveError("conflict", 409, url);
-            destinations.set(node.url, {
-              url,
-              etag: node.children.length ? validator(url, current.etag) : copiedEtag,
-              children: [...expected],
-            });
-          } else destinations.set(node.url, { url, etag: copiedEtag });
-          for (const child of node.children ?? []) await capture(child);
-        };
-        await capture(source);
-        for (const url of sourceUrls(source)) {
-          // Each destination is checked again immediately before its source's
-          // DELETE, since another child deletion may give a concurrent tab time.
-          await verifyDestination({ url });
-        }
-        deleting = true;
-        await deleteSnapshot(
-          source,
-          deleted,
-          async (node) => {
-            await beforeDelete?.();
-            await verifyDestination(node);
-            if (node.access.status === "known") {
-              const current = await access.read(node.access.policy.url);
-              if (
-                current.status !== "known" ||
-                current.policy.etag !== node.access.policy.etag ||
-                !sameGraph(node.access.policy.dataset, current.policy.dataset)
-              )
-                throw new DriveAccessError("Source policy changed");
-            }
-          },
-          (url) => `${to}${url.slice(from.length)}`,
+        const unknown = nodes.some(
+          (node) => (effective.get(node) as AccessState).status === "unknown",
         );
-      }
-    } catch (error) {
-      // Once deletion starts, even a definitive refusal retains the recovery copy.
-      const keep = verifyingCopy || deleting || deleted.length;
-      const cleanup = keep ? undefined : await rollback(created);
-      const retained = cleanup ? cleanup.retained : created.map(({ url }) => url);
-      if (!deleted.length && !retained.length) throw error;
-      const unverified = sourceUrls(source).filter((url) => !deleted.includes(url));
-      throw new DrivePartialFailureError(
-        from,
-        deleted,
-        unverified,
-        retained,
-        cleanup?.pending ?? error,
-      );
-    }
-    const etag = destinations.get(from)?.etag;
-    return {
-      url: to,
-      ...(etag ? { etag } : {}),
-      ...(source.children
-        ? {
-            children: source.children.map((child) => `${to}${child.url.slice(from.length)}`),
-            tree: [...destinations.values()],
+        // Copy, Trash and Restore preserve access, and refuse uncertainty before writes.
+        if (!ordinaryMove && unknown) throw new DriveAccessError("Current access is unknown");
+        await provision.guard(to, true);
+        let keepAccess = !ordinaryMove;
+        if (ordinaryMove && (!source.demo || unknown)) {
+          const inherited: SourceSnapshot[] = [];
+          const affected = (node: SourceSnapshot, protectedDefaults: boolean) => {
+            if (node.access.status === "none" && !protectedDefaults) inherited.push(node);
+            const protectedChildren =
+              protectedDefaults ||
+              (node.access.status === "known" && access.hasDefaults(node.access.policy, node.url));
+            for (const child of node.children ?? []) affected(child, protectedChildren);
+          };
+          affected(source, false);
+          if ((inherited.length > 0 && parentOf(from) !== parentOf(to)) || unknown) {
+            let current: OwnAccess | undefined;
+            let gains: string[];
+            try {
+              if (unknown) throw new DriveAccessError();
+              current = requireAccess(effective.get(source) as AccessState, from);
+              const destination = requireAccess(await access.effective(to, true), to);
+              const widened = new Set<string>();
+              for (const node of inherited)
+                for (const agent of accessGains(
+                  requireAccess(effective.get(node) as AccessState, node.url),
+                  destination,
+                ))
+                  widened.add(agent);
+              gains = [...widened];
+            } catch {
+              gains = [
+                "Access could not be determined (including unreadable ACLs or unsupported ACP)",
+              ];
+            }
+            if (gains.length) {
+              if (!options.confirmAccess)
+                throw new DriveAccessError("Access change requires confirmation");
+              const choice = await options.confirmAccess({
+                from,
+                to,
+                gains,
+                canKeep: !!current && !unknown,
+              });
+              if (choice === "cancel") throw new Error("Move cancelled");
+              if (choice === "keep") {
+                if (!current || unknown) throw new DriveAccessError("Current access is unknown");
+                source.targetAccess = current;
+                keepAccess = true;
+              }
+            }
           }
-        : {}),
-    };
+        }
+        const created: CreatedResource[] = [];
+        const copiedAccess = new Map<string, OwnAccess>();
+        await preparePolicies(source, from, to, privateOwner, archiveContainers);
+        if (keepAccess) {
+          for (const node of nodes)
+            if (!node.demo && node.access.status === "none" && node.targetAccess === undefined)
+              node.targetAccess = requireAccess(effective.get(node) as AccessState, node.url);
+        }
+        const deleted: string[] = [];
+        let deleting = false;
+        let verifyingCopy = false;
+        const destinations = new Map<string, MoveResource>();
+        const verifyDestination = async (source: Pick<SourceSnapshot, "url">) => {
+          const destination = destinations.get(source.url) as CreatedResource;
+          verifyingCopy = true;
+          const etag = validator(destination.url, destination.etag);
+          const response = await ensureOk(
+            await http(destination.url, { method: "HEAD", headers: { "if-match": etag } }),
+            destination.url,
+          );
+          // Also check servers that ignore HEAD preconditions.
+          if (response.headers.get("etag") !== etag)
+            throw new DriveError("conflict", 412, destination.url);
+          const own = copiedAccess.get(destination.url);
+          if (own) {
+            const current = await access.read(own.url);
+            if (
+              current.status !== "known" ||
+              current.policy.etag !== own.etag ||
+              !sameGraph(own.dataset, current.policy.dataset)
+            )
+              throw new DriveAccessError("Destination policy changed");
+          }
+          verifyingCopy = false;
+        };
+        try {
+          await copySnapshot(source, to, created, copiedAccess);
+          if (moving) {
+            await beforeDelete?.();
+            verifyingCopy = true;
+            const capture = async (node: SourceSnapshot) => {
+              const url = `${to}${node.url.slice(from.length)}`;
+              const copied = created.find((resource) => resource.url === url) as CreatedResource;
+              // A later HEAD must never invent an identity missing from the PUT.
+              const copiedEtag = validator(url, copied.etag);
+              if (node.children) {
+                // Populating a container changes its creation validator. Bind its
+                // final listing to the expected children, whose PUT identities are
+                // independently checked before any source deletion.
+                const current = await listing(url);
+                const expected = new Set(
+                  node.children.map((child) => `${url}${child.url.slice(node.url.length)}`),
+                );
+                if (
+                  !sameGraph(
+                    relocate(node.data as Store, [[node.url, url]]),
+                    containerData(current.dataset, url),
+                  ) ||
+                  current.items.length !== expected.size ||
+                  current.items.some((item) => !expected.has(item.url))
+                )
+                  throw new DriveError("conflict", 409, url);
+                destinations.set(node.url, {
+                  url,
+                  etag: node.children.length ? validator(url, current.etag) : copiedEtag,
+                  children: [...expected],
+                });
+              } else destinations.set(node.url, { url, etag: copiedEtag });
+              for (const child of node.children ?? []) await capture(child);
+            };
+            await capture(source);
+            for (const url of sourceUrls(source)) {
+              // Each destination is checked again immediately before its source's
+              // DELETE, since another child deletion may give a concurrent tab time.
+              await verifyDestination({ url });
+            }
+            deleting = true;
+            await deleteSnapshot(
+              source,
+              deleted,
+              async (node) => {
+                await beforeDelete?.();
+                await verifyDestination(node);
+                if (node.access.status === "known") {
+                  const current = await access.read(node.access.policy.url);
+                  if (
+                    current.status !== "known" ||
+                    current.policy.etag !== node.access.policy.etag ||
+                    !sameGraph(node.access.policy.dataset, current.policy.dataset)
+                  )
+                    throw new DriveAccessError("Source policy changed");
+                }
+              },
+              (url) => `${to}${url.slice(from.length)}`,
+            );
+          }
+        } catch (error) {
+          // Once deletion starts, even a definitive refusal retains the recovery copy.
+          const keep = verifyingCopy || deleting || deleted.length;
+          const cleanup = keep ? undefined : await rollback(created);
+          const retained = cleanup ? cleanup.retained : created.map(({ url }) => url);
+          if (!deleted.length && !retained.length) throw error;
+          const unverified = sourceUrls(source).filter((url) => !deleted.includes(url));
+          throw new DrivePartialFailureError(
+            from,
+            deleted,
+            unverified,
+            retained,
+            cleanup?.pending ?? error,
+          );
+        }
+        const etag = destinations.get(from)?.etag;
+        return {
+          url: to,
+          ...(etag ? { etag } : {}),
+          ...(source.children
+            ? {
+                children: source.children.map((child) => `${to}${child.url.slice(from.length)}`),
+                tree: [...destinations.values()],
+              }
+            : {}),
+        };
+      },
+      held,
+    );
   };
 
-  const copy: DriveClient["copy"] = async (from, to, policy) => {
+  const copy = async (
+    from: string,
+    to: string,
+    policy: PreservePolicy,
+    held: ReadonlySet<string>,
+  ) => {
     requirePolicy(policy, ["preserve-source"]);
-    await transfer(from, to, false, policy);
+    await transfer(from, to, false, policy, undefined, undefined, undefined, held);
   };
 
-  const move: DriveClient["move"] = async (from, to, policy, opts) => {
+  const move = async (
+    from: string,
+    to: string,
+    policy: MovePolicy,
+    opts: Parameters<DriveClient["move"]>[3],
+    held: ReadonlySet<string>,
+  ) => {
     requirePolicy(policy, ["preserve-source", "confirm-move"]);
     return transfer(
       from,
@@ -1033,17 +1060,22 @@ export function createSolidDriveClient(options: {
       opts?.beforeDelete,
       opts?.privateOwner,
       opts?.archiveContainers,
+      held,
     );
   };
 
-  const remove: DriveClient["remove"] = async (url, opts = {}) => {
+  const remove = async (
+    url: string,
+    opts: Parameters<DriveClient["remove"]>[1] = {},
+    held: ReadonlySet<string> = new Set(),
+  ) => {
     await deletion.guard(url);
     try {
       if (url.endsWith("/") && opts.recursive) {
         const source = await snapshot(url, true, false);
         const deleted: string[] = [];
         try {
-          await deleteSnapshot(source, deleted);
+          await sourceOperation(sourceUrls(source), () => deleteSnapshot(source, deleted), held);
         } catch (error) {
           if (deleted.length)
             throw new DrivePartialFailureError(
@@ -1064,7 +1096,8 @@ export function createSolidDriveClient(options: {
     }
   };
 
-  return {
+  const scopes = new WeakMap<DriveClient, ReadonlySet<string>>();
+  const client: DriveClient = {
     storageUrl,
     ...(options.confirmAccess ? { confirmAccess: options.confirmAccess } : {}),
     list,
@@ -1072,9 +1105,24 @@ export function createSolidDriveClient(options: {
     read,
     readVersion,
     readRdf,
-    write,
+    exclusive(urls, work) {
+      return sourceOperation(
+        urls,
+        (held) => {
+          const scoped = { ...this };
+          scopes.set(scoped, held);
+          return work(scoped);
+        },
+        scopes.get(this),
+      );
+    },
+    write(url, ...args) {
+      return sourceOperation([url], () => write(url, ...args), scopes.get(this));
+    },
     createFolder,
-    mergeContainer,
+    mergeContainer(from, to, policy) {
+      return sourceOperation([from, to], () => mergeContainer(from, to, policy), scopes.get(this));
+    },
     prepareTrash: async (url, decision) => {
       requirePolicy(decision, ["owner-only"]);
       const webId = decision.webId;
@@ -1091,9 +1139,20 @@ export function createSolidDriveClient(options: {
         await provision.protect(url, policy);
       }
     },
-    copy,
-    move,
-    remove,
+    copy(from, to, policy) {
+      return sourceOperation([from, to], (held) => copy(from, to, policy, held), scopes.get(this));
+    },
+    move(from, to, ...args) {
+      return sourceOperation(
+        [from, to],
+        (held) => move(from, to, args[0], args[1], held),
+        scopes.get(this),
+      );
+    },
+    remove(url, opts) {
+      return sourceOperation([url], (held) => remove(url, opts, held), scopes.get(this));
+    },
     recheckDeletions: () => deletion.recheck(storageUrl),
   };
+  return client;
 }
