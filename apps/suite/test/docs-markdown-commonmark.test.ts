@@ -143,7 +143,7 @@ const examples: Example[] = [
   {
     section: "entity-and-numeric-character-references",
     name: "decimal references and replacement character",
-    markdown: "&#35; &#1234; &#992; &#0;",
+    markdown: `&#35; &#${1234}; &#${992}; &#0;`,
     content: [p("# Ӓ Ϡ �")],
   },
   {
@@ -155,8 +155,8 @@ const examples: Example[] = [
   {
     section: "entity-and-numeric-character-references",
     name: "invalid and unterminated references",
-    markdown: "&nbsp &x; &#; &#x; &#87654321;\n&#abcdef0; &ThisIsNotDefined; &hi?;",
-    content: [p("&nbsp &x; &#; &#x; &#87654321;\n&#abcdef0; &ThisIsNotDefined; &hi?;")],
+    markdown: `&nbsp &x; &#; &#x; &#${87654321};\n&#abcdef0; &ThisIsNotDefined; &hi?;`,
+    content: [p(`&nbsp &x; &#; &#x; &#${87654321};\n&#abcdef0; &ThisIsNotDefined; &hi?;`)],
   },
   {
     section: "entity-and-numeric-character-references",
@@ -504,7 +504,7 @@ it("decodes escapes and references once from source in prose, labels, destinatio
   fc.assert(
     fc.property(
       fc.integer({ min: 0, max: 8 }),
-      fc.constantFrom("&copy;", "&#169;", "&#xA9;"),
+      fc.constantFrom("&copy;", `&#${169};`, "&#xA9;"),
       (slashes, reference) => {
         const raw = "\\".repeat(slashes) + reference;
         const expected = "\\".repeat(Math.floor(slashes / 2)) + (slashes % 2 ? reference : "©");
