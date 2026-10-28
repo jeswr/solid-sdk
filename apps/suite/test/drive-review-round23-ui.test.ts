@@ -188,7 +188,10 @@ it.each([
   await openRow(FILE);
   await click(button("Details"));
   await click(button("Show technical details"));
-  expect(document.querySelector(".drv-preview-text")?.textContent).toBe("old");
+  // Opening waits for metadata before its first GET. The refreshed listing must
+  // supersede this pending HEAD without loading or displaying the stale bytes.
+  expect(document.querySelector('[aria-label="Loading preview"]')).not.toBeNull();
+  expect(read).not.toHaveBeenCalled();
   expect(fact("Size")).toBe("3 B");
   await act(async () => {
     refreshed = true;
@@ -199,7 +202,7 @@ it.each([
   expect(document.querySelector(".drv-preview-text")?.textContent).toBe(body);
   expect(fact("Size")).toBe(`${latest.size} B`);
   expect(fact("Content type")).toBe(latest.contentType);
-  expect(read).toHaveBeenCalledTimes(2);
+  expect(read).toHaveBeenCalledTimes(1);
   await act(async () => staleHead.resolve(cached));
   expect(document.querySelector(".drv-preview-text")?.textContent).toBe(body);
   expect(fact("Size")).toBe(`${latest.size} B`);

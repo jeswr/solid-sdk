@@ -153,7 +153,7 @@ it.each(["list", "grid"])("Enter on the %s roving item still opens the file", as
   const target = row(view.host);
   await act(async () => target.focus());
   await key(target, "Enter");
-  expect(ui.preview).toEqual({ items, index: 0 });
+  expect(ui.preview).toEqual({ items, index: 0, activationId: expect.any(String) });
   await view.unmount();
 });
 
@@ -1378,4 +1378,37 @@ it("uploads a folder dropped on the listing or a folder row with its structure",
     expect(mocks.toast.error).toHaveBeenCalledWith("Couldn't read the dropped folder"),
   );
   expect(drive.uploads.enqueue).toHaveBeenCalledTimes(2);
+});
+
+it("offers confirmed Delete forever when private Trash access cannot be established", async () => {
+  const { DriveAccessError } = await import("../src/apps/drive/lib/client/access");
+  const error = new DriveAccessError();
+  const pod = createDemoPod({
+    root: "https://pod.example/",
+    seed: [{ path: "drive/A.txt", body: "Private data", contentType: "text/plain" }],
+  });
+  drive.client = createSolidDriveClient({ storageUrl: "https://pod.example/", fetch: pod.fetch });
+  vi.spyOn(operations, "trashItems").mockResolvedValue({
+    done: [],
+    failed: [{ url: `${ROOT}A.txt`, error }],
+  });
+  const view = await mount(tree(items, true));
+  await act(async () => actions.trash([items[0] as DriveItem]));
+  expect(mocks.toast.error).toHaveBeenCalledWith(
+    error.message,
+    expect.objectContaining({ action: expect.objectContaining({ label: "Delete forever" }) }),
+  );
+  const options = mocks.toast.error.mock.calls.at(-1)?.[1] as { action: { onClick(): void } };
+  await act(async () => options.action.onClick());
+  expect(document.querySelector('[role="alertdialog"]')?.textContent).toContain(
+    "This can't be undone.",
+  );
+  expect(pod.has(`${ROOT}A.txt`)).toBe(true);
+  const confirm = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent === "Delete for ever",
+  );
+  if (!confirm) throw new Error("Missing delete confirmation");
+  await click(confirm);
+  expect(pod.has(`${ROOT}A.txt`)).toBe(false);
+  await view.unmount();
 });

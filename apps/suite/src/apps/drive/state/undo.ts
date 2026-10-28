@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+import { accessControl } from "../lib/client/access";
 import { createSolidDriveClient, DriveError, type MoveResource } from "../lib/client/client";
 
 /**
@@ -17,6 +18,8 @@ export async function moveWithValidator(
   if (!etag || etag.startsWith("W/") || (folder && !tree))
     throw new Error("This move cannot be safely undone");
   const identities = new Map(tree?.map((resource) => [resource.url, resource]));
+  const auxiliaries = new Set<string>();
+  const policies = accessControl(options.fetch, options.storageUrl);
   let createdEtag: string | null = null;
   let folderCopied = false;
   const client = createSolidDriveClient({
@@ -27,7 +30,11 @@ export async function moveWithValidator(
       const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
       const headers = new Headers(init?.headers ?? request?.headers);
       const readingTree =
-        folder && !folderCopied && url.startsWith(from) && (method === "GET" || method === "HEAD");
+        folder &&
+        !folderCopied &&
+        url.startsWith(from) &&
+        (!auxiliaries.has(url) || identities.has(url)) &&
+        (method === "GET" || method === "HEAD");
       const identity = identities.get(url);
       if (readingTree) {
         if (!identity?.etag || identity.etag.startsWith("W/"))
@@ -61,6 +68,14 @@ export async function moveWithValidator(
         response.headers.get("etag") !== etag
       )
         throw new DriveError("conflict", 412, from);
+      if (readingTree && response.ok) {
+        try {
+          const acl = policies.discover(url, response.headers);
+          if (acl) auxiliaries.add(acl);
+        } catch {
+          // The transfer's access check asks about unsupported policy models.
+        }
+      }
       if (url === to && method === "PUT" && response.ok) {
         createdEtag = response.headers.get("etag");
         folderCopied = true;

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex
 "use client";
 /**
  * The item menu (04-drive §4.5) as one model rendered two ways: the row's
@@ -30,6 +31,8 @@ import {
   Trash2,
 } from "lucide-react";
 import type { DriveItem } from "../lib/client/client";
+import { isOwnStorage } from "../lib/client/ownership";
+import { useDrive } from "../state/drive-context";
 import type { DriveActions } from "../state/ui";
 import { useDriveUi } from "../state/ui";
 
@@ -51,6 +54,8 @@ export function useItemMenu(
   siblings: readonly DriveItem[],
 ): MenuEntry[] {
   const ui = useDriveUi();
+  const { session } = useDrive();
+  const writable = targets.every((item) => isOwnStorage(item.url, session.storageUrl));
   const [first] = targets;
   if (!first) return [];
   const single = targets.length === 1;
@@ -82,6 +87,7 @@ export function useItemMenu(
     entries.push("separator");
     entries.push({
       id: "rename",
+      disabled: !writable,
       label: "Rename",
       icon: Pencil,
       shortcut: "F2",
@@ -90,6 +96,7 @@ export function useItemMenu(
   }
   entries.push({
     id: "move",
+    disabled: !writable,
     label: "Move to…",
     icon: FolderInput,
     shortcut: "M",
@@ -98,6 +105,7 @@ export function useItemMenu(
   if (single && first.kind === "file") {
     entries.push({
       id: "copy",
+      disabled: !writable,
       label: "Make a copy",
       icon: Copy,
       onSelect: () => void actions.makeCopy(first),
@@ -123,6 +131,7 @@ export function useItemMenu(
   });
   entries.push({
     id: "trash",
+    disabled: !writable,
     label: "Move to trash",
     icon: Trash2,
     shortcut: "Del",

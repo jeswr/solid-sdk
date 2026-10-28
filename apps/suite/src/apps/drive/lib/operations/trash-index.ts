@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 /**
  * App-managed trash index (04-drive §5.3): one `prov:Entity` subject per
  * trashed item in `<drive>/.trash/index.ttl`, read and written through
@@ -58,6 +59,18 @@ export class TrashRecord extends TermWrapper {
   }
   set restoredLocation(value: string | undefined) {
     OptionalAs.object(this, `${DCT}isReplacedBy`, value, NamedNodeFrom.string);
+  }
+  get leaseOwner(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, `${PROV}wasAssociatedWith`, NamedNodeAs.string);
+  }
+  set leaseOwner(value: string | undefined) {
+    OptionalAs.object(this, `${PROV}wasAssociatedWith`, value, NamedNodeFrom.string);
+  }
+  get leaseUntil(): Date | undefined {
+    return OptionalFrom.subjectPredicate(this, `${DCT}valid`, LiteralAs.date);
+  }
+  set leaseUntil(value: Date | undefined) {
+    OptionalAs.object(this, `${DCT}valid`, value, LiteralFrom.dateTime);
   }
   /** Source URL/ETag tuples captured before the pending intent is persisted. */
   get sourceVersions(): Set<string> {

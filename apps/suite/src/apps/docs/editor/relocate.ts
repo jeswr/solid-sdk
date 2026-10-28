@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { SolidUpdateStore } from "@jeswr/y-solid";
 import { SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import sanitizeHtml from "sanitize-html";
 import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement, XmlFragment, XmlText } from "yjs";
-import { type DriveClient, DriveError } from "../../drive/lib/client/client";
+import { DriveAccessError } from "../../drive/lib/client/access";
+import { type DriveClient, DriveError, type WriteOptions } from "../../drive/lib/client/client";
 import { buildDocument, type PodDocument } from "../lib/model/document";
 import { docContainerUrls } from "../lib/model/layout";
 import { serializeTurtle } from "../lib/model/rdf-io";
@@ -159,11 +161,12 @@ export async function writeRestoreSnapshot(
   client: DriveClient,
   url: string,
   body: string,
-  condition: { ifMatch: string } | { ifNoneMatch: "*" },
+  condition: ({ ifMatch: string } | { ifNoneMatch: "*" }) & Pick<WriteOptions, "restoreFrom">,
 ): Promise<{ etag?: string }> {
   try {
     return await client.write(url, body, { contentType: "text/turtle", ...condition });
   } catch (error) {
+    if (error instanceof DriveAccessError) throw error;
     let current: Awaited<ReturnType<DriveClient["readVersion"]>>;
     try {
       current = await client.readVersion(url);

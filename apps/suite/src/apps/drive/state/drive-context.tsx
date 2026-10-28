@@ -28,6 +28,7 @@ import {
   parentOf,
 } from "../lib/client/client";
 import { DRIVE_ROOT_CLASS } from "../lib/constants";
+import { useAccessConfirmation } from "./access-confirmation";
 import { type DrivePreferences, useDrivePreferences } from "./prefs";
 import { type UploadQueue, useUploadQueue } from "./uploads";
 
@@ -69,9 +70,15 @@ async function resolveDriveRoot(client: DriveClient, session: PodSession): Promi
 }
 
 export function DriveProvider({ session, children }: { session: PodSession; children: ReactNode }) {
+  const { confirmAccess, dialog } = useAccessConfirmation();
   const client = useMemo(
-    () => createSolidDriveClient({ storageUrl: session.storageUrl, fetch: session.fetch }),
-    [session],
+    () =>
+      createSolidDriveClient({
+        storageUrl: session.storageUrl,
+        fetch: session.fetch,
+        confirmAccess,
+      }),
+    [session, confirmAccess],
   );
   const [driveRoot, setDriveRoot] = useState<string>();
   const [rootError, setRootError] = useState<unknown>();
@@ -142,7 +149,12 @@ export function DriveProvider({ session, children }: { session: PodSession; chil
     }),
     [session, client, driveRoot, rootError, prefs, updatePrefs, uploads, invalidate, changes],
   );
-  return <DriveContext value={value}>{children}</DriveContext>;
+  return (
+    <DriveContext value={value}>
+      {children}
+      {dialog}
+    </DriveContext>
+  );
 }
 
 export function useDrive(): DriveContextValue {

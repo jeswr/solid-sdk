@@ -27,7 +27,11 @@ function transport(
     if (method === "GET" || method === "HEAD")
       return current
         ? new Response(method === "HEAD" ? null : current.body, {
-            headers: { etag: current.etag, "content-type": "text/plain" },
+            headers: {
+              etag: current.etag,
+              "content-type": "text/plain",
+              "x-solid-demo-access-control": "none",
+            },
           })
         : new Response(null, { status: 404 });
     if (method === "PUT") {

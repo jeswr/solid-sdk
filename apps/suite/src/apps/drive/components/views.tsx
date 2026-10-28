@@ -20,6 +20,8 @@ import type { TrashEntry } from "../lib/operations/trash-index";
 import { formatSize } from "../lib/view/view";
 import { useDrive, useFolder } from "../state/drive-context";
 import { useDriveListingFocus } from "../state/listing-focus";
+import { withHydratedMetadata } from "../state/resource";
+import { latestShared, useRecordSharedOpen } from "../state/shared";
 import { useDriveActions, useDriveUi } from "../state/ui";
 import { Breadcrumbs } from "./breadcrumbs";
 import { type BrowserItem, FileBrowser } from "./file-browser";
@@ -42,6 +44,11 @@ export function FolderView({ url }: { url?: string }) {
   const folder = url ?? driveRoot;
   const listing = useFolder(folder);
   const isRoot = folder === driveRoot;
+  const recordOpen = useRecordSharedOpen();
+  useEffect(() => {
+    if (folder && listing.status === "ready")
+      recordOpen({ url: folder, name: nameOf(folder), kind: "folder" });
+  }, [folder, listing.status, recordOpen]);
   if (
     listing.status === "error" &&
     listing.error instanceof DriveError &&
@@ -200,7 +207,8 @@ export function StarredView() {
   const { client, prefs, driveRoot, changes } = useDrive();
   const [items, setItems] = useState<BrowserItem[]>();
   const [version, setVersion] = useState(0);
-  const starred = prefs.starred;
+  // Preference notifications parse fresh arrays even when the starred URLs are unchanged.
+  const starred = JSON.stringify(prefs.starred);
   // Starred items live anywhere in Drive, so any change there may remove or alter a row.
   useEffect(
     () =>
@@ -211,7 +219,7 @@ export function StarredView() {
     void version;
     let live = true;
     Promise.all(
-      starred.map((url) =>
+      (JSON.parse(starred) as string[]).map((url) =>
         client.stat(url).then(
           (item): BrowserItem => {
             const parent = parentOf(url);
@@ -242,21 +250,26 @@ export function StarredView() {
 }
 
 export function SharedView() {
-  const { prefs } = useDrive();
+  const { client, prefs } = useDrive();
   const items = useMemo<BrowserItem[]>(
     () =>
-      prefs.openedShared.map(({ url }) => ({
-        url,
-        name: nameOf(url),
-        kind: url.endsWith("/") ? "folder" : "file",
-      })),
-    [prefs.openedShared],
+      latestShared(prefs.openedShared).map(({ url, name, type, openedAt }) =>
+        withHydratedMetadata(client, {
+          url,
+          name: name ?? nameOf(url),
+          kind: type ?? (url.endsWith("/") ? "folder" : "file"),
+          openedAt: new Date(openedAt),
+        }),
+      ),
+    [client, prefs.openedShared],
   );
   return (
     <FileBrowser
       title="Shared with me"
       items={items}
-      columns={["modified"]}
+      fixedOrder
+      showModifiedFilter={false}
+      columns={["shared-by", "opened", "host"]}
       banner={
         <Alert className="drv-banner">
           <Users aria-hidden="true" size={16} />

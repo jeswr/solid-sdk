@@ -7,7 +7,7 @@
  */
 
 import { Button, IconButton } from "@jeswr/suite-ui";
-import { Copy, Lock, X } from "lucide-react";
+import { Copy, X } from "lucide-react";
 import Link from "next/link";
 import { useId, useState } from "react";
 import { encodeRef } from "@/lib/refs";
@@ -15,7 +15,9 @@ import { type DriveItem, parentOf } from "../lib/client/client";
 import { formatFileSize } from "../lib/files";
 import { breadcrumbs } from "../lib/files/breadcrumbs";
 import { formatModified, formatSize, friendlyType } from "../lib/view/view";
+import { useAccessLabel } from "../state/access";
 import { useDrive } from "../state/drive-context";
+import { useItemOwner } from "../state/ownership";
 import { useLiveItem } from "../state/resource";
 import { useDriveUi } from "../state/ui";
 import { ItemIcon } from "./item-icon";
@@ -54,9 +56,10 @@ export function DetailsPane({
   const detailsItems = items ?? selectedItems;
   const accessId = useId();
   const factsId = useId();
-  const { session } = useDrive();
   const [technical, setTechnical] = useState(false);
   const item = useLiveItem(detailsItems[0]);
+  const owner = useItemOwner(detailsItems.length === 1 ? item?.url : undefined);
+  const access = useAccessLabel(detailsItems.length === 1 ? detailsItems[0]?.url : undefined);
   if (!item) {
     return (
       <div className="drv-details">
@@ -97,8 +100,8 @@ export function DetailsPane({
       </div>
       <section aria-labelledby={accessId}>
         <h3 id={accessId}>Who has access</h3>
-        <p className="drv-access-line">
-          <Lock aria-hidden="true" size={16} /> Only you
+        <p className="drv-access-line" role="status" aria-live="polite">
+          {access}
         </p>
         <Button variant="outline" size="sm" disabled title="Sharing arrives with the share dialog">
           Manage access
@@ -129,7 +132,7 @@ export function DetailsPane({
           </div>
           <div>
             <dt>Owner</dt>
-            <dd>Me</dd>
+            <dd>{owner?.label ?? "Unknown"}</dd>
           </div>
         </dl>
         <button
@@ -162,7 +165,7 @@ export function DetailsPane({
             <div>
               <dt>Owner Account ID</dt>
               <dd>
-                <code>{session.webId}</code>
+                <code>{owner?.webId ?? "Unknown"}</code>
               </dd>
             </div>
           </dl>

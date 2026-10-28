@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 /**
  * The Drive screens' storage seam. Screens and operations only see
  * {@link DriveClient}; this module implements it over Solid LDP with an
@@ -8,10 +9,22 @@
  * implementation swaps and the interface stays.
  */
 
-import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
+import { fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
+import { serialize } from "@jeswr/rdf-serialize";
 import { Container, Resource } from "@solid/object";
-import { DataFactory, type Store } from "n3";
+import { DataFactory, Store } from "n3";
 import { mapConcurrent } from "../../../../lib/parallel";
+import {
+  type AccessState,
+  accessControl,
+  accessGains,
+  type ConfirmAccess,
+  DriveAccessError,
+  type OwnAccess,
+  privateAcl,
+  requireAccess,
+} from "./access";
+import { containerData, relocate, sameGraph } from "./rdf";
 
 const IANA_TYPE = /^http:\/\/www\.w3\.org\/ns\/iana\/media-types\/(.+)#Resource$/;
 
@@ -28,6 +41,8 @@ export interface DriveItem {
 
 export interface WriteOptions {
   readonly contentType: string;
+  /** Rewritten restore: install the archived source ACL before any payload. */
+  readonly restoreFrom?: { url: string; etag: string };
   /** `"*"`: fail with {@link DriveConflictError} when the target exists. */
   readonly ifNoneMatch?: "*";
   /** Overwrite only this version. */
@@ -51,6 +66,7 @@ export interface MoveResource {
 
 export interface DriveClient {
   readonly storageUrl: string;
+  readonly confirmAccess?: ConfirmAccess;
   /** Children of a folder (hidden dot-names included; the UI filters them). */
   list(folderUrl: string, options?: { signal?: AbortSignal }): Promise<DriveItem[]>;
   /** Metadata for one item (HEAD), optionally conditional on the expected version. */
@@ -62,13 +78,17 @@ export interface DriveClient {
   readRdf(url: string): Promise<{ dataset: Store; etag?: string } | undefined>;
   write(url: string, body: Blob | string, options: WriteOptions): Promise<{ etag?: string }>;
   createFolder(url: string): Promise<void>;
+  /** Establish owner-only default access before writing the Trash index or bytes. */
+  prepareTrash(url: string, webId?: string): Promise<void>;
+  /** Merge surviving container data and restore the policy for a recreated container. */
+  mergeContainer(from: string, to: string, copyPolicy: boolean): Promise<void>;
   /** Copy a file (folders: recursive). Fails with a conflict when `to` exists. */
   copy(from: string, to: string): Promise<void>;
   /** Move = copy + verified, conditional delete; returns the copied identity. */
   move(
     from: string,
     to: string,
-    options?: { beforeDelete?: () => Promise<void> },
+    options?: { beforeDelete?: () => Promise<void>; privateOwner?: string },
   ): Promise<MoveResult>;
   /** Non-recursive `ifMatch` deletes exactly that version without refreshing its validator. */
   remove(url: string, options?: { recursive?: boolean; ifMatch?: string }): Promise<void>;
@@ -142,15 +162,22 @@ interface SourceSnapshot {
   readonly children: readonly SourceSnapshot[] | undefined;
   readonly body?: Blob;
   readonly contentType?: string;
+  readonly data?: Store;
+  readonly access: AccessState;
+  readonly demo?: boolean;
+  targetAccess?: OwnAccess;
 }
 
 interface CreatedResource {
   readonly url: string;
-  readonly etag: string | undefined;
+  etag: string | undefined;
 }
 
+function snapshots(source: SourceSnapshot): SourceSnapshot[] {
+  return [source, ...(source.children ?? []).flatMap(snapshots)];
+}
 function sourceUrls(source: SourceSnapshot): string[] {
-  return [source.url, ...(source.children ?? []).flatMap(sourceUrls)];
+  return snapshots(source).map((node) => node.url);
 }
 
 function errorFor(status: number, url: string): DriveError {
@@ -215,12 +242,20 @@ function itemFromResource(resource: Resource): DriveItem {
   };
 }
 
+/** Private sibling receipt; it stays outside the resource's recovery tree. */
+export function policyArchiveOf(url: string): string | undefined {
+  const match = /^(.*\/\.trash\/[0-9a-f-]{36}\/)/i.exec(url);
+  return match ? `${match[1]}.access.json` : undefined;
+}
+
 export function createSolidDriveClient(options: {
   storageUrl: string;
   fetch: typeof globalThis.fetch;
+  confirmAccess?: ConfirmAccess;
 }): DriveClient {
   const { storageUrl } = options;
   const http = options.fetch;
+  const access = accessControl(http, storageUrl);
 
   const ensureOk = async (response: Response, url: string) => {
     if (!response.ok) throw errorFor(response.status, url);
@@ -238,6 +273,8 @@ export function createSolidDriveClient(options: {
       for (const child of members) validateMember(folderUrl, child.id);
       return {
         etag: result.etag ?? undefined,
+        dataset: result.dataset,
+        headers: result.response.headers,
         items: members.map((child) =>
           itemFromResource(new Resource(child.id, result.dataset, DataFactory)),
         ),
@@ -299,6 +336,54 @@ export function createSolidDriveClient(options: {
   };
 
   const write: DriveClient["write"] = async (url, body, opts) => {
+    if (opts.restoreFrom) {
+      const source = await snapshot(opts.restoreFrom.url, true, true);
+      if (source.etag !== opts.restoreFrom.etag) throw new DriveError("conflict", 412, source.url);
+      if (!source.demo) {
+        await preparePolicies(source, source.url, url);
+        const policy =
+          source.targetAccess ??
+          requireAccess(
+            source.access.status === "known" ? source.access : await access.effective(source.url),
+            source.url,
+          );
+        const empty = await write(url, "", {
+          contentType: opts.contentType,
+          ifNoneMatch: "*",
+        });
+        try {
+          const own = await access.install(policy, source.url, url);
+          const verifyPolicies = async () => {
+            for (const expected of [
+              own,
+              ...(source.access.status === "known" ? [source.access.policy] : []),
+            ]) {
+              const current = await access.read(expected.url);
+              if (
+                current.status !== "known" ||
+                current.policy.etag !== expected.etag ||
+                !sameGraph(expected.dataset, current.policy.dataset)
+              )
+                throw new DriveAccessError("Restore policy changed");
+            }
+          };
+          try {
+            return await write(url, body, {
+              contentType: opts.contentType,
+              ifMatch: validator(url, empty.etag),
+            });
+          } finally {
+            // Recheck policies even when a payload's acknowledgement is lost.
+            // Byte equality alone cannot settle an access-control failure.
+            await verifyPolicies();
+          }
+        } catch (error) {
+          // Delete only our unchanged placeholder; retain any durable payload.
+          await deleteVersion(url, empty.etag).catch(() => undefined);
+          throw error;
+        }
+      }
+    }
     const headers: Record<string, string> = { "content-type": opts.contentType };
     if (opts.ifNoneMatch) headers["if-none-match"] = opts.ifNoneMatch;
     if (opts.ifMatch) headers["if-match"] = opts.ifMatch;
@@ -332,20 +417,35 @@ export function createSolidDriveClient(options: {
     requireValidator: boolean,
     bodies: boolean,
   ): Promise<SourceSnapshot> => {
+    const policy = (headers: Headers): Promise<AccessState> =>
+      bodies
+        ? access.snapshot(url, headers)
+        : Promise.resolve({ status: "unknown", cause: "Not read" });
     if (url.endsWith("/")) {
-      const { items, etag } = await listing(url);
+      const { items, etag, dataset, headers } = await listing(url);
       if (requireValidator) validator(url, etag);
       const children: SourceSnapshot[] = [];
       for (const child of items) children.push(await snapshot(child.url, requireValidator, bodies));
-      return { url, etag, children };
+      const own = await policy(headers);
+      return {
+        url,
+        etag,
+        children,
+        demo: headers.get("x-solid-demo-access-control") === "none",
+        ...(bodies ? { data: containerData(dataset, url) } : {}),
+        access: own,
+      };
     }
     const response = await ensureOk(await http(url, bodies ? undefined : { method: "HEAD" }), url);
     const etag = response.headers.get("etag") ?? undefined;
     if (requireValidator) validator(url, etag);
+    const own = await policy(response.headers);
     return {
       url,
       etag,
       children: undefined,
+      demo: response.headers.get("x-solid-demo-access-control") === "none",
+      access: own,
       ...(bodies
         ? {
             body: await response.blob(),
@@ -379,7 +479,11 @@ export function createSolidDriveClient(options: {
       // Our own child deletions change a container's ETag. Read its new empty
       // representation, then conditionally delete it. Never walk new members.
       const current = await listing(source.url);
-      if (current.items.length) throw new DriveError("conflict", 409, source.url);
+      if (
+        current.items.length ||
+        (source.data && !sameGraph(source.data, containerData(current.dataset, source.url)))
+      )
+        throw new DriveError("conflict", 409, source.url);
       etag = current.etag;
       await verifyCopy?.(source);
     }
@@ -387,18 +491,56 @@ export function createSolidDriveClient(options: {
     deleted.push(source.url);
   };
 
-  const copySnapshot = async (source: SourceSnapshot, to: string, created: CreatedResource[]) => {
+  const copySnapshot = async (
+    source: SourceSnapshot,
+    to: string,
+    created: CreatedResource[],
+    copiedAccess: Map<string, OwnAccess>,
+  ) => {
+    const policy =
+      source.targetAccess ?? (source.access.status === "known" ? source.access.policy : undefined);
     if (source.children) {
       const response = await putFolder(to);
-      created.push({ url: to, etag: response.headers.get("etag") ?? undefined });
+      const resource = { url: to, etag: response.headers.get("etag") ?? undefined };
+      created.push(resource);
+      if (policy) copiedAccess.set(to, await access.install(policy, source.url, to));
+      const data = relocate(source.data as Store, [[source.url, to]]);
+      if (data.size) {
+        const saved = await write(to, await serialize([...data]), {
+          contentType: "text/turtle",
+          ifMatch: validator(to, resource.etag),
+        });
+        resource.etag = saved.etag;
+        const current = await listing(to);
+        if (!sameGraph(data, containerData(current.dataset, to)))
+          throw new DriveError("conflict", 409, to);
+      }
       for (const child of source.children)
-        await copySnapshot(child, `${to}${child.url.slice(source.url.length)}`, created);
+        await copySnapshot(
+          child,
+          `${to}${child.url.slice(source.url.length)}`,
+          created,
+          copiedAccess,
+        );
     } else {
+      let placeholder: CreatedResource | undefined;
+      if (policy) {
+        const empty = await write(to, "", {
+          contentType: source.contentType as string,
+          ifNoneMatch: "*",
+        });
+        placeholder = { url: to, etag: empty.etag };
+        created.push(placeholder);
+        copiedAccess.set(to, await access.install(policy, source.url, to));
+      }
       const result = await write(to, source.body as Blob, {
         contentType: source.contentType as string,
-        ifNoneMatch: "*",
+        ...(placeholder
+          ? { ifMatch: validator(to, placeholder.etag) }
+          : { ifNoneMatch: "*" as const }),
       });
-      created.push({ url: to, etag: result.etag });
+      if (placeholder) placeholder.etag = result.etag;
+      else created.push({ url: to, etag: result.etag });
     }
   };
 
@@ -420,17 +562,200 @@ export function createSolidDriveClient(options: {
     return retained;
   };
 
+  const preparePolicies = async (
+    source: SourceSnapshot,
+    from: string,
+    to: string,
+    privateOwner?: string,
+  ) => {
+    if (!source.demo) {
+      if (privateOwner) {
+        // WAC own grants override defaults. Archive the original policies under
+        // private Trash before replacing ALL recovery grants with owner-only ones.
+        const archive: Record<string, { resource: string; acl: string; turtle: string }> = {};
+        for (const node of snapshots(source)) {
+          const destination = `${to}${node.url.slice(from.length)}`;
+          const original = requireAccess(
+            node.access.status === "known" ? node.access : await access.effective(node.url),
+            node.url,
+          );
+          archive[destination] = {
+            resource: node.url,
+            acl: original.url,
+            turtle: await serialize([...original.dataset]),
+          };
+          node.targetAccess = {
+            url: `${node.url}.acl`,
+            etag: "",
+            dataset: privateAcl(node.url, privateOwner),
+          };
+        }
+        await write(policyArchiveOf(to) as string, JSON.stringify(archive), {
+          contentType: "application/json",
+          ifNoneMatch: "*",
+        });
+      } else {
+        const archiveUrl = policyArchiveOf(from);
+        if (archiveUrl) {
+          const response = await http(archiveUrl);
+          if (!response.ok && response.status !== 404) throw new DriveAccessError(response.status);
+          if (response.ok) {
+            const archive = (await response.json()) as Record<
+              string,
+              { resource: string; acl: string; turtle: string } | null
+            >;
+            for (const node of snapshots(source)) {
+              const saved = archive[node.url];
+              if (saved === undefined) throw new DriveAccessError("Missing archived policy");
+              node.targetAccess =
+                saved === null
+                  ? requireAccess(
+                      node.access.status === "known"
+                        ? node.access
+                        : await access.effective(node.url),
+                      node.url,
+                    )
+                  : {
+                      url: node.access.status === "known" ? node.access.policy.url : saved.acl,
+                      etag: "",
+                      dataset: relocate(
+                        await parseRdf(saved.turtle, "text/turtle", { baseIRI: saved.acl }),
+                        [
+                          [
+                            saved.acl,
+                            node.access.status === "known" ? node.access.policy.url : saved.acl,
+                          ],
+                          [saved.resource, node.url],
+                        ],
+                      ),
+                    };
+            }
+          }
+        }
+      }
+    }
+  };
+
+  const mergeContainer: DriveClient["mergeContainer"] = async (from, to, copyPolicy) => {
+    const original = await listing(from);
+    const own = await access.snapshot(from, original.headers);
+    const source: SourceSnapshot = {
+      url: from,
+      etag: original.etag,
+      children: [],
+      data: containerData(original.dataset, from),
+      demo: original.headers.get("x-solid-demo-access-control") === "none",
+      access: own,
+    };
+    const effective = own.status === "none" && !own.demo ? await access.effective(from) : own;
+    requireAccess(effective, from);
+    await preparePolicies(source, from, to);
+    const policy = source.demo
+      ? undefined
+      : (source.targetAccess ?? requireAccess(effective, from));
+    if (copyPolicy && policy) await access.install(policy, from, to);
+    else if (
+      policy &&
+      accessGains(access.forResource(policy, from), requireAccess(await access.effective(to), to))
+        .length
+    )
+      throw new DriveAccessError("Existing destination grants wider access");
+    const current = await listing(to);
+    const data = new Store([
+      ...containerData(current.dataset, to),
+      ...relocate(source.data as Store, [[from, to]]),
+    ]);
+    if (sameGraph(containerData(current.dataset, to), data)) return;
+    await write(to, await serialize([...data]), {
+      contentType: "text/turtle",
+      ifMatch: validator(to, current.etag),
+    });
+    if (!sameGraph(data, containerData((await listing(to)).dataset, to)))
+      throw new DriveError("conflict", 409, to);
+  };
+
   const transfer = async (
     from: string,
     to: string,
     moving: boolean,
     beforeDelete?: () => Promise<void>,
+    privateOwner?: string,
   ) => {
     if (from.endsWith("/") !== to.endsWith("/") || (from.endsWith("/") && to.startsWith(from))) {
       throw new DriveError("conflict", 409, to);
     }
+    const ordinaryMove = moving && !privateOwner && !policyArchiveOf(from);
     const source = await snapshot(from, moving, true);
+    const nodes = snapshots(source);
+    // Resolve every node, even for same-folder renames and descendants with own ACLs.
+    // A missing Link or unreadable ancestor can never stand in for known absence.
+    const effective = new Map<SourceSnapshot, AccessState>();
+    for (const node of nodes) {
+      effective.set(
+        node,
+        node.access.status === "none" && !node.access.demo
+          ? await access.effective(node.url)
+          : node.access,
+      );
+    }
+    const unknown = nodes.some((node) => (effective.get(node) as AccessState).status === "unknown");
+    // Copy, Trash and Restore preserve access, and refuse uncertainty before writes.
+    if (!ordinaryMove && unknown) throw new DriveAccessError("Current access is unknown");
+    let keepAccess = !ordinaryMove;
+    if (ordinaryMove && (!source.demo || unknown)) {
+      const inherited: SourceSnapshot[] = [];
+      const affected = (node: SourceSnapshot, protectedDefaults: boolean) => {
+        if (node.access.status === "none" && !protectedDefaults) inherited.push(node);
+        const protectedChildren =
+          protectedDefaults ||
+          (node.access.status === "known" && access.hasDefaults(node.access.policy, node.url));
+        for (const child of node.children ?? []) affected(child, protectedChildren);
+      };
+      affected(source, false);
+      if ((inherited.length > 0 && parentOf(from) !== parentOf(to)) || unknown) {
+        let current: OwnAccess | undefined;
+        let gains: string[];
+        try {
+          if (unknown) throw new DriveAccessError();
+          current = requireAccess(effective.get(source) as AccessState, from);
+          const destination = requireAccess(await access.effective(to, true), to);
+          const widened = new Set<string>();
+          for (const node of inherited)
+            for (const agent of accessGains(
+              requireAccess(effective.get(node) as AccessState, node.url),
+              destination,
+            ))
+              widened.add(agent);
+          gains = [...widened];
+        } catch {
+          gains = ["Access could not be determined (including unreadable ACLs or unsupported ACP)"];
+        }
+        if (gains.length) {
+          if (!options.confirmAccess)
+            throw new DriveAccessError("Access change requires confirmation");
+          const choice = await options.confirmAccess({
+            from,
+            to,
+            gains,
+            canKeep: !!current && !unknown,
+          });
+          if (choice === "cancel") throw new Error("Move cancelled");
+          if (choice === "keep") {
+            if (!current || unknown) throw new DriveAccessError("Current access is unknown");
+            source.targetAccess = current;
+            keepAccess = true;
+          }
+        }
+      }
+    }
     const created: CreatedResource[] = [];
+    const copiedAccess = new Map<string, OwnAccess>();
+    await preparePolicies(source, from, to, privateOwner);
+    if (keepAccess) {
+      for (const node of nodes)
+        if (!node.demo && node.access.status === "none" && node.targetAccess === undefined)
+          node.targetAccess = requireAccess(effective.get(node) as AccessState, node.url);
+    }
     const deleted: string[] = [];
     let deleting = false;
     let verifyingCopy = false;
@@ -446,10 +771,20 @@ export function createSolidDriveClient(options: {
       // Also check servers that ignore HEAD preconditions.
       if (response.headers.get("etag") !== etag)
         throw new DriveError("conflict", 412, destination.url);
+      const own = copiedAccess.get(destination.url);
+      if (own) {
+        const current = await access.read(own.url);
+        if (
+          current.status !== "known" ||
+          current.policy.etag !== own.etag ||
+          !sameGraph(own.dataset, current.policy.dataset)
+        )
+          throw new DriveAccessError("Destination policy changed");
+      }
       verifyingCopy = false;
     };
     try {
-      await copySnapshot(source, to, created);
+      await copySnapshot(source, to, created, copiedAccess);
       if (moving) {
         await beforeDelete?.();
         verifyingCopy = true;
@@ -467,6 +802,10 @@ export function createSolidDriveClient(options: {
               node.children.map((child) => `${url}${child.url.slice(node.url.length)}`),
             );
             if (
+              !sameGraph(
+                relocate(node.data as Store, [[node.url, url]]),
+                containerData(current.dataset, url),
+              ) ||
               current.items.length !== expected.size ||
               current.items.some((item) => !expected.has(item.url))
             )
@@ -491,7 +830,19 @@ export function createSolidDriveClient(options: {
         // Each destination is checked again immediately before its source's
         // DELETE, since another child deletion may give a concurrent tab time.
         deleting = true;
-        await deleteSnapshot(source, deleted, verifyDestination);
+        await deleteSnapshot(source, deleted, async (node) => {
+          await beforeDelete?.();
+          await verifyDestination(node);
+          if (node.access.status === "known") {
+            const current = await access.read(node.access.policy.url);
+            if (
+              current.status !== "known" ||
+              current.policy.etag !== node.access.policy.etag ||
+              !sameGraph(node.access.policy.dataset, current.policy.dataset)
+            )
+              throw new DriveAccessError("Source policy changed");
+          }
+        });
       }
     } catch (error) {
       // A network failure during DELETE is ambiguous: keep the recovery copy.
@@ -524,7 +875,7 @@ export function createSolidDriveClient(options: {
   };
 
   const move: DriveClient["move"] = async (from, to, opts) => {
-    return transfer(from, to, true, opts?.beforeDelete);
+    return transfer(from, to, true, opts?.beforeDelete, opts?.privateOwner);
   };
 
   const remove: DriveClient["remove"] = async (url, opts = {}) => {
@@ -551,6 +902,7 @@ export function createSolidDriveClient(options: {
 
   return {
     storageUrl,
+    ...(options.confirmAccess ? { confirmAccess: options.confirmAccess } : {}),
     list,
     stat,
     read,
@@ -558,6 +910,18 @@ export function createSolidDriveClient(options: {
     readRdf,
     write,
     createFolder,
+    mergeContainer,
+    prepareTrash: async (url, webId) => {
+      const response = await http(url, { method: "HEAD" });
+      if (response.headers.get("x-solid-demo-access-control") === "none") return;
+      try {
+        await createFolder(url);
+      } catch (error) {
+        if (!(error instanceof DriveError && error.kind === "conflict"))
+          throw new DriveAccessError(error);
+      }
+      await access.privateFolder(url, webId);
+    },
     copy,
     move,
     remove,

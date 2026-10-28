@@ -14,7 +14,8 @@
  * - strong ETags, `If-Match` / `If-None-Match` preconditions (412);
  * - POST with `Slug` (and a BasicContainer `Link` type) mints a child;
  * - DELETE of a non-empty container is 409; the root cannot be deleted;
- * - `Link` headers carry `rel="type"`, `rel="acl"` and the storage root type.
+ * - `Link` headers carry `rel="type"`, `rel="acl"` and the storage root type;
+ * - `X-Solid-Demo-Access-Control: none` explicitly reports the lack of enforcement.
  *
  * Listings are serialised with `n3.Writer` the way a server would emit them.
  */
@@ -306,7 +307,7 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
   const respond = (status: number, headers: Record<string, string> = {}, body?: BodyInit) =>
     new Response(status === 204 || status === 205 || status === 304 ? null : (body ?? null), {
       status,
-      headers,
+      headers: { "x-solid-demo-access-control": "none", ...headers },
     });
 
   const currentEtag = (url: string): string | undefined =>

@@ -21,7 +21,9 @@ import {
   useState,
 } from "react";
 import { encodeRef } from "@/lib/refs";
+import { accessControl, accessLabel, DriveAccessError } from "../lib/client/access";
 import { DriveError, type DriveItem, nameOf } from "../lib/client/client";
+import { isOwnStorage } from "../lib/client/ownership";
 import {
   copyItem,
   createFolder,
@@ -41,6 +43,7 @@ export type DriveDialog =
   | { kind: "new-folder"; parent: string }
   | { kind: "rename"; item: DriveItem }
   | { kind: "move"; items: DriveItem[] }
+  | { kind: "delete-source"; items: DriveItem[] }
   | {
       kind: "delete-forever" | "empty-trash";
       entries: TrashEntry[];
@@ -50,6 +53,7 @@ export type DriveDialog =
 export interface PreviewState {
   readonly items: readonly DriveItem[];
   readonly index: number;
+  readonly activationId?: string;
 }
 
 interface DriveUiValue {
@@ -235,7 +239,11 @@ export function useDriveUi(): DriveUiValue {
 
 /** User-facing message for a failed operation. */
 export function errorMessage(error: unknown, fallback = "Something went wrong"): string {
-  if (error instanceof TrashMovingError || error instanceof TrashRestorePartialError)
+  if (
+    error instanceof DriveAccessError ||
+    error instanceof TrashMovingError ||
+    error instanceof TrashRestorePartialError
+  )
     return error.message;
   if (error instanceof DriveError) {
     switch (error.kind) {
@@ -283,6 +291,7 @@ function folderLabel(url: string, driveRoot: string | undefined): string {
 }
 
 export function useDriveActions() {
+  const { openDialog } = useDriveUi();
   const { client, driveRoot, session, updatePrefs, prefs, invalidate } = useDrive();
   const router = useRouter();
 
@@ -297,6 +306,7 @@ export function useDriveActions() {
       if (setPreview) {
         const files = (siblings ?? [item]).filter((entry) => entry.kind === "file");
         setPreview({
+          activationId: crypto.randomUUID(),
           items: files,
           index: Math.max(
             0,
@@ -325,15 +335,19 @@ export function useDriveActions() {
     [client],
   );
 
-  const copyLink = useCallback(async (item: DriveItem) => {
-    const link = `${location.origin}${hrefFor(item)}`;
-    try {
-      await navigator.clipboard.writeText(link);
-      toast("Link copied", { description: "Only you can open this link" });
-    } catch {
-      toast.error("Couldn't copy the link");
-    }
-  }, []);
+  const copyLink = useCallback(
+    async (item: DriveItem) => {
+      const link = `${location.origin}${hrefFor(item)}`;
+      try {
+        await navigator.clipboard.writeText(link);
+        const access = await accessControl(session.fetch, session.storageUrl).effective(item.url);
+        toast("Link copied", { description: accessLabel(access, item.url, session.webId) });
+      } catch {
+        toast.error("Couldn't copy the link");
+      }
+    },
+    [session],
+  );
 
   const toggleStar = useCallback(
     (items: readonly DriveItem[]) => {
@@ -358,6 +372,11 @@ export function useDriveActions() {
 
   const move = useCallback(
     async (items: readonly DriveItem[], target: string, { undoable = true } = {}) => {
+      if (
+        !isOwnStorage(target, session.storageUrl) ||
+        items.some((item) => !isOwnStorage(item.url, session.storageUrl))
+      )
+        return;
       const pending = toast.loading(
         items.length === 1 ? `Moving ${items[0]?.name}…` : `Moving ${items.length} items…`,
       );
@@ -407,12 +426,17 @@ export function useDriveActions() {
                 label: "Undo",
                 onClick: async () => {
                   const failed: string[] = [];
+                  let accessError: DriveAccessError | undefined;
                   const restored: { from: string; to: string }[] = [];
                   for (const { from, to, identity } of undo) {
                     try {
                       if (!identity?.etag) throw new Error("No validator for Undo");
                       await moveWithValidator(
-                        { storageUrl: session.storageUrl, fetch: session.fetch },
+                        {
+                          storageUrl: session.storageUrl,
+                          fetch: session.fetch,
+                          ...(client.confirmAccess ? { confirmAccess: client.confirmAccess } : {}),
+                        },
                         to,
                         from,
                         identity.etag,
@@ -421,7 +445,8 @@ export function useDriveActions() {
                       invalidate(to);
                       invalidate(from);
                       restored.push({ from: to, to: from });
-                    } catch {
+                    } catch (error) {
+                      if (error instanceof DriveAccessError) accessError = error;
                       failed.push(nameOf(from));
                     }
                   }
@@ -431,7 +456,11 @@ export function useDriveActions() {
                       starred: repointStarred(current.starred, restored),
                     }));
                   if (failed.length > 0)
-                    toast.error(`This move cannot be safely undone: ${failed.join(", ")}`);
+                    toast.error(
+                      accessError
+                        ? accessError.message
+                        : `This move cannot be safely undone: ${failed.join(", ")}`,
+                    );
                 },
               },
             }
@@ -444,6 +473,7 @@ export function useDriveActions() {
 
   const rename = useCallback(
     async (item: DriveItem, name: string) => {
+      if (!isOwnStorage(item.url, session.storageUrl)) return;
       try {
         const url = await renameItem(client, item, name);
         invalidate(item.url);
@@ -461,11 +491,12 @@ export function useDriveActions() {
         return undefined;
       }
     },
-    [client, invalidate, updatePrefs],
+    [client, invalidate, updatePrefs, session.storageUrl],
   );
 
   const makeCopy = useCallback(
     async (item: DriveItem) => {
+      if (!isOwnStorage(item.url, session.storageUrl)) return;
       try {
         const url = await copyItem(client, item.url);
         invalidate(url);
@@ -476,11 +507,12 @@ export function useDriveActions() {
         return undefined;
       }
     },
-    [client, invalidate],
+    [client, invalidate, session.storageUrl],
   );
 
   const newFolder = useCallback(
     async (parent: string, name: string) => {
+      if (!isOwnStorage(parent, session.storageUrl)) return;
       try {
         const url = await createFolder(client, parent, name);
         invalidate(url);
@@ -491,7 +523,7 @@ export function useDriveActions() {
         return undefined;
       }
     },
-    [client, invalidate],
+    [client, invalidate, session.storageUrl],
   );
 
   const restore = useCallback(
@@ -523,7 +555,12 @@ export function useDriveActions() {
 
   const trash = useCallback(
     async (items: readonly DriveItem[]) => {
-      if (!driveRoot || items.length === 0) return;
+      if (
+        !driveRoot ||
+        items.length === 0 ||
+        items.some((item) => !isOwnStorage(item.url, session.storageUrl))
+      )
+        return;
       try {
         const result = await trashItems(client, driveRoot, items, { webId: session.webId });
         for (const warning of result.warnings ?? []) toast.error(warning.message);
@@ -532,7 +569,21 @@ export function useDriveActions() {
           invalidate(entry.url);
         }
         if (result.failed.length > 0) {
-          toast.error(errorMessage(result.failed[0]?.error, "Couldn't move to trash"));
+          const failure = result.failed[0]?.error;
+          if (failure instanceof DriveAccessError) {
+            toast.error(errorMessage(failure), {
+              action: {
+                label: "Delete forever",
+                onClick: () =>
+                  openDialog({
+                    kind: "delete-source",
+                    items: items.filter((item) =>
+                      result.failed.some((failed) => failed.url === item.url),
+                    ),
+                  }),
+              },
+            });
+          } else toast.error(errorMessage(failure, "Couldn't move to trash"));
         }
         const first = result.done[0];
         if (!first) return;
@@ -551,7 +602,7 @@ export function useDriveActions() {
         toast.error(errorMessage(error, "Couldn't move to trash"));
       }
     },
-    [client, driveRoot, invalidate, restore, session.webId],
+    [client, driveRoot, invalidate, restore, session.webId, session.storageUrl, openDialog],
   );
 
   const removeForever = useCallback(
@@ -568,6 +619,25 @@ export function useDriveActions() {
     [client, driveRoot, invalidate],
   );
 
+  const removeSourcesForever = useCallback(
+    async (items: readonly DriveItem[]) => {
+      if (items.some((item) => !isOwnStorage(item.url, session.storageUrl))) return;
+      const done: DriveItem[] = [];
+      for (const item of items) {
+        try {
+          await client.remove(item.url, { recursive: item.kind === "folder" });
+          done.push(item);
+          invalidate(item.url);
+        } catch (error) {
+          toast.error(errorMessage(error, "Couldn't delete"));
+        }
+      }
+      if (done.length) toast.success("Deleted for ever");
+      return { done };
+    },
+    [client, invalidate, session.storageUrl],
+  );
+
   return {
     starred,
     open,
@@ -581,6 +651,7 @@ export function useDriveActions() {
     trash,
     restore,
     removeForever,
+    removeSourcesForever,
   };
 }
 
