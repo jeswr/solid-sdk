@@ -74,7 +74,7 @@ it.each([
   "new folder",
   "copy",
   "different copy",
-])("retained protection governs recreation after successful cleanup: %s", async (operation) => {
+])("successful cleanup clears protection and recreation makes a fresh policy decision: %s", async (operation) => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   const { f, client, entry } = await trashedFolder();
   f.intercept(async (url, init) =>
@@ -93,14 +93,14 @@ it.each([
         ),
   ).rejects.toThrow();
   expect(f.pod.has(PRIVATE)).toBe(false);
-  expect(await protectionLedger(f.fetch).get(PRIVATE)).toBeDefined();
+  expect(await protectionLedger(f.fetch).get(PRIVATE)).toBeUndefined();
   f.intercept(undefined);
   if (operation === "new folder") await client.createFolder(PRIVATE, { kind: "inherit-verified" });
   else if (operation === "copy") await client.copy(entry.url, PRIVATE, { kind: "preserve-source" });
   else if (operation === "different copy") {
     await expect(client.copy(PUBLIC, PRIVATE, { kind: "preserve-source" })).rejects.toThrow();
     expect(f.pod.has(PRIVATE)).toBe(false);
-    expect(await protectionLedger(f.fetch).get(PRIVATE)).toBeDefined();
+    expect(await protectionLedger(f.fetch).get(PRIVATE)).toBeUndefined();
   } else {
     const fresh = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });
     await fresh.write(

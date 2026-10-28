@@ -64,8 +64,9 @@ it.each([
   const copyResult = copying.catch((error: unknown) => error);
   await reached.promise;
   const fresh = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });
+  const approved = await fresh.stat(to);
   const replacing = upload
-    ? uploadFile(fresh, PUBLIC, new Blob(["secret contents"]), "copy.txt", "replace")
+    ? uploadFile(fresh, PUBLIC, new Blob(["secret contents"]), "copy.txt", "replace", approved)
     : fresh.write(
         to,
         "secret contents",

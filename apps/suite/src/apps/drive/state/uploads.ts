@@ -8,9 +8,9 @@
  */
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import type { DriveClient } from "../lib/client/client";
+import type { DriveClient, DriveItem } from "../lib/client/client";
 import { DriveError, parentOf } from "../lib/client/client";
-import { type ConflictChoice, uploadFile } from "../lib/operations/operations";
+import { type ConflictChoice, childUrl, uploadFile } from "../lib/operations/operations";
 import { normalizeUploadName } from "../lib/upload";
 import type { DroppedFile } from "./dropped-files";
 
@@ -55,6 +55,7 @@ interface Job {
   file: File;
   root: string;
   policy: "fail" | ConflictChoice;
+  target: DriveItem | undefined;
 }
 
 function describe(error: unknown): string {
@@ -95,19 +96,35 @@ export function useUploadQueue(
       running.current += 1;
       const { id } = job.task;
       patch(id, { status: "uploading" });
-      uploadFile(client, job.task.folder, job.file, job.task.name, job.policy)
+      uploadFile(client, job.task.folder, job.file, job.task.name, job.policy, job.target)
         .then(
           (item) =>
             patch(
               id,
               item ? { status: "done", url: item.url, name: item.name } : { status: "skipped" },
             ),
-          (error: unknown) => {
-            if (error instanceof DriveError && error.kind === "conflict" && job.policy === "fail") {
-              if (blanket.current) {
-                job.policy = blanket.current;
-                patch(id, { status: "queued" });
-              } else patch(id, { status: "conflict" });
+          async (error: unknown) => {
+            if (
+              error instanceof DriveError &&
+              (error.kind === "conflict" ||
+                (error.kind === "not-found" && job.policy === "replace"))
+            ) {
+              // Snapshot before presenting the prompt, never when executing its
+              // decision. A changed approved target needs another explicit choice.
+              const automatic = job.policy === "fail" ? blanket.current : undefined;
+              try {
+                job.target = await client
+                  .stat(childUrl(job.task.folder, normalizeUploadName(job.task.name)))
+                  .catch((cause: unknown) => {
+                    if (cause instanceof DriveError && cause.kind === "not-found") return undefined;
+                    throw cause;
+                  });
+              } catch (cause) {
+                patch(id, { status: "failed", error: describe(cause) });
+                return;
+              }
+              job.policy = automatic ?? "fail";
+              patch(id, { status: automatic ? "queued" : "conflict" });
             } else patch(id, { status: "failed", error: describe(error) });
           },
         )
@@ -145,6 +162,7 @@ export function useUploadQueue(
           file,
           root: folder,
           policy: "fail",
+          target: undefined,
           task: target
             ? { id, name: file.name, folder: target, size: file.size, status: "queued" }
             : {
@@ -167,7 +185,7 @@ export function useUploadQueue(
     (id: string, choice: ConflictChoice, applyToAll = false) => {
       if (applyToAll) blanket.current = choice;
       for (const job of jobs.current.values()) {
-        if (job.task.id === id || (applyToAll && job.task.status === "conflict")) {
+        if (job.task.status === "conflict" && (job.task.id === id || applyToAll)) {
           job.policy = choice;
           job.task = { ...job.task, status: "queued" };
         }
@@ -180,6 +198,7 @@ export function useUploadQueue(
 
   const retry = useCallback(
     (id: string) => {
+      if (jobs.current.get(id)?.task.status !== "failed") return;
       patch(id, { status: "queued" });
       pump();
     },

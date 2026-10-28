@@ -279,7 +279,7 @@ it.each([
       ),
     ).rejects.toThrow();
     expect(f.pod.has(`${PRIVATE}retry`)).toBe(false);
-    expect(await protectionLedger(f.fetch).get(PRIVATE)).toBeDefined();
+    expect(Boolean(await protectionLedger(f.fetch).get(PRIVATE))).toBe(mode === "hidden Link");
     expect(f.pod.has(`${entry.url}secret`)).toBe(true);
   } else expect((await f.anonymous(`${PRIVATE}concurrent`)).status).toBe(403);
   expect(f.exposures).toEqual([]);

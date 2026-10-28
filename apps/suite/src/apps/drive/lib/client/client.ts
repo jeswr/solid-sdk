@@ -399,7 +399,7 @@ export function createSolidDriveClient(options: {
     init: RequestInit,
     creating = false,
   ): Promise<Response> => {
-    await provision.guard(url, creating);
+    await provision.guard(url, creating, new Headers(init.headers).get("if-none-match") === "*");
     return ensureOk(await http(url, init), url);
   };
 
@@ -504,10 +504,13 @@ export function createSolidDriveClient(options: {
   }
 
   const deleteVersion = async (url: string, etag: string | undefined) => {
-    await ensureOk(
-      await http(url, { method: "DELETE", headers: { "if-match": validator(url, etag) } }),
-      url,
-    );
+    const response = await http(url, {
+      method: "DELETE",
+      headers: { "if-match": validator(url, etag) },
+    });
+    if ((response.ok && response.status !== 202) || response.status === 404)
+      await ledger.clear(url);
+    await ensureOk(response, url);
     resources.delete(url);
     responseTypes.delete(url);
   };

@@ -120,8 +120,13 @@ export function ancestorGuard(options: {
   const cleanup = async (url: string, response: Response) => {
     const etag = response.headers.get("etag");
     // Unknown/foreign control documents are not ours to remove with the resource.
-    if (etag && (await access.snapshot(url, response.headers)).status !== "unknown")
-      await http(url, { method: "DELETE", headers: { "if-match": etag } }).catch(() => undefined);
+    if (etag && (await access.snapshot(url, response.headers)).status !== "unknown") {
+      const deleted = await http(url, { method: "DELETE", headers: { "if-match": etag } }).catch(
+        () => undefined,
+      );
+      if ((deleted?.ok && deleted.status !== 202) || deleted?.status === 404)
+        await ledger.clear(url);
+    }
   };
   // The sole raw creation seam, private to the provisioner. Callers hold this
   // resource's flight and must supply either verified inheritance or an ACL.
@@ -192,7 +197,11 @@ export function ancestorGuard(options: {
     }
     return undefined;
   };
-  const guard = async (destination: string, creating = false): Promise<void> => {
+  const guard = async (
+    destination: string,
+    creating = false,
+    allowAbsent = false,
+  ): Promise<void> => {
     assertWithinPodScope(storageUrl, destination);
     let url = parent(destination);
     const missing: string[] = [];
@@ -269,15 +278,21 @@ export function ancestorGuard(options: {
       });
     }
     // Only the provisioner holding this resource's flight may skip its own requirement.
-    if (!creating) await check(destination);
+    if (!creating) await check(destination, allowAbsent);
   };
-  const check = async (url: string): Promise<void> => {
+  const check = async (url: string, allowAbsent = false): Promise<void> => {
     try {
       await provisioning.get(url);
       await singleFlight(url, async () => {
         const required = await ledger.get(url);
         if (required) {
           const response = await http(url, { method: "HEAD" });
+          // Only a conditional create may start a fresh flight at a vacant URL.
+          // Reads and replacements must still refuse unavailable protection.
+          if (response.status === 404 && allowAbsent) {
+            await ledger.clear(url);
+            return;
+          }
           if (!response.ok) throw new DriveAccessError("Required resource is unavailable");
           await verify(url, response.headers, required);
         }
@@ -310,16 +325,16 @@ export function ancestorGuard(options: {
         // flight: concurrent writers may still use its verified protection.
         if (current.ok) return;
         if (current.status !== 404) throw options.error(current.status, url);
-        const remembered = required
-          ? { policy: await policyFor(required), from: required.from }
-          : undefined;
+        // The old requirement belongs to a removed resource. This flight will
+        // commit its own policy before its conditional placeholder PUT.
+        if (required) await ledger.clear(url);
         let policy: OwnAccess | undefined;
         if (decision.kind === "archived") policy = decision.acl;
         else if (decision.kind === "owner-only") {
           const webId = decision.webId ?? options.owner();
           if (!webId) throw new DriveAccessError("Owner WebID unavailable");
           policy = { url: `${url}.acl`, etag: "", dataset: privateAcl(url, webId) };
-        } else if (!remembered && current.headers.get("x-solid-demo-access-control") !== "none") {
+        } else if (current.headers.get("x-solid-demo-access-control") !== "none") {
           // A reappearing historical folder has an original audience. Only omit
           // its ledger when current inheritance is verified to be no wider.
           const original = decision.original ?? (await archived(url));
@@ -327,30 +342,22 @@ export function ancestorGuard(options: {
           if (original && accessGains(access.forResource(original, url), inherited).length)
             policy = original;
         }
-        if (
-          remembered &&
-          policy &&
-          !sameGraph(
-            relocate(remembered.policy.dataset, [
-              [remembered.policy.url, `${url}.acl`],
-              [remembered.from, url],
-            ]),
-            relocate(policy.dataset, [
-              [policy.url, `${url}.acl`],
-              [from, url],
-            ]),
+        if (decision.kind === "archived" && url.endsWith("/")) {
+          // Clearing a completed flight does not discard the historical folder
+          // audience recorded in Trash. A different copy may not widen it.
+          const original = await archived(url);
+          if (
+            original &&
+            accessGains(access.forResource(original, url), access.forResource(decision.acl, from))
+              .length
           )
-        )
-          throw new DriveAccessError("Resource has a different unfinished protection requirement");
-        const creationPolicy = remembered?.policy ?? policy;
-        const creationFrom = remembered ? remembered.from : from;
+            throw new DriveAccessError("Historical folder grants narrower access");
+        }
         // Do not record a new policy for a pre-existing resource: the conditional PUT
         // must conflict without changing the protection requirement of another writer.
         result = await create(
           url,
-          creationPolicy
-            ? { kind: "archived", acl: creationPolicy, from: creationFrom }
-            : { kind: "inherit-verified" },
+          policy ? { kind: "archived", acl: policy, from } : { kind: "inherit-verified" },
           onCreated,
           put,
         );

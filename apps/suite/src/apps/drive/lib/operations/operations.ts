@@ -110,7 +110,7 @@ export function contentTypeFor(name: string, declared?: string): string {
 
 /**
  * Upload one file. `"fail"` reports a conflict as {@link DriveError} `conflict`
- * so the UI can ask; `"replace"` overwrites the current version only;
+ * so the UI can ask; `"replace"` requires the target observed before that decision;
  * `"keep-both"` saves as `name (n).ext` with the first free n.
  */
 export async function uploadFile(
@@ -119,6 +119,7 @@ export async function uploadFile(
   file: Blob,
   rawName: string,
   policy: "fail" | ConflictChoice = "fail",
+  approvedTarget?: Pick<DriveItem, "url" | "etag">,
 ): Promise<DriveItem | undefined> {
   const name = normalizeUploadName(rawName);
   const contentType = contentTypeFor(name, file.type);
@@ -133,14 +134,18 @@ export async function uploadFile(
   if (policy === "skip") return undefined;
   const url = childUrl(folderUrl, name);
   if (policy === "replace") {
-    const current = await client.stat(url).catch((error: unknown) => {
-      if (error instanceof DriveError && error.kind === "not-found") return undefined;
-      throw error;
-    });
+    // A new HEAD would approve a different resource on Retry or after a delayed
+    // conflict decision. Keep the exact validator across every execution.
+    if (
+      approvedTarget?.url !== url ||
+      !approvedTarget.etag ||
+      !/^"[\x21\x23-\x7e\x80-\xff]*"$/.test(approvedTarget.etag)
+    )
+      throw new DriveError("conflict", 412, url);
     await client.write(
       url,
       file,
-      current?.etag ? { contentType, ifMatch: current.etag } : { contentType, ifNoneMatch: "*" },
+      { contentType, ifMatch: approvedTarget.etag },
       { kind: "protect-ancestors" },
     );
     return done(url);

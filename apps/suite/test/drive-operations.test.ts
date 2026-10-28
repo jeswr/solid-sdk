@@ -202,9 +202,9 @@ describe("Drive writes against the demo pod", () => {
     expectConditionalWrites(fetch);
   });
 
-  it("replaces with the current ETag and conditionally creates absent files", async () => {
+  it("replaces with the approved ETag and creates absent files without a replacement decision", async () => {
     const { client, fetch } = await setup();
-    const etag = (await client.stat(NOTES)).etag;
+    const approved = await client.stat(NOTES);
     fetch.mockClear();
     expect(
       await uploadFile(
@@ -213,11 +213,12 @@ describe("Drive writes against the demo pod", () => {
         new Blob(["replacement"], { type: "text/custom" }),
         "notes.md",
         "replace",
+        approved,
       ),
     ).toMatchObject({ url: NOTES, contentType: "text/custom" });
     expect(await (await client.read(NOTES)).text()).toBe("replacement");
-    expect(new Headers(puts(fetch)[0]?.[1]?.headers).get("if-match")).toBe(etag);
-    expect(await uploadFile(client, DRIVE, new Blob(["new"]), "new.png", "replace")).toMatchObject({
+    expect(new Headers(puts(fetch)[0]?.[1]?.headers).get("if-match")).toBe(approved.etag);
+    expect(await uploadFile(client, DRIVE, new Blob(["new"]), "new.png")).toMatchObject({
       url: `${DRIVE}new.png`,
       contentType: "image/png",
     });
@@ -314,6 +315,7 @@ describe("Drive writes against the demo pod", () => {
 
   it("retries racing keep-both names, stops after five conflicts, and propagates other errors", async () => {
     const { client } = await setup();
+    const approved = await client.stat(NOTES);
     const write = vi.spyOn(client, "write");
     write.mockRejectedValueOnce(new DriveError("conflict", 412, NOTES));
     expect(
@@ -335,10 +337,10 @@ describe("Drive writes against the demo pod", () => {
       );
       expect(write).toHaveBeenCalledTimes(1);
       vi.spyOn(client, "stat").mockRejectedValue(error);
-      await expect(uploadFile(client, DRIVE, new Blob(), "notes.md", "replace")).rejects.toBe(
-        error,
-      );
-      expect(write).toHaveBeenCalledTimes(1);
+      await expect(
+        uploadFile(client, DRIVE, new Blob(), "notes.md", "replace", approved),
+      ).rejects.toBe(error);
+      expect(write).toHaveBeenCalledTimes(2);
     }
   });
 });
