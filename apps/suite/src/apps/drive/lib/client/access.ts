@@ -8,6 +8,7 @@ import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { readSharing } from "../sharing/sharing";
+import { checkIdentity, commitIrreversible } from "./commit";
 import { relocate, sameGraph } from "./rdf";
 
 const ACL = "http://www.w3.org/ns/auth/acl#";
@@ -171,13 +172,20 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       if (!resource) throw new DriveAccessError("WAC model could not be identified");
       requireAccess(await effective(resource), resource);
     }
-    const response = await http(url, {
-      method: "PUT",
-      headers: {
-        "content-type": "text/turtle",
-        ...(current ? { "if-match": current.etag } : { "if-none-match": "*" }),
-      },
-      body: await serialize([...dataset]),
+    const body = await serialize([...dataset]);
+    const response = await commitIrreversible({
+      identityChecks: current
+        ? [() => checkIdentity(http, url, current.etag, (status) => new DriveAccessError(status))]
+        : [],
+      step: () =>
+        http(url, {
+          method: "PUT",
+          headers: {
+            "content-type": "text/turtle",
+            ...(current ? { "if-match": current.etag } : { "if-none-match": "*" }),
+          },
+          body,
+        }),
     });
     if (!response.ok) throw new DriveAccessError(response.status);
     rejectAcp(response.headers);

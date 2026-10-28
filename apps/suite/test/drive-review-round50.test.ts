@@ -223,6 +223,8 @@ it.each(races)("access binding: $operation / $side / $signal / $point", async ({
     });
   }
   f.intercept(async (url, init) => {
+    if (!changed && operation === "empty Trash" && url === from && init?.method === "HEAD")
+      await flip();
     const phase = writing(url, init);
     if (!changed && phase && point === `before ${phase}`) await flip();
     return undefined;
@@ -275,8 +277,10 @@ it.each(races)("access binding: $operation / $side / $signal / $point", async ({
     expect(f.pod.has(from)).toBe(true);
     expect(f.calls.filter(({ url, method }) => url === from && method === "DELETE").length).toBe(0);
   }
-  if (operation === "empty Trash") expect(failed).toBe(true);
-  else if (operation === "upload replacement") {
+  if (operation === "empty Trash") {
+    expect(failed).toBe(false);
+    expect(f.pod.has(from)).toBe(false);
+  } else if (operation === "upload replacement") {
     expect(await (await f.pod.fetch(from)).text()).toBe("secret contents");
     expect(failed).toBe(true);
   } else if (f.pod.has(to)) {
@@ -378,9 +382,13 @@ it("rechecks bound access after persisting a deletion intent and retires a refus
   const deletion = deletionControl(f.fetch, (status, target) => new Error(`${status}: ${target}`));
   const etag = (await f.pod.fetch(url, { method: "HEAD" })).headers.get("etag") as string;
   await expect(
-    deletion.remove(url, etag, undefined, async () => {
-      f.policies.set(`${url}.policy`, await aclBody(url, true));
-      await binding.recheck();
+    deletion.remove(url, etag, undefined, {
+      rechecks: [
+        async () => {
+          f.policies.set(`${url}.policy`, await aclBody(url, true));
+          await binding.recheck();
+        },
+      ],
     }),
   ).rejects.toThrow();
   expect(f.calls).not.toContainEqual({ url, method: "DELETE" });

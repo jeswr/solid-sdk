@@ -14,6 +14,7 @@ import {
   requireAccess,
 } from "./access";
 import { discardVersion, ownsEmptyContainer } from "./cleanup";
+import { type CommitEffects, Compensation, commitIrreversible } from "./commit";
 import { rethrowPendingDeletion } from "./deletion";
 import { type ProtectionRequirement, protectionLedger } from "./protection-ledger";
 import { relocate, sameGraph } from "./rdf";
@@ -152,14 +153,25 @@ export function ancestorGuard(options: {
     onCreated?: (response: Response) => void,
     put = () => options.putFolder(url),
     verifyAccess?: () => Promise<void>,
+    effects: CommitEffects = {},
   ): Promise<{ response: Response; policy?: OwnAccess }> => {
     const binding = await bindAccess(access, url, url, true);
+    let response: Response;
+    const compensation = new Compensation(() => binding.rollback(() => cleanup(url, response)));
     try {
       if (decision.kind === "archived")
         await ledger.set(url, await requirementFor(decision.acl, decision.from));
-      await verifyAccess?.();
-      await binding.recheck();
-      const response = await put();
+      response = await commitIrreversible({
+        ...effects,
+        arm: [compensation, ...(effects.arm ?? [])],
+        rechecks: [
+          async () => {
+            await verifyAccess?.();
+            await binding.recheck();
+          },
+        ],
+        step: put,
+      });
       onCreated?.(response);
       try {
         await verifyAccess?.();
@@ -170,9 +182,10 @@ export function ancestorGuard(options: {
             : undefined;
         if (policy) binding.installed(policy);
         await binding.recheck();
+        compensation.disarm();
         return { response, ...(policy ? { policy } : {}) };
       } catch (error) {
-        await binding.rollback(() => cleanup(url, response));
+        await compensation.rollback();
         throw error;
       }
     } finally {
@@ -335,6 +348,7 @@ export function ancestorGuard(options: {
     onCreated?: (response: Response) => void,
     put?: () => Promise<Response>,
     verifyAccess?: () => Promise<void>,
+    effects?: CommitEffects,
   ): Promise<{ response: Response; policy?: OwnAccess }> => {
     requirePolicy(decision, ["inherit-verified", "archived", "owner-only"]);
     const from = decision.kind === "archived" ? decision.from : url;
@@ -386,6 +400,7 @@ export function ancestorGuard(options: {
           onCreated,
           put,
           verifyAccess,
+          effects,
         );
       },
       false,
@@ -404,6 +419,7 @@ export function ancestorGuard(options: {
       put: () => Promise<Response>,
       onCreated: (response: Response) => void,
       verifyAccess?: () => Promise<void>,
+      effects?: CommitEffects,
     ) =>
       resource(
         url,
@@ -411,6 +427,7 @@ export function ancestorGuard(options: {
         onCreated,
         put,
         verifyAccess,
+        effects,
       ),
     async protect(url: string, policy: OwnAccess, from = url): Promise<void> {
       await guard(url, true);

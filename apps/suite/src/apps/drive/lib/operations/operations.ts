@@ -919,14 +919,30 @@ async function restoreMissing(
           },
           owns: (current) => ownsEmptyContainer(from, data, current),
           remove: async (etag) => {
-            const survivor = await client.readRdf(to);
-            if (
-              !survivor ||
-              !containsGraph(relocate(data, [[from, to]]), containerData(survivor.dataset, to))
-            )
-              throw new DriveError("conflict", 412, to);
-            await merged.recheck();
-            await client.remove(from, { ifMatch: etag });
+            await client.remove(from, {
+              ifMatch: etag,
+              commit: {
+                disarm: merged.disarm,
+                rechecks: [() => merged.recheck()],
+                identityChecks: [
+                  async () => {
+                    const survivor = await client.readRdf(to);
+                    if (
+                      !survivor ||
+                      !containsGraph(
+                        relocate(data, [[from, to]]),
+                        containerData(survivor.dataset, to),
+                      )
+                    )
+                      throw new DriveError("conflict", 412, to);
+                    if (!survivor.etag || survivor.etag.startsWith("W/"))
+                      throw new DriveError("missing-validator", 409, to);
+                    const final = await client.stat(to, { ifMatch: survivor.etag });
+                    if (final.etag !== survivor.etag) throw new DriveError("conflict", 412, to);
+                  },
+                ],
+              },
+            });
           },
         });
       }
@@ -941,13 +957,24 @@ async function restoreMissing(
         throw new DriveError("missing-validator", 409, from);
       if (!compared.survivorEtag || compared.survivorEtag.startsWith("W/"))
         throw new DriveError("missing-validator", 409, to);
-      const survivor = await client.stat(to, { ifMatch: compared.survivorEtag });
-      // Also check servers that ignore HEAD preconditions, as the move client does.
-      if (survivor.etag !== compared.survivorEtag) throw new DriveError("conflict", 412, to);
-      // Without an atomic server operation, the survivor can still disappear between
-      // this verification and the recovery DELETE. Keep that cross-resource window small.
-      await access?.recheck();
-      await client.remove(from, { ifMatch: compared.etag });
+      const survivorEtag = compared.survivorEtag;
+      await client.remove(from, {
+        ifMatch: compared.etag,
+        commit: {
+          rechecks: [
+            async () => {
+              await access?.recheck();
+            },
+          ],
+          identityChecks: [
+            async () => {
+              const survivor = await client.stat(to, { ifMatch: survivorEtag });
+              // Also check servers that ignore HEAD preconditions, as the move client does.
+              if (survivor.etag !== survivorEtag) throw new DriveError("conflict", 412, to);
+            },
+          ],
+        },
+      });
       return [];
     }
     if (!settled) {
@@ -1063,7 +1090,6 @@ async function deleteForeverUnlocked(
     try {
       slotOf(driveRoot, entry);
       await requireTrashEntry(client, driveRoot, entry);
-      await client.bindAccess?.(entry.url, indexUrlOf(driveRoot));
       const archive = await capturePolicyArchive(client, entry.url);
       await removeTrashItem(client, entry.url);
       await removeRecoveryMarker(client, driveRoot, entry);

@@ -263,10 +263,17 @@ describe("Drive data-safety regressions", () => {
     const deletes = fetch.mock.calls.filter(
       ([url, init]) => url === `${entry.url}b` && init?.method === "DELETE",
     );
+    expect(deletes).toEqual([]);
     if (mode === "changed") {
-      expect(deletes).toHaveLength(1);
-      expect(new Headers(deletes[0]?.[1]?.headers).get("if-match")).toBe(comparedEtag);
-    } else expect(deletes).toEqual([]);
+      expect(
+        fetch.mock.calls.some(
+          ([url, init]) =>
+            url === `${entry.url}b` &&
+            init?.method === "HEAD" &&
+            new Headers(init.headers).get("if-match") === comparedEtag,
+        ),
+      ).toBe(true);
+    }
     expect(await (await client.read(`${entry.url}b`)).text()).toBe(
       mode === "changed" ? "unique new recovery contents" : "B",
     );
