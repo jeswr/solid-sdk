@@ -17,6 +17,49 @@ const session = {
   fetch: vi.fn<typeof fetch>(),
 } as unknown as PodSession;
 describe("imports through the real editor schema", () => {
+  it.each([
+    "image alt containing a right bracket",
+    "inline code with edge spaces",
+  ])("preserves %s through Markdown download and replacement in the live Y.Doc", async (finding) => {
+    const doc = new Doc();
+    const fetchImage = vi.fn(async () => new Response(null, { status: 404 }));
+    const editor = new Editor({
+      element: document.createElement("div"),
+      extensions: editorExtensions(doc, fetchImage),
+    });
+    try {
+      if (finding === "image alt containing a right bracket") {
+        editor.commands.setImage({
+          src: "https://pod.test/docs/assets/photo.png",
+          alt: "Right bracket ]",
+        });
+      } else {
+        const imported = await convertImport(
+          new NodeFile(["Use ``  cat  `` here."], "code.md") as unknown as File,
+          session,
+          vi.fn(),
+          vi.fn(),
+        );
+        editor.commands.setContent(imported.json);
+        expect(editor.view.dom.querySelector("code")?.textContent).toBe(" cat ");
+      }
+      const before = editor.getJSON();
+      const saved = yDocToProsemirrorJSON(doc, "prosemirror");
+      const exported = exportMarkdown(saved);
+      const replacement = await convertImport(
+        new NodeFile([exported], "again.md") as unknown as File,
+        session,
+        vi.fn(),
+        vi.fn(),
+      );
+      editor.commands.setContent(replacement.json);
+      expect(editor.getJSON()).toEqual(before);
+      expect(yDocToProsemirrorJSON(doc, "prosemirror")).toEqual(saved);
+    } finally {
+      editor.destroy();
+      doc.destroy();
+    }
+  });
   it("maps a DOCX fixture to the editor's headings, lists, table, uploaded image and skipped report", async () => {
     const bytes = await readFile("e2e/fixtures/docs-import.docx");
     const file = new NodeFile([bytes], "fixture.docx") as unknown as File;

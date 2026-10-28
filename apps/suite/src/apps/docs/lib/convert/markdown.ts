@@ -4,7 +4,7 @@ import Image from "@tiptap/extension-image";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { TableKit } from "@tiptap/extension-table";
 import { MarkdownManager } from "@tiptap/markdown";
-import { flattenExtensions, getSchema, type JSONContent } from "@tiptap/react";
+import { decodeHtmlEntities, flattenExtensions, getSchema, type JSONContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { validLink } from "../editor/logic";
 import { MAX_IMPORT_BYTES } from "./docx-import";
@@ -15,32 +15,101 @@ function longestRun(text: string, pattern: RegExp): number {
   return longest;
 }
 
-// Keep StarterKit's schema/parser, replacing only its code serializers. The
-// inline serializer receives the whole marked span when choosing its delimiter.
-const codeExtensions = flattenExtensions([StarterKit])
-  .filter((extension) => ["codeBlock", "code"].includes(extension.name))
+function escapeText(text: string, label: boolean, table: boolean): string {
+  const escaped = text.replace(/^[ \t]+|[ \t]+$|[\\`*_[\]<>!#.+()~=|:@&\-\n\r\t]/gm, (value) =>
+    Array.from(value, (char) => {
+      // Entities avoid the label parser's extra bracket-unescaping pass.
+      return /[ \t\n\r:@&]/.test(char) || (label && /[\\[\]]/.test(char))
+        ? `&#${char.charCodeAt(0)};`
+        : `\\${char}`;
+    }).join(""),
+  );
+  return table ? escaped.replace(/ /g, "&#32;") : escaped;
+}
+
+function encodeUrlControls(url: string): string {
+  return url.replace(/[<>\r\n\t]/g, encodeURIComponent);
+}
+function safeDestination(url: string): boolean {
+  return !!validLink(encodeUrlControls(url).replace(/ /g, "%20"));
+}
+function destination(url: string): string {
+  const escaped = encodeUrlControls(url).replace(/\\/g, "\\\\").replace(/&/g, "&amp;");
+  return /[ ()]/.test(url) ? `<${escaped}>` : escaped;
+}
+function titleSuffix(title: string): string {
+  if (!title) return "";
+  const quote = title.includes('"') && !title.includes("'") ? "'" : '"';
+  const escaped = title.replace(/[\\&\r\n]|["']/g, (char) => {
+    if (/[&\r\n]/.test(char)) return `&#${char.charCodeAt(0)};`;
+    return char === "\\" || char === quote ? `\\${char}` : char;
+  });
+  return ` ${quote}${escaped}${quote}`;
+}
+function inlineCode(text: string): string {
+  const delimiter = "`".repeat(longestRun(text, /`+/g) + 1);
+  // CommonMark strips one space per edge only when both edges have spaces
+  // and the content is not entirely spaces.
+  const padding =
+    text.startsWith("`") ||
+    text.endsWith("`") ||
+    (text.startsWith(" ") && text.endsWith(" ") && /[^ ]/.test(text))
+      ? " "
+      : "";
+  return `${delimiter}${padding}${text}${padding}${delimiter}`;
+}
+
+// These serializers receive protected, context-escaped attributes from export.
+// Keep StarterKit's schema while decoding entities in parsed URL/title attrs.
+const customExtensions = flattenExtensions([StarterKit])
+  .filter((extension) => ["codeBlock", "link"].includes(extension.name))
   .map((extension) =>
-    extension.extend({
-      renderMarkdown(node, helpers, context) {
-        const content = helpers.renderChildren(node.content ?? []);
-        if (extension.name === "codeBlock") {
-          const fence = "`".repeat(Math.max(3, longestRun(content, /^ {0,3}`+/gm) + 1));
-          return `${fence}${node.attrs?.language ?? ""}\n${content}\n${fence}`;
-        }
-        const text = (context.meta as { markText: string }).markText;
-        const delimiter = "`".repeat(longestRun(text, /`+/g) + 1);
-        const padding = text.startsWith("`") || text.endsWith("`") ? " " : "";
-        return `${delimiter}${padding}${content}${padding}${delimiter}`;
-      },
-    }),
+    extension.name === "link"
+      ? extension.extend({
+          parseMarkdown(token, helpers) {
+            // Marked supplies inline tokens for every link, including empty labels.
+            return helpers.applyMark(
+              "link",
+              helpers.parseInline(token.tokens as NonNullable<typeof token.tokens>),
+              {
+                href: decodeHtmlEntities(token.href),
+                title: token.title ? decodeHtmlEntities(token.title) : null,
+              },
+            );
+          },
+          renderMarkdown(node, helpers) {
+            return `[${helpers.renderChildren(node)}](${node.attrs?.href}${node.attrs?.title})`;
+          },
+        })
+      : extension.extend({
+          renderMarkdown(node, helpers) {
+            const content = helpers.renderChildren(node.content ?? []);
+            const fence = "`".repeat(Math.max(3, longestRun(content, /^ {0,3}`+/gm) + 1));
+            return `${fence}${node.attrs?.language ?? ""}\n${content}\n${fence}`;
+          },
+        }),
   );
 const extensions = [
-  StarterKit.configure({ code: false, codeBlock: false }),
-  ...codeExtensions,
+  StarterKit.configure({ link: false, codeBlock: false }),
+  ...customExtensions,
   TableKit,
   TaskList,
   TaskItem.configure({ nested: true }),
-  Image,
+  Image.extend({
+    parseMarkdown(token, helpers) {
+      return helpers.createNode("image", {
+        src: decodeHtmlEntities(token.href),
+        alt: helpers
+          .parseInline(token.tokens as NonNullable<typeof token.tokens>)
+          .map(textContent)
+          .join(""),
+        title: token.title ? decodeHtmlEntities(token.title) : null,
+      });
+    },
+    renderMarkdown(node) {
+      return `![${node.attrs?.alt}](${node.attrs?.src}${node.attrs?.title})`;
+    },
+  }),
   Highlight,
 ];
 const markdown = new MarkdownManager({ extensions, markedOptions: { gfm: true } });
@@ -79,11 +148,11 @@ function clean(node: JSONContent, dropHighlights: boolean, tableDepth = 0): JSON
       (mark) =>
         !["underline", "comment"].includes(mark.type) &&
         !(dropHighlights && mark.type === "highlight") &&
-        (mark.type !== "link" || !!validLink(String(mark.attrs?.href))),
+        (mark.type !== "link" || safeDestination(String(mark.attrs?.href))),
     );
   if (
     result.type === "image" &&
-    (!/^https?:\/\//.test(String(result.attrs?.src)) || !validLink(String(result.attrs?.src)))
+    (!/^https?:\/\//.test(String(result.attrs?.src)) || !safeDestination(String(result.attrs?.src)))
   ) {
     return { type: "paragraph" };
   }
@@ -107,28 +176,60 @@ function textContent(node: JSONContent): string {
 export function exportMarkdown(json: JSONContent, dropHighlights = false): string {
   // The upstream serializer escapes inline delimiters but leaves block syntax
   // and edge whitespace literal. Protect text before serializing, then restore
-  // its escapes afterwards so the serializer cannot double-escape them. Mark
-  // delimiters, link destinations and code retain their normal serialization.
+  // its escapes afterwards so the serializer cannot double-escape them or
+  // collapse whitespace. Labels, destinations, titles and code have distinct
+  // escaping rules; protect each before it reaches the upstream serializer.
   let prefix = "DOCSLITERAL";
   const source = JSON.stringify(json);
   while (source.includes(prefix)) prefix += "X";
   const escapes: string[] = [];
-  const protect = (node: JSONContent, inCode = false): JSONContent => {
-    const code =
-      inCode || node.type === "codeBlock" || node.marks?.some((mark) => mark.type === "code");
+  const literal = (text: string) => `${prefix}${escapes.push(text) - 1}END`;
+  const protect = (node: JSONContent, inCode = false, inTable = false): JSONContent => {
+    const code = inCode || node.type === "codeBlock";
+    const table = inTable || node.type === "table";
+    const attribute = (text: string) =>
+      literal(table ? text.replace(/\|/g, (char) => `&#${char.charCodeAt(0)};`) : text);
     const result = { ...node };
-    if (node.text && !code) {
-      result.text = node.text.replace(
-        /^[ \t]+|[ \t]+$|[\\`*_[\]<>!#.+()~=|:@&\-\n\r\t]/gm,
-        (value) => {
-          const escaped = Array.from(value, (char) =>
-            /[ \t\n\r:@&]/.test(char) ? `&#${char.charCodeAt(0)};` : `\\${char}`,
-          ).join("");
-          return `${prefix}${escapes.push(escaped) - 1}END`;
-        },
+    if (node.text && !code && node.marks?.some((mark) => mark.type === "code")) {
+      // Protect the complete span: the upstream mark serializer moves edge
+      // whitespace outside marks, including code, before rendering delimiters.
+      result.text = literal(inlineCode(node.text));
+      result.marks = node.marks.filter((mark) => mark.type !== "code");
+    } else if (node.text && !code) {
+      result.text = literal(
+        escapeText(node.text, !!node.marks?.some((mark) => mark.type === "link"), table),
       );
     }
-    if (node.content) result.content = node.content.map((child) => protect(child, code));
+    if (node.type === "image") {
+      result.attrs = {
+        ...node.attrs,
+        alt: literal(escapeText(String(node.attrs?.alt ?? ""), true, table)),
+        src: attribute(destination(String(node.attrs?.src))),
+        title: attribute(titleSuffix(String(node.attrs?.title ?? ""))),
+      };
+    }
+    if (node.type === "codeBlock" && node.attrs?.language) {
+      result.attrs = {
+        ...node.attrs,
+        language: literal(
+          String(node.attrs.language).replace(/[`\r\n]/g, (char) => `&#${char.charCodeAt(0)};`),
+        ),
+      };
+    }
+    if (result.marks)
+      result.marks = result.marks.map((mark) =>
+        mark.type === "link"
+          ? {
+              ...mark,
+              attrs: {
+                ...mark.attrs,
+                href: attribute(destination(String(mark.attrs?.href))),
+                title: attribute(titleSuffix(String(mark.attrs?.title ?? ""))),
+              },
+            }
+          : mark,
+      );
+    if (node.content) result.content = node.content.map((child) => protect(child, code, table));
     return result;
   };
   return markdown
