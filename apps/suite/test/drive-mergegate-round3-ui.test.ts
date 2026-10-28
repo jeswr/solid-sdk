@@ -43,6 +43,32 @@ function tree(item: DriveItem) {
 it.each([
   "Details",
   "copied link",
+])("%s reports unknown for a public file outside the session storage", async (surface) => {
+  const f = await wacPod();
+  const storageUrl = "https://alice.test/";
+  const url = `${PUBLIC}placeholder`;
+  expect((await f.anonymous(url)).status).toBe(200);
+  drive.client = createSolidDriveClient({ storageUrl, fetch: f.fetch });
+  drive.session = { webId: `${storageUrl}profile#me`, storageUrl, fetch: f.fetch };
+  const item = await drive.client.stat(url);
+  const view = await mount(tree(item));
+  if (surface === "Details") {
+    expect(view.host.querySelector(".drv-access-line")?.textContent).toBe("Access unknown");
+    return;
+  }
+  vi.stubGlobal("location", window.location);
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: vi.fn() },
+  });
+  await act(async () => actions.copyLink(item));
+  expect(navigator.clipboard.writeText).toHaveBeenCalledOnce();
+  expect(mocks.toast).toHaveBeenLastCalledWith("Link copied", { description: "Access unknown" });
+});
+
+it.each([
+  "Details",
+  "copied link",
 ])("%s reports public effective access after an explicitly confirmed move", async (surface) => {
   const f = await wacPod();
   drive.client = createSolidDriveClient({
@@ -50,7 +76,7 @@ it.each([
     fetch: f.fetch,
     confirmAccess: async () => "move",
   });
-  drive.session.fetch = f.fetch;
+  drive.session = { webId: OWNER, storageUrl: ROOT, fetch: f.fetch };
   const to = `${PUBLIC}secret`;
   await drive.client.move(`${PRIVATE}secret`, to);
   expect((await f.anonymous(to)).status).toBe(200);

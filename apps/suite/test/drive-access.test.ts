@@ -97,7 +97,7 @@ it("resolves own accessTo, nearest default/defaultForNew and ignores unrelated a
     ),
   ).toEqual([OWNER]);
   f.policies.clear();
-  expect(await access.effective(ROOT)).toEqual({ status: "none", demo: false });
+  expect(await access.effective(ROOT)).toMatchObject({ status: "unknown" });
 });
 it.each([
   "unreadable",

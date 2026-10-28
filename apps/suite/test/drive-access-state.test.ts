@@ -26,7 +26,9 @@ it("distinguishes missing discovery, confirmed missing ACL and the demo declarat
     await access.snapshot(PRIVATE, new Headers({ link: `<${PRIVATE}.policy>; rel=acl` })),
   ).toMatchObject({ status: "known" });
   expect(await access.effective(`${ROOT}missing`)).toMatchObject({ status: "unknown" });
-  expect(requireAccess({ status: "none", demo: false }, PRIVATE).dataset.size).toBe(0);
+  expect(() => requireAccess({ status: "none", demo: false }, PRIVATE)).toThrow(
+    "can't confirm who can access",
+  );
 });
 
 it.each([
@@ -66,7 +68,7 @@ it("labels deny-all and unrepresentable grants without claiming exclusive access
     policy: { url: `${PRIVATE}.policy`, etag: '"v1"', dataset: new Store() },
   };
   expect(accessLabel(empty, PRIVATE, OWNER)).toBe("No one");
-  expect(accessLabel({ status: "none", demo: false }, PRIVATE, OWNER)).toBe("No one");
+  expect(accessLabel({ status: "none", demo: false }, PRIVATE, OWNER)).toBe("Access unknown");
   expect(accessLabel({ status: "none", demo: true }, PRIVATE, OWNER)).toBe("Only you (demo pod)");
   expect(accessLabel({ status: "unknown", cause: "hidden" }, PRIVATE, OWNER)).toBe(
     "Access unknown",

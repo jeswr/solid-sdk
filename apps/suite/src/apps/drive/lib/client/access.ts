@@ -57,15 +57,17 @@ export interface OwnAccess {
   etag: string;
 }
 
-/** Missing discovery is unknown; only a discovered ACL's 404 proves absence. */
+/** None means a discovered own ACL's 404 (inheritance unresolved), or an explicit demo pod. */
 export type AccessState =
   | { readonly status: "known"; readonly policy: OwnAccess }
   | { readonly status: "none"; readonly demo: boolean }
   | { readonly status: "unknown"; readonly cause: unknown };
 
-/** Require certainty before preserving or comparing access. None materializes deny-all. */
+/** Require a governing policy before preserving or comparing access; demo needs no ACL. */
 export function requireAccess(state: AccessState, resource: string): OwnAccess {
   if (state.status === "unknown") throw new DriveAccessError(state.cause);
+  if (state.status === "none" && !state.demo)
+    throw new DriveAccessError("Governing ACL unavailable");
   return state.status === "known"
     ? state.policy
     : { url: `${resource}.acl`, dataset: new Store(), etag: "" };
@@ -73,7 +75,7 @@ export function requireAccess(state: AccessState, resource: string): OwnAccess {
 
 export function accessLabel(state: AccessState, resource: string, webId: string): string {
   if (state.status === "unknown") return "Access unknown";
-  if (state.status === "none") return state.demo ? "Only you (demo pod)" : "No one";
+  if (state.status === "none") return state.demo ? "Only you (demo pod)" : "Access unknown";
   try {
     const sharing = readSharing({
       access: {
@@ -191,8 +193,8 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
         current = parent(current);
         inherit = true;
       }
-      // A known WAC hierarchy with no applicable policy denies everyone.
-      return { status: "none", demo: false };
+      // Skipped discovery or an exhausted walk never proves a governing deny-all policy.
+      return { status: "unknown", cause: "Governing ACL unavailable" };
     } catch (cause) {
       return { status: "unknown", cause };
     }

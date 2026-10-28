@@ -83,6 +83,14 @@ function fixture() {
     ],
   });
   const policies = new Map<string, string>();
+  const defaults = new Store();
+  const publicRule = new Fields(`${ROOT}#public`, defaults, DataFactory);
+  publicRule.iris("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").add(`${ACL}Authorization`);
+  publicRule.iris(`${ACL}accessTo`).add(ROOT);
+  publicRule.iris(`${ACL}default`).add(ROOT);
+  publicRule.iris(`${ACL}agentClass`).add("http://xmlns.com/foaf/0.1/Agent");
+  publicRule.iris(`${ACL}mode`).add(`${ACL}Read`);
+  const rootPolicy = turtle(defaults);
   const metadata = new Map<string, string>();
   const calls: { url: string; method: string }[] = [];
   let hook:
@@ -95,7 +103,7 @@ function fixture() {
     const intercepted = await hook?.(url, init);
     if (intercepted) return intercepted;
     if (url.endsWith(".policy")) {
-      const body = policies.get(url);
+      const body = policies.get(url) ?? (url === `${ROOT}.policy` ? await rootPolicy : undefined);
       if (method === "PUT") {
         policies.set(url, String(init?.body));
         return new Response(null, { status: 201, headers: { etag: '"policy"' } });
