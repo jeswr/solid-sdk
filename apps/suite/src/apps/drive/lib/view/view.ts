@@ -9,6 +9,7 @@
 
 import type { DriveItem } from "../client/client";
 import { formatFileSize } from "../files";
+import { resolveContentType } from "../files/resolve-content-type";
 import { createListComparator, filterEntries, type ListEntry, type TypeFilter } from "../list";
 
 export type SortKey = "name" | "modified" | "size";
@@ -39,14 +40,10 @@ export function toListEntry(item: DriveItem): ListEntry & { item: DriveItem } {
     displayName: item.name,
     size: item.size ?? null,
     modified: item.modified ?? null,
-    contentType: safeContentType(item.contentType),
+    contentType:
+      item.kind === "folder" ? null : (resolveContentType(item.name, item.contentType) ?? null),
     item,
   };
-}
-
-/** Only well-formed MIME types reach the list helpers (they reject the rest). */
-function safeContentType(value: string | undefined): string | null {
-  return value && /^[\w.+-]+\/[\w.+-]+$/.test(value) ? value : null;
 }
 
 function startOfDay(date: Date): number {
@@ -127,7 +124,7 @@ export function formatSize(item: Pick<DriveItem, "kind" | "size">, locale = "en"
 /** Friendly type label for the details pane. */
 export function friendlyType(item: Pick<DriveItem, "kind" | "contentType" | "name">): string {
   if (item.kind === "folder") return "Folder";
-  const type = item.contentType?.toLowerCase() ?? "";
+  const type = resolveContentType(item.name, item.contentType) ?? "";
   if (type === "application/pdf") return "PDF document";
   if (type.startsWith("image/"))
     return `Image (${type
@@ -160,8 +157,8 @@ export type PreviewKind =
   | "video"
   | "none";
 
-export function previewKind(contentType: string | undefined): PreviewKind {
-  const type = contentType?.toLowerCase() ?? "";
+export function previewKind(contentType: string | undefined, name = ""): PreviewKind {
+  const type = resolveContentType(name, contentType) ?? "";
   if (type.startsWith("image/") && type !== "image/svg+xml") return "image";
   if (type === "application/pdf") return "pdf";
   if (type === "text/markdown") return "markdown";

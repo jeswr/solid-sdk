@@ -3,18 +3,13 @@
 import { useCallback } from "react";
 import type { DriveItem } from "../lib/client/client";
 import { isOwnStorage } from "../lib/client/ownership";
-import { guessContentType } from "../lib/files/mime";
+import { resolveContentType } from "../lib/files/resolve-content-type";
 import { useDrive } from "./drive-context";
 import type { DrivePreferences } from "./prefs";
 
 /** Legacy preferences have no MIME; infer only a listing hint, never override declared metadata. */
-export function sharedContentType(name: string): string | undefined {
-  try {
-    // URL path segments can decode to separators even though upload names cannot contain them.
-    return guessContentType(name.split(/[/\\]/).pop() || "file");
-  } catch {
-    return undefined;
-  }
+export function sharedContentType(name: string, contentType?: string): string | undefined {
+  return resolveContentType(name, contentType);
 }
 
 export function latestShared(

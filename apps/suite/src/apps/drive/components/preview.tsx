@@ -30,6 +30,7 @@ import {
 } from "react";
 import { encodeRef } from "@/lib/refs";
 import type { DriveClient, DriveItem } from "../lib/client/client";
+import { resolveContentType } from "../lib/files/resolve-content-type";
 import { parseCsvPreview, previewKind } from "../lib/view/view";
 import { useDrive } from "../state/drive-context";
 import { useLiveResource, useResourceVersion } from "../state/resource";
@@ -73,9 +74,9 @@ function termLabel(iri: string): string {
 
 function filePreviewKind(item: DriveItem) {
   // SVG is safe in an image element, which does not execute its scripts.
-  return item.contentType?.toLowerCase() === "image/svg+xml"
+  return resolveContentType(item.name, item.contentType) === "image/svg+xml"
     ? "image"
-    : previewKind(item.contentType);
+    : previewKind(item.contentType, item.name);
 }
 
 /** A readable value for an object IRI: contact schemes lose their prefix. */

@@ -257,7 +257,7 @@ export function SharedView() {
         const { url, name, type, openedAt, size, modified } = entry;
         const kind = type ?? (url.endsWith("/") ? "folder" : "file");
         const contentType =
-          entry.contentType ?? (kind === "file" ? sharedContentType(nameOf(url)) : undefined);
+          kind === "file" ? sharedContentType(nameOf(url), entry.contentType) : undefined;
         return withHydratedMetadata(client, {
           url,
           name: name ?? nameOf(url),

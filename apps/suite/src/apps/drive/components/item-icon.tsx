@@ -1,7 +1,9 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex
 "use client";
 import { FileTypeIcon } from "@jeswr/suite-ui";
 import type { DriveItem } from "../lib/client/client";
+import { resolveContentType } from "../lib/files/resolve-content-type";
 
 /** `FileTypeIcon` for a Drive item; folders map to the folder glyph. */
 export function ItemIcon({
@@ -11,7 +13,8 @@ export function ItemIcon({
   item: Pick<DriveItem, "kind" | "name" | "contentType">;
   size: 16 | 20 | 24 | 32 | 40 | 48;
 }) {
-  const contentType = item.kind === "folder" ? "inode/directory" : item.contentType;
+  const contentType =
+    item.kind === "folder" ? "inode/directory" : resolveContentType(item.name, item.contentType);
   return (
     <FileTypeIcon
       {...(contentType ? { contentType } : {})}

@@ -13,6 +13,7 @@ import { serialize } from "@jeswr/rdf-serialize";
 import { Container, Resource } from "@solid/object";
 import { DataFactory, Store } from "n3";
 
+import { resolveContentType } from "../files/resolve-content-type";
 import {
   type AccessState,
   accessControl,
@@ -24,8 +25,6 @@ import {
   requireAccess,
 } from "./access";
 import { containerData, relocate, sameGraph } from "./rdf";
-
-const IANA_TYPE = /^http:\/\/www\.w3\.org\/ns\/iana\/media-types\/(.+)#Resource$/;
 
 /** One row in a Drive listing. */
 export interface DriveItem {
@@ -209,12 +208,10 @@ export function parentOf(url: string): string | undefined {
   return new URL(url.endsWith("/") ? ".." : ".", url).href;
 }
 
-function itemFromResource(resource: Resource): DriveItem {
-  let contentType: string | undefined;
-  for (const type of resource.type) {
-    const match = IANA_TYPE.exec(type);
-    if (match?.[1]) contentType = match[1];
-  }
+function itemFromResource(resource: Resource, knownType: string | undefined): DriveItem {
+  const contentType = resource.isContainer
+    ? undefined
+    : resolveContentType(nameOf(resource.id), knownType, resource);
   const size = (() => {
     try {
       return resource.size;
@@ -253,6 +250,14 @@ export function createSolidDriveClient(options: {
   const { storageUrl } = options;
   const http = options.fetch;
   const access = accessControl(http, storageUrl);
+  // Scoped to this authenticated client; listings retain their declared metadata for HEAD users.
+  const resources = new Map<string, Resource>();
+  const responseTypes = new Map<string, string>();
+  const rememberType = (url: string, headers: Headers) => {
+    const type = headers.get("content-type");
+    if (type) responseTypes.set(url, type);
+    return responseTypes.get(url);
+  };
 
   const ensureOk = async (response: Response, url: string) => {
     if (!response.ok) throw errorFor(response.status, url);
@@ -272,9 +277,11 @@ export function createSolidDriveClient(options: {
         etag: result.etag ?? undefined,
         dataset: result.dataset,
         headers: result.response.headers,
-        items: members.map((child) =>
-          itemFromResource(new Resource(child.id, result.dataset, DataFactory)),
-        ),
+        items: members.map((child) => {
+          const resource = new Resource(child.id, result.dataset, DataFactory);
+          resources.set(child.id, resource);
+          return itemFromResource(resource, responseTypes.get(child.id));
+        }),
       };
     } catch (error) {
       if (error instanceof RdfFetchError && error.status !== undefined)
@@ -295,14 +302,17 @@ export function createSolidDriveClient(options: {
     );
     const length = response.headers.get("content-length");
     const modified = response.headers.get("last-modified");
-    const contentType = response.headers.get("content-type")?.split(";")[0]?.trim();
+    const knownType = rememberType(url, response.headers);
     const etag = response.headers.get("etag");
     const isFolder = url.endsWith("/");
+    const contentType = isFolder
+      ? undefined
+      : resolveContentType(nameOf(url), knownType, resources.get(url));
     return {
       url,
       name: nameOf(url),
       kind: isFolder ? "folder" : "file",
-      ...(contentType && !isFolder ? { contentType } : {}),
+      ...(contentType ? { contentType } : {}),
       ...(length !== null && !isFolder ? { size: Number(length) } : {}),
       ...(modified ? { modified: new Date(modified) } : {}),
       ...(etag ? { etag } : {}),
@@ -311,6 +321,7 @@ export function createSolidDriveClient(options: {
 
   const readVersion: DriveClient["readVersion"] = async (url) => {
     const response = await ensureOk(await http(url), url);
+    rememberType(url, response.headers);
     const body = await response.blob();
     const etag = response.headers.get("etag");
     return etag ? { body, etag } : { body };
@@ -321,6 +332,7 @@ export function createSolidDriveClient(options: {
   const readRdf: DriveClient["readRdf"] = async (url) => {
     try {
       const result = await fetchRdf(url, { fetch: http });
+      rememberType(url, result.response.headers);
       return result.etag
         ? { dataset: result.dataset, etag: result.etag }
         : { dataset: result.dataset };
@@ -337,6 +349,9 @@ export function createSolidDriveClient(options: {
     if (opts.ifNoneMatch) headers["if-none-match"] = opts.ifNoneMatch;
     if (opts.ifMatch) headers["if-match"] = opts.ifMatch;
     const response = await ensureOk(await http(url, { method: "PUT", headers, body }), url);
+    // A replacement supersedes the previous listing's declarations before its refresh completes.
+    resources.delete(url);
+    responseTypes.delete(url);
     const etag = response.headers.get("etag");
     return etag ? { etag } : {};
   };
@@ -414,6 +429,8 @@ export function createSolidDriveClient(options: {
       await http(url, { method: "DELETE", headers: { "if-match": validator(url, etag) } }),
       url,
     );
+    resources.delete(url);
+    responseTypes.delete(url);
   };
 
   const deleteSnapshot = async (

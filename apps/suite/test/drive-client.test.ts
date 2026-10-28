@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex
 import { RdfFetchError } from "@jeswr/fetch-rdf";
+import { Container } from "@solid/object";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createSolidDriveClient,
@@ -395,13 +396,16 @@ describe("Drive error handling and foreign server responses", () => {
   });
 
   it("rethrows non-RdfFetchError listing errors unchanged", async () => {
+    const failure = new Error("broken container accessor");
+    vi.spyOn(Container.prototype, "contains", "get").mockImplementation(() => {
+      throw failure;
+    });
     const client = stubClient(
       async () =>
         new Response(
           `
       @prefix ldp: <http://www.w3.org/ns/ldp#>.
       <> ldp:contains <file>.
-      <file> a "invalid type literal".
     `,
           { headers: { "content-type": "text/turtle" } },
         ),

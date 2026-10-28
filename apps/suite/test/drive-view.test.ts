@@ -78,11 +78,16 @@ describe("Drive listing presentation", () => {
   it.each([
     "",
     "invalid",
-    "text/plain; charset=utf-8",
     "image/*",
   ])("keeps unsupported MIME syntax %j out of the strict list helpers", (contentType) => {
     expect(toListEntry(file("unknown", { contentType })).contentType).toBeNull();
     expect(viewItems([file("unknown", { contentType })], { types: ["other"] })).toHaveLength(1);
+  });
+
+  it("normalizes response MIME parameters before Documents filtering", () => {
+    const item = file("unknown", { contentType: "Text/Plain; charset=utf-8" });
+    expect(toListEntry(item).contentType).toBe("text/plain");
+    expect(viewItems([item], { types: ["documents"] })).toEqual([item]);
   });
 
   it("hides dot names, sorts folders first naturally, returns originals and leaves input alone", () => {
