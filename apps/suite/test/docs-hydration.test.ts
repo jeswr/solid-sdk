@@ -7,6 +7,7 @@ import { renderToString } from "react-dom/server";
 import { afterEach, expect, it, vi } from "vitest";
 import { Doc } from "yjs";
 import type { DocumentPersistence } from "../src/apps/docs/editor/persistence";
+import { TitleConflictError } from "../src/apps/docs/lib/model";
 import type { PodSession } from "../src/lib/session/pod-session";
 
 const mocks = vi.hoisted(() => ({ runtime: null as DocumentPersistence | null }));
@@ -100,6 +101,7 @@ it("hydrates the Docs editor across a minute boundary without changing its initi
     doc,
     session,
     state: "saved",
+    localState: "saved",
     online: true,
     lastSaved: Date.parse("2026-10-26T12:00:00Z"),
     title: "Plan",
@@ -135,14 +137,20 @@ it("renders a working Docs Trash link to Drive's unfiltered trash route", () => 
   const link = Array.from(host.querySelectorAll("a")).find((link) => link.textContent === "Trash");
   expect(link?.getAttribute("href")).toBe("/drive/trash");
 });
-it("shows that a trashed document's pending edits are kept on this device", () => {
+it.each([
+  ["saved", "Saved on this device"],
+  ["saving", "Saving on this device…"],
+  ["retrying", "Not saved — retrying on this device"],
+  ["failed", "Couldn't save on this device"],
+])("round27 offline and trash banners report the actual local %s state", (localState, message) => {
   const doc = new Doc();
   const session = { storageUrl: "https://pod.test/", fetch: vi.fn() } as unknown as PodSession;
   mocks.runtime = {
     doc,
     session,
     state: "retrying",
-    online: true,
+    localState,
+    online: false,
     trashed: true,
     lastSaved: Date.now(),
     title: "Plan",
@@ -156,9 +164,74 @@ it("shows that a trashed document's pending edits are kept on this device", () =
         createElement(DocumentEditor, { session, resource: undefined }),
       ),
     );
-    expect(html).toContain("Moved to trash — edits saved on this device");
+    const host = document.createElement("div");
+    host.innerHTML = html;
+    expect(host.textContent).toContain(`Moved to trash — ${message}`);
+    expect(host.textContent).toContain(`Offline — ${message}`);
     expect(html).not.toContain("Saved to your pod");
+    if (localState !== "saved") expect(host.textContent).not.toContain("Saved on this device");
   } finally {
+    doc.destroy();
+    mocks.runtime = null;
+  }
+});
+it.each([
+  ["saved", "Saved on this device"],
+  ["saving", "Saving on this device…"],
+  ["retrying", "Not saved — retrying on this device"],
+  ["failed", "Couldn't save on this device"],
+])("round27 save-error and title-conflict dialogs report the local %s state", async (localState, message) => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal("matchMedia", () => ({
+    matches: false,
+    addEventListener() {},
+    removeEventListener() {},
+  }));
+  window.matchMedia = globalThis.matchMedia;
+  const doc = new Doc();
+  const session = { storageUrl: "https://pod.test/", fetch: vi.fn() } as unknown as PodSession;
+  mocks.runtime = {
+    doc,
+    session,
+    state: "failed",
+    localState,
+    online: true,
+    lastSaved: Date.now(),
+    title: "Plan",
+    readOnly: false,
+  } as unknown as DocumentPersistence;
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const render = () =>
+    root.render(
+      createElement(
+        TooltipProvider,
+        null,
+        createElement(DocumentEditor, { session, resource: undefined }),
+      ),
+    );
+  try {
+    await act(async () => render());
+    const why = [...host.querySelectorAll("button")].find(
+      (button) => button.textContent === "Why?",
+    );
+    expect(why).toBeDefined();
+    await act(async () => why?.click());
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(message);
+    await act(async () => root.render(null));
+    mocks.runtime.conflict = new TitleConflictError(
+      "https://pod.test/docs/plan.ttl",
+      "Mine",
+      "Theirs",
+    );
+    await act(async () => render());
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+      `Choose the title to keep. ${message}.`,
+    );
+  } finally {
+    await act(async () => root.unmount());
+    host.remove();
     doc.destroy();
     mocks.runtime = null;
   }

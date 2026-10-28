@@ -2,7 +2,6 @@
 import { MarkdownManager } from "@tiptap/markdown";
 import { DOMParser as SchemaDOMParser, type TagParseRule } from "@tiptap/pm/model";
 import {
-  decodeHtmlEntities,
   Extension,
   flattenExtensions,
   getSchema,
@@ -12,11 +11,35 @@ import {
   type MarkdownRendererHelpers,
   type MarkdownToken,
 } from "@tiptap/react";
+import sanitizeHtml from "sanitize-html";
 import { baseExtensions } from "../../editor/extensions";
 import { validLink } from "../editor/logic";
 import { MAX_IMPORT_BYTES } from "./docx-import";
 import { normaliseImport } from "./schema";
 import { reportSkipped, type SkippedItem } from "./skipped";
+
+// CommonMark requires semicolons and bounds numeric references. Use the installed
+// HTML parser's full HTML5 entity table (including multi-codepoint names and
+// invalid numeric replacements), rather than Tiptap's small entity decoder.
+function decodeMarkdownEntities(value: string): string {
+  return value.replace(
+    /&(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-zA-Z][a-zA-Z0-9]*);/g,
+    (reference) => {
+      let decoded = "";
+      // The matched reference cannot contain quotes or markup. Reading a decoded
+      // attribute avoids interpreting decoded '<' or '&' as another round of HTML.
+      sanitizeHtml(`<span title="${reference}"></span>`, {
+        transformTags: {
+          span: (tagName, attribs) => {
+            decoded = attribs.title as string;
+            return { tagName, attribs };
+          },
+        },
+      });
+      return decoded;
+    },
+  );
+}
 
 function longestRun(text: string, pattern: RegExp): number {
   let longest = 0;
@@ -571,8 +594,8 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
             "link",
             helpers.parseInline(token.tokens as NonNullable<typeof token.tokens>),
             {
-              href: decodeHtmlEntities(token.href),
-              title: token.title ? decodeHtmlEntities(token.title) : null,
+              href: decodeMarkdownEntities(token.href as string),
+              title: token.title ? decodeMarkdownEntities(token.title as string) : null,
             },
           );
         },
@@ -617,12 +640,12 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
         },
         parseMarkdown(token: MarkdownToken, helpers: MarkdownParseHelpers) {
           return helpers.createNode("image", {
-            src: decodeHtmlEntities(token.href),
+            src: decodeMarkdownEntities(token.href as string),
             alt: helpers
               .parseInline(token.tokens as NonNullable<typeof token.tokens>)
               .map(textContent)
               .join(""),
-            title: token.title ? decodeHtmlEntities(token.title) : null,
+            title: token.title ? decodeMarkdownEntities(token.title as string) : null,
           });
         },
         renderMarkdown(node: JSONContent) {
@@ -738,6 +761,24 @@ const inlineHtml = Extension.create({
 const markdown = new MarkdownManager({
   extensions: [
     ...extensions,
+    Extension.create({
+      name: "docsEntity",
+      markdownTokenizer: {
+        name: "docsEntity",
+        level: "inline",
+        start: (source) => source.indexOf("&"),
+        tokenize(source) {
+          // Consume even a literal '&' here so Tiptap cannot subsequently decode
+          // an invalid or overlong numeric reference using its looser rules.
+          const match = /^&(?:(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-zA-Z][a-zA-Z0-9]*);)?/.exec(
+            source,
+          );
+          if (!match) return;
+          return { type: "docsEntity", raw: match[0], text: decodeMarkdownEntities(match[0]) };
+        },
+      },
+      parseMarkdown: (token, helpers) => helpers.createTextNode(token.text as string),
+    }),
     inlineHtml,
     Extension.create({
       name: "docsBlockHtml",

@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex
-import type { IndexeddbPersistence } from "y-indexeddb";
+import { type IndexeddbPersistence, storeState } from "y-indexeddb";
 import { applyUpdate, Doc, encodeStateAsUpdate, equalSnapshots, snapshot } from "yjs";
 
 type Metadata = Record<"pending" | "title" | "edit", unknown>;
@@ -9,6 +9,7 @@ export async function updateMirrorMetadata(
   update: (current: Metadata) => Record<string, string | number> | undefined,
   active: () => boolean,
   confirmed?: Uint8Array,
+  localUpdate?: Uint8Array,
 ): Promise<boolean> {
   const covered = (updates: Uint8Array[]) => {
     if (!confirmed) return true;
@@ -43,11 +44,12 @@ export async function updateMirrorMetadata(
       if (!active()) return false;
       await mirror.set(key, value);
     }
+    if (writes && localUpdate) await storeState(mirror, true);
     return writes !== undefined;
   }
   return new Promise<boolean>((resolve, reject) => {
     const transaction = database.transaction(
-      confirmed ? ["custom", "updates"] : ["custom"],
+      confirmed || localUpdate ? ["custom", "updates"] : ["custom"],
       "readwrite",
     );
     const store = transaction.objectStore("custom");
@@ -59,6 +61,7 @@ export async function updateMirrorMetadata(
       if (--remaining || !active() || !covered(updates)) return;
       const writes = update(current);
       for (const [name, value] of Object.entries(writes ?? {})) store.put(value, name);
+      if (writes && localUpdate) transaction.objectStore("updates").add(localUpdate);
       written = writes !== undefined;
     };
     transaction.oncomplete = () => resolve(written);

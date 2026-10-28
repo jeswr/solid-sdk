@@ -34,6 +34,7 @@ import { useDocument } from "../hooks/use-document";
 import { useNow } from "../hooks/use-now";
 import { useStarred } from "../hooks/use-starred";
 import {
+  deviceSaveStatus,
   editorShortcut,
   keyboardLabel,
   saveStatus,
@@ -293,6 +294,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
   const now = useNow();
   const status = saveStatus(
     runtime.state,
+    runtime.localState,
     runtime.online,
     runtime.lastSaved,
     now ?? runtime.lastSaved,
@@ -385,7 +387,11 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
         actions={
           <>
             <SaveIndicator
-              status={runtime.trashed ? "Moved to trash — edits saved on this device" : status}
+              status={
+                runtime.trashed
+                  ? `Moved to trash — ${deviceSaveStatus(runtime.localState)}`
+                  : status
+              }
             />
             {runtime.state === "failed" && !runtime.conflict && (
               <Button variant="link" onClick={() => setWhy(true)}>
@@ -469,9 +475,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             }}
           />
         )}
-        {!runtime.online && (
-          <p className="docs-view-only">Offline copy — your edits are saved on this device.</p>
-        )}
+        {!runtime.online && <p className="docs-view-only">{status}</p>}
         {runtime.readOnly && (
           <p className="docs-view-only">View only — ask the owner for edit access</p>
         )}
@@ -583,7 +587,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
           <DialogContent>
             <DialogTitle>This title changed somewhere else</DialogTitle>
             <DialogDescription>
-              Choose the title to keep. Your document content is safe.
+              Choose the title to keep. {deviceSaveStatus(runtime.localState)}.
             </DialogDescription>
             <p>Yours: {runtime.conflict?.localTitle}</p>
             <p>Theirs: {runtime.conflict?.remoteTitle}</p>
@@ -597,8 +601,8 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
           <DialogContent>
             <DialogTitle>Couldn't save</DialogTitle>
             <DialogDescription>
-              Your pod may be full or your edit access may have changed. Your words are saved on
-              this device. Check your storage and try again.
+              {deviceSaveStatus(runtime.localState)}. Check your device storage, pod storage and
+              edit access, then try again.
             </DialogDescription>
             <Button
               onClick={() => {

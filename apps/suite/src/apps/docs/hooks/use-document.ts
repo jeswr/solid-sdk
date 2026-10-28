@@ -58,6 +58,14 @@ export function useDocument(session: PodSession, resource: string | undefined) {
     const flush = () => {
       void current.current?.flush();
     };
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      // Starting a flush cannot make an uncommitted edit safe to close.
+      if (current.current?.hasUnsavedChanges) {
+        event.preventDefault();
+        event.returnValue = "";
+      }
+      flush();
+    };
     const visibility = () => {
       if (document.visibilityState === "hidden") flush();
     };
@@ -71,7 +79,7 @@ export function useDocument(session: PodSession, resource: string | undefined) {
       void current.current?.reconnect();
     };
     addEventListener("pagehide", flush);
-    addEventListener("beforeunload", flush);
+    addEventListener("beforeunload", beforeUnload);
     addEventListener("offline", offline);
     addEventListener("online", online);
     document.addEventListener("visibilitychange", visibility);
@@ -82,7 +90,7 @@ export function useDocument(session: PodSession, resource: string | undefined) {
     }, 30_000);
     return () => {
       removeEventListener("pagehide", flush);
-      removeEventListener("beforeunload", flush);
+      removeEventListener("beforeunload", beforeUnload);
       removeEventListener("offline", offline);
       removeEventListener("online", online);
       document.removeEventListener("visibilitychange", visibility);

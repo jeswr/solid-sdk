@@ -12,17 +12,25 @@ export function relativeTime(timestamp: number, now: number): string {
 }
 export function saveStatus(
   state: SaveState,
+  localState: SaveState,
   online: boolean,
   timestamp: number,
   now: number,
   readOnly = false,
 ): string {
   if (readOnly) return "View only";
-  if (!online) return "Offline — saved on this device";
+  if (!online) return `Offline — ${deviceSaveStatus(localState)}`;
+  if (localState !== "saved") return deviceSaveStatus(localState);
   if (state === "saving") return "Saving…";
   if (state === "retrying") return "Couldn't save — retrying";
   if (state === "failed") return "Couldn't save";
   return `Saved to your pod · ${relativeTime(timestamp, now)}`;
+}
+export function deviceSaveStatus(state: SaveState): string {
+  if (state === "saving") return "Saving on this device…";
+  if (state === "retrying") return "Not saved — retrying on this device";
+  if (state === "failed") return "Couldn't save on this device";
+  return "Saved on this device";
 }
 export const slashItems = [
   "Heading 1",

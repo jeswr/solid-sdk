@@ -25,6 +25,55 @@ const listKinds = ["bulletList", "orderedList", "taskList"] as const;
 const codeWhitespace = fc
   .tuple(fc.integer({ min: 2, max: 8 }), fc.integer({ min: 1, max: 3 }))
   .map(([spaces, tabs]) => `printf 'a${" ".repeat(spaces)}b'${"\t".repeat(tabs)}done`);
+
+it("Markdown decodes CommonMark entities once in prose, labels, destinations and titles, preserving code", () => {
+  const references = [
+    ["&eacute;", "é"],
+    ["&copy;", "©"],
+    ["&NotEqualTilde;", "≂̸"],
+    ["&CounterClockwiseContourIntegral;", "∳"],
+    ["&fjlig;", "fj"],
+    ["&amp;copy;", "&copy;"],
+    ["&#233;", "é"],
+    ["&#x1F600;", "😀"],
+    ["&#X0000A9;", "©"],
+    ["&#0;", "�"],
+    ["&#xD800;", "�"],
+    ["&#x110000;", "�"],
+    ["&unknown;", "&unknown;"],
+    ["&copy", "&copy"],
+    ["&#12345678;", "&#12345678;"],
+    ["&#x00000041;", "&#x00000041;"],
+  ] as const;
+  fc.assert(
+    fc.property(fc.shuffledSubarray([...references], { minLength: references.length }), (cases) => {
+      const reference = cases.map(([source]) => source).join("/");
+      const decoded = cases.map(([, value]) => value).join("/");
+      const imported = importMarkdown(
+        `${reference}\n\n[${reference}](https://example.org/${reference} "${reference}")\n\n[${reference}][entities]\n\n[entities]: https://example.org/${reference} "${reference}"\n\n![${reference}](https://example.org/${reference} "${reference}")\n\n\`${reference}\`\n\n\`\`\`\n${reference}\n\`\`\`\n\n    ${reference}`,
+        "entities.md",
+      );
+      expect(imported.skipped).toEqual([]);
+      const content = schema.nodeFromJSON(imported.json).content;
+      expect(content.child(0).textContent).toBe(decoded);
+      for (const index of [1, 2]) {
+        const link = content.child(index).firstChild;
+        expect(link?.text).toBe(decoded);
+        expect(link?.marks[0]?.attrs.href).toBe(`https://example.org/${decoded}`);
+        expect(link?.marks[0]?.attrs.title).toBe(decoded);
+      }
+      expect(content.child(3).attrs).toMatchObject({
+        src: `https://example.org/${decoded}`,
+        alt: decoded,
+        title: decoded,
+      });
+      expect(content.child(4).textContent).toBe(reference);
+      expect(content.child(5).textContent).toBe(reference);
+      expect(content.child(6).textContent).toBe(reference);
+    }),
+    { seed: 2727, numRuns: 10 },
+  );
+});
 async function roundTrip(original: JSONContent, embedded = true) {
   const data = await Packer.toArrayBuffer(
     await toDocx(original, async () => ({

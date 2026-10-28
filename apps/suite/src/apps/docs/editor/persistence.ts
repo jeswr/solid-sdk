@@ -91,6 +91,23 @@ export class DocumentPersistence {
   private destroyed: Promise<void> | undefined;
   private version = 0;
   private savedVersion = 0;
+  private localVersion = -1;
+  private localGeneration = -1;
+  private localUpdates = -1;
+  private localEdit: string | undefined;
+  private localFailure = false;
+  get localState(): SaveState {
+    if (
+      this.localVersion === this.version &&
+      this.localGeneration === this.mirrorGeneration &&
+      this.localUpdates === this.updates
+    )
+      return "saved";
+    return this.localFailure ? "retrying" : "saving";
+  }
+  get hasUnsavedChanges(): boolean {
+    return !this.readOnly && this.version > 0 && this.localState !== "saved";
+  }
   private invalidVersion: number | undefined;
   private tail: Promise<void> | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -219,30 +236,58 @@ export class DocumentPersistence {
   }
   private async writePending() {
     const edit = this.pendingEdit;
-    if (!edit) return;
+    const encodedEdit = JSON.stringify(edit);
+    if (this.localState === "saved" && this.localEdit === encodedEdit) return;
     const generation = this.mirrorGeneration;
-    await this.withMirror((mirror) =>
-      updateMirrorMetadata(
-        mirror,
-        (current) => {
-          const previous = this.parseMetadata<PendingEdit>(current.edit);
-          const previousTitle = previous?.title ?? current.title;
-          if (
-            current.pending &&
-            previous?.owner !== edit.owner &&
-            previousTitle !== edit.title &&
-            typeof previousTitle === "string" &&
-            (previous?.localTitle !== undefined
-              ? previous.localTitle !== null
-              : previousTitle !== previous?.baseTitle)
-          )
-            return undefined;
-          return { pending: 1, title: edit.title, edit: JSON.stringify(edit) };
-        },
-        () => generation === this.mirrorGeneration,
-      ),
-    );
-    if (!this.stopped && generation === this.mirrorGeneration && this.local)
+    const version = this.version;
+    const updates = this.updates;
+    let committed: boolean | undefined;
+    try {
+      committed = await this.withMirror((mirror) =>
+        updateMirrorMetadata(
+          mirror,
+          (current) => {
+            if (!edit) return {};
+            const previous = this.parseMetadata<PendingEdit>(current.edit);
+            const previousTitle = previous?.title ?? current.title;
+            if (
+              current.pending &&
+              previous?.owner !== edit.owner &&
+              previousTitle !== edit.title &&
+              typeof previousTitle === "string" &&
+              (previous?.localTitle !== undefined
+                ? previous.localTitle !== null
+                : previousTitle !== previous?.baseTitle)
+            )
+              return undefined;
+            return { pending: 1, title: edit.title, edit: JSON.stringify(edit) };
+          },
+          () => generation === this.mirrorGeneration,
+          undefined,
+          encodeStateAsUpdate(this.doc),
+        ),
+      );
+    } catch (error) {
+      if (generation === this.mirrorGeneration && version === this.version)
+        this.localFailure = true;
+      throw error;
+    }
+    // Request success and Yjs' fire-and-forget writes do not establish durability.
+    // Only this transaction's commit covers both the body and pending title intent.
+    if (
+      committed &&
+      generation === this.mirrorGeneration &&
+      version === this.version &&
+      updates === this.updates
+    ) {
+      this.localVersion = version;
+      this.localGeneration = generation;
+      this.localUpdates = updates;
+      this.localEdit = encodedEdit;
+      this.localFailure = false;
+      this.notify();
+    }
+    if (edit && !this.stopped && generation === this.mirrorGeneration && this.local)
       this.mirrorChannels.get(this.local)?.postMessage(null);
   }
   private async clearPending(title: string, confirmed: Uint8Array) {
@@ -648,6 +693,7 @@ export class DocumentPersistence {
         }
         this.json = yDocToProsemirrorJSON(this.doc) as JSONContent;
         this.body = generateHTML(this.json, baseExtensions(this.session.fetch));
+        await this.writePending();
         this.opened = true;
         return;
       }
@@ -780,6 +826,7 @@ export class DocumentPersistence {
       if (this.version !== this.savedVersion) this.captureDoc();
     }
     if (this.offlineCopy) this.scheduleRetry();
+    if (!this.readOnly) await this.writePending();
     this.state = this.conflict
       ? "failed"
       : this.version !== this.savedVersion || (this.provider && !this.provider.synced)
@@ -1007,6 +1054,7 @@ export class DocumentPersistence {
     };
     this.checkTitleConflict();
     this.version++;
+    this.localFailure = false;
     this.state = this.conflict ? "failed" : this.trashed ? "retrying" : "saving";
     void this.writePending().catch(() => {
       this.state = "retrying";
@@ -1024,7 +1072,16 @@ export class DocumentPersistence {
   }
   async flush(): Promise<void> {
     if (this.timer) clearTimeout(this.timer);
-    if (this.readOnly || !this.online) return;
+    if (this.readOnly) return;
+    try {
+      await this.writePending();
+    } catch {
+      this.state = "retrying";
+      this.scheduleRetry();
+      this.notify();
+      return;
+    }
+    if (!this.online) return;
     if (this.tail) return this.tail;
     if (this.invalidVersion === this.version) return;
     const write = () => this.write();
@@ -1305,6 +1362,7 @@ export class DocumentPersistence {
     if (this.stopped) return;
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
       this.online = false;
+      await this.flush();
       this.scheduleRetry();
       this.notify();
       return;
