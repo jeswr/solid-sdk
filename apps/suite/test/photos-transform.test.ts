@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   ASPECT_RATIOS,
@@ -7,6 +8,7 @@ import {
   composeEdits,
   computeOutputSize,
   createEditRecord,
+  MAX_SOURCE_DIMENSION,
   orientationMatrix,
   type PhotoEdit,
   TransformError,
@@ -237,9 +239,9 @@ describe("sequential non-destructive edits", () => {
 describe("aspect presets and output pixels", () => {
   it.each(
     [
-      { pixels: Number.MAX_SAFE_INTEGER, left: 0.1, right: 0.10000000000000016 },
-      { pixels: 4503599627370497, left: 0.5, right: 0.5000000000000002 },
-      { pixels: Number.MAX_SAFE_INTEGER, left: 0.5, right: 0.5000000000000001 },
+      { pixels: MAX_SOURCE_DIMENSION, left: 0.1, right: 0.1000000000000009 },
+      { pixels: MAX_SOURCE_DIMENSION - 1, left: 0.5, right: 0.5000000000000009 },
+      { pixels: MAX_SOURCE_DIMENSION, left: 0.5, right: 0.500000000000001 },
     ].flatMap((bounds) =>
       [1, 2, 3, 4, 5, 6, 7, 8].map((orientation) => ({ ...bounds, orientation })),
     ),
@@ -265,7 +267,7 @@ describe("aspect presets and output pixels", () => {
     ).toEqual({ width: 1, height: 1 });
   });
   it("bounds the half-pixel tolerance for large source dimensions", () => {
-    const source = { width: 4503599627370497, height: 1 };
+    const source = { width: MAX_SOURCE_DIMENSION, height: 1 };
     for (const extent of [1.25, 1.5 - 1e-8, 1.5, 1.75, 2.25]) {
       expect(computeOutputSize(source, cropped({ ...full, right: extent / source.width }))).toEqual(
         { width: Math.round(extent), height: 1 },
@@ -278,22 +280,26 @@ describe("aspect presets and output pixels", () => {
   });
   it.each([
     1, 2, 3, 4, 5, 6, 7, 8,
-  ])("preserves narrow crop extents when complements coincide in orientation %i", (orientation) => {
-    const source = { width: Number.MAX_SAFE_INTEGER, height: 1 };
+  ])("rejects subpixel extents whose complements coincide in orientation %i", (orientation) => {
+    const source = { width: MAX_SOURCE_DIMENSION, height: 1 };
     const horizontalCrop = { ...full, left: 0.10000000000000005, right: 0.10000000000000013 };
     const verticalCrop = { ...full, top: horizontalCrop.left, bottom: horizontalCrop.right };
-    expect(
-      computeOutputSize(source, {
-        orientation,
-        crop: orientation < 5 ? horizontalCrop : verticalCrop,
-      }),
-    ).toEqual({ width: 1, height: 1 });
-    expect(
-      computeOutputSize(
-        { width: source.height, height: source.width },
-        { orientation, crop: orientation < 5 ? verticalCrop : horizontalCrop },
-      ),
-    ).toEqual({ width: 1, height: 1 });
+    fails(
+      () =>
+        computeOutputSize(source, {
+          orientation,
+          crop: orientation < 5 ? horizontalCrop : verticalCrop,
+        }),
+      "invalid-size",
+    );
+    fails(
+      () =>
+        computeOutputSize(
+          { width: source.height, height: source.width },
+          { orientation, crop: orientation < 5 ? verticalCrop : horizontalCrop },
+        ),
+      "invalid-size",
+    );
   });
   it("keeps the 401-pixel fractional crop through a horizontal flip and its inverse", () => {
     const source = { width: 1000, height: 3000 };
@@ -412,8 +418,8 @@ describe("aspect presets and output pixels", () => {
       "invalid-size",
     );
     expect(
-      computeOutputSize({ width: Number.MAX_SAFE_INTEGER, height: 1 }, createEditRecord()),
-    ).toEqual({ width: Number.MAX_SAFE_INTEGER, height: 1 });
+      computeOutputSize({ width: MAX_SOURCE_DIMENSION, height: 1 }, createEditRecord()),
+    ).toEqual({ width: MAX_SOURCE_DIMENSION, height: 1 });
   });
 });
 
@@ -492,6 +498,10 @@ describe("fail-closed validation", () => {
     { width: NaN, height: 1 },
     { width: 1, height: Infinity },
     { width: 1.5, height: 2 },
+    { width: MAX_SOURCE_DIMENSION + 1, height: 1 },
+    { width: 1, height: MAX_SOURCE_DIMENSION + 1 },
+    { width: Number.MAX_SAFE_INTEGER, height: 1 },
+    { width: 4503599627370497, height: 1 },
     { width: Number.MAX_SAFE_INTEGER + 1, height: 1 },
     { width: "2", height: 1 },
     { ...size, extra: true },
