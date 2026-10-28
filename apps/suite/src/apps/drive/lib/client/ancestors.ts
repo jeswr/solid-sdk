@@ -201,12 +201,13 @@ export function ancestorGuard(options: {
     destination: string,
     creating = false,
     allowAbsent = false,
-  ): Promise<void> => {
+  ): Promise<boolean> => {
     assertWithinPodScope(storageUrl, destination);
     let url = parent(destination);
     const missing: string[] = [];
     const containers: string[] = [];
     let existing = false;
+    let demo = false;
     while (url.startsWith(storageUrl)) {
       // HEAD 200 may describe an empty container whose ACL is still being installed.
       // Check every ancestor, even above an existing immediate parent.
@@ -214,11 +215,12 @@ export function ancestorGuard(options: {
       else {
         const response = await http(url, { method: "HEAD" });
         await provisioning.get(url);
+        demo = response.headers.get("x-solid-demo-access-control") === "none";
         if (response.ok) existing = true;
         else {
           if (response.status !== 404 || url === storageUrl)
             throw new DriveAccessError("Ancestor could not be checked");
-          if (response.headers.get("x-solid-demo-access-control") === "none") return;
+          if (demo) return true;
           missing.unshift(url);
         }
       }
@@ -248,7 +250,10 @@ export function ancestorGuard(options: {
       // Recheck existing ancestors too: a delayed HEAD can outlive failed provisioning.
       await singleFlight(container, async () => {
         const required = await ledger.get(container);
-        if (container === storageUrl && !required) return;
+        // The demo explicitly has no inherited ACLs. Avoid serial HEAD rounds
+        // for its ancestors, while still waiting on flights and verifying any
+        // durable requirement left by an earlier protected operation.
+        if (!required && (container === storageUrl || demo)) return;
         // A different tab may have created (or removed) this ancestor while we waited.
         const current = await http(container, { method: "HEAD" });
         if (current.ok) {
@@ -279,6 +284,7 @@ export function ancestorGuard(options: {
     }
     // Only the provisioner holding this resource's flight may skip its own requirement.
     if (!creating) await check(destination, allowAbsent);
+    return demo;
   };
   const check = async (url: string, allowAbsent = false): Promise<void> => {
     try {
@@ -313,7 +319,14 @@ export function ancestorGuard(options: {
   ): Promise<{ response: Response; policy?: OwnAccess }> => {
     requirePolicy(decision, ["inherit-verified", "archived", "owner-only"]);
     const from = decision.kind === "archived" ? decision.from : url;
-    await guard(url, true);
+    const demo = await guard(url, true);
+    // Historical reads also check protection and acquire flights. Resolve them
+    // before holding this resource's lock; work inside a flight must never
+    // call back into provisioning, even through a metadata read or PUT seam.
+    let original: OwnAccess | undefined;
+    if (decision.kind === "inherit-verified" && !demo)
+      original = decision.original ?? (await archived(url));
+    else if (decision.kind === "archived" && url.endsWith("/")) original = await archived(url);
     let result: { response: Response; policy?: OwnAccess } | undefined;
     await singleFlight(
       url,
@@ -337,7 +350,6 @@ export function ancestorGuard(options: {
         } else if (current.headers.get("x-solid-demo-access-control") !== "none") {
           // A reappearing historical folder has an original audience. Only omit
           // its ledger when current inheritance is verified to be no wider.
-          const original = decision.original ?? (await archived(url));
           const inherited = requireAccess(await access.effective(url, true), url);
           if (original && accessGains(access.forResource(original, url), inherited).length)
             policy = original;
@@ -345,7 +357,6 @@ export function ancestorGuard(options: {
         if (decision.kind === "archived" && url.endsWith("/")) {
           // Clearing a completed flight does not discard the historical folder
           // audience recorded in Trash. A different copy may not widen it.
-          const original = await archived(url);
           if (
             original &&
             accessGains(access.forResource(original, url), access.forResource(decision.acl, from))

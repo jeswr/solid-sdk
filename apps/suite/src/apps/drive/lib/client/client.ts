@@ -395,14 +395,16 @@ export function createSolidDriveClient(options: {
     }
   };
 
-  // The only payload/container PUT seam. A provisioner may skip only its own
-  // unfinished ACL while creating an empty placeholder, never its ancestors'.
+  // Payload writes check ancestors and completed resource protection. An empty
+  // provisioning PUT has already guarded its ancestors before taking the flight;
+  // it must not enter provisioning again while that flight is held.
   const guardedWrite = async (
     url: string,
     init: RequestInit,
-    creating = false,
+    provisioned = false,
   ): Promise<Response> => {
-    await provision.guard(url, creating, new Headers(init.headers).get("if-none-match") === "*");
+    if (!provisioned)
+      await provision.guard(url, false, new Headers(init.headers).get("if-none-match") === "*");
     return ensureOk(await http(url, init), url);
   };
 
@@ -489,6 +491,9 @@ export function createSolidDriveClient(options: {
   };
 
   const rawPut = async (target: string, body: string, headers: HeadersInit): Promise<Response> => {
+    // Only the provisioner calls this seam, after guarding ancestors and while
+    // holding the target's flight. Re-entering guard here reverses lock order
+    // (child -> parent), and can wait on the provisioner's own unfinished work.
     return guardedWrite(
       target,
       {

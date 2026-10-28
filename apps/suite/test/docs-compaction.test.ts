@@ -77,7 +77,7 @@ describe("Docs log compaction before trash", () => {
     });
     await f.compact();
     expect(peak).toBe(64);
-    expect(f.http).toHaveBeenCalledTimes(3 * 65 + 7);
+    expect(f.http).toHaveBeenCalledTimes(3 * 65 + 4);
     expect(f.deletes()).toHaveLength(65);
     expect(f.copies()).toHaveLength(1);
     expect(f.copies()[0]?.[1].body).toEqual(mergeUpdates(updates));

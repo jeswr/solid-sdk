@@ -561,10 +561,10 @@ it("bounds Docs trash and Undo requests by compacting the typed Yjs log without 
   }
   doc.destroy();
   expect(updates).toHaveLength(62);
-  // Lease checks, protection gates and policy-archive discovery add reads;
-  // compaction still bounds both transfers without weakening those checks.
+  // Lease checks and resource protection still apply on the demo pod; its
+  // explicit capability lets us omit redundant ancestor HEADs and ACL history.
   expect(results).toEqual([
-    { trash: { requests: 934, mutations: 132 }, undo: { requests: 615, mutations: 133 } },
-    { trash: { requests: 273, mutations: 73 }, undo: { requests: 66, mutations: 11 } },
+    { trash: { requests: 612, mutations: 132 }, undo: { requests: 416, mutations: 133 } },
+    { trash: { requests: 253, mutations: 73 }, undo: { requests: 50, mutations: 11 } },
   ]);
 });
