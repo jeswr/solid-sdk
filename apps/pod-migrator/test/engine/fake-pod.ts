@@ -43,6 +43,8 @@ export class FakePod {
   readonly owner: string;
   readonly system: "wac" | "acp";
   readonly implementation: "css" | "ess" | "nss";
+  /** Offline routing for a destination ACL referencing a source-pod group. */
+  groupSource?: FakePod;
   afterWrite?: (url: string) => void | Promise<void>;
   /** CSS PutOperationHandler returns 201/205 without representation ETags. */
   writeEtags = true;
@@ -85,6 +87,7 @@ export class FakePod {
       root: this.root,
       ownerWebId: this.owner,
       http: createPodHttp({ root: this.root, fetch: this.fetch }),
+      publicHttp: createPodHttp({ root: this.root, fetch: this.publicFetch }),
       implementation: this.implementation,
     };
   }
@@ -103,7 +106,11 @@ export class FakePod {
     }
     return result;
   }
-  async permissions(url: string, identity: Identity = {}): Promise<Set<Mode>> {
+  async permissions(
+    url: string,
+    identity: Identity = {},
+    resolving = new Set<string>(),
+  ): Promise<Set<Mode>> {
     const allowed = new Set<string>();
     const denied = new Set<string>();
     for (const ancestor of this.ancestors(url)) {
@@ -122,11 +129,19 @@ export class FakePod {
           if (!scopes.includes(ancestor)) continue;
           const groupMatches = await Promise.all(
             node.iris(`${ACL}agentGroup`).map(async (group) => {
-              if (identity.groups?.includes(group)) return true;
               if (!identity.agent) return false;
               const documentUrl = group.split("#")[0] as string;
-              const stored = this.data.get(documentUrl);
+              const pod = this.groupSource?.data.has(documentUrl) ? this.groupSource : this;
+              if (resolving.has(documentUrl) || pod.denied.has(`GET ${documentUrl}`)) return false;
+              const stored = pod.data.get(documentUrl);
               if (!stored) return false;
+              // CSS dereferences vCard documents without the requester's credentials.
+              const publicAccess = await pod.permissions(
+                documentUrl,
+                {},
+                new Set([...resolving, documentUrl]),
+              );
+              if (!publicAccess.has("read")) return false;
               const dataset = await parseRdf(new TextDecoder().decode(stored.bytes), stored.type, {
                 baseIRI: documentUrl,
               });
@@ -156,6 +171,7 @@ export class FakePod {
         const issuers = [...matcher.issuer];
         const vcs = [...matcher.vc];
         return (
+          (this.implementation !== "ess" || agents.length > 0) &&
           agents.length + clients.length + issuers.length + vcs.length > 0 &&
           (!agents.length ||
             agents.some(
@@ -197,7 +213,8 @@ export class FakePod {
             if (denials.includes(`${ACL}Read`) || denials.includes(`${ACL}Write`))
               denied.add(`${ACL}Control`);
           } else {
-            for (const mode of grants) allowed.add(mode);
+            for (const mode of grants)
+              if (this.implementation !== "ess" || mode !== `${ACL}Control`) allowed.add(mode);
             for (const mode of denials) denied.add(mode);
           }
         }
@@ -232,12 +249,11 @@ export class FakePod {
             for (const control of url === ancestor ? acr.accessControl : acr.memberAccessControl)
               for (const policy of control.apply) apply(policy);
           }
-          if (url === ancestor)
-            for (const p of node.nodes(`${ACP}access`))
-              apply(
-                new Policy(p as unknown as import("@rdfjs/types").Term, dataset, DataFactory),
-                true,
-              );
+          for (const p of node.nodes(ACP + (url === ancestor ? "access" : "memberAccess")))
+            apply(
+              new Policy(p as unknown as import("@rdfjs/types").Term, dataset, DataFactory),
+              true,
+            );
         }
       }
     }
@@ -322,6 +338,10 @@ export class FakePod {
   readonly fetch: typeof fetch = async (input, init) => {
     if (typeof input !== "string") throw new TypeError("Fake transport requires strings");
     return this.request(input, init);
+  };
+  readonly publicFetch: typeof fetch = async (input, init) => {
+    if (typeof input !== "string") throw new TypeError("Fake transport requires strings");
+    return this.request(input, init, {});
   };
 }
 export function model(system: AccessSystem): "wac" | "acp" {

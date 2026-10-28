@@ -172,6 +172,7 @@ export async function seedSource(
     ownerWebId: account.webId,
     implementation: "css",
     http: createPodHttp({ root, fetch: account.fetch, allowInsecureLoopback: true }),
+    publicHttp: createPodHttp({ root, fetch, allowInsecureLoopback: true }),
   };
   await putFixture(account.side, "migration/", "");
   const owners = (container: boolean): FixtureRule[] => [
@@ -295,6 +296,7 @@ export async function seedSource(
         ownerWebId: reader.webId,
         implementation: "css" as const,
         http: createPodHttp({ root, fetch: reader.fetch, allowInsecureLoopback: true }),
+        publicHttp: side.publicHttp,
       }
     : side;
   return { system, account, stranger, side: migrationSide, paths, files, faithful };

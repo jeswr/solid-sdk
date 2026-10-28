@@ -12,7 +12,10 @@ function product(left: Subject[][], right: Subject[][]): Subject[][] {
   if (left.length * right.length > 64) throw new PolicyTooComplex("ACP policy exceeds 64 clauses");
   return left.flatMap((a) => right.map((b) => [...a, ...b]));
 }
-function matcherClauses(matcher: Matcher): Subject[][] {
+function matcherClauses(matcher: Matcher, dialect?: AcpDialect): Subject[][] {
+  // ESS matchers need an agent attribute, including when constrained by a client.
+  // Requiring it for every matcher is conservative for source variants.
+  if (dialect === "ess" && !matcher.agent.size) return [];
   let result: Subject[][] = [[]];
   let present = false;
   const attributes: Subject[][] = [
@@ -38,7 +41,13 @@ function matcherClauses(matcher: Matcher): Subject[][] {
         attribute.map((subject) => [subject]),
       );
     }
-  return present ? result : [];
+  return present
+    ? result.map((clause) =>
+        clause.some((subject) => subject.kind !== "public")
+          ? clause.filter((subject) => subject.kind !== "public")
+          : [{ kind: "public" }],
+      )
+    : [];
 }
 /**
  * CSS 7.2 AcpReader + AuthAuxiliaryReader use acl:* modes and resource Control.
@@ -54,6 +63,7 @@ export function readAcp(
   url: string,
   dialect?: AcpDialect,
   target = false,
+  onInactive?: (node: string, reason: string) => void,
 ): EffectivePolicy {
   const result: EffectivePolicy = { grants: [], denials: [] };
   // CSS enumerates EVERY acp:resource statement, not only the requested IRI.
@@ -75,7 +85,7 @@ export function readAcp(
   ))
     roots.set(key(q.subject), q.subject);
   for (const term of roots.values()) {
-    visit(term, ["resource", "accessControl", "memberAccessControl", "access"]);
+    visit(term, ["resource", "accessControl", "memberAccessControl", "access", "memberAccess"]);
     const acr = new AccessControlResource(term, dataset, DataFactory);
     const node = new RdfNode(term, dataset, DataFactory);
     const resources = node.iris(`${ACP}resource`);
@@ -97,11 +107,24 @@ export function readAcp(
       for (const matcher of [...all, ...any, ...policy.noneOf])
         visit(matcher, ["agent", "client", "issuer", "vc"]);
       if (!all.length && !any.length) return;
-      let who: Subject[][] = [[]];
-      for (const matcher of all) who = product(who, matcherClauses(matcher));
-      if (any.length) who = product(who, any.flatMap(matcherClauses));
+      const expand = (matcherDialect?: AcpDialect): Subject[][] => {
+        let clauses: Subject[][] = [[]];
+        for (const matcher of all)
+          clauses = product(clauses, matcherClauses(matcher, matcherDialect));
+        if (any.length)
+          clauses = product(
+            clauses,
+            any.flatMap((matcher) => matcherClauses(matcher, matcherDialect)),
+          );
+        return clauses;
+      };
+      const who = expand(dialect);
       // A conjunction inside noneOf cannot be flattened to OR exclusions. Fail closed.
-      const excluded = [...policy.noneOf].flatMap(matcherClauses);
+      // For source grants, a possibly active exclusion remains restrictive even
+      // outside the ESS matcher subset we can positively establish.
+      const excluded = [...policy.noneOf].flatMap((matcher) =>
+        matcherClauses(matcher, target ? dialect : undefined),
+      );
       if (excluded.some((clause) => clause.length !== 1))
         throw new PolicyTooComplex("Conjunctive ACP exclusions need a richer normal form");
       const convert = (values: Iterable<string>) =>
@@ -130,6 +153,22 @@ export function readAcp(
           subject.kind === "owner" || subject.kind === "creator" || subject.kind === "vc";
         if (target && dialect !== "ess" && [...who.flat(), ...excluded.flat()].some(uncertainRole))
           throw new TypeError("Target ACP owner/creator/vc matcher enforcement is not established");
+        // Source denials use the broadest plausible interpretation. Requiring
+        // an agent must never silently remove a possibly effective denial.
+        let activeWho = !target && field === "denials" && dialect === "ess" ? expand() : who;
+        if (field === "grants" || dialect === "css") {
+          activeWho = who.filter((clause) => dialect === "ess" || !clause.some(uncertainRole));
+          if (
+            field === "grants" &&
+            modes.size &&
+            (activeWho.length !== who.length ||
+              (dialect === "ess" && (!who.length || who.length !== expand().length)))
+          )
+            onInactive?.(
+              policy.value,
+              "Inactive source grant clauses were omitted: the source dialect cannot satisfy their matcher requirements.",
+            );
+        }
         const canonical = rawModes.map((mode) => mode.replace(ACP, ACL));
         if (
           target &&
@@ -145,17 +184,26 @@ export function readAcp(
               : modes.has("read") || modes.has("write");
           modes.clear();
           if (hasControl) modes.add("control");
+        } else if (dialect === "ess" && field === "grants" && modes.delete("control")) {
+          onInactive?.(
+            policy.value,
+            "Inactive ESS resource Control was omitted; ESS controls ACR access through access/memberAccess policies.",
+          );
         }
         if (modes.size && foreign && field === "grants")
           throw new TypeError("Cannot safely place grants from another ACP resource node");
+        const exclusions =
+          !target && field === "denials"
+            ? [...policy.noneOf].flatMap((matcher) => matcherClauses(matcher, dialect)).flat()
+            : excluded.flat();
         if (modes.size)
           result[field].push({
             modes,
-            who,
+            who: activeWho,
             except:
-              field === "denials" && !target
-                ? excluded.flat().filter((subject) => !uncertainRole(subject))
-                : excluded.flat(),
+              !target && (field === "denials" || dialect === "css")
+                ? exclusions.filter((subject) => !uncertainRole(subject))
+                : exclusions,
             appliesTo,
             source: { url, node: policy.value },
           });
@@ -177,14 +225,18 @@ export function readAcp(
       for (const policy of ac.apply)
         addPolicy(policy, own ? "members" : "both", false, !own, !resources.length);
     }
-    for (const policy of node.nodes(`${ACP}access`))
-      addPolicy(
-        new Policy(policy as unknown as import("@rdfjs/types").Term, dataset, DataFactory),
-        "resource",
-        true,
-        !own && !auxiliary,
-        !resources.length,
-      );
+    for (const [predicate, scope] of [
+      ["access", "resource"],
+      ["memberAccess", "members"],
+    ] as const)
+      for (const policy of node.nodes(ACP + predicate))
+        addPolicy(
+          new Policy(policy as unknown as import("@rdfjs/types").Term, dataset, DataFactory),
+          scope,
+          true,
+          !own && !auxiliary,
+          !resources.length,
+        );
   }
   for (const quad of dataset)
     if (
@@ -239,6 +291,10 @@ export async function writeAcp(
       default:
         throw new TypeError("Unsupported ACP subject");
     }
+    // PublicAgent is the identity element of conjunction. It activates ESS's
+    // conditional matchers without weakening the client/issuer/VC condition.
+    if (dialect === "ess" && ["client", "issuer", "vc"].includes(subject.kind))
+      node.add(`${ACP}agent`, `${ACP}PublicAgent`);
     return node.value;
   }
   for (const [field, rules] of [
@@ -274,7 +330,8 @@ export async function writeAcp(
           for (const subject of rule.except) controlPolicy.add(`${ACP}noneOf`, matcher(subject));
           controlPolicy.add(ACP + field, `${ACP}Read`);
           controlPolicy.add(ACP + field, `${ACP}Write`);
-          acr.add(`${ACP}access`, controlPolicy.value);
+          if (rule.appliesTo !== "members") acr.add(`${ACP}access`, controlPolicy.value);
+          if (rule.appliesTo !== "resource") acr.add(`${ACP}memberAccess`, controlPolicy.value);
         }
       }
   return serialize(dataset);

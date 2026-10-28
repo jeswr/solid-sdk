@@ -68,6 +68,7 @@ export async function executeMigration(
   for (const name of ["source", "target"] as const)
     if (
       opts[name].http !== state[name].http ||
+      opts[name].publicHttp !== state[name].publicHttp ||
       opts[name].root !== state[name].root ||
       opts[name].ownerWebId !== state[name].ownerWebId ||
       opts[name].implementation !== state[name].implementation
@@ -214,7 +215,12 @@ export async function executeMigration(
     for (const [group, expected] of state.groups) {
       const url = group.split("#")[0] as string;
       const dataset = await parse(
-        requireOk(await state.source.http.get(url, { accept: "text/turtle", signal: opts.signal })),
+        requireOk(
+          await (state.source.publicHttp as NonNullable<PodSide["publicHttp"]>).get(url, {
+            accept: "text/turtle",
+            signal: opts.signal,
+          }),
+        ),
         url,
       );
       const actual = [...new Group(group, dataset, DataFactory).hasMember];

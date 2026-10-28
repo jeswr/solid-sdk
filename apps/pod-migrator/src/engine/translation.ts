@@ -16,6 +16,7 @@ export interface TranslationContext {
   resourceUrl: string;
   targetOwner: string;
   sourceOwner: string;
+  targetImplementation?: "css" | "ess" | "nss";
   groups: ReadonlyMap<string, readonly string[]>;
   sourceRuleTurtle?: string;
 }
@@ -86,6 +87,19 @@ export function translatePolicy(
   };
   for (const [ruleIndex, original] of source.grants.entries()) {
     sourceRuleTurtle = context.sourceRules?.get(original.source.url) ?? context.sourceRuleTurtle;
+    if (
+      target === "acp" &&
+      context.targetImplementation === "css" &&
+      original.except.some((subject) => subject.kind === "vc")
+    ) {
+      choose(
+        "exclusion-unsupported",
+        "CSS cannot enforce credential exclusions. Omit the entire grant.",
+        ["skip", "abort"],
+        `${ruleIndex}:vc`,
+      );
+      continue;
+    }
     if (original.except.some((subject) => subject.kind === "creator")) {
       choose(
         "exclusion-unsupported",
@@ -126,6 +140,18 @@ export function translatePolicy(
       clauses = clauses.filter((c) => !c.some((s) => s.kind === "origin"));
     }
     if (target === "acp") {
+      if (
+        context.targetImplementation === "css" &&
+        clauses.some((clause) => clause.some((subject) => subject.kind === "vc"))
+      ) {
+        choose(
+          "condition-unsupported",
+          "CSS supplies no credential context. Omit credential-conditioned clauses.",
+          ["skip", "abort"],
+          `${ruleIndex}:vc`,
+        );
+        clauses = clauses.filter((clause) => !clause.some((subject) => subject.kind === "vc"));
+      }
       for (const group of new Set(
         clauses
           .flat()
@@ -135,7 +161,7 @@ export function translatePolicy(
         const members = context.groups.get(group);
         const decision = choose(
           "group-unsupported",
-          `ACP has no WAC groups. Current members: ${members ? members.join(", ") || "(empty)" : "unavailable within the source pod fence"}.`,
+          `ACP has no WAC groups. Publicly readable current members: ${members ? members.join(", ") || "(empty)" : "unavailable within the source pod fence"}.`,
           members ? ["skip", "expand", "abort"] : ["skip", "abort"],
           `${ruleIndex}:${group}`,
         );
@@ -243,10 +269,18 @@ export function translatePolicy(
   }
   if (target === "acp") {
     for (const [index, rule] of source.denials.entries()) {
-      if (rule.who.flat().some((subject) => subject.kind === "creator")) {
+      if (
+        rule.who
+          .flat()
+          .some(
+            (subject) =>
+              subject.kind === "creator" ||
+              (context.targetImplementation === "css" && subject.kind === "vc"),
+          )
+      ) {
         choose(
           "deny-unsupported",
-          "The original creator identity is unavailable. Drop grants of every possibly denied mode.",
+          "The target cannot establish this denial's creator or credential condition. Drop grants of every possibly denied mode.",
           ["drop-overlapping", "abort"],
           `creator:${index}`,
         );
@@ -269,7 +303,11 @@ export function translatePolicy(
           appliesTo: "resource",
           except: [
             ...rule.except
-              .filter((subject) => subject.kind !== "creator")
+              .filter(
+                (subject) =>
+                  subject.kind !== "creator" &&
+                  !(context.targetImplementation === "css" && subject.kind === "vc"),
+              )
               .map((subject) =>
                 subject.kind === "owner"
                   ? { kind: "agent" as const, webId: context.sourceOwner }

@@ -220,7 +220,7 @@ controls the target pod.
 | Source construct | To WAC | To ACP | If not faithful |
 |---|---|---|---|
 | agent, public, authenticated | same | same | — |
-| WAC `agentGroup` | same | no equivalent | `group-unsupported`: **skip** (drop the grant) / **expand** to the group's current members, read at plan time, shown as a list, with a warning that later membership changes won't follow / **abort** |
+| WAC `agentGroup` | same | no equivalent | `group-unsupported`: **skip** (drop the grant) / **expand** to the group's current members, read anonymously at plan time only when publicly readable, shown as a list, with a warning that later membership changes won't follow / **abort** |
 | WAC `acl:origin` | enforcement unestablished (CSS ignores it) | no equivalent (`acp:client` is a client id, not an origin) | `origin-unsupported`: **skip** / **abort**. Drop the affected grant clause; never retain or remove only the condition |
 | ACP `client`, `issuer`, `vc` in a clause | no equivalent | same | `condition-unsupported`: **skip the clause** / **abort**. Never drop just the condition |
 | ACP `noneOf` exclusions | no equivalent | same | `exclusion-unsupported`: **skip the grant** / **abort** |
@@ -242,6 +242,86 @@ what each option would write, and a short plain-English explanation. Every "near
 is checked mechanically: `assertNotWider(sourceEffective, plannedTargetEffective)` runs over
 every resource before execute, and execute refuses to start if it fails.
 
+### Implementation closure matrix
+
+A source grant is usable only when its source implementation can satisfy its conditions.
+CSS supplies no owner, creator or VC context: those positive grant clauses are dropped with
+`condition-unsupported`, provenance RDF and skip/abort. Other active clauses survive. Established
+CSS exclusions on absent attributes are ineffective and removed; unknown-source exclusions
+remain restrictive. ESS client-only grants are inactive. The reader accepts the conservative
+ESS subset in which each required matcher includes an agent attribute. Source denials use
+the broadest plausible positive matching and narrowest plausible exclusions, so a missing
+agent cannot weaken a denial. The ESS writer adds `PublicAgent` to client/issuer/VC matchers,
+which activates the condition without broadening it. It preserves conjunctions as separate
+matchers, including repeated attributes.
+
+Group evidence uses `PodSide.publicHttp`, a separate fenced transport over auth-core's pristine
+`publicFetch`. There is no owner-token fallback, including for unknown implementations. CSS's
+`AgentGroupAccessChecker` dereferences vCard documents without user credentials; privately
+readable membership proves no access. Missing public transport, foreign groups, failed public
+reads and redirects offer only skip/abort. The executor repeats the anonymous membership read
+before its first write and stops on changed membership or lost readability. WAC output can
+retain the original group IRI.
+
+Each cell below records **S** (source enforcement), **T** (target enforcement), and **M**
+(migration behavior). “Absent” means no representation in that implementation's access language;
+it contributes no grant. “Refuse” means report and skip/abort, with owner-only allowed only when
+the complete phase proof permits it. Unknown implementations use conservative source readings;
+ACP targets require independently established CSS/ESS semantics.
+
+CSS evidence is the installed **7.2.0** `WebAclReader`, its configured checker chain,
+`AcpReader.createContext`, `AcpUtil`, `@solid/access-control-policy` evaluator and
+`AuthAuxiliaryReader`. ESS/NSS are explicit offline fixture contracts; no live PodSpaces or NSS
+validation is claimed. In particular NSS origin enforcement is uncertain and never trusted on
+a target. The ESS source reader may narrow variants outside its established matcher subset.
+
+Every row label is a case in [`dialect-matrix.test.ts`](../test/engine/dialect-matrix.test.ts).
+Each runs all 16 source × target pairs. CSS checks use the installed server readers/evaluator;
+ESS/NSS use independent fake evaluation. The oracle never uses the engine's reader or prover.
+Matching, nonmatching and anonymous contexts vary WebID, client, issuer, VC and origin. Checks
+after every target PUT cover placeholders, locks, content, parent grants, existing descendants
+and a future child. Basic faithful grants must survive as well as satisfy the subset property.
+Absent source-language constructs are tested as inert; refused documents must leave their
+skipped subtree unwritten. Focused tests cover unknown sources, reporting and nested ESS folders.
+
+| Construct / test row | CSS 7.2 WAC | CSS 7.2 ACP | ESS | NSS |
+|---|---|---|---|---|
+| `agent` | S/T WebID equality; M retain | S/T WebID equality; M retain | S/T agent matcher; M retain | S/T WebID equality; M retain |
+| `public` | S/T `foaf:Agent`; M retain | S/T `PublicAgent`; M retain | S/T `PublicAgent`; M retain | S/T `foaf:Agent`; M retain |
+| `authenticated` | S/T authenticated WebID; M retain | S/T `AuthenticatedAgent`; M retain | S/T `AuthenticatedAgent`; M retain | S/T authenticated WebID; M retain |
+| `group-public` | S/T public vCard membership; M retain IRI or expand snapshot | S/T absent; M accept proven expanded agents | S/T absent; M accept proven expanded agents | S public evidence; T vCard membership; M retain IRI or expand snapshot |
+| `group-private` | S no membership; T no private match; M no expansion | S/T absent; M drop | S/T absent; M drop | S private resolution uncertain; T not relied on; M no expansion |
+| `owner` | S/T absent; M owner-only substitution | S no context; T not enforced; M drop inactive clause | S/T owner context; M map grant only to target owner | S/T absent; M owner-only substitution |
+| `creator` | S/T absent; M owner-only substitution | S no context; T not enforced; M drop inactive clause | S/T creator context; M map grant to target owner, omit creator exclusions and narrow denials | S/T absent; M owner-only substitution |
+| `client-only` | S/T absent; M drop clause | S/T can match without agent; M retain to ACP | S inactive without agent; T writer supplies `PublicAgent`; M drop inactive source grant | S/T absent; M drop clause |
+| `client-agent` | S/T absent; M drop clause | S/T AND attributes, OR values; M retain | S/T agent AND client; M retain all conditions | S/T absent; M drop clause |
+| `issuer` | S/T absent; M drop clause | S/T exact issuer equality; M retain | S/T agent AND issuer; M retain all conditions | S/T absent; M drop clause |
+| `vc` | S/T absent; M drop clause | S no VC context; T unenforced; M drop inactive/unsupported clause | S/T agent AND VC; M retain only to ESS | S/T absent; M drop clause |
+| `origin` | S ignored; T unenforced; M omit clause | S/T absent; M omit clause | S/T absent; M omit clause | S may restrict; T unestablished; M omit clause |
+| `allOf` | S/T no arbitrary conjunction; M narrow or omit | S/T every matcher must match; M retain | S/T every required matcher with agent; M retain supported subset | S/T no arbitrary conjunction; M narrow or omit |
+| `anyOf` | S/T union of principals; M retain representable clauses | S/T at least one matcher; M retain disjunction | S/T at least one active matcher; M drop inactive alternatives | S/T union of principals; M retain representable clauses |
+| `deny` | S/T absent; M subtract exact or drop overlaps | S/T deny overrides allow; M retain | S/T deny overrides allow; M retain conservatively | S/T absent; M subtract or drop overlaps |
+| `noneOf` | S/T absent; M omit excluded grant | S/T no excluded matcher may match; M retain | S/T exclusions; M retain conservative exclusion | S/T absent; M omit excluded grant |
+| `deny-vc` | S/T absent; M narrow overlaps | S inactive; T unenforced; M drop inactive denial or affected ESS grants | S/T VC-conditioned denial; M retain only with enforcement | S/T absent; M narrow overlaps |
+| `noneOf-vc` | S/T absent; M omit grant | S exclusion inactive; T unenforced; M remove inactive exclusion or omit ESS grant | S/T VC exclusion; M retain | S/T absent; M omit grant |
+| `deny-except-vc` | S/T absent; M drop overlaps | S exclusion inactive; T untrusted; M broaden denial | S/T VC exclusion; M retain to ESS, remove exclusion to CSS | S/T absent; M drop overlaps |
+| `noneOf-client-only` | S/T absent; M omit grant | S/T client-only exclusion; M retain | S uncertain exclusion variant; T writer adds agent; M conservatively retain | S/T absent; M omit grant |
+| `deny-client-only` | S/T absent; M drop overlaps | S/T client-only denial; M retain | S inactive in established subset; T writer adds agent; M conservatively retain possible denial | S/T absent; M drop overlaps |
+| `resource-scope` | S/T `accessTo` only; M preserve | S/T own `accessControl`; M preserve | S/T own `accessControl`; M preserve | S/T `accessTo` only; M preserve |
+| `member-scope` | S/T nearest `default`, child replaces; M materialize per resource to ACP | S/T additive descendant controls; M preserve union | S/T additive descendant controls; M preserve union | S/T nearest defaults; M materialize per resource to ACP |
+| `control` | S/T resource `acl:Control`; M preserve | S/T resource `acl:Control`, auxiliary derives access; M preserve | S/T ACR Read+Write via `access`/`memberAccess`; M preserve both scopes | S/T resource `acl:Control`; M preserve |
+| `append` | S/T Append alone; M preserve | S/T Append alone; M preserve | S/T Append alone; M preserve | S/T Append alone; M preserve |
+| `write` | S/T Write implies Append; M normalize | S/T implication after denials; M normalize | S/T Write implies Append; M normalize | S/T Write implies Append; M normalize |
+| `deny-append` | S/T absent; M subtract conservatively | S before implication; T writer denies both modes; M broaden denial | S mode denied; T both modes denied; M broaden denial | S/T absent; M subtract conservatively |
+| `deny-write` | S/T absent; M subtract conservatively | S before implication; T writer denies both modes; M broaden denial | S mode denied; T both modes denied; M broaden denial | S/T absent; M subtract conservatively |
+| `defaultForNew` | S ignored; T not emitted; M refuse | S/T absent; M no grant | S/T absent; M no grant | S legacy inheritance; T modern `default`; M normalize only established NSS |
+| `acp-modes` | S/T absent; M no grant | S ignored; T emits `acl:*`; M refuse mixed source | S/T `acp:Read/Write/Append`; M normalize vocabulary | S/T absent; M no grant |
+| `typed-acr` | S/T absent; M no grant | S ignores missing `resource`; T requires binding; M refuse | S typed root fallback; T explicit exclusive binding; M normalize | S/T absent; M no grant |
+| `acr-self` | S/T absent; M no grant | S no protected Control; T not emitted; M refuse grant | S ACR-self Read+Write gives Control; T scoped access; M normalize | S/T absent; M no grant |
+| `access` | S/T absent; M no grant | S ignored; T not emitted; M refuse grant | S/T resource ACR Read+Write gives Control; M preserve resource scope | S/T absent; M no grant |
+| `memberAccess` | S/T absent; M no grant | S ignored; T not emitted; M refuse grant | S/T descendant ACR Read+Write gives Control; M preserve member scope | S/T absent; M no grant |
+| `resource-control-mode` | S/T absent in ACP form; M no grant | S/T resource `acl:Control`; M normalize | S resource Control mode inactive; T not emitted; M drop with report | S/T absent in ACP form; M no grant |
+
 ## 6. Writing ACLs and ACRs
 
 Serialise with `n3.Writer` only, never by string concatenation. WAC: one `acl:Authorization`
@@ -257,6 +337,11 @@ through an unsafe access URL. Verification checks target document scopes and the
 permissions, including Control, before claiming success. A root read/parse failure preserves
 its actual cause; only a readable policy without the required owner permissions produces the
 owner-Control-loss diagnostic. Unsupported mixed-dialect documents still fail closed.
+
+ESS serializes resource Control through `acp:access` and descendant Control through
+`acp:memberAccess`, using the same matcher conditions and Read+Write policy for each. Both
+scopes round-trip independently, so owner-only folder locks also authorize nested creation.
+Resource `acp:Control` is inactive and is never emitted.
 
 CSS 7.2's `PutOperationHandler` returns 201/205 without an ETag for content and access
 documents. An empty placeholder's ETag may be recovered by HEAD only when its content length

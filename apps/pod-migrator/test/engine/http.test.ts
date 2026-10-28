@@ -23,6 +23,7 @@ describe("PodHttp credential boundary", () => {
     for (const [url, init] of fetch.mock.calls) {
       expect(typeof url).toBe("string");
       expect(init?.redirect).toBe("manual");
+      expect(init?.credentials).toBe("omit");
       expect(new Headers(init?.headers).has("authorization")).toBe(false);
       expect(new Headers(init?.headers).has("dpop")).toBe(false);
     }

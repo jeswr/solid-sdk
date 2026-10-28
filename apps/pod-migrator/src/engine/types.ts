@@ -15,6 +15,8 @@ export interface PodSide {
   root: string;
   ownerWebId: string;
   http: PodHttp;
+  /** Same pod fence over auth-core.publicFetch; never an authenticated fallback. */
+  publicHttp?: PodHttp;
   /** Established by the caller independently of editable access RDF; never inferred from mode IRIs. */
   implementation?: "css" | "ess" | "nss";
 }
@@ -125,4 +127,5 @@ export interface AccessDocument {
   url: string;
   turtle: string;
   etag: string | null;
+  inactiveGrants?: { node: string; reason: string }[];
 }

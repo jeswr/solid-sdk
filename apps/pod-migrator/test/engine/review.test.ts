@@ -145,9 +145,7 @@ describe("review regressions: document-wide ACP enforcement", () => {
     const { source, file, dataset, node } = await foreignPolicy("deny");
     node("urn:foreign-matcher").add(`${ACP}client`, `${ACP}PublicClient`);
     const read = readAcp(dataset, file, source.acl(file));
-    expect(read.denials.at(-1)?.who).toEqual([
-      [{ kind: "agent", webId: stranger }, { kind: "public" }],
-    ]);
+    expect(read.denials.at(-1)?.who).toEqual([[{ kind: "agent", webId: stranger }]]);
     expect(policiesEqual(scopePolicy(read, "resource"), scopePolicy(read, "resource"))).toBe(true);
   });
 });

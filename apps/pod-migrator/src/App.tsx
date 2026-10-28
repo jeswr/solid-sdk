@@ -302,6 +302,10 @@ function MigrationApp({ connections }: { connections: readonly [PodConnection, P
             root: sourceState.root,
             ownerWebId: sourceState.webId,
             implementation: sourceState.implementation,
+            publicHttp: createPodHttp({
+              root: sourceState.root,
+              fetch: sourceConnection.auth.publicFetch,
+            }),
             http: createPodHttp({
               root: sourceState.root,
               fetch: sourceConnection.auth.authenticatedFetch,

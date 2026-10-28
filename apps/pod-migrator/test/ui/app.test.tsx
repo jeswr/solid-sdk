@@ -4,7 +4,12 @@ import "@testing-library/jest-dom/vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../../src/App.js";
-import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
+import {
+  createPodHttp,
+  executeMigration,
+  finalizePlan,
+  planMigration,
+} from "../../src/engine/index.js";
 import { fakeConnections, profileTurtle, samplePlan, sourceRoot, targetRoot } from "./fixtures.js";
 
 vi.mock("../../src/engine/index.js", () => ({
@@ -95,6 +100,10 @@ describe("review gating", () => {
         target: expect.objectContaining({ root: essRoot, implementation: "ess" }),
       }),
     );
+    expect(createPodHttp).toHaveBeenCalledWith({
+      root: sourceRoot,
+      fetch: connections[0].auth.publicFetch,
+    });
     fireEvent.click(screen.getByRole("button", { name: "Back to options" }));
     fireEvent.click(screen.getByRole("button", { name: /Swap source and target/ }));
     fireEvent.click(screen.getByRole("button", { name: /Create migration plan/ }));
@@ -105,6 +114,10 @@ describe("review gating", () => {
         target: expect.objectContaining({ root: sourceRoot, implementation: "css" }),
       }),
     );
+    expect(createPodHttp).toHaveBeenCalledWith({
+      root: essRoot,
+      fetch: connections[1].auth.publicFetch,
+    });
   });
   it("requires both connections before proceeding", async () => {
     const connections = fakeConnections();

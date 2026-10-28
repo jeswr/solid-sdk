@@ -69,6 +69,7 @@ export async function readAccess(
   const turtle = await requireRepresentation(response).text();
   const dataset = await parse(new Response(turtle, { headers: response.headers }), url);
   if (system === "unknown") throw new TypeError("Cannot read unknown access system");
+  const inactiveGrants: NonNullable<AccessDocument["inactiveGrants"]> = [];
   const document: AccessDocument = {
     policy:
       system === "wac"
@@ -77,14 +78,18 @@ export async function readAccess(
             dataset,
             resource,
             url,
-            side.implementation === "ess" ? "ess" : "css",
+            side.implementation === "ess" || side.implementation === "css"
+              ? side.implementation
+              : undefined,
             requireSpecific,
+            (node, reason) => inactiveGrants.push({ node, reason }),
           ),
     url,
     // All later scope checks and merges consume Turtle, even if the server
     // returned JSON-LD despite our Accept preference.
     turtle: await serialize(dataset),
     etag: response.headers.get("etag"),
+    inactiveGrants,
   };
   if (requireSpecific) await assertSpecificAccess(resource, url, new Map(), document);
   return document;

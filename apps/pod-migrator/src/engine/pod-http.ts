@@ -24,7 +24,12 @@ export function createPodHttp(opts: {
   }
   async function send(url: string, method: string, init: RequestInit): Promise<Response> {
     const target = checked(url);
-    const response = await opts.fetch(target, { ...init, method, redirect: "manual" });
+    const response = await opts.fetch(target, {
+      ...init,
+      method,
+      redirect: "manual",
+      credentials: "omit",
+    });
     if (
       response.type === "opaqueredirect" ||
       response.redirected ||

@@ -161,11 +161,10 @@ describe("ACP expressions and writers", () => {
         { kind: "agent", webId: stranger },
         { kind: "public" },
         { kind: "authenticated" },
-        { kind: "owner" },
-        { kind: "creator" },
+        ...(dialect === "ess" ? ([{ kind: "owner" }, { kind: "creator" }] as Subject[]) : []),
         { kind: "client", clientId: "urn:client" },
         { kind: "issuer", issuer: "urn:issuer" },
-        { kind: "vc", vcType: "urn:vc" },
+        ...(dialect === "ess" ? ([{ kind: "vc", vcType: "urn:vc" }] as Subject[]) : []),
       ];
       const source = unionPolicies(
         dialect === "css"
@@ -229,7 +228,8 @@ describe("ACP expressions and writers", () => {
     node("urn:c", { [`${ACP}vc`]: ["urn:vc"] });
     node("urn:d", { [`${ACP}agent`]: ["urn:excluded"] });
     const result = readAcp(dataset, resource, url);
-    expect(result.grants[0]?.who).toHaveLength(4);
+    expect(result.grants[0]?.who).toHaveLength(2);
+    expect(result.grants[0]?.who.flat().some((subject) => subject.kind === "vc")).toBe(false);
     expect(result.grants[0]?.who.every((c) => c.length === 3)).toBe(true);
     expect(result.grants[0]?.except).toEqual([{ kind: "agent", webId: "urn:excluded" }]);
     expect(result.denials[0]?.modes).toEqual(new Set(["write", "append"]));

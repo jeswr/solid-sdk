@@ -175,6 +175,10 @@ describe("adversarial transport, metadata and planning edges", () => {
       );
       source.store(`${source.root}group`, await serialize(dataset), "text/turtle");
       source.setAcl(
+        `${source.root}group`,
+        await acl(source, `${source.root}group`, policy(grant())),
+      );
+      source.setAcl(
         `${source.root}file`,
         await acl(
           source,

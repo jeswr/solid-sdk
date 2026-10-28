@@ -66,6 +66,8 @@ export const executions = new WeakMap<ExecutablePlan, ExecutionState>();
 function bound(side: PodSide): PodSide {
   const root = normalizePodBase(side.root);
   if (side.http.root !== root) throw new TypeError("Pod side and transport roots differ");
+  if (side.publicHttp && side.publicHttp.root !== root)
+    throw new TypeError("Pod side and public transport roots differ");
   return { ...side, root };
 }
 function isProfileDocument(webId: string, resource: string): boolean {
@@ -202,6 +204,17 @@ export async function planMigration(opts: {
           item.acl,
         );
         sourceDocs.set(item.resource.sourceUrl, doc);
+        for (const inactive of doc?.inactiveGrants ?? [])
+          report.push(
+            reportItem(
+              "condition-unsupported",
+              item.resource.sourceUrl,
+              inactive.reason,
+              ["skip", "abort"],
+              `inactive:${inactive.node}`,
+              doc?.turtle,
+            ),
+          );
       } catch (error) {
         opts.signal?.throwIfAborted();
         sourceErrors.add(item.resource.sourceUrl);
@@ -255,11 +268,14 @@ export async function planMigration(opts: {
     for (const subject of doc?.policy.grants.flatMap((rule) => rule.who.flat()) ?? [])
       if (subject.kind === "group" && !groups.has(subject.group)) {
         const documentUrl = subject.group.split("#")[0] as string;
-        if (!isWithinPodScope(source.root, documentUrl)) continue;
+        if (!isWithinPodScope(source.root, documentUrl) || !source.publicHttp) continue;
         try {
           const dataset = await parse(
             requireOk(
-              await source.http.get(documentUrl, { accept: "text/turtle", signal: opts.signal }),
+              await source.publicHttp.get(documentUrl, {
+                accept: "text/turtle",
+                signal: opts.signal,
+              }),
             ),
             documentUrl,
           );
@@ -370,6 +386,7 @@ export async function planMigration(opts: {
       sourceOwner: source.ownerWebId,
       targetOwner: target.ownerWebId,
       groups,
+      targetImplementation: target.implementation,
       sourceRuleTurtle: sourceDocument?.turtle,
       sourceRules: new Map(
         [...sourceDocs.values()]
@@ -495,6 +512,7 @@ export function finalizePlan(plan: MigrationPlan, resolutions: Resolutions): Exe
       sourceOwner: state.source.ownerWebId,
       targetOwner: state.target.ownerWebId,
       groups: state.groups,
+      targetImplementation: state.target.implementation,
     };
     const translated = translatePolicy(
       resourceState.sourceEffective,

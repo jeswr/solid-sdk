@@ -24,13 +24,14 @@ DESIGN.md as follows. These notes are colocated with the engine and reflected in
   ESS source forms are accepted only with independently established ESS semantics, documented in
   `systems/acp.ts`. `PodSide.implementation` is a trusted caller assertion, never inferred from
   editable RDF or mode IRIs. ACP target writes without established CSS/ESS semantics abort.
-  The browser establishes ESS from the selected HTTPS `*.inrupt.com` storage host or the live
-  auth session's exact `https://login.inrupt.com/` issuer; CSS/NSS require an exposed root
+  The browser establishes ESS from the selected HTTPS `*.inrupt.com` storage host;
+  an identity provider's issuer cannot identify the storage implementation. CSS/NSS require an exposed root
   `X-Powered-By` header. Login/page input and RDF claims cannot set implementation. Unknown
   sources retain conservative readings; unknown ACP targets explain the refusal and abort.
   Live PodSpaces behavior still needs account testing. Its ACP-namespace modes, typed ACR
   roots and ACR-self/`acp:access` Control handling remain isolated in `systems/acp.ts`.
-  Missing owner Control at creation also fails closed on ESS.
+  ESS folder locks use `acp:memberAccess` for descendant Control as well as `acp:access`
+  for resource Control. Resource Control mode grants are inactive on ESS.
 - **Writing TARGET:** never rely on a condition the target might not enforce. CSS 7.2's configured
   WAC checker chain ignores `acl:origin`, so origin-restricted grants are unsupported on every
   WAC and ACP target: skip the affected clause or abort, never preserve or remove only its origin.
@@ -44,6 +45,10 @@ DESIGN.md as follows. These notes are colocated with the engine and reflected in
   of just one are refused because their derived Append behavior needs a richer neutral model.
   CSS supplies no owner/creator/VC matcher context; uncertain exclusions cannot weaken a
   source denial, and cannot be trusted as target restrictions.
+  Source grant clauses requiring absent CSS context are dropped and reported, while active
+  alternatives survive. ESS grants require agent matchers alongside client conditions;
+  emitted conditional matchers explicitly include `PublicAgent`. Unsupported VC restrictions
+  on CSS targets cause the affected grant or possibly denied modes to be omitted.
 - CSS selects policies from every `acp:resource` statement, choosing access controls for
   matching IRIs and member controls otherwise. Foreign-node denials are conservatively retained;
   unplaceable grants and unknown/detached constructs fail closed. Target scopes must be exclusive
@@ -81,9 +86,12 @@ DESIGN.md as follows. These notes are colocated with the engine and reflected in
   The original creator identity
   cannot be established from an ACR alone: creator exclusions drop the grant, and creator denials
   remove every possibly denied mode. Denials always exempt the target owner on the target side.
-- Group expansion uses only an in-fence, plan-time membership snapshot and warns that future
-  membership changes do not follow. Foreign groups cannot be expanded through a credentialed
-  transport. The snapshot is rechecked before execution.
+- Group expansion uses only a publicly readable, in-fence membership snapshot and warns that
+  future membership changes do not follow. `PodSide.publicHttp` must wrap auth-core's
+  `publicFetch`; it has no authenticated fallback. Both transports omit browser cookies.
+  CSS dereferences groups anonymously, so owner-readable private membership cannot activate
+  sharing. Missing public transport, unreadable or foreign groups offer only skip/abort.
+  The same anonymous snapshot is rechecked before execution.
 - RDF rewriting is opt-in. Parsed term positions are mapped; literal text stays untouched.
   Rewritten data uses TriG so named graphs survive. Default copying preserves the source bytes.
   Partial representations and redirects are refused. No remote JSON-LD contexts are fetched.
@@ -104,3 +112,5 @@ precedence are evaluated independently of the engine's readers and proof code. T
 stranger access after each write, ownership, stale plans, path/redirect fences, conditional
 writes, cancellation, every translation construct, RDF rewriting, and read-back verification.
 The engine coverage gate requires 100% lines, branches, functions, and statements.
+The design's implementation matrix is backed by 560 source-dialect × target-dialect cases,
+with installed CSS readers/evaluator as the CSS oracle and explicit ESS/NSS fixtures.

@@ -103,6 +103,7 @@ export async function createAccount(
       ownerWebId: webId,
       implementation: "css",
       http: createPodHttp({ root: podRoot, fetch: authenticated, allowInsecureLoopback: true }),
+      publicHttp: createPodHttp({ root: podRoot, fetch: fetcher, allowInsecureLoopback: true }),
     },
   };
 }
