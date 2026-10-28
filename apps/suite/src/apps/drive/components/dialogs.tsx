@@ -35,6 +35,8 @@ import { formatFileSize } from "../lib/files";
 import { getMoveValidity } from "../lib/list";
 import { extensionChange, isHidden, validateName } from "../lib/operations/operations";
 import type { TrashEntry } from "../lib/operations/trash-index";
+import { formatModified, formatSize, friendlyType } from "../lib/view/view";
+import { useAccessLabel } from "../state/access";
 import { useDrive } from "../state/drive-context";
 import { captureDriveFocusRemoval, useDriveActions, useDriveUi } from "../state/ui";
 
@@ -545,6 +547,39 @@ function TrashConfirmDialog({
   );
 }
 
+function UploadConflictDetails({ item }: { item: DriveItem }) {
+  const access = useAccessLabel(item.url);
+  return (
+    <dl className="drv-facts">
+      <div>
+        <dt>Existing file</dt>
+        <dd>{item.name}</dd>
+      </div>
+      <div>
+        <dt>Type</dt>
+        <dd>{friendlyType(item)}</dd>
+      </div>
+      <div>
+        <dt>Size</dt>
+        <dd>{formatSize(item)}</dd>
+      </div>
+      <div>
+        <dt>Modified</dt>
+        <dd>{formatModified(item.modified)}</dd>
+      </div>
+      <div>
+        <dt>Who has access</dt>
+        <dd>{access}</dd>
+      </div>
+    </dl>
+  );
+}
+
+function UploadDestinationAccess({ folder }: { folder: string }) {
+  const access = useAccessLabel(folder);
+  return <p>Who can access the destination folder: {access}</p>;
+}
+
 function UploadConflictDialog() {
   const { uploads } = useDrive();
   const conflicts = uploads.tasks.filter((task) => task.status === "conflict");
@@ -552,20 +587,26 @@ function UploadConflictDialog() {
   const [applyAll, setApplyAll] = useState(false);
   const checkboxId = useId();
   const restoreFocus = useRef<(() => void) | undefined>(undefined);
+  const cancel = useRef<HTMLButtonElement>(null);
   if (!current) return null;
-  const choose = (choice: "keep-both" | "replace" | "skip") => {
+  const choose = (choice: "keep-both" | "replace" | "skip" | "upload") => {
     uploads.resolve(current.id, choice, applyAll);
     setApplyAll(false);
   };
   return (
     <Dialog open onOpenChange={(open) => !open && choose("skip")}>
       <DialogContent
+        key={current.id}
         className="drv-dialog-sm"
-        onOpenAutoFocus={() => {
+        onOpenAutoFocus={(event) => {
           const previousFocus =
             document.activeElement instanceof HTMLElement ? document.activeElement : null;
           const restore = captureDriveFocusRemoval();
           restoreFocus.current = () => restore(undefined, previousFocus);
+          if (current.missingReplacement) {
+            event.preventDefault();
+            cancel.current?.focus();
+          }
         }}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
@@ -574,8 +615,19 @@ function UploadConflictDialog() {
       >
         <DialogHeader>
           <DialogTitle>Upload options</DialogTitle>
-          <DialogDescription>A file named "{current.name}" already exists</DialogDescription>
+          <DialogDescription>
+            {current.missingReplacement
+              ? "The file you were replacing is no longer here. Upload as a new file?"
+              : `A file named "${current.name}" already exists`}
+          </DialogDescription>
         </DialogHeader>
+        {current.missingReplacement ? (
+          <>
+            <p>{current.name}</p>
+            <UploadDestinationAccess folder={current.folder} />
+          </>
+        ) : null}
+        {current.conflictTarget ? <UploadConflictDetails item={current.conflictTarget} /> : null}
         {conflicts.length > 1 ? (
           <div className="drv-checkbox-row">
             <Checkbox
@@ -587,13 +639,19 @@ function UploadConflictDialog() {
           </div>
         ) : null}
         <DialogFooter>
-          <Button variant="ghost" onClick={() => choose("skip")}>
-            Skip
+          <Button ref={cancel} variant="ghost" onClick={() => choose("skip")}>
+            {current.missingReplacement ? "Cancel" : "Skip"}
           </Button>
-          <Button variant="outline" onClick={() => choose("replace")}>
-            Replace
-          </Button>
-          <Button onClick={() => choose("keep-both")}>Keep both</Button>
+          {current.missingReplacement ? (
+            <Button onClick={() => choose("upload")}>Upload</Button>
+          ) : (
+            <>
+              <Button variant="outline" onClick={() => choose("replace")}>
+                Replace
+              </Button>
+              <Button onClick={() => choose("keep-both")}>Keep both</Button>
+            </>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

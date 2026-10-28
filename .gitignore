@@ -18,3 +18,4 @@ coverage/
 
 # Docs browser captures are local verification artifacts
 /apps/suite/e2e/screenshots/
+.pages/

@@ -10,7 +10,10 @@ const mocks = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn() },
   params: new URLSearchParams(),
 }));
-vi.mock("@/apps/docs/lib/model/type-index", () => ({ ensureTypeRegistrations: vi.fn() }));
+vi.mock("@/apps/docs/lib/model/type-index", () => ({
+  discoverProfileRegistrations: vi.fn(async () => []),
+  ensureTypeRegistrations: vi.fn(),
+}));
 vi.mock("@/lib/refs", async () => import("../src/lib/refs"));
 vi.mock(
   "@/components/interim-shell/suite-frame",

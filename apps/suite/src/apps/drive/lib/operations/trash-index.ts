@@ -60,6 +60,13 @@ export class TrashRecord extends TermWrapper {
   set restoredLocation(value: string | undefined) {
     OptionalAs.object(this, `${DCT}isReplacedBy`, value, NamedNodeFrom.string);
   }
+  /** JSON archive of each original container's own ACL, before Trash privatizes it. */
+  get containerAcls(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, `${DCT}accessRights`, LiteralAs.string);
+  }
+  set containerAcls(value: string | undefined) {
+    OptionalAs.object(this, `${DCT}accessRights`, value, LiteralFrom.string);
+  }
   get leaseOwner(): string | undefined {
     return OptionalFrom.subjectPredicate(this, `${PROV}wasAssociatedWith`, NamedNodeAs.string);
   }

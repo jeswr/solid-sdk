@@ -10,7 +10,10 @@ const mocks = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn() },
   params: new URLSearchParams(),
 }));
-vi.mock("@/apps/docs/lib/model/type-index", () => ({ ensureTypeRegistrations: vi.fn() }));
+vi.mock("@/apps/docs/lib/model/type-index", () => ({
+  discoverProfileRegistrations: vi.fn(async () => []),
+  ensureTypeRegistrations: vi.fn(),
+}));
 vi.mock("@/lib/refs", async () => import("../src/lib/refs"));
 vi.mock(
   "@/components/interim-shell/suite-frame",
@@ -104,8 +107,11 @@ it("empty My Drive Upload restores listing focus after the first file completes"
     });
     picker.dispatchEvent(new Event("change", { bubbles: true }));
   });
-  await vi.waitFor(() => expect(drive.uploads.tasks[0]?.status).toBe("done"));
-  expect(view.host.querySelector("[data-url]")?.textContent).toContain("First.txt");
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(drive.uploads.tasks[0]?.status).toBe("done");
+    expect(view.host.querySelector("[data-url]")?.textContent).toContain("First.txt");
+  });
   expect(upload.isConnected).toBe(false);
   expect(document.activeElement).toBe(view.host.querySelector("[data-drive-listing]"));
 });

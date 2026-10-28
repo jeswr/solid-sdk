@@ -13,7 +13,10 @@ const mocks = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn() },
   params: new URLSearchParams(),
 }));
-vi.mock("@/apps/docs/lib/model/type-index", () => ({ ensureTypeRegistrations: vi.fn() }));
+vi.mock("@/apps/docs/lib/model/type-index", () => ({
+  discoverProfileRegistrations: vi.fn(async () => []),
+  ensureTypeRegistrations: vi.fn(),
+}));
 vi.mock("@/lib/refs", async () => import("../src/lib/refs"));
 vi.mock(
   "@/components/interim-shell/suite-frame",
@@ -166,7 +169,12 @@ it.each([
   const pane = () => document.querySelector(".drv-details") as Element;
   expect(fact(pane(), "Size")).toBe("3 B");
   await act(async () => {
-    await drive.client.write(FILE, "longer replacement", { contentType: "text/markdown" });
+    await drive.client.write(
+      FILE,
+      "longer replacement",
+      { contentType: "text/markdown" },
+      { kind: "protect-ancestors" },
+    );
   });
   expect(fact(pane(), "Size")).toBe("18 B");
   expect(fact(pane(), "Type")).toBe("Markdown document");
@@ -178,7 +186,10 @@ it.each([
 ])("refreshes usage after permanently removing 2 MB through %s", async (action) => {
   const { view } = await setup("x".repeat(2_000_000));
   await settleUsage(view.host);
-  vi.useFakeTimers();
+  // IndexedDB's setImmediate scheduler must keep committing while UI time is frozen.
+  vi.useFakeTimers({
+    toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"],
+  });
   expect(view.host.querySelector(".drv-usage")?.textContent).toBe("2 MB used");
   const item = await drive.client.stat(FILE);
   await act(async () => {
@@ -236,7 +247,12 @@ it("reloads RDF previews when their parent listing is invalidated", async () => 
   await view.render(tree(h(PreviewBody, { item })));
   expect(view.host.querySelector(".drv-rdf")?.textContent).toContain("Old title");
   await act(async () => {
-    await drive.client.write(FILE, await rdfTitle("New title"), { contentType: "text/turtle" });
+    await drive.client.write(
+      FILE,
+      await rdfTitle("New title"),
+      { contentType: "text/turtle" },
+      { kind: "protect-ancestors" },
+    );
   });
   expect(view.host.querySelector(".drv-rdf")?.textContent).toContain("New title");
 });
@@ -246,7 +262,12 @@ it("refreshes the direct preview renderer when replacement changes its content t
   await view.render(tree(h(PreviewRouteView)));
   expect(view.host.querySelector(".drv-preview-text")?.textContent).toBe("old");
   await act(async () => {
-    await drive.client.write(FILE, "Title,Value\nCurrent,42", { contentType: "text/csv" });
+    await drive.client.write(
+      FILE,
+      "Title,Value\nCurrent,42",
+      { contentType: "text/csv" },
+      { kind: "protect-ancestors" },
+    );
   });
   expect(view.host.querySelector(".drv-csv")?.textContent).toContain("Current42");
   expect(view.host.querySelector(".drv-preview-text")).toBeNull();
@@ -272,7 +293,9 @@ it("ignores superseded metadata responses in cached Details", async () => {
 it("debounces subtree usage changes and ignores superseded measurements", async () => {
   const { view } = await setup();
   await settleUsage(view.host);
-  vi.useFakeTimers();
+  vi.useFakeTimers({
+    toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"],
+  });
   const stale = deferred<number>();
   const measure = vi
     .spyOn(operations, "measureUsage")
@@ -303,7 +326,9 @@ it("debounces subtree usage changes and ignores superseded measurements", async 
 it("keeps usage debounced while the upload queue publishes progress", async () => {
   const { view, fetch, pod } = await setup();
   await settleUsage(view.host);
-  vi.useFakeTimers();
+  vi.useFakeTimers({
+    toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"],
+  });
   const pending = deferred<void>();
   fetch.mockImplementation(async (input, init) => {
     if (init?.method === "PUT") await pending.promise;

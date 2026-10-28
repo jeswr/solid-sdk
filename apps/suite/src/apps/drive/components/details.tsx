@@ -21,6 +21,7 @@ import { useItemOwner } from "../state/ownership";
 import { useLiveItem } from "../state/resource";
 import { useDriveUi } from "../state/ui";
 import { ItemIcon } from "./item-icon";
+import { ProtectionBanner } from "./protection-banner";
 
 function Location({ url }: { url: string }) {
   const { driveRoot } = useDrive();
@@ -98,6 +99,7 @@ export function DetailsPane({
           <X aria-hidden="true" size={18} />
         </IconButton>
       </div>
+      <ProtectionBanner key={item.url} item={item} />
       <section aria-labelledby={accessId}>
         <h3 id={accessId}>Who has access</h3>
         <p className="drv-access-line" role="status" aria-live="polite">

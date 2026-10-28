@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSolidDriveClient, DriveError } from "../src/apps/drive/lib/client/client";
@@ -61,10 +62,15 @@ describe("Drive data-safety regressions", () => {
       return undefined;
     });
     for (let index = 0; index < 7; index++)
-      await client.write(`${FROM}extra-${index}`, "extra", {
-        contentType: "text/plain",
-        ifNoneMatch: "*",
-      });
+      await client.write(
+        `${FROM}extra-${index}`,
+        "extra",
+        {
+          contentType: "text/plain",
+          ifNoneMatch: "*",
+        },
+        { kind: "protect-ancestors" },
+      );
     let active = 0;
     let peak = 0;
     const move = client.move.bind(client);
@@ -110,7 +116,7 @@ describe("Drive data-safety regressions", () => {
       }
       return undefined;
     });
-    const moving = client.move(FROM, TO);
+    const moving = client.move(FROM, TO, { kind: "confirm-move" });
     const settled = vi.fn();
     void moving.catch(settled);
     await checking;
@@ -342,7 +348,12 @@ describe("Drive data-safety regressions", () => {
       }
       return undefined;
     });
-    await client.write(`${FROM}c`, "C", { contentType: "text/plain", ifNoneMatch: "*" });
+    await client.write(
+      `${FROM}c`,
+      "C",
+      { contentType: "text/plain", ifNoneMatch: "*" },
+      { kind: "protect-ancestors" },
+    );
     await trashItems(client, DRIVE, [await client.stat(FROM)]);
     const entries = await listTrash(client, DRIVE);
     const entry = entries[0];
@@ -415,10 +426,15 @@ describe("Drive data-safety regressions", () => {
     expect(result.warnings).toHaveLength(1);
     const receipt = new URL("partial.ttl", entry.url).href;
     expect(pod.has(receipt)).toBe(!failReceipt);
-    await client.write(`${FROM}a`, "unrelated replacement", {
-      contentType: "text/plain",
-      ifNoneMatch: "*",
-    });
+    await client.write(
+      `${FROM}a`,
+      "unrelated replacement",
+      {
+        contentType: "text/plain",
+        ifNoneMatch: "*",
+      },
+      { kind: "protect-ancestors" },
+    );
     const listed = await listTrash(client, DRIVE);
     expect(listed).toHaveLength(1);
     if (failReceipt) {
@@ -442,22 +458,32 @@ describe("Drive data-safety regressions", () => {
     "nested",
   ])("pending recovery checks the identity of every %s occupant", async (kind) => {
     const { client } = setup();
-    await client.write(`${FROM}nested/note`, "original", {
-      contentType: "text/plain",
-      ifNoneMatch: "*",
-    });
+    await client.write(
+      `${FROM}nested/note`,
+      "original",
+      {
+        contentType: "text/plain",
+        ifNoneMatch: "*",
+      },
+      { kind: "protect-ancestors" },
+    );
     const copy = client.copy.bind(client);
     vi.spyOn(client, "move").mockImplementation(async (from, to) => {
-      await copy(from, to);
+      await copy(from, to, { kind: "preserve-source" });
       throw new Error("interrupted before deletion");
     });
     await trashItems(client, DRIVE, [await client.stat(kind === "file" ? `${FROM}a` : FROM)]);
     expect(await listTrash(client, DRIVE)).toEqual([]);
     const changed = kind === "file" ? `${FROM}a` : `${FROM}nested/note`;
-    await client.write(changed, "unrelated replacement", {
-      contentType: "text/plain",
-      ifMatch: (await client.stat(changed)).etag as string,
-    });
+    await client.write(
+      changed,
+      "unrelated replacement",
+      {
+        contentType: "text/plain",
+        ifMatch: (await client.stat(changed)).etag as string,
+      },
+      { kind: "protect-ancestors" },
+    );
     expect(await listTrash(client, DRIVE)).toMatchObject([{ status: "partial" }]);
   });
 
@@ -507,7 +533,7 @@ describe("Drive data-safety regressions", () => {
     const initial = await client.stat(source);
     const copy = client.copy.bind(client);
     vi.spyOn(client, "move").mockImplementation(async (from, to) => {
-      await copy(from, to);
+      await copy(from, to, { kind: "preserve-source" });
       throw new Error("interrupted");
     });
     const stat = client.stat.bind(client);
@@ -531,17 +557,27 @@ describe("Drive data-safety regressions", () => {
     if (mode === "legacy" || mode === "matching-etag") {
       expect(record.sourceVersions.size).toBe(1);
       record.sourceVersions.clear();
-      await client.write(INDEX, await serializeTrashIndex(index), {
-        contentType: "text/turtle",
-        ifMatch: current.etag as string,
-      });
+      await client.write(
+        INDEX,
+        await serializeTrashIndex(index),
+        {
+          contentType: "text/turtle",
+          ifMatch: current.etag as string,
+        },
+        { kind: "protect-ancestors" },
+      );
     }
     expect(await listTrash(client, DRIVE)).toEqual([]);
     // Same byte length forces actual byte comparison, rather than just size checks.
-    await client.write(source, "X", {
-      contentType: "text/plain",
-      ifMatch: (await stat(source)).etag as string,
-    });
+    await client.write(
+      source,
+      "X",
+      {
+        contentType: "text/plain",
+        ifMatch: (await stat(source)).etag as string,
+      },
+      { kind: "protect-ancestors" },
+    );
     expect(await listTrash(client, DRIVE)).toMatchObject([{ status: "partial" }]);
   });
 
@@ -635,10 +671,15 @@ describe("Drive data-safety regressions", () => {
     if (field === "status") record.status = "pending";
     else if (field === "original") record.originalLocation = `${FROM}b`;
     else record.trashedAt = field === "date" ? new Date(0) : undefined;
-    await client.write(receipt, await serializeTrashIndex(index), {
-      contentType: "text/turtle",
-      ifMatch: current.etag as string,
-    });
+    await client.write(
+      receipt,
+      await serializeTrashIndex(index),
+      {
+        contentType: "text/turtle",
+        ifMatch: current.etag as string,
+      },
+      { kind: "protect-ancestors" },
+    );
     const entries = await listTrash(client, DRIVE);
     expect(entries).toMatchObject([{ status: "partial" }]);
     expect((await restoreItems(client, DRIVE, entries)).failed).toEqual([]);
@@ -656,10 +697,15 @@ describe("Drive data-safety regressions", () => {
     await trashItems(client, DRIVE, [await client.stat(FROM)]);
     const [entry] = await listTrash(client, DRIVE);
     if (!entry) throw new Error("Missing partial recovery copy");
-    await client.write(`${FROM}a`, "unrelated replacement", {
-      contentType: "text/plain",
-      ifNoneMatch: "*",
-    });
+    await client.write(
+      `${FROM}a`,
+      "unrelated replacement",
+      {
+        contentType: "text/plain",
+        ifNoneMatch: "*",
+      },
+      { kind: "protect-ancestors" },
+    );
     const result = await restoreItems(client, DRIVE, [entry]);
     expect(result.done).toEqual([]);
     expect(result.failed[0]?.error).toMatchObject({
@@ -708,13 +754,18 @@ describe("Drive data-safety regressions", () => {
         ? new Response(null, { status: 500 })
         : undefined,
     );
-    await client.write(`${FROM}nested/note`, "nested", {
-      contentType: "text/plain",
-      ifNoneMatch: "*",
-    });
+    await client.write(
+      `${FROM}nested/note`,
+      "nested",
+      {
+        contentType: "text/plain",
+        ifNoneMatch: "*",
+      },
+      { kind: "protect-ancestors" },
+    );
     const copy = client.copy.bind(client);
     vi.spyOn(client, "move").mockImplementation(async (from, to) => {
-      await copy(from, to);
+      await copy(from, to, { kind: "preserve-source" });
       throw new Error("interrupted before deletion");
     });
     await trashItems(client, DRIVE, [await client.stat(FROM)]);
@@ -732,7 +783,7 @@ describe("Drive data-safety regressions", () => {
     const { client } = setup();
     const copy = client.copy.bind(client);
     vi.spyOn(client, "move").mockImplementation(async (from, to) => {
-      await copy(from, to);
+      await copy(from, to, { kind: "preserve-source" });
       throw new Error("interrupted before deletion");
     });
     await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
@@ -801,10 +852,15 @@ describe("Drive data-safety regressions", () => {
         ? new Response(null, { status: 500 })
         : undefined,
     );
-    await client.write(`${FROM}partial.ttl`, "unique recovery bytes", {
-      contentType: "text/plain",
-      ifNoneMatch: "*",
-    });
+    await client.write(
+      `${FROM}partial.ttl`,
+      "unique recovery bytes",
+      {
+        contentType: "text/plain",
+        ifNoneMatch: "*",
+      },
+      { kind: "protect-ancestors" },
+    );
     const {
       done: [entry],
     } = await trashItems(client, DRIVE, [await client.stat(`${FROM}partial.ttl`)]);
@@ -837,7 +893,9 @@ describe("Drive data-safety regressions", () => {
         return pod.fetch(url, { method: "HEAD" });
       return undefined;
     });
-    await expect(client.move(`${FROM}a`, destination)).rejects.toMatchObject({
+    await expect(
+      client.move(`${FROM}a`, destination, { kind: "confirm-move" }),
+    ).rejects.toMatchObject({
       kind: "partial-failure",
       deletedSources: [],
     });
@@ -853,7 +911,9 @@ describe("Drive data-safety regressions", () => {
         await pod.fetch(`${TO}b`, { method: "PUT", body: "unrelated" });
       return undefined;
     });
-    await expect(client.move(FROM, TO)).rejects.toMatchObject({ kind: "partial-failure" });
+    await expect(client.move(FROM, TO, { kind: "confirm-move" })).rejects.toMatchObject({
+      kind: "partial-failure",
+    });
     expect(await (await client.read(`${FROM}b`)).text()).toBe("B");
     expect(await (await client.read(`${TO}a`)).text()).toBe("A");
   });
@@ -871,7 +931,7 @@ describe("Drive data-safety regressions", () => {
       }
       return undefined;
     });
-    await expect(client.move(FROM, TO)).rejects.toMatchObject({
+    await expect(client.move(FROM, TO, { kind: "confirm-move" })).rejects.toMatchObject({
       kind: "partial-failure",
       deletedSources: [],
     });
@@ -942,10 +1002,15 @@ describe("Drive data-safety regressions", () => {
       }
       return undefined;
     });
-    await client.write(`${FROM}nested/note`, "nested", {
-      contentType: "text/plain",
-      ifNoneMatch: "*",
-    });
+    await client.write(
+      `${FROM}nested/note`,
+      "nested",
+      {
+        contentType: "text/plain",
+        ifNoneMatch: "*",
+      },
+      { kind: "protect-ancestors" },
+    );
     await trashItems(client, DRIVE, [await client.stat(FROM)]);
     const [entry] = await listTrash(client, DRIVE);
     if (!entry) throw new Error("Missing recovery copy");
@@ -1130,7 +1195,12 @@ describe("Drive data-safety regressions", () => {
       if (change === "removed") index.record(entry.url).clear();
       else if (change === "changed") index.record(entry.url).originalLocation = `${FROM}b`;
       else index.record(entry.url).status = "partial";
-      await client.write(INDEX, await serializeTrashIndex(index), { contentType: "text/turtle" });
+      await client.write(
+        INDEX,
+        await serializeTrashIndex(index),
+        { contentType: "text/turtle" },
+        { kind: "protect-ancestors" },
+      );
       return read(url);
     });
     expect(await listTrash(client, DRIVE)).toMatchObject(
@@ -1181,7 +1251,9 @@ describe("Drive data-safety regressions", () => {
       return undefined;
     });
     for (const url of [FROM, `${FROM}a`]) {
-      await expect(client.move(url, url.endsWith("/") ? TO : `${TO}a`)).rejects.toMatchObject({
+      await expect(
+        client.move(url, url.endsWith("/") ? TO : `${TO}a`, { kind: "confirm-move" }),
+      ).rejects.toMatchObject({
         kind: "missing-validator",
       });
       await expect(client.remove(url, { recursive: true })).rejects.toMatchObject({
@@ -1200,7 +1272,7 @@ describe("Drive data-safety regressions", () => {
       }
       return undefined;
     });
-    await client.copy(FROM, TO);
+    await client.copy(FROM, TO, { kind: "preserve-source" });
     expect(pod.has(`${TO}a`)).toBe(true);
   });
 
@@ -1212,7 +1284,7 @@ describe("Drive data-safety regressions", () => {
       }
       return undefined;
     });
-    await expect(client.copy(FROM, TO)).rejects.toMatchObject({
+    await expect(client.copy(FROM, TO, { kind: "preserve-source" })).rejects.toMatchObject({
       kind: "partial-failure",
       retainedDestinations: [TO],
       deletedSources: [],
@@ -1248,10 +1320,12 @@ describe("Drive data-safety regressions", () => {
       }
       return undefined;
     });
-    await expect(client.move(`${FROM}a`, `${TO}a`)).rejects.toMatchObject({
-      kind: "partial-failure",
-      retainedDestinations: [`${TO}a`],
-    });
+    await expect(client.move(`${FROM}a`, `${TO}a`, { kind: "confirm-move" })).rejects.toMatchObject(
+      {
+        kind: "partial-failure",
+        retainedDestinations: [`${TO}a`],
+      },
+    );
     expect(pod.has(`${FROM}a`)).toBe(false);
     expect(await (await client.read(`${TO}a`)).text()).toBe("A");
   });
@@ -1263,7 +1337,9 @@ describe("Drive data-safety regressions", () => {
       [`${FROM}a`, TO],
       [FROM, `${FROM}nested/`],
     ] as const)
-      await expect(client.copy(from, to)).rejects.toMatchObject({ kind: "conflict" });
+      await expect(client.copy(from, to, { kind: "preserve-source" })).rejects.toMatchObject({
+        kind: "conflict",
+      });
   });
 
   it("keeps pending intents hidden while the source exists and propagates inaccessible sources", async () => {
@@ -1290,7 +1366,12 @@ describe("Drive data-safety regressions", () => {
     };
     addTrashRecord(index, invalid);
     for (const entry of trashed.done) addTrashRecord(index, entry);
-    await client.write(INDEX, await serializeTrashIndex(index), { contentType: "text/turtle" });
+    await client.write(
+      INDEX,
+      await serializeTrashIndex(index),
+      { contentType: "text/turtle" },
+      { kind: "protect-ancestors" },
+    );
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     expect(await listTrash(client, DRIVE)).toEqual(trashed.done);
     expect(warn).toHaveBeenCalledWith(expect.objectContaining({ kind: "invalid-trash-record" }));
@@ -1355,7 +1436,7 @@ describe("Drive data-safety regressions", () => {
         ? new Response(null, { status: 403 })
         : undefined,
     );
-    await expect(client.move(FROM, TO)).rejects.toMatchObject({
+    await expect(client.move(FROM, TO, { kind: "confirm-move" })).rejects.toMatchObject({
       kind: "partial-failure",
       deletedSources: [`${FROM}a`],
     });
@@ -1371,10 +1452,12 @@ describe("Drive data-safety regressions", () => {
         await pod.fetch(url, { method: "PUT", body: "new edit" });
       return undefined;
     });
-    await expect(client.move(`${FROM}a`, `${TO}a`)).rejects.toMatchObject({
-      kind: "conflict",
-      status: 412,
-    });
+    await expect(client.move(`${FROM}a`, `${TO}a`, { kind: "confirm-move" })).rejects.toMatchObject(
+      {
+        kind: "conflict",
+        status: 412,
+      },
+    );
     expect(await (await client.read(`${FROM}a`)).text()).toBe("new edit");
     const deletion = fetch.mock.calls.find(([, init]) => init?.method === "DELETE");
     expect(new Headers(deletion?.[1]?.headers).get("if-match")).toMatch(/^"demo-/);
@@ -1389,7 +1472,9 @@ describe("Drive data-safety regressions", () => {
       }
       return undefined;
     });
-    await expect(client.move(FROM, TO)).rejects.toMatchObject({ kind: "partial-failure" });
+    await expect(client.move(FROM, TO, { kind: "confirm-move" })).rejects.toMatchObject({
+      kind: "partial-failure",
+    });
     expect(await (await client.read(`${FROM}new`)).text()).toBe("new child");
     expect(pod.has(FROM)).toBe(true);
     expect(pod.has(`${TO}new`)).toBe(false);
@@ -1405,12 +1490,14 @@ describe("Drive data-safety regressions", () => {
         ? new Response(null, { status: 500 })
         : undefined,
     );
-    await expect(client[operation](FROM, TO)).rejects.toMatchObject({ status: 500 });
+    await expect(client[operation](FROM, TO, { kind: "preserve-source" })).rejects.toMatchObject({
+      status: 500,
+    });
     expect(pod.has(TO)).toBe(false);
     expect(pod.has(`${TO}a`)).toBe(false);
     expect(pod.has(`${FROM}a`)).toBe(true);
     fail = false;
-    await client[operation](FROM, TO);
+    await client[operation](FROM, TO, { kind: "preserve-source" });
     expect(pod.has(`${TO}b`)).toBe(true);
   });
 
@@ -1418,7 +1505,9 @@ describe("Drive data-safety regressions", () => {
     const { pod, client, fetch } = setup(async (url, init) =>
       url === `${FROM}b` && !init?.method ? new Response(null, { status: 403 }) : undefined,
     );
-    await expect(client.move(FROM, TO)).rejects.toMatchObject({ status: 403 });
+    await expect(client.move(FROM, TO, { kind: "confirm-move" })).rejects.toMatchObject({
+      status: 403,
+    });
     expect(pod.has(TO)).toBe(false);
     expect(
       fetch.mock.calls.filter(([, init]) => ["PUT", "DELETE"].includes(init?.method ?? "")),
@@ -1444,8 +1533,8 @@ describe("Drive data-safety regressions", () => {
         : undefined,
     );
     for (const action of [
-      () => client.copy(FROM, TO),
-      () => client.move(FROM, TO),
+      () => client.copy(FROM, TO, { kind: "preserve-source" }),
+      () => client.move(FROM, TO, { kind: "confirm-move" }),
       () => client.remove(FROM, { recursive: true }),
     ])
       await expect(action()).rejects.toMatchObject({ kind: "invalid-listing" });

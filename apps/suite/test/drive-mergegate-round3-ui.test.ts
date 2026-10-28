@@ -78,7 +78,7 @@ it.each([
   });
   drive.session = { webId: OWNER, storageUrl: ROOT, fetch: f.fetch };
   const to = `${PUBLIC}secret`;
-  await drive.client.move(`${PRIVATE}secret`, to);
+  await drive.client.move(`${PRIVATE}secret`, to, { kind: "confirm-move" });
   expect((await f.anonymous(to)).status).toBe(200);
   const view = await mount(tree(await drive.client.stat(to)));
   if (surface === "Details") {

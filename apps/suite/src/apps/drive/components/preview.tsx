@@ -30,6 +30,7 @@ import {
 } from "react";
 import { encodeRef } from "@/lib/refs";
 import type { DriveClient, DriveItem } from "../lib/client/client";
+import { resolveContentType } from "../lib/files/resolve-content-type";
 import { parseCsvPreview, previewKind } from "../lib/view/view";
 import { useDrive } from "../state/drive-context";
 import { useLiveResource, useResourceVersion } from "../state/resource";
@@ -37,6 +38,7 @@ import { useRecordSharedOpen } from "../state/shared";
 import { captureDriveFocusRemoval, useDriveActions, useDriveUi } from "../state/ui";
 import { DetailsPane } from "./details";
 import { ItemIcon } from "./item-icon";
+import { ProtectionBanner } from "./protection-banner";
 
 const TEXT_LIMIT = 1024 * 1024;
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
@@ -73,9 +75,9 @@ function termLabel(iri: string): string {
 
 function filePreviewKind(item: DriveItem) {
   // SVG is safe in an image element, which does not execute its scripts.
-  return item.contentType?.toLowerCase() === "image/svg+xml"
+  return resolveContentType(item.name, item.contentType) === "image/svg+xml"
     ? "image"
-    : previewKind(item.contentType);
+    : previewKind(item.contentType, item.name);
 }
 
 /** A readable value for an object IRI: contact schemes lose their prefix. */
@@ -109,6 +111,10 @@ function useLoadedFile(
     let objectUrl: string | undefined;
     setState({ status: "loading" });
     if (metadataStatus === "loading") return;
+    if (item.protectionRequired) {
+      setState({ status: "error" });
+      return;
+    }
     const recordOnce = (current: DriveItem) => {
       if (recorded.current) return;
       recorded.current = true;
@@ -178,6 +184,7 @@ function useLoadedFile(
     version,
     recordOpen,
     metadataStatus,
+    item.protectionRequired,
   ]);
   return state;
 }
@@ -232,6 +239,7 @@ export function PreviewBody({
   const actions = useDriveActions();
   const loaded = useLoadedFile(client, item, metadataStatus);
   const kind = filePreviewKind(item);
+  if (item.protectionRequired) return <ProtectionBanner key={item.url} item={item} />;
   if (loaded.status === "loading")
     return <Skeleton className="drv-preview-skeleton" aria-label="Loading preview" />;
   if (loaded.status === "error") {

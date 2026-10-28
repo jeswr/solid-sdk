@@ -3,8 +3,14 @@
 import { useCallback } from "react";
 import type { DriveItem } from "../lib/client/client";
 import { isOwnStorage } from "../lib/client/ownership";
+import { resolveContentType } from "../lib/files/resolve-content-type";
 import { useDrive } from "./drive-context";
 import type { DrivePreferences } from "./prefs";
+
+/** Legacy preferences have no MIME; infer only a listing hint, never override declared metadata. */
+export function sharedContentType(name: string, contentType?: string): string | undefined {
+  return resolveContentType(name, contentType);
+}
 
 export function latestShared(
   entries: DrivePreferences["openedShared"],
@@ -28,6 +34,9 @@ export function useRecordSharedOpen() {
         url: item.url,
         name: item.name,
         type: item.kind,
+        ...(item.contentType !== undefined ? { contentType: item.contentType } : {}),
+        ...(item.size !== undefined ? { size: item.size } : {}),
+        ...(item.modified ? { modified: item.modified.toISOString() } : {}),
         openedAt: new Date().toISOString(),
       };
       updatePrefs((current) => ({

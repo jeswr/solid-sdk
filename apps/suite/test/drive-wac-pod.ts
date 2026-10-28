@@ -2,7 +2,7 @@
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { Term } from "@rdfjs/types";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
-import { AclResource } from "@solid/object";
+import { AclResource, Container } from "@solid/object";
 import { DataFactory, Store, Writer } from "n3";
 import { parentOf } from "../src/apps/drive/lib/client/client";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
@@ -58,6 +58,7 @@ export async function wacPod() {
   const calls: { url: string; method: string }[] = [];
   const exposures: string[] = [];
   let audit = false;
+  let privateListings: readonly string[] = [];
   let hook: ((url: string, init?: RequestInit) => Promise<Response | undefined>) | undefined;
   let after: ((url: string, method: string, response: Response) => Promise<Response>) | undefined;
   const anonymous = async (url: string): Promise<Response> => {
@@ -132,6 +133,15 @@ export async function wacPod() {
         )
           exposures.push(`${method} ${url}: ${resourceUrl}`);
       }
+      for (const folder of privateListings) {
+        const listing = await anonymous(folder);
+        if (
+          listing.ok &&
+          new Container(folder, await parseRdf(await listing.text(), "text/turtle"), DataFactory)
+            .contains.size > 0
+        )
+          exposures.push(`${method} ${url}: names in ${folder}`);
+      }
     }
     return after ? after(url, method, response) : response;
   };
@@ -142,8 +152,9 @@ export async function wacPod() {
     calls,
     exposures,
     anonymous,
-    audit() {
+    audit(folders: readonly string[] = []) {
       audit = true;
+      privateListings = folders;
     },
     intercept(fn: typeof hook) {
       hook = fn;

@@ -88,7 +88,7 @@ describe("Docs uses Drive trash records", () => {
         buildDocument(DOC, { title: "Replacement", updateLog: `${TREE}updates/` }),
       ),
     });
-    await client.createFolder(`${TREE}updates/`);
+    await client.createFolder(`${TREE}updates/`, { kind: "inherit-verified" });
     const target = `${ROOT}docs/plan%20(restored).ttl`;
     const interrupted = {
       ...client,
@@ -149,7 +149,7 @@ describe("Docs uses Drive trash records", () => {
   it("classifies companions before a parallel snapshot restore can delete its trash source", async () => {
     const { pod, session, client } = await fixture();
     const trashed = await deleteDocument(DOC, session);
-    await client.createFolder(`${TREE}updates/`);
+    await client.createFolder(`${TREE}updates/`, { kind: "inherit-verified" });
     let moving = false;
     let release = () => {};
     const moved = new Promise<void>((resolve) => {
@@ -271,7 +271,7 @@ describe("Docs uses Drive trash records", () => {
       headers: { "content-type": "text/turtle" },
       body: await serializeTurtle(buildDocument(DOC, { title: "Occupant", updateLog })),
     });
-    await client.createFolder(`${TREE}updates/`);
+    await client.createFolder(`${TREE}updates/`, { kind: "inherit-verified" });
     const restored = await restoreItems(client, DRIVE, trashed.done.slice(1));
     expect(restored.failed).toEqual([]);
     expect(restored.done[0]?.renamed).toBe(true);
@@ -283,7 +283,7 @@ describe("Docs uses Drive trash records", () => {
     const { pod, client, session } = await fixture();
     const trashed = await deleteDocument(DOC, session);
     await pod.fetch(DOC, { method: "PUT", headers: { "content-type": "text/turtle" }, body });
-    await client.createFolder(`${TREE}updates/`);
+    await client.createFolder(`${TREE}updates/`, { kind: "inherit-verified" });
     const restored = await restoreItems(client, DRIVE, trashed.done.slice(1));
     expect(restored.failed).toEqual([]);
     expect(restored.done[0]?.renamed).toBe(true);
@@ -291,7 +291,7 @@ describe("Docs uses Drive trash records", () => {
   it("merges empty update folders and timestamped recovery logs without renaming", async () => {
     const { pod, session, client } = await fixture();
     const trashed = await deleteDocument(DOC, session);
-    await client.createFolder(`${TREE}updates/`);
+    await client.createFolder(`${TREE}updates/`, { kind: "inherit-verified" });
     await pod.fetch(`${TREE}updates-123/001798000000002-00000000-0000-4000-8000-000000000003`, {
       method: "PUT",
       headers: { "content-type": "application/octet-stream" },
@@ -561,10 +561,10 @@ it("bounds Docs trash and Undo requests by compacting the typed Yjs log without 
   }
   doc.destroy();
   expect(updates).toHaveLength(62);
-  // Lease checks before each DELETE and policy-archive discovery add reads;
+  // Lease checks, protection gates and policy-archive discovery add reads;
   // compaction still bounds both transfers without weakening those checks.
   expect(results).toEqual([
-    { trash: { requests: 541, mutations: 132 }, undo: { requests: 346, mutations: 133 } },
-    { trash: { requests: 242, mutations: 73 }, undo: { requests: 41, mutations: 11 } },
+    { trash: { requests: 934, mutations: 132 }, undo: { requests: 615, mutations: 133 } },
+    { trash: { requests: 273, mutations: 73 }, undo: { requests: 66, mutations: 11 } },
   ]);
 });

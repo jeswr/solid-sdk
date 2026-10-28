@@ -4,7 +4,7 @@ import { buildDocument, parseDocument, serializeTurtle } from "../src/apps/docs/
 import { createSolidDriveClient, policyArchiveOf } from "../src/apps/drive/lib/client/client";
 import { restoreItems, trashItems } from "../src/apps/drive/lib/operations/operations";
 import { serializeTrashIndex, trashIndexFrom } from "../src/apps/drive/lib/operations/trash-index";
-import { aclBody, DRIVE, OWNER, ROOT, wacPod } from "./drive-wac-pod";
+import { aclBody, DRIVE, OWNER, PRIVATE, ROOT, wacPod } from "./drive-wac-pod";
 
 const DOC = `${ROOT}docs/plan.ttl`;
 const TREE = `${ROOT}docs/plan/`;
@@ -12,17 +12,62 @@ const TARGET = `${ROOT}docs/plan%20(restored).ttl`;
 const MOVED = `${ROOT}docs/plan%20(restored)/`;
 const INDEX = `${DRIVE}.trash/index.ttl`;
 
+it.each([
+  false,
+  true,
+])("serializes concurrent ACL archives and continues after a failed receipt (%s)", async (denied) => {
+  const f = await wacPod();
+  const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });
+  for (let index = 0; index < 8; index++)
+    await client.write(
+      `${PRIVATE}secret-${index}`,
+      "secret contents",
+      { contentType: "text/plain", ifNoneMatch: "*" },
+      { kind: "protect-ancestors" },
+    );
+  f.audit();
+  const items = await client.list(PRIVATE);
+  let indexWrites = 0;
+  f.intercept(async (url, init) => {
+    if (url === INDEX && init?.method === "PUT" && ++indexWrites === 2 && denied)
+      return new Response(null, { status: 503 });
+    return undefined;
+  });
+  const trashed = await trashItems(client, DRIVE, items, { webId: OWNER });
+  expect(trashed.failed).toHaveLength(denied ? 1 : 0);
+  expect(trashed.done).toHaveLength(denied ? 8 : 9);
+  const current = await client.readRdf(INDEX);
+  if (!current) throw new Error("Missing index");
+  const index = trashIndexFrom(current.dataset);
+  for (const entry of trashed.done) expect(index.record(entry.url).containerAcls).toBe("{}");
+  const restored = await restoreItems(client, DRIVE, trashed.done);
+  expect(restored.failed).toEqual([]);
+  expect(restored.done.map(({ url }) => url)).toEqual(trashed.done.map(({ original }) => original));
+  expect(await client.list(PRIVATE)).toHaveLength(items.length);
+  expect(f.exposures).toEqual([]);
+});
+
 async function fixture() {
   const pod = await wacPod();
-  const client = createSolidDriveClient({ storageUrl: ROOT, fetch: pod.fetch });
+  const client = createSolidDriveClient({ storageUrl: ROOT, webId: OWNER, fetch: pod.fetch });
   const data = buildDocument(DOC, {
     instanceId: "urn:uuid:00000000-0000-4000-8000-000000000007",
     title: "Private plan",
     body: `<img src="${TREE}assets/chart.png">`,
     assets: `${TREE}assets/`,
   });
-  await client.write(DOC, await serializeTurtle(data), { contentType: "text/turtle" });
-  await client.write(`${TREE}assets/chart.png`, "secret contents", { contentType: "image/png" });
+  await client.write(
+    DOC,
+    await serializeTurtle(data),
+    { contentType: "text/turtle" },
+    { kind: "protect-ancestors" },
+  );
+  await client.write(
+    `${TREE}assets/chart.png`,
+    "secret contents",
+    { contentType: "image/png" },
+    { kind: "protect-ancestors" },
+  );
   pod.policies.set(`${DOC}.policy`, await aclBody(DOC));
   pod.policies.set(`${TREE}.policy`, await aclBody(TREE));
   pod.audit();
@@ -41,14 +86,19 @@ async function fixture() {
 
 it("keeps a lone snapshot recoverable when rename planning cannot read its bytes", async () => {
   const f = await wacPod();
-  const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });
-  await client.write(DOC, await serializeTurtle(buildDocument(DOC, { title: "Private plan" })), {
-    contentType: "text/turtle",
-  });
+  const client = createSolidDriveClient({ storageUrl: ROOT, webId: OWNER, fetch: f.fetch });
+  await client.write(
+    DOC,
+    await serializeTurtle(buildDocument(DOC, { title: "Private plan" })),
+    {
+      contentType: "text/turtle",
+    },
+    { kind: "protect-ancestors" },
+  );
   f.policies.set(`${DOC}.policy`, await aclBody(DOC));
   const trashed = await trashItems(client, DRIVE, [await client.stat(DOC)], { webId: OWNER });
   expect(trashed.failed).toEqual([]);
-  await client.write(DOC, "occupant", { contentType: "text/plain" });
+  await client.write(DOC, "occupant", { contentType: "text/plain" }, { kind: "protect-ancestors" });
   const interrupted = {
     ...client,
     readVersion: async () => {
@@ -78,10 +128,15 @@ it.each([
     record.status = status;
     record.leaseOwner = "urn:uuid:00000000-0000-4000-8000-000000000001";
     record.leaseUntil = new Date(Date.now() + 60_000);
-    await f.client.write(INDEX, await serializeTrashIndex(index), {
-      contentType: "text/turtle",
-      ifMatch: current.etag,
-    });
+    await f.client.write(
+      INDEX,
+      await serializeTrashIndex(index),
+      {
+        contentType: "text/turtle",
+        ifMatch: current.etag,
+      },
+      { kind: "protect-ancestors" },
+    );
     const result = await restoreItems(f.client, DRIVE, f.entries.slice(1 - leased, 2 - leased));
     expect(result.done).toEqual([]);
     expect(result.failed).toHaveLength(2);
@@ -103,7 +158,12 @@ it.each([
   if (!snapshot) throw new Error("Missing snapshot");
   if (mode !== "archived") await f.client.remove(policyArchiveOf(snapshot.url) as string);
   if (mode === "legacy-inherited") f.policies.delete(`${snapshot.url}.policy`);
-  await f.client.write(DOC, "occupant", { contentType: "text/plain" });
+  await f.client.write(
+    DOC,
+    "occupant",
+    { contentType: "text/plain" },
+    { kind: "protect-ancestors" },
+  );
   const exposures: string[] = [];
   f.after(async (url, method, response) => {
     if (f.pod.has(TARGET)) {
@@ -138,10 +198,15 @@ it.each([
   if (!companion || !current?.etag) throw new Error("Missing companion intent");
   const index = trashIndexFrom(current.dataset);
   index.record(companion.url).status = "partial";
-  await f.client.write(INDEX, await serializeTrashIndex(index), {
-    contentType: "text/turtle",
-    ifMatch: current.etag,
-  });
+  await f.client.write(
+    INDEX,
+    await serializeTrashIndex(index),
+    {
+      contentType: "text/turtle",
+      ifMatch: current.etag,
+    },
+    { kind: "protect-ancestors" },
+  );
   if (denied)
     f.intercept(async (url, init) =>
       url === `${TREE}.policy` && init?.method === "PUT"
@@ -178,7 +243,12 @@ it.each([
   const f = await fixture();
   const snapshot = f.entries[0];
   if (!snapshot) throw new Error("Missing snapshot");
-  await f.client.write(DOC, "occupant", { contentType: "text/plain" });
+  await f.client.write(
+    DOC,
+    "occupant",
+    { contentType: "text/plain" },
+    { kind: "protect-ancestors" },
+  );
   if (mode === "unknown-access") {
     await f.client.remove(policyArchiveOf(snapshot.url) as string);
     f.policies.delete(`${snapshot.url}.policy`);
@@ -191,7 +261,11 @@ it.each([
     const method = init?.method ?? "GET";
     if (mode === "policy-unreadable" && written && url === `${TARGET}.policy` && method === "GET")
       return new Response(null, { status: 403 });
-    if (mode === "unknown-access" && url === `${DRIVE}.trash/.policy` && method === "GET")
+    if (
+      mode === "unknown-access" &&
+      url === `${new URL(".", snapshot.url).href}.policy` &&
+      method === "GET"
+    )
       return new Response(null, { status: 403 });
     if (
       ["policy-denied", "cleanup-denied"].includes(mode) &&

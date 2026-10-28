@@ -20,6 +20,7 @@ function transport(
     const url = String(input);
     const method = init?.method ?? "GET";
     const headers = new Headers(init?.headers);
+    if (url === `${ROOT}drive/` && method === "HEAD") return new Response(null);
     if (method === "DELETE" && url === SOURCE) options.beforeDelete?.(files);
     const current = files.get(url);
     const ifMatch = headers.get("if-match");
@@ -124,12 +125,17 @@ it("Undo of a folder refuses an unrelated replacement after A to B then B elsewh
   const client = createSolidDriveClient(options);
   const from = `${ROOT}drive/B/`,
     to = `${ROOT}drive/A/`;
-  const moved = await client.move(to, from);
-  await client.move(from, `${ROOT}drive/C/`);
-  await client.write(`${from}unrelated`, "unrelated", {
-    contentType: "text/plain",
-    ifNoneMatch: "*",
-  });
+  const moved = await client.move(to, from, { kind: "confirm-move" });
+  await client.move(from, `${ROOT}drive/C/`, { kind: "confirm-move" });
+  await client.write(
+    `${from}unrelated`,
+    "unrelated",
+    {
+      contentType: "text/plain",
+      ifNoneMatch: "*",
+    },
+    { kind: "protect-ancestors" },
+  );
   await expect(
     moveWithValidator(options, from, to, moved.etag as string, moved.tree),
   ).rejects.toThrow("cannot be safely undone");
@@ -167,10 +173,15 @@ it("reproduces A to B, B elsewhere, unrelated upload at B against the real demo 
   });
   const options = { storageUrl: ROOT, fetch: pod.fetch };
   const client = createSolidDriveClient(options);
-  await client.move(TARGET, SOURCE);
+  await client.move(TARGET, SOURCE, { kind: "confirm-move" });
   const moved = await client.stat(SOURCE);
-  await client.move(SOURCE, `${ROOT}drive/C.txt`);
-  await client.write(SOURCE, "unrelated", { contentType: "text/plain", ifNoneMatch: "*" });
+  await client.move(SOURCE, `${ROOT}drive/C.txt`, { kind: "confirm-move" });
+  await client.write(
+    SOURCE,
+    "unrelated",
+    { contentType: "text/plain", ifNoneMatch: "*" },
+    { kind: "protect-ancestors" },
+  );
   expect(moved.etag).toBeDefined();
   await expect(
     moveWithValidator(options, SOURCE, TARGET, moved.etag as string),
@@ -192,7 +203,7 @@ it("Undo restores an unchanged folder through the client's conditional recursive
   const client = createSolidDriveClient(options);
   const from = `${ROOT}drive/B/`,
     to = `${ROOT}drive/A/`;
-  const moved = await client.move(`${ROOT}drive/C/`, from);
+  const moved = await client.move(`${ROOT}drive/C/`, from, { kind: "confirm-move" });
   fetch.mockClear();
   await moveWithValidator(options, from, to, moved.etag as string, moved.tree);
   expect(await (await client.read(`${to}child/note`)).text()).toBe("original");

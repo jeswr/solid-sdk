@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { SolidPersistence, SolidUpdateStore } from "@jeswr/y-solid";
 import { generateHTML, generateJSON, getSchema, type JSONContent } from "@tiptap/react";
@@ -689,7 +690,8 @@ export class DocumentPersistence {
       await createSolidDriveClient({
         storageUrl: this.session.storageUrl,
         fetch: this.session.fetch,
-      }).createFolder(container);
+        webId: this.session.webId,
+      }).createFolder(container, { kind: "inherit-verified" });
       this.assertActive();
       // Recovery is an explicit creation state: make its base update durable
       // before advertising the new log to other clients.

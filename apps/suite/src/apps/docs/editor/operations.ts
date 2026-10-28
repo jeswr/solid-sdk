@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { createPodScopedFetch } from "@jeswr/guarded-fetch";
 import type { PodSession } from "@/lib/session/pod-session";
 import { createSolidDriveClient, DriveError } from "../../drive/lib/client/client";
@@ -14,6 +15,7 @@ import { compactDocumentLog } from "./compact";
 function clientFor(session: PodSession) {
   return createSolidDriveClient({
     storageUrl: session.storageUrl,
+    webId: session.webId,
     fetch: createPodScopedFetch(session.storageUrl, { fetch: session.fetch }),
   });
 }

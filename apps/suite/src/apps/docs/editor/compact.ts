@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { SolidUpdateStore } from "@jeswr/y-solid";
 import { mergeUpdates } from "yjs";
 import { mapConcurrent } from "../../../lib/parallel";
@@ -51,10 +52,15 @@ export async function compactDocumentLog(
     return;
   }
   const destination = `${container}${Date.now()}-${crypto.randomUUID()}`;
-  const { etag } = await client.write(destination, new Blob([new Uint8Array(merged)]), {
-    contentType: "application/octet-stream",
-    ifNoneMatch: "*",
-  });
+  const { etag } = await client.write(
+    destination,
+    new Blob([new Uint8Array(merged)]),
+    {
+      contentType: "application/octet-stream",
+      ifNoneMatch: "*",
+    },
+    { kind: "protect-ancestors" },
+  );
   if (!etag || etag.startsWith("W/")) throw new DriveError("missing-validator", 409, destination);
   const copy = await store.readUpdate(destination);
   if (

@@ -49,10 +49,15 @@ async function relocateLog(
     fetch: async (input, init) => {
       const url = String(input);
       if (init?.method === "PUT") {
-        await client.write(url, new Blob([init.body as Uint8Array<ArrayBuffer>]), {
-          contentType: "application/octet-stream",
-          ifNoneMatch: "*",
-        });
+        await client.write(
+          url,
+          new Blob([init.body as Uint8Array<ArrayBuffer>]),
+          {
+            contentType: "application/octet-stream",
+            ifNoneMatch: "*",
+          },
+          { kind: "protect-ancestors" },
+        );
         return new Response(null, { status: 201 });
       }
       try {
@@ -164,7 +169,12 @@ export async function writeRestoreSnapshot(
   condition: ({ ifMatch: string } | { ifNoneMatch: "*" }) & Pick<WriteOptions, "restoreFrom">,
 ): Promise<{ etag?: string }> {
   try {
-    return await client.write(url, body, { contentType: "text/turtle", ...condition });
+    return await client.write(
+      url,
+      body,
+      { contentType: "text/turtle", ...condition },
+      { kind: "protect-ancestors" },
+    );
   } catch (error) {
     if (error instanceof DriveAccessError) throw error;
     let current: Awaited<ReturnType<DriveClient["readVersion"]>>;

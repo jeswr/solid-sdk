@@ -1,8 +1,8 @@
 // AUTHORED-BY Codex
 // Reuse suite-ui's installed DOM harness without adding application dependencies.
 import { createRequire } from "node:module";
-import { act, createElement, type ReactNode } from "react";
-import { afterEach, vi } from "vitest";
+import { createElement, type ReactNode, act as reactAct } from "react";
+import { afterEach, beforeEach, vi } from "vitest";
 
 const requireUi = createRequire(
   new URL("../../../packages/suite-ui/package.json", import.meta.url),
@@ -10,6 +10,38 @@ const requireUi = createRequire(
 const { JSDOM } = requireUi("jsdom") as {
   JSDOM: new (html: string, options: { url: string }) => { window: Window & typeof globalThis };
 };
+const { IDBFactory } = createRequire(
+  new URL("../../../packages/solid-offline/package.json", import.meta.url),
+)("fake-indexeddb") as { IDBFactory: new () => IDBFactory };
+const storageWork = new Set<Promise<void>>();
+beforeEach(() => {
+  sessionStorage.clear();
+  const factory = new IDBFactory();
+  const open = factory.open.bind(factory);
+  vi.spyOn(factory, "open").mockImplementation((...args) => {
+    const request = open(...args);
+    let finish!: () => void;
+    const pending = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    storageWork.add(pending);
+    const done = () => {
+      storageWork.delete(pending);
+      finish();
+    };
+    request.addEventListener("error", done);
+    request.addEventListener("success", () => {
+      const db = request.result;
+      const close = db.close.bind(db);
+      db.close = () => {
+        close();
+        done();
+      };
+    });
+    return request;
+  });
+  vi.stubGlobal("indexedDB", factory);
+});
 const dom = new JSDOM("<!doctype html><html><body></body></html>", {
   url: "https://suite.example/drive/my",
 });
@@ -66,7 +98,17 @@ afterEach(async () => {
 });
 
 export const h = createElement;
-export { act };
+// React cannot observe IndexedDB tasks. Flush those committed transactions too,
+// so assertions wait for real durable Drive state rather than incidental microtasks.
+export async function act<T>(work: () => T | Promise<T>): Promise<void> {
+  await reactAct(async () => {
+    await work();
+  });
+  while (storageWork.size)
+    await reactAct(async () => {
+      await Promise.all([...storageWork]);
+    });
+}
 export async function mount(node: ReactNode) {
   const host = document.createElement("div");
   document.body.append(host);

@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { Blob as NodeBlob } from "node:buffer";
+import { createRequire } from "node:module";
 import { SolidPersistence, SolidUpdateStore } from "@jeswr/y-solid";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement, XmlText } from "yjs";
@@ -45,8 +47,14 @@ vi.mock("y-indexeddb", () => ({
   clearDocument: async () => {},
 }));
 const runtimes: DocumentPersistence[] = [];
+const { IDBFactory } = createRequire(`${process.cwd()}/../../packages/solid-offline/package.json`)(
+  "fake-indexeddb",
+) as { IDBFactory: new () => IDBFactory };
 // Use a Blob compatible with Node's fetch/Response for Drive's byte copies.
-beforeEach(() => vi.stubGlobal("Blob", NodeBlob));
+beforeEach(() => {
+  vi.stubGlobal("Blob", NodeBlob);
+  vi.stubGlobal("indexedDB", new IDBFactory());
+});
 afterEach(async () => {
   await Promise.all(runtimes.splice(0).map((runtime) => runtime.destroy()));
   mirrors.clear();

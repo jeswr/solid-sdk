@@ -10,7 +10,10 @@ const mocks = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn() },
   params: new URLSearchParams(),
 }));
-vi.mock("@/apps/docs/lib/model/type-index", () => ({ ensureTypeRegistrations: vi.fn() }));
+vi.mock("@/apps/docs/lib/model/type-index", () => ({
+  discoverProfileRegistrations: vi.fn(async () => []),
+  ensureTypeRegistrations: vi.fn(),
+}));
 vi.mock("@/lib/refs", async () => import("../src/lib/refs"));
 vi.mock(
   "@/components/interim-shell/suite-frame",
@@ -298,7 +301,7 @@ it.each([
   const view = await setup();
   if (action === "move")
     await act(async () => {
-      await drive.client.createFolder(`${ROOT}Archive/`);
+      await drive.client.createFolder(`${ROOT}Archive/`, { kind: "inherit-verified" });
     });
   const first = rows(view.host).find((row) => row.dataset.url === `${ROOT}A.txt`) as HTMLElement;
   await act(async () => first.focus());

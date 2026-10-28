@@ -275,11 +275,16 @@ it("folder Undo refuses unrelated nested replacements despite an unchanged root 
   };
   const moved = `${ROOT}B/A/`;
   const before = await client.stat(moved);
-  await client.move(`${moved}nested/note`, `${ROOT}elsewhere`);
-  await client.write(`${moved}nested/note`, "unrelated", {
-    contentType: "text/plain",
-    ifNoneMatch: "*",
-  });
+  await client.move(`${moved}nested/note`, `${ROOT}elsewhere`, { kind: "confirm-move" });
+  await client.write(
+    `${moved}nested/note`,
+    "unrelated",
+    {
+      contentType: "text/plain",
+      ifNoneMatch: "*",
+    },
+    { kind: "protect-ancestors" },
+  );
   expect((await client.stat(moved)).etag).toBe(before.etag);
   await act(async () => undo.action.onClick());
   expect(mocks.toast.error).toHaveBeenCalledWith(
@@ -610,11 +615,16 @@ it("Undo uses the move response validator even if a replacement is present befor
         copiedEtag = response.headers.get("etag");
       if (String(input) === original.url && init?.method === "DELETE") {
         // Interleave another tab after the DELETE commits, before move returns.
-        await otherTab.move(destination, `${ROOT}elsewhere.txt`);
-        await otherTab.write(destination, "unrelated", {
-          contentType: "text/plain",
-          ifNoneMatch: "*",
-        });
+        await otherTab.move(destination, `${ROOT}elsewhere.txt`, { kind: "confirm-move" });
+        await otherTab.write(
+          destination,
+          "unrelated",
+          {
+            contentType: "text/plain",
+            ifNoneMatch: "*",
+          },
+          { kind: "protect-ancestors" },
+        );
       }
       return response;
     },
@@ -634,7 +644,7 @@ it("Undo uses the move response validator even if a replacement is present befor
   };
   await act(async () => options.action.onClick());
   expect(mocks.undoMove).toHaveBeenCalledWith(
-    expect.any(Object),
+    expect.objectContaining({ onProtectionChange: drive.invalidate }),
     destination,
     items[0]?.url,
     copiedEtag,

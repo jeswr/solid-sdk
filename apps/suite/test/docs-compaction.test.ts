@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from "vitest";
 import { applyUpdate, Doc, encodeStateAsUpdate, mergeUpdates } from "yjs";
 import { compactDocumentLog } from "../src/apps/docs/editor/compact";
@@ -54,7 +55,7 @@ describe("Docs log compaction before trash", () => {
     let peak = 0;
     const verified = new Set<string>();
     f.intercept(async (url, init) => {
-      if (init?.method === "HEAD") {
+      if (init?.method === "HEAD" && new Headers(init.headers).has("if-match")) {
         const response = await f.pod.fetch(url, init);
         expect(response.ok).toBe(true);
         expect(new Headers(init.headers).get("if-match")).toBe(response.headers.get("etag"));
@@ -76,7 +77,7 @@ describe("Docs log compaction before trash", () => {
     });
     await f.compact();
     expect(peak).toBe(64);
-    expect(f.http).toHaveBeenCalledTimes(3 * 65 + 3);
+    expect(f.http).toHaveBeenCalledTimes(3 * 65 + 7);
     expect(f.deletes()).toHaveLength(65);
     expect(f.copies()).toHaveLength(1);
     expect(f.copies()[0]?.[1].body).toEqual(mergeUpdates(updates));

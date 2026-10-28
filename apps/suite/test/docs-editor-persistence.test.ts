@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { Blob as NodeBlob } from "node:buffer";
+import { createRequire } from "node:module";
 import { SolidPersistence, SolidUpdateStore } from "@jeswr/y-solid";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement, XmlText } from "yjs";
@@ -14,8 +16,14 @@ import type { PodSession } from "../src/lib/session/pod-session";
 // Browser IndexedDB is exercised by Playwright; the Node tests inspect mirror metadata.
 const connections = vi.hoisted(() => new Set<object>());
 const mirrors = vi.hoisted(() => new Map<string, Map<string, unknown>>());
+const { IDBFactory } = createRequire(`${process.cwd()}/../../packages/solid-offline/package.json`)(
+  "fake-indexeddb",
+) as { IDBFactory: new () => IDBFactory };
 // These adapter tests exercise reconnect without cross-tab notifications.
-beforeEach(() => vi.stubGlobal("BroadcastChannel", undefined));
+beforeEach(() => {
+  vi.stubGlobal("BroadcastChannel", undefined);
+  vi.stubGlobal("indexedDB", new IDBFactory());
+});
 vi.mock("y-indexeddb", () => ({
   IndexeddbPersistence: class {
     whenSynced = Promise.resolve(this);

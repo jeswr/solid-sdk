@@ -27,11 +27,11 @@ export function useLiveItem(initial: DriveItem | undefined): DriveItem | undefin
 // Client identity scopes metadata to the account and transport that hydrated it.
 const hydrated = new WeakMap<DriveClient, Map<string, DriveItem>>();
 
-/** Preference rows carry names and timestamps; retain metadata already read for their URL. */
+/** Freshly read metadata takes precedence over a persisted, unversioned preference row. */
 export function withHydratedMetadata<T extends DriveItem>(client: DriveClient, item: T): T {
   const known = hydrated.get(client)?.get(item.url);
   return known && (item.etag === undefined || item.etag === known.etag)
-    ? { ...known, ...item }
+    ? { ...item, ...known, name: item.name }
     : item;
 }
 

@@ -8,6 +8,8 @@
  * queue. Screens read it through {@link useDrive} and {@link useFolder}.
  */
 
+import { toast } from "@jeswr/suite-ui";
+import { termsEqual } from "@jeswr/suite-vocab";
 import {
   createContext,
   type ReactNode,
@@ -18,13 +20,17 @@ import {
   useRef,
   useState,
 } from "react";
-import { ensureTypeRegistrations } from "@/apps/docs/lib/model/type-index";
+import {
+  discoverProfileRegistrations,
+  ensureTypeRegistrations,
+} from "@/apps/docs/lib/model/type-index";
 import type { PodSession } from "@/lib/session/pod-session";
 import {
   createSolidDriveClient,
   type DriveClient,
   DriveError,
   type DriveItem,
+  nameOf,
   parentOf,
 } from "../lib/client/client";
 import { DRIVE_ROOT_CLASS } from "../lib/constants";
@@ -52,10 +58,35 @@ export interface DriveContextValue {
 
 const DriveContext = createContext<DriveContextValue | undefined>(undefined);
 
+export class DriveRootDiscoveryError extends Error {
+  constructor(cause: unknown) {
+    super("Can't read your Drive type index. Check your access and retry.", { cause });
+  }
+}
+
 async function resolveDriveRoot(client: DriveClient, session: PodSession): Promise<string> {
+  try {
+    const locations = await discoverProfileRegistrations(
+      session.webId,
+      session.fetch,
+      session.storageUrl,
+    );
+    // Reuse the first DriveRoot container in discovery order (public, then private).
+    // A DriveRoot can also be registered as an instance of the root container.
+    // Resource instances without a trailing slash cannot serve as a folder.
+    const existing = locations.find(
+      (location) =>
+        termsEqual(location.forClass, DRIVE_ROOT_CLASS) &&
+        (location.container || location.instance?.endsWith("/")),
+    );
+    const root = existing?.container ?? existing?.instance;
+    if (root) return root;
+  } catch (cause) {
+    throw new DriveRootDiscoveryError(cause);
+  }
   const root = `${session.storageUrl}drive/`;
   try {
-    await client.createFolder(root);
+    await client.createFolder(root, { kind: "inherit-verified" });
   } catch (error) {
     if (!(error instanceof DriveError && error.kind === "conflict")) throw error;
   }
@@ -71,15 +102,6 @@ async function resolveDriveRoot(client: DriveClient, session: PodSession): Promi
 
 export function DriveProvider({ session, children }: { session: PodSession; children: ReactNode }) {
   const { confirmAccess, dialog } = useAccessConfirmation();
-  const client = useMemo(
-    () =>
-      createSolidDriveClient({
-        storageUrl: session.storageUrl,
-        fetch: session.fetch,
-        confirmAccess,
-      }),
-    [session, confirmAccess],
-  );
   const [driveRoot, setDriveRoot] = useState<string>();
   const [rootError, setRootError] = useState<unknown>();
   const [prefs, updatePrefs] = useDrivePreferences(session.webId);
@@ -120,6 +142,23 @@ export function DriveProvider({ session, children }: { session: PodSession; chil
     }
   }, []);
 
+  const client = useMemo(
+    () =>
+      createSolidDriveClient({
+        storageUrl: session.storageUrl,
+        fetch: session.fetch,
+        confirmAccess,
+        webId: session.webId,
+        onProtectionChange: invalidate,
+        onPrivateFolder: (url) =>
+          toast(`${nameOf(url)} was restored as private`, {
+            description:
+              "Its original access was unknown. Only you can access this folder and new files in it.",
+          }),
+      }),
+    [session, confirmAccess, invalidate],
+  );
+
   useEffect(() => session.subscribe((url) => invalidate(url)), [session, invalidate]);
 
   useEffect(() => {
@@ -133,7 +172,11 @@ export function DriveProvider({ session, children }: { session: PodSession; chil
     };
   }, [client, session]);
 
-  const uploads = useUploadQueue(client, invalidate);
+  const uploads = useUploadQueue(
+    client,
+    invalidate,
+    JSON.stringify([session.storageUrl, session.webId]),
+  );
 
   const value = useMemo<DriveContextValue>(
     () => ({

@@ -21,7 +21,7 @@ import { formatSize } from "../lib/view/view";
 import { useDrive, useFolder } from "../state/drive-context";
 import { useDriveListingFocus } from "../state/listing-focus";
 import { withHydratedMetadata } from "../state/resource";
-import { latestShared, useRecordSharedOpen } from "../state/shared";
+import { latestShared, sharedContentType, useRecordSharedOpen } from "../state/shared";
 import { useDriveActions, useDriveUi } from "../state/ui";
 import { Breadcrumbs } from "./breadcrumbs";
 import { type BrowserItem, FileBrowser } from "./file-browser";
@@ -253,14 +253,21 @@ export function SharedView() {
   const { client, prefs } = useDrive();
   const items = useMemo<BrowserItem[]>(
     () =>
-      latestShared(prefs.openedShared).map(({ url, name, type, openedAt }) =>
-        withHydratedMetadata(client, {
+      latestShared(prefs.openedShared).map((entry) => {
+        const { url, name, type, openedAt, size, modified } = entry;
+        const kind = type ?? (url.endsWith("/") ? "folder" : "file");
+        const contentType =
+          kind === "file" ? sharedContentType(nameOf(url), entry.contentType) : undefined;
+        return withHydratedMetadata(client, {
           url,
           name: name ?? nameOf(url),
-          kind: type ?? (url.endsWith("/") ? "folder" : "file"),
+          kind,
+          ...(contentType !== undefined ? { contentType } : {}),
+          ...(size !== undefined ? { size } : {}),
+          ...(modified ? { modified: new Date(modified) } : {}),
           openedAt: new Date(openedAt),
-        }),
-      ),
+        });
+      }),
     [client, prefs.openedShared],
   );
   return (

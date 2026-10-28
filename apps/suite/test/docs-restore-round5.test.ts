@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex
 import { SolidUpdateStore } from "@jeswr/y-solid";
 import { NamedNodeAs, NamedNodeFrom, OptionalAs, OptionalFrom, TermWrapper } from "@rdfjs/wrapper";
@@ -206,10 +207,15 @@ it.each([
     url: partner.url.replace(/\.trash\/[^/]+\//, ".trash/00000000-0000-4000-8000-000000000002/"),
     trashedBy: `${ROOT}other#me`,
   });
-  await client.write(indexUrl, await serializeTrashIndex(index), {
-    contentType: "text/turtle",
-    ifMatch: current.etag as string,
-  });
+  await client.write(
+    indexUrl,
+    await serializeTrashIndex(index),
+    {
+      contentType: "text/turtle",
+      ifMatch: current.etag as string,
+    },
+    { kind: "protect-ancestors" },
+  );
   await pod.fetch(URL, { method: "PUT", body: "replacement" });
   const selected = trash.done.filter(
     (entry) => entry.original.endsWith("/") === (first === "companion"),
@@ -460,10 +466,15 @@ it.each([
   if (fault === "wrong original")
     index.record(companion.url).originalLocation = `${ROOT}docs/other/`;
   else index.record(companion.url).pairedWith = `${DRIVE}.trash/other/plan.ttl`;
-  await client.write(indexUrl, await serializeTrashIndex(index), {
-    contentType: "text/turtle",
-    ifMatch: current.etag as string,
-  });
+  await client.write(
+    indexUrl,
+    await serializeTrashIndex(index),
+    {
+      contentType: "text/turtle",
+      ifMatch: current.etag as string,
+    },
+    { kind: "protect-ancestors" },
+  );
   const restored = await restoreItems(client, DRIVE, [snapshot]);
   expect(restored.done).toEqual([]);
   expect(restored.failed[0]?.error).toMatchObject({ kind: "invalid-trash-record" });
