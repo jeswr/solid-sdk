@@ -223,6 +223,8 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     effective,
     forResource: (own: OwnAccess, resource: string): OwnAccess =>
       projectAccess(own, resource, resource, false),
+    defaults: (own: OwnAccess, resource: string): OwnAccess =>
+      projectAccess(own, resource, resource, true),
     hasDefaults: (own: OwnAccess, resource: string): boolean =>
       projectAccess(own, resource, resource, true).dataset.size > 0,
     read,

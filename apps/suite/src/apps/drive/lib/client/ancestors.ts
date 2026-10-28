@@ -388,11 +388,17 @@ export function ancestorGuard(options: {
     folder: resource,
     file: (
       url: string,
-      policy: OwnAccess,
+      policy: OwnAccess | undefined,
       from: string,
       put: () => Promise<Response>,
       onCreated: (response: Response) => void,
-    ) => resource(url, { kind: "archived", acl: policy, from }, onCreated, put),
+    ) =>
+      resource(
+        url,
+        policy ? { kind: "archived", acl: policy, from } : { kind: "inherit-verified" },
+        onCreated,
+        put,
+      ),
     async protect(url: string, policy: OwnAccess, from = url): Promise<void> {
       await guard(url, true);
       await singleFlight(

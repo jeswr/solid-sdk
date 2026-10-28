@@ -89,6 +89,26 @@ async function hasEdit(f: Awaited<ReturnType<typeof wacPod>>, url: string) {
     .has(`${ROOT}concurrent`);
 }
 
+it("recursive Delete forever retains folder RDF saved after a child DELETE", async () => {
+  const f = await rdfPod();
+  const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });
+  let edited = false;
+  f.after(async (url, method, response) => {
+    if (!edited && url === `${PRIVATE}secret` && method === "DELETE" && response.ok) {
+      edited = true;
+      await editFolder(f, PRIVATE);
+    }
+    return response;
+  });
+  const outcome = await client
+    .remove(PRIVATE, { recursive: true })
+    .catch((error: unknown) => error);
+  expect(edited).toBe(true);
+  expect(outcome).toMatchObject({ kind: "partial-failure", cause: { kind: "conflict" } });
+  expect(await hasEdit(f, PRIVATE)).toBe(true);
+  expect(f.calls).not.toContainEqual({ url: PRIVATE, method: "DELETE" });
+});
+
 const signals = [
   "empty ACR via rel=acl",
   "inherited ACP policies",
@@ -645,7 +665,7 @@ it("a direct recovery move refuses an unreadable policy archive before payload w
   expect(f.pod.has(original)).toBe(false);
 });
 
-it("a destination ACL changed after payload PUT retains the source and recovery copy", async () => {
+it("a destination ACL widened after payload PUT retains the source and removes the exposed copy", async () => {
   const f = await rdfPod();
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });
   const source = `${PRIVATE}secret`;
@@ -657,13 +677,11 @@ it("a destination ACL changed after payload PUT retains the source and recovery 
     return response;
   });
   await expect(client.move(source, to, { kind: "preserve-source" })).rejects.toMatchObject({
-    kind: "partial-failure",
-    cause: { kind: "private-access-unavailable" },
-    retainedDestinations: [to],
+    kind: "private-access-unavailable",
   });
   expect(writes).toBe(2);
   expect(f.pod.has(source)).toBe(true);
-  expect(f.pod.has(to)).toBe(true);
+  expect(f.pod.has(to)).toBe(false);
 });
 
 it("Restore retains recovery when the original's existence cannot be determined", async () => {
