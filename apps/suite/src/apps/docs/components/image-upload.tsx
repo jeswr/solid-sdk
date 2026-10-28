@@ -4,6 +4,7 @@ import { Button, Input, Popover, PopoverAnchor, PopoverContent } from "@jeswr/su
 import type { Editor } from "@tiptap/react";
 import { useId, useState } from "react";
 import type { DocumentPersistence } from "../editor/persistence";
+import { insertionAnchor } from "../lib/editor/insertion-anchor";
 import { docContainerUrls } from "../lib/model";
 export function ImageUpload({
   editor,
@@ -32,6 +33,7 @@ export function ImageUpload({
       return;
     }
     setState("uploading");
+    const anchor = insertionAnchor(editor);
     try {
       if (!runtime.stored) {
         runtime.change(editor.getHTML(), editor.getJSON());
@@ -55,14 +57,20 @@ export function ImageUpload({
         body: file,
       });
       if (!response.ok) throw new Error("Upload failed");
+      if (editor.isDestroyed) return;
       editor
         .chain()
         .focus()
-        .setImage({ src, alt: decorative ? "" : alt.trim() })
+        .insertContentAt(anchor.position, {
+          type: "image",
+          attrs: { src, alt: decorative ? "" : alt.trim() },
+        })
         .run();
       close();
     } catch {
       setState("error");
+    } finally {
+      anchor.release();
     }
   };
   return (
@@ -79,7 +87,7 @@ export function ImageUpload({
         aria-label="Image alt text"
         onCloseAutoFocus={(event) => {
           event.preventDefault();
-          editor.commands.focus();
+          if (!editor.isDestroyed) editor.commands.focus();
         }}
       >
         <form

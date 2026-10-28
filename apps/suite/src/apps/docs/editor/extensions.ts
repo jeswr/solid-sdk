@@ -10,6 +10,7 @@ import { CharacterCount, Placeholder } from "@tiptap/extensions";
 import { Extension } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import type { Doc } from "yjs";
+import { compatibleCodeExtensions } from "../lib/editor/code-mark";
 import { validLink } from "../lib/editor/logic";
 import { FindDecorations } from "./find-plugin";
 import { privateImage } from "./private-image";
@@ -48,6 +49,7 @@ const EditorKeys = Extension.create({
 export function baseExtensions(fetchImpl: typeof fetch) {
   return [
     StarterKit.configure({
+      code: false,
       undoRedo: false,
       heading: { levels: [1, 2, 3] },
       link: {
@@ -56,6 +58,7 @@ export function baseExtensions(fetchImpl: typeof fetch) {
         isAllowedUri: (url) => validLink(url) !== null,
       },
     }),
+    ...compatibleCodeExtensions,
     TableKit.configure({ table: { resizable: true, cellMinWidth: 32 } }),
     TaskList,
     TaskItem.configure({

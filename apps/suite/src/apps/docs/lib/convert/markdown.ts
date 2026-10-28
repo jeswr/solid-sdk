@@ -6,6 +6,7 @@ import { TableKit } from "@tiptap/extension-table";
 import { MarkdownManager } from "@tiptap/markdown";
 import { decodeHtmlEntities, flattenExtensions, getSchema, type JSONContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
+import { compatibleCodeExtensions } from "../editor/code-mark";
 import { validLink } from "../editor/logic";
 import { MAX_IMPORT_BYTES } from "./docx-import";
 
@@ -25,6 +26,12 @@ function escapeText(text: string, label: boolean, table: boolean): string {
     }).join(""),
   );
   return table ? escaped.replace(/ /g, "&#32;") : escaped;
+}
+
+function escapeHtmlText(text: string): string {
+  // HTML fallback contents are parsed as HTML, where Markdown escapes are literal.
+  // Encode label delimiters too: an HTML span can itself be inside a Markdown link.
+  return text.replace(/[\p{P}\p{S}\s]/gu, (char) => `&#${char.codePointAt(0)};`);
 }
 
 function encodeUrlControls(url: string): string {
@@ -59,12 +66,111 @@ function inlineCode(text: string): string {
   return `${delimiter}${padding}${text}${padding}${delimiter}`;
 }
 
+const emphasisSyntax: Record<string, { delimiter: string; tag: string }> = {
+  bold: { delimiter: "**", tag: "strong" },
+  italic: { delimiter: "*", tag: "em" },
+  strike: { delimiter: "~~", tag: "del" },
+  highlight: { delimiter: "==", tag: "mark" },
+};
+
+/** Resolve whole mark runs before placeholders hide their whitespace/punctuation. */
+function prepareEmphasis(nodes: JSONContent[]): JSONContent[] {
+  const code = (node: JSONContent) => !!node.marks?.some((mark) => mark.type === "code");
+  // Inline code is atomic: its edge spaces belong inside the code span.
+  const text = nodes
+    .map((node) => {
+      const value = node.text ?? "\0";
+      return code(node) ? "x".repeat(value.length) : value;
+    })
+    .join("");
+  const runs: { type: string; start: number; end: number; code: boolean; html: boolean }[] = [];
+  for (const type of Object.keys(emphasisSyntax)) {
+    let position = 0;
+    let current: (typeof runs)[number] | undefined;
+    for (const node of nodes) {
+      const end = position + (node.text ?? "\0").length;
+      if (node.type === "text" && node.marks?.some((mark) => mark.type === type)) {
+        if (current) {
+          current.end = end;
+          current.code ||= code(node);
+        } else {
+          current = { type, start: position, end, code: code(node), html: false };
+          runs.push(current);
+        }
+      } else current = undefined;
+      position = end;
+    }
+  }
+  if (!runs.length) return nodes;
+  for (const run of runs) {
+    const value = text.slice(run.start, run.end);
+    run.start += value.length - value.trimStart().length;
+    run.end -= value.length - value.trimEnd().length;
+  }
+  const punctuation = (char: string) => /[\p{P}\p{S}]/u.test(char);
+  const whitespace = (char: string) => !char || /\s/u.test(char);
+  for (const run of runs) {
+    const core = Array.from(text.slice(run.start, run.end));
+    const first = core[0] ?? "";
+    const last = core.at(-1) ?? "";
+    const before = Array.from(text.slice(0, run.start)).at(-1) ?? "";
+    const after = Array.from(text.slice(run.end))[0] ?? "";
+    // CommonMark flanking rules. Touching/overlapping runs and code use HTML
+    // too, so their delimiters cannot combine into a different mark sequence.
+    run.html =
+      run.code ||
+      // Marked's delimiter scanner can split astral edge characters into surrogates.
+      first.length > 1 ||
+      last.length > 1 ||
+      before.length > 1 ||
+      after.length > 1 ||
+      (punctuation(first) && !whitespace(before) && !punctuation(before)) ||
+      (punctuation(last) && !whitespace(after) && !punctuation(after)) ||
+      runs.some((other) => other !== run && other.start <= run.end && other.end >= run.start);
+  }
+  let position = 0;
+  return nodes.flatMap((node) => {
+    const start = position;
+    position += (node.text ?? "\0").length;
+    if (!node.text) return [node];
+    const cuts = [...new Set([start, position, ...runs.flatMap((run) => [run.start, run.end])])]
+      .filter((cut) => cut >= start && cut <= position)
+      .sort((a, b) => a - b);
+    return cuts.slice(0, -1).map((from, index) => {
+      const to = cuts[index + 1] as number;
+      return {
+        ...node,
+        text: (node.text as string).slice(from - start, to - start),
+        marks: (node.marks ?? []).flatMap((mark) => {
+          if (!emphasisSyntax[mark.type]) return [mark];
+          const run = runs.find(
+            (range) => range.type === mark.type && range.start <= from && range.end >= to,
+          );
+          return run ? [{ ...mark, attrs: { ...mark.attrs, docsHtml: run.html } }] : [];
+        }),
+      };
+    });
+  });
+}
+
 // These serializers receive protected, context-escaped attributes from export.
 // Keep StarterKit's schema while decoding entities in parsed URL/title attrs.
-const customExtensions = flattenExtensions([StarterKit])
-  .filter((extension) => ["codeBlock", "link"].includes(extension.name))
-  .map((extension) =>
-    extension.name === "link"
+const customExtensions = flattenExtensions([StarterKit, Highlight])
+  .filter((extension) =>
+    ["codeBlock", "link", ...Object.keys(emphasisSyntax)].includes(extension.name),
+  )
+  .map((extension) => {
+    const syntax = emphasisSyntax[extension.name];
+    if (syntax)
+      return extension.extend({
+        renderMarkdown(node, helpers) {
+          const text = helpers.renderChildren(node);
+          return node.attrs?.docsHtml
+            ? `<${syntax.tag}>${text}</${syntax.tag}>`
+            : `${syntax.delimiter}${text}${syntax.delimiter}`;
+        },
+      });
+    return extension.name === "link"
       ? extension.extend({
           parseMarkdown(token, helpers) {
             // Marked supplies inline tokens for every link, including empty labels.
@@ -87,10 +193,18 @@ const customExtensions = flattenExtensions([StarterKit])
             const fence = "`".repeat(Math.max(3, longestRun(content, /^ {0,3}`+/gm) + 1));
             return `${fence}${node.attrs?.language ?? ""}\n${content}\n${fence}`;
           },
-        }),
-  );
+        });
+  });
 const extensions = [
-  StarterKit.configure({ link: false, codeBlock: false }),
+  StarterKit.configure({
+    link: false,
+    codeBlock: false,
+    code: false,
+    bold: false,
+    italic: false,
+    strike: false,
+  }),
+  ...compatibleCodeExtensions,
   ...customExtensions,
   TableKit,
   TaskList,
@@ -110,7 +224,6 @@ const extensions = [
       return `![${node.attrs?.alt}](${node.attrs?.src}${node.attrs?.title})`;
     },
   }),
-  Highlight,
 ];
 const markdown = new MarkdownManager({ extensions, markedOptions: { gfm: true } });
 const schema = getSchema(extensions);
@@ -190,14 +303,19 @@ export function exportMarkdown(json: JSONContent, dropHighlights = false): strin
     const attribute = (text: string) =>
       literal(table ? text.replace(/\|/g, (char) => `&#${char.charCodeAt(0)};`) : text);
     const result = { ...node };
+    const html = !!node.marks?.some((mark) => mark.attrs?.docsHtml);
     if (node.text && !code && node.marks?.some((mark) => mark.type === "code")) {
       // Protect the complete span: the upstream mark serializer moves edge
       // whitespace outside marks, including code, before rendering delimiters.
-      result.text = literal(inlineCode(node.text));
+      result.text = literal(
+        html ? `<code>${escapeHtmlText(node.text)}</code>` : inlineCode(node.text),
+      );
       result.marks = node.marks.filter((mark) => mark.type !== "code");
     } else if (node.text && !code) {
       result.text = literal(
-        escapeText(node.text, !!node.marks?.some((mark) => mark.type === "link"), table),
+        html
+          ? escapeHtmlText(node.text)
+          : escapeText(node.text, !!node.marks?.some((mark) => mark.type === "link"), table),
       );
     }
     if (node.type === "image") {
@@ -229,7 +347,10 @@ export function exportMarkdown(json: JSONContent, dropHighlights = false): strin
             }
           : mark,
       );
-    if (node.content) result.content = node.content.map((child) => protect(child, code, table));
+    if (node.content)
+      result.content = (code ? node.content : prepareEmphasis(node.content)).map((child) =>
+        protect(child, code, table),
+      );
     return result;
   };
   return markdown
