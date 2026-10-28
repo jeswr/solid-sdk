@@ -251,10 +251,11 @@ const AUTOLOGIN_FRAGMENT_PREFIX = "#autologin/";
  * the already-set sentinel makes us fall through to the login screen instead of
  * looping. Cleared on a successful completion, and on a non-code bounce.
  */
-const AUTOLOGIN_SENTINEL_KEY = "autologin-attempted";
+// App-scoped on shared origins. Never read the former unscoped key.
+export const AUTOLOGIN_SENTINEL_KEY = "pod-mail:autologin-attempted";
 
 /** Read the one-shot autologin sentinel (the WebID we last attempted), or null. */
-function readAutologinSentinel(): string | null {
+export function readAutologinSentinel(): string | null {
   try {
     return globalThis.sessionStorage?.getItem(AUTOLOGIN_SENTINEL_KEY) ?? null;
   } catch {

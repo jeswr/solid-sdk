@@ -122,6 +122,44 @@ function expectFailure(files, message) {
 }
 
 describe("Vercel config guard", () => {
+  it.each([
+    "$comment",
+    "unknownProperty",
+    "buildComand",
+    "__proto__",
+  ])("rejects unknown top-level property %s in listed and unlisted apps", (key) => {
+    for (const path of [
+      "apps/example/web/vercel.json",
+      "apps/next/vercel.json",
+      "apps/unlisted/vercel.json",
+      "apps/unlisted/web/vercel.json",
+    ]) {
+      const files = fixtures([viteApp, nextApp]);
+      files[path] = { ...(files[path] ?? { git: { deploymentEnabled: false } }), [key]: "invalid" };
+      expectFailure(files, `${path}: unknown top-level property ${key}`);
+    }
+  });
+
+  it("accepts schema metadata and supported Vercel top-level options", () => {
+    const files = fixtures();
+    Object.assign(files["apps/example/web/vercel.json"], {
+      // biome-ignore lint/style/useNamingConvention: Vercel's schema metadata key.
+      $schema: "https://openapi.vercel.sh/vercel.json",
+      buildCommand: "vite build",
+      framework: "vite",
+      outputDirectory: "dist",
+      cleanUrls: true,
+      trailingSlash: false,
+    });
+    expect(scan(files).status).toBe(0);
+  });
+
+  it("rejects an array in place of a Vercel configuration object", () => {
+    const files = fixtures();
+    files["apps/example/web/vercel.json"] = [];
+    expectFailure(files, "apps/example/web/vercel.json: expected a configuration object");
+  });
+
   const suiteApp = {
     ...nextApp,
     project: "solid-suite",

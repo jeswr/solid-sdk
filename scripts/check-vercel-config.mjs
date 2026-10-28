@@ -8,6 +8,69 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
+// Top-level properties from https://openapi.vercel.sh/vercel.json (2026-10-28).
+// Keep this local so the guard stays deterministic and works without network access.
+const vercelProperties = new Set([
+  "$schema",
+  "alias",
+  "build",
+  "buildCommand",
+  "builds",
+  "bulkRedirectsPath",
+  "bunVersion",
+  "ci",
+  "cleanUrls",
+  "crons",
+  "daemons",
+  "devCommand",
+  "env",
+  "experimentalAtproto",
+  "experimentalBYOC",
+  "experimentalEnvironmentVariables",
+  "experimentalServiceGroups",
+  "experimentalServices",
+  "experimentalServicesV2",
+  "fluid",
+  "framework",
+  "functionFailoverRegions",
+  "functions",
+  "git",
+  "github",
+  "headers",
+  "ignoreCommand",
+  "images",
+  "installCommand",
+  "manualProvisioning",
+  "name",
+  "outputDirectory",
+  "passiveRegions",
+  "proxy",
+  "redirects",
+  "regions",
+  "relatedProjects",
+  "rewrites",
+  "routes",
+  "schedules",
+  "scope",
+  "services",
+  "skipMiddlewareRequestBody",
+  "trailingSlash",
+  "version",
+  "wildcard",
+]);
+
+function checkTopLevelProperties(config, path, failures) {
+  if (Array.isArray(config)) {
+    failures.push(`${path}: expected a configuration object`);
+    return;
+  }
+  for (const key of Object.keys(config)) {
+    if (!vercelProperties.has(key)) {
+      failures.push(`${path}: unknown top-level property ${key}`);
+    }
+  }
+}
+
 function readJson(root, path, failures) {
   let source;
   try {
@@ -53,6 +116,7 @@ function checkGitDeployment(root, app, failures) {
   const path = `${app.rootDirectory}/vercel.json`;
   const config = readJson(root, path, failures);
   if (!config) return;
+  checkTopLevelProperties(config, path, failures);
   // Vercel enables unspecified branches. ** also covers branch names containing /.
   const suite = app.rootDirectory === "apps/suite" && app.project === "solid-suite";
   const policy = gitDeploymentPolicy(suite);
@@ -308,6 +372,7 @@ function checkVercelConfig(root) {
     for (const config of configs) {
       if (!directories.has(config.slice(0, -"/vercel.json".length))) {
         const value = readJson(root, config, failures);
+        if (value) checkTopLevelProperties(value, config, failures);
         const suite = config === "apps/suite/vercel.json";
         if (value && !matchesGitDeployment(value.git?.deploymentEnabled, suite)) {
           failures.push(`${config}: git.deploymentEnabled must be ${gitDeploymentPolicy(suite)}`);
