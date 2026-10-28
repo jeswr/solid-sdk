@@ -15,6 +15,7 @@ const { IDBFactory } = createRequire(
 )("fake-indexeddb") as { IDBFactory: new () => IDBFactory };
 const storageWork = new Set<Promise<void>>();
 beforeEach(() => {
+  sessionStorage.clear();
   const factory = new IDBFactory();
   const open = factory.open.bind(factory);
   vi.spyOn(factory, "open").mockImplementation((...args) => {

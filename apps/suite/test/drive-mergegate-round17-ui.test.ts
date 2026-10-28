@@ -153,7 +153,7 @@ it.each([
   });
   expect(await (await f.anonymous(url)).text()).toBe("");
   await settled(["conflict"]);
-  expect(writes).toEqual([{ url, match: null, none: "*" }]);
+  expect(writes).toEqual([]);
   const dialog = document.querySelector('[role="dialog"]');
   expect(dialog?.textContent).toContain("report.txt");
   expect(dialog?.textContent).toContain("PDF document");
@@ -181,7 +181,7 @@ it("reselecting a failed replacement after reload asks about the current target 
   failures.clear();
   await f.fetch(url, { method: "PUT", body: "current file" });
   await mount(env.tree());
-  // Files and decisions are not persisted by the upload queue.
+  // File bytes and approvals are not persisted; replacement intent survives.
   expect(env.drive.uploads.tasks).toEqual([]);
   const current = (await env.drive.client.stat(url)).etag;
   await act(async () => env.drive.uploads.enqueue(PUBLIC, [file]));
@@ -219,9 +219,7 @@ it("Apply to all asks once for each retry batch, including files beyond the conc
       for (const task of env.drive.uploads.tasks) env.drive.uploads.retry(task.id);
     });
     await settled(names.map(() => "conflict"));
-    expect(writes).toEqual(
-      names.map((name) => ({ url: `${PUBLIC}${name}`, match: null, none: "*" })),
-    );
+    expect(writes).toEqual([]);
   }
   await replaceAll();
   await settled(names.map(() => "done"));
@@ -262,7 +260,6 @@ it("a renewed Apply to all covers siblings retried later in the same batch", asy
   await settled(["done", "done", "done"]);
   expect(document.querySelector('[role="dialog"]')).toBeNull();
   expect(writes.filter((write) => write.url === `${PUBLIC}c.txt`)).toMatchObject([
-    { match: null, none: "*" },
     { match: `"${createHash("sha256").update("").digest("hex")}"`, none: null },
   ]);
 });
@@ -307,7 +304,7 @@ it("renewed Apply to all reaches an in-flight retry conflict lookup", async () =
 it.each([
   false,
   true,
-])("Retry clears the dock error and creates without asking when the target is absent (previously replace: %s)", async (replace) => {
+])("Retry clears the dock error and renews confirmation for a vanished replacement (previously replace: %s)", async (replace) => {
   const env = await setup();
   const { f, urls, failures, settled, writes } = env;
   const name = replace ? "placeholder" : "new.txt";
@@ -333,6 +330,11 @@ it.each([
   });
   writes.length = 0;
   await click(button(`Retry ${name}`));
+  if (replace) {
+    await settled(["conflict"]);
+    expect(writes).toEqual([]);
+    await click(button("Upload"));
+  }
   await settled(["uploading"]);
   expect.soft(env.drive.uploads.tasks[0]?.error).toBeUndefined();
   expect.soft(document.querySelector(".drv-dock-error")).toBeNull();

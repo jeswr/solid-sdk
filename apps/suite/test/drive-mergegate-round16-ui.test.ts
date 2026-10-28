@@ -72,7 +72,7 @@ it.each([
   });
   expect(await (await f.anonymous(url)).text()).toBe("public replacement");
   expect(queue.current.tasks[0]?.status).toBe("conflict");
-  expect(writes).toEqual([approved, null]);
+  expect(writes).toEqual([approved]);
   expect(f.exposures).toEqual([]);
   await act(async () => queue.current.resolve(id, "skip"));
   await settled("skipped");
@@ -99,7 +99,7 @@ it.each([
     await act(async () => queue.current.resolve(id, "replace"));
   } else {
     expect(f.pod.has(url)).toBe(false);
-    await act(async () => queue.current.resolve(id, "keep-both"));
+    await act(async () => queue.current.resolve(id, "upload"));
   }
   await queue.settled("done");
 });
@@ -134,12 +134,16 @@ it.each([
     return undefined;
   });
   await act(async () => queue.current.retry(id));
-  await queue.settled(change === "missing" ? "done" : "conflict");
-  expect(writes).toEqual([null]);
-  if (change !== "missing") {
+  await queue.settled("conflict");
+  expect(writes).toEqual([]);
+  if (change === "missing") {
+    await act(async () => queue.current.resolve(id, "upload"));
+    await queue.settled("done");
+    expect(writes).toEqual([null]);
+  } else {
     await act(async () => queue.current.resolve(id, "replace"));
     await queue.settled(change === "unchanged" ? "done" : "conflict");
-    expect(writes).toEqual([null, approved]);
+    expect(writes).toEqual([approved]);
   }
   if (change !== "404 response") expect(await (await client.read(url)).text()).toBe("new contents");
 });

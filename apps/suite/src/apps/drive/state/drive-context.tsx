@@ -172,7 +172,11 @@ export function DriveProvider({ session, children }: { session: PodSession; chil
     };
   }, [client, session]);
 
-  const uploads = useUploadQueue(client, invalidate);
+  const uploads = useUploadQueue(
+    client,
+    invalidate,
+    JSON.stringify([session.storageUrl, session.webId]),
+  );
 
   const value = useMemo<DriveContextValue>(
     () => ({
