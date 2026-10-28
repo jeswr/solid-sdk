@@ -92,6 +92,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
           "defaultForNew",
           "agent",
           "agentClass",
+          "agentGroup",
           "mode",
           "origin",
         ])
@@ -119,8 +120,31 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       throw new DriveAccessError("Policy verification failed");
     return saved;
   };
+  const effective = async (resource: string, inherit = false): Promise<OwnAccess> => {
+    let current: string | undefined = inherit ? parent(resource) : resource;
+    while (current?.startsWith(storageUrl)) {
+      const response = await http(current, { method: "HEAD" });
+      if (!response.ok) throw new DriveAccessError(response.status);
+      const url = discover(current, response.headers);
+      if (!url) throw new DriveAccessError("Access control is unknown");
+      const own = await read(url);
+      if (own) {
+        const policy = projectAccess(own, current, resource, inherit);
+        if (!inherit || policy.dataset.size) return policy;
+      }
+      current = parent(current);
+      inherit = true;
+    }
+    // A known WAC hierarchy with no applicable policy denies everyone.
+    return { url: `${resource}.acl`, dataset: new Store(), etag: "" };
+  };
   return {
     discover,
+    effective,
+    forResource: (own: OwnAccess, resource: string): OwnAccess =>
+      projectAccess(own, resource, resource, false),
+    hasDefaults: (own: OwnAccess, resource: string): boolean =>
+      projectAccess(own, resource, resource, true).dataset.size > 0,
     read,
     store,
     async snapshot(resource: string, headers: Headers): Promise<OwnAccess | undefined> {
@@ -152,4 +176,94 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       }
     },
   };
+}
+
+function parent(resource: string): string | undefined {
+  if (new URL(resource).pathname === "/") return undefined;
+  return new URL(resource.endsWith("/") ? ".." : ".", resource).href;
+}
+
+const SELECTORS = ["agent", "agentClass", "agentGroup"] as const;
+/** Materialize only the effective grants, through typed ACL readers/writers. */
+function projectAccess(
+  own: OwnAccess,
+  governed: string,
+  resource: string,
+  inherited: boolean,
+): OwnAccess {
+  const dataset = new Store();
+  for (const authorization of new AclResource(own.dataset, DataFactory).authorizations) {
+    const rule = new WritableAuthorization(authorization as Term, own.dataset, DataFactory);
+    const targets = inherited
+      ? [...rule.values(`${ACL}default`), ...rule.values(`${ACL}defaultForNew`)]
+      : [...rule.values(`${ACL}accessTo`)];
+    if (!targets.includes(governed)) continue;
+    const target = new WritableAuthorization(DataFactory.blankNode(), dataset, DataFactory);
+    target.type.add(`${ACL}Authorization`);
+    target.accessTo = resource;
+    if (resource.endsWith("/")) target.default = resource;
+    for (const predicate of [...SELECTORS, "origin", "mode"])
+      for (const value of rule.values(`${ACL}${predicate}`))
+        target.values(`${ACL}${predicate}`).add(value);
+  }
+  return { ...own, dataset };
+}
+
+export type AccessChoice = "move" | "keep" | "cancel";
+export interface AccessChange {
+  readonly from: string;
+  readonly to: string;
+  readonly gains: readonly string[];
+  readonly canKeep: boolean;
+}
+export type ConfirmAccess = (change: AccessChange) => Promise<AccessChoice>;
+
+const PUBLIC = "http://xmlns.com/foaf/0.1/Agent";
+const AUTHENTICATED = `${ACL}AuthenticatedAgent`;
+/** Conservative clause comparison: uncertain group/class/origin relationships prompt. */
+export function accessGains(source: OwnAccess, destination: OwnAccess): string[] {
+  const clauses = (policy: OwnAccess) =>
+    [...new AclResource(policy.dataset, DataFactory).authorizations].flatMap((authorization) => {
+      const rule = new WritableAuthorization(authorization as Term, policy.dataset, DataFactory);
+      const origins = [...rule.values(`${ACL}origin`)];
+      const modes = [...rule.values(`${ACL}mode`)];
+      if (modes.includes(`${ACL}Write`)) modes.push(`${ACL}Append`);
+      return SELECTORS.flatMap((predicate) =>
+        [...rule.values(`${ACL}${predicate}`)].map((agent) => ({
+          predicate,
+          agent,
+          origins,
+          modes,
+        })),
+      );
+    });
+  const before = clauses(source);
+  const gains = new Set<string>();
+  for (const grant of clauses(destination)) {
+    if (!grant.modes.length) continue;
+    const covered = grant.modes.every((mode) =>
+      before.some(
+        (existing) =>
+          existing.modes.includes(mode) &&
+          (!existing.origins.length ||
+            (grant.origins.length > 0 &&
+              grant.origins.every((origin) => existing.origins.includes(origin)))) &&
+          ((existing.predicate === grant.predicate && existing.agent === grant.agent) ||
+            (existing.predicate === "agentClass" &&
+              (existing.agent === PUBLIC ||
+                (existing.agent === AUTHENTICATED && grant.predicate === "agent")))),
+      ),
+    );
+    if (covered) continue;
+    const name =
+      grant.agent === PUBLIC
+        ? "Everyone (public)"
+        : grant.agent === AUTHENTICATED
+          ? "Authenticated agents"
+          : grant.predicate === "agentGroup"
+            ? `Group ${grant.agent}`
+            : grant.agent;
+    gains.add(grant.origins.length ? `${name} from ${grant.origins.join(", ")}` : name);
+  }
+  return [...gains];
 }

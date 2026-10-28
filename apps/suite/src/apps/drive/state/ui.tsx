@@ -419,7 +419,11 @@ export function useDriveActions() {
                     try {
                       if (!identity?.etag) throw new Error("No validator for Undo");
                       await moveWithValidator(
-                        { storageUrl: session.storageUrl, fetch: session.fetch },
+                        {
+                          storageUrl: session.storageUrl,
+                          fetch: session.fetch,
+                          ...(client.confirmAccess ? { confirmAccess: client.confirmAccess } : {}),
+                        },
                         to,
                         from,
                         identity.etag,

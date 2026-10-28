@@ -342,7 +342,9 @@ describe("Drive error handling and foreign server responses", () => {
       new Response(null),
       new Response(null),
       new Response(null, { status: 201 }),
-      new Response(new Uint8Array([0, 255])),
+      new Response(new Uint8Array([0, 255]), {
+        headers: { "x-solid-demo-access-control": "none" },
+      }),
       new Response(null, { status: 201 }),
     ];
     const fetch = vi.fn<typeof globalThis.fetch>(async () => {

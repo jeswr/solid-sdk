@@ -725,6 +725,14 @@ async function restoreMissing(
           if (!(error instanceof DriveError && error.kind === "conflict")) throw error;
         }
       }
+      // Establish and verify the archived ACL before any child payload exists.
+      // A failed installation leaves only our empty container to roll back.
+      try {
+        await client.mergeContainer(from, to, created);
+      } catch (error) {
+        if (created) await client.remove(to).catch(() => undefined);
+        throw error;
+      }
       const remaining: { url: string; error: unknown }[] = [];
       for (const child of await client.list(from))
         remaining.push(
@@ -737,7 +745,6 @@ async function restoreMissing(
         );
       // Non-recursive removal succeeds only for an empty recovery container.
       if (remaining.length === 0) {
-        await client.mergeContainer(from, to, created);
         if (!settled) throw new TrashMovingError();
         await client.remove(from);
       }
