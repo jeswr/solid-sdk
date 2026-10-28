@@ -181,6 +181,23 @@ export function readAcp(
               ? !clause.some((subject) => subject.kind === "issuer" || subject.kind === "vc")
               : !clause.some(uncertainRole),
           );
+          // ESS may require login for a whole policy once any matcher names a
+          // client. Source grants take that narrower reading for every alternative.
+          if (
+            field === "grants" &&
+            !target &&
+            dialect === "ess" &&
+            [...all, ...any].some((matcher) => matcher.client.size)
+          )
+            activeWho = activeWho.map((clause) => [
+              ...clause.filter((subject) => subject.kind !== "public"),
+              // A named agent, owner or creator is already an authenticated identity.
+              ...(clause.some((subject) =>
+                ["authenticated", "agent", "owner", "creator"].includes(subject.kind),
+              )
+                ? []
+                : [{ kind: "authenticated" } as const]),
+            ]);
           if (
             field === "grants" &&
             modes.size &&

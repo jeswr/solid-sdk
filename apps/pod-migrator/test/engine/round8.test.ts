@@ -169,4 +169,41 @@ describe("round 8: source client wildcards", () => {
       new Set(["read"]),
     );
   });
+
+  it.each([
+    "wac",
+    "acp",
+  ] as const)("requires login for every alternative of an ESS policy with a client matcher on %s", async (system) => {
+    const source = new FakePod("https://shared.example/alice/", "acp", undefined, "ess");
+    const target = new FakePod("https://shared.example/bob/", system);
+    await source.initialize(await acl(source, source.root));
+    await target.initialize(await acl(target, target.root));
+    const file = `${source.root}file`;
+    source.store(file, "login required");
+    source.setAcl(file, await acl(source, file));
+    const dataset = (await source.dataset(file)) as Store;
+    const n = addRule(dataset, source.acl(file), "accessControl", "allow", `${ACP}Read`);
+    dataset.removeMatches(
+      DataFactory.namedNode("urn:r8:policy"),
+      DataFactory.namedNode(`${ACP}allOf`),
+    );
+    n("urn:r8:policy").add(`${ACP}anyOf`, "urn:r8:matcher");
+    n("urn:r8:policy").add(`${ACP}anyOf`, "urn:r8:client");
+    n("urn:r8:client").add(`${ACP}agent`, `${ACP}PublicAgent`);
+    n("urn:r8:client").add(`${ACP}client`, `${ACP}PublicClient`);
+    source.setAcl(file, await serialize(dataset));
+    const who = readAcp(dataset, file, source.acl(file), "ess").grants.find(
+      (rule) => rule.source.node === "urn:r8:policy",
+    )?.who;
+    expect(who?.length).toBeGreaterThan(0);
+    for (const clause of who ?? []) {
+      expect(clause.some((subject) => subject.kind === "public")).toBe(false);
+      expect(clause.some((subject) => subject.kind === "authenticated")).toBe(true);
+    }
+    const options = { source: source.side(), target: target.side() };
+    const plan = await planMigration(options);
+    const result = await executeMigration(finalizePlan(plan, resolve(plan)), options);
+    expect(result.verified).toBe(true);
+    expect(await target.permissions(`${target.root}file`)).toEqual(new Set());
+  });
 });
