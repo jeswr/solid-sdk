@@ -22,9 +22,10 @@ import {
 } from "react";
 import { encodeRef } from "@/lib/refs";
 import { accessControl, accessLabel, DriveAccessError } from "../lib/client/access";
-import { DriveError, type DriveItem, nameOf } from "../lib/client/client";
+import { type DriveClient, DriveError, type DriveItem, nameOf } from "../lib/client/client";
 import { isOwnStorage } from "../lib/client/ownership";
 import {
+  childUrl,
   copyItem,
   createFolder,
   deleteForever,
@@ -33,6 +34,7 @@ import {
   restoreItems,
   TrashMovingError,
   TrashRestorePartialError,
+  trashFolderOf,
   trashItems,
 } from "../lib/operations/operations";
 import type { TrashEntry } from "../lib/operations/trash-index";
@@ -290,6 +292,43 @@ function folderLabel(url: string, driveRoot: string | undefined): string {
   return url === driveRoot ? "My Drive" : nameOf(url);
 }
 
+/** Record actual endpoints; refresh after the whole operation, including index writes. */
+async function refreshAfter<T>(
+  client: DriveClient,
+  invalidate: (url: string) => void,
+  urls: Iterable<string>,
+  operation: (client: DriveClient) => Promise<T>,
+): Promise<T> {
+  const touched = new Set(urls);
+  const tracked: DriveClient = {
+    ...client,
+    copy: (from, to, policy) => {
+      touched.add(from);
+      touched.add(to);
+      return client.copy(from, to, policy);
+    },
+    move: (from, to, policy, options) => {
+      touched.add(from);
+      touched.add(to);
+      return client.move(from, to, policy, options);
+    },
+    mergeContainer: (from, to, policy) => {
+      touched.add(from);
+      touched.add(to);
+      return client.mergeContainer(from, to, policy);
+    },
+    remove: (url, options) => {
+      touched.add(url);
+      return client.remove(url, options);
+    },
+  };
+  try {
+    return await operation(tracked);
+  } finally {
+    for (const url of touched) invalidate(url);
+  }
+}
+
 export function useDriveActions() {
   const { openDialog } = useDriveUi();
   const { client, driveRoot, session, updatePrefs, prefs, invalidate } = useDrive();
@@ -380,16 +419,17 @@ export function useDriveActions() {
       const pending = toast.loading(
         items.length === 1 ? `Moving ${items[0]?.name}…` : `Moving ${items.length} items…`,
       );
-      const result = await moveItems(
+      const urls = items.map((item) => item.url);
+      const result = await refreshAfter(
         client,
-        items.map((item) => item.url),
-        target,
+        invalidate,
+        [
+          ...urls,
+          ...items.map((item) => childUrl(target, nameOf(item.url), item.kind === "folder")),
+        ],
+        (tracked) => moveItems(tracked, urls, target),
       );
       toast.dismiss(pending);
-      for (const { from, to } of result.done) {
-        invalidate(from);
-        invalidate(to);
-      }
       // A star follows the item; leaving it on the old URL would star a replacement.
       updatePrefs((current) => ({
         ...current,
@@ -449,12 +489,13 @@ export function useDriveActions() {
                         identity.etag,
                         ...(identity.tree ? ([identity.tree] as const) : ([] as const)),
                       );
-                      invalidate(to);
-                      invalidate(from);
                       restored.push({ from: to, to: from });
                     } catch (error) {
                       if (error instanceof DriveAccessError) accessError = error;
                       failed.push(nameOf(from));
+                    } finally {
+                      invalidate(to);
+                      invalidate(from);
                     }
                   }
                   if (restored.length > 0)
@@ -482,10 +523,10 @@ export function useDriveActions() {
     async (item: DriveItem, name: string) => {
       if (!isOwnStorage(item.url, session.storageUrl)) return;
       try {
-        const url = await renameItem(client, item, name);
-        invalidate(item.url);
+        const url = await refreshAfter(client, invalidate, [item.url], (tracked) =>
+          renameItem(tracked, item, name),
+        );
         if (url !== item.url) {
-          invalidate(url);
           updatePrefs((current) => ({
             ...current,
             starred: repointStarred(current.starred, [{ from: item.url, to: url }]),
@@ -505,8 +546,9 @@ export function useDriveActions() {
     async (item: DriveItem) => {
       if (!isOwnStorage(item.url, session.storageUrl)) return;
       try {
-        const url = await copyItem(client, item.url);
-        invalidate(url);
+        const url = await refreshAfter(client, invalidate, [item.url], (tracked) =>
+          copyItem(tracked, item.url),
+        );
         toast.success(`Created ${nameOf(url)}`);
         return url;
       } catch (error) {
@@ -536,17 +578,13 @@ export function useDriveActions() {
   const restore = useCallback(
     async (entries: readonly TrashEntry[]) => {
       if (!driveRoot) return;
-      const result = await restoreItems(client, driveRoot, entries);
+      const result = await refreshAfter(
+        client,
+        invalidate,
+        entries.flatMap((entry) => [entry.url, entry.original]),
+        (tracked) => restoreItems(tracked, driveRoot, entries),
+      );
       for (const warning of result.warnings ?? []) toast.error(warning.message);
-      for (const { entry, url } of result.done) {
-        invalidate(entry.url);
-        invalidate(url);
-      }
-      for (const { url } of result.failed) {
-        invalidate(url);
-        const entry = entries.find((entry) => entry.url === url);
-        if (entry) invalidate(entry.original);
-      }
       const first = result.done[0];
       if (result.failed.length > 0)
         toast.error(errorMessage(result.failed[0]?.error, "Couldn't restore"));
@@ -569,12 +607,13 @@ export function useDriveActions() {
       )
         return;
       try {
-        const result = await trashItems(client, driveRoot, items, { webId: session.webId });
+        const result = await refreshAfter(
+          client,
+          invalidate,
+          [...items.map((item) => item.url), trashFolderOf(driveRoot)],
+          (tracked) => trashItems(tracked, driveRoot, items, { webId: session.webId }),
+        );
         for (const warning of result.warnings ?? []) toast.error(warning.message);
-        for (const entry of result.done) {
-          invalidate(entry.original);
-          invalidate(entry.url);
-        }
         if (result.failed.length > 0) {
           const failure = result.failed[0]?.error;
           if (failure instanceof DriveAccessError) {
@@ -615,9 +654,13 @@ export function useDriveActions() {
   const removeForever = useCallback(
     async (entries: readonly TrashEntry[]) => {
       if (!driveRoot) return;
-      const result = await deleteForever(client, driveRoot, entries);
+      const result = await refreshAfter(
+        client,
+        invalidate,
+        entries.map((entry) => entry.url),
+        (tracked) => deleteForever(tracked, driveRoot, entries),
+      );
       for (const warning of result.warnings ?? []) toast.error(warning.message);
-      for (const entry of result.done) invalidate(entry.url);
       if (result.failed.length > 0)
         toast.error(errorMessage(result.failed[0]?.error, "Couldn't delete"));
       if (result.done.length > 0) toast.success("Deleted for ever");
@@ -634,9 +677,10 @@ export function useDriveActions() {
         try {
           await client.remove(item.url, { recursive: item.kind === "folder" });
           done.push(item);
-          invalidate(item.url);
         } catch (error) {
           toast.error(errorMessage(error, "Couldn't delete"));
+        } finally {
+          invalidate(item.url);
         }
       }
       if (done.length) toast.success("Deleted for ever");
