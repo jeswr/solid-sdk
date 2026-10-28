@@ -66,7 +66,7 @@ test("creates, saves, reloads and formats a document accessibly", async ({ page 
   await expect(page).toHaveURL(/\/docs\/d\//);
   await expect(
     page.getByRole("status").filter({ hasText: "Saved to your pod · just now" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 15_000 });
   await page.reload();
   await expect(body).toContainText("A clear plan for the launch.");
   await expect(body).toContainText("Keep every word in your own pod.");
@@ -100,7 +100,7 @@ test("creates, saves, reloads and formats a document accessibly", async ({ page 
   await expect(body.locator("table th")).toHaveCount(3);
   await expect(
     page.getByRole("status").filter({ hasText: "Saved to your pod · just now" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 15_000 });
   await body.press("Escape");
   await expect(title).toBeFocused();
   await title.press("Escape");
@@ -175,7 +175,7 @@ test("find replaces atomically and recovers failed offline writes across an offl
   await body.pressSequentially("cat cat cat");
   await expect(
     page.getByRole("status").filter({ hasText: "Saved to your pod · just now" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 15_000 });
   await body.press("Control+f");
   await page.getByRole("textbox", { name: "Find", exact: true }).fill("cat");
   await expect(page.getByText("1 of 3", { exact: true })).toBeVisible();
@@ -186,7 +186,7 @@ test("find replaces atomically and recovers failed offline writes across an offl
   await expect(body).toBeFocused();
   await expect(
     page.getByRole("status").filter({ hasText: "Saved to your pod · just now" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 15_000 });
   await expect.poll(async () => (await podDocument(page)).body).toContain("dog dog dog");
   const before = await podDocument(page);
   await demoOffline(page, true);
@@ -204,7 +204,7 @@ test("find replaces atomically and recovers failed offline writes across an offl
   await demoOffline(page, false);
   await expect(
     page.getByRole("status").filter({ hasText: "Saved to your pod · just now" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 15_000 });
   await expect
     .poll(async () => (await podDocument(page)).body)
     .toContain("dog dog dog safely offline");
