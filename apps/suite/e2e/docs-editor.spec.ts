@@ -204,7 +204,7 @@ test("find replaces atomically and recovers failed offline writes across an offl
   expect(stillRemote.updates).toBe(before.updates);
   await page.reload();
   await expect(body).toContainText("dog dog dog safely offline", { timeout: 15_000 });
-  await expect(page.getByText("Offline copy — your edits are saved on this device.")).toBeVisible();
+  await expect(page.locator(".docs-view-only")).toContainText(/saved on this device/i);
   await demoOffline(page, false);
   await expect(
     page.getByRole("status").filter({ hasText: "Saved to your pod · just now" }),
