@@ -160,10 +160,15 @@ describe("Drive client against a seeded demo pod", () => {
   it("writes strings and Blobs with conditional create/overwrite and creates normalized folders", async () => {
     const { pod, client } = await setup();
     const url = `${DRIVE}New/fresh.txt`;
-    const first = await client.write(url, "first", {
-      contentType: "text/plain; charset=utf-8",
-      ifNoneMatch: "*",
-    });
+    const first = await client.write(
+      url,
+      "first",
+      {
+        contentType: "text/plain; charset=utf-8",
+        ifNoneMatch: "*",
+      },
+      { kind: "protect-ancestors" },
+    );
     expect(first.etag).toMatch(/^"demo-/);
     expect(await client.stat(url)).toMatchObject({
       contentType: "text/plain",
@@ -171,30 +176,52 @@ describe("Drive client against a seeded demo pod", () => {
       etag: first.etag,
     });
     await expect(
-      client.write(url, "collision", { contentType: "text/plain", ifNoneMatch: "*" }),
+      client.write(
+        url,
+        "collision",
+        { contentType: "text/plain", ifNoneMatch: "*" },
+        { kind: "protect-ancestors" },
+      ),
     ).rejects.toMatchObject({ kind: "conflict", status: 412, url });
     await expect(
-      client.write(url, "stale", { contentType: "text/plain", ifMatch: '"stale"' }),
+      client.write(
+        url,
+        "stale",
+        { contentType: "text/plain", ifMatch: '"stale"' },
+        { kind: "protect-ancestors" },
+      ),
     ).rejects.toMatchObject({ kind: "conflict", status: 412 });
-    const second = await client.write(url, new Blob(["second"]), {
-      contentType: "text/plain",
-      ifMatch: first.etag as string,
-    });
+    const second = await client.write(
+      url,
+      new Blob(["second"]),
+      {
+        contentType: "text/plain",
+        ifMatch: first.etag as string,
+      },
+      { kind: "protect-ancestors" },
+    );
     expect(second.etag).not.toBe(first.etag);
     expect(await (await client.read(url)).text()).toBe("second");
-    await client.createFolder(`${DRIVE}Created`);
-    await client.createFolder(`${DRIVE}Created/Nested/`);
+    await client.createFolder(`${DRIVE}Created`, { kind: "inherit-verified" });
+    await client.createFolder(`${DRIVE}Created/Nested/`, { kind: "inherit-verified" });
     expect(pod.has(`${DRIVE}Created/Nested/`)).toBe(true);
-    await expect(client.createFolder(`${DRIVE}Created/`)).rejects.toMatchObject({
+    await expect(
+      client.createFolder(`${DRIVE}Created/`, { kind: "inherit-verified" }),
+    ).rejects.toMatchObject({
       kind: "conflict",
       status: 412,
     });
-    await expect(client.createFolder(url)).rejects.toMatchObject({ kind: "conflict", status: 409 });
+    await expect(client.createFolder(url, { kind: "inherit-verified" })).rejects.toMatchObject({
+      kind: "conflict",
+      status: 409,
+    });
   });
 
   it("copies files and recursive folder trees while preserving bytes and media types", async () => {
     const { client } = await setup();
-    await client.copy(`${DRIVE}Work/Report.pdf`, `${DRIVE}report-copy.pdf`);
+    await client.copy(`${DRIVE}Work/Report.pdf`, `${DRIVE}report-copy.pdf`, {
+      kind: "preserve-source",
+    });
     expect(
       new Uint8Array(await (await client.read(`${DRIVE}report-copy.pdf`)).arrayBuffer()),
     ).toEqual(REPORT_PDF);
@@ -202,11 +229,18 @@ describe("Drive client against a seeded demo pod", () => {
       contentType: "application/pdf",
     });
     await expect(
-      client.copy(`${DRIVE}Work/Report.pdf`, `${DRIVE}report-copy.pdf`),
+      client.copy(`${DRIVE}Work/Report.pdf`, `${DRIVE}report-copy.pdf`, {
+        kind: "preserve-source",
+      }),
     ).rejects.toMatchObject({ status: 412, kind: "conflict" });
-    await client.createFolder(`${DRIVE}Work/Nested/Empty/`);
-    await client.write(`${DRIVE}Work/Nested/file`, "nested", { contentType: "text/plain" });
-    await client.copy(`${DRIVE}Work/`, `${DRIVE}Work%20copy/`);
+    await client.createFolder(`${DRIVE}Work/Nested/Empty/`, { kind: "inherit-verified" });
+    await client.write(
+      `${DRIVE}Work/Nested/file`,
+      "nested",
+      { contentType: "text/plain" },
+      { kind: "protect-ancestors" },
+    );
+    await client.copy(`${DRIVE}Work/`, `${DRIVE}Work%20copy/`, { kind: "preserve-source" });
     expect((await client.list(`${DRIVE}Work%20copy/`)).map((item) => item.name)).toEqual([
       "Budget 2026.csv",
       "Nested",
@@ -222,20 +256,22 @@ describe("Drive client against a seeded demo pod", () => {
     const source = `${DRIVE}notes.md`;
     const target = `${DRIVE}renamed.md`;
     const original = await (await client.read(source)).text();
-    expect(await client.move(source, target)).toEqual({
+    expect(await client.move(source, target, { kind: "confirm-move" })).toEqual({
       url: target,
       etag: (await client.stat(target)).etag,
     });
     expect(pod.has(source)).toBe(false);
     expect(await (await client.read(target)).text()).toBe(original);
-    await expect(client.move(`${DRIVE}Work/`, `${DRIVE}Work/Nested/`)).rejects.toEqual(
-      new DriveError("conflict", 409, `${DRIVE}Work/Nested/`),
-    );
-    await expect(client.move(`${DRIVE}Work/`, `${DRIVE}Work/`)).rejects.toMatchObject({
+    await expect(
+      client.move(`${DRIVE}Work/`, `${DRIVE}Work/Nested/`, { kind: "confirm-move" }),
+    ).rejects.toEqual(new DriveError("conflict", 409, `${DRIVE}Work/Nested/`));
+    await expect(
+      client.move(`${DRIVE}Work/`, `${DRIVE}Work/`, { kind: "confirm-move" }),
+    ).rejects.toMatchObject({
       kind: "conflict",
       status: 409,
     });
-    expect(await client.move(`${DRIVE}Work/`, `${DRIVE}Moved/`)).toEqual({
+    expect(await client.move(`${DRIVE}Work/`, `${DRIVE}Moved/`, { kind: "confirm-move" })).toEqual({
       url: `${DRIVE}Moved/`,
       etag: (await client.stat(`${DRIVE}Moved/`)).etag,
       children: [`${DRIVE}Moved/Budget%202026.csv`, `${DRIVE}Moved/Report.pdf`],
@@ -277,7 +313,7 @@ describe("Drive client against a seeded demo pod", () => {
       }
       return pod.fetch(input, init);
     });
-    await expect(client.move(from, to)).rejects.toMatchObject({
+    await expect(client.move(from, to, { kind: "confirm-move" })).rejects.toMatchObject({
       kind: rollbackFails ? "partial-failure" : "forbidden",
       status: rollbackFails ? 409 : 403,
       url: from,
@@ -300,7 +336,7 @@ describe("Drive error handling and foreign server responses", () => {
   ])("maps HTTP %i for both RDF listings and direct requests", async (status, kind) => {
     const client = stubClient(async (input, init) =>
       String(input) === DRIVE && init?.method === "HEAD"
-        ? new Response(null)
+        ? new Response(null, { headers: { "x-solid-demo-access-control": "none" } })
         : new Response(null, { status }),
     );
     const url = `${DRIVE}missing/`;
@@ -308,9 +344,15 @@ describe("Drive error handling and foreign server responses", () => {
       [() => client.list(url), url],
       [() => client.stat(url), url],
       [() => client.read(url), url],
-      [() => client.write(url, "", { contentType: "text/plain" }), url],
-      [() => client.createFolder(url), url],
-      [() => client.copy(`${DRIVE}missing`, `${DRIVE}copy`), `${DRIVE}missing`],
+      [
+        () => client.write(url, "", { contentType: "text/plain" }, { kind: "protect-ancestors" }),
+        url,
+      ],
+      [() => client.createFolder(url, { kind: "inherit-verified" }), url],
+      [
+        () => client.copy(`${DRIVE}missing`, `${DRIVE}copy`, { kind: "preserve-source" }),
+        `${DRIVE}missing`,
+      ],
       [() => client.remove(url), url],
     ] as const) {
       await expect(operation()).rejects.toMatchObject({
@@ -367,8 +409,10 @@ describe("Drive error handling and foreign server responses", () => {
     const file = `${DRIVE}file`;
     expect(await client.stat(file)).toEqual({ url: file, name: "file", kind: "file" });
     expect(await client.stat(DRIVE)).toEqual({ url: DRIVE, name: "drive", kind: "folder" });
-    expect(await client.write(file, "", { contentType: "text/plain" })).toEqual({});
-    await client.copy(file, `${DRIVE}copy`);
+    expect(
+      await client.write(file, "", { contentType: "text/plain" }, { kind: "protect-ancestors" }),
+    ).toEqual({});
+    await client.copy(file, `${DRIVE}copy`, { kind: "preserve-source" });
     expect(fetch).toHaveBeenLastCalledWith(
       `${DRIVE}copy`,
       expect.objectContaining({

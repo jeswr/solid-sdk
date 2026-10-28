@@ -186,7 +186,7 @@ describe("PR 143 merge-gate regressions", () => {
     const data = new Store();
     new Fields(FROM, data, DataFactory).title = "Private research";
     f.metadata.set(FROM, await turtle(data));
-    await f.client.move(FROM, TO);
+    await f.client.move(FROM, TO, { kind: "confirm-move" });
     const moved = await f.client.readRdf(TO);
     expect(
       moved?.dataset
@@ -236,7 +236,7 @@ it.each([
     }
     return undefined;
   });
-  await expect(f.client.move(FROM, TO)).rejects.toThrow();
+  await expect(f.client.move(FROM, TO, { kind: "confirm-move" })).rejects.toThrow();
   expect(f.pod.has(`${FROM}a`)).toBe(true);
   expect(f.pod.has(`${FROM}b`)).toBe(true);
   expect(f.calls.filter((c) => c.method === "DELETE" && c.url.startsWith(FROM))).toEqual([]);
@@ -266,8 +266,8 @@ it.each([
     target = FROM;
   } else if (operation === "rename")
     target = await renameItem(f.client, await f.client.stat(FROM), "target");
-  else if (operation === "move") await f.client.move(FROM, TO);
-  else await f.client.copy(FROM, TO);
+  else if (operation === "move") await f.client.move(FROM, TO, { kind: "confirm-move" });
+  else await f.client.copy(FROM, TO, { kind: "preserve-source" });
   const current = await f.client.readRdf(target);
   expect(
     current?.dataset
@@ -381,7 +381,9 @@ it.each([
       privateAtWrite = f.policies.has(`${DRIVE}target.policy`);
     return undefined;
   });
-  await f.client[operation as "copy" | "move"](`${FROM}a`, `${DRIVE}target`);
+  await f.client[operation as "copy" | "move"](`${FROM}a`, `${DRIVE}target`, {
+    kind: "preserve-source",
+  });
   expect(privateAtWrite).toBe(true);
 });
 
@@ -419,14 +421,16 @@ it.each([
       return new Response("", { headers: { "content-type": "text/turtle", etag: '"changed"' } });
     return undefined;
   });
-  await expect(f.client.move(`${FROM}a`, `${DRIVE}target`)).rejects.toThrow();
+  await expect(
+    f.client.move(`${FROM}a`, `${DRIVE}target`, { kind: "confirm-move" }),
+  ).rejects.toThrow();
   expect(f.pod.has(`${FROM}a`)).toBe(true);
 });
 
 it("keeps a fresh lease from another tab pending and exposes an expired completed transfer as partial", async () => {
   const f = fixture();
   const recovery = `${DRIVE}.trash/12345678-1234-1234-1234-123456789012/source/`;
-  await f.client.copy(FROM, recovery);
+  await f.client.copy(FROM, recovery, { kind: "preserve-source" });
   await f.client.remove(`${FROM}a`);
   const index = emptyTrashIndex();
   addTrashRecord(index, { url: recovery, original: FROM, trashedAt: new Date(), name: "source" });
@@ -434,10 +438,20 @@ it("keeps a fresh lease from another tab pending and exposes an expired complete
   record.status = "pending";
   record.leaseOwner = "urn:uuid:another-tab";
   record.leaseUntil = new Date(Date.now() + 60_000);
-  await f.client.write(INDEX, await serializeTrashIndex(index), { contentType: "text/turtle" });
+  await f.client.write(
+    INDEX,
+    await serializeTrashIndex(index),
+    { contentType: "text/turtle" },
+    { kind: "protect-ancestors" },
+  );
   expect(await listTrash(f.client, DRIVE)).toEqual([]);
   record.leaseUntil = new Date(0);
-  await f.client.write(INDEX, await serializeTrashIndex(index), { contentType: "text/turtle" });
+  await f.client.write(
+    INDEX,
+    await serializeTrashIndex(index),
+    { contentType: "text/turtle" },
+    { kind: "protect-ancestors" },
+  );
   const entries = await listTrash(f.client, DRIVE);
   expect(entries[0]?.status).toBe("partial");
   expect((await restoreItems(f.client, DRIVE, entries)).failed[0]?.error).toMatchObject({
@@ -543,7 +557,12 @@ it.each([
   if (mode === "missing") await f.client.remove(archive);
   if (mode === "policy-removed") f.policies.delete(`${entry.url}.policy`);
   if (mode === "missing-entry")
-    await f.client.write(archive, "{}", { contentType: "application/json" });
+    await f.client.write(
+      archive,
+      "{}",
+      { contentType: "application/json" },
+      { kind: "protect-ancestors" },
+    );
   if (mode === "unreadable")
     f.intercept(async (url) => (url === archive ? new Response(null, { status: 403 }) : undefined));
   const restored = await restoreItems(f.client, DRIVE, [entry]);
@@ -566,7 +585,12 @@ it("restores folder RDF and ACLs when partial recovery must recreate a missing c
   if (!current) throw new Error("Missing index");
   const index = trashIndexFrom(current.dataset);
   index.record(entry.url).status = "partial";
-  await f.client.write(INDEX, await serializeTrashIndex(index), { contentType: "text/turtle" });
+  await f.client.write(
+    INDEX,
+    await serializeTrashIndex(index),
+    { contentType: "text/turtle" },
+    { kind: "protect-ancestors" },
+  );
   expect((await restoreItems(f.client, DRIVE, [entry])).failed).toEqual([]);
   expect(f.policies.has(`${FROM}.policy`)).toBe(true);
   expect(
@@ -645,26 +669,41 @@ it("rejects a server that stores a different ACL and conditionally replaces an e
 it("refuses to promote an expired transfer renewed by another tab during reconciliation", async () => {
   const f = fixture();
   const recovery = `${DRIVE}.trash/12345678-1234-1234-1234-123456789012/source/`;
-  await f.client.copy(FROM, recovery);
+  await f.client.copy(FROM, recovery, { kind: "preserve-source" });
   await f.client.remove(`${FROM}a`);
   const index = emptyTrashIndex();
   addTrashRecord(index, { url: recovery, original: FROM, name: "source", trashedAt: new Date() });
   index.record(recovery).status = "pending";
   index.record(recovery).leaseOwner = "urn:uuid:renewed-owner";
   index.record(recovery).leaseUntil = new Date(0);
-  await f.client.write(INDEX, await serializeTrashIndex(index), { contentType: "text/turtle" });
+  await f.client.write(
+    INDEX,
+    await serializeTrashIndex(index),
+    { contentType: "text/turtle" },
+    { kind: "protect-ancestors" },
+  );
   const read = f.client.readRdf.bind(f.client);
   let reads = 0;
   vi.spyOn(f.client, "readRdf").mockImplementation(async (url) => {
     if (url === INDEX && ++reads === 2) {
       index.record(recovery).leaseUntil = new Date(Date.now() + 60_000);
-      await f.client.write(INDEX, await serializeTrashIndex(index), { contentType: "text/turtle" });
+      await f.client.write(
+        INDEX,
+        await serializeTrashIndex(index),
+        { contentType: "text/turtle" },
+        { kind: "protect-ancestors" },
+      );
     }
     return read(url);
   });
   expect(await listTrash(f.client, DRIVE)).toEqual([]);
   index.record(recovery).status = "partial";
-  await f.client.write(INDEX, await serializeTrashIndex(index), { contentType: "text/turtle" });
+  await f.client.write(
+    INDEX,
+    await serializeTrashIndex(index),
+    { contentType: "text/turtle" },
+    { kind: "protect-ancestors" },
+  );
   expect((await restoreItems(f.client, DRIVE, trashEntries(index))).failed[0]?.error).toMatchObject(
     { kind: "trash-moving" },
   );
@@ -690,13 +729,15 @@ it("keeps a recovery container if its application RDF cannot be verified after m
   const data = new Store();
   new Fields(FROM, data, DataFactory).title = "Only recovery metadata";
   f.metadata.set(FROM, await turtle(data));
-  await f.client.createFolder(TO);
+  await f.client.createFolder(TO, { kind: "inherit-verified" });
   f.intercept(async (url, init) =>
     url === TO && init?.method === "PUT" && init.body
       ? f.pod.fetch(url, { method: "HEAD" })
       : undefined,
   );
-  await expect(f.client.mergeContainer(FROM, TO, false)).rejects.toMatchObject({
+  await expect(
+    f.client.mergeContainer(FROM, TO, { kind: "preserve-source" }),
+  ).rejects.toMatchObject({
     kind: "conflict",
   });
   expect(f.pod.has(FROM)).toBe(true);
@@ -705,7 +746,7 @@ it("keeps a recovery container if its application RDF cannot be verified after m
 it("retains an empty folder recovery graph when an expired owner's DELETE may still arrive", async () => {
   const f = fixture();
   const recovery = `${DRIVE}.trash/12345678-1234-1234-1234-123456789012/empty/`;
-  await f.client.createFolder(recovery);
+  await f.client.createFolder(recovery, { kind: "inherit-verified" });
   const data = new Store();
   new Fields(recovery, data, DataFactory).title = "Irreplaceable metadata";
   f.metadata.set(recovery, await turtle(data));
@@ -719,7 +760,12 @@ it("retains an empty folder recovery graph when an expired owner's DELETE may st
   index.record(recovery).status = "partial";
   index.record(recovery).leaseOwner = "urn:uuid:expired";
   index.record(recovery).leaseUntil = new Date(0);
-  await f.client.write(INDEX, await serializeTrashIndex(index), { contentType: "text/turtle" });
+  await f.client.write(
+    INDEX,
+    await serializeTrashIndex(index),
+    { contentType: "text/turtle" },
+    { kind: "protect-ancestors" },
+  );
   expect((await restoreItems(f.client, DRIVE, trashEntries(index))).failed).toHaveLength(1);
   expect(f.pod.has(recovery)).toBe(true);
   expect(f.pod.has(`${DRIVE}empty/`)).toBe(true);
@@ -745,4 +791,26 @@ it.each([
   expect(f.pod.has(INDEX)).toBe(false);
   expect(f.pod.has(`${FROM}a`)).toBe(true);
   expect(f.policies.get(`${DRIVE}.trash/.policy`)).toBe(await turtle(dataset));
+});
+
+it.each([
+  false,
+  true,
+])("failed metadata merge cleans up only its newly provisioned folder (cleanup fails: %s)", async (cleanupFails) => {
+  const f = fixture();
+  const data = new Store();
+  new Fields(FROM, data, DataFactory).title = "Retain recovery metadata";
+  f.metadata.set(FROM, await turtle(data));
+  f.intercept(async (url, init) =>
+    url === TO &&
+    ((init?.method === "PUT" && !!init.body) || (cleanupFails && init?.method === "DELETE"))
+      ? new Response(null, { status: 503 })
+      : undefined,
+  );
+  await expect(
+    f.client.mergeContainer(FROM, TO, { kind: "preserve-source" }),
+  ).rejects.toMatchObject({ status: 503 });
+  expect(f.pod.has(TO)).toBe(cleanupFails);
+  expect(f.pod.has(FROM)).toBe(true);
+  expect(f.metadata.get(FROM)).toBe(await turtle(data));
 });

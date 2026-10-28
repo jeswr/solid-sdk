@@ -169,7 +169,12 @@ it.each([
   const pane = () => document.querySelector(".drv-details") as Element;
   expect(fact(pane(), "Size")).toBe("3 B");
   await act(async () => {
-    await drive.client.write(FILE, "longer replacement", { contentType: "text/markdown" });
+    await drive.client.write(
+      FILE,
+      "longer replacement",
+      { contentType: "text/markdown" },
+      { kind: "protect-ancestors" },
+    );
   });
   expect(fact(pane(), "Size")).toBe("18 B");
   expect(fact(pane(), "Type")).toBe("Markdown document");
@@ -242,7 +247,12 @@ it("reloads RDF previews when their parent listing is invalidated", async () => 
   await view.render(tree(h(PreviewBody, { item })));
   expect(view.host.querySelector(".drv-rdf")?.textContent).toContain("Old title");
   await act(async () => {
-    await drive.client.write(FILE, await rdfTitle("New title"), { contentType: "text/turtle" });
+    await drive.client.write(
+      FILE,
+      await rdfTitle("New title"),
+      { contentType: "text/turtle" },
+      { kind: "protect-ancestors" },
+    );
   });
   expect(view.host.querySelector(".drv-rdf")?.textContent).toContain("New title");
 });
@@ -252,7 +262,12 @@ it("refreshes the direct preview renderer when replacement changes its content t
   await view.render(tree(h(PreviewRouteView)));
   expect(view.host.querySelector(".drv-preview-text")?.textContent).toBe("old");
   await act(async () => {
-    await drive.client.write(FILE, "Title,Value\nCurrent,42", { contentType: "text/csv" });
+    await drive.client.write(
+      FILE,
+      "Title,Value\nCurrent,42",
+      { contentType: "text/csv" },
+      { kind: "protect-ancestors" },
+    );
   });
   expect(view.host.querySelector(".drv-csv")?.textContent).toContain("Current42");
   expect(view.host.querySelector(".drv-preview-text")).toBeNull();

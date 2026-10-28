@@ -45,7 +45,7 @@ it.each([
   });
   let result!: Promise<unknown>;
   await act(async () => {
-    result = client.move(change.from, change.to).catch((error) => error);
+    result = client.move(change.from, change.to, { kind: "confirm-move" }).catch((error) => error);
   });
   const dialog = document.querySelector('[role="alertdialog"]');
   expect(dialog).not.toBeNull();

@@ -10,7 +10,9 @@ it("private file moved to public folder prompts; Cancel leaves source untouched"
   const confirmAccess = vi.fn(async () => "cancel" as const);
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, confirmAccess });
   expect((await f.anonymous(`${PRIVATE}secret`)).status).toBe(403);
-  await expect(client.move(`${PRIVATE}secret`, `${PUBLIC}secret`)).rejects.toThrow("cancelled");
+  await expect(
+    client.move(`${PRIVATE}secret`, `${PUBLIC}secret`, { kind: "confirm-move" }),
+  ).rejects.toThrow("cancelled");
   expect(confirmAccess).toHaveBeenCalledWith(
     expect.objectContaining({ gains: ["Everyone (public)"] }),
   );
@@ -22,7 +24,7 @@ it("Move and keep current access installs inherited policy before destination se
   const confirmAccess = vi.fn(async () => "keep" as const);
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, confirmAccess });
   f.audit();
-  await client.move(`${PRIVATE}secret`, `${PUBLIC}secret`);
+  await client.move(`${PRIVATE}secret`, `${PUBLIC}secret`, { kind: "confirm-move" });
   expect(confirmAccess).toHaveBeenCalledOnce();
   expect((await f.anonymous(`${PUBLIC}secret`)).status).toBe(403);
   expect(f.exposures).toEqual([]);
@@ -70,7 +72,7 @@ it("folder move then Undo succeeds with descendant advertised ACL auxiliaries", 
   f.policies.set(`${PRIVATE}secret.policy`, await aclBody(`${PRIVATE}secret`));
   const options = { storageUrl: ROOT, fetch: f.fetch };
   const client = createSolidDriveClient(options);
-  const moved = await client.move(PRIVATE, `${PUBLIC}private/`);
+  const moved = await client.move(PRIVATE, `${PUBLIC}private/`, { kind: "confirm-move" });
   await moveWithValidator(options, moved.url, PRIVATE, moved.etag as string, moved.tree);
   expect(await (await client.read(`${PRIVATE}secret`)).text()).toBe("secret contents");
   expect(f.pod.has(moved.url)).toBe(false);
@@ -93,7 +95,12 @@ it.each([
   if (!saved) throw new Error("Missing index");
   const index = trashIndexFrom(saved.dataset);
   index.record(entry.url).status = "partial";
-  await client.write(url, await serializeTrashIndex(index), { contentType: "text/turtle" });
+  await client.write(
+    url,
+    await serializeTrashIndex(index),
+    { contentType: "text/turtle" },
+    { kind: "protect-ancestors" },
+  );
   f.audit();
   f.intercept(async (url, init) => {
     if (url === `${PRIVATE}.policy` && init?.method === "PUT") {
@@ -123,9 +130,14 @@ it.each([
   const entry = result.done[0];
   if (!entry) throw new Error("Missing trash entry");
   const { policyArchiveOf } = await import("../src/apps/drive/lib/client/client");
-  await client.write(policyArchiveOf(entry.url) as string, JSON.stringify({ [entry.url]: null }), {
-    contentType: "application/json",
-  });
+  await client.write(
+    policyArchiveOf(entry.url) as string,
+    JSON.stringify({ [entry.url]: null }),
+    {
+      contentType: "application/json",
+    },
+    { kind: "protect-ancestors" },
+  );
   if (absent) f.policies.delete(`${entry.url}.policy`);
   f.policies.delete(`${PRIVATE}.policy`);
   f.audit();
@@ -139,7 +151,7 @@ it("failed partial recovery never deletes an existing target container", async (
   const result = await trashItems(client, DRIVE, [await client.stat(PRIVATE)], { webId: OWNER });
   const entry = result.done[0];
   if (!entry) throw new Error("Missing trash entry");
-  await client.createFolder(PRIVATE);
+  await client.createFolder(PRIVATE, { kind: "inherit-verified" });
   const { trashIndexFrom, serializeTrashIndex } = await import(
     "../src/apps/drive/lib/operations/trash-index"
   );
@@ -148,7 +160,12 @@ it("failed partial recovery never deletes an existing target container", async (
   if (!saved) throw new Error("Missing index");
   const index = trashIndexFrom(saved.dataset);
   index.record(entry.url).status = "partial";
-  await client.write(indexUrl, await serializeTrashIndex(index), { contentType: "text/turtle" });
+  await client.write(
+    indexUrl,
+    await serializeTrashIndex(index),
+    { contentType: "text/turtle" },
+    { kind: "protect-ancestors" },
+  );
   vi.spyOn(client, "mergeContainer").mockRejectedValue(new Error("Cannot merge safely"));
   expect((await restoreItems(client, DRIVE, [entry])).failed).toHaveLength(1);
   expect(f.pod.has(PRIVATE)).toBe(true);
@@ -164,7 +181,9 @@ it("partial Restore into a surviving public folder stops before merging restrict
   const result = await trashItems(client, DRIVE, [await client.stat(PRIVATE)], { webId: OWNER });
   const entry = result.done[0];
   if (!entry) throw new Error("Missing trash entry");
-  await client.createFolder(PRIVATE);
+  // An external writer recreated a public survivor; Drive's provisioner now
+  // preserves the archived audience when it creates this URL itself.
+  await f.pod.fetch(PRIVATE, { method: "PUT" });
   const { trashIndexFrom, serializeTrashIndex } = await import(
     "../src/apps/drive/lib/operations/trash-index"
   );
@@ -173,7 +192,12 @@ it("partial Restore into a surviving public folder stops before merging restrict
   if (!saved) throw new Error("Missing index");
   const index = trashIndexFrom(saved.dataset);
   index.record(entry.url).status = "partial";
-  await client.write(indexUrl, await serializeTrashIndex(index), { contentType: "text/turtle" });
+  await client.write(
+    indexUrl,
+    await serializeTrashIndex(index),
+    { contentType: "text/turtle" },
+    { kind: "protect-ancestors" },
+  );
   f.audit();
   expect((await restoreItems(client, DRIVE, [entry])).failed).toHaveLength(1);
   expect(f.exposures).toEqual([]);
@@ -202,7 +226,12 @@ it.each([
     if (!saved) throw new Error("Missing index");
     const index = trashIndexFrom(saved.dataset);
     index.record(entry.url).status = "partial";
-    await client.write(url, await serializeTrashIndex(index), { contentType: "text/turtle" });
+    await client.write(
+      url,
+      await serializeTrashIndex(index),
+      { contentType: "text/turtle" },
+      { kind: "protect-ancestors" },
+    );
   }
   f.audit();
   expect((await restoreItems(client, DRIVE, [entry])).failed).toEqual([]);

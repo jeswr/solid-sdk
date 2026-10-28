@@ -4,7 +4,14 @@ import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { serialize } from "@jeswr/rdf-serialize";
 import type { Store } from "n3";
 import { trashEntries, trashIndexFrom } from "../operations/trash-index";
-import { type accessControl, DriveAccessError, type OwnAccess, privateAcl } from "./access";
+import {
+  type accessControl,
+  accessGains,
+  DriveAccessError,
+  type OwnAccess,
+  privateAcl,
+  requireAccess,
+} from "./access";
 import { type ProtectionRequirement, protectionLedger } from "./protection-ledger";
 import { relocate, sameGraph } from "./rdf";
 
@@ -30,6 +37,20 @@ export interface ArchivedAcl {
   resource: string;
   acl: string;
   turtle: string;
+}
+
+/** Every container creation must make an explicit access decision. */
+export type ContainerPolicy =
+  | { readonly kind: "inherit-verified"; readonly original?: OwnAccess }
+  | { readonly kind: "archived"; readonly acl: OwnAccess; readonly from: string }
+  | { readonly kind: "owner-only"; readonly webId?: string | undefined };
+
+export function requirePolicy(
+  policy: { readonly kind: string } | undefined,
+  kinds: readonly string[],
+): void {
+  if (!policy || !kinds.includes(policy.kind))
+    throw new DriveAccessError(undefined, "Explicit container policy required");
 }
 
 /** Private sibling receipt; it stays outside the resource's recovery tree. */
@@ -100,6 +121,26 @@ export function ancestorGuard(options: {
     // Unknown/foreign control documents are not ours to remove with the folder.
     if (etag && (await access.snapshot(url, response.headers)).status !== "unknown")
       await http(url, { method: "DELETE", headers: { "if-match": etag } }).catch(() => undefined);
+  };
+  // The sole raw creation seam, private to the provisioner. Callers hold this
+  // folder's flight and must supply either verified inheritance or an ACL.
+  const create = async (
+    url: string,
+    decision: Exclude<ContainerPolicy, { kind: "owner-only" }>,
+    onCreated?: (response: Response) => void,
+  ): Promise<{ response: Response; policy?: OwnAccess }> => {
+    if (decision.kind === "archived")
+      await ledger.set(url, await requirementFor(decision.acl, decision.from));
+    const response = await options.putFolder(url);
+    onCreated?.(response);
+    try {
+      const policy =
+        decision.kind === "archived" ? await install(url, decision.acl, decision.from) : undefined;
+      return { response, ...(policy ? { policy } : {}) };
+    } catch (error) {
+      await cleanup(url, response);
+      throw error;
+    }
   };
   const archived = async (url: string): Promise<OwnAccess | undefined> => {
     // Unreadable/malformed historical metadata is unknown access, never permission to inherit.
@@ -213,15 +254,8 @@ export function ancestorGuard(options: {
           ? await policyFor(required)
           : (plan as (typeof plans)[number]).policy;
         const from = required?.from ?? container;
-        await ledger.set(container, required ?? (await requirementFor(policy, from)));
         // Conditional creation refuses uncoordinated races; never replace their ACLs.
-        const response = await options.putFolder(container);
-        try {
-          await install(container, policy, from);
-        } catch (error) {
-          await cleanup(container, response);
-          throw error;
-        }
+        await create(container, { kind: "archived", acl: policy, from });
         if (plan?.private && !container.includes("/.trash/")) options.onPrivateFolder?.(container);
       });
     }
@@ -243,10 +277,11 @@ export function ancestorGuard(options: {
     guard,
     async folder(
       url: string,
-      policy?: OwnAccess,
-      from = url,
+      decision: ContainerPolicy,
       onCreated?: (response: Response) => void,
     ): Promise<{ response: Response; policy?: OwnAccess }> {
+      requirePolicy(decision, ["inherit-verified", "archived", "owner-only"]);
+      const from = decision.kind === "archived" ? decision.from : url;
       await guard(url, true);
       let result: { response: Response; policy?: OwnAccess } | undefined;
       await singleFlight(
@@ -262,6 +297,20 @@ export function ancestorGuard(options: {
           const remembered = required
             ? { policy: await policyFor(required), from: required.from }
             : undefined;
+          let policy: OwnAccess | undefined;
+          if (decision.kind === "archived") policy = decision.acl;
+          else if (decision.kind === "owner-only") {
+            const webId = decision.webId ?? options.owner();
+            if (!webId) throw new DriveAccessError("Owner WebID unavailable");
+            policy = { url: `${url}.acl`, etag: "", dataset: privateAcl(url, webId) };
+          } else if (!remembered && current.headers.get("x-solid-demo-access-control") !== "none") {
+            // A reappearing historical folder has an original audience. Only omit
+            // its ledger when current inheritance is verified to be no wider.
+            const original = decision.original ?? (await archived(url));
+            const inherited = requireAccess(await access.effective(url, true), url);
+            if (original && accessGains(access.forResource(original, url), inherited).length)
+              policy = original;
+          }
           if (
             remembered &&
             policy &&
@@ -281,19 +330,13 @@ export function ancestorGuard(options: {
           const creationFrom = remembered ? remembered.from : from;
           // Do not record a new policy for a pre-existing folder: the conditional PUT
           // must conflict without changing the protection requirement of another writer.
-          if (creationPolicy)
-            await ledger.set(url, required ?? (await requirementFor(creationPolicy, creationFrom)));
-          const response = await options.putFolder(url);
-          onCreated?.(response);
-          try {
-            const saved = creationPolicy
-              ? await install(url, creationPolicy, creationFrom)
-              : undefined;
-            result = { response, ...(saved ? { policy: saved } : {}) };
-          } catch (error) {
-            await cleanup(url, response);
-            throw error;
-          }
+          result = await create(
+            url,
+            creationPolicy
+              ? { kind: "archived", acl: creationPolicy, from: creationFrom }
+              : { kind: "inherit-verified" },
+            onCreated,
+          );
         },
         false,
       );

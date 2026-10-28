@@ -301,7 +301,7 @@ it.each([
   const view = await setup();
   if (action === "move")
     await act(async () => {
-      await drive.client.createFolder(`${ROOT}Archive/`);
+      await drive.client.createFolder(`${ROOT}Archive/`, { kind: "inherit-verified" });
     });
   const first = rows(view.host).find((row) => row.dataset.url === `${ROOT}A.txt`) as HTMLElement;
   await act(async () => first.focus());

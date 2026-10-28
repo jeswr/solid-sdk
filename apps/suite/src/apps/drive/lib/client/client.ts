@@ -24,10 +24,26 @@ import {
   privateAcl,
   requireAccess,
 } from "./access";
-import { type ArchivedAcl, ancestorGuard, policyArchiveOf } from "./ancestors";
+import {
+  type ArchivedAcl,
+  ancestorGuard,
+  type ContainerPolicy,
+  policyArchiveOf,
+  requirePolicy,
+} from "./ancestors";
 import { containerData, relocate, sameGraph } from "./rdf";
 
+export type { ContainerPolicy } from "./ancestors";
 export { policyArchiveOf } from "./ancestors";
+
+/** Resolve historical ancestor requirements, falling back to verified owner-only access. */
+export interface AncestorPolicy {
+  readonly kind: "protect-ancestors";
+}
+export interface PreservePolicy {
+  readonly kind: "preserve-source";
+}
+export type MovePolicy = PreservePolicy | { readonly kind: "confirm-move" };
 
 /** One row in a Drive listing. */
 export interface DriveItem {
@@ -75,18 +91,27 @@ export interface DriveClient {
   readVersion(url: string): Promise<{ body: Blob; etag?: string }>;
   /** Parsed RDF and its validator; `undefined` when the resource does not exist. */
   readRdf(url: string): Promise<{ dataset: Store; etag?: string } | undefined>;
-  write(url: string, body: Blob | string, options: WriteOptions): Promise<{ etag?: string }>;
-  createFolder(url: string): Promise<void>;
+  write(
+    url: string,
+    body: Blob | string,
+    options: WriteOptions,
+    policy: AncestorPolicy,
+  ): Promise<{ etag?: string }>;
+  createFolder(url: string, policy: ContainerPolicy): Promise<void>;
   /** Establish owner-only default access before writing the Trash index or bytes. */
-  prepareTrash(url: string, webId?: string): Promise<void>;
+  prepareTrash(
+    url: string,
+    policy: Extract<ContainerPolicy, { kind: "owner-only" }>,
+  ): Promise<void>;
   /** Merge surviving container data and restore the policy for a recreated container. */
-  mergeContainer(from: string, to: string, copyPolicy: boolean): Promise<void>;
+  mergeContainer(from: string, to: string, policy: PreservePolicy): Promise<void>;
   /** Copy a file (folders: recursive). Fails with a conflict when `to` exists. */
-  copy(from: string, to: string): Promise<void>;
+  copy(from: string, to: string, policy: PreservePolicy): Promise<void>;
   /** Move = copy + verified, conditional delete; returns the copied identity. */
   move(
     from: string,
     to: string,
+    policy: MovePolicy,
     options?: {
       beforeDelete?: () => Promise<void>;
       privateOwner?: string;
@@ -168,6 +193,7 @@ interface SourceSnapshot {
   readonly data?: Store;
   readonly access: AccessState;
   readonly demo?: boolean;
+  inheritedAccess?: OwnAccess;
   targetAccess?: OwnAccess;
 }
 
@@ -359,10 +385,15 @@ export function createSolidDriveClient(options: {
     return ensureOk(await http(url, init), url);
   };
 
-  const write: DriveClient["write"] = async (url, body, opts) => {
+  const write: DriveClient["write"] = async (url, body, opts, policy) => {
+    requirePolicy(policy, ["protect-ancestors"]);
     const headers: Record<string, string> = { "content-type": opts.contentType };
     if (opts.ifNoneMatch) headers["if-none-match"] = opts.ifNoneMatch;
     if (opts.ifMatch) headers["if-match"] = opts.ifMatch;
+    // Metadata updates may never mint a container. Even a concurrent deletion
+    // must fail its precondition instead of recreating a folder outside its flight.
+    if (url.endsWith("/"))
+      headers["if-match"] = opts.ifMatch ?? validator(url, (await stat(url)).etag);
     const response = await guardedWrite(url, { method: "PUT", headers, body });
     // A replacement supersedes the previous listing's declarations before its refresh completes.
     resources.delete(url);
@@ -396,13 +427,9 @@ export function createSolidDriveClient(options: {
     owner: () => owner,
     ...(options.onPrivateFolder ? { onPrivateFolder: options.onPrivateFolder } : {}),
   });
-  const putFolder = async (url: string): Promise<Response> => {
+  const createFolder: DriveClient["createFolder"] = async (url, policy) => {
     const target = url.endsWith("/") ? url : `${url}/`;
-    return (await provision.folder(target)).response;
-  };
-
-  const createFolder: DriveClient["createFolder"] = async (url) => {
-    await putFolder(url);
+    await provision.folder(target, policy);
   };
 
   // Read and validate the complete tree before the first destination write or DELETE.
@@ -497,17 +524,40 @@ export function createSolidDriveClient(options: {
       source.targetAccess ?? (source.access.status === "known" ? source.access.policy : undefined);
     if (source.children) {
       const resource: CreatedResource = { url: to, etag: undefined };
-      const result = await provision.folder(to, policy, source.url, (response) => {
+      let decision: ContainerPolicy;
+      if (policy) decision = { kind: "archived", acl: policy, from: source.url };
+      else if (source.demo) decision = { kind: "inherit-verified" };
+      else {
+        const inherited = requireAccess(await access.effective(to, true), to);
+        // Ordinary moves retain inheritance when it is no wider than the
+        // source. Confirmed widening gets a ledger and an explicit ACL instead.
+        decision =
+          source.inheritedAccess && !accessGains(source.inheritedAccess, inherited).length
+            ? {
+                kind: "inherit-verified",
+                original: {
+                  ...source.inheritedAccess,
+                  dataset: relocate(source.inheritedAccess.dataset, [[source.url, to]]),
+                },
+              }
+            : { kind: "archived", acl: inherited, from: to };
+      }
+      const result = await provision.folder(to, decision, (response) => {
         resource.etag = response.headers.get("etag") ?? undefined;
         created.push(resource);
       });
       if (result.policy) copiedAccess.set(to, result.policy);
       const data = relocate(source.data as Store, [[source.url, to]]);
       if (data.size) {
-        const saved = await write(to, await serialize([...data]), {
-          contentType: "text/turtle",
-          ifMatch: validator(to, resource.etag),
-        });
+        const saved = await write(
+          to,
+          await serialize([...data]),
+          {
+            contentType: "text/turtle",
+            ifMatch: validator(to, resource.etag),
+          },
+          { kind: "protect-ancestors" },
+        );
         resource.etag = saved.etag;
         const current = await listing(to);
         if (!sameGraph(data, containerData(current.dataset, to)))
@@ -523,20 +573,30 @@ export function createSolidDriveClient(options: {
     } else {
       let placeholder: CreatedResource | undefined;
       if (policy) {
-        const empty = await write(to, "", {
-          contentType: source.contentType as string,
-          ifNoneMatch: "*",
-        });
+        const empty = await write(
+          to,
+          "",
+          {
+            contentType: source.contentType as string,
+            ifNoneMatch: "*",
+          },
+          { kind: "protect-ancestors" },
+        );
         placeholder = { url: to, etag: empty.etag };
         created.push(placeholder);
         copiedAccess.set(to, await access.install(policy, source.url, to));
       }
-      const result = await write(to, source.body as Blob, {
-        contentType: source.contentType as string,
-        ...(placeholder
-          ? { ifMatch: validator(to, placeholder.etag) }
-          : { ifNoneMatch: "*" as const }),
-      });
+      const result = await write(
+        to,
+        source.body as Blob,
+        {
+          contentType: source.contentType as string,
+          ...(placeholder
+            ? { ifMatch: validator(to, placeholder.etag) }
+            : { ifNoneMatch: "*" as const }),
+        },
+        { kind: "protect-ancestors" },
+      );
       if (placeholder) placeholder.etag = result.etag;
       else created.push({ url: to, etag: result.etag });
     }
@@ -597,10 +657,15 @@ export function createSolidDriveClient(options: {
           };
         }
         await archiveContainers?.(JSON.stringify(containers));
-        await write(policyArchiveOf(to) as string, JSON.stringify(archive), {
-          contentType: "application/json",
-          ifNoneMatch: "*",
-        });
+        await write(
+          policyArchiveOf(to) as string,
+          JSON.stringify(archive),
+          {
+            contentType: "application/json",
+            ifNoneMatch: "*",
+          },
+          { kind: "protect-ancestors" },
+        );
       } else {
         const archiveUrl = policyArchiveOf(from);
         if (archiveUrl) {
@@ -643,7 +708,8 @@ export function createSolidDriveClient(options: {
     }
   };
 
-  const mergeContainer: DriveClient["mergeContainer"] = async (from, to, copyPolicy) => {
+  const mergeContainer: DriveClient["mergeContainer"] = async (from, to, decision) => {
+    requirePolicy(decision, ["preserve-source"]);
     const original = await listing(from);
     const own = await access.snapshot(from, original.headers);
     const source: SourceSnapshot = {
@@ -660,31 +726,54 @@ export function createSolidDriveClient(options: {
     const policy = source.demo
       ? undefined
       : (source.targetAccess ?? requireAccess(effective, from));
-    if (copyPolicy && policy) await provision.protect(to, policy, from);
-    else if (
+    let created = false;
+    try {
+      // Resolve the archive before creation, then hold one flight from the
+      // durable requirement through empty PUT and ACL installation/verification.
+      await provision.folder(
+        to,
+        policy ? { kind: "archived", acl: policy, from } : { kind: "inherit-verified" },
+      );
+      created = true;
+    } catch (error) {
+      if (!(error instanceof DriveError && error.kind === "conflict")) throw error;
+    }
+    if (
+      !created &&
       policy &&
       accessGains(access.forResource(policy, from), requireAccess(await access.effective(to), to))
         .length
     )
       throw new DriveAccessError("Existing destination grants wider access");
-    const current = await listing(to);
-    const data = new Store([
-      ...containerData(current.dataset, to),
-      ...relocate(source.data as Store, [[from, to]]),
-    ]);
-    if (sameGraph(containerData(current.dataset, to), data)) return;
-    await write(to, await serialize([...data]), {
-      contentType: "text/turtle",
-      ifMatch: validator(to, current.etag),
-    });
-    if (!sameGraph(data, containerData((await listing(to)).dataset, to)))
-      throw new DriveError("conflict", 409, to);
+    try {
+      const current = await listing(to);
+      const data = new Store([
+        ...containerData(current.dataset, to),
+        ...relocate(source.data as Store, [[from, to]]),
+      ]);
+      if (sameGraph(containerData(current.dataset, to), data)) return;
+      await write(
+        to,
+        await serialize([...data]),
+        {
+          contentType: "text/turtle",
+          ifMatch: validator(to, current.etag),
+        },
+        { kind: "protect-ancestors" },
+      );
+      if (!sameGraph(data, containerData((await listing(to)).dataset, to)))
+        throw new DriveError("conflict", 409, to);
+    } catch (error) {
+      if (created) await remove(to).catch(() => undefined);
+      throw error;
+    }
   };
 
   const transfer = async (
     from: string,
     to: string,
     moving: boolean,
+    decision: MovePolicy,
     beforeDelete?: () => Promise<void>,
     privateOwner?: string,
     archiveContainers?: (archive: string) => Promise<void>,
@@ -692,19 +781,20 @@ export function createSolidDriveClient(options: {
     if (from.endsWith("/") !== to.endsWith("/") || (from.endsWith("/") && to.startsWith(from))) {
       throw new DriveError("conflict", 409, to);
     }
-    const ordinaryMove = moving && !privateOwner && !policyArchiveOf(from);
+    const ordinaryMove =
+      moving && decision.kind === "confirm-move" && !privateOwner && !policyArchiveOf(from);
     const source = await snapshot(from, moving, true);
     const nodes = snapshots(source);
     // Resolve every node, even for same-folder renames and descendants with own ACLs.
     // A missing Link or unreadable ancestor can never stand in for known absence.
     const effective = new Map<SourceSnapshot, AccessState>();
     for (const node of nodes) {
-      effective.set(
-        node,
+      const state =
         node.access.status === "none" && !node.access.demo
           ? await access.effective(node.url)
-          : node.access,
-      );
+          : node.access;
+      effective.set(node, state);
+      if (state.status === "known") node.inheritedAccess = state.policy;
     }
     const unknown = nodes.some((node) => (effective.get(node) as AccessState).status === "unknown");
     // Copy, Trash and Restore preserve access, and refuse uncertainty before writes.
@@ -874,15 +964,18 @@ export function createSolidDriveClient(options: {
     };
   };
 
-  const copy: DriveClient["copy"] = async (from, to) => {
-    await transfer(from, to, false);
+  const copy: DriveClient["copy"] = async (from, to, policy) => {
+    requirePolicy(policy, ["preserve-source"]);
+    await transfer(from, to, false, policy);
   };
 
-  const move: DriveClient["move"] = async (from, to, opts) => {
+  const move: DriveClient["move"] = async (from, to, policy, opts) => {
+    requirePolicy(policy, ["preserve-source", "confirm-move"]);
     return transfer(
       from,
       to,
       true,
+      policy,
       opts?.beforeDelete,
       opts?.privateOwner,
       opts?.archiveContainers,
@@ -922,14 +1015,16 @@ export function createSolidDriveClient(options: {
     write,
     createFolder,
     mergeContainer,
-    prepareTrash: async (url, webId) => {
+    prepareTrash: async (url, decision) => {
+      requirePolicy(decision, ["owner-only"]);
+      const webId = decision.webId;
       if (webId) owner = webId;
       const response = await http(url, { method: "HEAD" });
       if (response.headers.get("x-solid-demo-access-control") === "none") return;
       if (!webId) throw new DriveAccessError("Owner WebID unavailable");
       const policy: OwnAccess = { url: `${url}.acl`, etag: "", dataset: privateAcl(url, webId) };
       try {
-        await provision.folder(url, policy);
+        await provision.folder(url, decision);
       } catch (error) {
         if (!(error instanceof DriveError && error.kind === "conflict"))
           throw new DriveAccessError(error);

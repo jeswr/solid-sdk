@@ -38,7 +38,12 @@ it("the result toast explains that an unknown-access recreated folder was restor
   const folder = `${DRIVE}recovered/`;
   f.audit([folder]);
   await act(async () => {
-    await client.write(`${folder}secret`, "secret contents", { contentType: "text/plain" });
+    await client.write(
+      `${folder}secret`,
+      "secret contents",
+      { contentType: "text/plain" },
+      { kind: "protect-ancestors" },
+    );
   });
   expect(notices.toast).toHaveBeenCalledWith("recovered was restored as private", {
     description:

@@ -269,7 +269,7 @@ describe("Drive writes against the demo pod", () => {
       ]);
       expect(pod.has(NOTES)).toBe(false);
       expect(pod.has(`${target}notes.md`)).toBe(true);
-      await client.move(`${target}notes.md`, NOTES);
+      await client.move(`${target}notes.md`, NOTES, { kind: "confirm-move" });
     }
     const moved = await moveItems(client, [`${DRIVE}Photos/`], `${DRIVE}Archive/`);
     expect(moved).toEqual({
@@ -394,6 +394,7 @@ describe("app-managed trash against the demo pod", () => {
       INDEX,
       `${text}\n<urn:bad> a <${prov}Entity>; <${prov}wasDerivedFrom> <${NOTES}>; <${prov}invalidatedAtTime> "not-a-date"^^<http://www.w3.org/2001/XMLSchema#dateTime>.`,
       { contentType: "text/turtle", ifMatch: etag },
+      { kind: "protect-ancestors" },
     );
     expect(await listTrash(client, DRIVE)).toEqual([second, first]);
     expectConditionalWrites(fetch);
@@ -520,7 +521,12 @@ describe("app-managed trash against the demo pod", () => {
     };
     const index = emptyTrashIndex();
     addTrashRecord(index, entry);
-    await client.write(INDEX, await serializeTrashIndex(index), { contentType: "text/turtle" });
+    await client.write(
+      INDEX,
+      await serializeTrashIndex(index),
+      { contentType: "text/turtle" },
+      { kind: "protect-ancestors" },
+    );
     vi.spyOn(client, "stat").mockRejectedValue(error);
     expect(await restoreItems(client, DRIVE, [entry])).toEqual({
       done: [],

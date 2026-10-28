@@ -123,7 +123,9 @@ it.each([
   });
   const confirmAccess = vi.fn(async () => "cancel" as const);
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, confirmAccess });
-  await expect(client.move(`${PRIVATE}secret`, `${PUBLIC}secret`)).rejects.toThrow("cancelled");
+  await expect(
+    client.move(`${PRIVATE}secret`, `${PUBLIC}secret`, { kind: "confirm-move" }),
+  ).rejects.toThrow("cancelled");
   expect(confirmAccess).toHaveBeenCalledWith(
     expect.objectContaining({
       canKeep: false,
@@ -142,9 +144,9 @@ it("unknown source cannot be kept even if a caller requests Keep", async () => {
     fetch: f.fetch,
     confirmAccess: async () => "keep",
   });
-  await expect(client.move(`${PRIVATE}secret`, `${PUBLIC}secret`)).rejects.toThrow(
-    "Private access",
-  );
+  await expect(
+    client.move(`${PRIVATE}secret`, `${PUBLIC}secret`, { kind: "confirm-move" }),
+  ).rejects.toThrow("Private access");
   expect(f.pod.has(`${PUBLIC}secret`)).toBe(false);
 });
 it("unknown destination can still keep the known source policy", async () => {
@@ -154,7 +156,7 @@ it("unknown destination can still keep the known source policy", async () => {
   );
   const confirmAccess = vi.fn(async () => "keep" as const);
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, confirmAccess });
-  await client.move(`${PRIVATE}secret`, `${PUBLIC}secret`);
+  await client.move(`${PRIVATE}secret`, `${PUBLIC}secret`, { kind: "confirm-move" });
   expect(confirmAccess).toHaveBeenCalledWith(expect.objectContaining({ canKeep: true }));
   expect((await f.anonymous(`${PUBLIC}secret`)).status).toBe(403);
 });
@@ -163,7 +165,7 @@ it("moves to equivalent or narrower inherited defaults without prompting; demo p
   f.policies.set(`${PUBLIC}.policy`, await aclBody(PUBLIC));
   const confirmAccess = vi.fn(async () => "cancel" as const);
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, confirmAccess });
-  await client.move(`${PRIVATE}secret`, `${PUBLIC}secret`);
+  await client.move(`${PRIVATE}secret`, `${PUBLIC}secret`, { kind: "confirm-move" });
   expect(confirmAccess).not.toHaveBeenCalled();
   const pod = createDemoPod({
     root: ROOT,
@@ -172,6 +174,7 @@ it("moves to equivalent or narrower inherited defaults without prompting; demo p
   await createSolidDriveClient({ storageUrl: ROOT, fetch: pod.fetch, confirmAccess }).move(
     `${DRIVE}a`,
     `${DRIVE}b`,
+    { kind: "confirm-move" },
   );
   expect(confirmAccess).not.toHaveBeenCalled();
 });
@@ -179,7 +182,7 @@ it("copy of an inherited private file keeps its source access before payloads", 
   const f = await wacPod();
   f.audit();
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });
-  await client.copy(`${PRIVATE}secret`, `${PUBLIC}secret`);
+  await client.copy(`${PRIVATE}secret`, `${PUBLIC}secret`, { kind: "preserve-source" });
   expect((await f.anonymous(`${PUBLIC}secret`)).status).toBe(403);
   expect(f.exposures).toEqual([]);
 });
@@ -189,6 +192,7 @@ it("no confirmation handler fails closed on widening", async () => {
     createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch }).move(
       `${PRIVATE}secret`,
       `${PUBLIC}secret`,
+      { kind: "confirm-move" },
     ),
   ).rejects.toThrow("can't confirm who can access");
   expect(f.pod.has(`${PUBLIC}secret`)).toBe(false);
@@ -208,6 +212,7 @@ it.each([
     client.move(
       folder ? PRIVATE : `${PRIVATE}secret`,
       folder ? `${PUBLIC}private/` : `${PUBLIC}secret`,
+      { kind: "confirm-move" },
     ),
   ).rejects.toThrow("cancelled");
   expect(confirmAccess).toHaveBeenCalledWith(expect.objectContaining({ canKeep: false }));
@@ -220,7 +225,7 @@ it("explicit Move acknowledges unknown source policies; Keep remains unavailable
   );
   const confirmAccess = vi.fn(async () => "move" as const);
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, confirmAccess });
-  await client.move(`${PRIVATE}secret`, `${PUBLIC}secret`);
+  await client.move(`${PRIVATE}secret`, `${PUBLIC}secret`, { kind: "confirm-move" });
   expect(confirmAccess).toHaveBeenCalledWith(expect.objectContaining({ canKeep: false }));
   expect((await f.anonymous(`${PUBLIC}secret`)).status).toBe(200);
 });
@@ -232,10 +237,15 @@ it("Keep on a folder materializes accessTo and defaults before any child bytes",
     fetch: f.fetch,
     confirmAccess: async () => "keep",
   });
-  await client.createFolder(`${PRIVATE}nested/`);
-  await client.write(`${PRIVATE}nested/secret`, "secret contents", { contentType: "text/plain" });
+  await client.createFolder(`${PRIVATE}nested/`, { kind: "inherit-verified" });
+  await client.write(
+    `${PRIVATE}nested/secret`,
+    "secret contents",
+    { contentType: "text/plain" },
+    { kind: "protect-ancestors" },
+  );
   f.audit();
-  await client.move(`${PRIVATE}nested/`, `${PUBLIC}nested/`);
+  await client.move(`${PRIVATE}nested/`, `${PUBLIC}nested/`, { kind: "confirm-move" });
   expect((await f.anonymous(`${PUBLIC}nested/secret`)).status).toBe(403);
   expect((await f.anonymous(`${PUBLIC}nested/`)).status).toBe(403);
   expect(f.exposures).toEqual([]);
@@ -248,12 +258,17 @@ it("folder own accessTo without defaults still prompts for widening inherited ch
     fetch: f.fetch,
     confirmAccess: async () => "keep",
   });
-  await client.createFolder(`${PRIVATE}nested/`);
-  await client.write(`${PRIVATE}nested/secret`, "secret contents", { contentType: "text/plain" });
+  await client.createFolder(`${PRIVATE}nested/`, { kind: "inherit-verified" });
+  await client.write(
+    `${PRIVATE}nested/secret`,
+    "secret contents",
+    { contentType: "text/plain" },
+    { kind: "protect-ancestors" },
+  );
   const accessToOnly = policy([{ accessTo: [`${PRIVATE}nested/`], agent: [OWNER], mode: read }]);
   f.policies.set(`${PRIVATE}nested/.policy`, await turtle(accessToOnly.dataset));
   f.audit();
-  await client.move(`${PRIVATE}nested/`, `${PUBLIC}nested/`);
+  await client.move(`${PRIVATE}nested/`, `${PUBLIC}nested/`, { kind: "confirm-move" });
   expect((await f.anonymous(`${PUBLIC}nested/secret`)).status).toBe(403);
   expect(f.exposures).toEqual([]);
 });
@@ -263,7 +278,9 @@ it("Undo of a narrowing move prompts before widening access again; Cancel keeps 
   const confirmAccess = vi.fn(async () => "cancel" as const);
   const options = { storageUrl: ROOT, fetch: f.fetch, confirmAccess };
   const client = createSolidDriveClient(options);
-  const moved = await client.move(`${PUBLIC}placeholder`, `${PRIVATE}placeholder`);
+  const moved = await client.move(`${PUBLIC}placeholder`, `${PRIVATE}placeholder`, {
+    kind: "confirm-move",
+  });
   expect(confirmAccess).not.toHaveBeenCalled();
   const { moveWithValidator } = await import("../src/apps/drive/state/undo");
   await expect(
@@ -288,7 +305,9 @@ it("Keep rolls back its placeholder if ACL installation fails, without exposing 
     fetch: f.fetch,
     confirmAccess: async () => "keep",
   });
-  await expect(client.move(`${PRIVATE}secret`, `${PUBLIC}secret`)).rejects.toThrow();
+  await expect(
+    client.move(`${PRIVATE}secret`, `${PUBLIC}secret`, { kind: "confirm-move" }),
+  ).rejects.toThrow();
   expect(f.exposures).toEqual([]);
   expect(f.pod.has(`${PUBLIC}secret`)).toBe(false);
   expect(f.pod.has(`${PRIVATE}secret`)).toBe(true);
@@ -300,9 +319,9 @@ it("copy refuses an unreadable own ACL before any destination writes", async () 
     url === `${PRIVATE}secret.policy` ? new Response(null, { status: 403 }) : undefined,
   );
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });
-  await expect(client.copy(`${PRIVATE}secret`, `${PUBLIC}secret`)).rejects.toThrow(
-    "Private access",
-  );
+  await expect(
+    client.copy(`${PRIVATE}secret`, `${PUBLIC}secret`, { kind: "preserve-source" }),
+  ).rejects.toThrow("Private access");
   expect(f.calls.some((call) => call.method === "PUT")).toBe(false);
   expect(f.pod.has(`${PRIVATE}secret`)).toBe(true);
 });
@@ -316,13 +335,18 @@ it.each([
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, confirmAccess });
   const from = `${PRIVATE}nested/`,
     to = `${PUBLIC}nested/`;
-  await client.createFolder(from);
-  await client.write(`${from}secret`, "secret contents", { contentType: "text/plain" });
+  await client.createFolder(from, { kind: "inherit-verified" });
+  await client.write(
+    `${from}secret`,
+    "secret contents",
+    { contentType: "text/plain" },
+    { kind: "protect-ancestors" },
+  );
   const own = policy([{ accessTo: [from], agentClass: [EVERYONE], mode: read }]);
   f.policies.set(`${from}.policy`, await turtle(own.dataset));
   f.audit();
-  if (mode === "copy") await client.copy(from, to);
-  else await client.move(from, to);
+  if (mode === "copy") await client.copy(from, to, { kind: "preserve-source" });
+  else await client.move(from, to, { kind: "confirm-move" });
   expect((await f.anonymous(`${to}secret`)).status).toBe(403);
   expect(f.exposures).toEqual([]);
   expect(confirmAccess).toHaveBeenCalledTimes(mode === "copy" ? 0 : 1);
@@ -333,7 +357,7 @@ it("folder Undo asks about unknown ACP instead of rejecting policy discovery dur
   const confirmAccess = vi.fn(async () => "cancel" as const);
   const options = { storageUrl: ROOT, fetch: f.fetch, confirmAccess };
   const client = createSolidDriveClient(options);
-  const moved = await client.move(PUBLIC, `${PRIVATE}moved/`);
+  const moved = await client.move(PUBLIC, `${PRIVATE}moved/`, { kind: "confirm-move" });
   expect(confirmAccess).not.toHaveBeenCalled();
   f.after(async (url, method, response) => {
     if (url !== moved.url || !["GET", "HEAD"].includes(method)) return response;

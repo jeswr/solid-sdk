@@ -103,5 +103,5 @@ export async function moveWithValidator(
     await verify(from);
     if (seen.size !== identities.size) throw new Error("This move cannot be safely undone");
   }
-  await client.move(from, to);
+  await client.move(from, to, { kind: "confirm-move" });
 }

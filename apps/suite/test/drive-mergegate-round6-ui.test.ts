@@ -4,7 +4,7 @@ import type { DriveItem } from "../src/apps/drive/lib/client/client";
 import { encodeRef } from "../src/lib/refs";
 import type { PodSession } from "../src/lib/session/pod-session";
 import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
-import { DRIVE, OWNER, PUBLIC, ROOT, wacPod } from "./drive-wac-pod";
+import { aclBody, DRIVE, OWNER, PUBLIC, ROOT, wacPod } from "./drive-wac-pod";
 
 const route = vi.hoisted(() => ({ ref: "" }));
 vi.mock("@/apps/docs/lib/model/type-index", () => ({
@@ -45,7 +45,11 @@ it.each([
   const foreign = surface !== "Recent";
   const storageUrl = foreign ? `${ROOT}alice/` : ROOT;
   // A real session's storage root exists before Drive provisions its own root.
-  if (foreign) await pod.pod.fetch(storageUrl, { method: "PUT" });
+  if (foreign) {
+    await pod.pod.fetch(storageUrl, { method: "PUT" });
+    // Policy discovery stays within the selected storage root.
+    pod.policies.set(`${storageUrl}.policy`, await aclBody(storageUrl));
+  }
   const webId = foreign ? `${storageUrl}profile#me` : OWNER;
   const url = `${PUBLIC}placeholder`;
   expect((await pod.anonymous(url)).status).toBe(200);

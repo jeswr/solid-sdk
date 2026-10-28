@@ -86,7 +86,7 @@ async function resolveDriveRoot(client: DriveClient, session: PodSession): Promi
   }
   const root = `${session.storageUrl}drive/`;
   try {
-    await client.createFolder(root);
+    await client.createFolder(root, { kind: "inherit-verified" });
   } catch (error) {
     if (!(error instanceof DriveError && error.kind === "conflict")) throw error;
   }

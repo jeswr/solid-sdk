@@ -38,7 +38,12 @@ it("restoring a file after trashing its private parent never exposes names or la
   if (!file) throw new Error("Missing trashed file");
   f.audit([PRIVATE]);
   expect((await restoreItems(client, DRIVE, [file])).failed).toEqual([]);
-  await client.write(`${PRIVATE}another`, "secret contents", { contentType: "text/plain" });
+  await client.write(
+    `${PRIVATE}another`,
+    "secret contents",
+    { contentType: "text/plain" },
+    { kind: "protect-ancestors" },
+  );
   expect(f.exposures).toEqual([]);
   expect((await f.anonymous(PRIVATE)).status).toBe(403);
   expect((await f.anonymous(`${PRIVATE}secret`)).status).toBe(403);
@@ -49,7 +54,12 @@ it("archives every container's own ACL in the index and restores folder grants a
   const f = await wacPod();
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });
   const nested = `${PRIVATE}nested/`;
-  await client.write(`${nested}secret`, "secret contents", { contentType: "text/plain" });
+  await client.write(
+    `${nested}secret`,
+    "secret contents",
+    { contentType: "text/plain" },
+    { kind: "protect-ancestors" },
+  );
   const original = await parseRdf(await aclBody(nested), "text/turtle");
   const reader = new WacFields(`${nested}#reader`, original, DataFactory);
   reader.iris("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").add(`${ACL}Authorization`);
@@ -72,7 +82,12 @@ it("archives every container's own ACL in the index and restores folder grants a
   const restored = await accessControl(f.fetch, ROOT).read(`${nested}.policy`);
   expect(restored.status).toBe("known");
   if (restored.status === "known") expect(sameGraph(restored.policy.dataset, original)).toBe(true);
-  await client.write(`${nested}another`, "secret contents", { contentType: "text/plain" });
+  await client.write(
+    `${nested}another`,
+    "secret contents",
+    { contentType: "text/plain" },
+    { kind: "protect-ancestors" },
+  );
   expect(f.exposures).toEqual([]);
 });
 
@@ -83,7 +98,12 @@ it.each([
   const f = await wacPod();
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });
   const nested = `${PRIVATE}nested/`;
-  await client.write(`${nested}secret`, "secret contents", { contentType: "text/plain" });
+  await client.write(
+    `${nested}secret`,
+    "secret contents",
+    { contentType: "text/plain" },
+    { kind: "protect-ancestors" },
+  );
   const original = await parseRdf(await aclBody(nested), "text/turtle");
   const friend = new WacFields(`${nested}#friend`, original, DataFactory);
   friend.iris("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").add(`${ACL}Authorization`);
@@ -102,15 +122,25 @@ it.each([
   const index = trashIndexFrom(required(saved).dataset);
   if (mode === "legacy archive") index.record(folder.url).containerAcls = undefined;
   else await client.remove(required(policyArchiveOf(folder.url))); // The index alone must suffice.
-  await client.write(`${DRIVE}.trash/index.ttl`, await serializeTrashIndex(index), {
-    contentType: "text/turtle",
-  });
+  await client.write(
+    `${DRIVE}.trash/index.ttl`,
+    await serializeTrashIndex(index),
+    {
+      contentType: "text/turtle",
+    },
+    { kind: "protect-ancestors" },
+  );
   f.audit([PRIVATE, nested]);
   // A new client proves metadata is durable, rather than cached in the deleting tab.
   const onPrivateFolder = vi.fn();
   const fresh = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, onPrivateFolder });
   expect((await restoreItems(fresh, DRIVE, [file])).failed).toEqual([]);
-  await fresh.write(`${nested}another`, "secret contents", { contentType: "text/plain" });
+  await fresh.write(
+    `${nested}another`,
+    "secret contents",
+    { contentType: "text/plain" },
+    { kind: "protect-ancestors" },
+  );
   expect(f.exposures).toEqual([]);
   expect(f.policies.has(`${PRIVATE}.policy`)).toBe(true);
   expect(f.policies.has(`${nested}.policy`)).toBe(true);
@@ -140,7 +170,12 @@ it("unknown original ancestor access restores privately and reports the folder",
   });
   f.audit([PRIVATE]);
   expect((await restoreItems(fresh, DRIVE, [file])).failed).toEqual([]);
-  await fresh.write(`${PRIVATE}another`, "secret contents", { contentType: "text/plain" });
+  await fresh.write(
+    `${PRIVATE}another`,
+    "secret contents",
+    { contentType: "text/plain" },
+    { kind: "protect-ancestors" },
+  );
   expect(onPrivateFolder).toHaveBeenCalledExactlyOnceWith(PRIVATE);
   expect(f.exposures).toEqual([]);
 });
@@ -159,16 +194,32 @@ it.each([
     nested = `${missing}nested/`;
   f.audit([missing, nested]);
   if (operation === "upload")
-    await client.write(`${nested}secret`, "secret contents", { contentType: "text/plain" });
+    await client.write(
+      `${nested}secret`,
+      "secret contents",
+      { contentType: "text/plain" },
+      { kind: "protect-ancestors" },
+    );
   else if (operation === "new folder") {
-    await client.createFolder(`${nested}new/`);
-    await client.write(`${nested}new/secret`, "secret contents", { contentType: "text/plain" });
-  } else if (operation === "move") await client.move(`${PRIVATE}secret`, `${nested}secret`);
+    await client.createFolder(`${nested}new/`, { kind: "inherit-verified" });
+    await client.write(
+      `${nested}new/secret`,
+      "secret contents",
+      { contentType: "text/plain" },
+      { kind: "protect-ancestors" },
+    );
+  } else if (operation === "move")
+    await client.move(`${PRIVATE}secret`, `${nested}secret`, { kind: "confirm-move" });
   else {
     const etag = required((await client.stat(`${PRIVATE}secret`)).etag);
     await moveWithValidator(options, `${PRIVATE}secret`, `${nested}secret`, etag);
   }
-  await client.write(`${nested}another`, "secret contents", { contentType: "text/plain" });
+  await client.write(
+    `${nested}another`,
+    "secret contents",
+    { contentType: "text/plain" },
+    { kind: "protect-ancestors" },
+  );
   expect(onPrivateFolder.mock.calls).toEqual([[missing], [nested]]);
   expect(f.exposures).toEqual([]);
 });
@@ -195,9 +246,14 @@ it.each([
   if (mode === "malformed index archive") record.containerAcls = "invalid JSON";
   else if (mode === "no own ACL") record.containerAcls = "{}";
   else record.containerAcls = undefined;
-  await client.write(`${DRIVE}.trash/index.ttl`, await serializeTrashIndex(index), {
-    contentType: "text/turtle",
-  });
+  await client.write(
+    `${DRIVE}.trash/index.ttl`,
+    await serializeTrashIndex(index),
+    {
+      contentType: "text/turtle",
+    },
+    { kind: "protect-ancestors" },
+  );
   if (mode === "absent legacy archive") await client.remove(required(policyArchiveOf(folder.url)));
   if (mode === "null legacy policy" || mode === "malformed legacy policy")
     await client.write(
@@ -209,6 +265,7 @@ it.each([
             : { resource: PRIVATE, acl: `${PRIVATE}.policy`, turtle: "invalid RDF" },
       }),
       { contentType: "application/json" },
+      { kind: "protect-ancestors" },
     );
   if (mode === "unreadable index")
     f.intercept(async (url) =>
@@ -223,7 +280,12 @@ it.each([
   });
   f.audit([PRIVATE]);
   // A raw upload exercises fallback even when the index itself cannot be read.
-  await fresh.write(`${PRIVATE}secret`, "secret contents", { contentType: "text/plain" });
+  await fresh.write(
+    `${PRIVATE}secret`,
+    "secret contents",
+    { contentType: "text/plain" },
+    { kind: "protect-ancestors" },
+  );
   expect(onPrivateFolder).toHaveBeenCalledExactlyOnceWith(PRIVATE);
   expect(f.exposures).toEqual([]);
 });
@@ -265,7 +327,12 @@ it.each([
       return response;
     });
   await expect(
-    client.write(`${missing}secret`, "secret contents", { contentType: "text/plain" }),
+    client.write(
+      `${missing}secret`,
+      "secret contents",
+      { contentType: "text/plain" },
+      { kind: "protect-ancestors" },
+    ),
   ).rejects.toThrow();
   expect(f.pod.has(`${missing}secret`)).toBe(false);
   expect(onPrivateFolder).not.toHaveBeenCalled();
@@ -289,7 +356,12 @@ it.each([
   const url =
     mode === "foreign destination" ? "https://other.test/secret" : `${DRIVE}missing/nested/secret`;
   await expect(
-    client.write(url, "secret contents", { contentType: "text/plain" }),
+    client.write(
+      url,
+      "secret contents",
+      { contentType: "text/plain" },
+      { kind: "protect-ancestors" },
+    ),
   ).rejects.toThrow();
   expect(f.calls.filter(({ method }) => method === "PUT")).toEqual([]);
 });

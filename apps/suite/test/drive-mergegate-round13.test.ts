@@ -54,7 +54,7 @@ it("an explicit creation queued behind restore runs after its flight and reports
   });
   const restoring = restoreItems(client, DRIVE, [entry]);
   await reached.promise;
-  const creating = client.createFolder(PRIVATE);
+  const creating = client.createFolder(PRIVATE, { kind: "inherit-verified" });
   const settled = vi.fn();
   void creating.then(settled, settled);
   try {
@@ -84,21 +84,31 @@ it.each([
   );
   await expect(
     operation.includes("copy")
-      ? client.copy(entry.url, PRIVATE)
-      : client.write(`${PRIVATE}first`, "secret contents", { contentType: "text/plain" }),
+      ? client.copy(entry.url, PRIVATE, { kind: "preserve-source" })
+      : client.write(
+          `${PRIVATE}first`,
+          "secret contents",
+          { contentType: "text/plain" },
+          { kind: "protect-ancestors" },
+        ),
   ).rejects.toThrow();
   expect(f.pod.has(PRIVATE)).toBe(false);
   expect(await protectionLedger(f.fetch).get(PRIVATE)).toBeDefined();
   f.intercept(undefined);
-  if (operation === "new folder") await client.createFolder(PRIVATE);
-  else if (operation === "copy") await client.copy(entry.url, PRIVATE);
+  if (operation === "new folder") await client.createFolder(PRIVATE, { kind: "inherit-verified" });
+  else if (operation === "copy") await client.copy(entry.url, PRIVATE, { kind: "preserve-source" });
   else if (operation === "different copy") {
-    await expect(client.copy(PUBLIC, PRIVATE)).rejects.toThrow();
+    await expect(client.copy(PUBLIC, PRIVATE, { kind: "preserve-source" })).rejects.toThrow();
     expect(f.pod.has(PRIVATE)).toBe(false);
     expect(await protectionLedger(f.fetch).get(PRIVATE)).toBeDefined();
   } else {
     const fresh = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });
-    await fresh.write(`${PRIVATE}retry`, "secret contents", { contentType: "text/plain" });
+    await fresh.write(
+      `${PRIVATE}retry`,
+      "secret contents",
+      { contentType: "text/plain" },
+      { kind: "protect-ancestors" },
+    );
   }
   if (operation !== "different copy") {
     expect((await f.anonymous(PRIVATE)).status).toBe(403);
@@ -120,21 +130,28 @@ it.each([
       : undefined,
   );
   await expect(
-    client.write(`${PRIVATE}first`, "secret contents", { contentType: "text/plain" }),
+    client.write(
+      `${PRIVATE}first`,
+      "secret contents",
+      { contentType: "text/plain" },
+      { kind: "protect-ancestors" },
+    ),
   ).rejects.toThrow();
   f.intercept(undefined);
   if (operation === "missing metadata target") {
     await f.pod.fetch(PRIVATE, { method: "DELETE" });
-    await expect(client.write(PRIVATE, "", { contentType: "text/turtle" })).rejects.toThrow();
+    await expect(
+      client.write(PRIVATE, "", { contentType: "text/turtle" }, { kind: "protect-ancestors" }),
+    ).rejects.toThrow();
   } else if (operation === "existing folder") {
-    await expect(client.createFolder(PRIVATE)).rejects.toMatchObject({
+    await expect(client.createFolder(PRIVATE, { kind: "inherit-verified" })).rejects.toMatchObject({
       kind: "conflict",
       status: 412,
     });
     expect(await protectionLedger(f.fetch).get(PRIVATE)).toBeUndefined();
     expect((await f.anonymous(PRIVATE)).status).toBe(403);
   } else {
-    await client.write(PRIVATE, "", { contentType: "text/turtle" });
+    await client.write(PRIVATE, "", { contentType: "text/turtle" }, { kind: "protect-ancestors" });
     expect(await protectionLedger(f.fetch).get(PRIVATE)).toBeUndefined();
     expect((await f.anonymous(PRIVATE)).status).toBe(403);
   }
@@ -151,7 +168,12 @@ it("checks protection requirements on the storage root before writing descendant
   });
   f.audit();
   await expect(
-    client.write(`${PUBLIC}upload`, "secret contents", { contentType: "text/plain" }),
+    client.write(
+      `${PUBLIC}upload`,
+      "secret contents",
+      { contentType: "text/plain" },
+      { kind: "protect-ancestors" },
+    ),
   ).rejects.toThrow();
   expect(f.pod.has(`${PUBLIC}upload`)).toBe(false);
   expect(f.exposures).toEqual([]);
@@ -220,7 +242,12 @@ it("commits protection before container creation and retains it until ACL verifi
     }
     return response;
   });
-  await client.write(`${PRIVATE}upload`, "secret contents", { contentType: "text/plain" });
+  await client.write(
+    `${PRIVATE}upload`,
+    "secret contents",
+    { contentType: "text/plain" },
+    { kind: "protect-ancestors" },
+  );
   expect(beforeCreate).toHaveBeenCalledOnce();
   expect(beforeVerify).toHaveBeenCalledOnce();
   expect(await ledger.get(PRIVATE)).toBeUndefined();
@@ -243,7 +270,12 @@ it.each([
     return undefined;
   });
   await expect(
-    client.write(`${PRIVATE}first`, "secret contents", { contentType: "text/plain" }),
+    client.write(
+      `${PRIVATE}first`,
+      "secret contents",
+      { contentType: "text/plain" },
+      { kind: "protect-ancestors" },
+    ),
   ).rejects.toThrow();
   expect(f.pod.has(PRIVATE)).toBe(true);
   f.intercept(undefined);
@@ -254,7 +286,12 @@ it.each([
       return response;
     });
   f.calls.length = 0;
-  const retry = client.write(`${PRIVATE}retry`, "secret contents", { contentType: "text/plain" });
+  const retry = client.write(
+    `${PRIVATE}retry`,
+    "secret contents",
+    { contentType: "text/plain" },
+    { kind: "protect-ancestors" },
+  );
   if (mode === "matching") {
     await retry;
     expect(await protectionLedger(f.fetch).get(PRIVATE)).toBeUndefined();
@@ -287,9 +324,14 @@ it.each([
   });
   const restoring = restoreItems(client, DRIVE, [entry]);
   await reached.promise;
-  const uploading = client.write(`${PRIVATE}upload`, "secret contents", {
-    contentType: "text/plain",
-  });
+  const uploading = client.write(
+    `${PRIVATE}upload`,
+    "secret contents",
+    {
+      contentType: "text/plain",
+    },
+    { kind: "protect-ancestors" },
+  );
   const settled = vi.fn();
   void uploading.then(settled, settled);
   const done = Promise.allSettled([restoring, uploading]);
@@ -333,7 +375,12 @@ it.each([
     return response;
   });
   const upload = (c: ReturnType<typeof createSolidDriveClient>, name: string) =>
-    c.write(`${PRIVATE}${name}`, "secret contents", { contentType: "text/plain" });
+    c.write(
+      `${PRIVATE}${name}`,
+      "secret contents",
+      { contentType: "text/plain" },
+      { kind: "protect-ancestors" },
+    );
   await expect(upload(client, "first")).rejects.toThrow();
   expect(f.pod.has(PRIVATE)).toBe(true);
   // A fresh module registry models a reload: only IndexedDB and the pod survive.

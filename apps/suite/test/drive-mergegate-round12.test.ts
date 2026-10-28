@@ -9,7 +9,12 @@ afterEach(() => vi.unstubAllGlobals());
 
 const turn = () => new Promise<void>((resolve) => setImmediate(resolve));
 const upload = (client: ReturnType<typeof createSolidDriveClient>, name: string) =>
-  client.write(`${PRIVATE}${name}`, "secret contents", { contentType: "text/plain" });
+  client.write(
+    `${PRIVATE}${name}`,
+    "secret contents",
+    { contentType: "text/plain" },
+    { kind: "protect-ancestors" },
+  );
 
 async function recreatedFolder(trashFile = false) {
   const f = await wacPod();
@@ -50,7 +55,12 @@ it.each([
     await turn();
     expect(f.pod.has(`${PRIVATE}first`)).toBe(false);
     expect(f.pod.has(`${PRIVATE}second`)).toBe(false);
-    await client.write(`${PUBLIC}unrelated`, "unrelated", { contentType: "text/plain" });
+    await client.write(
+      `${PUBLIC}unrelated`,
+      "unrelated",
+      { contentType: "text/plain" },
+      { kind: "protect-ancestors" },
+    );
     expect(f.pod.has(`${PUBLIC}unrelated`)).toBe(true);
     expect(f.exposures).toEqual([]);
   } finally {
@@ -257,7 +267,12 @@ it.each([
   "new folder",
 ])("%s waits for the same pending ancestor ACL and fails without writes on 503", async (operation) => {
   const { f, client, file } = await recreatedFolder(operation === "restore");
-  await client.write(`${PUBLIC}source`, "secret contents", { contentType: "text/plain" });
+  await client.write(
+    `${PUBLIC}source`,
+    "secret contents",
+    { contentType: "text/plain" },
+    { kind: "protect-ancestors" },
+  );
   const source = `${PUBLIC}source`;
   const sourceItem = await client.stat(source);
   const trashed = await trashItems(client, DRIVE, [sourceItem], { webId: OWNER });
@@ -280,15 +295,20 @@ it.each([
   await reached.promise;
   const second =
     operation === "nested upload"
-      ? client.write(`${PRIVATE}nested/second`, "secret contents", { contentType: "text/plain" })
+      ? client.write(
+          `${PRIVATE}nested/second`,
+          "secret contents",
+          { contentType: "text/plain" },
+          { kind: "protect-ancestors" },
+        )
       : operation === "restore"
         ? restoreItems(client, DRIVE, [restoring])
         : operation === "new folder"
-          ? client.createFolder(`${PRIVATE}nested/`)
+          ? client.createFolder(`${PRIVATE}nested/`, { kind: "inherit-verified" })
           : operation === "copy"
-            ? client.copy(entry.url, `${PRIVATE}second`)
+            ? client.copy(entry.url, `${PRIVATE}second`, { kind: "preserve-source" })
             : operation === "move"
-              ? client.move(entry.url, `${PRIVATE}second`)
+              ? client.move(entry.url, `${PRIVATE}second`, { kind: "confirm-move" })
               : moveWithValidator(
                   { storageUrl: ROOT, fetch: f.fetch, webId: OWNER },
                   entry.url,

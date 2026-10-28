@@ -141,18 +141,24 @@ export async function uploadFile(
       url,
       file,
       current?.etag ? { contentType, ifMatch: current.etag } : { contentType, ifNoneMatch: "*" },
+      { kind: "protect-ancestors" },
     );
     return done(url);
   }
   if (policy === "fail") {
-    await client.write(url, file, { contentType, ifNoneMatch: "*" });
+    await client.write(url, file, { contentType, ifNoneMatch: "*" }, { kind: "protect-ancestors" });
     return done(url);
   }
   const taken = (await client.list(folderUrl)).map((item) => item.name);
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const candidate = childUrl(folderUrl, keepBothName(name, taken));
     try {
-      await client.write(candidate, file, { contentType, ifNoneMatch: "*" });
+      await client.write(
+        candidate,
+        file,
+        { contentType, ifNoneMatch: "*" },
+        { kind: "protect-ancestors" },
+      );
       return done(candidate);
     } catch (error) {
       if (!(error instanceof DriveError && error.kind === "conflict")) throw error;
@@ -169,7 +175,7 @@ export async function createFolder(
 ): Promise<string> {
   const name = normalizeUploadName(rawName, "folder");
   const url = childUrl(parentUrl, name, true);
-  await client.createFolder(url);
+  await client.createFolder(url, { kind: "inherit-verified" });
   return url;
 }
 
@@ -204,7 +210,11 @@ export async function renameItem(
   const parent = parentOf(item.url);
   if (!parent || newName.trim() === item.name) return item.url;
   const name = normalizeUploadName(newName, item.kind === "folder" ? "folder" : "file");
-  return (await client.move(item.url, childUrl(parent, name, item.kind === "folder"))).url;
+  return (
+    await client.move(item.url, childUrl(parent, name, item.kind === "folder"), {
+      kind: "confirm-move",
+    })
+  ).url;
 }
 
 export async function moveItems(
@@ -223,7 +233,7 @@ export async function moveItems(
         throw new DriveError("conflict", 409, targetFolder);
       }
       const to = childUrl(targetFolder, nameOf(url), url.endsWith("/"));
-      const identity = await client.move(url, to);
+      const identity = await client.move(url, to, { kind: "confirm-move" });
       result.done.push({ from: url, to: identity.url, identity });
     } catch (error) {
       result.failed.push({ url, error });
@@ -238,7 +248,7 @@ export async function copyItem(client: DriveClient, url: string): Promise<string
   const taken = (await client.list(parent)).map((item) => item.name);
   const name = keepBothName(`Copy of ${nameOf(url)}`, taken);
   const to = childUrl(parent, name, url.endsWith("/"));
-  await client.copy(url, to);
+  await client.copy(url, to, { kind: "preserve-source" });
   return to;
 }
 
@@ -270,6 +280,7 @@ async function updateIndex(
         current?.etag
           ? { contentType: "text/turtle", ifMatch: current.etag }
           : { contentType: "text/turtle", ifNoneMatch: "*" },
+        { kind: "protect-ancestors" },
       );
       return;
     } catch (error) {
@@ -382,10 +393,15 @@ async function markRecovery(
   const receipt = emptyTrashIndex();
   addTrashRecord(receipt, entry);
   receipt.record(entry.url).status = status;
-  await client.write(recoveryMarker(driveRoot, entry), await serializeTrashIndex(receipt), {
-    contentType: "text/turtle",
-    ifNoneMatch: "*",
-  });
+  await client.write(
+    recoveryMarker(driveRoot, entry),
+    await serializeTrashIndex(receipt),
+    {
+      contentType: "text/turtle",
+      ifNoneMatch: "*",
+    },
+    { kind: "protect-ancestors" },
+  );
 }
 
 async function reconcilePending(
@@ -587,7 +603,7 @@ async function runTrash(
   }
   // No source may be removed until every intent is durably discoverable.
   try {
-    await client.prepareTrash(trash, options.webId);
+    await client.prepareTrash(trash, { kind: "owner-only", webId: options.webId });
     const intents = await Promise.all(
       entries.map(async (entry) => [entry, await sourceVersions(client, entry.original)] as const),
     );
@@ -611,18 +627,23 @@ async function runTrash(
   const partial: TrashEntry[] = [];
   for (const entry of entries) {
     try {
-      await client.move(entry.original, entry.url, {
-        ...(options.webId ? { privateOwner: options.webId } : {}),
-        archiveContainers: async (archive) => {
-          await updateIndex(client, driveRoot, (index) => {
-            index.record(entry.url).containerAcls = archive;
-          });
+      await client.move(
+        entry.original,
+        entry.url,
+        { kind: "preserve-source" },
+        {
+          ...(options.webId ? { privateOwner: options.webId } : {}),
+          archiveContainers: async (archive) => {
+            await updateIndex(client, driveRoot, (index) => {
+              index.record(entry.url).containerAcls = archive;
+            });
+          },
+          beforeDelete: async () => {
+            await requireTrashEntry(client, driveRoot, entry, true, owner);
+            await client.stat(entry.url);
+          },
         },
-        beforeDelete: async () => {
-          await requireTrashEntry(client, driveRoot, entry, true, owner);
-          await client.stat(entry.url);
-        },
-      });
+      );
       result.done.push(entry);
     } catch (error) {
       result.failed.push({ url: entry.original, error });
@@ -721,23 +742,7 @@ async function restoreMissing(
 ): Promise<{ url: string; error: unknown }[]> {
   try {
     if (from.endsWith("/")) {
-      let created = false;
-      if (!(await exists(client, to))) {
-        try {
-          await client.createFolder(to);
-          created = true;
-        } catch (error) {
-          if (!(error instanceof DriveError && error.kind === "conflict")) throw error;
-        }
-      }
-      // Establish and verify the archived ACL before any child payload exists.
-      // A failed installation leaves only our empty container to roll back.
-      try {
-        await client.mergeContainer(from, to, created);
-      } catch (error) {
-        if (created) await client.remove(to).catch(() => undefined);
-        throw error;
-      }
+      await client.mergeContainer(from, to, { kind: "preserve-source" });
       const remaining: { url: string; error: unknown }[] = [];
       for (const child of await client.list(from))
         remaining.push(
@@ -775,10 +780,10 @@ async function restoreMissing(
       // An expired owner may still have an HTTP DELETE in flight. Even an absent
       // original can be recreated with the same content-derived ETag. Copy it
       // back, but retain recovery until a terminal receipt confirms quiescence.
-      await client.copy(from, to);
+      await client.copy(from, to, { kind: "preserve-source" });
       throw new TrashMovingError();
     }
-    await client.move(from, to);
+    await client.move(from, to, { kind: "preserve-source" });
     return [];
   } catch (error) {
     return [{ url: from, error }];
@@ -831,7 +836,7 @@ export async function restoreItems(
         renamed = true;
       }
       // The client verifies original or owner-only ACLs on missing ancestors first.
-      const { url } = await client.move(entry.url, target);
+      const { url } = await client.move(entry.url, target, { kind: "preserve-source" });
       if (await recoveryStatus(client, driveRoot, entry))
         await client.remove(recoveryMarker(driveRoot, entry));
       // The slot may contain another writer's resources; only remove it empty.
