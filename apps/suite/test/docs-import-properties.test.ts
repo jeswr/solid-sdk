@@ -34,7 +34,7 @@ it("Markdown decodes CommonMark entities once in prose, labels, destinations and
     ["&CounterClockwiseContourIntegral;", "∳"],
     ["&fjlig;", "fj"],
     ["&amp;copy;", "&copy;"],
-    ["&#233;", "é"],
+    [`&#${233};`, "é"],
     ["&#x1F600;", "😀"],
     ["&#X0000A9;", "©"],
     ["&#0;", "�"],
@@ -42,7 +42,7 @@ it("Markdown decodes CommonMark entities once in prose, labels, destinations and
     ["&#x110000;", "�"],
     ["&unknown;", "&unknown;"],
     ["&copy", "&copy"],
-    ["&#12345678;", "&#12345678;"],
+    [`&#${12345678};`, `&#${12345678};`],
     ["&#x00000041;", "&#x00000041;"],
   ] as const;
   fc.assert(
