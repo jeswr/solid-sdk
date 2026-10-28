@@ -396,3 +396,29 @@ describe("round 9: PublicAgent and conditional attribute in the same matcher", (
     combinations.filter((c) => ["client", "PublicClient", "issuer", "vc"].includes(c.matcher)),
   )("$matcher $operator $field $scope → CSS $target", async (c) => enumerate(c, true));
 });
+
+describe("round 10: auxiliary ACR nodes", () => {
+  it.each(
+    targets,
+  )("never treats an auxiliary node's direct access as Control on CSS %s", async (target) => {
+    const f = await fixture("accessControl", target);
+    const aux = `${f.source.acl(f.file)}#aux`;
+    f.n(aux).add(`${ACP}resource`, f.source.acl(f.file));
+    f.n(aux).add(`${ACP}access`, "urn:r10:public");
+    f.n("urn:r10:public").add(`${ACP}allow`, `${ACP}Read`);
+    f.n("urn:r10:public").add(`${ACP}allow`, `${ACP}Write`);
+    f.n("urn:r10:public").add(`${ACP}allOf`, "urn:r10:anyone");
+    f.n("urn:r10:anyone").add(`${ACP}agent`, `${ACP}PublicAgent`);
+    expect(() => readAcp(f.dataset, f.file, f.source.acl(f.file), "ess")).toThrow(
+      /another ACP resource node/,
+    );
+    f.source.setAcl(f.resource, await serialize(f.dataset));
+    const options = { source: f.source.side(), target: f.target.side() };
+    const plan = await planMigration(options);
+    await executeMigration(finalizePlan(plan, resolve(plan)), options).catch(() => undefined);
+    for (const identity of [{}, { agent: stranger }])
+      expect(
+        (await cssAccess(f.target, `${f.target.root}folder/file`, identity)).has("control"),
+      ).toBe(false);
+  });
+});

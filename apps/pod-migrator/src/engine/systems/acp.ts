@@ -315,7 +315,9 @@ export function readAcp(
           new Policy(policy as unknown as import("@rdfjs/types").Term, dataset, DataFactory),
           scope,
           true,
-          !own && !auxiliary,
+          // Direct access policies count only on the canonical ACR subject; an
+          // auxiliary node's placement is not established as enforced.
+          !own,
           !resources.length,
         );
   }
