@@ -1,13 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it, vi } from "vitest";
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { NamedNodeFrom, OptionalAs, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { IssueAssignmentAnnouncer, issuesStore, type Issue } from "./issues.js";
+import { buildIssue, IssueAssignmentAnnouncer, IssueDoc, issuesStore, type Issue } from "./issues.js";
 import { ActivityDoc } from "./notify-send.js";
 import { serializeTurtle } from "./pod-data.js";
 import {
   InvalidTargetError,
+  ItemReadError,
   NoInboxError,
   NotificationSendError,
   ResourceWriteError,
@@ -15,6 +17,7 @@ import {
 import type { StoredItem } from "./productivity-store.js";
 
 const ACTOR = "https://alice.example/profile/card#me";
+const REPORTER = "https://reporter.example/profile/card#me";
 const RECIPIENT = "https://bob.example/profile/card#me";
 const PROFILE = "https://bob.example/profile/card";
 const INBOX = "https://bob.example/inbox/";
@@ -28,24 +31,36 @@ class InboxProfile extends TermWrapper {
   }
 }
 
-function turtle(body: string): Response {
-  return new Response(body, { headers: { "content-type": "text/turtle", etag: '"v2"' } });
+function turtle(body: string, etag = '"v2"'): Response {
+  return new Response(body, { headers: { "content-type": "text/turtle", etag } });
 }
 
 function previous(assignee?: string, url = ISSUE): StoredItem<Issue> {
   return { url, etag: '"v1"', data: { title: "Repair a hinge", state: "open", assignee } };
 }
 
-async function harness(opts: { inbox?: string; postStatus?: number; putStatus?: number } = {}) {
+async function harness(opts: {
+  inbox?: string;
+  postStatus?: number;
+  putStatus?: number;
+  profileResponse?: Promise<Response>;
+} = {}) {
   const dataset = new Store();
   new InboxProfile(RECIPIENT, dataset, DataFactory).inbox = (opts.inbox ?? INBOX) || undefined;
   const profile = await serializeTurtle(dataset);
   const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
     const url = String(input);
+    // IssuesStore.update reads the stored creator before its conditional PUT
+    // (sst-kfx.1); keep that read on the real RDF parsing path.
+    if (url.startsWith(`${POD}issues/`) && (init?.method ?? "GET") === "GET") {
+      return turtle(await serializeTurtle(buildIssue(url, {
+        ...previous().data, creator: REPORTER,
+      })), '"v1"');
+    }
     if (url.startsWith(`${POD}issues/`) && init?.method === "PUT") {
       return new Response(null, { status: opts.putStatus ?? 205, headers: { etag: '"v2"' } });
     }
-    if (url === PROFILE) return turtle(profile);
+    if (url === PROFILE) return opts.profileResponse ?? turtle(profile);
     if (url === INBOX && init?.method === "POST") {
       return new Response(null, { status: opts.postStatus ?? 201 });
     }
@@ -66,6 +81,7 @@ describe("user issue assignment announcements", () => {
       title: 'Repair "a hinge"',
       description: `Private details at ${POD}private/notes.ttl`,
       assignee: RECIPIENT,
+      creator: ACTOR,
     };
     await expect(
       h.announcer.updateFromUser(h.store, previous(ACTOR), issue),
@@ -75,8 +91,14 @@ describe("user issue assignment announcements", () => {
     expect(String(input)).toBe(INBOX);
     expect(init?.redirect).toBe("manual");
     expect(new Headers(init?.headers).get("content-type")).toBe("text/turtle");
-    expect(h.fetchImpl.mock.calls[0][1]?.method).toBe("PUT");
-    expect(new Headers(h.fetchImpl.mock.calls[0][1]?.headers).get("if-match")).toBe('"v1"');
+    expect(h.fetchImpl.mock.calls.map(([url, request]) => [String(url), request?.method ?? "GET"]))
+      .toEqual([[ISSUE, "GET"], [ISSUE, "PUT"], [PROFILE, "GET"], [INBOX, "POST"]]);
+    const put = h.fetchImpl.mock.calls[1][1];
+    expect(new Headers(put?.headers).get("if-match")).toBe('"v1"');
+    const { dataset: saved } = await fetchRdf(ISSUE, {
+      fetch: vi.fn<typeof fetch>(async () => turtle(String(put?.body))),
+    });
+    expect(new IssueDoc(`${ISSUE}#it`, saved, DataFactory).creator).toBe(REPORTER);
     const { dataset } = await fetchRdf(`${INBOX}notification.ttl`, {
       fetch: vi.fn<typeof fetch>(async () => turtle(String(init?.body))),
     });
@@ -104,7 +126,7 @@ describe("user issue assignment announcements", () => {
     await h.announcer.updateFromUser(h.store, previous(before), {
       ...previous().data, assignee: after,
     });
-    expect(h.fetchImpl.mock.calls.map(([, init]) => init?.method)).toEqual(["PUT"]);
+    expect(h.fetchImpl.mock.calls.map(([, init]) => init?.method ?? "GET")).toEqual(["GET", "PUT"]);
     expect(h.onError).not.toHaveBeenCalled();
   });
 
@@ -120,15 +142,15 @@ describe("user issue assignment announcements", () => {
   });
 
   it("reserves the pair while inbox delivery is still pending", async () => {
-    const h = await harness();
     let release!: (response: Response) => void;
     const pending = new Promise<Response>((resolve) => { release = resolve; });
-    h.fetchImpl.mockImplementationOnce(async () => new Response(null, { status: 205 }));
-    h.fetchImpl.mockImplementationOnce(() => pending);
+    const h = await harness({ profileResponse: pending });
     const issue = { ...previous().data, assignee: RECIPIENT };
     await h.announcer.updateFromUser(h.store, previous(), issue);
     await h.announcer.updateFromUser(h.store, previous(), issue);
     expect(h.fetchImpl.mock.calls.filter(([url]) => String(url) === PROFILE)).toHaveLength(1);
+    expect(h.fetchImpl.mock.calls.filter(([, init]) => init?.method === "PUT")).toHaveLength(2);
+    expect(h.posts()).toHaveLength(0);
     release(turtle(h.profile));
     await vi.waitFor(() => expect(h.posts()).toHaveLength(1));
   });
@@ -192,7 +214,7 @@ describe("user issue assignment announcements", () => {
       ...previous().data, assignee: "https://127.0.0.1/profile#me",
     });
     await vi.waitFor(() => expect(h.onError).toHaveBeenCalled());
-    expect(h.fetchImpl.mock.calls.map(([, init]) => init?.method)).toEqual(["PUT"]);
+    expect(h.fetchImpl.mock.calls.map(([, init]) => init?.method ?? "GET")).toEqual(["GET", "PUT"]);
   });
 
   it("does not announce a rejected issue write", async () => {
@@ -200,13 +222,23 @@ describe("user issue assignment announcements", () => {
     await expect(h.announcer.updateFromUser(h.store, previous(), {
       ...previous().data, assignee: RECIPIENT,
     })).rejects.toBeInstanceOf(ResourceWriteError);
-    expect(h.fetchImpl.mock.calls.map(([, init]) => init?.method)).toEqual(["PUT"]);
+    expect(h.fetchImpl.mock.calls.map(([, init]) => init?.method ?? "GET")).toEqual(["GET", "PUT"]);
+    expect(h.onError).not.toHaveBeenCalled();
+  });
+
+  it("does not write or announce when the creator-preserving read fails", async () => {
+    const h = await harness();
+    h.fetchImpl.mockResolvedValueOnce(new Response(null, { status: 403 }));
+    await expect(h.announcer.updateFromUser(h.store, previous(), {
+      ...previous().data, assignee: RECIPIENT,
+    })).rejects.toBeInstanceOf(ItemReadError);
+    expect(h.fetchImpl.mock.calls.map(([, init]) => init?.method ?? "GET")).toEqual(["GET"]);
     expect(h.onError).not.toHaveBeenCalled();
   });
 
   it("keeps ordinary store updates silent for bulk and automated callers", async () => {
     const h = await harness();
     await h.store.update(ISSUE, { ...previous().data, assignee: RECIPIENT }, '"v1"');
-    expect(h.fetchImpl.mock.calls.map(([, init]) => init?.method)).toEqual(["PUT"]);
+    expect(h.fetchImpl.mock.calls.map(([, init]) => init?.method ?? "GET")).toEqual(["GET", "PUT"]);
   });
 });
