@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Typed @rdfjs/wrapper accessors over a VC graph + the low-level GraphBuilder
@@ -23,12 +24,14 @@ import { DataFactory, Store } from "n3";
 import { escapeIri } from "./iri.js";
 import {
   DC_CREATED,
+  LEGACY_SVC_NS,
   RDF_TYPE,
   SEC_CRYPTOSUITE,
   SEC_PROOF,
   SEC_PROOF_PURPOSE,
   SEC_PROOF_VALUE,
   SEC_VERIFICATION_METHOD,
+  SVC,
   VC_CREDENTIAL,
   VC_CREDENTIAL_SUBJECT,
   VC_HOLDER,
@@ -47,6 +50,22 @@ import {
  */
 function objectTerms(node: TermWrapper, predicate: string): Set<TermWrapperType> {
   return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
+}
+
+/** Read-only authorization claims across both namespace spellings. */
+export class AuthorizationSubjectNode extends TermWrapper {
+  constructor(subject: string, dataset: DatasetCore) {
+    super(subject, dataset, DataFactory as unknown as DataFactoryType);
+  }
+  iris(local: "authorizes" | "action" | "target" | "policy"): Set<string> {
+    return new Set(
+      [SVC, LEGACY_SVC_NS].flatMap((ns) =>
+        [...objectTerms(this, ns + local)]
+          .filter((term) => term.termType === "NamedNode")
+          .map((term) => term.value),
+      ),
+    );
+  }
 }
 
 /** A typed view of a `sec:DataIntegrityProof` node. */

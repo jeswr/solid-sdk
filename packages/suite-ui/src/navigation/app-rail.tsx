@@ -2,6 +2,12 @@
 "use client";
 
 import type { ReactNode } from "react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../components/ui/tooltip.js";
 import { AppLauncher, type AppLauncherProps } from "./app-launcher.js";
 import { AppGlyph, suiteApps } from "./apps.js";
 import { usePreferences } from "./preferences.js";
@@ -38,16 +44,21 @@ export function AppRail({
         </div>
       ) : (
         pinned.map((app) => (
-          <a
-            className="suite-rail-button"
-            key={app.slug}
-            href={app.basePath}
-            aria-label={app.name}
-            title={app.name}
-            aria-current={app.slug === currentApp ? "page" : undefined}
-          >
-            <AppGlyph app={app.slug} />
-          </a>
+          <TooltipProvider key={app.slug}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <a
+                  className="suite-rail-button"
+                  href={app.basePath}
+                  aria-label={app.name}
+                  aria-current={app.slug === currentApp ? "page" : undefined}
+                >
+                  <AppGlyph app={app.slug} />
+                </a>
+              </TooltipTrigger>
+              <TooltipContent side="right">{app.name}</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         ))
       )}
       <AppLauncher currentApp={currentApp} apps={apps} trigger="more" />
