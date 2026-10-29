@@ -17,7 +17,7 @@ test('fills approved categories after preview and remembers consent separately f
   await page.locator('[data-solid-formfill]').click();
   const preview = await previewPromise;
   await preview.waitForURL('**/formfill/preview.html?*');
-  await expect(preview.getByLabel('Use profile')).toBeVisible();
+  await expect(preview.getByLabel('Use account')).toBeVisible();
   await expect(preview.locator('dd')).toContainText([
     'Alex Wilder',
     'test@example.com',

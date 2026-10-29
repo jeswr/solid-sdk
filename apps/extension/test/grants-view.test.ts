@@ -8,6 +8,7 @@ import {
 } from '../src/sidepanel/grants-controller';
 import { mountGrantsView } from '../src/sidepanel/grants-view';
 import { DAY, NOW, profiles, SITE, siteGrant } from './grants-fixtures';
+import { expectAccessible } from './permission-a11y';
 
 let cleanup: (() => void) | undefined;
 afterEach(() => {
@@ -16,7 +17,9 @@ afterEach(() => {
 });
 
 async function fixture(grants = [siteGrant()]) {
-  const dom = new JSDOM('<section id="grants"></section>');
+  const dom = new JSDOM(
+    '<!doctype html><html lang="en"><head><title>Site access</title></head><body><main><h1>Solid</h1><section id="grants"></section></main></body></html>',
+  );
   const doc = dom.window.document;
   // jsdom lacks native dialog opening/closing and keyboard default actions. Real
   // Tab movement and Enter/Space activation are covered by the E2E scenario.
@@ -50,6 +53,85 @@ async function fixture(grants = [siteGrant()]) {
 }
 
 describe('sites with access view', () => {
+  it.each([
+    'light',
+    'dark',
+  ])('groups the PermissionRow header and per-class consequences accessibly in %s mode', async (theme) => {
+    const grant = siteGrant({ expiresAt: NOW + DAY * 30 });
+    const { root, button, doc, dialog } = await fixture([grant]);
+    doc.documentElement.classList.toggle('dark', theme === 'dark');
+    const header = root.querySelector('.permission-header')!;
+    expect(header.querySelector('h3')?.textContent).toBe(SITE);
+    expect(header.querySelector('.grants-bound-account')?.textContent).toContain(
+      'Personal account',
+    );
+    expect(header.textContent).toContain('Since');
+    expect(header.querySelector('.grants-summary')?.textContent).toContain('Documents');
+    expect(header.querySelector('.grants-destructive')?.textContent).toBe('Revoke');
+    const toggle = button('Access details');
+    toggle.focus();
+    toggle.click();
+    const detail = doc.getElementById(toggle.getAttribute('aria-controls')!)!;
+    expect(detail.hidden).toBe(false);
+    expect(detail.querySelector('.grants-feature')?.textContent).toBe(`Used by ${SITE}`);
+    expect(detail.querySelector('.grants-consequence')?.textContent).toContain(
+      'will lose access to your Documents',
+    );
+    const expiry = new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(grant.expiresAt!);
+    expect(detail.querySelector('.grants-expiry')?.textContent).toBe(`Expires ${expiry}`);
+    await expectAccessible(doc);
+    button('Revoke').click();
+    expect(dialog.open).toBe(true);
+    await expectAccessible(doc);
+  });
+
+  it('summarises distinct data types with four chips and an overflow count, retaining every detail', async () => {
+    const grant = siteGrant();
+    const classes = [
+      'Person',
+      'Person',
+      'Event',
+      'TextDigitalDocument',
+      'PostalAddress',
+      'OtherClass',
+    ].map((name, index) => ({
+      ...grant.scope.classes![0],
+      grantId: `class-${index}`,
+      dataClass: `https://schema.org/${name}`,
+      purpose: 'plan your week',
+    }));
+    const { root } = await fixture([siteGrant({ scope: { pods: [], classes } })]);
+    const chips = [...root.querySelectorAll('.grants-summary span')].map(
+      (node) => node.textContent,
+    );
+    expect(chips).toEqual([
+      'Contacts',
+      'Calendar events',
+      'Documents',
+      'Addresses',
+      '+1',
+      'Until revoked',
+    ]);
+    expect(root.querySelectorAll('.grants-class')).toHaveLength(6);
+    expect(root.querySelector('.grants-feature')?.textContent).toBe('Used to plan your week');
+  });
+
+  it('keeps an open confirmation and its focus through refresh, then returns to its trigger', async () => {
+    const { doc, button, dialog, controller } = await fixture();
+    button('Revoke').focus();
+    button('Revoke').click();
+    const cancel = button('Cancel', dialog);
+    await controller.refresh();
+    expect(dialog.open).toBe(true);
+    expect(doc.activeElement).toBe(cancel);
+    cancel.click();
+    expect(dialog.open).toBe(false);
+    expect(doc.activeElement).toBe(button('Revoke'));
+  });
+
   it('renders site identity, account initials, since and nested plain-language data access', async () => {
     const { root, button } = await fixture([siteGrant({ expiresAt: NOW + DAY * 90 })]);
     expect(root.querySelector('article')?.getAttribute('aria-label')).toBe(SITE);
