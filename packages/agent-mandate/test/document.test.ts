@@ -55,6 +55,10 @@ it("verifies the exported mandate proof configuration independently with WebCryp
   const store = await parseRdf(document, "text/turtle");
   const proof = node(store, ID).one(`${SEC}proof`);
   expect(proof.termType).toBe("BlankNode");
+  const cryptosuite = proof.one(`${SEC}cryptosuite`);
+  expect((cryptosuite as unknown as { datatype: { value: string } }).datatype.value).toBe(
+    `${SEC}cryptosuiteString`,
+  );
   const created = proof.one("http://purl.org/dc/terms/created");
   expect((created as unknown as { datatype: { value: string } }).datatype.value).toBe(
     "http://www.w3.org/2001/XMLSchema#dateTime",
@@ -120,6 +124,7 @@ it("preserves ACL, delegation and extension vocabulary in signed mandate Turtle"
 it.each([
   "named",
   "datatype",
+  "cryptosuite-datatype",
   "extra",
 ] as const)("rejects altered mandate proof configuration: %s", async (change) => {
   const document = await alterProofOptions(await mandateToTurtle(vc), ID, change);

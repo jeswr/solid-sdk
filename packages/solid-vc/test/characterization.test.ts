@@ -21,6 +21,10 @@
 //  - RDFC-1.0 canonicalization is deterministic by construction, so the canonical
 //    N-Quads and the Turtle / JSON-LD projections are pinned literally.
 
+// AUTHORED-BY Codex GPT-6.1-Sol
+// The proof hash/signature goldens intentionally change for the standards fix:
+// sec:cryptosuite is typed sec:cryptosuiteString. W3C vectors independently pin
+// that encoding in rdfc-conformance.test.ts; the unsigned claim goldens stay fixed.
 import { importJWK, type JWK } from "jose";
 import { describe, expect, it } from "vitest";
 import { canonicalNQuads, dataIntegrityHash } from "../src/canonicalize.js";
@@ -96,12 +100,12 @@ const GOLDEN_CANON = `<https://alice.example/profile#me> <https://w3id.org/jeswr
 
 // The captured golden Ed25519 proofValue (deterministic for this exact pre-image).
 const GOLDEN_PROOF_VALUE =
-  "z2Vz6d7hC4kWW9mhXcpK1iJ6HJf4mPPEN4BBKMpsjmkhNviESnnudfpDesAdqQHN2F9ktUbN2DJs2CcKdUZm41pYo";
+  "z63JgqDynh8Gnr9h1MfZmtbzTPpVqFcxRHAEaZ31HZ73qnzCrLeJMsweiJNg6RQ3LRdE9wHTX7P9v71ujbNoEc23c";
 
 // The captured golden Data Integrity signing pre-image:
 // SHA-256(canon(proofOptions)) || SHA-256(canon(document)), 64 bytes / 128 hex.
 const GOLDEN_HASH_HEX =
-  "b328c5d83bd327d3789e550288ef08516d4adf9c25b8c3d6e8abb965df79711146f61edbd0e72d3eae8b2b34d9e2020689704844cc957d6f353abd1d18cea0f6";
+  "92918040c9b9b6c2e74962454486737763f981ad852c023a9bcf434f06bcee5146f61edbd0e72d3eae8b2b34d9e2020689704844cc957d6f353abd1d18cea0f6";
 
 // The captured golden Turtle serialisation (byte-for-byte from @jeswr/rdf-serialize).
 const GOLDEN_TTL = `@prefix cred: <https://www.w3.org/2018/credentials#>.

@@ -18,6 +18,7 @@
 // verificationMethod, proofPurpose, created) AND the document — see
 // src/canonicalize.ts.
 
+// AUTHORED-BY Codex GPT-6.1-Sol
 import type { Quad } from "@rdfjs/types";
 import { dataIntegrityHash } from "./canonicalize.js";
 import { base58btcDecode, base58btcEncode } from "./multibase.js";
@@ -121,7 +122,12 @@ export function proofOptionsQuads(proof: Omit<DataIntegrityProof, "proofValue">)
   const b = new GraphBuilder();
   const node = { kind: "blank", value: "_:proof" } as const;
   b.addType(node, "https://w3id.org/security#DataIntegrityProof");
-  b.addLiteral(node, SEC_CRYPTOSUITE, proof.cryptosuite);
+  b.addLiteral(
+    node,
+    SEC_CRYPTOSUITE,
+    proof.cryptosuite,
+    "https://w3id.org/security#cryptosuiteString",
+  );
   b.addIri(node, SEC_VERIFICATION_METHOD, proof.verificationMethod);
   b.addIri(node, SEC_PROOF_PURPOSE, purposeIri(proof.proofPurpose));
   if (proof.created !== undefined) {

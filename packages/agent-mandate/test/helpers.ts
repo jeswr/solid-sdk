@@ -100,7 +100,7 @@ export async function verifyExportedRdf(
 export async function alterProofOptions(
   document: string,
   id: string,
-  change: "named" | "datatype" | "extra",
+  change: "named" | "datatype" | "cryptosuite-datatype" | "extra",
 ): Promise<string> {
   const store = await parseRdf(document, "text/turtle");
   const subject = node(store, id);
@@ -115,14 +115,14 @@ export async function alterProofOptions(
       ...[...store].filter((q) => subject.equals(q.subject) && q.predicate.value === `${SEC}proof`),
     ]);
     subject.setIri(`${SEC}proof`, named.value);
-  } else if (change === "datatype") {
-    const created = proof.text("http://purl.org/dc/terms/created");
+  } else if (change === "datatype" || change === "cryptosuite-datatype") {
+    const predicate =
+      change === "datatype" ? "http://purl.org/dc/terms/created" : `${SEC}cryptosuite`;
+    const value = proof.text(predicate);
     store.removeQuads(
-      [...store].filter(
-        (q) => proof.equals(q.subject) && q.predicate.value === "http://purl.org/dc/terms/created",
-      ),
+      [...store].filter((q) => proof.equals(q.subject) && q.predicate.value === predicate),
     );
-    proof.setText("http://purl.org/dc/terms/created", created);
+    proof.setText(predicate, value);
   } else proof.setText("urn:example:extra", "unsigned option");
   return turtle(store);
 }

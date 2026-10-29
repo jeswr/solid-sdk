@@ -54,6 +54,10 @@ it("verifies the exported approval proof configuration independently with WebCry
   const store = await parseRdf(document, "text/turtle");
   const proof = node(store, a.id).one(`${SEC}proof`);
   expect(proof.termType).toBe("BlankNode");
+  const cryptosuite = proof.one(`${SEC}cryptosuite`);
+  expect((cryptosuite as unknown as { datatype: { value: string } }).datatype.value).toBe(
+    `${SEC}cryptosuiteString`,
+  );
   const created = proof.one("http://purl.org/dc/terms/created");
   expect((created as unknown as { datatype: { value: string } }).datatype.value).toBe(
     "http://www.w3.org/2001/XMLSchema#dateTime",
@@ -62,6 +66,7 @@ it("verifies the exported approval proof configuration independently with WebCry
 it.each([
   "named",
   "datatype",
+  "cryptosuite-datatype",
   "extra",
 ] as const)("rejects altered approval proof configuration: %s", async (change) => {
   const document = await alterProofOptions(await issueApproval(a, key, NOW), a.id, change);
