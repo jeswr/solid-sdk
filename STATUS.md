@@ -443,3 +443,48 @@ distributions are committed. Both supplied findings are addressed, with no
 unfinished implementation or open questions. `roborev` remains unavailable in the
 sandbox, so per-commit review remains with the dispatcher. No pushes, PRs, branch
 changes, remote git fetches/merges, or tracker writes occurred.
+
+## Fix round 12 — quoted assignments, malformed end tags, and trailing slashes
+
+Starting commit: `7c71e81181e26c18da46d3ce7921a564c8d13c06`.
+
+- `b1ef79ee` — `fix(skills): preserve single-quoted backslashes`: parse
+  single-quoted environment values literally, retaining double-quoted escape
+  handling. Add 11 cases covering terminal backslashes, multiline values,
+  placeholders, decoded metadata, environment companions, and index preservation.
+- `fa12d58d` — `fix(skills): consume malformed HTML end tags`: consume end-tag
+  openers without an ASCII letter through the next `>` or EOF before resuming
+  link scanning. Add 24 cases covering active links, inert comment contents,
+  raw-text elements, foreign content, attributes, reference definitions, and index
+  preservation.
+- `72fe3525` — `fix(skills): require directories for trailing slashes`: retain
+  the decoded path's trailing-slash requirement and check the resolved target's
+  type. Add 23 cases covering Markdown and HTML destinations, encoded slashes,
+  companion Markdown, directories, query/fragment boundaries, and index preservation.
+- The final `docs:` commit records this round's validation results.
+
+All three supplied findings were reproduced before their fixes. All 753 checker
+cases pass afterward (58 added this round). No dependencies, package
+implementations, skill content, or generated index changes were needed. Only root
+tooling changed, so individual package gates and dependency-policy checks do not
+apply. Validation used Node `v24.22.1` via `/opt/node24/bin`.
+
+| Exact command | Result |
+| --- | --- |
+| `PATH=/opt/node24/bin:$PATH pnpm exec vitest run test/check-skills.test.mjs` | PASS, 706 tests after the first fix; the affected gate below covers all 753 final checker tests. |
+| `PATH=/opt/node24/bin:$PATH pnpm exec vitest run test/check-skills.test.mjs -t 'malformed end.tag\|processing.instruction\|CDATA\|comment'` | PASS, 94 selected tests after the second fix. |
+| `PATH=/opt/node24/bin:$PATH pnpm exec vitest run test/check-skills.test.mjs -t 'trailing.slash\|directory destinations'` | PASS, 23 selected tests after the third fix. |
+| `PATH=/opt/node24/bin:$PATH pnpm exec biome check --write scripts/check-skills.mjs test/check-skills.test.mjs` | PASS; formatted one test layout before its implementation commit. |
+| `PATH=/opt/node24/bin:$PATH pnpm exec biome check scripts/check-skills.mjs test/check-skills.test.mjs` | PASS, including after the full gate. |
+| `PATH=/opt/node24/bin:$PATH TURBO_SCM_BASE=7c71e81181e26c18da46d3ce7921a564c8d13c06 pnpm run gate` | PASS on retry; root lint, 57 skills with current index, and all 1,498 root tests across ten files, including all 753 checker tests. The first run passed 1,497 tests but failed the unrelated SDK-layer timing assertion at `test/check-sdk-layers.test.mjs:328` (61.3 ms versus its 50 ms limit). No code or test changes preceded the successful retry. |
+| `PATH=/opt/node24/bin:$PATH pnpm run gate:full` | FAIL, 298 successful / 353 total tasks, one cached; the previously recorded `@jeswr/federation-trust#test` JWK-order snapshot mismatch at `test/characterization.test.ts:196`. Root lint passes; all 1,498 root tests replayed from the successful affected-gate cache. |
+| `git diff --exit-code 7c71e81181e26c18da46d3ce7921a564c8d13c06 -- packages apps skills/INDEX.md pnpm-lock.yaml` | PASS; all are unchanged in this round. |
+| `git diff --check` | PASS. |
+
+The full gate received JWK property order `kty,crv,x` where the snapshot expects
+`crv,x,kty`; that existing failure remains outside this brief. Removed the 16
+generated app `clientid.jsonld`/`callback.html` files after the gate. No generated
+distributions are committed. All three supplied findings are addressed, with no
+unfinished implementation or open questions. `roborev` remains unavailable in the
+sandbox, so per-commit review remains with the dispatcher. No pushes, PRs, branch
+changes, remote git fetches/merges, or tracker writes occurred.
