@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 
 import * as entry0 from "@jeswr/agent-mandate";
+import * as entry2 from "@jeswr/agent-mandate/sparq";
 import * as entry1 from "@jeswr/agent-mandate/testing";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { existsSync, readFileSync } from "fs";
@@ -13,6 +14,7 @@ const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.
 const modules: Record<string, object> = {
   ".": entry0,
   "./testing": entry1,
+  "./sparq": entry2,
 };
 const entries = Object.entries(manifest.exports) as [string, { types: string; default: string }][];
 
@@ -24,10 +26,10 @@ it("declares the root and testing entry points on Node >=24", () => {
   expect(manifest.engines.node).toBe(">=24");
 });
 
-it.each(entries)("resolves %s without exposing runtime capabilities", (subpath, target) => {
+it.each(entries)("resolves the documented %s entry point", (subpath, target) => {
   expect(existsSync(fileURLToPath(new URL(`../${target.types}`, import.meta.url)))).toBe(true);
   const entry = new URL(`../${target.default}`, import.meta.url);
   const specifier = manifest.name + (subpath === "." ? "" : subpath.slice(1));
   expect(import.meta.resolve(specifier)).toBe(entry.href);
-  expect(Object.getOwnPropertyNames(modules[subpath])).toEqual([]);
+  expect(Object.getOwnPropertyNames(modules[subpath]).length).toBeGreaterThan(0);
 });

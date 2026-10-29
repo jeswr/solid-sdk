@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
 import {
   agentAuthorizationFromRdf,
@@ -154,6 +155,50 @@ describe("authorization namespace migration", () => {
     const data = await parseCredentialRdf(
       `${ttl}\n<${ISSUER}> <${SVC}${claim}> <https://example.org/conflict> .`,
     );
+    expect(agentAuthorizationFromRdf(expectDefined(credentialFromRdf(data)))).toBeUndefined();
+  });
+
+  it.each([LEGACY, SVC])("rejects differing RDF action sets in %s", async (namespace) => {
+    const other = namespace === SVC ? LEGACY : SVC;
+    const data = await parseCredentialRdf(
+      await credentialToTurtle({
+        ...buildAgentAuthorizationCredential(auth),
+        credentialSubject: {
+          id: ISSUER,
+          [`${LEGACY}authorizes`]: AGENT,
+          [`${namespace}action`]: [ACL_READ],
+          [`${other}action`]: [ACL_READ, "http://www.w3.org/ns/auth/acl#Write"],
+        },
+      }),
+    );
+    expect(agentAuthorizationFromRdf(expectDefined(credentialFromRdf(data)))).toBeUndefined();
+  });
+
+  it.each([
+    "https://other.example/principal",
+    undefined,
+  ])("rejects additional RDF subjects, including %s", async (id) => {
+    const credential = buildAgentAuthorizationCredential(auth);
+    const data = await parseCredentialRdf(
+      await credentialToTurtle({
+        ...credential,
+        credentialSubject: [
+          credential.credentialSubject as { id: string },
+          { id, authorizes: AGENT },
+        ],
+      }),
+    );
+    expect(agentAuthorizationFromRdf(expectDefined(credentialFromRdf(data)))).toBeUndefined();
+  });
+
+  it.each([
+    "authorizes",
+    "action",
+    "target",
+    "policy",
+  ])("rejects non-IRI RDF %s aliases instead of hiding them", async (claim) => {
+    const ttl = await credentialToTurtle(buildAgentAuthorizationCredential(auth));
+    const data = await parseCredentialRdf(`${ttl}\n<${ISSUER}> <${SVC}${claim}> "invalid" .`);
     expect(agentAuthorizationFromRdf(expectDefined(credentialFromRdf(data)))).toBeUndefined();
   });
 });

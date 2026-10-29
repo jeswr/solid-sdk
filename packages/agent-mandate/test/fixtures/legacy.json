@@ -1,0 +1,78 @@
+{
+  "authoredBy": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "fixture": "TEST ONLY: synthetic pilot schedulingMandate",
+  "publicJwk": {
+    "kty": "OKP",
+    "crv": "Ed25519",
+    "x": "gbhALjJloGfO3EnYmcVMh2MHdX2L8x-SW7V9viXK4NM"
+  },
+  "kid": "P2KeQEX4rFvg1qKBzWTbWtfgr9N9gr-GN-E31L2H130",
+  "jws": "eyJhbGciOiJFZERTQSIsImtpZCI6IlAyS2VRRVg0ckZ2ZzFxS0J6V1RiV3RmZ3I5Tjlnci1HTi1FMzFMMkgxMzAiLCJ0eXAiOiJhd3AtbWFuZGF0ZStqd3MifQ.eyJ0eXBlIjoiT3duZXJNYW5kYXRlIiwiaWQiOiJ1cm46ZXhhbXBsZTpwaWxvdC1tYW5kYXRlIiwidmVyc2lvbiI6MSwiaXNzdWVyIjoiaHR0cHM6Ly9vd25lci5leGFtcGxlL3Byb2ZpbGUjbWUiLCJzdWJqZWN0IjoiaHR0cHM6Ly9hZ2VudC5leGFtcGxlLyNtZSIsInZhbGlkRnJvbSI6IjIwMjYtMTAtMTlUMDA6MDA6MDAuMDAwWiIsInZhbGlkVW50aWwiOiIyMDI2LTExLTE5VDAwOjAwOjAwLjAwMFoiLCJhdXRvbm9tb3VzIjp7ImlkIjoidXJuOmV4YW1wbGU6cGlsb3QtYXV0b25vbW91cyIsInR5cGUiOiJTZXQiLCJhc3NpZ25lciI6Imh0dHBzOi8vb3duZXIuZXhhbXBsZS9wcm9maWxlI21lIiwiYXNzaWduZWUiOiJodHRwczovL2FnZW50LmV4YW1wbGUvI21lIiwiY29uZmxpY3QiOiJwcm9oaWJpdCIsInBlcm1pc3Npb25zIjpbeyJpZCI6InVybjpleGFtcGxlOnNjaGVkdWxlLWtub3duIiwidHlwZSI6InBlcm1pc3Npb24iLCJhY3Rpb24iOiJ1c2UiLCJ0YXJnZXQiOiJodHRwczovL3czaWQub3JnL2plc3dyL2F3cCNvcC9zY2hlZHVsZS1tZWV0aW5nIiwiY29uc3RyYWludHMiOlt7ImxlZnRPcGVyYW5kIjoicHVycG9zZSIsIm9wZXJhdG9yIjoiaXNBbnlPZiIsInJpZ2h0T3BlcmFuZCI6WyJodHRwczovL3czaWQub3JnL2RwdiNDb21tdW5pY2F0aW9uTWFuYWdlbWVudCJdfSx7ImxlZnRPcGVyYW5kIjoicmVjaXBpZW50Iiwib3BlcmF0b3IiOiJpc0FueU9mIiwicmlnaHRPcGVyYW5kIjpbImh0dHBzOi8vcGVlci5leGFtcGxlLyNtZSJdfV19XSwicHJvaGliaXRpb25zIjpbeyJpZCI6InVybjpleGFtcGxlOm5vLXBheW1lbnQiLCJ0eXBlIjoicHJvaGliaXRpb24iLCJhY3Rpb24iOiJjb21wZW5zYXRlIiwidGFyZ2V0IjoiaHR0cHM6Ly93M2lkLm9yZy9qZXN3ci9hd3Ajb3AvcGF5bWVudCJ9XX0sIndpdGhBcHByb3ZhbCI6eyJpZCI6InVybjpleGFtcGxlOnBpbG90LWFwcHJvdmFsIiwidHlwZSI6IlNldCIsImFzc2lnbmVyIjoiaHR0cHM6Ly9vd25lci5leGFtcGxlL3Byb2ZpbGUjbWUiLCJhc3NpZ25lZSI6Imh0dHBzOi8vYWdlbnQuZXhhbXBsZS8jbWUiLCJjb25mbGljdCI6InByb2hpYml0IiwicGVybWlzc2lvbnMiOlt7ImlkIjoidXJuOmV4YW1wbGU6c2NoZWR1bGUtb3RoZXIiLCJ0eXBlIjoicGVybWlzc2lvbiIsImFjdGlvbiI6InVzZSIsInRhcmdldCI6Imh0dHBzOi8vdzNpZC5vcmcvamVzd3IvYXdwI29wL3NjaGVkdWxlLW1lZXRpbmciLCJjb25zdHJhaW50cyI6W3sibGVmdE9wZXJhbmQiOiJwdXJwb3NlIiwib3BlcmF0b3IiOiJpc0FueU9mIiwicmlnaHRPcGVyYW5kIjpbImh0dHBzOi8vdzNpZC5vcmcvZHB2I0NvbW11bmljYXRpb25NYW5hZ2VtZW50Il19XX1dfSwibm90ZSI6IlN5bnRoZXRpYyBwaWxvdCBtYW5kYXRlLiBTY2hlZHVsaW5nIG9ubHk7IG5vIHBheW1lbnRzOyBubyBvdGhlciBvcGVyYXRpb25zLiJ9.aUiHW6Dg4XRjMwxq3sRNiiyOKtNizYz3ZEcbIZ6Q_Z0RoSTuFF9pqvxpoUM5vH6IImVnA_LW4nGN47z_imcRBw",
+  "payload": {
+    "type": "OwnerMandate",
+    "id": "urn:example:pilot-mandate",
+    "version": 1,
+    "issuer": "https://owner.example/profile#me",
+    "subject": "https://agent.example/#me",
+    "validFrom": "2026-10-19T00:00:00.000Z",
+    "validUntil": "2026-11-19T00:00:00.000Z",
+    "autonomous": {
+      "id": "urn:example:pilot-autonomous",
+      "type": "Set",
+      "assigner": "https://owner.example/profile#me",
+      "assignee": "https://agent.example/#me",
+      "conflict": "prohibit",
+      "permissions": [
+        {
+          "id": "urn:example:schedule-known",
+          "type": "permission",
+          "action": "use",
+          "target": "https://w3id.org/jeswr/awp#op/schedule-meeting",
+          "constraints": [
+            {
+              "leftOperand": "purpose",
+              "operator": "isAnyOf",
+              "rightOperand": ["https://w3id.org/dpv#CommunicationManagement"]
+            },
+            {
+              "leftOperand": "recipient",
+              "operator": "isAnyOf",
+              "rightOperand": ["https://peer.example/#me"]
+            }
+          ]
+        }
+      ],
+      "prohibitions": [
+        {
+          "id": "urn:example:no-payment",
+          "type": "prohibition",
+          "action": "compensate",
+          "target": "https://w3id.org/jeswr/awp#op/payment"
+        }
+      ]
+    },
+    "withApproval": {
+      "id": "urn:example:pilot-approval",
+      "type": "Set",
+      "assigner": "https://owner.example/profile#me",
+      "assignee": "https://agent.example/#me",
+      "conflict": "prohibit",
+      "permissions": [
+        {
+          "id": "urn:example:schedule-other",
+          "type": "permission",
+          "action": "use",
+          "target": "https://w3id.org/jeswr/awp#op/schedule-meeting",
+          "constraints": [
+            {
+              "leftOperand": "purpose",
+              "operator": "isAnyOf",
+              "rightOperand": ["https://w3id.org/dpv#CommunicationManagement"]
+            }
+          ]
+        }
+      ]
+    },
+    "note": "Synthetic pilot mandate. Scheduling only; no payments; no other operations."
+  }
+}
