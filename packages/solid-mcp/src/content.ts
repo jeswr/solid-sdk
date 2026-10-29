@@ -49,8 +49,10 @@ export function decodePrefix(bytes: Uint8Array, truncated: boolean): string {
 }
 
 /** Normalize JSON-LD for parsing with the refusing document loader. */
-export function normalizeLocalJsonLd(text: string): string {
+export function normalizeLocalJsonLd(text: string, validate: (document: unknown) => void): string {
   const document: unknown = JSON.parse(text);
+  // Validate before stringify: deeply nested JSON can exhaust its call stack.
+  validate(document);
   // Resolve duplicate keys before the streaming parser sees them. Contexts and
   // @import inside JSON literals are opaque data; the parser's refusing loader
   // rejects actual remote contexts without inspecting literal contents.

@@ -114,6 +114,18 @@ function budgetN3Directives(format: string, baseIRI: string, charge: (bytes: num
   })({ lineMode: format === "application/n-triples" || format === "application/n-quads" });
 }
 
+/** Bound buffered jobs and key-path copying before streaming parsing starts. */
+function budgetJsonLdStructure(value: unknown, charge: (bytes: number) => void, depth = 0): void {
+  if (depth > 64) throw new RdfLimitError();
+  // Reserve per-job overhead and depth-weighted path work for EVERY value,
+  // including empty containers, ignored properties and opaque JSON literals.
+  // Key-path scans can themselves copy each prefix, hence the squared depth.
+  charge(8 + (depth + 1) ** 2);
+  if (value && typeof value === "object") {
+    for (const child of Object.values(value)) budgetJsonLdStructure(child, charge, depth + 1);
+  }
+}
+
 /** Context normalization never calls the RDF factory. Account for it separately. */
 function budgetJsonLdContexts(parser: JsonLdParser, charge: (bytes: number) => void): void {
   // Version 5 has no context-parser injection option. Keep this instance-local
@@ -199,14 +211,16 @@ export async function parseBoundedRdf(source: string, contentType: string, baseI
   if (!(SUPPORTED_RDF_MEDIA_TYPES as readonly string[]).includes(format)) {
     throw new RdfFetchError(`Unsupported RDF media type: ${format}`, { contentType: format });
   }
-  const input = Buffer.from(
-    format === "application/ld+json" ? normalizeLocalJsonLd(source) : source,
-  );
   let allocatedBytes = 0;
   const charge = (bytes: number) => {
     allocatedBytes += bytes;
     if (allocatedBytes > MAX_CONTENT_BYTES) throw new RdfLimitError();
   };
+  const input = Buffer.from(
+    format === "application/ld+json"
+      ? normalizeLocalJsonLd(source, (document) => budgetJsonLdStructure(document, charge))
+      : source,
+  );
   const factory = budgetedFactory(charge);
   // N3 supports lexer injection, omitted from the installed @types/n3 options.
   const n3Options =

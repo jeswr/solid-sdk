@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { JsonLdParser } from "jsonld-streaming-parser";
 import { Store, Writer } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -12,6 +13,57 @@ const BASE = "https://alice.example/pod/data";
 afterEach(() => vi.restoreAllMocks());
 
 describe("RDF expansion and serialization budgets", () => {
+  it.each([
+    ["objects", '{"unmapped":', "}", 10_000],
+    ["arrays", "[", "]", 10_000],
+    ["mixed containers", '{"unmapped":[', "]}", 100],
+    [
+      "JSON literals",
+      `{"urn:p":{"@type":"@json","@value":${"[".repeat(100)}`,
+      `${"]".repeat(100)}}}`,
+      1,
+    ],
+  ] as const)("rejects excessive JSON-LD depth in %s before streaming", async (_kind, open, close, depth) => {
+    // Build text directly: stringify itself can overflow on attacker nesting.
+    const source = `${open.repeat(depth)}null${close.repeat(depth)}`;
+    expect(Buffer.byteLength(source)).toBeLessThan(1024 * 1024);
+    const transform = vi.spyOn(JsonLdParser.prototype, "_transform");
+    await expect(parseBoundedRdf(source, "application/ld+json", BASE)).rejects.toBeInstanceOf(
+      RdfLimitError,
+    );
+    expect(transform).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["wide", "[", "]", 100_000],
+    ["depth-weighted", `${'{"unmapped":'.repeat(30)}[`, `]${"}".repeat(30)}`, 2_000],
+  ] as const)("bounds %s JSON-LD jobs even without RDF terms", async (_kind, open, close, count) => {
+    const source = `${open}${"{},".repeat(count - 1)}{}${close}`;
+    expect(Buffer.byteLength(source)).toBeLessThan(1024 * 1024);
+    const transform = vi.spyOn(JsonLdParser.prototype, "_transform");
+    await expect(parseBoundedRdf(source, "application/ld+json", BASE)).rejects.toBeInstanceOf(
+      RdfLimitError,
+    );
+    expect(transform).not.toHaveBeenCalled();
+  });
+
+  it("accepts bounded nesting and treats structural characters in strings as data", async () => {
+    expect(
+      (await parseBoundedRdf(`${"[".repeat(64)}null${"]".repeat(64)}`, "application/ld+json", BASE))
+        .size,
+    ).toBe(0);
+    await expect(
+      parseBoundedRdf(`${"[".repeat(65)}null${"]".repeat(65)}`, "application/ld+json", BASE),
+    ).rejects.toBeInstanceOf(RdfLimitError);
+    const literal = '[{"\\'.repeat(100);
+    const dataset = await parseBoundedRdf(
+      JSON.stringify({ "@id": "urn:s", "urn:p": literal }),
+      "application/ld+json",
+      BASE,
+    );
+    expect(dataset.getQuads("urn:s", "urn:p", null, null)[0]?.object.value).toBe(literal);
+  });
+
   it("bounds chained prefix expansion before emitting quads", async () => {
     const context = {
       p0: `https://example.org/${"long".repeat(4096)}/`,

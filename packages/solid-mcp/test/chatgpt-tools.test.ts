@@ -475,6 +475,18 @@ describe.each([
     expect(result.metadata.truncated).toBe(true);
   });
 
+  it.each([
+    ["depth", `${"[".repeat(100)}null${"]".repeat(100)}`],
+    ["structural work", `[${"{},".repeat(99_999)}{}]`],
+  ])("marks excessive JSON-LD %s as truncated", async (_kind, body) => {
+    const id = `${POD}data`;
+    expect(Buffer.byteLength(body)).toBeLessThan(CAP);
+    const pod = makeFakePod({ [id]: { contentType: "application/ld+json", body } });
+    const result = await fetchDocument({ fetch: pod.fetch, podRoot: POD }, id);
+    expect(result.text).toBe("");
+    expect(result.metadata).toEqual({ contentType: "application/ld+json", truncated: true });
+  });
+
   it("marks unused inline context expansion as truncated", async () => {
     const id = `${POD}data`;
     const context = {
