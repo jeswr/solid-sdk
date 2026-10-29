@@ -186,6 +186,89 @@ async function symmetricAssertionBatch(batch: string, ids = ["one"]) {
   return value;
 }
 
+async function jointCorrespondence(mergeNodes = true) {
+  const first = await sharedBlankAssertions(["one"], "joint-first");
+  const second = await build("joint-second", { template: "email", value: "other@example.org" });
+  const third = await sharedBlankAssertions(["three"], "joint-second");
+  for (const value of [second, third]) {
+    const np = value.nanopubs[0]!;
+    const node =
+      value === third && mergeNodes
+        ? new RdfNode(identity.webId, graph(value.dataset, np.assertionId)).one(
+            `${NS.schema}hasPreference`,
+          )
+        : DataFactory.blankNode();
+    const name = pkgId("batch", np.batch, "sources");
+    const sources = graph(value.dataset, name);
+    new RdfNode("https://example.org/document", sources).add(`${NS.schema}about`, node);
+    new RdfNode(node, sources).text(`${NS.schema}name`, "Preference");
+    putGraph(value.dataset as Store, name, sources);
+  }
+  return [first, second, third];
+}
+
+it.each([
+  [0, 1, 2],
+  [1, 0, 2],
+  [0, 2, 1],
+  [2, 0, 1],
+  [1, 2, 0],
+  [2, 1, 0],
+])("rejects inconsistent joint correspondence across three puts in order %s, %s, %s", async (...order) => {
+  const { store, pod, write } = setup();
+  const values = await jointCorrespondence();
+  const [first, second, third] = order.map((index) => values[index]!);
+  await store.put(first!);
+  await store.put(second!);
+  const urls = [first!, second!].map((value) => store.url(value.nanopubs[0]!.id));
+  const before = await Promise.all(urls.map((url) => pod.read(url)));
+  const unrelated = await build("unrelated", { template: "email", value: "unrelated@example.org" });
+  const incoming = {
+    dataset: new Store([...unrelated.dataset, ...third!.dataset]),
+    nanopubs: [...unrelated.nanopubs, ...third!.nanopubs],
+  };
+  const list = pod.list;
+  for (const reverse of [false, true]) {
+    pod.list = async (container) => {
+      const entries = await list(container);
+      return reverse ? entries.reverse() : entries;
+    };
+    write.mockClear();
+    await expect(new NanopubStore(pod).put(incoming)).rejects.toThrow(
+      /Conflicting blank-node references|Unsupported cross-resource blank-node sharing/,
+    );
+    expect(write).not.toHaveBeenCalled();
+    expect(await Promise.all(urls.map((url) => pod.read(url)))).toEqual(before);
+    for (const np of incoming.nanopubs)
+      await expect(store.get(np.id)).rejects.toMatchObject({ status: 404 });
+    for (let i = 0; i < 2; i++) expect((await store.list()).nanopubs).toHaveLength(2);
+  }
+});
+
+it("preserves independent nodes when repeating graphs from two stored resources", async () => {
+  const { store, pod } = setup();
+  const values = await jointCorrespondence(false);
+  for (const value of values) await new NanopubStore(pod).put(value);
+  const list = pod.list;
+  for (const reverse of [false, true]) {
+    pod.list = async (container) => {
+      const entries = await list(container);
+      return reverse ? entries.reverse() : entries;
+    };
+    const loaded = await store.list();
+    expect(loaded.nanopubs).toHaveLength(3);
+    const np = values[2]!.nanopubs[0]!;
+    const preference = new RdfNode(identity.webId, graph(loaded.dataset, np.assertionId)).one(
+      `${NS.schema}hasPreference`,
+    );
+    const about = new RdfNode(
+      "https://example.org/document",
+      graph(loaded.dataset, pkgId("batch", np.batch, "sources")),
+    ).one(`${NS.schema}about`);
+    expect(preference.equals(about)).toBe(false);
+  }
+});
+
 it.each([
   false,
   true,
