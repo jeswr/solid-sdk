@@ -607,6 +607,51 @@ describe("skill validation", () => {
   });
 
   it.each([
+    '<div></3 <textarea><a href="missing.md">broken</a></div>',
+    '<div></! <style><img src="missing.png"></div>',
+    '<div></ <script><a href="missing.md">broken</a></div>',
+    '<div></\t<title><a href="missing.md">broken</a></div>',
+    '<div></\n<xmp><a href="missing.md">broken</a></div>',
+    '<div></é <plaintext><a href="missing.md">broken</a></div>',
+    '<div></? <!-- ><a href="missing.md">broken</a></div>',
+    '<div></3 data="> <a href="missing.md">broken</a></div>',
+    '<div></><a href="missing.md">broken</a></div>',
+    '<div><svg></3 <title><a xlink:href="missing.md">broken</a></svg></div>',
+    '<div><svg><foreignObject></3 <textarea><a href="missing.md">broken</a></foreignObject></svg></div>',
+    "<div></3 <textarea>\n\n[active]: missing.md\n\n</div>",
+  ])("checks active links after malformed end tags and preserves the index: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    const errors = ["skills/alpha/SKILL.md: relative link does not resolve (target omitted)"];
+    expect(checkSkills(root, { write: true }).errors).toEqual(errors);
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+    const index = "Previously generated index\n";
+    put(root, "skills/INDEX.md", index);
+    expect(checkSkills(root, { write: true }).errors).toEqual(errors);
+    expect(readFileSync(join(root, "skills/INDEX.md"), "utf8")).toBe(index);
+  });
+
+  it.each([
+    '<div></3 <a href="missing.md">comment</a></div>',
+    '<div></! <img src="missing.png"><a href="references/guide.md">guide</a></div>',
+    '<div><svg></3 <a xlink:href="missing.md">comment</a></svg></div>',
+    '<div></3 <a href="missing.md"',
+    "<div></",
+    '<!-- </3 <textarea><a href="missing.md">comment</a> -->',
+    '<textarea></3 <a href="missing.md">literal</a></textarea>',
+    '<script></3 <a href="missing.md">literal</a></script>',
+    '<a title="</3 <textarea>" href="references/guide.md">guide</a>',
+    '`</3 <textarea><a href="missing.md">literal</a>`',
+    '<div></3 <textarea><a href="references/guide.md">guide</a></div>',
+    '<div></div data="<textarea>"><a href="references/guide.md">guide</a>',
+  ])("keeps malformed end-tag comments and literal openers inert: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+    expect(checkSkills(root).errors).toEqual([]);
+  });
+
+  it.each([
     '<svg><![CDATA[<a href="ignored.md">literal</a>]]><a href="missing.md">broken</a></svg>',
     '<svg><![CDATA[<a href="ignored.md">literal</a>]]]><a href="missing.md">broken</a></svg>',
     '<svg><![CDATA[</svg><textarea>]]><a href="missing.md">broken</a></svg>',

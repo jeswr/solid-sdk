@@ -276,17 +276,19 @@ function scriptEndTagOffset(html, start) {
 function htmlLinksIn(html, definitions, definitionMarker) {
   const links = [];
   const elements = [];
-  // Recognize comments/declarations/instructions only between tags; consume values below.
+  // Recognize comment/declaration/instruction and malformed end-tag openers
+  // only between tags; consume attribute values below.
   const tokens = new RegExp(
-    `<!--(?:-?>|[\\s\\S]*?(?:--!?>|$))|<[!?]|<\\/?[a-zA-Z][^\\t\\n\\f\\r />]*|${definitionMarker}(\\d+)\0`,
+    `<!--(?:-?>|[\\s\\S]*?(?:--!?>|$))|<[!?]|<\\/?[a-zA-Z][^\\t\\n\\f\\r />]*|</|${definitionMarker}(\\d+)\0`,
     "g",
   );
   const whitespace = /[\t\n\f\r ]/;
   for (let token = tokens.exec(html); token; token = tokens.exec(html)) {
     if (token[0].startsWith("<!--")) continue;
-    if (token[0] === "<!" || token[0] === "<?") {
+    if (token[0] === "<!" || token[0] === "<?" || token[0] === "</") {
       // CDATA is text through ']]>' only in foreign content. HTML CDATA,
-      // DOCTYPEs, bogus declarations, and instructions end at the next '>' (or EOF).
+      // DOCTYPEs, bogus declarations, instructions, and end tags without an
+      // ASCII letter after '</' end at the next '>' (or EOF).
       const terminator =
         token[0] === "<!" &&
         html.startsWith("[CDATA[", tokens.lastIndex) &&
