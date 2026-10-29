@@ -184,6 +184,10 @@ has not been run in this fixture-only lane.
 immediate UUID resources and ignores nested or off-container listing entries.
 It validates the complete collection's correspondence before returning, including
 externally written resources and regardless of listing order.
+Listing and put validation reject stored resources containing graphs outside
+their head, assertion, provenance, publication-info and declared batch source/entity
+graphs (including correspondence batches). Undeclared graphs reject even when
+their contents match another resource; default and blank-node graphs also reject.
 Repeated graphs must match exactly up to blank-node labels, including literal
 lexical forms, datatypes and language tags; assertion value normalization does
 not apply to this comparison.

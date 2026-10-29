@@ -397,7 +397,12 @@ function mergeNanopublication(
 ): void {
   const np = result.nanopubs[0] as Nanopublication;
   const privateNames = [np.id, np.provenanceId, np.pubinfoId];
-  // Inspect actual graph contents too: external files may carry extra graphs.
+  const sharedNames = sharedGraphNames(np, result.dataset);
+  const declared = new Set([...privateNames, ...sharedNames]);
+  // Only declared graphs participate in fingerprinting and node correspondence.
+  for (const quad of result.dataset)
+    if (quad.graph.termType !== "NamedNode" || !declared.has(quad.graph.value))
+      throw new Error("Undeclared nanopublication graph");
   // Repeated creates still reach the Pod's create-only identity check.
   if (
     !collection.nanopubs.some((previous) => previous.id === np.id) &&
@@ -416,7 +421,7 @@ function mergeNanopublication(
     )
       throw new Error("Reused private nanopublication graph");
   }
-  const graphs = sharedGraphNames(np, result.dataset).map((name) => {
+  const graphs = sharedNames.map((name) => {
     const contents = graph(result.dataset, name);
     const canonical =
       contents.size === 0

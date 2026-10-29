@@ -526,11 +526,97 @@ it("rejects extra named graphs colliding with another resource's private graphs 
       const entries = await list(container);
       return reverse ? entries.reverse() : entries;
     };
-    await expect(new NanopubStore(pod).list()).rejects.toThrow(
-      "Reused private nanopublication graph",
-    );
+    await expect(new NanopubStore(pod).list()).rejects.toThrow("Undeclared nanopublication graph");
   }
   expect(write).not.toHaveBeenCalled();
+});
+
+it.each([
+  ["assertion", false],
+  ["assertion", true],
+  ["sources", false],
+  ["sources", true],
+  ["entities", false],
+  ["entities", true],
+] as const)("rejects undeclared %s graphs (conflicting contents: %s)", async (kind, conflict) => {
+  const { store, pod, memory, write } = setup();
+  const first =
+    kind === "assertion"
+      ? await sharedBlankAssertions(["one"], "extra-first")
+      : await sharedBlankBatchGraphs("extra-first", ["one"]);
+  const second = await build("extra-second", { template: "email", value: "other@example.org" });
+  const name =
+    kind === "assertion" ? first.nanopubs[0]!.assertionId : pkgId("batch", "extra-first", kind);
+  const extra = graph(first.dataset, name);
+  expect([...extra].some((q) => q.subject.termType === "BlankNode")).toBe(true);
+  if (conflict)
+    new RdfNode(identity.webId, extra).text(`${NS.schema}description`, "Conflicting extra graph");
+  putGraph(second.dataset as Store, name, extra);
+  await store.put(first);
+  const firstUrl = store.url(first.nanopubs[0]!.id);
+  const secondUrl = store.url(second.nanopubs[0]!.id);
+  await memory.write(
+    secondUrl,
+    encode(await serializeNanopublications(second)),
+    "application/trig",
+    {
+      ifNoneMatch: "*",
+    },
+  );
+  const before = await Promise.all([firstUrl, secondUrl].map((url) => memory.read(url)));
+  const list = pod.list;
+  const remove = vi.spyOn(pod, "delete");
+  const incoming = await build("extra-incoming", { template: "email", value: "new@example.org" });
+  write.mockClear();
+  for (const reverse of [false, true]) {
+    pod.list = async (container) => {
+      const entries = await list(container);
+      return reverse ? entries.reverse() : entries;
+    };
+    await expect(new NanopubStore(pod).list()).rejects.toThrow("Undeclared nanopublication graph");
+    await expect(new NanopubStore(pod).put(incoming)).rejects.toThrow(
+      "Undeclared nanopublication graph",
+    );
+    expect(write).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+    expect(await Promise.all([firstUrl, secondUrl].map((url) => memory.read(url)))).toEqual(before);
+  }
+  // Even without a retained copy, the undeclared graph must not enter preflight's collection.
+  await memory.delete(firstUrl);
+  await expect(new NanopubStore(pod).put(first)).rejects.toThrow(
+    "Undeclared nanopublication graph",
+  );
+  expect(write).not.toHaveBeenCalled();
+  expect(remove).not.toHaveBeenCalled();
+  expect(await memory.read(secondUrl)).toEqual(before[1]);
+  await expect(memory.read(firstUrl)).rejects.toMatchObject({ status: 404 });
+  await expect(memory.read(store.url(incoming.nanopubs[0]!.id))).rejects.toMatchObject({
+    status: 404,
+  });
+});
+
+it.each([
+  DataFactory.namedNode("https://example.org/extra"),
+  DataFactory.defaultGraph(),
+  DataFactory.blankNode("extra"),
+])("rejects an unrelated external $termType graph before merging", async (name) => {
+  const { store, memory, write } = setup();
+  const value = await build("unrelated-extra");
+  const extra = new Store();
+  new RdfNode(identity.webId, extra).text(`${NS.schema}description`, "Unrelated extra graph");
+  for (const q of extra)
+    value.dataset.add(DataFactory.quad(q.subject, q.predicate, q.object, name));
+  const url = store.url(value.nanopubs[0]!.id);
+  await memory.write(url, encode(await serializeNanopublications(value)), "application/trig", {
+    ifNoneMatch: "*",
+  });
+  const before = await memory.read(url);
+  await expect(store.list()).rejects.toThrow("Undeclared nanopublication graph");
+  await expect(store.put(await build("unrelated-incoming"))).rejects.toThrow(
+    "Undeclared nanopublication graph",
+  );
+  expect(write).not.toHaveBeenCalled();
+  expect(await memory.read(url)).toEqual(before);
 });
 
 it.each([
