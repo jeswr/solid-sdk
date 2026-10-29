@@ -20,7 +20,7 @@ import {
   parentOf,
   policyArchiveOf,
 } from "../client/client";
-import type { ResourceIdentity } from "../client/commit";
+import { assertVersion, type ResourceIdentity } from "../client/commit";
 import { rethrowPendingDeletion } from "../client/deletion";
 import { containerData, containsGraph, relocate, sameGraph } from "../client/rdf";
 import { DriveOperationInProgressError } from "../client/source-operations";
@@ -374,24 +374,53 @@ async function sourceVersions(client: DriveClient, url: string): Promise<string[
 }
 
 /** Presence alone cannot identify a survivor: its URL may have been reused. */
+interface RecoveryComparison {
+  readonly same: boolean;
+  readonly etag: string | undefined;
+  readonly survivorEtag: string | undefined;
+}
+function sameRecoveryFile(
+  client: DriveClient,
+  from: string,
+  to: string,
+  options: { readonly requireIdentity: true },
+): Promise<RecoveryComparison & { readonly survivorEtag: string }>;
+function sameRecoveryFile(
+  client: DriveClient,
+  from: string,
+  to: string,
+  options: { readonly versions: ReadonlySet<string> },
+): Promise<RecoveryComparison>;
 async function sameRecoveryFile(
   client: DriveClient,
   from: string,
   to: string,
-  versions: ReadonlySet<string> = new Set(),
-): Promise<{ same: boolean; etag: string | undefined; survivorEtag: string | undefined }> {
+  options: { readonly versions?: ReadonlySet<string>; readonly requireIdentity?: true },
+): Promise<RecoveryComparison> {
   const target = await client.stat(to);
-  if (target.etag && !target.etag.startsWith("W/")) {
-    // Validators only identify versions at the URL that issued them.
-    if (versions.has(JSON.stringify([to, target.etag])))
-      return { same: true, etag: undefined, survivorEtag: target.etag };
-  }
+  if (options.requireIdentity && (!target.etag || target.etag.startsWith("W/")))
+    throw new DriveError("missing-validator", 409, to);
+  // Validators only identify versions at the URL that issued them.
+  if (
+    target.etag &&
+    !target.etag.startsWith("W/") &&
+    options.versions?.has(JSON.stringify([to, target.etag]))
+  )
+    return { same: true, etag: undefined, survivorEtag: target.etag };
   const [recovery, survivor] = await Promise.all([
     client.readVersion(from),
     client.readVersion(to),
   ]);
   const etag = recovery.etag;
   const survivorEtag = survivor.etag;
+  // Read-only pending-transfer reconciliation can compare bytes without an
+  // identity. Discarding recovery must retain the survivor's initial HEAD.
+  if (options.requireIdentity)
+    assertVersion(
+      { url: to, etag: target.etag as string },
+      survivorEtag,
+      (status, url) => new DriveError("conflict", status, url),
+    );
   if (recovery.body.size !== survivor.body.size) return { same: false, etag, survivorEtag };
   const [a, b] = await Promise.all([recovery.body.arrayBuffer(), survivor.body.arrayBuffer()]);
   const bytes = new Uint8Array(b);
@@ -410,7 +439,8 @@ async function holdsRecovery(
   versions: ReadonlySet<string>,
 ): Promise<boolean> {
   if (!(await exists(client, original))) return false;
-  if (!from.endsWith("/")) return (await sameRecoveryFile(client, from, original, versions)).same;
+  if (!from.endsWith("/"))
+    return (await sameRecoveryFile(client, from, original, { versions })).same;
   const source = new Set((await client.list(original)).map(({ url }) => url));
   for (const child of await client.list(from)) {
     const target = `${original}${child.url.slice(from.length)}`;
@@ -974,12 +1004,17 @@ async function restoreMissing(
               throw new DriveError("conflict", 412, to);
             if (!survivor.etag || survivor.etag.startsWith("W/"))
               throw new DriveError("missing-validator", 409, to);
+            assertVersion(
+              merged.destination,
+              survivor.etag,
+              (status, url) => new DriveError("conflict", status, url),
+            );
             await client.remove(from, {
               ifMatch: etag,
               commit: {
                 disarm: merged.disarm,
                 rechecks: [() => merged.recheck()],
-                survivors: [{ url: to, etag: survivor.etag }, ...ancestors],
+                survivors: [merged.destination, ...ancestors],
               },
             });
           },
@@ -990,14 +1025,12 @@ async function restoreMissing(
     if (await exists(client, to)) {
       if (!settled) throw new TrashMovingError();
       const access = await client.bindAccess?.(from, to);
-      const compared = await sameRecoveryFile(client, from, to);
+      const compared = await sameRecoveryFile(client, from, to, { requireIdentity: true });
       if (approvedEtag !== undefined && compared.etag !== approvedEtag)
         throw new DriveError("conflict", 412, from);
       if (!compared.same) throw new DriveError("conflict", 412, to);
       if (!compared.etag || compared.etag.startsWith("W/"))
         throw new DriveError("missing-validator", 409, from);
-      if (!compared.survivorEtag || compared.survivorEtag.startsWith("W/"))
-        throw new DriveError("missing-validator", 409, to);
       const survivorEtag = compared.survivorEtag;
       await client.remove(from, {
         ifMatch: compared.etag,

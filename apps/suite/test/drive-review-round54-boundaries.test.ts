@@ -65,6 +65,10 @@ const steps = [
   "protection receipt repair",
   "retained recovery clearing",
   "replay recovery clearing",
+  "container merge",
+  "partial folder Restore metadata",
+  "copy rollback without Link",
+  "container rollback without Link",
 ] as const;
 type Step = (typeof steps)[number];
 
@@ -94,9 +98,19 @@ async function scenario(step: Step, events: string[]) {
     "partial folder Restore",
     "container rollback",
     "metadata undo",
+    "container merge",
+    "partial folder Restore metadata",
+    "container rollback without Link",
   ].includes(step);
   const source = folder ? `${PRIVATE}tree/` : `${PRIVATE}secret`;
   if (folder) await f.pod.fetch(source, { method: "PUT", body: "" });
+  if (step === "container merge" || step === "partial folder Restore metadata") {
+    const data = new Store();
+    new WacFields(source, data, DataFactory)
+      .iris("https://example.test/note")
+      .add(`${ROOT}statement`);
+    await f.pod.fetch(source, { method: "PUT", body: await turtle(data) });
+  }
   const selected = await client.stat(source);
   if (!selected.etag) throw new Error("Missing source validator");
   let target = source;
@@ -123,6 +137,7 @@ async function scenario(step: Step, events: string[]) {
       "policy archive cleanup",
       "receipt cleanup",
       "slot cleanup",
+      "partial folder Restore metadata",
     ].includes(step)
   ) {
     if (step.startsWith("partial"))
@@ -158,6 +173,22 @@ async function scenario(step: Step, events: string[]) {
       step === "Restore" || step.startsWith("partial")
         ? restoreItems(client, DRIVE, [entry])
         : deleteForever(client, DRIVE, [entry]);
+  } else if (step === "container merge") {
+    target = `${PRIVATE}merged/`;
+    run = () => client.mergeContainer(source, target, { kind: "preserve-source" });
+  } else if (step.endsWith("rollback without Link")) {
+    target = `${PRIVATE}copy${folder ? "/" : ""}`;
+    const foreign = await aclBody(target, true);
+    let created = false;
+    f.after(async (url, method, response) => {
+      if (!created && url === target && method === "PUT" && response.ok) {
+        created = true;
+        response.headers.delete("link");
+        f.policies.set(`${target}.policy`, foreign);
+      }
+      return response;
+    });
+    run = () => client.copy(source, target, { kind: "preserve-source" });
   } else if (step === "copy payload" || step === "copy rollback" || step === "container rollback") {
     target = `${PRIVATE}copy${folder ? "/" : ""}`;
     if (step === "container rollback") {
@@ -319,7 +350,7 @@ async function scenario(step: Step, events: string[]) {
 
 it.each(
   steps,
-)("round 56 shape a: %s retains a replacement at its final identity check", async (step) => {
+)("round 58 shape a: %s retains a replacement at its final identity check", async (step) => {
   const events: string[] = [];
   const s = await scenario(step, events);
   let checks = 0;
@@ -347,7 +378,7 @@ it.each(
 
 it.each(
   steps,
-)("round 56 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
+)("round 58 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   const events: string[] = [];
   const s = await scenario(step, events);

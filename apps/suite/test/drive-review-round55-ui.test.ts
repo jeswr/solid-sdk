@@ -134,9 +134,11 @@ it("round 55: refresh wrappers forward every copy and merge option unchanged", a
   await setup();
   const operations = await import("../src/apps/drive/lib/operations/operations");
   const copy = vi.spyOn(drive.client, "copy").mockResolvedValue();
-  const merge = vi
-    .spyOn(drive.client, "mergeContainer")
-    .mockResolvedValue({ recheck: async () => {}, disarm: [] });
+  const merge = vi.spyOn(drive.client, "mergeContainer").mockResolvedValue({
+    recheck: async () => {},
+    disarm: [],
+    destination: { url: `${PRIVATE}to/`, etag: '"merged"' },
+  });
   const guards = [{ url: `${PRIVATE}tree/`, etag: '"approved ancestor"' }];
   const options = { ifMatch: '"approved root"', sourceGuards: guards };
   vi.spyOn(operations, "restoreItems").mockImplementation(async (tracked) => {

@@ -550,7 +550,10 @@ function materializeAccess(own: OwnAccess, resource: string): OwnAccess {
       ...(resource.endsWith("/") ? ["default", "defaultForNew"] : []),
     ].filter((predicate) => rule.values(`${ACL}${predicate}`).has(resource));
     if (!targets.length) continue;
-    const target = new WritableAuthorization(authorization as Term, dataset, DataFactory);
+    // Rule names are local implementation details, not principals. Fresh subjects
+    // make transplantation injective even if another rule already uses the name
+    // a source subject would acquire at the destination.
+    const target = new WritableAuthorization(DataFactory.blankNode(), dataset, DataFactory);
     target.type.add(`${ACL}Authorization`);
     for (const predicate of targets) target.values(`${ACL}${predicate}`).add(resource);
     for (const predicate of [...SELECTORS, "origin", "mode"])
@@ -560,7 +563,7 @@ function materializeAccess(own: OwnAccess, resource: string): OwnAccess {
   return { ...own, dataset };
 }
 
-/** Rebase ACL targets and rule identifiers, preserving principal and condition identities. */
+/** Rebase ACL targets with distinct rule identities, preserving principals and conditions. */
 function retargetAccess(source: OwnAccess, from: string, to: string, url = source.url): OwnAccess {
   return {
     ...source,

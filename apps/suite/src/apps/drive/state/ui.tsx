@@ -285,13 +285,28 @@ function reportFailure(
   else toast.error(message);
 }
 
-export function errorMessage(error: unknown, fallback = "Something went wrong"): string {
-  if (deletionPending(error)) return "Still deleting on the server";
+function recoveryLocations(error: unknown): string[] {
   if (error instanceof DrivePartialFailureError) {
-    const recovery = error.retainedDestinations.filter((url) => url.includes("/.drive-recovery-"));
-    const message = errorMessage(error.cause, fallback);
-    return recovery.length ? `${message} Private recovery copies: ${recovery.join(", ")}` : message;
+    return [
+      ...error.retainedDestinations.filter((url) => url.includes("/.drive-recovery-")),
+      ...recoveryLocations(error.cause),
+    ];
   }
+  if (error instanceof TrashRestorePartialError)
+    return error.remaining.flatMap(({ error }) => recoveryLocations(error));
+  if (error instanceof Error) return recoveryLocations(error.cause);
+  return [];
+}
+
+export function errorMessage(error: unknown, fallback = "Something went wrong"): string {
+  const recovery = [...new Set(recoveryLocations(error))];
+  const message = failureMessage(error, fallback);
+  return recovery.length ? `${message} Private recovery copies: ${recovery.join(", ")}` : message;
+}
+
+function failureMessage(error: unknown, fallback: string): string {
+  if (deletionPending(error)) return "Still deleting on the server";
+  if (error instanceof DrivePartialFailureError) return failureMessage(error.cause, fallback);
   if (
     error instanceof DriveOperationInProgressError ||
     error instanceof DriveAccessError ||
@@ -490,14 +505,10 @@ export function useDriveActions() {
         starred: repointStarred(current.starred, result.done),
       }));
       if (result.failed.length > 0) {
-        const error = result.failed[0]?.error;
-        if (deletionPending(error)) reportFailure(error, "Couldn't move", client, invalidate);
-        else
-          toast.error(
-            result.done.length === 0
-              ? errorMessage(error, "Couldn't move")
-              : `Moved ${result.done.length} of ${items.length} items`,
-          );
+        if (result.done.length > 0)
+          toast.error(`Moved ${result.done.length} of ${items.length} items`);
+        for (const { error } of result.failed)
+          reportFailure(error, "Couldn't move", client, invalidate);
       }
       if (result.done.length === 0) return result;
       // An unreadable/absent validator makes Undo fail closed for that item.
@@ -549,6 +560,8 @@ export function useDriveActions() {
                       restored.push({ from: to, to: from });
                     } catch (error) {
                       if (error instanceof DriveAccessError) accessError = error;
+                      if (recoveryLocations(error).length)
+                        reportFailure(error, "Couldn't undo move", client, invalidate);
                       failed.push(nameOf(from));
                     } finally {
                       invalidate(to);
@@ -642,10 +655,11 @@ export function useDriveActions() {
           entries.flatMap((entry) => [entry.url, entry.original]),
           (tracked) => restoreItems(tracked, driveRoot, entries),
         );
-        for (const warning of result.warnings ?? []) toast.error(warning.message);
+        for (const warning of result.warnings ?? [])
+          toast.error(errorMessage(warning, warning.message));
         const first = result.done[0];
-        if (result.failed.length > 0)
-          reportFailure(result.failed[0]?.error, "Couldn't restore", client, invalidate);
+        for (const { error } of result.failed)
+          reportFailure(error, "Couldn't restore", client, invalidate);
         if (first && result.done.length === 1) {
           toast.success(
             first.renamed ? `Restored as ${nameOf(first.url)}` : `Restored ${first.entry.name}`,
@@ -680,9 +694,9 @@ export function useDriveActions() {
           [...items.map((item) => item.url), trashFolderOf(driveRoot)],
           (tracked) => trashItems(tracked, driveRoot, items, { webId: session.webId }),
         );
-        for (const warning of result.warnings ?? []) toast.error(warning.message);
-        if (result.failed.length > 0) {
-          const failure = result.failed[0]?.error;
+        for (const warning of result.warnings ?? [])
+          toast.error(errorMessage(warning, warning.message));
+        for (const { url, error: failure } of result.failed) {
           if (failure instanceof DriveAccessError && !deletionPending(failure)) {
             toast.error(errorMessage(failure), {
               action: {
@@ -690,9 +704,7 @@ export function useDriveActions() {
                 onClick: () =>
                   openDialog({
                     kind: "delete-source",
-                    items: items.filter((item) =>
-                      result.failed.some((failed) => failed.url === item.url),
-                    ),
+                    items: items.filter((item) => item.url === url),
                   }),
               },
             });
@@ -727,7 +739,8 @@ export function useDriveActions() {
         entries.map((entry) => entry.url),
         (tracked) => deleteForever(tracked, driveRoot, entries),
       );
-      for (const warning of result.warnings ?? []) toast.error(warning.message);
+      for (const warning of result.warnings ?? [])
+        toast.error(errorMessage(warning, warning.message));
       if (result.done.length) {
         const absent = await confirmedAbsent(
           client,
@@ -735,8 +748,8 @@ export function useDriveActions() {
         );
         updatePrefs((prefs) => pruneDeleted(prefs, absent));
       }
-      if (result.failed.length > 0)
-        reportFailure(result.failed[0]?.error, "Couldn't delete", client, invalidate);
+      for (const { error } of result.failed)
+        reportFailure(error, "Couldn't delete", client, invalidate);
       if (result.done.length > 0) toast.success("Deleted for ever");
       return result;
     },

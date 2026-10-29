@@ -11,6 +11,15 @@ export interface PolicyIdentity {
   readonly etag: string | null;
 }
 
+/** A later read verifies a captured identity; it never supplies its replacement. */
+export function assertVersion(
+  identity: ResourceIdentity,
+  observed: string | null | undefined,
+  error: (status: number, url: string) => Error,
+): void {
+  if (observed !== identity.etag) throw error(412, identity.url);
+}
+
 interface HttpIdentity extends PolicyIdentity {
   readonly allowMissing?: boolean;
   readonly http: typeof fetch;
@@ -159,5 +168,5 @@ export async function checkIdentity(
   }
   if (allowMissing && (response.status === 404 || response.status === 410)) return;
   if (!response.ok) throw error(response.status, url);
-  if (response.headers.get("etag") !== etag) throw error(412, url);
+  assertVersion({ url, etag }, response.headers.get("etag"), error);
 }

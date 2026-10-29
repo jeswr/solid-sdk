@@ -11,6 +11,7 @@ import { moveWithValidator } from "../src/apps/drive/state/undo";
 import {
   ACL,
   aclBody,
+  aclClauses,
   DRIVE,
   OWNER,
   PRIVATE,
@@ -81,7 +82,8 @@ it("archives every container's own ACL in the index and restores folder grants a
   expect((await restoreItems(client, DRIVE, [folder])).failed).toEqual([]);
   const restored = await accessControl(f.fetch, ROOT).read(`${nested}.policy`);
   expect(restored.status).toBe("known");
-  if (restored.status === "known") expect(sameGraph(restored.policy.dataset, original)).toBe(true);
+  if (restored.status === "known")
+    expect(aclClauses(restored.policy.dataset)).toEqual(aclClauses(original));
   await client.write(
     `${nested}another`,
     "secret contents",
@@ -145,11 +147,8 @@ it.each([
   expect(f.policies.has(`${PRIVATE}.policy`)).toBe(true);
   expect(f.policies.has(`${nested}.policy`)).toBe(true);
   expect(
-    sameGraph(
-      await parseRdf(required(f.policies.get(`${nested}.policy`)), "text/turtle"),
-      original,
-    ),
-  ).toBe(true);
+    aclClauses(await parseRdf(required(f.policies.get(`${nested}.policy`)), "text/turtle")),
+  ).toEqual(aclClauses(original));
   expect(onPrivateFolder).not.toHaveBeenCalled();
 });
 

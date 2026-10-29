@@ -141,13 +141,13 @@ describe("Drive data-safety regressions", () => {
     ]);
   });
 
-  it("partial restore rechecks the comparison GET's survivor version immediately before recovery deletion", async () => {
+  it("partial restore refuses a comparison GET that replaces the survivor's initial HEAD identity", async () => {
     let restoring = false;
     let comparedEtag: string | null = null;
     const { pod, client, fetch } = setupPartial(async (url, init) => {
       if (!restoring || url !== `${FROM}b`) return undefined;
       if (!init?.method || init.method === "GET") {
-        // A new identical version after the earlier stat must use this GET's ETag.
+        // Even an identical version after the initial stat needs a new decision.
         await pod.fetch(url, { method: "PUT", body: "B" });
         const response = await pod.fetch(url, init);
         comparedEtag = response.headers.get("etag");
@@ -170,26 +170,17 @@ describe("Drive data-safety regressions", () => {
     fetch.mockClear();
     const result = await restoreItems(client, DRIVE, entries);
     restoring = false;
-    expect(result.failed).toEqual([]);
-    expect(result.done).toHaveLength(1);
+    expect(result.failed).toHaveLength(1);
+    expect(result.done).toEqual([]);
     expect(comparedEtag).not.toBe(before.etag);
     const deletion = fetch.mock.calls.findIndex(
       ([url, init]) => url === `${entry.url}b` && init?.method === "DELETE",
     );
-    const preceding = fetch.mock.calls
-      .slice(0, deletion)
-      .findLast(
-        ([url, init]) =>
-          url === `${FROM}b` &&
-          init?.method === "HEAD" &&
-          new Headers(init.headers).has("if-match"),
-      );
-    expect(preceding?.[0]).toBe(`${FROM}b`);
-    expect(preceding?.[1]?.method).toBe("HEAD");
-    expect(new Headers(preceding?.[1]?.headers).get("if-match")).toBe(comparedEtag);
+    expect(deletion).toBe(-1);
     expect(await (await client.read(`${FROM}b`)).text()).toBe("B");
-    expect(await listTrash(client, DRIVE)).toEqual([]);
-    expect(pod.has(entry.url)).toBe(false);
+    expect(await listTrash(client, DRIVE)).toMatchObject([{ url: entry.url, status: "partial" }]);
+    expect(pod.has(entry.url)).toBe(true);
+    expect(await (await client.read(`${entry.url}b`)).text()).toBe("B");
   });
 
   it("partial restore compares bytes when different URLs issue equal ETags", async () => {

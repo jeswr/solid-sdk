@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex
 import { createRequire } from "node:module";
 import { parseRdf } from "@jeswr/fetch-rdf";
+import { AclResource } from "@solid/object";
 import { DataFactory } from "n3";
 import { afterEach, expect, it, vi } from "vitest";
 import { createSolidDriveClient, policyArchiveOf } from "../src/apps/drive/lib/client/client";
@@ -247,9 +248,12 @@ it.each([
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });
   await client.copy(from, to, { kind: "preserve-source" });
   const saved = await parseRdf(f.policies.get(`${to}.policy`) as string, "text/turtle");
-  const rule = new WacFields(`${to}#guest`, saved, DataFactory);
-  expect([...rule.iris(`${ACL}agent`)]).toEqual([`${from}#person`]);
-  expect([...rule.iris(`${ACL}origin`)]).toEqual([`${from}#origin`]);
+  const rule = [...new AclResource(saved, DataFactory).authorizations].find((rule) =>
+    rule.agent.has(`${from}#person`),
+  );
+  expect(rule).toBeDefined();
+  expect([...(rule?.agent ?? [])]).toEqual([`${from}#person`]);
+  expect([...(rule?.origin ?? [])]).toEqual([`${from}#origin`]);
   expect((await f.anonymous(to)).status).toBe(403);
   if (kind === "folder") expect((await f.anonymous(`${to}child`)).status).toBe(403);
 });

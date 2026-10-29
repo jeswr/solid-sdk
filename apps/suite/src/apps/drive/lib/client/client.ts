@@ -38,6 +38,7 @@ import {
 } from "./ancestors";
 import { discardVersion, ownsEmptyContainer } from "./cleanup";
 import {
+  assertVersion,
   type CommitChecks,
   type CommitEffects,
   Compensation,
@@ -145,6 +146,7 @@ export interface DriveClient {
     Pick<AccessBinding, "recheck"> & {
       readonly disarm: readonly Compensation[];
       readonly source?: ResourceIdentity;
+      readonly destination: ResourceIdentity;
     }
   >;
   /** Copy a file (folders: recursive). Fails with a conflict when `to` exists. */
@@ -413,10 +415,25 @@ export function createSolidDriveClient(options: {
     if (resource.url.endsWith("/")) versions.track(resource.url);
   };
   const checkContainerVersion = (resource: CreatedResource, etag: string | undefined) => {
-    validator(resource.url, resource.etag);
-    if (etag !== versions.current(resource.url, resource.etag))
-      throw new DriveError("conflict", 412, resource.url);
+    assertVersion(
+      versions.identity({ url: resource.url, etag: validator(resource.url, resource.etag) }),
+      etag,
+      errorFor,
+    );
   };
+  const requireOwnReceipt = (own: AccessState["own"], demo: boolean | undefined) => {
+    // Missing discovery is unknown ownership. Neither cleanup nor protection may
+    // adopt another writer's ACL just because our content PUT still matches.
+    if (!own && !demo) throw new DriveAccessError("Own ACL receipt unavailable");
+    return own;
+  };
+  const createdOwnAccess = (resource: CreatedResource) =>
+    requireOwnReceipt(
+      resource.protection
+        ? { url: resource.protection.url, policy: resource.protection }
+        : resource.ownAcl,
+      resource.source.demo,
+    );
   const rememberType = (url: string, headers: Headers) => {
     const type = headers.get("content-type");
     if (type) responseTypes.set(url, type);
@@ -646,8 +663,8 @@ export function createSolidDriveClient(options: {
     let response: Response;
     const compensation = new Compensation(async () => {
       const etag = validator(url, response.headers.get("etag") ?? undefined);
-      // Removing unchecked bytes needs only our PUT identity. Replaying an old
-      // representation also requires restoring its captured audience first.
+      // Cleanup needs our content AND own-ACL receipts: resource DELETE also
+      // removes its ACL. Replays restore only the captured audience.
       await (binding as AccessBinding).rollback(async () => {
         if (previous) {
           const policy = required ?? (binding as AccessBinding).source;
@@ -678,9 +695,13 @@ export function createSolidDriveClient(options: {
           }
         } else {
           try {
+            const own = requireOwnReceipt(
+              (binding as AccessBinding).destinationOwn,
+              response.headers.get("x-solid-demo-access-control") === "none",
+            );
             await deleteVersion(url, etag, undefined, {
-              policyGuards: ownAccessGuards((binding as AccessBinding).destinationOwn),
-              rechecks: [() => access.checkOwn((binding as AccessBinding).destinationOwn)],
+              policyGuards: ownAccessGuards(own),
+              rechecks: [() => access.checkOwn(own)],
             });
           } catch (cause) {
             const retained = await quarantine(url, etag, (binding as AccessBinding).source, [
@@ -1124,6 +1145,7 @@ export function createSolidDriveClient(options: {
         );
         await verifyAccess();
         const current = await listing(to);
+        checkContainerVersion(resource, current.etag);
         if (!sameGraph(data, containerData(current.dataset, to)))
           throw new DriveError("conflict", 409, to);
       }
@@ -1208,6 +1230,7 @@ export function createSolidDriveClient(options: {
       resource.protection ?? resource.source.targetAccess ?? resource.source.inheritedAccess;
     if (!policy || !resource.etag) return [resource.url];
     try {
+      const own = createdOwnAccess(resource);
       await provision.protect(
         resource.url,
         policy,
@@ -1218,11 +1241,8 @@ export function createSolidDriveClient(options: {
             etag: validator(resource.url, versions.current(resource.url, resource.etag)),
           },
           restrict: true,
-          ...(resource.protection
-            ? { knownAcl: resource.protection.url, expectedAcl: resource.protection }
-            : resource.ownAcl
-              ? { knownAcl: resource.ownAcl.url, expectedAcl: resource.ownAcl.policy }
-              : {}),
+          knownAcl: own?.url,
+          expectedAcl: own?.policy ?? null,
         },
       );
       return [resource.url];
@@ -1241,6 +1261,7 @@ export function createSolidDriveClient(options: {
     let pending: Error | undefined;
     for (const resource of [...created].reverse()) {
       try {
+        const own = createdOwnAccess(resource);
         if (resource.url.endsWith("/")) {
           const expected = resource.data as Store;
           validator(resource.url, resource.etag);
@@ -1259,19 +1280,8 @@ export function createSolidDriveClient(options: {
             remove: (etag) =>
               binding.rollback(() =>
                 deleteVersion(resource.url, etag, undefined, {
-                  policyGuards: ownAccessGuards(
-                    resource.protection
-                      ? { url: resource.protection.url, policy: resource.protection }
-                      : resource.ownAcl,
-                  ),
-                  rechecks: [
-                    () =>
-                      access.checkOwn(
-                        resource.protection
-                          ? { url: resource.protection.url, policy: resource.protection }
-                          : resource.ownAcl,
-                      ),
-                  ],
+                  policyGuards: ownAccessGuards(own),
+                  rechecks: [() => access.checkOwn(own)],
                   identityChecks: [() => verifySnapshotIdentity(resource.source)],
                 }),
               ),
@@ -1288,19 +1298,8 @@ export function createSolidDriveClient(options: {
             remove: (etag) =>
               binding.rollback(() =>
                 deleteVersion(resource.url, etag, undefined, {
-                  policyGuards: ownAccessGuards(
-                    resource.protection
-                      ? { url: resource.protection.url, policy: resource.protection }
-                      : resource.ownAcl,
-                  ),
-                  rechecks: [
-                    () =>
-                      access.checkOwn(
-                        resource.protection
-                          ? { url: resource.protection.url, policy: resource.protection }
-                          : resource.ownAcl,
-                      ),
-                  ],
+                  policyGuards: ownAccessGuards(own),
+                  rechecks: [() => access.checkOwn(own)],
                   identityChecks: [() => verifySnapshotIdentity(resource.source)],
                 }),
               ),
@@ -1586,6 +1585,8 @@ export function createSolidDriveClient(options: {
       await binding.recheck();
       const current = await listing(to);
       versions.track(to);
+      if (created) checkContainerVersion(resource, current.etag);
+      else resource.etag = current.etag;
       previous = containerData(current.dataset, to);
       if (created && !ownsEmptyContainer(to, new Store(), current.dataset))
         throw new DriveError("conflict", 409, to);
@@ -1600,6 +1601,7 @@ export function createSolidDriveClient(options: {
           recheck,
           disarm: [compensation],
           source: versions.identity({ url: from, etag: validator(from, original.etag) }),
+          destination: versions.identity({ url: to, etag: validator(to, resource.etag) }),
         };
       }
       await write(
@@ -1621,7 +1623,9 @@ export function createSolidDriveClient(options: {
         },
       );
       await binding.recheck();
-      if (!sameGraph(data, containerData((await listing(to)).dataset, to)))
+      const verified = await listing(to);
+      checkContainerVersion(resource, verified.etag);
+      if (!sameGraph(data, containerData(verified.dataset, to)))
         throw new DriveError("conflict", 409, to);
       await binding.recheck();
       scope.add(check);
@@ -1629,6 +1633,7 @@ export function createSolidDriveClient(options: {
         recheck,
         disarm: [compensation],
         source: versions.identity({ url: from, etag: validator(from, original.etag) }),
+        destination: versions.identity({ url: to, etag: validator(to, resource.etag) }),
       };
     } catch (error) {
       await compensation.rollback();

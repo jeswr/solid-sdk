@@ -42,6 +42,25 @@ export async function turtle(data: Store) {
   );
 }
 
+/** Compare complete clauses independently of an authorization's local subject label. */
+export function aclClauses(data: Store) {
+  return [...new AclResource(data, DataFactory).authorizations]
+    .map((authorization) => {
+      const rule = new WacFields(authorization as Term, data, DataFactory);
+      return [
+        "accessTo",
+        "default",
+        "defaultForNew",
+        "agent",
+        "agentClass",
+        "agentGroup",
+        "origin",
+        "mode",
+      ].map((predicate) => [predicate, [...rule.iris(`${ACL}${predicate}`)].sort()]);
+    })
+    .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+}
+
 /** Real WAC own/default resolution over a transport with LDP and ETags. */
 export async function wacPod() {
   const pod = createDemoPod({

@@ -180,8 +180,8 @@ it("gate regression: an older merge client without a container receipt retains r
     this: DriveClient,
     ...args
   ) {
-    const { recheck, disarm } = await merge.apply(this, args);
-    return { recheck, disarm };
+    const { recheck, disarm, destination } = await merge.apply(this, args);
+    return { recheck, disarm, destination };
   });
   expect((await restoreItems(client, DRIVE, entries)).failed).toHaveLength(1);
   expect(f.pod.has(entries[0]?.url as string)).toBe(true);
