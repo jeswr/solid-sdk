@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 
 import { describe, expect, it } from "vitest";
@@ -106,7 +107,7 @@ describe("buildProtocol fail-closed on required coded values (SHACL MUSTs)", () 
     );
     // A hostile document with a negative challengeStep parses back with it dropped.
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
       <${URL_}#it> a diet:EliminationProtocol ;
         diet:targetTrigger diet:lactose ;

@@ -1,0 +1,21 @@
+X-Fixture-Author: AUTHORED-BY Codex GPT-6.1-Sol
+From: Kit Example <kit@example.org>
+To: Dana Example <dana@example.org>
+Subject: Synthetic HTML reading sample
+MIME-Version: 1.0
+Content-Type: text/html; charset=utf-8
+
+<!doctype html><html><head>
+<base href="https://example.org/"><link rel="stylesheet" href="https://example.org/theme.css">
+<meta http-equiv="refresh" content="0;url=https://example.org/redirect">
+<style>@import url(https://example.org/style.css); p { background: url(https://example.org/pixel); }</style>
+<script>scriptSentinel()</script></head><body onload="bad()">
+<p id="location" style="background:url(https://example.org/bg)">Hello <strong>Dana</strong> &amp; Kit.</p>
+<img src="https://example.org/pixel" srcset="https://example.org/2x 2x" onerror="bad()" alt="Remote image">
+<iframe src="https://example.org/frame" srcdoc="<script>bad()</script>">frameSentinel</iframe>
+<object data="https://example.org/object">objectSentinel</object>
+<svg><image href="https://example.org/svg"/><script>svgSentinel()</script></svg>
+<form action="https://example.org/post"><input autofocus onfocus="bad()"><button>Submit</button></form>
+<a href="https://example.org/read" ping="https://example.org/ping" target="_blank">Read more</a>
+<a href="javascript:bad()">Unsafe link</a>
+</body></html>

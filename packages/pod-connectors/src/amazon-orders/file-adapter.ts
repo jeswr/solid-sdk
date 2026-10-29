@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Amazon orders → Finance (Tier-C file import).
  *
@@ -13,11 +15,12 @@
  * the very old "order reports" came zipped — we accept the CSV directly.
  */
 import { DataFactory, Store } from "n3";
-import { parseCsv } from "../core/csv.js";
 import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
+import { csvRows } from "../core/file-stream.js";
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, Invoice } from "../core/vocab.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "amazon-orders";
 
@@ -51,6 +54,7 @@ function pick(row: Record<string, string>, names: readonly string[]): string | u
 }
 
 export const amazonOrdersFileAdapter: FileImportAdapter = {
+  vocabMap,
   metadata,
   accept: ".csv,text/csv",
   fileHint:
@@ -59,12 +63,11 @@ export const amazonOrdersFileAdapter: FileImportAdapter = {
 
   async importFile(file: ImportFile, ctx: FileImportContext): Promise<void> {
     ctx.progress({ label: "Reading your orders…", done: 0, total: 1 });
-    const { rows } = parseCsv(await file.text());
 
     const doc = ctx.resolve("finance/amazon-orders.ttl");
     const store = new Store();
     let count = 0;
-    for (const row of rows) {
+    for await (const row of csvRows(file, ctx.skip)) {
       if (count >= ctx.maxRows) break;
       const product = pick(row, FIELD.product);
       const orderId = pick(row, FIELD.orderId);

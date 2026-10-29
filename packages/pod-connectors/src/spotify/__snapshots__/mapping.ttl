@@ -1,0 +1,78 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# music/playlists.ttl
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-37i9dQZF1DXcBWIGoYBM5M-item-1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/ListItem> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-37i9dQZF1DXcBWIGoYBM5M-item-1> <https://schema.org/item> <https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-4uLU6hMCjMI75M1A2tKUQC> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-37i9dQZF1DXcBWIGoYBM5M-item-1> <https://schema.org/position> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-37i9dQZF1DXcBWIGoYBM5M-item-2> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/ListItem> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-37i9dQZF1DXcBWIGoYBM5M-item-2> <https://schema.org/item> <https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-0VjIjW4GlUZAMYd2vXMi3b> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-37i9dQZF1DXcBWIGoYBM5M-item-2> <https://schema.org/position> "2"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-37i9dQZF1DXcBWIGoYBM5M> <http://purl.org/dc/terms/title> "Focus Flow" .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-37i9dQZF1DXcBWIGoYBM5M> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://jeswr.org/ns/sectors/media#Playlist> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-37i9dQZF1DXcBWIGoYBM5M> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/MusicPlaylist> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-37i9dQZF1DXcBWIGoYBM5M> <https://schema.org/description> "Instrumentals to keep you in the zone." .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-37i9dQZF1DXcBWIGoYBM5M> <https://schema.org/identifier> "37i9dQZF1DXcBWIGoYBM5M" .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-37i9dQZF1DXcBWIGoYBM5M> <https://schema.org/itemListElement> <https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-37i9dQZF1DXcBWIGoYBM5M-item-1> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-37i9dQZF1DXcBWIGoYBM5M> <https://schema.org/itemListElement> <https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-37i9dQZF1DXcBWIGoYBM5M-item-2> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-37i9dQZF1DXcBWIGoYBM5M> <https://schema.org/name> "Focus Flow" .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-37i9dQZF1DXcBWIGoYBM5M> <https://schema.org/numTracks> "74"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-37i9dQZF1DXcBWIGoYBM5M> <https://schema.org/url> <https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-5ABHKGoOzxkaa28ttQV9sE-item-1> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/ListItem> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-5ABHKGoOzxkaa28ttQV9sE-item-1> <https://schema.org/item> <https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-4uLU6hMCjMI75M1A2tKUQC> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-5ABHKGoOzxkaa28ttQV9sE-item-1> <https://schema.org/position> "1"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-5ABHKGoOzxkaa28ttQV9sE-item-2> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/ListItem> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-5ABHKGoOzxkaa28ttQV9sE-item-2> <https://schema.org/item> <https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-0VjIjW4GlUZAMYd2vXMi3b> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-5ABHKGoOzxkaa28ttQV9sE-item-2> <https://schema.org/position> "2"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-5ABHKGoOzxkaa28ttQV9sE> <http://purl.org/dc/terms/title> "Sunday Morning" .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-5ABHKGoOzxkaa28ttQV9sE> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://jeswr.org/ns/sectors/media#Playlist> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-5ABHKGoOzxkaa28ttQV9sE> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/MusicPlaylist> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-5ABHKGoOzxkaa28ttQV9sE> <https://schema.org/description> "Slow starts and coffee." .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-5ABHKGoOzxkaa28ttQV9sE> <https://schema.org/identifier> "5ABHKGoOzxkaa28ttQV9sE" .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-5ABHKGoOzxkaa28ttQV9sE> <https://schema.org/itemListElement> <https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-5ABHKGoOzxkaa28ttQV9sE-item-1> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-5ABHKGoOzxkaa28ttQV9sE> <https://schema.org/itemListElement> <https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-5ABHKGoOzxkaa28ttQV9sE-item-2> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-5ABHKGoOzxkaa28ttQV9sE> <https://schema.org/name> "Sunday Morning" .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-5ABHKGoOzxkaa28ttQV9sE> <https://schema.org/numTracks> "41"^^<http://www.w3.org/2001/XMLSchema#integer> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#playlist-5ABHKGoOzxkaa28ttQV9sE> <https://schema.org/url> <https://open.spotify.com/playlist/5ABHKGoOzxkaa28ttQV9sE> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-0VjIjW4GlUZAMYd2vXMi3b> <http://purl.org/dc/terms/title> "Blinding Lights" .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-0VjIjW4GlUZAMYd2vXMi3b> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://jeswr.org/ns/sectors/media#CreativeWork> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-0VjIjW4GlUZAMYd2vXMi3b> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://jeswr.org/ns/sectors/media#MusicRecording> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-0VjIjW4GlUZAMYd2vXMi3b> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://jeswr.org/ns/sectors/media#Track> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-0VjIjW4GlUZAMYd2vXMi3b> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/MusicRecording> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-0VjIjW4GlUZAMYd2vXMi3b> <https://schema.org/byArtist> "The Weeknd" .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-0VjIjW4GlUZAMYd2vXMi3b> <https://schema.org/duration> "PT3M20S" .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-0VjIjW4GlUZAMYd2vXMi3b> <https://schema.org/identifier> "0VjIjW4GlUZAMYd2vXMi3b" .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-0VjIjW4GlUZAMYd2vXMi3b> <https://schema.org/inAlbum> "After Hours" .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-0VjIjW4GlUZAMYd2vXMi3b> <https://schema.org/name> "Blinding Lights" .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-0VjIjW4GlUZAMYd2vXMi3b> <https://schema.org/url> <https://open.spotify.com/track/0VjIjW4GlUZAMYd2vXMi3b> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <http://purl.org/dc/terms/title> "Never Gonna Give You Up" .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://jeswr.org/ns/sectors/media#CreativeWork> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://jeswr.org/ns/sectors/media#MusicRecording> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://jeswr.org/ns/sectors/media#Track> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/MusicRecording> .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <https://schema.org/byArtist> "Rick Astley" .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <https://schema.org/duration> "PT3M34S" .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <https://schema.org/identifier> "4uLU6hMCjMI75M1A2tKUQC" .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <https://schema.org/inAlbum> "Whenever You Need Somebody" .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <https://schema.org/name> "Never Gonna Give You Up" .
+<https://pod.test/alice/integrations/spotify/music/playlists.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <https://schema.org/url> <https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC> .
+
+# music/recently-played.ttl
+<https://pod.test/alice/integrations/spotify/music/recently-played.ttl#play-4uLU6hMCjMI75M1A2tKUQC-1792929600000> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://jeswr.org/ns/sectors/media#PlaybackEvent> .
+<https://pod.test/alice/integrations/spotify/music/recently-played.ttl#play-4uLU6hMCjMI75M1A2tKUQC-1792929600000> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/ListenAction> .
+<https://pod.test/alice/integrations/spotify/music/recently-played.ttl#play-4uLU6hMCjMI75M1A2tKUQC-1792929600000> <https://jeswr.org/ns/core#atTime> <https://pod.test/alice/integrations/spotify/music/recently-played.ttl#time-1792929600000> .
+<https://pod.test/alice/integrations/spotify/music/recently-played.ttl#play-4uLU6hMCjMI75M1A2tKUQC-1792929600000> <https://jeswr.org/ns/sectors/media#playedVia> <https://open.spotify.com/> .
+<https://pod.test/alice/integrations/spotify/music/recently-played.ttl#play-4uLU6hMCjMI75M1A2tKUQC-1792929600000> <https://jeswr.org/ns/sectors/media#playedWork> <https://pod.test/alice/integrations/spotify/music/recently-played.ttl#track-4uLU6hMCjMI75M1A2tKUQC> .
+<https://pod.test/alice/integrations/spotify/music/recently-played.ttl#play-4uLU6hMCjMI75M1A2tKUQC-1792929600000> <https://schema.org/identifier> "4uLU6hMCjMI75M1A2tKUQC-1792929600000" .
+<https://pod.test/alice/integrations/spotify/music/recently-played.ttl#play-4uLU6hMCjMI75M1A2tKUQC-1792929600000> <https://schema.org/url> <https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC> .
+<https://pod.test/alice/integrations/spotify/music/recently-played.ttl#time-1792929600000> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2006/time#Instant> .
+<https://pod.test/alice/integrations/spotify/music/recently-played.ttl#time-1792929600000> <http://www.w3.org/2006/time#inXSDDateTime> "2026-10-25T12:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+<https://pod.test/alice/integrations/spotify/music/recently-played.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <http://purl.org/dc/terms/title> "Never Gonna Give You Up" .
+<https://pod.test/alice/integrations/spotify/music/recently-played.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://jeswr.org/ns/sectors/media#CreativeWork> .
+<https://pod.test/alice/integrations/spotify/music/recently-played.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://jeswr.org/ns/sectors/media#MusicRecording> .
+<https://pod.test/alice/integrations/spotify/music/recently-played.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://jeswr.org/ns/sectors/media#Track> .
+<https://pod.test/alice/integrations/spotify/music/recently-played.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/MusicRecording> .
+<https://pod.test/alice/integrations/spotify/music/recently-played.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <https://schema.org/byArtist> "Rick Astley" .
+<https://pod.test/alice/integrations/spotify/music/recently-played.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <https://schema.org/duration> "PT3M34S" .
+<https://pod.test/alice/integrations/spotify/music/recently-played.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <https://schema.org/identifier> "4uLU6hMCjMI75M1A2tKUQC" .
+<https://pod.test/alice/integrations/spotify/music/recently-played.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <https://schema.org/inAlbum> "Whenever You Need Somebody" .
+<https://pod.test/alice/integrations/spotify/music/recently-played.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <https://schema.org/name> "Never Gonna Give You Up" .
+<https://pod.test/alice/integrations/spotify/music/recently-played.ttl#track-4uLU6hMCjMI75M1A2tKUQC> <https://schema.org/url> <https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC> .

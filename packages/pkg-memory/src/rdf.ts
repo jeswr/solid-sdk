@@ -1,10 +1,18 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { safeIri } from "@jeswr/rdf-serialize";
 import type { DatasetCore, Literal, NamedNode, Quad, Term } from "@rdfjs/types";
 import { LiteralAs, NamedNodeAs, SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
-import { DataFactory as df, Literal as N3Literal, Parser, Store } from "n3";
 import {
+  DataFactory as df,
+  BlankNode as N3BlankNode,
+  Literal as N3Literal,
+  Parser,
+  Store,
+} from "n3";
+import {
+  UnsupportedBlankNodeLabelError,
   UnsupportedLiteralCharacterError,
   UnsupportedLiteralDatatypeError,
   UnsupportedLiteralLexicalFormError,
@@ -21,8 +29,10 @@ export const NS = {
   schema: "https://schema.org/",
   vcard: "http://www.w3.org/2006/vcard/ns#",
   foaf: "http://xmlns.com/foaf/0.1/",
-  health: "https://w3id.org/jeswr/sectors/health#",
-  core: "https://w3id.org/jeswr/core#",
+  // Canonical source: @jeswr/suite-vocab NS.HEALTH
+  health: "https://jeswr.org/ns/sectors/health#",
+  // Canonical source: @jeswr/suite-vocab NS.CORE
+  core: "https://jeswr.org/ns/core#",
   fhir: "http://hl7.org/fhir/",
   sct: "http://snomed.info/id/",
   loinc: "https://loinc.org/",
@@ -34,6 +44,11 @@ export const NS = {
   xsd: "http://www.w3.org/2001/XMLSchema#",
 } as const;
 
+// The reference builder's implicit prefixes are hash inputs. Preserve them when
+// parsing historical assertion bodies; templates use NS for new facts.
+export const LEGACY_HEALTH_NS = "https://w3id.org/jeswr/sectors/health#";
+export const LEGACY_CORE_NS = "https://w3id.org/jeswr/core#";
+
 /** Retain RDFlib's language spelling in both the RDF/JS term and N3's store key. */
 function languageLiteral(value: string, language: string): Literal {
   const literal = new N3Literal(`"${value}"@${language}`);
@@ -43,6 +58,10 @@ function languageLiteral(value: string, language: string): Literal {
 
 const referenceFactory = {
   ...df,
+  // Preserve even an invalid empty caller label so the safety guard can reject it.
+  blankNode(value?: string) {
+    return value === undefined ? df.blankNode() : new N3BlankNode(value);
+  },
   literal(value: string | number, languageOrDatatype?: string | NamedNode) {
     return typeof languageOrDatatype === "string"
       ? languageLiteral(String(value), languageOrDatatype)
@@ -54,6 +73,40 @@ const referenceFactory = {
 export class ReferenceStore extends Store {
   constructor(quads: Quad[] = []) {
     super(quads, { factory: referenceFactory });
+  }
+
+  override addQuad(quad: Quad): boolean;
+  override addQuad(
+    subject: Quad["subject"],
+    predicate: Quad["predicate"],
+    object: Quad["object"],
+    graph?: Quad["graph"],
+  ): boolean;
+  override addQuad(
+    subjectOrQuad: Quad["subject"] | Quad,
+    predicate?: Quad["predicate"],
+    object?: Quad["object"],
+    graph?: Quad["graph"],
+  ): boolean {
+    const quad = predicate
+      ? df.quad(subjectOrQuad as Quad["subject"], predicate, object as Quad["object"], graph)
+      : (subjectOrQuad as Quad);
+    const literal = quad.object;
+    if (literal.termType === "Literal" && literal.language) {
+      // RDFlib retains the first spelling of an equal language literal. Match
+      // only this statement's graph, subject and predicate, leaving its stored
+      // term untouched so serialization and assertion hashes keep that spelling.
+      for (const existing of this.getQuads(quad.subject, quad.predicate, null, quad.graph)) {
+        const other = existing.object;
+        if (
+          other.termType === "Literal" &&
+          other.value === literal.value &&
+          other.language.toLowerCase() === literal.language.toLowerCase()
+        )
+          return false;
+      }
+    }
+    return super.addQuad(quad);
   }
 }
 
@@ -114,8 +167,22 @@ export function validateLiterals(dataset: DatasetCore): void {
   for (const q of dataset) if (q.object.termType === "Literal") validateLiteral(q.object);
 }
 
+// Turtle/TriG BLANK_NODE_LABEL: (PN_CHARS_U | [0-9])
+// ((PN_CHARS | '.')* PN_CHARS)? — periods are allowed only internally.
+const pnCharsBase =
+  "A-Za-z\\u00C0-\\u00D6\\u00D8-\\u00F6\\u00F8-\\u02FF\\u0370-\\u037D" +
+  "\\u037F-\\u1FFF\\u200C-\\u200D\\u2070-\\u218F\\u2C00-\\u2FEF" +
+  "\\u3001-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFFD\\u{10000}-\\u{EFFFF}";
+const pnChars = `${pnCharsBase}_0-9\\-\\u00B7\\u0300-\\u036F\\u203F-\\u2040`;
+const blankNodeLabel = new RegExp(
+  `^[${pnCharsBase}_0-9](?:[${pnChars}.]*[${pnChars}])?(?![\\s\\S])`,
+  "u",
+);
+
 /** Reject unsafe caller-owned terms without changing their RDF identity. */
 export function validateTermSafety(term: Term): void {
+  if (term.termType === "BlankNode" && !blankNodeLabel.test(term.value))
+    throw new UnsupportedBlankNodeLabelError();
   if (term.termType === "NamedNode" && iri(term.value) !== term.value)
     throw new Error("Unsafe assertion IRI");
   if (term.termType === "Literal") {
