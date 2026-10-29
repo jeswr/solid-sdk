@@ -155,9 +155,7 @@ describe("WebIdDPoPTokenProvider — owned request target (sst-m040)", () => {
       keepalive: true,
       signal: abort.signal,
     });
-    // Match the platform's existing new Request(input, { headers }) behavior,
-    // including its referrer/referrerPolicy handling when init is supplied.
-    const expected = new Request(request.clone(), { headers: request.headers });
+    const expected = request.clone();
     expect(await setup.provider.matches(request)).toBe(true);
     expect(request.bodyUsed).toBe(false); // matches must not consume an upload
     const upgraded = await setup.provider.upgrade(request);
@@ -195,7 +193,7 @@ describe("WebIdDPoPTokenProvider — owned request target (sst-m040)", () => {
   });
 
   for (const status of [307, 308]) {
-    it(`preserves a byte-backed POST across a same-origin ${status} redirect`, async () => {
+    it(`makes a direct upgraded POST manual on a same-origin ${status} redirect`, async () => {
       const received: { url?: string; method?: string; body: string; auth?: string }[] = [];
       const server = createServer(async (request, response) => {
         const chunks: Buffer[] = [];
@@ -220,10 +218,12 @@ describe("WebIdDPoPTokenProvider — owned request target (sst-m040)", () => {
           new Request(`${origin}/start`, { method: "POST", body: "ABC" }),
         );
         const response = await fetch(upgraded);
+        expect(upgraded.redirect).toBe("manual");
+        expect(response.status).toBe(status);
         expect(await response.text()).toBe("ok");
-        expect(response.url).toBe(`${origin}/final`);
+        expect(response.url).toBe(`${origin}/start`);
         expect(received).toEqual(
-          ["/start", "/final"].map((url) => ({
+          ["/start"].map((url) => ({
             url,
             method: "POST",
             body: "ABC",
@@ -239,15 +239,24 @@ describe("WebIdDPoPTokenProvider — owned request target (sst-m040)", () => {
     });
   }
 
-  it("preserves a no-cors POST without losing its body", async () => {
-    const request = new Request(POD, { method: "POST", mode: "no-cors", body: "no-cors body" });
-    const upgraded = await setup.provider.upgrade(request);
-    const sent = new Request(upgraded);
-    expect(sent.url).toBe(POD);
-    expect(sent.method).toBe("POST");
-    expect(sent.mode).toBe("no-cors");
-    expect(await sent.text()).toBe("no-cors body");
-  });
+  for (const force of [false, true]) {
+    it(`keeps a no-cors POST uncredentialed without refreshing, forceRefresh=${force}`, async () => {
+      setup.session.expiresAt = 0;
+      const request = new Request(POD, { method: "POST", mode: "no-cors", body: "no-cors body" });
+      expect(await setup.provider.matches(request)).toBe(false);
+      const upgraded = await setup.provider.upgrade(request, force);
+      expect(upgraded).toBe(request);
+      const sent = new Request(upgraded);
+      expect(sent.url).toBe(POD);
+      expect(sent.method).toBe("POST");
+      expect(sent.mode).toBe("no-cors");
+      expect(sent.redirect).toBe("follow");
+      expect(sent.headers.has("Authorization")).toBe(false);
+      expect(sent.headers.has("DPoP")).toBe(false);
+      expect(await sent.text()).toBe("no-cors body");
+      expect(setup.refresh).not.toHaveBeenCalled();
+    });
+  }
 
   it("preserves no-cors POST and abort propagation through the proactive wrapper", async () => {
     const abort = new AbortController();
@@ -260,7 +269,9 @@ describe("WebIdDPoPTokenProvider — owned request target (sst-m040)", () => {
         expect(delivered.method).toBe("POST");
         expect(delivered.mode).toBe("no-cors");
         expect(await delivered.text()).toBe("no-cors body");
-        expect(await proofOf(delivered, setup.session)).toMatchObject({ htu: POD, htm: "POST" });
+        expect(delivered.redirect).toBe("follow");
+        expect(delivered.headers.has("Authorization")).toBe(false);
+        expect(delivered.headers.has("DPoP")).toBe(false);
         return new Response("ok");
       },
       POD,
