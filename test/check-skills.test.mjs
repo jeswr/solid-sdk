@@ -1111,6 +1111,42 @@ describe("skill validation", () => {
     }
   });
 
+  it.each(
+    ["skills/alpha/SKILL.md", "packages/widget/SKILL.md"].flatMap((path) =>
+      ["internal", "external", "invalid", "directory", "dangling"].map((type) => [path, type]),
+    ),
+  )("rejects symbolic-link entry points before reading: %s (%s)", (path, type) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill());
+    const target = join(type === "internal" ? root : fixture(), "private-fixture-target");
+    if (type === "directory") mkdirSync(target);
+    else if (type !== "dangling") {
+      writeFileSync(
+        target,
+        type === "invalid"
+          ? "# Invalid linked skill\n"
+          : skill({ name: dirname(path).split("/").at(-1) }),
+      );
+    }
+    rmSync(join(root, path));
+    symlinkSync(target, join(root, path));
+    const error = `${path}: symbolic-link skill entry points are forbidden`;
+    const indexPath = join(root, "skills/INDEX.md");
+    for (const previousIndex of [undefined, "Previously generated index\n"]) {
+      if (previousIndex !== undefined) writeFileSync(indexPath, previousIndex);
+      for (const write of [false, true]) {
+        expect(checkSkills(root, { write }).errors).toEqual([error]);
+        const result = cli(root, ...(write ? ["--write"] : []));
+        expect(result.status).toBe(1);
+        expect(result.stderr.trim()).toBe(error);
+        expect(result.stdout).toBe("");
+        expect(readlinkSync(join(root, path))).toBe(target);
+        if (previousIndex === undefined) expect(existsSync(indexPath)).toBe(false);
+        else expect(readFileSync(indexPath, "utf8")).toBe(previousIndex);
+      }
+    }
+  });
+
   it.each([
     ["skills/alpha/references/linked.md", "file"],
     ["skills/alpha/scripts/.linked", "file"],

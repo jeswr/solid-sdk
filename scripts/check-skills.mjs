@@ -480,7 +480,12 @@ export function checkSkills(root, { write = false } = {}) {
       }
       if (!dir.isDirectory() || dir.name.startsWith(".")) continue;
       const path = join(skillDir, "SKILL.md");
-      if (existsSync(join(root, path))) paths.push(path);
+      const entry = lstatSync(join(root, path), { throwIfNoEntry: false });
+      if (entry?.isSymbolicLink()) {
+        report(path, "symbolic-link skill entry points are forbidden");
+        continue;
+      }
+      if (entry) paths.push(path);
       // A shared skill directory must contain its entry point; packages may omit it.
       else if (collection === "skills") report(path, "missing SKILL.md");
     }
