@@ -251,6 +251,9 @@ export async function parseBoundedRdf(source: string, contentType: string, baseI
     for (let offset = 0; offset < input.length; offset += 4096) {
       yield input.subarray(offset, offset + 4096);
     }
+    // N3 holds any Buffer ending in a non-ASCII byte until an ASCII byte
+    // arrives. Flush that pending input before EOF; JSON-LD needs no sentinel.
+    if (format !== "application/ld+json") yield Buffer.from("\n");
   }
   try {
     await pipeline(

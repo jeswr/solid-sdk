@@ -12,6 +12,32 @@ import {
 const BASE = "https://alice.example/pod/data";
 afterEach(() => vi.restoreAllMocks());
 
+describe.each([
+  "text/turtle",
+  "application/x-turtle",
+  "application/trig",
+  "application/n-triples",
+  "application/n-quads",
+])("bounded %s parsing", (format) => {
+  it.each([
+    "é",
+    "中",
+    "🌱",
+  ])("preserves statements before an EOF comment ending in %s", async (tail) => {
+    const statement = '<urn:s> <urn:p> "café 🌱". # ';
+    // Cover one chunk and a multibyte character split at the 4096-byte boundary.
+    for (const padding of ["", " ".repeat(4095 - Buffer.byteLength(statement))]) {
+      const dataset = await parseBoundedRdf(statement + padding + tail, format, BASE);
+      expect(dataset.size).toBe(1);
+      expect(dataset.getQuads("urn:s", "urn:p", null, null)[0]?.object.value).toBe("café 🌱");
+    }
+  });
+
+  it("rejects malformed input ending in a non-ASCII byte", async () => {
+    await expect(parseBoundedRdf('<urn:s> <urn:p> "x". é', format, BASE)).rejects.toThrow();
+  });
+});
+
 describe("RDF expansion and serialization budgets", () => {
   it.each([
     ["objects", '{"unmapped":', "}", 10_000],

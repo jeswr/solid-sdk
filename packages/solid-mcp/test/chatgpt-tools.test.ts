@@ -118,6 +118,29 @@ describe.each([false, true])("ChatGPT tool contracts (fetch PodPort: %s)", (port
     ]);
   });
 
+  it("fetch and search preserve RDF ending in a Unicode comment without a newline", async () => {
+    const id = `${POD}data.ttl`;
+    const pod = makeFakePod({
+      [POD]: { contentType: "text/turtle", body: containerTurtle(POD, [{ name: "data.ttl" }]) },
+      [id]: { contentType: "text/turtle", body: '<urn:s> <urn:p> "avocado". # café' },
+    });
+    const client = await connect(pod.fetch);
+    const fetched = await client.callTool({ name: "fetch", arguments: { id } });
+    expect(fetched.isError).toBeUndefined();
+    const content = fetched.content as { type: "text"; text: string }[];
+    const document = JSON.parse(content[0]!.text);
+    expect(document.metadata.truncated).toBe(false);
+    expect(
+      (await parseRdf(document.text, "text/turtle")).getQuads("urn:s", "urn:p", null, null)[0]
+        ?.object.value,
+    ).toBe("avocado");
+    const searched = await client.callTool({ name: "search", arguments: { query: "avocado" } });
+    expect(searched.isError).toBeUndefined();
+    expect(searched.content).toEqual([
+      { type: "text", text: JSON.stringify({ results: [{ id, title: "data.ttl", url: id }] }) },
+    ]);
+  });
+
   it("returns tool errors for fetch failures and invalid search limits", async () => {
     const client = await connect(makeFakePod({}).fetch, { maxResources: -1 });
     expect((await client.callTool({ name: "search", arguments: { query: "x" } })).isError).toBe(
