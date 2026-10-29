@@ -503,6 +503,36 @@ it("rejects identical private graph reuse within one batch before any write", as
   expect(write).not.toHaveBeenCalled();
 });
 
+it("rejects extra named graphs colliding with another resource's private graphs on listing", async () => {
+  const { store, pod, memory, write } = setup();
+  const first = await build("private-first");
+  const second = await build("private-second");
+  const np = first.nanopubs[0]!;
+  const extra = graph(first.dataset, np.provenanceId);
+  const assertion = new RdfNode(np.assertionId, extra);
+  assertion.terms(`${NS.pkg}epistemicStatus`).clear();
+  assertion.link(`${NS.pkg}epistemicStatus`, `${NS.pkg}Mentioned`);
+  putGraph(second.dataset as Store, np.provenanceId, extra);
+  for (const value of [first, second]) {
+    const trig = await serializeNanopublications(value);
+    expect((await parseNanopublications(trig)).nanopubs).toEqual(value.nanopubs);
+    await memory.write(store.url(value.nanopubs[0]!.id), encode(trig), "application/trig", {
+      ifNoneMatch: "*",
+    });
+  }
+  const list = pod.list;
+  for (const reverse of [false, true]) {
+    pod.list = async (container) => {
+      const entries = await list(container);
+      return reverse ? entries.reverse() : entries;
+    };
+    await expect(new NanopubStore(pod).list()).rejects.toThrow(
+      "Reused private nanopublication graph",
+    );
+  }
+  expect(write).not.toHaveBeenCalled();
+});
+
 it.each([
   { separate: false, conflict: false },
   { separate: false, conflict: true },

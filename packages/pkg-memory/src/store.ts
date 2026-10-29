@@ -397,21 +397,26 @@ function mergeNanopublication(
 ): void {
   const np = result.nanopubs[0] as Nanopublication;
   const privateNames = [np.id, np.provenanceId, np.pubinfoId];
-  const sharedNames = sharedGraphNames(np, result.dataset);
+  // Inspect actual graph contents too: external files may carry extra graphs.
+  // Repeated creates still reach the Pod's create-only identity check.
+  if (
+    !collection.nanopubs.some((previous) => previous.id === np.id) &&
+    privateNames.some(
+      (name) => collection.dataset.match(null, null, null, df.namedNode(name)).size > 0,
+    )
+  )
+    throw new Error("Reused private nanopublication graph");
   for (const previous of collection.nanopubs) {
-    // A repeated create still reaches the Pod's create-only identity check.
     if (previous.id === np.id) continue;
     const previousPrivate = [previous.id, previous.provenanceId, previous.pubinfoId];
-    const previousShared = sharedGraphNames(previous, collection.dataset);
     if (
-      privateNames.some(
-        (name) => previousPrivate.includes(name) || previousShared.includes(name),
-      ) ||
-      sharedNames.some((name) => previousPrivate.includes(name))
+      previousPrivate.some(
+        (name) => result.dataset.match(null, null, null, df.namedNode(name)).size > 0,
+      )
     )
       throw new Error("Reused private nanopublication graph");
   }
-  const graphs = sharedNames.map((name) => {
+  const graphs = sharedGraphNames(np, result.dataset).map((name) => {
     const contents = graph(result.dataset, name);
     const canonical =
       contents.size === 0
