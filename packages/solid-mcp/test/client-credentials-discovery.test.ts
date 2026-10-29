@@ -1,7 +1,11 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { lookup } from "node:dns/promises";
+import { Readable } from "node:stream";
+import { createPinningDispatcher } from "@jeswr/guarded-fetch/node";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createCliFetch } from "../src/client-credentials.js";
+import type { CliConfig } from "../src/cli-config.js";
+import { createCliFetch as realCreateCliFetch } from "../src/client-credentials.js";
 import { search } from "../src/pod.js";
 import { createFetchPodPort } from "../src/pod-port.js";
 import { containerTurtle, makeFakePod } from "./fake-pod.js";
@@ -17,11 +21,47 @@ const config = {
 const profile = "https://profile.example/me";
 
 vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
+vi.mock("@jeswr/guarded-fetch/node", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@jeswr/guarded-fetch/node")>();
+  return { ...original, createPinningDispatcher: vi.fn(original.createPinningDispatcher) };
+});
+const originalNode = await vi.importActual<typeof import("@jeswr/guarded-fetch/node")>(
+  "@jeswr/guarded-fetch/node",
+);
 beforeEach(() => {
+  vi.mocked(createPinningDispatcher)
+    .mockReset()
+    .mockImplementation(originalNode.createPinningDispatcher);
   vi.mocked(lookup)
     .mockReset()
     .mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
 });
+
+// Keep ordinary discovery tests on fixture I/O at the Node dispatcher's request seam.
+async function createCliFetch(config: CliConfig, fetchImpl: typeof fetch) {
+  vi.mocked(createPinningDispatcher).mockImplementation((options) => {
+    const dispatcher = originalNode.createPinningDispatcher(options);
+    vi.spyOn(dispatcher, "request").mockImplementation(async (request) => {
+      const response = await fetchImpl(new URL(request.path, String(request.origin)), {
+        method: request.method,
+        headers: request.headers as Record<string, string>,
+        signal: request.signal as AbortSignal,
+        redirect: "manual",
+        credentials: "omit",
+      });
+      return {
+        statusCode: response.status,
+        headers: Object.fromEntries(response.headers),
+        body: response.body ? Readable.fromWeb(response.body as never) : Readable.from([]),
+        trailers: {},
+        opaque: null,
+        context: {},
+      } as Awaited<ReturnType<typeof dispatcher.request>>;
+    });
+    return dispatcher;
+  });
+  return realCreateCliFetch(config, fetchImpl);
+}
 
 describe("anonymous WebID profile redirects", () => {
   it.each([
@@ -61,8 +101,85 @@ describe("anonymous WebID profile redirects", () => {
       "https://profile.example/public-profile",
     ]);
     expect(lookup).toHaveBeenCalledTimes(2);
+    expect(createPinningDispatcher).toHaveBeenNthCalledWith(1, { allowLoopback: false });
+    expect(createPinningDispatcher).toHaveBeenNthCalledWith(2, { allowLoopback: false });
+    const dispatchers = vi.mocked(createPinningDispatcher).mock.results.map(({ value }) => value);
+    expect(dispatchers).toHaveLength(2);
+    expect(dispatchers[0]).not.toBe(dispatchers[1]);
+    for (const dispatcher of dispatchers) expect(dispatcher.request).toHaveBeenCalledTimes(1);
     expect(lookup).toHaveBeenCalledWith("profile.example", { all: true });
     expect(css.stats.tokens).toBe(1);
+  });
+
+  it.each([
+    [{ address: "169.254.169.254", family: 4 }],
+    [
+      { address: "93.184.216.34", family: 4 },
+      { address: "10.0.0.1", family: 4 },
+    ],
+  ])("refuses DNS rebinding at connect time after a public redirect check: %j", async (...addresses) => {
+    const resolveAll = vi.fn(async () => addresses);
+    vi.mocked(createPinningDispatcher).mockImplementationOnce((options) =>
+      originalNode.createPinningDispatcher({ ...options, resolveAll }),
+    );
+    const css = mockCss();
+    const fetch = await realCreateCliFetch(config, async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url.startsWith(ISSUER)) return css.fetch(input, init);
+      expect(request.url).toBe(profile);
+      return new Response(null, { status: 302, headers: { location: "/card" } });
+    });
+    // The real Node connector must reject the private answer before opening a socket.
+    await expect(fetch(profile)).rejects.toThrow(/non-public address/i);
+    expect(lookup).toHaveBeenCalledWith("profile.example", { all: true });
+    expect(resolveAll).toHaveBeenCalledExactlyOnceWith("profile.example");
+  });
+
+  it.each([
+    "10.0.0.1",
+    "93.184.216.34",
+  ])("refuses a configured HTTP loopback redirect rebinding to %s at connect time", async (address) => {
+    const webId = "http://localhost:3000/me";
+    vi.mocked(lookup).mockResolvedValue([{ address: "127.0.0.1", family: 4 }]);
+    const resolveAll = vi.fn(async () => [{ address, family: 4 }]);
+    vi.mocked(createPinningDispatcher).mockImplementationOnce((options) =>
+      originalNode.createPinningDispatcher({ ...options, resolveAll }),
+    );
+    const css = mockCss();
+    const fetch = await realCreateCliFetch({ ...config, webId }, async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url.startsWith(ISSUER)) return css.fetch(input, init);
+      expect(request.url).toBe(webId);
+      return new Response(null, { status: 302, headers: { location: "/card" } });
+    });
+    await expect(fetch(webId)).rejects.toThrow(/requires loopback-only/i);
+    expect(createPinningDispatcher).toHaveBeenCalledExactlyOnceWith({ allowLoopback: true });
+    expect(resolveAll).toHaveBeenCalledExactlyOnceWith("localhost");
+  });
+
+  it.each([
+    { method: "GET", status: 200, body: "profile" },
+    { method: "HEAD", status: 200, body: null },
+    { method: "GET", status: 204, body: null },
+    { method: "GET", status: 205, body: null },
+    { method: "GET", status: 304, body: null },
+  ])("preserves the redirected response for $method $status", async ({ method, status, body }) => {
+    const css = mockCss();
+    const target = "https://profile.example/card?view=public";
+    const fetch = await createCliFetch(config, async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url.startsWith(ISSUER)) return css.fetch(input, init);
+      expect(request.method).toBe(method);
+      if (request.url === profile)
+        return new Response(null, { status: 302, headers: { location: `${target}#me` } });
+      expect(request.url).toBe(target);
+      return new Response(body, { status, headers: { etag: '"profile-version"' } });
+    });
+    const response = await fetch(profile, { method });
+    expect(response.status).toBe(status);
+    expect(response.headers.get("etag")).toBe('"profile-version"');
+    expect(response.url).toBe(`${target}#me`);
+    expect(await response.text()).toBe(body ?? "");
   });
 
   it("bounds redirect chains and cancels their response bodies", async () => {
@@ -206,6 +323,7 @@ describe("anonymous WebID profile redirects", () => {
     });
     expect(await (await fetch(webId)).text()).toBe("local profile");
     expect(urls).toEqual([webId, new URL("/card", webId).href]);
+    expect(createPinningDispatcher).toHaveBeenCalledExactlyOnceWith({ allowLoopback: true });
   });
 
   it("preserves same-origin loopback redirects outside the configured local pod subtree", async () => {

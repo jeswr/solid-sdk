@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { Readable } from "node:stream";
 import { assertSafeUrl } from "@jeswr/guarded-fetch";
+import { createPinningDispatcher } from "@jeswr/guarded-fetch/node";
 import {
   acquireToken,
   assertEndpointTransport,
@@ -16,6 +18,42 @@ import type { CliConfig } from "./cli-config.js";
 import { withProfileRedirects } from "./profile-redirects.js";
 
 const MAX_PROFILE_REDIRECTS = 5;
+
+/** One anonymous, DNS-pinned hop; the caller owns redirect origin checks. */
+async function fetchProfileHop(
+  request: Request,
+  headers: Headers,
+  allowLoopback: boolean,
+): Promise<Response> {
+  const target = new URL(request.url);
+  const dispatcher = createPinningDispatcher({ allowLoopback });
+  try {
+    // Use the dispatcher's own request API: Node's bundled fetch may use a different
+    // undici handler protocol. No redirect interceptor or cookie jar is installed.
+    const response = await dispatcher.request({
+      origin: target.origin,
+      path: target.pathname + target.search,
+      method: request.method as "GET" | "HEAD",
+      headers: Object.fromEntries(headers),
+      signal: request.signal,
+    });
+    const responseHeaders = new Headers();
+    for (const [name, values] of Object.entries(response.headers)) {
+      for (const value of Array.isArray(values) ? values : values === undefined ? [] : [values])
+        responseHeaders.append(name, value);
+    }
+    const result = new Response(
+      request.method === "HEAD" || [204, 205, 304].includes(response.statusCode)
+        ? null
+        : (Readable.toWeb(response.body) as ReadableStream<Uint8Array>),
+      { status: response.statusCode, headers: responseHeaders },
+    );
+    Object.defineProperty(result, "url", { value: request.url });
+    return result;
+  } finally {
+    void dispatcher.close().catch(() => {});
+  }
+}
 
 /** CSS login with a process-local token/key cache shared by every stdio tool. */
 export async function createCliFetch(
@@ -113,12 +151,15 @@ export async function createCliFetch(
       headers.delete("dpop");
       const follow = request.redirect === "follow" && ["GET", "HEAD"].includes(request.method);
       let anonymousRequest = request;
+      let redirectPolicy: { allowLoopback: boolean } | undefined;
       for (let hop = 0; ; hop++) {
-        const response = await fetchImpl(anonymousRequest, {
-          headers,
-          redirect: "manual",
-          credentials: "omit",
-        });
+        const response = redirectPolicy
+          ? await fetchProfileHop(anonymousRequest, headers, redirectPolicy.allowLoopback)
+          : await fetchImpl(anonymousRequest, {
+              headers,
+              redirect: "manual",
+              credentials: "omit",
+            });
         const location = response.headers.get("location");
         if (!follow || ![301, 302, 303, 307, 308].includes(response.status) || !location)
           return response;
@@ -136,6 +177,7 @@ export async function createCliFetch(
               (url) => url && new URL(url).origin === target.origin,
             );
           await assertSafeUrl(target.href, { allowLoopback });
+          redirectPolicy = { allowLoopback };
         } catch {
           throw new Error("Invalid anonymous profile redirect.");
         }
