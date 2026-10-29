@@ -42,6 +42,60 @@ it("refuses an undeclared local origin before connecting, and permits listed loo
   }
 });
 
+it("transports body-bearing keepalive requests with effective bodies and content types", async () => {
+  const requests: Array<{
+    method: string | undefined;
+    body: string;
+    contentType: string | undefined;
+  }> = [];
+  const server = createServer(async (req, res) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(Buffer.from(chunk));
+    requests.push({
+      method: req.method,
+      body: Buffer.concat(chunks).toString("utf8"),
+      contentType: req.headers["content-type"],
+    });
+    res.end("body fixture");
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("no local fixture address");
+    const origin = `http://127.0.0.1:${address.port}`;
+    const scoped = createOriginScopedFetch(new Set([origin]), { allowLoopback: true });
+    const init = { method: "POST", body: "keepalive fixture ✓", keepalive: true };
+    const inputs: Array<Parameters<typeof scoped>> = [
+      [origin, init],
+      [new URL(origin), init],
+      [new Request(origin, init)],
+      [new Request(origin, { ...init, keepalive: false }), { keepalive: true }],
+      [new Request(origin, { ...init, body: "replaced fixture" }), init],
+      [origin, { ...init, keepalive: false }],
+    ];
+    for (const input of inputs) {
+      expect(await (await scoped(...input)).text()).toBe("body fixture");
+      expect(requests.at(-1)).toEqual({
+        method: "POST",
+        body: init.body,
+        contentType: "text/plain;charset=UTF-8",
+      });
+    }
+    const form = new URLSearchParams({ fixture: "keepalive form ✓" });
+    expect(await (await scoped(origin, { ...init, body: form })).text()).toBe("body fixture");
+    expect(requests.at(-1)).toEqual({
+      method: "POST",
+      body: form.toString(),
+      contentType: "application/x-www-form-urlencoded;charset=UTF-8",
+    });
+    expect(requests).toHaveLength(inputs.length + 1);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
+
 it("checks string, URL and Request inputs and refuses redirects before forwarding credentials", async () => {
   const transport = vi.fn(async () => new Response("fixture"));
   const createTransport = vi.fn<NonNullable<OriginFetchOptions["createTransport"]>>(

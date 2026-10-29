@@ -57,6 +57,8 @@ export function createOriginScopedFetch(
     if (!allowed.has(url.origin)) throw new TypeError("request origin is outside binding ORIGINS");
     // guarded-fetch normalizes only part of Request; retain the effective policies explicitly.
     return guarded(request, {
+      // Explicit streams are incompatible with keepalive; retain the snapshotted body as bytes.
+      body: request.keepalive && request.body !== null ? await request.arrayBuffer() : request.body,
       redirect: "manual",
       integrity: request.integrity,
       cache: request.cache,
