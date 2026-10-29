@@ -15,8 +15,12 @@ these shapes, preserving its email-default adapter and parser.
 
 `createOriginScopedFetch(ORIGINS, options)` snapshots the binding's origins before any
 request. It checks each target before DNS/connection, uses guarded-fetch with DNS
-pinning by default, and refuses redirects. `options.transport` is a trusted injected
-fake or DNS-pinning transport; `allowLoopback` is exclusively for local tests.
+pinning by default, and refuses redirects. `options.createTransport` is a trusted
+factory for a DNS-pinning transport or test fake. It receives frozen construction
+options including `maxRedirects: 0`, which it must apply internally: passing a
+preconstructed redirect-following fetch is unsafe because an outer refusal runs
+after that fetch has already followed the redirect. `allowLoopback` is exclusively
+for local tests.
 
 `./direct` exports only `createDirectReader`. `./direct/send` owns the send half;
 only agent-executor and channel tests may import it. `./testing` exports

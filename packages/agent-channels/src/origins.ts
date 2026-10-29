@@ -8,9 +8,13 @@ import {
 } from "@jeswr/guarded-fetch";
 import { createNodeGuardedFetch } from "@jeswr/guarded-fetch/node";
 
-/** Trusted injection is for tests or an already DNS-pinning transport. */
+/** Trusted injection constructs a single-hop DNS-pinning transport (or a test fake). */
 export interface OriginFetchOptions {
-  readonly transport?: typeof guardedFetch;
+  /** Apply maxRedirects at construction; do not wrap an already-following transport. */
+  readonly createTransport?: (options: {
+    readonly maxRedirects: 0;
+    readonly allowLoopback: boolean;
+  }) => typeof guardedFetch;
   readonly allowLoopback?: boolean;
   readonly dnsLookup?: GuardOptions["dnsLookup"];
 }
@@ -30,9 +34,9 @@ export function createOriginScopedFetch(
     )
       throw new TypeError("invalid binding origin");
   }
-  const transport =
-    options.transport ??
-    createNodeGuardedFetch({ allowLoopback: options.allowLoopback, maxRedirects: 0 });
+  const transport = (options.createTransport ?? createNodeGuardedFetch)(
+    Object.freeze({ allowLoopback: options.allowLoopback ?? false, maxRedirects: 0 }),
+  );
   const guarded = createGuardedFetch({
     pinningFetch: refuseRedirects(transport),
     allowLoopback: options.allowLoopback,

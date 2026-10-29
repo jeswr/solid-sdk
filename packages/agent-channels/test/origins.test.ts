@@ -1,12 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import type { guardedFetch } from "@jeswr/guarded-fetch";
+import { createGuardedFetch, type guardedFetch } from "@jeswr/guarded-fetch";
+import { createNodeGuardedFetch } from "@jeswr/guarded-fetch/node";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer uses bare builtins
 import { createHash } from "crypto";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer uses bare builtins
 import { createServer } from "http";
 import { expect, it, vi } from "vitest";
-import { createOriginScopedFetch } from "../src/origins.js";
+import { createOriginScopedFetch, type OriginFetchOptions } from "../src/origins.js";
 
 it("refuses an undeclared local origin before connecting, and permits listed loopback only in tests", async () => {
   let requests = 0;
@@ -43,9 +44,17 @@ it("refuses an undeclared local origin before connecting, and permits listed loo
 
 it("checks string, URL and Request inputs and refuses redirects before forwarding credentials", async () => {
   const transport = vi.fn(async () => new Response("fixture"));
+  const createTransport = vi.fn<NonNullable<OriginFetchOptions["createTransport"]>>(
+    () => transport,
+  );
   const dnsLookup = vi.fn(async () => [{ address: "1.1.1.1", family: 4 as const }]);
   const origin = "https://allowed.example";
-  const scoped = createOriginScopedFetch(new Set([origin]), { transport, dnsLookup });
+  const scoped = createOriginScopedFetch(new Set([origin]), { createTransport, dnsLookup });
+  expect(createTransport).toHaveBeenCalledExactlyOnceWith({
+    maxRedirects: 0,
+    allowLoopback: false,
+  });
+  expect(Object.isFrozen(createTransport.mock.calls[0]?.[0])).toBe(true);
   for (const input of [origin, new URL(`${origin}/url`), new Request(`${origin}/request`)])
     expect(await (await scoped(input)).text()).toBe("fixture");
   expect(transport).toHaveBeenCalledTimes(3);
@@ -58,12 +67,46 @@ it("checks string, URL and Request inputs and refuses redirects before forwardin
     async () => new Response(null, { status: 302, headers: { location: "https://other.example" } }),
   );
   await expect(
-    createOriginScopedFetch(new Set([origin]), { transport: redirect, dnsLookup })(origin, {
-      redirect: "follow",
-      headers: { authorization: "Bearer test-token" },
-    }),
+    createOriginScopedFetch(new Set([origin]), { createTransport: () => redirect, dnsLookup })(
+      origin,
+      {
+        redirect: "follow",
+        headers: { authorization: "Bearer test-token" },
+      },
+    ),
   ).rejects.toThrow();
   expect(redirect).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  301, 302, 303, 307, 308,
+])("refuses injected guard redirects (%s) before contacting the target", async (status) => {
+  const origin = "https://allowed.example";
+  const source = `${origin}/source`;
+  const dnsLookup = vi.fn(async () => [{ address: "1.1.1.1", family: 4 as const }]);
+  for (const location of [`${origin}/target`, "https://other.example/target"]) {
+    const pinningFetch = vi.fn<typeof guardedFetch>(async (input) =>
+      input === source
+        ? new Response(null, { status, headers: { location } })
+        : new Response("redirect target"),
+    );
+    const scoped = createOriginScopedFetch(new Set([origin]), {
+      createTransport: (options) =>
+        createGuardedFetch({ ...options, pinningFetch, dnsLookup, requireDnsPinning: true }),
+      dnsLookup,
+    });
+    expect(await (await scoped(`${origin}/target`)).text()).toBe("redirect target");
+    expect(pinningFetch).toHaveBeenCalledTimes(1);
+    pinningFetch.mockClear();
+    await expect(
+      scoped(new Request(source, { redirect: "follow" }), {
+        redirect: "follow",
+        headers: { authorization: "Bearer test-token" },
+      }),
+    ).rejects.toThrow(/redirect/i);
+    expect(pinningFetch).toHaveBeenCalledTimes(1);
+    expect(pinningFetch.mock.calls[0]?.[0]).toBe(source);
+  }
 });
 
 it("enforces effective response integrity from Request inputs and init overrides", async () => {
@@ -158,14 +201,17 @@ it.each([
     return new Response("policy fixture");
   });
   const scoped = createOriginScopedFetch(new Set([origin]), {
-    transport,
+    createTransport: () => transport,
     dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }],
   });
   expect(await (await scoped(input, init)).text()).toBe("policy fixture");
   expect(transport).toHaveBeenCalledTimes(1);
 });
 
-it("refuses same-origin and unlisted-origin redirects through the default transport", async () => {
+it.each([
+  "default",
+  "injected",
+] as const)("refuses same-origin and unlisted-origin redirects through the %s Node transport", async (kind) => {
   const requests: string[] = [];
   let targetRequests = 0;
   let status = 301;
@@ -192,10 +238,20 @@ it("refuses same-origin and unlisted-origin redirects through the default transp
     )
       throw new Error("no local fixture address");
     const origin = `http://127.0.0.1:${sourceAddress.port}`;
-    const scoped = createOriginScopedFetch(new Set([origin]), { allowLoopback: true });
-    const expectedRequests: string[] = [];
+    const createTransport = vi.fn(createNodeGuardedFetch);
+    const scoped = createOriginScopedFetch(new Set([origin]), {
+      allowLoopback: true,
+      createTransport: kind === "injected" ? createTransport : undefined,
+    });
+    if (kind === "injected")
+      expect(createTransport).toHaveBeenCalledExactlyOnceWith({
+        maxRedirects: 0,
+        allowLoopback: true,
+      });
+    expect(await (await scoped(`${origin}/target`)).text()).toBe("same-origin redirect target");
+    const expectedRequests: string[] = ["/target"];
     for (status of [301, 302, 303, 307, 308]) {
-      for (const destination of ["same", "unlisted"]) {
+      for (const destination of ["unlisted", "same"]) {
         location =
           destination === "same" ? "/target" : `http://127.0.0.1:${targetAddress.port}/target`;
         const path = `/redirect-${status}-${destination}`;
@@ -236,7 +292,10 @@ it("refuses malformed origins, userinfo, unsupported schemes and unsafe destinat
   const transport = vi.fn(async () => new Response("unexpected"));
   const scoped = createOriginScopedFetch(
     new Set(["https://allowed.example", "https://127.0.0.1", "http://allowed.example"]),
-    { transport, dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }] },
+    {
+      createTransport: () => transport,
+      dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }],
+    },
   );
   for (const input of [
     "!",
