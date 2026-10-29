@@ -116,3 +116,21 @@ The full command has been run against both local servers with loopback sockets.
 Offline checks additionally validate crypto, HTTP request construction, probes,
 observation ordering, shipped config imports, and independent fixtures against CSS's
 own ACP evaluator.
+
+`content-length.integration.ts` reproduces CSS 7.2.0's memory-backend length bug
+independently: PUT a Unicode Turtle document, GET it intact, insert an ASCII triple
+with PATCH, then compare a raw loopback HTTP response with HEAD and Fetch GET.
+The server sends 133 UTF-8 bytes but advertises 128 (the JavaScript string length);
+Fetch exposes only 128 bytes and the RDF parser rejects that prefix. The test logs
+the exact bodies, statuses and raw response headers, and drives the engine against
+the damaged source to require a failed-resource report and no destination file.
+`@jeswr/fetch-rdf` also rejects the streamed response without a package change.
+The count originates at CSS `dist/storage/accessors/InMemoryDataAccessor.js:53`
+(`chunk.length`) and is emitted by
+`dist/http/output/metadata/RangeMetadataWriter.js:27`.
+
+`shared.ttl` retains Unicode in the full migration scenarios. Following a successful
+stranger append, the suite requires the engine body reader to reject the truncated
+Turtle. It negotiates N-Triples only to inspect the inserted triple, then restores
+the original Turtle with the original Turtle representation's ETag. No server code
+is patched and no truncated body is used as migration input successfully.

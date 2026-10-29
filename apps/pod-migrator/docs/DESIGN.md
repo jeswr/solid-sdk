@@ -71,6 +71,16 @@ Data crosses from source to target only as bytes plus a content type. No header,
      overwrite unless the user chose "overwrite" for that path). RDF documents may optionally have
      source-pod IRIs rewritten to target-pod IRIs (parse with `@jeswr/fetch-rdf`, rewrite terms,
      serialise with `n3.Writer`); off by default the bytes are copied verbatim.
+     Before creating a file placeholder or replacing content, consume the source body and
+     check its Content-Length against received bytes when Content-Encoding does not transform
+     the body. Parse supported RDF with strict UTF-8 decoding even when rewriting is off.
+     Stream, length, decoding and parse failures stop execution with a resource entry in
+     `MigrationResult.failed`; the failing content is never written. CSS 7.2's memory backend
+     can undercount string chunks after PATCH, so Fetch may return a truncated body whose
+     byte count matches its incorrect header. HEAD repeats that incorrect length; RDF
+     validation detects the malformed representation in this case. These checks cannot
+     establish completeness for arbitrary opaque bytes or a syntactically valid RDF prefix
+     when the server consistently advertises an incorrect length.
    - *Grant.* Write the final ACLs/ACRs **bottom up** (deepest first, containers after their
      members). Every intermediate state is a subset of the final state, which is a subset of the
      source.

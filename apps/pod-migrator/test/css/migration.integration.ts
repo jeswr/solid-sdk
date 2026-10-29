@@ -15,6 +15,7 @@ import {
   planMigration,
   type ReportKind,
 } from "../../src/engine/index.js";
+import { readResourceBytes } from "../../src/engine/resource-body.js";
 import { type CssAccount, createAccount } from "./account.js";
 import { boundedFetch } from "./auth.js";
 import {
@@ -506,9 +507,17 @@ describe.sequential("real CSS 7.2 migration security", () => {
       await append.arrayBuffer();
       const changed = await destination.fetch(shared);
       const etag = changed.headers.get("etag");
-      const changedText = await changed.text();
+      const changedBytes = new Uint8Array(await changed.arrayBuffer());
+      const changedText = new TextDecoder().decode(changedBytes);
       if (process.env.CSS_DEBUG) console.log(`[APPENDED BODY]\n${changedText}`);
-      const graph = await parseRdf(changedText, changed.headers.get("content-type"), {
+      // CSS's memory backend miscounts non-ASCII Turtle after PATCH. The engine
+      // must refuse these bytes; negotiate another syntax only to prove Append.
+      await expect(
+        readResourceBytes(new Response(changedBytes, { headers: changed.headers }), shared),
+      ).rejects.toThrow("Invalid or truncated RDF body");
+      const complete = await destination.side.http.get(shared, { accept: "application/n-triples" });
+      expect(complete.status).toBe(200);
+      const graph = await parseRdf(await complete.text(), complete.headers.get("content-type"), {
         baseIRI: shared,
       });
       expect(

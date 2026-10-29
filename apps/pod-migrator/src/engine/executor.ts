@@ -13,6 +13,7 @@ import {
   unionPolicies,
 } from "./policy.js";
 import { aclLink, parent, parse, requireOk, requireRepresentation, serialize } from "./rdf.js";
+import { readResourceBytes } from "./resource-body.js";
 import { assertSpecificAccess, targetAccessLinks } from "./target-access.js";
 import type {
   AccessDocument,
@@ -300,7 +301,7 @@ export async function executeMigration(
       const source = requireRepresentation(
         await state.source.http.get(entry.state.resource.sourceUrl, { signal: opts.signal }),
       );
-      let bytes = new Uint8Array(await source.arrayBuffer());
+      let bytes = await readResourceBytes(source, entry.state.resource.sourceUrl);
       let contentType = source.headers.get("content-type") ?? "application/octet-stream";
       if (
         state.rewriteIris &&
