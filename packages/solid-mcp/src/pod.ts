@@ -633,5 +633,5 @@ async function searchRdf(
   if (expectedProfile?.href !== finalDocument.href) {
     requirePodScopedUrl({ podRoot: pod.root }, base);
   }
-  return parseBoundedRdf(new TextDecoder().decode(body), contentType, base);
+  return parseBoundedRdf(new TextDecoder().decode(body), contentType || "text/turtle", base);
 }

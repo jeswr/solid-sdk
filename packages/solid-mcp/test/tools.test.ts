@@ -186,6 +186,58 @@ describe("tool registry over a fetch-free portable pod", () => {
     }
   });
 
+  it.each([
+    "profile",
+    "index",
+    "literal",
+    "all",
+  ])("searches portable Turtle with an empty content type at %s", async (headerless) => {
+    const pod = portablePod();
+    pod.webId = "https://identity.example/card#me";
+    const index = `${ROOT}index.ttl`;
+    const note = `${ROOT}note`;
+    pod.list.mockResolvedValue([]);
+    pod.read.mockImplementation(async (url) => {
+      const stage = url === pod.webId ? "profile" : url === index ? "index" : "literal";
+      return {
+        body: new TextEncoder().encode(
+          stage === "profile"
+            ? `<#me> <http://www.w3.org/ns/solid/terms#publicTypeIndex> <${index}> .`
+            : stage === "index"
+              ? "<#reg> <http://www.w3.org/ns/solid/terms#instance> <note> ."
+              : '<> <http://schema.org/text> "portable needle" .',
+        ),
+        contentType: headerless === "all" || headerless === stage ? "" : "text/turtle",
+        url: url === pod.webId ? "https://identity.example/card" : url,
+      };
+    });
+    expect(await search(pod, "needle")).toEqual([
+      { url: note, name: "note", snippet: "literal: portable needle" },
+    ]);
+    expect(pod.read.mock.calls.map(([url]) => url)).toEqual([pod.webId, index, note]);
+  });
+
+  it.each([
+    "",
+    "image/png",
+  ])("uses the portable Turtle fallback only for an empty content type (%s)", async (contentType) => {
+    const pod = portablePod();
+    const note = `${ROOT}note.ttl`;
+    pod.list.mockResolvedValue([{ url: note, isContainer: false }]);
+    pod.read.mockResolvedValue({
+      body: new TextEncoder().encode('<> <http://schema.org/text> "portable needle" .'),
+      contentType,
+    });
+    expect(await search(pod, "needle")).toEqual(
+      contentType === ""
+        ? [{ url: note, name: "note.ttl", snippet: "literal: portable needle" }]
+        : [],
+    );
+    expect(pod.read).toHaveBeenCalledWith(note, {
+      accept: "text/turtle, application/ld+json;q=0.9",
+    });
+  });
+
   it("shares the portable search budget across profile, index, direct instance and listing reads", async () => {
     const pod = portablePod();
     pod.webId = "https://identity.example/card#me";
