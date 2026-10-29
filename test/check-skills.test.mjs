@@ -211,6 +211,48 @@ describe("skill validation", () => {
   });
 
   it.each([
+    ['<a href="references/gu&#105de.md">guide</a>', "guide.md"],
+    ["<img src='references/gu&#x69g.md'>", "guig.md"],
+    ["<a href=references/gu&#105de.md>guide</a>", "guide.md"],
+    ['<a href="references/gu&#000000000000105;de.md">guide</a>', "guide.md"],
+    ['<a href="references/gu&#x000000000000069;de.md">guide</a>', "guide.md"],
+    ['<a href="references/&#128.md">guide</a>', "€.md"],
+    ['<a href="references/&#x80.md">guide</a>', "€.md"],
+    ['<a href="references/&#x110000.md">guide</a>', "�.md"],
+    ['<a href="references/&#55296.md">guide</a>', "�.md"],
+    ['<a href="references/&#0.md">guide</a>', "�.md"],
+    ['<a href="references/&#9999999999999999999999999.md">guide</a>', "�.md"],
+    ['<a href="references/&copy.md">guide</a>', "©.md"],
+    ['<a href="references/a&amp!b.md">guide</a>', "a&!b.md"],
+    ['<a href="references/&AMP.md">guide</a>', "&.md"],
+    ['<a href="references/&not.md">guide</a>', "¬.md"],
+    ['<a href="references/&copy=.md">guide</a>', "&copy=.md"],
+    ['<a href="references/&copycat.md">guide</a>', "&copycat.md"],
+    ['<a href="references/&notin.md">guide</a>', "&notin.md"],
+    ['<a href="references/&apos.md">guide</a>', "&apos.md"],
+    ['<a href="references/&unknown.md">guide</a>', "&unknown.md"],
+    ['<a href="references/&toString.md">guide</a>', "&toString.md"],
+    ['<a href="references/guide.md&#63raw=1">guide</a>', "guide.md"],
+    ['<a href="references/&amp;copy.md">guide</a>', "&copy.md"],
+  ])("uses HTML attribute character-reference rules: %s", (body, filename) => {
+    const root = fixture();
+    put(root, `skills/alpha/references/${filename}`, "# Guide\n");
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
+    '<a href="&#32https&#58//example.invalid/missing.md&#9">external</a>',
+    '<img src="&#x20https&#X3A//example.invalid/missing.png&#10">',
+    '<a href="&#32references/gu&#105de.md&#13">guide</a>',
+    "[doc]: &#32https&#58//example.invalid/missing.md&#9;",
+  ])("normalizes semicolonless references before URL classification: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
     '<!-- <a href="old-guide.md">old guide</a> -->',
     '<!--\n<a href="old-guide.md">old guide</a>\n<img src="old-image.png">\n-->',
     'See <!-- <img src="old-image.png"> --> the [guide](references/guide.md).',

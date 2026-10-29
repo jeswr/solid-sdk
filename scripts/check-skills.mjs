@@ -17,6 +17,8 @@ import { JSON_SCHEMA, load } from "js-yaml";
 import { Marked } from "marked";
 import characterReferences from "./html-character-references.json" with { type: "json" };
 
+const legacyCharacterReferences = new Set(characterReferences.$legacy);
+
 // W9 DESIGN §6 categories. Scan examples too, but allow explicit template values.
 const secretPatterns = [
   ["private key", /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----/g],
@@ -56,10 +58,19 @@ function scanSecrets(text, report) {
 function decodeCharacterReferences(text) {
   // Decode once: &amp;copy; denotes the literal filename &copy;, not ©.
   return text.replace(
-    /&(#(?:[xX][\da-fA-F]{1,6}|\d{1,7})|[a-zA-Z][a-zA-Z\d]*);/g,
-    (match, name) => {
-      if (!name.startsWith("#"))
+    /&(#(?:[xX][\da-fA-F]+|\d+)|[a-zA-Z][a-zA-Z\d]*);?/g,
+    (match, name, offset) => {
+      if (!name.startsWith("#")) {
+        // In attributes, legacy names without ';' cannot precede '=' or an
+        // alphanumeric character (the name pattern consumes the latter in full).
+        if (
+          !match.endsWith(";") &&
+          (!legacyCharacterReferences.has(name) || text[offset + match.length] === "=")
+        ) {
+          return match;
+        }
         return Object.hasOwn(characterReferences, name) ? characterReferences[name] : match;
+      }
       const hex = name[1].toLowerCase() === "x";
       const codePoint = Number.parseInt(name.slice(hex ? 2 : 1), hex ? 16 : 10);
       return (
