@@ -5,16 +5,19 @@ import type { KeyPair, VerifiableCredential } from "@jeswr/solid-vc";
 import { beforeAll, expect, it } from "vitest";
 import { mandateToTurtle, parseMandateCredential } from "../src/document.js";
 import { createVcMandateVerifier, issueMandate } from "../src/mandate.js";
-import { node, RDF_TYPE, SEC, turtle } from "../src/rdf.js";
+import { node, RDF_TYPE, readProof, SEC, trig } from "../src/rdf.js";
 import { AGENT, ODRL } from "../src/types.js";
 import {
   ACTOR,
+  alterProofGraph,
   alterProofOptions,
   clock,
   edKey,
+  expectStandardProof,
   ID,
   mandate,
   OWNER,
+  PROOF_GRAPH_CHANGES,
   profileResolver,
   STATUS,
   verifyExportedRdf,
@@ -22,11 +25,15 @@ import {
 
 let vc: VerifiableCredential;
 let key: KeyPair;
+it.each(PROOF_GRAPH_CHANGES)("rejects altered mandate proof graphs: %s", async (change) => {
+  const document = await alterProofGraph(await mandateToTurtle(vc), ID, change);
+  expect(await parseMandateCredential(document)).toBeUndefined();
+});
 beforeAll(async () => {
   key = await edKey();
   vc = await issueMandate(mandate(), key, { statusListCredential: STATUS, statusListIndex: "1" });
 });
-it("round-trips signed mandate Turtle without changing its verified graph", async () => {
+it("round-trips signed mandate TriG without changing its verified graph", async () => {
   for (const credential of [
     vc,
     { ...vc, proof: [vc.proof] } as VerifiableCredential,
@@ -52,8 +59,9 @@ it("round-trips signed mandate Turtle without changing its verified graph", asyn
 it("verifies the exported mandate proof configuration independently with WebCrypto", async () => {
   const document = await mandateToTurtle(vc);
   expect(await verifyExportedRdf(document, ID, key.publicKey)).toBe(true);
-  const store = await parseRdf(document, "text/turtle");
-  const proof = node(store, ID).one(`${SEC}proof`);
+  await expectStandardProof(document, ID);
+  const store = await parseRdf(document, "application/trig");
+  const { p: proof } = readProof(store, ID);
   expect(proof.termType).toBe("BlankNode");
   const cryptosuite = proof.one(`${SEC}cryptosuite`);
   expect((cryptosuite as unknown as { datatype: { value: string } }).datatype.value).toBe(
@@ -64,7 +72,7 @@ it("verifies the exported mandate proof configuration independently with WebCryp
     "http://www.w3.org/2001/XMLSchema#dateTime",
   );
 });
-it("preserves ACL, delegation and extension vocabulary in signed mandate Turtle", async () => {
+it("preserves ACL, delegation and extension vocabulary in signed mandate TriG", async () => {
   const m = {
     ...mandate(),
     autonomous: {
@@ -89,7 +97,7 @@ it("preserves ACL, delegation and extension vocabulary in signed mandate Turtle"
   });
   const document = await mandateToTurtle(credential);
   expect(await verifyExportedRdf(document, ID, key.publicKey)).toBe(true);
-  const store = await parseRdf(document, "text/turtle");
+  const store = await parseRdf(document, "application/trig");
   expect(
     [...store].filter((q) => q.predicate.value === `${ODRL}action`).map((q) => q.object.value),
   ).toEqual(
@@ -157,11 +165,11 @@ it("fails closed on malformed, partial and altered mandate RDF", async () => {
   expect(
     await parseMandateCredential(document.replaceAll("VerifiableCredential", "Other")),
   ).toBeUndefined();
-  const store = await parseRdf(document, "text/turtle");
+  const store = await parseRdf(document, "application/trig");
   node(store, OWNER).setText("urn:example:extra", "unsigned injection");
-  expect(await parseMandateCredential(await turtle(store))).toBeUndefined();
-  const duplicate = await parseRdf(document, "text/turtle");
+  expect(await parseMandateCredential(await trig(store))).toBeUndefined();
+  const duplicate = await parseRdf(document, "application/trig");
   node(duplicate, ID).setIri(`${SEC}proof`, "urn:another-proof");
   node(duplicate, "urn:another-proof").setIri(RDF_TYPE, `${SEC}DataIntegrityProof`);
-  expect(await parseMandateCredential(await turtle(duplicate))).toBeUndefined();
+  expect(await parseMandateCredential(await trig(duplicate))).toBeUndefined();
 });

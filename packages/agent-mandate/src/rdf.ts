@@ -3,8 +3,15 @@
 
 import { type DataIntegrityProof, digestQuads, proofOptionsQuads } from "@jeswr/solid-vc";
 import type { DataFactory as Factory } from "@rdfjs/types";
-import { NamedNodeFrom, SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
-import { DataFactory, type Store, Writer } from "n3";
+import {
+  NamedGraphDataset,
+  NamedNodeFrom,
+  SetFrom,
+  TermAs,
+  TermFrom,
+  TermWrapper,
+} from "@rdfjs/wrapper";
+import { DataFactory, Store, Writer } from "n3";
 
 /** RDF vocabulary used by the typed document wrappers. */
 export const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
@@ -48,30 +55,72 @@ export function node(store: Store, id: string): Node {
     DataFactory as unknown as Factory,
   );
 }
-/** Attach the exact signed proof options, with a fresh blank node and the library's datatypes. */
+/** Attach a Data Integrity proof in its own graph, as defined by the standard context. */
 export function writeProof(store: Store, id: string, proof: DataIntegrityProof): void {
   const factory = DataFactory as unknown as Factory;
-  const p = new Node(DataFactory.blankNode(), store, factory);
-  node(store, id).setValue(`${SEC}proof`, p);
+  const graph = DataFactory.blankNode();
+  node(store, id).setValue(`${SEC}proof`, new Node(graph, store, factory));
+  const dataset = new NamedGraphDataset(graph, store, factory);
+  const p = new Node(DataFactory.blankNode(), dataset, factory);
   for (const q of proofOptionsQuads(proof))
-    p.setValue(q.predicate.value, new Node(q.object, store, factory));
-  p.setText(`${SEC}proofValue`, proof.proofValue);
+    p.setValue(q.predicate.value, new Node(q.object, dataset, factory));
+  p.setValue(
+    `${SEC}proofValue`,
+    new Node(
+      DataFactory.literal(proof.proofValue, DataFactory.namedNode(`${SEC}multibase`)),
+      dataset,
+      factory,
+    ),
+  );
+}
+/** Extract one proof graph as a default-graph view for cryptosuite canonicalization. */
+export function readProof(store: Store, id: string): { p: Node; claims: Store } {
+  const subject = node(store, id);
+  const graph = TermAs.term(subject.one(`${SEC}proof`));
+  if (graph.termType !== "BlankNode" && graph.termType !== "NamedNode")
+    throw new Error("Expected a proof graph");
+  const factory = DataFactory as unknown as Factory;
+  const dataset = new NamedGraphDataset(graph, store, factory);
+  const subjects = [...dataset].map((q) => q.subject);
+  const first = subjects[0];
+  if (!first || subjects.some((s) => !first.equals(s)))
+    throw new Error("Expected one proof node in its graph");
+  const p = new Node(first, dataset, factory);
+  const value = p.one(`${SEC}proofValue`);
+  if (value.termType !== "Literal" || value.datatype.value !== `${SEC}multibase`)
+    throw new Error("Expected a multibase proof value");
+  const claims = new Store(
+    [...store].filter(
+      (q) =>
+        !graph.equals(q.graph) &&
+        !(
+          q.graph.termType === "DefaultGraph" &&
+          subject.equals(q.subject) &&
+          q.predicate.value === `${SEC}proof`
+        ),
+    ),
+  );
+  return { p, claims };
 }
 /** Reject proof options that reconstruction would otherwise silently change or discard. */
 export async function matchesProofConfiguration(
-  store: Store,
   p: Node,
   proof: DataIntegrityProof,
 ): Promise<boolean> {
-  const config = [...store].filter(
-    (q) => p.equals(q.subject) && q.predicate.value !== `${SEC}proofValue`,
-  );
+  const config = [...p.dataset].filter((q) => q.predicate.value !== `${SEC}proofValue`);
   return (await digestQuads(config)) === (await digestQuads(proofOptionsQuads(proof)));
 }
 /** Serialize through n3.Writer, never by concatenating triples. */
 export function turtle(store: Store): Promise<string> {
+  return serialize(store, "Turtle");
+}
+/** TriG preserves the named graphs required by Data Integrity proofs. */
+export function trig(store: Store): Promise<string> {
+  return serialize(store, "TriG");
+}
+function serialize(store: Store, format: "Turtle" | "TriG"): Promise<string> {
   return new Promise((resolve, reject) => {
-    const writer = new Writer();
+    const writer = new Writer({ format });
     writer.addQuads([...store]);
     writer.end((error, result) => (error ? reject(error) : resolve(result)));
   });

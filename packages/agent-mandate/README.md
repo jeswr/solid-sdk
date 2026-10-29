@@ -19,10 +19,12 @@ Actual accounting and enforcement belong to agent-executor.
 
 `issueMandate(mandate, ed25519Key, { statusListCredential, statusListIndex })` creates a
 `solid-vc` AgentAuthorizationCredential with an embedded ODRL Agreement and
-`eddsa-rdfc-2022` proof. The complete policy graph is signed. Use `mandateToTurtle` to store
-it and `parseMandateCredential` to read the package-issued Turtle representation; parsing
-alone does **not** establish authority. Extra, ambiguous, malformed or unrepresentable
-claim graphs fail closed. All IRIs use the namespace `https://jeswr.org/ns/agent#`.
+`eddsa-rdfc-2022` proof. The complete policy graph is signed. Use `mandateToTurtle` (the
+historical export name) to serialize TriG and `parseMandateCredential` to read it. Serve
+the document as `application/trig`, for example at a `.trig` URL. Each proof lives in a
+named graph with a `sec:multibase` signature literal, matching the standard Data Integrity
+JSON-LD context. Parsing alone does **not** establish authority. Extra, ambiguous, malformed
+or unrepresentable claim graphs fail closed. All IRIs use `https://jeswr.org/ns/agent#`.
 
 `createVcMandateVerifier({ read, ownerWebId, agentWebId, statusListCredential,
 webIdKeyResolver, resolveStatus, now }).load()` returns a verified mandate or `undefined`.
@@ -31,7 +33,7 @@ Inject `solid-vc`'s `createWebIdKeyResolver` with a scoped fetch, and its
 The status-list URL must end in `/agent/mandates/status.ttl`. Missing, unreadable,
 revoked or otherwise unconfirmed status refuses all authority. The upstream bitstring
 resolver reads a signed JSON/JSON-LD status-list credential, even at this `.ttl` URL;
-its fetch seam can adapt the storage representation. Mandate Turtle itself is supported.
+its fetch seam can adapt the storage representation. Mandate transport uses TriG.
 
 The verifier uses `agent-authz-verifier` for credential integrity, owner/agent cross-binding,
 and revocation. Its empty Agreement projection deliberately delegates Phase D to the
@@ -61,9 +63,10 @@ Values that would lose precision require confirmation, including in prohibitions
 Typed float values also require confirmation whenever binary32 rounding changes their value.
 
 `issueApproval({ id, approves, termsDigest, expires, decision }, p256Key, now)` produces
-Turtle with a Data Integrity `ecdsa-rdfc-2019` proof. It accepts a non-extractable WebCrypto
-P-256 private key without exporting it. `verifyApproval(turtle, { id, ownerWebId, proposal,
-termsDigest, webIdKeyResolver, now })` checks suite/purpose, the owner's authoritative
+TriG (`application/trig`) with a Data Integrity `ecdsa-rdfc-2019` proof. It accepts a
+non-extractable WebCrypto P-256 private key without exporting it.
+`verifyApproval(trig, { id, ownerWebId, proposal, termsDigest, webIdKeyResolver, now })`
+checks suite/purpose, the owner's authoritative
 WebID assertionMethod, the canonical graph signature, proposal, digest, expiry and decision,
 in that order. Verification material inside the statement is never trusted. Digest
 comparison hashes both inputs to fixed-size arrays before constant-work comparison.

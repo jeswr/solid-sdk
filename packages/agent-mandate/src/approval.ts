@@ -9,7 +9,15 @@ import {
 } from "@jeswr/solid-vc";
 import { Store } from "n3";
 import { validInstant } from "./instant.js";
-import { matchesProofConfiguration, node, RDF_TYPE, SEC, turtle, writeProof } from "./rdf.js";
+import {
+  matchesProofConfiguration,
+  node,
+  RDF_TYPE,
+  readProof,
+  SEC,
+  trig,
+  writeProof,
+} from "./rdf.js";
 import { AGENT } from "./types.js";
 
 /** Exact terms an owner signs in the browser. */
@@ -49,7 +57,7 @@ async function sameDigest(a: string, b: string): Promise<boolean> {
       (new Uint8Array(right as ArrayBuffer)[i] as number);
   return difference === 0;
 }
-/** Issue a Turtle RDF approval with an ecdsa-rdfc-2019 proof; accepts a non-extractable P-256 private key. */
+/** Issue a TriG RDF approval with an ecdsa-rdfc-2019 proof; accepts a non-extractable P-256 private key. */
 export async function issueApproval(approval: Approval, key: KeyPair, now: Date): Promise<string> {
   if (
     key.privateKey.algorithm.name !== "ECDSA" ||
@@ -69,7 +77,7 @@ export async function issueApproval(approval: Approval, key: KeyPair, now: Date)
     created: now,
   });
   writeProof(store, approval.id, proof);
-  return turtle(store);
+  return trig(store);
 }
 /** Verify an approval against an owner's authoritative WebID assertionMethod and exact proposal terms. */
 export async function verifyApproval(
@@ -88,9 +96,9 @@ export async function verifyApproval(
     reason,
   });
   try {
-    const store = await parseRdf(document, "text/turtle");
-    const a = node(store, options.id);
-    const p = a.one(`${SEC}proof`);
+    const store = await parseRdf(document, "application/trig");
+    const { p, claims } = readProof(store, options.id);
+    const a = node(claims, options.id);
     if (
       p.iri(RDF_TYPE) !== `${SEC}DataIntegrityProof` ||
       p.text(`${SEC}cryptosuite`) !== "ecdsa-rdfc-2019" ||
@@ -114,12 +122,9 @@ export async function verifyApproval(
       created: p.text("http://purl.org/dc/terms/created"),
       proofValue: p.text(`${SEC}proofValue`),
     };
-    const claims = [...store].filter(
-      (q) => !p.equals(q.subject) && !(a.equals(q.subject) && q.predicate.value === `${SEC}proof`),
-    );
     if (
-      !(await matchesProofConfiguration(store, p, proof)) ||
-      !(await new DataIntegritySuite("ecdsa-rdfc-2019").verify(claims, proof, {
+      !(await matchesProofConfiguration(p, proof)) ||
+      !(await new DataIntegritySuite("ecdsa-rdfc-2019").verify([...claims], proof, {
         resolveKey: () => key,
       }))
     )

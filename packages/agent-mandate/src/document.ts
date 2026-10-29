@@ -15,10 +15,18 @@ import { Store } from "n3";
 import { decodeLimit, decodePolicy, decodeProhibitions } from "./codec.js";
 import { validInstant } from "./instant.js";
 import { mandateCredential } from "./mandate.js";
-import { matchesProofConfiguration, node, RDF_TYPE, SEC, turtle, writeProof } from "./rdf.js";
+import {
+  matchesProofConfiguration,
+  node,
+  RDF_TYPE,
+  readProof,
+  SEC,
+  trig,
+  writeProof,
+} from "./rdf.js";
 import { AGENT, ODRL } from "./types.js";
 
-/** Serialize a single-proof mandate credential as Turtle for agent/mandates/<id>.ttl. */
+/** Serialize a single-proof mandate as application/trig; the historical export name is retained. */
 export async function mandateToTurtle(vc: VerifiableCredential): Promise<string> {
   const proofs = Array.isArray(vc.proof) ? vc.proof : [vc.proof];
   if (!vc.id || proofs.length !== 1 || !proofs[0]?.created)
@@ -26,14 +34,14 @@ export async function mandateToTurtle(vc: VerifiableCredential): Promise<string>
   const proof = proofs[0];
   const store = new Store(credentialToRdf(vc));
   writeProof(store, vc.id, proof);
-  return turtle(store);
+  return trig(store);
 }
-/** Parse this package's mandate Turtle. This is structural parsing; always pass its result to the verifier. */
+/** Parse this package's mandate TriG. This is structural parsing; always pass its result to the verifier. */
 export async function parseMandateCredential(
   document: string,
 ): Promise<VerifiableCredential | undefined> {
   try {
-    const store = await parseRdf(document, "text/turtle");
+    const store = await parseRdf(document, "application/trig");
     const result = readValidCredential(store);
     if (
       !result.valid ||
@@ -43,8 +51,8 @@ export async function parseMandateCredential(
     )
       return undefined;
     const meta = result.credential;
-    const credential = node(store, meta.id);
-    const p = credential.one(`${SEC}proof`);
+    const { p, claims } = readProof(store, meta.id);
+    const credential = node(claims, meta.id);
     if (
       p.iri(RDF_TYPE) !== `${SEC}DataIntegrityProof` ||
       p.iri(`${SEC}proofPurpose`) !== `${SEC}assertionMethod`
@@ -56,7 +64,7 @@ export async function parseMandateCredential(
       status.text(`${STATUS}statusPurpose`) !== "revocation"
     )
       return undefined;
-    const root = node(store, meta.issuer).one(`${AGENT}agreement`);
+    const root = node(claims, meta.issuer).one(`${AGENT}agreement`);
     const m = {
       id: meta.id,
       issuer: root.iri(`${ODRL}assigner`),
@@ -78,7 +86,7 @@ export async function parseMandateCredential(
       created: p.text("http://purl.org/dc/terms/created"),
       proofValue: p.text(`${SEC}proofValue`),
     };
-    if (!(await matchesProofConfiguration(store, p, proof))) return undefined;
+    if (!(await matchesProofConfiguration(p, proof))) return undefined;
     const parsed: VerifiableCredential = {
       ...mandateCredential(m, {
         statusListCredential: status.iri(`${STATUS}statusListCredential`),
@@ -87,12 +95,8 @@ export async function parseMandateCredential(
       }),
       proof,
     };
-    const raw = [...store].filter(
-      (q) =>
-        !p.equals(q.subject) &&
-        !(credential.equals(q.subject) && q.predicate.value === `${SEC}proof`),
-    );
-    if ((await digestQuads(raw)) !== (await digestQuads(credentialToRdf(parsed)))) return undefined;
+    if ((await digestQuads([...claims])) !== (await digestQuads(credentialToRdf(parsed))))
+      return undefined;
     return parsed;
   } catch {
     return undefined;

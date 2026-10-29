@@ -10,8 +10,14 @@ import {
   publishVerificationMethod,
   type ResolveWebIdKeyOptions,
 } from "@jeswr/solid-vc";
+import type { DataFactory as Factory, Quad_Graph } from "@rdfjs/types";
+import { NamedGraphDataset, TermAs } from "@rdfjs/wrapper";
+// biome-ignore lint/style/useNodejsImportProtocol: the agent import guard requires bare module names
+import { readFileSync } from "fs";
+import { DataFactory } from "n3";
+import { expect } from "vitest";
 import { defaultMandate } from "../src/mandate.js";
-import { node, SEC, turtle } from "../src/rdf.js";
+import { Node, node, readProof, SEC, trig } from "../src/rdf.js";
 import { AGENT, type Intent, type Mandate } from "../src/types.js";
 export const OWNER = "https://owner.example/profile#me";
 export const ACTOR = "https://agent.example/#me";
@@ -81,16 +87,20 @@ export async function verifyExportedRdf(
   id: string,
   key: CryptoKey,
 ): Promise<boolean> {
-  const store = await parseRdf(document, "text/turtle");
+  const store = await parseRdf(document, "application/trig");
   const subject = node(store, id);
-  const proof = subject.one(`${SEC}proof`);
-  const config = [...store].filter(
+  const graph = subject.one(`${SEC}proof`);
+  const factory = DataFactory as unknown as Factory;
+  const dataset = new NamedGraphDataset(TermAs.term(graph) as Quad_Graph, store, factory);
+  const first = [...dataset][0];
+  if (!first) throw new Error("Missing exported proof graph");
+  const proof = new Node(first.subject, dataset, factory);
+  const config = [...dataset].filter(
     (q) => proof.equals(q.subject) && q.predicate.value !== `${SEC}proofValue`,
   );
   const claims = [...store].filter(
     (q) =>
-      !proof.equals(q.subject) &&
-      !(subject.equals(q.subject) && q.predicate.value === `${SEC}proof`),
+      !graph.equals(q.graph) && !(subject.equals(q.subject) && q.predicate.value === `${SEC}proof`),
   );
   const hashes = await Promise.all(
     [config, claims].map(
@@ -114,25 +124,53 @@ export async function verifyExportedRdf(
   );
 }
 
+/** Compare export to a generic JSON-LD parser using the locally vendored W3C context. */
+export async function expectStandardProof(document: string, id: string): Promise<void> {
+  const store = await parseRdf(document, "application/trig");
+  const graph = node(store, id).one(`${SEC}proof`);
+  const { p } = readProof(store, id);
+  expect(graph.termType).toBe("BlankNode");
+  expect(p.equals(TermAs.term(graph))).toBe(false);
+  const expected = await parseRdf(
+    JSON.stringify({
+      ...JSON.parse(
+        readFileSync(
+          new URL("../../solid-vc/src/contexts/data-integrity-v2.json", import.meta.url),
+          "utf8",
+        ),
+      ),
+      id,
+      proof: {
+        type: "DataIntegrityProof",
+        cryptosuite: p.text(`${SEC}cryptosuite`),
+        verificationMethod: p.iri(`${SEC}verificationMethod`),
+        proofPurpose: "assertionMethod",
+        created: p.text("http://purl.org/dc/terms/created"),
+        proofValue: p.text(`${SEC}proofValue`),
+      },
+    }),
+    "application/ld+json",
+  );
+  const exported = [...store].filter(
+    (q) => graph.equals(q.graph) || q.predicate.value === `${SEC}proof`,
+  );
+  expect(await canonicalNQuads(exported)).toBe(await canonicalNQuads([...expected]));
+}
+
 /** Change RDF proof options without changing the claims or signature bytes. */
 export async function alterProofOptions(
   document: string,
   id: string,
   change: "named" | "datatype" | "cryptosuite-datatype" | "extra",
 ): Promise<string> {
-  const store = await parseRdf(document, "text/turtle");
-  const subject = node(store, id);
-  const proof = subject.one(`${SEC}proof`);
+  const store = await parseRdf(document, "application/trig");
+  const { p: proof } = readProof(store, id);
   if (change === "named") {
-    const named = node(store, `${id}/proof`);
+    const named = new Node(DataFactory.namedNode(`${id}/proof`), proof.dataset, proof.factory);
     const old = [...store].filter((q) => proof.equals(q.subject));
     for (const predicate of new Set(old.map((q) => q.predicate.value)))
       for (const value of proof.values(predicate)) named.setValue(predicate, value);
-    store.removeQuads([
-      ...old,
-      ...[...store].filter((q) => subject.equals(q.subject) && q.predicate.value === `${SEC}proof`),
-    ]);
-    subject.setIri(`${SEC}proof`, named.value);
+    store.removeQuads(old);
   } else if (change === "datatype" || change === "cryptosuite-datatype") {
     const predicate =
       change === "datatype" ? "http://purl.org/dc/terms/created" : `${SEC}cryptosuite`;
@@ -142,5 +180,59 @@ export async function alterProofOptions(
     );
     proof.setText(predicate, value);
   } else proof.setText("urn:example:extra", "unsigned option");
-  return turtle(store);
+  return trig(store);
+}
+
+export const PROOF_GRAPH_CHANGES = [
+  "literal-link",
+  "empty-graph",
+  "extra-node",
+  "untyped-value",
+  "iri-value",
+  "duplicate-value",
+  "option-default",
+  "extra-graph",
+] as const;
+/** Malformed graph boundaries and signature datatypes must not be laundered by extraction. */
+export async function alterProofGraph(
+  document: string,
+  id: string,
+  change: (typeof PROOF_GRAPH_CHANGES)[number],
+): Promise<string> {
+  const store = await parseRdf(document, "application/trig");
+  const root = node(store, id);
+  const graph = root.one(`${SEC}proof`);
+  const { p } = readProof(store, id);
+  if (change === "literal-link") {
+    store.removeQuads(
+      [...store].filter((q) => root.equals(q.subject) && q.predicate.value === `${SEC}proof`),
+    );
+    root.setText(`${SEC}proof`, graph.value);
+  } else if (change === "empty-graph") {
+    const flat = new Node(TermAs.term(p), store, p.factory);
+    for (const q of [...p.dataset])
+      flat.setValue(q.predicate.value, new Node(q.object, store, p.factory));
+    store.removeQuads([...store].filter((q) => graph.equals(q.graph)));
+  } else if (change === "extra-node" || change === "extra-graph") {
+    const dataset =
+      change === "extra-node"
+        ? p.dataset
+        : new NamedGraphDataset(DataFactory.namedNode("urn:example:other-graph"), store, p.factory);
+    new Node(DataFactory.blankNode(), dataset, p.factory).setText("urn:example:extra", "injected");
+  } else if (change === "option-default") {
+    const predicate = "http://purl.org/dc/terms/created";
+    const value = p.one(predicate);
+    store.removeQuads(
+      [...store].filter((q) => p.equals(q.subject) && q.predicate.value === predicate),
+    );
+    new Node(TermAs.term(p), store, p.factory).setValue(predicate, value);
+  } else {
+    if (change !== "duplicate-value")
+      store.removeQuads(
+        [...store].filter((q) => p.equals(q.subject) && q.predicate.value === `${SEC}proofValue`),
+      );
+    if (change === "iri-value") p.setIri(`${SEC}proofValue`, "urn:example:signature");
+    else p.setText(`${SEC}proofValue`, "zFakeSignature");
+  }
+  return trig(store);
 }

@@ -5,15 +5,18 @@ import { parseRdf } from "@jeswr/fetch-rdf";
 import type { KeyPair, WebIdKeyResolver } from "@jeswr/solid-vc";
 import { beforeAll, expect, it } from "vitest";
 import { type Approval, issueApproval, verifyApproval } from "../src/approval.js";
-import { node, SEC, turtle } from "../src/rdf.js";
+import { node, readProof, SEC, trig } from "../src/rdf.js";
 import {
+  alterProofGraph,
   alterProofOptions,
   approvalKey,
   clock,
   edKey,
+  expectStandardProof,
   INVALID_INSTANTS,
   NOW,
   OWNER,
+  PROOF_GRAPH_CHANGES,
   profileResolver,
   verifyExportedRdf,
 } from "./helpers.js";
@@ -48,6 +51,10 @@ beforeAll(async () => {
   key = await approvalKey();
   resolver = await profileResolver(key);
 });
+it.each(PROOF_GRAPH_CHANGES)("rejects altered approval proof graphs: %s", async (change) => {
+  const document = await alterProofGraph(await issueApproval(a, key, NOW), a.id, change);
+  expect((await verifyApproval(document, options())).valid).toBe(false);
+});
 it("verifies real P-256 signatures using a fixture WebID assertionMethod", async () => {
   expect(key.privateKey.extractable).toBe(false);
   for (const decision of ["approve", "deny"] as const) {
@@ -61,8 +68,9 @@ it("verifies real P-256 signatures using a fixture WebID assertionMethod", async
 it("verifies the exported approval proof configuration independently with WebCrypto", async () => {
   const document = await issueApproval(a, key, NOW);
   expect(await verifyExportedRdf(document, a.id, key.publicKey)).toBe(true);
-  const store = await parseRdf(document, "text/turtle");
-  const proof = node(store, a.id).one(`${SEC}proof`);
+  await expectStandardProof(document, a.id);
+  const store = await parseRdf(document, "application/trig");
+  const { p: proof } = readProof(store, a.id);
   expect(proof.termType).toBe("BlankNode");
   const cryptosuite = proof.one(`${SEC}cryptosuite`);
   expect((cryptosuite as unknown as { datatype: { value: string } }).datatype.value).toBe(
@@ -140,10 +148,10 @@ it("rejects unlisted, missing and wrong keys and never uses embedded keys", asyn
       }),
     ).toEqual({ valid: false, reason });
   }
-  const store = await parseRdf(doc, "text/turtle");
+  const store = await parseRdf(doc, "application/trig");
   node(store, a.id).setText(`${SEC}publicKeyJwk`, "test-token-0123456789");
   expect(
-    await verifyApproval(await turtle(store), {
+    await verifyApproval(await trig(store), {
       ...options(),
       webIdKeyResolver: {
         isControlledBy: async () => false,

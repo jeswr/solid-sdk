@@ -11,8 +11,11 @@ The public interfaces are in src/types.ts, src/mandate.ts and src/approval.ts; .
 contains explicit in-memory fakes. The optional Node-only sparq binary adapter is ./sparq.
 
 Use `issueMandate` with Ed25519 and a mandatory revocation status entry. Policies are embedded
-in the signed credential graph. `mandateToTurtle` / `parseMandateCredential` transport the
-package-issued graph losslessly; parsing is structural, so always run `createVcMandateVerifier`.
+in the signed credential graph. `mandateToTurtle` (historical name) / `parseMandateCredential`
+transport the package-issued dataset losslessly as TriG (`application/trig`). Approvals use
+the same transport. Proofs occupy named graphs and proofValue is a sec:multibase literal,
+matching the standard Data Integrity context. Parsing is structural, so always run
+`createVcMandateVerifier`.
 The WebID key resolver and status resolver are mandatory injected seams. Never substitute
 a verification method prefix heuristic or use a key supplied inside the document.
 
