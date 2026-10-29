@@ -152,7 +152,7 @@ function htmlLinksIn(html, definitions, definitionMarker) {
   const elements = [];
   // Recognize comments/declarations only between tags; consume attribute values below.
   const tokens = new RegExp(
-    `<!--(?:-?>|[\\s\\S]*?(?:-->|$))|<!|<\\/?[a-zA-Z][^\\t\\n\\f\\r />]*|${definitionMarker}(\\d+)\0`,
+    `<!--(?:-?>|[\\s\\S]*?(?:--!?>|$))|<!|<\\/?[a-zA-Z][^\\t\\n\\f\\r />]*|${definitionMarker}(\\d+)\0`,
     "g",
   );
   const whitespace = /[\t\n\f\r ]/;

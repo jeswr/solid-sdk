@@ -343,6 +343,41 @@ describe("skill validation", () => {
   });
 
   it.each([
+    '<!-- note --!><a href="missing.md">broken</a>',
+    '<!-- note --!> <img src="missing.png">',
+    '<!-- --!><a href="missing.md">broken</a>',
+    '<!-- note ---!><a href="missing.md">broken</a>',
+    '<!--\n<a href="ignored.md">comment</a>\n--!><a href="missing.md">broken</a>',
+    '<div>\n<!-- note --!><a href="missing.md">broken</a>\n</div>',
+    'Inline <!-- note --!><a href="missing.md">broken</a>',
+    '<!-- first --!><!-- second --><a href="missing.md">broken</a>',
+    '<!-- first --><!-- second --!><a href="missing.md">broken</a>',
+    '<svg><!-- note --!><a href="missing.md">broken</a></svg>',
+    '<!-- note --!>\n\n<a href="missing.md">broken</a>',
+    '<!-- note --!><img srcset="missing.png 2x">',
+  ])("checks active links after comment end-bang delimiters: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+  });
+
+  it.each([
+    '<!-- <a href="ignored.md">comment</a> --!>',
+    '<!-- <img srcset="ignored.png 2x"> --!><a href="references/guide.md">guide</a>',
+    '<!-- note --! <a href="ignored.md">still a comment</a> -->',
+    '<!-- note --! <a href="ignored.md">unclosed comment',
+    '<a title="--!>" href="references/guide.md">guide</a>',
+    '<textarea><!-- --!><a href="ignored.md">literal</a></textarea>',
+    '`<!-- note --!><a href="ignored.md">literal</a>`',
+  ])("keeps comment contents and apparent end-bang delimiters inert: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
     '<svg><![CDATA[<a href="missing.md">literal</a>]]></svg>',
     '<SVG><g><![CDATA[<image href="missing.png"/>]]></g></SVG>',
     '<svg>\n<![CDATA[\n<a href="missing.md">literal</a>\n\n<img src="missing.png">\n]]>\n</svg>',
