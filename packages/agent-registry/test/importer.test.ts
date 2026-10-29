@@ -42,9 +42,71 @@ const inactivePrivateNotes = [
   'Identity conflict: alice@example.com versus "private-user". Resolved.',
   'Identity conflict: "private-user".',
   'No conflicts for "private-user".',
+  "The account <private-user> was checked.",
+  "The account (private-user) was checked.",
 ];
 
 describe("synthetic registry import", () => {
+  it.each([
+    "This account was checked.",
+    "Use the credential reference for this personal email account.",
+    "No identity conflict: the Google account was checked.",
+  ])("imports valid references and metadata with ordinary note %s", async (note) => {
+    const ports = harness(
+      stringify({
+        version: 1,
+        accounts: [
+          {
+            id: "fixture-account",
+            channel: "email",
+            provider: "google",
+            organization: "personal",
+            identifiers: { primary: "alice@example.com" },
+            credential_ref: [
+              "op://test-vault/account-01/credential",
+              "op://test%20vault/account%2D01/credential",
+              "profile:account-01",
+            ],
+            connector: { target: "gmail", setup_status: "planned" },
+          },
+        ],
+        notes: [note],
+      }),
+    );
+    const report = await importRegistry(config, ports);
+    expect(report).toMatchObject({ imported: 2, updated: 0, unchanged: 0 });
+    const account = report.settings.connections[0];
+    if (!account) throw new Error("Fixture account absent");
+    expect(account).toMatchObject({
+      channel: "email",
+      provider: "google",
+      organisation: "personal",
+      credentialRefs: [
+        "op://test%20vault/account%2D01/credential",
+        "op://test-vault/account-01/credential",
+        "profile:account-01",
+      ],
+      bindingState: "setup-required",
+      identityConflicts: [],
+      restrictions: DENY_ALL,
+    });
+    const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
+    const dataset = ports.storage.resources.get(url)?.dataset;
+    expect(
+      dataset?.getObjects(term(url), term(`${AGENT}credentialRef`), null).map((v) => v.value),
+    ).toEqual(account.credentialRefs);
+    expect(
+      dataset?.getObjects(term(url), term(`${AGENT}organisation`), null).map((v) => v.value),
+    ).toEqual(["personal"]);
+    const output = JSON.stringify({ report, resources: [...ports.storage.resources] });
+    expect(output).not.toContain(note);
+    expect(output).not.toContain("alice@example.com");
+    expect(await importRegistry(config, ports)).toMatchObject({
+      imported: 0,
+      updated: 0,
+      unchanged: 2,
+    });
+  });
   it("imports 28 accounts plus a default-deny Telegram bot as typed RDF, with ACLs first", async () => {
     const ports = harness();
     const report = await importRegistry(config, ports);

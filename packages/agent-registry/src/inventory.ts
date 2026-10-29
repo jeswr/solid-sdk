@@ -236,32 +236,36 @@ const NOTE_IDENTIFIER_PART =
 // Keep phone formatting and adjacent suffixes so longer identities cannot match a prefix.
 const NOTE_IDENTIFIER = `\\+\\d[\\d ().-]{5,}\\d${NOTE_IDENTIFIER_PART}*|${NOTE_IDENTIFIER_PART}+`;
 const NOTE_IDENTIFIERS = new RegExp(
-  // Preserve whole quoted and angle-bracketed spans, including URI delimiters and phones.
+  // Preserve explicitly delimited spans, including opaque handles, URI delimiters and phones.
   // Do not search beyond the first closing quote when it is inside a bare identity.
-  `(["'\`])((?:(?!\\1)[^\\r\\n])+)\\1[.!?:]*(?!${NOTE_IDENTIFIER_PART})|<([^<>\\r\\n]+)>[.!?:]*(?!${NOTE_IDENTIFIER_PART})|${NOTE_IDENTIFIER}`,
+  `(["'\`])((?:(?!\\1)[^\\r\\n])+)\\1[.!?:]*(?!${NOTE_IDENTIFIER_PART})|<([^<>\\r\\n]+)>[.!?:]*(?!${NOTE_IDENTIFIER_PART})|\\(([^()\\r\\n]+)\\)[.!?:]*(?!${NOTE_IDENTIFIER_PART})|${NOTE_IDENTIFIER}`,
   "gu",
 );
-/** Keep complete phone/handle/URI tokens; strip prose punctuation after a mention. */
+/** Keep known, recognizable or explicitly delimited identities, excluding ordinary prose. */
 function noteIdentifiers(
   note: string,
   known: { folded: Set<string>; matrix: Set<string> },
 ): string[] {
-  return Array.from(note.normalize("NFC").matchAll(NOTE_IDENTIFIERS), (match) => {
-    if (match[2] !== undefined) return match[2];
-    if (match[3] !== undefined) return match[3];
+  return Array.from(note.normalize("NFC").matchAll(NOTE_IDENTIFIERS)).flatMap((match) => {
+    const delimited = match[2] ?? match[3] ?? match[4];
+    if (delimited !== undefined) return [delimited];
     const identifier = match[0];
     // Exact known identities take precedence over unquoted prose punctuation.
     if (
       known.folded.has(normaliseHandle(identifier)) ||
       known.matrix.has(normaliseHandle(identifier, "matrix"))
     )
-      return identifier;
+      return [identifier];
     const handle = identifier.replace(/[.:]+$/u, "");
     const unpunctuated = handle.replace(/[.!?:]+$/u, "");
     // Sentence marks cannot end an email domain, Matrix server or phone number.
     // Keep them in opaque handles and URIs, and inside explicit identifiers' local parts.
-    return noteIdentityChannel(unpunctuated) ? unpunctuated : handle;
-  }).filter((identifier) => identifier.length > 0);
+    if (noteIdentityChannel(unpunctuated)) return [unpunctuated];
+    return known.folded.has(normaliseHandle(handle)) ||
+      known.matrix.has(normaliseHandle(handle, "matrix"))
+      ? [handle]
+      : [];
+  });
 }
 /** Discover explicit identities only; URI alternatives retain case-sensitive components. */
 function noteIdentityChannel(handle: string): string | undefined {
@@ -331,7 +335,7 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
     return {
       identifiers,
       active: !!conflict,
-      // Inactive prose may contain opaque handles: keep every candidate for privacy screening.
+      // Inactive notes retain identity mentions without treating prose words as handles.
       privateIdentifiers: conflict
         ? conflict.filter((_, index) => index === 0 || index === 2)
         : identifiers,

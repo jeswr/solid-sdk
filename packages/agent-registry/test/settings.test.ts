@@ -275,6 +275,65 @@ describe("privacy and settings model", () => {
     });
     expect(JSON.stringify(s)).not.toContain(identity);
   });
+  it.each([
+    "This account was checked.",
+    "Use the credential reference for this account.",
+    "This personal email account uses Google.",
+    "The Telegram setup is planned.",
+    "Read and draft need current instructions.",
+    "No identity conflict: account status was checked.",
+    "Identity conflict: no account conflict remains.",
+  ])("keeps valid settings and references unchanged by ordinary note %s", (note) => {
+    const snap = parseRegistryYaml(fixture);
+    const first = snap.accounts[0];
+    if (!first) throw new Error("Fixture account absent");
+    first.refs = [
+      "op://test-vault/account-01/credential",
+      "op://test%20vault/account%2D01/credential",
+      "profile:account-01",
+    ];
+    const expected = inventorySettings(snap, salt);
+    snap.notes.push(note);
+    expect(inventorySettings(snap, salt)).toEqual(expected);
+  });
+  it.each([
+    ['"', '"'],
+    ["'", "'"],
+    ["`", "`"],
+    ["<", ">"],
+    ["(", ")"],
+  ])("keeps inactive opaque handles private inside %s%s", (open, close) => {
+    const snap = parseRegistryYaml(fixture);
+    const first = snap.accounts[0];
+    if (!first) throw new Error("Fixture account absent");
+    snap.notes = [`The account ${open}private-user${close} was checked.`];
+    first.organisation = "Contact PRIVATE-USER";
+    expect(inventorySettings(snap, salt).connections[0]).toMatchObject({
+      organisation: "redacted",
+      bindingState: "setup-required",
+      identityConflicts: [],
+      credentialRefs: ["op://test-vault/account-01/credential"],
+    });
+    for (const ref of ["profile:private-user", "op://test-vault/PRIVATE%2DUSER/credential"]) {
+      first.refs = [ref];
+      expect(() => inventorySettings(snap, salt)).toThrow("private identifier");
+    }
+  });
+  it.each(["account", "evidence"])("keeps known %s identities private in prose", (source) => {
+    const snap = parseRegistryYaml(fixture);
+    const first = snap.accounts[0];
+    const evidence = snap.evidence[0];
+    if (!first || !evidence) throw new Error("Fixture account or evidence absent");
+    snap.accounts = [first];
+    if (source === "account") first.handles = ["account"];
+    else evidence.identifier = "account";
+    snap.notes = ["This account was checked."];
+    first.organisation = "Account owner";
+    first.refs = [];
+    expect(inventorySettings(snap, salt).connections[0]?.organisation).toBe("redacted");
+    first.refs = ["op://test-vault/account-01/credential"];
+    expect(() => inventorySettings(snap, salt)).toThrow("private identifier");
+  });
   it.each(["matrix", "matrix_bot"])("preserves %s case in normalisation and HMAC", (channel) => {
     expect(normaliseHandle("  @fixture:MATRIX.example  ", channel)).toBe("@fixture:MATRIX.example");
     expect(hashHandle("  @fixture:MATRIX.example  ", salt, channel)).toBe(
