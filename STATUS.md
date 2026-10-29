@@ -880,3 +880,58 @@ so automated per-commit review could not run. No dependencies or manifests chang
 dependency lifecycle script was used. Both requested findings are fixed; no
 implementation work or open questions remain. Validation limitations are the
 full-workspace font download and unavailable roborev.
+
+## Codex fix round 7 — review of `defaef2d4e86`
+
+- `1eed84f2 fix: flush pending RDF bytes at EOF` appends a newline to the
+  N3-family parser stream so its lexer consumes buffered UTF-8 bytes before EOF.
+  JSON-LD input is unchanged. Valid statements preceding a final Unicode comment
+  now reach fetch and search; malformed Unicode-ending input is rejected.
+- `e8ad3d66 fix: disable N3 lexer extensions` explicitly sets `n3: false` on the
+  budgeted lexer, preserving the supported formats' syntax restrictions.
+- `docs: record round-seven validation` records this round's results.
+
+Added **64 fixture regression cases**: Unicode EOF comments with two-, three-
+and four-byte characters, including splits at the 4096-byte chunk boundary;
+malformed Unicode-ending input; variables in subject, predicate and object
+positions; and N3 equality/implication abbreviations (`=`, `=>`, `<=`). Parser
+cases cover Turtle, its alias, TriG, N-Triples and N-Quads. Tool cases verify
+preserved fetch/search content and rejection/skipping of invalid documents
+through both adapters. Before the corresponding fixes, all 22 EOF cases and
+30 of the 42 syntax cases failed; N-Triples/N-Quads already rejected extensions.
+
+Validation used Node 24 and the existing fixture-only network guard:
+
+```sh
+export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"
+export NODE_OPTIONS=--require=/tmp/sst-9s2-round2-network-guard.cjs
+export GIT_ALLOW_PROTOCOL=file
+pnpm exec turbo run build --filter '@jeswr/solid-mcp^...' --concurrency=4
+pnpm --filter @jeswr/solid-mcp run lint
+pnpm --filter @jeswr/solid-mcp run build
+pnpm --filter @jeswr/solid-mcp run typecheck
+pnpm --filter @jeswr/solid-mcp run test
+pnpm --filter @jeswr/solid-mcp run test:coverage
+TURBO_SCM_BASE=defaef2d4e865b47ea108b760b6bbdf1f683a64e pnpm run gate
+pnpm run gate:full
+```
+
+All commands except `gate:full` pass (exit 0). The package gate and coverage run
+each pass **614 tests across 11 files**, including configured coverage thresholds.
+The affected repository gate passes **23/23 tasks**, 7 cached, including root
+lint and dependent-package checks.
+
+The session-close full gate exits 1 after **150 successful tasks out of 282**,
+12 cached. The unchanged `@jeswr/app-suite#build` cannot download Onest, Source
+Code Pro and Source Serif 4 from Google Fonts because the fixture-only guard
+refuses external connections. Root tests pass **745 tests across 9 files**.
+This is the same validation limitation recorded in earlier rounds; unrelated
+code was left untouched.
+
+`git diff --check` passes. `roborev status` exits 127 because roborev is
+unavailable, so automated per-commit review could not run. No dependencies or
+manifests changed; `check:packages` is not applicable. No push, publication,
+remote Git fetch/merge or dependency lifecycle script was used. Both requested
+findings are fixed, with no implementation work or open questions remaining.
+Validation limitations are the full-workspace font download and unavailable
+roborev.
