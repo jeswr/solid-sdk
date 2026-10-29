@@ -560,6 +560,11 @@ it.each([
   { datatype: "float", left: 2 ** -149, right: 0 },
   { datatype: "float", left: (2 - 2 ** -23) * 2 ** 127, right: 0 },
   { datatype: "dateTime", left: "2026-10-27T12:00:00+00:00", right: "2026-10-26T12:00:00Z" },
+  ...["+13:59", "-13:59", "+14:00", "-14:00"].map((zone) => ({
+    datatype: "dateTime",
+    left: `2026-10-27T12:00:00${zone}`,
+    right: `2026-10-26T12:00:00${zone}`,
+  })),
   { datatype: "dateTime", left: "2026-10-26T12:00:00.001000Z", right: "2026-10-26T12:00:00.000Z" },
   { leftOperand: "dateTime", left: "2026-10-26T12:00:00.001Z", right: "2026-10-26T12:00:00.000Z" },
   { datatype: "date", left: "2026-10-27", right: "2026-10-26" },
@@ -643,6 +648,12 @@ it.each([
   { datatype: "double", left: 1, right: Number.NaN },
   { datatype: "double", left: 1, right: [1, "z"], operator: "isAnyOf" },
   { datatype: "dateTime", left: "z", right: "2026-10-26T12:00:00Z" },
+  ...["+14:01", "-14:01", "+15:00", "-15:00", "+23:59", "-23:59", "+00:60", "-00:60"].flatMap(
+    (zone) => [
+      { datatype: "dateTime", left: `2026-10-26T12:00:00${zone}`, right: "2026-10-26T12:00:00Z" },
+      { datatype: "dateTime", left: "2026-10-26T12:00:00Z", right: `2026-10-26T12:00:00${zone}` },
+    ],
+  ),
   { datatype: "dateTime", left: "2026-10-26T12:00:00.0001Z", right: "2026-10-26T12:00:00.0002Z" },
   { datatype: "dateTime", left: "2026-10-26T12:00:00.000Z", right: "2026-10-26T12:00:00.0001Z" },
   {

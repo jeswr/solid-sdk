@@ -473,6 +473,13 @@ it.each([
     type: "dateTime",
     value: "2026-10-26T12:00:00Z",
   },
+  ...["+13:59", "-13:59", "+14:00", "-14:00"].map((zone) => ({
+    datatype: "dateTime",
+    left: `2026-10-26T12:00:00${zone}`,
+    right: `2026-10-26T12:00:00${zone}`,
+    type: "dateTime",
+    value: `2026-10-26T12:00:00${zone}`,
+  })),
 ])("uses the declared constraint type for request context: %j", async ({
   datatype,
   left,
@@ -945,6 +952,12 @@ it.each([
   { datatype: "double", left: 1, right: Number.NaN },
   { datatype: "double", left: 1, right: [1, "z"], operator: "isAnyOf" },
   { datatype: "dateTime", left: "z", right: "2026-10-26T12:00:00Z" },
+  ...["+14:01", "-14:01", "+15:00", "-15:00", "+23:59", "-23:59", "+00:60", "-00:60"].flatMap(
+    (zone) => [
+      { datatype: "dateTime", left: `2026-10-26T12:00:00${zone}`, right: "2026-10-26T12:00:00Z" },
+      { datatype: "dateTime", left: "2026-10-26T12:00:00Z", right: `2026-10-26T12:00:00${zone}` },
+    ],
+  ),
   { datatype: "dateTime", left: "2026-10-26T12:00:00.0001Z", right: "2026-10-26T12:00:00Z" },
   { datatype: "dateTime", left: "2026-10-26T12:00:00Z", right: "2026-10-26T12:00:00.0001Z" },
   { leftOperand: "dateTime", left: "2026-10-26T12:00:00.0001Z", right: "2026-10-26T12:00:00Z" },
