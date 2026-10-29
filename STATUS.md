@@ -395,3 +395,49 @@ No remote was fetched, no branch was switched, and no other checkout was modifie
 
 The `roborev` executable remains unavailable, so automated per-commit verdicts
 could not be collected. No review tooling or tracker was installed.
+
+## Fix round 9 — review of `931dd61ef5fd`
+
+Both requested findings are fixed on `lane/sst-31t`. Changes are limited to
+agent-channels, its regression tests and this report.
+
+| Commit | Change |
+| --- | --- |
+| `d3224b7f` | `fix: bound and sanitize scoped fetch requests` — move keepalive/no-cors buffering into the guarded transport, under its existing combined caller/deadline signal. Cap buffered request bytes at 1 MiB and cancel/release readers on overflow, failure or abort without awaiting a potentially stalled cancellation. Reject URL userinfo before Request construction; replace URL, Request and binding-origin normalization failures with fixed errors that retain no native cause. Add 21 regression cases covering exact byte limits, overflow, stalled bodies, shared DNS/buffering deadlines, caller aborts, failed reads and cancellation, and credential-bearing normalization errors. |
+| This final commit | `docs: record sst-31t round nine verification` — this report. |
+
+Verification uses Node 24.22.1 with `PATH=/opt/node24/bin:$PATH` for all pnpm
+commands. Both initial overflow regressions and all 12 normalization regressions
+failed before their respective fixes. An intermediate coverage run exceeded the
+default 5-second timeout while deeply comparing a 1 MiB typed array; replacing
+that assertion with native `Buffer.equals` retained byte-for-byte verification
+and removed the comparison overhead. Final package tests pass with unchanged
+coverage thresholds and timeout configuration.
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/agent-channels` | PASS; 5/5 prerequisite build tasks. |
+| `pnpm exec vitest run --root packages/agent-channels test/origins.test.ts --coverage.enabled=false -t 'bounds buffered'` (before the buffering fix) | Expected FAIL; both oversized bodies reached the fake transport. |
+| `pnpm exec vitest run --root packages/agent-channels test/origins.test.ts --coverage.enabled=false -t 'sanitizes\|before Request construction'` (before the normalization fix) | Expected FAIL; all 12 regression cases reproduced. |
+| `pnpm --filter @jeswr/agent-channels run lint && pnpm --filter @jeswr/agent-channels run build && pnpm --filter @jeswr/agent-channels run typecheck && pnpm --filter @jeswr/agent-channels run test` | PASS; 4 test files, 120 tests. Enforced per-file coverage: statements 219/219, branches 145/145, functions 40/40, lines 210/210 — all 100%. |
+| `TURBO_SCM_BASE=931dd61ef5fd105bd9f6471cfd5386950cfe4530 pnpm run gate` | PASS; root lint and 25/25 Turbo tasks, including 120 channel tests, 650 legacy-bridge tests, 121 model tests and 531 personal-agent tests. The supplied starting SHA scopes this round; `agent/integration` remains absent locally. |
+| `pnpm run gate:full` | FAIL outside this fix; 74/241 tasks completed successfully before five cases at `test/agent-layers.test.mjs:546` exceeded 5000 ms and `test/check-sdk-layers.test.mjs:328` measured 65.14 ms against its 50 ms limit. Root tests: 741 passed, 6 failed. These are the root timing failures recorded in earlier rounds. |
+| `pnpm exec vitest run test/agent-layers.test.mjs --testTimeout=60000` | PASS; all 345 tests, including the five cases that timed out in the full gate. Only the command-line timeout was changed, as permitted by the original brief. |
+| `pnpm exec vitest run test/check-sdk-layers.test.mjs -t 'validates pathological specs'` | PASS; the timing assertion passed unchanged in isolation. |
+| `git diff --check` | PASS. |
+
+The conservative buffering cap matches guarded-fetch's existing 1 MiB default
+response limit. Buffering shares its existing 10-second operation deadline;
+there is no additional buffering timer or timeout reset. Existing keepalive,
+no-cors, body override, content-type, integrity and fetch-policy regressions pass.
+No dependencies were added, so no new `check:packages` run was required. Tests
+use only existing fakes and loopback traffic. Both requested fixes are complete,
+with no open questions or unfinished implementation work.
+
+The full-workspace gate remains blocked by the unrelated root timing failures
+above; the isolated checks pass. No further full-gate retry or unrelated fix was
+made. No generated app files required cleanup, and no `dist/` is committed.
+No remote was fetched, no branch was switched, and no other checkout was modified.
+
+The `roborev` executable remains unavailable, so automated per-commit verdicts
+could not be collected. No review tooling or tracker was installed.
