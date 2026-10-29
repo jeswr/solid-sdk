@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
-// Solid backend, read side (ADR-003 §6, T-021). Writes arrive with T-022.
+// AUTHORED-BY Codex GPT-6.1-Sol
+// Solid backend read side (ADR-003 §6, T-021); mutations are isolated in solid-write.ts.
 import { parseRdf, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
 import { isWithinPodScope } from "@jeswr/guarded-fetch";
 import { deriveFeatures, type Features } from "@jeswr/storage-capabilities";
@@ -19,6 +20,7 @@ import {
   send,
 } from "./http.js";
 import { paginate, pathParent } from "./internal.js";
+import { type InspectContainer, solidWrites } from "./solid-write.js";
 import type {
   AuthFetch,
   Entry,
@@ -50,6 +52,8 @@ export interface SolidBackendOptions {
   root: string;
   /** Resolved features (capabilities()); default: an undescribed Solid storage. */
   features?: Features;
+  /** HEAD after a committed mutation without an ETag. Default true; failures yield null. */
+  etagFollowUp?: boolean;
 }
 
 /** A listed member with the optional `dct:format` literal some servers emit. */
@@ -91,17 +95,7 @@ function tolerant<T>(read: () => T): T | undefined {
   }
 }
 
-function writesPending(method: string, url: string): Promise<never> {
-  return Promise.reject(
-    new StorageError("unsupported", {
-      method,
-      url,
-      message: `${method} on the Solid backend is not available yet (T-022)`,
-    }),
-  );
-}
-
-/** Create the Solid StorageClient. Read operations only; mutations reject with `unsupported`. */
+/** Create the Solid StorageClient (ADR-003 §6). */
 export function createSolidBackend(options: SolidBackendOptions): StorageClient {
   const { fetch } = options;
   const root = scoped(options.root, "GET", options.root);
@@ -130,13 +124,15 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     url: string,
     response: Response,
     expect: { range: boolean; conditional: boolean },
+    signal?: AbortSignal,
   ): Promise<ReadShape> {
     const expected =
       response.status === 200 ||
       (response.status === 206 && expect.range) ||
       (response.status === 304 && expect.conditional);
     if (!expected) {
-      if (response.status < 200 || response.status >= 400) await failed(method, url, response);
+      if (response.status < 200 || response.status >= 400)
+        await failed(method, url, response, signal);
       // Any other success or redirect (204, unsolicited 206/304, 3xx) is not a read result.
       discard(response.body);
       throw new StorageError("invalid-response", {
@@ -172,10 +168,13 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
   ): Promise<ReadResult> {
     const target = scoped(root, "GET", url);
     const response = await send(fetch, "GET", target, headers, signal);
-    const shape = await shapeOf("GET", target, response, {
-      range,
-      conditional: "If-None-Match" in headers,
-    });
+    const shape = await shapeOf(
+      "GET",
+      target,
+      response,
+      { range, conditional: "If-None-Match" in headers },
+      signal,
+    );
     return readResultFrom(response, target, shape, signal);
   }
 
@@ -233,62 +232,76 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     };
   }
 
+  async function list(
+    url: string,
+    opts: Parameters<StorageClient["list"]>[1] = {},
+    inspect?: InspectContainer,
+  ) {
+    const container = scoped(root, "GET", url);
+    // A query or fragment (even an empty `?` or `#`, which URL.search/hash report as "") would
+    // name a different RDF subject than the container. In a canonical href both are delimiters.
+    if (/[?#]/.test(container)) {
+      throw new StorageError("bad-request", {
+        method: "GET",
+        url: container,
+        message: "list() takes a container URL without a query or fragment",
+      });
+    }
+    if (opts.cursor !== undefined) {
+      throw new StorageError("bad-request", {
+        method: "GET",
+        url: opts.cursor.url,
+        message: "Solid listings have one page",
+      });
+    }
+    const result = await get(container, { Accept: "text/turtle" }, opts.signal);
+    if (result.kind !== "container") {
+      discard(result.body);
+      throw new StorageError("method-not-allowed", {
+        method: "GET",
+        url: container,
+        message: `${container} is not a container`,
+      });
+    }
+    const { dataset } = await rdfBody(result, "invalid-response");
+    const listed = new Container(container, dataset, DataFactory);
+    const items: Entry[] = [];
+    // `contains` is a set of distinct members, so URLs are unique.
+    for (const resource of listed.contains) {
+      const entry = entryOf(new Member(resource.id, dataset, DataFactory), container);
+      if (entry) items.push(entry);
+    }
+    items.sort((a, b) => (a.url < b.url ? -1 : 1));
+    inspect?.(container, dataset, items);
+    return { items, next: null, total: items.length, etag: result.etag } satisfies Page<Entry>;
+  }
+
+  function listAll(url: string, opts: { signal?: AbortSignal } = {}, inspect?: InspectContainer) {
+    return paginate(
+      url,
+      (cursor) => list(url, { cursor, signal: opts.signal }, inspect),
+      opts.signal,
+    );
+  }
+
   const client: StorageClient = {
     protocol: "solid",
     root,
     features,
 
-    async list(url, opts = {}) {
-      const container = scoped(root, "GET", url);
-      // A query or fragment (even an empty `?` or `#`, which URL.search/hash report as "") would
-      // name a different RDF subject than the container. In a canonical href both are delimiters.
-      if (/[?#]/.test(container)) {
-        throw new StorageError("bad-request", {
-          method: "GET",
-          url: container,
-          message: "list() takes a container URL without a query or fragment",
-        });
-      }
-      if (opts.cursor !== undefined) {
-        throw new StorageError("bad-request", {
-          method: "GET",
-          url: opts.cursor.url,
-          message: "Solid listings have one page",
-        });
-      }
-      const result = await get(container, { Accept: "text/turtle" }, opts.signal);
-      if (result.kind !== "container") {
-        discard(result.body);
-        throw new StorageError("method-not-allowed", {
-          method: "GET",
-          url: container,
-          message: `${container} is not a container`,
-        });
-      }
-      const { dataset } = await rdfBody(result, "invalid-response");
-      const listed = new Container(container, dataset, DataFactory);
-      const items: Entry[] = [];
-      // `contains` is a set of distinct members, so URLs are unique.
-      for (const resource of listed.contains) {
-        const entry = entryOf(new Member(resource.id, dataset, DataFactory), container);
-        if (entry) items.push(entry);
-      }
-      items.sort((a, b) => (a.url < b.url ? -1 : 1));
-      return { items, next: null, total: items.length, etag: result.etag } satisfies Page<Entry>;
-    },
-
-    listAll(url, opts = {}) {
-      return paginate(
-        url,
-        (cursor) => client.list(url, { cursor, signal: opts.signal }),
-        opts.signal,
-      );
-    },
+    list,
+    listAll,
 
     async head(url, opts = {}) {
       const target = scoped(root, "HEAD", url);
       const response = await send(fetch, "HEAD", target, { Accept: "*/*" }, opts.signal);
-      const shape = await shapeOf("HEAD", target, response, { range: false, conditional: false });
+      const shape = await shapeOf(
+        "HEAD",
+        target,
+        response,
+        { range: false, conditional: false },
+        opts.signal,
+      );
       return readResultFrom(response, target, shape, opts.signal);
     },
 
@@ -326,13 +339,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
       return { url: result.url, etag: result.etag, contentType: type, dataset };
     },
 
-    write: (url) => writesPending("PUT", url),
-    writeRdf: (url) => writesPending("PUT", url),
-    create: (url) => writesPending("POST", url),
-    patch: (url) => writesPending("PATCH", url),
-    move: (url) => writesPending("MOVE", url),
-    delete: (url) => writesPending("DELETE", url),
-    setMetadata: (url) => writesPending("PATCH", url),
+    ...solidWrites({ ...options, root }, () => client, listAll, list),
 
     async metadata(url): Promise<Metadata> {
       const described = await client.head(url);

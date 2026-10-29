@@ -1,0 +1,725 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 5.5
+// Solid mutations (ADR-003 §6, T-022); the read side stays in solid-backend.ts.
+import type { DatasetCore, Quad } from "@jeswr/fetch-rdf";
+import { escapeIri } from "@jeswr/rdf-serialize";
+import { DataFactory, Store } from "n3";
+import { StorageError, type StorageErrorCode, storageErrorFrom } from "./errors.js";
+import { discard, scoped, send } from "./http.js";
+import { pathParent, throwIfAborted } from "./internal.js";
+import { serializeQuads, WRITABLE_RDF } from "./rdf.js";
+import type { SolidBackendOptions } from "./solid-backend.js";
+import { buildN3Patch, n3Envelope, patchFormulas } from "./solid-patch.js";
+import type {
+  Body,
+  Entry,
+  Page,
+  ReadResult,
+  ResourceKind,
+  StorageClient,
+  WriteResult,
+} from "./types.js";
+
+type Writes = Pick<
+  StorageClient,
+  "write" | "writeRdf" | "create" | "patch" | "delete" | "move" | "setMetadata"
+>;
+const TOKEN = "[!#$%&'*+.^_`|~0-9A-Za-z-]+";
+const MEDIA = new RegExp(
+  `^${TOKEN}/${TOKEN}(?:[ \\t]*;[ \\t]*${TOKEN}=(?:${TOKEN}|"(?:[\\t !#-\\[\\]-~\\x80-\\xff]|\\\\[\\t -~\\x80-\\xff])*"))*[ \\t]*$`,
+);
+const LDP_CONTAINER = '<http://www.w3.org/ns/ldp#BasicContainer>; rel="type"';
+const LDP_RESOURCE = '<http://www.w3.org/ns/ldp#Resource>; rel="type"';
+const BASE32 = "abcdefghijklmnopqrstuvwxyz234567";
+const LDP = "http://www.w3.org/ns/ldp#";
+const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+const PIM_STORAGE = "http://www.w3.org/ns/pim/space#Storage";
+const MODIFIED = "http://purl.org/dc/terms/modified";
+const STAT = "http://www.w3.org/ns/posix/stat#";
+const IANA = "http://www.w3.org/ns/iana/media-types/";
+
+/** Private listing hook: inspect the same parsed RDF that supplies listAll's entries. */
+export type InspectContainer = (url: string, dataset: DatasetCore, items: readonly Entry[]) => void;
+
+// CSS 8.0.0-alpha.3 dist/storage/DataAccessorBasedStore.js:95-100 (containment),
+// dist/util/ResourceUtil.js:21-36 (types/modified), and
+// dist/storage/accessors/FileDataAccessor.js:274-305 (member media-type class, stat:mtime/size).
+const checkContainerRdf: InspectContainer = (url, dataset, items) => {
+  const subjects = new Set([url, ...items.map((item) => item.url)]);
+  const members = new Set(items.map((item) => item.url));
+  for (const q of dataset) {
+    if (q.predicate.value === `${LDP}contains`) continue;
+    // File-backed CSS types each listed member with `<iana/media-types/{type}#Resource>`.
+    if (
+      q.subject.termType === "NamedNode" &&
+      members.has(q.subject.value) &&
+      q.predicate.value === RDF_TYPE &&
+      q.object.termType === "NamedNode" &&
+      q.object.value.startsWith(IANA) &&
+      q.object.value.endsWith("#Resource")
+    )
+      continue;
+    if (
+      q.subject.termType === "NamedNode" &&
+      subjects.has(q.subject.value) &&
+      (q.predicate.value === MODIFIED ||
+        q.predicate.value.startsWith(STAT) ||
+        (q.predicate.value === RDF_TYPE &&
+          q.object.termType === "NamedNode" &&
+          (q.object.value.startsWith(LDP) || q.object.value === PIM_STORAGE)))
+    )
+      continue;
+    throw new StorageError("unsupported", {
+      method: "MOVE",
+      url,
+      feature: "move",
+      message: "Container RDF would not be preserved by an emulated move",
+    });
+  }
+};
+
+// If-Match uses strong comparison: wildcards, weak tags and lists cannot identify copied bytes.
+function usableEtag(value: string | null | undefined): value is string {
+  return typeof value === "string" && /^"[\x21\x23-\x7E\x80-\xFF]*"$/.test(value);
+}
+
+// Decode only for comparisons. Requests retain the raw spelling, including non-UTF-8 names.
+function movePath(url: string): string[] {
+  return new URL(url).pathname
+    .replace(/\/$/, "")
+    .split("/")
+    .map((segment) => {
+      try {
+        return decodeURIComponent(segment);
+      } catch {
+        return segment;
+      }
+    });
+}
+function moveIdentity(url: string): string {
+  const parsed = new URL(url);
+  return JSON.stringify([parsed.origin, movePath(url), parsed.pathname.endsWith("/")]);
+}
+function withinMoveSource(url: string, source: string): boolean {
+  const path = movePath(url);
+  const sourcePath = movePath(source);
+  // Keep decoded slashes inside their segment, never join them into a path again.
+  return sourcePath.length <= path.length && sourcePath.every((part, i) => part === path[i]);
+}
+
+function header(value: unknown, name: string): asserts value is string {
+  if (
+    typeof value !== "string" ||
+    value === "" ||
+    value.trim() !== value ||
+    /[\r\n\0\u0100-\uFFFF]/.test(value)
+  )
+    throw new TypeError(`Invalid ${name}`);
+}
+function contentType(value: unknown): asserts value is string {
+  header(value, "media type");
+  if (!MEDIA.test(value)) throw new TypeError("Invalid media type");
+}
+function conditional(value: unknown, any = false): asserts value is string {
+  header(value, "ifMatch");
+  if (value === "*" && !any) throw new TypeError("ifMatch '*' is only allowed on write()");
+}
+function absoluteIri(value: unknown): asserts value is string {
+  if (
+    typeof value !== "string" ||
+    !/^[a-z][a-z0-9+.-]*:/i.test(value) ||
+    !URL.canParse(value) ||
+    escapeIri(value) !== value
+  )
+    throw new TypeError("Expected an absolute IRI");
+}
+interface Node {
+  url: string;
+  kind: ResourceKind;
+}
+interface Copy extends Node {
+  source: string;
+  etag: string | null;
+  creationEtag: string | null;
+}
+
+/** Attach mutations without changing the read implementation or its closure. */
+export function solidWrites(
+  options: SolidBackendOptions,
+  client: () => StorageClient,
+  listAll: (
+    url: string,
+    opts: { signal?: AbortSignal },
+    inspect?: InspectContainer,
+  ) => AsyncIterable<Entry>,
+  list: (
+    url: string,
+    opts: { signal?: AbortSignal },
+    inspect?: InspectContainer,
+  ) => Promise<Page<Entry>>,
+): Writes {
+  const { fetch } = options;
+  const root = options.root;
+  const error = (code: StorageErrorCode, method: string, url: string, message?: string) =>
+    new StorageError(code, { method, url, message });
+  function target(method: string, url: string): string {
+    const result = scoped(root, method, url);
+    if (/[?#]/.test(result))
+      throw error("bad-request", method, result, "Mutation URLs cannot have a query or fragment");
+    return result;
+  }
+  function container(method: string, url: string): string {
+    const result = target(method, url);
+    if (!result.endsWith("/"))
+      throw error("bad-request", method, result, "Expected a container URL");
+    return result;
+  }
+  function nameFor(method: string, url: string, name: string | undefined): string | undefined {
+    if (name === undefined) return undefined;
+    if (typeof name !== "string") throw new TypeError("name must be a string");
+    if (
+      name === "" ||
+      name === "." ||
+      name === ".." ||
+      name.includes("/") ||
+      [...name].some((c) => {
+        const code = c.codePointAt(0) as number;
+        return code < 32 || (code >= 127 && code <= 159);
+      })
+    )
+      throw error("bad-request", method, url, "Invalid name");
+    return encodeURIComponent(name);
+  }
+  function checkEtag(method: string, url: string, current: string | null, expected: string) {
+    if (current !== expected)
+      throw new StorageError("precondition-failed", { method, url, status: 412, etag: current });
+  }
+  function requireEtag(read: ReadResult, method: string): string {
+    if (usableEtag(read.etag)) return read.etag;
+    discard(read.body);
+    throw error(
+      "invalid-response",
+      method,
+      read.url,
+      "Conditional moves require strong source ETags",
+    );
+  }
+  async function etag(
+    url: string,
+    value: string | null,
+    signal?: AbortSignal,
+    refresh = false,
+  ): Promise<string | null> {
+    if (!refresh && value !== null) return value;
+    if (options.etagFollowUp === false) return refresh ? value : null;
+    try {
+      return (await client().head(scoped(root, "HEAD", url), { signal })).etag;
+    } catch {
+      return null;
+    } // A successful mutation must never reject because its HEAD failed.
+  }
+  async function request(
+    method: string,
+    url: string,
+    headers: Record<string, string>,
+    signal?: AbortSignal,
+    body?: Body,
+  ): Promise<Response> {
+    const response = await send(fetch, method, target(method, url), headers, signal, body);
+    if (![200, 201, 204, 205].includes(response.status)) {
+      if (response.status < 200 || response.status >= 400) {
+        const cause = await storageErrorFrom(method, url, response);
+        // Reading the error body can be cut short by an abort; never report that as retryable.
+        throwIfAborted(method, url, signal);
+        throw body instanceof ReadableStream
+          ? new StorageError(cause.code, { ...cause, message: cause.message, retryable: false })
+          : cause;
+      }
+      discard(response.body);
+      throw new StorageError("invalid-response", { method, url, status: response.status });
+    }
+    discard(response.body);
+    return response;
+  }
+  async function result(
+    url: string,
+    response: Response,
+    signal?: AbortSignal,
+  ): Promise<WriteResult> {
+    return {
+      url,
+      etag: await etag(url, response.headers.get("etag"), signal),
+      created: response.status === 201,
+    };
+  }
+  // The segment is already encoded. Never decode it, even when moving a non-UTF-8 name.
+  async function createExact(
+    parent: string,
+    segment: string,
+    kind: ResourceKind,
+    body: Body,
+    type: string,
+    signal?: AbortSignal,
+  ): Promise<{ result: WriteResult; creationEtag: string | null }> {
+    const url = target(
+      "PUT",
+      `${container("PUT", parent)}${segment}${kind === "container" ? "/" : ""}`,
+    );
+    contentType(type);
+    const headers: Record<string, string> = { "Content-Type": type, "If-None-Match": "*" };
+    if (kind === "container") headers.Link = LDP_CONTAINER;
+    let response: Response;
+    try {
+      response = await request("PUT", url, headers, signal, kind === "container" ? "" : body);
+    } catch (cause) {
+      if (cause instanceof StorageError && cause.status === 412)
+        throw new StorageError("conflict", {
+          method: "PUT",
+          url,
+          status: 412,
+          etag: cause.etag,
+          cause,
+          message: "name taken",
+        });
+      throw cause;
+    }
+    return {
+      result: await result(url, response, signal),
+      creationEtag: response.headers.get("etag"),
+    };
+  }
+  async function remove(url: string, signal?: AbortSignal, ifMatch?: string): Promise<void> {
+    await request("DELETE", url, ifMatch === undefined ? {} : { "If-Match": ifMatch }, signal);
+  }
+  async function tree(
+    url: string,
+    limit = Number.POSITIVE_INFINITY,
+    signal?: AbortSignal,
+    inspect?: InspectContainer,
+  ): Promise<Node[]> {
+    const nodes: Node[] = [{ url, kind: "container" }];
+    for (const node of nodes) {
+      if (node.kind !== "container") continue;
+      for await (const entry of listAll(node.url, { signal }, inspect)) {
+        const child = target("GET", entry.url);
+        nodes.push({ url: child, kind: entry.kind });
+        if (nodes.length > limit)
+          throw new StorageError("unsupported", {
+            method: "MOVE",
+            url,
+            feature: "move",
+            message: "Emulated moves are capped at 2000 resources",
+          });
+      }
+    }
+    return nodes;
+  }
+  // Cleanup is independent of the caller's aborted signal. Continue after failures to free every
+  // safe copy, but retain each failure so the original error can never disappear.
+  async function rollback(copies: readonly Copy[], keep: Set<string>): Promise<unknown[]> {
+    const failures: unknown[] = [];
+    // Resources trust only their own create validator. Container membership changes that
+    // validator, so verify an empty, server-managed representation before conditional cleanup.
+    for (const copy of copies)
+      if (copy.kind === "resource" && !usableEtag(copy.creationEtag)) keep.add(copy.url);
+    for (const copy of [...copies].reverse()) {
+      // Propagate both pre-existing retained copies and failures from deeper cleanup.
+      if (copy.kind === "container" && [...keep].some((url) => url.startsWith(copy.url)))
+        keep.add(copy.url);
+      if (keep.has(copy.url)) continue;
+      try {
+        let validator = copy.creationEtag as string;
+        if (copy.kind === "container") {
+          let managed = true;
+          const current = await list(copy.url, {}, (url, dataset) => {
+            try {
+              checkContainerRdf(url, dataset, []);
+            } catch {
+              managed = false;
+            }
+          });
+          if (current.items.length || !managed || !usableEtag(current.etag)) {
+            keep.add(copy.url);
+            continue;
+          }
+          validator = current.etag;
+        }
+        await remove(copy.url, undefined, validator);
+      } catch (cause) {
+        keep.add(copy.url);
+        failures.push(cause);
+      }
+    }
+    return failures;
+  }
+  const writes: Writes = {
+    async write(url, body, opts) {
+      const dest = target("PUT", url);
+      contentType(opts?.contentType);
+      conditional(opts?.ifMatch, true);
+      if (dest.endsWith("/"))
+        throw error("method-not-allowed", "PUT", dest, "Containers have no writable body");
+      const headers: Record<string, string> = { "Content-Type": opts.contentType };
+      if (opts.ifMatch !== "*") headers["If-Match"] = opts.ifMatch;
+      return result(dest, await request("PUT", dest, headers, opts.signal, body), opts.signal);
+    },
+    async writeRdf(url, dataset, opts) {
+      const dest = target("PUT", url);
+      conditional(opts?.ifMatch, true);
+      const type = opts?.contentType ?? "text/turtle";
+      contentType(type);
+      if (!WRITABLE_RDF.has(type))
+        throw new StorageError("unsupported", { method: "PUT", url: dest, feature: "rdfConneg" });
+      return writes.write(dest, await serializeQuads(dataset, type, opts?.prefixes), {
+        ...opts,
+        contentType: type,
+      });
+    },
+    async create(url, body, opts = {}) {
+      const parent = container("POST", url);
+      const kind = opts.kind ?? "resource";
+      if (kind !== "resource" && kind !== "container") throw new TypeError("Invalid kind");
+      if (opts.contentType !== undefined || kind === "resource") contentType(opts.contentType);
+      const type = kind === "container" ? "text/turtle" : (opts.contentType as string);
+      const segment = nameFor("POST", parent, opts.name);
+      if (segment !== undefined)
+        return (await createExact(parent, segment, kind, body ?? "", type, opts.signal)).result;
+      const slug = [...crypto.getRandomValues(new Uint8Array(16))]
+        .map((byte) => BASE32[byte % 32])
+        .join("");
+      header(slug, "Slug");
+      const response = await request(
+        "POST",
+        parent,
+        {
+          "Content-Type": type,
+          Slug: slug,
+          Link: kind === "container" ? LDP_CONTAINER : LDP_RESOURCE,
+        },
+        opts.signal,
+        kind === "container" ? "" : (body ?? ""),
+      );
+      const location = response.headers.get("location");
+      if (location === null) throw error("invalid-response", "POST", parent, "Missing Location");
+      let dest: string;
+      try {
+        dest = target("POST", new URL(location, parent).href);
+        if (pathParent(dest, root) !== parent || dest.endsWith("/") !== (kind === "container"))
+          throw new TypeError("Invalid Location child or kind");
+      } catch {
+        // URL parsing and scope errors can carry the raw Location, including credentials.
+        throw error("invalid-response", "POST", parent, "Invalid Location");
+      }
+      return result(dest, response, opts.signal);
+    },
+    async patch(url, patch, opts) {
+      const dest = target("PATCH", url);
+      conditional(opts?.ifMatch);
+      let body: string;
+      let type: string;
+      const feature = client().features.patch;
+      const formats = feature.detail.formats;
+      if (patch.kind === "rdf") {
+        const advertised = formats["text/turtle"] ?? [];
+        const format =
+          advertised.includes("text/n3") || feature.state !== "available"
+            ? "text/n3"
+            : advertised.includes("application/sparql-update")
+              ? "application/sparql-update"
+              : null;
+        if (format === null)
+          throw new StorageError("unsupported", { method: "PATCH", url: dest, feature: "patch" });
+        const formulas = await patchFormulas(patch, dest, format);
+        type = format;
+        if (format === "text/n3") {
+          body = n3Envelope(formulas);
+        } else if (!patch.where?.length && !formulas.variables) {
+          body = [
+            formulas.deletes ? `DELETE DATA {\n${formulas.deletes}}` : "",
+            formulas.inserts ? `INSERT DATA {\n${formulas.inserts}}` : "",
+          ]
+            .filter(Boolean)
+            .join(";\n");
+        } else
+          throw new StorageError("unsupported", { method: "PATCH", url: dest, feature: "patch" });
+      } else if (patch.kind === "json") {
+        if (
+          !Array.isArray(patch.ops) ||
+          [...patch.ops].some(
+            (op) =>
+              !op ||
+              typeof op !== "object" ||
+              Array.isArray(op) ||
+              !["add", "remove", "replace", "move", "copy", "test"].includes(op.op) ||
+              typeof op.path !== "string",
+          )
+        )
+          throw new TypeError("Invalid JSON Patch operations");
+        if (!Object.values(formats).some((types) => types.includes("application/json-patch+json")))
+          throw new StorageError("unsupported", { method: "PATCH", url: dest, feature: "patch" });
+        type = "application/json-patch+json";
+        body = JSON.stringify(patch.ops);
+      } else {
+        contentType(patch.mediaType);
+        type = patch.mediaType;
+        body = patch.body;
+      }
+      return result(
+        dest,
+        await request(
+          "PATCH",
+          dest,
+          { "Content-Type": type, "If-Match": opts.ifMatch },
+          opts.signal,
+          body,
+        ),
+        opts.signal,
+      );
+    },
+    async delete(url, opts = {}) {
+      const dest = target("DELETE", url);
+      conditional(opts.ifMatch);
+      if (dest === root) throw error("method-not-allowed", "DELETE", dest);
+      if (opts.recursive && dest.endsWith("/")) {
+        checkEtag(
+          "DELETE",
+          dest,
+          (await client().head(dest, { signal: opts.signal })).etag,
+          opts.ifMatch,
+        );
+        for (const node of (await tree(dest, undefined, opts.signal)).sort((a, b) =>
+          a.url < b.url ? 1 : -1,
+        )) {
+          try {
+            await remove(node.url, opts.signal);
+          } catch (cause) {
+            // A descendant can already be gone: deleting a subject also deletes its auxiliary
+            // documents (Solid Protocol §5.4). The top container itself must still exist.
+            if (node.url === dest || !(cause instanceof StorageError && cause.code === "not-found"))
+              throw cause;
+          }
+        }
+      } else await remove(dest, opts.signal, opts.ifMatch);
+    },
+    async move(url, destination, opts = {}) {
+      const source = target("MOVE", url);
+      const parent = container("MOVE", destination);
+      conditional(opts.ifMatch);
+      if (source === root) throw error("method-not-allowed", "MOVE", source);
+      const kind = source.endsWith("/") ? "container" : "resource";
+      if (kind === "container" && withinMoveSource(parent, source))
+        throw error("conflict", "MOVE", source, "Cannot move a container into itself");
+      const segment =
+        nameFor("MOVE", source, opts.name) ??
+        source.slice((pathParent(source, root) as string).length).replace(/\/$/, "");
+      const dest = target("MOVE", `${parent}${segment}${kind === "container" ? "/" : ""}`);
+      const first =
+        kind === "container"
+          ? await client().head(source, { signal: opts.signal })
+          : await client().read(source, { signal: opts.signal });
+      let nodes: Node[];
+      let planned: Node[];
+      const sourceEtags = new Map<string, string | null>();
+      const excluded = new Set<string>();
+      try {
+        requireEtag(first, kind === "resource" ? "GET" : "HEAD");
+        checkEtag("MOVE", source, first.etag, opts.ifMatch);
+        nodes =
+          kind === "container"
+            ? await tree(source, 2000, opts.signal, checkContainerRdf)
+            : [{ url: source, kind }];
+        const sourceIdentity = moveIdentity(source);
+        for (const node of nodes) {
+          const identity = moveIdentity(node.url);
+          if (
+            identity !== sourceIdentity &&
+            /\.(acl|acr)$/.test(movePath(node.url).at(-1) as string)
+          )
+            excluded.add(identity);
+          // Discover every auxiliary exclusion before any resource body is copied.
+          const read =
+            node.url === source ? first : await client().head(node.url, { signal: opts.signal });
+          const auxiliary = (read.links.get("acl") ?? []).map((link) => link.target);
+          if (read.metadataUrl) auxiliary.push(read.metadataUrl);
+          for (const url of auxiliary) {
+            const auxiliaryIdentity = moveIdentity(target("GET", url));
+            if (auxiliaryIdentity !== sourceIdentity) excluded.add(auxiliaryIdentity);
+          }
+          sourceEtags.set(node.url, read.etag);
+        }
+        planned = nodes.filter((node) => !excluded.has(moveIdentity(node.url)));
+        // Reject unusable validators before writes, including any used for auxiliary teardown.
+        // Auxiliary members may have no ETag and are then deleted unconditionally. GET validators are
+        // checked again when streaming, since those alone identify the bytes actually copied.
+        for (const node of nodes) {
+          const sourceEtag = sourceEtags.get(node.url);
+          if (
+            node.kind === "resource" &&
+            !usableEtag(sourceEtag) &&
+            (!excluded.has(moveIdentity(node.url)) || sourceEtag !== null)
+          )
+            throw error(
+              "invalid-response",
+              "HEAD",
+              node.url,
+              "Conditional moves require strong source ETags",
+            );
+        }
+      } catch (cause) {
+        discard(first.body);
+        throw cause;
+      }
+      const copies: Copy[] = [];
+      try {
+        for (const node of planned) {
+          const copyUrl = dest + node.url.slice(source.length);
+          const copyParent = pathParent(copyUrl, root) as string;
+          const copySegment = copyUrl.slice(copyParent.length).replace(/\/$/, "");
+          let body: Body = "";
+          let type = "text/turtle";
+          if (node.kind === "resource") {
+            const read =
+              node.url === source ? first : await client().read(node.url, { signal: opts.signal });
+            sourceEtags.set(node.url, requireEtag(read, "GET"));
+            try {
+              contentType(read.contentType);
+            } catch {
+              discard(read.body);
+              throw error("invalid-response", "GET", node.url, "Invalid source Content-Type");
+            }
+            body = read.body ?? "";
+            type = read.contentType;
+          }
+          const copied = await createExact(
+            copyParent,
+            copySegment,
+            node.kind,
+            body,
+            type,
+            opts.signal,
+          );
+          copies.push({
+            ...node,
+            source: node.url,
+            url: copied.result.url,
+            etag: copied.result.etag,
+            creationEtag: copied.creationEtag,
+          });
+        }
+      } catch (cause) {
+        const keep = new Set<string>();
+        const failures = await rollback(copies, keep);
+        if (failures.length || keep.size)
+          throw new StorageError("conflict", {
+            method: "MOVE",
+            url: source,
+            cause: failures.length
+              ? new AggregateError([cause, ...failures], "Copy and rollback failed")
+              : cause,
+            message: "The move was partial; some copies were preserved or could not be removed",
+          });
+        throw cause;
+      }
+      const deleted = new Set<string>();
+      try {
+        for (const node of [...nodes].sort((a, b) => (a.url < b.url ? 1 : -1))) {
+          try {
+            await remove(
+              node.url,
+              opts.signal,
+              node.kind === "resource" ? (sourceEtags.get(node.url) ?? undefined) : undefined,
+            );
+          } catch (cause) {
+            // Deleting a subject also deletes its auxiliary documents (Solid Protocol §5.4), so
+            // an excluded auxiliary member that is already gone needs no DELETE of its own.
+            if (
+              !(
+                cause instanceof StorageError &&
+                cause.code === "not-found" &&
+                excluded.has(moveIdentity(node.url))
+              )
+            )
+              throw cause;
+          }
+          deleted.add(node.url);
+        }
+      } catch (cause) {
+        const keep = new Set<string>();
+        // Any failed DELETE may have committed, including a gateway's 5xx. Probe without the
+        // caller's signal; only a successful HEAD makes removing a copy safe.
+        for (const copy of copies) {
+          let exists = !deleted.has(copy.source);
+          if (exists) {
+            try {
+              await client().head(copy.source);
+            } catch {
+              exists = false;
+            }
+          }
+          if (!exists) keep.add(copy.url);
+        }
+        const failures = await rollback(copies, keep);
+        throw new StorageError("conflict", {
+          method: "MOVE",
+          url: source,
+          cause: failures.length
+            ? new AggregateError([cause, ...failures], "Delete and rollback failed")
+            : cause,
+          message:
+            deleted.size || keep.size || failures.length
+              ? "The move was partial; some copies were preserved or could not be removed"
+              : "Source delete failed; the copy was rolled back",
+        });
+      }
+      const top = copies[0] as Copy;
+      return {
+        url: dest,
+        etag: await etag(dest, top.etag, opts.signal, kind === "container"),
+        created: true,
+      };
+    },
+    async setMetadata(url, ops, opts) {
+      const dest = target("PATCH", url);
+      conditional(opts?.ifMatch);
+      const changes = ops.map((op) => {
+        const anchor = scoped(root, "PATCH", op.anchor ?? dest);
+        absoluteIri(op.href);
+        let rel = op.rel;
+        if (/^[a-z][a-z0-9.-]*$/i.test(rel))
+          rel = `http://www.iana.org/assignments/relation/${rel.toLowerCase()}`;
+        else absoluteIri(rel);
+        if (op.op !== "add" && op.op !== "remove")
+          throw new TypeError("Invalid metadata operation");
+        return {
+          op: op.op,
+          quad: DataFactory.quad(
+            DataFactory.namedNode(anchor),
+            DataFactory.namedNode(rel),
+            DataFactory.namedNode(op.href),
+          ),
+        };
+      });
+      const document = await client().metadata(dest);
+      const metadataUrl = target("PATCH", document.url);
+      checkEtag("PATCH", metadataUrl, document.etag, opts.ifMatch);
+      const original = document.raw as DatasetCore;
+      const effective = new Store([...(original as Iterable<Quad>)]);
+      for (const change of changes) {
+        if (change.op === "add") effective.add(change.quad);
+        else effective.delete(change.quad);
+      }
+      const inserts = [...effective].filter((q) => !original.has(q));
+      const deletes = [...(original as Iterable<Quad>)].filter((q) => !effective.has(q));
+      if (!inserts.length && !deletes.length) return { etag: document.etag };
+      const response = await request(
+        "PATCH",
+        metadataUrl,
+        { "Content-Type": "text/n3", "If-Match": opts.ifMatch },
+        undefined,
+        await buildN3Patch({ inserts, deletes }),
+      );
+      return { etag: await etag(metadataUrl, response.headers.get("etag")) };
+    },
+  };
+  return writes;
+}
