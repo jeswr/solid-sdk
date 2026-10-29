@@ -3,7 +3,7 @@
 
 # sst-j2y — A-036 lane report
 
-Current validation and fixes are recorded in [Fix round 9](#fix-round-9).
+Current validation and fixes are recorded in [Fix round 11](#fix-round-11).
 The original implementation report below is historical.
 
 Implemented `@jeswr/agent-registry` on `lane/sst-j2y`. Only the package, the workspace
@@ -741,3 +741,74 @@ or invoked. Both commits use the required two co-author trailers. All work
 remained in this checkout on `lane/sst-j2y`; no branch switch, fetch, merge, push,
 PR or modifications to another checkout were performed. This report is committed
 after validation, and the checkout is left clean.
+
+## Fix round 11
+
+Addressed exactly the inactive-note privacy finding against `aabbc981c5ce`
+on `lane/sst-j2y`:
+
+- `850a830d` — `fix(agent-registry): retain inactive note identities`: retain
+  private note candidates independently of conflict activation and the position
+  of `versus`. The shared privacy set screens both metadata and original/decoded
+  credential references. Expanded settings and offline importer regressions for
+  resolved and negated prefixes, comparison prose, extra prose and single-identity
+  notes, including both operand positions. Tests verify settings and RDF redaction,
+  unchanged inactive conflict state, and reference rejection before storage writes.
+- Final report commit — `docs(agent-registry): record fix round 11 validation`
+  (this file).
+
+Conservative choice: every identifier candidate in inactive prose remains private,
+including opaque candidates whose channel cannot be inferred. This may redact
+matching metadata prose as well. The affirmative conflict grammar is unchanged.
+No dependencies, manifests, lockfiles or test configuration changed;
+`check:packages` was not applicable. All added test inputs are synthetic and all
+importer transports are in memory.
+
+The diagnostic run reproduced **21 failing cases** before the fix. All **35**
+targeted cases passed after it. Validation used Node `v24.22.1` via
+`export PATH=/opt/node24/bin:$PATH`. The package gate passed **309 tests in 4 files**:
+
+```sh
+pnpm --filter @jeswr/agent-registry run lint
+pnpm --filter @jeswr/agent-registry run build
+pnpm --filter @jeswr/agent-registry run typecheck
+pnpm --filter @jeswr/agent-registry run test
+```
+
+The affected repository gate passed **5/5 tasks**, including root lint and all
+309 package tests, in **10.428s**. The local `agent/integration` ref is unavailable,
+so the supplied review head was used as the existing local baseline:
+
+```sh
+TURBO_SCM_BASE=aabbc981c5cee6c56fef07f0495f1f309614870a pnpm run gate
+```
+
+`pnpm run gate:full` failed in the unchanged `@jeswr/federation-codegen#test`:
+**2 failed and 23 passed tests**. `test/generator.test.ts:81` expects the legacy
+`w3id.org` bookmarks namespace while the ontology uses `jeswr.org/ns`; the
+generated-output comparison at line 126 also detects the corresponding ontology
+drift. Both failures were recorded in earlier rounds. Turbo reported
+**212/291 successful tasks**, 4 cached, after **5m23.798s**. All **686 root tests
+in 7 files** passed, and the run replayed all **309 passing registry tests**.
+The full gate used telemetry disabled and loopback proxies to keep external
+network requests offline:
+
+```sh
+export NEXT_TELEMETRY_DISABLED=1
+export HTTP_PROXY=http://127.0.0.1:9
+export HTTPS_PROXY=http://127.0.0.1:9
+export ALL_PROXY=http://127.0.0.1:9
+export NODE_USE_ENV_PROXY=1
+pnpm run gate:full
+```
+
+No unrelated source, assertions or timeout configuration changed. No in-scope
+implementation remains unfinished and there are no open questions. A green
+full-workspace gate remains blocked by the unrelated failures above. `roborev`
+is unavailable and no post-commit hook is installed in this checkout, so automated
+per-commit review could not run; no review tooling or model endpoint was installed
+or invoked. Both commits use the required two co-author trailers. All work
+remained in this checkout on `lane/sst-j2y`; no branch switch, fetch, merge, push,
+PR or modifications to another checkout were performed. No generated untracked
+files remain. This report is committed after validation, and the checkout is
+left clean.
