@@ -1,0 +1,13 @@
+# expect: https://www.w3.org/ns/activitystreams#content
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/futures/shapes#CritiqueShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix dcterms: <http://purl.org/dc/terms/>.
+@prefix fut: <https://jeswr.org/ns/sectors/futures#>.
+
+<https://example.org/fixtures/futures/Critique-40> a fut:Critique;
+    fut:onStatement <https://example.org/fixtures/futures/support-41>;
+    dcterms:created "2026-11-01T09:00:00Z"^^xsd:dateTime;
+    dcterms:creator <https://example.org/fixtures/futures/support-42>;
+    fut:inDeliberation <https://example.org/fixtures/futures/support-43>.

@@ -1,0 +1,7 @@
+# expect: http://www.w3.org/2006/time#inXSDDateTime
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/media/shapes#PlayedAtInstantShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix time: <http://www.w3.org/2006/time#>.
+
+<https://example.org/fixtures/media/Instant-9> a time:Instant.

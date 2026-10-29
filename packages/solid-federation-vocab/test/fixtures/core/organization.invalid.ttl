@@ -1,0 +1,14 @@
+# expect: https://jeswr.org/ns/core#identifiedBy
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/core#OrganizationShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+
+<https://example.org/fixtures/core/Organization-2> a core:Organization.
+<https://example.org/fixtures/core/support-3> a core:Identifier;
+    core:value "Fixture";
+    core:inScheme <https://example.org/fixtures/core/support-4>.
+<https://example.org/fixtures/core/support-4> a core:IdentifierScheme;
+    core:schemeAuthority <https://example.org/fixtures/core/support-5>.
+<https://example.org/fixtures/core/support-5> a core:Agent.

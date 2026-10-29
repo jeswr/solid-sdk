@@ -1,0 +1,104 @@
+# Conforming diary example.
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Reused from sectors/health/diet/diet-examples.ttl; coded values include their class assertions.
+@prefix diet: <https://jeswr.org/ns/sectors/health/diet#>.
+@prefix ex: <https://example.org/alice/health/diary/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix schema: <http://schema.org/>.
+@prefix health: <https://jeswr.org/ns/sectors/health#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+
+ex:me a core:Person, health:Patient.
+ex:meal-01 a diet:Meal;
+    schema:startTime "2026-07-02T08:15:00Z"^^xsd:dateTime;
+    diet:context diet:home;
+    diet:portion diet:normal;
+    diet:hasItem ex:food-01;
+    diet:note "Porridge with a handful of dried apricots.".
+diet:Meal a <http://www.w3.org/2002/07/owl#Class>, <http://purl.org/nemo/gufo#SubKind>.
+diet:home a <http://www.w3.org/2004/02/skos/core#Concept>, diet:MealContext.
+diet:normal a <http://www.w3.org/2004/02/skos/core#Concept>, diet:Portion.
+ex:food-01 a diet:FoodItem;
+    schema:name "Dried apricots";
+    diet:offBarcode "3273220001234";
+    diet:offRef <https://world.openfoodfacts.org/product/3273220001234>;
+    diet:ingredientsText "Dried apricots.";
+    diet:offCategory "en:dried-apricots";
+    diet:sourceConfidence diet:off.
+diet:FoodItem a <http://www.w3.org/2002/07/owl#Class>, <http://purl.org/nemo/gufo#SubKind>.
+diet:off a <http://www.w3.org/2004/02/skos/core#Concept>, diet:SourceConfidence.
+ex:exposure-01 a diet:Exposure;
+    diet:trigger diet:sulphites;
+    diet:exposureLevel diet:possibleUndeclared;
+    diet:derivedFrom ex:food-01.
+diet:Exposure a <http://www.w3.org/2002/07/owl#Class>, <http://purl.org/nemo/gufo#SubKind>.
+diet:sulphites a <http://www.w3.org/2004/02/skos/core#Concept>, diet:TriggerClass.
+diet:possibleUndeclared a <http://www.w3.org/2004/02/skos/core#Concept>, diet:ExposureLevel.
+ex:symptom-01 a diet:Symptom;
+    schema:startTime "2026-07-02T09:30:00Z"^^xsd:dateTime;
+    diet:note "Chest tightness ~1h after breakfast.";
+    diet:symptomType diet:wheezeBreathing;
+    diet:severity 6;
+    health:patient ex:me.
+diet:Symptom a <http://www.w3.org/2002/07/owl#Class>, <http://purl.org/nemo/gufo#SubKind>.
+diet:wheezeBreathing a <http://www.w3.org/2004/02/skos/core#Concept>, diet:SymptomType.
+ex:protocol-01 a diet:EliminationProtocol;
+    diet:targetTrigger diet:sulphites;
+    diet:phase diet:washout;
+    diet:phaseStarted "2026-07-01T00:00:00Z"^^xsd:dateTime;
+    diet:phasePlannedEnd "2026-07-04T00:00:00Z"^^xsd:dateTime;
+    diet:challengeStep 0.
+diet:EliminationProtocol a <http://www.w3.org/2002/07/owl#Class>, <http://purl.org/nemo/gufo#SubKind>.
+diet:washout a <http://www.w3.org/2004/02/skos/core#Concept>, diet:ProtocolPhase.
+ex:conclusion-lactose a diet:ToleranceConclusion;
+    diet:derivedFrom ex:exposure-01, ex:symptom-01;
+    diet:aboutTrigger diet:lactose;
+    diet:verdict diet:reacts;
+    diet:confidence diet:suspected;
+    diet:reviewAfter "2027-01-02"^^xsd:date.
+diet:ToleranceConclusion a <http://www.w3.org/2002/07/owl#Class>, <http://purl.org/nemo/gufo#SubKind>.
+diet:lactose a <http://www.w3.org/2004/02/skos/core#Concept>, diet:TriggerClass.
+diet:reacts a <http://www.w3.org/2004/02/skos/core#Concept>, diet:Verdict.
+diet:suspected a <http://www.w3.org/2004/02/skos/core#Concept>, diet:Confidence.
+ex:genetics a diet:GeneticSummary;
+    diet:consentGiven true;
+    diet:enteredManually false;
+    diet:sourceType diet:consumerArray;
+    diet:coverageComplete false;
+    diet:coeliacGeneticRisk diet:riskHaplotypePresent;
+    diet:geneticInterpretation "Carrying DQ2.5 does NOT mean you have coeliac (30–40% of people carry DQ2/DQ8); it cannot diagnose you. Diagnosis needs serology + biopsy while eating gluten. This consumer chip may not tag every risk allele — a null result is not reassurance.";
+    diet:hlaMarker ex:marker-dq25.
+diet:GeneticSummary a <http://www.w3.org/2002/07/owl#Class>, <http://purl.org/nemo/gufo#SubKind>.
+diet:consumerArray a <http://www.w3.org/2004/02/skos/core#Concept>, diet:GeneticSourceType.
+diet:riskHaplotypePresent a <http://www.w3.org/2004/02/skos/core#Concept>, diet:CoeliacGeneticRisk.
+ex:marker-dq25 a diet:HlaMarker;
+    diet:rsid "rs2187668";
+    diet:genotype "AG";
+    diet:riskHaplotype diet:DQ2_5;
+    diet:markerPresence diet:markerPresent;
+    diet:markerInterpretation "rs2187668 present → DQ2.5 risk haplotype.".
+diet:HlaMarker a <http://www.w3.org/2002/07/owl#Class>, <http://purl.org/nemo/gufo#SubKind>.
+diet:DQ2_5 a <http://www.w3.org/2004/02/skos/core#Concept>, diet:HlaRiskHaplotype.
+diet:markerPresent a <http://www.w3.org/2004/02/skos/core#Concept>, diet:MarkerPresence.
+ex:genetics-negative a diet:GeneticSummary;
+    diet:consentGiven true;
+    diet:enteredManually false;
+    diet:sourceType diet:clinicalReport;
+    diet:coverageComplete true;
+    diet:coeliacGeneticRisk diet:riskHaplotypeAbsent;
+    diet:geneticInterpretation "No DQ2/DQ8 risk haplotype was found on a complete HLA-DQ typing → coeliac is very unlikely (strong negative predictive value). This is NOT a statement that you don't have coeliac; discuss with a clinician.";
+    diet:hlaMarker ex:marker-dq8-absent.
+diet:clinicalReport a <http://www.w3.org/2004/02/skos/core#Concept>, diet:GeneticSourceType.
+diet:riskHaplotypeAbsent a <http://www.w3.org/2004/02/skos/core#Concept>, diet:CoeliacGeneticRisk.
+ex:marker-dq8-absent a diet:HlaMarker;
+    diet:rsid "rs7454108";
+    diet:genotype "TT";
+    diet:riskHaplotype diet:DQ8;
+    diet:markerPresence diet:markerAbsent;
+    diet:markerInterpretation "rs7454108 absent → no DQ8 risk haplotype tagged.".
+diet:DQ8 a <http://www.w3.org/2004/02/skos/core#Concept>, diet:HlaRiskHaplotype.
+diet:markerAbsent a <http://www.w3.org/2004/02/skos/core#Concept>, diet:MarkerPresence.
+ex:plan a diet:DietPlan;
+    diet:excludes diet:lactose;
+    diet:restsOn ex:conclusion-lactose.
+diet:DietPlan a <http://www.w3.org/2002/07/owl#Class>, <http://purl.org/nemo/gufo#SubKind>.

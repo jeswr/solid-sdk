@@ -1,0 +1,9 @@
+# expect: https://www.w3.org/ns/activitystreams#content
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/futures/shapes#VisionStatementShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix dcterms: <http://purl.org/dc/terms/>.
+@prefix fut: <https://jeswr.org/ns/sectors/futures#>.
+
+<https://example.org/fixtures/futures/VisionStatement-12> a fut:VisionStatement;
+    dcterms:creator <https://example.org/fixtures/futures/support-13>.

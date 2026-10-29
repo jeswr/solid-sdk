@@ -1,0 +1,9 @@
+# expect: https://jeswr.org/ns/core#performedBy
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/identity/shapes#AttributeAssertionShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix id: <https://jeswr.org/ns/sectors/identity#>.
+
+<https://example.org/fixtures/identity/AttributeAssertion-34> a id:AttributeAssertion.
+<https://example.org/fixtures/identity/support-35> a core:Agent.

@@ -1,0 +1,8 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Conforming instances of the bookmarks profile's NodeShapes.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix schema: <http://schema.org/>.
+@prefix bookmark: <https://jeswr.org/ns/sectors/bookmarks#>.
+
+<https://example.org/fixtures/bookmarks/Bookmark-1> a bookmark:Bookmark;
+    schema:url <https://example.org/fixtures/bookmarks/support-2>.

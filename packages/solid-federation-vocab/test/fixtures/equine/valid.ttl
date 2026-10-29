@@ -1,0 +1,24 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Conforming instances of the equine profile's NodeShapes.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix schema: <http://schema.org/>.
+@prefix eq: <https://jeswr.org/ns/sectors/equine#>.
+
+<https://example.org/fixtures/equine/Horse-1> a eq:Horse;
+    eq:sex <https://example.org/fixtures/equine/support-2>.
+<https://example.org/fixtures/equine/OwnershipShare-3> a eq:OwnershipShare;
+    eq:sharePct 1.0;
+    eq:owner "Fixture".
+<https://example.org/fixtures/equine/StudShare-4> a eq:StudShare;
+    eq:sharePct 1.0;
+    eq:horse <https://example.org/fixtures/equine/support-5>.
+<https://example.org/fixtures/equine/StudNomination-6> a eq:StudNomination;
+    eq:horse <https://example.org/fixtures/equine/support-7>;
+    eq:season "Fixture".
+<https://example.org/fixtures/equine/RaceResult-8> a eq:RaceResult;
+    eq:horse <https://example.org/fixtures/equine/support-9>;
+    eq:finishPos "1"^^xsd:positiveInteger;
+    eq:forRace <https://example.org/fixtures/equine/support-10>.
+<https://example.org/fixtures/equine/PrizeDistribution-11> a eq:PrizeDistribution;
+    schema:amount "Fixture".

@@ -1,0 +1,7 @@
+# expect: https://jeswr.org/ns/sectors/contacts#rawValue
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/contacts/shapes#OnlineHandleShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix contact: <https://jeswr.org/ns/sectors/contacts#>.
+
+<https://example.org/fixtures/contacts/OnlineHandle-21> a contact:OnlineHandle.

@@ -1,0 +1,7 @@
+# expect: https://jeswr.org/ns/sectors/futures#valueConcept
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/futures/shapes#ValueStatementShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix fut: <https://jeswr.org/ns/sectors/futures#>.
+
+<https://example.org/fixtures/futures/ValueStatement-16> a fut:ValueStatement.

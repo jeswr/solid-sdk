@@ -1,0 +1,12 @@
+# expect: https://jeswr.org/ns/sectors/futures#motivatedBy
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/futures/shapes#InfraProposalShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix dcterms: <http://purl.org/dc/terms/>.
+@prefix fut: <https://jeswr.org/ns/sectors/futures#>.
+
+<https://example.org/fixtures/futures/InfraProposal-30> a fut:InfraProposal;
+    fut:targetsSystem <https://example.org/fixtures/futures/support-32>;
+    fut:affectsRole fut:ImplementerRole;
+    dcterms:title "Fixture".

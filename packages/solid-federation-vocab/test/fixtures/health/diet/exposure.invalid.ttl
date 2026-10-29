@@ -1,0 +1,10 @@
+# expect: https://jeswr.org/ns/sectors/health/diet#trigger
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/health/diet/shapes#ExposureShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix diet: <https://jeswr.org/ns/sectors/health/diet#>.
+
+<https://example.org/fixtures/health/diet/Exposure-4> a diet:Exposure;
+    diet:exposureLevel <https://example.org/fixtures/health/diet/support-6>.
+<https://example.org/fixtures/health/diet/support-5> a diet:TriggerClass.
+<https://example.org/fixtures/health/diet/support-6> a diet:ExposureLevel.

@@ -1,0 +1,10 @@
+# expect: https://jeswr.org/ns/sectors/collectibles#eventType
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/collectibles/shapes#ProvenanceEventShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix col: <https://jeswr.org/ns/sectors/collectibles#>.
+@prefix prov: <http://www.w3.org/ns/prov#>.
+
+<https://example.org/fixtures/collectibles/ProvenanceEvent-2> a col:ProvenanceEvent;
+    prov:startedAtTime "2026-11-01T09:00:00Z"^^xsd:dateTime.

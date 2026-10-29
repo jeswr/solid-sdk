@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Issues (lightweight tracker) — one `wf:Task` per resource under `issues/`.
  *
@@ -7,7 +8,8 @@
  * SolidOS's own issue-tracker pane reads/writes, so issues created here are
  * re-readable there. Fields map to `dct:title`, `dct:description`,
  * `dct:created` (`xsd:dateTime`), state via `rdf:type wf:Open`/`wf:Closed`
- * (the canonical solid-issues model), and an optional `wf:assignee` WebID.
+ * (the canonical solid-issues model), optional `wf:assignee` and `dct:creator`
+ * WebIDs, and a `schema:priority` string (high/medium/low).
  *
  * **State model (federation-compatible, pss-qec).**
  * State is expressed as `rdf:type wf:Open` or `rdf:type wf:Closed` — the
@@ -28,8 +30,8 @@
  * apps (e.g. solid-issues) that enumerate `wf:Task` registrations will discover
  * PM's issues container, and PM will discover theirs.
  *
- * SAME-POD ONLY: like Tasks/Bookmarks this is plain typed-CRUD on the owner's
- * own pod — no cross-pod posting, no inbox sends, no SSRF surface.
+ * CRUD stays on the owner's pod. Explicit user edits can additionally announce
+ * assignment changes through the validated cross-pod notification sender.
  *
  * Mirrors `tasks.ts`/`bookmarks.ts`: a typed `@rdfjs/wrapper` doc, a pure
  * parse/build pair, a `StoreConfig`, and a store factory. Pure sort/group
@@ -47,15 +49,16 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { sendNotification } from "./notify-send.js";
 import {
-  createStore,
-  type ProductivityStore,
+  ProductivityStore,
   type StoredItem,
   type StoreConfig,
 } from "./productivity-store.js";
 
 const WF = "http://www.w3.org/2005/01/wf/flow#";
 const DCT = "http://purl.org/dc/terms/";
+const SCHEMA = "http://schema.org/";
 const PROV = "http://www.w3.org/ns/prov#";
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 
@@ -84,12 +87,22 @@ export const WF_IN_PROGRESS_CLASS =
 /** Container slug under the pod root. */
 export const ISSUES_SLUG = "issues/";
 
-const PREFIXES = { wf: WF, dct: DCT, prov: PROV } as const;
+const PREFIXES = { wf: WF, dct: DCT, prov: PROV, schema: SCHEMA } as const;
 
 /** Issue lifecycle states the UI offers. */
 export type IssueState = "open" | "in-progress" | "closed";
 
+/** Shared task priority, carried by a `schema:priority` string literal. */
+export type IssuePriority = "high" | "medium" | "low";
+
+const ISSUE_PRIORITIES: readonly IssuePriority[] = ["high", "medium", "low"];
 const ISSUE_STATES: readonly IssueState[] = ["open", "in-progress", "closed"];
+
+/** Match solid-task-model's priority normalization; unknown values are absent. */
+function normalizePriority(value: string | undefined): IssuePriority | undefined {
+  const v = (value ?? "").toLowerCase().trim();
+  return (ISSUE_PRIORITIES as readonly string[]).includes(v) ? (v as IssuePriority) : undefined;
+}
 
 /** Normalise an arbitrary state string to a known band (default open). */
 export function normalizeState(value: string | undefined): IssueState {
@@ -114,6 +127,10 @@ export interface Issue {
   endedAt?: Date;
   /** Optional assignee WebID — `wf:assignee`. */
   assignee?: string;
+  /** Original reporter's WebID — `dct:creator`. Preserved on edit. */
+  creator?: string;
+  /** Optional shared priority — `schema:priority`. */
+  priority?: IssuePriority;
   /**
    * Set by the read-shim when a legacy `wf:state` literal was found and mapped.
    * On the next conditional write, the caller should pass `rewriteLegacy: true`
@@ -173,6 +190,24 @@ export class IssueDoc extends TermWrapper {
   }
   set assignee(v: string | undefined) {
     OptionalAs.object(this, `${WF}assignee`, v, NamedNodeFrom.string);
+  }
+
+  /** `dct:creator` — the original reporter's WebID (object property). */
+  get creator(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, `${DCT}creator`, NamedNodeAs.string);
+  }
+  set creator(v: string | undefined) {
+    OptionalAs.object(this, `${DCT}creator`, v, NamedNodeFrom.string);
+  }
+
+  /** `schema:priority` — shared high/medium/low text, normalized on read. */
+  get priority(): IssuePriority | undefined {
+    return normalizePriority(
+      OptionalFrom.subjectPredicate(this, `${SCHEMA}priority`, LiteralAs.string),
+    );
+  }
+  set priority(v: IssuePriority | undefined) {
+    OptionalAs.object(this, `${SCHEMA}priority`, v, LiteralFrom.string);
   }
 
   /**
@@ -259,6 +294,8 @@ export function parseIssue(
     created: doc.created,
     endedAt: doc.endedAt,
     assignee: doc.assignee,
+    creator: doc.creator,
+    priority: doc.priority,
   };
   if (legacyStateLiteral !== undefined) {
     issue._legacyStateLiteral = legacyStateLiteral;
@@ -307,9 +344,11 @@ export function buildIssue(
   // The flag is accepted to keep the API consistent with the design spec.
   void opts.rewriteLegacy;
 
-  // Only persist an assignee that looks like an absolute http(s) WebID — never
+  // Only persist agent fields that look like absolute http(s) WebIDs — never
   // coerce arbitrary text into a NamedNode (keeps the graph well-formed).
   doc.assignee = isWebId(issue.assignee) ? issue.assignee : undefined;
+  doc.creator = isWebId(issue.creator) ? issue.creator : undefined;
+  doc.priority = issue.priority;
   return store;
 }
 
@@ -355,13 +394,108 @@ export const ISSUES_CONFIG: StoreConfig<Issue> = {
   build: buildIssue,
 };
 
-/** Build an Issues store bound to the active pod + WebID. */
-export function issuesStore(opts: {
+interface IssuesStoreOptions {
   podRoot: string;
   webId: string;
   /** Final document URL from the session profile load. */
   profileDocumentUrl?: string;
   fetchImpl?: typeof fetch;
-}): ProductivityStore<Issue> {
-  return createStore(ISSUES_CONFIG, opts);
+}
+
+/** Issue-specific authorship rules over the shared conditional CRUD. */
+class IssuesStore extends ProductivityStore<Issue> {
+  constructor(private readonly opts: IssuesStoreOptions) {
+    super(ISSUES_CONFIG, opts.podRoot, opts.webId, opts.fetchImpl, opts.profileDocumentUrl);
+  }
+
+  override create(data: Issue, slugHint?: string): Promise<{ url: string; etag: string | null }> {
+    return super.create(
+      { ...data, creator: isWebId(this.opts.webId) ? this.opts.webId : data.creator },
+      slugHint,
+    );
+  }
+
+  override async update(
+    url: string,
+    data: Issue,
+    etag?: string | null,
+  ): Promise<{ etag: string | null }> {
+    // Read through the store's scope guard. A caller may omit or replace creator,
+    // but editing must retain the resource's original reporter.
+    const current = await this.read(url);
+    return super.update(
+      url,
+      { ...data, creator: current?.data.creator ?? data.creator },
+      etag ?? current?.etag,
+    );
+  }
+}
+
+/** Build an Issues store bound to the active pod + WebID. */
+export function issuesStore(opts: IssuesStoreOptions): ProductivityStore<Issue> {
+  return new IssuesStore(opts);
+}
+
+/** Session-scoped options for best-effort issue assignment announcements. */
+export interface IssueAssignmentOptions {
+  actorWebId: string;
+  /** Omit in production so the auth-patched global fetch runs. */
+  fetchImpl?: typeof fetch;
+  /** The edit already succeeded; this hook only reports notification failures. */
+  onError?: (message: string, detail: unknown) => void;
+}
+
+/**
+ * One announcer per signed-in session, shared across editor visits. Only the
+ * explicit user-edit entry point sends; ordinary store CRUD remains silent.
+ */
+export class IssueAssignmentAnnouncer {
+  private readonly announced = new Set<string>();
+
+  constructor(private readonly opts: IssueAssignmentOptions) {}
+
+  /** Save an existing issue, then start delivery without waiting for the inbox. */
+  async updateFromUser(
+    store: ProductivityStore<Issue>,
+    previous: StoredItem<Issue>,
+    issue: Issue,
+  ): Promise<{ etag: string | null }> {
+    const { assignee, title } = issue;
+    const previousAssignee = previous.data.assignee;
+    const url = previous.url;
+    const result = await store.update(url, issue, previous.etag);
+    if (
+      !assignee || !isWebId(assignee) ||
+      assignee === previousAssignee || assignee === this.opts.actorWebId
+    ) {
+      return result;
+    }
+
+    const key = JSON.stringify([url, assignee]);
+    if (this.announced.has(key)) return result;
+    // Reserve before discovery awaits so overlapping saves cannot double-send.
+    this.announced.add(key);
+    void sendNotification(
+      {
+        recipientWebId: assignee,
+        actorWebId: this.opts.actorWebId,
+        type: "Announce",
+        object: `${url}#it`,
+        target: assignee,
+        summary: title.trim()
+          ? `You were assigned to "${title.trim()}"`
+          : "You were assigned to an issue",
+      },
+      this.opts.fetchImpl,
+    ).catch((error: unknown) => {
+      // Failed delivery may be retried by a later user assignment transition.
+      this.announced.delete(key);
+      try {
+        this.opts.onError?.("Couldn't notify the assignee.", error);
+      } catch {
+        // A reporting hook must not turn background delivery into a rejection.
+      }
+    });
+    return result;
+  }
 }

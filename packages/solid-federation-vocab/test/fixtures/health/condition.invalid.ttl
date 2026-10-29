@@ -1,0 +1,13 @@
+# expect: https://jeswr.org/ns/sectors/health#patient
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/health/shapes#ConditionShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix health: <https://jeswr.org/ns/sectors/health#>.
+
+<https://example.org/fixtures/health/Condition-12> a health:Condition;
+    health:hasCode <https://example.org/fixtures/health/support-14>.
+<https://example.org/fixtures/health/support-13> a core:Person.
+<https://example.org/fixtures/health/support-14> a health:CodeableConcept;
+    core:value "Fixture".

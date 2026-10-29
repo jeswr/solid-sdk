@@ -1,0 +1,15 @@
+# expect: https://jeswr.org/ns/sectors/finance#hasMonetaryAmount
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/finance/shapes#TransactionShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix fin: <https://jeswr.org/ns/sectors/finance#>.
+
+<https://example.org/fixtures/finance/Transaction-8> a fin:Transaction;
+    fin:postingTime "2026-11-01T09:00:00Z"^^xsd:dateTime;
+    fin:hasCounterparty <https://example.org/fixtures/finance/support-10>.
+<https://example.org/fixtures/finance/support-9> a fin:MonetaryAmount;
+    fin:amount 1.0;
+    fin:currency "GBP".
+<https://example.org/fixtures/finance/support-10> a core:Agent.

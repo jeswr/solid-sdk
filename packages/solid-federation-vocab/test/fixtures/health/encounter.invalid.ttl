@@ -1,0 +1,11 @@
+# expect: https://jeswr.org/ns/sectors/health#patient
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/health/shapes#EncounterShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix health: <https://jeswr.org/ns/sectors/health#>.
+
+<https://example.org/fixtures/health/Encounter-25> a health:Encounter;
+    health:recordedBy <https://example.org/fixtures/health/support-27>.
+<https://example.org/fixtures/health/support-26> a core:Person.
+<https://example.org/fixtures/health/support-27> a core:Agent.

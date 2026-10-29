@@ -1,0 +1,9 @@
+# expect: https://jeswr.org/ns/core#identifiedBy
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/identity/shapes#CountryShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix id: <https://jeswr.org/ns/sectors/identity#>.
+
+<https://example.org/fixtures/identity/Country-33> a id:Country;
+    core:identifiedBy ex:untyped.

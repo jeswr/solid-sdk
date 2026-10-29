@@ -1,0 +1,10 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Conforming instances of the drawing profile's NodeShapes.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix dcterms: <http://purl.org/dc/terms/>.
+@prefix drawing: <https://jeswr.org/ns/sectors/drawing#>.
+
+<https://example.org/fixtures/drawing/Scene-1> a drawing:Scene;
+    dcterms:title "Fixture";
+    drawing:sceneDocument <https://example.org/fixtures/drawing/support-2>.

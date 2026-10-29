@@ -1,0 +1,17 @@
+# expect: https://jeswr.org/ns/sectors/contacts#identifies
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/contacts/shapes#OrganizationContactShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix contact: <https://jeswr.org/ns/sectors/contacts#>.
+
+<https://example.org/fixtures/contacts/OrganizationContact-13> a contact:OrganizationContact.
+<https://example.org/fixtures/contacts/support-14> a core:Organization;
+    core:identifiedBy <https://example.org/fixtures/contacts/support-15>.
+<https://example.org/fixtures/contacts/support-15> a core:Identifier;
+    core:value "Fixture";
+    core:inScheme <https://example.org/fixtures/contacts/support-16>.
+<https://example.org/fixtures/contacts/support-16> a core:IdentifierScheme;
+    core:schemeAuthority <https://example.org/fixtures/contacts/support-17>.
+<https://example.org/fixtures/contacts/support-17> a core:Agent.

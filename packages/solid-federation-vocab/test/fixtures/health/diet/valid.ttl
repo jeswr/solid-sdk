@@ -1,0 +1,39 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Conforming instances of the health/diet profile's NodeShapes.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix schema: <http://schema.org/>.
+@prefix diet: <https://jeswr.org/ns/sectors/health/diet#>.
+
+<https://example.org/fixtures/health/diet/Meal-1> a diet:Meal;
+    schema:startTime "2026-11-01T09:00:00Z"^^xsd:dateTime;
+    diet:hasItem <https://example.org/fixtures/health/diet/support-2>.
+<https://example.org/fixtures/health/diet/support-2> a diet:FoodItem;
+    schema:name "Fixture".
+<https://example.org/fixtures/health/diet/FoodItem-3> a diet:FoodItem;
+    schema:name "Fixture".
+<https://example.org/fixtures/health/diet/Exposure-4> a diet:Exposure;
+    diet:trigger <https://example.org/fixtures/health/diet/support-5>;
+    diet:exposureLevel <https://example.org/fixtures/health/diet/support-6>.
+<https://example.org/fixtures/health/diet/support-5> a diet:TriggerClass.
+<https://example.org/fixtures/health/diet/support-6> a diet:ExposureLevel.
+<https://example.org/fixtures/health/diet/Symptom-7> a diet:Symptom;
+    schema:startTime "2026-11-01T09:00:00Z"^^xsd:dateTime;
+    diet:symptomType <https://example.org/fixtures/health/diet/support-8>.
+<https://example.org/fixtures/health/diet/support-8> a diet:SymptomType.
+<https://example.org/fixtures/health/diet/EliminationProtocol-9> a diet:EliminationProtocol;
+    diet:targetTrigger <https://example.org/fixtures/health/diet/support-10>;
+    diet:phase <https://example.org/fixtures/health/diet/support-11>.
+<https://example.org/fixtures/health/diet/support-10> a diet:TriggerClass.
+<https://example.org/fixtures/health/diet/support-11> a diet:ProtocolPhase.
+<https://example.org/fixtures/health/diet/ToleranceConclusion-12> a diet:ToleranceConclusion;
+    diet:aboutTrigger <https://example.org/fixtures/health/diet/support-13>;
+    diet:verdict <https://example.org/fixtures/health/diet/support-14>.
+<https://example.org/fixtures/health/diet/support-13> a diet:TriggerClass.
+<https://example.org/fixtures/health/diet/support-14> a diet:Verdict.
+<https://example.org/fixtures/health/diet/GeneticSummary-15> a diet:GeneticSummary;
+    diet:geneticInterpretation "Fixture";
+    diet:consentGiven true.
+<https://example.org/fixtures/health/diet/HlaMarker-16> a diet:HlaMarker;
+    diet:rsid "Fixture".
+<https://example.org/fixtures/health/diet/DietPlan-17> a diet:DietPlan.

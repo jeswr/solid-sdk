@@ -1,0 +1,13 @@
+# expect: https://jeswr.org/ns/sectors/collectibles#policyNumber
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/collectibles/shapes#InsurancePolicyShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix schema: <http://schema.org/>.
+@prefix col: <https://jeswr.org/ns/sectors/collectibles#>.
+
+<https://example.org/fixtures/collectibles/InsurancePolicy-9> a col:InsurancePolicy;
+    col:coverageAmount <https://example.org/fixtures/collectibles/support-10>.
+<https://example.org/fixtures/collectibles/support-10> a schema:MonetaryAmount;
+    schema:value 1.0;
+    schema:currency "GBP".

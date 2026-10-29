@@ -1,0 +1,7 @@
+# expect: https://jeswr.org/ns/sectors/futures#satisfies
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/futures/shapes#SatisfierShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix fut: <https://jeswr.org/ns/sectors/futures#>.
+
+<https://example.org/fixtures/futures/Satisfier-14> a fut:Satisfier.

@@ -1,0 +1,11 @@
+# expect: https://jeswr.org/ns/sectors/futures#observedParty
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/futures/shapes#AdoptionObservationShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix fut: <https://jeswr.org/ns/sectors/futures#>.
+
+<https://example.org/fixtures/futures/AdoptionObservation-36> a fut:AdoptionObservation;
+    fut:observedVersion <https://example.org/fixtures/futures/support-38>;
+    fut:observedAt "2026-11-01T09:00:00Z"^^xsd:dateTime;
+    fut:observationSource <https://example.org/fixtures/futures/support-39>.

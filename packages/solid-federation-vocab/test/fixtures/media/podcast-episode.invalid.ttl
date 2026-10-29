@@ -1,0 +1,7 @@
+# expect: http://purl.org/dc/terms/title
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/media/shapes#PodcastEpisodeShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix media: <https://jeswr.org/ns/sectors/media#>.
+
+<https://example.org/fixtures/media/PodcastEpisode-18> a media:PodcastEpisode.

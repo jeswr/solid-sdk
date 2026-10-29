@@ -1,0 +1,11 @@
+# expect: https://jeswr.org/ns/sectors/finance#payer
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/finance/shapes#PaymentShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix fin: <https://jeswr.org/ns/sectors/finance#>.
+
+<https://example.org/fixtures/finance/Payment-11> a fin:Payment;
+    fin:payee <https://example.org/fixtures/finance/support-13>.
+<https://example.org/fixtures/finance/support-12> a core:Agent.
+<https://example.org/fixtures/finance/support-13> a core:Agent.
