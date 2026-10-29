@@ -56,8 +56,11 @@ Pass the original provider's `clientSecret` too for confidential clients (Basic 
 `refreshSolidSession` needs the persisted issuer, refresh token and private JWK; never use the
 current provider instance's possibly regenerated key. It returns new state, preserves verified
 identity/ID-token fields, and retains an omitted rotated refresh token. `expiresAt` is epoch
-seconds. If `expires_in` is omitted, the helper clears the old `expiresAt` because the new
-lifetime is unknown; the callback refreshes on every subsequent invocation while it remains unknown.
+seconds. Persist the entire returned state: its `authorizationServerNonce` carries the latest
+token-response DPoP nonce into the next refresh and is never used for pod requests. Missing or
+empty nonce headers retain the previous nonce. If `expires_in` is omitted, the helper clears the
+old `expiresAt` because the new lifetime is unknown; the callback refreshes on every subsequent
+invocation while it remains unknown.
 Coordinate concurrent refreshes when the AS rotates single-use refresh tokens.
 
 Handle `SolidSessionRefreshError.code` without logging state or raw tokens. Fail the callback

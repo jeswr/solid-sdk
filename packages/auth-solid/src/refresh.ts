@@ -97,6 +97,7 @@ function formEncode(value: string): string {
  * Returns new state, preserving the verified identity, ID token and key. An absent rotated refresh
  * token retains the old one. `expiresAt` is epoch SECONDS, counted from the token request's start;
  * an omitted `expires_in` clears the previous expiry because the new token's lifetime is unknown.
+ * Persists the latest authorization-server DPoP nonce for the next refresh proof (RFC 9449 §8.2).
  * Does not verify or adopt an ID token returned by refresh. Callers own persistence and concurrency
  * control when an authorization server rotates single-use refresh tokens.
  *
@@ -115,7 +116,13 @@ export async function refreshSolidSession(
   ) {
     throw new SolidSessionRefreshError("invalid_options");
   }
-  if (!session || !nonemptyString(session.refreshToken) || !nonemptyString(session.issuer)) {
+  if (
+    !session ||
+    !nonemptyString(session.refreshToken) ||
+    !nonemptyString(session.issuer) ||
+    (session.authorizationServerNonce !== undefined &&
+      !nonemptyString(session.authorizationServerNonce))
+  ) {
     throw new SolidSessionRefreshError("invalid_session");
   }
   const allowInsecure = options.allowInsecure === true;
@@ -162,7 +169,8 @@ export async function refreshSolidSession(
     throw new SolidSessionRefreshError("invalid_response");
   }
   const endpoint = secureUrl(metadata.token_endpoint, allowInsecure, "invalid_response");
-  const tokenFetch = buildDpopCustomFetch(keyPair, options.fetch, allowInsecure);
+  const nonceState = { nonce: session.authorizationServerNonce };
+  const tokenFetch = buildDpopCustomFetch(keyPair, options.fetch, allowInsecure, nonceState);
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     refresh_token: session.refreshToken,
@@ -218,6 +226,7 @@ export async function refreshSolidSession(
     ...withoutExpiry,
     accessToken: token.access_token,
     refreshToken: token.refresh_token ?? session.refreshToken,
+    ...(nonceState.nonce === undefined ? {} : { authorizationServerNonce: nonceState.nonce }),
     ...(token.expires_in === undefined ? {} : { expiresAt: requestedAt + token.expires_in }),
   };
 }

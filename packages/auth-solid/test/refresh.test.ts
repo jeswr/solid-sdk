@@ -12,12 +12,14 @@ import {
 import ts from "typescript";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import {
+  extractSolidAuthState,
   type FetchLike,
   refreshSolidSession,
   SOLID_JWT_KEY,
   type SolidJwtState,
   SolidSessionRefreshError,
   type SolidSessionRefreshErrorCode,
+  solidDpopFetch,
 } from "../src/index.js";
 
 const ISSUER = "https://op.example/tenant";
@@ -286,6 +288,103 @@ describe("refreshSolidSession", () => {
     );
   });
 
+  it("persists and rotates successful-response nonces across restored refresh sessions", async () => {
+    const replies = ["first-nonce-fixture", "next-nonce-fixture", undefined, ""];
+    const op = mockEndpoint(() => {
+      const nonce = replies[op.tokenCalls.length - 1];
+      return json(tokens(), 200, nonce === undefined ? {} : { "dpop-nonce": nonce });
+    });
+    let state = session;
+    for (const nonce of [
+      "first-nonce-fixture",
+      "next-nonce-fixture",
+      "next-nonce-fixture",
+      "next-nonce-fixture",
+    ]) {
+      const input: SolidJwtState = Object.freeze(JSON.parse(JSON.stringify(state)));
+      const before = JSON.stringify(input);
+      state = await refreshSolidSession(input, { clientId: CLIENT_ID, fetch: op.fetch });
+      expect(state.authorizationServerNonce).toBe(nonce);
+      expect(JSON.stringify(input)).toBe(before);
+    }
+    expect(op.tokenCalls).toHaveLength(4);
+    const proofs = op.tokenCalls.map((call) =>
+      decodeJwt(new Headers(call.headers).get("dpop") as string),
+    );
+    expect(proofs.map((proof) => proof.nonce)).toEqual([
+      undefined,
+      "first-nonce-fixture",
+      "next-nonce-fixture",
+      "next-nonce-fixture",
+    ]);
+    expect(new Set(proofs.map((proof) => proof.jti)).size).toBe(4);
+    for (const proof of proofs) expect(proof.ath).toBeUndefined();
+
+    // Another session sharing this issuer/key must not inherit the previous session's nonce.
+    await refreshSolidSession(session, { clientId: CLIENT_ID, fetch: op.fetch });
+    expect(
+      decodeJwt(new Headers(op.tokenCalls[4]?.headers).get("dpop") as string).nonce,
+    ).toBeUndefined();
+  });
+
+  it.each([
+    undefined,
+    "success-nonce-fixture",
+  ])("replaces a stale nonce after one challenge and persists the latest nonce (%s)", async (successNonce) => {
+    const state = Object.freeze({ ...session, authorizationServerNonce: "stale-nonce-fixture" });
+    const op = mockEndpoint(() =>
+      op.tokenCalls.length === 1
+        ? json({ error: "use_dpop_nonce" }, 400, { "dpop-nonce": "challenge-nonce-fixture" })
+        : json(tokens(), 200, successNonce ? { "dpop-nonce": successNonce } : {}),
+    );
+    const refreshed = await refreshSolidSession(state, { clientId: CLIENT_ID, fetch: op.fetch });
+    const latestNonce = successNonce ?? "challenge-nonce-fixture";
+    expect(refreshed.authorizationServerNonce).toBe(latestNonce);
+    expect(state.authorizationServerNonce).toBe("stale-nonce-fixture");
+    expect(op.tokenCalls).toHaveLength(2);
+    await refreshSolidSession(JSON.parse(JSON.stringify(refreshed)), {
+      clientId: CLIENT_ID,
+      fetch: op.fetch,
+    });
+    expect(op.tokenCalls).toHaveLength(3);
+    expect(
+      op.tokenCalls.map((call) => decodeJwt(new Headers(call.headers).get("dpop") as string).nonce),
+    ).toEqual(["stale-nonce-fixture", "challenge-nonce-fixture", latestNonce]);
+  });
+
+  it("keeps authorization-server nonces out of discovery and pod proofs", async () => {
+    const state = { ...session, authorizationServerNonce: "as-nonce-fixture" };
+    const op = mockEndpoint();
+    await refreshSolidSession(state, { clientId: CLIENT_ID, fetch: op.fetch });
+    expect(new Headers(op.fetch.mock.calls[0]?.[1]?.headers).has("dpop")).toBe(false);
+    const resourceState = extractSolidAuthState(state);
+    expect(resourceState).not.toHaveProperty("authorizationServerNonce");
+    const podFetch = vi.fn<FetchLike>(async () => new Response("pod fixture"));
+    // Even passing the persisted state directly must not use the AS nonce at a resource server.
+    await solidDpopFetch(state, { fetch: podFetch })("https://pod.example/resource");
+    expect(
+      decodeJwt(new Headers(podFetch.mock.calls[0]?.[1]?.headers).get("dpop") as string).nonce,
+    ).toBeUndefined();
+  });
+
+  it.each([
+    ["invalid_grant", () => json({ error: "invalid_grant" }, 400, { "dpop-nonce": "new-nonce" })],
+    [
+      "invalid_response",
+      () => json(tokens({ token_type: "Bearer" }), 200, { "dpop-nonce": "new-nonce" }),
+    ],
+    ["use_dpop_nonce", () => json({ error: "use_dpop_nonce" }, 400, { "dpop-nonce": "new-nonce" })],
+  ] as const)("does not mutate the persisted nonce on %s", async (code, reply) => {
+    const state = Object.freeze({ ...session, authorizationServerNonce: "persisted-nonce" });
+    const op = mockEndpoint(reply);
+    await expectCode(refreshSolidSession(state, { clientId: CLIENT_ID, fetch: op.fetch }), code);
+    expect(state.authorizationServerNonce).toBe("persisted-nonce");
+    expect(op.tokenCalls).toHaveLength(code === "use_dpop_nonce" ? 2 : 1);
+    expect(decodeJwt(new Headers(op.tokenCalls[0]?.headers).get("dpop") as string).nonce).toBe(
+      "persisted-nonce",
+    );
+  });
+
   it("fails on a second nonce error without making a third request", async () => {
     const op = mockEndpoint(() =>
       json({ error: "use_dpop_nonce" }, 400, { "dpop-nonce": "persistent-nonce-fixture" }),
@@ -508,6 +607,12 @@ describe("refreshSolidSession input and discovery boundaries", () => {
     { issuer: "https://user:password@op.example" },
     { issuer: "https://op.example?query=1" },
     { issuer: "https://op.example#fragment" },
+    { authorizationServerNonce: "" },
+    { authorizationServerNonce: null },
+    { authorizationServerNonce: 123 },
+    { authorizationServerNonce: false },
+    { authorizationServerNonce: {} },
+    { authorizationServerNonce: [] },
     { dpopKeyJwk: undefined },
     { dpopKeyJwk: {} },
     { dpopKeyJwk: { kty: "oct", k: "secret-fixture", d: "invalid" } },

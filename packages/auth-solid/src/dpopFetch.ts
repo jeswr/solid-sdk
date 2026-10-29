@@ -212,11 +212,14 @@ async function isUseDpopNonceChallenge(res: Response): Promise<boolean> {
  * @param underlying    the base fetch Auth.js passes its requests to (the global `fetch`, or an
  *                      injected SSRF-guarded / test fetch).
  * @param allowInsecure permit http: on loopback (dev OP). Default false (https-only).
+ * @param nonceState    optional caller-owned nonce for a single authorization server; seeds proofs
+ *                      and receives the latest nonempty token-response nonce, including on retry.
  */
 export function buildDpopCustomFetch(
   keyPair: DpopKeyPair,
   underlying: FetchLike,
   allowInsecure: boolean,
+  nonceState?: { nonce: string | undefined },
 ): typeof fetch {
   // SECURITY (redirect refusal): the token-endpoint leg is CREDENTIALED — it carries the DPoP proof
   // plus the authorization code and, for a confidential client, the client secret. Wrap the
@@ -245,7 +248,7 @@ export function buildDpopCustomFetch(
 
     // The token-endpoint proof carries NO `ath` (RFC 9449 §4.2 — there is no access token being
     // presented yet). A fresh `jti` per proof (solid-dpop) makes it single-use.
-    const send = async (nonce?: string): Promise<Response> => {
+    const send = async (nonce = nonceState?.nonce): Promise<Response> => {
       const proof = await createDpopProof(
         nonce === undefined
           ? { keyPair, htm: method, htu: url }
@@ -264,7 +267,12 @@ export function buildDpopCustomFetch(
       // oauth4webapi sends the body in `init.body` (a URLSearchParams string) — a small, replayable
       // value, so the §8 retry can resend it as-is. We forward `init` unchanged but with our headers.
       // `tokenLegFetch` refuses redirects (see above) so this credentialed request never follows a 3xx.
-      return tokenLegFetch(url, { ...(init ?? {}), method, headers });
+      const response = await tokenLegFetch(url, { ...(init ?? {}), method, headers });
+      const nextNonce = response.headers.get("dpop-nonce");
+      if (nonceState && nextNonce) {
+        nonceState.nonce = nextNonce;
+      }
+      return response;
     };
 
     const res = await send();

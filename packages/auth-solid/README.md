@@ -86,6 +86,9 @@ The helper discovers the issuer's token endpoint, requires an exact match with t
 issuer identifier, uses the persisted key with no `ath` on the token proof, and retries a
 `use_dpop_nonce` challenge once. It returns new state with updated
 tokens and expiry in epoch seconds, retaining the old refresh token if rotation is omitted.
+It also persists the latest authorization-server `DPoP-Nonce` in `authorizationServerNonce`
+and reuses it on the next refresh, including after session restoration. This nonce is never
+used for pod requests. Missing or empty nonce headers retain the previous value.
 When `expires_in` is omitted, it clears the previous `expiresAt`; the new lifetime is unknown.
 The callback above refreshes on every subsequent invocation while expiry remains unknown.
 When supplied, `expires_in` must be a safe nonnegative integer in seconds.
