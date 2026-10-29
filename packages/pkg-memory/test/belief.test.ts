@@ -168,6 +168,41 @@ describe("KG §4.1 belief view", () => {
     ).toBe("past");
   });
 
+  it.each([
+    false,
+    true,
+  ])("ignores literal envelope revision targets (assertion revision: %s)", async (legacy) => {
+    const value = await build([
+      { id: "old", epistemic: "SelfReportedExplicit", assertion: assertion("old") },
+      { id: "other", epistemic: "SelfReportedExplicit", assertion: assertion("other") },
+      {
+        id: "new",
+        epistemic: "SelfReportedExplicit",
+        assertion: assertion("new"),
+        supersedes: legacy ? ["old"] : [],
+      },
+    ]);
+    const [old, other, newer] = value.nanopubs;
+    const provenance = graph(value.dataset, newer!.provenanceId);
+    new RdfNode(newer!.id, provenance).text(`${NS.prov}wasRevisionOf`, other!.id);
+    putGraph(value.dataset, newer!.provenanceId, provenance);
+    const parsed = await parseNanopublications(await serializeNanopublications(value));
+    const result = classifyNanopublications(parsed);
+    expect(result.find((np) => np.id === other!.id)).toMatchObject({
+      validity: "Current",
+      belief: "definitely",
+      replacedBy: [],
+    });
+    expect(result.find((np) => np.id === old!.id)).toMatchObject({
+      belief: legacy ? "past" : "definitely",
+      replacedBy: legacy ? [newer!.id] : [],
+    });
+    expect(result.find((np) => np.id === newer!.id)).toMatchObject({
+      belief: "definitely",
+      replacedBy: [],
+    });
+  });
+
   it("does not treat retired contradictions as unresolved", async () => {
     const value = await build([
       {
