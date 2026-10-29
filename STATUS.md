@@ -209,3 +209,55 @@ is committed. `roborev` remains unavailable, so automated per-commit review coul
 No push, PR, branch switch, merge, publication, tracker mutation, or other-checkout write
 occurred. The requested fix is complete; the full workspace gate remains blocked by the
 unrelated snapshot failure. This round introduces no open questions.
+
+## Fix round 4 — review of `c17534d6b760`
+
+The single requested discovery cancellation finding is fixed on `lane/sst-6sex`, starting from
+`c17534d6b760118cdaa98e4e6f935f8118c0cd60`.
+
+- `dd0e077a` — `fix(mcp-oauth): avoid discovery cancellation deadlock`: read and validate the
+  original discovery body, then reconstruct the response with its status and headers for the
+  OIDC engine. Cancelling an oversized stream no longer waits for an unread cloned branch.
+  Regression tests cover login start, callback completion and restored-session refresh with
+  oversized streams that remain open, plus valid streamed metadata at the 64 KiB limit.
+- The final `docs: record fourth review fix results` commit records this validation.
+
+All commands ran with `/opt/node24/bin` prepended to PATH: Node `v24.22.1`, pnpm `10.4.1`.
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/mcp-oauth
+pnpm --filter @jeswr/mcp-oauth exec vitest run src/pod-sessions.test.ts --coverage.enabled=false -t 'streaming engine discovery|streamed discovery at the size limit'
+pnpm --filter @jeswr/mcp-oauth run lint && pnpm --filter @jeswr/mcp-oauth run build && pnpm --filter @jeswr/mcp-oauth run typecheck && pnpm --filter @jeswr/mcp-oauth run test
+pnpm run lint:root
+TURBO_SCM_BASE=c17534d6b760118cdaa98e4e6f935f8118c0cd60 pnpm run gate
+git diff --check
+```
+
+PASS: dependency-first build, all four focused cases, package gate (245 tests in seven files;
+100% statements, branches, functions and lines), root lint, affected gate (nine tasks, four
+cached) and whitespace checks. Before the fix, all three oversized streaming cases reproduced
+the deadlock by timing out. The tests use only offline issuer fixtures. No dependency was
+added, so no package-policy check or lockfile change was needed.
+
+```sh
+pnpm run gate:full
+pnpm exec turbo run test:root
+pnpm run gate:full
+pnpm --filter @jeswr/federation-trust run test
+git diff c17534d6b760118cdaa98e4e6f935f8118c0cd60 -- packages/federation-trust test scripts package.json vitest.config.ts
+```
+
+The first full gate stopped on the unchanged root timing assertion at
+`test/check-sdk-layers.test.mjs:328` (70.39 ms against a 50 ms limit; 744 tests passed).
+The isolated root suite passed all 745 tests. The full retry reused that passing result,
+then failed at the previously recorded federation-trust snapshot mismatch at
+`test/characterization.test.ts:196`: serialized JWK keys are expected in `crv,x,kty` order and
+received in `kty,crv,x` order. The isolated federation-trust test reproduced it (53 pass, one
+fail). The full retry completed 340 of 376 tasks, with 44 cached. The comparison against this
+round's base is empty for both failing surfaces; no unrelated source or snapshot was changed.
+
+Removed the 16 generated callback/Client ID files from the eight pod app builds. No dist output
+is committed. `roborev` remains unavailable, so automated per-commit review could not run.
+No push, PR, branch switch, merge, publication, tracker mutation, or other-checkout write
+occurred. The requested fix is complete; the full workspace gate remains blocked by the
+unrelated snapshot failure. This round introduces no open questions.
