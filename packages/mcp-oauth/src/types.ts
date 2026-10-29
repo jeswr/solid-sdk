@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { KeyObject } from "node:crypto";
 
 /** Server-side pod identity. Pod credentials are owned exclusively by the provider. */
@@ -13,6 +14,8 @@ export interface PodSessionProvider {
   complete(callbackUrl: string, state: string): Promise<PodSession>;
   fetchFor(sessionId: string): Promise<typeof fetch>;
   revoke(sessionId: string): Promise<void>;
+  /** Durable liveness for cascade revocation. MCP-10's broker always implements this. */
+  isActive?(sessionId: string): Promise<boolean>;
 }
 
 /** The supported public-client registration metadata. */
@@ -82,6 +85,10 @@ export interface OneTimeStore<T> extends RecordStore<T> {
 /** Revocation must be atomic and irreversible; never overwrite an existing grant with put. */
 export interface GrantStore extends RecordStore<Grant> {
   revoke(id: string): Promise<void>;
+  /** Idempotently persist irreversible session-wide intent before retiring broker credentials. */
+  revokeSession(sessionId: string): Promise<void>;
+  /** Shared durable tombstones must cover existing and future grants bound to this session. */
+  isSessionRevoked(sessionId: string): Promise<boolean>;
 }
 
 /** Pluggable stores. Shared durable implementations are required for multiple workers. */

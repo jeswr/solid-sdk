@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 /**
  * Session-half unit tests with an injected transport (no CSS, no network). Cover the
  * client-credentials acquire flow's DPoP wiring, the §8 nonce challenge retry, authedFetch's
@@ -118,6 +119,80 @@ describe("authedFetch", () => {
     const payload = decodeJwt(proof as string);
     expect(payload.ath).toBeTruthy();
     expect(payload.htu).toBe("https://pod.example/r");
+  });
+
+  it.each([
+    undefined,
+    "old-nonce",
+  ])("retries concurrent nonce challenges independently with initial nonce %s", async (nonce) => {
+    const session: SolidSessionState = {
+      keyPair: await generateSessionKeyPair(),
+      accessToken: "live-token",
+      expiresAt: Date.now() + 600_000,
+      ...(nonce ? { nonce } : {}),
+    };
+    const urls = ["https://pod.example/first", "https://pod.example/second"];
+    const nonces = new Map<string, unknown[]>();
+    const jtis = new Set<unknown>();
+    let releaseChallenges!: () => void;
+    const bothStarted = new Promise<void>((resolve) => {
+      releaseChallenges = resolve;
+    });
+    const fetchImpl: FetchLike = async (url, init) => {
+      const proof = decodeJwt(init?.headers?.dpop as string);
+      const sent = nonces.get(url) ?? [];
+      sent.push(proof.nonce);
+      nonces.set(url, sent);
+      jtis.add(proof.jti);
+      if (sent.length === 1) {
+        // Neither response may update the shared session until both proofs are sent.
+        if (nonces.size === 2) releaseChallenges();
+        await bothStarted;
+        return new Response(null, { status: 401, headers: { "DPoP-Nonce": "srv-nonce" } });
+      }
+      expect(proof.nonce).toBe("srv-nonce");
+      return new Response("ok");
+    };
+
+    const responses = await Promise.all(
+      urls.map((url) => authedFetch(session, undefined, "GET", url, {}, fetchImpl)),
+    );
+    expect(responses.map((response) => response.status)).toEqual([200, 200]);
+    expect(urls.map((url) => nonces.get(url))).toEqual([
+      [nonce, "srv-nonce"],
+      [nonce, "srv-nonce"],
+    ]);
+    expect(jtis.size).toBe(4);
+    expect(session.nonce).toBe("srv-nonce");
+  });
+
+  it.each([
+    { challenge: "sent-nonce", attempts: 1 },
+    { challenge: "new-nonce", attempts: 2 },
+  ])("bounds retries for a repeated $challenge challenge", async ({ challenge, attempts }) => {
+    const session: SolidSessionState = {
+      keyPair: await generateSessionKeyPair(),
+      accessToken: "live-token",
+      expiresAt: Date.now() + 600_000,
+      nonce: "sent-nonce",
+    };
+    const nonces: unknown[] = [];
+    const fetchImpl: FetchLike = async (_url, init) => {
+      nonces.push(decodeJwt(init?.headers?.dpop as string).nonce);
+      return new Response(null, { status: 401, headers: { "DPoP-Nonce": challenge } });
+    };
+
+    const response = await authedFetch(
+      session,
+      undefined,
+      "GET",
+      "https://pod.example/r",
+      {},
+      fetchImpl,
+    );
+    expect(response.status).toBe(401);
+    expect(nonces).toEqual(attempts === 1 ? ["sent-nonce"] : ["sent-nonce", challenge]);
+    expect(session.nonce).toBe(challenge);
   });
 });
 
