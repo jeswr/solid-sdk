@@ -5,6 +5,7 @@ import type { PodSession } from "@/lib/session/pod-session";
 import { type ExportImage, toDocx } from "../lib/convert/docx-export";
 import { exportMarkdown } from "../lib/convert/markdown";
 import { validLink } from "../lib/editor/logic";
+import { imagePng } from "./image-blob";
 import { loadDocumentContent } from "./persistence";
 import { podScopedFetch } from "./private-image";
 
@@ -15,32 +16,13 @@ export async function readExportImage(session: PodSession, src: string): Promise
     redirect: "error",
   });
   if (!response.ok) throw new Error("Image unavailable");
-  const blob = await response.blob();
-  if (!blob.type.startsWith("image/")) throw new Error("Image unavailable");
-  const bitmap = await createImageBitmap(blob);
-  try {
-    // Decode in the browser and normalize formats (including WebP/SVG) to DOCX-safe PNG.
-    const canvas = document.createElement("canvas");
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
-    const context = canvas.getContext("2d");
-    if (!context) throw new Error("Image unavailable");
-    context.drawImage(bitmap, 0, 0);
-    const png = await new Promise<Blob>((resolve, reject) =>
-      canvas.toBlob(
-        (value) => (value ? resolve(value) : reject(new Error("Image unavailable"))),
-        "image/png",
-      ),
-    );
-    return {
-      data: new Uint8Array(await png.arrayBuffer()),
-      type: "png",
-      width: bitmap.width,
-      height: bitmap.height,
-    };
-  } finally {
-    bitmap.close();
-  }
+  const png = await imagePng(await response.blob());
+  return {
+    data: new Uint8Array(await png.blob.arrayBuffer()),
+    type: "png",
+    width: png.width,
+    height: png.height,
+  };
 }
 export async function downloadDocument(
   json: JSONContent,

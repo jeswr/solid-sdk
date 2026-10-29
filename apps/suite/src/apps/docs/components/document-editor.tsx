@@ -110,6 +110,11 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
   const [, updateSelection] = useState(0);
   const [mac, setMac] = useState(false);
   const [find, setFind] = useState(false);
+  const findRef = useRef<HTMLInputElement>(null);
+  const openFind = () => {
+    setFind(true);
+    findRef.current?.focus();
+  };
   const [link, setLink] = useState(false);
   const [count, setCount] = useState(false);
   const [pinned, setPinned] = useState(false);
@@ -280,7 +285,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
     if (action) {
       event.preventDefault();
       if (action === "save") void runtime.forceSave();
-      if (action === "find") setFind(true);
+      if (action === "find") openFind();
       if (action === "link") setLink(true);
       if (action === "count") setCount(true);
       if (action === "help") setHelp(true);
@@ -322,7 +327,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
   const opens = {
     link: () => setLink(true),
     image: () => fileRef.current?.click(),
-    find: () => setFind(true),
+    find: openFind,
     count: () => setCount(true),
   };
   const actions = editor ? editorActions(editor, opens) : [];
@@ -486,7 +491,12 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
           <EditorToolbar editor={editor} actions={actions} mac={mac} online={runtime.online} />
         )}
         {find && editor && (
-          <FindBar editor={editor} revision={revision} close={() => setFind(false)} />
+          <FindBar
+            editor={editor}
+            revision={revision}
+            close={() => setFind(false)}
+            inputRef={findRef}
+          />
         )}
         <div className="docs-page-wrap">
           <article className="docs-page" aria-label="Document page">

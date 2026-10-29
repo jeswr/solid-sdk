@@ -14,6 +14,7 @@ import {
 import sanitizeHtml from "sanitize-html";
 import { baseExtensions } from "../../editor/extensions";
 import { normaliseDestination } from "../editor/destination";
+import { normaliseHtmlTableSpans } from "../editor/table-spans";
 import { MAX_IMPORT_BYTES } from "./docx-import";
 import { normaliseImport } from "./schema";
 import { reportSkipped, type SkippedItem } from "./skipped";
@@ -120,7 +121,7 @@ export const MARKDOWN_NODE_RULES: Record<string, { tag: string; attributes: stri
   codeBlock: { tag: "pre", attributes: ["language"] },
   hardBreak: { tag: "br", attributes: [] },
   horizontalRule: { tag: "hr", attributes: [] },
-  image: { tag: "img", attributes: ["src", "alt", "title", "width", "height"] },
+  image: { tag: "img", attributes: ["src", "alt", "title", "width", "height", "link"] },
   table: { tag: "table", attributes: [] },
   tableRow: { tag: "tr", attributes: [] },
   tableCell: { tag: "td", attributes: ["colspan", "rowspan", "colwidth", "align"] },
@@ -314,6 +315,8 @@ function htmlNode(node: JSONContent): string {
   const opening = `<${tag}${attributes(attrs)}${exactAttributes(node)}>`;
   const closing = !["br", "hr", "img"].includes(tag) ? `</${tag}>` : "";
   let result = opening + body + closing;
+  if (node.type === "image" && node.attrs?.link)
+    result = htmlMark({ type: "link", attrs: node.attrs.link }, result);
   for (const mark of node.marks ?? []) result = htmlMark(mark, result);
   return result;
 }
@@ -364,6 +367,7 @@ function needsHtml(node: JSONContent): boolean {
     return true;
   if (node.type === "image")
     return (
+      node.attrs?.link != null ||
       node.attrs?.width != null ||
       node.attrs?.height != null ||
       node.attrs?.alt === null ||
@@ -491,6 +495,7 @@ function listItemSource(raw: string): { text: string; indent: number } {
 // JavaScript's multiline ^ also matches Unicode line/paragraph separators.
 // CommonMark container prefixes begin only at the start of input or after LF.
 const quotePrefix = /(?<=^|\n) {0,3}>[ \t]?/g;
+const taskMarker = /^\[[ xX]\](?:[ \t]|$)/;
 
 // Use exactly the live editor's nodes, marks and attributes. Only Markdown
 // handlers are overridden; HTML parsing still comes from the editor schema.
@@ -529,8 +534,8 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
               other: {
                 ...tokenizer.rules.other,
                 blockquoteSetextReplace2: quotePrefix,
-                listIsTask: /^\[[ xX]\](?:[ \t]|$)/,
-                listReplaceTask: /^\[[ xX]\](?:[ \t]|$)/,
+                listIsTask: taskMarker,
+                listReplaceTask: taskMarker,
               },
             };
             const token = tokenizer.list(containerBoundaries(source));
@@ -552,7 +557,7 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
               type: "docsList",
               items: token.items.map((item) => {
                 const { text: original, indent } = listItemSource(item.raw);
-                const text = item.task ? original.replace(/^\[[ xX]\](?:[ \t]|$)/, "") : original;
+                const text = item.task ? original.replace(taskMarker, "") : original;
                 return {
                   ...item,
                   text,
@@ -593,14 +598,13 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
     if (extension.name === "link")
       return extension.configure({ isAllowedUri: safeDestination }).extend({
         parseMarkdown(token: MarkdownToken, helpers: MarkdownParseHelpers) {
-          return helpers.applyMark(
-            "link",
-            helpers.parseInline(token.tokens as NonNullable<typeof token.tokens>),
-            {
-              href: token.href,
-              title: token.title || null,
-            },
-          );
+          const mark = { type: "link", attrs: { href: token.href, title: token.title || null } };
+          return helpers
+            .parseInline(token.tokens as NonNullable<typeof token.tokens>)
+            .map((node) => ({
+              ...node,
+              marks: [...(node.marks ?? []), mark],
+            }));
         },
       });
     if (extension.name === "code")
@@ -677,6 +681,7 @@ function parseHtml(token: MarkdownToken): JSONContent[] {
     if (src && /^https?:/.test(src)) image.setAttribute("src", src);
     else reportSkipped(mappingSkipped, "Unsafe images");
   }
+  normaliseHtmlTableSpans(dom.body, () => reportSkipped(mappingSkipped, "Invalid table spans"));
   const rules = SchemaDOMParser.fromSchema(schema).rules;
   const parser = new SchemaDOMParser(
     schema,
@@ -943,19 +948,57 @@ markdown.instance.use({
       tokenizer.lexer = new markdown.instance.Lexer({ gfm: true, tokenizer });
       tokenizer.rules = {
         ...tokenizer.rules,
-        other: { ...tokenizer.rules.other, blockquoteSetextReplace2: quotePrefix },
+        other: {
+          ...tokenizer.rules.other,
+          blockquoteSetextReplace2: quotePrefix,
+          listIsTask: taskMarker,
+          listReplaceTask: taskMarker,
+        },
       };
       // The code tokenizer already handled indentation of four or more columns.
       // A new unquoted list cannot be a lazy continuation. Marked's list
       // re-entry otherwise absorbs it after a lazy line. Its list grammar
       // covers every bullet/ordered marker and indentation at every depth.
-      const lines = containerBoundaries(source).split("\n");
-      const interruption = lines.findIndex(
-        (line, index) => index > 0 && tokenizer.rules.block.list.test(line),
-      );
-      const token = tokenizer.blockquote(
-        lines.slice(0, interruption < 0 ? undefined : interruption).join("\n"),
-      ) as NonNullable<ReturnType<typeof tokenizer.blockquote>>;
+      const boundaries = containerBoundaries(source);
+      const candidate = tokenizer.blockquote(boundaries) as NonNullable<
+        ReturnType<typeof tokenizer.blockquote>
+      >;
+      // Examine only this quote's candidate lines, not every later quote in the document.
+      const lines = boundaries
+        .split("\n")
+        .slice(0, candidate.raw.replace(/\n+$/, "").split("\n").length);
+      const openParagraph = (tokens: MarkdownToken[]): boolean => {
+        const last = tokens.at(-1);
+        if (!last) return false;
+        if (last.type === "paragraph" || last.type === "text") return true;
+        if (last.type === "blockquote") return openParagraph(last.tokens as MarkdownToken[]);
+        if (last.type === "list") {
+          const item = (last.items as MarkdownToken[]).at(-1) as MarkdownToken;
+          // Marked strips a task checkbox after block tokenization. Re-lex the
+          // remaining source, matching the real task-item parser above.
+          return openParagraph(
+            item.task
+              ? tokenizer.lexer.blockTokens(item.text as string)
+              : (item.tokens as MarkdownToken[]),
+          );
+        }
+        return false;
+      };
+      const interruption = lines.findIndex((line, index) => {
+        if (index === 0 || /^ {0,3}>/.test(line)) return false;
+        if (tokenizer.rules.block.list.test(line)) return true;
+        if (!/^ {0,3}>/.test(lines[index - 1] as string)) return false;
+        const prefix = tokenizer.blockquote(lines.slice(0, index).join("\n")) as NonNullable<
+          ReturnType<typeof tokenizer.blockquote>
+        >;
+        return /^ {0,3}>[ \t]*$/.test(lines[index - 1] as string) || !openParagraph(prefix.tokens);
+      });
+      const token =
+        interruption < 0
+          ? candidate
+          : (tokenizer.blockquote(lines.slice(0, interruption).join("\n")) as NonNullable<
+              ReturnType<typeof tokenizer.blockquote>
+            >);
       // The boundary lexer may append LF when re-entering a quoted list.
       // A terminal LF is not an additional source line to attribute to it.
       const count = token.raw.replace(/\n+$/, "").split("\n").length;
@@ -1080,6 +1123,8 @@ function clean(
   return result;
 }
 function textContent(node: JSONContent): string {
+  // Images are text-bearing leaves in descriptions, including nested images.
+  if (node.type === "image") return String(node.attrs?.alt ?? "");
   return node.text ?? (node.content ?? []).map(textContent).join(" ");
 }
 

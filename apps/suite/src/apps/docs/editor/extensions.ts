@@ -4,16 +4,17 @@ import Highlight from "@tiptap/extension-highlight";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
-import { TableKit } from "@tiptap/extension-table";
+import { TableCell, TableHeader, TableKit } from "@tiptap/extension-table";
 import TextAlign from "@tiptap/extension-text-align";
 import { CharacterCount, Placeholder } from "@tiptap/extensions";
 import { Plugin } from "@tiptap/pm/state";
-import { Extension } from "@tiptap/react";
+import { type Attribute, Extension } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import type { Doc } from "yjs";
 import { codeWhitespaceTextblocks, compatibleCodeExtensions } from "../lib/editor/code-mark";
 import { normaliseDestination } from "../lib/editor/destination";
 import { validLink } from "../lib/editor/logic";
+import { normaliseTableSpan } from "../lib/editor/table-spans";
 import { FindDecorations } from "./find-plugin";
 import { privateImage } from "./private-image";
 
@@ -74,6 +75,24 @@ const EditorKeys = Extension.create({
     };
   },
 });
+const boundedTableSpans = {
+  addAttributes(this: { parent: (() => Record<string, Attribute>) | undefined }) {
+    const attrs = this.parent?.() ?? {};
+    return {
+      ...attrs,
+      ...Object.fromEntries(
+        ["colspan", "rowspan"].map((key) => [
+          key,
+          {
+            ...attrs[key],
+            parseHTML: (element: HTMLElement) => normaliseTableSpan(element.getAttribute(key)) ?? 1,
+          },
+        ]),
+      ),
+    };
+  },
+};
+
 export function baseExtensions(fetchImpl: typeof fetch) {
   return [
     StarterKit.configure({
@@ -89,7 +108,13 @@ export function baseExtensions(fetchImpl: typeof fetch) {
     }),
     ...compatibleCodeExtensions,
     ...codeWhitespaceTextblocks,
-    TableKit.configure({ table: { resizable: true, cellMinWidth: 32 } }),
+    TableKit.configure({
+      table: { resizable: true, cellMinWidth: 32 },
+      tableCell: false,
+      tableHeader: false,
+    }),
+    TableCell.extend(boundedTableSpans),
+    TableHeader.extend(boundedTableSpans),
     TaskList,
     TaskItem.configure({
       nested: true,

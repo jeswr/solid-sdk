@@ -140,3 +140,45 @@ it("round33 shortcut-opened help restores editor focus after Close", async () =>
     await view.close();
   }
 });
+
+it.each([
+  "ctrlKey",
+  "metaKey",
+])("round34 %s+F refocuses the open Find field without clearing its query", async (modifier) => {
+  const view = await mountEditor();
+  const shortcut = () =>
+    view.body.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        key: "f",
+        [modifier]: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  try {
+    await act(async () => {
+      shortcut();
+    });
+    const input = view.host.querySelector<HTMLInputElement>(
+      ".docs-find-bar input",
+    ) as HTMLInputElement;
+    expect(document.activeElement).toBe(input);
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        input,
+        "kept query",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      view.body.focus();
+    });
+    expect(document.activeElement).toBe(view.body);
+    await act(async () => {
+      shortcut();
+    });
+    expect(document.activeElement).toBe(input);
+    expect(input.value).toBe("kept query");
+    expect(view.body.textContent).toBe("");
+  } finally {
+    await view.close();
+  }
+});

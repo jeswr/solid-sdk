@@ -3,17 +3,19 @@
 import { Button, IconButton, Input, toast } from "@jeswr/suite-ui";
 import type { Editor } from "@tiptap/react";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
-import { useEffect, useId, useState } from "react";
+import { type Ref, useEffect, useId, useState } from "react";
 import { findKey } from "../editor/find-plugin";
 import { findText, replaceAll, replaceOne } from "../lib/find";
 export function FindBar({
   editor,
   revision,
   close,
+  inputRef,
 }: {
   editor: Editor;
   revision: number;
   close: () => void;
+  inputRef?: Ref<HTMLInputElement>;
 }) {
   const [query, setQuery] = useState("");
   const [replacement, setReplacement] = useState("");
@@ -80,6 +82,7 @@ export function FindBar({
     >
       <label htmlFor={`${id}-find`}>Find</label>
       <Input
+        ref={inputRef}
         id={`${id}-find`}
         autoFocus
         value={query}

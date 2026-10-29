@@ -3,11 +3,16 @@
 import { Button, Input, Popover, PopoverAnchor, toast } from "@jeswr/suite-ui";
 import type { Editor } from "@tiptap/react";
 import { useId, useState } from "react";
+import { normaliseImageLink } from "../editor/image-link";
 import { normaliseDestination } from "../lib/editor/destination";
 import { wordCount } from "../lib/editor/logic";
 import { EditorPopoverContent } from "./editor-popover-content";
 export function LinkPopover({ editor, close }: { editor: Editor; close: () => void }) {
-  const [url, setUrl] = useState(String(editor.getAttributes("link").href ?? ""));
+  const image = editor.isActive("image");
+  const imageLink = image ? editor.getAttributes("image").link : null;
+  const [url, setUrl] = useState(
+    String(imageLink?.href ?? editor.getAttributes("link").href ?? ""),
+  );
   const [text, setText] = useState("");
   const [error, setError] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -29,7 +34,13 @@ export function LinkPopover({ editor, close }: { editor: Editor; close: () => vo
               setError(true);
               return;
             }
-            if (empty && text)
+            if (image)
+              editor
+                .chain()
+                .focus()
+                .updateAttributes("image", { link: normaliseImageLink({ ...imageLink, href }) })
+                .run();
+            else if (empty && text)
               editor
                 .chain()
                 .focus()
@@ -92,11 +103,12 @@ export function LinkPopover({ editor, close }: { editor: Editor; close: () => vo
               </Button>
             </div>
           )}
-          {editor.isActive("link") && (
+          {(imageLink || editor.isActive("link")) && (
             <Button
               variant="ghost"
               onClick={() => {
-                editor.chain().focus().unsetLink().run();
+                if (image) editor.chain().focus().updateAttributes("image", { link: null }).run();
+                else editor.chain().focus().unsetLink().run();
                 close();
               }}
             >

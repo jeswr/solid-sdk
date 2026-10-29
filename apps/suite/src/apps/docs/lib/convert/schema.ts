@@ -3,7 +3,9 @@
 import { Mark } from "@tiptap/pm/model";
 import { generateJSON, getSchema, type JSONContent } from "@tiptap/react";
 import { baseExtensions } from "../../editor/extensions";
+import { normaliseImageLink } from "../../editor/image-link";
 import { normaliseDestination } from "../editor/destination";
+import { normaliseHtmlTableSpans, normaliseTableSpan } from "../editor/table-spans";
 import { sanitiseImport } from "./sanitise";
 import { reportSkipped, type SkippedItem } from "./skipped";
 
@@ -27,6 +29,10 @@ export function normaliseDestinations(node: JSONContent, skipped: SkippedItem[])
       return { type: "paragraph" };
     }
     result.attrs = { ...node.attrs, src };
+    if (node.attrs?.link != null) {
+      result.attrs.link = normaliseImageLink(node.attrs.link);
+      if (!result.attrs.link) reportSkipped(skipped, "Unsafe URLs");
+    }
   }
   if (node.content)
     result.content = node.content.map((child) => normaliseDestinations(child, skipped));
@@ -42,14 +48,17 @@ export function normaliseImport(json: JSONContent, skipped: SkippedItem[] = []) 
       return [];
     }
     const attrs = { ...node.attrs };
+    if (node.type === "image") {
+      const link = node.marks?.find((mark) => mark.type === "link");
+      if (link) attrs.link = normaliseImageLink(link.attrs);
+    }
     if (node.type === "tableCell" || node.type === "tableHeader") {
       // ProseMirror's schema checks content, but not numeric attributes. Both
       // row/column spans reach renderers that allocate/iterate by their value.
       for (const key of ["colspan", "rowspan"]) {
         if (!(key in attrs)) continue;
-        const value: unknown = attrs[key];
-        const span = typeof value === "number" || typeof value === "string" ? Number(value) : NaN;
-        if (Number.isInteger(span) && span >= 1 && span <= 1000) attrs[key] = span;
+        const span = normaliseTableSpan(attrs[key]);
+        if (span !== null) attrs[key] = span;
         else {
           attrs[key] = 1;
           reportSkipped(skipped, "Invalid table spans");
@@ -88,9 +97,8 @@ export function normaliseImport(json: JSONContent, skipped: SkippedItem[] = []) 
     try {
       // JSON marks are an unordered multiset from importers. Canonicalize with
       // the schema's rank/exclusion rules before check() can reject the text.
-      // Inline wrappers can also surround lifted images/rules. Suite block
-      // containers accept no marks, so remove those at this common boundary
-      // before a marked block can invalidate its parent and the whole document.
+      // Lifted block wrappers cannot carry marks. Image links have a dedicated
+      // attribute so link parsing cannot accidentally mark a whole paragraph.
       if (mapped.marks)
         mapped.marks = type.isInline
           ? mapped.marks
@@ -121,6 +129,7 @@ export function importHtml(source: string, skipped: SkippedItem[] = []) {
   // All six HTML heading levels have the same meaning as Markdown/DOCX levels.
   const html = sanitiseImport(source, skipped);
   const dom = new window.DOMParser().parseFromString(html, "text/html");
+  normaliseHtmlTableSpans(dom.body, () => reportSkipped(skipped, "Invalid table spans"));
   for (const paragraph of dom.body.querySelectorAll("p")) {
     if (paragraph.querySelector("img") && !paragraph.textContent?.trim())
       paragraph.replaceWith(...paragraph.childNodes);
