@@ -411,3 +411,70 @@ No requested finding remains unfinished and there are no new open questions. The
 gate failures above remain outside scope. `roborev` is unavailable, so automated per-commit
 review could not run; the supplied findings were reproduced and checked locally. No
 remote was fetched or merged, and nothing was pushed or published.
+
+## Fix round 5 — SPARQ operand datatypes at `7d88f1029817`
+
+2026-10-29. The requested datatype finding is fixed on `lane/sst-gpa`:
+
+- `8827321d` — `fix(agent-mandate): preserve sparq operand datatypes`.
+  Apply a SPARQ-only RDF lowering through typed wrapper accessors: declared constraint
+  datatypes become actual operand literal datatypes, and an undeclared `dateTime`
+  operand becomes `xsd:dateTime`. Every operand in a set is lowered. Preserve lexical
+  values, existing inferred numeric types, undeclared IRIs, and the input policy.
+  Regression tests cover permissions and prohibitions, inferred/explicit temporal
+  bounds, date overrides, temporal sets, declared integer/decimal/double/float/string
+  operands, and malformed datatype declarations refusing before process invocation.
+- Final report commit — `docs(agent-mandate): record fifth fix round validation`.
+
+Validation uses Node v24.22.1 (`PATH=/opt/node24/bin:$PATH`):
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/agent-mandate... --concurrency=4
+pnpm exec vitest run --root packages/agent-mandate test/sparq.test.ts --coverage.enabled=false
+pnpm --filter @jeswr/agent-mandate run lint && pnpm --filter @jeswr/agent-mandate run build && pnpm --filter @jeswr/agent-mandate run typecheck && pnpm --filter @jeswr/agent-mandate run test
+TURBO_SCM_BASE=7d88f1029817244b04b5ed2b43b1e92b10491854 pnpm run gate
+pnpm run gate:full
+```
+
+- Prerequisite builds — PASS, 7/7 tasks.
+- Regression check — nine new datatype cases failed before the fix; all 52 adapter
+  tests then passed. The final package run also includes the new malformed-datatype
+  regression (53 adapter tests).
+- Package gate — PASS, 312 tests in 8 files. Per-file coverage remains 100%:
+  statements 416/416, branches 487/487, functions 114/114 and lines 373/373.
+  The existing non-fatal agent-authz-verifier sourcemap warning remains.
+- Affected repository gate — PASS, 11/11 tasks in 8.6 seconds. Its
+  `pnpm run lint:root` and every workspace/layer guard pass. The comparison base is
+  the supplied pre-fix head.
+- Full workspace gate — FAIL outside this fix round, 261 successful tasks of 329
+  reported in 2m29s. All 686 root tests pass. Two unchanged federation-codegen
+  tests fail: the bookmark target-class expectation still uses the old `w3id.org`
+  namespace, and committed generated ontology output differs from current
+  `jeswr.org/ns` source vocabulary. No codegen source, test, generated output or
+  vocabulary file differs from the supplied pre-fix head.
+- Isolated full-gate failure recheck — the same two failures reproduce without
+  workspace concurrency (23 passes, 2 failures):
+
+  ```sh
+  pnpm --filter @jeswr/federation-codegen run test
+  ```
+
+- Backend operand classification — PASS using the installed SPARQ 0.1.5 WASM
+  Turtle parser on 22 emitted policy graphs, followed by the unchanged
+  `literal_value`, `is_datetime`, and `is_numeric` functions from the local SPARQ
+  parser (`/home/user/sparq`, head `b926c5f`), compiled with `rustc` and minimal
+  literal accessors. All 33 classifier assertions pass, including the original
+  untyped temporal bound as a negative control. The temporary verification files
+  are ignored under `artifacts/sst-gpa-parser`; no dependency was installed.
+  This validates RDF parsing and operand classification; the complete native
+  `sparq-policy-decide` process remains unavailable and was not executed.
+- `git diff --check` — PASS.
+
+No dependencies were added, so no new `check:packages` run was needed. Conservative
+scope: datatype conversion is confined to the optional SPARQ adapter; the signed
+mandate codec and other policy-engine behavior are unchanged.
+
+No requested code change remains unfinished and there are no new open questions.
+The unrelated full-workspace gate failures remain outside scope. `roborev` is
+unavailable, so automated per-commit review could not run. No remote was fetched or
+merged, and nothing was pushed or published.
