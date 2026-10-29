@@ -686,3 +686,65 @@ Neither `roborev` nor `sparq-policy-decide` is available on PATH, so automated p
 review and native backend execution could not run. Tests use synthetic data and injected
 process results. No live provider, pod or external model service was called; no remote
 was fetched or merged, and nothing was pushed or published.
+
+## Fix round 9 — credential timestamps, timezone bounds and SPARQ budgets at `d0b144e0d93e`
+
+2026-10-29. All three requested findings are fixed on `lane/sst-gpa`:
+
+- `ca74bede` — `fix(agent-mandate): validate direct credential timestamps`.
+  Run the same `solid-vc` structural credential validator used by Turtle parsing before
+  comparing validity windows. Signed date-only, space-separated, truncated, lowercase
+  and slash-separated timestamps fail on both loading paths. Accepted structural
+  date-times retain the parser's existing timezone and fractional-second behavior.
+- `624ef496` — `fix(agent-mandate): enforce temporal timezone bounds`.
+  The shared temporal operand validator accepts offsets only through ±14:00, with
+  minutes in 00–59 and no nonzero minutes at hour 14. Invalid left or right operands
+  require confirmation in rules, duties and obligations; SPARQ rejects them before
+  process invocation. Tests retain valid ±13:59 and ±14:00 boundaries.
+- `6306f854` — `fix(agent-mandate): bound complete SPARQ evaluations`.
+  Use one monotonic deadline for preparation, subprocesses and response validation.
+  Each subprocess receives the remaining time. Late responses and process/protocol
+  failures stop evaluation with an indeterminate result. Conservatively cap each
+  evaluation at 32 projections, including the initial projection and projections
+  rejected for conflicting context types. Successful unmatched prohibitions can
+  still lead to a later definite prohibition. Also type the temporal regression tables
+  explicitly for strict TypeScript checking.
+- Final report commit — `docs(agent-mandate): record ninth fix round validation`.
+
+All final checks use Node v24.22.1 (`PATH=/opt/node24/bin:$PATH`):
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/agent-mandate... --concurrency=4
+pnpm exec vitest run --root packages/agent-mandate test/mandate.test.ts --coverage.enabled=false
+pnpm exec vitest run --root packages/agent-mandate test/policy.test.ts test/sparq.test.ts --coverage.enabled=false
+pnpm --filter @jeswr/agent-mandate run lint && pnpm --filter @jeswr/agent-mandate run build && pnpm --filter @jeswr/agent-mandate run typecheck && pnpm --filter @jeswr/agent-mandate run test
+TURBO_SCM_BASE=d0b144e0d93e6a69c256775d6f022975701b9c0a pnpm run gate
+pnpm run gate:full
+```
+
+- Prerequisite builds — PASS, 7/7 tasks. An initial test invocation before the builds
+  finished could not resolve an unbuilt dependency; verification ran after building.
+- Regression reproduction — 24 timezone cases and 16 SPARQ budget/failure cases
+  failed before their fixes. All final regressions pass. The clock tests are
+  deterministic and introduce no sleeps.
+- Package gate — PASS, 579 tests in eight files, adding 64 tests relative to the
+  supplied head. Every required per-file coverage metric remains 100%:
+  statements 481/481, branches 555/555, functions 125/125 and lines 430/430.
+  No coverage threshold, exclusion or configured timeout changed. The existing
+  non-fatal agent-authz-verifier sourcemap warning remains.
+- Affected repository gate — PASS, 11/11 tasks in 10.3 seconds, including
+  `pnpm run lint:root` and every workspace/layer guard. The comparison base is
+  the supplied pre-fix head.
+- Full workspace gate — FAIL outside this fix round, 51 successful tasks of 211
+  reported in 32 seconds. `@jeswr/app-suite#build` fails in Next.js's `next/font`
+  Google font loader with `TypeError: Cannot read properties of null (reading '1')`.
+  The app, root manifests and lockfile have no diff from the supplied head.
+- `git diff --check` — PASS.
+
+No dependencies were added, so no `check:packages` run was needed. Changes are confined
+to the reviewed package and this required report. No requested finding remains unfinished
+and there are no open questions. The unrelated full-workspace build failure remains
+outside scope. Neither `roborev` nor `sparq-policy-decide` is available on PATH, so
+automated per-commit review and native backend execution could not run. Package tests
+use synthetic data, generated keys and injected I/O. No remote was fetched or merged,
+and nothing was pushed or published.
