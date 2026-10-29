@@ -237,6 +237,7 @@ export async function executeMigration(
         url,
         state.source.publicHttp,
         opts.signal,
+        true,
       );
       const actual = [...new Group(group, dataset, DataFactory).hasMember];
       if (JSON.stringify(actual.sort()) !== JSON.stringify([...expected].sort()))

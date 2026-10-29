@@ -82,6 +82,8 @@ DESIGN.md as follows. These notes are colocated with the engine and reflected in
 - Target inventory includes existing siblings and the profile even when review skips them. Shared
   access URLs and foreign resource bindings are refused before ACL PUTs, including newly created
   placeholders. Final verification proves the owner retains root access including Control.
+  Inventory listings require fail-closed completeness evidence: a truncated listing must never
+  hide a sibling sharing the destination's access document. Both planning and execution enforce this.
   Root read/parse refusals preserve their underlying diagnostic; they do not claim Control loss.
 - A WAC 404 means that an own ACL is absent, so the nearest ancestor's defaults apply. ACP 404s
   contribute no own controls. A 403, parsing failure, or failed request makes the policy unknown;
@@ -124,9 +126,17 @@ DESIGN.md as follows. These notes are colocated with the engine and reflected in
   warns: graphs cannot prove preservation of duplicate triples or other lexical bytes. Explicit
   rewriting may use that semantic proof without warning. Length-free non-ASCII RDF data also
   requests a conversion: disagreement refuses before writes; unavailable or echoed conversions
-  leave the received bytes accepted without warning. Unicode ACLs/ACRs require an agreeing
-  length-free conversion even when the first response lacks Content-Length. A short CORS body
-  with hidden Content-Encoding is treated as length-free because compression can expand it;
+  leave the received bytes accepted without warning, including source container listings.
+  Every security-relevant network read (ACLs/ACRs and access-system discovery, anonymous group
+  snapshots and rechecks, WebID storage discovery, and target inventories) requires an agreeing
+  independent conversion for Unicode RDF even when the first response lacks Content-Length.
+  Prefer JSON-LD: strict UTF-8, full JSON syntax and RDF parsing with remote contexts refused
+  make it self-framing, with or without Content-Length. Unavailable, echoed or unparseable
+  JSON-LD falls back once to length-free N-Quads (TriG for N-Quads originals). A valid but
+  disagreeing graph always refuses without fallback. JSON-LD success needs only one extra GET,
+  supporting Turtle/JSON-LD servers without N-Quads; the fallback bounds this to two.
+  Local generated policies and serializations of already validated graphs use `parseRdf` directly.
+  A short CORS body with hidden Content-Encoding is treated as length-free because compression can expand it;
   basic/default responses with reliable lengths still reject short bodies. Target verification
   requires exact equality with the retained upload bytes and needs no conversion. These checks trust
   the source server's account of its own data; a server lying in both representations is outside

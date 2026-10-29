@@ -63,11 +63,11 @@ export function serialize(dataset: DatasetCore): Promise<string> {
 export async function parse(
   response: Response,
   url: string,
-  http?: PodHttp,
+  http?: Pick<PodHttp, "get">,
   signal?: AbortSignal,
-  accessDocument = false,
+  securityRelevant = false,
 ): Promise<Awaited<ReturnType<typeof parseRdf>>> {
-  return (await readBody(response, url, { http, signal, semantic: true, accessDocument }))
+  return (await readBody(response, url, { http, signal, semantic: true, securityRelevant }))
     .dataset as Awaited<ReturnType<typeof parseRdf>>;
 }
 export function requireRepresentation(response: Response): Response {

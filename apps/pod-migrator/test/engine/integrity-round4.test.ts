@@ -103,12 +103,12 @@ it.each([
   expect(await readResourceBytes(rdf(body), url, options)).toEqual(new TextEncoder().encode(body));
   expect(onGraphProofOnly).not.toHaveBeenCalled();
   await expect(
-    readResourceBytes(rdf(body), url, { ...options, accessDocument: true }),
+    readResourceBytes(rdf(body), url, { ...options, securityRelevant: true }),
   ).rejects.toMatchObject({
     resourceUrl: url,
     message: expect.stringContaining("completeness cannot be established"),
   });
-  expect(get).toHaveBeenCalledTimes(2);
+  expect(get).toHaveBeenCalledTimes(4);
 });
 
 it.each([
@@ -136,7 +136,7 @@ it.each([
       onGraphProofOnly,
     }),
   ).toEqual(new TextEncoder().encode(body));
-  expect(get).toHaveBeenCalledTimes(kind === "unicode-turtle" ? 1 : 0);
+  expect(get).toHaveBeenCalledTimes(kind === "unicode-turtle" ? 2 : 0);
   expect(onGraphProofOnly).not.toHaveBeenCalled();
 });
 

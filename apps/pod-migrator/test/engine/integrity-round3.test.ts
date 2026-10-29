@@ -123,7 +123,7 @@ it.each([
       message: expect.stringContaining("completeness cannot be established"),
     });
   }
-  expect(get).toHaveBeenCalledTimes(2);
+  expect(get).toHaveBeenCalledTimes(3);
   expect(get).toHaveBeenLastCalledWith(url, { accept: "application/n-quads", signal: undefined });
 });
 

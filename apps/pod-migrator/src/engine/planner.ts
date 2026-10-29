@@ -291,6 +291,7 @@ async function buildPlan(opts: {
             documentUrl,
             source.publicHttp,
             opts.signal,
+            true,
           );
           groups.set(subject.group, [...new Group(subject.group, dataset, DataFactory).hasMember]);
         } catch {

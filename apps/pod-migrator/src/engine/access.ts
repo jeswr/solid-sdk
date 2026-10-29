@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory } from "n3";
 import { assertNotWider, ownerPolicy, policiesEqual, scopePolicy } from "./policy.js";
 import { ACL, ACP, aclLink, links, parse, RDF, requireOk, serialize } from "./rdf.js";
@@ -131,15 +132,10 @@ export async function writeAccess(
     system === "wac"
       ? await writeWac(policy, resource, url, prefix)
       : await writeAcp(policy, resource, url, dialect, prefix);
-  const dataset = await parse(
-    new Response(turtle, { headers: { "content-type": "text/turtle" } }),
-    url,
-  );
+  // These complete strings are locally emitted or serialized from a validated network graph.
+  const dataset = await parseRdf(turtle, "text/turtle", { baseIRI: url });
   if (mergeDocument) {
-    const original = await parse(
-      new Response(mergeDocument.turtle, { headers: { "content-type": "text/turtle" } }),
-      url,
-    );
+    const original = await parseRdf(mergeDocument.turtle, "text/turtle", { baseIRI: url });
     for (const quad of original) dataset.add(quad);
     turtle = await serialize(dataset);
   }

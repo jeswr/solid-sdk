@@ -166,7 +166,7 @@ it.each([
       { http: { get } as never },
     ),
   ).rejects.toThrow("completeness cannot be established");
-  expect(get).toHaveBeenCalledTimes(1);
+  expect(get).toHaveBeenCalledTimes(2);
 });
 
 it.each([
@@ -177,8 +177,8 @@ it.each([
   const converted = `<${graph}> { _:new <urn:p> "é". }\n`;
   const get = vi
     .fn()
-    .mockResolvedValue(
-      new Response(converted, { headers: { "content-type": "application/trig" } }),
+    .mockImplementation(
+      () => new Response(converted, { headers: { "content-type": "application/trig" } }),
     );
   const bytes = new TextEncoder().encode(original);
   const reading = readResourceBytes(
@@ -190,5 +190,6 @@ it.each([
   );
   if (graph === "urn:g") expect(await reading).toEqual(bytes);
   else await expect(reading).rejects.toThrow("graph mismatch");
+  expect(get).toHaveBeenCalledTimes(2);
   expect(get).toHaveBeenCalledWith(url, { accept: "application/trig", signal: undefined });
 });

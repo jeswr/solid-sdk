@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, isWithinPodScope } from "@jeswr/guarded-fetch";
 import { Container } from "@solid/object";
 import { DataFactory } from "n3";
@@ -31,6 +32,7 @@ export async function targetAccessLinks(
       url,
       side.http,
       signal,
+      true,
     );
     for (const member of new Container(url, dataset, DataFactory).contains) {
       const child = assertWithinPodScope(side.root, member.id);
@@ -53,10 +55,8 @@ export async function assertSpecificAccess(
     if ((other !== resource && otherAcl === acl) || other === acl)
       throw new TypeError("Target access document is shared with another resource");
   if (!document) return;
-  const dataset = await parse(
-    new Response(document.turtle, { headers: { "content-type": "text/turtle" } }),
-    acl,
-  );
+  // readAccess already proved the network graph; this is its complete local serialization.
+  const dataset = await parseRdf(document.turtle, "text/turtle", { baseIRI: acl });
   for (const predicate of [
     `${ACL}accessTo`,
     `${ACL}default`,

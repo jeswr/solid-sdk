@@ -14,10 +14,11 @@ export class ResourceReadError extends TypeError {
   }
 }
 interface ReadOptions {
-  http?: PodHttp;
+  http?: Pick<PodHttp, "get">;
   signal?: AbortSignal;
   semantic?: boolean;
-  accessDocument?: boolean;
+  /** Network data used to decide access: unavailable completeness evidence refuses the read. */
+  securityRelevant?: boolean;
   /** Retained upload bytes: exact equality establishes target completeness. */
   expected?: Uint8Array;
   /** False only for explicit RDF rewriting. */
@@ -27,6 +28,28 @@ interface ReadOptions {
    * the reason; without it such a read is refused.
    */
   onGraphProofOnly?: (reason: string) => void;
+}
+
+/** JSON-LD frames itself; other conversions must omit the possibly character-counted length. */
+async function independentGraph(
+  http: Pick<PodHttp, "get">,
+  url: string,
+  accept: string,
+  signal?: AbortSignal,
+): Promise<Awaited<ReturnType<typeof parseRdf>>> {
+  const response = await http.get(url, { accept, signal });
+  if (
+    extractMediaType(response.headers.get("content-type")) !== accept ||
+    (accept !== "application/ld+json" && response.headers.has("content-length"))
+  ) {
+    await response.body?.cancel();
+    throw new Error("Server did not supply an independently framed serialization");
+  }
+  // Strict UTF-8, full JSON syntax and the default refusing context loader are shared
+  // with original reads. No transport is passed, so conversion cannot negotiate again.
+  return (await readBody(response, url, { semantic: true })).dataset as Awaited<
+    ReturnType<typeof parseRdf>
+  >;
 }
 
 /** All network RDF readers share byte validation, strict decoding and completeness proof. */
@@ -89,37 +112,31 @@ export async function readBody(response: Response, url: string, options: ReadOpt
     }
     // With ambiguous framing, a non-ASCII string's character count can masquerade
     // as a byte count even when the prefix is valid RDF. Length-free data also
-    // checks any available conversion; access documents require that evidence.
+    // checks any available conversion; security decisions require that evidence.
     // A complete JSON document already establishes its syntactic boundary.
     if (
       type !== "application/ld+json" &&
       !expected &&
-      (options.accessDocument ||
+      (options.securityRelevant ||
         length === null ||
         (identity && bytes.byteLength === Number(length))) &&
       bytes.some((b) => b > 127)
     ) {
-      let failClosed = options.accessDocument || length !== null;
+      let failClosed = options.securityRelevant || length !== null;
       try {
         if (!options.http) throw new Error("No independent representation transport");
-        const accept = type === "application/n-quads" ? "application/trig" : "application/n-quads";
-        const independent = await options.http.get(url, { accept, signal: options.signal });
-        if (
-          extractMediaType(independent.headers.get("content-type")) !== accept ||
-          independent.headers.has("content-length")
-        ) {
-          await independent.body?.cancel();
-          throw new Error("Server did not supply an independently framed serialization");
+        let other: Awaited<ReturnType<typeof parseRdf>>;
+        try {
+          other = await independentGraph(options.http, url, "application/ld+json", options.signal);
+        } catch {
+          const accept =
+            type === "application/n-quads" ? "application/trig" : "application/n-quads";
+          other = await independentGraph(options.http, url, accept, options.signal);
         }
-        const other = await readBody(independent, url, { semantic: true });
         // A valid conversion makes graph disagreement evidence of missing data.
+        // Compare outside the JSON-LD fallback: disagreement must never try another graph.
         failClosed = true;
-        if (
-          !isomorphic(
-            dataset as NonNullable<typeof dataset>,
-            other.dataset as NonNullable<typeof dataset>,
-          )
-        )
+        if (!isomorphic(dataset as NonNullable<typeof dataset>, other))
           throw new Error("Independent RDF graphs differ");
         graphProofOnly = true;
       } catch (cause) {

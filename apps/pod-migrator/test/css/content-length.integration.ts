@@ -69,8 +69,8 @@ it("uses real CSS conversion evidence for Unicode access reads even without an i
         ...account.side.http,
         get: async (resource: string, init?: { accept?: string; signal?: AbortSignal }) => {
           const response = await account.side.http.get(resource, init);
-          if (resource === document && init?.accept === "application/n-quads") {
-            expect(response.headers.get("content-type")).toContain("application/n-quads");
+          if (resource === document && init?.accept === "application/ld+json") {
+            expect(response.headers.get("content-type")).toContain("application/ld+json");
             lengths.push(response.headers.get("content-length"));
           }
           if (resource === document && init?.accept === "text/turtle") {
