@@ -789,6 +789,47 @@ describe("skill validation", () => {
     ]);
   });
 
+  it.each([
+    '<plaintext><a href="missing.md">literal</a>',
+    '<plaintext><img src="missing.png">',
+    '<PLAINTEXT><image srcset="missing.png 2x">',
+    '<plaintext/><a href="missing.md">literal</a>',
+    '<plaintext></plaintext><a href="missing.md">still literal</a>',
+    '<plaintext></PLAINTEXT><img srcset="missing.png 2x">',
+    'Example: <plaintext><a href="missing.md">literal</a>\n\n[link](missing.md)',
+    "<plaintext>\n\n![image](missing.png)\n\n[unused]: missing.md",
+    '<div><plaintext href="missing.md" src="missing.png"></div><a href="missing.md">literal</a>',
+    '<svg><foreignObject><plaintext><a href="missing.md">literal</a></foreignObject></svg>',
+    '<svg><title><plaintext><img src="missing.png"></title></svg>',
+    '<math><mtext><plaintext><a href="missing.md">literal</a></mtext></math>',
+    '<math><annotation-xml encoding="text/html"><plaintext><img src="missing.png"></annotation-xml></math>',
+  ])("consumes HTML plaintext through the end of the document: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+    expect(checkSkills(root).errors).toEqual([]);
+  });
+
+  it.each([
+    '<a href="missing.md">broken</a><plaintext><a href="ignored.md">literal</a>',
+    '<plaintext-extra><a href="missing.md">broken</a>',
+    '</plaintext><a href="missing.md">broken</a>',
+    '<!-- <plaintext> --><a href="missing.md">broken</a>',
+    '&lt;plaintext><a href="missing.md">broken</a>',
+    '`<plaintext>` <a href="missing.md">broken</a>',
+    '<textarea><plaintext></textarea><a href="missing.md">broken</a>',
+    '<svg><plaintext><a xlink:href="missing.md">broken</a></plaintext></svg>',
+    '<math><plaintext><a href="missing.md">broken</a></plaintext></math>',
+    '<svg><plaintext /></svg><a href="missing.md">broken</a>',
+  ])("checks active links outside HTML plaintext: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+  });
+
   it.each(textElements)("preserves HTML %s text state across inline Markdown tokens", (tag) => {
     const root = fixture();
     put(

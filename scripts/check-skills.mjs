@@ -409,7 +409,10 @@ function htmlLinksIn(html, definitions, definitionMarker) {
           )),
       mathText: namespace === "math" && /^(?:mi|mo|mn|ms|mtext)$/.test(tag),
     });
-    if (namespace === "html" && tag === "script") {
+    if (namespace === "html" && tag === "plaintext") {
+      // PLAINTEXT has no end tag: even apparent closing tags remain text.
+      tokens.lastIndex = html.length;
+    } else if (namespace === "html" && tag === "script") {
       tokens.lastIndex = scriptEndTagOffset(html, tokens.lastIndex);
     } else if (
       namespace === "html" &&
