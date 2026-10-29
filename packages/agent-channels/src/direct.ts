@@ -36,11 +36,12 @@ export function createDirectReader(mailbox: DirectMailbox, tokens: TokenProvider
       async list(account, cursor, limits) {
         const id = accountId(account);
         const accountRef = Object.freeze({ id });
+        const { maxItems, maxBytes } = limits;
         if (
-          !Number.isSafeInteger(limits.maxItems) ||
-          limits.maxItems <= 0 ||
-          !Number.isSafeInteger(limits.maxBytes) ||
-          limits.maxBytes <= 0
+          !Number.isSafeInteger(maxItems) ||
+          maxItems <= 0 ||
+          !Number.isSafeInteger(maxBytes) ||
+          maxBytes <= 0
         )
           throw new RangeError("list bounds must be positive safe integers");
         let offset = 0;
@@ -55,9 +56,9 @@ export function createDirectReader(mailbox: DirectMailbox, tokens: TokenProvider
         assertGrant(await tokens.read(accountRef), "read");
         const items = [];
         let bytes = 0;
-        for (const item of messages.slice(offset, offset + limits.maxItems)) {
+        for (const item of messages.slice(offset, offset + maxItems)) {
           const size = Buffer.byteLength(item.raw);
-          if (bytes + size > limits.maxBytes) {
+          if (bytes + size > maxBytes) {
             if (items.length === 0) throw new RangeError("next item exceeds byte bound");
             break;
           }

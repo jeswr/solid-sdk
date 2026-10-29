@@ -660,6 +660,84 @@ describe("direct loopback", () => {
     expect(authorized).toEqual(account);
   });
 
+  it.each([
+    { bound: "maxItems", replacement: Number.MAX_SAFE_INTEGER },
+    { bound: "maxBytes", replacement: Number.MAX_SAFE_INTEGER },
+    { bound: "maxItems", replacement: 0 },
+    { bound: "maxBytes", replacement: 0 },
+  ] as const)("snapshots list $bound before delayed credentials ($replacement)", async ({
+    bound,
+    replacement,
+  }) => {
+    const config = options();
+    const first = { id: "first", raw: "first fixture" };
+    const items = [first, { id: "second", raw: "second fixture" }];
+    const mailbox: DirectMailbox = {
+      inboxes: new Map([[account.id, items]]),
+      accepted: new Map(),
+    };
+    const started = deferred<void>();
+    const resume = deferred<void>();
+    const reader = createDirectReader(mailbox, {
+      read: async (ref) => {
+        started.resolve();
+        await resume.promise;
+        return config.tokens.read(ref);
+      },
+      send: config.tokens.send.bind(config.tokens),
+    });
+    const bounds =
+      bound === "maxItems"
+        ? { maxItems: 1, maxBytes: limits.maxBytes }
+        : { maxItems: limits.maxItems, maxBytes: Buffer.byteLength(first.raw) };
+    const pending = reader.ingest.list(account, undefined, bounds);
+    await started.promise;
+    bounds[bound] = replacement;
+    resume.resolve();
+    expect(await pending).toEqual({
+      items: [first],
+      next: JSON.stringify({ account: account.id, offset: 1 }),
+    });
+    expect(config.tokens.calls).toEqual([{ access: "read", account }]);
+  });
+
+  it("reads each caller-owned list bound once before validation", async () => {
+    const config = options();
+    const first = { id: "first", raw: "first fixture" };
+    const items = [first, { id: "second", raw: "second fixture" }];
+    const mailbox: DirectMailbox = {
+      inboxes: new Map([[account.id, items]]),
+      accepted: new Map(),
+    };
+    const maxItems = vi
+      .fn<() => number>()
+      .mockReturnValueOnce(1)
+      .mockReturnValue(Number.MAX_SAFE_INTEGER);
+    const maxBytes = vi
+      .fn<() => number>()
+      .mockReturnValueOnce(Buffer.byteLength(first.raw))
+      .mockReturnValue(Number.MAX_SAFE_INTEGER);
+    const bounds = {
+      get maxItems() {
+        return maxItems();
+      },
+      get maxBytes() {
+        return maxBytes();
+      },
+    };
+    const page = await createDirectReader(mailbox, config.tokens).ingest.list(
+      account,
+      undefined,
+      bounds,
+    );
+    expect(page).toEqual({
+      items: [first],
+      next: JSON.stringify({ account: account.id, offset: 1 }),
+    });
+    expect(maxItems).toHaveBeenCalledTimes(1);
+    expect(maxBytes).toHaveBeenCalledTimes(1);
+  });
+
   it("refuses wrong-scope, absent and empty grants before reading or delivering", async () => {
     for (const grant of [
       undefined,
