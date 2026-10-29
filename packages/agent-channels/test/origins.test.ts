@@ -9,8 +9,10 @@ import { createOriginScopedFetch } from "../src/origins.js";
 
 it("refuses an undeclared local origin before connecting, and permits listed loopback only in tests", async () => {
   let requests = 0;
-  const server = createServer((_req, res) => {
+  let cacheControl: string | undefined;
+  const server = createServer((req, res) => {
     requests++;
+    cacheControl = req.headers["cache-control"];
     res.end("local fixture");
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -26,8 +28,11 @@ it("refuses an undeclared local origin before connecting, and permits listed loo
     await expect(createOriginScopedFetch(new Set([origin]))(origin)).rejects.toThrow();
     expect(requests).toBe(0);
     const local = createOriginScopedFetch(new Set([origin]), { allowLoopback: true });
-    expect(await (await local(new URL(`${origin}/listed`))).text()).toBe("local fixture");
+    expect(await (await local(new URL(`${origin}/listed`), { cache: "no-store" })).text()).toBe(
+      "local fixture",
+    );
     expect(requests).toBe(1);
+    expect(cacheControl).toBe("no-cache");
   } finally {
     await new Promise<void>((resolve, reject) =>
       server.close((error) => (error ? reject(error) : resolve())),
@@ -94,6 +99,69 @@ it("enforces effective response integrity from Request inputs and init overrides
       server.close((error) => (error ? reject(error) : resolve())),
     );
   }
+});
+
+it.each([
+  "string",
+  "URL",
+  "Request",
+  "partial",
+  "override",
+  "clear",
+] as const)("preserves effective fetch policies for %s inputs", async (kind) => {
+  const origin = "https://allowed.example";
+  const policy: RequestInit = {
+    cache: "no-store",
+    mode: "same-origin",
+    keepalive: true,
+    referrer: "https://referrer.example/source",
+    referrerPolicy: "no-referrer",
+    integrity: "sha256-dGVzdA==",
+    credentials: "include",
+  };
+  const replacement: RequestInit =
+    kind === "clear"
+      ? {
+          cache: "default",
+          mode: "cors",
+          keepalive: false,
+          referrer: "",
+          referrerPolicy: "",
+          integrity: "",
+          credentials: "same-origin",
+        }
+      : {
+          cache: "reload",
+          mode: "no-cors",
+          keepalive: false,
+          referrer: "https://referrer.example/replacement",
+          referrerPolicy: "origin",
+          integrity: "sha256-b3ZlcnJpZGU=",
+          credentials: "omit",
+        };
+  const input =
+    kind === "string" ? origin : kind === "URL" ? new URL(origin) : new Request(origin, policy);
+  const init =
+    kind === "Request"
+      ? undefined
+      : kind === "partial"
+        ? { cache: policy.cache, referrer: undefined, referrerPolicy: undefined }
+        : kind === "override" || kind === "clear"
+          ? replacement
+          : policy;
+  const expected = kind === "override" || kind === "clear" ? replacement : policy;
+  const transport = vi.fn<typeof fetch>(async (target, effectiveInit) => {
+    const received = new Request(target, effectiveInit);
+    expect(received).toMatchObject(expected);
+    expect(received.redirect).toBe("manual");
+    return new Response("policy fixture");
+  });
+  const scoped = createOriginScopedFetch(new Set([origin]), {
+    transport,
+    dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }],
+  });
+  expect(await (await scoped(input, init)).text()).toBe("policy fixture");
+  expect(transport).toHaveBeenCalledTimes(1);
 });
 
 it("refuses same-origin and unlisted-origin redirects through the default transport", async () => {

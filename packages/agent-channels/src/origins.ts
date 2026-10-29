@@ -42,9 +42,24 @@ export function createOriginScopedFetch(
   });
   return async (input, init) => {
     // Snapshot mutable URL/Request inputs before any asynchronous work.
-    const request = new Request(input, init);
+    // Request construction resets inherited referrer settings unless supplied explicitly.
+    const inherited = input instanceof Request ? input : undefined;
+    const request = new Request(input, {
+      ...init,
+      referrer: init?.referrer ?? inherited?.referrer,
+      referrerPolicy: init?.referrerPolicy ?? inherited?.referrerPolicy,
+    });
     const url = new URL(request.url);
     if (!allowed.has(url.origin)) throw new TypeError("request origin is outside binding ORIGINS");
-    return guarded(request, { redirect: "manual", integrity: request.integrity });
+    // guarded-fetch normalizes only part of Request; retain the effective policies explicitly.
+    return guarded(request, {
+      redirect: "manual",
+      integrity: request.integrity,
+      cache: request.cache,
+      mode: request.mode,
+      keepalive: request.keepalive,
+      referrer: request.referrer,
+      referrerPolicy: request.referrerPolicy,
+    });
   };
 }
