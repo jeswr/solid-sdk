@@ -4,6 +4,13 @@
 
 import { ArrowLeft, Menu, PanelRight } from "lucide-react";
 import type { ReactNode } from "react";
+import { IconButton } from "../components/ui/icon-button.js";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "../components/ui/tooltip.js";
 
 export interface TopBarProps {
   appName: string;
@@ -35,29 +42,35 @@ export function TopBar({
   return (
     <header className="suite-topbar">
       {back && (
-        <a
-          className="suite-shell-icon-button suite-back"
-          href={back.href}
-          aria-label={back.label}
-          title={back.label}
-        >
-          <ArrowLeft size={20} strokeWidth={1.75} aria-hidden="true" />
-        </a>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <a
+                className="suite-shell-icon-button suite-back"
+                href={back.href}
+                aria-label={back.label}
+              >
+                <ArrowLeft size={20} strokeWidth={1.75} aria-hidden="true" />
+              </a>
+            </TooltipTrigger>
+            <TooltipContent>{back.label}</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       )}
       {sidebarToggle && (
-        <button
+        <IconButton
+          variant="ghost"
           type="button"
           data-slot="top-bar-sidebar-toggle"
           className="suite-shell-icon-button"
-          aria-label="Toggle sidebar"
-          title="Toggle sidebar ([)"
+          label="Toggle sidebar"
           aria-keyshortcuts="["
           aria-expanded={sidebarToggle.open}
           aria-controls={sidebarToggle.controls}
           onClick={sidebarToggle.onToggle}
         >
           <Menu size={20} strokeWidth={1.75} aria-hidden="true" />
-        </button>
+        </IconButton>
       )}
       <div className="suite-topbar-context">
         <span>{appName}</span>
@@ -67,19 +80,19 @@ export function TopBar({
       {actions && <div className="suite-topbar-actions">{actions}</div>}
       {offlinePill && <div className="suite-topbar-offline">{offlinePill}</div>}
       {detailsToggle && (
-        <button
+        <IconButton
+          variant="ghost"
           type="button"
           data-slot="top-bar-details-toggle"
           className="suite-shell-icon-button"
-          aria-label="Toggle details pane"
-          title="Toggle details pane (])"
+          label="Toggle details pane"
           aria-keyshortcuts="]"
           aria-expanded={detailsToggle.open}
           aria-controls={detailsToggle.controls}
           onClick={detailsToggle.onToggle}
         >
           <PanelRight size={20} strokeWidth={1.75} aria-hidden="true" />
-        </button>
+        </IconButton>
       )}
       {bell}
       {account}

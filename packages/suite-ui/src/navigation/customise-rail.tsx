@@ -5,6 +5,7 @@
 
 import { ArrowDown, ArrowUp, GripVertical } from "lucide-react";
 import { useId } from "react";
+import { IconButton } from "../components/ui/icon-button.js";
 import type { AppSlug, NavigationApp } from "./apps.js";
 import { usePreferences } from "./preferences.js";
 
@@ -70,7 +71,9 @@ export function CustomiseRail({ apps }: { apps: readonly NavigationApp[] }) {
                     move(slug as AppSlug, index < 0 ? pinned.length : index);
                 }}
               >
-                <button
+                <IconButton
+                  variant="ghost"
+                  size="icon-sm"
                   type="button"
                   data-slot="customise-rail-drag"
                   className="suite-drag"
@@ -79,13 +82,11 @@ export function CustomiseRail({ apps }: { apps: readonly NavigationApp[] }) {
                     event.dataTransfer.setData("text/plain", app.slug);
                     event.dataTransfer.effectAllowed = "move";
                   }}
-                  aria-label={`Drag ${app.name} to pin or reorder`}
-                  title={`Drag ${app.name} to pin or reorder`}
-                  tabIndex={-1}
-                  aria-hidden="true"
+                  label={`Drag ${app.name} to pin or reorder`}
+                  aria-describedby={description}
                 >
-                  <GripVertical size={16} aria-hidden="true" />
-                </button>
+                  <GripVertical size={16} className="size-4" aria-hidden="true" />
+                </IconButton>
                 <label>
                   <input
                     type="checkbox"
@@ -98,28 +99,30 @@ export function CustomiseRail({ apps }: { apps: readonly NavigationApp[] }) {
                 </label>
                 {index >= 0 && (
                   <span className="suite-reorder">
-                    <button
+                    <IconButton
+                      variant="ghost"
+                      size="icon-sm"
                       type="button"
                       data-slot="navigation-icon-button"
                       className="suite-icon-button"
-                      title={`Move ${app.name} up`}
-                      aria-label={`Move ${app.name} up`}
+                      label={`Move ${app.name} up`}
                       disabled={index === 0}
                       onClick={() => move(app.slug, index - 1)}
                     >
-                      <ArrowUp size={16} aria-hidden="true" />
-                    </button>
-                    <button
+                      <ArrowUp size={16} className="size-4" aria-hidden="true" />
+                    </IconButton>
+                    <IconButton
+                      variant="ghost"
+                      size="icon-sm"
                       type="button"
                       data-slot="navigation-icon-button"
                       className="suite-icon-button"
-                      title={`Move ${app.name} down`}
-                      aria-label={`Move ${app.name} down`}
+                      label={`Move ${app.name} down`}
                       disabled={index === pinned.length - 1}
                       onClick={() => move(app.slug, index + 1)}
                     >
-                      <ArrowDown size={16} aria-hidden="true" />
-                    </button>
+                      <ArrowDown size={16} className="size-4" aria-hidden="true" />
+                    </IconButton>
                   </span>
                 )}
               </li>

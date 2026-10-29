@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6
 //
 // catalog.ts — the typed shape of the app-store catalog (the data the UI renders
 // and the DCAT serializer emits). The single source of truth for an app entry is
@@ -40,7 +41,7 @@ export interface AppEntry {
   /** Display category bucket. */
   category: Category;
   /**
-   * The deployed app origin (no trailing slash needed). `null` for apps that are
+   * The deployed app URL, including its base path. `null` for apps that are
    * not deployed (wip / local-only) — those render "Coming soon", never a Launch.
    */
   deployedUrl: string | null;
