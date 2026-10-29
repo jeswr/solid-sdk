@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   AGENT,
   canonicalJson,
@@ -35,6 +36,8 @@ export function envelope(compactJws: string): string {
 /** Check a bounded carrier without claiming anything about its signature. */
 export function readEnvelope(raw: string | Uint8Array): { text: string; compactJws: string } {
   try {
+    if (typeof raw !== "string" && raw.byteLength > DIRECT.maxBytes)
+      throw new TypeError("direct carrier exceeds byte limit");
     const text =
       typeof raw === "string" ? raw : new TextDecoder("utf-8", { fatal: true }).decode(raw);
     const parsed = parseBoundedJson(text, CARRIER_LIMITS) as Record<string, unknown>;

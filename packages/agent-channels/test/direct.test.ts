@@ -162,6 +162,26 @@ describe("direct loopback", () => {
     expect(config.tokens.calls).toEqual([]);
   });
 
+  it("bounds raw carrier bytes before decoding, including a stripped UTF-8 BOM", () => {
+    const binding = createInMemoryDirectBinding(options());
+    const text = envelope("a.b.c");
+    const padded = `${text}${" ".repeat(DIRECT.maxBytes - Buffer.byteLength(text))}`;
+    const bounded = Buffer.from(padded);
+    expect(bounded.byteLength).toBe(DIRECT.maxBytes);
+    expect(binding.ingest.parse({ id: "bounded", raw: bounded }).jsonLdBlocks).toEqual([padded]);
+    const oversized = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), bounded]);
+    expect(oversized.byteLength).toBeGreaterThan(DIRECT.maxBytes);
+    expect(new TextDecoder("utf-8", { fatal: true }).decode(oversized)).toBe(padded);
+    const decode = vi.spyOn(TextDecoder.prototype, "decode");
+    try {
+      for (const raw of [oversized, new Uint8Array(DIRECT.maxBytes + 1)])
+        expect(() => binding.ingest.parse({ id: "oversized", raw })).toThrow(ChannelParseError);
+      expect(decode).not.toHaveBeenCalled();
+    } finally {
+      decode.mockRestore();
+    }
+  });
+
   it.each([
     { stage: "verification", mutation: "replace" },
     { stage: "verification", mutation: "mutate" },
