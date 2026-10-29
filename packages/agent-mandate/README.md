@@ -58,6 +58,7 @@ Typed decimal values must retain their decimal identity through the evaluator's 
 conversion; insignificant zeros and exponent formatting do not change that identity.
 Date-time operands must have millisecond precision (additional trailing zeros are accepted).
 Values that would lose precision require confirmation, including in prohibitions and duties.
+Typed float values also require confirmation whenever binary32 rounding changes their value.
 
 `issueApproval({ id, approves, termsDigest, expires, decision }, p256Key, now)` produces
 Turtle with a Data Integrity `ecdsa-rdfc-2019` proof. It accepts a non-extractable WebCrypto

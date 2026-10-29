@@ -84,6 +84,8 @@ function decimalIdentity(value: string): string {
 function numeric(value: unknown, datatype: string): boolean {
   if (typeof value !== "string" && typeof value !== "number") return false;
   if (!numericPattern.test(String(value)) || !Number.isFinite(Number(value))) return false;
+  // Both evaluators compare binary64 numbers: accept float only when binary32 agrees.
+  if (datatype === `${XSD}float`) return Math.fround(Number(value)) === Number(value);
   if (datatype === `${XSD}integer`)
     return /^[+-]?\d+$/.test(String(value)) && Number.isSafeInteger(Number(value));
   if (datatype === `${XSD}decimal`)
