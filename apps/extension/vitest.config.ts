@@ -17,6 +17,8 @@ export default defineConfig({
       enabled: true,
       provider: 'v8',
       include: [
+        'src/background/core/authenticated-fetch.ts',
+        'src/background/core/manual-redirect.ts',
         'src/background/core/profile-store.ts',
         'src/background/core/origin-grant.ts',
         'src/background/core/formfill-data.ts',
