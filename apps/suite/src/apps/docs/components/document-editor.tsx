@@ -30,6 +30,7 @@ import { convertImport, uploadImportImage } from "../editor/import-document";
 import type { DocumentPersistence } from "../editor/persistence";
 import { printDocument } from "../editor/print-document";
 import { podScopedFetch } from "../editor/private-image";
+import { useDialogFocus } from "../hooks/use-dialog-focus";
 import { useDocument } from "../hooks/use-document";
 import { useNow } from "../hooks/use-now";
 import { useStarred } from "../hooks/use-starred";
@@ -97,6 +98,8 @@ export function DocumentEditor({
   return <HydratedEditor key={runtime.doc.guid} runtime={runtime} />;
 }
 function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
+  const conflictFocus = useDialogFocus();
+  const saveErrorFocus = useDialogFocus();
   const router = useRouter();
   const params = useSearchParams();
   const printed = useRef(false);
@@ -605,7 +608,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
           </p>
         )}
         <Dialog open={!!runtime.conflict} onOpenChange={() => {}}>
-          <DialogContent>
+          <DialogContent {...conflictFocus}>
             <DialogTitle>This title changed somewhere else</DialogTitle>
             <DialogDescription>
               Choose the title to keep. {deviceSaveStatus(runtime.localState)}.
@@ -619,7 +622,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
           </DialogContent>
         </Dialog>
         <Dialog open={why} onOpenChange={setWhy}>
-          <DialogContent>
+          <DialogContent {...saveErrorFocus}>
             <DialogTitle>Couldn't save</DialogTitle>
             <DialogDescription>
               {deviceSaveStatus(runtime.localState)}. Check your device storage, pod storage and

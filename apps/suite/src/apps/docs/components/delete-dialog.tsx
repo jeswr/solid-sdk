@@ -10,6 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@jeswr/suite-ui";
+import { useDialogFocus } from "../hooks/use-dialog-focus";
 export function DeleteDialog({
   open,
   busy,
@@ -21,9 +22,10 @@ export function DeleteDialog({
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
 }) {
+  const focus = useDialogFocus();
   return (
     <AlertDialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
-      <AlertDialogContent>
+      <AlertDialogContent {...focus}>
         <AlertDialogHeader>
           <AlertDialogTitle>Move this document to trash?</AlertDialogTitle>
           <AlertDialogDescription>

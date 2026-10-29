@@ -26,6 +26,14 @@ vi.mock("@/components/interim-shell/suite-frame", () => ({
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
   state.store.list.mockReset();
   state.store.read.mockReset();
   state.store.save.mockReset();
@@ -113,6 +121,45 @@ function button(label: string) {
   if (!found) throw new Error(`Missing button: ${label}`);
   return found;
 }
+
+it.each([
+  "Rename",
+  "Move to trash",
+])("round38 Escape from keyboard %s returns focus to the invoking row Actions button", async (action) => {
+  state.store.list.mockResolvedValue([
+    entry("First"),
+    { ...entry("Second"), url: "https://pod.test/docs/second.ttl" },
+  ]);
+  const { root } = await mount();
+  try {
+    for (const name of ["First", "Second"]) {
+      const trigger = button(`Actions for ${name}`);
+      await act(async () => {
+        trigger.focus();
+        trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      });
+      const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+        (node) => node.textContent === action,
+      ) as HTMLElement;
+      expect(item).toBeDefined();
+      await act(async () => {
+        item.focus();
+        item.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+      });
+      const selector = action === "Rename" ? '[role="dialog"]' : '[role="alertdialog"]';
+      await vi.waitFor(() => expect(document.querySelector(selector)).not.toBeNull());
+      await act(async () =>
+        (document.querySelector(selector) as HTMLElement).dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+        ),
+      );
+      await vi.waitFor(() => expect(document.querySelector(selector)).toBeNull());
+      await vi.waitFor(() => expect(document.activeElement).toBe(trigger));
+    }
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
 
 it.each([
   "success",

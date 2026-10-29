@@ -90,7 +90,10 @@ export function privateImage(fetchImpl: typeof fetch) {
         dom.className = "docs-private-image";
         present();
         const src = String(node.attrs.src);
-        if (validLink(src) && /^https?:/.test(src)) {
+        const load = () => {
+          if (!alive || !validLink(src) || !/^https?:/.test(src)) return;
+          dom.dataset.docsImageState = "loading";
+          present();
           void fetchImpl(src, { signal: abort.signal, redirect: "error" })
             .then(async (response) => {
               if (!response.ok) throw new Error("Image unavailable");
@@ -98,6 +101,8 @@ export function privateImage(fetchImpl: typeof fetch) {
               if (alive) {
                 objectUrl = URL.createObjectURL(blob);
                 dom.src = objectUrl;
+                dom.dataset.docsImageState = "loaded";
+                present();
               }
             })
             .catch(() => {
@@ -105,7 +110,15 @@ export function privateImage(fetchImpl: typeof fetch) {
               dom.dataset.docsImageState = "error";
               present();
             });
-        } else {
+        };
+        // Every failed request shares this recovery path. Pending and loaded
+        // views retain their bytes/request; destroyed views cannot retry.
+        const reconnect = () => {
+          if (dom.dataset.docsImageState === "error") load();
+        };
+        window.addEventListener("online", reconnect);
+        if (validLink(src) && /^https?:/.test(src)) load();
+        else {
           dom.dataset.docsImageState = "error";
           present();
         }
@@ -119,6 +132,7 @@ export function privateImage(fetchImpl: typeof fetch) {
           },
           destroy() {
             alive = false;
+            window.removeEventListener("online", reconnect);
             abort.abort();
             if (objectUrl) URL.revokeObjectURL(objectUrl);
           },

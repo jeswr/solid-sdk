@@ -473,7 +473,9 @@ function containerBoundaries(source: string): string {
 function lazyParagraphLine(line: string): string {
   // An escape survives every subsequent container dedent; extra indentation
   // does not. Inline parsing removes it only after block structure is final.
-  return /^[ \t]*(?:=+|-+)[ \t]*$/.test(line) ? line.replace(/(?=[=-])/, "\\") : line;
+  // Escape the whole run: a remaining == can still pair with a later lazy
+  // underline as an inline highlight delimiter across intervening prose.
+  return /^[ \t]*(?:=+|-+)[ \t]*$/.test(line) ? line.replace(/[=-]/g, (char) => `\\${char}`) : line;
 }
 
 function listItemSource(raw: string): { text: string; indent: number } {
@@ -512,7 +514,12 @@ function openParagraph(tokens: MarkdownToken[]): boolean {
   if (!last) return false;
   // Reference definitions remain paragraphs during block-structure detection.
   if (["paragraph", "text", "def"].includes(String(last.type))) return true;
-  if (last.type === "blockquote") return openParagraph(last.tokens as MarkdownToken[]);
+  if (last.type === "blockquote") {
+    // Marked can fold a final quoted blank into the paragraph's raw LF,
+    // leaving no space token. Its source still closes lazy continuation.
+    if (/(?:^|\n) {0,3}>[ \t]*\n*$/.test(last.raw as string)) return false;
+    return openParagraph(last.tokens as MarkdownToken[]);
+  }
   if (last.type === "list") {
     const item = (last.items as MarkdownToken[]).at(-1) as MarkdownToken;
     return openParagraph(
@@ -536,6 +543,31 @@ function containerTokenizer() {
       listIsTask: taskMarker,
       listReplaceTask: taskMarker,
     },
+  };
+  const blockquote = tokenizer.blockquote;
+  tokenizer.blockquote = function (source) {
+    const match = this.rules.block.blockquote.exec(source);
+    if (!match) return;
+    // The grammar match is a source span. Marked's returned raw is not: list
+    // re-entry can insert internal blank lines as well as a terminal LF.
+    // Establish boundaries from source for every quote, including nested
+    // boundary probes, before asking marked to classify its contents.
+    const lines = match[0].replace(/\n+$/, "").split("\n");
+    const interruption = lines.findIndex((line, index) => {
+      if (index === 0 || /^ {0,3}>/.test(line)) return false;
+      if (this.rules.block.list.test(line)) return true;
+      if (!/^ {0,3}>/.test(lines[index - 1] as string)) return false;
+      // Keep reference definitions visible even after a previous probe.
+      this.lexer.tokens.links = {};
+      const prefix = blockquote.call(this, lines.slice(0, index).join("\n")) as NonNullable<
+        ReturnType<typeof blockquote>
+      >;
+      return /^ {0,3}>[ \t]*$/.test(lines[index - 1] as string) || !openParagraph(prefix.tokens);
+    });
+    const raw = (interruption < 0 ? lines : lines.slice(0, interruption)).join("\n");
+    const token = blockquote.call(this, raw) as NonNullable<ReturnType<typeof blockquote>>;
+    token.raw = raw;
+    return token;
   };
   const list = tokenizer.list;
   tokenizer.list = function (source) {
@@ -1007,34 +1039,12 @@ markdown.instance.use({
       // re-entry otherwise absorbs it after a lazy line. Its list grammar
       // covers every bullet/ordered marker and indentation at every depth.
       const boundaries = containerBoundaries(source);
-      const candidate = tokenizer.blockquote(boundaries) as NonNullable<
+      const token = tokenizer.blockquote(boundaries) as NonNullable<
         ReturnType<typeof tokenizer.blockquote>
       >;
-      // Examine only this quote's candidate lines, not every later quote in the document.
-      const lines = boundaries
-        .split("\n")
-        .slice(0, candidate.raw.replace(/\n+$/, "").split("\n").length);
-      const interruption = lines.findIndex((line, index) => {
-        if (index === 0 || /^ {0,3}>/.test(line)) return false;
-        if (tokenizer.rules.block.list.test(line)) return true;
-        if (!/^ {0,3}>/.test(lines[index - 1] as string)) return false;
-        // Boundary probes must retain def tokens even if a prior probe has
-        // registered the same label in this private lexer's reference table.
-        tokenizer.lexer.tokens.links = {};
-        const prefix = tokenizer.blockquote(lines.slice(0, index).join("\n")) as NonNullable<
-          ReturnType<typeof tokenizer.blockquote>
-        >;
-        return /^ {0,3}>[ \t]*$/.test(lines[index - 1] as string) || !openParagraph(prefix.tokens);
-      });
-      const token =
-        interruption < 0
-          ? candidate
-          : (tokenizer.blockquote(lines.slice(0, interruption).join("\n")) as NonNullable<
-              ReturnType<typeof tokenizer.blockquote>
-            >);
-      // The boundary lexer may append LF when re-entering a quoted list.
-      // A terminal LF is not an additional source line to attribute to it.
-      const count = token.raw.replace(/\n+$/, "").split("\n").length;
+      // Boundary tokens now always own an exact source span, so tab expansion
+      // can be reversed by line without attributing synthetic lines to it.
+      const count = token.raw.split("\n").length;
       token.raw = source.split("\n").slice(0, count).join("\n");
       const marker = (/^[ \t]*>[ \t]?/.exec(token.raw) as RegExpExecArray)[0];
       const indent = indentation(marker, containerColumn) + 1 + (marker.endsWith(">") ? 0 : 1);

@@ -11,6 +11,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { Doc } from "yjs";
 import { baseExtensions } from "../src/apps/docs/editor/extensions";
 import type { DocumentPersistence } from "../src/apps/docs/editor/persistence";
+import { TitleConflictError } from "../src/apps/docs/lib/model";
 import type { PodSession } from "../src/lib/session/pod-session";
 
 const mocks = vi.hoisted(() => ({
@@ -101,15 +102,15 @@ async function mountEditor(initial?: JSONContent, storedUrl?: string) {
   const host = document.createElement("div");
   document.body.append(host);
   const root = createRoot(host);
-  await act(async () =>
+  const render = () =>
     root.render(
       createElement(
         TooltipProvider,
         null,
         createElement(DocumentEditor, { session, resource: undefined }),
       ),
-    ),
-  );
+    );
+  await act(async () => render());
   const body = await vi.waitFor(() => {
     const body = host.querySelector<HTMLElement>('[aria-label="Document body"]');
     expect(body).not.toBeNull();
@@ -119,12 +120,63 @@ async function mountEditor(initial?: JSONContent, storedUrl?: string) {
   return {
     host,
     body,
+    async refresh() {
+      await act(async () => render());
+    },
     async close() {
       await act(async () => root.unmount());
       doc.destroy();
     },
   };
 }
+
+it("round38 save-error dialog restores focus to its invoking Why button", async () => {
+  const view = await mountEditor(undefined, "https://pod.test/docs/plan.ttl");
+  try {
+    const runtime = mocks.runtime as DocumentPersistence;
+    runtime.state = "failed";
+    await view.refresh();
+    const why = Array.from(view.host.querySelectorAll("button")).find(
+      (button) => button.textContent === "Why?",
+    ) as HTMLButtonElement;
+    await act(async () => {
+      why.focus();
+      why.click();
+    });
+    const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+    expect(dialog.textContent).toContain("Couldn't save");
+    await act(async () =>
+      dialog.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })),
+    );
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+    await vi.waitFor(() => expect(document.activeElement).toBe(why));
+  } finally {
+    await view.close();
+  }
+});
+
+it("round38 resolving a title-conflict dialog restores the previously focused editor", async () => {
+  const view = await mountEditor(undefined, "https://pod.test/docs/plan.ttl");
+  try {
+    const runtime = mocks.runtime as DocumentPersistence;
+    view.body.focus();
+    runtime.conflict = new TitleConflictError("https://pod.test/docs/plan.ttl", "Mine", "Theirs");
+    runtime.resolveTitle = vi.fn(async () => {
+      runtime.conflict = undefined;
+    });
+    await view.refresh();
+    const keep = Array.from(document.querySelectorAll('[role="dialog"] button')).find(
+      (button) => button.textContent === "Keep mine",
+    ) as HTMLButtonElement;
+    expect(keep).toBeDefined();
+    await act(async () => keep.click());
+    await view.refresh();
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+    await vi.waitFor(() => expect(document.activeElement).toBe(view.body));
+  } finally {
+    await view.close();
+  }
+});
 
 it.each([
   "Bold",

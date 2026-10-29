@@ -8,11 +8,8 @@ import {
   DialogDescription,
   DialogFooter,
   DialogTitle,
-  DropdownMenu,
-  DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
   FileTypeIcon,
   IconButton,
   Input,
@@ -22,7 +19,7 @@ import {
   TooltipTrigger,
   toast,
 } from "@jeswr/suite-ui";
-import { MoreHorizontal, Plus, RefreshCw, Star } from "lucide-react";
+import { Plus, RefreshCw, Star } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -33,9 +30,11 @@ import { copyDocument } from "../editor/copy";
 import { type LocalDraft, listLocalDrafts } from "../editor/drafts";
 import { downloadDocument, rowExportJson } from "../editor/export-document";
 import { importDocument } from "../editor/import-document";
+import { useDialogFocus } from "../hooks/use-dialog-focus";
 import { useDocsStore } from "../hooks/use-docs-store";
 import { useStarred } from "../hooks/use-starred";
 import type { DocumentEntry } from "../lib/model";
+import { ActionsMenu } from "./actions-menu";
 import { DocsError, DocsSidebar } from "./common";
 import { DeleteDialog } from "./delete-dialog";
 import { DownloadMenu } from "./download-menu";
@@ -43,6 +42,7 @@ import { ImportDialog } from "./import-dialog";
 import { ModifiedTime } from "./modified-time";
 import { trashDocumentWithUndo } from "./trash-actions";
 export function DocumentList({ session }: { session: PodSession }) {
+  const renameFocus = useDialogFocus();
   const store = useDocsStore(session);
   useEffect(() => {
     document.title = "Documents · Docs · Solid Suite";
@@ -249,68 +249,62 @@ export function DocumentList({ session }: { session: PodSession }) {
                     <ModifiedTime value={entry.modified} />
                   </td>
                   <td className="docs-row-actions">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <IconButton
-                          label={`Actions for ${entry.title || "Untitled document"}`}
-                          variant="ghost"
-                        >
-                          <MoreHorizontal aria-hidden="true" />
-                        </IconButton>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                          <Link href={`/docs/d/${encodeRef(entry.url)}`}>Open</Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          disabled={entry.readOnly}
-                          onSelect={() => {
-                            setRenaming({ entry, title: entry.title });
-                          }}
-                        >
-                          Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onSelect={() => toggle(entry.url)}>
-                          {starred.includes(entry.url) ? "Unstar" : "Star"}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          disabled={busy}
-                          onSelect={() =>
-                            void act(async () => {
-                              const source = await store.read(entry.url);
-                              if (!source) throw new Error("Missing document");
-                              const copy = await copyDocument(store, source, session);
-                              router.push(`/docs/d/${encodeRef(copy.url)}`);
-                            })
-                          }
-                        >
-                          Make a copy
-                        </DropdownMenuItem>
-                        <DownloadMenu
-                          download={(format) =>
-                            void act(async () => {
-                              const json = await rowExportJson(entry.url, session);
-                              const name = await downloadDocument(
-                                json,
-                                entry.title,
-                                format,
-                                session,
-                              );
-                              toast.success(`Downloaded ${name}`);
-                            })
-                          }
-                          print={() => router.push(`/docs/d/${encodeRef(entry.url)}?print=1`)}
-                        />
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          disabled={entry.readOnly}
-                          variant="destructive"
-                          onSelect={() => setDeleting(entry)}
-                        >
-                          Move to trash
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <ActionsMenu label={`Actions for ${entry.title || "Untitled document"}`}>
+                      {(choose) => (
+                        <>
+                          <DropdownMenuItem asChild>
+                            <Link href={`/docs/d/${encodeRef(entry.url)}`}>Open</Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            disabled={entry.readOnly}
+                            onSelect={choose(() => {
+                              setRenaming({ entry, title: entry.title });
+                            })}
+                          >
+                            Rename
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onSelect={() => toggle(entry.url)}>
+                            {starred.includes(entry.url) ? "Unstar" : "Star"}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            disabled={busy}
+                            onSelect={() =>
+                              void act(async () => {
+                                const source = await store.read(entry.url);
+                                if (!source) throw new Error("Missing document");
+                                const copy = await copyDocument(store, source, session);
+                                router.push(`/docs/d/${encodeRef(copy.url)}`);
+                              })
+                            }
+                          >
+                            Make a copy
+                          </DropdownMenuItem>
+                          <DownloadMenu
+                            download={(format) =>
+                              void act(async () => {
+                                const json = await rowExportJson(entry.url, session);
+                                const name = await downloadDocument(
+                                  json,
+                                  entry.title,
+                                  format,
+                                  session,
+                                );
+                                toast.success(`Downloaded ${name}`);
+                              })
+                            }
+                            print={() => router.push(`/docs/d/${encodeRef(entry.url)}?print=1`)}
+                          />
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            disabled={entry.readOnly}
+                            variant="destructive"
+                            onSelect={choose(() => setDeleting(entry))}
+                          >
+                            Move to trash
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </ActionsMenu>
                   </td>
                 </tr>
               ))}
@@ -328,7 +322,7 @@ export function DocumentList({ session }: { session: PodSession }) {
           <TooltipContent>New document</TooltipContent>
         </Tooltip>
         <Dialog open={renaming !== null} onOpenChange={(open) => !open && setRenaming(null)}>
-          <DialogContent>
+          <DialogContent {...renameFocus}>
             <DialogTitle>Rename document</DialogTitle>
             <DialogDescription>Choose a title for this document.</DialogDescription>
             <form
