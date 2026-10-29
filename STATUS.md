@@ -610,3 +610,75 @@ by the unrelated codegen tests; no implementation work or open questions remain.
 No pushes, PRs, branch switches, remote fetches/merges, tracker changes, or edits
 to other checkouts were performed. Earlier pilot/live-server verification limits
 still apply.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Review fix round 6 — lock ACL, listing validation and retractable correspondence
+
+Review/fix base and affected-gate comparison:
+`b853e285c7c1022eb03a4614d751b54001cf98c2`; branch remains `lane/sst-vcij`.
+
+- `544a5985` — `fix(pkg-memory): protect the write lock ACL`: conditionally
+  establish a dedicated owner-only lock ACL before acquisition. Propagate ACL
+  read/write failures, races, and missing/weak replacement ETags before acquiring
+  or deleting any lock or writing nanopub bytes. Eight added regression cases.
+- `b0145c3c` — `fix(pkg-memory): validate listed graph correspondence`: apply
+  put's final collection correspondence validation to listing. Six added cases
+  exercise every order of externally stored bridging resources, supported
+  independent-node controls, repeated reads and mutation-free rejection.
+- `89d36cf8` — `fix(pkg-memory): retain retraction correspondence context`:
+  retain the original batch's supporting graphs when withdrawing blank-node
+  assertions. Three added cases cover source-only, entity-only and jointly
+  distinguishing context, fresh instances, both listing orders, repeated
+  withdrawals, unchanged originals and envelope-scoped classification.
+- `68672dda` — `fix(pkg-memory): scope retraction context to batches`: identify
+  retained context using envelope-level `pkg:correspondenceBatch` strings.
+  Splitting and matching include only those batches' source/entity graphs.
+  Ordinary derivation links retain their existing meaning, including links to
+  other nanopubs' component graphs. Reject malformed context metadata before
+  mutation. Three additional cases cover these boundaries.
+- Final documentation commit — `docs: record sst-vcij round six validation`:
+  this report, committed last after the required gates.
+
+The conservative correspondence fix preserves the original graph context and
+assertion identities. The withdrawal retains its new batch identity. Context
+survives storage, parsing, listing and subsequent retractions.
+
+### Validation
+
+Commands ran with `/opt/node24/bin` first on `PATH` (Node v24.22.1, pnpm 10.4.1).
+The new tests reproduced all three findings before their fixes: eight lock ACL
+cases, four incorrectly accepted listing orders, and all three jointly
+distinguished retractions. The context-boundary regressions also failed before
+the final batch-scoping refinement.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/pkg-memory...` | PASS; four dependency-first builds. |
+| `pnpm --filter @jeswr/pkg-memory run lint` | PASS. |
+| `pnpm --filter @jeswr/pkg-memory run build` | PASS. |
+| `pnpm --filter @jeswr/pkg-memory run typecheck` | PASS, including tests. |
+| `pnpm --filter @jeswr/pkg-memory run test` | PASS; 11 files, 646 tests; 100% statements, branches, functions and lines. |
+| `pnpm run lint:root` (via the affected gate) | PASS. |
+| `TURBO_SCM_BASE=b853e285c7c1022eb03a4614d751b54001cf98c2 pnpm run gate` | PASS on the final implementation; 8 successful tasks. |
+| `pnpm exec turbo run test:root` | PASS; all 686 root tests. |
+| `pnpm run gate:full` (first attempt) | FAIL outside this lane; 263 successful tasks, all 686 root tests passed; two federation-codegen failures. |
+| `pnpm run gate:full` (final implementation) | FAIL outside this lane; 190 successful tasks (169 cached); the same two federation-codegen failures. |
+| `git diff b853e285c7c1022eb03a4614d751b54001cf98c2 --check` | PASS. |
+
+Both full-gate attempts reproduced the previously recorded Bookmark target-class
+and ontology-byte namespace mismatches in
+`tools/federation-codegen/test/generator.test.ts` (2 failed, 23 passed tests).
+The tool and vocabulary inputs are unchanged from this round's base, verified
+with `git diff b853e285c7c1022eb03a4614d751b54001cf98c2 --exit-code -- tools/federation-codegen packages/solid-federation-vocab`.
+Sixteen generated web-public callback/client-ID files were removed after the gate.
+
+All three requested findings are implemented with 20 added regression cases.
+No dependency, manifest or lockfile changed; no dependency policy check was
+needed. Tests use fictional identities and the memory PodPort. `roborev` remains
+unavailable (`command -v roborev` found no executable), so automated per-commit
+review remains outstanding. The full workspace gate remains blocked by the
+unrelated codegen tests. No implementation work or open questions remain.
+No pushes, PRs, branch switches, remote fetches/merges, tracker changes or edits
+to other checkouts were performed. Earlier pilot/live-server verification limits
+still apply.
