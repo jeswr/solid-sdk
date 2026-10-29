@@ -1,11 +1,14 @@
+// biome-ignore-all lint/style/useNodejsImportProtocol: agent layer requires bare module specifiers
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
 import * as entry0 from "@jeswr/agent-credentials";
+import * as cli from "@jeswr/agent-credentials/cli";
+import * as google from "@jeswr/agent-credentials/providers/google";
+import * as microsoft from "@jeswr/agent-credentials/providers/microsoft";
+import * as setup from "@jeswr/agent-credentials/providers/setup";
 import * as entry1 from "@jeswr/agent-credentials/testing";
-// biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { existsSync, readFileSync } from "fs";
-// biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { fileURLToPath } from "url";
 import { expect, it } from "vitest";
 
@@ -13,6 +16,10 @@ const manifest = JSON.parse(readFileSync(new URL("../package.json", import.meta.
 const modules: Record<string, object> = {
   ".": entry0,
   "./testing": entry1,
+  "./cli": cli,
+  "./providers/google": google,
+  "./providers/microsoft": microsoft,
+  "./providers/setup": setup,
 };
 const entries = Object.entries(manifest.exports) as [string, { types: string; default: string }][];
 
@@ -24,10 +31,10 @@ it("declares the root and testing entry points on Node >=24", () => {
   expect(manifest.engines.node).toBe(">=24");
 });
 
-it.each(entries)("resolves %s without exposing runtime capabilities", (subpath, target) => {
+it.each(entries)("resolves %s to its built entry point", (subpath, target) => {
   expect(existsSync(fileURLToPath(new URL(`../${target.types}`, import.meta.url)))).toBe(true);
   const entry = new URL(`../${target.default}`, import.meta.url);
   const specifier = manifest.name + (subpath === "." ? "" : subpath.slice(1));
   expect(import.meta.resolve(specifier)).toBe(entry.href);
-  expect(Object.getOwnPropertyNames(modules[subpath])).toEqual([]);
+  expect(Object.getOwnPropertyNames(modules[subpath]).length).toBeGreaterThan(0);
 });

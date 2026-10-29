@@ -1,18 +1,28 @@
 ---
 name: agent-credentials
-description: Use when working on the credential and token provider seams surface in @jeswr/agent-credentials.
+description: Use when working on the private credential store, PKCE login, provisioning, or purpose-separated token supply in @jeswr/agent-credentials.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/agent-credentials
 
-This is the A-003 scaffold, not an implemented API. Read the agent DESIGN §2 and the
-package README before adding behavior. Root and `./testing` modules are reserved.
+Read README.md and agent DESIGN §9.2. Node >=24, ESM, private security-critical package;
+maintain 100% branches/functions/lines/statements coverage. Source imports use bare Node
+builtin names because the agent layer guard forbids colon-containing specifiers.
 
-Follow ADR-001 D4: Node >=24, ESM exports, workspace dependencies, strict TypeScript,
-Biome, and Vitest. Maintain 100% branches/functions/lines/statements coverage.
+Ported from pilot credentials and action providers. Preserve owner-only 0700 directories,
+0600 records, O_EXCL temporary writes + fsync + rename, O_NOFOLLOW reads, account/tenant/client
+pinning, signed OIDC ID-token checks, and per-profile refresh locks. Never fall back across
+provider, account, purpose or resource. A read grant cannot supply a send token even when
+its OAuth scopes include send. Missing or ambiguous profiles fail closed.
 
-Never use live providers or credentials in tests. Future fake implementations belong
-in `./testing`. Send implementations belong exclusively in channel send subpaths,
-importable only by agent-executor and channel tests. Only agent-model-gateway may
-import OpenAI or Anthropic SDKs; the gateway must never import agent-audit.
+Tests always supply a temporary store directory, fake transport and reserved example accounts.
+Never open the real default store, run a real op executable or contact a live provider. Network
+is injected explicitly; absent transport refuses. Only the executable `bin` entry injects
+the production DNS-pinning, official-origin-only transport (no redirects or loopback).
+`StoreTokenProvider` implements agent-channels' `TokenProvider`: take `AccountRef`, snapshot
+and validate `.id` once, and return distinct `{ access: "read" | "send", accessToken }` grants.
+Keep ./testing synthetic and deterministic.
+The provisioning shell test prepends a fake op to PATH. Its POSIX-compatible zsh script can
+also be tested with bash when zsh is unavailable. No runtime use of 1Password.

@@ -1,0 +1,221 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer uses bare builtins
+import { createServer } from "http";
+import { expect, it, vi } from "vitest";
+import { createOriginScopedFetch } from "../src/origins.js";
+
+it("never exposes URL credentials or malformed inputs through construction errors", async () => {
+  const origin = "https://allowed.example";
+  const transport = vi.fn(async () => new Response("unexpected"));
+  const dnsLookup = vi.fn(async () => [{ address: "1.1.1.1", family: 4 }]);
+  const scoped = createOriginScopedFetch(new Set([origin]), { transport, dnsLookup });
+  for (const input of [
+    `${origin}/path`,
+    "https://private-user:private-password@allowed.example/path",
+    new URL("https://private-user@allowed.example/path"),
+    new URL("https://:private-password@allowed.example/path"),
+    "https://private-user:private-password@malformed host/path",
+    "malformed-private-password",
+  ]) {
+    const error = await scoped(input, { method: "invalid method" }).catch(
+      (error: unknown) => error,
+    );
+    expect(error).toBeInstanceOf(TypeError);
+    expect(error).toMatchObject({ message: "invalid binding request" });
+    expect((error as Error).cause).toBeUndefined();
+    expect(String(error)).not.toContain(String(input));
+    expect(String(error)).not.toMatch(/private-user|private-password|allowed\.example/);
+  }
+  expect(transport).not.toHaveBeenCalled();
+  expect(dnsLookup).not.toHaveBeenCalled();
+});
+
+it("refuses an undeclared local origin before connecting, and permits listed loopback only in tests", async () => {
+  let requests = 0;
+  const server = createServer((_req, res) => {
+    requests++;
+    res.end("local fixture");
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("no local fixture address");
+  const origin = `http://127.0.0.1:${address.port}`;
+  try {
+    const allowed = new Set(["https://allowed.example"]);
+    const scoped = createOriginScopedFetch(allowed);
+    allowed.add(origin);
+    await expect(scoped(`${origin}/blocked`)).rejects.toThrow("ORIGINS");
+    expect(requests).toBe(0);
+    await expect(createOriginScopedFetch(new Set([origin]))(origin)).rejects.toThrow();
+    expect(requests).toBe(0);
+    const local = createOriginScopedFetch(new Set([origin]), { allowLoopback: true });
+    expect(await (await local(new URL(`${origin}/listed`))).text()).toBe("local fixture");
+    expect(requests).toBe(1);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
+
+it("checks string, URL and Request inputs and refuses redirects before forwarding credentials", async () => {
+  const transport = vi.fn(async () => new Response("fixture"));
+  const dnsLookup = vi.fn(async () => [{ address: "1.1.1.1", family: 4 as const }]);
+  const origin = "https://allowed.example";
+  const scoped = createOriginScopedFetch(new Set([origin]), { transport, dnsLookup });
+  for (const input of [origin, new URL(`${origin}/url`), new Request(`${origin}/request`)])
+    expect(await (await scoped(input)).text()).toBe("fixture");
+  expect(transport).toHaveBeenCalledTimes(3);
+  await expect(
+    scoped("https://other.example/private", { headers: { authorization: "Bearer test-token" } }),
+  ).rejects.toThrow("ORIGINS");
+  expect(transport).toHaveBeenCalledTimes(3);
+  expect(dnsLookup).toHaveBeenCalledTimes(3);
+  const redirect = vi.fn(
+    async () => new Response(null, { status: 302, headers: { location: "https://other.example" } }),
+  );
+  await expect(
+    createOriginScopedFetch(new Set([origin]), { transport: redirect, dnsLookup })(origin, {
+      redirect: "follow",
+      headers: { authorization: "Bearer test-token" },
+    }),
+  ).rejects.toThrow();
+  expect(redirect).toHaveBeenCalledTimes(1);
+});
+
+it("refuses same-origin and unlisted-origin redirects through the default transport", async () => {
+  const requests: string[] = [];
+  let targetRequests = 0;
+  let status = 301;
+  let location = "";
+  const target = createServer((_req, res) => {
+    targetRequests++;
+    res.end("unlisted redirect target");
+  });
+  const source = createServer((req, res) => {
+    requests.push(req.url ?? "");
+    if (req.url === "/target") res.end("same-origin redirect target");
+    else res.writeHead(status, { location }).end();
+  });
+  await new Promise<void>((resolve) => target.listen(0, "127.0.0.1", resolve));
+  await new Promise<void>((resolve) => source.listen(0, "127.0.0.1", resolve));
+  try {
+    const sourceAddress = source.address();
+    const targetAddress = target.address();
+    if (
+      !sourceAddress ||
+      typeof sourceAddress === "string" ||
+      !targetAddress ||
+      typeof targetAddress === "string"
+    )
+      throw new Error("no local fixture address");
+    const origin = `http://127.0.0.1:${sourceAddress.port}`;
+    const scoped = createOriginScopedFetch(new Set([origin]), { allowLoopback: true });
+    const expectedRequests: string[] = [];
+    for (status of [301, 302, 303, 307, 308]) {
+      for (const destination of ["same", "unlisted"]) {
+        location =
+          destination === "same" ? "/target" : `http://127.0.0.1:${targetAddress.port}/target`;
+        const path = `/redirect-${status}-${destination}`;
+        expectedRequests.push(path);
+        await expect(
+          scoped(`${origin}${path}`, {
+            redirect: "follow",
+            headers: { authorization: "Bearer test-token" },
+          }),
+        ).rejects.toThrow(/redirect/i);
+        expect(requests).toEqual(expectedRequests);
+        expect(targetRequests).toBe(0);
+      }
+    }
+  } finally {
+    await Promise.all(
+      [source, target].map(
+        (server) =>
+          new Promise<void>((resolve, reject) =>
+            server.close((error) => (error ? reject(error) : resolve())),
+          ),
+      ),
+    );
+  }
+});
+
+it.each([
+  "string",
+  "URL",
+  "Request",
+  "Request with init",
+])("preserves request policy through the guarded transport for %s inputs", async (kind) => {
+  const origin = "https://allowed.example";
+  const controller = new AbortController();
+  const policy: RequestInit = {
+    integrity: "sha256-Zml4dHVyZQ==",
+    cache: "no-store",
+    mode: "same-origin",
+    referrer: `${origin}/referrer`,
+    referrerPolicy: "no-referrer",
+    keepalive: true,
+    credentials: "omit",
+    redirect: "follow",
+    headers: { "x-fixture": "policy" },
+    signal: controller.signal,
+  };
+  const transport = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+    const request = new Request(input, init);
+    for (const field of [
+      "integrity",
+      "cache",
+      "mode",
+      "referrer",
+      "referrerPolicy",
+      "keepalive",
+      "credentials",
+    ] as const)
+      expect(request[field]).toBe(policy[field]);
+    expect(request.redirect).toBe("manual");
+    expect(request.headers.get("x-fixture")).toBe("policy");
+    expect(request.signal.aborted).toBe(false);
+    controller.abort();
+    expect(request.signal.aborted).toBe(true);
+    return new Response("fixture");
+  });
+  const scoped = createOriginScopedFetch(new Set([origin]), {
+    transport,
+    dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }],
+  });
+  if (kind === "Request") await scoped(new Request(origin, policy));
+  else if (kind === "Request with init")
+    await scoped(new Request(origin, { integrity: "old", cache: "reload" }), policy);
+  else await scoped(kind === "URL" ? new URL(origin) : origin, policy);
+  expect(transport).toHaveBeenCalledTimes(1);
+});
+
+it("refuses malformed origins, userinfo, unsupported schemes and unsafe destinations", async () => {
+  for (const origin of [
+    "!",
+    "https://allowed.example/path",
+    "https://user:pass@allowed.example",
+    "file://",
+    "ftp://allowed.example",
+    "https://allowed.example/",
+    "https://allowed.example#fragment",
+  ])
+    expect(() => createOriginScopedFetch(new Set([origin]))).toThrow();
+  const transport = vi.fn(async () => new Response("unexpected"));
+  const scoped = createOriginScopedFetch(
+    new Set(["https://allowed.example", "https://127.0.0.1", "http://allowed.example"]),
+    { transport, dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }] },
+  );
+  for (const input of [
+    "!",
+    "https://user:pass@allowed.example",
+    "https://127.0.0.1",
+    "http://allowed.example",
+  ])
+    await expect(scoped(input)).rejects.toThrow();
+  expect(transport).not.toHaveBeenCalled();
+  await expect(
+    createOriginScopedFetch(new Set(["https://127.0.0.1"]))("https://127.0.0.1"),
+  ).rejects.toThrow();
+});
