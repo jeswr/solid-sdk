@@ -271,3 +271,54 @@ distributions are committed. All three supplied findings are addressed, with no
 unfinished implementation or new open questions. `roborev` remains unavailable in
 the sandbox, so the dispatcher must obtain per-commit review before merge.
 No pushes, PRs, branch changes, remote git fetches/merges, or tracker writes occurred.
+
+## Fix round 8 — quoted assignments, linked roots, and script escapes
+
+Starting commit: `eec011b38355f8f26f03cf3538e6c02382e5d79a`.
+
+- `90d77316` — `fix(skills): scan complete quoted secrets`: parse complete
+  single- and double-quoted environment values, including whitespace, comment
+  characters, escaped quotes, and newlines, before trimming and applying the
+  existing placeholder exemptions. Keep diagnostics value-free and protect both
+  missing and existing indexes. Add 13 regression and control cases, including
+  decoded metadata and non-Markdown companions.
+- `4e3b9d81` — `fix(skills): reject linked discovery roots`: enumerate shared
+  and package roots directly before entry-point discovery, rejecting symbolic
+  links without following their targets. Cover dangling links, file links,
+  directories with and without entry points, and linked collection directories.
+  Add 12 cases checking CLI diagnostics and index preservation.
+- `4e4a6865` — `fix(skills): tokenize script escape states`: extend the HTML
+  tokenizer with script data, escaped, double-escaped, dash, and escape-boundary
+  states. An apparent end tag in double-escaped content only changes escape state;
+  link scanning resumes at the actual closing tag. Add 29 cases for mixed case,
+  delimiters, repeated escapes, unclosed content, inert URLs/definitions, and active
+  Markdown, reference, and HTML links after scripts.
+- The final `docs:` commit records this round's validation results.
+
+All three findings were reproduced before their fixes. All 545 checker tests pass
+(54 added in this round). No dependencies, package implementations, skill content,
+or generated index changes were needed. Root tooling is the only implementation
+surface changed, so no individual package gates or dependency-policy checks apply.
+Validation used Node `v24.22.1` via `/opt/node24/bin`.
+
+| Exact command | Result |
+| --- | --- |
+| `PATH=/opt/node24/bin:$PATH pnpm exec vitest run test/check-skills.test.mjs` | PASS, 545 tests. The checker suite also passes in the affected-gate retry and full gate. |
+| `PATH=/opt/node24/bin:$PATH pnpm exec biome check --write scripts/check-skills.mjs test/check-skills.test.mjs` | PASS; formatting applied before the implementation commit. Subsequent gate lint checks pass without writes. |
+| `PATH=/opt/node24/bin:$PATH TURBO_SCM_BASE=eec011b38355f8f26f03cf3538e6c02382e5d79a pnpm run gate` | FAIL on both attempts: root lint passes (57 skills, current index). First attempt: 1,288 passed / 2 timed out, in an existing index CLI test and agent-layer test. Retry: 1,286 passed / 4 timed out, all in unchanged agent-layer tests. |
+| `PATH=/opt/node24/bin:$PATH pnpm run gate:full` | FAIL, 52 successful / 219 total tasks. Root lint and all 545 checker tests pass. Root tests: 1,284 passed / 6 failed, comprising five unchanged agent-layer test timeouts and one unchanged SDK-layer timing assertion (61.6 ms versus a 50 ms limit). |
+| `PATH=/opt/node24/bin:$PATH pnpm exec vitest run test/agent-layers.test.mjs test/check-sdk-layers.test.mjs --maxWorkers=1` | PASS, all 643 tests across both previously failing guard files. |
+| `git diff --exit-code eec011b38355f8f26f03cf3538e6c02382e5d79a -- test/agent-layers.test.mjs test/check-sdk-layers.test.mjs scripts/check-agent-layers.mjs scripts/check-sdk-layers.mjs` | PASS; both guard implementations and test files are unchanged. |
+| `git diff --check` | PASS. |
+
+The successful isolated guard run supports concurrency-related timing failures;
+the repository gates remain reported as failed. Their test limits and unrelated
+implementations were left unchanged. The full gate stopped at root tests before
+reaching the historical federation-trust snapshot failure recorded above.
+
+No generated app files remained to clean up, and no distribution output is committed.
+All three supplied findings are addressed; no unfinished implementation or new open
+questions remain. The conservative symlink policy rejects linked roots rather than
+traversing them. `roborev` remains unavailable in the sandbox, so the dispatcher must
+obtain per-commit review before merge. No pushes, PRs, branch changes, remote git
+fetches/merges, or tracker writes occurred.
