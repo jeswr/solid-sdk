@@ -264,6 +264,55 @@ describe("skill validation", () => {
     expect(checkSkills(root, { write: true }).errors).toEqual([]);
   });
 
+  it.each([
+    '<svg><![CDATA[<a href="missing.md">literal</a>]]></svg>',
+    '<SVG><g><![CDATA[<image href="missing.png"/>]]></g></SVG>',
+    '<svg>\n<![CDATA[\n<a href="missing.md">literal</a>\n\n<img src="missing.png">\n]]>\n</svg>',
+    '<svg><![CDATA[</svg><a href="missing.md">literal</a>]]></svg>',
+    '<svg>\n<![CDATA[<a href="missing.md">literal to EOF</a>',
+    '<svg><![CDATA[<a href="missing.md">literal</a>]]><![CDATA[<a href="other.md">literal</a>]]></svg>',
+    '<math><mtext><![CDATA[<a href="missing.md">literal</a>]]></mtext></math>',
+    '<svg><foreignObject><![CDATA[<a href="missing.md">literal</a>]]></foreignObject></svg>',
+    '<svg><title><![CDATA[<a href="missing.md">literal</a>]]></title></svg>',
+    'Example: <svg><![CDATA[<a href="missing.md">literal</a>]]></svg>',
+    "<svg>\n<![CDATA[\n\n[unused]: missing.md\n\n]]>\n</svg>",
+  ])("ignores apparent links inside foreign CDATA: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
+    `<!DOCTYPE html PUBLIC '<a href="missing.md">literal</a>'>`,
+    `<!doctype html SYSTEM '<img src="missing.png">'>`,
+    '<div>\n<!CUSTOM <a href="missing.md">literal</a>>\n</div>',
+    '<div>\n<![CDATA[<a href="missing.md">literal</a>]]>\n</div>',
+    '<div>\n<svg><![cdata[<a href="missing.md">literal</a>]]></svg>\n</div>',
+  ])("consumes markup declarations without extracting apparent links: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
+    '<svg><![CDATA[<a href="ignored.md">literal</a>]]><a href="missing.md">broken</a></svg>',
+    '<svg><![CDATA[<a href="ignored.md">literal</a>]]]><a href="missing.md">broken</a></svg>',
+    '<svg><![CDATA[</svg><textarea>]]><a href="missing.md">broken</a></svg>',
+    '<div>\n<!DOCTYPE html><a href="missing.md">broken</a>\n</div>',
+    '<div>\n<!CUSTOM <a href="ignored.md">literal</a>><a href="missing.md">broken</a>\n</div>',
+    '<div>\n<![CDATA[<a href="ignored.md">literal</a><a href="missing.md">broken</a>]]>\n</div>',
+    '<svg><foreignObject><div><![CDATA[<a href="ignored.md">literal</a><a href="missing.md">broken</a>]]></div></foreignObject></svg>',
+    '<div>\n<svg><![cdata[<a href="ignored.md">literal</a><a href="missing.md">broken</a>]]></svg>\n</div>',
+    '<svg>&lt;![CDATA[<a href="missing.md">broken</a>]]></svg>',
+    "<svg><![CDATA[\n[ignored]: ignored.md\n]]></svg>\n\n[active]: missing.md",
+  ])("checks active links after CDATA and declaration boundaries: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+  });
+
   it("still checks active HTML links beside comments", () => {
     const root = fixture();
     put(

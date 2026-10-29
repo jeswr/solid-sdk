@@ -89,14 +89,26 @@ function decodeCharacterReferences(text) {
 function htmlLinksIn(html, definitions, definitionMarker) {
   const links = [];
   const elements = [];
-  // Recognize comments only between tags; attribute values are consumed in full below.
+  // Recognize comments/declarations only between tags; consume attribute values below.
   const tokens = new RegExp(
-    `<!--(?:-?>|[\\s\\S]*?(?:-->|$))|<\\/?[a-zA-Z][^\\t\\n\\f\\r />]*|${definitionMarker}(\\d+)\0`,
+    `<!--(?:-?>|[\\s\\S]*?(?:-->|$))|<!|<\\/?[a-zA-Z][^\\t\\n\\f\\r />]*|${definitionMarker}(\\d+)\0`,
     "g",
   );
   const whitespace = /[\t\n\f\r ]/;
   for (let token = tokens.exec(html); token; token = tokens.exec(html)) {
     if (token[0].startsWith("<!--")) continue;
+    if (token[0] === "<!") {
+      // CDATA is text through ']]>' only in foreign content. HTML CDATA,
+      // DOCTYPEs, and bogus declarations end at the next '>' (or EOF).
+      const terminator =
+        html.startsWith("[CDATA[", tokens.lastIndex) &&
+        (elements.at(-1)?.namespace ?? "html") !== "html"
+          ? "]]>"
+          : ">";
+      const end = html.indexOf(terminator, tokens.lastIndex);
+      tokens.lastIndex = end === -1 ? html.length : end + terminator.length;
+      continue;
+    }
     if (token[1] !== undefined) {
       links.push(definitions[Number(token[1])]);
       continue;
