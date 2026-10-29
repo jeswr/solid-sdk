@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // GOLDEN-MASTER / CHARACTERIZATION suite — pins the OBSERVABLE OUTPUT of the public
@@ -21,6 +22,8 @@
 // changelog + DECISIONS. The RDFC-1.0 hashes are the ones an independent conformant
 // implementation reproduces (see protocol.test.ts for the spec worked-example
 // vector).
+//
+// Phase 1 preserves the published legacy wire bytes and content hashes.
 //
 // NON-DETERMINISM is normalised: intent node IRIs are supplied explicitly (never
 // the FNV digest of the NL), and RDFC-1.0 relabels blank nodes to stable c14n

@@ -38,6 +38,21 @@
             },
             {
               "kind": "method",
+              "name": "valuesTransform",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "(graph: Store) => void"
+                }
+              },
+              "description": "Optional local migration of the display graph before binding canonical shapes.",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
               "name": "applyFormDeltaToExisting",
               "privacy": "protected",
               "return": {
@@ -241,7 +256,7 @@
             "module": "/src/components/form-base.js"
           },
           "solid": {
-            "class": "https://w3id.org/jeswr/bookmark#Bookmark",
+            "class": "https://jeswr.org/ns/bookmark#Bookmark",
             "mode": "edit",
             "cardinality": "one"
           },
@@ -577,7 +592,7 @@
             "module": "/src/components/shared.js"
           },
           "solid": {
-            "class": "https://w3id.org/jeswr/bookmark#Bookmark",
+            "class": "https://jeswr.org/ns/bookmark#Bookmark",
             "mode": "view",
             "cardinality": "container"
           },
@@ -1122,6 +1137,21 @@
               },
               "description": "Resolver options forwarded to the §9 pre-fetch (max bytes / timeout / test stub).",
               "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "valuesTransform",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "((graph: Store) => void) | undefined"
+                }
+              },
+              "description": "Optional local migration of the display graph before binding canonical shapes.",
               "inheritedFrom": {
                 "name": "AbstractFormElement",
                 "module": "src/components/form-base.ts"
@@ -1735,6 +1765,17 @@
             },
             {
               "kind": "method",
+              "name": "valuesTransform",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "((graph: Store) => void) | undefined"
+                }
+              },
+              "description": "Optional local migration of the display graph before binding canonical shapes."
+            },
+            {
+              "kind": "method",
               "name": "applyFormDeltaToExisting",
               "privacy": "protected",
               "return": {
@@ -1902,9 +1943,9 @@
             {
               "name": "typeIri",
               "type": {
-                "text": "string"
+                "text": "string | readonly string[]"
               },
-              "description": "the model class IRI (wf:Task / vcard:Individual / book:Bookmark)."
+              "description": "the model class IRI or its canonical and legacy aliases."
             },
             {
               "name": "conventional",
@@ -1921,7 +1962,7 @@
               "description": "the n3 DataFactory.namedNode (passed in by the subclass)."
             }
           ],
-          "description": "Find the EDITED subject in shacl-form's `toRDF()` form graph — the node whose\nfield values the merge reads. shacl-form in EDIT mode binds the form to a subject\nthat is NOT necessarily the resource's conventional subject (it commonly MINTS a\nfresh IRI, observed under the real upstream), so we must locate the form's typed\nsubject rather than assume `${url}#it`. Returns the first NamedNode subject typed\nwith `typeIri` in the form graph, preferring `conventional` if IT is the typed one,\nelse `conventional` as a last resort (an empty form graph). A direct quad scan\n(existence query — no triple built), via a `namedNode` factory so the n3 term\nconstruction lives at the call site (each form imports n3's DataFactory once).\n\nIMPORTANT — this is the READ subject (in the form graph). The merge WRITES onto the\nresource's `conventional` subject in the EXISTING graph (so the saved triples land\non `${url}#it`/`#this`, not on shacl-form's minted IRI). See each per-class form."
+          "description": "Find the EDITED subject in shacl-form's `toRDF()` form graph — the node whose\nfield values the merge reads. shacl-form in EDIT mode binds the form to a subject\nthat is NOT necessarily the resource's conventional subject (it commonly MINTS a\nfresh IRI, observed under the real upstream), so we must locate the form's typed\nsubject rather than assume `${url}#it`. Returns the first NamedNode subject typed\nwith any `typeIri` in the form graph, preferring `conventional` if IT is the typed one,\nelse `conventional` as a last resort (an empty form graph). A direct quad scan\n(existence query — no triple built), via a `namedNode` factory so the n3 term\nconstruction lives at the call site (each form imports n3's DataFactory once).\n\nIMPORTANT — this is the READ subject (in the form graph). The merge WRITES onto the\nresource's `conventional` subject in the EXISTING graph (so the saved triples land\non `${url}#it`/`#this`, not on shacl-form's minted IRI). See each per-class form."
         }
       ],
       "exports": [
@@ -2692,6 +2733,16 @@
             },
             {
               "kind": "field",
+              "name": "prepareValues",
+              "privacy": "public",
+              "type": {
+                "text": "((graph: Store) => void) | undefined"
+              },
+              "description": "Optional typed migration of the hardened local display graph before shape binding.",
+              "default": "undefined"
+            },
+            {
+              "kind": "field",
               "name": "showSaveButton",
               "privacy": "public",
               "type": {
@@ -3004,7 +3055,7 @@
         {
           "kind": "variable",
           "name": "BOOKMARK_SHAPE_TTL",
-          "default": "` @prefix sh: <http://www.w3.org/ns/shacl#> . @prefix book: <https://w3id.org/jeswr/bookmark#> . @prefix schema: <http://schema.org/> . @prefix dct: <http://purl.org/dc/terms/> . @prefix xsd: <http://www.w3.org/2001/XMLSchema#> . [] a sh:NodeShape ; sh:targetClass book:Bookmark ; sh:property [ sh:path schema:url ; sh:name \"URL\" ; sh:order 1 ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern \"^https?://\" ] ; sh:property [ sh:path dct:title ; sh:name \"Title\" ; sh:order 2 ; sh:datatype xsd:string ; sh:maxCount 1 ] ; sh:property [ sh:path dct:description ; sh:name \"Description\" ; sh:order 3 ; sh:datatype xsd:string ; sh:maxCount 1 ] ; sh:property [ sh:path book:notes ; sh:name \"Notes\" ; sh:order 4 ; sh:datatype xsd:string ; sh:maxCount 1 ] ; sh:property [ sh:path book:archived ; sh:name \"Archived\" ; sh:order 5 ; sh:datatype xsd:boolean ; sh:maxCount 1 ] ; sh:property [ sh:path schema:keywords ; sh:name \"Tags\" ; sh:order 6 ; sh:datatype xsd:string ] . `",
+          "default": "` @prefix sh: <http://www.w3.org/ns/shacl#> . @prefix book: <https://jeswr.org/ns/bookmark#> . @prefix schema: <http://schema.org/> . @prefix dct: <http://purl.org/dc/terms/> . @prefix xsd: <http://www.w3.org/2001/XMLSchema#> . [] a sh:NodeShape ; sh:targetClass book:Bookmark ; sh:property [ sh:path schema:url ; sh:name \"URL\" ; sh:order 1 ; sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ; sh:pattern \"^https?://\" ] ; sh:property [ sh:path dct:title ; sh:name \"Title\" ; sh:order 2 ; sh:datatype xsd:string ; sh:maxCount 1 ] ; sh:property [ sh:path dct:description ; sh:name \"Description\" ; sh:order 3 ; sh:datatype xsd:string ; sh:maxCount 1 ] ; sh:property [ sh:path book:notes ; sh:name \"Notes\" ; sh:order 4 ; sh:datatype xsd:string ; sh:maxCount 1 ] ; sh:property [ sh:path book:archived ; sh:name \"Archived\" ; sh:order 5 ; sh:datatype xsd:boolean ; sh:maxCount 1 ] ; sh:property [ sh:path schema:keywords ; sh:name \"Tags\" ; sh:order 6 ; sh:datatype xsd:string ] . `",
           "description": "The editable `book:Bookmark` shape (aligned to"
         },
         {
@@ -3765,6 +3816,21 @@
               },
               "description": "Resolver options forwarded to the §9 pre-fetch (max bytes / timeout / test stub).",
               "default": "undefined",
+              "inheritedFrom": {
+                "name": "AbstractFormElement",
+                "module": "src/components/form-base.ts"
+              }
+            },
+            {
+              "kind": "method",
+              "name": "valuesTransform",
+              "privacy": "protected",
+              "return": {
+                "type": {
+                  "text": "((graph: Store) => void) | undefined"
+                }
+              },
+              "description": "Optional local migration of the display graph before binding canonical shapes.",
               "inheritedFrom": {
                 "name": "AbstractFormElement",
                 "module": "src/components/form-base.ts"
@@ -4630,6 +4696,14 @@
           "name": "LDP_CONTAINER",
           "declaration": {
             "name": "LDP_CONTAINER",
+            "module": "./vocab.js"
+          }
+        },
+        {
+          "kind": "js",
+          "name": "LEGACY_BOOKMARK_CLASS",
+          "declaration": {
+            "name": "LEGACY_BOOKMARK_CLASS",
             "module": "./vocab.js"
           }
         },

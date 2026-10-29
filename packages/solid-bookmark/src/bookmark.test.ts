@@ -1,4 +1,6 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory, Parser, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import {
@@ -10,8 +12,17 @@ import {
   parseBookmark,
   parseBookmarkTtl,
   serializeBookmark,
+  storeToTurtle,
 } from "./bookmark.js";
-import { BOOK_ARCHIVED, BOOK_NOTES, BOOKMARK_CLASS, SCHEMA_KEYWORDS, SCHEMA_URL } from "./vocab.js";
+import {
+  BOOK,
+  BOOK_ARCHIVED,
+  BOOK_NOTES,
+  BOOKMARK_CLASS,
+  LEGACY_BOOK_NS,
+  SCHEMA_KEYWORDS,
+  SCHEMA_URL,
+} from "./vocab.js";
 
 const RES = "http://localhost:3000/alice/bookmarks/x";
 const SUBJ = bookmarkSubject(RES);
@@ -96,6 +107,8 @@ describe("round-trip (serialize with n3.Writer → parse back)", () => {
     // Sanity: the writer used the prefixes (pretty output), not raw IRIs.
     expect(ttl).toContain("book:");
     expect(ttl).toContain("schema:url");
+    expect(ttl).toContain(`<${BOOK}>`);
+    expect(ttl).not.toContain(LEGACY_BOOK_NS);
 
     const back = parseBookmark(RES, toStore(ttl));
     expect(back).toEqual({
@@ -137,7 +150,7 @@ describe("round-trip (serialize with n3.Writer → parse back)", () => {
       "file:///etc/passwd",
     ]) {
       const store = toStore(`
-        @prefix book:   <https://w3id.org/jeswr/bookmark#> .
+        @prefix book:   <https://jeswr.org/ns/bookmark#> .
         @prefix schema: <http://schema.org/> .
         @prefix dct:    <http://purl.org/dc/terms/> .
         <${SUBJ}> a book:Bookmark ; schema:url <${bad}> ; dct:title "Trap" .
@@ -148,7 +161,7 @@ describe("round-trip (serialize with n3.Writer → parse back)", () => {
 
   it("parseBookmark returns undefined for a book:Bookmark with NO schema:url", () => {
     const store = toStore(`
-      @prefix book: <https://w3id.org/jeswr/bookmark#> .
+      @prefix book: <https://jeswr.org/ns/bookmark#> .
       @prefix dct:  <http://purl.org/dc/terms/> .
       <${SUBJ}> a book:Bookmark ; dct:title "No url" .
     `);
@@ -157,7 +170,7 @@ describe("round-trip (serialize with n3.Writer → parse back)", () => {
 
   it("parseBookmark accepts a valid http(s) schema:url (positive control for the read filter)", () => {
     const store = toStore(`
-      @prefix book:   <https://w3id.org/jeswr/bookmark#> .
+      @prefix book:   <https://jeswr.org/ns/bookmark#> .
       @prefix schema: <http://schema.org/> .
       @prefix dct:    <http://purl.org/dc/terms/> .
       <${SUBJ}> a book:Bookmark ; schema:url <${URL_}> ; dct:title "Fine" .
@@ -167,7 +180,7 @@ describe("round-trip (serialize with n3.Writer → parse back)", () => {
 
   it("parseBookmarkTtl also rejects a hostile non-http(s) url (filter applies through the parse path)", async () => {
     const ttl = `
-      @prefix book:   <https://w3id.org/jeswr/bookmark#> .
+      @prefix book:   <https://jeswr.org/ns/bookmark#> .
       @prefix schema: <http://schema.org/> .
       <${SUBJ}> a book:Bookmark ; schema:url <javascript:alert(1)> .
     `;
@@ -185,6 +198,117 @@ describe("round-trip (serialize with n3.Writer → parse back)", () => {
     const ttl = await serializeBookmark(RES, { url: URL_, title: "Null CT" });
     const back = await parseBookmarkTtl(RES, ttl, null);
     expect(back?.title).toBe("Null CT");
+  });
+});
+
+describe("legacy namespace compatibility", () => {
+  it.each([
+    false,
+    true,
+  ])("re-marks legacy bookmarks canonically (mixed types: %s)", async (mixed) => {
+    const store = await parseRdf(
+      `<${SUBJ}> a <${LEGACY_BOOK_NS}Bookmark>, <urn:other-class>
+        ${mixed ? `, <${BOOKMARK_CLASS}>` : ""} ; <${SCHEMA_URL}> <${URL_}> .`,
+      "text/turtle",
+      {},
+    );
+    const doc = new Bookmark(SUBJ, store, DataFactory);
+    expect(doc.isBookmark).toBe(true);
+    expect(doc.mark()).toBe(doc);
+    doc.mark();
+    const turtle = await storeToTurtle(new Store([...store]));
+    expect(turtle).not.toContain(LEGACY_BOOK_NS);
+    const serialized = new Bookmark(SUBJ, await parseRdf(turtle, "text/turtle", {}), DataFactory);
+    expect([...serialized.types].sort()).toEqual([BOOKMARK_CLASS, "urn:other-class"].sort());
+    expect(serialized.url).toBe(URL_);
+  });
+
+  it("reads a legacy fixture with the same result as canonical Turtle", async () => {
+    const legacy = `
+      @prefix book: <https://w3id.org/jeswr/bookmark#> .
+      @prefix schema: <http://schema.org/> .
+      @prefix dct: <http://purl.org/dc/terms/> .
+      @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+      <#it> a book:Bookmark ;
+        schema:url <${URL_}> ;
+        dct:title "Saved article" ; dct:description "A blurb." ;
+        book:notes "My **notes**." ; book:archived true ;
+        schema:keywords "rdf", "solid" ;
+        dct:created "2026-06-09T10:00:00.000Z"^^xsd:dateTime ;
+        dct:modified "2026-06-10T11:00:00.000Z"^^xsd:dateTime .
+    `;
+    const data: BookmarkData = {
+      url: URL_,
+      title: "Saved article",
+      description: "A blurb.",
+      notes: "My **notes**.",
+      archived: true,
+      tags: ["rdf", "solid"],
+      created: new Date("2026-06-09T10:00:00.000Z"),
+      modified: new Date("2026-06-10T11:00:00.000Z"),
+    };
+    const store = toStore(legacy);
+    const original = [...store];
+    expect(parseBookmark(RES, store)).toEqual(data);
+    expect([...store]).toEqual(original);
+    expect(await parseBookmarkTtl(RES, legacy)).toEqual(data);
+    expect(await parseBookmarkTtl(RES, await serializeBookmark(RES, data))).toEqual(data);
+  });
+
+  it.each([
+    [BOOK, LEGACY_BOOK_NS],
+    [LEGACY_BOOK_NS, BOOK],
+  ])("reads a %s class with %s predicates", async (typeNs, predicateNs) => {
+    const ttl = `
+      <#it> a <${typeNs}Bookmark> ; <${SCHEMA_URL}> <${URL_}> ;
+        <${predicateNs}notes> "Mixed notes" ; <${predicateNs}archived> true .
+    `;
+    expect(await parseBookmarkTtl(RES, ttl)).toEqual({
+      url: URL_,
+      notes: "Mixed notes",
+      archived: true,
+    });
+  });
+
+  it("prefers canonical notes and false over conflicting legacy values", () => {
+    const store = toStore(`
+      <#it> a <${LEGACY_BOOK_NS}Bookmark> ; <${SCHEMA_URL}> <${URL_}> ;
+        <${BOOK_NOTES}> "" ; <${LEGACY_BOOK_NS}notes> "Stale" ;
+        <${BOOK_ARCHIVED}> false ; <${LEGACY_BOOK_NS}archived> true .
+    `);
+    expect(parseBookmark(RES, store)).toEqual({ url: URL_, notes: "", archived: false });
+  });
+
+  it("updates and clears legacy properties through canonical setters", () => {
+    const store = toStore(`
+      <#it> a <${LEGACY_BOOK_NS}Bookmark> ; <${SCHEMA_URL}> <${URL_}> ;
+        <${LEGACY_BOOK_NS}notes> "Old notes" ; <${LEGACY_BOOK_NS}archived> true .
+    `);
+    const doc = new Bookmark(SUBJ, store, DataFactory);
+    doc.notes = "Updated";
+    doc.archived = false;
+    expect(doc.notes).toBe("Updated");
+    expect(doc.archived).toBe(false);
+    expect(store.getQuads(SUBJ, `${LEGACY_BOOK_NS}notes`, null, null)).toHaveLength(0);
+    expect(store.getQuads(SUBJ, `${LEGACY_BOOK_NS}archived`, null, null)).toHaveLength(0);
+    doc.notes = undefined;
+    doc.archived = undefined;
+    expect(doc.notes).toBeUndefined();
+    expect(doc.archived).toBe(false);
+    expect(store.getQuads(SUBJ, BOOK_NOTES, null, null)).toHaveLength(0);
+    expect(store.getQuads(SUBJ, BOOK_ARCHIVED, null, null)).toHaveLength(0);
+  });
+
+  it("clears legacy properties even without a preceding canonical update", () => {
+    const store = toStore(`
+      <#it> <${LEGACY_BOOK_NS}notes> "Old notes" ; <${LEGACY_BOOK_NS}archived> true .
+    `);
+    const doc = new Bookmark(SUBJ, store, DataFactory);
+    doc.notes = undefined;
+    doc.archived = undefined;
+    expect(store.size).toBe(0);
+    expect(doc.notes).toBeUndefined();
+    expect(doc.archived).toBe(false);
   });
 });
 
