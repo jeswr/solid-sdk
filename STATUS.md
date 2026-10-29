@@ -315,3 +315,99 @@ implementation limitations above remain outside this fix round. `roborev` is sti
 unavailable, so automated per-commit review could not run; the supplied findings were
 reproduced and verified locally. No external review service was called, no remote was
 fetched or merged, and nothing was pushed or published.
+
+## Fix round 4 — review findings at `f941d40ddfbf`
+
+2026-10-29. Both requested findings are fixed on `lane/sst-gpa`:
+
+- `dd9a71ac` — `fix(agent-mandate): enforce sparq action profile`.
+  Reuse the in-process engine's candidate matcher for actions, targets and effective
+  assignees before serializing SPARQ policies. Lower matching permissions, prohibitions
+  and the request to `odrl:use`, so the backend's broader umbrella cannot grant ACL
+  control, delegation, ownership transfer or custom actions through a generic use rule.
+  Regression tests cover both rule kinds, standard implications, exact custom actions,
+  exclusions, targets, inherited assignees and preserved constraints. The expanded
+  adapter tests failed before the fix and pass afterward.
+- `2345c6c5` — `fix(solid-vc): encode standard cryptosuite datatype`.
+  Encode `sec:cryptosuite` as `sec:cryptosuiteString` in the shared proof configuration
+  used for signing, verification and mandate/approval RDF. Published W3C EdDSA B.1 and
+  ECDSA P-256 A.1 vectors pin canonical proof options, combined hashes and successful
+  verification of published signatures. Independently encoded configurations also
+  verify newly issued signatures; altered documents/purposes and untyped exported
+  cryptosuite literals are rejected. The W3C vector tests failed before the fix.
+  Update the existing hash/signature goldens for the intentional encoding correction.
+  Align agent-authz-verifier's existing solid-vc dependency to `workspace:*`: its old
+  GitHub pin otherwise embeds the incorrect proof encoding and rejects corrected
+  mandate signatures. Existing mandate integration tests reproduced that mismatch
+  before the dependency correction. Only this necessary dependency edge changes.
+- Final report commit — `docs(agent-mandate): record fourth fix round validation`.
+
+Validation uses Node v24.22.1 (`PATH=/opt/node24/bin:$PATH`):
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/agent-mandate... --concurrency=4
+pnpm --filter @jeswr/solid-vc run lint && pnpm --filter @jeswr/solid-vc run build && pnpm --filter @jeswr/solid-vc run typecheck && pnpm --filter @jeswr/solid-vc run test && pnpm --filter @jeswr/solid-vc run test:coverage
+pnpm --filter @jeswr/agent-authz-verifier run lint && pnpm --filter @jeswr/agent-authz-verifier run build && pnpm --filter @jeswr/agent-authz-verifier run typecheck && pnpm --filter @jeswr/agent-authz-verifier run test
+pnpm --filter @jeswr/agent-mandate run lint && pnpm --filter @jeswr/agent-mandate run build && pnpm --filter @jeswr/agent-mandate run typecheck && pnpm --filter @jeswr/agent-mandate run test
+pnpm run lint:root
+TURBO_SCM_BASE=f941d40ddfbf47fc72cc55930eff8b40bde86ad2 pnpm run gate
+pnpm run gate:full
+```
+
+- Prerequisite builds — PASS, 7/7 tasks, including a rebuild after correcting the
+  verifier dependency. An intermediate mandate test run exposed the stale pinned
+  verifier; all final package gates pass after fixing it.
+- solid-vc package gate and coverage command — PASS, 342 tests in 17 files, including
+  both published W3C vectors. Coverage is 94.29% statements/lines, 88.37% branches and
+  94.30% functions across this upstream package; its existing configuration has no
+  100% threshold. Coverage configuration and exclusions were not changed.
+- agent-authz-verifier package gate — PASS, 47 tests in 3 files.
+- agent-mandate package gate — PASS, 298 tests in 8 files. Per-file coverage remains
+  100%: statements 404/404, branches 481/481, functions 113/113 and lines 362/362.
+  The existing non-fatal agent-authz-verifier sourcemap warning remains.
+- Root lint — PASS, including every workspace and layer guard.
+- Affected repository gate — FAIL outside this fix round, 17/18 tasks successful in
+  2m33s. All package checks pass. Root tests have 685 passes and one unchanged
+  `test/check-sdk-layers.test.mjs` performance failure: 174 ms against a 50 ms limit.
+  The comparison base is the supplied pre-fix head.
+- Full workspace gate — FAIL outside this fix round, 89 successful tasks of 216
+  reported in 3m01s. Root tests have 680 passes and six timing failures in untouched
+  files: the same performance assertion (131 ms against 50 ms) and five module-load
+  form cases in `test/agent-layers.test.mjs` exceeding the five-second timeout.
+  No root source, tests or gate configurations were changed.
+- Isolated performance rerun — PASS, the one selected test, with its 50 ms assertion
+  unchanged:
+
+  ```sh
+  pnpm exec vitest run test/check-sdk-layers.test.mjs -t 'validates pathological specs' --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000
+  ```
+
+- Isolated module-load rerun — PASS, all 13 selected cases, including the five that
+  timed out in the full gate, in 14 seconds. Only CLI worker/time limits changed:
+
+  ```sh
+  pnpm exec vitest run test/agent-layers.test.mjs -t 'rejects disallowed path characters globally' --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000
+  ```
+
+- `git diff --check` — PASS.
+
+Dependency installation and lockfile validation both pass offline:
+
+```sh
+pnpm install --offline --ignore-scripts
+pnpm install --offline --ignore-scripts --frozen-lockfile
+```
+
+The lockfile diff contains only the corrected workspace edge and removal of its unused
+tarball entries; unrelated pnpm peer-resolution churn was discarded. No dependency was
+added, so no new `check:packages` run was required. No lifecycle scripts were enabled.
+
+Conservative choices: the binary adapter evaluates only shared-profile candidates;
+incorrectly encoded old proofs receive no compatibility fallback and must be reissued.
+The published vector fixtures contain public keys only; signing-test keys are generated
+in memory. Tests perform no live provider or pod I/O.
+
+No requested finding remains unfinished and there are no new open questions. The wider
+gate failures above remain outside scope. `roborev` is unavailable, so automated per-commit
+review could not run; the supplied findings were reproduced and checked locally. No
+remote was fetched or merged, and nothing was pushed or published.
