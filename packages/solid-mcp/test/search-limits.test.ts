@@ -538,6 +538,7 @@ describe("one bounded search across discovery and scanning", () => {
         contentType: "text/turtle",
         body: `<#r> <${SOLID}instance> ${urls.map((url) => `<${url}>`).join(",")} .`,
       },
+      ...Object.fromEntries(urls.map((url) => [url, { contentType: "text/turtle", body: "" }])),
     });
     const fetch = vi.fn(pod.fetch);
     const hits = await search({ fetch, podRoot: POD, webId: WEBID }, "match", { maxResources: 4 });
@@ -573,6 +574,7 @@ describe("one bounded search across discovery and scanning", () => {
         contentType: "text/turtle",
         body: containerTurtle(`${POD}sub/`, [{ name: "deep-match.ttl" }]),
       },
+      [`${POD}match.ttl`]: { contentType: "text/turtle", body: "" },
     });
     const fetch = vi.fn(pod.fetch);
     const hits = await search({ fetch, podRoot: POD }, "match", { maxResources: 3, maxDepth: 0 });
@@ -592,6 +594,7 @@ describe("one bounded search across discovery and scanning", () => {
         body: `<${WEBID}> <${SOLID}publicTypeIndex> <${INDEX}>, <${evil}> .`,
       },
       [INDEX]: { contentType: "text/turtle", body: `<#r> <${SOLID}instanceContainer> <${evil}> .` },
+      [`${POD}match.ttl`]: { contentType: "text/turtle", body: "" },
     });
     const fetch = vi.fn(pod.fetch);
     const hits = await search({ fetch, podRoot: POD, webId: WEBID }, "match");
@@ -616,14 +619,19 @@ describe("one bounded search across discovery and scanning", () => {
   ])("stops a stalled %s read at the deadline", async (stage) => {
     vi.useFakeTimers();
     const fixture = makeFakePod({
-      [POD]: { contentType: "text/turtle", body: containerTurtle(POD, [{ name: "match.ttl" }]) },
+      [POD]: {
+        contentType: "text/turtle",
+        body: containerTurtle(POD, [{ name: "match.ttl" }, { name: "pending-match.ttl" }]),
+      },
+      [`${POD}match.ttl`]: { contentType: "text/turtle", body: "" },
     });
     let signal: AbortSignal | null | undefined;
     let resolveLate: (value: Response) => void = () => {};
     const cancel = vi.fn();
     const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (stage === "literal" && url === POD) return fixture.fetch(input, init);
+      if (stage === "literal" && [POD, `${POD}match.ttl`].includes(url))
+        return fixture.fetch(input, init);
       signal = init?.signal;
       if (stage === "body")
         return new Response(new ReadableStream({ cancel }), {
@@ -641,6 +649,7 @@ describe("one bounded search across discovery and scanning", () => {
     await vi.advanceTimersByTimeAsync(25);
     const hits = await result;
     expect(hits.map((hit) => hit.url)).toEqual(stage === "literal" ? [`${POD}match.ttl`] : []);
+    expect(hits.map((hit) => hit.url)).not.toContain(`${POD}pending-match.ttl`);
     expect(signal?.aborted).toBe(true);
     if (stage === "body") expect(cancel).toHaveBeenCalledOnce();
     const calls = fetch.mock.calls.length;
@@ -702,6 +711,7 @@ describe("one bounded search across discovery and scanning", () => {
         body: '{"@context":"http://127.0.0.1/context"}',
       },
       [POD]: { contentType: "text/turtle", body: containerTurtle(POD, [{ name: "match.txt" }]) },
+      [`${POD}match.txt`]: { contentType: "text/plain", body: "readable match" },
     });
     expect(
       (await search({ fetch: pod.fetch, podRoot: POD, webId: WEBID }, "match")).map(

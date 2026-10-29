@@ -3,7 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fetchDocument } from "../src/fetch.js";
-import { search } from "../src/pod.js";
+import { readRdf, readResource, search } from "../src/pod.js";
 import { createFetchPodPort, type PodPort } from "../src/pod-port.js";
 import { createSolidMcpServer } from "../src/server.js";
 import { containerTurtle, makeFakePod } from "./fake-pod.js";
@@ -30,6 +30,243 @@ async function connect(pod: PodPort) {
 }
 
 describe("injected fetch PodPort authorization boundary", () => {
+  describe.each(["type-index", "listing"])("%s candidates", (discovery) => {
+    it.each([
+      [
+        "filename",
+        "sensitive-diagnosis.ttl",
+        "text/turtle",
+        '<> <urn:value> "unrelated".',
+        "sensitive",
+      ],
+      ["URL", "medical/record.ttl", "text/turtle", '<> <urn:value> "unrelated".', "medical"],
+      ["literal", "record.ttl", "text/turtle", '<> <urn:value> "sensitive".', "sensitive"],
+      ["text filename", "sensitive.txt", "text/plain", "unrelated", "sensitive"],
+      ["binary filename", "sensitive.png", "image/png", "unrelated", "sensitive"],
+      ["malformed RDF filename", "sensitive.ttl", "text/turtle", "invalid RDF", "sensitive"],
+    ])("requires a successful read for a %s match", async (_kind, path, contentType, body, query) => {
+      const target = `${ROOT}${path}`;
+      const fixture = makeFakePod({
+        [WEBID]: {
+          contentType: "text/turtle",
+          body: `<${WEBID}> <${SOLID}privateTypeIndex> <${INDEX}>.`,
+        },
+        [INDEX]: { contentType: "text/turtle", body: `<#r> <${SOLID}instance> <${target}>.` },
+        [ROOT]: {
+          contentType: "text/turtle",
+          body: containerTurtle(ROOT, discovery === "listing" ? [{ name: path }] : []),
+        },
+        [target]: { contentType, body },
+      });
+      const pod = createFetchPodPort({
+        fetch: fixture.fetch,
+        podRoot: ROOT,
+        ...(discovery === "type-index" ? { webId: WEBID } : {}),
+      });
+      const client = await connect(pod);
+      const read = pod.read;
+      let deny = true;
+      pod.read = vi.fn(async (url, options) => {
+        const result = await read(url, options);
+        // Content-based policy: the entire injected read must finish authorizing.
+        if (url === target && deny) throw new Error("purpose denied");
+        return result;
+      });
+      // Hints must not resurrect an entry hidden by a filtered listing.
+      if (discovery === "type-index") pod.list = vi.fn(async () => []);
+
+      for (const name of ["search", "solid_search"]) {
+        const result = await client.callTool({ name, arguments: { query } });
+        expect(result).toMatchObject({
+          content: [{ text: name === "search" ? '{"results":[]}' : "[]" }],
+        });
+        expect(JSON.stringify(result)).not.toContain(target);
+      }
+      expect(await search(pod, query)).toEqual([]);
+      expect(vi.mocked(pod.read).mock.calls.some(([url]) => url === target)).toBe(true);
+
+      deny = false;
+      // A successful read with no matching literal (or invalid/non-RDF content)
+      // still permits a name/URL hit. A denial must remain a different outcome.
+      for (const name of ["search", "solid_search"]) {
+        const result = await client.callTool({ name, arguments: { query } });
+        const hits = JSON.parse((result.content as { text: string }[])[0].text);
+        expect(
+          name === "search"
+            ? hits.results.map((hit: { id: string }) => hit.id)
+            : hits.map((hit: { url: string }) => hit.url),
+        ).toEqual([target]);
+      }
+    });
+  });
+
+  it("authorizes container name matches even when maxDepth prevents descent", async () => {
+    const target = `${ROOT}sensitive/`;
+    const fixture = makeFakePod({
+      [ROOT]: {
+        contentType: "text/turtle",
+        body: containerTurtle(ROOT, [{ name: "sensitive/", container: true }]),
+      },
+      [target]: { contentType: "text/turtle", body: containerTurtle(target, []) },
+    });
+    const pod = createFetchPodPort({ fetch: fixture.fetch, podRoot: ROOT });
+    const read = pod.read;
+    pod.read = vi.fn(async (url, options) => {
+      if (url === target) throw new Error("purpose denied");
+      return read(url, options);
+    });
+    expect(await search(pod, "sensitive", { maxDepth: 0 })).toEqual([]);
+    expect(pod.read).toHaveBeenCalledWith(target, undefined);
+    pod.read = read;
+    expect(await search(pod, "sensitive", { maxDepth: 0 })).toEqual([
+      { url: target, name: "sensitive", snippet: "name/url match" },
+    ]);
+  });
+
+  it("filters unreadable child metadata from list tools and MCP resources", async () => {
+    const secret = `${ROOT}sensitive-diagnosis.ttl`;
+    const fixture = makeFakePod({
+      [ROOT]: {
+        contentType: "text/turtle",
+        body: containerTurtle(ROOT, [{ name: "sensitive-diagnosis.ttl" }, { name: "note.ttl" }]),
+      },
+      [secret]: { contentType: "text/turtle", body: '<> <urn:medical> "private history".' },
+      [NOTE]: { contentType: "text/turtle", body: '<> <urn:public> "guidance".' },
+    });
+    const pod = createFetchPodPort({ fetch: fixture.fetch, podRoot: ROOT });
+    const client = await connect(pod);
+    const read = pod.read;
+    pod.read = vi.fn(async (url, options) => {
+      if (url === secret) throw new Error("purpose denied");
+      return read(url, options);
+    });
+    for (const name of ["pod_list", "solid_list"]) {
+      const result = await client.callTool({ name, arguments: { container: ROOT } });
+      expect(result.isError).toBeFalsy();
+      const children = JSON.parse((result.content as { text: string }[])[0].text);
+      expect(children.map((child: { url: string }) => child.url)).toEqual([NOTE]);
+    }
+    expect((await client.listResources()).resources.map(({ uri }) => uri)).toEqual([NOTE]);
+    const result = await client.readResource({ uri: ROOT });
+    expect(JSON.stringify(result)).not.toContain(secret);
+    expect(JSON.stringify(result)).toContain(NOTE);
+  });
+
+  it("discards a hinted match if a later scan read denies the same resource", async () => {
+    const secret = `${ROOT}sensitive.ttl`;
+    const fixture = makeFakePod({
+      [WEBID]: {
+        contentType: "text/turtle",
+        body: `<${WEBID}> <${SOLID}privateTypeIndex> <${INDEX}>.`,
+      },
+      [INDEX]: { contentType: "text/turtle", body: `<#r> <${SOLID}instance> <${secret}>.` },
+      [ROOT]: {
+        contentType: "text/turtle",
+        body: containerTurtle(ROOT, [{ name: "sensitive.ttl" }]),
+      },
+      [secret]: { contentType: "text/turtle", body: '<> <urn:value> "sensitive".' },
+    });
+    const pod = createFetchPodPort({ fetch: fixture.fetch, podRoot: ROOT, webId: WEBID });
+    const read = pod.read;
+    const client = await connect(pod);
+    let reads = 0;
+    pod.read = vi.fn(async (url, options) => {
+      if (url === secret && ++reads > 1) throw new Error("purpose denied");
+      return read(url, options);
+    });
+    for (const name of ["search", "solid_search"]) {
+      reads = 0;
+      expect(await client.callTool({ name, arguments: { query: "sensitive" } })).toMatchObject({
+        content: [{ text: name === "search" ? '{"results":[]}' : "[]" }],
+      });
+      expect(reads).toBe(2);
+    }
+  });
+
+  it.each([
+    "type-index",
+    "listing",
+  ])("does not publish a %s match while authorization is pending", async (discovery) => {
+    vi.useFakeTimers();
+    const secret = `${ROOT}sensitive.ttl`;
+    const fixture = makeFakePod({
+      [WEBID]: {
+        contentType: "text/turtle",
+        body: `<${WEBID}> <${SOLID}privateTypeIndex> <${INDEX}>.`,
+      },
+      [INDEX]: { contentType: "text/turtle", body: `<#r> <${SOLID}instance> <${secret}>.` },
+      [ROOT]: {
+        contentType: "text/turtle",
+        body: containerTurtle(ROOT, discovery === "listing" ? [{ name: "sensitive.ttl" }] : []),
+      },
+      [secret]: { contentType: "text/turtle", body: '<> <urn:value> "sensitive".' },
+    });
+    const pod = createFetchPodPort({
+      fetch: fixture.fetch,
+      podRoot: ROOT,
+      ...(discovery === "type-index" ? { webId: WEBID } : {}),
+    });
+    let release = () => {};
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const read = pod.read;
+    pod.read = vi.fn(async (url, options) => {
+      const result = await read(url, options);
+      if (url === secret) await pending;
+      return result;
+    });
+    const searching = search(pod, "sensitive", { maxTimeMs: 25 });
+    await vi.advanceTimersByTimeAsync(25);
+    const hits = await searching;
+    expect(pod.read).toHaveBeenCalledWith(secret, {
+      accept: "text/turtle, application/ld+json;q=0.9",
+    });
+    expect(hits).toEqual([]);
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(hits).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("denies container tools and resources when only list authorization succeeds", async () => {
+    const fixture = makeFakePod({
+      [ROOT]: { contentType: "text/turtle", body: containerTurtle(ROOT, [{ name: "note.ttl" }]) },
+      [NOTE]: { contentType: "text/plain", body: "public note" },
+    });
+    const pod = createFetchPodPort({ fetch: fixture.fetch, podRoot: ROOT });
+    const client = await connect(pod);
+    pod.read = vi.fn(async () => {
+      throw new Error("purpose denied");
+    });
+    for (const name of ["pod_list", "solid_list"]) {
+      expect(await client.callTool({ name, arguments: { container: ROOT } })).toMatchObject({
+        isError: true,
+        content: [{ text: "purpose denied" }],
+      });
+    }
+    await expect(client.listResources()).rejects.toThrow("purpose denied");
+    await expect(client.readResource({ uri: ROOT })).rejects.toThrow("purpose denied");
+  });
+
+  it("validates injected response URLs before returning resource content", async () => {
+    const pod = createFetchPodPort({ fetch: makeFakePod({}).fetch, podRoot: ROOT });
+    pod.read = vi.fn(async () => ({
+      body: new TextEncoder().encode('<> <urn:value> "private history".'),
+      contentType: "text/turtle",
+      url: "https://evil.example/secret.ttl",
+    }));
+    await expect(readResource(pod, NOTE)).rejects.toThrow(/pod-scope/);
+    await expect(readRdf(pod, NOTE)).rejects.toThrow(/pod-scope/);
+    const client = await connect(pod);
+    for (const name of ["pod_read", "solid_read", "fetch"]) {
+      const result = await client.callTool({ name, arguments: { url: NOTE, id: NOTE } });
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result)).not.toContain("private history");
+    }
+    await expect(client.readResource({ uri: NOTE })).rejects.toThrow(/pod-scope/);
+  });
+
   it.each([
     "grant denied",
     "purpose denied",

@@ -22,7 +22,13 @@ import {
 import { parseBoundedRdf, RdfLimitError } from "./bounded-rdf.js";
 import { MAX_CONTENT_BYTES, mediaType, resourceTitle } from "./content.js";
 import { withPodFetchLimits } from "./pod-operation.js";
-import { asPodPort, type PodSource, podSearchLimits } from "./pod-port.js";
+import {
+  asPodPort,
+  type PodReadOptions,
+  type PodReadResult,
+  type PodSource,
+  podSearchLimits,
+} from "./pod-port.js";
 
 import { SearchBudget, searchLimit } from "./search-budget.js";
 
@@ -132,6 +138,24 @@ function isTextualContentType(ct: string | undefined): boolean {
  */
 export async function listContainer(source: PodSource, url: string): Promise<PodChild[]> {
   const pod = asPodPort(source);
+  const target = requirePodScopedUrl({ podRoot: pod.root }, url);
+  await readScopedResource(pod, target, { accept: RDF_ACCEPT });
+  const children: PodChild[] = [];
+  for (const child of await containerCandidates(pod, target)) {
+    try {
+      // Permission to read a listing is not permission to disclose its children.
+      await readScopedResource(pod, child.url);
+      children.push(child);
+    } catch {
+      // A denied/missing child is omitted along with all its listing metadata.
+    }
+  }
+  return children;
+}
+
+/** Scope-filtered discovery candidates; callers must authorize before reporting them. */
+export async function containerCandidates(source: PodSource, url: string): Promise<PodChild[]> {
+  const pod = asPodPort(source);
   const config = { podRoot: pod.root };
   const target = requirePodScopedUrl(config, url);
   return (await pod.list(target)).flatMap((child) => {
@@ -143,6 +167,20 @@ export async function listContainer(source: PodSource, url: string): Promise<Pod
   });
 }
 
+/** Keep authorization and final-URL validation ahead of all resource output. */
+async function readScopedResource(
+  source: PodSource,
+  url: string,
+  options?: PodReadOptions,
+): Promise<PodReadResult> {
+  const pod = asPodPort(source);
+  const config = { podRoot: pod.root };
+  const target = requirePodScopedUrl(config, url);
+  const result = await pod.read(target, options);
+  requirePodScopedUrl(config, result.url ?? target);
+  return result;
+}
+
 /**
  * Read a resource's raw bytes (pod-scoped) via a plain GET on the injected fetch
  * (NOT fetchRdf — we want the bytes for ANY content type). Decides text vs binary
@@ -152,7 +190,7 @@ export async function listContainer(source: PodSource, url: string): Promise<Pod
 export async function readResource(source: PodSource, url: string): Promise<ReadResult> {
   const pod = asPodPort(source);
   const target = requirePodScopedUrl({ podRoot: pod.root }, url);
-  const { body, contentType: rawContentType, etag } = await pod.read(target);
+  const { body, contentType: rawContentType, etag } = await readScopedResource(pod, target);
   const contentType = (rawContentType.split(";").shift() ?? "").trim().toLowerCase();
   const result: ReadResult = { ...(contentType ? { contentType } : {}), ...(etag ? { etag } : {}) };
   if (isTextualContentType(contentType)) {
@@ -170,7 +208,13 @@ export async function readResource(source: PodSource, url: string): Promise<Read
 export async function readRdf(source: PodSource, url: string): Promise<ReadRdfResult> {
   const pod = asPodPort(source);
   const target = requirePodScopedUrl({ podRoot: pod.root }, url);
-  const { body, contentType, url: finalUrl } = await pod.read(target, { accept: RDF_ACCEPT });
+  const {
+    body,
+    contentType,
+    url: finalUrl,
+  } = await readScopedResource(pod, target, {
+    accept: RDF_ACCEPT,
+  });
   const dataset = await parseRdf(new TextDecoder().decode(body), contentType || null, {
     baseIRI: finalUrl ?? target,
   });
@@ -220,6 +264,12 @@ class RankedMatches {
     }
   }
 
+  /** A later denied read must also discard an earlier discovery of this URL. */
+  remove(url: string): void {
+    this.byUrl.delete(url);
+    this.rankOf.delete(url);
+  }
+
   /** All matches, strongest (lowest rank) first. */
   ranked(): SearchMatch[] {
     return [...this.byUrl.values()].sort(
@@ -232,7 +282,7 @@ class RankedMatches {
  * (1) Seed containers for the scan. Always seeds the `scope`; when a `webId` is
  * configured, adds best-effort Type-Index hints (a failure never aborts). Each
  * discovered hint is re-scope-checked (SSRF guard): in-pod containers become scan
- * seeds; a direct in-pod instance file is matched immediately (rank 0). A hint
+ * seeds; a direct in-pod instance file is read before matching (rank 0). A hint
  * outside the pod is ignored.
  */
 async function seedContainers(
@@ -258,12 +308,8 @@ async function seedContainers(
       if (isContainerUrl(scoped)) {
         seeds.add(scoped);
       } else {
-        // A direct instance file: match its url/name immediately.
         const name = resourceTitle(scoped);
-        if (scoped.toLowerCase().includes(q) || name.toLowerCase().includes(q)) {
-          matches.add({ url: scoped, name, snippet: "type-index instance" }, 0);
-        }
-        await matchChildLiteral(
+        await matchChild(
           config,
           { url: scoped, name, isContainer: false, type: [] },
           q,
@@ -279,8 +325,8 @@ async function seedContainers(
   return seeds;
 }
 
-/** A single RDF resource child matched against `q` for a literal hit (rank 2). */
-async function matchChildLiteral(
+/** Authorize a candidate before recording any name, URL or literal match. */
+async function matchChild(
   config: PodSource,
   child: PodChild,
   q: string,
@@ -288,11 +334,36 @@ async function matchChildLiteral(
   budget: SearchBudget,
   directInstance = false,
 ): Promise<void> {
-  // A container listing often does NOT advertise a child's mimeType, so we also
-  // try resources whose URL carries a known RDF file extension. Type Index
-  // instances are explicit discovery hints: negotiate RDF regardless of name.
-  if (!(directInstance || isRdfLike(child.mimeType) || hasRdfExtension(child.url))) return;
-  const literalHit = await literalMatch(config, child.url, q);
+  const nameHit = child.name.toLowerCase().includes(q) || child.url.toLowerCase().includes(q);
+  // Type Index instances negotiate RDF even without a filename extension.
+  const tryLiteral =
+    !child.isContainer &&
+    (directInstance || isRdfLike(child.mimeType) || hasRdfExtension(child.url));
+  if (!nameHit && !tryLiteral) return;
+  let read: PodReadResult;
+  try {
+    read = await readScopedResource(
+      config,
+      child.url,
+      tryLiteral ? { accept: RDF_ACCEPT } : undefined,
+    );
+  } catch {
+    matches.remove(child.url);
+    return;
+  }
+  if (!budget.active) return;
+  if (nameHit) {
+    matches.add(
+      {
+        url: child.url,
+        name: child.name,
+        snippet: directInstance ? "type-index instance" : "name/url match",
+      },
+      directInstance ? 0 : 1,
+    );
+  }
+  if (!tryLiteral) return;
+  const literalHit = await literalMatch(read, child.url, q);
   if (literalHit && budget.active) {
     matches.add({ url: child.url, name: child.name, snippet: `literal: ${literalHit}` }, 2);
   }
@@ -323,7 +394,7 @@ async function scanContainers(
 
     let children: PodChild[];
     try {
-      children = await listContainer(config, url);
+      children = await containerCandidates(config, url);
     } catch {
       continue; // unreadable container — skip.
     }
@@ -331,13 +402,9 @@ async function scanContainers(
     for (const child of children) {
       if (!budget.active) break;
       if (!budget.claim(child.url)) continue;
-      if (child.name.toLowerCase().includes(q) || child.url.toLowerCase().includes(q)) {
-        matches.add({ url: child.url, name: child.name, snippet: "name/url match" }, 1);
-      }
+      await matchChild(config, child, q, matches, budget);
       if (child.isContainer) {
         if (depth + 1 <= maxDepth) queue.push({ url: child.url, depth: depth + 1 });
-      } else {
-        await matchChildLiteral(config, child, q, matches, budget);
       }
     }
   }
@@ -445,22 +512,17 @@ function hasRdfExtension(url: string): boolean {
 
 /**
  * Read an RDF resource and return the first literal object value containing `q`
- * (case-insensitive), truncated to a short snippet, or `undefined`. Never throws.
+ * (case-insensitive), truncated to a short snippet, or `undefined`. Only parsing
+ * and literal nonmatches are handled here; the caller has already authorized the read.
  */
 async function literalMatch(
-  config: PodSource,
+  read: PodReadResult,
   url: string,
   q: string,
 ): Promise<string | undefined> {
-  // Defense-in-depth: never fetch a URL we cannot confirm is in-pod, even though
-  // callers pass scope-filtered URLs (the listing is untrusted — SSRF guard).
-  const target = podScopedUrlOrUndefined({ podRoot: asPodPort(config).root }, url);
-  if (target === undefined) {
-    return undefined;
-  }
   let dataset: import("n3").Store;
   try {
-    dataset = await searchRdf(config, target);
+    dataset = await parseSearchRead(read, url);
   } catch {
     return undefined;
   }
@@ -568,8 +630,8 @@ async function searchRdf(
   profile = false,
 ): Promise<import("n3").Store> {
   const pod = asPodPort(source);
-  const { body, contentType, url: finalUrl } = await pod.read(url, { accept: RDF_ACCEPT });
-  if (body.byteLength > MAX_CONTENT_BYTES) throw new RdfLimitError();
+  const read = await pod.read(url, { accept: RDF_ACCEPT });
+  const { url: finalUrl } = read;
   const base = finalUrl ?? url;
   // HTTP representation URLs omit WebID fragments; retain the configured-profile exception.
   const expectedProfile = profile ? new URL(pod.webId) : undefined;
@@ -581,9 +643,18 @@ async function searchRdf(
   if (expectedProfile?.href !== finalDocument.href) {
     requirePodScopedUrl({ podRoot: pod.root }, base);
   }
+  return parseSearchRead(read, url);
+}
+
+/** Parse an already authorized read without turning a read denial into a nonmatch. */
+async function parseSearchRead(
+  { body, contentType, url: finalUrl }: PodReadResult,
+  url: string,
+): Promise<import("n3").Store> {
+  if (body.byteLength > MAX_CONTENT_BYTES) throw new RdfLimitError();
   return parseBoundedRdf(
     new TextDecoder().decode(body),
     mediaType(contentType || "text/turtle"),
-    base,
+    finalUrl ?? url,
   );
 }

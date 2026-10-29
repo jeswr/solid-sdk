@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it, vi } from "vitest";
 import { readRdf, readResource, search } from "../src/pod.js";
@@ -54,6 +55,7 @@ describe("fetch PodPort", () => {
         body: `<#registration> <${solid}instance> <${ROOT}favorite.txt> .`,
         contentType: "text/turtle",
       },
+      [`${ROOT}favorite.txt`]: { body: "readable instance", contentType: "text/plain" },
     });
     const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
       if (String(input) !== webId) return fixture.fetch(input, init);
@@ -111,6 +113,7 @@ describe("fetch PodPort", () => {
         body: `<#registration> <${solid}instance> <${instance}> .`,
         contentType: "text/turtle",
       },
+      [instance]: { body: "readable instance", contentType: "text/plain" },
     });
     const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
       if (String(input) !== webId) return fixture.fetch(input, init);

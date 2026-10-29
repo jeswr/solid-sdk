@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import {
   CHAT_PROVIDERS,
@@ -14,7 +15,7 @@ import {
   scopedFetch,
   writesEnabled,
 } from "./auth.js";
-import { listContainer } from "./pod.js";
+import { containerCandidates } from "./pod.js";
 
 /** Parse a conservative Link-header subset; ambiguous/unsupported discovery fails closed. */
 function wacAclLink(header: string): string {
@@ -97,7 +98,9 @@ export function createChatPodPort(config: SolidMcpConfig): ChatPodPort {
       };
     },
     async list(container) {
-      return listContainer({ ...config, fetch: rdfFetch }, container);
+      // ChatWriter reads metadata and every message before returning a result.
+      // Preserve those read errors instead of silently filtering missing messages.
+      return containerCandidates({ ...config, fetch: rdfFetch }, container);
     },
     async write(url, body, contentType, cond) {
       if (!writesEnabled(config)) throw new Error("write disabled: server is read-only");

@@ -76,6 +76,11 @@ Every tool, including `fetch` and both search names, uses the injected port's cu
 `read` and `list` methods. Authorization decorators, filtered listings, and redacted
 read results remain authoritative. Fetch-backed streaming and parsing limits are
 enforced inside that boundary.
+Search records a match only after the target read succeeds, including matches
+based solely on a Type Index hint, filename or URL. Read denials discard the
+candidate; an authorized read with no matching RDF literal can still match by name.
+Container tools and MCP resource listings authorize the container and each child
+before returning metadata, omitting unreadable children.
 Decorated reads receive complete bodies up to the input limit; larger downloads
 fail closed so a content-based authorization check cannot inspect a partial body.
 
