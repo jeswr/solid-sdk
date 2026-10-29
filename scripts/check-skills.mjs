@@ -6,6 +6,7 @@ import {
   existsSync,
   globSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   writeFileSync,
@@ -283,11 +284,16 @@ export function checkSkills(root, { write = false } = {}) {
   for (const path of paths) {
     files.add(path);
     const skillDir = dirname(path);
-    const patterns = path.startsWith("skills/")
-      ? [`${skillDir}/**/*`]
-      : [`${skillDir}/references/**/*`];
-    for (const companion of globSync(patterns, { cwd: root, withFileTypes: true })) {
-      if (companion.isFile()) files.add(relative(root, join(companion.parentPath, companion.name)));
+    const companionDir = path.startsWith("skills/") ? skillDir : join(skillDir, "references");
+    if (existsSync(join(root, companionDir))) {
+      // Directory enumeration includes dotfiles and dot-directories within this scope.
+      for (const companion of readdirSync(join(root, companionDir), {
+        recursive: true,
+        withFileTypes: true,
+      })) {
+        if (companion.isFile())
+          files.add(relative(root, join(companion.parentPath, companion.name)));
+      }
     }
 
     const text = readFileSync(join(root, path), "utf8").replaceAll("\r\n", "\n");

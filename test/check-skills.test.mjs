@@ -558,6 +558,49 @@ describe("skill validation", () => {
   });
 
   it.each([
+    "skills/alpha/.env",
+    "skills/alpha/.private/credentials.txt",
+    "skills/alpha/scripts/.config",
+    "skills/alpha/assets/.private/nested/config.txt",
+    "packages/widget/references/.env",
+    "packages/widget/references/.private/nested/config.txt",
+  ])("scans hidden companions for secrets and forbidden paths: %s", (path) => {
+    const root = fixture();
+    const index = "Previously generated index\n";
+    put(root, "skills/INDEX.md", index);
+    put(root, path, "TOKEN=fixture-credential-value\n/Users/someone/private\n");
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      `${path}: line 2: absolute user path is forbidden`,
+      `${path}: line 1: possible environment secret (value omitted)`,
+    ]);
+    expect(readFileSync(join(root, "skills/INDEX.md"), "utf8")).toBe(index);
+  });
+
+  it.each([
+    "skills/alpha/.private/guide.md",
+    "packages/widget/references/.guide.md",
+  ])("checks relative links in hidden Markdown companions: %s", (path) => {
+    const root = fixture();
+    put(root, path, "[broken](missing.md)");
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      `${path}: relative link does not resolve (target omitted)`,
+    ]);
+  });
+
+  it("keeps hidden-file discovery within the companion scope", () => {
+    const root = fixture();
+    for (const path of [
+      "skills/.config",
+      "packages/widget/.env",
+      "packages/widget/scripts/.private/config.txt",
+      "packages/no-skill/references/.env",
+    ]) {
+      put(root, path, "TOKEN=fixture-credential-value\n/Users/someone/private\n");
+    }
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
     "skills/alpha/SKILL.md",
     "skills/alpha/references/guide.md",
     "packages/widget/SKILL.md",
