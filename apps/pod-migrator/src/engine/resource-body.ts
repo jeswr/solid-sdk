@@ -18,7 +18,9 @@ interface ReadOptions {
   signal?: AbortSignal;
   semantic?: boolean;
   accessDocument?: boolean;
-  /** False only for explicit RDF rewriting or comparison with known complete bytes. */
+  /** Retained upload bytes: exact equality establishes target completeness. */
+  expected?: Uint8Array;
+  /** False only for explicit RDF rewriting. */
   verbatim?: boolean;
   /**
    * Accept a verbatim copy whose completeness rests on graph isomorphism alone. Called with
@@ -41,21 +43,30 @@ export async function readBody(response: Response, url: string, options: ReadOpt
       cause,
     );
   }
-  const length = response.headers.get("content-length");
+  let length = response.headers.get("content-length");
   const encoding = response.headers.get("content-encoding");
   const identity = !encoding || encoding.toLowerCase() === "identity";
   // Fetch decodes Content-Encoding while retaining the encoded Content-Length.
   if (length !== null && identity) {
     if (!/^\d+$/.test(length) || !Number.isSafeInteger(Number(length)))
       throw new ResourceReadError(url, `Invalid Content-Length at ${url}`);
-    // CORS can expose Content-Length while hiding Content-Encoding. A decoded
-    // body longer than the encoded length is not evidence of truncation.
-    if (bytes.byteLength < Number(length))
-      throw new ResourceReadError(
-        url,
-        `Incomplete resource body at ${url}: Content-Length is ${length} bytes, received ${bytes.byteLength}`,
-      );
+    // CORS can hide compression, which can expand small bodies. A short decoded
+    // CORS body then has no reliable length; a longer body remains acceptable.
+    if (bytes.byteLength < Number(length)) {
+      if (response.type === "cors" && !encoding) length = null;
+      else
+        throw new ResourceReadError(
+          url,
+          `Incomplete resource body at ${url}: Content-Length is ${length} bytes, received ${bytes.byteLength}`,
+        );
+    }
   }
+  const expected = options.expected;
+  if (
+    expected &&
+    (bytes.length !== expected.length || bytes.some((value, i) => value !== expected[i]))
+  )
+    throw new ResourceReadError(url, "Content verification failed");
   const contentType = response.headers.get("content-type");
   const type = extractMediaType(contentType);
   let dataset: Awaited<ReturnType<typeof parseRdf>> | undefined;
@@ -77,15 +88,18 @@ export async function readBody(response: Response, url: string, options: ReadOpt
       );
     }
     // With ambiguous framing, a non-ASCII string's character count can masquerade
-    // as a byte count even when the prefix is valid RDF. Access documents also
-    // require conversion evidence when the first response has no visible length.
+    // as a byte count even when the prefix is valid RDF. Length-free data also
+    // checks any available conversion; access documents require that evidence.
     // A complete JSON document already establishes its syntactic boundary.
     if (
       type !== "application/ld+json" &&
+      !expected &&
       (options.accessDocument ||
-        (length !== null && identity && bytes.byteLength === Number(length))) &&
+        length === null ||
+        (identity && bytes.byteLength === Number(length))) &&
       bytes.some((b) => b > 127)
     ) {
+      let failClosed = options.accessDocument || length !== null;
       try {
         if (!options.http) throw new Error("No independent representation transport");
         const accept = type === "application/n-quads" ? "application/trig" : "application/n-quads";
@@ -98,6 +112,8 @@ export async function readBody(response: Response, url: string, options: ReadOpt
           throw new Error("Server did not supply an independently framed serialization");
         }
         const other = await readBody(independent, url, { semantic: true });
+        // A valid conversion makes graph disagreement evidence of missing data.
+        failClosed = true;
         if (
           !isomorphic(
             dataset as NonNullable<typeof dataset>,
@@ -107,11 +123,12 @@ export async function readBody(response: Response, url: string, options: ReadOpt
           throw new Error("Independent RDF graphs differ");
         graphProofOnly = true;
       } catch (cause) {
-        throw new ResourceReadError(
-          url,
-          `RDF completeness cannot be established at ${url}: independent representation unavailable or graph mismatch`,
-          cause,
-        );
+        if (failClosed)
+          throw new ResourceReadError(
+            url,
+            `RDF completeness cannot be established at ${url}: independent representation unavailable or graph mismatch`,
+            cause,
+          );
       }
     }
   }

@@ -454,16 +454,9 @@ export async function executeMigration(
           extractMediaType(copied.contentType)
         )
           throw new TypeError("Content type verification failed");
-        const actual = await readResourceBytes(response, current, {
-          http: state.target.http,
-          signal: opts.signal,
-          // The following byte-for-byte comparison supplies independent evidence
-          // against the complete body retained before writing.
-          verbatim: false,
+        await readResourceBytes(response, current, {
+          expected: copied.bytes,
         });
-        const { bytes } = copied;
-        if (actual.length !== bytes.length || actual.some((value, i) => value !== bytes[i]))
-          throw new TypeError("Content verification failed");
       }
       progress("verify", index + 1, active.length, current);
     }

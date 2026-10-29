@@ -89,10 +89,11 @@ Data crosses from source to target only as bytes plus a content type. No header,
      serialise with `n3.Writer`); off by default the bytes are copied verbatim.
      All network RDF reads use one validated reader: file bodies, containers, anonymous groups,
      access-system discovery, ACLs/ACRs, execution rechecks and verification. It consumes bytes,
-     checks for bodies shorter than visible Content-Length when no non-identity encoding is
-     exposed, and decodes RDF with fatal UTF-8. Fetch decodes compression, and browser CORS can
-     hide Content-Encoding while exposing Content-Length. A longer decoded body is therefore
-     accepted; its size is not proof of truncation. Exposed compressed lengths are not compared.
+     decodes RDF with fatal UTF-8 and rejects bodies shorter than visible Content-Length on
+     basic/default responses without an exposed non-identity encoding. Fetch decodes compression,
+     and browser CORS can hide Content-Encoding while exposing Content-Length. Compression can
+     expand small bodies: a shorter CORS body with no visible Content-Encoding is treated as
+     length-free. A longer decoded body remains accepted. Exposed compressed lengths are not compared.
      Stream, length, decoding and integrity failures carry the resource URL. Planning failures
      become blocking report items; execution failures appear against the affected destination
      resource in `MigrationResult.failed`, with the source/document URL in the explanation.
@@ -101,7 +102,8 @@ Data crosses from source to target only as bytes plus a content type. No header,
      exactly between triples, parse successfully, and match an incorrect Content-Length. HEAD
      repeats that length. For non-JSON RDF with non-ASCII bytes matching a visible length and
      no exposed non-identity encoding, request **one** different serialization: N-Quads, or TriG
-     when the original is N-Quads. **ACLs and ACRs require this check even when the first response
+     when the original is N-Quads. Length-free non-ASCII data requests the same conversion.
+     **ACLs and ACRs require this check even when the first response
      has no Content-Length or exposes compression**: no supported server has independent evidence
      that its original representation always counts bytes. Merely lacking Content-Length is not
      completeness evidence for an access document from CSS or another unestablished server.
@@ -111,8 +113,11 @@ Data crosses from source to target only as bytes plus a content type. No header,
      Installed/live CSS 7.2 confirms conversion consumes the full stored stream and omits the
      stored length. This CSS conversion behaviour supplies independent evidence within the
      stated threat model. Matching lengths, ETags or a second length-framed response do not.
-     A mismatch or unavailable conversion fails closed. ASCII RDF, opaque resources and
-     length-free non-access representations need no second GET.
+     A graph mismatch always fails before any destination write. An unavailable conversion
+     (including errors or an echoed original media type) fails closed for access documents and
+     data matching a visible length. Length-free data keeps its received bytes without a warning
+     when conversion is unavailable: there is no evidence of truncation. An agreeing conversion
+     uses the graph-only path below. ASCII RDF and opaque resources need no second GET.
 
      **Verbatim copying warns when completeness depends on graph isomorphism.** A dataset
      deduplicates triples, so even an agreeing complete alternate graph cannot establish that
@@ -123,7 +128,8 @@ Data crosses from source to target only as bytes plus a content type. No header,
      translated from the proven graph. Explicit IRI rewriting
      parses and reserializes RDF anyway; duplicate lexical triples are not preserved in
      that mode. Byte verification compares against the complete retained body actually written,
-     so it can use semantic validation followed by exact byte equality with that body.
+     so exact equality establishes target completeness without requesting another serialization.
+     Different bytes fail verification.
 
      JSON-LD copies validate the complete JSON syntax and UTF-8 without expanding any context.
      JSON's closing delimiters establish the document boundary, so a character-count cut cannot

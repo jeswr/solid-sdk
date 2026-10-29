@@ -121,9 +121,14 @@ DESIGN.md as follows. These notes are colocated with the engine and reflected in
 - RDF rewriting is opt-in. Parsed term positions are mapped; literal text stays untouched.
   Rewritten data uses TriG so named graphs survive. Default copying preserves the source bytes.
   If completeness depends on graph agreement with a converted representation, default copying
-  refuses before writes: graphs cannot prove preservation of duplicate triples or other lexical
-  bytes. Explicit rewriting may use that semantic proof. Unicode ACLs/ACRs require an agreeing
-  length-free conversion even when the first response lacks Content-Length. These checks trust
+  warns: graphs cannot prove preservation of duplicate triples or other lexical bytes. Explicit
+  rewriting may use that semantic proof without warning. Length-free non-ASCII RDF data also
+  requests a conversion: disagreement refuses before writes; unavailable or echoed conversions
+  leave the received bytes accepted without warning. Unicode ACLs/ACRs require an agreeing
+  length-free conversion even when the first response lacks Content-Length. A short CORS body
+  with hidden Content-Encoding is treated as length-free because compression can expand it;
+  basic/default responses with reliable lengths still reject short bodies. Target verification
+  requires exact equality with the retained upload bytes and needs no conversion. These checks trust
   the source server's account of its own data; a server lying in both representations is outside
   the [documented threat model](../../docs/DESIGN.md#threat-model-and-completeness).
   Partial representations and redirects are refused. No remote JSON-LD contexts are fetched.
