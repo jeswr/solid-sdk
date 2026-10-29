@@ -4,6 +4,7 @@
 
 ```ts
 
+import { ContainerMember } from '@jeswr/ldp-container';
 import type { DatasetCore } from '@rdfjs/types';
 import { Store } from 'n3';
 import { TermWrapper } from '@rdfjs/wrapper';
@@ -14,7 +15,7 @@ export const AS = "https://www.w3.org/ns/activitystreams#";
 // @public
 export const as: (local: string) => string;
 
-// @public
+// @public @deprecated
 export function assertWithinBase(container: string, url: string, opts?: {
     allowRoot?: boolean;
 }): void;
@@ -22,11 +23,7 @@ export function assertWithinBase(container: string, url: string, opts?: {
 // @public
 export function buildMemory(resourceUrl: string, data: MemoryData): Store;
 
-// @public
-export interface ContainerMember {
-    readonly container: boolean;
-    readonly url: string;
-}
+export { ContainerMember }
 
 // @public
 export const DCT = "http://purl.org/dc/terms/";
