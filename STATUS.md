@@ -935,3 +935,77 @@ remote Git fetch/merge or dependency lifecycle script was used. Both requested
 findings are fixed, with no implementation work or open questions remaining.
 Validation limitations are the full-workspace font download and unavailable
 roborev.
+
+## Codex fix round 8 — review of `9359717525f0`
+
+- `54c80fa5 fix: bound N3 structural allocations` limits N3-family structural
+  nesting to 64 levels and charges pending contexts before forwarding opening
+  lexer tokens. Context reservations accumulate even for empty scopes that emit
+  no quads. Generated blank nodes consume the shared allocation budget before
+  factory construction, including nodes that never reach an emitted quad.
+  README documents the limits.
+- `docs: record round-eight validation` records this round's results.
+
+The conservative choices are a 64-level nesting limit matching JSON-LD, a
+128-byte context reservation, and a 64-byte reservation for each generated blank
+node. Graph and annotation scopes count alongside blank-node, collection,
+reified-triple and triple-term contexts. These reservations share the existing
+1 MiB allocation budget with directives and expanded terms.
+
+Added **42 fixture cases** covering every structural token pair, boundary and
+excessive nesting, sibling contexts, empty TriG graphs without quads, generated
+list nodes sharing directive budgets, structural characters inside data, and
+fetch truncation/search skipping through both adapters. Against the previous
+parser, **36 regression cases fail**; with the fix, all cases pass. Spies on N3's
+actual context and node allocation paths verify that deep input stops before
+retaining a 65th context and before emitting any quad.
+
+Validation used Node 24 and the existing fixture-only network guard:
+
+```sh
+export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"
+export NODE_OPTIONS=--require=/tmp/sst-9s2-round2-network-guard.cjs
+export GIT_ALLOW_PROTOCOL=file
+pnpm exec turbo run build --filter '@jeswr/solid-mcp^...' --concurrency=4
+pnpm --filter @jeswr/solid-mcp run lint
+pnpm --filter @jeswr/solid-mcp run build
+pnpm --filter @jeswr/solid-mcp run typecheck
+pnpm --filter @jeswr/solid-mcp run test
+pnpm --filter @jeswr/solid-mcp run test:coverage
+TURBO_SCM_BASE=9359717525f01afb16e1fae2ccf876a987508bd3 pnpm run gate
+pnpm run gate:full
+```
+
+All commands except `gate:full` pass (exit 0). The package gate and coverage run
+each pass **656 tests across 11 files**, including configured coverage thresholds.
+The affected repository gate passes **23/23 tasks**, 7 cached, including root
+lint and dependent-package checks. Root tests pass **745 tests across 9 files**.
+
+The initial full gate exits 1 after **199 successful tasks out of 284**, 12 cached:
+the temporary guard intercepts seven guarded-fetch DNS fixtures before their
+injected lookup can run. The app-suite font build also reports refused external
+connections. A temporary guard revision permits injected lookup callbacks but
+refuses every non-loopback resolved address before socket connection; a separate
+probe confirms that refusal. No repository harness or package code was changed
+for this validation adjustment. Then:
+
+```sh
+export NODE_OPTIONS=--require=/tmp/sst-9s2-round8-network-guard.cjs
+pnpm --filter @jeswr/guarded-fetch run test
+pnpm run gate:full
+```
+
+The guarded-fetch fixture suite passes **335 tests across 6 files** (exit 0).
+The full-gate retry exits 1 after **211 successful tasks out of 286**, 198 cached,
+at the unchanged `@jeswr/app-suite#build`: `next/font` cannot download Onest,
+Source Code Pro and Source Serif 4 from Google Fonts through the fixture-only
+network guard. This is the same font-download limitation recorded in prior
+rounds. Unrelated code was left untouched.
+
+`git diff --check` passes. `roborev status` exits 127 because roborev is
+unavailable, so automated per-commit review could not run. No dependencies or
+manifests changed; `check:packages` is not applicable. No push, publication,
+remote Git fetch/merge or dependency lifecycle script was used. The requested
+finding is fixed, with no implementation work or open questions remaining.
+Validation limitations are the full-workspace font download and unavailable
+roborev.
