@@ -107,8 +107,9 @@ export function sparqPolicyEngine(
     id: "sparq-policy",
     async evaluate(policy, request) {
       try {
+        const binary = options.binary;
         if (
-          !options.binary ||
+          !binary ||
           (options.timeoutMs !== undefined &&
             (!Number.isFinite(options.timeoutMs) ||
               options.timeoutMs <= 0 ||
@@ -160,93 +161,106 @@ export function sparqPolicyEngine(
         // Unresolved policies can establish only a prohibition; permissions add no evidence.
         const permissions = unresolved ? [] : lower(policy.permissions);
         const prohibitions = lower(policy.prohibitions);
-        const contextTypes = new Map<string, string>();
-        for (const rule of [...permissions, ...prohibitions]) {
-          for (const c of rule.constraints ?? []) {
-            const left = leftOperandIri(c.leftOperand);
-            const type = contextType(c.datatype);
-            // One request context slot cannot carry two incompatible comparison kinds.
-            if (contextTypes.has(left) && contextTypes.get(left) !== type)
-              return { effect: "indeterminate" };
-            contextTypes.set(left, type);
+        const decide = async (
+          permissions: ReturnType<typeof lower>,
+          prohibitions: ReturnType<typeof lower>,
+        ): Promise<{ effect: Effect } | undefined> => {
+          const contextTypes = new Map<string, string>();
+          for (const rule of [...permissions, ...prohibitions]) {
+            for (const c of rule.constraints ?? []) {
+              const left = leftOperandIri(c.leftOperand);
+              const type = contextType(c.datatype);
+              // One request context slot cannot carry two incompatible comparison kinds.
+              if (contextTypes.has(left) && contextTypes.get(left) !== type) return undefined;
+              contextTypes.set(left, type);
+            }
           }
-        }
-        const graph = credentialToRdf({
-          id: "urn:example:sparq-envelope",
-          issuer: "https://owner.example/#me",
-          credentialSubject: {
-            [`${AGENT}policy`]: encodePolicy({
-              ...policy,
-              assigner: undefined,
-              assignee: undefined,
-              conflict: "prohibit",
-              profile: undefined,
-              obligations: [],
-              permissions,
-              prohibitions,
-            }),
-          },
-        });
-        // Only validated rule operands reach the backend, with one slot per canonical IRI.
-        const context = [...contextTypes].map(([leftOperand, type]) => {
-          const value = attributes.get(leftOperand);
-          return {
-            leftOperand,
-            value: { type, value: type === "decimal" ? Number(value) : value },
-          };
-        });
-        const input = JSON.stringify({
-          api: SPARQ_DECIDE_API,
-          policy: { format: "turtle", text: await turtle(sparqOperands(new Store(graph))) },
-          request: {
-            action: actionIri("use"),
-            target: request.target,
-            context,
-          },
-        });
-        if (new TextEncoder().encode(input).length > 256 * 1024) return { effect: "indeterminate" };
-        const run =
-          options.run ??
-          ((binary, args) => {
-            const result = spawnSync(binary, [], args);
-            return { ...result, stdout: result.stdout };
+          const graph = credentialToRdf({
+            id: "urn:example:sparq-envelope",
+            issuer: "https://owner.example/#me",
+            credentialSubject: {
+              [`${AGENT}policy`]: encodePolicy({
+                ...policy,
+                assigner: undefined,
+                assignee: undefined,
+                conflict: "prohibit",
+                profile: undefined,
+                obligations: [],
+                permissions,
+                prohibitions,
+              }),
+            },
           });
-        const result = run(options.binary, {
-          input,
-          encoding: "utf8",
-          timeout: options.timeoutMs ?? 5000,
-          maxBuffer: 64 * 1024,
-          env: {},
-          shell: false,
-        });
-        if (
-          result.error ||
-          result.status !== 0 ||
-          new TextEncoder().encode(result.stdout).length > 64 * 1024
-        )
-          return { effect: "indeterminate" };
-        const doc = JSON.parse(result.stdout);
-        if (
-          doc?.api !== SPARQ_DECIDE_API ||
-          doc.error !== undefined ||
-          doc.evaluator?.crate !== "sparq-policy" ||
-          doc.evaluator.function !== "decide" ||
-          typeof doc.evaluator.version !== "string" ||
-          !Array.isArray(doc.matchedRules) ||
-          !doc.matchedRules.every((r: unknown) => typeof r === "string")
-        )
-          return { effect: "indeterminate" };
-        if (doc.effect === "permit" && Array.isArray(doc.unresolved) && doc.unresolved.length > 0)
-          return { effect: "indeterminate" };
-        const effect: Effect =
-          doc.effect === "permit"
-            ? "permit"
-            : doc.effect === "deny"
-              ? doc.matchedRules.length > 0
-                ? "prohibited"
-                : "not-applicable"
-              : "indeterminate";
-        return { effect: unresolved && effect !== "prohibited" ? "indeterminate" : effect };
+          // Only validated rule operands reach the backend, with one slot per canonical IRI.
+          const context = [...contextTypes].map(([leftOperand, type]) => {
+            const value = attributes.get(leftOperand);
+            return {
+              leftOperand,
+              value: { type, value: type === "decimal" ? Number(value) : value },
+            };
+          });
+          const input = JSON.stringify({
+            api: SPARQ_DECIDE_API,
+            policy: { format: "turtle", text: await turtle(sparqOperands(new Store(graph))) },
+            request: {
+              action: actionIri("use"),
+              target: request.target,
+              context,
+            },
+          });
+          if (new TextEncoder().encode(input).length > 256 * 1024)
+            return { effect: "indeterminate" };
+          const run =
+            options.run ??
+            ((binary, args) => {
+              const result = spawnSync(binary, [], args);
+              return { ...result, stdout: result.stdout };
+            });
+          const result = run(binary, {
+            input,
+            encoding: "utf8",
+            timeout: options.timeoutMs ?? 5000,
+            maxBuffer: 64 * 1024,
+            env: {},
+            shell: false,
+          });
+          if (
+            result.error ||
+            result.status !== 0 ||
+            new TextEncoder().encode(result.stdout).length > 64 * 1024
+          )
+            return { effect: "indeterminate" };
+          const doc = JSON.parse(result.stdout);
+          if (
+            doc?.api !== SPARQ_DECIDE_API ||
+            doc.error !== undefined ||
+            doc.evaluator?.crate !== "sparq-policy" ||
+            doc.evaluator.function !== "decide" ||
+            typeof doc.evaluator.version !== "string" ||
+            !Array.isArray(doc.matchedRules) ||
+            !doc.matchedRules.every((r: unknown) => typeof r === "string")
+          )
+            return { effect: "indeterminate" };
+          if (doc.effect === "permit" && Array.isArray(doc.unresolved) && doc.unresolved.length > 0)
+            return { effect: "indeterminate" };
+          const effect: Effect =
+            doc.effect === "permit"
+              ? "permit"
+              : doc.effect === "deny"
+                ? doc.matchedRules.length > 0
+                  ? "prohibited"
+                  : "not-applicable"
+                : "indeterminate";
+          return { effect: unresolved && effect !== "prohibited" ? "indeterminate" : effect };
+        };
+        const result = await decide(permissions, prohibitions);
+        if (result !== undefined) return result;
+        // Conflicting context types cannot hide an independently decidable prohibition.
+        for (const prohibition of prohibitions) {
+          const result = await decide([], [prohibition]);
+          if (result?.effect === "prohibited") return result;
+        }
+        return { effect: "indeterminate" };
       } catch {
         return { effect: "indeterminate" };
       }

@@ -512,8 +512,18 @@ it.each([
   ).toEqual({ type, value });
 });
 
-it("requires confirmation when one context value needs incompatible backend types", async () => {
-  const run = vi.fn(() => ({ stdout: response(), status: 0 }));
+it.each([
+  { effect: "deny", matchedRules: ["urn:temporal"], expected: "prohibited" },
+  { effect: "deny", matchedRules: [], expected: "indeterminate" },
+  { effect: "permit", matchedRules: [], expected: "indeterminate" },
+])("checks prohibitions independently across incompatible context types: %j", async ({
+  expected,
+  ...backend
+}) => {
+  const run = vi.fn((_binary: string, _args: ProcessOptions) => ({
+    stdout: response(backend),
+    status: 0,
+  }));
   const request = intent({ action: "read", attributes: { purpose: "2026-10-26" } });
   const p: Policy = {
     id: policy.id,
@@ -546,6 +556,172 @@ it("requires confirmation when one context value needs incompatible backend type
       },
     ],
   };
+  const adapter = sparqPolicyEngine({ binary: "test", run });
+  expect(await solidOdrlEngine.evaluate(p, request)).toEqual({ effect: "prohibited" });
+  expect(await adapter.evaluate(p, request)).toEqual({ effect: expected });
+  expect(run).toHaveBeenCalledOnce();
+  const doc = JSON.parse((run.mock.calls[0] as [string, ProcessOptions])[1].input);
+  expect(doc.request.context).toEqual([
+    { leftOperand: `${ODRL}purpose`, value: { type: "dateTime", value: "2026-10-26" } },
+  ]);
+  const store = await parseRdf(doc.policy.text, "text/turtle");
+  const lowered = node(store, "urn:example:sparq-envelope")
+    .one("https://www.w3.org/2018/credentials#credentialSubject")
+    .one(`${AGENT}policy`);
+  expect(lowered.values(`${ODRL}permission`)).toHaveLength(0);
+  expect(lowered.values(`${ODRL}prohibition`)).toHaveLength(1);
+  expect(await evaluateIntent({ ...mandate(), autonomous: p }, request, adapter)).toEqual(
+    expected === "prohibited"
+      ? { decision: "prohibited", reason: "prohibition" }
+      : { decision: "confirm-required", reason: "indeterminate" },
+  );
+});
+
+it.each([
+  false,
+  true,
+])("retains unrelated prohibitions across conflicting permissions (match: %s)", async (matches) => {
+  const run = vi.fn((_binary: string, _args: ProcessOptions) => ({
+    stdout: response({ effect: "deny", matchedRules: matches ? ["urn:count"] : [] }),
+    status: 0,
+  }));
+  const p: Policy = {
+    id: policy.id,
+    permissions: [
+      {
+        type: "permission",
+        action: "read",
+        constraints: ["string", "date"].map((datatype) => ({
+          leftOperand: "purpose",
+          operator: "eq",
+          rightOperand: "2026-10-26",
+          datatype: `${XSD}${datatype}`,
+        })),
+      },
+    ],
+    prohibitions: [
+      {
+        type: "prohibition",
+        action: "read",
+        constraints: [{ leftOperand: "count", operator: "eq", rightOperand: 2 }],
+      },
+    ],
+  };
+  const request = intent({
+    action: "read",
+    attributes: { purpose: "2026-10-26", count: matches ? 2 : 1 },
+  });
+  expect(await sparqPolicyEngine({ binary: "test", run }).evaluate(p, request)).toEqual({
+    effect: matches ? "prohibited" : "indeterminate",
+  });
+  expect(run).toHaveBeenCalledOnce();
+  const doc = JSON.parse((run.mock.calls[0] as [string, ProcessOptions])[1].input);
+  expect(doc.request.context).toEqual([
+    { leftOperand: `${ODRL}count`, value: { type: "decimal", value: matches ? 2 : 1 } },
+  ]);
+});
+
+it.each([
+  "date",
+  "string",
+])("checks conflicting prohibitions separately with %s first", async (first) => {
+  const constraints: Constraint[] = [first, first === "date" ? "string" : "date"].map(
+    (datatype) => ({
+      leftOperand: "purpose",
+      operator: "eq",
+      rightOperand: datatype === "date" ? "2026-10-26" : "other",
+      datatype: `${XSD}${datatype}`,
+    }),
+  );
+  const run = vi.fn((_binary: string, args: ProcessOptions) => {
+    const { request } = JSON.parse(args.input);
+    const matches = request.context[0].value.type === "dateTime";
+    return {
+      stdout: response({ effect: "deny", matchedRules: matches ? ["urn:temporal"] : [] }),
+      status: 0,
+    };
+  });
+  const p: Policy = {
+    ...policy,
+    prohibitions: constraints.map((c) => ({
+      type: "prohibition",
+      action: "read",
+      constraints: [c],
+    })),
+  };
+  const request = intent({ action: "read", attributes: { purpose: "2026-10-26" } });
+  expect(await sparqPolicyEngine({ binary: "test", run }).evaluate(p, request)).toEqual({
+    effect: "prohibited",
+  });
+  expect(run).toHaveBeenCalledTimes(first === "date" ? 1 : 2);
+  for (const [, args] of run.mock.calls) {
+    const doc = JSON.parse(args.input);
+    const store = await parseRdf(doc.policy.text, "text/turtle");
+    const lowered = node(store, "urn:example:sparq-envelope")
+      .one("https://www.w3.org/2018/credentials#credentialSubject")
+      .one(`${AGENT}policy`);
+    expect(lowered.values(`${ODRL}permission`)).toHaveLength(0);
+    expect(lowered.values(`${ODRL}prohibition`)).toHaveLength(1);
+    const datatype = lowered
+      .one(`${ODRL}prohibition`)
+      .one(`${ODRL}constraint`)
+      .iri(`${AGENT}datatype`);
+    expect(doc.request.context[0].value.type).toBe(
+      datatype === `${XSD}date` ? "dateTime" : "string",
+    );
+  }
+});
+
+it("skips an internally conflicting prohibition and retains an independent prohibition", async () => {
+  const run = vi.fn(() => ({
+    stdout: response({ effect: "deny", matchedRules: ["urn:unconditional"] }),
+    status: 0,
+  }));
+  expect(
+    await sparqPolicyEngine({ binary: "test", run }).evaluate(
+      {
+        ...policy,
+        prohibitions: [
+          {
+            type: "prohibition",
+            action: "read",
+            constraints: ["string", "date"].map((datatype) => ({
+              leftOperand: "purpose",
+              operator: "eq",
+              rightOperand: "2026-10-26",
+              datatype: `${XSD}${datatype}`,
+            })),
+          },
+          { type: "prohibition", action: "read" },
+        ],
+      },
+      intent({ action: "read", attributes: { purpose: "2026-10-26" } }),
+    ),
+  ).toEqual({ effect: "prohibited" });
+  expect(run).toHaveBeenCalledOnce();
+});
+
+it.each([
+  "permission",
+  "prohibition",
+] as const)("requires confirmation for an internally conflicting %s without a definite prohibition", async (type) => {
+  const run = vi.fn(() => ({ stdout: response(), status: 0 }));
+  const p: Policy = {
+    id: policy.id,
+    [type === "permission" ? "permissions" : "prohibitions"]: [
+      {
+        type,
+        action: "read",
+        constraints: ["string", "date"].map((datatype) => ({
+          leftOperand: "purpose",
+          operator: "eq",
+          rightOperand: "2026-10-26",
+          datatype: `${XSD}${datatype}`,
+        })),
+      },
+    ],
+  };
+  const request = intent({ action: "read", attributes: { purpose: "2026-10-26" } });
   const adapter = sparqPolicyEngine({ binary: "test", run });
   expect(await adapter.evaluate(p, request)).toEqual({ effect: "indeterminate" });
   expect(run).not.toHaveBeenCalled();
