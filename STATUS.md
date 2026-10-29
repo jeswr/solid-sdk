@@ -364,3 +364,57 @@ is committed. `roborev` remains unavailable, so automated per-commit review coul
 No push, PR, branch switch, merge, publication, tracker mutation, or other-checkout write
 occurred. The requested fix is complete; the full workspace gate remains blocked by the
 unrelated snapshot failure. This round introduces no open questions.
+
+## Fix round 7 — review of `15465265b371`
+
+The single requested resource-dispatch liveness finding is fixed on `lane/sst-6sex`,
+starting from `15465265b37175bbbd7f792a15b4aba6e7b3ab29`.
+
+- `0a72b0ae` — `fix(mcp-oauth): recheck sessions at resource dispatch`: bind the callback
+  and restored clients' transports to their pod session ID. Recheck durable session liveness
+  immediately before each credentialed resource attempt, after body buffering and proof
+  generation, including nonce retries. Public-client discovery and token requests retain
+  their existing behavior. Keep the earlier fetchFor checks as well.
+- The final `docs: record seventh review fix results` commit records this validation.
+
+Eight new offline fixture cases cover cached and restored clients: revocation by another
+worker, absolute session expiry, or a vault outage during body buffering, and retirement
+while cancelling a resource nonce challenge. All eight first failed against the previous
+implementation because the requests succeeded. After the fix, buffering cases send no
+resource request, and nonce cases send only the initial challenge request.
+
+All commands ran with `/opt/node24/bin` prepended to PATH: Node `v24.22.1`, pnpm `10.4.1`.
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/mcp-oauth
+pnpm --filter @jeswr/mcp-oauth exec vitest run src/pod-sessions.test.ts --coverage.enabled=false -t 'resource dispatch after|resource nonce retries after'
+pnpm --filter @jeswr/mcp-oauth run lint && pnpm --filter @jeswr/mcp-oauth run build && pnpm --filter @jeswr/mcp-oauth run typecheck && pnpm --filter @jeswr/mcp-oauth run test
+pnpm run lint:root
+TURBO_SCM_BASE=15465265b37175bbbd7f792a15b4aba6e7b3ab29 pnpm run gate
+```
+
+PASS: dependency-first build, eight focused cases, package gate (264 tests in seven files;
+100% statements, branches, functions and lines), root lint, and affected gate (nine tasks,
+four cached). Existing successful body replay, nonce retry, and request-snapshot cases
+continue to pass. No dependency or lockfile change was needed; no package-policy check
+was applicable.
+
+```sh
+pnpm run gate:full
+pnpm --filter @jeswr/federation-trust run test
+git diff 15465265b37175bbbd7f792a15b4aba6e7b3ab29 -- packages/federation-trust test scripts package.json vitest.config.ts
+git diff --check
+```
+
+The full gate passed all 745 root tests, then failed at the previously recorded federation-trust
+snapshot mismatch at `test/characterization.test.ts:196`: serialized JWK keys are expected in
+`crv,x,kty` order and received in `kty,crv,x` order. The isolated federation-trust command
+reproduced it (53 pass, one fail). The full gate completed 315 of 361 tasks, with seven cached.
+The comparison against this round's base is empty for the failing package and root test/config
+surfaces. No unrelated source or snapshot was changed. Whitespace checks pass.
+
+Removed the 16 generated callback/Client ID files from the eight pod app builds. No dist output
+is committed. `roborev` remains unavailable, so automated per-commit review could not run.
+No push, PR, branch switch, merge, publication, tracker mutation, or other-checkout write
+occurred. The requested fix is complete; the full workspace gate remains blocked by the
+unrelated snapshot failure. This round introduces no open questions.
