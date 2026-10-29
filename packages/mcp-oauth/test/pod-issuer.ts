@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   createHash,
   createPublicKey,
@@ -44,12 +45,15 @@ export function podIssuer() {
     issueRefresh: true,
     expiresIn: 600 as number | undefined,
     idNonce: undefined as string | undefined,
+    idSubject: "alice",
     idIssuer: POD_ISSUER,
     tokenError: false,
     tokenNonce: false,
     resourceNonce: false,
     alwaysResourceNonce: false,
     refreshWebId: undefined as string | undefined,
+    refreshNonce: undefined as string | undefined,
+    refreshIdToken: true,
     rotateRefresh: true,
     onToken: undefined as (() => Promise<void>) | undefined,
   };
@@ -61,7 +65,7 @@ export function podIssuer() {
     const payload = b64({
       iss: controls.idIssuer,
       aud: POD_CLIENT,
-      sub: "alice",
+      sub: controls.idSubject,
       webid: webId,
       iat: now,
       exp: now + 600,
@@ -184,7 +188,14 @@ export function podIssuer() {
       return Response.json({
         access_token: accessToken,
         token_type: controls.tokenType,
-        id_token: mint(nonce, nonce === undefined ? controls.refreshWebId : controls.webId),
+        ...(nonce !== undefined || controls.refreshIdToken
+          ? {
+              id_token: mint(
+                nonce ?? controls.refreshNonce,
+                nonce === undefined ? controls.refreshWebId : controls.webId,
+              ),
+            }
+          : {}),
         ...(controls.expiresIn === undefined ? {} : { expires_in: controls.expiresIn }),
         ...(controls.issueRefresh && (nonce !== undefined || controls.rotateRefresh)
           ? { refresh_token: refreshToken }

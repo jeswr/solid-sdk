@@ -30,6 +30,12 @@ const STORAGE = "http://www.w3.org/ns/pim/space#storage";
 const MAX_CACHED_CLIENTS = 256;
 const CLIENT_CACHE_TTL = 300;
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value));
+// Only call after solid-openid-client has successfully validated the ID token.
+const verifiedIdTokenClaims = (token: string) =>
+  JSON.parse(Buffer.from(token.split(".")[1] as string, "base64url").toString("utf8")) as {
+    sub: string;
+    nonce?: string;
+  };
 type PrivateJwk = Awaited<ReturnType<typeof exportDpopKeyPairJwk>>;
 type CachedClient = { bytes: Uint8Array; client: SolidOidcClient };
 
@@ -54,6 +60,8 @@ interface StoredPodSession {
   kind: "session";
   identity: PodSession;
   issuer: string;
+  subject: string;
+  nonce: string;
   redirect: string;
   clientId: string;
   key: PrivateJwk;
@@ -173,7 +181,11 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
         value.kind !== "session" ||
         value.identity.id !== id ||
         value.clientId !== options.clientId ||
-        value.redirect !== options.redirectUri
+        value.redirect !== options.redirectUri ||
+        typeof value.subject !== "string" ||
+        value.subject.length === 0 ||
+        typeof value.nonce !== "string" ||
+        value.nonce.length === 0
       )
         throw new Error("Invalid pod session");
       if (!(value.expiresAt > now())) {
@@ -248,6 +260,8 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
       if (pending.expiresAt <= now()) throw new Error("Expired pod login");
       const client = await clientFor(pending.issuer, pending.key);
       const session = await client.handleCallback({ url: callbackUrl }, pending.state);
+      // The callback requires an ID token and checks its nonce against pending.state.nonce.
+      const claims = verifiedIdTokenClaims(session.tokens.idToken as string);
       if (pending.expectedWebId !== undefined && session.webId !== pending.expectedWebId)
         throw new Error("Pod WebID mismatch");
       const view = await profile(session.webId);
@@ -260,6 +274,8 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
         kind: "session",
         identity,
         issuer: session.issuer,
+        subject: claims.sub,
+        nonce: pending.state.nonce,
         redirect: options.redirectUri,
         clientId: options.clientId,
         key: pending.key,
@@ -314,6 +330,12 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
           try {
             const client = await clientFor(value.issuer, value.key);
             const tokens = await client.refresh(value.refreshToken);
+            if (tokens.idToken !== undefined) {
+              const claims = verifiedIdTokenClaims(tokens.idToken);
+              if (claims.sub !== value.subject) throw new Error("Refreshed subject mismatch");
+              if (claims.nonce !== undefined && claims.nonce !== value.nonce)
+                throw new Error("Refreshed nonce mismatch");
+            }
             const webId = client.currentWebId();
             if (webId !== undefined && webId !== value.identity.webId)
               throw new Error("Refreshed WebID mismatch");

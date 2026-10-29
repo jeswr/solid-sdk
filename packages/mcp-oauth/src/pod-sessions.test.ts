@@ -241,6 +241,55 @@ describe("Solid-OIDC pod broker", () => {
     expect(await f.store.get(`session:${session.id}`)).not.toContain("fixture-pod-refresh");
   });
 
+  it.each([
+    "matching nonce",
+    "omitted nonce",
+    "omitted ID token",
+  ])("preserves original OIDC claims through restored refreshes with %s", async (variant) => {
+    const f = brokerFixture();
+    f.op.controls.idSubject = "fixture-original-subject";
+    const { begin, session } = await f.login();
+    const nonce = new URL(begin.authorizeUrl).searchParams.get("nonce");
+    const key = `session:${session.id}`;
+    const original = JSON.parse(Buffer.from((await f.vault.get(key)) as Uint8Array).toString());
+    expect(original).toMatchObject({ subject: "fixture-original-subject", nonce });
+    if (variant === "matching nonce") f.op.controls.refreshNonce = nonce as string;
+    if (variant === "omitted ID token") f.op.controls.refreshIdToken = false;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const restarted = createPodSessionProvider(f.options);
+      expect((await (await restarted.fetchFor(session.id))(`${POD_ROOT}notes`)).status).toBe(200);
+      const updated = JSON.parse(Buffer.from((await f.vault.get(key)) as Uint8Array).toString());
+      expect(updated).toMatchObject({
+        subject: original.subject,
+        nonce: original.nonce,
+        refreshToken: `fixture-pod-refresh-${attempt + 2}`,
+      });
+      // Even an intervening response without a nonce must retain the original binding.
+      f.op.controls.refreshNonce = nonce as string;
+      f.op.controls.refreshIdToken = true;
+    }
+    expect(f.op.captured.filter((r) => r.url.startsWith(POD_ROOT))).toHaveLength(2);
+  });
+
+  it.each([
+    "subject",
+    "nonce",
+  ])("retires a restored session before accepting refreshed credentials with a changed %s", async (claim) => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const restarted = createPodSessionProvider(f.options);
+    const fetcher = await restarted.fetchFor(session.id);
+    if (claim === "subject") f.op.controls.idSubject = "other-subject-with-the-same-webid";
+    else f.op.controls.refreshNonce = "different-login-nonce";
+    const swap = vi.spyOn(f.vault, "compareAndSwap");
+    await expect(fetcher(`${POD_ROOT}notes`)).rejects.toThrow(`Refreshed ${claim} mismatch`);
+    expect(swap).toHaveBeenCalledTimes(1); // Claim ownership, without persisting new credentials.
+    expect(f.op.captured.filter((r) => r.url.startsWith(POD_ROOT))).toHaveLength(0);
+    expect(await f.vault.get(`session:${session.id}`)).toBeUndefined();
+    expect(await f.provider.isActive(session.id)).toBe(false);
+    await expect(fetcher(`${POD_ROOT}notes`)).rejects.toThrow("inactive");
+  });
+
   it("rejects callback substitution, duplicate params, wrong state and callback reuse", async () => {
     const f = brokerFixture();
     const begin = await f.provider.begin(POD_ISSUER, POD_CALLBACK);
@@ -486,6 +535,10 @@ describe("Solid-OIDC pod broker", () => {
       { identity: { id: "other" } },
       { clientId: "other" },
       { redirect: "other" },
+      { subject: undefined },
+      { subject: "" },
+      { nonce: undefined },
+      { nonce: "" },
     ]) {
       await f.vault.put(key, Buffer.from(JSON.stringify({ ...value, ...change })));
       await expect(f.provider.isActive(session.id)).rejects.toThrow("Invalid pod session");
