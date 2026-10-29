@@ -9,7 +9,7 @@ import {
   SPARQ_DECIDE_API,
   sparqPolicyEngine,
 } from "../src/sparq.js";
-import type { Policy } from "../src/types.js";
+import type { Policy, Rule } from "../src/types.js";
 import { AGENT, ODRL } from "../src/types.js";
 import { ACTOR, intent } from "./helpers.js";
 
@@ -108,7 +108,7 @@ it("sends typed context, explicit process limits, and only this agent's rules", 
   ).toEqual({ effect: "permit" });
   expect(captured).toMatchObject({ timeout: 42, maxBuffer: 65536, shell: false, env: {} });
   const doc = JSON.parse(captured?.input as string);
-  expect(doc.request.action).toBe("http://www.w3.org/ns/odrl/2/read");
+  expect(doc.request.action).toBe(`${ODRL}use`);
   expect(doc.policy.text).not.toContain("urn:other");
   expect(doc.request.context.map((c: { value: { type: string } }) => c.value.type)).toEqual([
     "iri",
@@ -137,10 +137,10 @@ it("rejects unbounded timeouts and permits carrying unresolved context", async (
   });
 });
 it.each([
-  ["append", "http://www.w3.org/ns/auth/acl#Append"],
-  ["control", "http://www.w3.org/ns/auth/acl#Control"],
-  [`${AGENT}SendMessage`, `${AGENT}SendMessage`],
-])("sends shared vocabulary identities to the external engine: %s", async (action, iri) => {
+  "append",
+  "control",
+  `${AGENT}SendMessage`,
+])("lowers matched actions while preserving shared context identities: %s", async (action) => {
   let input = "";
   await sparqPolicyEngine({
     binary: "test",
@@ -162,7 +162,7 @@ it.each([
     intent({ action, attributes: { delegationDepth: 1, [`${AGENT}binding`]: "gmail" } }),
   );
   const doc = JSON.parse(input);
-  expect(doc.request.action).toBe(iri);
+  expect(doc.request.action).toBe(`${ODRL}use`);
   expect(doc.request.context[0].leftOperand).toBe(
     "https://w3id.org/jeswr/odrl-delegation#delegationDepth",
   );
@@ -172,8 +172,99 @@ it.each([
     .one("https://www.w3.org/2018/credentials#credentialSubject")
     .one(`${AGENT}policy`)
     .one(`${ODRL}permission`);
-  expect(rule.iri(`${ODRL}action`)).toBe(iri);
+  expect(rule.iri(`${ODRL}action`)).toBe(`${ODRL}use`);
   expect(rule.one(`${ODRL}constraint`).iri(`${ODRL}leftOperand`)).toBe(
     "https://w3id.org/jeswr/odrl-delegation#delegationDepth",
   );
+});
+
+it.each([
+  ["use", "read", true],
+  ["use", "append", true],
+  ["write", "append", true],
+  ["append", "write", false],
+  ["read", "write", false],
+  ...[
+    "control",
+    "grantUse",
+    "nextPolicy",
+    "transfer",
+    `${AGENT}SendMessage`,
+    `${AGENT}Transfer`,
+    `${AGENT}Sign`,
+    `${AGENT}BookAppointment`,
+  ].flatMap(
+    (action) =>
+      [
+        ["use", action, false],
+        [action, action, true],
+        [action, "read", false],
+      ] as const,
+  ),
+  [`${AGENT}SendMessage`, `${AGENT}Transfer`, false],
+  ["use", "https://example.org/Action", false],
+] as const)("filters %s rules for %s before backend matching (match: %s)", async (action, requested, matches) => {
+  for (const type of ["permission", "prohibition"] as const) {
+    let input = "";
+    const rule: Rule = {
+      type,
+      action,
+      target: intent().target,
+      assignee: ACTOR,
+      constraints: [{ leftOperand: "count", operator: "lteq", rightOperand: 4 }],
+    };
+    await sparqPolicyEngine({
+      binary: "test",
+      run(_binary, args) {
+        input = args.input;
+        return { stdout: response(), status: 0 };
+      },
+    }).evaluate(
+      { id: policy.id, [type === "permission" ? "permissions" : "prohibitions"]: [rule] },
+      intent({ action: requested, attributes: { count: 4 } }),
+    );
+    const doc = JSON.parse(input);
+    const store = await parseRdf(doc.policy.text, "text/turtle");
+    const serialized = node(store, "urn:example:sparq-envelope")
+      .one("https://www.w3.org/2018/credentials#credentialSubject")
+      .one(`${AGENT}policy`)
+      .values(`${ODRL}${type}`);
+    expect(serialized).toHaveLength(matches ? 1 : 0);
+    expect(doc.request.action).toBe(`${ODRL}use`);
+    for (const lowered of serialized) {
+      expect(lowered.iri(`${ODRL}action`)).toBe(`${ODRL}use`);
+      expect(lowered.iri(`${ODRL}target`)).toBe(rule.target);
+      expect(lowered.values(`${ODRL}assignee`)).toHaveLength(0);
+      expect(lowered.one(`${ODRL}constraint`).text(`${ODRL}rightOperand`)).toBe("4");
+    }
+  }
+});
+
+it("filters targets and inherited assignees before removing parties", async () => {
+  let input = "";
+  await sparqPolicyEngine({
+    binary: "test",
+    run(_binary, args) {
+      input = args.input;
+      return { stdout: response(), status: 0 };
+    },
+  }).evaluate(
+    {
+      id: policy.id,
+      assignee: "urn:other",
+      permissions: [
+        { type: "permission", action: "read" },
+        { type: "permission", action: "read", assignee: ACTOR, target: "urn:other-target" },
+        { type: "permission", action: "read", assignee: ACTOR },
+      ],
+      prohibitions: [{ type: "prohibition", action: "read" }],
+    },
+    intent({ action: "read" }),
+  );
+  const store = await parseRdf(JSON.parse(input).policy.text, "text/turtle");
+  const serialized = node(store, "urn:example:sparq-envelope")
+    .one("https://www.w3.org/2018/credentials#credentialSubject")
+    .one(`${AGENT}policy`);
+  expect(serialized.values(`${ODRL}permission`)).toHaveLength(1);
+  expect(serialized.values(`${ODRL}prohibition`)).toHaveLength(0);
 });

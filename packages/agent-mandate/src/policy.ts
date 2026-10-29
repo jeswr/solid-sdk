@@ -136,7 +136,8 @@ function knownOperand(c: Constraint, value: unknown): boolean {
   });
 }
 
-function candidate(r: Rule, p: Policy, q: Intent): boolean {
+/** Match action, target and effective assignee before lowering for either backend. */
+export function candidate(r: Rule, p: Policy, q: Intent): boolean {
   // Use the shared matcher for standard action implications before validating context.
   const actionMatches = (ODRL_ACTIONS as readonly string[]).includes(q.action)
     ? matchingPermissions(

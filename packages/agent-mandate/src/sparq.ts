@@ -6,7 +6,7 @@ import { credentialToRdf } from "@jeswr/solid-vc";
 import { spawnSync } from "child_process";
 import { Store } from "n3";
 import { actionIri, encodePolicy, leftOperandIri } from "./codec.js";
-import { supportedPolicy } from "./policy.js";
+import { candidate, supportedPolicy } from "./policy.js";
 import { turtle } from "./rdf.js";
 import { AGENT, type Effect, type PolicyEngine, type Rule } from "./types.js";
 
@@ -52,14 +52,15 @@ export function sparqPolicyEngine(
           )
         )
           return { effect: "indeterminate" };
-        const filter = (rules: readonly Rule[] = []) =>
-          rules.filter(
-            (r) =>
-              (r.assignee ?? policy.assignee) === undefined ||
-              (r.assignee ?? policy.assignee) === request.agent,
-          );
-        const withoutParties = (rules: readonly Rule[] = []) =>
-          filter(rules).map(({ assignee: _assignee, assigner: _assigner, ...rule }) => rule);
+        // The backend's use umbrella is broader than the shared suite profile.
+        // Select candidates here, then use one exact action for rules and request.
+        const lower = (rules: readonly Rule[] = []) =>
+          rules
+            .filter((r) => candidate(r, policy, request))
+            .map(({ assignee: _assignee, assigner: _assigner, ...rule }) => ({
+              ...rule,
+              action: "use",
+            }));
         const graph = credentialToRdf({
           id: "urn:example:sparq-envelope",
           issuer: "https://owner.example/#me",
@@ -68,8 +69,8 @@ export function sparqPolicyEngine(
               ...policy,
               assigner: undefined,
               assignee: undefined,
-              permissions: withoutParties(policy.permissions),
-              prohibitions: withoutParties(policy.prohibitions),
+              permissions: lower(policy.permissions),
+              prohibitions: lower(policy.prohibitions),
             }),
           },
         });
@@ -92,7 +93,7 @@ export function sparqPolicyEngine(
           api: SPARQ_DECIDE_API,
           policy: { format: "turtle", text: await turtle(new Store(graph)) },
           request: {
-            action: actionIri(request.action),
+            action: actionIri("use"),
             target: request.target,
             context,
           },
