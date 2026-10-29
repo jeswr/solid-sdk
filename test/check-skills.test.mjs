@@ -1453,6 +1453,13 @@ describe("skill validation", () => {
     'export API_KEY = " #fixture credential value " # comment',
     "  SECRET='\nfixture-credential-value\n'",
     'TOKEN=" \\"fixture-credential-value\\" "',
+    "TOKEN='fixture-credential-value\\'",
+    "PASSWORD='\\'",
+    "export API_KEY=' fixture credential value\\' # comment",
+    "SECRET='fixture-credential-value\\\\\\'",
+    "TOKEN='fixture-credential-value\n\\'",
+    "TOKEN='fixture-credential-value\r\n\\'",
+    "TOKEN='fixture-credential-value\\' # 'your-token'",
   ])("scans complete quoted environment assignments: %s", (assignment) => {
     const root = fixture();
     const path = "skills/alpha/references/guide.md";
@@ -1481,6 +1488,9 @@ describe("skill validation", () => {
     "TOKEN=' \t '",
     "TOKEN= # no value",
     'TOKEN="your-token" # fixture-credential-value',
+    "TOKEN='your-token\\'",
+    "SECRET='[REDACTED]\\' # 'fixture-credential-value'",
+    "TOKEN='your-token\\'\nPASSWORD='your-password'",
   ])("applies placeholder and empty-value exemptions after parsing: %s", (assignment) => {
     const root = fixture();
     put(root, "skills/alpha/references/guide.md", `${assignment}\n`);
@@ -1497,6 +1507,23 @@ describe("skill validation", () => {
       }),
     );
     put(root, "skills/alpha/assets/config.env", "PASSWORD=' fixture credential value'\n");
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: decoded metadata: possible environment secret (value omitted)",
+      "skills/alpha/assets/config.env: line 1: possible environment secret (value omitted)",
+    ]);
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+  });
+
+  it("preserves single-quoted backslashes in decoded metadata and environment companions", () => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({
+        description: JSON.stringify("Use when testing.\nTOKEN='fixture-credential-value\\'"),
+      }),
+    );
+    put(root, "skills/alpha/assets/config.env", "PASSWORD='fixture-credential-value\\'\n");
     expect(checkSkills(root, { write: true }).errors).toEqual([
       "skills/alpha/SKILL.md: decoded metadata: possible environment secret (value omitted)",
       "skills/alpha/assets/config.env: line 1: possible environment secret (value omitted)",

@@ -59,7 +59,7 @@ const secretPatterns = [
   ],
 ];
 const environmentAssignments =
-  /^[\t ]*(?:export[\t ]+)?(?=[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY))[A-Z_][A-Z0-9_]*[\t ]*=[\t ]*(?:"((?:\\[\s\S]|[^"\\])*)"|'((?:\\[\s\S]|[^'\\])*)'|([^\s"'`#]+))/gm;
+  /^[\t ]*(?:export[\t ]+)?(?=[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY))[A-Z_][A-Z0-9_]*[\t ]*=[\t ]*(?:"((?:\\[\s\S]|[^"\\])*)"|'([^']*)'|([^\s"'`#]+))/gm;
 
 function isPlaceholder(value) {
   return /^(?:\$|<|\{|\[|\.\.\.|…|(?:your|example|placeholder|redacted|dummy|test)(?:[-_]|$))/i.test(
@@ -79,7 +79,8 @@ function scanSecrets(text, report) {
     }
   }
   for (const match of text.matchAll(environmentAssignments)) {
-    // Quotes may contain whitespace, comments, and escaped quotes. Classify the
+    // Double quotes allow escapes; single quotes preserve literal backslashes,
+    // including a backslash immediately before the closing quote. Classify the
     // complete value, not the first unquoted-looking fragment of the assignment.
     const value = (match[1] ?? match[2] ?? match[3]).trim();
     if (value && !isPlaceholder(value)) report("environment secret", match.index);
