@@ -21,9 +21,11 @@ The root export is daemon-side; `./settings` is browser-safe; `./testing` contai
 - `ports.ts` is the minimal temporary SDK storage seam. Persist owner-only ACLs before
   content, use ETags/conditional creates, and reject transport errors. Do not assume absent
   content when access was denied. Re-import replaces stable hashed URLs, never appends.
-- Extend RDF via typed `@rdfjs/wrapper` accessors and N3 Writer. Do not build triples or Turtle
-  by hand. Keep the agent namespace `https://jeswr.org/ns/agent#` aligned with agent-model
-  when its vocabulary becomes available.
+- Emit and validate accounts through `@jeswr/agent-model`'s RDF mappings. Registry fields
+  belong to inventory; preserve validated owner restrictions, label and binding state on
+  re-import, and skip semantically unchanged accounts. New accounts remain default-deny.
+  Extend the shared vocabulary and mappings when inventory needs new fields. Do not build
+  triples or Turtle by hand.
 - Keep settings assessments offline and default-deny. Browser settings must not import file
   or crypto modules. The executor owns provider/mandate enforcement, not this settings model.
 

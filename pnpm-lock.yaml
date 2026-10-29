@@ -2515,6 +2515,9 @@ importers:
 
   packages/agent-registry:
     dependencies:
+      '@jeswr/agent-model':
+        specifier: workspace:*
+        version: link:../agent-model
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0

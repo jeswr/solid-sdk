@@ -29,7 +29,7 @@ containing a known identifier or recognizable email, Matrix/social handle, ident
 international phone syntax, including in decoded URI components, are refused even when the
 inventory has no handles. Malformed escapes and decoded control characters are refused. References are
 never resolved. Labels, source paths and free-text notes are never copied into settings
-or RDF; conflict notes become structured hash-only `agent:identityConflict` values.
+or RDF; conflict notes become structured hash-only `agent:identityConflict` inventory values.
 
 `SaltProvider.getSalt()` supplies a stable, private salt of at least 32 bytes from the
 daemon store. Handles use HMAC-SHA-256(salt, normaliseHandle(handle, channel)), hexadecimal.
@@ -58,9 +58,17 @@ Every parsed conflict operand is private even when its channel cannot be inferre
 Explicit email, Matrix, international phone and HTTP(S)/DID/mailto/tel URI alternatives
 are retained as hashes even when absent from accounts and evidence.
 Registry `connected` claims map to `setup-required`; errors and disabled states remain visible.
-Read, triage, draft and send restrictions start false. A changed import resets restrictions
-to false; unchanged resources retain their existing representation. Removed registry rows
-are not deleted automatically.
+Read, triage, draft and send restrictions start false. Re-import validates the stored account
+through `@jeswr/agent-model`, refreshes registry-controlled inventory, and preserves the
+owner's restrictions, label and binding state. Malformed stored accounts abort the import.
+Unchanged inventory and owner settings retain their existing bytes and ETag, including
+when Turtle formatting differs. Removed registry rows are not deleted automatically.
+
+Account RDF is emitted through agent-model's mappings. The account's optional scalar
+`channelHandleHash` and `credentialRef` use the first sorted hash/reference; unconfigured
+accounts omit the primary handle. The shared `inventory` object retains all hashed handles,
+credential references, setup status, observation/test dates, historic evidence and conflicts.
+Lists use the shared RDF sequence mapping rather than multivalued scalar predicates.
 
 `StorageClient` in `src/ports.ts` is a local seam pending SDK storage-client integration.
 Its ACL setter **replaces** grants with owner-only Read/Write/Control and must persist
@@ -68,7 +76,7 @@ the ACL even for an account that has no content yet. The accounts-container ACL 
 first, then each account ACL before content. Conditional creates/updates use `ifNoneMatch`
 or the read ETag; read/ACL/write failures abort. A batch can be partially imported when a
 later storage operation fails; re-running safely resumes it. Re-import uses stable URLs,
-replaces RDF rather than appending, and skips identical Turtle content.
+replaces RDF rather than appending, and skips semantically unchanged accounts.
 
 Use `@jeswr/agent-registry/settings` in the browser for `Settings`, `Account`,
 `emptySettings`, `channelGroup`, `connectionStatus`, `effectiveCapability`, and

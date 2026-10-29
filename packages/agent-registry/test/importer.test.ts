@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+
+import { fromRdf } from "@jeswr/agent-model/rdf";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer forbids scheme imports
 import { mkdtemp, readFile, rm, symlink, writeFile } from "fs/promises";
-import { DataFactory } from "n3";
+import { DataFactory, type Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { stringify } from "yaml";
 import {
@@ -33,6 +35,16 @@ function harness(text = fixture) {
   };
 }
 const term = DataFactory.namedNode;
+function inventoryValues(
+  dataset: Store | undefined,
+  url: string,
+  field: "identityConflicts" | "evidence",
+) {
+  if (!dataset) throw new Error("Fixture dataset absent");
+  const account = fromRdf(dataset, url);
+  if (account.type !== "account" || !account.inventory) throw new Error("Fixture inventory absent");
+  return account.inventory[field];
+}
 const inactivePrivateNotes = [
   'Resolved identity conflict: alice@example.com versus "private-user".',
   'No identity conflict: "private-user" versus alice@example.com.',
@@ -102,7 +114,7 @@ describe("synthetic registry import", () => {
     const dataset = ports.storage.resources.get(url)?.dataset;
     expect(
       dataset?.getObjects(term(url), term(`${AGENT}credentialRef`), null).map((v) => v.value),
-    ).toEqual(account.credentialRefs);
+    ).toEqual(account.credentialRefs.slice(0, 1));
     expect(
       dataset?.getObjects(term(url), term(`${AGENT}organisation`), null).map((v) => v.value),
     ).toEqual(["personal"]);
@@ -150,10 +162,7 @@ describe("synthetic registry import", () => {
     expect(report.settings.connections.every((a) => a.bindingState !== "connected")).toBe(true);
     const mainUrl = `https://pod.example/agent/accounts/${main?.id}.ttl`;
     expect(
-      ports.storage.resources
-        .get(mainUrl)
-        ?.dataset.getObjects(term(mainUrl), term(`${AGENT}identityConflict`), null)
-        .map((v) => JSON.parse(v.value)),
+      inventoryValues(ports.storage.resources.get(mainUrl)?.dataset, mainUrl, "identityConflicts"),
     ).toEqual(main?.identityConflicts);
     expect(ports.storage.events[0]).toEqual({
       operation: "acl",
@@ -275,10 +284,7 @@ describe("synthetic registry import", () => {
     ] as const) {
       const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
       expect(
-        ports.storage.resources
-          .get(url)
-          ?.dataset.getObjects(term(url), term(`${AGENT}identityConflict`), null)
-          .map((v) => JSON.parse(v.value)),
+        inventoryValues(ports.storage.resources.get(url)?.dataset, url, "identityConflicts"),
       ).toEqual(expected);
     }
   });
@@ -318,10 +324,7 @@ describe("synthetic registry import", () => {
     expect(account).toMatchObject({ bindingState: "error", identityConflicts: expected });
     const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
     expect(
-      ports.storage.resources
-        .get(url)
-        ?.dataset.getObjects(term(url), term(`${AGENT}identityConflict`), null)
-        .map((v) => JSON.parse(v.value)),
+      inventoryValues(ports.storage.resources.get(url)?.dataset, url, "identityConflicts"),
     ).toEqual(expected);
     const output = JSON.stringify({
       report,
@@ -499,7 +502,7 @@ describe("synthetic registry import", () => {
     expect(
       dataset?.getObjects(term(url), term(`${AGENT}organisation`), null).map((v) => v.value),
     ).toEqual(["redacted"]);
-    expect(dataset?.getObjects(term(url), term(`${AGENT}identityConflict`), null)).toEqual([]);
+    expect(inventoryValues(dataset, url, "identityConflicts")).toEqual([]);
     expect(
       dataset?.getObjects(term(url), term(`${AGENT}bindingState`), null).map((v) => v.value),
     ).toEqual(["setup-required"]);
@@ -583,16 +586,10 @@ describe("synthetic registry import", () => {
       expect(
         dataset?.getObjects(term(url), term(`${AGENT}channelHandle`), null).map((v) => v.value),
       ).toEqual([index === 0 ? ownHash : lowerHash]);
-      expect(
-        dataset
-          ?.getObjects(term(url), term(`${AGENT}identityConflict`), null)
-          .map((v) => JSON.parse(v.value)),
-      ).toEqual(index === 0 ? expected : []);
-      expect(
-        dataset
-          ?.getObjects(term(url), term(`${AGENT}historicEvidence`), null)
-          .map((v) => JSON.parse(v.value)),
-      ).toEqual(account.evidence);
+      expect(inventoryValues(dataset, url, "identityConflicts")).toEqual(
+        index === 0 ? expected : [],
+      );
+      expect(inventoryValues(dataset, url, "evidence")).toEqual(account.evidence);
     }
     expect(report.settings.unmatchedEvidence).toEqual([]);
     const output = JSON.stringify({ report, resources: [...ports.storage.resources] });
@@ -630,10 +627,7 @@ describe("synthetic registry import", () => {
       expect(account.identityConflicts).toEqual(index === 0 ? [] : expected);
       const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
       expect(
-        ports.storage.resources
-          .get(url)
-          ?.dataset.getObjects(term(url), term(`${AGENT}identityConflict`), null)
-          .map((v) => JSON.parse(v.value)),
+        inventoryValues(ports.storage.resources.get(url)?.dataset, url, "identityConflicts"),
       ).toEqual(index === 0 ? [] : expected);
     }
     const output = JSON.stringify({ report, resources: [...ports.storage.resources] });
@@ -680,11 +674,7 @@ describe("synthetic registry import", () => {
       expect(account).toMatchObject({ identityConflicts: expected, bindingState: state });
       const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
       const dataset = ports.storage.resources.get(url)?.dataset;
-      expect(
-        dataset
-          ?.getObjects(term(url), term(`${AGENT}identityConflict`), null)
-          .map((v) => JSON.parse(v.value)),
-      ).toEqual(expected);
+      expect(inventoryValues(dataset, url, "identityConflicts")).toEqual(expected);
       expect(
         dataset?.getObjects(term(url), term(`${AGENT}bindingState`), null).map((v) => v.value),
       ).toEqual([state]);
@@ -729,11 +719,7 @@ describe("synthetic registry import", () => {
       expect(account).toMatchObject({ identityConflicts: expected, bindingState: state });
       const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
       const dataset = ports.storage.resources.get(url)?.dataset;
-      expect(
-        dataset
-          ?.getObjects(term(url), term(`${AGENT}identityConflict`), null)
-          .map((value) => JSON.parse(value.value)),
-      ).toEqual(expected);
+      expect(inventoryValues(dataset, url, "identityConflicts")).toEqual(expected);
       expect(
         dataset?.getObjects(term(url), term(`${AGENT}bindingState`), null).map((v) => v.value),
       ).toEqual([state]);
@@ -769,7 +755,7 @@ describe("synthetic registry import", () => {
     expect(account).toMatchObject({ bindingState: "setup-required", identityConflicts: [] });
     const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
     const dataset = ports.storage.resources.get(url)?.dataset;
-    expect(dataset?.getObjects(term(url), term(`${AGENT}identityConflict`), null)).toEqual([]);
+    expect(inventoryValues(dataset, url, "identityConflicts")).toEqual([]);
     expect(
       dataset?.getObjects(term(url), term(`${AGENT}bindingState`), null).map((v) => v.value),
     ).toEqual(["setup-required"]);
@@ -810,10 +796,7 @@ describe("synthetic registry import", () => {
       expect(account.identityConflicts).toEqual(expected);
       const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
       expect(
-        ports.storage.resources
-          .get(url)
-          ?.dataset.getObjects(term(url), term(`${AGENT}identityConflict`), null)
-          .map((v) => JSON.parse(v.value)),
+        inventoryValues(ports.storage.resources.get(url)?.dataset, url, "identityConflicts"),
       ).toEqual(expected);
     }
     const output = JSON.stringify({ report, resources: [...ports.storage.resources] });
@@ -870,11 +853,7 @@ describe("synthetic registry import", () => {
     expect(
       dataset?.getObjects(term(url), term(`${AGENT}channelHandle`), null).map((v) => v.value),
     ).toEqual([hash]);
-    expect(
-      dataset
-        ?.getObjects(term(url), term(`${AGENT}identityConflict`), null)
-        .map((v) => JSON.parse(v.value)),
-    ).toEqual(conflicts);
+    expect(inventoryValues(dataset, url, "identityConflicts")).toEqual(conflicts);
     const output = JSON.stringify({ report, resources: [...ports.storage.resources] });
     expect(output).not.toContain(identity);
     expect(output).not.toContain(alternative);
@@ -923,11 +902,7 @@ describe("synthetic registry import", () => {
     expect(account.identityConflicts).toEqual(expected);
     const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
     const dataset = ports.storage.resources.get(url)?.dataset;
-    expect(
-      dataset
-        ?.getObjects(term(url), term(`${AGENT}identityConflict`), null)
-        .map((v) => JSON.parse(v.value)),
-    ).toEqual(expected);
+    expect(inventoryValues(dataset, url, "identityConflicts")).toEqual(expected);
     expect(
       dataset?.getObjects(term(url), term(`${AGENT}bindingState`), null).map((v) => v.value),
     ).toEqual(["error"]);

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** Canonical namespace and the single migration table for pilot/M1 vocabulary symbols.
  * Legacy prefix names are keys only: legacy namespace IRIs are never emitted or fetched.
  */
@@ -138,6 +139,8 @@ export const TERM_DEFINITIONS = {
   channel: "Agent record field channel.",
   channelHandle:
     "Salted hash of an account or sender handle. Raw handles are held only by the daemon.",
+  channelHandles:
+    "Ordered inventory of salted account handle hashes, including an empty list for unconfigured accounts.",
   channelMessageId: "The channel's own id for the transmitted message (recorded on the receipt).",
   claimSubject: "The subject the claim is about.",
   claimType: "The claim type the source was assessed for.",
@@ -167,6 +170,7 @@ export const TERM_DEFINITIONS = {
   credential: "Reference to a signed mandate authorization credential.",
   credentialRef:
     "Daemon profile name or provisioning reference string; never the credential value.",
+  credentialRefs: "Ordered inventory of unresolved credential references; never credential values.",
   credentialState: "Current binding credential state, without credential values.",
   decision: "Owner choice of approve or deny; never trusted before external proof verification.",
   decisionBasis: "A concept from agent:DecisionBases.",
@@ -199,12 +203,17 @@ export const TERM_DEFINITIONS = {
   grantKind: "A concept from agent:GrantKinds.",
   grantee: "The agent a grant is issued to.",
   historyWindow: "Available channel history as an xsd:duration.",
+  historicEvidence:
+    "Ordered hash-only historic connector observations; never evidence of live provider access.",
+  identityConflict: "Ordered hash-only unresolved identity or provider mismatch observations.",
   identityStatus:
     "Sender identity status; inbound messages remain unverified in the logical record.",
   implementsConfiguration: "A configuration the agent implements.",
   inLedger: "The ledger an entry belongs to.",
   inReplyTo: "Reply linkage between channel messages.",
   intent: "Agent record field intent.",
+  inventory:
+    "Registry-controlled account observations, separate from owner restrictions, label and live binding state.",
   interactionPattern: "negotiate, invoke, public-read, ...",
   "kind/accept":
     "accept value in the kind concept scheme; an evidence classification, not a grant.",
@@ -227,6 +236,7 @@ export const TERM_DEFINITIONS = {
   "kind/unsupported":
     "unsupported value in the kind concept scheme; an evidence classification, not a grant.",
   lastIngest: "Timestamp of the most recent ingestion.",
+  lastTested: "Registry-reported connector test date or timestamp; not proof of a live connection.",
   length:
     "Number of ordered items in a bounded RDF sequence, including zero for an empty sequence.",
   limitation: "A stated limit of what a record establishes.",
@@ -252,6 +262,7 @@ export const TERM_DEFINITIONS = {
   odrlAction:
     "The ODRL action short-name the outbound intent performs (literal \u2208 ODRL_ACTIONS).",
   offer: "The identified offer message.",
+  observedAt: "Registry observation date or timestamp, preserved as reported text.",
   offeror: "Software actor that made the offer.",
   operation: "The operation concerned.",
   operationVersion: "Version of the referenced operation definition.",
@@ -286,6 +297,8 @@ export const TERM_DEFINITIONS = {
   send: "Whether account sends may be considered by the executor; false by default and never proof of authorization.",
   sendSupported: "Whether the binding implements sending; not an authorization to send.",
   sequence: "Position of an entry in its ledger (xsd:integer).",
+  setupStatus:
+    "Registry-reported connector setup status; never an owner grant or proof of live access.",
   source: "The source whose authority was assessed.",
   sourceRule: "The local source-authority rule applied.",
   sourceRuleVersion: "Version of that rule.",

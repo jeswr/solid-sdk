@@ -1,15 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import type { AccountInventory, Account as PodAccount } from "@jeswr/agent-model";
 
 /** Pod binding state. Inventory claims never establish a connected state. */
-export type BindingState = "none" | "setup-required" | "connected" | "error" | "disabled";
+export type BindingState = PodAccount["bindingState"];
 /** Owner switches describe restrictions, never a mandate or provider grant. */
-export interface Restrictions {
-  read: boolean;
-  triage: boolean;
-  draft: boolean;
-  send: boolean;
-}
+export type Restrictions = PodAccount["restrictions"];
 /** Deny every operation until the owner supplies independent authorisation. */
 export const DENY_ALL: Readonly<Restrictions> = Object.freeze({
   read: false,
@@ -18,18 +14,9 @@ export const DENY_ALL: Readonly<Restrictions> = Object.freeze({
   send: false,
 });
 /** Conflict evidence contains hashes only; it never resolves competing identities. */
-export interface IdentityConflict {
-  kind: "identity-mismatch" | "provider-mismatch";
-  handleHashes: string[];
-}
+export type IdentityConflict = AccountInventory["identityConflicts"][number];
 /** Historic connector evidence is not current provider access. */
-export interface HistoricEvidence {
-  channel: string;
-  provider: string;
-  handleHash: string;
-  observedOn: string;
-  method: string;
-}
+export type HistoricEvidence = AccountInventory["evidence"][number];
 /** Privacy-safe settings connection and RDF account view. No raw identifiers or free-text notes. */
 export interface Account {
   id: string;
@@ -42,11 +29,7 @@ export interface Account {
   restrictions: Restrictions;
   identityConflicts: IdentityConflict[];
   evidence: HistoricEvidence[];
-  inventory: {
-    setupStatus: string;
-    observedAt?: string;
-    lastTested?: string;
-  };
+  inventory: Pick<AccountInventory, "setupStatus" | "observedAt" | "lastTested">;
 }
 /** Read-only communication policy evidence ported from the pilot settings model. */
 export interface WorkflowPolicy {
