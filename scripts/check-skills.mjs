@@ -301,7 +301,7 @@ function htmlLinksIn(html, definitions, definitionMarker) {
       continue;
     }
     const closing = token[0].startsWith("</");
-    const tag = token[0].slice(closing ? 2 : 1).toLowerCase();
+    let tag = token[0].slice(closing ? 2 : 1).toLowerCase();
     let cursor = tokens.lastIndex;
     let selfClosing = false;
     const elementAttributes = new Map();
@@ -371,6 +371,8 @@ function htmlLinksIn(html, definitions, definitionMarker) {
       namespace = "html";
     }
     if (namespace === "html" && (tag === "svg" || tag === "math")) namespace = tag;
+    // HTML rewrites legacy image start tags to the void img element.
+    if (namespace === "html" && tag === "image") tag = "img";
     const urlAttributes =
       namespace === "html" ? (htmlUrlAttributes.get(tag) ?? []) : ["href", "src", "xlink:href"];
     for (const [name, value] of elementAttributes) {

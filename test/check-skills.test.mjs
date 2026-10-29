@@ -145,6 +145,47 @@ describe("skill validation", () => {
   });
 
   it.each([
+    '<image src="missing.png">',
+    "<IMAGE SRC='missing.png'>",
+    "<image src=missing.png>",
+    '<image src="missing.png" />',
+    '<image srcset="missing.png 2x">',
+    '<image src="references/guide.md" srcset="references/guide.md 1x, miss&#105;ng.png 2x">',
+    '<svg><foreignObject><image srcset="missing.png 2x"></foreignObject></svg>',
+    '<svg><title><image src="missing.png"></title></svg>',
+    '<math><mtext><image srcset="missing.png 2x"></mtext></math>',
+    '<math><annotation-xml encoding="text/html"><image src="missing.png"></annotation-xml></math>',
+  ])("validates HTML image aliases and preserves index output: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    const errors = ["skills/alpha/SKILL.md: relative link does not resolve (target omitted)"];
+    expect(checkSkills(root, { write: true }).errors).toEqual(errors);
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+    const index = "Previously generated index\n";
+    put(root, "skills/INDEX.md", index);
+    expect(checkSkills(root, { write: true }).errors).toEqual(errors);
+    expect(readFileSync(join(root, "skills/INDEX.md"), "utf8")).toBe(index);
+  });
+
+  it.each([
+    '<image src="references/gu&#105;de.md" srcset="references/guide.md 1x, https://example.invalid/image.png 2x">',
+    '<image src="references/guide.md" SRC="missing.png" srcset="references/guide.md 1x" SRCSET="missing.png 2x">',
+    '<image href="missing.png" xlink:href="missing.png">',
+    '<!-- <image src="missing.png" srcset="missing.png 2x"> -->',
+    '`<image src="missing.png">`',
+    '<textarea><image srcset="missing.png 2x"></textarea>',
+    '<svg><image href="references/guide.md" srcset="missing.png 2x" /></svg>',
+    '<math><image xlink:href="references/guide.md" srcset="missing.png 2x" /></math>',
+    '<svg><foreignObject><image src="references/guide.md"><![CDATA[<a href="ignored.md">literal</a><a href="missing.md">literal</a>]]></foreignObject></svg>',
+    '<math><mtext><image src="references/guide.md"><![CDATA[<a href="ignored.md">literal</a><a href="missing.md">literal</a>]]></mtext></math>',
+  ])("preserves HTML image alias URL and void-element rules: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+    expect(checkSkills(root).errors).toEqual([]);
+  });
+
+  it.each([
     '<object data="references/missing.svg"></object>',
     "<OBJECT DATA='references/missing.svg'></OBJECT>",
     "<object data=references/missing.svg></object>",
