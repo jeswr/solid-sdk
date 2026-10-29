@@ -313,7 +313,8 @@ function linksIn(text) {
   const links = [];
   for (const href of htmlLinksIn(html, definitions, definitionMarker)) {
     // HTML URL attributes allow surrounding ASCII whitespace, including encoded whitespace.
-    links.push(href.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, ""));
+    // URL parsing also removes embedded tabs/newlines; percent escapes stay intact.
+    links.push(href.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, "").replace(/[\t\n\r]/g, ""));
   }
   return [...new Set(links)];
 }

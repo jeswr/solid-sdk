@@ -725,6 +725,81 @@ describe("skill validation", () => {
     expect(checkSkills(root, { write: true }).errors).toEqual([]);
   });
 
+  it.each([
+    '<a href="references/gu&#9;ide.md">guide</a>',
+    '<a href="references/gu&#10;ide.md">guide</a>',
+    '<a href="references/gu&#13;ide.md">guide</a>',
+    '<a href="references/gu&Tab;ide.md">guide</a>',
+    '<a href="references/gu&NewLine;ide.md">guide</a>',
+    '<a href="references/gu\tide.md">guide</a>',
+    '<img src="references/gu\nide.md">',
+    '<img src="references/gu\ride.md">',
+    '<svg><a xlink:href="references/gu&#9;ide.md">guide</a></svg>',
+    "[guide](references/gu&#9;ide.md)",
+    "[guide][doc]\n\n[doc]: references/gu&#10;ide.md",
+    "[unused]: references/gu&#13;ide.md",
+    '<a href="ht&#9;tps://example.invalid/missing.md">external</a>',
+    '<a href="h\nttps://example.invalid/missing.md">external</a>',
+    '<img src="&#9;ht&#10;tps&#13;://example.invalid/missing.png">',
+    '<a href="&#32;#sec&#9;tion">anchor</a>',
+    '<img src="/im&#10;age.png">',
+    '<a href="?que&#13;ry=1">query</a>',
+    '<a href=" &#9;references/gu&#10;ide.md&#13; ">guide</a>',
+  ])("removes embedded URL tabs and newlines before resolution: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
+    "%09",
+    "%0A",
+    "%0D",
+    "%2509",
+    "&#12;",
+    "&#32;",
+    "&amp;Tab;",
+  ])("preserves encoded filename characters during URL preprocessing: %s", (encoding) => {
+    const root = fixture();
+    const decoded = { "&#12;": "\f", "&#32;": " ", "&amp;Tab;": "&Tab;" };
+    const filename = `gu${decoded[encoding] ?? decodeURIComponent(encoding)}ide.png`;
+    put(root, `skills/alpha/references/${filename}`, "Image fixture\n");
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({ body: `<img src="references/gu${encoding}ide.png">` }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
+    "%09",
+    "%0A",
+    "%0D",
+  ])("does not resolve a percent-encoded control character to a different filename: %s", (encoding) => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({ body: `<a href="references/gu${encoding}ide.md">guide</a>` }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+  });
+
+  it("still rejects missing relative URLs after removing tabs and newlines", () => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({ body: '<a href="references/miss&#9;ing&#10;.md">broken</a>' }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+  });
+
   it("preserves internal and percent-encoded spaces in HTML filenames", () => {
     const root = fixture();
     put(root, "skills/alpha/references/space name.md", "# Guide\n");
