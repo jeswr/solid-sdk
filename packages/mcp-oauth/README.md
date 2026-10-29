@@ -36,6 +36,8 @@ well-known insertion rule: `/.well-known/oauth-authorization-server/auth` and
 `oauth.protectedResourceMetadataUrl()` returns the latter for a resource server's
 `WWW-Authenticate` challenge (pass it to `@jeswr/solid-mcp/http` as `resourceMetadataUrl`). Metadata, JWKS, errors,
 token responses and redirects carry `Cache-Control: no-store`.
+`metadataUrl(identifier, suffix)` from `@jeswr/mcp-oauth/metadata` shares this construction
+with the MCP HTTP transport without loading the authorization server.
 
 Registration accepts HTTPS or HTTP loopback (`localhost`, 127/8, `::1`) redirect URIs, without
 userinfo or fragments. Redirect comparison is exact, including loopback ports and URI spelling.

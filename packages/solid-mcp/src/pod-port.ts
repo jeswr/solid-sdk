@@ -1,5 +1,7 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { fetchRdf } from "@jeswr/fetch-rdf";
+import { isContainerUrl } from "@jeswr/guarded-fetch";
 import { ContainerDataset } from "@solid/object";
 import { DataFactory } from "n3";
 import {
@@ -11,7 +13,9 @@ import {
   scopedFetch,
   writesEnabled,
 } from "./auth.js";
+import { fetchBoundedRdf } from "./bounded-rdf.js";
 import type { PodChild } from "./pod.js";
+import { hasPodFetchLimits, podOperationFetch } from "./pod-operation.js";
 
 /** Conditional mutation headers supported by a pod. */
 export interface PodConditions {
@@ -37,6 +41,8 @@ export interface PodReadResult {
   etag?: string;
   /** Final representation URL after validated redirects, when available. */
   url?: string;
+  /** Container identified by the backend, including LDP type links on redirect hops. */
+  isContainer?: boolean;
 }
 
 /** Minimal portable container entry; fetch-backed listings retain legacy metadata. */
@@ -72,11 +78,41 @@ export function asPodPort(source: PodSource): PodPort {
   return "root" in source ? source : createFetchPodPort(source);
 }
 
+// Retain only configuration limits, never a way around the injected capability.
+const searchLimits = new WeakMap<PodPort, SolidMcpConfig["searchLimits"]>();
+const nativeReads = new WeakSet<PodPort["read"]>();
+
+/** Internal: only native reads are known not to authorize against complete bodies. */
+export function isFetchPodRead(read: PodPort["read"]): boolean {
+  return nativeReads.has(read);
+}
+
+/** Type relations may share a Link header with quoted commas and other relations. */
+function hasContainerTypeLink(header: string): boolean {
+  for (const link of header.matchAll(/<([^<>]*)>((?:[^"<,]|"(?:[^"\\]|\\.)*")*)/g)) {
+    if (!/^http:\/\/www\.w3\.org\/ns\/ldp#(?:Basic|Direct|Indirect)?Container$/.test(link[1] ?? ""))
+      continue;
+    for (const rel of (link[2] ?? "").matchAll(
+      /(?:^|;)\s*rel\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^\s;,]+))/gi,
+    )) {
+      if (
+        (rel[1] ?? rel[2] ?? "").replace(/\\(.)/g, "$1").toLowerCase().split(/\s+/).includes("type")
+      )
+        return true;
+    }
+  }
+  return false;
+}
+
+/** Internal: configured search defaults for a legacy source or fetch adapter. */
+export function podSearchLimits(source: PodSource): SolidMcpConfig["searchLimits"] {
+  return "root" in source ? searchLimits.get(source) : source.searchLimits;
+}
+
 /** Fetch-backed PodPort, preserving the existing pod scope and configured-identity exception. */
 export function createFetchPodPort(input: SolidMcpConfig): PodPort {
   const config = { ...input, podRoot: normalizePodRoot(input.podRoot) };
-  const guardedFetch = scopedFetch(config);
-  return {
+  const pod: PodPort = {
     root: config.podRoot,
     webId: config.webId ?? "",
     async read(url, options: PodReadOptions = {}) {
@@ -84,8 +120,25 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
       // Tool/resource callers scope-check first, so clients cannot use it as an escape.
       const profile = url === config.webId;
       const target = profile ? url : requirePodScopedUrl(config, url);
+      let finalUrl = target;
+      let isContainer = false;
+      const boundedFetch = podOperationFetch(config.fetch);
+      const transport: typeof globalThis.fetch = async (input, init) => {
+        const requestedUrl = input instanceof Request ? input.url : input.toString();
+        const response = await boundedFetch(input, init);
+        finalUrl = response.url || requestedUrl;
+        // Retain container evidence across the whole guarded redirect chain,
+        // even when a transport omits Response.url (e.g. a portable test seam).
+        isContainer ||=
+          isContainerUrl(requestedUrl) ||
+          isContainerUrl(finalUrl) ||
+          hasContainerTypeLink(response.headers.get("link") ?? "");
+        return response;
+      };
       const fetcher =
-        profile && podScopedUrlOrUndefined(config, url) === undefined ? config.fetch : guardedFetch;
+        profile && podScopedUrlOrUndefined(config, url) === undefined
+          ? transport
+          : scopedFetch({ ...config, fetch: transport });
       const response = await fetcher(target, {
         method: "GET",
         // The off-pod identity exception must never follow an unchecked redirect.
@@ -94,9 +147,10 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
         // Generic reads preserve the server's default representation.
         headers: options.accept === undefined ? undefined : { accept: options.accept },
       });
+      if (!response.ok) void response.body?.cancel().catch(() => {});
       if (response.status === 401 || response.status === 403) {
         throw new Error(
-          `unauthenticated/forbidden (${response.status}) reading ${target} — supply an authenticated fetch (the Solid-MCP server holds no credentials of its own).`,
+          `unauthenticated/forbidden (${response.status}) reading ${target} (HTTP ${response.status}) — supply an authenticated fetch (the Solid-MCP server holds no credentials of its own).`,
         );
       }
       if (!response.ok) {
@@ -108,12 +162,16 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
           .trim()
           .toLowerCase(),
         etag: response.headers.get("etag") ?? undefined,
-        ...(response.url ? { url: response.url } : {}),
+        ...(response.url || finalUrl !== target ? { url: finalUrl } : {}),
+        ...(isContainer ? { isContainer: true } : {}),
       };
     },
     async list(url): Promise<PodChild[]> {
       const target = requirePodScopedUrl(config, url);
-      const { dataset } = await fetchRdf(target, { fetch: guardedFetch });
+      const read = hasPodFetchLimits() ? fetchBoundedRdf : fetchRdf;
+      const { dataset } = await read(target, {
+        fetch: scopedFetch({ ...config, fetch: podOperationFetch(config.fetch) }),
+      });
       const container = new ContainerDataset(dataset, DataFactory).container;
       const children: PodChild[] = [];
       for (const r of container?.contains ?? []) {
@@ -151,6 +209,10 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
       await mutate("DELETE", url, cond);
     },
   };
+
+  searchLimits.set(pod, config.searchLimits && { ...config.searchLimits });
+  nativeReads.add(pod.read);
+  return pod;
 
   async function mutate(
     method: "PUT" | "DELETE",

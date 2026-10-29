@@ -1,12 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { serialize } from "@jeswr/rdf-serialize";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import type { SolidMcpConfig } from "../src/auth.js";
-import { createChatPodPort } from "../src/chat-tools.js";
+import { createChatPodPort, registerChatTools } from "../src/chat-tools.js";
+import { createFetchPodPort, type PodPort } from "../src/pod-port.js";
 import { createSolidMcpServer } from "../src/server.js";
 
 const ROOT = "https://alice.example/pod/";
@@ -84,8 +87,11 @@ function fakePod() {
   }) as unknown as typeof globalThis.fetch;
   return { fetch, resources, requests, failures, redirects, aclLinks };
 }
-async function connect(config: SolidMcpConfig) {
-  const server = createSolidMcpServer(config);
+async function connect(config: SolidMcpConfig, outputPod?: PodPort) {
+  const server = outputPod
+    ? new McpServer({ name: "chat-output-authorization", version: "1" })
+    : createSolidMcpServer(config);
+  if (outputPod) registerChatTools(server, config, outputPod);
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   const client = new Client({ name: "chat-test", version: "1.0" });
   await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
@@ -106,6 +112,71 @@ const input = {
 };
 
 describe("MCP chat tools over the scoped fetch port", () => {
+  it.each([
+    "chat_save",
+    "chat_list",
+    "chat_get",
+  ])("%s projects only authorized resource descriptions", async (name) => {
+    const fixture = fakePod();
+    const config = { fetch: fixture.fetch, podRoot: ROOT, webId: OWNER, readOnly: false };
+    const pod = createFetchPodPort(config);
+    const client = await connect(config, pod);
+    const deniedUrl = `${ROOT}private/chats/claude/sensitive-record/`;
+    const allowedUrl = `${ROOT}private/chats/claude/allowed-record/`;
+    try {
+      for (const conversationId of ["sensitive-record", "allowed-record"]) {
+        const seeded = await client.callTool({
+          name: "chat_save",
+          arguments: {
+            ...input,
+            conversationId,
+            title:
+              conversationId === "sensitive-record"
+                ? "private medical history"
+                : "allowed conversation",
+          },
+        });
+        expect(seeded.isError).toBeFalsy();
+      }
+      const read = pod.read;
+      pod.read = async (url, options) => {
+        if (url === deniedUrl)
+          throw new Error(`purpose denied ${deniedUrl}: private medical history`);
+        return read(url, options);
+      };
+      const args = (conversationId: string) =>
+        name === "chat_list" ? { provider: "claude" } : { ...input, conversationId };
+      const denied = await client.callTool({ name, arguments: args("sensitive-record") });
+      if (name === "chat_get") expect(denied.isError).toBe(true);
+      else expect(denied.isError).toBeFalsy();
+      expect(JSON.stringify(denied)).not.toContain(deniedUrl);
+      expect(JSON.stringify(denied)).not.toContain("sensitive-record");
+      expect(JSON.stringify(denied)).not.toContain("private medical history");
+      const allowed = await client.callTool({ name, arguments: args("allowed-record") });
+      expect(allowed.isError).toBeFalsy();
+      expect(JSON.stringify(allowed)).toContain(allowedUrl);
+      // Individual message reads must also use the current port, before a chat
+      // result can contain their text under an otherwise-readable conversation.
+      pod.read = vi.fn(async (url, options) => {
+        if (url === `${allowedUrl}m-m1.ttl`)
+          throw new Error(`purpose denied ${deniedUrl}: private medical history`);
+        return read(url, options);
+      });
+      const messageDenied = await client.callTool({
+        name: "chat_get",
+        arguments: { provider: "claude", conversationId: "allowed-record" },
+      });
+      expect(messageDenied.isError).toBe(true);
+      expect(pod.read).toHaveBeenCalledWith(`${allowedUrl}m-m1.ttl`, { accept: "text/turtle" });
+      expect(messageDenied.content).toEqual([{ type: "text", text: "purpose denied" }]);
+      expect(JSON.stringify(messageDenied)).not.toContain(deniedUrl);
+      expect(JSON.stringify(messageDenied)).not.toContain("private medical history");
+      expect(JSON.stringify(messageDenied)).not.toContain("Question");
+    } finally {
+      await client.close();
+    }
+  });
+
   it("saves and gets each provider, replays idempotently, and pages with since", async () => {
     const pod = fakePod();
     const client = await connect({

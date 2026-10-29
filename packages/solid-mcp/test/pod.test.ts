@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 import { describe, expect, it } from "vitest";
@@ -40,6 +41,9 @@ describe.each(["legacy config", "fetch PodPort"])("pod operations via %s", (mode
             { name: "photo.png" },
           ]),
         },
+        [`${POD}notes/`]: { contentType: "text/turtle", body: containerTurtle(`${POD}notes/`, []) },
+        [`${POD}a.ttl`]: { contentType: "text/turtle", body: "" },
+        [`${POD}photo.png`]: { contentType: "image/png", body: "image bytes" },
       });
       const children = await listContainer(cfg(pod.fetch), POD);
       const byUrl = Object.fromEntries(children.map((c) => [c.url, c]));
@@ -72,6 +76,7 @@ describe.each(["legacy config", "fetch PodPort"])("pod operations via %s", (mode
           contentType: "text/turtle",
           body: poisonedContainerTurtle(POD, [`${POD}ok.ttl`, "https://evil.example/secret"]),
         },
+        [`${POD}ok.ttl`]: { contentType: "text/turtle", body: "" },
       });
       const children = await listContainer(cfg(pod.fetch), POD);
       const urls = children.map((c) => c.url);
@@ -89,6 +94,7 @@ describe.each(["legacy config", "fetch PodPort"])("pod operations via %s", (mode
             "https://alice.example/other-pod/leak.ttl",
           ]),
         },
+        [`${POD}ok.ttl`]: { contentType: "text/turtle", body: "" },
       });
       const urls = (await listContainer(cfg(pod.fetch), POD)).map((c) => c.url);
       expect(urls).toEqual([`${POD}ok.ttl`]);
@@ -241,7 +247,9 @@ describe.each(["legacy config", "fetch PodPort"])("pod operations via %s", (mode
         },
         [`${POD}note.ttl`]: { contentType: "text/turtle", body: ttl },
       });
-      const hits = await search(cfg(pod.fetch), "avocado");
+      const rec = recordingFetch(pod.fetch);
+      const hits = await search(cfg(rec.fetch), "avocado");
+      expect(rec.urls).not.toContain(`${POD}note`);
       const hit = hits.find((h) => h.url === `${POD}note.ttl`);
       expect(hit).toBeDefined();
       expect(hit?.snippet).toContain("avocados");
@@ -382,6 +390,7 @@ describe.each(["legacy config", "fetch PodPort"])("pod operations via %s", (mode
         [`${POD}settings/publicTypeIndex.ttl`]: { contentType: "text/turtle", body: index },
         // Default root scope is empty: only the type-index instance hint can match.
         [POD]: { contentType: "text/turtle", body: containerTurtle(POD, []) },
+        [instanceUrl]: { contentType: "text/turtle", body: "" },
       });
       const hits = await search(cfg(pod.fetch, { webId }), "treasure");
       // If mis-seeded as a container, `listContainer` would be attempted on it

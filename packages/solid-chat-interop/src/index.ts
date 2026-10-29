@@ -92,7 +92,13 @@ export type {
 } from "./chat-writer.js";
 
 // AUTHORED-BY Codex GPT-6.1-Sol
-export { CHAT_PROVIDERS, CHAT_ROLES, ChatWriter, chatPortStatus } from "./chat-writer.js";
+export {
+  CHAT_PROVIDERS,
+  CHAT_ROLES,
+  ChatWriter,
+  chatPortStatus,
+  validateWacAcl,
+} from "./chat-writer.js";
 // --- vocabulary (IRI constants + prefixes) ---
 export {
   AS,

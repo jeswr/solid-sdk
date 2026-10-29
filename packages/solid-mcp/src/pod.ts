@@ -1,7 +1,8 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-5
 /**
- * Pod operations over the injected authenticated `fetch`, all pod-scope-guarded.
+ * Pod operations over the caller's PodPort and shared output projection.
  *
  * RDF discipline (house rule): we NEVER hand-build or hand-parse RDF. Container
  * listings are parsed via `@jeswr/fetch-rdf` (`fetchRdf`) + `@solid/object`
@@ -12,8 +13,19 @@ import { parseRdf } from "@jeswr/fetch-rdf";
 import { isContainerUrl } from "@jeswr/guarded-fetch";
 import { serialize } from "@jeswr/rdf-serialize";
 import { DataFactory } from "n3";
-import { podScopedUrlOrUndefined, requirePodScopedUrl, requirePodScopedWriteUrl } from "./auth.js";
-import { asPodPort, type PodSource } from "./pod-port.js";
+import {
+  podScopedUrlOrUndefined,
+  requirePodScopedUrl,
+  requirePodScopedWriteUrl,
+  type SolidMcpConfig,
+} from "./auth.js";
+import { parseBoundedRdf, RdfLimitError } from "./bounded-rdf.js";
+import { MAX_CONTENT_BYTES, mediaType, RDF_MEDIA_TYPES, resourceTitle } from "./content.js";
+import { PodOutput } from "./output.js";
+import { withPodFetchLimits, withPodReadLimits } from "./pod-operation.js";
+import { asPodPort, type PodReadResult, type PodSource, podSearchLimits } from "./pod-port.js";
+
+import { SearchBudget, searchLimit } from "./search-budget.js";
 
 const RDF_ACCEPT = "text/turtle, application/ld+json;q=0.9";
 
@@ -71,8 +83,10 @@ export interface SearchOptions {
   scope?: string;
   /** Max recursion depth for the container scan (default 4). */
   maxDepth?: number;
-  /** Max total resources visited in the scan (default 500). */
+  /** Max distinct resources across discovery and scanning (default 500). */
   maxResources?: number;
+  /** Wall-clock budget including discovery and stalled reads (default 5000 ms). */
+  maxTimeMs?: number;
 }
 
 /**
@@ -118,6 +132,11 @@ function isTextualContentType(ct: string | undefined): boolean {
  * being in-pod.
  */
 export async function listContainer(source: PodSource, url: string): Promise<PodChild[]> {
+  return new PodOutput(asPodPort(source)).children(url);
+}
+
+/** Scope-filtered discovery candidates; callers must authorize before reporting them. */
+export async function containerCandidates(source: PodSource, url: string): Promise<PodChild[]> {
   const pod = asPodPort(source);
   const config = { podRoot: pod.root };
   const target = requirePodScopedUrl(config, url);
@@ -137,17 +156,27 @@ export async function listContainer(source: PodSource, url: string): Promise<Pod
  * fetch" error, and on any other non-2xx with the status.
  */
 export async function readResource(source: PodSource, url: string): Promise<ReadResult> {
-  const pod = asPodPort(source);
-  const target = requirePodScopedUrl({ podRoot: pod.root }, url);
-  const { body, contentType: rawContentType, etag } = await pod.read(target);
-  const contentType = (rawContentType.split(";").shift() ?? "").trim().toLowerCase();
-  const result: ReadResult = { ...(contentType ? { contentType } : {}), ...(etag ? { etag } : {}) };
-  if (isTextualContentType(contentType)) {
-    result.text = new TextDecoder().decode(body);
-  } else {
-    result.base64 = Buffer.from(body).toString("base64");
-  }
-  return result;
+  return withPodReadLimits(async () => {
+    const pod = asPodPort(source);
+    const target = requirePodScopedUrl({ podRoot: pod.root }, url);
+    const output = new PodOutput(pod);
+    const {
+      body,
+      contentType: rawContentType,
+      etag,
+    } = await output.representation(target, await output.read(target));
+    const contentType = (rawContentType.split(";").shift() ?? "").trim().toLowerCase();
+    const result: ReadResult = {
+      ...(contentType ? { contentType } : {}),
+      ...(etag ? { etag } : {}),
+    };
+    if (isTextualContentType(contentType)) {
+      result.text = new TextDecoder().decode(body);
+    } else {
+      result.base64 = Buffer.from(body).toString("base64");
+    }
+    return result;
+  });
 }
 
 /**
@@ -155,14 +184,25 @@ export async function readResource(source: PodSource, url: string): Promise<Read
  * hand-concatenated) plus the parsed dataset.
  */
 export async function readRdf(source: PodSource, url: string): Promise<ReadRdfResult> {
-  const pod = asPodPort(source);
-  const target = requirePodScopedUrl({ podRoot: pod.root }, url);
-  const { body, contentType, url: finalUrl } = await pod.read(target, { accept: RDF_ACCEPT });
-  const dataset = await parseRdf(new TextDecoder().decode(body), contentType || null, {
-    baseIRI: finalUrl ?? target,
+  return withPodReadLimits(async () => {
+    const pod = asPodPort(source);
+    const target = requirePodScopedUrl({ podRoot: pod.root }, url);
+    const output = new PodOutput(pod);
+    const read = await output.read(target, {
+      accept: RDF_ACCEPT,
+    });
+    const dataset =
+      (await output.containerRdf(target, read)) ??
+      (await output.rdf(
+        target,
+        read,
+        await parseRdf(new TextDecoder().decode(read.body), read.contentType || null, {
+          baseIRI: read.url ?? target,
+        }),
+      ));
+    const turtle = await serializeTurtle(dataset);
+    return { turtle, dataset };
   });
-  const turtle = await serializeTurtle(dataset);
-  return { turtle, dataset };
 }
 
 /** Serialise an n3.Store to Turtle via the shared serializer (no hand-built triples). */
@@ -173,22 +213,8 @@ function serializeTurtle(dataset: import("n3").Store): Promise<string> {
   });
 }
 
-/**
- * The lowercase RDF media types this package recognises — the ONE reviewed list,
- * shared by every RDF decision so they cannot drift:
- *   - here (`isRdfLike`): which resources to RDF-parse during a literal search;
- *   - in server.ts: which resources to render as Turtle in the read path.
- * If a new RDF serialisation is supported, adding it here updates BOTH. Internal
- * (not re-exported from index.ts), so it is not part of the public API surface.
- */
-export const RDF_MEDIA_TYPES = new Set([
-  "text/turtle",
-  "application/x-turtle",
-  "application/ld+json",
-  "application/n-triples",
-  "application/n-quads",
-  "application/trig",
-]);
+/** Compatibility import location for the shared parsing/output media-type vocabulary. */
+export { RDF_MEDIA_TYPES } from "./content.js";
 
 /**
  * De-duplicated match accumulator keyed by URL, keeping the STRONGEST (lowest)
@@ -207,6 +233,12 @@ class RankedMatches {
     }
   }
 
+  /** A later denied read must also discard an earlier discovery of this URL. */
+  remove(url: string): void {
+    this.byUrl.delete(url);
+    this.rankOf.delete(url);
+  }
+
   /** All matches, strongest (lowest rank) first. */
   ranked(): SearchMatch[] {
     return [...this.byUrl.values()].sort(
@@ -219,60 +251,90 @@ class RankedMatches {
  * (1) Seed containers for the scan. Always seeds the `scope`; when a `webId` is
  * configured, adds best-effort Type-Index hints (a failure never aborts). Each
  * discovered hint is re-scope-checked (SSRF guard): in-pod containers become scan
- * seeds; a direct in-pod instance file is matched immediately (rank 0). A hint
+ * seeds; a direct in-pod instance file is read before matching (rank 0). A hint
  * outside the pod is ignored.
  */
 async function seedContainers(
-  source: PodSource,
+  config: PodSource,
   q: string,
   scope: string,
   matches: RankedMatches,
+  budget: SearchBudget,
 ): Promise<Set<string>> {
-  const config = { podRoot: asPodPort(source).root };
   const seeds = new Set<string>([scope]);
-  if (!asPodPort(source).webId) return seeds;
+  if (!asPodPort(config).webId) return seeds;
   let hints: string[];
   try {
-    hints = await typeIndexContainers(source);
+    hints = await typeIndexContainers(config);
   } catch {
     return seeds; // No type index / unreadable profile — plain scan from scope.
   }
   for (const hint of hints) {
-    // Best-effort per hint: a hint outside the pod scope OR one whose direct
-    // instance segment is undecodable (malformed percent-encoding in an untrusted
-    // profile) is SKIPPED, never allowed to abort the whole search. The entire
-    // per-hint body is guarded, matching the original error boundary.
+    if (!budget.claim(hint)) continue;
+    // Best-effort per hint: untrusted profile data never aborts the whole search.
     try {
-      const scoped = requirePodScopedUrl(config, hint); // only honour in-pod hints
+      const scoped = requirePodScopedUrl({ podRoot: asPodPort(config).root }, hint); // only honour in-pod hints
       if (isContainerUrl(scoped)) {
         seeds.add(scoped);
       } else {
-        // A direct instance file: match its url/name immediately.
-        const name = decodeURIComponent(scoped.replace(/\/$/, "").split("/").pop() ?? scoped);
-        if (scoped.toLowerCase().includes(q) || name.toLowerCase().includes(q)) {
-          matches.add({ url: scoped, name, snippet: "type-index instance" }, 0);
-        }
+        const name = resourceTitle(scoped);
+        await matchChild(
+          config,
+          { url: scoped, name, isContainer: false, type: [] },
+          q,
+          matches,
+          budget,
+          true,
+        );
       }
     } catch {
-      // out-of-pod or undecodable hint — ignore (best-effort seeding).
+      // Unreadable or out-of-pod hint — ignore (best-effort seeding).
     }
   }
   return seeds;
 }
 
-/** A single RDF resource child matched against `q` for a literal hit (rank 2). */
-async function matchChildLiteral(
-  source: PodSource,
+/** Authorize a candidate before recording any name, URL or literal match. */
+async function matchChild(
+  config: PodSource,
   child: PodChild,
   q: string,
   matches: RankedMatches,
+  budget: SearchBudget,
+  directInstance = false,
 ): Promise<void> {
-  // A container listing often does NOT advertise a child's mimeType, so we also
-  // try resources whose URL carries a known RDF file extension. Best-effort.
-  if (!(isRdfLike(child.mimeType) || hasRdfExtension(child.url))) return;
-  const literalHit = await literalMatch(source, child.url, q);
-  if (literalHit) {
-    matches.add({ url: child.url, name: child.name, snippet: `literal: ${literalHit}` }, 2);
+  const nameHit = child.name.toLowerCase().includes(q) || child.url.toLowerCase().includes(q);
+  // Type Index instances negotiate RDF even without a filename extension.
+  const tryLiteral =
+    !child.isContainer &&
+    (directInstance || isRdfLike(child.mimeType) || hasRdfExtension(child.url));
+  if (!nameHit && !tryLiteral) return;
+  let read: PodReadResult;
+  const output = new PodOutput(asPodPort(config));
+  try {
+    read = await output.read(child.url, tryLiteral ? { accept: RDF_ACCEPT } : undefined);
+  } catch {
+    matches.remove(child.url);
+    return;
+  }
+  if (!budget.active) return;
+  if (nameHit) {
+    const match = await output.match({
+      url: child.url,
+      name: child.name,
+      snippet: directInstance ? "type-index instance" : "name/url match",
+    });
+    if (budget.active) matches.add(match, directInstance ? 0 : 1);
+  }
+  if (!tryLiteral) return;
+  const literalHit = await literalMatch(read, child.url, q, output);
+  if (literalHit && budget.active) {
+    const match = await output.match({
+      url: child.url,
+      name: child.name,
+      snippet: `literal: ${literalHit}`,
+    });
+    if (budget.active) matches.add(match, 2);
   }
 }
 
@@ -283,40 +345,35 @@ async function matchChildLiteral(
  * are enqueued until the depth cap. All matches are added to `matches`.
  */
 async function scanContainers(
-  source: PodSource,
+  config: PodSource,
   q: string,
   seeds: Set<string>,
   maxDepth: number,
-  maxResources: number,
   matches: RankedMatches,
+  budget: SearchBudget,
 ): Promise<void> {
-  let visited = 0;
   const seen = new Set<string>();
   const queue: Array<{ url: string; depth: number }> = [...seeds].map((url) => ({ url, depth: 0 }));
-  while (queue.length > 0 && visited < maxResources) {
+  while (queue.length > 0 && budget.active) {
     const next = queue.shift();
     if (!next) break;
     const { url, depth } = next;
-    if (seen.has(url)) continue;
+    if (seen.has(url) || !budget.claim(url)) continue;
     seen.add(url);
 
     let children: PodChild[];
     try {
-      children = await listContainer(source, url);
+      children = await containerCandidates(config, url);
     } catch {
       continue; // unreadable container — skip.
     }
 
     for (const child of children) {
-      if (visited >= maxResources) break;
-      visited++;
-      if (child.name.toLowerCase().includes(q) || child.url.toLowerCase().includes(q)) {
-        matches.add({ url: child.url, name: child.name, snippet: "name/url match" }, 1);
-      }
+      if (!budget.active) break;
+      if (!budget.claim(child.url)) continue;
+      await matchChild(config, child, q, matches, budget);
       if (child.isContainer) {
         if (depth + 1 <= maxDepth) queue.push({ url: child.url, depth: depth + 1 });
-      } else {
-        await matchChildLiteral(source, child, q, matches);
       }
     }
   }
@@ -342,18 +399,64 @@ export async function search(
   options: SearchOptions = {},
 ): Promise<SearchMatch[]> {
   const pod = asPodPort(source);
+  const config: Pick<SolidMcpConfig, "podRoot" | "searchLimits"> = {
+    podRoot: pod.root,
+    searchLimits: podSearchLimits(source),
+  };
   const q = (query ?? "").trim().toLowerCase();
   if (q.length === 0) {
     return [];
   }
-  const maxDepth = options.maxDepth ?? 4;
-  const maxResources = options.maxResources ?? 500;
-  const scope = requirePodScopedUrl({ podRoot: pod.root }, options.scope ?? pod.root);
+  const maxDepth = searchLimit(options.maxDepth ?? config.searchLimits?.maxDepth ?? 4, "maxDepth");
+  const maxResources = searchLimit(
+    options.maxResources ?? config.searchLimits?.maxResources ?? 500,
+    "maxResources",
+  );
+  const maxTimeMs = searchLimit(
+    options.maxTimeMs ?? config.searchLimits?.maxTimeMs ?? 5000,
+    "maxTimeMs",
+  );
+  const scope = requirePodScopedUrl(config, options.scope ?? config.podRoot);
 
   const matches = new RankedMatches();
-  const seeds = await seedContainers(pod, q, scope, matches); // (1) seed
-  await scanContainers(pod, q, seeds, maxDepth, maxResources, matches); // (2) scan
-  return matches.ranked(); // (3) rank
+  if (maxResources === 0 || maxTimeMs === 0) return [];
+  const budget = new SearchBudget(maxResources, maxTimeMs);
+  const bounded: PodSource = {
+    root: pod.root,
+    webId: pod.webId,
+    write: (...args) => pod.write(...args),
+    delete: (...args) => pod.delete(...args),
+    async read(url, options) {
+      if (!budget.claim(url)) throw new Error("Search resource/time budget exhausted.");
+      return pod.read(url, options);
+    },
+    async list(url) {
+      if (!budget.claim(url)) throw new Error("Search resource/time budget exhausted.");
+      return pod.list(url);
+    },
+  };
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<void>((resolve) => {
+    timer = setTimeout(() => {
+      budget.stop();
+      resolve();
+    }, maxTimeMs);
+  });
+  const crawl = () =>
+    withPodFetchLimits(
+      (fetcher) => budget.wrap(fetcher),
+      async () => {
+        const seeds = await seedContainers(bounded, q, scope, matches, budget);
+        await scanContainers(bounded, q, seeds, maxDepth, matches, budget);
+      },
+    );
+  try {
+    await Promise.race([crawl(), deadline]);
+    return matches.ranked();
+  } finally {
+    clearTimeout(timer);
+    budget.stop();
+  }
 }
 
 /** Is the MIME type one we will attempt to RDF-parse for literal search? */
@@ -378,22 +481,18 @@ function hasRdfExtension(url: string): boolean {
 
 /**
  * Read an RDF resource and return the first literal object value containing `q`
- * (case-insensitive), truncated to a short snippet, or `undefined`. Never throws.
+ * (case-insensitive), truncated to a short snippet, or `undefined`. Only parsing
+ * and literal nonmatches are handled here; the caller has already authorized the read.
  */
 async function literalMatch(
-  source: PodSource,
+  read: PodReadResult,
   url: string,
   q: string,
+  output: PodOutput,
 ): Promise<string | undefined> {
-  // Defense-in-depth: never fetch a URL we cannot confirm is in-pod, even though
-  // callers pass scope-filtered URLs (the listing is untrusted — SSRF guard).
-  const target = podScopedUrlOrUndefined({ podRoot: asPodPort(source).root }, url);
-  if (target === undefined) {
-    return undefined;
-  }
   let dataset: import("n3").Store;
   try {
-    ({ dataset } = await readRdf(source, target));
+    dataset = await output.rdf(url, read, await parseSearchRead(read, url));
   } catch {
     return undefined;
   }
@@ -424,23 +523,21 @@ async function literalMatch(
  * within the pod, and (b) only EMIT instance/instanceContainer URLs that are
  * within the pod. This prevents the profile from steering `search` into an SSRF.
  */
-async function typeIndexContainers(source: PodSource): Promise<string[]> {
-  const pod = asPodPort(source);
-  const config = { podRoot: pod.root };
-  const webId = pod.webId;
+async function typeIndexContainers(config: PodSource): Promise<string[]> {
+  const webId = asPodPort(config).webId;
   if (!webId) return [];
   const solidNs = "http://www.w3.org/ns/solid/terms#";
   const out = new Set<string>();
-  const { body, contentType, url: finalUrl } = await pod.read(webId, { accept: RDF_ACCEPT });
-  const profile = await parseRdf(new TextDecoder().decode(body), contentType || null, {
-    baseIRI: finalUrl ?? webId,
-  });
+  const profile = await searchRdf(config, webId, true);
   const indexes = new Set<string>();
   for (const p of [`${solidNs}publicTypeIndex`, `${solidNs}privateTypeIndex`]) {
     for (const quad of profile.getQuads(null, DataFactory.namedNode(p), null, null)) {
       if (quad.object.termType === "NamedNode") {
         // Only fetch type-index documents that are within the pod (untrusted ref).
-        const scoped = podScopedUrlOrUndefined(config, quad.object.value);
+        const scoped = podScopedUrlOrUndefined(
+          { podRoot: asPodPort(config).root },
+          quad.object.value,
+        );
         if (scoped !== undefined) indexes.add(scoped);
       }
     }
@@ -449,12 +546,15 @@ async function typeIndexContainers(source: PodSource): Promise<string[]> {
     try {
       // The index URL is in-pod (validated above); use scopedFetch so a redirect
       // out of the pod is still blocked (redirect-based SSRF guard).
-      const { dataset: ti } = await readRdf(pod, index);
+      const ti = await searchRdf(config, index);
       for (const p of [`${solidNs}instance`, `${solidNs}instanceContainer`]) {
         for (const quad of ti.getQuads(null, DataFactory.namedNode(p), null, null)) {
           if (quad.object.termType === "NamedNode") {
             // Only emit in-pod instance targets (the caller scope-checks again).
-            const scoped = podScopedUrlOrUndefined(config, quad.object.value);
+            const scoped = podScopedUrlOrUndefined(
+              { podRoot: asPodPort(config).root },
+              quad.object.value,
+            );
             if (scoped !== undefined) out.add(scoped);
           }
         }
@@ -480,7 +580,10 @@ export async function writeResource(
   const pod = asPodPort(source);
   const target = requirePodScopedWriteUrl({ podRoot: pod.root }, url);
   const result = await pod.write(target, new TextEncoder().encode(content), contentType, {});
-  return { url: target, ...result };
+  const output = new PodOutput(pod);
+  // Mutation permission does not grant permission to describe the stored data.
+  await output.read(target);
+  return { url: target, ...(result.etag ? { etag: result.etag } : {}) };
 }
 
 /** Derive a name when a portable backend only supplies URL and container status. */
@@ -491,4 +594,40 @@ function resourceName(url: string): string {
   } catch {
     return name;
   }
+}
+
+/** Keep bounded parsing for portable reads as well as streaming fetch-backed reads. */
+async function searchRdf(
+  source: PodSource,
+  url: string,
+  profile = false,
+): Promise<import("n3").Store> {
+  const pod = asPodPort(source);
+  const read = await pod.read(url, { accept: RDF_ACCEPT });
+  const { url: finalUrl } = read;
+  const base = finalUrl ?? url;
+  // HTTP representation URLs omit WebID fragments; retain the configured-profile exception.
+  const expectedProfile = profile ? new URL(pod.webId) : undefined;
+  const finalDocument = new URL(base);
+  if (expectedProfile) {
+    expectedProfile.hash = "";
+    finalDocument.hash = "";
+  }
+  if (expectedProfile?.href !== finalDocument.href) {
+    requirePodScopedUrl({ podRoot: pod.root }, base);
+  }
+  return parseSearchRead(read, url);
+}
+
+/** Parse an already authorized read without turning a read denial into a nonmatch. */
+async function parseSearchRead(
+  { body, contentType, url: finalUrl }: PodReadResult,
+  url: string,
+): Promise<import("n3").Store> {
+  if (body.byteLength > MAX_CONTENT_BYTES) throw new RdfLimitError();
+  return parseBoundedRdf(
+    new TextDecoder().decode(body),
+    mediaType(contentType || "text/turtle"),
+    finalUrl ?? url,
+  );
 }

@@ -19,6 +19,22 @@ export function createPodToolRegistry(pod: PodPort, readOnly?: boolean): readonl
 export function createSolidMcpServer(config: SolidMcpServerConfig): McpServer;
 
 // @public
+export function fetchDocument(source: PodSource, id: string): Promise<FetchResult>;
+
+// @public
+export interface FetchResult {
+    id: string;
+    metadata: {
+        contentType: string;
+        truncated: boolean;
+        etag?: string;
+    };
+    text: string;
+    title: string;
+    url: string;
+}
+
+// @public
 export function listContainer(source: PodSource, url: string): Promise<PodChild[]>;
 
 // @public
@@ -66,6 +82,7 @@ export interface PodReadResult {
     body: Uint8Array;
     contentType: string;
     etag?: string;
+    isContainer?: boolean;
     url?: string;
 }
 
@@ -135,6 +152,7 @@ export interface SearchMatch {
 export interface SearchOptions {
     maxDepth?: number;
     maxResources?: number;
+    maxTimeMs?: number;
     scope?: string;
 }
 
@@ -143,6 +161,11 @@ export interface SolidMcpConfig {
     fetch: typeof fetch;
     podRoot: string;
     readOnly?: boolean;
+    searchLimits?: {
+        maxDepth?: number;
+        maxResources?: number;
+        maxTimeMs?: number;
+    };
     webId?: string;
 }
 

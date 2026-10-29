@@ -303,7 +303,9 @@ Profile, wire semantics, security assumptions, supervisor interface and boundari
 - **Untrusted email** goes only through the bridge's exhaustively-hardened `parseEmail`; this package
   never hand-rolls RFC/MIME parsing or RDF (it uses `@jeswr/fetch-rdf`, `@solid/object`, `n3.Writer`).
 - **Owner-private + ACL-first**: every container is owner-only ACL'd before any content (regression
-  tested).
+  tested). The helper discovers the existing container's own WAC ACL and validates it
+  before replacing it. Missing/ambiguous associations, ACP, out-of-container or shared ACLs,
+  redirects and read/write failures abort before private content is written.
 - **Deny-by-default autonomy** via the signed ODRL mandate, enforced in the no-LLM executor.
 - **At-most-once send** (compare-and-swap claim before send).
 - **SSRF-guarded, redirect-refusing** remote reads; the pod (the owner's own origin) uses the injected

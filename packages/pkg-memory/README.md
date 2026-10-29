@@ -98,10 +98,37 @@ rejects malformed skeletons, missing graphs, duplicate scalar fields and unknown
 statuses. It returns graph identifiers, statuses, evidence, attribution, categories,
 revision links and a complete dataset; it does not infer template inputs from RDF.
 
-This is a model/parser, not the KG SHACL validator. It preserves the builder's
-optional evidence/category fields; consumers must enforce their own provenance
-and purpose requirements. Belief classification, purpose policy, and pod storage
-are MCP-05. No owner identity or data access is implicit.
+This is not the KG SHACL validator. The model preserves the builder's optional
+evidence/category fields; consumers enforce their own provenance requirements.
+No owner identity or data access is implicit.
+
+`classifyNanopublications(result)` returns a derived view with `belief` equal to
+`definitely`, `might`, `mentioned`, or `past`, distinct-nanopub `corroboration`
+counts, and `replacedBy` nanopub IDs. Past validity, provenance invalidation and
+explicit revisions take precedence regardless of extraction/publication order.
+Current Documented facts are definite; current
+explicit/summary facts need no unresolved contradiction in either direction.
+Other live claims are `might`, except `Mentioned`. Retired contradictory claims
+do not block current explicit facts. The source dataset is never modified.
+Consumers acting on a fact must additionally require `validity === "Current"`.
+
+`purposeFilter(policy, purpose, clientId)` returns an array-filter predicate over
+nanopub metadata. Purpose is the closed `ServiceProvision | Personalisation` enum;
+each category is an ODRL read target, evaluated against that DPV purpose and the
+client ID. Every category must be permitted; missing categories, unmatched rules
+and outstanding duties deny. Both full category IRIs and `pd:` names are supported.
+Policies declaring profiles or delegation deny on every read, including direct
+calls: this filter cannot interpret profile semantics or verify delegation authority.
+Temporal constraints accept at most three fractional second digits, matching
+the evaluator's millisecond precision; finer declared precision denies the read.
+`createDefaultPolicy(id, owner)` permits contact/address/preferences for these
+purposes, including contact data used for scheduling; health/genetics/mental
+health/finance deny for all clients until the owner edits the policy. The spec
+does not name a category for other scheduling data, so none is invented.
+`isSpecialCategory(category)` recognizes the local DPV-PD special-category list,
+including health and biometric descendants; financial data is separately denied
+by the default policy. No vocabulary fetching or implicit subclass inference
+occurs. Unknown categories require an explicit policy permit.
 
 Offline fixtures contain only fictional identities. See
 [test/fixtures/README.md](test/fixtures/README.md) for the independent Python oracle.
@@ -112,6 +139,92 @@ committed canonicalization edge cases. RDFlib 7.1.4 itself can choose different
 canonical IDs across runs on some highly symmetric regular blank-node graphs;
 byte parity on those graphs is not a stable reference contract. Templates use
 plain-string literals (RDF/JS merges plain strings and explicit `xsd:string`).
+
+Belief tests cover the KG §4.1 status matrix and the independent synthetic builder
+oracle. The supplied snapshot omits `pipeline/queries/*.rq` and the private pilot;
+exact query/pilot parity has not been verified.
+
+`new NanopubStore(pod)` accepts the structural MCP `PodPort` interface without a
+runtime dependency on the MCP server. `put(result)` splits batches into one
+`/private/pkg/mcp/<uuid>.trig` resource per nanopub, retaining its four graphs and
+shared batch source/entity graphs. Writes are create-only; malformed input is
+rejected before mutations. A blank node shared across resources must occur in a
+common assertion, sources, or entities graph in every resource that uses it.
+Structural refinement across those common graphs must distinguish every shared
+blank node without tie-breaking search. Unresolved ties, including symmetric
+authors, reject before any Pod write, including single-resource puts whose graphs
+may recur in later calls. Listing older or externally written copies with such
+ties also rejects. Symmetry confined to private graphs in one resource remains
+supported. Each put also checks incoming resources against existing copies,
+using only their common graphs, before any Pod write. It validates the joint
+correspondence against the accumulated collection and rejects mergers of nodes
+that were stored independently, regardless of insertion order. A batch's extra
+graphs cannot resolve an ambiguity shared with a different stored batch.
+Other cross-resource sharing (such as evidence targets used only in separate
+provenance graphs) rejects before any Pod write; local cross-graph sharing remains
+supported. Owner-only WAC ACLs are written before creating
+containers and data. Existing shared ancestor containers and their ACLs are
+preserved; replacement is limited to the store's own `mcp/` ACL and the dedicated
+ACLs of nanopub, policy and lock resources. Each nanopub's owner-only ACL is established
+conditionally before writing its private bytes, replacing any orphan resource ACL
+that would override the container default. The adapter must support the spec's
+`.acl` convention; ACL failures stop the operation. Existing ACL replacement needs
+a strong ETag.
+
+An empty `/private/pkg/mcp/.write-lock`, created with `If-None-Match: *` after
+container protection, coordinates puts across store instances and processes.
+Its dedicated owner-only resource ACL is established conditionally before every
+acquisition; an orphan ACL is replaced and ACL failures stop the put.
+The writer revalidates the collection while holding the lock, then writes its
+resources and releases the lock using its strong creation ETag. A competing put
+fails with HTTP 412 and can retry after the writer finishes. Lock acquisition,
+validation and release failures propagate. A missing/weak lock ETag or an
+interrupted writer leaves the lock in place; subsequent puts fail closed until
+the owner recovers it. There is no automatic lock expiry or takeover.
+
+The store tries `application/trig` and reads the representation back. An HTTP 415
+or changed bytes/media type triggers the sole fallback, `application/octet-stream`,
+with exactly the original TriG bytes. Replacing rewritten TriG needs its strong
+read-back ETag; a failed byte-preservation check is an error. Authentication,
+conflict and other failures do not trigger fallback. These behaviors are covered
+by simulated server responses on the memory PodPort; live CSS/sparq validation
+has not been run in this fixture-only lane.
+
+`get(id)` verifies the stored media type and nanopub identity. `list()` loads only
+immediate UUID resources and ignores nested or off-container listing entries.
+It validates the complete collection's correspondence before returning, including
+externally written resources and regardless of listing order.
+Listing and put validation reject stored resources containing graphs outside
+their head, assertion, provenance, publication-info and declared batch source/entity
+graphs (including correspondence batches). Undeclared graphs reject even when
+their contents match another resource; default and blank-node graphs also reject.
+Repeated graphs must match exactly up to blank-node labels, including literal
+lexical forms, datatypes and language tags; assertion value normalization does
+not apply to this comparison.
+`retract(id, { batchId, clientId, generatedAt? })` appends a new Retracted nanopub
+with `prov:wasRevisionOf` and `prov:invalidatedAtTime`; original bytes remain
+unchanged, and the withdrawal reuses the original assertion graph and IRI,
+including skolemized nodes. Later classification recognizes the withdrawal across resources.
+For assertions with blank nodes, the withdrawal also retains the original batch's
+source/entity graphs and any inherited correspondence context. Envelope-level
+`pkg:correspondenceBatch` string values identify these batches for splitting,
+matching and listing, so jointly distinguished nodes remain retractable without
+changing the assertion or the withdrawal's new batch identity.
+The withdrawal's provenance also identifies the revised nanopub envelope. That
+target takes precedence over the shared assertion revision link, so a later batch
+can reassert identical facts as Current without changing assertion deduplication.
+Assertion-only revisions retain their existing assertion-wide semantics.
+`writeDefaultPolicy()` writes `/private/pkg/mcp-policy.ttl` only if absent and
+preserves owner edits, including concurrent first-run creation. Consumers apply
+the purpose predicate to their reads and own the special-category read audit.
+Existing policies must use the evaluator's supported core ODRL terms. The store
+rejects unsupported fields (including profiles and delegation), malformed duties
+or constraints, ambiguous scalar fields, and additional policy graphs before
+returning a policy for authorization. Restrictions are never silently discarded.
+
+For offline storage tests, `@jeswr/pkg-memory/testing` exports
+`createMemoryPodPort({ root, webId })` with byte copies, ETags, and conditional
+write/delete behavior.
 
 New typed facts use `https://jeswr.org/ns/sectors/health#` and
 `https://jeswr.org/ns/core#`. Parsing, hashing and reserializing supplied assertion

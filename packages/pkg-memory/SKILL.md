@@ -1,8 +1,9 @@
 ---
 name: pkg-memory
-description: Build, serialize, or parse PKG nanopublications and the eight typed memory fact templates.
+description: Build, parse and classify PKG nanopublications, enforce purpose policies, and store memory through PodPort.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # PKG nanopublications
 
@@ -17,7 +18,24 @@ canonicalization compatible with RDFlib 7's builder; RDFC-1.0 labels are differe
 Use only fictional `example.org` identities in fixtures. The five synthetic claims
 and Python-generated expected outputs in `test/fixtures` replace private pilot data.
 Supply source digests explicitly; this data-model package never reads source files.
-Belief classification, purpose filtering, and pod storage belong to MCP-05.
+
+Use `classifyNanopublications` for derived belief views; acting on a fact also
+requires Current validity. Preserve graph-scoped provenance when assertions are
+shared. Past/revised claims stay in history; Mentioned is never an inference input.
+
+Use `purposeFilter(policy, purpose, clientId)` on every personal-data read. It
+requires an ODRL permit for every category and denies uncategorized data and
+outstanding duties. `isSpecialCategory` uses a local list; it does not fetch DPV
+or infer arbitrary subclasses. The two purpose tokens are ServiceProvision and
+Personalisation. Never expose rejected values in a denial message.
+
+Use `NanopubStore` for one-resource-per-nanopub persistence over the structural
+PodPort seam. Its default-policy writer preserves owner edits. ACL writes must
+succeed before any private data is written; no public ACL fallback is allowed.
+TriG rejection (HTTP 415) or rewriting permits only the same bytes stored as
+octet-stream. Strong ETags are required for replacements. Never use a Turtle or
+flattened-graph fallback. Retraction appends a revising nanopub; it does not edit
+or delete the original. Use the exported memory PodPort for offline tests.
 
 New templates write canonical `https://jeswr.org/ns/sectors/health#` and
 `https://jeswr.org/ns/core#` terms. Keep supplied assertion graphs and the
