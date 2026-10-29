@@ -966,6 +966,39 @@ describe("skill validation", () => {
   });
 
   it.each([
+    ...["skills/alpha", "packages/widget"].flatMap((path) =>
+      ["skill", "empty", "file", "dangling"].map((type) => [path, type]),
+    ),
+    ["skills", "skill"],
+    ["packages", "skill"],
+    ["skills", "dangling"],
+    ["packages", "dangling"],
+  ])("rejects symbolic-link skill roots before discovery: %s (%s)", (path, type) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill());
+    const target = join(fixture(), "private-fixture-target");
+    if (type === "file") writeFileSync(target, "# Private fixture\n");
+    if (type === "empty" || type === "skill") mkdirSync(target);
+    if (type === "skill") put(target, "SKILL.md", "# Invalid linked skill\n");
+    rmSync(join(root, path), { recursive: true });
+    symlinkSync(target, join(root, path));
+    const indexPath = join(root, "skills/INDEX.md");
+    for (const previousIndex of [undefined, "Previously generated index\n"]) {
+      // A dangling collection has no writable index parent.
+      if (previousIndex !== undefined && path === "skills" && type === "dangling") continue;
+      if (previousIndex !== undefined) writeFileSync(indexPath, previousIndex);
+      for (const args of [[], ["--write"]]) {
+        const result = cli(root, ...args);
+        expect(result.status).toBe(1);
+        expect(result.stderr.trim()).toBe(`${path}: symbolic-link skill roots are forbidden`);
+        expect(result.stdout).toBe("");
+        if (previousIndex === undefined) expect(existsSync(indexPath)).toBe(false);
+        else expect(readFileSync(indexPath, "utf8")).toBe(previousIndex);
+      }
+    }
+  });
+
+  it.each([
     ["skills/alpha/references/linked.md", "file"],
     ["skills/alpha/scripts/.linked", "file"],
     ["skills/alpha/assets/linked", "dir"],

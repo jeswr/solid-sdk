@@ -4,7 +4,6 @@
 
 import {
   existsSync,
-  globSync,
   lstatSync,
   mkdirSync,
   readdirSync,
@@ -364,16 +363,31 @@ export function checkSkills(root, { write = false } = {}) {
   const names = new Map();
   const files = new Set();
   const report = (path, rule) => errors.push(`${path}: ${rule}`);
-  const paths = globSync(["skills/*/SKILL.md", "packages/*/SKILL.md"], { cwd: root }).sort();
-
-  // A shared skill directory must contain its entry point; other files at skills/ are docs.
-  for (const dir of globSync("skills/*", { cwd: root, withFileTypes: true })) {
-    if (dir.isDirectory() && !existsSync(join(root, "skills", dir.name, "SKILL.md"))) {
-      report(`skills/${dir.name}/SKILL.md`, "missing SKILL.md");
+  const paths = [];
+  for (const collection of ["skills", "packages"]) {
+    const collectionPath = join(root, collection);
+    const info = lstatSync(collectionPath, { throwIfNoEntry: false });
+    if (info?.isSymbolicLink()) {
+      report(collection, "symbolic-link skill roots are forbidden");
+      continue;
+    }
+    if (!info?.isDirectory()) continue;
+    // Enumerate roots without following links, including dangling links that globs omit.
+    for (const dir of readdirSync(collectionPath, { withFileTypes: true })) {
+      const skillDir = join(collection, dir.name);
+      if (dir.isSymbolicLink()) {
+        report(skillDir, "symbolic-link skill roots are forbidden");
+        continue;
+      }
+      if (!dir.isDirectory() || dir.name.startsWith(".")) continue;
+      const path = join(skillDir, "SKILL.md");
+      if (existsSync(join(root, path))) paths.push(path);
+      // A shared skill directory must contain its entry point; packages may omit it.
+      else if (collection === "skills") report(path, "missing SKILL.md");
     }
   }
 
-  for (const path of paths) {
+  for (const path of paths.sort()) {
     files.add(path);
     const skillDir = dirname(path);
     const companionDir = path.startsWith("skills/") ? skillDir : join(skillDir, "references");
