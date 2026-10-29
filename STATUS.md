@@ -322,3 +322,41 @@ questions remain. The conservative symlink policy rejects linked roots rather th
 traversing them. `roborev` remains unavailable in the sandbox, so the dispatcher must
 obtain per-commit review before merge. No pushes, PRs, branch changes, remote git
 fetches/merges, or tracker writes occurred.
+
+## Fix round 9 — index destinations and duplicate URL attributes
+
+Starting commit: `33cd5a5ce7fd4384d708590ce62416cec50678af`.
+
+- `e71a3e2f` — `fix(skills): refuse symbolic-link index writes`: check the
+  destination immediately before index handling and write with `O_NOFOLLOW` so a
+  link substituted after the check cannot overwrite its target. Add seven cases
+  covering internal, external, dangling, and deterministically substituted links.
+- `2249ef4f` — `fix(skills): ignore duplicate URL attributes`: apply the existing
+  `firstAttribute` guard to URL collection. Add 18 cases covering `href`, `src`,
+  `srcset`, foreign `xlink:href`, mixed case, empty/valueless first attributes,
+  quoted markup, and active broken URLs beside duplicates.
+- The final `docs:` commit records this round's validation results.
+
+Both findings were reproduced before their fixes: four new symlink cases and 14
+new duplicate-attribute cases failed. All 570 checker tests pass afterward, with
+25 cases added in this round. No dependencies, package implementations, skill
+content, or generated index changes were needed. Root tooling is the only changed
+implementation surface, so individual package gates and dependency-policy checks
+do not apply. Validation used Node `v24.22.1` via `/opt/node24/bin`.
+
+| Exact command | Result |
+| --- | --- |
+| `PATH=/opt/node24/bin:$PATH pnpm exec vitest run test/check-skills.test.mjs` | PASS, 570 tests. |
+| `PATH=/opt/node24/bin:$PATH pnpm exec biome check scripts/check-skills.mjs test/check-skills.test.mjs` | PASS. |
+| `PATH=/opt/node24/bin:$PATH TURBO_SCM_BASE=33cd5a5ce7fd4384d708590ce62416cec50678af pnpm run gate` | PASS; root lint, 57 skills with current index, and all 1,315 root tests across 10 files. |
+| `PATH=/opt/node24/bin:$PATH pnpm run gate:full` | FAIL, 289 successful / 351 total tasks, 1 cached; the previously recorded `@jeswr/federation-trust#test` JWK-order snapshot mismatch at `test/characterization.test.ts:196`. Root lint passes; all 1,315 root tests are replayed from the successful affected-gate cache. |
+| `git diff --exit-code 33cd5a5ce7fd4384d708590ce62416cec50678af -- packages/federation-trust packages/solid-vc` | PASS; both packages are unchanged in this round. |
+| `git diff --check` | PASS. |
+
+The full gate received JWK property order `kty,crv,x` where the snapshot expects
+`crv,x,kty`; that existing failure remains outside this brief. Removed the 16
+generated app `clientid.jsonld`/`callback.html` files after the gate. No generated
+distributions are committed. Both supplied findings are addressed, with no
+unfinished implementation or open questions. `roborev` remains unavailable in the
+sandbox, so per-commit review remains with the dispatcher. No pushes, PRs, branch
+changes, remote git fetches/merges, or tracker writes occurred.
