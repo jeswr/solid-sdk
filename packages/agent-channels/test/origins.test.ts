@@ -42,7 +42,10 @@ it("refuses an undeclared local origin before connecting, and permits listed loo
   }
 });
 
-it("transports body-bearing keepalive requests with effective bodies and content types", async () => {
+it.each([
+  "keepalive",
+  "no-cors",
+] as const)("transports body-bearing %s requests with effective bodies and content types", async (policy) => {
   const requests: Array<{
     method: string | undefined;
     body: string;
@@ -64,14 +67,20 @@ it("transports body-bearing keepalive requests with effective bodies and content
     if (!address || typeof address === "string") throw new Error("no local fixture address");
     const origin = `http://127.0.0.1:${address.port}`;
     const scoped = createOriginScopedFetch(new Set([origin]), { allowLoopback: true });
-    const init = { method: "POST", body: "keepalive fixture ✓", keepalive: true };
+    const init = {
+      method: "POST",
+      body: "body fixture ✓",
+      keepalive: policy === "keepalive",
+      mode: policy === "no-cors" ? ("no-cors" as const) : ("cors" as const),
+    };
     const inputs: Array<Parameters<typeof scoped>> = [
       [origin, init],
       [new URL(origin), init],
       [new Request(origin, init)],
       [new Request(origin, { ...init, keepalive: false }), { keepalive: true }],
+      [new Request(origin, { ...init, mode: "cors" }), { mode: init.mode }],
       [new Request(origin, { ...init, body: "replaced fixture" }), init],
-      [origin, { ...init, keepalive: false }],
+      [origin, { ...init, keepalive: false, mode: "cors" }],
     ];
     for (const input of inputs) {
       expect(await (await scoped(...input)).text()).toBe("body fixture");
@@ -81,7 +90,7 @@ it("transports body-bearing keepalive requests with effective bodies and content
         contentType: "text/plain;charset=UTF-8",
       });
     }
-    const form = new URLSearchParams({ fixture: "keepalive form ✓" });
+    const form = new URLSearchParams({ fixture: "body form ✓" });
     expect(await (await scoped(origin, { ...init, body: form })).text()).toBe("body fixture");
     expect(requests.at(-1)).toEqual({
       method: "POST",
