@@ -409,6 +409,38 @@ describe("skill validation", () => {
   });
 
   it.each([
+    '<div><?note <textarea ?><a href="missing.md">broken</a></div>',
+    '<div><?note <style ><img src="missing.png"></div>',
+    '<div><?note <!-- ?><a href="missing.md">broken</a></div>',
+    '<div><?note <![CDATA[ ?><a href="missing.md">broken</a></div>',
+    '<div><?note data="> <a href="missing.md">broken</a></div>',
+    "<div><?note <textarea ?>\n\n[active]: missing.md\n\n</div>",
+    '<svg><?note <title ?><a xlink:href="missing.md">broken</a></svg>',
+    '<svg><?[CDATA[ ><a xlink:href="missing.md">broken</a></svg>',
+    '<a title="<?note <textarea ?>" href="missing.md">broken</a>',
+    '&lt;?note <a href="missing.md">broken</a>',
+  ])("checks active links after processing instructions: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+  });
+
+  it.each([
+    '<div><?note <a href="missing.md">ignored</a> ?></div>',
+    '<div><?note <img src="missing.png"> ?><a href="references/guide.md">guide</a></div>',
+    '<svg><?note <a xlink:href="missing.md">ignored</a> ?></svg>',
+    '<div><?note data="<a href=missing.md"',
+    '<textarea><?note <a href="missing.md">literal</a></textarea>',
+    '<a title="<?note <img src=missing.png ?>" href="references/guide.md">guide</a>',
+  ])("keeps processing-instruction data and literal openers inert: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
     '<svg><![CDATA[<a href="ignored.md">literal</a>]]><a href="missing.md">broken</a></svg>',
     '<svg><![CDATA[<a href="ignored.md">literal</a>]]]><a href="missing.md">broken</a></svg>',
     '<svg><![CDATA[</svg><textarea>]]><a href="missing.md">broken</a></svg>',
