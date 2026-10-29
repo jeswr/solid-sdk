@@ -238,6 +238,50 @@ describe.each([
   });
 
   it.each([
+    "explicit",
+    "coerced",
+    "aliased",
+  ])("preserves opaque JSON literals with %s typing", async (typing) => {
+    const network = vi.fn(() => {
+      throw new Error("Unexpected network");
+    });
+    vi.stubGlobal("fetch", network);
+    const id = `${POD}data`;
+    const value = {
+      "@context": "https://evil.example/context",
+      "@import": "http://127.0.0.1/context",
+      nested: [{ "@context": { "@import": "https://evil.example/nested" } }],
+    };
+    const document = {
+      "@context": {
+        data: typing === "coerced" ? { "@id": "urn:data", "@type": "@json" } : "urn:data",
+        ...(typing === "aliased" ? { value: "@value", type: "@type" } : {}),
+      },
+      "@id": id,
+      data:
+        typing === "coerced"
+          ? value
+          : typing === "aliased"
+            ? { value, type: "@json" }
+            : { "@value": value, "@type": "@json" },
+    };
+    const pod = makeFakePod({
+      [id]: { contentType: "application/ld+json", body: JSON.stringify(document) },
+    });
+    const result = await fetchDocument({ fetch: pod.fetch, podRoot: POD }, id);
+    expect(result.metadata).toEqual({ contentType: "application/ld+json", truncated: false });
+    const dataset = await parseRdf(result.text, "text/turtle");
+    expect(dataset.size).toBe(1);
+    const literal = dataset.getQuads(id, "urn:data", null, null)[0]?.object;
+    expect(literal?.termType).toBe("Literal");
+    expect(literal).toMatchObject({
+      datatype: { value: "http://www.w3.org/1999/02/22-rdf-syntax-ns#JSON" },
+    });
+    expect(JSON.parse(literal?.value ?? "null")).toEqual(value);
+    expect(network).not.toHaveBeenCalled();
+  });
+
+  it.each([
     '"@context":"https://evil.example/context"',
     '"@context":{"@import":"https://evil.example/context"}',
   ])("normalizes duplicate context keys before parsing: %s", async (discarded) => {
@@ -289,7 +333,30 @@ describe.each([
     { "@context": "http://127.0.0.1/context" },
     { "@context": [null, "https://evil.example/context"] },
     { "@context": { "@import": "https://evil.example/context" } },
-    { nested: [{ "@context": { term: { "@context": "https://evil.example/context" } } }] },
+    {
+      "@context": { nested: "urn:nested" },
+      nested: [
+        {
+          "@context": {
+            term: { "@id": "urn:term", "@context": "https://evil.example/context" },
+          },
+          term: { "urn:value": "x" },
+        },
+      ],
+    },
+    {
+      "@context": {
+        term: {
+          "@id": "urn:term",
+          "@context": { "@import": "https://evil.example/context" },
+        },
+      },
+      term: { "urn:value": "x" },
+    },
+    {
+      "@context": "https://evil.example/context",
+      "urn:data": { "@type": "@json", "@value": { "@context": "ordinary data" } },
+    },
   ])("refuses remote JSON-LD contexts without parser network access: %j", async (document) => {
     const network = vi.fn(() => {
       throw new Error("Unexpected network");

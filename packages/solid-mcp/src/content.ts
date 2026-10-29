@@ -48,25 +48,12 @@ export function decodePrefix(bytes: Uint8Array, truncated: boolean): string {
   return new TextDecoder().decode(bytes, { stream: truncated });
 }
 
-/** Refuse remote contexts and return the exact JSON representation safe to parse. */
+/** Normalize JSON-LD for parsing with the refusing document loader. */
 export function normalizeLocalJsonLd(text: string): string {
   const document: unknown = JSON.parse(text);
-  function visit(value: unknown, context = false): void {
-    if (typeof value === "string" && context) {
-      throw new Error("Remote JSON-LD contexts are disabled (SSRF guard).");
-    }
-    if (Array.isArray(value)) {
-      for (const item of value) visit(item, context);
-    } else if (value && typeof value === "object") {
-      for (const [key, child] of Object.entries(value)) {
-        if (key === "@import") throw new Error("JSON-LD @import is disabled (SSRF guard).");
-        visit(child, key === "@context");
-      }
-    }
-  }
-  visit(document);
-  // The pinned RDF parser has no documentLoader seam. Re-serialize the checked
-  // object so duplicate keys cannot expose discarded contexts to its parser.
+  // Resolve duplicate keys before the streaming parser sees them. Contexts and
+  // @import inside JSON literals are opaque data; the parser's refusing loader
+  // rejects actual remote contexts without inspecting literal contents.
   return JSON.stringify(document);
 }
 

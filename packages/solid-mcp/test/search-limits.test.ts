@@ -198,6 +198,56 @@ describe("one bounded search across discovery and scanning", () => {
     "index",
     "container",
     "literal",
+  ])("preserves opaque JSON literals in the search %s read", async (stage) => {
+    const network = vi.fn(() => {
+      throw new Error("Unexpected network");
+    });
+    vi.stubGlobal("fetch", network);
+    const note = `${POD}note.ttl`;
+    const opaque = {
+      "@type": "@json",
+      "@value": {
+        "@context": "https://evil.example/context",
+        nested: [{ "@import": "http://127.0.0.1/context" }],
+      },
+    };
+    const document = (name: string, value: object) => ({
+      contentType: "application/ld+json",
+      body: JSON.stringify({ ...value, ...(stage === name ? { "urn:data": opaque } : {}) }),
+    });
+    const fixture = makeFakePod({
+      [WEBID]: document("profile", {
+        "@id": WEBID,
+        [`${SOLID}publicTypeIndex`]: { "@id": INDEX },
+      }),
+      [INDEX]: document("index", {
+        "@id": `${INDEX}#registration`,
+        [`${SOLID}instance`]: { "@id": note },
+      }),
+      [POD]: document("container", {
+        "@id": POD,
+        ...(stage === "container" || stage === "literal"
+          ? { "http://www.w3.org/ns/ldp#contains": { "@id": note } }
+          : {}),
+      }),
+      [note]: document("literal", {
+        "@id": note,
+        "https://schema.org/text": "avocado",
+      }),
+    });
+    const fetch = vi.fn(fixture.fetch);
+    const config = { fetch, podRoot: POD, ...(stage === "container" ? {} : { webId: WEBID }) };
+    for (const source of [config, createFetchPodPort(config)]) {
+      expect((await search(source, "avocado")).map((hit) => hit.url)).toEqual([note]);
+    }
+    expect(network).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "profile",
+    "index",
+    "container",
+    "literal",
   ])("skips excessive inline context expansion in the search %s read", async (stage) => {
     const note = `${POD}note.ttl`;
     const context = {

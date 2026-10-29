@@ -192,7 +192,7 @@ function budgetJsonLdContexts(parser: JsonLdParser, charge: (bytes: number) => v
 /**
  * The pinned parseRdf API only exposes baseIRI, with no quad/factory budget seam.
  * Use its existing parser libraries here so limits apply before Store insertion.
- * Input is already byte-capped; JSON-LD must also pass the local-context guard.
+ * Input is already byte-capped; JSON-LD is normalized and uses a refusing loader.
  */
 export async function parseBoundedRdf(source: string, contentType: string, baseIRI: string) {
   const format = contentType === "application/x-turtle" ? "text/turtle" : contentType;
