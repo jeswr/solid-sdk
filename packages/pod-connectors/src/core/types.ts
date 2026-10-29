@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * The integration adapter contract (docs/integrations-catalog.md §"The common
  * adapter shape"). An adapter pulls a user's data from a platform API,
@@ -51,6 +53,16 @@ export interface OAuthAppConfig {
    */
   readonly tokenExchange: "public" | "proxy";
   readonly tokenProxyUrl?: string;
+  /** Optional installed-app secret injected by a Node host; never persist or expose in a UI. */
+  readonly clientSecret?: string;
+  /**
+   * Direct Node exchange with a local client secret: form-post secret by default,
+   * or HTTP Basic client authentication with a form or JSON body.
+   * Proxies keep their form contract.
+   */
+  readonly tokenRequest?: "form" | "basic-form" | "basic-json";
+  /** Node loopback login requires a fixed, provider-registered callback port. */
+  readonly requiresCallbackPort?: boolean;
   /** Extra query params some platforms require on the authorize URL. */
   readonly extraAuthParams?: Readonly<Record<string, string>>;
   /**
@@ -83,11 +95,43 @@ export interface NormalisedDoc {
   /** The document content, built via the typed vocab wrappers. */
   readonly dataset: DatasetCore;
   /**
+   * Replace the document by default (snapshot semantics). Use "merge" for incremental
+   * pages: incoming deterministic subjects replace their descriptions; absent subjects survive.
+   */
+  readonly writeMode?: "replace" | "merge";
+  /** Source document for items without their own schema:url (e.g. file exports). */
+  readonly sourceUrl?: string;
+  /**
+   * Register `forClass` for this ancestor container slug (ending in `/`) instead of the
+   * document's own container, e.g. a mail account root holding `messages/` and `threads/`.
+   */
+  readonly registrationContainer?: string;
+  /**
    * Skip Type-Index registration for this doc's class (default false). Used
    * for companion documents that ride along in an already-registered
    * container (e.g. a profile doc beside the repositories collection).
    */
   readonly skipRegistration?: boolean;
+}
+
+/**
+ * A non-RDF resource. `"create"` keeps an existing resource (source-immutable content keyed
+ * by a stable id, e.g. a mail message); `"replace"` overwrites it under its current ETag.
+ */
+export interface BinaryDoc {
+  /** Path under the adapter's root container, e.g. `"mail/acct/messages/id.eml"`. */
+  readonly slug: string;
+  /** Media type sent as `Content-Type`; RDF media types are refused (use `write`). */
+  readonly contentType: string;
+  readonly body: Uint8Array;
+  /** Default `"create"`. */
+  readonly mode?: "create" | "replace";
+}
+
+/** A binary resource the writer stored (`created: false` when `"create"` kept an existing one). */
+export interface WrittenBinary {
+  readonly url: string;
+  readonly created: boolean;
 }
 
 /** A doc the runner wrote, with its final URL. */
@@ -96,6 +140,8 @@ export interface WrittenDoc {
   readonly category: string;
   readonly forClass: string;
   readonly skipRegistration?: boolean;
+  /** Absolute container registered instead of the document's own container. */
+  readonly registrationContainer?: string;
 }
 
 export interface ImportProgress {
@@ -124,6 +170,16 @@ export interface ImportContext {
   read(slug: string): Promise<DatasetCore | undefined>;
   /** Write RDF; defaults to the precondition retained by a preceding read of this URL. */
   write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
+  /**
+   * Write a non-RDF resource (original file, `.eml` source, attachment) inside the
+   * adapter container. Throws `IntegrationSyncError` when the host writer has no binary port.
+   */
+  writeBinary(doc: BinaryDoc): Promise<WrittenBinary>;
+  /**
+   * Delete a resource the source deleted (RDF or binary). Missing resources are not an
+   * error. Throws `IntegrationSyncError` when the host writer has no delete port.
+   */
+  remove(slug: string): Promise<void>;
   /** Report progress to the UI. */
   progress(p: ImportProgress): void;
   /** Incremental cursor from the previous import of this adapter, if any. */
@@ -144,11 +200,14 @@ export interface ImportOutcome {
   readonly skipped?: number;
 }
 
-/** One recorded fixture route for the typed fake fetch. */
+/** One recorded fixture route for the typed fake fetch.
+ * Entries sharing a method and URL replay in array order, then fail on exhaustion.
+ * A single entry for a method/URL remains reusable for static demos.
+ */
 export interface FixtureRoute {
   /** HTTP method (default GET). */
   readonly method?: string;
-  /** Exact URL or prefix the request URL must start with. */
+  /** URL prefix on the same origin and complete path segments; longest match wins. */
   readonly url: string;
   /** JSON body to answer with. */
   readonly json: unknown;
@@ -156,10 +215,31 @@ export interface FixtureRoute {
 }
 
 /** The adapter: metadata + auth config + the import implementation. */
+/** Per-adapter vocabulary seam; preserves legacy types for older readers. */
+export type VocabMap = (doc: NormalisedDoc, context?: { readonly webId?: string }) => NormalisedDoc;
+
+/** Host-persisted state. Dates are ISO strings; counts describe the latest successful run. */
+export interface ConnectorState {
+  readonly connectedAt: string;
+  readonly lastSync?: string;
+  readonly cursor?: string;
+  readonly lastOutcome: "success" | "error";
+  readonly counts: { readonly documents: number; readonly items: number; readonly skipped: number };
+}
+
+export interface ConnectorStateOptions {
+  readonly state?: ConnectorState;
+  /** Called after completion or failure; failures retain the previous checkpoint. */
+  readonly onState?: (state: ConnectorState) => void;
+}
+
 export interface IntegrationAdapter {
+  readonly vocabMap?: VocabMap;
   readonly metadata: IntegrationMetadata;
   /** Present iff `authKind === "oauth-pkce"`. */
   readonly oauth?: OAuthAppConfig;
+  /** Optional provider-specific session transport, selected by the Node CLI after login. */
+  createSourceAuth?(config: OAuthAppConfig, token: TokenSet, sourceFetch: typeof fetch): SourceAuth;
   /** Static headers every live API call needs (e.g. Twitch `Client-Id`). */
   readonly apiHeaders?: Readonly<Record<string, string>>;
   /** Recorded API fixtures — power demo mode AND the contract tests. */
@@ -181,12 +261,22 @@ export interface TypeRegistrationRequest {
 
 /** Host-owned storage port, bound to one connector's document container. */
 export interface PodWriter {
+  /** Importing user's WebID; required for financial subjects and Steam account holders. */
+  readonly webId?: string;
   /** Resolve an adapter-relative slug within its container. */
   resolve(slug: string): string;
   /** Read existing RDF and its ETag; undefined only for a missing document. */
   read(slug: string): Promise<{ dataset: DatasetCore; etag: string | null } | undefined>;
   /** Write RDF, preserving the caller's conditional-write precondition. */
   write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
+  /**
+   * Optional binary port with the same container confinement as `write`. `"create"` sends
+   * `If-None-Match: *` and reports a 412 as an existing resource; `"replace"` reads the
+   * current ETag first and sends `If-Match` (or `If-None-Match: *` when absent).
+   */
+  writeBinary?(doc: BinaryDoc): Promise<WrittenBinary>;
+  /** Optional delete port with the same confinement; 404 counts as already deleted. */
+  remove?(slug: string, conditions?: { readonly ifMatch?: string }): Promise<void>;
   /** Ensure the distinct class/container registrations and report the index used. */
   registerType(registrations: readonly TypeRegistrationRequest[]): Promise<{ indexUrl: string }>;
 }

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // G9 — the ODRL DECISION-RECORD emitter (agent-delegation profile, the sibling of
@@ -55,6 +56,7 @@ import {
   ACTION_IRI,
   DECISION_RECORD_INLINE_CONTEXT,
   LEFT_OPERAND_IRI,
+  legacyOdrlIri,
   ODRL_ACTION,
   ODRL_ASSIGNEE,
   ODRL_CONSTRAINT,
@@ -240,8 +242,9 @@ function operandIsIri(c: OdrlConstraint, r: string | number): r is string {
  * policy path's {@link inferDatatype}/{@link isIriValued} for parity.
  */
 function writeDecisionConstraint(b: GraphBuilder, parent: NodeRef, c: OdrlConstraint): void {
+  // Canonical emission is deferred to phase 2: pinned verifiers would reject it.
   const node = b.linkBlankNode(parent, ODRL_CONSTRAINT);
-  b.addIri(node, ODRL_LEFT_OPERAND, LEFT_OPERAND_IRI[c.leftOperand]);
+  b.addIri(node, ODRL_LEFT_OPERAND, legacyOdrlIri(LEFT_OPERAND_IRI[c.leftOperand]));
   b.addIri(node, ODRL_OPERATOR, OPERATOR_IRI[c.operator]);
   const rights = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
   for (const r of rights) {
@@ -264,7 +267,7 @@ function decisionConstraintJsonLd(c: OdrlConstraint): Record<string, unknown> {
     return dt !== undefined ? { "@value": String(r), "@type": dt } : String(r);
   });
   return {
-    leftOperand: { "@id": LEFT_OPERAND_IRI[c.leftOperand] },
+    leftOperand: { "@id": legacyOdrlIri(LEFT_OPERAND_IRI[c.leftOperand]) },
     operator: { "@id": OPERATOR_IRI[c.operator] },
     rightOperand: emitted.length === 1 ? emitted[0] : emitted,
   };
@@ -282,27 +285,28 @@ function decisionConstraintJsonLd(c: OdrlConstraint): Record<string, unknown> {
  * descriptor cannot inject a triple.
  */
 export function decisionRecord(input: DecisionRecordInput): Quad[] {
+  // Canonical emission is deferred to phase 2: pinned verifiers would reject it.
   const { id, policy, request, result, evaluatedAt } = input;
   const b = new GraphBuilder();
   const rec = iriRef(id);
 
-  b.addIri(rec, RDF_TYPE, ODRLD_DECISION_RECORD_CLASS);
+  b.addIri(rec, RDF_TYPE, legacyOdrlIri(ODRLD_DECISION_RECORD_CLASS));
   b.addLiteral(rec, PROV_ENDED_AT_TIME, evaluatedAt.toISOString(), XSD_DATETIME);
-  b.addIri(rec, ODRLD_EVALUATED_POLICY, policy.id);
+  b.addIri(rec, legacyOdrlIri(ODRLD_EVALUATED_POLICY), policy.id);
   if (request.agent !== undefined) {
-    b.addIri(rec, ODRLD_REQUEST_AGENT, request.agent);
+    b.addIri(rec, legacyOdrlIri(ODRLD_REQUEST_AGENT), request.agent);
   }
-  b.addIri(rec, ODRLD_REQUEST_ACTION, ACTION_IRI[request.action]);
+  b.addIri(rec, legacyOdrlIri(ODRLD_REQUEST_ACTION), ACTION_IRI[request.action]);
   if (request.target !== undefined) {
-    b.addIri(rec, ODRLD_REQUEST_TARGET, request.target);
+    b.addIri(rec, legacyOdrlIri(ODRLD_REQUEST_TARGET), request.target);
   }
   for (const purpose of requestPurposes(request)) {
-    b.addIri(rec, ODRLD_REQUEST_PURPOSE, purpose);
+    b.addIri(rec, legacyOdrlIri(ODRLD_REQUEST_PURPOSE), purpose);
   }
-  b.addLiteral(rec, ODRLD_DECISION, result.decision);
-  b.addLiteral(rec, ODRLD_REASON, result.reason);
+  b.addLiteral(rec, legacyOdrlIri(ODRLD_DECISION), result.decision);
+  b.addLiteral(rec, legacyOdrlIri(ODRLD_REASON), result.reason);
   if (result.conflict) {
-    b.addLiteral(rec, ODRLD_CONFLICT, "true", XSD_BOOLEAN);
+    b.addLiteral(rec, legacyOdrlIri(ODRLD_CONFLICT), "true", XSD_BOOLEAN);
   }
 
   const decidingRules: DecisionRule[] = [
@@ -332,10 +336,10 @@ function writeDecidingRule(
 ): void {
   // Preserve the stable link to the policy rule: use the rule's IRI as the node when
   // the descriptor carries one, else a blank node (linkChild escapes an IRI child).
-  const node = b.linkChild(rec, ODRLD_DECIDING_RULE, descriptor.id);
+  const node = b.linkChild(rec, legacyOdrlIri(ODRLD_DECIDING_RULE), descriptor.id);
   const cls = descriptor.type === "prohibition" ? ODRL_PROHIBITION_CLASS : ODRL_PERMISSION_CLASS;
   b.addIri(node, RDF_TYPE, cls);
-  b.addLiteral(node, ODRLD_RULE_KIND, descriptor.type);
+  b.addLiteral(node, legacyOdrlIri(ODRLD_RULE_KIND), descriptor.type);
   b.addIri(node, ODRL_ACTION, ACTION_IRI[descriptor.action]);
   if (descriptor.target !== undefined) {
     b.addIri(node, ODRL_TARGET, descriptor.target);
@@ -358,16 +362,21 @@ function writeDecidingRule(
  * duty IRI (when present) is linked via `odrld:onDuty` instead.
  */
 function writeActiveDuty(b: GraphBuilder, rec: NodeRef, duty: ActiveDuty): void {
-  const node = b.linkBlankNode(rec, ODRLD_ACTIVE_DUTY);
+  const node = b.linkBlankNode(rec, legacyOdrlIri(ODRLD_ACTIVE_DUTY));
   b.addIri(node, RDF_TYPE, ODRL_DUTY_CLASS);
   if (duty.id !== undefined) {
-    b.addIri(node, ODRLD_ON_DUTY, duty.id);
+    b.addIri(node, legacyOdrlIri(ODRLD_ON_DUTY), duty.id);
   }
   b.addIri(node, ODRL_ACTION, ACTION_IRI[duty.action]);
   if (duty.target !== undefined) {
     b.addIri(node, ODRL_TARGET, duty.target);
   }
-  b.addLiteral(node, ODRLD_FULFILLED, duty.fulfilled ? "true" : "false", XSD_BOOLEAN);
+  b.addLiteral(
+    node,
+    legacyOdrlIri(ODRLD_FULFILLED),
+    duty.fulfilled ? "true" : "false",
+    XSD_BOOLEAN,
+  );
 }
 
 /**
@@ -380,6 +389,7 @@ function writeActiveDuty(b: GraphBuilder, rec: NodeRef, duty: ActiveDuty): void 
  * non-throwing constraint emitter {@link writeDecisionConstraint} the RDF path uses.
  */
 export function decisionRecordJsonLd(input: DecisionRecordInput): Record<string, unknown> {
+  // Canonical emission is deferred to phase 2: pinned verifiers would reject it.
   const { id, policy, request, result, evaluatedAt } = input;
 
   const doc: Record<string, unknown> = {

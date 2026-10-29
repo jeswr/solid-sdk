@@ -3,8 +3,11 @@
 The **@jeswr Solid suite workspace** — reusable TypeScript SDK packages plus the private
 applications that consume them, consolidated into one pnpm + Turborepo workspace.
 
-Forty publishable packages and thirteen private applications are imported with full git history;
-two maintainer-directed packages (`@jeswr/synthetic-rdf` and `@jeswr/solid-seed`) were added here.
+The workspace contains 72 packages and 18 applications; `suite.json` records the inventory.
+The original forty packages and thirteen applications were imported with full git history.
+Maintainer-directed additions include `@jeswr/synthetic-rdf`, `@jeswr/solid-seed`, and
+[`@jeswr/ldp-container`](packages/ldp-container/README.md), the shared security-critical
+LDP listing helper (sst-8xm.7). The listing helper has no mirror repository configured.
 Libraries live in `packages/`; deployables live in `apps/` and use `workspace:*` for every SDK
 dependency that exists here. Mirror publishing (`--execute`) has not run yet. The package design,
 inventory, and phased migration plan live in
@@ -53,6 +56,13 @@ See [`AGENTS.md`](AGENTS.md) for the repo charter (conventions, merge rules, pro
 Package imports happen per the phased plan in `decisions/0001`; application histories are grafted
 under `apps/<slug>` and remain private deployables.
 
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+The ten Vite web apps are published together at
+[jeswr.github.io/solid-sdk](https://jeswr.github.io/solid-sdk/) by the Pages workflow.
+Only `apps/suite` keeps Vercel git deployments, on `main`. See
+[deployment locations and setup](docs/deployment.md) for every app and local build commands.
+
 <!-- AUTHORED-BY Codex GPT-5 -->
 ## Agent skills
 
@@ -60,7 +70,8 @@ Reusable agent guidance lives with the code it describes:
 
 - A skill for a workspace package is [`packages/<package>/SKILL.md`](packages/solid-dpop/SKILL.md).
   Keeping it beside the implementation makes API and security guidance reviewable in the same
-  change as the package.
+  change as the package. The `solid-fetch-rdf` skill is
+  [`packages/fetch-rdf/SKILL.md`](packages/fetch-rdf/SKILL.md).
 - Cross-cutting guidance is in [`skills/<skill>/SKILL.md`](skills/solid-server-matrix/SKILL.md).
   This also temporarily holds guidance for external suite packages that have not yet been imported
   into this workspace (`@solid/object`, notifications, and Client Identifier

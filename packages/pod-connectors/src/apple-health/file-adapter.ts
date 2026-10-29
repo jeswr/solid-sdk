@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Apple Health → Health (Tier-C file import).
  *
@@ -19,10 +21,12 @@
  */
 import { DataFactory, Store } from "n3";
 import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
-import { extractElements } from "../core/mini-xml.js";
+import { fileText, xmlTags } from "../core/file-stream.js";
+import { parseAttrs } from "../core/mini-xml.js";
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, ExerciseAction } from "../core/vocab.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "apple-health";
 
@@ -38,6 +42,7 @@ const metadata: IntegrationMetadata = {
 };
 
 export const appleHealthFileAdapter: FileImportAdapter = {
+  vocabMap,
   metadata,
   accept: ".xml,text/xml,application/xml",
   fileHint:
@@ -45,12 +50,14 @@ export const appleHealthFileAdapter: FileImportAdapter = {
 
   async importFile(file: ImportFile, ctx: FileImportContext): Promise<void> {
     ctx.progress({ label: "Reading your workouts…", done: 0, total: 1 });
-    const xml = await file.text();
 
     const doc = ctx.resolve("health/workouts.ttl");
     const store = new Store();
     let count = 0;
-    for (const w of extractElements(xml, "Workout", ctx.maxRows)) {
+    for await (const token of xmlTags(fileText(file), ctx.skip, "Workout")) {
+      if (count >= ctx.maxRows) break;
+      if (!/^<Workout(?:\s|\/?>)/.test(token)) continue;
+      const w = parseAttrs(token.slice(8, -1));
       const type = humanWorkoutType(w.workoutActivityType ?? "");
       const start = parseAppleDate(w.startDate);
       const key = `${w.startDate ?? ""}|${w.workoutActivityType ?? ""}|${w.duration ?? ""}`;

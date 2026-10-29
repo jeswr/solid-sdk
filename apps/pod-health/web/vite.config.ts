@@ -104,7 +104,9 @@ export default defineConfig({
   server: { fs: { allow: [fileURLToPath(new URL("..", import.meta.url))] } },
   // `base: "./"` makes the built asset URLs relative, so the static bundle works
   // when served from a domain root (the per-subdomain deploy) without rewriting.
-  base: "./",
+  // Vercel builds use "/" instead: vercel.json rewrites nested paths to
+  // index.html, where relative asset URLs would resolve under the nested path.
+  base: process.env.VERCEL === "1" ? "/" : "./",
   build: {
     outDir: "dist",
     // Surface oversized bundles in CI without failing the build.

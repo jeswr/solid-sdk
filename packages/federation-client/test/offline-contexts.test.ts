@@ -14,7 +14,6 @@ const appsDirectory = new URL("../../../apps/", import.meta.url);
 const shippedApps = readdirSync(appsDirectory).filter((app) =>
   existsSync(new URL(`${app}/clientid.jsonld`, appsDirectory)),
 );
-// Keep the reader's existing vocabulary: namespace migration is a separate issue.
 const terms = {
   fedapp: "https://w3id.org/jeswr/fed#",
   acl: "http://www.w3.org/ns/auth/acl#",
@@ -72,8 +71,11 @@ describe("offline federation client contexts", () => {
     expect(fetch).toHaveBeenCalledTimes(mode === "body" ? 0 : 1);
   });
 
-  it("verifies and lists a registration using the bundled federation context", async () => {
-    const body = registration([OIDC, FEDERATION]);
+  it.each([
+    FEDERATION,
+    "https://jeswr.org/ns/fed",
+  ])("verifies and lists a registration using context %s", async (context) => {
+    const body = registration([OIDC, context]);
     const result = await verify(APP, { body, bodyContentType: "application/ld+json" });
     expect(result.valid).toBe(true);
     expect(result.registration).toMatchObject({
@@ -102,15 +104,21 @@ describe("offline federation client contexts", () => {
       );
       expect(result.issues.map((issue) => issue.code)).not.toContain("parse-failed");
       expect(fetch).toHaveBeenCalledTimes(mode === "body" ? 0 : 1);
-      // Canonical namespace recognition is tracked separately as VOC-06.
       if (app === "pod-chat") {
-        // Check extraction independently of existing access-mode validation issues.
+        expect(result.valid).toBe(true);
+        expect(result.issues).toEqual([]);
         expect(result.registration).toMatchObject({
           id,
-          sectors: ["https://w3id.org/jeswr/sectors/social#sector"],
+          sectors: ["https://jeswr.org/ns/sectors/social#sector"],
+          access: ["Read", "Write", "Append"],
           produces: [
-            "https://w3id.org/jeswr/pod-chat#ChatRoom",
+            "https://jeswr.org/ns/pod-chat#ChatRoom",
             "https://www.w3.org/ns/activitystreams#Note",
+          ],
+          consumes: [
+            "https://jeswr.org/ns/pod-chat#ChatRoom",
+            "https://www.w3.org/ns/activitystreams#Note",
+            "http://www.w3.org/2005/01/wf/flow#Task",
           ],
         });
       }

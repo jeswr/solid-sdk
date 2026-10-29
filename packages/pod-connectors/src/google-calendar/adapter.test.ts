@@ -1,8 +1,11 @@
-import { DataFactory } from "n3";
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { DataFactory, Writer } from "n3";
 import { describe, expect, it } from "vitest";
-import { demoImport, TEST_POD_ROOT } from "../core/testing.js";
+import { demoImport, fixtureFetch, TEST_POD_ROOT } from "../core/testing.js";
+import type { NormalisedDoc } from "../core/types.js";
 import { CalendarEvent, CLASSES } from "../core/vocab.js";
 import { googleCalendarAdapter } from "./adapter.js";
+import { SCHED } from "./vocab-map.js";
 
 const ROOT = `${TEST_POD_ROOT}integrations/google-calendar/`;
 const EVENTS_DOC = `${ROOT}calendar/events.ttl`;
@@ -29,6 +32,18 @@ describe("google-calendar adapter contract", () => {
     const holiday = new CalendarEvent(`${EVENTS_DOC}#event-z9y8x7w6v5u4t3s2`, ds, DataFactory);
     expect(holiday.name).toBe("Public holiday");
     expect(holiday.startDate?.toISOString()).toBe("2026-06-15T00:00:00.000Z");
+    for (const predicate of [`${SCHED}startTime`, "https://schema.org/startDate"]) {
+      const value = ds.getQuads(
+        DataFactory.namedNode(`${EVENTS_DOC}#event-z9y8x7w6v5u4t3s2`),
+        DataFactory.namedNode(predicate),
+        null,
+        null,
+      )[0]?.object;
+      expect(value).toMatchObject({
+        value: "2026-06-15",
+        datatype: { value: "http://www.w3.org/2001/XMLSchema#date" },
+      });
+    }
   });
 
   it("registers the Event class for the calendar container", async () => {
@@ -50,5 +65,34 @@ describe("google-calendar adapter contract", () => {
     await demoImport(googleCalendarAdapter, { pod });
     expect(pod.urls()).toEqual(before);
     expect(pod.dataset(EVENTS_DOC).size).toBe(sizeBefore);
+  });
+
+  it("matches the sorted Turtle mapping snapshot, including recurrence and date datatypes", async () => {
+    let doc: NormalisedDoc | undefined;
+    await googleCalendarAdapter.import({
+      api: fixtureFetch("google-calendar", googleCalendarAdapter.fixtures()),
+      resolve: (slug) => `${ROOT}${slug}`,
+      read: async () => undefined,
+      progress: () => {},
+      write: async (value) => {
+        doc = value;
+        return { url: EVENTS_DOC, category: value.category, forClass: value.forClass };
+      },
+    });
+    expect(doc).toBeDefined();
+    if (!doc) throw new Error("No Calendar document written");
+    const sorted = [...doc.dataset].sort((a, b) =>
+      [a.subject.value, a.predicate.value, a.object.value]
+        .join("\n")
+        .localeCompare([b.subject.value, b.predicate.value, b.object.value].join("\n")),
+    );
+    const turtle = await new Promise<string>((resolve, reject) => {
+      const writer = new Writer({ format: "text/turtle" });
+      writer.addQuads(sorted);
+      writer.end((error, result) => (error ? reject(error) : resolve(result)));
+    });
+    await expect(`# AUTHORED-BY Codex GPT-6.1-Sol\n${turtle}`).toMatchFileSnapshot(
+      "__snapshots__/mapping.ttl",
+    );
   });
 });

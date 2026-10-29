@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * ChatGPT → Documents (Tier-C file import).
  *
@@ -14,9 +16,11 @@
  */
 import { DataFactory, Store } from "n3";
 import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
-import { recordFragment } from "../core/slug.js";
+import { jsonEntries } from "../core/file-json.js";
+import { recordFragment, sourceItemUrl } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, TextDocument } from "../core/vocab.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "chatgpt";
 
@@ -37,9 +41,11 @@ export interface FlatConversation {
   readonly created?: Date;
   readonly transcript: string;
   readonly key: string;
+  readonly sourceUrl?: string;
 }
 
 export const chatgptFileAdapter: FileImportAdapter = {
+  vocabMap,
   metadata,
   accept: ".json,application/json",
   fileHint:
@@ -48,15 +54,20 @@ export const chatgptFileAdapter: FileImportAdapter = {
 
   async importFile(file: ImportFile, ctx: FileImportContext): Promise<void> {
     ctx.progress({ label: "Reading your conversations…", done: 0, total: 1 });
-    const conversations = parseChatgptExport(await file.text(), ctx.maxRows);
 
     const doc = ctx.resolve("documents/chatgpt-conversations.ttl");
     const store = new Store();
-    for (const conv of conversations) {
+    let index = 0;
+    for await (const entry of jsonEntries(file, ["", "conversations"], [], ctx.skip)) {
+      if (index >= ctx.maxRows) break;
+      const conv = flattenConversation(entry.value, index);
+      if (!conv) continue;
+      index++;
       const frag = recordFragment(conv.title, conv.key);
       const td = new TextDocument(`${doc}#chat-${frag}`, store, DataFactory).mark();
       td.name = conv.title;
       td.text = conv.transcript;
+      td.sourceUrl = conv.sourceUrl;
       if (conv.created) td.dateCreated = conv.created;
     }
 
@@ -100,19 +111,26 @@ export function parseChatgptExport(
   let idx = 0;
   for (const raw of list) {
     if (out.length >= limit) break;
-    if (!isObject(raw)) continue;
-    const title = asString(raw.title)?.trim() || "Untitled conversation";
-    const created = numberToDate(raw.create_time);
-    const transcript = flattenMapping(raw.mapping);
-    out.push({
-      title,
-      created,
-      transcript,
-      key: asString(raw.id) ?? asString(raw.conversation_id) ?? `${title}|${idx}`,
-    });
+    const conversation = flattenConversation(raw, idx);
+    if (!conversation) continue;
+    out.push(conversation);
     idx++;
   }
   return out;
+}
+
+/** The existing export parser, shared by buffered callers and streaming input. */
+function flattenConversation(raw: unknown, idx: number): FlatConversation | undefined {
+  if (!isObject(raw)) return undefined;
+  const title = asString(raw.title)?.trim() || "Untitled conversation";
+  const id = asString(raw.id) ?? asString(raw.conversation_id);
+  return {
+    title,
+    sourceUrl: sourceItemUrl("https://chatgpt.com/c/", id),
+    created: numberToDate(raw.create_time),
+    transcript: flattenMapping(raw.mapping),
+    key: id ?? `${title}|${idx}`,
+  };
 }
 
 /** Walk the node map and join messages in create_time order as `Role: text`. */
