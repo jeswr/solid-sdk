@@ -334,7 +334,9 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
           }
         }
         if (!(await provider.isActive(id))) throw new Error("Pod session is inactive");
-        return cached.client.fetch(request);
+        // Consume our owned body directly; cloning it leaves an unread tee branch that
+        // can prevent the OIDC client's size-limit or abort cancellation from settling.
+        return cached.client.fetch(request, { body: request.body });
       };
     },
     async revoke(id: string) {

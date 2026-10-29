@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { DEFAULT_MAX_REPLAY_BODY_BYTES } from "@jeswr/solid-openid-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fixture, RESOURCE } from "../test/fixtures.js";
 import {
@@ -105,6 +106,75 @@ describe("Solid-OIDC pod broker", () => {
         ).jwk.x,
     );
     expect(new Set(jwks).size).toBe(2);
+  });
+
+  it.each([
+    "request",
+    "init",
+  ])("rejects and cancels oversized %s bodies before transport", async (input) => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const fetcher = await f.provider.fetchFor(session.id);
+    const cancel = vi.fn();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(DEFAULT_MAX_REPLAY_BODY_BYTES));
+        controller.enqueue(new Uint8Array(1));
+        // Keep the source open: rejection must cancel it without an unread tee branch.
+      },
+      cancel,
+    });
+    const target = `${POD_ROOT}notes`;
+    const init = { method: "PUT", body, duplex: "half" };
+    const running =
+      input === "request" ? fetcher(new Request(target, init)) : fetcher(target, init);
+    await expect(running).rejects.toThrow("replay buffer cap");
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(cancel).toHaveBeenCalledWith(expect.any(Error));
+    expect(f.op.captured.filter((r) => r.url.startsWith(POD_ROOT))).toHaveLength(0);
+  });
+
+  it.each([
+    { input: "request", timing: "before" },
+    { input: "request", timing: "during" },
+    { input: "init", timing: "before" },
+    { input: "init", timing: "during" },
+  ])("cancels $input bodies when aborted $timing buffering", async ({ input, timing }) => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const fetcher = await f.provider.fetchFor(session.id);
+    const controller = new AbortController();
+    const reason = new Error(`Fixture abort ${timing} buffering`);
+    const cancel = vi.fn();
+    let started!: () => void;
+    const reading = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(source) {
+          source.enqueue(new TextEncoder().encode("partial body"));
+          started();
+          // Stay open with the next read pending until the caller aborts.
+          return new Promise<void>(() => {});
+        },
+        cancel,
+      },
+      { highWaterMark: 0 },
+    );
+    const target = `${POD_ROOT}notes`;
+    const init = { method: "PUT", body, signal: controller.signal, duplex: "half" };
+    if (timing === "before") controller.abort(reason);
+    const running =
+      input === "request" ? fetcher(new Request(target, init)) : fetcher(target, init);
+    const rejected = expect(running).rejects.toBe(reason);
+    if (timing === "during") {
+      await reading;
+      controller.abort(reason);
+    }
+    await rejected;
+    expect(cancel).toHaveBeenCalledExactlyOnceWith(reason);
+    expect(f.op.captured.filter((r) => r.url.startsWith(POD_ROOT))).toHaveLength(0);
   });
 
   it.each([
