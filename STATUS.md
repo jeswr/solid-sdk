@@ -3,7 +3,7 @@
 
 # sst-j2y — A-036 lane report
 
-Current validation and fixes are recorded in [Fix round 8](#fix-round-8).
+Current validation and fixes are recorded in [Fix round 9](#fix-round-9).
 The original implementation report below is historical.
 
 Implemented `@jeswr/agent-registry` on `lane/sst-j2y`. Only the package, the workspace
@@ -594,4 +594,71 @@ checkout, so automated per-commit review could not run; no review tooling or mod
 endpoint was installed or invoked. Both commits use the required two co-author
 trailers. No branch switch, fetch, merge, push, PR or modifications to another
 checkout were performed. This report is committed after validation, and the
+checkout is left clean.
+
+## Fix round 9
+
+Addressed exactly the three findings against `b766cf2153a9` on `lane/sst-j2y`:
+
+- `5e9427ee` — `fix(agent-registry): preserve private identity operands`:
+  include opaque conflict operands in metadata redaction and credential-reference
+  validation independently of channel inference; preserve case-sensitive URI
+  components in hashes, historical evidence and conflicts; parse complete
+  angle-bracketed identities before bare-token matching. Added or expanded
+  settings and RDF regressions covering notes-only opaque identifiers, all metadata
+  fields, decoded references, Unicode/case variants, distinct URI paths/query
+  values/fragments, unmatched evidence, URI punctuation and shorter-account isolation.
+- Final report commit — `docs(agent-registry): record fix round 9 validation`
+  (this file).
+
+Conservative choice: normalize only a URI's scheme to lowercase, preserving all
+following components without additional canonicalization. Matrix normalization
+and non-URI alias behavior remain as documented. Privacy checks separately fold
+case so case-sensitive identity matching cannot weaken redaction or reference
+validation. Quotes and angle brackets retain complete operands, including their
+internal punctuation. No dependencies, manifests, lockfiles or test configuration
+changed; `check:packages` was not applicable. All inputs and transports are
+synthetic and offline.
+
+The initial regression run reproduced the findings with **23 failures** before
+the source fixes. Final checks used Node `v24.22.1` via
+`export PATH=/opt/node24/bin:$PATH`. The package gate passed **247 tests in 4 files**:
+
+```sh
+pnpm --filter @jeswr/agent-registry run lint
+pnpm --filter @jeswr/agent-registry run build
+pnpm --filter @jeswr/agent-registry run typecheck
+pnpm --filter @jeswr/agent-registry run test
+```
+
+The affected repository gate passed **5/5 tasks**, including `pnpm run lint:root`,
+using the supplied review head as the existing local baseline:
+
+```sh
+TURBO_SCM_BASE=b766cf2153a9350fb340aab2cc6d8b1a1b6372d3 pnpm run gate
+```
+
+`pnpm run gate:full` failed in two unchanged root tests: the disallowed-path case
+at `test/agent-layers.test.mjs:509` exceeded the default 5-second timeout, and
+`test/check-sdk-layers.test.mjs:328` took **57.11 ms** against its **50 ms** limit.
+Root tests reported **684 passed and 2 failed**. Turbo completed **48 of 211
+tasks** successfully (3 cached) before stopping after **1m35.831s**. The full gate
+remains failed; no unrelated source, assertions or timeout configuration changed.
+
+The separate root-suite retry passed **686 tests in 7 files** with the CLI timeout
+override permitted by the brief:
+
+```sh
+pnpm run test:root --testTimeout=30000 --hookTimeout=30000
+```
+
+This retry does not replace the failed full-workspace gate. No in-scope
+implementation remains unfinished and there are no open questions. A green
+full-workspace gate remains blocked by the two root-test timing failures above.
+`roborev` is unavailable and no post-commit hook is installed in this checkout,
+so automated per-commit review could not run. No review tooling or model endpoint
+was installed or invoked. Both commits use the required two co-author trailers.
+All work remained in this checkout on `lane/sst-j2y`; no branch switch, fetch,
+merge, push, PR or modifications to another checkout were performed. No generated
+untracked files remain. This report is committed after validation, and the
 checkout is left clean.
