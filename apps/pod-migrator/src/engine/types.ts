@@ -29,6 +29,7 @@ export type ReportKind =
   | "owner-mapped"
   | "source-owner-kept"
   | "inheritance-narrowed"
+  | "resource-unreadable"
   | "acl-unreadable"
   | "acl-system-unknown"
   | "target-exists"

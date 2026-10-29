@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 import { assertWithinPodScope, normalizePodBase } from "@jeswr/guarded-fetch";
+import { ResourceReadError } from "./resource-body.js";
 import type { PodHttp } from "./types.js";
 
 /** Only checked primitive strings ever reach the credential-bearing transport. */
@@ -24,23 +25,33 @@ export function createPodHttp(opts: {
   }
   async function send(url: string, method: string, init: RequestInit): Promise<Response> {
     const target = checked(url);
-    const response = await opts.fetch(target, {
-      ...init,
-      method,
-      redirect: "manual",
-      credentials: "omit",
-    });
-    if (
-      response.type === "opaqueredirect" ||
-      response.redirected ||
-      (response.status >= 300 && response.status < 400)
-    )
-      throw new TypeError("Pod redirects are refused");
-    if (response.url && checked(response.url) !== target)
-      throw new TypeError("Unexpected response URL");
-    const location = response.headers.get("location");
-    if (location) checked(new URL(location, target).href);
-    return response;
+    try {
+      const response = await opts.fetch(target, {
+        ...init,
+        method,
+        redirect: "manual",
+        credentials: "omit",
+      });
+      if (
+        response.type === "opaqueredirect" ||
+        response.redirected ||
+        (response.status >= 300 && response.status < 400)
+      )
+        throw new TypeError("Pod redirects are refused");
+      if (response.url && checked(response.url) !== target)
+        throw new TypeError("Unexpected response URL");
+      const location = response.headers.get("location");
+      if (location) checked(new URL(location, target).href);
+      return response;
+    } catch (error) {
+      if (method === "GET" || method === "HEAD")
+        throw new ResourceReadError(
+          target,
+          error instanceof Error ? error.message : String(error),
+          error,
+        );
+      throw error;
+    }
   }
   return Object.freeze({
     root,

@@ -96,3 +96,14 @@ describe("PodHttp credential boundary", () => {
       expect(() => createPodHttp({ root, fetch, allowInsecureLoopback: true })).toThrow();
   });
 });
+
+it("retains read URL attribution for non-Error transport rejections and propagates write failures", async () => {
+  const error = "transport rejected";
+  const fetch = vi.fn<typeof globalThis.fetch>().mockRejectedValue(error);
+  const http = createPodHttp({ root, fetch });
+  await expect(http.get(`${root}x`)).rejects.toMatchObject({
+    resourceUrl: `${root}x`,
+    message: error,
+  });
+  await expect(http.put(`${root}x`, "", { contentType: "text/plain" })).rejects.toBe(error);
+});

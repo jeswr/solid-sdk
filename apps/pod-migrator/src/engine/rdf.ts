@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex GPT-6
-import { parseRdf } from "@jeswr/fetch-rdf";
+import type { parseRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { parseLinkHeaders } from "@jeswr/storage-capabilities";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import { NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Writer } from "n3";
-import type { Mode } from "./types.js";
+import { ResourceReadError, readBody } from "./resource-body.js";
+import type { Mode, PodHttp } from "./types.js";
 export const ACL = "http://www.w3.org/ns/auth/acl#";
 export const ACP = "http://www.w3.org/ns/solid/acp#";
 export const RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
@@ -62,9 +63,12 @@ export function serialize(dataset: DatasetCore): Promise<string> {
 export async function parse(
   response: Response,
   url: string,
+  http?: Pick<PodHttp, "get">,
+  signal?: AbortSignal,
+  securityRelevant = false,
 ): Promise<Awaited<ReturnType<typeof parseRdf>>> {
-  requireRepresentation(response);
-  return parseRdf(await response.text(), response.headers.get("content-type"), { baseIRI: url });
+  return (await readBody(response, url, { http, signal, semantic: true, securityRelevant }))
+    .dataset as Awaited<ReturnType<typeof parseRdf>>;
 }
 export function requireRepresentation(response: Response): Response {
   if (response.status !== 200)
@@ -81,8 +85,12 @@ export function aclLink(response: Response, url: string, root: string): string |
   if (found.length > 1) throw new TypeError("Ambiguous ACL links");
   return found[0] === undefined ? undefined : assertWithinPodScope(root, found[0]);
 }
-export function requireOk(response: Response): Response {
-  if (!response.ok) throw new Error(`Pod request failed (${response.status})`);
+export function requireOk(response: Response, url?: string): Response {
+  if (!response.ok) {
+    const message = `Pod request failed (${response.status})`;
+    if (url) throw new ResourceReadError(url, message);
+    throw new Error(message);
+  }
   return response;
 }
 export function parent(url: string, root: string): string | undefined {

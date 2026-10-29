@@ -13,6 +13,17 @@ more accessible than it was in the source, at any moment, including partway thro
 rule cannot be expressed faithfully, the migrator either drops it, substitutes something
 strictly narrower, or stops. It never substitutes something broader.
 
+### Threat model and completeness
+
+The migrator trusts the SOURCE server's representation of its own data: that server also
+defines and enforces the source policy. A malicious source server can lie about its ACRs
+with or without truncation. Completeness against an adversarial server cannot be proven and
+is out of scope, including consistently omitting a denial from both serializations. In scope
+are honest-but-buggy servers (including CSS 7.2's character-counted Content-Length bug and
+similar framing bugs) and broken transports. Independent evidence below means a different
+server conversion path consuming the stored stream, under this trust assumption; graph
+agreement alone is not a cryptographic snapshot or proof against a lying server.
+
 ## 1. Two sessions, two fences
 
 The app holds two independent `createSolidAuth()` instances from `@jeswr/solid-auth-core`,
@@ -60,7 +71,12 @@ Data crosses from source to target only as bytes plus a content type. No header,
 4. **Review** (UI). Show the plan: resource counts, bytes, and every report item with its
    options. Nothing has been written yet. The user resolves each item or aborts. Resolutions can
    be applied in bulk per item kind.
-5. **Execute** (writes, target only). Three phases, in order:
+5. **Execute** (writes, target only). Four phases, in order:
+   - *Validate.* Before any destination mutation, recheck source and target access, then
+     fetch, validate and retain every selected file body (including any requested IRI rewrite).
+     A failure in a nested file therefore leaves no containers, placeholders or ACLs from this
+     attempt. The retained bodies consume memory proportional to the selected content; this
+     implementation buffers the complete migration rather than re-fetching bodies after validation.
    - *Lock.* Create each target container top down. Immediately after creating one, write an
      owner-only ACL/ACR on it (owner gets Read, Write, Control on the container and its members;
      nothing else). Before writing any resource directly into a target container that already
@@ -71,6 +87,83 @@ Data crosses from source to target only as bytes plus a content type. No header,
      overwrite unless the user chose "overwrite" for that path). RDF documents may optionally have
      source-pod IRIs rewritten to target-pod IRIs (parse with `@jeswr/fetch-rdf`, rewrite terms,
      serialise with `n3.Writer`); off by default the bytes are copied verbatim.
+     All network RDF reads use one validated reader: file bodies, containers, anonymous groups,
+     WebID storage discovery, access-system discovery, ACLs/ACRs, execution rechecks and verification.
+     It consumes bytes, decodes RDF with fatal UTF-8 and rejects bodies shorter than visible
+     Content-Length on basic/default responses without an exposed non-identity encoding. Fetch decodes compression,
+     and browser CORS can hide Content-Encoding while exposing Content-Length. Compression can
+     expand small bodies: a shorter CORS body with no visible Content-Encoding is treated as
+     length-free. A longer decoded body remains accepted. Exposed compressed lengths are not compared.
+     Stream, length, decoding and integrity failures carry the resource URL. Planning failures
+     become blocking report items; execution failures appear against the affected destination
+     resource in `MigrationResult.failed`, with the source/document URL in the explanation.
+
+     CSS 7.2's memory backend can count string characters after PATCH, so a response can end
+     exactly between triples, parse successfully, and match an incorrect Content-Length. HEAD
+     repeats that length. For non-JSON RDF with non-ASCII bytes matching a visible length and
+     no exposed non-identity encoding, prefer a different serialization via
+     `Accept: application/ld+json`. Strict UTF-8, full JSON syntax and RDF parsing with remote
+     contexts refused establish JSON-LD completeness even with Content-Length. If unavailable,
+     echoed in the original media type, or unparseable (including a remote context), fall back
+     once to N-Quads, or TriG when the original is N-Quads. Length-free non-ASCII data uses the
+     same negotiation. This supports servers offering Turtle and JSON-LD without N-Quads.
+     **Every security-relevant read requires this check even when the first response
+     has no Content-Length or exposes compression**: no supported server has independent evidence
+     that its original representation always counts bytes. Merely lacking Content-Length is not
+     completeness evidence for a security decision from CSS or another unestablished server.
+     This includes ACLs/ACRs and their discovery, anonymous group membership, WebID storage
+     discovery, and target container inventories establishing whether an access document is shared,
+     during both planning and execution rechecks. A truncated inventory can hide a private sibling
+     sharing the destination's ACR; uncertainty therefore stops before any grant or write.
+     Require the requested returned media type, strict parsing, and dataset isomorphism
+     (including blank nodes and named graphs) with the original bytes. The N-Quads/TriG fallback
+     additionally requires no Content-Length. The different media type must exercise conversion;
+     an echoed original serialization does not qualify.
+     Installed/live CSS 7.2 confirms conversion consumes the full stored stream and omits the
+     stored length. This CSS conversion behaviour supplies independent evidence within the
+     stated threat model. Matching lengths or ETags alone do not supply evidence; JSON-LD's
+     complete syntax frames its body independently. A graph mismatch always fails before any
+     destination write, without trying another conversion. An unavailable conversion
+     (including errors or an echoed original media type) fails closed for security-relevant reads and
+     data matching a visible length. Plain source files and source container listings remain data:
+     length-free data keeps its received bytes without a warning when conversion is unavailable:
+     there is no evidence of truncation. An agreeing conversion
+     uses the graph-only path below. ASCII RDF and opaque resources need no second GET.
+
+     **Verbatim copying warns when completeness depends on graph isomorphism.** A dataset
+     deduplicates triples, so even an agreeing complete alternate graph cannot establish that
+     the original bytes include a trailing duplicate triple, comment or whitespace. Those
+     carry no RDF meaning, and refusing would block every non-ASCII Turtle file on servers
+     that stream conversions, so the data file is copied from the received bytes with a
+     `warn` log entry naming it. Access documents are never copied as bytes; they are
+     translated from the proven graph. Explicit IRI rewriting
+     parses and reserializes RDF anyway; duplicate lexical triples are not preserved in
+     that mode. Byte verification compares against the complete retained body actually written,
+     so exact equality establishes target completeness without requesting another serialization.
+     Different bytes fail verification.
+
+     JSON-LD copies validate the complete JSON syntax and UTF-8 without expanding any context.
+     JSON's closing delimiters establish the document boundary, so a character-count cut cannot
+     discard graph data while leaving a valid complete JSON document. Access reads and IRI
+     rewriting additionally parse RDF with remote contexts refused. The migrator never fetches
+     remote JSON-LD contexts, even for an otherwise intact document.
+
+     An access document whose byte integrity or completeness cannot be established offers
+     **skip / abort**, including for descendants. It cannot be downgraded to an owner-only copy.
+     Other unsupported but intact source policy shapes retain the conservative owner-only option.
+
+     Residual limits: these checks operate within the source-server trust assumption above.
+     Successful conversion streams are assumed to serialize the stored graph completely;
+     a server consistently lying in both responses is out of scope. An arbitrary wrong byte
+     length on all-ASCII RDF or opaque bytes cannot be proven complete without a trusted digest
+     or server-side snapshot. Separate reads are not an atomic snapshot: a concurrent graph
+     change can cause safe refusal. JSON syntax validation is integrity evidence, not JSON-LD
+     context expansion or semantic validation. The extra completeness check uses one alternate
+     GET when JSON-LD works, at most two with fallback, and one graph comparison per affected
+     read; other media types incur no extra request. Isomorphism uses a bijection of at most
+     64 blank nodes and a 100,000-step search budget; larger or harder proofs, and non-identical
+     quoted-triple graphs, fail closed.
+     There is no new remote-context, HEAD-length or unbounded negotiation loop.
    - *Grant.* Write the final ACLs/ACRs **bottom up** (deepest first, containers after their
      members). Every intermediate state is a subset of the final state, which is a subset of the
      source.
@@ -310,6 +403,7 @@ controls the target pod.
 | Grant to the source owner's WebID | kept verbatim (it is the same person, and they may still use that WebID) | same | info item |
 | WAC child ACL narrower than an inherited default | write the child ACL | ACP inheritance is additive, so the parent's member rules would reach the child | `inheritance-narrowed`: **per-resource** (no member controls on that parent; every existing descendant gets its own explicit controls; new files added later inherit nothing) / **abort** |
 | ACP member controls + own controls | CSS source: union; ESS source: own grants suppress inherited grants, inherited denials remain | CSS source: union; ESS source: materialize strict effective controls per resource | ESS→ACP: `inheritance-narrowed`: **per-resource** / **abort** |
+| Source ACL/ACR with unproven integrity/completeness | — | — | `acl-unreadable`: **skip the resource and subtree** / **abort** |
 | Unreadable source ACL/ACR | — | — | `acl-unreadable`: **owner-only** / **skip the resource** / **abort** |
 | Unreadable, ambiguous or shared target ACL/ACR | — | — | `acl-unreadable`: **skip the resource** / **abort**. Owner-only cannot remove unproven existing restrictions or additive ancestor grants |
 | Unknown source access-control system | — | — | `acl-system-unknown`: **owner-only for everything** / **abort** |

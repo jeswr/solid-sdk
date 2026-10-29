@@ -45,8 +45,12 @@ permission comparison counts. Assertion failures and startup failures exit
 nonzero; live scenarios are never silently skipped.
 
 Data includes nested containers, Turtle, JSON, all byte values in a binary file,
-and a filename containing spaces and Unicode. Final checks compare exact file
-bytes, container membership, effective permissions, owner access to each access
+and a filename containing spaces and Unicode. The full scenarios explicitly enable
+IRI rewriting: Unicode RDF with ambiguous length framing can establish graph
+completeness through CSS conversion, but cannot prove the original lexical bytes.
+A separate scenario requires the default byte-verbatim migration to refuse those
+resources before any writes. Final checks compare exact non-RDF bytes and exact
+reserialized/re-written RDF bytes, container membership, effective permissions, owner access to each access
 document, and owner ability to conditionally replace it. Grants to the named
 stranger must preserve Read and Append, including a successful insertion PATCH
 whose bytes are then restored by the owner. The stranger must also be refused
@@ -116,3 +120,27 @@ The full command has been run against both local servers with loopback sockets.
 Offline checks additionally validate crypto, HTTP request construction, probes,
 observation ordering, shipped config imports, and independent fixtures against CSS's
 own ACP evaluator.
+
+`content-length.integration.ts` reproduces CSS 7.2.0's memory-backend length bug
+independently: PUT a Unicode Turtle document, GET it intact, insert an ASCII triple
+with PATCH, then compare a raw loopback HTTP response with HEAD and Fetch GET.
+The server sends 133 UTF-8 bytes but advertises 128 (the JavaScript string length);
+Fetch exposes only 128 bytes and the RDF parser rejects that prefix. The test logs
+the exact bodies, statuses and raw response headers, and drives the engine against
+the damaged source to require a failed-resource report and no destination file.
+`@jeswr/fetch-rdf` also rejects the streamed response without a package change.
+The count originates at CSS `dist/storage/accessors/InMemoryDataAccessor.js:53`
+(`chunk.length`) and is emitted by
+`dist/http/output/metadata/RangeMetadataWriter.js:27`.
+
+An access-read regression also obtains its alternate N-Quads representation from
+real CSS, requiring conversion to omit Content-Length. A wrapper removes the first
+Turtle response's length, both with the intact body and with a valid-triple prefix.
+The intact access graph passes; the prefix is refused against the full conversion.
+This exercises conversion evidence rather than trusting a missing header alone.
+
+`shared.ttl` retains Unicode in the full migration scenarios. Following a successful
+stranger append, the suite requires the engine body reader to reject the truncated
+Turtle. It negotiates N-Triples only to inspect the inserted triple, then restores
+the original Turtle with the original Turtle representation's ETag. No server code
+is patched and no truncated body is used as migration input successfully.

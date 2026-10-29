@@ -4,6 +4,7 @@ import { parseRdf } from "@jeswr/fetch-rdf";
 import { Container } from "@solid/object";
 import { DataFactory } from "n3";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { rewriteRdf } from "../../src/engine/executor.js";
 import {
   executeMigration,
   finalizePlan,
@@ -15,6 +16,7 @@ import {
   planMigration,
   type ReportKind,
 } from "../../src/engine/index.js";
+import { readResourceBytes } from "../../src/engine/resource-body.js";
 import { type CssAccount, createAccount } from "./account.js";
 import { boundedFetch } from "./auth.js";
 import {
@@ -293,6 +295,25 @@ describe.sequential("real CSS 7.2 migration security", () => {
     );
   });
 
+  it("copies byte-verbatim Unicode RDF proven by conversion, with a warning", async () => {
+    const source = sources.get("wac") as SourceFixture;
+    const destination = await target("acp");
+    const options = { source: source.side, target: destination.side };
+    const plan = await planMigration(options);
+    const result = await executeMigration(
+      finalizePlan(plan, resolutions(plan, scenarios[0] as Scenario)),
+      options,
+    );
+    expect(result.failed).toEqual([]);
+    expect(result.verified).toBe(true);
+    expect(result.log).toContainEqual(
+      expect.objectContaining({
+        level: "warn",
+        message: expect.stringContaining("Byte-verbatim completeness cannot be established"),
+      }),
+    );
+  });
+
   for (const scenario of scenarios)
     it(scenario.name, async () => {
       console.log(`[SCENARIO] ${scenario.name}`);
@@ -350,8 +371,28 @@ describe.sequential("real CSS 7.2 migration security", () => {
       const options = {
         source: source.side,
         target: targetSide,
+        rewriteIris: true,
         onProgress: (event: Progress) => progressEvents.push(event),
       };
+      const copiedFiles = new Map(
+        await Promise.all(
+          [...source.files].map(
+            async ([path, bytes]) =>
+              [
+                path,
+                path.endsWith(".ttl")
+                  ? await rewriteRdf(
+                      bytes,
+                      "text/turtle",
+                      source.side.root,
+                      destination.podRoot,
+                      source.side.root + path,
+                    )
+                  : bytes,
+              ] as const,
+          ),
+        ),
+      );
       const plan = await planMigration(options);
       expect(plan.sourceSystem).toBe(scenario.from);
       expect(plan.targetSystem).toBe(scenario.to);
@@ -438,7 +479,7 @@ describe.sequential("real CSS 7.2 migration security", () => {
         const data = await destination.fetch(url);
         expect(data.status).toBe(200);
         const bytes = new Uint8Array(await data.arrayBuffer());
-        if (source.files.has(path)) expect(bytes, `${path} bytes`).toEqual(source.files.get(path));
+        if (copiedFiles.has(path)) expect(bytes, `${path} bytes`).toEqual(copiedFiles.get(path));
         else {
           const dataset = await parseRdf(
             new TextDecoder().decode(bytes),
@@ -506,9 +547,17 @@ describe.sequential("real CSS 7.2 migration security", () => {
       await append.arrayBuffer();
       const changed = await destination.fetch(shared);
       const etag = changed.headers.get("etag");
-      const changedText = await changed.text();
+      const changedBytes = new Uint8Array(await changed.arrayBuffer());
+      const changedText = new TextDecoder().decode(changedBytes);
       if (process.env.CSS_DEBUG) console.log(`[APPENDED BODY]\n${changedText}`);
-      const graph = await parseRdf(changedText, changed.headers.get("content-type"), {
+      // CSS's memory backend miscounts non-ASCII Turtle after PATCH. The engine
+      // must refuse these bytes; negotiate another syntax only to prove Append.
+      await expect(
+        readResourceBytes(new Response(changedBytes, { headers: changed.headers }), shared),
+      ).rejects.toThrow("Invalid or truncated RDF body");
+      const complete = await destination.side.http.get(shared, { accept: "application/n-triples" });
+      expect(complete.status).toBe(200);
+      const graph = await parseRdf(await complete.text(), complete.headers.get("content-type"), {
         baseIRI: shared,
       });
       expect(
@@ -521,13 +570,13 @@ describe.sequential("real CSS 7.2 migration security", () => {
       assert.ok(etag, "Restoring the append test requires the current content ETag");
       const restore = await destination.fetch(shared, {
         method: "PUT",
-        headers: { "content-type": "text/turtle", "if-match": etag },
-        body: new Uint8Array(source.files.get("shared.ttl") as Uint8Array),
+        headers: { "content-type": "application/trig", "if-match": etag },
+        body: new Uint8Array(copiedFiles.get("shared.ttl") as Uint8Array),
       });
       expect(restore.ok).toBe(true);
       await restore.arrayBuffer();
       const restored = await destination.fetch(shared);
-      expect(new Uint8Array(await restored.arrayBuffer())).toEqual(source.files.get("shared.ttl"));
+      expect(new Uint8Array(await restored.arrayBuffer())).toEqual(copiedFiles.get("shared.ttl"));
       const sharedAcl = accessLink(await destination.side.http.head(shared), shared);
       const forbiddenControl = await stranger(sharedAcl, {
         method: "PUT",
