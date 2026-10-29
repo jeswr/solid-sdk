@@ -551,25 +551,35 @@ export function createSolidDriveClient(options: {
     const webId = owner ?? policyOwner(policy);
     if (!webId) throw new DriveAccessError("Recovery owner unavailable");
     const folder = `${storageUrl}.drive-recovery-${crypto.randomUUID()}/`;
-    await createFolder(folder, { kind: "owner-only", webId });
-    const recoveryAccess = await bindAccess(access, folder, folder);
     const retained: string[] = [];
-    const survivors: ResourceIdentity[] = [];
-    const backupAccess: AccessBinding[] = [];
-    for (const [index, copy] of copies.entries()) {
-      const target = `${folder}${index}-${encodeURIComponent(nameOf(url))}`;
-      backupAccess.push(await bindAccess(access, target, target));
-      const saved = await write(
-        target,
-        copy.body,
-        { contentType: copy.type, ifNoneMatch: "*" },
-        { kind: "protect-ancestors" },
-      );
-      survivors.push({ url: target, etag: validator(target, saved.etag) });
-      retained.push(target);
-    }
-    const required = await ledger.get(url);
+    let committedBackup: string | undefined;
     try {
+      await createFolder(folder, { kind: "owner-only", webId });
+      const recoveryAccess = await bindAccess(access, folder, folder);
+      const survivors: ResourceIdentity[] = [];
+      const backupAccess: AccessBinding[] = [];
+      for (const [index, copy] of copies.entries()) {
+        const target = `${folder}${index}-${encodeURIComponent(nameOf(url))}`;
+        backupAccess.push(await bindAccess(access, target, target));
+        const saved = await write(
+          target,
+          copy.body,
+          { contentType: copy.type, ifNoneMatch: "*" },
+          { kind: "protect-ancestors" },
+          undefined,
+          undefined,
+          {
+            onWritten: () => {
+              committedBackup = target;
+            },
+          },
+        );
+        // A committed backup remains discoverable even if its receipt is missing.
+        retained.push(target);
+        committedBackup = undefined;
+        survivors.push({ url: target, etag: validator(target, saved.etag) });
+      }
+      const required = await ledger.get(url);
       const cleared = await commitHttp({
         rechecks: [recoveryAccess, ...backupAccess].map((binding) => () => binding.recheck()),
         policyGuards: [recoveryAccess, ...backupAccess].flatMap((binding) => binding.identities),
@@ -593,13 +603,30 @@ export function createSolidDriveClient(options: {
       if (required)
         await ledger.set(url, { ...required, etag: validator(url, cleared.headers.get("etag")) });
     } catch (cause) {
+      // write() may fail after its PUT commits. Nested quarantine reports the
+      // useful replacement locations itself; otherwise retain this receipt too,
+      // unless read-only discovery confirms that compensation removed it.
+      if (
+        committedBackup &&
+        !(cause instanceof DrivePartialFailureError && cause.retainedDestinations.length)
+      ) {
+        const current = await http(committedBackup, { method: "HEAD", cache: "no-store" }).catch(
+          () => undefined,
+        );
+        if (current?.status !== 404 && current?.status !== 410) retained.push(committedBackup);
+      }
       throw new DrivePartialFailureError(
         url,
         [],
         [],
-        isMissingItem(cause)
-          ? retained.filter((target) => target !== (cause as DriveError).url)
-          : retained,
+        [
+          ...new Set([
+            ...(isMissingItem(cause)
+              ? retained.filter((target) => target !== (cause as DriveError).url)
+              : retained),
+            ...(cause instanceof DrivePartialFailureError ? cause.retainedDestinations : []),
+          ]),
+        ],
         cause,
       );
     }
@@ -617,7 +644,7 @@ export function createSolidDriveClient(options: {
     verifyAccess?: () => Promise<void>,
     scope: AccessScope = new Set(),
     effects: Omit<CommitEffects, "onCommit"> &
-      Pick<CommitChecks, "identityChecks"> & {
+      Pick<CommitChecks, "identityChecks" | "policyGuards"> & {
         readonly onWritten?: (response: Response) => void;
       } = {},
     required?: OwnAccess,
@@ -667,7 +694,7 @@ export function createSolidDriveClient(options: {
       // removes its ACL. Replays restore only the captured audience.
       await (binding as AccessBinding).rollback(async () => {
         if (previous) {
-          const policy = required ?? (binding as AccessBinding).source;
+          const policy = required ?? (binding as AccessBinding).destinationPolicy;
           try {
             await replayProtected(
               url,
@@ -704,12 +731,17 @@ export function createSolidDriveClient(options: {
               rechecks: [() => access.checkOwn(own)],
             });
           } catch (cause) {
-            const retained = await quarantine(url, etag, (binding as AccessBinding).source, [
-              {
-                body: init.body,
-                type: init.headers["content-type"],
-              },
-            ]);
+            const retained = await quarantine(
+              url,
+              etag,
+              (binding as AccessBinding).destinationPolicy,
+              [
+                {
+                  body: init.body,
+                  type: init.headers["content-type"],
+                },
+              ],
+            );
             throw new DrivePartialFailureError(url, [], [], retained, cause);
           }
         }
@@ -730,7 +762,11 @@ export function createSolidDriveClient(options: {
         },
       ],
       identityChecks: effects.identityChecks ?? [],
-      policyGuards: [...scopePolicyGuards(scope), ...(binding?.identities ?? [])],
+      policyGuards: [
+        ...scopePolicyGuards(scope),
+        ...(binding?.identities ?? []),
+        ...(effects.policyGuards ?? []),
+      ],
       finalIdentities: parents.map((identity) => ({ ...identity, http, error: errorFor })),
       http,
       url,
@@ -767,47 +803,60 @@ export function createSolidDriveClient(options: {
     expectedOwn?: { url: string; policy: OwnAccess | null },
   ) => {
     const etag = validator(url, new Headers(init.headers).get("if-match"));
-    const protectedPolicy = policy
-      ? await provision.protect(url, policy, url, {
-          identity: { url, etag },
-          restrict: true,
-          knownAcl: expectedOwn?.url,
-          expectedAcl: expectedOwn?.policy ?? null,
-        })
-      : undefined;
+    // An unchanged captured own ACL already protects the replay. Reinstalling
+    // a projection would erase independent defaults and unrelated ACL clauses.
+    // Pin its receipt at the same HTTP boundary as every installed policy.
+    const captured = expectedOwn?.policy;
+    const preserved =
+      policy && captured && sameGraph(policy.dataset, captured.dataset) ? captured : undefined;
+    const protectedPolicy =
+      preserved ??
+      (policy
+        ? await provision.protect(url, policy, url, {
+            identity: { url, etag },
+            restrict: true,
+            knownAcl: expectedOwn?.url,
+            expectedAcl: expectedOwn?.policy ?? null,
+          })
+        : undefined);
+    const verifyProtection = async () => {
+      if (protectedPolicy) {
+        const current = requireAccess(await access.effective(url), url);
+        if (
+          current.url !== protectedPolicy.url ||
+          current.etag !== protectedPolicy.etag ||
+          accessGains(protectedPolicy, current).length
+        )
+          throw new DriveAccessError("Rollback protection changed");
+      }
+    };
     let replayed: Response | undefined;
     try {
-      return await guardedWrite(
-        url,
-        init,
-        false,
-        async () => {
-          if (
-            protectedPolicy &&
-            accessGains(protectedPolicy, requireAccess(await access.effective(url), url)).length
-          )
-            throw new DriveAccessError("Rollback protection changed");
+      return await guardedWrite(url, init, false, verifyProtection, undefined, {
+        ...effects,
+        policyGuards: protectedPolicy
+          ? [{ url: protectedPolicy.url, etag: protectedPolicy.etag }]
+          : [],
+        onWritten: (response) => {
+          replayed = response;
         },
-        undefined,
-        {
-          ...effects,
-          onWritten: (response) => {
-            replayed = response;
-          },
-        },
-      );
+      });
     } catch (error) {
       // A replay is already confidential. Secure our captured PUT even if Link
       // disappears; the previously verified own ACL remains the repair endpoint.
       if (replayed && protectedPolicy) {
         const receipt = validator(url, replayed.headers.get("etag"));
         try {
-          await provision.protect(url, protectedPolicy, url, {
-            identity: { url, etag: receipt },
-            restrict: true,
-            knownAcl: protectedPolicy.url,
-            expectedAcl: protectedPolicy,
-          });
+          // A failed post-replay check cannot authorize rewriting the captured
+          // ACL either. Reuse the same complete policy on every replay path.
+          if (preserved) await verifyProtection();
+          else
+            await provision.protect(url, protectedPolicy, url, {
+              identity: { url, etag: receipt },
+              restrict: true,
+              knownAcl: protectedPolicy.url,
+              expectedAcl: protectedPolicy,
+            });
         } catch (cause) {
           const retained = await quarantine(url, receipt, protectedPolicy, [
             {
@@ -1515,7 +1564,7 @@ export function createSolidDriveClient(options: {
         // Our restored children changed membership. Hydrate the resulting
         // representation before committing the undo; a refusal never rebases it.
         const body = await serialize([...previous]);
-        const restoredPolicy = previous.size ? binding.destination : undefined;
+        const restoredPolicy = previous.size ? binding.destinationPolicy : undefined;
         const expected = resource.data as Store;
         validator(to, resource.etag);
         const current = await listing(to);

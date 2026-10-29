@@ -27,7 +27,16 @@ exposed PUT. Failures report retained recovery locations. Another client can sti
 change content or access between requests: conditional mutations and operation
 rechecks surface that limitation instead of attempting to revert the other client.
 
-Round 56 audited call sites (all go through the same conditional HTTP boundary):
+Compensation uses the complete captured own ACL, including independent child
+defaults. An unchanged ACL stays intact during content replay; its captured
+validator joins the final HTTP checks. A failed quarantine reports every backup
+already saved, including backups retained by a nested failure, even when later
+discovery, backup creation, receipt validation, or ledger hydration fails. Backup
+PUT receipts are recorded before verification; uncertain locations are checked
+only for error reporting, without authorizing any later mutation.
+
+Round 59 audited call sites (all go through the same conditional HTTP boundary;
+full finding/test mapping in the [round 59 audit](../../../../../test/drive-review-round59-audit.md)):
 
 | Path | Call sites |
 | --- | --- |

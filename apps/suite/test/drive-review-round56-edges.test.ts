@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory, Store } from "n3";
-import { expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { accessControl, requireAccess } from "../src/apps/drive/lib/client/access";
 import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
 import { restoreItems } from "../src/apps/drive/lib/operations/operations";
@@ -23,6 +23,8 @@ import {
   turtle,
   WacFields,
 } from "./drive-wac-pod";
+
+afterEach(() => vi.restoreAllMocks());
 
 it.each([
   "graph",
@@ -109,7 +111,10 @@ it.each([
   await expect(client.copy(from, to, { kind: "preserve-source" })).rejects.toMatchObject({
     kind: "partial-failure",
     retainedDestinations: expect.arrayContaining([to]),
-    cause: { kind: "private-access-unavailable" },
+    cause:
+      failure === "no controller"
+        ? { kind: "private-access-unavailable" }
+        : { kind: "partial-failure", retainedDestinations: [], cause: "Backup unavailable" },
   });
   expect(copied).toBe(true);
   expect(await (await f.pod.fetch(to)).text()).toBe("secret contents");
@@ -143,10 +148,73 @@ it("round 56: a retained move surfaces backup provisioning failure and keeps pri
   );
   await expect(client.move(from, to, { kind: "preserve-source" })).rejects.toMatchObject({
     kind: "partial-failure",
-    cause: { kind: "failed", status: 503 },
+    cause: {
+      kind: "partial-failure",
+      retainedDestinations: [],
+      cause: { kind: "failed", status: 503 },
+    },
   });
   expect((await f.anonymous(to)).status).toBe(403);
   expect(await (await f.pod.fetch(to)).text()).toBe("secret contents");
+});
+
+it.each([
+  "no controller",
+  "unavailable recovery identifier",
+])("round 59: recovery reports %s without hiding the retained destination", async (failure) => {
+  const f = await rdfPod();
+  const from = `${PRIVATE}secret`;
+  const to = `${PRIVATE}copy`;
+  if (failure === "no controller") {
+    const data = await parseRdf(await aclBody(from), "text/turtle");
+    new WacFields(`${from}#owner`, data, DataFactory).iris(`${ACL}mode`).delete(`${ACL}Control`);
+    f.policies.set(`${from}.policy`, await turtle(data));
+  }
+  const client = createSolidDriveClient({
+    storageUrl: ROOT,
+    fetch: f.fetch,
+    ...(failure === "unavailable recovery identifier" ? { webId: OWNER } : {}),
+  });
+  let copied = false;
+  const uuid = crypto.randomUUID.bind(crypto);
+  vi.spyOn(crypto, "randomUUID").mockImplementation(() => {
+    if (copied && failure === "unavailable recovery identifier")
+      throw "Recovery identifier unavailable";
+    return uuid();
+  });
+  f.after(async (url, method, response) => {
+    if (
+      !copied &&
+      url === to &&
+      method === "PUT" &&
+      response.ok &&
+      (await (await f.pod.fetch(to)).text()) === "secret contents"
+    ) {
+      copied = true;
+      await f.pod.fetch(from, { method: "PUT", body: "edited" });
+      if (failure === "unavailable recovery identifier")
+        f.policies.set(`${to}.policy`, await aclBody(to, true));
+    }
+    return response;
+  });
+  f.intercept(async (url, init) =>
+    copied && url === `${to}.policy` && init?.method === "PUT"
+      ? new Response(null, { status: 503 })
+      : undefined,
+  );
+  await expect(client.move(from, to, { kind: "preserve-source" })).rejects.toMatchObject({
+    kind: "partial-failure",
+    retainedDestinations: expect.arrayContaining([to]),
+    cause: {
+      kind: "private-access-unavailable",
+      cause:
+        failure === "no controller"
+          ? "Recovery owner unavailable"
+          : "Recovery identifier unavailable",
+    },
+  });
+  expect(await (await f.pod.fetch(to)).text()).toBe("secret contents");
+  expect(f.calls).not.toContainEqual({ url: to, method: "DELETE" });
 });
 
 it("round 56: demo folder compensation also uses the shared ACL ownership boundary", async () => {

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex
 import { createRequire } from "node:module";
+import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { afterEach, expect, it, vi } from "vitest";
 import { accessControl, privateAcl } from "../src/apps/drive/lib/client/access";
@@ -20,7 +21,17 @@ import {
   serializeTrashIndex,
 } from "../src/apps/drive/lib/operations/trash-index";
 import { rdfPod } from "./drive-rdf-pod";
-import { aclBody, DRIVE, OWNER, PRIVATE, ROOT, turtle, WacFields } from "./drive-wac-pod";
+import {
+  ACL,
+  aclBody,
+  DRIVE,
+  EVERYONE,
+  OWNER,
+  PRIVATE,
+  ROOT,
+  turtle,
+  WacFields,
+} from "./drive-wac-pod";
 
 const { IDBFactory, IDBObjectStore } = createRequire(
   new URL("../../../packages/solid-offline/package.json", import.meta.url),
@@ -69,6 +80,8 @@ const steps = [
   "partial folder Restore metadata",
   "copy rollback without Link",
   "container rollback without Link",
+  "folder overwrite rollback with child defaults",
+  "partial Restore rollback with child defaults",
 ] as const;
 type Step = (typeof steps)[number];
 
@@ -101,6 +114,8 @@ async function scenario(step: Step, events: string[]) {
     "container merge",
     "partial folder Restore metadata",
     "container rollback without Link",
+    "folder overwrite rollback with child defaults",
+    "partial Restore rollback with child defaults",
   ].includes(step);
   const source = folder ? `${PRIVATE}tree/` : `${PRIVATE}secret`;
   if (folder) await f.pod.fetch(source, { method: "PUT", body: "" });
@@ -111,13 +126,70 @@ async function scenario(step: Step, events: string[]) {
       .add(`${ROOT}statement`);
     await f.pod.fetch(source, { method: "PUT", body: await turtle(data) });
   }
+  if (step.endsWith("with child defaults")) {
+    const data = new Store();
+    const subject = new WacFields(source, data, DataFactory);
+    const node = new WacFields(DataFactory.blankNode(), data, DataFactory);
+    node.iris("https://example.test/value").add("urn:original");
+    SetFrom.subjectPredicate(
+      subject,
+      "https://example.test/note",
+      TermAs.is,
+      TermFrom.instance,
+    ).add(node);
+    await f.pod.fetch(source, { method: "PUT", body: await turtle(data) });
+    await f.pod.fetch(`${source}child`, { method: "PUT", body: "shared child" });
+    const policy = privateAcl(source, OWNER);
+    const rule = new WacFields(DataFactory.blankNode(), policy, DataFactory);
+    rule.iris("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").add(`${ACL}Authorization`);
+    rule.iris(`${ACL}default`).add(source);
+    rule.iris(`${ACL}agentClass`).add(EVERYONE);
+    rule.iris(`${ACL}mode`).add(`${ACL}Read`);
+    f.policies.set(`${source}.policy`, await turtle(policy));
+  }
   const selected = await client.stat(source);
   if (!selected.etag) throw new Error("Missing source validator");
   let target = source;
   let targetCheck = 1;
   let identityTarget: string | undefined;
   let run: () => Promise<unknown>;
-  if (step === "Trash index overwrite") {
+  if (step.endsWith("with child defaults")) {
+    if (step === "partial Restore rollback with child defaults") {
+      f.intercept(async (url, init) =>
+        url === `${source}child` && init?.method === "DELETE"
+          ? new Response(null, { status: 403 })
+          : undefined,
+      );
+      expect((await trashItems(client, DRIVE, [selected], { webId: OWNER })).failed).toHaveLength(
+        1,
+      );
+      f.intercept(undefined);
+      const [entry] = await listTrash(client, DRIVE);
+      if (!entry) throw new Error("Missing recovery");
+      run = () => restoreItems(client, DRIVE, [entry]);
+    } else
+      run = () =>
+        client.write(
+          source,
+          "",
+          { contentType: "text/turtle", ifMatch: selected.etag as string },
+          { kind: "protect-ancestors" },
+        );
+    let written = false;
+    let failed = false;
+    f.after(async (url, method, response) => {
+      if (url === source && method === "PUT" && response.ok) written = true;
+      return response;
+    });
+    f.intercept(async (url, init) => {
+      if (written && !failed && url === `${source}.policy` && !init?.method) {
+        failed = true;
+        return new Response(null, { status: 503 });
+      }
+      return undefined;
+    });
+    targetCheck = 2;
+  } else if (step === "Trash index overwrite") {
     target = `${DRIVE}.trash/index.ttl`;
     await client.prepareTrash(`${DRIVE}.trash/`, { kind: "owner-only", webId: OWNER });
     await client.write(
@@ -350,7 +422,7 @@ async function scenario(step: Step, events: string[]) {
 
 it.each(
   steps,
-)("round 58 shape a: %s retains a replacement at its final identity check", async (step) => {
+)("round 59 shape a: %s retains a replacement at its final identity check", async (step) => {
   const events: string[] = [];
   const s = await scenario(step, events);
   let checks = 0;
@@ -378,7 +450,7 @@ it.each(
 
 it.each(
   steps,
-)("round 58 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
+)("round 59 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   const events: string[] = [];
   const s = await scenario(step, events);

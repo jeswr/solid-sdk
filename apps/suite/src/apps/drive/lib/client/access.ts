@@ -202,6 +202,8 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     if (state.status === "unknown") throw new DriveAccessError(state.cause);
     const current = state.status === "known" ? state.policy : undefined;
     const expected = guard?.expectedAcl;
+    if ((guard?.knownAcl && guard.knownAcl !== url) || (expected && expected.url !== url))
+      throw new DriveAccessChangedError(["The item's own ACL endpoint changed"]);
     if (current && expected !== undefined && current.etag !== expected?.etag)
       throw new DriveAccessChangedError(["The item's own ACL changed"]);
     if (!current && expected) throw new DriveAccessChangedError(["The item's own ACL was removed"]);
@@ -332,7 +334,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       return store(url, retargetAccess(source, from, to, url).dataset, to, {
         expectedAcl: source.url === url && source.etag ? source : null,
         ...guard,
-        knownAcl: url,
+        knownAcl: guard?.knownAcl ?? url,
         identity: { url: to, etag },
       });
     },
@@ -455,6 +457,12 @@ export async function bindAccess(
     },
     source: source.resource,
     destination: destination.resource,
+    /** Resource projections are only for access comparisons. Compensation must
+     * retain the complete captured own ACL, including independent child defaults.
+     */
+    get destinationPolicy() {
+      return destinationOwn?.policy ?? destination.resource;
+    },
     retire: (url: string): void => {
       retired.add(url);
     },
