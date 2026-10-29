@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Offline / stale / pending STATUS SURFACE (P5).
  *
@@ -8,7 +9,7 @@
  *   - CONNECTIVITY  — online vs offline, from `navigator.onLine` + the `online` /
  *     `offline` window events.
  *   - PER-RESOURCE FRESHNESS — for each URL the consumer cares about:
- *       'pending'  a (re)validation is in flight (the consumer marked it),
+ *       'pending'  a (re)validation is in flight (worker event or consumer mark),
  *       'stale'    the last read was served from cache while offline / unconfirmed
  *                  (the SWR engine tagged it `X-Offline: stale`),
  *       'fresh'    a revalidation confirmed it (304) or the consumer marked a 200,
@@ -18,14 +19,14 @@
  * It is deliberately a *plain* `subscribe`/`getSnapshot` store (no framework) so
  * the React hooks (`react.ts`) can wrap it with `useSyncExternalStore` and a
  * vanilla app can use it directly. It listens to the same `BroadcastChannel` the
- * SWR engine broadcasts `updated` events on, so any tab's revalidation flips the
+ * SWR engine broadcasts revalidation events on, so any tab's revalidation flips the
  * status for every tab.
  *
  * It holds NO bytes and is NOT authoritative — it only reflects events. Tearing
  * it down (`close()`) drops listeners + the channel; it never touches the cache.
  */
 
-import type { UpdatedEvent } from './types.js';
+import type { OfflineEvent } from './types.js';
 
 /** Freshness of a single tracked resource. */
 export type ResourceFreshness = 'fresh' | 'stale' | 'pending' | 'updated';
@@ -61,7 +62,7 @@ export interface ConnectivityTarget {
 }
 
 export interface StatusSurfaceOptions {
-  /** BroadcastChannel name the SW broadcasts `updated` events on. Default: 'solid-offline'. */
+  /** BroadcastChannel name the SW broadcasts revalidation events on. Default: 'solid-offline'. */
   channelName?: string;
   /** Inject a channel (tests). Falls back to a real `BroadcastChannel` when available. */
   channel?: StatusChannel;
@@ -121,7 +122,13 @@ export function createStatusSurface(options: StatusSurfaceOptions = {}): Offline
   const connectivity = options.connectivity ?? defaultConnectivity();
 
   const listeners = new Set<StatusListener>();
+  // Settled freshness is independent of worker activity, so manual observations
+  // and unread updates survive until the last overlapping attempt settles.
   const resources = new Map<string, ResourceFreshness>();
+  // Account for every observed attempt, even while a URL is absent from the snapshot.
+  // IDs prevent completions of starts missed before subscription from settling
+  // newer work. Legacy URL-only senders retain separate counter-based accounting.
+  const revalidations = new Map<string, { attempts: Set<string>; legacy: number }>();
   let online = isOnline();
 
   // Cached immutable snapshot — `useSyncExternalStore` REQUIRES `getSnapshot` to
@@ -133,7 +140,8 @@ export function createStatusSurface(options: StatusSurfaceOptions = {}): Offline
     let stale = 0;
     let updated = 0;
     const map: Record<string, ResourceFreshness> = {};
-    for (const [url, freshness] of resources) {
+    for (const [url, settled] of resources) {
+      const freshness = revalidations.has(url) ? 'pending' : settled;
       map[url] = freshness;
       if (freshness === 'pending') pending += 1;
       else if (freshness === 'stale') stale += 1;
@@ -148,18 +156,46 @@ export function createStatusSurface(options: StatusSurfaceOptions = {}): Offline
   }
 
   function setFreshness(url: string, freshness: ResourceFreshness): void {
-    if (resources.get(url) === freshness) return;
     resources.set(url, freshness);
-    emit();
+    emitIfChanged(url);
+  }
+
+  function emitIfChanged(url: string): void {
+    const freshness = revalidations.has(url) ? 'pending' : resources.get(url);
+    if (snapshot.resources[url] !== freshness) emit();
   }
 
   const onMessage = (event: MessageEvent): void => {
-    const data = event.data as UpdatedEvent | undefined;
-    if (data?.event !== 'updated') return;
-    // A newer version exists for this URL. Only flag resources the consumer is
-    // already tracking — we don't want to grow the map for every change in the
-    // pod, only the ones a view is actually showing.
-    if (resources.has(data.url)) setFreshness(data.url, 'updated');
+    const data = event.data as OfflineEvent | undefined;
+    if (typeof data?.url !== 'string') return;
+    const active = revalidations.get(data.url);
+    if (data.event === 'revalidating') {
+      const pending = active ?? { attempts: new Set<string>(), legacy: 0 };
+      if (data.attemptId !== undefined) pending.attempts.add(data.attemptId);
+      else pending.legacy += 1;
+      revalidations.set(data.url, pending);
+      if (resources.has(data.url)) emitIfChanged(data.url);
+      return;
+    }
+    if (
+      data.event !== 'updated' &&
+      data.event !== 'revalidated' &&
+      data.event !== 'revalidate-failed'
+    )
+      return;
+    if (active) {
+      if (data.attemptId !== undefined) active.attempts.delete(data.attemptId);
+      else active.legacy = Math.max(0, active.legacy - 1);
+      if (active.attempts.size === 0 && active.legacy === 0) revalidations.delete(data.url);
+    }
+
+    // Lifecycle accounting survives tracking changes; only tracked URLs are visible.
+    if (!resources.has(data.url)) return;
+    if (data.event === 'updated') setFreshness(data.url, 'updated');
+    // A 304 confirms worker bytes, not that the consumer has read an update.
+    else if (data.event === 'revalidated' && resources.get(data.url) !== 'updated')
+      setFreshness(data.url, 'fresh');
+    else emitIfChanged(data.url);
   };
 
   const onOnline = (): void => {
@@ -205,6 +241,7 @@ export function createStatusSurface(options: StatusSurfaceOptions = {}): Offline
       connectivity?.removeEventListener('offline', onOffline);
       listeners.clear();
       resources.clear();
+      revalidations.clear();
     },
   };
 }

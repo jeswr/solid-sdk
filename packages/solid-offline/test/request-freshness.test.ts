@@ -117,7 +117,6 @@ describe('Cache-Control: no-cache forces synchronous revalidation (no stale serv
     expect(h.broadcast.messages.at(-1)).toMatchObject({
       url: URL_A,
       event: 'updated',
-      etag: '"v2"',
     });
     const row = (await h.meta.getByUrl(URL_A))[0];
     expect(row?.etag).toBe('"v2"');

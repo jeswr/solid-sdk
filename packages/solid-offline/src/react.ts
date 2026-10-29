@@ -41,6 +41,12 @@ import type { UpdatedEvent } from './types.js';
 
 export type { OfflineStatusSnapshot, OfflineStatusSurface, ResourceFreshness } from './status.js';
 
+/** Status snapshot plus a convenience flag for rendering a syncing indicator. */
+export interface UseOfflineStatusResult extends OfflineStatusSnapshot {
+  /** True while at least one tracked resource is pending. */
+  syncing: boolean;
+}
+
 /**
  * Subscribe a component to the offline status surface. Pass a surface you already
  * created (recommended — share ONE across the app, e.g. from your offline
@@ -51,7 +57,7 @@ export type { OfflineStatusSnapshot, OfflineStatusSurface, ResourceFreshness } f
  */
 export function useOfflineStatus(
   surfaceOrOptions?: OfflineStatusSurface | StatusSurfaceOptions,
-): OfflineStatusSnapshot {
+): UseOfflineStatusResult {
   // If the caller passed a surface, use it as-is and never tear it down here.
   // Otherwise create+own one for this component's lifetime.
   const provided = isSurface(surfaceOrOptions) ? surfaceOrOptions : undefined;
@@ -75,11 +81,12 @@ export function useOfflineStatus(
     };
   }, [provided]);
 
-  return useSyncExternalStore(
+  const snapshot = useSyncExternalStore(
     useCallback((cb) => surface.subscribe(cb), [surface]),
     () => surface.getSnapshot(),
     () => surface.getSnapshot(),
   );
+  return useMemo(() => ({ ...snapshot, syncing: snapshot.pending > 0 }), [snapshot]);
 }
 
 function isSurface(x: unknown): x is OfflineStatusSurface {

@@ -3,6 +3,7 @@ name: solid-auth-core
 description: Use when implementing browser Solid login with @jeswr/solid-auth-core, including WebID-first issuer discovery, DPoP login, pristine/public fetch separation, proactive authenticated fetch, silent restore, recent accounts, logout, or the React SessionProvider.
 ---
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # Work with `@jeswr/solid-auth-core`
 
@@ -31,6 +32,7 @@ React consumers use `SessionProvider` and `useSolidSession()` from `@jeswr/solid
 - Keep pristine fetch capture first and pin every OIDC discovery, registration, token, and refresh request to it. Never route auth bootstrap traffic through a token-attaching global wrapper.
 - Use `authenticatedFetch` only for allowed Solid resource origins and `publicFetch` for foreign/public origins.
 - Keep the allowed-origin set fail-closed: HTTPS resource origins only, with explicit loopback HTTP opt-in for development. Do not add the issuer merely because it issued the token.
+- `deriveProactiveAllowedOrigins` excludes the issuer origin by default; only `includeIssuerOrigin: true` opts in. A pod hosted on the issuer origin remains allowed through `podRoot`. Use `includeWebIdOrigin: false` if the WebID document is not served by the pod. The separate `computeAllowedOrigins` default still includes the issuer.
 - When storage origins become known after restore, call `reArmAllowedOrigins()` rather than re-running the grant.
 - Keep generation fences and per-session ownership checks around login, restore, refresh, logout, and persistence. Re-check after every awaited boundary before mutating live state.
 - On any failure after arming a session, clear both the provider session and the authenticated-fetch boundary.

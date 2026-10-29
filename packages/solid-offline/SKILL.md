@@ -48,6 +48,30 @@ Import `solid-offline/worker` from an origin-served service-worker entry. Import
 
 Use `offline.status` or `createStatusSurface()` as a stable `subscribe`/`getSnapshot` store. `useOfflineStatus` and `useOfflineResource` should remain thin `useSyncExternalStore` adapters; caching policy stays in the service worker.
 
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+The worker broadcasts `OfflineEvent` messages containing only URL, event, and an opaque
+random `attemptId` shared by an attempt's start and terminal messages: `revalidating` starts an attempt;
+exactly one of `updated` (replacement/purge), `revalidated` (confirmed 304), or
+`revalidate-failed` (network/offline/storage/non-authoritative response) terminates it.
+Keep `UpdatedEvent` source-compatible; do not put ETags, bytes, headers, credentials, or
+errors on the channel. Direct delete purges use the same balanced lifecycle without
+fetching; purge errors terminate with `revalidate-failed`.
+
+Track URLs with the surface's mark methods. For tracked URLs, start → `pending`,
+confirmed 304 → `fresh`, replacement/purge → `updated`, and failure → the prior state.
+Parallel observed attempts remain pending until all settle. Correlate completions by ID,
+so a missed start before subscription cannot settle newer work (including lazy `offline.status`).
+Keep legacy ID-less messages source-compatible with separate URL-based counting; that
+older protocol cannot guarantee correct accounting across missed starts.
+Keep settled freshness separate from
+active-attempt counts: manual marks update the settled state while pending, and failures
+retain that state. An unread `updated` survives 304 confirmations until a consumer mark
+acknowledges its read. Offline cache hits and no-op/skipped
+validations emit no lifecycle events. An unsolicited 304 on an unconditional listing
+refresh is a failed confirmation. `markPending` remains supported. `useOfflineStatus`
+returns `UseOfflineStatusResult`, which adds `syncing: boolean` (`pending > 0`) to the
+snapshot. `useOfflineResource` continues to reload only on `updated` events.
+
 Test decision logic with fake fetch, Cache API, WebSocket, and real fake IndexedDB seams. A change to worker lifecycle wiring also needs browser-level verification because unit tests do not exercise real service-worker install/activate/fetch events.
 
 Run the package and full workspace gates. For an intentional public API change, rebuild and update the API report before the final gate.
