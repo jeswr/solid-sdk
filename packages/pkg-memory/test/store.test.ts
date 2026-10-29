@@ -245,6 +245,54 @@ it.each([
   }
 });
 
+it.each([
+  [0, 1, 2],
+  [1, 0, 2],
+  [0, 2, 1],
+  [2, 0, 1],
+  [1, 2, 0],
+  [2, 1, 0],
+])("validates external collection correspondence in listing order %s, %s, %s", async (...order) => {
+  for (const mergeNodes of [true, false]) {
+    const { store, pod, memory, write } = setup();
+    const values = await jointCorrespondence(mergeNodes);
+    for (const value of values)
+      await memory.write(
+        store.url(value.nanopubs[0]!.id),
+        encode(await serializeNanopublications(value)),
+        "application/trig",
+        { ifNoneMatch: "*" },
+      );
+    pod.list = async () =>
+      order.map((index) => ({
+        url: store.url(values[index]!.nanopubs[0]!.id),
+        isContainer: false,
+      }));
+    const remove = vi.spyOn(pod, "delete");
+    for (let i = 0; i < 2; i++) {
+      if (mergeNodes)
+        await expect(new NanopubStore(pod).list()).rejects.toThrow(
+          /Conflicting blank-node references|Unsupported cross-resource blank-node sharing/,
+        );
+      else {
+        const loaded = await new NanopubStore(pod).list();
+        expect(loaded.nanopubs).toHaveLength(3);
+        const np = values[2]!.nanopubs[0]!;
+        const preference = new RdfNode(identity.webId, graph(loaded.dataset, np.assertionId)).one(
+          `${NS.schema}hasPreference`,
+        );
+        const about = new RdfNode(
+          "https://example.org/document",
+          graph(loaded.dataset, pkgId("batch", np.batch, "sources")),
+        ).one(`${NS.schema}about`);
+        expect(preference.equals(about)).toBe(false);
+      }
+    }
+    expect(write).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+  }
+});
+
 it("preserves independent nodes when repeating graphs from two stored resources", async () => {
   const { store, pod } = setup();
   const values = await jointCorrespondence(false);

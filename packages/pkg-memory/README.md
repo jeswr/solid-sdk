@@ -182,6 +182,8 @@ has not been run in this fixture-only lane.
 
 `get(id)` verifies the stored media type and nanopub identity. `list()` loads only
 immediate UUID resources and ignores nested or off-container listing entries.
+It validates the complete collection's correspondence before returning, including
+externally written resources and regardless of listing order.
 Repeated graphs must match exactly up to blank-node labels, including literal
 lexical forms, datatypes and language tags; assertion value normalization does
 not apply to this comparison.

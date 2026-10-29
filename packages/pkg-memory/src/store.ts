@@ -143,6 +143,7 @@ export class NanopubStore {
     const shared = new Map<string, string>();
     for (const id of this.resourceIds(await this.pod.list(this.container)))
       mergeNanopublication(collection, shared, await this.get(id));
+    validateBlankNodeSharing(collection.dataset, nanopubParts(collection));
     return collection;
   }
 
