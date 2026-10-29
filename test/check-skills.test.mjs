@@ -5,9 +5,11 @@ import { spawnSync } from "node:child_process";
 import {
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readlinkSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -1318,6 +1320,83 @@ describe("skill validation", () => {
 });
 
 describe("generated skill index", () => {
+  it.each([
+    "internal",
+    "external",
+    "dangling",
+  ])("rejects an index symbolic link to an %s target without changing it", (type) => {
+    const root = fixture();
+    const target = join(type === "internal" ? root : fixture(), "private-fixture-target");
+    const previous = "Preserve fixture target\n";
+    if (type !== "dangling") writeFileSync(target, previous);
+    const indexPath = join(root, "skills/INDEX.md");
+    symlinkSync(target, indexPath);
+    for (const args of [[], ["--write"]]) {
+      const result = cli(root, ...args);
+      expect(result.status).toBe(1);
+      expect(result.stderr.trim()).toBe("skills/INDEX.md: symbolic-link skill roots are forbidden");
+      expect(result.stdout).toBe("");
+      expect(readlinkSync(indexPath)).toBe(target);
+      if (type === "dangling") expect(existsSync(target)).toBe(false);
+      else expect(readFileSync(target, "utf8")).toBe(previous);
+    }
+  });
+
+  it.each([
+    ["after discovery", "file"],
+    ["after discovery", "dangling"],
+    ["at write", "file"],
+    ["at write", "dangling"],
+  ])("refuses an index symbolic link introduced %s (%s target)", (phase, type) => {
+    const root = fixture();
+    const indexPath = join(root, "skills/INDEX.md");
+    put(root, "skills/INDEX.md", "Previously generated index\n");
+    const target = join(fixture(), "private-fixture-target");
+    const previous = "Preserve fixture target\n";
+    if (type === "file") writeFileSync(target, previous);
+    // Inject the link at a deterministic filesystem boundary in an isolated process.
+    const script = `
+      import assert from "node:assert/strict";
+      import fs from "node:fs";
+      import { syncBuiltinESMExports } from "node:module";
+      const indexPath = ${JSON.stringify(indexPath)};
+      const target = ${JSON.stringify(target)};
+      const afterDiscovery = ${JSON.stringify(phase === "after discovery")};
+      const method = afterDiscovery ? "readFileSync" : "writeFileSync";
+      const original = fs[method];
+      let injected = false;
+      fs[method] = (...args) => {
+        if (!injected && args[0] === (afterDiscovery
+          ? ${JSON.stringify(join(root, "skills/alpha/SKILL.md"))} : indexPath)) {
+          injected = true;
+          fs.rmSync(indexPath);
+          fs.symlinkSync(target, indexPath);
+        }
+        return original(...args);
+      };
+      syncBuiltinESMExports();
+      const { checkSkills } = await import(${JSON.stringify(checker)});
+      if (afterDiscovery) {
+        assert.deepEqual(checkSkills(${JSON.stringify(root)}, { write: true }).errors, [
+          "skills/INDEX.md: symbolic-link index destinations are forbidden",
+        ]);
+      } else {
+        assert.throws(() => checkSkills(${JSON.stringify(root)}, { write: true }),
+          { code: "ELOOP" });
+      }
+      assert.equal(injected, true);
+    `;
+    const result = spawnSync(process.execPath, ["--input-type=module", "--eval", script], {
+      encoding: "utf8",
+    });
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(lstatSync(indexPath).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(indexPath)).toBe(target);
+    if (type === "dangling") expect(existsSync(target)).toBe(false);
+    else expect(readFileSync(target, "utf8")).toBe(previous);
+  });
+
   it("checks missing/stale indexes without writing and offers an explicit generation mode", () => {
     const root = fixture();
     expect(cli(root).status).toBe(1);

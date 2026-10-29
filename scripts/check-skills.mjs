@@ -3,6 +3,7 @@
 // AUTHORED-BY Codex GPT-6
 
 import {
+  constants,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -583,9 +584,14 @@ export function checkSkills(root, { write = false } = {}) {
   // Never publish invalid metadata (or a secret) into the generated index.
   if (errors.length === 0) {
     const index = renderIndex(skills);
-    if (write) {
+    if (lstatSync(indexPath, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      report("skills/INDEX.md", "symbolic-link index destinations are forbidden");
+    } else if (write) {
       mkdirSync(dirname(indexPath), { recursive: true });
-      writeFileSync(indexPath, index);
+      // Refuse a symbolic link even if the destination changed after the check.
+      writeFileSync(indexPath, index, {
+        flag: constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW,
+      });
     } else if (!existsSync(indexPath) || readFileSync(indexPath, "utf8") !== index) {
       report("skills/INDEX.md", "index is missing or stale; run pnpm run check:skills --write");
     }
