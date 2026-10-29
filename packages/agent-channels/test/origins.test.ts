@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import type { guardedFetch } from "@jeswr/guarded-fetch";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer uses bare builtins
 import { createHash } from "crypto";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer uses bare builtins
@@ -150,7 +151,7 @@ it.each([
           ? replacement
           : policy;
   const expected = kind === "override" || kind === "clear" ? replacement : policy;
-  const transport = vi.fn<typeof fetch>(async (target, effectiveInit) => {
+  const transport = vi.fn<typeof guardedFetch>(async (target, effectiveInit) => {
     const received = new Request(target, effectiveInit);
     expect(received).toMatchObject(expected);
     expect(received.redirect).toBe("manual");
