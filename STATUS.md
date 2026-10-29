@@ -623,3 +623,81 @@ The frozen offline check passes (exit 0). `git diff --check` passes.
 per-commit review is unavailable. No remote Git fetch/merge, push, publication,
 new dependency or lifecycle script was used. Both requested fixes are complete;
 no open questions or unfinished implementation work remain.
+
+## Review fixes — `547f8f970ba8` (round 3)
+
+- `565a1466 fix(mcp): meter N3 base directive work` reserves work before N3
+  processes the initial base or a base directive. The existing shared parser
+  budget now accounts for the quadratic worst case of base-path normalization
+  and conservative expanded-base lengths, including declarations emitting no
+  quads. Fixtures cover relative chains, repeated Turtle/SPARQL directives,
+  mixed-case `BASE`, expensive single bases, shared term budgets and normal
+  base/prefix resolution. This conservative work limit can reject a base even
+  when its term bytes alone would fit the allocation limit.
+- `5716117f fix(bridge): reject legacy ACL inheritance scopes` takes the
+  conservative option explicitly allowed by the review: discovered ACLs with
+  any `acl:defaultForNew` statement are refused before replacement. Same-container,
+  foreign, mixed, literal and blank-node targets all abort before any PUT.
+- `aaa20c5c fix(mcp): normalize portable search media types` normalizes case,
+  whitespace and parameters before bounded RDF parsing, retaining the empty-header
+  Turtle fallback. Fixtures cover profile/index discovery, direct instance
+  literals, scanned literals and the Turtle alias; explicit binary types remain
+  refused.
+- `docs: record MCP round-three validation` records the final gate results.
+
+All three supplied findings are addressed. There are **21 additional fixture
+cases**; **19 regressions fail against the reviewed implementation**, while all
+**80 cases in the three focused files pass** with the fixes. No dependency or
+manifest changed, so `check:packages` is not applicable.
+
+Validation used Node 24 and the existing temporary network guard:
+
+```sh
+export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"
+export NODE_OPTIONS=--require=/tmp/sst-9s2-round2-network-guard.cjs
+export GIT_ALLOW_PROTOCOL=file
+```
+
+Both package gates pass (exit 0):
+
+```sh
+pnpm --filter @jeswr/solid-mcp run lint
+pnpm --filter @jeswr/solid-mcp run build
+pnpm --filter @jeswr/solid-mcp run typecheck
+pnpm --filter @jeswr/solid-mcp run test
+pnpm --filter @jeswr/agentic-legacy-bridge run lint
+pnpm --filter @jeswr/agentic-legacy-bridge run build
+pnpm --filter @jeswr/agentic-legacy-bridge run typecheck
+pnpm --filter @jeswr/agentic-legacy-bridge run test
+pnpm --filter @jeswr/agentic-legacy-bridge run test:coverage
+```
+
+Solid MCP passes **525 tests across 11 files**. The bridge passes **680 tests
+across 37 files**, including its coverage run (94.01% statements, 86.65% branches,
+97.34% functions and 96.32% lines).
+
+The affected repository gate passes (exit 0; **26/26 tasks successful**, 7 cached),
+including `pnpm run lint:root` and the agent-model/personal-agent dependent checks:
+
+```sh
+TURBO_SCM_BASE=547f8f970ba85ca080ebe9a61326d2093e0f6758 pnpm run gate
+```
+
+The full-workspace gate ran before the final documentation commit:
+
+```sh
+pnpm run gate:full
+```
+
+It exits 1 after **129 successful tasks out of 278**, 13 cached, at the unchanged
+`@jeswr/app-suite#build`. Its `next/font` build attempts to download Onest, Source
+Code Pro and Source Serif 4 from Google Fonts; the fixture-only network guard
+refuses those connections. The root suite passes **745 tests across 9 files**.
+This is the same environmental limitation recorded in the previous review round;
+no unrelated source was changed to address it.
+
+`git diff --check` passes. `roborev status` exits 127 because roborev is not
+installed, so automated per-commit review remains unavailable. No remote Git
+fetch/merge, push, publication, new dependency or lifecycle script was used.
+No implementation work or open questions remain; the outstanding validation
+limitations are the full-workspace font download and unavailable roborev.
