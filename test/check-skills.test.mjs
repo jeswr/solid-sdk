@@ -374,6 +374,44 @@ describe("skill validation", () => {
   });
 
   it.each([
+    "<svg><title /></svg>\n\n[broken](missing.md)",
+    "<svg><title/></svg>\n\n![broken](missing.png)",
+    '<SVG><TITLE /></SVG>\n\n<a href="missing.md">broken</a>',
+    "<svg><g><title /></g></svg>\n\n[broken](missing.md)",
+    "<svg><style /></svg>\n\n[broken](missing.md)",
+    "<svg><script /></svg>\n\n[broken](missing.md)",
+    "<svg><title>caption</title></svg>\n\n[broken](missing.md)",
+    '<svg><title><a href="missing.md">broken</a></title></svg>',
+    '<svg><foreignObject><textarea>literal</textarea><a href="missing.md">broken</a></foreignObject></svg>',
+    "<svg><foreignObject /><title /></svg>\n\n[broken](missing.md)",
+    '<svg><desc><svg><title /></svg><a href="missing.md">broken</a></desc></svg>',
+    '<svg><div><title>caption</title><a href="missing.md">broken</a></div>',
+    "<math><title /></math>\n\n[broken](missing.md)",
+    '<math><mtext><svg><title /></svg><a href="missing.md">broken</a></mtext></math>',
+    '<math><annotation-xml encoding="text/html"><textarea>literal</textarea><a href="missing.md">broken</a></annotation-xml></math>',
+  ])("checks links across foreign element boundaries: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+  });
+
+  it.each([
+    "<title />\n\n[ignored](missing.md)",
+    "<svg /><title />\n\n[ignored](missing.md)",
+    "<svg><foreignObject><textarea/>\n\n[ignored](missing.md)\n\n</textarea></foreignObject></svg>",
+    "<svg><desc><title/>\n\n[ignored](missing.md)\n\n</title></desc></svg>",
+    "<svg><div><textarea/>\n\n[ignored](missing.md)\n\n</textarea></div>",
+    "<math><mtext><textarea/>\n\n[ignored](missing.md)\n\n</textarea></mtext></math>",
+    '<math><annotation-xml encoding="TEXT&#47;HTML"><textarea/>\n\n[ignored](missing.md)\n\n</textarea></annotation-xml></math>',
+  ])("preserves HTML text state at foreign integration points: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
     '<a href=" references/guide.md ">guide</a>',
     "<img src=' \t\nreferences/guide.md\r\f '>",
     '<a href=" https://example.invalid/missing.md ">external</a>',

@@ -76,6 +76,7 @@ function decodeCharacterReferences(text) {
 
 function htmlLinksIn(html) {
   const links = [];
+  const elements = [];
   // Recognize comments only between tags; attribute values are consumed in full below.
   const tokens = /<!--(?:-?>|[\s\S]*?(?:-->|$))|<\/?[a-zA-Z][^\t\n\f\r />]*/g;
   const whitespace = /[\t\n\f\r ]/;
@@ -84,8 +85,11 @@ function htmlLinksIn(html) {
     const closing = token[0].startsWith("</");
     const tag = token[0].slice(closing ? 2 : 1).toLowerCase();
     let cursor = tokens.lastIndex;
+    let selfClosing = false;
     const attributes = [];
+    const elementAttributes = new Map();
     while (cursor < html.length && html[cursor] !== ">") {
+      if (html[cursor] === "/" && html[cursor + 1] === ">") selfClosing = true;
       if (whitespace.test(html[cursor]) || html[cursor] === "/") {
         cursor++;
         continue;
@@ -93,6 +97,8 @@ function htmlLinksIn(html) {
       const nameStart = cursor;
       while (cursor < html.length && !/[\t\n\f\r /=>]/.test(html[cursor])) cursor++;
       const name = html.slice(nameStart, cursor).toLowerCase();
+      const firstAttribute = !elementAttributes.has(name);
+      if (!elementAttributes.has(name)) elementAttributes.set(name, "");
       while (cursor < html.length && whitespace.test(html[cursor])) cursor++;
       if (html[cursor] !== "=") continue;
       cursor++;
@@ -109,14 +115,71 @@ function htmlLinksIn(html) {
         while (cursor < html.length && !/[\t\n\f\r >]/.test(html[cursor])) cursor++;
         value = html.slice(start, cursor);
       }
+      if (firstAttribute) elementAttributes.set(name, value);
       if (!closing && (name === "href" || name === "src")) attributes.push(value);
     }
     // An incomplete tag does not create an element or active URL attributes.
     if (html[cursor] === ">") links.push(...attributes);
     tokens.lastIndex = cursor + 1;
+    if (html[cursor] !== ">") continue;
+    if (closing) {
+      const index = elements.findLastIndex((element) => element.tag === tag);
+      if (index !== -1) elements.length = index;
+      continue;
+    }
+
+    const parent = elements.at(-1);
+    let namespace = parent?.namespace ?? "html";
     if (
-      !closing &&
-      html[cursor] === ">" &&
+      parent?.htmlChildren ||
+      (parent?.mathText && !/^(?:mglyph|malignmark)$/.test(tag)) ||
+      (namespace === "math" && parent?.tag === "annotation-xml" && tag === "svg")
+    ) {
+      namespace = "html";
+    }
+    // These HTML tags exit foreign content even without an explicit closing tag.
+    if (
+      namespace !== "html" &&
+      (/^(?:b|big|blockquote|body|br|center|code|dd|div|dl|dt|em|embed|h[1-6]|head|hr|i|img|li|listing|menu|meta|nobr|ol|p|pre|ruby|s|small|span|strong|strike|sub|sup|table|tt|u|ul|var)$/.test(
+        tag,
+      ) ||
+        (tag === "font" && ["color", "face", "size"].some((name) => elementAttributes.has(name))))
+    ) {
+      while (
+        elements.length &&
+        elements.at(-1).namespace !== "html" &&
+        !elements.at(-1).htmlChildren &&
+        !elements.at(-1).mathText
+      ) {
+        elements.pop();
+      }
+      namespace = "html";
+    }
+    if (namespace === "html" && (tag === "svg" || tag === "math")) namespace = tag;
+    // A slash closes foreign elements; HTML text elements ignore it.
+    if (
+      (namespace !== "html" && selfClosing) ||
+      (namespace === "html" &&
+        /^(?:area|base|basefont|bgsound|br|col|embed|hr|img|input|keygen|link|meta|param|source|track|wbr)$/.test(
+          tag,
+        ))
+    ) {
+      continue;
+    }
+    elements.push({
+      tag,
+      namespace,
+      htmlChildren:
+        (namespace === "svg" && /^(?:foreignobject|desc|title)$/.test(tag)) ||
+        (namespace === "math" &&
+          tag === "annotation-xml" &&
+          /^(?:text\/html|application\/xhtml\+xml)$/i.test(
+            decodeCharacterReferences(elementAttributes.get("encoding") ?? ""),
+          )),
+      mathText: namespace === "math" && /^(?:mi|mo|mn|ms|mtext)$/.test(tag),
+    });
+    if (
+      namespace === "html" &&
       /^(?:textarea|title|script|style|xmp|iframe|noembed|noframes)$/.test(tag)
     ) {
       // Raw-text/RCDATA contents cannot start tags or comments. Only a matching
