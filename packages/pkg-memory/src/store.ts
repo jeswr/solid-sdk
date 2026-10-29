@@ -8,6 +8,7 @@ import { compareDateTimes } from "./chronology.js";
 import { canonicalizeGraphWithLabels, pkgId } from "./ids.js";
 import {
   buildNanopublications,
+  type Nanopublication,
   type Nanopublications,
   parseNanopublications,
   serializeNanopublications,
@@ -68,17 +69,31 @@ export class NanopubStore {
   async put(value: Nanopublications): Promise<string[]> {
     const parsed = await parseNanopublications(await serializeNanopublications(value));
     const parts = parsed.nanopubs.map((np) => {
-      const sharedGraphs = [
-        np.assertionId,
-        pkgId("batch", np.batch, "sources"),
-        pkgId("batch", np.batch, "entities"),
-      ];
+      const sharedGraphs = sharedGraphNames(np);
       const dataset = new Store();
       for (const name of [np.id, np.provenanceId, np.pubinfoId, ...sharedGraphs])
         putGraph(dataset, name, graph(parsed.dataset, name));
       return { np, dataset, sharedGraphs };
     });
     validateBlankNodeSharing(parsed.dataset, parts);
+    let entries: Awaited<ReturnType<PodPort["list"]>>;
+    try {
+      entries = await this.pod.list(this.container);
+    } catch (error) {
+      if (podStatus(error) !== 404) throw error;
+      entries = [];
+    }
+    for (const id of this.resourceIds(entries)) {
+      const stored = await this.get(id);
+      const names = sharedGraphNames(stored.nanopubs[0] as Nanopublication);
+      for (const { dataset, sharedGraphs } of parts) {
+        const common = new Set(sharedGraphs.filter((name) => names.includes(name)));
+        // Later batches may share fewer graphs than this call's resources do.
+        // Check each stored copy using only graphs list() can use in either order.
+        if (sharedGraphLabels(dataset, common).id !== sharedGraphLabels(stored.dataset, common).id)
+          throw new Error("Conflicting copies of a shared nanopublication graph");
+      }
+    }
     const resources = await Promise.all(
       parts.map(async ({ np, dataset }) => ({
         url: this.url(np.id),
@@ -106,20 +121,11 @@ export class NanopubStore {
   async list(): Promise<Nanopublications> {
     const dataset = new Store();
     const nanopubs: Nanopublications["nanopubs"] = [];
-    const ids = new Set<string>();
     const shared = new Map<string, string>();
-    for (const entry of await this.pod.list(this.container)) {
-      if (entry.isContainer || !entry.url.startsWith(this.container)) continue;
-      const id = `urn:uuid:${entry.url.slice(this.container.length).replace(/\.trig$/, "")}`;
-      if (!uuid.test(id) || this.url(id) !== entry.url || ids.has(id)) continue;
-      ids.add(id);
+    for (const id of this.resourceIds(await this.pod.list(this.container))) {
       const result = await this.get(id);
       const np = result.nanopubs[0] as Nanopublications["nanopubs"][number];
-      const graphs = [
-        np.assertionId,
-        pkgId("batch", np.batch, "sources"),
-        pkgId("batch", np.batch, "entities"),
-      ].map((name) => {
+      const graphs = sharedGraphNames(np).map((name) => {
         const contents = graph(result.dataset, name);
         const canonical =
           contents.size === 0
@@ -159,6 +165,17 @@ export class NanopubStore {
       nanopubs.push(...result.nanopubs);
     }
     return { dataset, nanopubs };
+  }
+
+  private resourceIds(entries: Awaited<ReturnType<PodPort["list"]>>): Set<string> {
+    const ids = new Set<string>();
+    for (const entry of entries) {
+      if (entry.isContainer || !entry.url.startsWith(this.container)) continue;
+      const id = `urn:uuid:${entry.url.slice(this.container.length).replace(/\.trig$/, "")}`;
+      if (!uuid.test(id) || this.url(id) !== entry.url || ids.has(id)) continue;
+      ids.add(id);
+    }
+    return ids;
   }
 
   /** Append a Retracted revision; the original resource remains immutable. */
@@ -340,6 +357,14 @@ export class NanopubStore {
     )
       throw new Error("Pod did not preserve nanopublication bytes in octet-stream fallback");
   }
+}
+
+function sharedGraphNames(np: Nanopublication): string[] {
+  return [
+    np.assertionId,
+    pkgId("batch", np.batch, "sources"),
+    pkgId("batch", np.batch, "entities"),
+  ];
 }
 
 /** Encode (graph, predicate) pairs only for joint matching, never for stored RDF. */

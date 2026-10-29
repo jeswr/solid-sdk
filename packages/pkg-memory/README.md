@@ -143,7 +143,9 @@ blank node without tie-breaking search. Unresolved ties, including symmetric
 authors, reject before any Pod write, including single-resource puts whose graphs
 may recur in later calls. Listing older or externally written copies with such
 ties also rejects. Symmetry confined to private graphs in one resource remains
-supported.
+supported. Each put also checks incoming resources against existing copies,
+using only their common graphs, before any Pod write. A batch's extra graphs
+cannot resolve an ambiguity shared with a different stored batch.
 Other cross-resource sharing (such as evidence targets used only in separate
 provenance graphs) rejects before any Pod write; local cross-graph sharing remains
 supported. Owner-only WAC ACLs are written before creating

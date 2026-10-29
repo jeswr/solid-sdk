@@ -163,6 +163,139 @@ async function symmetricSharedAuthors(ids = ["one", "two"]) {
   return { value, author, other, sourcesId };
 }
 
+async function symmetricAssertionBatch(batch: string, ids = ["one"]) {
+  const value = await sharedBlankAssertions(ids, batch);
+  const assertionId = value.nanopubs[0]!.assertionId;
+  const assertion = new Store();
+  const sourcesId = pkgId("batch", batch, "sources");
+  const sources = graph(value.dataset, sourcesId);
+  const nodes = [DataFactory.blankNode(), DataFactory.blankNode()];
+  for (const [index, node] of nodes.entries()) {
+    new RdfNode(identity.webId, assertion).add(`${NS.schema}hasPreference`, node);
+    new RdfNode(node, assertion).text(`${NS.schema}value`, "tea");
+    new RdfNode("https://example.org/document", sources).add(`${NS.schema}about`, node);
+    new RdfNode(node, sources).text(`${NS.schema}name`, `Preference ${index}`);
+  }
+  putGraph(value.dataset as Store, assertionId, assertion);
+  putGraph(value.dataset as Store, sourcesId, sources);
+  for (const np of value.nanopubs) {
+    const provenance = graph(value.dataset, np.provenanceId);
+    new RdfNode(np.id, provenance).add(`${NS.prov}primarySource`, nodes[0]!);
+    putGraph(value.dataset as Store, np.provenanceId, provenance);
+  }
+  return value;
+}
+
+it.each([
+  false,
+  true,
+])("rejects ambiguous assertion correspondence across separate puts (reverse put order: %s)", async (reverse) => {
+  const { store, pod, write } = setup();
+  const values = [await symmetricAssertionBatch("first"), await symmetricAssertionBatch("second")];
+  if (reverse) values.reverse();
+  const [first, second] = values;
+  await store.put(first!);
+  const url = store.url(first!.nanopubs[0]!.id);
+  const before = await pod.read(url);
+  const unrelated = await build("unrelated");
+  const incoming = {
+    dataset: new Store([...unrelated.dataset, ...second!.dataset]),
+    nanopubs: [...unrelated.nanopubs, ...second!.nanopubs],
+  };
+  write.mockClear();
+  // A new instance must validate persisted copies, without relying on an in-memory map.
+  await expect(new NanopubStore(pod).put(incoming)).rejects.toThrow(
+    "Ambiguous shared blank-node identity",
+  );
+  expect(write).not.toHaveBeenCalled();
+  expect(await pod.read(url)).toEqual(before);
+  for (const np of incoming.nanopubs)
+    await expect(store.get(np.id)).rejects.toMatchObject({ status: 404 });
+  const list = pod.list;
+  for (const reversed of [false, true]) {
+    if (reversed) pod.list = async (container) => (await list(container)).reverse();
+    for (let i = 0; i < 2; i++) {
+      const loaded = await store.list();
+      expect(loaded.nanopubs).toHaveLength(1);
+      expect(isomorphic([...loaded.dataset], [...first!.dataset])).toBe(true);
+    }
+  }
+});
+
+it.each([
+  false,
+  true,
+])("preserves jointly distinguished assertion nodes across separate puts (reverse listing: %s)", async (reverse) => {
+  const { store, pod } = setup();
+  const value = await symmetricAssertionBatch("same-batch", ["one", "two"]);
+  for (const np of value.nanopubs) {
+    const dataset = new Store();
+    for (const name of [
+      np.id,
+      np.assertionId,
+      np.provenanceId,
+      np.pubinfoId,
+      pkgId("batch", np.batch, "sources"),
+      pkgId("batch", np.batch, "entities"),
+    ])
+      putGraph(dataset, name, graph(value.dataset, name));
+    await new NanopubStore(pod).put({ dataset, nanopubs: [np] });
+  }
+  const list = pod.list;
+  if (reverse) pod.list = async (container) => (await list(container)).reverse();
+  for (let i = 0; i < 2; i++)
+    expect(isomorphic([...(await store.list()).dataset], [...value.dataset])).toBe(true);
+});
+
+it("rejects conflicting shared graph copies in a later put before any write", async () => {
+  const { store, write } = setup();
+  const first = await sharedBlankAssertions(["one"], "first");
+  const second = await sharedBlankAssertions(["two"], "second");
+  const assertionId = second.nanopubs[0]!.assertionId;
+  const assertion = graph(second.dataset, assertionId);
+  new RdfNode(identity.webId, assertion).text(`${NS.schema}description`, "Different contents");
+  putGraph(second.dataset as Store, assertionId, assertion);
+  await store.put(first);
+  write.mockClear();
+  await expect(store.put(second)).rejects.toThrow("Conflicting copies");
+  expect(write).not.toHaveBeenCalled();
+  expect(isomorphic([...(await store.list()).dataset], [...first.dataset])).toBe(true);
+});
+
+it("allows the first put when the collection listing returns 404", async () => {
+  const { store, pod, memory } = setup();
+  pod.list = async (container) => {
+    await memory.read(container);
+    return memory.list(container);
+  };
+  const value = await build();
+  await expect(store.put(value)).resolves.toHaveLength(1);
+  expect(isomorphic([...(await store.list()).dataset], [...value.dataset])).toBe(true);
+});
+
+it("fails before any write when the existing collection cannot be listed", async () => {
+  const { store, pod, write } = setup();
+  pod.list = async () => {
+    throw statusError(403);
+  };
+  await expect(store.put(await build())).rejects.toMatchObject({ status: 403 });
+  expect(write).not.toHaveBeenCalled();
+});
+
+it("fails before any write when a listed resource disappears during validation", async () => {
+  const { store, pod, memory, write } = setup();
+  const value = await build();
+  await store.put(value);
+  const url = store.url(value.nanopubs[0]!.id);
+  pod.read = async (target) => {
+    if (target === url) throw statusError(404);
+    return memory.read(target);
+  };
+  write.mockClear();
+  await expect(store.put(await build("later"))).rejects.toMatchObject({ status: 404 });
+  expect(write).not.toHaveBeenCalled();
+});
+
 it.each([
   "provenance",
   "pubinfo",
