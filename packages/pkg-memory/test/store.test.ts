@@ -440,7 +440,10 @@ it("releases the lock after a failed validation read and permits a later retry",
   write.mockClear();
   const value = await build();
   await expect(store.put(value)).rejects.toMatchObject({ status: 403 });
-  expect(write.mock.calls.map((call) => call[0])).toEqual([`${store.container}.write-lock`]);
+  expect(write.mock.calls.map((call) => call[0])).toEqual([
+    `${store.container}.write-lock.acl`,
+    `${store.container}.write-lock`,
+  ]);
   await expect(memory.read(`${store.container}.write-lock`)).rejects.toMatchObject({ status: 404 });
   list.mockRestore();
   await expect(store.put(value)).resolves.toHaveLength(1);
@@ -450,7 +453,7 @@ it("writes no nanopub and deletes no lock when lock acquisition fails", async ()
   const { store, pod, memory, write } = setup();
   await store.writeDefaultPolicy();
   const remove = vi.spyOn(pod, "delete");
-  write.mockRejectedValueOnce(statusError(403));
+  write.mockImplementationOnce(memory.write).mockRejectedValueOnce(statusError(403));
   const value = await build();
   await expect(store.put(value)).rejects.toMatchObject({ status: 403 });
   expect(remove).not.toHaveBeenCalled();
@@ -458,6 +461,88 @@ it("writes no nanopub and deletes no lock when lock acquisition fails", async ()
     status: 404,
   });
   await expect(store.put(value)).resolves.toHaveLength(1);
+});
+
+it.each([
+  false,
+  true,
+])("protects the lock's resource ACL before acquisition (existing ACL: %s)", async (existing) => {
+  const { store, memory, write } = setup();
+  await store.writeDefaultPolicy();
+  const lockUrl = `${store.container}.write-lock`;
+  const aclUrl = `${lockUrl}.acl`;
+  const previous = existing
+    ? await memory.write(aclUrl, encode("public ACL"), "text/turtle", {})
+    : undefined;
+  write.mockClear();
+  write.mockImplementation(async (url, body, type, cond) => {
+    if (url === lockUrl) {
+      const dataset = await parseRdf(decode((await memory.read(aclUrl)).body), "text/turtle");
+      const acl = "http://www.w3.org/ns/auth/acl#";
+      const authorization = new RdfNode(`${aclUrl}#owner`, dataset);
+      expect(dataset.size).toBe(6);
+      expect(authorization.oneIri(`${acl}agent`)).toBe(identity.webId);
+      expect(authorization.oneIri(`${acl}accessTo`)).toBe(lockUrl);
+      expect([...authorization.terms(`${acl}mode`)].map((term) => term.value).sort()).toEqual(
+        ["Control", "Read", "Write"].map((mode) => acl + mode),
+      );
+      expect(authorization.terms(`${acl}default`).size).toBe(0);
+    }
+    return memory.write(url, body, type, cond);
+  });
+  await store.put(await build());
+  expect(write.mock.calls[0]![0]).toBe(aclUrl);
+  expect(write.mock.calls[0]![3]).toEqual(
+    existing ? { ifMatch: previous!.etag } : { ifNoneMatch: "*" },
+  );
+  expect(write.mock.calls[1]![0]).toBe(lockUrl);
+});
+
+it.each([
+  "read failure",
+  "write failure",
+  "create race",
+  "replace race",
+  "missing ETag",
+  "weak ETag",
+])("acquires no lock and writes no nanopub after a lock ACL %s", async (failure) => {
+  const { store, pod, memory, write } = setup();
+  await store.writeDefaultPolicy();
+  const lockUrl = `${store.container}.write-lock`;
+  const aclUrl = `${lockUrl}.acl`;
+  if (["replace race", "missing ETag", "weak ETag"].includes(failure))
+    await memory.write(aclUrl, encode("public ACL"), "text/turtle", {});
+  pod.read = async (url) => {
+    if (url === aclUrl && failure === "read failure") throw statusError(403);
+    const result = await memory.read(url);
+    return url === aclUrl && failure.endsWith("ETag")
+      ? { ...result, etag: failure === "weak ETag" ? 'W/"acl"' : undefined }
+      : result;
+  };
+  write.mockClear();
+  write.mockImplementation(async (url, body, type, cond) => {
+    if (url === aclUrl) {
+      if (failure === "write failure") throw statusError(403);
+      if (failure.endsWith("race"))
+        await memory.write(url, encode("concurrent ACL"), "text/turtle", {});
+    }
+    return memory.write(url, body, type, cond);
+  });
+  const remove = vi.spyOn(pod, "delete");
+  const value = await build();
+  if (failure.endsWith("ETag")) await expect(store.put(value)).rejects.toThrow("strong ETag");
+  else
+    await expect(store.put(value)).rejects.toMatchObject({
+      status: failure.endsWith("race") ? 412 : 403,
+    });
+  expect(write.mock.calls.every((call) => call[0] === aclUrl)).toBe(true);
+  expect(remove).not.toHaveBeenCalled();
+  await expect(memory.read(lockUrl)).rejects.toMatchObject({ status: 404 });
+  await expect(memory.read(store.url(value.nanopubs[0]!.id))).rejects.toMatchObject({
+    status: 404,
+  });
+  if (failure.endsWith("race"))
+    expect(decode((await memory.read(aclUrl)).body)).toBe("concurrent ACL");
 });
 
 it.each([
@@ -475,7 +560,7 @@ it.each([
   });
   const value = await build();
   await expect(store.put(value)).rejects.toThrow("strong ETag");
-  expect(write.mock.calls.map((call) => call[0])).toEqual([lockUrl]);
+  expect(write.mock.calls.map((call) => call[0])).toEqual([`${lockUrl}.acl`, lockUrl]);
   expect(remove).not.toHaveBeenCalled();
   const before = await memory.read(lockUrl);
   expect(before.body).toHaveLength(0);
@@ -1232,12 +1317,12 @@ it("fails closed if container state cannot be rechecked after its ACL write", as
   expect(write.mock.calls[0]![0]).toBe(`${identity.root}private/.acl`);
 });
 
-it("conditionally replaces only the store's ACL and retains existing containers", async () => {
+it("conditionally replaces only the store's dedicated ACLs and retains existing containers", async () => {
   const { store, pod, write } = setup();
   await store.put(await build());
   write.mockClear();
   await new NanopubStore(pod).put(await build("second"));
-  expect(write.mock.calls.filter((call) => call[0].endsWith(".acl"))).toHaveLength(2);
+  expect(write.mock.calls.filter((call) => call[0].endsWith(".acl"))).toHaveLength(3);
   expect(write.mock.calls[0]![0]).toBe(`${store.container}.acl`);
   expect(write.mock.calls[0]![3].ifMatch).toBeDefined();
   const resourceAcl = write.mock.calls.find((call) => call[0].endsWith(".trig.acl"))!;
@@ -1270,7 +1355,11 @@ it.each([
   }
   expect(
     write.mock.calls.filter((call) => call[0].endsWith(".acl")).map((call) => call[0]),
-  ).toEqual([`${store.container}.acl`, `${store.url(value.nanopubs[0]!.id)}.acl`]);
+  ).toEqual([
+    `${store.container}.acl`,
+    `${store.container}.write-lock.acl`,
+    `${store.url(value.nanopubs[0]!.id)}.acl`,
+  ]);
   const aclCall = write.mock.calls.findIndex((call) => call[0] === `${store.container}.acl`);
   const dataCall = write.mock.calls.findIndex((call) => call[0].endsWith(".trig"));
   expect(aclCall).toBeLessThan(dataCall);
@@ -1284,7 +1373,11 @@ it("leaves existing shared ancestors without local ACLs untouched", async () => 
   await store.put(value);
   expect(
     write.mock.calls.filter((call) => call[0].endsWith(".acl")).map((call) => call[0]),
-  ).toEqual([`${store.container}.acl`, `${store.url(value.nanopubs[0]!.id)}.acl`]);
+  ).toEqual([
+    `${store.container}.acl`,
+    `${store.container}.write-lock.acl`,
+    `${store.url(value.nanopubs[0]!.id)}.acl`,
+  ]);
 });
 
 it("uses only octet-stream, preserving exact TriG bytes after a 415 rejection", async () => {

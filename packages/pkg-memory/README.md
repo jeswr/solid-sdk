@@ -163,6 +163,8 @@ a strong ETag.
 
 An empty `/private/pkg/mcp/.write-lock`, created with `If-None-Match: *` after
 container protection, coordinates puts across store instances and processes.
+Its dedicated owner-only resource ACL is established conditionally before every
+acquisition; an orphan ACL is replaced and ACL failures stop the put.
 The writer revalidates the collection while holding the lock, then writes its
 resources and releases the lock using its strong creation ETag. A competing put
 fails with HTTP 412 and can retry after the writer finishes. Lock acquisition,

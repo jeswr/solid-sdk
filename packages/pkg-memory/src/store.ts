@@ -78,9 +78,10 @@ export class NanopubStore {
       })),
     );
     await this.initialize();
-    // The private container supplies the owner-only ACL. This empty resource is
-    // a pod-wide mutex, including across instances and processes, not a lease.
+    // An orphan resource ACL overrides container inheritance. Protect the mutex
+    // before acquisition, including across instances and processes.
     const lockUrl = `${this.container}.write-lock`;
+    await this.protectResource(lockUrl, false, await this.readOptional(`${lockUrl}.acl`));
     const lock = await this.pod.write(lockUrl, new Uint8Array(), "application/octet-stream", {
       ifNoneMatch: "*",
     });
