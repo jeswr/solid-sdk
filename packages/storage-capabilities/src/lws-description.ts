@@ -1,11 +1,33 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY GPT-6.1-Sol
 import { CapabilitiesError } from "./errors.js";
 import type { CapabilityEntry, ServiceEntry, StorageDescription } from "./types.js";
-import { LWS } from "./vocab.js";
+import { LWS, NOTIFY, SSD } from "./vocab.js";
 
 const LWS_NAMESPACE = "https://www.w3.org/ns/lws#";
 const DEFAULT_TTL_MS = 3_600_000;
+const CHANNEL_TYPES = [
+  NOTIFY.WebSocketChannel2023,
+  NOTIFY.StreamingHTTPChannel2023,
+  NOTIFY.WebhookChannel2023,
+  NOTIFY.LDNChannel2023,
+  NOTIFY.WebPushChannel2023,
+] as const;
+// The fixed terms from solid-sd/context/v1; no runtime context dereferencing.
+const SSD_TERMS: ReadonlySet<string> = new Set([
+  SSD.SolidNotificationService,
+  SSD.SparqlQueryService,
+  SSD.CrdtSyncService,
+  SSD.VersioningService,
+  SSD.TrashService,
+  SSD.RecursiveDeleteService,
+  SSD.AccessControl,
+  SSD.PatchSupport,
+  SSD.ResumableUploads,
+  SSD.Pagination,
+  SSD.ContentNegotiation,
+  SSD.SseSubscription,
+  SSD.WebSocketSubscription,
+]);
 
 /**
  * Parse an already decoded CID body, regardless of its response media type.
@@ -146,7 +168,9 @@ export function parseLwsDescription(
   }
 
   function expand(term: string): string {
-    return term.includes(":") ? term : `${LWS_NAMESPACE}${term}`;
+    if (term.includes(":")) return term;
+    const extension = `https://jeswr.org/ns/solid-sd#${term}`;
+    return SSD_TERMS.has(extension) ? extension : `${LWS_NAMESPACE}${term}`;
   }
 
   function types(value: unknown): string[] {
@@ -160,7 +184,48 @@ export function parseLwsDescription(
       const expanded = strings(extra.subscriptionType, "subscriptionType").map(expand);
       extra.subscriptionType = Array.isArray(extra.subscriptionType) ? expanded : expanded[0];
     }
+    // Fixed scoped @vocab terms from solid-sd/context/v1. Unknown values survive;
+    // there is no runtime JSON-LD context processing or dereferencing here.
+    for (const [key, terms] of [
+      ["channelType", CHANNEL_TYPES],
+      ["model", [SSD.WAC, SSD.ACP, SSD.ODRLGrants]],
+    ] as const) {
+      if (extra[key] === undefined) continue;
+      const values = Array.isArray(extra[key]) ? extra[key] : [extra[key]];
+      const expanded = values.map((value) =>
+        typeof value === "string"
+          ? (terms.find((iri) => iri.endsWith(`#${value}`)) ?? value)
+          : value,
+      );
+      extra[key] = Array.isArray(extra[key]) ? expanded : expanded[0];
+    }
     return extra;
+  }
+
+  function notificationExtra(extra: Record<string, unknown>): Record<string, unknown> {
+    // Normative presence wins over legacy keys, even when its value is malformed.
+    const normative = [NOTIFY.channelType, "channelType"].filter((key) => key in extra);
+    const keys =
+      normative.length > 0
+        ? normative
+        : [
+            "ssd:channelType",
+            "https://jeswr.org/ns/solid-sd#channelType",
+            `${LWS_NAMESPACE}channelType`,
+          ].filter((key) => key in extra);
+    // Compact and expanded keys denote the same RDF predicate: count all their objects.
+    const raw = keys.flatMap((key) => (Array.isArray(extra[key]) ? extra[key] : [extra[key]]));
+    const channel = raw[0];
+    const iri =
+      typeof channel === "string"
+        ? (CHANNEL_TYPES.find((term) => term.endsWith(`#${channel}`)) ?? channel)
+        : undefined;
+    // SSD-SVC-NOTIFY-2: count raw objects before checking their kind. As in the RDF
+    // mapper, an empty normative array blocks every fallback, including service types.
+    return {
+      ...extra,
+      [NOTIFY.channelType]: raw.length === 1 && iri !== undefined && URL.canParse(iri) ? iri : [],
+    };
   }
 
   function sameAuthority(left: URL, right: URL): boolean {
@@ -180,12 +245,16 @@ export function parseLwsDescription(
 
   const services: ServiceEntry[] = array(body.service, "service").map((value) => {
     const { type, serviceEndpoint, id, conformsTo, ...extra } = record(value, "service entry");
+    const serviceTypes = types(type);
+    const fields = extraFields(extra);
     return {
-      type: types(type),
+      type: serviceTypes,
       endpoint: url(serviceEndpoint, "serviceEndpoint").href,
       ...(id === undefined ? {} : { id: string(id, "service id") }),
       ...(conformsTo === undefined ? {} : { conformsTo: strings(conformsTo, "conformsTo") }),
-      extra: extraFields(extra),
+      extra: serviceTypes.includes(SSD.SolidNotificationService)
+        ? notificationExtra(fields)
+        : fields,
     };
   });
   const roots = services.filter((service) => service.type.includes(LWS.StorageRoot));

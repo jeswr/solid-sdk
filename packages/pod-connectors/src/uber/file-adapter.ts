@@ -17,8 +17,8 @@
  * the extracted CSV (the download is a ZIP; we accept the inner CSV directly).
  */
 import { DataFactory, Store } from "n3";
-import { parseCsv } from "../core/csv.js";
 import type { FileImportAdapter, FileImportContext, ImportFile } from "../core/file-import.js";
+import { csvRows } from "../core/file-stream.js";
 import { recordFragment } from "../core/slug.js";
 import type { IntegrationMetadata } from "../core/types.js";
 import { CLASSES, Invoice, TravelAction } from "../core/vocab.js";
@@ -67,14 +67,13 @@ export const uberFileAdapter: FileImportAdapter = {
 
   async importFile(file: ImportFile, ctx: FileImportContext): Promise<void> {
     ctx.progress({ label: "Reading your trips…", done: 0, total: 1 });
-    const { rows } = parseCsv(await file.text());
 
     const tripsDoc = ctx.resolve("mobility/uber-trips.ttl");
     const faresDoc = ctx.resolve("finance/uber-fares.ttl");
     const trips = new Store();
     const fares = new Store();
     let count = 0;
-    for (const row of rows) {
+    for await (const row of csvRows(file, ctx.skip)) {
       if (count >= ctx.maxRows) break;
       const begin = pick(row, FIELD.begin);
       const dropAddr = pick(row, FIELD.dropAddr);

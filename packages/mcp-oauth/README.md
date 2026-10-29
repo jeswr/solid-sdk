@@ -33,7 +33,9 @@ const principal = await oauth.verifyAccessToken(accessToken, "https://mcp.exampl
 All endpoints are under the issuer: `/register` (JSON POST), `/authorize` (GET), `/callback`
 (upstream GET), `/token` and `/revoke` (form POST), `/jwks` (GET). Metadata follows the RFC
 well-known insertion rule: `/.well-known/oauth-authorization-server/auth` and
-`/.well-known/oauth-protected-resource/mcp` for the example above. Metadata, JWKS, errors,
+`/.well-known/oauth-protected-resource/mcp` for the example above;
+`oauth.protectedResourceMetadataUrl()` returns the latter for a resource server's
+`WWW-Authenticate` challenge (pass it to `@jeswr/solid-mcp/http` as `resourceMetadataUrl`). Metadata, JWKS, errors,
 token responses and redirects carry `Cache-Control: no-store`.
 
 Registration accepts HTTPS or HTTP loopback (`localhost`, 127/8, `::1`) redirect URIs, without

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5 — protectedResourceMetadataUrl (MCP-01F)
 import { timingSafeEqual } from "node:crypto";
 import { Clients, clientMetadata } from "./clients.js";
 import { generateSigningKey, JwtService } from "./jwt.js";
@@ -89,6 +90,14 @@ export class AuthorizationServer {
     };
   }
 
+  /**
+   * Where {@link handle} serves {@link protectedResourceMetadata} (RFC 9728 §3.1 insertion form).
+   * Resource servers advertise this URL in their `WWW-Authenticate` challenge.
+   */
+  protectedResourceMetadataUrl(): string {
+    return metadataUrl(this.resource, "oauth-protected-resource");
+  }
+
   /** Public verification keys, never the private signing key. */
   jwks() {
     return { keys: [structuredClone(this.jwt.jwk)] };
@@ -99,7 +108,7 @@ export class AuthorizationServer {
     try {
       const url = new URL(request.url);
       const asMetadata = metadataUrl(this.issuer, "oauth-authorization-server");
-      const resourceMetadata = metadataUrl(this.resource, "oauth-protected-resource");
+      const resourceMetadata = this.protectedResourceMetadataUrl();
       if (request.method === "GET" && url.origin + url.pathname === asMetadata) {
         return json(this.authorizationServerMetadata());
       }

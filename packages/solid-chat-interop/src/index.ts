@@ -72,6 +72,7 @@ export {
   serializeLongChat,
   storeToTurtle,
 } from "./reconcile.js";
+
 // --- the canonical message SHACL shape (`MESSAGE_SHAPE_PATH` / `messageShapeTtl`)
 //     is deliberately NOT re-exported here: `./shape` reads the `.ttl` via `node:fs`,
 //     and the package ROOT is imported by BROWSER consumers (PM `/chat`, the
@@ -80,6 +81,18 @@ export {
 //     accessor lives on the Node-only `./shape` subpath; the raw shape file is
 //     available browser-side via the `./shapes/message.shacl.ttl` asset export. ---
 
+export type {
+  ChatConversation,
+  ChatListOptions,
+  ChatMessage,
+  ChatPodPort,
+  ChatProvider,
+  ChatRole,
+  ChatSummary,
+} from "./chat-writer.js";
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+export { CHAT_PROVIDERS, CHAT_ROLES, ChatWriter, chatPortStatus } from "./chat-writer.js";
 // --- vocabulary (IRI constants + prefixes) ---
 export {
   AS,
