@@ -310,3 +310,49 @@ checkout was modified.
 
 The `roborev` executable remains unavailable, so automated per-commit verdicts
 could not be collected. No review tooling or tracker was installed.
+
+## Fix round 7 — review of `97b36aad087f`
+
+Both findings are fixed on `lane/sst-31t`. Changes are limited to
+agent-channels, its regression tests and this report.
+
+| Commit | Change |
+| --- | --- |
+| `41d5359d` | `fix: preserve keepalive request bodies` — forward the normalized Request's keepalive body as an ArrayBuffer so guarded-fetch does not pass an explicit stream to the transport. A real loopback server checks POST bodies and content types for string, URL and Request inputs, inherited bodies, init overrides, URLSearchParams and a non-keepalive control. |
+| `6e0873e0` | `fix: snapshot direct list bounds before authorization` — read both limits once into local primitives before validation, then use those values for pagination and byte accounting. Tests raise and lower each limit while read credentials are pending and check accessor-backed limits are read only once. |
+| This final commit | `docs: record sst-31t round seven verification` — this report. |
+
+Verification uses Node 24.22.1 with `PATH=/opt/node24/bin:$PATH` for all pnpm
+commands. All six new regression cases failed before the fixes: the POST failed
+with `TypeError: keepalive`, and every caller-owned bounds case changed the
+validated pagination result. The final package gate passes. Its first attempt
+caught two unchecked test-fixture array accesses during typecheck; those were
+corrected before the passing run and included in the bounds commit.
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/agent-channels` | PASS; 5/5 prerequisite build tasks. |
+| `pnpm exec vitest run --root packages/agent-channels test/origins.test.ts test/direct.test.ts --coverage.enabled=false -t 'body-bearing keepalive\|snapshots list\|reads each caller-owned list bound'` (before the fixes) | Expected FAIL; all 6 new regression cases reproduced. |
+| `pnpm --filter @jeswr/agent-channels run lint && pnpm --filter @jeswr/agent-channels run build && pnpm --filter @jeswr/agent-channels run typecheck && pnpm --filter @jeswr/agent-channels run test` (final run) | PASS; 4 test files, 98 tests. Enforced per-file coverage: statements 179/179, branches 132/132, functions 35/35, lines 172/172 — all 100%. |
+| `pnpm run lint:root` | PASS; all root lint and guard checks. |
+| `TURBO_SCM_BASE=97b36aad087fb2b276e9e21072108fdf8940e924 pnpm run gate` | PASS; root lint and 25/25 Turbo tasks, including 98 channel tests, 650 legacy-bridge tests, 121 model tests and 531 personal-agent tests. The supplied starting SHA scopes this round; `agent/integration` remains absent locally. |
+| `pnpm run gate:full` (first attempt) | FAIL outside this fix; 68/233 tasks completed successfully before two cases at `test/agent-layers.test.mjs:546` exceeded 5000 ms. Root tests: 745 passed, 2 timed out. |
+| `pnpm exec vitest run test/agent-layers.test.mjs --testTimeout=60000` | PASS; all 345 tests, including the cases that timed out in both full-gate attempts. Only the command-line timeout was changed, as permitted by the original brief. |
+| `pnpm run gate:full` (retry) | FAIL outside this fix; 101/279 tasks completed successfully before one case at `test/agent-layers.test.mjs:546` exceeded 5000 ms and `test/check-sdk-layers.test.mjs:328` measured 146.41 ms against its 50 ms limit. Root tests: 745 passed, 2 failed. |
+| `pnpm exec vitest run test/check-sdk-layers.test.mjs -t 'validates pathological specs'` | PASS; the timing assertion passed unchanged in isolation. |
+| `git diff --check` | PASS. |
+
+No dependencies were added, so no new `check:packages` run was required. Tests
+use fake grants and loopback traffic. Coverage thresholds, configured timeouts
+and unrelated source remain unchanged. Both requested fixes and their
+regression tests are complete, with no open questions or design changes.
+
+The full-workspace gate remains blocked by the unrelated root timing failures
+above. The isolated checks pass; no further full-gate retry or unrelated fix
+was made. Both full runs stopped before the federation-trust snapshot failure
+recorded in earlier rounds. No generated app files required cleanup, and no
+`dist/` is committed. No remote was fetched, no branch was switched, and no
+other checkout was modified.
+
+The `roborev` executable remains unavailable, so automated per-commit verdicts
+could not be collected. No review tooling or tracker was installed.
