@@ -682,3 +682,71 @@ unrelated codegen tests. No implementation work or open questions remain.
 No pushes, PRs, branch switches, remote fetches/merges, tracker changes or edits
 to other checkouts were performed. Earlier pilot/live-server verification limits
 still apply.
+
+## Review fix round 7 — private graph collisions and a common authorization instant
+
+Review/fix base and affected-gate comparison:
+`b8ab13a11d1ad37e6617294d9ee5608a6d57d274`; branch remains `lane/sst-vcij`.
+
+- `68a24632` — `fix(pkg-memory): reject reused private graph names`: reject
+  head, provenance and publication-info graph names reused across distinct
+  resources, including collisions with shared graph names. Checks run in put's
+  mutation-free preflight, its locked revalidation and listing. Six regression
+  cases cover conflicting statuses, publication-info and cross-role collisions,
+  both put/list orders, unchanged stored bytes, parsing roundtrips and identical
+  private graph reuse within a batch.
+- `ee243bd3` — `fix(pkg-memory): share the authorization instant`: capture a
+  fresh timestamp for each predicate invocation and pass it as `now` to every
+  category's ODRL evaluation. Two advancing-clock cases cover a common permit
+  window, disjoint windows that must never combine into a permit, and fresh
+  evaluation on the next read.
+- `26812ec1` — `fix(pkg-memory): check extra graph collisions`: inspect actual
+  graph contents, including undeclared extra graphs in external resources.
+  An additional regression rejects an extra conflicting provenance graph in
+  both listing orders.
+- Final documentation commit — `docs: record sst-vcij round seven validation`:
+  this report, committed last after validation.
+
+The review explicitly permits rejecting private graph reuse. This conservative
+choice also rejects identical private graphs shared by distinct nanopubs;
+assertion and batch graph correspondence keeps its existing behavior. Repeated
+creates of an existing nanopub still reach the Pod's HTTP 412 identity check.
+No new design ambiguity or open question was introduced.
+
+### Validation
+
+Commands ran with `/opt/node24/bin` first on `PATH` (Node v24.22.1, pnpm 10.4.1).
+The original seven collision/clock regressions failed against the reviewed code;
+the extra-graph regression also failed before its follow-up fix. All nine added
+cases now pass with fictional fixtures and the memory PodPort.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/pkg-memory...` | PASS; four dependency-first builds. |
+| `pnpm --filter @jeswr/pkg-memory run lint` | PASS on the final implementation. |
+| `pnpm --filter @jeswr/pkg-memory run build` | PASS on the final implementation. |
+| `pnpm --filter @jeswr/pkg-memory run typecheck` | PASS, including tests. |
+| `pnpm --filter @jeswr/pkg-memory run test` | PASS; 11 files, 655 tests; 100% statements, branches, functions and lines. |
+| `pnpm run lint:root` (via the affected gate) | PASS. |
+| `TURBO_SCM_BASE=b8ab13a11d1ad37e6617294d9ee5608a6d57d274 pnpm run gate` | PASS on the final implementation; 8 successful tasks. |
+| `pnpm run gate:full` | FAIL outside this lane; 116 successful tasks before the root tests stopped the run (675 passed, 11 failed). |
+| `pnpm run test:root` (isolated retry) | FAIL; 685 passed, 1 failed: an unchanged import-path test exceeded its 5-second timeout. |
+| `git diff b8ab13a11d1ad37e6617294d9ee5608a6d57d274 --check` | PASS. |
+
+The full gate failed on ten 5-second timeouts in
+`test/agent-layers.test.mjs`'s disallowed-path-character cases and the 50 ms
+performance assertion in `test/check-sdk-layers.test.mjs` (160.79 ms observed).
+The isolated root retry passed the performance assertion and nine of those
+timeout cases, but `import TARGET;` still exceeded 5 seconds. All root tests
+and scripts are unchanged from this round's base, verified with
+`git diff b8ab13a11d1ad37e6617294d9ee5608a6d57d274 --exit-code -- test scripts`.
+No unrelated timing limits or guard behavior were changed. No federation-codegen
+test result was produced in this full-gate run.
+
+Both requested findings are implemented. No dependency, manifest or lockfile
+changed; no dependency policy check was needed. `roborev` remains unavailable
+(`command -v roborev` found no executable), so automated per-commit review remains
+outstanding. Full-workspace validation remains blocked by the unrelated root
+test timeout. No implementation work or open questions remain. No pushes, PRs,
+branch switches, remote fetches/merges, tracker changes or edits to other
+checkouts were performed. Earlier pilot/live-server verification limits remain.
