@@ -310,3 +310,57 @@ is committed. `roborev` remains unavailable, so automated per-commit review coul
 No push, PR, branch switch, merge, publication, tracker mutation, or other-checkout write
 occurred. The requested fix is complete; the full workspace gate remains blocked by the
 unrelated snapshot failure. This round introduces no open questions.
+
+## Fix round 6 — review of `826adf894c63`
+
+The single requested OIDC refresh identity-binding finding is fixed on `lane/sst-6sex`,
+starting from `826adf894c63cd93bcb273a404d4fb697e68ebe3`.
+
+- `121f3bea` — `fix(mcp-oauth): bind refresh to original OIDC claims`: persist the original
+  ID-token subject and validated login nonce in the encrypted session. Compare the subject
+  and any returned nonce before persisting refreshed credentials or fetching pod resources.
+  Mismatches retire the session. Preserve the binding across worker restarts and refresh
+  responses without a nonce or ID token. Five new offline issuer cases cover valid refreshes
+  and both identity substitutions; expanded record tests reject missing/empty binding claims.
+- The final `docs: record sixth review fix results` commit records this validation.
+
+Conservative compatibility choice: older vault sessions without the original subject/nonce
+fail closed and require a new login; no unverified claims are inferred for existing records.
+The comparison follows [OIDC Core §12.2](https://openid.net/specs/openid-connect-core-1_0.html#RefreshTokenResponse).
+
+All commands ran with `/opt/node24/bin` prepended to PATH: Node `v24.22.1`, pnpm `10.4.1`.
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/mcp-oauth
+pnpm --filter @jeswr/mcp-oauth exec vitest run src/pod-sessions.test.ts --coverage.enabled=false -t 'original OIDC claims|changed subject|changed nonce|cross-client and corrupt'
+pnpm --filter @jeswr/mcp-oauth run lint && pnpm --filter @jeswr/mcp-oauth run build && pnpm --filter @jeswr/mcp-oauth run typecheck && pnpm --filter @jeswr/mcp-oauth run test
+pnpm run lint:root
+TURBO_SCM_BASE=826adf894c63cd93bcb273a404d4fb697e68ebe3 pnpm run gate
+```
+
+PASS: dependency-first build, six focused cases, package gate (256 tests in seven files;
+100% statements, branches, functions and lines), root lint, and affected gate (nine tasks,
+four cached). Before the fix, the six focused cases failed: changed-subject and changed-nonce
+refreshes both sent successful pod requests, and original binding claims were not persisted
+or required. After the fix, mismatches fail before credential persistence and transport.
+No dependencies or lockfile changes were needed; no package-policy check was applicable.
+
+```sh
+pnpm run gate:full
+pnpm --filter @jeswr/federation-trust run test
+git diff 826adf894c63cd93bcb273a404d4fb697e68ebe3 -- packages/federation-trust test scripts package.json vitest.config.ts
+git diff --check
+```
+
+The full gate passed all 745 root tests, then failed at the previously recorded federation-trust
+snapshot mismatch at `test/characterization.test.ts:196`: serialized JWK keys are expected in
+`crv,x,kty` order and received in `kty,crv,x` order. The isolated federation-trust command
+reproduced it (53 pass, one fail). The full gate completed 301 of 360 tasks, with seven cached.
+The comparison against this round's base is empty for the failing package and root test/config
+surfaces. No unrelated source or snapshot was changed. Whitespace checks pass.
+
+Removed the 16 generated callback/Client ID files from the eight pod app builds. No dist output
+is committed. `roborev` remains unavailable, so automated per-commit review could not run.
+No push, PR, branch switch, merge, publication, tracker mutation, or other-checkout write
+occurred. The requested fix is complete; the full workspace gate remains blocked by the
+unrelated snapshot failure. This round introduces no open questions.
