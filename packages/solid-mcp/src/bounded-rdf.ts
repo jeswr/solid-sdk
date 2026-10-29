@@ -6,7 +6,15 @@ import type { DataFactory as RdfFactory, Term } from "@rdfjs/types";
 import { NamedGraphDataset } from "@rdfjs/wrapper";
 import { JsonLdParser } from "jsonld-streaming-parser";
 import type { ParsingContext } from "jsonld-streaming-parser/lib/ParsingContext.js";
-import { DataFactory, Store, StreamParser, Writer } from "n3";
+import {
+  DataFactory,
+  Lexer,
+  Store,
+  StreamParser,
+  type Token,
+  type TokenCallback,
+  Writer,
+} from "n3";
 import {
   decodePrefix,
   limitedBody,
@@ -67,6 +75,43 @@ function budgetedFactory(charge: (bytes: number) => void): RdfFactory {
       return DataFactory.quad(subject, predicate, object, graph);
     },
   };
+}
+
+/** N3 resolves base directives without calling the RDF factory. */
+function budgetN3Directives(format: string, baseIRI: string, charge: (bytes: number) => void) {
+  let baseBytes = Buffer.byteLength(baseIRI);
+  // N3's base-path normalization regex can rescan a long path segment from
+  // every position. Charge its quadratic worst case, including the initial
+  // base processed by the parser constructor, before entering that work.
+  charge(baseBytes ** 2);
+  let baseDirective = false;
+  const meter = (token: Token) => {
+    if (baseDirective && token.type === "IRI") {
+      const iri = token.value ?? "";
+      const bytes = Buffer.byteLength(iri);
+      // Reserve work BEFORE N3 resolves, normalizes and copies the base. A
+      // relative resolution is no longer than base + reference + one slash.
+      // Keep an upper bound so we never resolve attacker IRIs a second time.
+      charge((baseBytes + bytes + 1) ** 2);
+      baseBytes = /^[a-z][a-z0-9+.-]*:/i.test(iri) ? bytes : baseBytes + bytes + 1;
+    }
+    baseDirective = token.type === "@base" || token.type === "BASE";
+  };
+  return new (class extends Lexer {
+    override tokenize(input: string): Token[];
+    override tokenize(input: Parameters<Lexer["tokenize"]>[0], callback: TokenCallback): void;
+    override tokenize(input: Parameters<Lexer["tokenize"]>[0], callback?: TokenCallback) {
+      if (!callback) {
+        const tokens = super.tokenize(input as string);
+        for (const token of tokens) meter(token);
+        return tokens;
+      }
+      super.tokenize(input, (error, token) => {
+        if (!error) meter(token);
+        callback(error, token);
+      });
+    }
+  })({ lineMode: format === "application/n-triples" || format === "application/n-quads" });
 }
 
 /** Context normalization never calls the RDF factory. Account for it separately. */
@@ -163,6 +208,16 @@ export async function parseBoundedRdf(source: string, contentType: string, baseI
     if (allocatedBytes > MAX_CONTENT_BYTES) throw new RdfLimitError();
   };
   const factory = budgetedFactory(charge);
+  // N3 supports lexer injection, omitted from the installed @types/n3 options.
+  const n3Options =
+    format === "application/ld+json"
+      ? undefined
+      : {
+          format,
+          baseIRI,
+          factory,
+          lexer: budgetN3Directives(format, baseIRI, charge),
+        };
   const parser =
     format === "application/ld+json"
       ? new JsonLdParser({
@@ -174,7 +229,7 @@ export async function parseBoundedRdf(source: string, contentType: string, baseI
             },
           },
         })
-      : new StreamParser({ format, baseIRI, factory });
+      : new StreamParser(n3Options);
   if (parser instanceof JsonLdParser) budgetJsonLdContexts(parser, charge);
   const dataset = new Store();
   // Small chunks keep parser queues bounded as well as the retained dataset.

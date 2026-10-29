@@ -107,6 +107,70 @@ describe("RDF expansion and serialization budgets", () => {
 
   it.each([
     "text/turtle",
+    "application/x-turtle",
+    "application/trig",
+  ])("bounds chained relative base directives without quads in %s", async (format) => {
+    const source = "@base <segment/> .\n".repeat(4096);
+    expect(Buffer.byteLength(source)).toBeLessThan(1024 * 1024);
+    const addQuad = vi.spyOn(Store.prototype, "addQuad");
+    await expect(parseBoundedRdf(source, format, BASE)).rejects.toBeInstanceOf(RdfLimitError);
+    expect(addQuad).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "@base <> .\n",
+    "BASE <>\n",
+    "BaSe <>\n",
+  ])("charges repeated base resolution against an expanded base (%s)", async (directive) => {
+    const base = `${BASE}/${"long".repeat(64)}/`;
+    expect((await parseBoundedRdf(directive, "text/turtle", base)).size).toBe(0);
+    await expect(
+      parseBoundedRdf(directive.repeat(100), "text/turtle", base),
+    ).rejects.toBeInstanceOf(RdfLimitError);
+  });
+
+  it("shares directive work with the expanded term budget", async () => {
+    const base = `${BASE}/${"long".repeat(64)}/`;
+    const directives = "@base <> .\n".repeat(8);
+    const statements = '<s> <p> "Alice" .\n'.repeat(800);
+    expect((await parseBoundedRdf(directives, "text/turtle", base)).size).toBe(0);
+    expect((await parseBoundedRdf(statements, "text/turtle", base)).size).toBe(1);
+    await expect(
+      parseBoundedRdf(directives + statements, "text/turtle", base),
+    ).rejects.toBeInstanceOf(RdfLimitError);
+  });
+
+  it.each([
+    "initial",
+    "directive",
+  ])("bounds a single expensive %s base before normalization", async (kind) => {
+    const base = `${BASE}/${"long".repeat(1024)}/`;
+    const source = kind === "initial" ? "" : `BASE <${base}>`;
+    const addQuad = vi.spyOn(Store.prototype, "addQuad");
+    await expect(
+      parseBoundedRdf(source, "text/turtle", kind === "initial" ? base : BASE),
+    ).rejects.toBeInstanceOf(RdfLimitError);
+    expect(addQuad).not.toHaveBeenCalled();
+  });
+
+  it("preserves ordinary relative base and prefix resolution", async () => {
+    const dataset = await parseBoundedRdf(
+      '@base <https://example.org/> . BASE <nested/> PREFIX p: <vocab/> <s> p:name "Alice" .',
+      "text/turtle",
+      BASE,
+    );
+    expect(
+      dataset.getQuads(
+        "https://example.org/nested/s",
+        "https://example.org/nested/vocab/name",
+        null,
+        null,
+      )[0]?.object.value,
+    ).toBe("Alice");
+  });
+
+  it.each([
+    "text/turtle",
     "application/ld+json",
   ])("bounds duplicate %s quads before Store insertion", async (contentType) => {
     const count = MAX_RDF_QUADS + 1;
