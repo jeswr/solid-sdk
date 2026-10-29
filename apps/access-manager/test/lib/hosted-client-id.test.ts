@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-5.6 (Sol)
+// AUTHORED-BY Codex GPT-6
 
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -24,6 +25,33 @@ function generated(env: Record<string, string>) {
 }
 
 describe("hosted client ID", () => {
+  it("includes the Pages base in browser identity, callback and logout URLs", () => {
+    const base = "https://jeswr.github.io/solid-sdk/access-manager/";
+    const { config, document } = generated({
+      APP_ORIGIN: "https://jeswr.github.io",
+      CLIENT_BASE_PATH: "/solid-sdk/access-manager/",
+    });
+    expect(document.client_id).toBe(`${base}clientid.jsonld`);
+    expect(document.client_uri).toBe(base);
+    expect(document.redirect_uris).toEqual([`${base}callback.html`]);
+    expect(document.post_logout_redirect_uris).toEqual([base]);
+    expect(JSON.parse(config.define?.["import.meta.env.VITE_CLIENT_ID"] ?? "null")).toBe(
+      document.client_id,
+    );
+  });
+
+  it.each([
+    "https://other.example/",
+    "//other.example/",
+    "/missing-slash",
+    "/query?x/",
+    "/hash#x/",
+  ])("rejects invalid client base %s", (basePath) => {
+    expect(() =>
+      generated({ APP_ORIGIN: "https://jeswr.github.io", CLIENT_BASE_PATH: basePath }),
+    ).toThrow("CLIENT_BASE_PATH");
+  });
+
   it("emits HTTPS metadata and uses the same client ID in the browser", () => {
     const origin = "https://access.example:8443";
     const { config, document } = generated({ APP_ORIGIN: `${origin}/` });

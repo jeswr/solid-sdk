@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Shared test fixtures: sample Turtle datasets for each data model + helpers to parse
@@ -10,6 +11,11 @@
 // href.
 
 import { Parser, Store } from "n3";
+import { parseToStore } from "../src/rdf.js";
+
+/** Shared production RDF parser for asynchronous namespace regression tests. */
+export const parseRdfTurtle = (text: string, baseIRI = "https://pod.example/doc"): Promise<Store> =>
+  parseToStore(text, "text/turtle", { baseIRI });
 
 /** Parse a Turtle string into an n3 Store (base IRI for relative refs). */
 export function parseTurtle(text: string, baseIRI = "https://pod.example/doc"): Store {
@@ -97,8 +103,9 @@ export const PROFILE_TTL = `
 
 // --- book:Bookmark fixtures -------------------------------------------------
 
-export const BOOKMARKS_TTL = `
-@prefix book: <https://w3id.org/jeswr/bookmark#> .
+function bookmarksTurtle(namespace: string): string {
+  return `
+@prefix book: <${namespace}> .
 @prefix schema: <http://schema.org/> .
 @prefix dct: <http://purl.org/dc/terms/> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
@@ -115,6 +122,25 @@ export const BOOKMARKS_TTL = `
   schema:url <https://example.com/other> ;
   dct:title "Archived one" ;
   book:archived true .
+`;
+}
+
+export const BOOKMARKS_TTL = bookmarksTurtle("https://jeswr.org/ns/bookmark#");
+export const LEGACY_BOOKMARKS_TTL = bookmarksTurtle("https://w3id.org/jeswr/bookmark#");
+
+/** One canonical, one legacy, and one dual-typed bookmark; canonical fields win. */
+export const MIXED_BOOKMARKS_TTL = `
+@prefix book: <https://jeswr.org/ns/bookmark#> .
+@prefix legacy: <https://w3id.org/jeswr/bookmark#> .
+@prefix schema: <http://schema.org/> .
+@prefix dct: <http://purl.org/dc/terms/> .
+<https://pod.example/bookmarks/1#it> a book:Bookmark ;
+  schema:url <https://example.com/canonical> ; dct:title "Canonical" ; legacy:archived true .
+<https://pod.example/bookmarks/2#it> a legacy:Bookmark ;
+  schema:url <https://example.com/legacy> ; dct:title "Legacy" ; book:archived true .
+<https://pod.example/bookmarks/3#it> a legacy:Bookmark, book:Bookmark ;
+  schema:url <https://example.com/mixed> ; dct:title "Mixed" ;
+  book:archived false ; legacy:archived true ; book:notes "" ; legacy:notes "stale" .
 `;
 
 // --- as:Note message fixtures (read via @jeswr/solid-chat-interop) ----------
@@ -196,7 +222,7 @@ export const CONTAINER_TTL = `
 
 /** A bookmark whose url is `javascript:` — must NOT render as an href. */
 export const HOSTILE_BOOKMARK_TTL = `
-@prefix book: <https://w3id.org/jeswr/bookmark#> .
+@prefix book: <https://jeswr.org/ns/bookmark#> .
 @prefix schema: <http://schema.org/> .
 @prefix dct: <http://purl.org/dc/terms/> .
 <https://pod.example/bookmarks/evil#it> a book:Bookmark ;
