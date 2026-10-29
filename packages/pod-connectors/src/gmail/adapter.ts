@@ -40,7 +40,7 @@ export const MAX_RAW_BYTES = 36 * 1024 * 1024;
 const MAX_MESSAGE_JSON_BYTES = Math.ceil((MAX_RAW_BYTES * 4) / 3) + 64 * 1024;
 
 /** System labels with a pod-mail folder; other system labels (categories, IMPORTANT) are dropped. */
-const SYSTEM_LABELS: Readonly<Record<string, string>> = {
+export const SYSTEM_LABELS: Readonly<Record<string, string>> = {
   INBOX: "Inbox",
   SENT: "Sent",
   DRAFT: "Drafts",

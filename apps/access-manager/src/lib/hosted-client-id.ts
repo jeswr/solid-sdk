@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-5.6 (Sol)
+// AUTHORED-BY Codex GPT-6
 
 import type { UserConfig } from "vite";
 
@@ -17,13 +18,19 @@ export function hostedClientIdConfig(
     );
   }
   const origin = url.origin;
-  const clientId = `${origin}/clientid.jsonld`;
+  const basePath = env.CLIENT_BASE_PATH || "/";
+  if (!/^\/(?:[^?#\\]*\/)?$/.test(basePath) || basePath.startsWith("//")) {
+    throw new Error("CLIENT_BASE_PATH must be an absolute path ending in /");
+  }
+  const appUrl = new URL(basePath, `${origin}/`).href;
+  const clientUri = basePath === "/" ? origin : appUrl;
+  const clientId = `${appUrl}clientid.jsonld`;
   const document = {
     ...template,
     client_id: clientId,
-    client_uri: origin,
-    redirect_uris: [`${origin}/callback.html`],
-    post_logout_redirect_uris: [origin],
+    client_uri: clientUri,
+    redirect_uris: [`${appUrl}callback.html`],
+    post_logout_redirect_uris: [clientUri],
   };
 
   return {

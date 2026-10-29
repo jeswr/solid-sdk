@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=340" />
+  <title>Solid</title>
+  <link rel="stylesheet" href="../shared/fonts/onest.css" />
+  <link rel="stylesheet" href="../shared/suite-tokens.css" />
+  <link rel="stylesheet" href="popup.css" />
+  <link rel="stylesheet" href="../popup/profiles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to account</a>
+  <div class="container">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">
+          <svg class="brand-pod" viewBox="0 0 40 40"><polygon points="20,4 34,12 34,28 20,36 6,28 6,12"/></svg>
+          <!-- Lucide icon, ISC licence -->
+          <svg class="brand-key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z"/>
+            <circle cx="16.5" cy="7.5" r=".5" fill="currentColor"/>
+          </svg>
+        </span>
+        <h1 class="brand-name">Solid</h1>
+      </div>
+      <jeswr-theme-toggle></jeswr-theme-toggle>
+    </header>
+
+    <!-- First-run nudge: extensions cannot self-pin. -->
+    <div id="pin-nudge" class="pin-nudge" hidden>
+      <!-- Lucide icon, ISC licence -->
+      <svg class="pin-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M16 9V4l1-1V2H7v1l1 1v5a2 2 0 0 1-1 2l-2 1v2h14v-2l-2-1a2 2 0 0 1-1-2ZM12 14v8"/>
+      </svg>
+      <span>Pin Solid to your toolbar (puzzle icon &rarr; pin) to keep your account a click away.</span>
+      <button id="pin-nudge-dismiss" type="button" class="link-btn">Got it</button>
+    </div>
+
+    <main id="content">
+      <!-- Signed out: the suite-wide login surface, driven by MessageBridgeLoginController
+           (see account-surface.ts, shared with the side panel) so the actual auth still
+           runs in the service worker. The panel's OWN auto-restore is disabled via the
+           `.autoRestore = false` PROPERTY in account-surface.ts (NOT a markup attribute —
+           the surface owns the restore flow; see the note there). -->
+      <section id="signed-out" hidden>
+        <div id="login-form"><jeswr-login-panel id="login-panel"></jeswr-login-panel></div>
+      </section>
+
+      <!-- Restoring / signing in -->
+      <section id="busy" role="status" aria-live="polite" hidden>
+        <div class="spinner" aria-hidden="true"></div>
+        <p id="busy-text">Restoring your session&hellip;</p>
+      </section>
+
+      <!-- Signed in -->
+      <section id="signed-in" hidden>
+        <div class="account-card">
+          <jeswr-account-menu id="account-menu"></jeswr-account-menu>
+          <div class="account-details">
+            <p id="account-name"></p>
+            <p id="account-host"></p>
+          </div>
+        </div>
+        <nav class="shortcuts" aria-label="Pod shortcuts">
+          <a id="shortcut-profile" class="shortcut" href="#" target="_blank" rel="noopener noreferrer">
+            Open my pod
+          </a>
+        </nav>
+      </section>
+    </main>
+  </div>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

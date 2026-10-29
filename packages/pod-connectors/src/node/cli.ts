@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { constants } from "node:fs";
+
+import { constants, createReadStream } from "node:fs";
 import { open } from "node:fs/promises";
 import { basename } from "node:path";
 import { stderr as nodeStderr, stdout as nodeStdout } from "node:process";
+import { Readable } from "node:stream";
 import {
   type FileImportAdapter,
   type ImportFile,
@@ -60,12 +62,60 @@ export function parseImportArgs(args: readonly string[]): {
   return { id, file, since };
 }
 
-async function importFile(path: string, adapter: FileImportAdapter): Promise<ImportFile> {
+export async function importFile(path: string, adapter: FileImportAdapter): Promise<ImportFile> {
   try {
     const file = await open(path, constants.O_RDONLY | constants.O_NONBLOCK);
     try {
       const stat = await file.stat();
-      if (!stat.isFile() || stat.size > MAX_FILE_BYTES) throw new Error("Invalid file");
+      if (!stat.isFile() || (!adapter.streaming && stat.size > MAX_FILE_BYTES))
+        throw new Error("Invalid file");
+      if (adapter.streaming) {
+        const stream = (start = 0, end = stat.size) => {
+          if (
+            !Number.isSafeInteger(start) ||
+            !Number.isSafeInteger(end) ||
+            start < 0 ||
+            end < start ||
+            end > stat.size
+          )
+            throw new Error("Invalid file range");
+          if (start === end)
+            return new ReadableStream<Uint8Array>({
+              start(controller) {
+                controller.close();
+              },
+            });
+          return Readable.toWeb(
+            createReadStream(path, { start, end: end - 1, highWaterMark: 64 * 1024 }),
+          ) as ReadableStream<Uint8Array>;
+        };
+        return {
+          name: basename(path),
+          type: "",
+          size: stat.size,
+          stream: () => stream(),
+          slice: (start, end) => ({ stream: () => stream(start, end) }),
+          async text() {
+            if (stat.size > MAX_FILE_BYTES) throw new Error("File exceeds text limit");
+            const reader = stream().getReader();
+            let size = 0;
+            const parts: Buffer[] = [];
+            try {
+              while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                size += value.length;
+                if (size > MAX_FILE_BYTES) throw new Error("File grew past limit");
+                parts.push(Buffer.from(value));
+              }
+            } finally {
+              await reader.cancel();
+              reader.releaseLock();
+            }
+            return Buffer.concat(parts).toString("utf8");
+          },
+        };
+      }
       const bytes = await file.readFile();
       if (bytes.length > MAX_FILE_BYTES) throw new Error("File grew past limit");
       return {

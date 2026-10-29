@@ -1,11 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { useState } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AppLauncher,
   AppRail,
@@ -22,6 +22,17 @@ import { navigationErrorCopy } from "../src/navigation/states.js";
 const create = vi.fn();
 const update = vi.fn();
 const retry = vi.fn();
+function stubResizeObserver() {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+}
+beforeEach(stubResizeObserver);
 function Harness({
   children,
   initial = defaultRailPins,
@@ -81,6 +92,81 @@ afterEach(() => {
 });
 
 describe("AppLauncher", () => {
+  it.each([
+    "brand",
+    "more",
+    "tab",
+    "button",
+  ] as const)("shows the %s trigger tooltip on Tab focus and hover without opening the launcher", async (trigger) => {
+    render(
+      <Harness>
+        <AppLauncher currentApp="drive" trigger={trigger} />
+      </Harness>,
+    );
+    const user = userEvent.setup();
+    const label = trigger === "brand" || trigger === "button" ? "Apps" : "More apps";
+    const button = screen.getByRole("button", { name: label });
+    expect(button.dataset.slot).toBe("app-launcher-trigger");
+    expect(button.hasAttribute("title")).toBe(false);
+    await user.tab();
+    expect(document.activeElement).toBe(button);
+    expect((await screen.findByRole("tooltip")).textContent).toBe(label);
+    expect(button.getAttribute("aria-expanded")).toBe("false");
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await user.tab();
+    await user.hover(button);
+    expect((await screen.findByRole("tooltip")).textContent).toBe(label);
+    await user.unhover(button);
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
+  });
+  it("shows the close tooltip inside the modal and retains close/focus restoration", async () => {
+    render(<Harness />);
+    const user = await open();
+    await user.tab({ shift: true });
+    const close = screen.getByRole("button", { name: "Close apps" });
+    expect(document.activeElement).toBe(close);
+    expect(close.dataset.slot).toBe("navigation-icon-button");
+    expect((await screen.findByRole("tooltip")).textContent).toBe("Close apps");
+    await accessible();
+    await user.keyboard("{Enter}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Apps" })),
+    );
+  });
+  it("exposes drag and disabled/enabled move tooltips while guarding boundary moves", async () => {
+    render(<Harness />);
+    const user = await open();
+    const customise = screen.getByRole("button", { name: "Customise rail" });
+    await user.click(customise);
+    await user.tab();
+    const drag = screen.getByRole("button", { name: "Drag Home to pin or reorder" });
+    expect(document.activeElement).toBe(drag);
+    expect(drag.dataset.slot).toBe("customise-rail-drag");
+    expect((await screen.findByRole("tooltip")).textContent).toBe("Drag Home to pin or reorder");
+    await user.tab(); // checkbox
+    await user.tab(); // disabled boundary move stays focusable for its tooltip
+    const up = screen.getByRole("button", { name: "Move Home up" });
+    expect(document.activeElement).toBe(up);
+    expect(up.getAttribute("aria-disabled")).toBe("true");
+    expect(up.dataset.slot).toBe("navigation-icon-button");
+    expect((await screen.findByRole("tooltip")).textContent).toBe("Move Home up");
+    await user.keyboard("{Enter} ");
+    await user.click(up);
+    expect(update).not.toHaveBeenCalled();
+    await user.tab();
+    const down = screen.getByRole("button", { name: "Move Home down" });
+    expect(document.activeElement).toBe(down);
+    expect((await screen.findByRole("tooltip")).textContent).toBe("Move Home down");
+    await user.keyboard("{Enter}");
+    expect(update).toHaveBeenCalledWith({
+      pinned: ["drive", "home", "docs", "tasks", "permissions"],
+    });
+    await accessible();
+  });
   it("tabs into the grid, moves by column/row, keeps one tab stop, and returns focus on Escape", async () => {
     render(<Harness />);
     const user = await open();
@@ -188,7 +274,8 @@ describe("AppLauncher", () => {
       pinned: ["drive", "contacts", "permissions", "docs", "tasks", "calendar"],
     });
     await accessible();
-  });
+    // Repeated edits remount tooltip controls for all 15 apps alongside the gate's builds.
+  }, 15000);
   it("preserves hidden saved pins through checkbox, keyboard and drag edits", async () => {
     vi.stubEnv("NEXT_PUBLIC_SHOW_BACKLOG_APPS", "0");
     const { rerender } = render(<Harness initial={["home", "calendar", "drive", "docs"]} />);
@@ -298,6 +385,28 @@ describe("AppLauncher", () => {
     expect(retry).toHaveBeenCalledOnce();
     await accessible();
   });
+});
+
+it("shows pinned link tooltips on Tab focus and hover while retaining current-page semantics", async () => {
+  render(
+    <Harness>
+      <AppRail currentApp="drive" />
+    </Harness>,
+  );
+  const user = userEvent.setup();
+  await user.tab(); // brand
+  await user.tab(); // Home
+  await user.tab(); // Drive
+  const drive = screen.getByRole("link", { name: "Drive" });
+  expect(document.activeElement).toBe(drive);
+  expect(drive.getAttribute("href")).toBe("/drive");
+  expect(drive.getAttribute("aria-current")).toBe("page");
+  expect((await screen.findByRole("tooltip")).textContent).toBe("Drive");
+  await accessible();
+  await user.keyboard("{Escape}");
+  await user.tab();
+  await user.hover(drive);
+  expect((await screen.findByRole("tooltip")).textContent).toBe("Drive");
 });
 
 describe("AppRail and BottomTabBar", () => {
