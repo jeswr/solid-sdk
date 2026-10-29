@@ -224,3 +224,48 @@ full-workspace gate and was left unchanged to respect scope. The `roborev`
 executable remains unavailable (`command -v roborev` found no executable), so
 automated per-commit verdicts could not be collected. No review tooling or
 tracker was installed.
+
+## Fix round 4 — review of `fd2c20022c86`
+
+All three findings are fixed on `lane/sst-31t`. Changes are limited to
+agent-channels, its regression tests and this report.
+
+| Commit | Change |
+| --- | --- |
+| `16aac36c` | `fix: bind direct reads to the selected account` — pass a frozen reference built from the validated inbox ID to `tokens.read`. The regression mutates the caller's ID while credentials are delayed, then checks the recorded grant account, returned inbox, cursor and immutability of the provider's reference. |
+| `38e2d3e0` | `fix: preserve origin-scoped request integrity` — explicitly forward the snapshotted Request's effective integrity policy through guarded-fetch normalization. A real loopback transport accepts matching hashes and rejects mismatches for string, URL and Request inputs, including init overrides and explicit policy clearing. |
+| `44d0beb3` | `fix: separate direct carrier and payload bounds` — bound the compact-JWS carrier string by the carriage byte limit and apply the model's default JSON bounds independently to verified payloads. Tests round-trip a real signed message within four bytes of the 64 KiB limit, reject oversized string/byte carriers, and reject decoded payload string, depth, array and node-count violations before credentials or delivery. |
+| This final commit | `docs: record sst-31t round four verification` — this report. |
+
+Verification uses Node 24.22.1 with `PATH=/opt/node24/bin:$PATH` for all pnpm
+commands. Each regression was reproduced before its fix: the delayed read
+requested credentials for the mutated account; a mismatched response hash was
+accepted; a valid large signed message was refused at the carrier string limit.
+The payload regressions also demonstrated that excessive decoded depth, array
+length and node count were accepted before the independent payload bounds.
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/agent-channels` | PASS; 5/5 tasks, preparing workspace prerequisites in this fresh checkout. |
+| `pnpm exec vitest run --root packages/agent-channels test/direct.test.ts --coverage.enabled=false -t 'delayed read credentials'` (before the read fix) | Expected FAIL; the recorded credential account differed from the selected inbox. |
+| `pnpm exec vitest run --root packages/agent-channels test/origins.test.ts --coverage.enabled=false -t 'response integrity'` (before the integrity fix) | Expected FAIL; a mismatched integrity hash resolved successfully. |
+| `pnpm exec vitest run --root packages/agent-channels test/direct.test.ts --coverage.enabled=false -t 'near the carriage\|decoded payload'` (before the bounds fix) | Expected FAIL; all five regression cases reproduced. |
+| `pnpm --filter @jeswr/agent-channels run lint && pnpm --filter @jeswr/agent-channels run build && pnpm --filter @jeswr/agent-channels run typecheck && pnpm --filter @jeswr/agent-channels run test` | PASS; 4 test files, 79 tests. Enforced per-file coverage: statements 175/175, branches 116/116, functions 35/35, lines 168/168 — all 100%. |
+| `TURBO_SCM_BASE=fd2c20022c86b8e6926e01cdb6a9ee03a491f14f pnpm run gate` | PASS; root lint and 25/25 Turbo tasks, including 79 channel tests, 650 legacy-bridge tests, 121 model tests and 531 pilot tests. The supplied starting lane SHA scopes this fix round; `agent/integration` remains absent locally. |
+| `pnpm run gate:full` | FAIL outside this fix: 283/346 tasks completed successfully before the existing `@jeswr/federation-trust#test` delegation-credential snapshot failed at `test/characterization.test.ts:196`. Expected JWK property order is `crv,x,kty`; received order is `kty,crv,x`, matching previous lane reports. All 747 root tests passed. |
+| `git diff --check` | PASS. |
+
+No dependencies were added, so no new `check:packages` run was required. Tests
+use local signatures, fake grants and loopback servers. No coverage threshold,
+timeout configuration or unrelated source was changed. The conservative bounds
+choice retains the model's default decoded-payload limits while allowing the
+encoded carrier to use the advertised byte limit. There are no open design
+questions or unfinished requested fixes.
+
+The unrelated federation-trust snapshot still blocks a green full-workspace
+gate and was left unchanged to respect fix-round scope. The 16 generated app
+callback and client-ID files were removed; no `dist/` is committed. No remote
+was fetched, no branch was switched, and no other checkout was modified.
+
+The `roborev` executable remains unavailable, so automated per-commit verdicts
+could not be collected. No review tooling or tracker was installed.
