@@ -748,3 +748,74 @@ outside scope. Neither `roborev` nor `sparq-policy-decide` is available on PATH,
 automated per-commit review and native backend execution could not run. Package tests
 use synthetic data, generated keys and injected I/O. No remote was fetched or merged,
 and nothing was pushed or published.
+
+## Fix round 10 — scalar ordering, signed instants, process termination and RDF proofs at `9c1280fd900d`
+
+2026-10-29. All four requested findings are fixed on `lane/sst-gpa`:
+
+- `bd2fa77f` — `fix(agent-mandate): constrain SPARQ comparisons and termination`.
+  Reject textual and URI ordering before delegation because the backend's numeric
+  fallback does not preserve lexical comparisons. Unsupported candidates require
+  confirmation while independently decidable prohibitions retain precedence. Enforce
+  subprocess termination with `SIGKILL` at the remaining evaluation deadline. Tests
+  cover all four ordering operators, inferred/explicit string and URI types, both
+  permission and prohibition rules, prohibition precedence and process options.
+- `ecf84766` — `fix(agent-mandate): validate signed calendar instants`.
+  Share strict calendar, clock and timezone validation across direct VC loading,
+  mandate RDF parsing, legacy JWS loading, approval expiry and intent evaluation.
+  Reject impossible calendar dates, normalized 24:00 times, offsets beyond ±14:00,
+  invalid offset minutes and timestamps without a timezone before comparisons.
+  Tests sign the invalid values and choose clocks that would otherwise authorize
+  their normalized instants. Valid leap days, fractional seconds and timezone
+  boundaries remain covered.
+- `a66349d7` — `fix(agent-mandate): transport standard RDF proof graphs`.
+  Export mandate and approval proofs in separate named graphs with `sec:multibase`
+  signature literals. Use TriG (`application/trig`) for writing and reading, retaining
+  the historical `mandateToTurtle` export name. Extract the proof graph into a
+  default-graph view for the existing solid-vc cryptosuite; retain other claims and
+  graphs so injection cannot be discarded. Compare exports with generic JSON-LD
+  parsing using the locally vendored W3C Data Integrity context, verify signatures
+  independently with WebCrypto, and reject malformed proof graphs, moved options,
+  extra nodes/graphs and wrong or duplicate signature values. Update package README
+  and skill transport guidance.
+- Final report commit — `docs(agent-mandate): record tenth fix round validation`.
+
+Validation uses Node v24.22.1 (`PATH=/opt/node24/bin:$PATH`):
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/agent-mandate... --concurrency=4
+pnpm --filter @jeswr/agent-mandate run lint && pnpm --filter @jeswr/agent-mandate run build && pnpm --filter @jeswr/agent-mandate run typecheck && pnpm --filter @jeswr/agent-mandate run test
+TURBO_SCM_BASE=9c1280fd900df52c6cd8a56e5f5c24df952c2584 pnpm run gate
+NEXT_FONT_GOOGLE_MOCKED_RESPONSES=/tmp/sst-gpa-font-responses.cjs NEXT_TELEMETRY_DISABLED=1 TURBO_TELEMETRY_DISABLED=1 pnpm run gate:full
+```
+
+- Prerequisite builds — PASS, 7/7 tasks.
+- Package gate — PASS, 670 tests in nine files, adding 91 tests relative to the
+  supplied head. Every required per-file metric remains 100%: statements 500/500,
+  branches 569/569, functions 129/129 and lines 449/449. Coverage thresholds,
+  exclusions and configured timeouts are unchanged. The existing non-fatal
+  agent-authz-verifier sourcemap warning remains.
+- Affected repository gate — PASS, 11/11 tasks in 9.9 seconds, including root lint
+  and every workspace/layer guard. The local `agent/integration` ref is absent;
+  the comparison base is the supplied pre-fix head.
+- Full workspace gate — FAIL outside this fix round, 229 successful tasks of 302
+  reported in 3m17s. All 686 root tests pass. The two previously recorded failures
+  recur in `tools/federation-codegen/test/generator.test.ts`: the bookmarks target
+  class still expects the old `w3id.org` namespace, and committed generated ontology
+  output differs from current `jeswr.org/ns` source vocabulary. The codegen project
+  and suite vocabulary have no diff from the supplied pre-fix head. A temporary
+  synthetic Google Fonts response fixture was supplied through Next.js's mocked
+  response seam for this gate; no font service was needed and no repository config
+  was changed. The suite app build passes in this run.
+- `git diff --check` — PASS.
+
+Conservative choices: require confirmation for unsupported SPARQ textual ordering;
+require explicit timezones for signed validity and expiry; keep the public mandate
+serializer name while documenting its corrected TriG transport. No dependencies were
+added, so no `check:packages` run was needed. Changes are confined to the reviewed
+package and this required report. No requested finding remains unfinished and there
+are no open questions. The original upstream browser-issuance limitation is unchanged.
+Neither `roborev` nor `sparq-policy-decide` is installed, so per-commit automated review
+and native backend execution could not run. Package tests use synthetic data, generated
+keys and injected I/O. No remote was fetched or merged, and nothing was pushed or
+published.
