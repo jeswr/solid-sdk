@@ -1,8 +1,9 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it, vi } from "vitest";
-import { readResource } from "../src/pod.js";
+import { readResource, search } from "../src/pod.js";
 import type { PodPort } from "../src/pod-port.js";
 import { createSolidMcpServer } from "../src/server.js";
 import { createPodToolRegistry } from "../src/tools.js";
@@ -36,12 +37,14 @@ async function connect(pod: PodPort, readOnly?: boolean) {
 }
 
 describe("tool registry over a fetch-free portable pod", () => {
-  it("owns four named schemas, handlers, aliases and read-only flags", () => {
+  it("owns pod and ChatGPT schemas, handlers, aliases and read-only flags", () => {
     const tools = createPodToolRegistry(portablePod());
     expect(tools.map(({ name, readOnly, aliases }) => ({ name, readOnly, aliases }))).toEqual([
+      { name: "search", aliases: [], readOnly: true },
+      { name: "fetch", aliases: [], readOnly: true },
       { name: "pod_list", aliases: ["solid_list"], readOnly: true },
       { name: "pod_read", aliases: ["solid_read"], readOnly: true },
-      { name: "search", aliases: ["solid_search"], readOnly: true },
+      { name: "solid_search", aliases: [], readOnly: true },
       { name: "pod_write", aliases: ["solid_write"], readOnly: false },
     ]);
     for (const tool of tools) expect(tool.inputSchema.toJSONSchema().type).toBe("object");
@@ -76,11 +79,33 @@ describe("tool registry over a fetch-free portable pod", () => {
       expect(await client.callTool({ name: "pod_read", arguments: { url: FILE } })).toMatchObject({
         content: [{ text: "hello" }],
       });
-      expect(
-        JSON.stringify(
-          await client.callTool({ name: "search", arguments: { query: "memo", scope: ROOT } }),
-        ),
-      ).toContain(FILE);
+      expect(await client.callTool({ name: "search", arguments: { query: "memo" } })).toMatchObject(
+        {
+          content: [
+            { text: JSON.stringify({ results: [{ id: FILE, title: "memo.txt", url: FILE }] }) },
+          ],
+        },
+      );
+      const legacy = await client.callTool({
+        name: "solid_search",
+        arguments: { query: "memo", scope: ROOT },
+      });
+      expect(JSON.parse((legacy.content as Array<{ text: string }>)[0].text)).toEqual([
+        { url: FILE, name: "memo.txt", snippet: "name/url match" },
+      ]);
+      expect(await client.callTool({ name: "fetch", arguments: { id: FILE } })).toMatchObject({
+        content: [
+          {
+            text: JSON.stringify({
+              id: FILE,
+              title: "memo.txt",
+              text: "hello",
+              url: FILE,
+              metadata: { contentType: "text/plain", truncated: false },
+            }),
+          },
+        ],
+      });
       expect((await client.listResources()).resources.map((resource) => resource.uri)).toEqual([
         FILE,
       ]);
@@ -134,12 +159,19 @@ describe("tool registry over a fetch-free portable pod", () => {
           "solid_list",
           "pod_write",
           "solid_write",
+          "fetch",
         ]) {
           expect(
             (
               await client.callTool({
                 name,
-                arguments: { url, container: url, content: "no", contentType: "text/plain" },
+                arguments: {
+                  id: url,
+                  url,
+                  container: url,
+                  content: "no",
+                  contentType: "text/plain",
+                },
               })
             ).isError,
           ).toBe(true);
@@ -152,6 +184,152 @@ describe("tool registry over a fetch-free portable pod", () => {
     } finally {
       await client.close();
     }
+  });
+
+  it.each([
+    "",
+    "TEXT/TURTLE",
+    " Text/Turtle ; charset=UTF-8",
+    "APPLICATION/X-TURTLE",
+  ])("searches portable RDF media type %s across discovery and literals", async (contentType) => {
+    const pod = portablePod();
+    pod.webId = "https://identity.example/card#me";
+    const index = `${ROOT}index.ttl`;
+    const note = `${ROOT}note`;
+    pod.list.mockResolvedValue([]);
+    pod.read.mockImplementation(async (url) => ({
+      body: new TextEncoder().encode(
+        url === pod.webId
+          ? `<#me> <http://www.w3.org/ns/solid/terms#publicTypeIndex> <${index}> .`
+          : url === index
+            ? "<#reg> <http://www.w3.org/ns/solid/terms#instance> <note> ."
+            : '<> <http://schema.org/text> "portable needle" .',
+      ),
+      contentType,
+      url: url === pod.webId ? "https://identity.example/card" : url,
+    }));
+    expect(await search(pod, "needle")).toEqual([
+      { url: note, name: "note", snippet: "literal: portable needle" },
+    ]);
+    expect(pod.read.mock.calls.map(([url]) => url)).toEqual([pod.webId, index, note]);
+  });
+
+  it.each([
+    "profile",
+    "index",
+    "literal",
+    "all",
+  ])("searches portable Turtle with an empty content type at %s", async (headerless) => {
+    const pod = portablePod();
+    pod.webId = "https://identity.example/card#me";
+    const index = `${ROOT}index.ttl`;
+    const note = `${ROOT}note`;
+    pod.list.mockResolvedValue([]);
+    pod.read.mockImplementation(async (url) => {
+      const stage = url === pod.webId ? "profile" : url === index ? "index" : "literal";
+      return {
+        body: new TextEncoder().encode(
+          stage === "profile"
+            ? `<#me> <http://www.w3.org/ns/solid/terms#publicTypeIndex> <${index}> .`
+            : stage === "index"
+              ? "<#reg> <http://www.w3.org/ns/solid/terms#instance> <note> ."
+              : '<> <http://schema.org/text> "portable needle" .',
+        ),
+        contentType: headerless === "all" || headerless === stage ? "" : "text/turtle",
+        url: url === pod.webId ? "https://identity.example/card" : url,
+      };
+    });
+    expect(await search(pod, "needle")).toEqual([
+      { url: note, name: "note", snippet: "literal: portable needle" },
+    ]);
+    expect(pod.read.mock.calls.map(([url]) => url)).toEqual([pod.webId, index, note]);
+  });
+
+  it.each([
+    "",
+    "TEXT/TURTLE",
+    " Text/Turtle ; charset=UTF-8",
+    "image/png",
+  ])("searches scanned Turtle with normalized or empty media types and refuses binary (%s)", async (contentType) => {
+    const pod = portablePod();
+    const note = `${ROOT}note.ttl`;
+    pod.list.mockResolvedValue([{ url: note, isContainer: false }]);
+    pod.read.mockResolvedValue({
+      body: new TextEncoder().encode('<> <http://schema.org/text> "portable needle" .'),
+      contentType,
+    });
+    expect(await search(pod, "needle")).toEqual(
+      contentType !== "image/png"
+        ? [{ url: note, name: "note.ttl", snippet: "literal: portable needle" }]
+        : [],
+    );
+    expect(pod.read).toHaveBeenCalledWith(note, {
+      accept: "text/turtle, application/ld+json;q=0.9",
+    });
+  });
+
+  it("shares the portable search budget across profile, index, direct instance and listing reads", async () => {
+    const pod = portablePod();
+    pod.webId = "https://identity.example/card#me";
+    const index = `${ROOT}index.ttl`;
+    const note = `${ROOT}note`;
+    pod.read.mockImplementation(async (url) => ({
+      body: new TextEncoder().encode(
+        url === pod.webId
+          ? `<${pod.webId}> <http://www.w3.org/ns/solid/terms#publicTypeIndex> <${index}> .`
+          : url === index
+            ? `<#reg> <http://www.w3.org/ns/solid/terms#instance> <${note}> .`
+            : '<> <http://schema.org/text> "portable needle" .',
+      ),
+      contentType: "text/turtle",
+      url: url === pod.webId ? "https://identity.example/card" : url,
+    }));
+    expect(await search(pod, "needle", { maxResources: 2 })).toEqual([]);
+    expect(pod.read.mock.calls.map(([url]) => url)).toEqual([pod.webId, index]);
+    expect(pod.list).not.toHaveBeenCalled();
+    pod.read.mockClear();
+    expect(await search(pod, "needle", { maxResources: 4 })).toEqual([
+      { url: note, name: "note", snippet: "literal: portable needle" },
+    ]);
+    expect(pod.read.mock.calls.map(([url]) => url)).toEqual([pod.webId, index, note]);
+    expect(pod.read).toHaveBeenLastCalledWith(note, {
+      accept: "text/turtle, application/ld+json;q=0.9",
+    });
+    expect(pod.list).toHaveBeenCalledWith(ROOT);
+  });
+
+  it("bounds portable fetch output and refuses remote JSON-LD and off-pod response URLs", async () => {
+    const pod = portablePod();
+    const fetchTool = createPodToolRegistry(pod).find((tool) => tool.name === "fetch");
+    if (!fetchTool) throw new Error("fetch missing from registry");
+    pod.read.mockResolvedValueOnce({
+      body: new TextEncoder().encode("x".repeat(1024 * 1024 + 1)),
+      contentType: "text/plain",
+    });
+    const capped = await fetchTool.handler({ id: FILE });
+    const result = JSON.parse((capped.content[0] as { text: string }).text);
+    expect(result.text.length).toBe(1024 * 1024);
+    expect(result.metadata.truncated).toBe(true);
+    pod.read.mockResolvedValueOnce({
+      body: new TextEncoder().encode('{"@context":"https://evil.example/context"}'),
+      contentType: "application/ld+json",
+    });
+    expect((await fetchTool.handler({ id: FILE })).isError).toBe(true);
+    pod.read.mockResolvedValueOnce({
+      body: new TextEncoder().encode('<#item> <http://schema.org/name> "portable" .'),
+      contentType: "text/turtle",
+      url: `${ROOT}redirected/file`,
+    });
+    const rdf = await fetchTool.handler({ id: FILE });
+    expect(JSON.parse((rdf.content[0] as { text: string }).text).text).toContain(
+      `${ROOT}redirected/file#item`,
+    );
+    pod.read.mockResolvedValueOnce({
+      body: new Uint8Array(),
+      contentType: "text/plain",
+      url: "https://evil.example/file",
+    });
+    expect((await fetchTool.handler({ id: FILE })).isError).toBe(true);
   });
 
   it("enforces server read-only even if the injected backend allows writes", async () => {

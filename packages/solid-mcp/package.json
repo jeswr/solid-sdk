@@ -69,7 +69,8 @@
     "content-type": "^2.0.0",
     "jsonld-streaming-parser": "^5.0.0",
     "n3": "^2.1.1",
-    "zod": "^4.4.3"
+    "zod": "^4.4.3",
+    "@jeswr/mcp-oauth": "workspace:*"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.3",
@@ -88,6 +89,9 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "mirrorPublish": {
+    "inlined": ["@jeswr/mcp-oauth"]
   },
   "securityCritical": true,
   "sideEffects": false

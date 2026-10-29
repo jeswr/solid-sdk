@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import { ContainerDataset } from "@solid/object";
@@ -72,11 +73,19 @@ export function asPodPort(source: PodSource): PodPort {
   return "root" in source ? source : createFetchPodPort(source);
 }
 
+// Internal transport metadata keeps search/fetch streaming limits across the adapter seam.
+const fetchConfigs = new WeakMap<PodPort, SolidMcpConfig>();
+
+/** Internal: recover streaming transport only for adapters created by this package. */
+export function fetchConfig(source: PodSource): SolidMcpConfig | undefined {
+  return "root" in source ? fetchConfigs.get(source) : source;
+}
+
 /** Fetch-backed PodPort, preserving the existing pod scope and configured-identity exception. */
 export function createFetchPodPort(input: SolidMcpConfig): PodPort {
   const config = { ...input, podRoot: normalizePodRoot(input.podRoot) };
   const guardedFetch = scopedFetch(config);
-  return {
+  const pod: PodPort = {
     root: config.podRoot,
     webId: config.webId ?? "",
     async read(url, options: PodReadOptions = {}) {
@@ -151,6 +160,9 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
       await mutate("DELETE", url, cond);
     },
   };
+
+  fetchConfigs.set(pod, config);
+  return pod;
 
   async function mutate(
     method: "PUT" | "DELETE",

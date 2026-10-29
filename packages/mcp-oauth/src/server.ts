@@ -3,6 +3,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { Clients, clientMetadata } from "./clients.js";
 import { generateSigningKey, JwtService } from "./jwt.js";
+import { metadataUrl } from "./metadata.js";
 import {
   ACCESS_TTL,
   CODE_TTL,
@@ -404,11 +405,6 @@ export function createAuthorizationServer(
   options: AuthorizationServerOptions,
 ): AuthorizationServer {
   return new AuthorizationServer(options);
-}
-
-function metadataUrl(identifier: string, suffix: string): string {
-  const url = new URL(identifier);
-  return `${url.origin}/.well-known/${suffix}${url.pathname.replace(/\/$/u, "")}`;
 }
 
 function structuredCloneContext(

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -619,6 +620,9 @@ interface Put {
 }
 function recordingFetch(puts: Put[]): typeof globalThis.fetch {
   return (async (input: string | URL | Request, init?: RequestInit) => {
+    if (init?.method === "HEAD")
+      return new Response(null, { headers: { link: '<.acl>; rel="acl"' } });
+    if (init?.method === "GET") return new Response(null, { status: 404 });
     puts.push({
       url: String(input),
       contentType: String((init?.headers as Record<string, string>)?.["content-type"] ?? ""),

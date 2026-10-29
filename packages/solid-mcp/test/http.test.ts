@@ -2,9 +2,11 @@
 // AUTHORED-BY Codex GPT-6 — shutdown regression tests
 // AUTHORED-BY Codex GPT-6 — CORS and parse-error regression tests
 // AUTHORED-BY Claude Opus 5.5 — RFC 9728 metadata URL regression tests (MCP-01F)
+
 import { once } from "node:events";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { Readable } from "node:stream";
+import { createAuthorizationServer } from "@jeswr/mcp-oauth";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -283,6 +285,41 @@ describe("authentication and methods", () => {
     expect(response.status).toBe(401);
     expect(response.headers.get("www-authenticate")).toBe(`Bearer resource_metadata="${METADATA}"`);
     expect(server).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "https://mcp.example/",
+    "https://mcp.example/mcp",
+    "https://mcp.example/nested/mcp/",
+  ])("serves metadata at the advertised challenge URL for %s", async (resourceUrl) => {
+    const { handler } = setup({ resourceUrl, authenticate: () => null });
+    const response = await handler(new Request(resourceUrl));
+    const challenge = response.headers.get("www-authenticate") ?? "";
+    const url = /^Bearer resource_metadata="([^"]+)"$/.exec(challenge)?.[1];
+    expect(url).toBeDefined();
+    const oauth = createAuthorizationServer({
+      issuer: "https://mcp.example/auth",
+      resource: resourceUrl,
+      podSessions: {
+        begin: async () => {
+          throw new Error("Unexpected login");
+        },
+        complete: async () => {
+          throw new Error("Unexpected login");
+        },
+        fetchFor: async () => {
+          throw new Error("Unexpected pod access");
+        },
+        revoke: async () => {},
+      },
+      consent: async () => false,
+    });
+    const metadata = await oauth.handle(new Request(url as string));
+    expect(metadata.status).toBe(200);
+    expect(await metadata.json()).toMatchObject({
+      resource: resourceUrl,
+      authorization_servers: ["https://mcp.example/auth"],
+    });
   });
 
   it("sanitizes authentication exceptions and trims the metadata separator", async () => {

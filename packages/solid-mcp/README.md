@@ -45,9 +45,10 @@ The bundled `solid-mcp` CLI reads `SOLID_MCP_POD_ROOT`, optional `SOLID_MCP_WEBI
 - Scope: `normalizePodRoot`, `requirePodScopedUrl`, `podScopedUrlOrUndefined`.
 - Data seam: `PodPort`, `createFetchPodPort`, `PodConditions`.
 - Registry: `createPodToolRegistry`, `registerPodTools`, `PodTool` (Zod schema, handler, readOnly flag).
-- MCP tools: `pod_list`, `pod_read`, `search`, and opt-in `pod_write`.
+- MCP tools: `pod_list`, `pod_read`, `search`, `fetch`, and opt-in `pod_write`.
 - One-release aliases in v0.2: `solid_list`, `solid_read`, `solid_search`, `solid_write`.
-  Aliases retain the same schemas, output and read-only enforcement.
+  List/read/write aliases retain the same schemas, output and read-only enforcement.
+  `solid_search` retains its optional scope and ranked array response.
 
 ## Portable pod access
 
@@ -73,9 +74,48 @@ off-pod profile redirects are refused. Client tools and resources are always con
 must enforce its data boundary and mutation policy too.
 
 The existing fetch-based server configuration and exported pod operations remain
-supported. Operations also accept a PodPort directly. `search` retains the existing
-ranked array output in this scaffold. HTTP, OAuth, memory and capture tools are
-implemented by subsequent W9 tasks.
+supported. Operations also accept a PodPort directly. The programmatic `search` operation retains its ranked array output; the MCP
+`search` tool returns the ChatGPT envelope described below.
+
+## ChatGPT search and fetch
+
+`search` accepts `{query}` and returns one MCP text block containing JSON:
+`{results:[{id,title,url}]}`. IDs are pod resource URLs. It searches Type Index
+registrations and container listings, matching names, URLs, and RDF literals
+(including memory notes and chat titles). Results are deduplicated and ranked.
+The legacy `solid_search` tool retains its original array response.
+
+The shared discovery/scan limits default to depth 4, 500 distinct resources, and
+5000 ms. Set `searchLimits: {maxDepth, maxResources, maxTimeMs}` in the server
+configuration to override them. Discovery, redirect hops, and hinted resources
+consume the same resource budget. A deadline returns the matches found so far;
+the exact search response has no additional completeness fields. Each scanned
+response is also limited to 1 MiB. Direct Type Index instances are negotiated
+as RDF even when their URLs have no file extension.
+
+`fetch` accepts `{id}` (an absolute pod URL) and returns one MCP text block
+containing `{id,title,text,url,metadata}`. Titles use the decoded filename.
+Metadata contains `contentType`, `truncated`, and an optional `etag`. RDF is
+parsed with bounded N3/JSON-LD parsers and serialized as Turtle; `text/*` is
+returned as text. Named-graph RDF is rendered as a union graph (Turtle has no graph labels).
+Other media types, including non-RDF `application/json`, return empty text
+and metadata without downloading the body through a fetch-backed adapter.
+Custom PodPorts return byte arrays and must bound their own backend reads; the
+server still bounds parsing and tool output.
+
+Both the input and UTF-8 output are capped at 1 MiB. Text returns a complete
+UTF-8 prefix and `metadata.truncated: true` when capped. Oversized RDF returns
+empty text with that flag, since a partial document may be invalid RDF. Missing
+Content-Type is treated as binary. JSON-LD inline contexts are supported; remote
+contexts and `@import` are refused to prevent parser-initiated network requests.
+Parsing stops before storing more than 16,384 quads (including duplicate input
+statements), 1 MiB of expanded term values, or 1 MiB of term bytes across quads.
+N3-family structural nesting is capped at 64 levels; pending contexts and
+generated blank nodes also consume the shared 1 MiB allocation budget.
+The Turtle writer retains at most 1 MiB and stops as soon as its output exceeds
+that limit. These parsing budgets also apply to search profiles, Type Indexes,
+container listings, and literal reads; search skips documents that exceed them.
+All fetch URLs and redirect hops are validated against the configured pod scope.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
@@ -144,9 +184,12 @@ are capped at 1 MiB, including chunked bodies; GET, DELETE and other methods ret
 authentication. Invalid JSON/UTF-8 returns 400, oversized bodies return 413, and failures to
 authenticate return 401 with the protected-resource metadata challenge. The application serves
 that metadata separately, by default at the RFC 9728 §3.1 location returned by
-`protectedResourceMetadataUrl(resourceUrl)` (for `https://mcp.example/mcp`:
-`https://mcp.example/.well-known/oauth-protected-resource/mcp`, where `@jeswr/mcp-oauth` serves
-it). Pass `resourceMetadataUrl` to advertise another URL, for example
+`protectedResourceMetadataUrl(resourceUrl)`, using the OAuth server's well-known insertion rule:
+`https://mcp.example/mcp` advertises
+`https://mcp.example/.well-known/oauth-protected-resource/mcp`; a root resource advertises
+`https://mcp.example/.well-known/oauth-protected-resource`. Both the transport and
+`@jeswr/mcp-oauth` use `metadataUrl` from `@jeswr/mcp-oauth/metadata` to construct this URL.
+Pass `resourceMetadataUrl` to advertise another URL, for example
 `oauth.protectedResourceMetadataUrl()` from the composed authorization server.
 
 Host must exactly match the public URL's authority, including any port. Forwarding headers do
