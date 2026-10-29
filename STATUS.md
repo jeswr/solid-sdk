@@ -2,6 +2,76 @@
 
 # sst-8xm.15 lane report
 
+## Fix round 3
+
+The nonce-persistence finding against `1df6f8958bfc` is addressed. The
+package gate and affected workspace gate pass. The full workspace gate
+still fails in the same unchanged root guard tests recorded in fix round 2.
+
+| Commit | Change |
+| --- | --- |
+| `56f0f41d` — `fix: preserve authorization-server refresh nonces` | Persist `authorizationServerNonce` in returned JWT state, seed the next refresh proof from it, and capture the latest nonce on both challenge and successful responses. Preserve and extend the regression tests present at lane start; document persistence. |
+| This report commit — `docs: record nonce persistence fix` | Record fix-round validation and remaining verification blockers. |
+
+### Security properties and regression evidence
+
+The nonce remains scoped to its persisted session and authorization server;
+there is no process-wide cache shared by sessions with the same issuer/key.
+JSON-round-tripped sessions reuse the latest nonce on the next token proof.
+Missing or empty response headers conservatively retain the previous nonce,
+as expected by [RFC 9449 §8.2](https://www.rfc-editor.org/rfc/rfc9449.html#section-8.2).
+A challenge replaces a stale nonce for the single allowed retry. The nonce
+from the successful retry takes precedence when present; otherwise the
+challenge nonce is retained. Successful and failed refreshes leave their
+input state unchanged. Invalid persisted nonce values fail before HTTP.
+
+Tests cover all of those cases, fresh proof identifiers and omitted `ath`,
+isolation between sessions, and exclusion of the authorization-server nonce
+from discovery, extracted pod state, and pod proofs even when the full JWT
+state is passed directly. Existing retry, key-binding, transport, credential
+replay, and sanitized-error tests continue passing. All HTTP remains mocked.
+
+Before the code fix, the regression tests present at lane start produced
+**3 failures / 131 passes**. The completed package suite has **224 tests in
+4 files**, including **143 refresh tests** (13 more package tests than fix
+round 2). No new dependency or API report update is needed; this package
+has no API report configuration.
+
+### Fix-round validation
+
+Commands used `PATH=/opt/node24/bin:$PATH` (Node **v24.22.1**, pnpm **10.4.1**).
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter='@jeswr/auth-solid^...'` | PASS: both workspace dependencies built. |
+| `pnpm --filter @jeswr/auth-solid exec vitest run test/refresh.test.ts` | Expected FAIL before the fix: **3 failed / 131 passed**. PASS after the fix and additional tests: **143 passed**. |
+| `pnpm --filter @jeswr/auth-solid run lint && pnpm --filter @jeswr/auth-solid run build && pnpm --filter @jeswr/auth-solid run typecheck && pnpm --filter @jeswr/auth-solid run test` | PASS: lint/build/strict typecheck; **224 tests passed**. |
+| `TURBO_SCM_BASE=1df6f8958bfc63db03b99e4324c91960d503fafb pnpm run gate` | PASS, including `lint:root`: **7/7 tasks** succeeded. |
+| `pnpm run gate:full` | FAIL (exit 1): `//#test:root`; **161 failed / 739 passed** root tests across 4 failing files. Turbo stopped with **59 successful / 227 total tasks**. |
+| `roborev status` | Unavailable: exit 127, `roborev: command not found`. |
+| `git diff --check` | PASS. |
+
+The failing root files are `test/agent-layers.test.mjs`,
+`test/agent-layers-reachability.test.mjs`, `test/check-packages-guard.test.mjs`,
+and `test/check-sdk-layers.test.mjs`. Their empty child-process output
+assertions match the previously recorded failures.
+`git diff --quiet 1df6f8958bfc63db03b99e4324c91960d503fafb -- test scripts guardrails vitest.config.ts package.json pnpm-lock.yaml`
+passed, confirming those sources and configuration are unchanged this round.
+
+Logs: `/tmp/sst-8xm.15-fix3-{deps-build,regressions-red,regressions-green,package-gate,affected-gate,full-gate}.log`.
+
+### Remaining work and open questions
+
+- The requested nonce fix is complete. Full-workspace verification remains
+  blocked by existing root-test failures; automated roborev is unavailable.
+  Jesse retains the security review and merge decision.
+- No dependencies were added; policy checks and installation are not
+  applicable. No open questions.
+- No push, PR, branch switch, remote fetch/merge, publishing, or edits to
+  another checkout were performed.
+
+---
+
 ## Fix round 2
 
 The unknown-expiry callback finding against `381977109fec` is addressed.
