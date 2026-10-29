@@ -48,10 +48,13 @@ export function createDirectSend(
     const compactJws = proposal.compactJws;
     if (typeof compactJws !== "string" || compactJws.length > DIRECT.maxBytes)
       throw new ChannelParseError("invalid direct signed-message carrier");
+    const proposedMessage = proposal.message;
+    assertJsonBounds(proposedMessage);
+    const proposedJson = canonicalJson(proposedMessage);
     const bytes = envelope(compactJws);
     const wire = { bytes, digest: digestBytes(bytes), mediaType: "application/ld+json" };
     const message = await verified(assertWire(wire));
-    if (canonicalJson(message) !== canonicalJson(proposal.message))
+    if (canonicalJson(message) !== proposedJson)
       throw new ChannelParseError("signed payload differs from proposal");
     return wire;
   }
@@ -59,9 +62,16 @@ export function createDirectSend(
     render,
     async validate(wire, proposal) {
       try {
+        // Refuse extra structure without walking its values or serializing the wire.
+        if (Reflect.ownKeys(wire).length !== 3)
+          return { ok: false, reason: "terms-digest-mismatch" };
+        const snapshot = { bytes: wire.bytes, digest: wire.digest, mediaType: wire.mediaType };
+        assertWire(snapshot);
         const expected = await render(proposal, DIRECT);
         assertCurrent(proposal.message);
-        return canonicalJson(wire) === canonicalJson(expected)
+        return snapshot.bytes === expected.bytes &&
+          snapshot.digest === expected.digest &&
+          snapshot.mediaType === expected.mediaType
           ? { ok: true }
           : { ok: false, reason: "terms-digest-mismatch" };
       } catch {

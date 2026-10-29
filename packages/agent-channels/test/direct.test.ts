@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+
+import * as model from "@jeswr/agent-model";
 import { canonicalJson, DEFAULT_LIMITS, digestBytes } from "@jeswr/agent-model";
 import { describe, expect, it, vi } from "vitest";
 import { createDirectSend } from "../src/direct/send.js";
@@ -125,6 +127,117 @@ describe("direct loopback", () => {
   });
 
   it.each([
+    { bound: "string length", value: "x".repeat(DEFAULT_LIMITS.maxStringLength + 1) },
+    {
+      bound: "depth",
+      value: Array.from({ length: DEFAULT_LIMITS.maxJsonDepth }).reduce<unknown>(
+        (nested) => ({ nested }),
+        null,
+      ),
+    },
+    { bound: "array length", value: Array(DEFAULT_LIMITS.maxArrayLength + 1).fill(0) },
+    {
+      bound: "node count",
+      value: Array.from({ length: 10 }, () => Array(DEFAULT_LIMITS.maxArrayLength).fill(0)),
+    },
+  ])("bounds proposal $bound before canonicalization or verification", async ({ value }) => {
+    const config = options();
+    const verify = vi.fn(verifyMessage);
+    const binding = createInMemoryDirectBinding({ ...config, verify });
+    const signedProposal = signed();
+    const wire = await binding.send.render(signedProposal, DIRECT);
+    verify.mockClear();
+    const proposal = {
+      ...signedProposal,
+      message: { ...message, kind: "description", body: { description: { value } } } as never,
+    };
+    const canonicalize = vi.spyOn(model, "canonicalJson");
+    try {
+      await expect(binding.send.render(proposal, DIRECT)).rejects.toThrow();
+      expect(await binding.send.validate(wire, proposal)).toEqual({
+        ok: false,
+        reason: "malformed",
+      });
+      expect(canonicalize.mock.calls.some(([input]) => input === proposal.message)).toBe(false);
+      expect(verify).not.toHaveBeenCalled();
+      expect(config.tokens.calls).toEqual([]);
+    } finally {
+      canonicalize.mockRestore();
+    }
+  });
+
+  it("bounds cyclic proposal payloads before canonicalization", async () => {
+    const config = options();
+    const verify = vi.fn(verifyMessage);
+    const binding = createInMemoryDirectBinding({ ...config, verify });
+    const proposal = signed();
+    const cycle: Record<string, unknown> = {};
+    cycle.self = cycle;
+    const changed = { ...proposal, message: { ...message, body: cycle } as never };
+    const canonicalize = vi.spyOn(model, "canonicalJson");
+    try {
+      await expect(binding.send.render(changed, DIRECT)).rejects.toThrow();
+      expect(canonicalize.mock.calls.some(([input]) => input === changed.message)).toBe(false);
+      expect(verify).not.toHaveBeenCalled();
+    } finally {
+      canonicalize.mockRestore();
+    }
+  });
+
+  it.each([
+    { input: "oversized ASCII", bytes: "x".repeat(DIRECT.maxBytes + 1) },
+    { input: "oversized UTF-8", bytes: "é".repeat(DIRECT.maxBytes / 2 + 1) },
+    {
+      input: "deep carrier",
+      bytes: `${"[".repeat(DEFAULT_LIMITS.maxJsonDepth + 1)}0${"]".repeat(DEFAULT_LIMITS.maxJsonDepth + 1)}`,
+    },
+  ])("bounds $input wire before canonicalization or verification", async ({ bytes }) => {
+    const config = options();
+    const verify = vi.fn(verifyMessage);
+    const binding = createInMemoryDirectBinding({ ...config, verify });
+    const proposal = signed();
+    const wire = { bytes, digest: digestBytes(bytes), mediaType: "application/ld+json" };
+    const canonicalize = vi.spyOn(model, "canonicalJson");
+    try {
+      expect(await binding.send.validate(wire, proposal)).toEqual({
+        ok: false,
+        reason: "malformed",
+      });
+      expect(canonicalize.mock.calls.some(([input]) => input === wire)).toBe(false);
+      expect(verify).not.toHaveBeenCalled();
+      expect(config.tokens.calls).toEqual([]);
+    } finally {
+      canonicalize.mockRestore();
+    }
+  });
+
+  it("refuses unexpected wire structure without traversing its values", async () => {
+    const config = options();
+    const binding = createInMemoryDirectBinding(config);
+    const proposal = signed();
+    const wire = await binding.send.render(proposal, DIRECT);
+    const extra = vi.fn(() => "x".repeat(DIRECT.maxBytes * 16));
+    const changed = {
+      ...wire,
+      get extra() {
+        return extra();
+      },
+    };
+    const canonicalize = vi.spyOn(model, "canonicalJson");
+    try {
+      expect(await binding.send.validate(changed, proposal)).toEqual({
+        ok: false,
+        reason: "terms-digest-mismatch",
+      });
+      expect(canonicalize.mock.calls.some(([input]) => input === changed)).toBe(false);
+      expect(extra).not.toHaveBeenCalled();
+      expect(config.tokens.calls).toEqual([]);
+    } finally {
+      canonicalize.mockRestore();
+    }
+  });
+
+  it.each([
     { input: "missing", compactJws: undefined },
     { input: "null", compactJws: null },
     { input: "number", compactJws: 123 },
@@ -181,11 +294,11 @@ describe("direct loopback", () => {
     const config = options();
     const verify = vi.fn(verifyMessage);
     const binding = createInMemoryDirectBinding({ ...config, verify });
-    const proposal = signed({
-      ...message,
-      kind: "description",
-      body: { description: { value } },
-    });
+    // Keep the proposal bounded so this exercises the independently verified payload.
+    const proposal = {
+      ...signed({ ...message, kind: "description", body: { description: { value } } }),
+      message,
+    };
     const bytes = envelope(proposal.compactJws);
     const wire = { bytes, digest: digestBytes(bytes), mediaType: "application/ld+json" };
     expect(Buffer.byteLength(bytes)).toBeLessThan(DIRECT.maxBytes);
@@ -891,8 +1004,13 @@ describe("direct loopback", () => {
       { ...wire, bytes: `${wire.bytes} ` },
       { ...wire, digest: "wrong" },
       { ...wire, mediaType: "text/plain" },
-      { ...wire, extra: true },
     ])
+      expect(await b.send.validate(changed, proposal)).toEqual({
+        ok: false,
+        reason: "malformed",
+      });
+    const different = await b.send.render(signed({ ...message, id: "urn:example:other" }), DIRECT);
+    for (const changed of [different, { ...wire, extra: true }])
       expect(await b.send.validate(changed, proposal)).toEqual({
         ok: false,
         reason: "terms-digest-mismatch",
