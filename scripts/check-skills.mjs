@@ -10,6 +10,7 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, relative, resolve } from "node:path";
@@ -610,7 +611,12 @@ export function checkSkills(root, { write = false } = {}) {
       if (/^(?:[a-z][a-z\d+.-]*:|\/|#|\?)/i.test(href) || href === "") continue;
       try {
         const target = decodeURIComponent(href.split(/[?#]/, 1)[0]);
-        if (!existsSync(resolve(root, dirname(path), target)))
+        const destination = resolve(root, dirname(path), target);
+        // resolve() strips trailing slashes; the original path still requires a directory.
+        if (
+          !existsSync(destination) ||
+          (target.endsWith("/") && !statSync(destination).isDirectory())
+        )
           report(path, "relative link does not resolve (target omitted)");
       } catch {
         report(path, "relative link has invalid URL encoding (target omitted)");

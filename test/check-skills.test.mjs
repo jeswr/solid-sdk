@@ -145,6 +145,61 @@ describe("skill validation", () => {
   });
 
   it.each([
+    "[guide](references/guide.md/)",
+    "[guide](references/guide.md///)",
+    "[guide](references/guide.md/?raw=1#section)",
+    "[guide](references/guide.md%2F)",
+    "[guide](references/guide.md&#47;)",
+    "[guide][doc]\n\n[doc]: references/guide.md/",
+    "[unused]: references/guide.md/",
+    "![image](references/guide.md/)",
+    '<a href="references/guide.md/">guide</a>',
+    '<img src="references/guide.md%2f?raw=1#section">',
+    '<img srcset="references/guide.md/ 2x">',
+    '<svg><a xlink:href="references/guide.md/">guide</a></svg>',
+  ])("requires a directory for trailing-slash destinations and preserves the index: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    const errors = ["skills/alpha/SKILL.md: relative link does not resolve (target omitted)"];
+    expect(checkSkills(root, { write: true }).errors).toEqual(errors);
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+    const index = "Previously generated index\n";
+    put(root, "skills/INDEX.md", index);
+    expect(checkSkills(root, { write: true }).errors).toEqual(errors);
+    expect(readFileSync(join(root, "skills/INDEX.md"), "utf8")).toBe(index);
+  });
+
+  it.each([
+    "[directory](references/)",
+    "[directory](references///)",
+    "[directory](references%2F)",
+    "[directory](references/?raw=1#section)",
+    "[directory](./)",
+    "[guide](references/guide.md?base=/#section/)",
+    "[guide](references/guide.md#section/)",
+    '<a href="references&#47;">directory</a>',
+    '<a href="references/guide.md">guide</a>',
+  ])("accepts directory destinations and slashes outside the path: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+    expect(checkSkills(root).errors).toEqual([]);
+  });
+
+  it.each([
+    "skills/alpha/references/nested.md",
+    "packages/widget/references/nested/guide.md",
+  ])("checks trailing-slash file destinations in companion Markdown: %s", (path) => {
+    const root = fixture();
+    put(root, path, "[file](./target.md/)");
+    put(root, join(dirname(path), "target.md"), "# Guide\n");
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      `${path}: relative link does not resolve (target omitted)`,
+    ]);
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+  });
+
+  it.each([
     '<image src="missing.png">',
     "<IMAGE SRC='missing.png'>",
     "<image src=missing.png>",
