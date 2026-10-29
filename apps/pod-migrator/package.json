@@ -1,0 +1,52 @@
+{
+  "name": "@jeswr/app-pod-migrator",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Pod Migrator: copy everything from one Solid pod to another and translate access controls between ACP and WAC without ever widening access. Experimental, AI-agent-generated.",
+  "securityCritical": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:pages": "APP_ORIGIN=https://jeswr.github.io APP_BASE_PATH=/solid-sdk/pod-migrator/ vite build",
+    "preview": "vite preview",
+    "lint": "biome check src test vite.config.ts vitest.config.ts",
+    "lint:fix": "biome check --write src test vite.config.ts vitest.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --coverage",
+    "test:css": "node test/css/run.mjs",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@jeswr/app-shell": "workspace:*",
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/solid-auth-core": "workspace:*",
+    "@jeswr/storage-capabilities": "workspace:*",
+    "@rdfjs/wrapper": "0.34.0",
+    "@solid/object": "0.6.0",
+    "n3": "2.0.3",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.0",
+    "@rdfjs/types": "2.0.1",
+    "@tailwindcss/vite": "4.3.1",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
+    "@types/n3": "1.26.1",
+    "@types/node": "22.19.3",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "5.2.0",
+    "jsdom": "26.1.0",
+    "tailwindcss": "4.3.1",
+    "typescript": "5.7.3",
+    "vite": "7.3.5",
+    "vitest": "4.1.10",
+    "@vitest/coverage-v8": "4.1.10",
+    "@playwright/test": "1.60.0",
+    "@solid/community-server": "7.2.0"
+  }
+}
