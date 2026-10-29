@@ -693,13 +693,13 @@ export function createSolidDriveClient(options: {
   const deleteSnapshot = async (
     source: SourceSnapshot,
     deleted: string[],
-    verifyCopy?: (source: SourceSnapshot) => Promise<void>,
-    recovery?: (url: string) => string,
-    retired?: (url: string) => void,
-    identityCheck?: (source: SourceSnapshot) => Promise<void>,
-    disarm?: (url: string) => readonly Compensation[],
+    verifyCopy: (source: SourceSnapshot) => Promise<void>,
+    recovery: ((url: string) => string) | undefined,
+    retired: (url: string) => void,
+    identityCheck: (source: SourceSnapshot) => Promise<void>,
+    disarm: (url: string) => readonly Compensation[],
   ) => {
-    await verifyCopy?.(source);
+    await verifyCopy(source);
     let etag = source.etag;
     if (source.children?.length) {
       for (const child of source.children)
@@ -713,23 +713,23 @@ export function createSolidDriveClient(options: {
       )
         throw new DriveError("conflict", 409, source.url);
       etag = current.etag;
-      await verifyCopy?.(source);
+      await verifyCopy(source);
     }
     await deleteVersion(source.url, etag, recovery?.(source.url), {
       rechecks: [
         async () => {
-          await verifyCopy?.(source);
+          await verifyCopy(source);
         },
       ],
       identityChecks: [
         async () => {
-          await identityCheck?.(source);
+          await identityCheck(source);
         },
       ],
-      ...(disarm ? { disarm: disarm(source.url) } : {}),
+      disarm: disarm(source.url),
       onCommit: () => {
         deleted.push(source.url);
-        retired?.(source.url);
+        retired(source.url);
       },
     });
   };
