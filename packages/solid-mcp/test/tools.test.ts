@@ -187,6 +187,34 @@ describe("tool registry over a fetch-free portable pod", () => {
   });
 
   it.each([
+    "",
+    "TEXT/TURTLE",
+    " Text/Turtle ; charset=UTF-8",
+    "APPLICATION/X-TURTLE",
+  ])("searches portable RDF media type %s across discovery and literals", async (contentType) => {
+    const pod = portablePod();
+    pod.webId = "https://identity.example/card#me";
+    const index = `${ROOT}index.ttl`;
+    const note = `${ROOT}note`;
+    pod.list.mockResolvedValue([]);
+    pod.read.mockImplementation(async (url) => ({
+      body: new TextEncoder().encode(
+        url === pod.webId
+          ? `<#me> <http://www.w3.org/ns/solid/terms#publicTypeIndex> <${index}> .`
+          : url === index
+            ? "<#reg> <http://www.w3.org/ns/solid/terms#instance> <note> ."
+            : '<> <http://schema.org/text> "portable needle" .',
+      ),
+      contentType,
+      url: url === pod.webId ? "https://identity.example/card" : url,
+    }));
+    expect(await search(pod, "needle")).toEqual([
+      { url: note, name: "note", snippet: "literal: portable needle" },
+    ]);
+    expect(pod.read.mock.calls.map(([url]) => url)).toEqual([pod.webId, index, note]);
+  });
+
+  it.each([
     "profile",
     "index",
     "literal",
@@ -219,8 +247,10 @@ describe("tool registry over a fetch-free portable pod", () => {
 
   it.each([
     "",
+    "TEXT/TURTLE",
+    " Text/Turtle ; charset=UTF-8",
     "image/png",
-  ])("uses the portable Turtle fallback only for an empty content type (%s)", async (contentType) => {
+  ])("searches scanned Turtle with normalized or empty media types and refuses binary (%s)", async (contentType) => {
     const pod = portablePod();
     const note = `${ROOT}note.ttl`;
     pod.list.mockResolvedValue([{ url: note, isContainer: false }]);
@@ -229,7 +259,7 @@ describe("tool registry over a fetch-free portable pod", () => {
       contentType,
     });
     expect(await search(pod, "needle")).toEqual(
-      contentType === ""
+      contentType !== "image/png"
         ? [{ url: note, name: "note.ttl", snippet: "literal: portable needle" }]
         : [],
     );

@@ -22,7 +22,7 @@ import {
   scopedFetch,
 } from "./auth.js";
 import { fetchBoundedRdf, parseBoundedRdf, RdfLimitError } from "./bounded-rdf.js";
-import { MAX_CONTENT_BYTES, resourceTitle } from "./content.js";
+import { MAX_CONTENT_BYTES, mediaType, resourceTitle } from "./content.js";
 import { asPodPort, fetchConfig, type PodSource } from "./pod-port.js";
 
 import { SearchBudget, searchLimit } from "./search-budget.js";
@@ -633,5 +633,9 @@ async function searchRdf(
   if (expectedProfile?.href !== finalDocument.href) {
     requirePodScopedUrl({ podRoot: pod.root }, base);
   }
-  return parseBoundedRdf(new TextDecoder().decode(body), contentType || "text/turtle", base);
+  return parseBoundedRdf(
+    new TextDecoder().decode(body),
+    mediaType(contentType || "text/turtle"),
+    base,
+  );
 }
