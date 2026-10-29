@@ -36,9 +36,20 @@ it("merge rollback retains recovered RDF when its recovery graph disappears befo
   f.policies.set(`${to}.policy`, await aclBody(to, true));
   await expect(merged.recheck()).rejects.toMatchObject({ kind: "private-access-unavailable" });
   expect(f.calls).not.toContainEqual({ url: to, method: "DELETE" });
-  const survivor = await client.readRdf(to);
-  if (!survivor) throw new Error("Missing merged survivor");
-  expect([...new WacFields(to, survivor.dataset, DataFactory).iris(predicate)]).toEqual([object]);
+  // The concurrently widened ACL stays intact; recovery is private and reads
+  // of the unresolved original endpoint remain blocked.
+  await expect(client.readRdf(to)).rejects.toThrow();
+  const { parseRdf } = await import("@jeswr/fetch-rdf");
+  let recovered = false;
+  for (const [url] of f.pod.snapshot().resources) {
+    if (!url.includes("/.drive-recovery-")) continue;
+    const data = await parseRdf(await (await f.pod.fetch(url)).text(), "text/turtle");
+    if (new WacFields(to, data, DataFactory).iris(predicate).has(object)) {
+      recovered = true;
+      expect((await f.anonymous(url)).status).toBe(403);
+    }
+  }
+  expect(recovered).toBe(true);
   const recovery = await client.readRdf(PRIVATE);
   if (!recovery) throw new Error("Missing recovery container");
   expect(new WacFields(PRIVATE, recovery.dataset, DataFactory).iris(predicate).size).toBe(0);

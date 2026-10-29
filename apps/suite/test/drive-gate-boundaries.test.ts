@@ -3,6 +3,7 @@ import { expect, it, vi } from "vitest";
 import { createSolidDriveClient, DriveError } from "../src/apps/drive/lib/client/client";
 import { deletionControl } from "../src/apps/drive/lib/client/deletion";
 import { uploadFile } from "../src/apps/drive/lib/operations/operations";
+import { expectPrivateRecovery } from "./drive-private-recovery";
 import { rdfPod } from "./drive-rdf-pod";
 import { aclBody, OWNER, PRIVATE, ROOT, wacPod } from "./drive-wac-pod";
 
@@ -113,15 +114,21 @@ it.each([
       },
       { kind: "owner-only" },
     ),
-  ).rejects.toMatchObject({
-    kind: "private-access-unavailable",
-    cause: "Owner-only protection changed",
-  });
+  ).rejects.toMatchObject(
+    timing === "before"
+      ? {
+          kind: "private-access-unavailable",
+          cause: "Owner-only protection changed",
+        }
+      : { kind: "partial-failure", cause: { kind: "private-access-unavailable" } },
+  );
   expect(widened).toBe(true);
   expect(uploaded).toBe(timing === "after");
-  expect(await (await f.pod.fetch(url)).text()).toBe("secret contents");
-  if (uploaded) expect((await f.anonymous(url)).status).toBe(403);
-  else expect(f.calls).not.toContainEqual({ url, method: "PUT" });
+  expect(await (await f.pod.fetch(url)).text()).toBe(uploaded ? "" : "secret contents");
+  if (uploaded) {
+    await expectPrivateRecovery(f, "secret contents");
+    await expectPrivateRecovery(f, "new index");
+  } else expect(f.calls).not.toContainEqual({ url, method: "PUT" });
   expect(f.exposures).toEqual([]);
 });
 
@@ -156,14 +163,18 @@ it("replacement rollback stops if protection widens again after its ACL PUT veri
   await expect(
     uploadFile(client, PRIVATE, new Blob(["replacement"]), "secret", "replace", selected),
   ).rejects.toMatchObject({
-    kind: "private-access-unavailable",
-    cause: "Rollback protection changed",
+    kind: "partial-failure",
+    cause: { kind: "private-access-unavailable" },
   });
-  expect(widenedAgain).toBe(true);
+  expect(widenedAgain).toBe(false);
+  expect(reprotected).toBe(false);
+  expect(f.calls).not.toContainEqual({ url: `${url}.policy`, method: "PUT" });
   expect(
     f.calls.filter(({ url: target, method }) => target === url && method === "PUT"),
-  ).toHaveLength(1);
-  expect(await (await f.pod.fetch(url)).text()).toBe("replacement");
+  ).toHaveLength(2);
+  expect(await (await f.pod.fetch(url)).text()).toBe("");
+  await expectPrivateRecovery(f, "secret contents");
+  await expectPrivateRecovery(f, "replacement");
   expect(f.exposures).toEqual([]);
 });
 
@@ -216,7 +227,7 @@ it("copy rollback retains its container when the original source is replaced by 
   });
   await expect(client.copy(from, to, { kind: "preserve-source" })).rejects.toMatchObject({
     kind: "partial-failure",
-    retainedDestinations: [to],
+    retainedDestinations: expect.arrayContaining([to]),
     deletedSources: [],
   });
   expect(replaced).toBe(true);

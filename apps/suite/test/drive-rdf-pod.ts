@@ -10,9 +10,19 @@ export async function rdfPod() {
   const raw = f.pod.fetch;
   const graphs = new Map<string, Store>();
   const revisions = new Map<string, number>();
+  const receipt = (response: Response): Response => {
+    const header = response.headers.get("x-solid-drive-parent-validators");
+    if (header) {
+      const parents = JSON.parse(header) as Record<string, string>;
+      for (const [url, etag] of Object.entries(parents))
+        parents[url] = `"${etag.slice(1, -1)}-rdf-${revisions.get(url) ?? 0}"`;
+      response.headers.set("x-solid-drive-parent-validators", JSON.stringify(parents));
+    }
+    return response;
+  };
   const folderFetch: typeof fetch = async (input, init) => {
     const url = String(input);
-    if (!url.endsWith("/")) return raw(input, init);
+    if (!url.endsWith("/")) return receipt(await raw(input, init));
     const method = init?.method ?? "GET";
     const prior = await raw(url, { method: "HEAD" });
     const tag = (etag: string | null) => `"${etag?.slice(1, -1)}-rdf-${revisions.get(url) ?? 0}"`;
@@ -29,12 +39,12 @@ export async function rdfPod() {
     }
     if (method === "DELETE") {
       graphs.delete(url);
-      return response;
+      return receipt(response);
     }
     const out = new Headers(response.headers);
     out.set("etag", tag(response.headers.get("etag")));
     if (method !== "GET")
-      return new Response(response.body, { status: response.status, headers: out });
+      return receipt(new Response(response.body, { status: response.status, headers: out }));
     const dataset = new Store([
       ...(await parseRdf(await response.text(), "text/turtle")),
       ...(graphs.get(url) ?? []),

@@ -98,7 +98,8 @@ export function useLiveResource(initial: DriveItem | undefined, activationId?: s
   const current =
     snapshot?.client === client &&
     snapshot.activationId === activationId &&
-    snapshot.version === version &&
+    // Keep the current representation visible during background revalidation.
+    // The resolving HEAD replaces it only if this resource actually changed.
     (snapshot.sourceKey === key || metadataKey(snapshot.item) === key)
       ? snapshot
       : undefined;

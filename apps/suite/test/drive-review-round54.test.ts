@@ -10,6 +10,7 @@ import {
   trashItems,
   uploadFile,
 } from "../src/apps/drive/lib/operations/operations";
+import { expectPrivateRecovery } from "./drive-private-recovery";
 import { rdfPod } from "./drive-rdf-pod";
 import { aclBody, DRIVE, OWNER, PRIVATE, ROOT, turtle, WacFields } from "./drive-wac-pod";
 
@@ -136,7 +137,8 @@ it.each([
   expect(exposed).not.toContain("secret contents");
   const anonymous = await f.anonymous(url);
   expect(anonymous.ok && (await anonymous.text()) === "secret contents").toBe(false);
-  if (!hideLink) expect(await (await f.pod.fetch(url)).text()).toBe("secret contents");
+  expect(await (await f.pod.fetch(url)).text()).toBe("");
+  await expectPrivateRecovery(f, "secret contents");
 });
 
 it.each([

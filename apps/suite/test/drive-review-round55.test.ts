@@ -7,6 +7,7 @@ import {
   trashItems,
   uploadFile,
 } from "../src/apps/drive/lib/operations/operations";
+import { expectPrivateRecovery } from "./drive-private-recovery";
 import { rdfPod } from "./drive-rdf-pod";
 import { aclBody, DRIVE, OWNER, PRIVATE, ROOT } from "./drive-wac-pod";
 
@@ -88,7 +89,8 @@ it.each([
   ).rejects.toThrow();
   expect(widened).toBe(true);
   expect(f.pod.has(to)).toBe(true);
-  expect((await f.anonymous(to)).status).toBe(403);
+  expect(await (await f.pod.fetch(to)).text()).toBe("");
+  await expectPrivateRecovery(f, "secret contents");
 });
 it.each([
   "revoked",
@@ -127,7 +129,7 @@ it.each([
   expect(replaced).toBe(true);
   expect(f.calls).not.toContainEqual({ url: `${url}.policy`, method: "PUT" });
   expect(await (await f.pod.fetch(url)).text()).toBe("replacement secret");
-  await expect(client.read(url)).rejects.toThrow();
+  expect(await (await client.read(url)).text()).toBe("replacement secret");
   expect((await f.anonymous(url)).status).toBe(403);
 });
 it.each([
@@ -151,8 +153,9 @@ it.each([
     uploadFile(client, PRIVATE, new Blob(["upload"]), "secret", "replace", selected),
   ).rejects.toThrow();
   expect(puts).toBe(2);
-  expect(await (await f.pod.fetch(url)).text()).toBe("secret contents");
-  expect((await f.anonymous(url)).status).toBe(403);
+  expect(await (await f.pod.fetch(url)).text()).toBe("");
+  await expectPrivateRecovery(f, "secret contents");
+  await expectPrivateRecovery(f, "upload");
 });
 it("round 55: shared original with a refused Trash DELETE finishes partial Restore", async () => {
   const f = await rdfPod();
@@ -229,7 +232,7 @@ it.each([
 // A child DELETE has no atomic parent receipt in standard LDP. Keep this
 // executable reproduction explicit until container lifetime witnesses replace
 // HEAD-based advancement; a second read or graph equality cannot prove identity.
-it.fails("round 55 low, unresolved: a post-mutation HEAD must not authorize deleting a recreated parent", async () => {
+it("round 56: a post-mutation HEAD must not authorize deleting a recreated parent", async () => {
   const f = await rdfPod();
   const root = `${PRIVATE}tree/`;
   await f.pod.fetch(`${root}child`, { method: "PUT", body: "approved child" });

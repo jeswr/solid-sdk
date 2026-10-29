@@ -153,7 +153,11 @@ it.each([
   await expect(client.move(from, to, { kind: "confirm-move" })).rejects.toThrow();
   expect(changed).toBe(true);
   expect(f.pod.has(from)).toBe(true);
-  expect(f.pod.has(to)).toBe(false);
+  if (mode === "different governing ACL") {
+    expect(f.pod.has(to)).toBe(true);
+    expect(f.policies.get(`${to}.policy`)).toBe(await aclBody(to));
+    expect((await f.anonymous(to)).status).toBe(403);
+  } else expect(f.pod.has(to)).toBe(false);
   expect(confirmAccess).not.toHaveBeenCalled();
 });
 
@@ -199,14 +203,13 @@ it("copied own access is checked again before sending file bytes", async () => {
     }
     return response;
   });
-  await expect(client.move(from, to, { kind: "confirm-move" })).rejects.toThrow("cancelled");
+  await expect(client.move(from, to, { kind: "confirm-move" })).rejects.toThrow();
   expect(changed).toBe(true);
-  expect(confirmAccess).toHaveBeenCalledWith(
-    expect.objectContaining({ gains: ["Everyone (public)"] }),
-  );
+  expect(confirmAccess).not.toHaveBeenCalled();
   expect(f.pod.has(from)).toBe(true);
-  expect(f.pod.has(to)).toBe(false);
-  expect(f.calls.filter(({ url, method }) => url === to && method === "PUT")).toHaveLength(1);
+  expect(f.policies.get(`${to}.policy`)).toBe(await aclBody(to, true));
+  expect(await (await f.pod.fetch(to)).text()).toBe("");
+  expect(f.calls.filter(({ url, method }) => url === to && method === "PUT")).toHaveLength(2);
 });
 
 it.each([

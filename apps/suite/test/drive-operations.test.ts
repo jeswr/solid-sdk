@@ -578,7 +578,7 @@ describe("app-managed trash against the demo pod", () => {
   it.each([
     false,
     true,
-  ])("retries one real concurrent index update and preserves it (second conflict: %s)", async (twice) => {
+  ])("preserves a concurrent index update without adopting its validator (repeated conflict: %s)", async (twice) => {
     const { pod } = await setup();
     const concurrent: TrashEntry = {
       url: `${DRIVE}.trash/00000000-0000-0000-0000-000000000001/file`,
@@ -611,20 +611,15 @@ describe("app-managed trash against the demo pod", () => {
     });
     const client = createSolidDriveClient({ storageUrl: DEMO_ROOT, fetch });
     const operation = trashItems(client, DRIVE, [await item(client)], { now: new Date(NOW) });
-    if (twice)
-      await expect(operation).resolves.toMatchObject({
-        done: [],
-        failed: [{ url: NOTES, error: { kind: "conflict", status: 412, url: INDEX } }],
-        warnings: [{ kind: "trash-index-persistence" }],
-      });
-    else {
-      const result = await operation;
-      expect(await listTrash(client, DRIVE)).toEqual([
-        result.done[0],
-        { ...concurrent, etag: (await client.stat(concurrent.url)).etag },
-      ]);
-    }
-    expect(writes).toBe(twice ? 2 : 3);
+    await expect(operation).resolves.toMatchObject({
+      done: [],
+      failed: [{ url: NOTES, error: { kind: "conflict", status: 412, url: INDEX } }],
+      warnings: [{ kind: "trash-index-persistence" }],
+    });
+    expect(await listTrash(client, DRIVE)).toEqual([
+      { ...concurrent, etag: (await client.stat(concurrent.url)).etag },
+    ]);
+    expect(writes).toBe(1);
     expectConditionalWrites(fetch);
   });
 

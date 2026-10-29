@@ -233,6 +233,11 @@ function payloadWrites(text: string, name: string): string[] {
           "url",
           "init",
         ]);
+      } else if (callee === "commitHttp") {
+        // Quarantine has already saved private copies. It conditionally clears
+        // only our exposed payload without consulting the changed ACL.
+        expect(enclosing.getText(source)).toContain('body: ""');
+        expect(enclosing.getText(source)).toContain('"if-match": etag');
       } else expect(callee, `${name}: ${node.getText(source)}`).toBe("guardedWrite");
       mutations.push(node.initializer.text);
     }
@@ -258,7 +263,7 @@ it("every Drive payload PUT/POST/PATCH is sent through guardedWrite", () => {
     if (!name.endsWith(".ts") || name === "access.ts") continue;
     mutations.push(...payloadWrites(readFileSync(new URL(name, directory), "utf8"), name));
   }
-  expect(mutations).toEqual(["PUT", "PUT", "PUT", "PUT"]);
+  expect(mutations).toEqual(["PUT", "PUT", "PUT", "PUT", "PUT"]);
 });
 async function trashedFolder() {
   const f = await wacPod();

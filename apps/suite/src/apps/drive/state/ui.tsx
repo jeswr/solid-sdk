@@ -287,7 +287,11 @@ function reportFailure(
 
 export function errorMessage(error: unknown, fallback = "Something went wrong"): string {
   if (deletionPending(error)) return "Still deleting on the server";
-  if (error instanceof DrivePartialFailureError) return errorMessage(error.cause, fallback);
+  if (error instanceof DrivePartialFailureError) {
+    const recovery = error.retainedDestinations.filter((url) => url.includes("/.drive-recovery-"));
+    const message = errorMessage(error.cause, fallback);
+    return recovery.length ? `${message} Private recovery copies: ${recovery.join(", ")}` : message;
+  }
   if (
     error instanceof DriveOperationInProgressError ||
     error instanceof DriveAccessError ||
@@ -600,7 +604,7 @@ export function useDriveActions() {
       if (!isOwnStorage(item.url, session.storageUrl)) return;
       try {
         const url = await refreshAfter(client, invalidate, [item.url], (tracked) =>
-          copyItem(tracked, item.url),
+          copyItem(tracked, item),
         );
         toast.success(`Created ${nameOf(url)}`);
         return url;

@@ -35,6 +35,7 @@ afterEach(() => {
 });
 
 const steps = [
+  "Trash index overwrite",
   "move",
   "rename",
   "Trash",
@@ -62,8 +63,8 @@ const steps = [
   "owner-only folder overwrite",
   "private folder ACL",
   "protection receipt repair",
-  "retained recovery ACL",
-  "replay repair ACL",
+  "retained recovery clearing",
+  "replay recovery clearing",
 ] as const;
 type Step = (typeof steps)[number];
 
@@ -102,7 +103,17 @@ async function scenario(step: Step, events: string[]) {
   let targetCheck = 1;
   let identityTarget: string | undefined;
   let run: () => Promise<unknown>;
-  if (
+  if (step === "Trash index overwrite") {
+    target = `${DRIVE}.trash/index.ttl`;
+    await client.prepareTrash(`${DRIVE}.trash/`, { kind: "owner-only", webId: OWNER });
+    await client.write(
+      target,
+      "",
+      { contentType: "text/turtle", ifNoneMatch: "*" },
+      { kind: "owner-only" },
+    );
+    run = () => trashItems(client, DRIVE, [selected], { webId: OWNER });
+  } else if (
     [
       "Delete forever",
       "Empty Trash",
@@ -224,7 +235,7 @@ async function scenario(step: Step, events: string[]) {
       );
   } else if (step === "owner-only ACL") {
     target = `${source}.policy`;
-    f.policies.set(target, await aclBody(source, true));
+    f.policies.set(`${source}.policy`, await aclBody(source, true));
     run = () =>
       client.write(
         source,
@@ -235,11 +246,12 @@ async function scenario(step: Step, events: string[]) {
         },
         { kind: "owner-only" },
       );
-  } else if (step === "retained recovery ACL") {
+  } else if (step === "retained recovery clearing") {
     const destination = `${PRIVATE}copy`;
-    target = `${destination}.policy`;
-    // Placeholder installation is the first own ACL write (If-None-Match).
-    // Recovery repair is the first conditional overwrite of that policy.
+    target = destination;
+    // ACL installation and payload each check the destination first. The third
+    // identity check pins clearing our exposed bytes after private retention.
+    targetCheck = 3;
     let copied = false;
     f.after(async (url, method, response) => {
       if (
@@ -250,19 +262,19 @@ async function scenario(step: Step, events: string[]) {
         (await (await f.pod.fetch(url)).text()) === "secret contents"
       ) {
         copied = true;
-        f.policies.set(target, await aclBody(destination, true));
+        f.policies.set(`${destination}.policy`, await aclBody(destination, true));
         await f.pod.fetch(source, { method: "PUT", body: "edited source" });
       }
       return response;
     });
     run = () => client.copy(source, destination, { kind: "preserve-source" });
-  } else if (step === "replay repair ACL") {
-    target = `${source}.policy`;
+  } else if (step === "replay recovery clearing") {
+    target = source;
     targetCheck = 2;
     let puts = 0;
     f.after(async (url, method, response) => {
       if (url === source && method === "PUT" && response.ok && ++puts <= 2)
-        f.policies.set(target, await aclBody(source, true));
+        f.policies.set(`${source}.policy`, await aclBody(source, true));
       return response;
     });
     run = () => uploadFile(client, PRIVATE, new Blob(["upload"]), "secret", "replace", selected);
@@ -307,7 +319,7 @@ async function scenario(step: Step, events: string[]) {
 
 it.each(
   steps,
-)("round 55 shape a: %s retains a replacement at its final identity check", async (step) => {
+)("round 56 shape a: %s retains a replacement at its final identity check", async (step) => {
   const events: string[] = [];
   const s = await scenario(step, events);
   let checks = 0;
@@ -335,7 +347,7 @@ it.each(
 
 it.each(
   steps,
-)("round 55 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
+)("round 56 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   const events: string[] = [];
   const s = await scenario(step, events);

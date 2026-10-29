@@ -12,6 +12,7 @@ import {
   trashItems,
   uploadFile,
 } from "../src/apps/drive/lib/operations/operations";
+import { expectPrivateRecovery } from "./drive-private-recovery";
 import { rdfPod } from "./drive-rdf-pod";
 import {
   aclBody,
@@ -619,7 +620,7 @@ it("a direct recovery move refuses an unreadable policy archive before payload w
   expect(f.pod.has(original)).toBe(false);
 });
 
-it("a destination ACL widened after payload PUT retains the source and removes the exposed copy", async () => {
+it("a destination ACL widened after payload PUT retains private recovery and preserves the foreign ACL", async () => {
   const f = await rdfPod();
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });
   const source = `${PRIVATE}secret`;
@@ -631,11 +632,14 @@ it("a destination ACL widened after payload PUT retains the source and removes t
     return response;
   });
   await expect(client.move(source, to, { kind: "preserve-source" })).rejects.toMatchObject({
-    kind: "private-access-unavailable",
+    kind: "partial-failure",
+    cause: { kind: "private-access-unavailable" },
   });
-  expect(writes).toBe(2);
+  expect(writes).toBe(3);
   expect(f.pod.has(source)).toBe(true);
-  expect(f.pod.has(to)).toBe(false);
+  expect(await (await f.pod.fetch(to)).text()).toBe("");
+  expect(f.policies.get(`${to}.policy`)).toBe(await aclBody(to, true));
+  await expectPrivateRecovery(f, "secret contents");
 });
 
 it("Restore retains recovery when the original's existence cannot be determined", async () => {

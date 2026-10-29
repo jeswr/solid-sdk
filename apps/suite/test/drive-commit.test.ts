@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex
 import { expect, it, vi } from "vitest";
 import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
-import { Compensation, commitIrreversible } from "../src/apps/drive/lib/client/commit";
+import { Compensation, commitHttp, commitIrreversible } from "../src/apps/drive/lib/client/commit";
 import { restoreItems, trashItems, uploadFile } from "../src/apps/drive/lib/operations/operations";
 import { rdfPod } from "./drive-rdf-pod";
 import { DRIVE, OWNER, PRIVATE, ROOT } from "./drive-wac-pod";
@@ -90,4 +90,24 @@ it("all Drive overwrites and deletes follow their final conditional identity che
       } else expect(prior.headers.get("if-match")).toBe(request.headers.get("if-match"));
     }
   }
+});
+
+it.each([
+  "PUT",
+  "DELETE",
+])("round 56: %s cannot reach an irreversible request without a captured precondition", async (method) => {
+  const http = vi.fn<typeof fetch>();
+  const recheck = vi.fn(async () => {});
+  await expect(
+    commitHttp({
+      http,
+      url: PRIVATE,
+      init: { method },
+      rechecks: [recheck],
+      error: (status) => new Error(String(status)),
+      response: async () => {},
+    }),
+  ).rejects.toThrow("428");
+  expect(http).not.toHaveBeenCalled();
+  expect(recheck).not.toHaveBeenCalled();
 });

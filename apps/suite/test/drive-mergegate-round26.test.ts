@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createSolidDriveClient, parentOf } from "../src/apps/drive/lib/client/client";
 import { listTrash, restoreItems, trashItems } from "../src/apps/drive/lib/operations/operations";
 import { nonWacPod } from "./drive-non-wac-pod";
+import { expectPrivateRecovery } from "./drive-private-recovery";
 import { rdfPod } from "./drive-rdf-pod";
 import { aclBody, DRIVE, OWNER, PRIVATE, ROOT, turtle, WacFields } from "./drive-wac-pod";
 
@@ -311,7 +312,8 @@ it("copy rollback retains its payload if the source disappears during access rec
   });
   await expect(client.copy(source, to, { kind: "preserve-source" })).rejects.toThrow();
   expect(f.pod.has(source)).toBe(false);
-  expect(await (await f.pod.fetch(to)).text()).toBe("secret contents");
+  expect(await (await f.pod.fetch(to)).text()).toBe("");
+  await expectPrivateRecovery(f, "secret contents");
 });
 
 it("merge rollback checks recovery identity after access rechecks before overwriting recovered RDF", async () => {

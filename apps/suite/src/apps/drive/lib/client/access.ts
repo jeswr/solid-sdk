@@ -48,6 +48,16 @@ export function privateAcl(resource: string, webId: string): Store {
   rule.canReadWriteAcl = true;
   return dataset;
 }
+/** Recover only under a captured controller's private policy. */
+export function policyOwner(policy: OwnAccess): string | undefined {
+  for (const rule of new AclResource(policy.dataset, DataFactory).authorizations)
+    if (rule.mode.has(`${ACL}Control`) && rule.canRead) {
+      const [agent] = rule.agent;
+      if (agent) return agent;
+    }
+  return undefined;
+}
+
 export interface OwnAccess {
   url: string;
   dataset: Store;
@@ -60,14 +70,17 @@ export interface AccessWriteGuard {
   /** Recovery may remove grants, but must never undo a concurrent revocation. */
   readonly restrict?: boolean;
   /** Previously verified own endpoint, usable to secure recovery if Link disappears. */
-  readonly knownAcl?: string;
+  readonly knownAcl?: string | undefined;
+  /** Own ACL approved before the operation; null means conditional creation only. */
+  readonly expectedAcl?: OwnAccess | null;
 }
 
 /** None means a discovered own ACL's 404 (inheritance unresolved), or an explicit demo pod. */
-export type AccessState =
+export type AccessState = (
   | { readonly status: "known"; readonly policy: OwnAccess }
   | { readonly status: "none"; readonly demo: boolean }
-  | { readonly status: "unknown"; readonly cause: unknown };
+  | { readonly status: "unknown"; readonly cause: unknown }
+) & { readonly own?: { readonly url: string; readonly policy: OwnAccess | null } };
 
 /** Require a governing policy before preserving or comparing access; demo needs no ACL. */
 export function requireAccess(state: AccessState, resource: string): OwnAccess {
@@ -182,10 +195,21 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     const state = await read(url);
     if (state.status === "unknown") throw new DriveAccessError(state.cause);
     const current = state.status === "known" ? state.policy : undefined;
+    const expected = guard?.expectedAcl;
+    if (current && expected !== undefined && current.etag !== expected?.etag) {
+      // A compensation may use a concurrent restriction as-is, but cannot edit
+      // it, including removing sharing grants added by that writer.
+      if (guard?.restrict && !accessGains({ url, etag: "", dataset }, current).length)
+        return current;
+      throw new DriveAccessChangedError(["The item's own ACL changed"]);
+    }
+    if (!current && expected) {
+      if (!guard?.restrict) throw new DriveAccessChangedError(["The item's own ACL was removed"]);
+    }
     let effectivePolicy = current;
     if (!current) {
       if (!resource) throw new DriveAccessError("WAC model could not be identified");
-      effectivePolicy = requireAccess(await effective(resource), resource);
+      effectivePolicy = requireAccess(await effective(resource, !!guard?.knownAcl), resource);
     }
     if (guard?.restrict)
       dataset = intersectAccess(dataset, effectivePolicy as OwnAccess, guard.identity.url);
@@ -199,7 +223,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
         method: "PUT",
         headers: {
           "content-type": "text/turtle",
-          ...(current ? { "if-match": current.etag } : { "if-none-match": "*" }),
+          ...(current ? { "if-match": expected?.etag ?? current.etag } : { "if-none-match": "*" }),
         },
         body,
       },
@@ -218,7 +242,9 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       if (headers.get("x-solid-demo-access-control") === "none")
         return { status: "none", demo: true };
       const url = discover(resource, headers);
-      return url ? await read(url) : { status: "unknown", cause: "ACL Link unavailable" };
+      if (!url) return { status: "unknown", cause: "ACL Link unavailable" };
+      const state = await read(url);
+      return { ...state, own: { url, policy: state.status === "known" ? state.policy : null } };
     } catch (cause) {
       return { status: "unknown", cause };
     }
@@ -230,6 +256,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
   ): Promise<AccessState> => {
     try {
       let current: string | undefined = inherit ? parent(resource) : resource;
+      let endpoint: AccessState["own"];
       while (current?.startsWith(storageUrl)) {
         const response = await http(current, { method: "HEAD", cache: "no-store" });
         if (!response.ok && !(allowAbsent && response.status === 404))
@@ -244,10 +271,12 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
           continue;
         }
         const own = await snapshot(current, response.headers);
+        if (current === resource) endpoint = own.own;
         if (own.status === "unknown" || (own.status === "none" && own.demo)) return own;
         if (own.status === "known") {
           const policy = projectAccess(own.policy, current, resource, inherit);
-          if (!inherit || policy.dataset.size) return { status: "known", policy };
+          if (!inherit || policy.dataset.size)
+            return { status: "known", policy, ...(endpoint ? { own: endpoint } : {}) };
         }
         current = parent(current);
         inherit = true;
@@ -260,6 +289,15 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
   };
   return {
     discover,
+    async checkOwn(
+      own: { readonly url: string; readonly policy: OwnAccess | null } | undefined,
+    ): Promise<void> {
+      if (!own) return;
+      const state = await read(own.url);
+      if (state.status === "unknown") throw new DriveAccessError(state.cause);
+      if ((state.status === "known" ? state.policy.etag : undefined) !== own.policy?.etag)
+        throw new DriveAccessChangedError(["The item's own ACL changed"]);
+    },
     effective,
     forResource: (own: OwnAccess, resource: string): OwnAccess =>
       projectAccess(own, resource, resource, false),
@@ -289,7 +327,12 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
           [from, to],
         ]),
         to,
-        { ...guard, identity: { url: to, etag } },
+        {
+          expectedAcl: source.url === url && source.etag ? source : null,
+          ...guard,
+          knownAcl: url,
+          identity: { url: to, etag },
+        },
       );
     },
     async privateFolder(url: string, webId?: string): Promise<void> {
@@ -358,7 +401,10 @@ function intersectAccess(desired: Store, current: OwnAccess, resource: string): 
 
 export class DriveAccessChangedError extends DriveAccessError {
   constructor(readonly gains: readonly string[]) {
-    super("Bound access changed");
+    super(
+      "Bound access changed",
+      "The item's access policy changed during this operation. Refresh its sharing before retrying.",
+    );
   }
 }
 
@@ -372,16 +418,24 @@ export async function bindAccess(
   to: string,
   destinationOnly = false,
 ) {
-  const resolve = async (url: string) => ({
-    resource: requireAccess(await access.effective(url, false, true), url),
-    defaults: url.endsWith("/")
-      ? requireAccess(await access.effective(`${url}.access-binding`, true, true), url)
-      : undefined,
-  });
+  const resolve = async (url: string) => {
+    const state = await access.effective(url, false, true);
+    return {
+      resource: requireAccess(state, url),
+      own: state.own,
+      defaults: url.endsWith("/")
+        ? requireAccess(await access.effective(`${url}.access-binding`, true, true), url)
+        : undefined,
+    };
+  };
   let source = await resolve(from);
   let destination = from === to ? source : await resolve(to);
+  let destinationOwn = destination.own;
   const retired = new Set<string>();
   const binding = {
+    get destinationOwn() {
+      return destinationOwn;
+    },
     source: source.resource,
     destination: destination.resource,
     retire: (url: string) => retired.add(url),
@@ -393,9 +447,11 @@ export async function bindAccess(
       await binding.recheck().catch(() => undefined);
       return work();
     },
-    installed(policy: OwnAccess) {
+    installed(policy: OwnAccess, inherited = false) {
+      if (!inherited) destinationOwn = { url: policy.url, policy };
       const defaults = access.defaults(policy, to);
       destination = {
+        own: destinationOwn,
         resource: access.forResource(policy, to),
         defaults: to.endsWith("/") && defaults.dataset.size ? defaults : destination.defaults,
       };
@@ -411,6 +467,7 @@ export async function bindAccess(
         [destination, currentDestination, false],
       ] as const) {
         if (!current) continue;
+        if (before.own?.policy?.etag !== current.own?.policy?.etag) changed = true;
         for (const key of ["resource", "defaults"] as const) {
           const previous = before[key];
           const next = current[key];

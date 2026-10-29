@@ -83,7 +83,7 @@ export function deletionControl(http: typeof fetch, error: (status: number, url:
     commit: CommitChecks &
       CommitEffects & {
         readonly survivors?: readonly ResourceIdentity[];
-        readonly afterCommit?: () => Promise<void>;
+        readonly afterCommit?: (response: Response) => void;
       } = {},
   ) => {
     await guard(url);
@@ -97,7 +97,7 @@ export function deletionControl(http: typeof fetch, error: (status: number, url:
     };
     await pending.add(record);
     try {
-      await commitHttp({
+      const response = await commitHttp({
         ...commit,
         http: async (input, init) => {
           try {
@@ -118,12 +118,12 @@ export function deletionControl(http: typeof fetch, error: (status: number, url:
           let outcome = classifyDelete(response.status);
           if (outcome === "not-performed") throw refusal(response.status, url);
           if (outcome === "unknown") outcome = await reread(record);
-          if (outcome === "done") return;
+          if (outcome === "done") return response;
           if (outcome === "not-performed") throw refusal(412, url);
           throw new DriveDeletePendingError(url, { cause: error(response.status, url) });
         },
       });
-      await commit.afterCommit?.();
+      commit.afterCommit?.(response);
     } catch (cause) {
       if (!(cause instanceof DriveDeletePendingError)) await retire(record);
       throw cause;

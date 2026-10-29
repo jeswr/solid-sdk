@@ -93,6 +93,8 @@ export function commitHttp<T>(
 ): Promise<T> {
   const headers = new Headers(options.init.headers);
   const etag = headers.get("if-match");
+  if (!etag && headers.get("if-none-match") !== "*")
+    return Promise.reject(options.error(428, options.url));
   const init = { ...options.init, headers };
   return commitIrreversible({
     ...options,

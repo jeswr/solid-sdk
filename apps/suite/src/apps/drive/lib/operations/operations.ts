@@ -269,12 +269,23 @@ export async function moveItems(
 }
 
 /** "Make a copy" of a file next to it: `Copy of {name}`, then `(n)` on collisions. */
-export async function copyItem(client: DriveClient, url: string): Promise<string> {
+export async function copyItem(
+  client: DriveClient,
+  selected: string | Pick<DriveItem, "url" | "etag">,
+): Promise<string> {
+  const url = typeof selected === "string" ? selected : selected.url;
   const parent = parentOf(url) as string;
   const taken = (await client.list(parent)).map((item) => item.name);
   const name = keepBothName(`Copy of ${nameOf(url)}`, taken);
   const to = childUrl(parent, name, url.endsWith("/"));
-  await client.copy(url, to, { kind: "preserve-source" });
+  await client.copy(
+    url,
+    to,
+    { kind: "preserve-source" },
+    typeof selected === "string" || selected.etag === undefined
+      ? undefined
+      : { ifMatch: selected.etag },
+  );
   return to;
 }
 
@@ -314,30 +325,26 @@ async function updateIndex(
   }
 }
 
-/** Apply `change` with a conditional write; one retry on 412. */
+/** Bind this bookkeeping mutation to one snapshot, including through refusal.
+ * A conflict needs a fresh operation; retrying here would adopt another writer's
+ * index identity even though the user's resource decision has already finished.
+ */
 async function updateIndexUnlocked(
   client: DriveClient,
   url: string,
   change: (index: ReturnType<typeof emptyTrashIndex>) => void,
 ): Promise<void> {
-  for (let attempt = 0; ; attempt += 1) {
-    const current = await client.readRdf(url);
-    const index = current ? trashIndexFrom(current.dataset) : emptyTrashIndex();
-    change(index);
-    try {
-      await client.write(
-        url,
-        await serializeTrashIndex(index),
-        current?.etag
-          ? { contentType: "text/turtle", ifMatch: current.etag }
-          : { contentType: "text/turtle", ifNoneMatch: "*" },
-        { kind: "owner-only" },
-      );
-      return;
-    } catch (error) {
-      if (attempt > 0 || !(error instanceof DriveError && error.kind === "conflict")) throw error;
-    }
-  }
+  const current = await client.readRdf(url);
+  const index = current ? trashIndexFrom(current.dataset) : emptyTrashIndex();
+  change(index);
+  await client.write(
+    url,
+    await serializeTrashIndex(index),
+    current?.etag
+      ? { contentType: "text/turtle", ifMatch: current.etag }
+      : { contentType: "text/turtle", ifNoneMatch: "*" },
+    { kind: "owner-only" },
+  );
 }
 
 async function exists(client: DriveClient, url: string): Promise<boolean> {
@@ -1009,7 +1016,15 @@ async function restoreMissing(
       // An expired owner may still have an HTTP DELETE in flight. Even an absent
       // original can be recreated with the same content-derived ETag. Copy it
       // back, but retain recovery until a terminal receipt confirms quiescence.
-      await client.copy(from, to, { kind: "preserve-source" }, { sourceGuards: ancestors });
+      await client.copy(
+        from,
+        to,
+        { kind: "preserve-source" },
+        {
+          ...(approvedEtag === undefined ? {} : { ifMatch: approvedEtag }),
+          sourceGuards: ancestors,
+        },
+      );
       throw new TrashMovingError();
     }
     await client.move(

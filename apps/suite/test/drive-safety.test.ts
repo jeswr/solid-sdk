@@ -325,7 +325,7 @@ describe("Drive data-safety regressions", () => {
     expect(await listTrash(client, DRIVE)).toEqual([]);
   });
 
-  it("permanent deletion retries a descendant 404 wrapped by partial deletion", async () => {
+  it("permanent deletion renews parent confirmation when a descendant 404 has no receipt", async () => {
     let recovery: string | undefined;
     const { pod, client } = setup(async (url, init) => {
       if (recovery && url === `${recovery}b` && init?.method === "DELETE") {
@@ -340,8 +340,11 @@ describe("Drive data-safety regressions", () => {
     if (!entry) throw new Error("Missing entry");
     recovery = entry.url;
     const remove = vi.spyOn(client, "remove");
-    expect(await deleteForever(client, DRIVE, entries)).toEqual({ done: entries, failed: [] });
+    expect((await deleteForever(client, DRIVE, entries)).failed).toHaveLength(1);
     expect(remove.mock.calls.filter(([url]) => url === entry.url)).toHaveLength(1);
+    expect(pod.has(entry.url)).toBe(true);
+    const refreshed = await listTrash(client, DRIVE);
+    expect(await deleteForever(client, DRIVE, refreshed)).toEqual({ done: refreshed, failed: [] });
     expect(pod.has(entry.url)).toBe(false);
     expect(await listTrash(client, DRIVE)).toEqual([]);
   });

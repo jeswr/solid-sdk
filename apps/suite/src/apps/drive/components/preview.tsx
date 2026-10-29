@@ -100,7 +100,10 @@ function useLoadedFile(
 ): Loaded {
   const kind = filePreviewKind(item);
   const recordOpen = useRecordSharedOpen();
-  const version = useResourceVersion(item.url);
+  // Strong metadata validators decide whether folder invalidation changed bytes.
+  const version = useResourceVersion(
+    item.etag && metadataStatus !== undefined ? undefined : item.url,
+  );
   const [state, setState] = useState<Loaded>({ status: "loading" });
   // The body is keyed by URL + activation. Metadata refreshes can reload bytes,
   // but only the first successful load in this opening writes the preference.

@@ -17,6 +17,7 @@ import {
   trashItems,
   uploadFile,
 } from "../src/apps/drive/lib/operations/operations";
+import { expectPrivateRecovery } from "./drive-private-recovery";
 import { rdfPod } from "./drive-rdf-pod";
 import {
   aclBody,
@@ -281,14 +282,13 @@ it.each(races)("access binding: $operation / $side / $signal / $point", async ({
     expect(failed).toBe(false);
     expect(f.pod.has(from)).toBe(false);
   } else if (operation === "upload replacement") {
-    // Round 54 intentionally refuses replaying old confidential bytes when ACP
-    // makes the captured WAC audience unverifiable. Keep the failed PUT version;
-    // restoring the old body here could publish it under the unknown policy.
-    expect(await (await f.pod.fetch(from)).text()).toBe(
-      signal === "ACR added" ? "new confidential upload" : "secret contents",
-    );
-    if (signal === "ACR added")
-      expect(f.calls.filter(({ url, method }) => url === from && method === "PUT")).toHaveLength(1);
+    if (signal === "inherited default changed") {
+      expect(await (await f.pod.fetch(from)).text()).toBe("secret contents");
+    } else {
+      expect(await (await f.pod.fetch(from)).text()).toBe("");
+      await expectPrivateRecovery(f, "secret contents");
+      await expectPrivateRecovery(f, "new confidential upload");
+    }
     expect(failed).toBe(true);
   } else if (f.pod.has(to)) {
     // An irrelevant ancestor edit may be shielded by a verified own ACL.
@@ -379,7 +379,11 @@ it.each([
     expect(await (await f.pod.fetch(to)).text()).toBe("foreign bytes");
   else if (operation === "folder metadata")
     expect(await (await f.pod.fetch(to)).text()).not.toContain("confidential");
-  else expect(f.pod.has(to)).toBe(false);
+  else if (operation === "new upload") {
+    expect(await (await f.pod.fetch(to)).text()).toBe("");
+    await expectPrivateRecovery(f, "secret contents");
+    expect(f.policies.get(`${to}.policy`)).toBe(await aclBody(to, true));
+  } else expect(f.pod.has(to)).toBe(false);
 });
 
 it("rechecks bound access after persisting a deletion intent and retires a refused intent", async () => {

@@ -136,10 +136,16 @@ export function ancestorGuard(options: {
     await ledger.clear(url);
     return saved;
   };
-  const cleanup = async (url: string, response: Response) => {
+  const cleanup = async (url: string, response: Response, installed?: OwnAccess) => {
     const etag = response.headers.get("etag");
     // Unknown/foreign control documents are not ours to remove with the resource.
     if (etag && (await access.snapshot(url, response.headers)).status !== "unknown") {
+      const endpoint = access.discover(url, response.headers);
+      try {
+        await access.checkOwn(endpoint ? { url: endpoint, policy: installed ?? null } : undefined);
+      } catch {
+        return;
+      } // Deleting the resource would also delete another writer's ACL.
       const empty = new Store();
       await discardVersion<Store | string>({
         url,
@@ -171,7 +177,10 @@ export function ancestorGuard(options: {
   ): Promise<{ response: Response; policy?: OwnAccess }> => {
     const binding = await bindAccess(access, url, url, true);
     let response: Response;
-    const compensation = new Compensation(() => binding.rollback(() => cleanup(url, response)));
+    let installed: OwnAccess | undefined;
+    const compensation = new Compensation(() =>
+      binding.rollback(() => cleanup(url, response, installed)),
+    );
     try {
       if (decision.kind === "archived")
         await ledger.set(url, await requirementFor(decision.acl, decision.from));
@@ -199,9 +208,13 @@ export function ancestorGuard(options: {
           decision.kind === "archived"
             ? await install(url, decision.acl, decision.from, {
                 identity: { url, etag: response.headers.get("etag") ?? "" },
+                expectedAcl: null,
               })
             : undefined;
-        if (policy) binding.installed(policy);
+        if (policy) {
+          installed = policy;
+          binding.installed(policy);
+        }
         await binding.recheck();
         compensation.disarm();
         return { response, ...(policy ? { policy } : {}) };
@@ -456,6 +469,17 @@ export function ancestorGuard(options: {
       from: string,
       protectionGuard: AccessWriteGuard,
     ): Promise<OwnAccess> {
+      const endpoint =
+        protectionGuard.knownAcl ??
+        access.discover(url, (await http(url, { method: "HEAD", cache: "no-store" })).headers);
+      if (!endpoint) throw new DriveAccessError("ACL endpoint unavailable");
+      const own =
+        protectionGuard.expectedAcl !== undefined
+          ? protectionGuard.expectedAcl
+          : await access.read(endpoint);
+      if (own && "status" in own && own.status === "unknown") throw new DriveAccessError(own.cause);
+      const expectedAcl =
+        own && "status" in own ? (own.status === "known" ? own.policy : null) : own;
       await guard(url, true);
       let saved = policy;
       await singleFlight(
@@ -465,7 +489,11 @@ export function ancestorGuard(options: {
             ...(await requirementFor(policy, from)),
             etag: protectionGuard.identity.etag,
           });
-          saved = await install(url, policy, from, protectionGuard);
+          saved = await install(url, policy, from, {
+            ...protectionGuard,
+            knownAcl: endpoint,
+            expectedAcl,
+          });
         },
         false,
       );
