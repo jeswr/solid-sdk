@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6
 //
 // gen-catalog.mjs — emit the Solid App Store catalog as Linked Data BEFORE every
 // build/dev (wired INLINE at the front of the `build`/`dev` scripts in package.json —
@@ -31,7 +32,12 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import jsonld from "jsonld";
 import n3 from "n3";
-import { DEV_DEFAULT, normaliseOrigin, resolveOriginValue } from "./gen-clientid.mjs";
+import {
+  clientIdDocument,
+  DEV_DEFAULT,
+  normaliseOrigin,
+  resolveOriginValue,
+} from "./gen-clientid.mjs";
 
 const { DataFactory, Writer } = n3;
 const { namedNode, literal, quad } = DataFactory;
@@ -146,7 +152,7 @@ export function buildCatalogQuads(origin, apps, modified = "2026-06-20T00:00:00Z
           quad(
             appNode,
             namedNode(`${SCHEMA}identifier`),
-            namedNode(`${app.deployedUrl}/clientid.jsonld`),
+            namedNode(new URL("clientid.jsonld", `${app.deployedUrl.replace(/\/$/, "")}/`).href),
           ),
         );
       }
@@ -198,7 +204,8 @@ async function main() {
     resolveOriginValue({ shellEnv: process.env, devDefault: DEV_DEFAULT }),
   );
   const apps = readApps();
-  const quads = buildCatalogQuads(origin, apps);
+  const appUrl = clientIdDocument(origin, process.env.CLIENT_BASE_PATH || "/").client_uri;
+  const quads = buildCatalogQuads(appUrl.replace(/\/$/, ""), apps);
 
   const [turtle, jsonldDoc] = await Promise.all([quadsToTurtle(quads), quadsToJsonLd(quads)]);
 

@@ -22,7 +22,7 @@
  * **Actionable messages (the shared task model).** A message may also be an
  * actionable item — a "could you do X" turned into a tracked task — by *also*
  * typing the same subject `wf:Task` and carrying the shared cross-app task model
- * from `https://w3id.org/jeswr/task#` (re-using the SolidOS workflow ontology
+ * from `https://jeswr.org/ns/task#` (re-using the SolidOS workflow ontology
  * `wf:`, Dublin Core `dct:` and ActivityStreams `as:`, NOT a new ontology):
  *
  *   - `rdf:type wf:Task` — marks the note as a task as well as a message.
@@ -42,22 +42,24 @@
  * `type-index.ts`.
  */
 
+import { NS as SUITE_NS } from "@jeswr/suite-vocab";
+
 /** Namespace base IRIs. */
 export const NS = {
   /** Pod-Chat application vocabulary (the ChatRoom class + participant glue). */
-  PC: "https://w3id.org/jeswr/pod-chat#",
+  PC: SUITE_NS.POD_CHAT,
   /** ActivityStreams 2.0 — the chat room/message/person model. */
-  AS: "https://www.w3.org/ns/activitystreams#",
+  AS: SUITE_NS.AS,
   /** SolidOS / W3C workflow ontology — the shared task model. */
-  WF: "http://www.w3.org/2005/01/wf/flow#",
+  WF: SUITE_NS.WF,
   /** Dublin Core Terms — created / creator / title. */
-  DCT: "http://purl.org/dc/terms/",
+  DCT: SUITE_NS.DCT,
   /** RDF core — rdf:type. */
-  RDF: "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+  RDF: SUITE_NS.RDF,
   /** XSD datatypes. */
-  XSD: "http://www.w3.org/2001/XMLSchema#",
+  XSD: SUITE_NS.XSD,
   /** Solid terms — type index. */
-  SOLID: "http://www.w3.org/ns/solid/terms#",
+  SOLID: SUITE_NS.SOLID,
 } as const;
 
 /** `rdf:type`. */
@@ -99,7 +101,7 @@ export const DCT = {
 } as const;
 
 /**
- * The shared cross-app task model (`https://w3id.org/jeswr/task#` — a re-use of
+ * The shared cross-app task model (`https://jeswr.org/ns/task#` — a re-use of
  * `wf:` / `dct:` / `as:`, NOT a new ontology). An actionable chat message is
  * typed `wf:Task` AND carries a lifecycle-state class + `wf:assignee`.
  */

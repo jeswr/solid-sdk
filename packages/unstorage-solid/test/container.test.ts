@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 
 import { DataFactory, Writer } from "n3";
@@ -88,5 +89,21 @@ describe("listContainer", () => {
     ]);
     const members = await listContainer(BASE, BASE, turtleFetch(body));
     expect(members?.map((m) => m.url)).toEqual([`${BASE}real`]);
+  });
+  it("skips an unparseable id and self query/fragment aliases per entry", async () => {
+    const body = `@prefix ldp: <http://www.w3.org/ns/ldp#> .
+<${BASE}> ldp:contains <${BASE}before>, <http://[>, <${BASE}?self>, <${BASE}#self>, <${BASE}after> .`;
+    expect(await listContainer(BASE, BASE, turtleFetch(body))).toEqual([
+      { url: `${BASE}before`, container: false },
+      { url: `${BASE}after`, container: false },
+    ]);
+  });
+
+  it.each([BASE, `${BASE}/`])("keeps legacy root-alias refusal under %s", async (base) => {
+    const body = `@prefix ldp: <http://www.w3.org/ns/ldp#> .
+<${base}> ldp:contains <${base.slice(0, -1)}>, <${base}ok> .`;
+    expect(await listContainer(base, base, turtleFetch(body))).toEqual([
+      { url: `${base}ok`, container: false },
+    ]);
   });
 });

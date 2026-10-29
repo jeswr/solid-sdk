@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * `diet:GeneticSummary` — the interpreted HLA summary (DESIGN §2.2 entity 8, §7,
@@ -35,16 +36,7 @@
  */
 
 import type { DatasetCore } from "@rdfjs/types";
-import {
-  LiteralAs,
-  LiteralFrom,
-  NamedNodeAs,
-  NamedNodeFrom,
-  OptionalAs,
-  OptionalFrom,
-  SetFrom,
-  TermWrapper,
-} from "@rdfjs/wrapper";
+import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import {
   coeliacGeneticRiskCodec,
@@ -53,6 +45,7 @@ import {
   sourceTypeCodec,
 } from "./concepts.js";
 import { httpIriOrUndefined } from "./iri.js";
+import { AliasOptionalAs, AliasOptionalFrom, AliasSetFrom, hasType } from "./legacy.js";
 import { assertSubjectSingletons } from "./rdfGuards.js";
 import { parseBody, storeToTurtle } from "./serialize.js";
 import { setIfDefined, tryRead, validDateOrUndefined } from "./util.js";
@@ -259,19 +252,24 @@ export class GeneticSummary extends TermWrapper {
     return this.value;
   }
   get types(): Set<string> {
-    return SetFrom.subjectPredicate(this, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string);
+    return AliasSetFrom.subjectPredicate(
+      this,
+      rdf("type"),
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
   }
   mark(): this {
     this.types.add(DIET_GENETIC_SUMMARY);
     return this;
   }
   get isGeneticSummary(): boolean {
-    return this.types.has(DIET_GENETIC_SUMMARY);
+    return hasType(this, DIET_GENETIC_SUMMARY);
   }
 
   /** `diet:hlaMarker` → the marker node IRIs (live set). */
   get hlaMarker(): Set<string> {
-    return SetFrom.subjectPredicate(
+    return AliasSetFrom.subjectPredicate(
       this,
       diet("hlaMarker"),
       NamedNodeAs.string,
@@ -280,43 +278,47 @@ export class GeneticSummary extends TermWrapper {
   }
 
   get interpretation(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("geneticInterpretation"), LiteralAs.string);
+    return AliasOptionalFrom.subjectPredicate(
+      this,
+      diet("geneticInterpretation"),
+      LiteralAs.string,
+    );
   }
   set interpretation(value: string | undefined) {
-    OptionalAs.object(this, diet("geneticInterpretation"), value, LiteralFrom.string);
+    AliasOptionalAs.object(this, diet("geneticInterpretation"), value, LiteralFrom.string);
   }
 
   get enteredManually(): boolean | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("enteredManually"), LiteralAs.boolean);
+    return AliasOptionalFrom.subjectPredicate(this, diet("enteredManually"), LiteralAs.boolean);
   }
   set enteredManually(value: boolean | undefined) {
-    OptionalAs.object(this, diet("enteredManually"), value, LiteralFrom.boolean);
+    AliasOptionalAs.object(this, diet("enteredManually"), value, LiteralFrom.boolean);
   }
 
   /** `diet:consentGiven` — explicit genetic-data consent (MUST be true to write). */
   get consentGiven(): boolean | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("consentGiven"), LiteralAs.boolean);
+    return AliasOptionalFrom.subjectPredicate(this, diet("consentGiven"), LiteralAs.boolean);
   }
   set consentGiven(value: boolean | undefined) {
-    OptionalAs.object(this, diet("consentGiven"), value, LiteralFrom.boolean);
+    AliasOptionalAs.object(this, diet("consentGiven"), value, LiteralFrom.boolean);
   }
 
   /** `diet:coverageComplete` — did the source test every tracked risk tag SNP? */
   get coverageComplete(): boolean | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("coverageComplete"), LiteralAs.boolean);
+    return AliasOptionalFrom.subjectPredicate(this, diet("coverageComplete"), LiteralAs.boolean);
   }
   set coverageComplete(value: boolean | undefined) {
-    OptionalAs.object(this, diet("coverageComplete"), value, LiteralFrom.boolean);
+    AliasOptionalAs.object(this, diet("coverageComplete"), value, LiteralFrom.boolean);
   }
 
   /** `diet:sourceType` → `diet:{concept}`; read back as the friendly token. */
   get sourceType(): GeneticSourceType | undefined {
     return sourceTypeCodec.fromIri(
-      OptionalFrom.subjectPredicate(this, diet("sourceType"), NamedNodeAs.string),
+      AliasOptionalFrom.subjectPredicate(this, diet("sourceType"), NamedNodeAs.string),
     );
   }
   set sourceType(value: GeneticSourceType | undefined) {
-    OptionalAs.object(
+    AliasOptionalAs.object(
       this,
       diet("sourceType"),
       value ? sourceTypeCodec.toIri(value) : undefined,
@@ -327,11 +329,11 @@ export class GeneticSummary extends TermWrapper {
   /** `diet:coeliacGeneticRisk` → `diet:{concept}`; read back as the friendly token. */
   get coeliacGeneticRisk(): CoeliacGeneticRisk | undefined {
     return coeliacGeneticRiskCodec.fromIri(
-      OptionalFrom.subjectPredicate(this, diet("coeliacGeneticRisk"), NamedNodeAs.string),
+      AliasOptionalFrom.subjectPredicate(this, diet("coeliacGeneticRisk"), NamedNodeAs.string),
     );
   }
   set coeliacGeneticRisk(value: CoeliacGeneticRisk | undefined) {
-    OptionalAs.object(
+    AliasOptionalAs.object(
       this,
       diet("coeliacGeneticRisk"),
       value ? coeliacGeneticRiskCodec.toIri(value) : undefined,
@@ -341,56 +343,61 @@ export class GeneticSummary extends TermWrapper {
 
   /** `health:patient` — the pod-owner Patient/Person WebID. */
   get patient(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, HEALTH_PATIENT_PROP, NamedNodeAs.string);
+    return AliasOptionalFrom.subjectPredicate(this, HEALTH_PATIENT_PROP, NamedNodeAs.string);
   }
   set patient(value: string | undefined) {
-    OptionalAs.object(this, HEALTH_PATIENT_PROP, value, NamedNodeFrom.string);
+    AliasOptionalAs.object(this, HEALTH_PATIENT_PROP, value, NamedNodeFrom.string);
   }
 
   get created(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, dct("created"), LiteralAs.date);
+    return AliasOptionalFrom.subjectPredicate(this, dct("created"), LiteralAs.date);
   }
   set created(value: Date | undefined) {
-    OptionalAs.object(this, dct("created"), value, LiteralFrom.dateTime);
+    AliasOptionalAs.object(this, dct("created"), value, LiteralFrom.dateTime);
   }
 }
 
 /** A single `diet:HlaMarker` node accessor (`diet:rsid`/`diet:genotype`/`diet:markerInterpretation`). */
 class HlaMarker extends TermWrapper {
   get types(): Set<string> {
-    return SetFrom.subjectPredicate(this, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string);
+    return AliasSetFrom.subjectPredicate(
+      this,
+      rdf("type"),
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
   }
   mark(): this {
     this.types.add(DIET_HLA_MARKER);
     return this;
   }
   get rsid(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("rsid"), LiteralAs.string);
+    return AliasOptionalFrom.subjectPredicate(this, diet("rsid"), LiteralAs.string);
   }
   set rsid(value: string | undefined) {
-    OptionalAs.object(this, diet("rsid"), value, LiteralFrom.string);
+    AliasOptionalAs.object(this, diet("rsid"), value, LiteralFrom.string);
   }
   get genotype(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("genotype"), LiteralAs.string);
+    return AliasOptionalFrom.subjectPredicate(this, diet("genotype"), LiteralAs.string);
   }
   set genotype(value: string | undefined) {
-    OptionalAs.object(this, diet("genotype"), value, LiteralFrom.string);
+    AliasOptionalAs.object(this, diet("genotype"), value, LiteralFrom.string);
   }
   get markerInterpretation(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("markerInterpretation"), LiteralAs.string);
+    return AliasOptionalFrom.subjectPredicate(this, diet("markerInterpretation"), LiteralAs.string);
   }
   set markerInterpretation(value: string | undefined) {
-    OptionalAs.object(this, diet("markerInterpretation"), value, LiteralFrom.string);
+    AliasOptionalAs.object(this, diet("markerInterpretation"), value, LiteralFrom.string);
   }
 
   /** `diet:riskHaplotype` → `diet:{concept}`; read back as the friendly token. */
   get riskHaplotype(): RiskHaplotype | undefined {
     return riskHaplotypeCodec.fromIri(
-      OptionalFrom.subjectPredicate(this, diet("riskHaplotype"), NamedNodeAs.string),
+      AliasOptionalFrom.subjectPredicate(this, diet("riskHaplotype"), NamedNodeAs.string),
     );
   }
   set riskHaplotype(value: RiskHaplotype | undefined) {
-    OptionalAs.object(
+    AliasOptionalAs.object(
       this,
       diet("riskHaplotype"),
       value ? riskHaplotypeCodec.toIri(value) : undefined,
@@ -401,11 +408,11 @@ class HlaMarker extends TermWrapper {
   /** `diet:markerPresence` → `diet:{concept}`; read back as the friendly token. */
   get markerPresence(): MarkerPresence | undefined {
     return markerPresenceCodec.fromIri(
-      OptionalFrom.subjectPredicate(this, diet("markerPresence"), NamedNodeAs.string),
+      AliasOptionalFrom.subjectPredicate(this, diet("markerPresence"), NamedNodeAs.string),
     );
   }
   set markerPresence(value: MarkerPresence | undefined) {
-    OptionalAs.object(
+    AliasOptionalAs.object(
       this,
       diet("markerPresence"),
       value ? markerPresenceCodec.toIri(value) : undefined,

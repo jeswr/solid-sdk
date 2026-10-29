@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 //
 // Unit tests for the agent-delegation profile chain evaluator
@@ -15,6 +16,7 @@ import { parsePolicy, policyFromRdf, policyToJsonLd, policyToTurtle } from "../s
 import { serialize } from "../src/serialize.js";
 import type { OdrlPolicy, RequestContext } from "../src/types.js";
 import {
+  legacyOdrlIri,
   ODRLD_DELEGATED_UNDER,
   PROV_ACTED_ON_BEHALF_OF,
   PROV_WAS_ATTRIBUTED_TO,
@@ -797,7 +799,7 @@ describe("delegationProvenance", () => {
     const triples = quads.map((q) => `${q.subject.value} ${q.predicate.value} ${q.object.value}`);
     expect(triples).toContain(`${ROOT_ID} ${PROV_WAS_ATTRIBUTED_TO} ${OWNER}`);
     expect(triples).toContain(`${HOP1_ID} ${PROV_WAS_ATTRIBUTED_TO} ${AGENT_A}`);
-    expect(triples).toContain(`${HOP1_ID} ${ODRLD_DELEGATED_UNDER} ${ROOT_ID}`);
+    expect(triples).toContain(`${HOP1_ID} ${legacyOdrlIri(ODRLD_DELEGATED_UNDER)} ${ROOT_ID}`);
     expect(triples).toContain(`${HOP1_ID} ${PROV_WAS_DERIVED_FROM} ${ROOT_ID}`);
     expect(triples).toContain(`${AGENT_B} ${PROV_ACTED_ON_BEHALF_OF} ${AGENT_A}`);
   });
@@ -869,7 +871,7 @@ describe("delegation terms: RDF round-trip", () => {
     // The n3 writer prefixes odrl: terms; the odrld: terms appear as full IRIs.
     expect(turtle).toContain("odrl:grantUse");
     expect(turtle).toContain("odrl:nextPolicy");
-    expect(turtle).toContain(ODRLD_DELEGATED_UNDER);
+    expect(turtle).toContain(legacyOdrlIri(ODRLD_DELEGATED_UNDER));
     const parsed = await parsePolicy(turtle);
     expect(parsed).toBeDefined();
     expect(parsed?.delegatedUnder).toBe(ROOT_ID);
