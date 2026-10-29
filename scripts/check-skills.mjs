@@ -21,6 +21,31 @@ import characterReferences from "./html-character-references.json" with { type: 
 
 const legacyCharacterReferences = new Set(characterReferences.$legacy);
 
+// HTML URL attributes are element-specific; data/poster are not global attributes.
+// https://html.spec.whatwg.org/multipage/indices.html#attributes-3
+const htmlUrlAttributes = new Map([
+  ["a", ["href", "ping"]],
+  ["area", ["href", "ping"]],
+  ["audio", ["src"]],
+  ["base", ["href"]],
+  ["blockquote", ["cite"]],
+  ["button", ["formaction"]],
+  ["del", ["cite"]],
+  ["embed", ["src"]],
+  ["form", ["action"]],
+  ["iframe", ["src"]],
+  ["img", ["src", "srcset"]],
+  ["input", ["src", "formaction"]],
+  ["ins", ["cite"]],
+  ["link", ["href", "imagesrcset"]],
+  ["object", ["data"]],
+  ["q", ["cite"]],
+  ["script", ["src"]],
+  ["source", ["src", "srcset"]],
+  ["track", ["src"]],
+  ["video", ["src", "poster"]],
+]);
+
 // W9 DESIGN §6 categories. Scan examples too, but allow explicit template values.
 const secretPatterns = [
   ["private key", /-----BEGIN (?:[A-Z0-9]+ )*PRIVATE KEY-----/g],
@@ -279,7 +304,6 @@ function htmlLinksIn(html, definitions, definitionMarker) {
     const tag = token[0].slice(closing ? 2 : 1).toLowerCase();
     let cursor = tokens.lastIndex;
     let selfClosing = false;
-    const attributes = [];
     const elementAttributes = new Map();
     while (cursor < html.length && html[cursor] !== ">") {
       if (html[cursor] === "/" && html[cursor + 1] === ">") selfClosing = true;
@@ -309,8 +333,6 @@ function htmlLinksIn(html, definitions, definitionMarker) {
         value = html.slice(start, cursor);
       }
       if (firstAttribute) elementAttributes.set(name, value);
-      if (firstAttribute && !closing && /^(?:href|src|srcset|xlink:href)$/.test(name))
-        attributes.push([name, value]);
     }
     // An incomplete tag does not create an element or active URL attributes.
     tokens.lastIndex = cursor + 1;
@@ -349,17 +371,19 @@ function htmlLinksIn(html, definitions, definitionMarker) {
       namespace = "html";
     }
     if (namespace === "html" && (tag === "svg" || tag === "math")) namespace = tag;
-    for (const [name, value] of attributes) {
-      if (name === "srcset") {
-        if (namespace === "html" && /^(?:img|source)$/.test(tag)) {
-          // Decode before splitting: character references can introduce delimiters.
-          links.push(...srcsetLinksIn(decodeCharacterReferences(value)));
-        }
-        continue;
+    const urlAttributes =
+      namespace === "html" ? (htmlUrlAttributes.get(tag) ?? []) : ["href", "src", "xlink:href"];
+    for (const [name, value] of elementAttributes) {
+      if (!urlAttributes.includes(name)) continue;
+      // Decode before splitting: character references can introduce delimiters.
+      const decoded = decodeCharacterReferences(value);
+      if (name === "srcset" || name === "imagesrcset") {
+        links.push(...srcsetLinksIn(decoded));
+      } else if (name === "ping") {
+        links.push(...decoded.split(/[\t\n\f\r ]+/).filter(Boolean));
+      } else {
+        links.push(decoded);
       }
-      // XLink href is a URL only when adjusted as a foreign-content attribute.
-      if (name !== "xlink:href" || namespace !== "html")
-        links.push(decodeCharacterReferences(value));
     }
     // A slash closes foreign elements; HTML text elements ignore it.
     if (

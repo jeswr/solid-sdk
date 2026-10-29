@@ -145,6 +145,129 @@ describe("skill validation", () => {
   });
 
   it.each([
+    '<object data="references/missing.svg"></object>',
+    "<OBJECT DATA='references/missing.svg'></OBJECT>",
+    "<object data=references/missing.svg></object>",
+    '<video poster="references/missing.png"></video>',
+    "<VIDEO POSTER='references/missing.png'></VIDEO>",
+    "<video poster=references/missing.png></video>",
+    '<video src="references/guide.md" poster="references/missing.png"></video>',
+    '<form action="references/missing.html"></form>',
+    '<button formaction="references/missing.html">submit</button>',
+    '<input type="submit" formaction="references/missing.html">',
+    '<blockquote cite="references/missing.md">quote</blockquote>',
+    '<q cite="references/missing.md">quote</q>',
+    '<del cite="references/missing.md">removed</del>',
+    '<ins cite="references/missing.md">added</ins>',
+    '<a href="references/guide.md" ping="references/missing.html">guide</a>',
+    '<area href="references/guide.md" ping="references/guide.md references/missing.html">',
+    '<a ping="references/missing.html&#9;references/guide.md">guide</a>',
+    '<link rel="preload" as="image" imagesrcset="references/guide.md 1x, references/missing.png 2x">',
+    '<object data="references/miss&#105;ng.svg?raw=1#icon"></object>',
+    '<video poster=" &#32;references/miss&#9;ing.png&#10; "></video>',
+    '<object data="references/missing.svg" DATA="references/guide.md"></object>',
+    '<video poster="references/missing.png" POSTER="references/guide.md"></video>',
+    '<svg><foreignObject><object data="references/missing.svg"></object></foreignObject></svg>',
+    '<math><mtext><video poster="references/missing.png"></video></mtext></math>',
+    '<math><annotation-xml encoding="text/html"><object data="references/missing.svg"></object></annotation-xml></math>',
+  ])("validates HTML resource attributes and preserves index output: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    const errors = ["skills/alpha/SKILL.md: relative link does not resolve (target omitted)"];
+    expect(checkSkills(root, { write: true }).errors).toEqual(errors);
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+    const index = "Previously generated index\n";
+    put(root, "skills/INDEX.md", index);
+    expect(checkSkills(root, { write: true }).errors).toEqual(errors);
+    expect(readFileSync(join(root, "skills/INDEX.md"), "utf8")).toBe(index);
+  });
+
+  it.each([
+    '<object data="references/gu&#105;de.md?raw=1#icon"></object>',
+    '<video poster=" &#32;references/space%20name.png?raw=1#frame&#9; "></video>',
+    '<object data="references/a&amp;b.svg"></object>',
+    '<object data="https://example.invalid/missing.svg"></object>',
+    '<video poster="//example.invalid/missing.png"></video>',
+    '<object data="/missing.svg"></object>',
+    '<video poster="#frame"></video>',
+    '<form action="references/guide.md"></form>',
+    '<button formaction="references/guide.md">submit</button>',
+    '<input formaction="references/guide.md">',
+    '<blockquote cite="references/guide.md">quote</blockquote>',
+    '<q cite="references/guide.md">quote</q>',
+    '<del cite="references/guide.md">removed</del>',
+    '<ins cite="references/guide.md">added</ins>',
+    '<a ping="references/guide.md&#9;references/a&amp;b.svg https://example.invalid/ping">guide</a>',
+    '<area ping=" references/guide.md&#10;references/space%20name.png ">',
+    '<link rel="preload" as="image" imagesrcset="references/space%20name.png 1x, references/a&amp;b.svg 2x">',
+    '<object data="references/guide.md" DATA="missing.svg"></object>',
+    '<video poster="references/guide.md" POSTER="missing.png"></video>',
+    '<object data DATA="missing.svg"></object>',
+    '<video poster="" POSTER="missing.png"></video>',
+    '<a ping="references/guide.md" PING="missing.html">guide</a>',
+    '<link imagesrcset="references/guide.md 1x" IMAGESRCSET="missing.png 2x">',
+  ])("accepts resolved and non-relative HTML resource URLs: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/references/space name.png", "Image fixture\n");
+    put(root, "skills/alpha/references/a&b.svg", "Image fixture\n");
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+    expect(checkSkills(root).errors).toEqual([]);
+  });
+
+  it.each([
+    '<object data="private%ZZ.svg"></object>',
+    '<video poster="private%ZZ.png"></video>',
+    '<form action="private%ZZ.html"></form>',
+    '<a ping="references/guide.md private%ZZ.html">guide</a>',
+    '<link imagesrcset="references/guide.md 1x, private%ZZ.png 2x">',
+  ])("checks HTML resource URL encoding without exposing destinations: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link has invalid URL encoding (target omitted)",
+    ]);
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+  });
+
+  it.each([
+    '<div data="missing.svg" poster="missing.png" href="missing.md" src="missing.png"></div>',
+    '<object poster="missing.png" data-src="missing.svg"></object>',
+    '<video data="missing.svg" data-poster="missing.png"></video>',
+    '<a action="missing.html" formaction="missing.html" cite="missing.md">text</a>',
+    '<div ping="missing.html" imagesrcset="missing.png 2x"></div>',
+    '<svg><object data="missing.svg" /><video poster="missing.png" /></svg>',
+    '<math><object data="missing.svg" /><video poster="missing.png" /></math>',
+    '<svg><link imagesrcset="missing.png 2x" /></svg>',
+    '<!-- <object data="missing.svg"></object><video poster="missing.png"></video> -->',
+    '`<object data="missing.svg"></object>`',
+    '```html\n<video poster="missing.png"></video>\n```',
+    '<textarea><object data="missing.svg"></object></textarea>',
+    "<script>const example = '<video poster=\"missing.png\"></video>';</script>",
+    '<object title=\'data="missing.svg" > <video poster="missing.png">\'></object>',
+    '<object data="missing.svg"',
+    '<video poster="missing.png"',
+    '<link imagesrcset="missing.png invalid">',
+  ])("ignores inert or inapplicable HTML resource attributes: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
+    "skills/alpha/SKILL.md",
+    "packages/widget/references/resources.md",
+  ])("blocks CLI index generation for unresolved HTML resources in %s", (path) => {
+    const root = fixture();
+    put(root, path, skill({ body: '<object data="missing.svg"></object>' }));
+    const result = cli(root, "--write");
+    expect(result.status).toBe(1);
+    expect(result.stderr.trim()).toBe(`${path}: relative link does not resolve (target omitted)`);
+    expect(result.stdout).toBe("");
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+  });
+
+  it.each([
     '<img srcset="missing.png 2x">',
     "<IMG SRCSET='missing.png 320w'>",
     "<img srcset=missing.png>",
