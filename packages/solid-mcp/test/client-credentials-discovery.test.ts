@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { lookup } from "node:dns/promises";
 import { Readable } from "node:stream";
+import { brotliCompressSync, deflateSync, gzipSync } from "node:zlib";
 import { createPinningDispatcher } from "@jeswr/guarded-fetch/node";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CliConfig } from "../src/cli-config.js";
@@ -19,6 +20,15 @@ const config = {
   oidcIssuer: ISSUER,
 };
 const profile = "https://profile.example/me";
+const profileEncodings = [
+  { encoding: "identity", compress: (body: Uint8Array) => body },
+  { encoding: "gzip", compress: gzipSync },
+  { encoding: "x-gzip", compress: gzipSync },
+  { encoding: "GZip", compress: gzipSync },
+  { encoding: "deflate", compress: deflateSync },
+  { encoding: "br", compress: brotliCompressSync },
+  { encoding: "gzip, br", compress: (body: Uint8Array) => brotliCompressSync(gzipSync(body)) },
+];
 
 vi.mock("node:dns/promises", () => ({ lookup: vi.fn() }));
 vi.mock("@jeswr/guarded-fetch/node", async (importOriginal) => {
@@ -173,7 +183,13 @@ describe("anonymous WebID profile redirects", () => {
       if (request.url === profile)
         return new Response(null, { status: 302, headers: { location: `${target}#me` } });
       expect(request.url).toBe(target);
-      return new Response(body, { status, headers: { etag: '"profile-version"' } });
+      return new Response(body, {
+        status,
+        headers: {
+          etag: '"profile-version"',
+          ...(body === null ? { "content-encoding": "gzip" } : {}),
+        },
+      });
     });
     const response = await fetch(profile, { method });
     expect(response.status).toBe(status);
@@ -182,7 +198,81 @@ describe("anonymous WebID profile redirects", () => {
     expect(await response.text()).toBe(body ?? "");
   });
 
-  it("bounds redirect chains and cancels their response bodies", async () => {
+  it("decodes streamed profile bytes while preserving response metadata", async () => {
+    const css = mockCss();
+    const target = "https://profile.example/card";
+    const body = gzipSync("public profile");
+    const headers = {
+      "content-encoding": "gzip",
+      "content-length": String(body.byteLength),
+      "content-type": "text/turtle",
+      etag: '"profile-version"',
+    };
+    const fetch = await createCliFetch(config, async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url.startsWith(ISSUER)) return css.fetch(input, init);
+      if (request.url === profile)
+        return new Response(null, { status: 302, headers: { location: target } });
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(body.subarray(0, 3));
+            controller.enqueue(body.subarray(3));
+            controller.close();
+          },
+        }),
+        { headers },
+      );
+    });
+    const response = await fetch(profile);
+    expect(await response.text()).toBe("public profile");
+    expect(response.status).toBe(200);
+    expect(response.url).toBe(target);
+    expect(Object.fromEntries(response.headers)).toEqual(headers);
+  });
+
+  it.each([
+    "gzip",
+    "deflate",
+    "br",
+  ])("rejects a malformed %s profile body when consumed", async (encoding) => {
+    const css = mockCss();
+    const fetch = await createCliFetch(config, async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url.startsWith(ISSUER)) return css.fetch(input, init);
+      if (request.url === profile)
+        return new Response(null, { status: 302, headers: { location: "/card" } });
+      return new Response(new Uint8Array([255, 255, 255, 255]), {
+        headers: { "content-encoding": encoding },
+      });
+    });
+    const response = await fetch(profile);
+    await expect(response.text()).rejects.toThrow();
+  });
+
+  it.each([
+    "custom",
+    "gzip, custom",
+    "custom, gzip",
+    Array(6).fill("gzip").join(", "),
+  ])("leaves unsupported encoding chains untouched: %s", async (encoding) => {
+    const css = mockCss();
+    const body = gzipSync("public profile");
+    const fetch = await createCliFetch(config, async (input, init) => {
+      const request = new Request(input, init);
+      if (request.url.startsWith(ISSUER)) return css.fetch(input, init);
+      if (request.url === profile)
+        return new Response(null, { status: 302, headers: { location: "/card" } });
+      return new Response(new Uint8Array(body), { headers: { "content-encoding": encoding } });
+    });
+    const response = await fetch(profile);
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array(body));
+  });
+
+  it.each([
+    undefined,
+    "gzip",
+  ])("bounds redirect chains and cancels %s response bodies", async (encoding) => {
     const css = mockCss();
     let requests = 0;
     let cancelled = 0;
@@ -196,7 +286,13 @@ describe("anonymous WebID profile redirects", () => {
             cancelled++;
           },
         }),
-        { status: 302, headers: { location: `/profile-${requests}` } },
+        {
+          status: 302,
+          headers: {
+            location: `/profile-${requests}`,
+            ...(encoding ? { "content-encoding": encoding } : {}),
+          },
+        },
       );
     });
     await expect(fetch(profile)).rejects.toThrow(/too many.*redirect/i);
@@ -378,10 +474,15 @@ describe("anonymous WebID profile redirects", () => {
     expect(requests).toBe(1);
   });
 
-  it.each([
-    "fetch",
-    "PodPort",
-  ])("discovers Type Index hints through a redirected external profile using %s", async (source) => {
+  it.each(
+    ["fetch", "PodPort"].flatMap((source) =>
+      profileEncodings.map((encoding) => ({ source, ...encoding })),
+    ),
+  )("discovers Type Index hints through a $encoding external profile using $source", async ({
+    source,
+    encoding,
+    compress,
+  }) => {
     const css = mockCss();
     const webId = `${profile}#me`;
     const index = `${POD}type-index`;
@@ -415,8 +516,9 @@ describe("anonymous WebID profile redirects", () => {
           status: 303,
           headers: { location: "https://profile.example/card" },
         });
-      return new Response(`<${webId}> <${solid}publicTypeIndex> <${index}> .`, {
-        headers: { "content-type": "text/turtle" },
+      const body = compress(Buffer.from(`<${webId}> <${solid}publicTypeIndex> <${index}> .`));
+      return new Response(new Uint8Array(body), {
+        headers: { "content-type": "text/turtle", "content-encoding": encoding },
       });
     });
     const podConfig = { ...config, fetch, webId };

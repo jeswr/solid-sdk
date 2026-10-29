@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { Readable } from "node:stream";
+import { Duplex, Readable } from "node:stream";
+import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import { assertSafeUrl } from "@jeswr/guarded-fetch";
 import { createPinningDispatcher } from "@jeswr/guarded-fetch/node";
 import {
@@ -18,6 +19,12 @@ import type { CliConfig } from "./cli-config.js";
 import { withProfileRedirects } from "./profile-redirects.js";
 
 const MAX_PROFILE_REDIRECTS = 5;
+const PROFILE_DECODERS = new Map<string, () => Duplex>([
+  ["gzip", createGunzip],
+  ["x-gzip", createGunzip],
+  ["deflate", createInflate],
+  ["br", createBrotliDecompress],
+]);
 
 /** One anonymous, DNS-pinned hop; the caller owns redirect origin checks. */
 async function fetchProfileHop(
@@ -42,12 +49,29 @@ async function fetchProfileHop(
       for (const value of Array.isArray(values) ? values : values === undefined ? [] : [values])
         responseHeaders.append(name, value);
     }
-    const result = new Response(
+    let body =
       request.method === "HEAD" || [204, 205, 304].includes(response.statusCode)
         ? null
-        : (Readable.toWeb(response.body) as ReadableStream<Uint8Array>),
-      { status: response.statusCode, headers: responseHeaders },
-    );
+        : Readable.toWeb(response.body);
+    const redirecting =
+      [301, 302, 303, 307, 308].includes(response.statusCode) && responseHeaders.has("location");
+    // Redirect bodies are cancelled by the caller without being consumed.
+    if (body && !redirecting) {
+      // dispatcher.request() returns wire bytes; fetch callers expect decoded content.
+      const decoders = responseHeaders
+        .get("content-encoding")
+        ?.toLowerCase()
+        .split(",")
+        .map((coding) => PROFILE_DECODERS.get(coding.trim()));
+      // Match fetch's all-or-nothing handling, with a bounded number of decoding layers.
+      if (decoders && decoders.length <= 5 && decoders.every((decoder) => decoder !== undefined)) {
+        for (const decoder of decoders.reverse()) body = body.pipeThrough(Duplex.toWeb(decoder()));
+      }
+    }
+    const result = new Response(body as ReadableStream<Uint8Array> | null, {
+      status: response.statusCode,
+      headers: responseHeaders,
+    });
     Object.defineProperty(result, "url", { value: request.url });
     return result;
   } finally {
