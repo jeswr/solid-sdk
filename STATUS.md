@@ -1193,3 +1193,67 @@ remote Git fetch/merge or dependency lifecycle script was used. The requested
 finding is fixed, with no implementation work or open questions remaining.
 Validation limitations are the full-workspace font download and unavailable
 roborev.
+
+## Codex fix round 12 — review of `32d16199b2c3`
+
+- `37b4174d fix: normalize implicit JSON-LD numbers` shares native numeric
+  lexical conversion between the budgeted factory and the streaming parser's
+  scalar conversion seam. Implicit numbers use magnitude when choosing their
+  default datatype; context coercion retains precedence. Supplied lexical strings
+  and opaque JSON data retain their values. The adapter is instance-local.
+- `698aa8c8 fix: reject overflowing JSON-LD numbers` rejects non-finite parsed
+  numbers before JSON reserialization can substitute null, including inside
+  opaque JSON literals. Fetch returns a tool error and search skips that document.
+  Rejection is the conservative option explicitly permitted by the review.
+- `docs: record round-twelve validation` records this round's results.
+
+Added **53 fixture regression cases**: 24 for numeric conversion and 29 for
+non-finite values and finite opaque data. Coverage includes positive/negative
+integer precision, negative magnitudes at/above 1e21, explicit/implicit term
+equivalence, context coercion, arrays, lists, aliases, scoped contexts, preserved
+strings, finite numeric boundaries, and fetch/search through both adapters.
+Against the prior implementations, **17 numeric cases** and **28 overflow cases**
+fail; the remaining new cases verify preserved behavior. After both fixes, all
+**354 tests in the two focused suites pass**.
+
+Validation used Node 24.22.1 and the existing fixture-only network guard:
+
+```sh
+export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"
+export NODE_OPTIONS=--require=/tmp/sst-9s2-round8-network-guard.cjs
+export GIT_ALLOW_PROTOCOL=file
+pnpm exec turbo run build --filter '@jeswr/solid-mcp^...' --concurrency=4
+pnpm --filter @jeswr/solid-mcp exec vitest run test/bounded-rdf.test.ts test/chatgpt-tools.test.ts
+pnpm --filter @jeswr/solid-mcp run lint
+pnpm --filter @jeswr/solid-mcp run build
+pnpm --filter @jeswr/solid-mcp run typecheck
+pnpm --filter @jeswr/solid-mcp run test
+pnpm --filter @jeswr/solid-mcp run test:coverage
+TURBO_SCM_BASE=32d16199b2c32a8e69d40590a7210593641c8e98 pnpm run gate
+pnpm run gate:full
+pnpm exec turbo run test:root --concurrency=1
+pnpm run gate:full
+```
+
+Dependency build, focused suites, package lint/build/typecheck/tests, coverage,
+and the affected repository gate pass (exit 0). Package tests and coverage each
+pass **751 tests across 11 files**. Aggregate coverage is **98.16% lines / 90.84%
+branches**; configured thresholds pass. The affected gate passes **23/23 tasks**,
+7 cached, including root lint and dependent-package checks.
+
+The first full gate exits 1 after **74 successful tasks out of 242**, 12 cached:
+an unchanged SDK-layer timing assertion takes 73.19 ms against its 50 ms limit
+under concurrent build load; the other 744 root tests pass. The isolated root
+retry passes all **745 tests across 9 files** (exit 0), caching that result without
+changing code or configuration. The full-gate retry exits 1 after **116 successful
+tasks out of 285**, 74 cached, at the unchanged `@jeswr/app-suite#build`:
+`next/font` cannot download Onest, Source Code Pro or Source Serif 4 from Google
+Fonts through the fixture-only network guard. This is the font-download limitation
+recorded in earlier rounds. No unrelated changes were made.
+
+`git diff --check` passes. `roborev status` exits 127 because roborev is unavailable,
+so automated per-commit review could not run. No dependencies or manifests changed;
+`check:packages` is not applicable. No push, publication, remote Git fetch/merge or
+dependency lifecycle script was used. Both findings are fixed; no implementation
+work or open questions remain. Validation limitations are the full-workspace font
+download and unavailable roborev.
