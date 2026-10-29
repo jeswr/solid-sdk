@@ -6,6 +6,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { ContainerDataset } from "@solid/object";
 import { DataFactory } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createChatPodPort } from "../src/chat-tools.js";
 import { fetchDocument } from "../src/fetch.js";
 import { listContainer, readRdf, readResource, search } from "../src/pod.js";
 import { createFetchPodPort, type PodPort } from "../src/pod-port.js";
@@ -28,7 +29,7 @@ afterEach(async () => {
   await Promise.all(clients.splice(0).map((client) => client.close()));
 });
 
-async function fixture(adapter: string) {
+async function fixture(adapter: string, containerContentType?: string, rdfAvailable = true) {
   const parent = `${containerTurtle(ROOT, [
     { name: "sensitive-record.ttl" },
     { name: "allowed-record.ttl" },
@@ -42,11 +43,37 @@ async function fixture(adapter: string) {
     [ALLOWED]: { contentType: "text/turtle", body: '<> <urn:text> "allowed record".' },
   };
   for (const url of PARENTS) resources[url] = { contentType: "text/turtle", body: parent };
+  if (containerContentType) {
+    for (const url of PARENTS) {
+      resources[url] = {
+        contentType: containerContentType,
+        body: `<html>${SECRET}: ${PRIVATE}; ${ALLOWED}</html>`,
+        etag: '"unprojected"',
+      };
+    }
+  }
   resources[PARENTS[4]] = { contentType: "text/turtle", body: "", redirectTo: ROOT };
   const fetch: typeof globalThis.fetch = async (input, init) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    // Generic reads and the fetch tool get the server-rendered representation;
+    // list() must explicitly negotiate RDF, including when reached via a redirect.
+    if (containerContentType && PARENTS.slice(0, 4).includes(url)) {
+      const rdf =
+        rdfAvailable && new Headers(init?.headers).get("accept")?.includes("application/ld+json");
+      return new Response(rdf ? parent : resources[url].body, {
+        headers: {
+          "content-type": rdf ? "text/turtle" : containerContentType,
+          etag: '"unprojected"',
+          ...(url === PARENTS[3]
+            ? {
+                link: '<http://www.w3.org/ns/ldp#BasicContainer>; title="listing, view"; rel="alternate type"',
+              }
+            : {}),
+        },
+      });
+    }
     const response = await makeFakePod(resources).fetch(input, init);
     if (init?.method === "PUT") {
-      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
       resources[url] = {
         body: await new Response(init.body).text(),
         contentType: new Headers(init.headers).get("content-type") ?? "text/plain",
@@ -68,9 +95,11 @@ async function fixture(adapter: string) {
               contentType: resource.contentType,
               etag: '"version"',
               ...(url === PARENTS[4] ? { url: ROOT } : {}),
+              ...(containerContentType && url === PARENTS[3] ? { isContainer: true } : {}),
             };
           },
           async list() {
+            if (!rdfAvailable) throw new Error("RDF representation unavailable");
             return [SECRET, ALLOWED].map((url) => ({ url, isContainer: false }));
           },
           async write(url, body, contentType) {
@@ -115,6 +144,72 @@ function noSecret(result: unknown) {
 }
 
 describe.each(["decorated fetch", "portable"])("shared output authorization: %s", (adapter) => {
+  it("projects container bodies read through the chat adapter", async () => {
+    const { pod } = await fixture(adapter);
+    const port = createChatPodPort({ podRoot: ROOT, fetch: globalThis.fetch }, pod);
+    const read = await port.read(ROOT);
+    const text = new TextDecoder().decode(read.body);
+    noSecret(text);
+    expect(text).toContain(ALLOWED);
+    expect(read.contentType).toBe("text/turtle");
+  });
+
+  it.each([
+    "text/plain",
+    "text/html",
+  ])("refuses %s chat bodies when the RDF request is ignored", async (contentType) => {
+    const { pod } = await fixture(adapter, contentType);
+    const port = createChatPodPort({ podRoot: ROOT, fetch: globalThis.fetch }, pod);
+    await expect(port.read(PARENTS[3])).rejects.toThrow("Unsupported chat RDF content type");
+  });
+
+  describe.each(["text/plain", "text/html"])("non-RDF container: %s", (contentType) => {
+    it.each(PARENTS)("projects %s across tools, resources and public reads", async (parent) => {
+      const { client, pod, allow } = await fixture(adapter, contentType);
+      for (const name of ["fetch", "pod_read", "solid_read"]) {
+        const result = await client.callTool({ name, arguments: { id: parent, url: parent } });
+        expect(result.isError).toBeFalsy();
+        noSecret(result);
+        expect(JSON.stringify(result)).toContain(ALLOWED);
+      }
+      const resource = await client.readResource({ uri: parent });
+      noSecret(resource);
+      expect(JSON.stringify(resource)).toContain(ALLOWED);
+      const bytes = await readResource(pod, parent);
+      const fetched = await fetchDocument(pod, parent);
+      const rdf = await readRdf(pod, parent);
+      for (const result of [bytes, fetched, rdf.turtle]) {
+        noSecret(result);
+        expect(JSON.stringify(result)).toContain(ALLOWED);
+      }
+      expect(bytes.contentType).toBe("text/turtle");
+      expect(bytes.etag).toBeUndefined();
+      expect(fetched.metadata).toEqual({ contentType: "text/turtle", truncated: false });
+      const parsed = await parseRdf(fetched.text, "text/turtle", { baseIRI: parent });
+      expect(
+        [...(new ContainerDataset(parsed, DataFactory).container?.contains ?? [])].map((r) => r.id),
+      ).toEqual([ALLOWED]);
+      allow();
+      expect((await fetchDocument(pod, parent)).text).toContain(SECRET);
+    });
+
+    it("refuses container output when RDF is unavailable", async () => {
+      const { client, pod } = await fixture(adapter, contentType, false);
+      for (const operation of [fetchDocument, readResource, readRdf]) {
+        await expect(operation(pod, PARENTS[3])).rejects.toThrow();
+      }
+      for (const name of ["fetch", "pod_read", "solid_read"]) {
+        const result = await client.callTool({
+          name,
+          arguments: { id: PARENTS[3], url: PARENTS[3] },
+        });
+        expect(result.isError).toBe(true);
+        noSecret(result);
+      }
+      await expect(client.readResource({ uri: PARENTS[3] })).rejects.toThrow();
+    });
+  });
+
   describe.each(PARENTS)("container and alias %s", (parent) => {
     it.each([
       "fetch",

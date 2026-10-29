@@ -9,7 +9,6 @@ import {
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
-  requirePodScopedUrl,
   requirePodScopedWriteUrl,
   type SolidMcpConfig,
   scopedFetch,
@@ -104,21 +103,15 @@ export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPo
       return requirePodScopedWriteUrl(config, acl.href);
     },
     async read(url) {
-      if (pod) {
-        const read = await portOperation(() =>
-          new PodOutput(pod).read(url, { accept: "text/turtle" }),
-        );
-        requireChatRdf(read.contentType || "text/turtle");
-        return { ...read, contentType: read.contentType || "text/turtle" };
-      }
-      const response = await rdfFetch(requirePodScopedUrl(config, url), {
-        headers: { accept: "text/turtle" },
-      });
-      check(response);
-      return {
-        body: new Uint8Array(await response.arrayBuffer()),
-        contentType: response.headers.get("content-type") ?? "text/turtle",
-      };
+      return portOperation(() =>
+        withPodReadLimits(async () => {
+          const output = new PodOutput(pod ?? createFetchPodPort(config));
+          const raw = await output.read(url, { accept: "text/turtle" });
+          requireChatRdf(raw.contentType || "text/turtle");
+          const read = await output.representation(url, raw);
+          return { ...read, contentType: read.contentType || "text/turtle" };
+        }),
+      );
     },
     async list(container) {
       // ChatWriter reads metadata and every message before returning a result.

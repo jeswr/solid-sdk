@@ -355,7 +355,8 @@ describe("one bounded search across discovery and scanning", () => {
           ? [POD, finalUrl, note]
           : stage === "index"
             ? [WEBID, INDEX, finalUrl, note, POD]
-            : [WEBID, INDEX, note, finalUrl, POD],
+            : // Portable authorization checks the resolved resource separately.
+              [WEBID, INDEX, note, finalUrl, finalUrl, POD],
       );
     }
   });

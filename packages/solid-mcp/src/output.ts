@@ -172,16 +172,30 @@ export class PodOutput {
     return dataset;
   }
 
-  async rdf(url: string, read: PodReadResult, dataset: Store): Promise<Store> {
+  /** Recognize containers before interpreting or returning any server-rendered body. */
+  async containerRdf(
+    url: string,
+    read: PodReadResult,
+    dataset?: Store,
+  ): Promise<Store | undefined> {
     return withPodReadLimits(async () => {
       const finalUrl = read.url ?? url;
-      const typedContainer = new ContainerDataset(dataset, DataFactory).container;
+      const typedContainer = dataset && new ContainerDataset(dataset, DataFactory).container;
       const membershipSubject = dataset
-        .getSubjects(DataFactory.namedNode(`${LDP}contains`), null, null)
+        ?.getSubjects(DataFactory.namedNode(`${LDP}contains`), null, null)
         .find((subject) => subject.termType === "NamedNode");
-      // Classify by representation as well as URL: slashless, query and redirect
-      // aliases must not turn a container into an unfiltered ordinary RDF read.
-      if (isContainerUrl(finalUrl) || typedContainer || membershipSubject) {
+      const containerAddress = (address: string) =>
+        isContainerUrl(address) ||
+        new URL(address).pathname === new URL(this.pod.root).pathname.slice(0, -1);
+      // Either end of an alias, response type links, and RDF membership identify
+      // a container. Never interpret a non-RDF listing as ordinary document data.
+      if (
+        containerAddress(url) ||
+        containerAddress(finalUrl) ||
+        read.isContainer ||
+        typedContainer ||
+        membershipSubject
+      ) {
         const containerUrl = typedContainer
           ? requirePodScopedUrl({ podRoot: this.pod.root }, typedContainer.id)
           : membershipSubject
@@ -190,37 +204,32 @@ export class PodOutput {
         if (!(await this.allows(containerUrl))) throw new Error("purpose denied");
         return this.container(containerUrl);
       }
-      // An authorized document owns all of its links, literals and descriptions.
-      return dataset;
+      return undefined;
     });
+  }
+
+  async rdf(url: string, read: PodReadResult, dataset: Store): Promise<Store> {
+    // An authorized document owns all of its links, literals and descriptions.
+    return (await this.containerRdf(url, read, dataset)) ?? dataset;
   }
 
   /** All byte/text resource paths use this before choosing an MCP representation. */
   async representation(url: string, read: PodReadResult): Promise<PodReadResult> {
     return withPodReadLimits(async () => {
       const contentType = mediaType(read.contentType);
-      let body = read.body;
-      let projectedType = read.contentType;
-      let changed = false;
-      if (RDF_MEDIA_TYPES.has(contentType)) {
-        const dataset = await parseRdf(new TextDecoder().decode(body), contentType, {
+      let projected = await this.containerRdf(url, read);
+      if (!projected && RDF_MEDIA_TYPES.has(contentType)) {
+        const dataset = await parseRdf(new TextDecoder().decode(read.body), contentType, {
           baseIRI: read.url ?? url,
         });
-        const filtered = await this.rdf(url, read, dataset);
-        changed = filtered !== dataset;
-        if (changed) {
-          body = new TextEncoder().encode(serializeBoundedTurtle(filtered));
-          projectedType = "text/turtle";
-        }
-      } else if (isContainerUrl(read.url ?? url)) {
-        body = new TextEncoder().encode(
-          serializeBoundedTurtle(await this.container(read.url ?? url)),
-        );
-        projectedType = "text/turtle";
-        changed = true;
+        projected = await this.containerRdf(url, read, dataset);
       }
-      return changed
-        ? { body, contentType: projectedType, ...(read.url ? { url: read.url } : {}) }
+      return projected
+        ? {
+            body: new TextEncoder().encode(serializeBoundedTurtle(projected)),
+            contentType: "text/turtle",
+            ...(read.url ? { url: read.url } : {}),
+          }
         : read;
     });
   }

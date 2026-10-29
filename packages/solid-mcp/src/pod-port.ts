@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { fetchRdf } from "@jeswr/fetch-rdf";
+import { isContainerUrl } from "@jeswr/guarded-fetch";
 import { ContainerDataset } from "@solid/object";
 import { DataFactory } from "n3";
 import {
@@ -40,6 +41,8 @@ export interface PodReadResult {
   etag?: string;
   /** Final representation URL after validated redirects, when available. */
   url?: string;
+  /** Container identified by the backend, including LDP type links on redirect hops. */
+  isContainer?: boolean;
 }
 
 /** Minimal portable container entry; fetch-backed listings retain legacy metadata. */
@@ -84,6 +87,23 @@ export function isFetchPodRead(read: PodPort["read"]): boolean {
   return nativeReads.has(read);
 }
 
+/** Type relations may share a Link header with quoted commas and other relations. */
+function hasContainerTypeLink(header: string): boolean {
+  for (const link of header.matchAll(/<([^<>]*)>((?:[^"<,]|"(?:[^"\\]|\\.)*")*)/g)) {
+    if (!/^http:\/\/www\.w3\.org\/ns\/ldp#(?:Basic|Direct|Indirect)?Container$/.test(link[1] ?? ""))
+      continue;
+    for (const rel of (link[2] ?? "").matchAll(
+      /(?:^|;)\s*rel\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^\s;,]+))/gi,
+    )) {
+      if (
+        (rel[1] ?? rel[2] ?? "").replace(/\\(.)/g, "$1").toLowerCase().split(/\s+/).includes("type")
+      )
+        return true;
+    }
+  }
+  return false;
+}
+
 /** Internal: configured search defaults for a legacy source or fetch adapter. */
 export function podSearchLimits(source: PodSource): SolidMcpConfig["searchLimits"] {
   return "root" in source ? searchLimits.get(source) : source.searchLimits;
@@ -100,7 +120,21 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
       // Tool/resource callers scope-check first, so clients cannot use it as an escape.
       const profile = url === config.webId;
       const target = profile ? url : requirePodScopedUrl(config, url);
-      const transport = podOperationFetch(config.fetch);
+      let finalUrl = target;
+      let isContainer = false;
+      const boundedFetch = podOperationFetch(config.fetch);
+      const transport: typeof globalThis.fetch = async (input, init) => {
+        const requestedUrl = input instanceof Request ? input.url : input.toString();
+        const response = await boundedFetch(input, init);
+        finalUrl = response.url || requestedUrl;
+        // Retain container evidence across the whole guarded redirect chain,
+        // even when a transport omits Response.url (e.g. a portable test seam).
+        isContainer ||=
+          isContainerUrl(requestedUrl) ||
+          isContainerUrl(finalUrl) ||
+          hasContainerTypeLink(response.headers.get("link") ?? "");
+        return response;
+      };
       const fetcher =
         profile && podScopedUrlOrUndefined(config, url) === undefined
           ? transport
@@ -128,7 +162,8 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
           .trim()
           .toLowerCase(),
         etag: response.headers.get("etag") ?? undefined,
-        ...(response.url ? { url: response.url } : {}),
+        ...(response.url || finalUrl !== target ? { url: finalUrl } : {}),
+        ...(isContainer ? { isContainer: true } : {}),
       };
     },
     async list(url): Promise<PodChild[]> {

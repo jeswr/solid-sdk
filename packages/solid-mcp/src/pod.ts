@@ -191,13 +191,15 @@ export async function readRdf(source: PodSource, url: string): Promise<ReadRdfRe
     const read = await output.read(target, {
       accept: RDF_ACCEPT,
     });
-    const dataset = await output.rdf(
-      target,
-      read,
-      await parseRdf(new TextDecoder().decode(read.body), read.contentType || null, {
-        baseIRI: read.url ?? target,
-      }),
-    );
+    const dataset =
+      (await output.containerRdf(target, read)) ??
+      (await output.rdf(
+        target,
+        read,
+        await parseRdf(new TextDecoder().decode(read.body), read.contentType || null, {
+          baseIRI: read.url ?? target,
+        }),
+      ));
     const turtle = await serializeTurtle(dataset);
     return { turtle, dataset };
   });

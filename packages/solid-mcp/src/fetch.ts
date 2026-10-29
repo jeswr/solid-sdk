@@ -63,6 +63,18 @@ export async function fetchDocument(source: PodSource, id: string): Promise<Fetc
       url: target,
       metadata: { contentType, truncated: false, ...(etag ? { etag } : {}) },
     };
+    try {
+      const container = await output.containerRdf(target, read);
+      if (container) {
+        result.metadata = { contentType: "text/turtle", truncated: false };
+        result.text = serializeBoundedTurtle(container);
+        return result;
+      }
+    } catch (error) {
+      if (!(error instanceof RdfLimitError)) throw error;
+      result.metadata = { contentType: "text/turtle", truncated: true };
+      return result;
+    }
     const rdf = RDF_MEDIA_TYPES.has(contentType);
     if (!rdf && !contentType.startsWith("text/")) {
       void response.body?.cancel().catch(() => {});
@@ -78,7 +90,10 @@ export async function fetchDocument(source: PodSource, id: string): Promise<Fetc
         const dataset = await parseBoundedRdf(decoded, contentType, response.url || target);
         const filtered = await output.rdf(target, read, dataset);
         result.text = serializeBoundedTurtle(filtered);
-        if (filtered !== dataset) delete result.metadata.etag;
+        if (filtered !== dataset) {
+          result.metadata.contentType = "text/turtle";
+          delete result.metadata.etag;
+        }
       } catch (error) {
         if (!(error instanceof RdfLimitError)) throw error;
         result.metadata.truncated = true;

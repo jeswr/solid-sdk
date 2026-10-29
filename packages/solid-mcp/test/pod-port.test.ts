@@ -83,6 +83,78 @@ describe("fetch PodPort", () => {
     });
   });
 
+  it.each([
+    "URL on redirect hop",
+    "type link on redirect hop",
+    "type link on final response",
+  ])("retains container identity from %s even without Response.url", async (kind) => {
+    const alias = `${ROOT}alias`;
+    const intermediate = `${ROOT}listing/`;
+    const finalUrl = `${ROOT}rendered`;
+    const link =
+      '<urn:other>; title="other, view"; rel="alternate", <http://www.w3.org/ns/ldp#DirectContainer>; rel="type"';
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+      const url = String(input);
+      if (url === alias)
+        return new Response(null, {
+          status: 302,
+          headers: {
+            location: kind === "URL on redirect hop" ? intermediate : finalUrl,
+            ...(kind === "type link on redirect hop" ? { link } : {}),
+          },
+        });
+      if (url === intermediate)
+        return new Response(null, { status: 302, headers: { location: finalUrl } });
+      return new Response("server-managed listing", {
+        headers: {
+          "content-type": "text/html",
+          ...(kind === "type link on final response" ? { link } : {}),
+        },
+      });
+    });
+    const pod = createFetchPodPort({ fetch, podRoot: ROOT });
+    expect(await pod.read(alias)).toMatchObject({ url: finalUrl, isContainer: true });
+    // Returning raw bytes here is the adapter contract; all public read paths
+    // must honor the retained container signal before returning those bytes.
+    pod.list = vi.fn(async () => []);
+    const result = await readResource(pod, alias);
+    expect(result.contentType).toBe("text/turtle");
+    expect(result.text).not.toContain("server-managed listing");
+    expect(pod.list).toHaveBeenCalledWith(finalUrl);
+  });
+
+  it.each([
+    ["Container", '"type"'],
+    ["BasicContainer", "type"],
+    ["DirectContainer", '"alternate type"'],
+    ["IndirectContainer", '"ty\\pe"'],
+  ])("projects slashless containers advertised as ldp:%s with rel=%s", async (type, rel) => {
+    const fetch = responding(200, {
+      "content-type": "text/html",
+      link: `<http://www.w3.org/ns/ldp#${type}>; title="listing, view"; REL=${rel}`,
+    });
+    const pod = createFetchPodPort({ fetch, podRoot: ROOT });
+    pod.list = vi.fn(async () => []);
+    expect((await readResource(pod, FILE)).contentType).toBe("text/turtle");
+    expect(pod.list).toHaveBeenCalledWith(FILE);
+  });
+
+  it("preserves an ordinary document with an unrelated Link relation", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(
+      async () =>
+        new Response("ordinary HTML", {
+          headers: {
+            "content-type": "text/html",
+            link: '<http://www.w3.org/ns/ldp#Container>; rel="describedby"; title="rel=type"',
+          },
+        }),
+    );
+    const pod = createFetchPodPort({ fetch, podRoot: ROOT });
+    pod.list = vi.fn(async () => []);
+    expect((await readResource(pod, FILE)).text).toBe("ordinary HTML");
+    expect(pod.list).not.toHaveBeenCalled();
+  });
+
   it.each(["legacy", "PodPort"])("defaults headerless RDF reads to Turtle via %s", async (mode) => {
     const fetch = vi.fn<typeof globalThis.fetch>(
       async () =>

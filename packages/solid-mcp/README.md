@@ -71,7 +71,8 @@ and refusal of all mutation redirects. Mutations reject the root and its slashle
 alias. Both adapter and server default to read-only; opt into writes at both layers.
 The configured WebID remains readable for Type Index discovery even when off-pod;
 off-pod profile redirects are refused. Client tools and resources are always confined to the pod root. A custom PodPort
-must enforce its data boundary and mutation policy too.
+must enforce its data boundary and mutation policy too, and retain otherwise ambiguous
+container identities in `PodReadResult.isContainer`.
 Every tool, including `fetch` and both search names, uses the injected port's current
 `read` and `list` methods. Authorization decorators, filtered listings, and redacted
 read results remain authoritative. Fetch-backed streaming and parsing limits are
@@ -88,13 +89,17 @@ the write; the write can succeed even if that receipt is denied.
 
 Container representations are rebuilt from authorized children through typed
 RDF accessors and the N3 Writer. This applies to container URLs, slashless roots,
-query/redirect aliases and RDF identified as a container or containing membership
-statements. Membership and server-managed descriptions are retained only for authorized
+query/redirect aliases, LDP container type Link headers (including redirect hops),
+and RDF identified as a container or containing membership statements.
+Membership and server-managed descriptions are retained only for authorized
 children. The content of an authorized document is its own data: prose, JSON
 fields and RDF terms are never scanned for URLs, redacted or followed for further
 authorization. Backend errors are mapped to fixed public diagnostics so
 rejected URLs, names and values cannot escape through error messages. Authorization
 decisions are never retained across operations or callers.
+
+Server-rendered container bodies, including plain text and HTML, are never returned.
+The listing requests RDF and fails closed when it cannot produce the filtered graph.
 Initial reads and container projection share a 5000 ms deadline and a 1 MiB
 per-response limit. Native authorization-only reads discard unused bodies;
 decorated reads receive complete bodies up to the input limit. Larger downloads
@@ -124,7 +129,9 @@ as RDF even when their URLs have no file extension.
 containing `{id,title,text,url,metadata}`. Titles use the decoded filename.
 Metadata contains `contentType`, `truncated`, and an optional `etag`. RDF is
 parsed with bounded N3/JSON-LD parsers and serialized as Turtle; `text/*` is
-returned as text. Named-graph RDF is rendered as a union graph (Turtle has no graph labels).
+returned as text for ordinary documents. Recognized containers always return projected
+Turtle with its own content type and no source ETag. Named-graph RDF is rendered as a
+union graph (Turtle has no graph labels).
 Other media types, including non-RDF `application/json`, return empty text
 and metadata without downloading the body through an undecorated fetch-backed adapter.
 Custom PodPorts return byte arrays and must bound their own backend reads; the

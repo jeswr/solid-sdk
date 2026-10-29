@@ -246,7 +246,9 @@ describe.each([
     fetchSourceDocument(portable ? createFetchPodPort(config) : config, id);
   it("uses the hostname as the title when the pod root has no path segment", async () => {
     const root = "https://alice.example/";
-    const pod = makeFakePod({ [root]: { contentType: "text/plain", body: "Hello" } });
+    const pod = makeFakePod({
+      [root]: { contentType: "text/turtle", body: containerTurtle(root, []) },
+    });
     expect((await fetchDocument({ fetch: pod.fetch, podRoot: root }, root)).title).toBe(
       "alice.example",
     );
@@ -565,9 +567,9 @@ describe.each([
 
   it("treats absent Content-Type as binary and handles an empty response", async () => {
     const fetch = vi.fn(async () => new Response(null));
-    const result = await fetchDocument({ fetch, podRoot: POD }, POD);
+    const result = await fetchDocument({ fetch, podRoot: POD }, `${POD}empty`);
     expect(result).toMatchObject({
-      title: "pod",
+      title: "empty",
       text: "",
       metadata: { contentType: "application/octet-stream", truncated: false },
     });
