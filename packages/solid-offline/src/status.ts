@@ -126,7 +126,9 @@ export function createStatusSurface(options: StatusSurfaceOptions = {}): Offline
   // and unread updates survive until the last overlapping attempt settles.
   const resources = new Map<string, ResourceFreshness>();
   // Account for every observed attempt, even while a URL is absent from the snapshot.
-  const revalidations = new Map<string, number>();
+  // IDs prevent completions of starts missed before subscription from settling
+  // newer work. Legacy URL-only senders retain separate counter-based accounting.
+  const revalidations = new Map<string, { attempts: Set<string>; legacy: number }>();
   let online = isOnline();
 
   // Cached immutable snapshot — `useSyncExternalStore` REQUIRES `getSnapshot` to
@@ -166,9 +168,12 @@ export function createStatusSurface(options: StatusSurfaceOptions = {}): Offline
   const onMessage = (event: MessageEvent): void => {
     const data = event.data as OfflineEvent | undefined;
     if (typeof data?.url !== 'string') return;
-    const active = revalidations.get(data.url) ?? 0;
+    const active = revalidations.get(data.url);
     if (data.event === 'revalidating') {
-      revalidations.set(data.url, active + 1);
+      const pending = active ?? { attempts: new Set<string>(), legacy: 0 };
+      if (data.attemptId !== undefined) pending.attempts.add(data.attemptId);
+      else pending.legacy += 1;
+      revalidations.set(data.url, pending);
       if (resources.has(data.url)) emitIfChanged(data.url);
       return;
     }
@@ -178,8 +183,11 @@ export function createStatusSurface(options: StatusSurfaceOptions = {}): Offline
       data.event !== 'revalidate-failed'
     )
       return;
-    if (active > 1) revalidations.set(data.url, active - 1);
-    else revalidations.delete(data.url);
+    if (active) {
+      if (data.attemptId !== undefined) active.attempts.delete(data.attemptId);
+      else active.legacy = Math.max(0, active.legacy - 1);
+      if (active.attempts.size === 0 && active.legacy === 0) revalidations.delete(data.url);
+    }
 
     // Lifecycle accounting survives tracking changes; only tracked URLs are visible.
     if (!resources.has(data.url)) return;

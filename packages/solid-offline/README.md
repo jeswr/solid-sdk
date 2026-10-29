@@ -61,7 +61,7 @@ caller-supplied fetch, and cache state is scoped by WebID.
 
 Background SWR reads, forced `Cache-Control: no-cache` reads, notification updates,
 container-listing refreshes, and reconnect sweeps broadcast on `solid-offline` (or the
-configured channel). Every started attempt emits `{ url, event: 'revalidating' }`, followed
+configured channel). Every started attempt emits `{ url, event: 'revalidating', attemptId }`, followed
 by exactly one terminal message:
 
 | Event | Meaning | Status for a tracked URL |
@@ -71,8 +71,9 @@ by exactly one terminal message:
 | `updated` | Replacement, deletion, revocation, or a purge completed | `updated`; re-read |
 | `revalidate-failed` | Network/offline, storage, or non-authoritative HTTP failure | Retain settled freshness, including manual marks |
 
-Messages contain only `url` and `event`; no response bytes, headers, credentials, or error
-details. `OfflineEvent` includes all messages. `UpdatedEvent` and `offline.onUpdated`
+Messages contain only `url`, `event`, and an opaque random `attemptId` shared by the start
+and its terminal message; no response bytes, headers, credentials, or error details.
+`OfflineEvent` includes all messages. `UpdatedEvent` and `offline.onUpdated`
 remain available; its optional `etag` field remains type-compatible but is not emitted.
 Direct delete purges also emit balanced `revalidating` / `updated` events (or
 `revalidate-failed` if the purge fails), without fetching. Offline cache hits,
@@ -80,7 +81,10 @@ ETag notification short-circuits, and skipped SWR validations emit no lifecycle 
 An unsolicited 304 on an unconditional listing refresh fails confirmation.
 
 The status surface updates only URLs already tracked by `markFresh`, `markStale`, or
-`markPending`. Parallel attempts keep a URL pending until all settle. Settled freshness
+`markPending`. Parallel observed attempts keep a URL pending until all settle. Attempt IDs
+ensure a completion whose start predates subscription cannot settle newer observed work,
+including when `offline.status` is created lazily. Older senders without IDs retain URL-based
+counting; they cannot provide this subscription-race guarantee. Settled freshness
 records manual marks made during those attempts, so failures preserve the latest observation.
 An unread `updated` survives later 304 confirmations until the consumer marks its read.
 `markFresh` acknowledges a fresh read, including during pending work. `forget` drops its status history.

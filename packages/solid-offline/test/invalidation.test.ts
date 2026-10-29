@@ -112,7 +112,7 @@ describe('ETag short-circuit', () => {
 });
 
 describe('Update → revalidate → broadcast', () => {
-  it('200 replaces bytes + metadata and broadcasts URL-only events', async () => {
+  it('200 replaces bytes + metadata and broadcasts correlated events', async () => {
     const h = await harness([() => turtleResponse('<#x> <#y> <#z> .', { etag: '"v2"' })]);
     await seed(h, DOC, 'old', '"v1"');
 
@@ -123,8 +123,8 @@ describe('Update → revalidate → broadcast', () => {
     // Conditional GET carried our old ETag.
     expect(h.calls[0]?.headers.get('if-none-match')).toBe('"v1"');
     expect(h.broadcast.messages).toEqual([
-      { url: DOC, event: 'revalidating' },
-      { url: DOC, event: 'updated' },
+      { url: DOC, event: 'revalidating', attemptId: expect.any(String) },
+      { url: DOC, event: 'updated', attemptId: expect.any(String) },
     ]);
     const rec = await h.meta.getByUrl(DOC);
     expect(rec[0]?.etag).toBe('"v2"');
@@ -139,8 +139,8 @@ describe('Update → revalidate → broadcast', () => {
 
     expect(outcome.kind).toBe('304-confirmed');
     expect(h.broadcast.messages).toEqual([
-      { url: DOC, event: 'revalidating' },
-      { url: DOC, event: 'revalidated' },
+      { url: DOC, event: 'revalidating', attemptId: expect.any(String) },
+      { url: DOC, event: 'revalidated', attemptId: expect.any(String) },
     ]);
     const rec = await h.meta.getByUrl(DOC);
     expect(rec[0]?.fetchedAt).toBe(1_000_000); // touched
@@ -158,8 +158,8 @@ describe('Delete + forbidden', () => {
     expect(outcome.kind).toBe('deleted');
     expect(h.calls).toHaveLength(0); // a Delete needs no revalidation
     expect(h.broadcast.messages).toEqual([
-      { url: DOC, event: 'revalidating' },
-      { url: DOC, event: 'updated' },
+      { url: DOC, event: 'revalidating', attemptId: expect.any(String) },
+      { url: DOC, event: 'updated', attemptId: expect.any(String) },
     ]);
     expect(await h.meta.getByUrl(DOC)).toHaveLength(0);
     expect(await h.cache.match(keyRequest(DOC, 'accept=text/turtle'))).toBeUndefined();
@@ -176,8 +176,8 @@ describe('Delete + forbidden', () => {
 
     expect(outcome.kind).toBe('deleted');
     expect(h.broadcast.messages).toEqual([
-      { url: DOC, event: 'revalidating' },
-      { url: DOC, event: 'updated' },
+      { url: DOC, event: 'revalidating', attemptId: expect.any(String) },
+      { url: DOC, event: 'updated', attemptId: expect.any(String) },
     ]);
     expect(await h.meta.getByUrl(DOC)).toHaveLength(0);
   });
@@ -201,8 +201,8 @@ describe('Add/Remove → container listing re-fetch', () => {
     expect(h.calls[0]?.url).toBe(CONTAINER);
     expect(h.calls[0]?.headers.get('if-none-match')).toBeNull();
     expect(h.broadcast.messages).toEqual([
-      { url: CONTAINER, event: 'revalidating' },
-      { url: CONTAINER, event: 'updated' },
+      { url: CONTAINER, event: 'revalidating', attemptId: expect.any(String) },
+      { url: CONTAINER, event: 'updated', attemptId: expect.any(String) },
     ]);
   });
 
@@ -296,8 +296,8 @@ describe('revalidation 2xx but non-cacheable (no-store/private) purges the stale
     expect(await h.meta.getByUrl(DOC)).toHaveLength(0);
     expect(await h.cache.match(keyRequest(DOC, 'accept=text/turtle'))).toBeUndefined();
     expect(h.broadcast.messages).toEqual([
-      { url: DOC, event: 'revalidating' },
-      { url: DOC, event: 'updated' },
+      { url: DOC, event: 'revalidating', attemptId: expect.any(String) },
+      { url: DOC, event: 'updated', attemptId: expect.any(String) },
     ]);
   });
 });

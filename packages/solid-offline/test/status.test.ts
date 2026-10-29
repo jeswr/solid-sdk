@@ -169,6 +169,54 @@ describe('status surface — snapshot + subscription', () => {
 const URL = 'https://pod/doc';
 describe('revalidation status transitions', () => {
   it.each([
+    'identified',
+    'legacy',
+  ] as const)('does not let unknown attempt IDs consume %s work', (kind) => {
+    const channel = new MockChannel();
+    const s = make({ channel });
+    s.markStale(URL);
+    const identity = kind === 'identified' ? { attemptId: 'current' } : {};
+    channel.emit({ url: URL, event: 'revalidating', ...identity });
+    for (const event of ['revalidated', 'updated', 'revalidate-failed'] as const) {
+      channel.emit({ url: URL, event, attemptId: 'unseen' });
+      expect(s.getSnapshot().pending).toBe(1);
+    }
+    channel.emit({ url: URL, event: 'revalidate-failed', ...identity });
+    expect(s.getSnapshot()).toMatchObject({ pending: 0, resources: { [URL]: 'updated' } });
+  });
+
+  it('settles identified and legacy attempts independently', () => {
+    const channel = new MockChannel();
+    const s = make({ channel });
+    s.markStale(URL);
+    channel.emit({ url: URL, event: 'revalidating', attemptId: 'current' });
+    channel.emit({ url: URL, event: 'revalidated' });
+    expect(s.getSnapshot().pending).toBe(1);
+    channel.emit({ url: URL, event: 'revalidating' });
+    channel.emit({ url: URL, event: 'revalidate-failed', attemptId: 'current' });
+    expect(s.getSnapshot().pending).toBe(1);
+    channel.emit({ url: URL, event: 'revalidate-failed', attemptId: 'current' });
+    expect(s.getSnapshot().pending).toBe(1);
+    channel.emit({ url: URL, event: 'revalidate-failed' });
+    expect(s.getSnapshot()).toMatchObject({ pending: 0, resources: { [URL]: 'fresh' } });
+  });
+
+  it('does not double-count identified starts or let duplicate completions settle another attempt', () => {
+    const channel = new MockChannel();
+    const s = make({ channel });
+    s.markStale(URL);
+    channel.emit({ url: URL, event: 'revalidating', attemptId: 'first' });
+    channel.emit({ url: URL, event: 'revalidating', attemptId: 'first' });
+    channel.emit({ url: URL, event: 'revalidated', attemptId: 'first' });
+    expect(s.getSnapshot().pending).toBe(0);
+    channel.emit({ url: URL, event: 'revalidating', attemptId: 'second' });
+    channel.emit({ url: URL, event: 'revalidated', attemptId: 'first' });
+    expect(s.getSnapshot().pending).toBe(1);
+    channel.emit({ url: URL, event: 'revalidate-failed', attemptId: 'second' });
+    expect(s.getSnapshot().pending).toBe(0);
+  });
+
+  it.each([
     'revalidated',
     'updated',
     'revalidate-failed',

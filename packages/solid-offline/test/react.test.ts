@@ -13,6 +13,7 @@
  */
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createOfflineClient } from '../src/index.js';
 import { useOfflineResource, useOfflineStatus } from '../src/react.js';
 import { createStatusSurface } from '../src/status.js';
 import type { OfflineEvent } from '../src/types.js';
@@ -35,6 +36,53 @@ async function broadcast(event: OfflineEvent): Promise<void> {
 }
 
 describe('useOfflineStatus', () => {
+  // AUTHORED-BY Codex GPT-6.1-Sol
+  it.each([
+    'revalidated',
+    'updated',
+    'revalidate-failed',
+  ] as const)('keeps lazy client syncing after an unseen %s', async (event) => {
+    const channelName = `lazy-status-${crypto.randomUUID()}`;
+    const publisher = new BroadcastChannel(channelName);
+    const offline = createOfflineClient({ channelName });
+    // The lazy status channel does not exist when this attempt starts.
+    publisher.postMessage({ url: 'https://pod/doc', event: 'revalidating', attemptId: 'older' });
+    const surface = offline.status;
+    surface.markStale('https://pod/doc');
+    surface.markStale('https://pod/barrier');
+    const { result, unmount } = renderHook(() => useOfflineStatus(surface));
+    try {
+      await act(async () => {
+        publisher.postMessage({
+          url: 'https://pod/doc',
+          event: 'revalidating',
+          attemptId: 'newer',
+        });
+      });
+      await waitFor(() => expect(result.current.syncing).toBe(true));
+      await act(async () => {
+        publisher.postMessage({ url: 'https://pod/doc', event, attemptId: 'older' });
+        publisher.postMessage({ url: 'https://pod/barrier', event: 'updated' });
+      });
+      // Same-channel ordering proves the old completion has been processed.
+      await waitFor(() => expect(result.current.resources['https://pod/barrier']).toBe('updated'));
+      expect(result.current.syncing).toBe(true);
+      expect(result.current.pending).toBe(1);
+      await act(async () => {
+        publisher.postMessage({
+          url: 'https://pod/doc',
+          event: 'revalidate-failed',
+          attemptId: 'newer',
+        });
+      });
+      await waitFor(() => expect(result.current.syncing).toBe(false));
+    } finally {
+      unmount();
+      offline.close();
+      publisher.close();
+    }
+  });
+
   it('re-renders when a tracked resource is broadcast updated', async () => {
     const surface = createStatusSurface({ channelName: CHANNEL, isOnline: () => true });
     surface.markFresh('https://pod/doc'); // track it

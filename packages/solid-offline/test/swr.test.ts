@@ -136,14 +136,14 @@ describe('HIT + ONLINE → serve cached + revalidate (304 confirms)', () => {
     const rec = await h.meta.get('https://pod/a accept=text/turtle');
     expect(rec?.fetchedAt).toBe(5000); // touched
     expect(h.broadcast.messages).toEqual([
-      { url: 'https://pod/a', event: 'revalidating' },
-      { url: 'https://pod/a', event: 'revalidated' },
+      { url: 'https://pod/a', event: 'revalidating', attemptId: expect.any(String) },
+      { url: 'https://pod/a', event: 'revalidated', attemptId: expect.any(String) },
     ]);
   });
 });
 
 describe('HIT + ONLINE → revalidate (200 replaces + broadcasts updated)', () => {
-  it('replaces entry and posts URL-only progress and updated events', async () => {
+  it('replaces entry and posts correlated progress and updated events', async () => {
     const h = await harness([
       () => turtleResponse('original', { etag: '"e1"' }),
       () => turtleResponse('changed', { etag: '"e2"' }),
@@ -158,8 +158,8 @@ describe('HIT + ONLINE → revalidate (200 replaces + broadcasts updated)', () =
     expect(outcome).toEqual({ kind: '200-replaced', etag: '"e2"' });
     // ...and the cache + broadcast reflect the new version.
     expect(h.broadcast.messages).toEqual([
-      { url: 'https://pod/a', event: 'revalidating' },
-      { url: 'https://pod/a', event: 'updated' },
+      { url: 'https://pod/a', event: 'revalidating', attemptId: expect.any(String) },
+      { url: 'https://pod/a', event: 'updated', attemptId: expect.any(String) },
     ]);
     const rec = await h.meta.get('https://pod/a accept=text/turtle');
     expect(rec?.etag).toBe('"e2"');

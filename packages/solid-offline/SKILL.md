@@ -49,7 +49,8 @@ Import `solid-offline/worker` from an origin-served service-worker entry. Import
 Use `offline.status` or `createStatusSurface()` as a stable `subscribe`/`getSnapshot` store. `useOfflineStatus` and `useOfflineResource` should remain thin `useSyncExternalStore` adapters; caching policy stays in the service worker.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
-The worker broadcasts URL-only `OfflineEvent` messages: `revalidating` starts an attempt;
+The worker broadcasts `OfflineEvent` messages containing only URL, event, and an opaque
+random `attemptId` shared by an attempt's start and terminal messages: `revalidating` starts an attempt;
 exactly one of `updated` (replacement/purge), `revalidated` (confirmed 304), or
 `revalidate-failed` (network/offline/storage/non-authoritative response) terminates it.
 Keep `UpdatedEvent` source-compatible; do not put ETags, bytes, headers, credentials, or
@@ -58,7 +59,11 @@ fetching; purge errors terminate with `revalidate-failed`.
 
 Track URLs with the surface's mark methods. For tracked URLs, start → `pending`,
 confirmed 304 → `fresh`, replacement/purge → `updated`, and failure → the prior state.
-Parallel attempts remain pending until all settle. Keep settled freshness separate from
+Parallel observed attempts remain pending until all settle. Correlate completions by ID,
+so a missed start before subscription cannot settle newer work (including lazy `offline.status`).
+Keep legacy ID-less messages source-compatible with separate URL-based counting; that
+older protocol cannot guarantee correct accounting across missed starts.
+Keep settled freshness separate from
 active-attempt counts: manual marks update the settled state while pending, and failures
 retain that state. An unread `updated` survives 304 confirmations until a consumer mark
 acknowledges its read. Offline cache hits and no-op/skipped

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Public + internal types for solid-offline (P0/P1).
  *
@@ -202,14 +203,18 @@ export type AclStatus = 'ok' | 'forbidden' | 'not-found';
 export interface UpdatedEvent {
   url: string;
   event: 'updated';
-  /** Optional legacy field; current worker messages contain only URL and event. */
+  /** Opaque lifecycle identifier; optional for compatibility with older senders. */
+  attemptId?: string;
+  /** Optional legacy field; current worker messages omit response metadata. */
   etag?: string;
 }
 
-/** URL-only progress messages; never include response bytes, headers or credentials. */
+/** Progress messages; never include response bytes, headers or credentials. */
 export interface RevalidationEvent {
   url: string;
   event: 'revalidating' | 'revalidated' | 'revalidate-failed';
+  /** Opaque lifecycle identifier; optional for compatibility with older senders. */
+  attemptId?: string;
 }
 
 /** All messages on the offline BroadcastChannel. UpdatedEvent remains source-compatible. */

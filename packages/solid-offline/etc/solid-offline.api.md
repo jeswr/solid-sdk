@@ -495,13 +495,17 @@ type AclStatus = 'ok' | 'forbidden' | 'not-found';
 interface UpdatedEvent {
     url: string;
     event: 'updated';
-    /** Optional legacy field; current worker messages contain only URL and event. */
+    /** Opaque lifecycle identifier; optional for compatibility with older senders. */
+    attemptId?: string;
+    /** Optional legacy field; current worker messages omit response metadata. */
     etag?: string;
 }
-/** URL-only progress messages; never include response bytes, headers or credentials. */
+/** Progress messages; never include response bytes, headers or credentials. */
 interface RevalidationEvent {
     url: string;
     event: 'revalidating' | 'revalidated' | 'revalidate-failed';
+    /** Opaque lifecycle identifier; optional for compatibility with older senders. */
+    attemptId?: string;
 }
 /** All messages on the offline BroadcastChannel. UpdatedEvent remains source-compatible. */
 type OfflineEvent = UpdatedEvent | RevalidationEvent;

@@ -42,6 +42,42 @@ const outcomes = [
   { name: 'offline', status: -1, event: 'revalidate-failed' },
 ] as const;
 
+it('pairs concurrent attempts with distinct IDs across broadcasters', async () => {
+  const first = new MockBroadcaster();
+  const second = new MockBroadcaster();
+  let settleFirst!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    settleFirst = resolve;
+  });
+  const older = reportRevalidation(
+    URL,
+    first,
+    () => pending,
+    () => 'revalidated',
+  );
+  await reportRevalidation(
+    URL,
+    second,
+    async () => undefined,
+    () => 'updated',
+  );
+  settleFirst();
+  await older;
+  const firstId = first.messages[0]?.attemptId;
+  const secondId = second.messages[0]?.attemptId;
+  expect(firstId).toEqual(expect.any(String));
+  expect(secondId).toEqual(expect.any(String));
+  expect(firstId).not.toBe(secondId);
+  expect(first.messages).toEqual([
+    { url: URL, event: 'revalidating', attemptId: firstId },
+    { url: URL, event: 'revalidated', attemptId: firstId },
+  ]);
+  expect(second.messages).toEqual([
+    { url: URL, event: 'revalidating', attemptId: secondId },
+    { url: URL, event: 'updated', attemptId: secondId },
+  ]);
+});
+
 describe.each(['start', 'terminal', 'both'] as const)('%s broadcast failure', (failureAt) => {
   function broadcaster() {
     return {
@@ -65,8 +101,8 @@ describe.each(['start', 'terminal', 'both'] as const)('%s broadcast failure', (f
     await expect(reportRevalidation(URL, broadcast, run, () => event)).resolves.toBe(result);
     expect(run).toHaveBeenCalledTimes(1);
     expect(broadcast.postMessage.mock.calls).toEqual([
-      [{ url: URL, event: 'revalidating' }],
-      [{ url: URL, event }],
+      [{ url: URL, event: 'revalidating', attemptId: expect.any(String) }],
+      [{ url: URL, event, attemptId: expect.any(String) }],
     ]);
   });
 
@@ -81,8 +117,8 @@ describe.each(['start', 'terminal', 'both'] as const)('%s broadcast failure', (f
     expect(run).toHaveBeenCalledTimes(1);
     expect(eventFor).not.toHaveBeenCalled();
     expect(broadcast.postMessage.mock.calls).toEqual([
-      [{ url: URL, event: 'revalidating' }],
-      [{ url: URL, event: 'revalidate-failed' }],
+      [{ url: URL, event: 'revalidating', attemptId: expect.any(String) }],
+      [{ url: URL, event: 'revalidate-failed', attemptId: expect.any(String) }],
     ]);
   });
 
@@ -98,8 +134,8 @@ describe.each(['start', 'terminal', 'both'] as const)('%s broadcast failure', (f
     expect(deps.cache.size).toBe(0);
     expect(deps.fetch).toHaveBeenCalledTimes(path === 'Delete' ? 0 : 1);
     expect(broadcast.postMessage.mock.calls).toEqual([
-      [{ url: URL, event: 'revalidating' }],
-      [{ url: URL, event: 'updated' }],
+      [{ url: URL, event: 'revalidating', attemptId: expect.any(String) }],
+      [{ url: URL, event: 'updated', attemptId: expect.any(String) }],
     ]);
   });
 });
@@ -145,7 +181,9 @@ describe.each([
     // Observe rejection immediately; forced reads continue to reject on network failure.
     const done = run().catch((error: unknown) => error);
     await fetching;
-    expect(deps.broadcast.messages).toEqual([{ url: URL, event: 'revalidating' }]);
+    expect(deps.broadcast.messages).toEqual([
+      { url: URL, event: 'revalidating', attemptId: expect.any(String) },
+    ]);
     if (outcome.status <= 0) {
       if (outcome.status === -1) deps.isOnline = () => false;
       fail(new TypeError(outcome.name));
@@ -161,9 +199,10 @@ describe.each([
     const event =
       path === 'listing' && outcome.status === 304 ? 'revalidate-failed' : outcome.event;
     expect(deps.broadcast.messages).toEqual([
-      { url: URL, event: 'revalidating' },
-      { url: URL, event },
+      { url: URL, event: 'revalidating', attemptId: expect.any(String) },
+      { url: URL, event, attemptId: expect.any(String) },
     ]);
+    expect(deps.broadcast.messages[1]?.attemptId).toBe(deps.broadcast.messages[0]?.attemptId);
   });
 });
 
@@ -213,8 +252,8 @@ describe.each([
     expect(await deps.meta.getByUrl(URL)).toEqual([]);
     expect(deps.cache.size).toBe(0);
     expect(deps.broadcast.messages).toEqual([
-      { url: URL, event: 'revalidating' },
-      { url: URL, event: 'updated' },
+      { url: URL, event: 'revalidating', attemptId: expect.any(String) },
+      { url: URL, event: 'updated', attemptId: expect.any(String) },
     ]);
   });
 
@@ -224,8 +263,8 @@ describe.each([
     vi.spyOn(deps.cache, 'put').mockRejectedValueOnce(new Error('fixture storage failure'));
     await run(deps).catch(() => undefined);
     expect(deps.broadcast.messages).toEqual([
-      { url: URL, event: 'revalidating' },
-      { url: URL, event: 'revalidate-failed' },
+      { url: URL, event: 'revalidating', attemptId: expect.any(String) },
+      { url: URL, event: 'revalidate-failed', attemptId: expect.any(String) },
     ]);
   });
 });
@@ -243,7 +282,9 @@ it.each([
     .fn()
     .mockResolvedValueOnce(new Response(null, { status: 304 }))
     .mockImplementationOnce(async () => {
-      expect(deps.broadcast.messages).toEqual([{ url: URL, event: 'revalidating' }]);
+      expect(deps.broadcast.messages).toEqual([
+        { url: URL, event: 'revalidating', attemptId: expect.any(String) },
+      ]);
       if (outcome === 'error') throw new TypeError('fixture offline');
       return turtleResponse('confirmed');
     });
@@ -252,8 +293,12 @@ it.each([
   await handleFetch(request, deps).catch(() => undefined);
   expect(deps.fetch).toHaveBeenCalledTimes(2);
   expect(deps.broadcast.messages).toEqual([
-    { url: URL, event: 'revalidating' },
-    { url: URL, event: outcome === '200' ? 'updated' : 'revalidate-failed' },
+    { url: URL, event: 'revalidating', attemptId: expect.any(String) },
+    {
+      url: URL,
+      event: outcome === '200' ? 'updated' : 'revalidate-failed',
+      attemptId: expect.any(String),
+    },
   ]);
 });
 
@@ -267,8 +312,8 @@ it('reports a failed sweep attempt before propagating its error', async () => {
   await expect(resyncSweep(deps)).rejects.toBe(failure);
   expect(deps.fetch).toHaveBeenCalledTimes(1);
   expect(deps.broadcast.messages).toEqual([
-    { url: URL, event: 'revalidating' },
-    { url: URL, event: 'revalidate-failed' },
+    { url: URL, event: 'revalidating', attemptId: expect.any(String) },
+    { url: URL, event: 'revalidate-failed', attemptId: expect.any(String) },
   ]);
 });
 
@@ -317,9 +362,13 @@ describe('direct delete lifecycle', () => {
       outcome === 'success' ? { kind: 'deleted' } : { kind: 'error', error: failure },
     );
     expect(deps.broadcast.messages).toEqual([
-      { url: URL, event: 'revalidating' },
-      { url: URL, event: 'revalidating' },
-      { url: URL, event: outcome === 'success' ? 'updated' : 'revalidate-failed' },
+      { url: URL, event: 'revalidating', attemptId: expect.any(String) },
+      { url: URL, event: 'revalidating', attemptId: expect.any(String) },
+      {
+        url: URL,
+        event: outcome === 'success' ? 'updated' : 'revalidate-failed',
+        attemptId: expect.any(String),
+      },
     ]);
     expect(surface.getSnapshot().pending).toBe(1);
 
