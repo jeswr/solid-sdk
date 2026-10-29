@@ -7,7 +7,7 @@ import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { spawnSync } from "child_process";
 import { Store } from "n3";
 import { actionIri, encodePolicy, leftOperandIri } from "./codec.js";
-import { candidate, knownOperand, supportedPolicy } from "./policy.js";
+import { candidate, knownOperand, operandDatatype, supportedPolicy } from "./policy.js";
 import { Node, node, turtle } from "./rdf.js";
 import {
   AGENT,
@@ -18,6 +18,15 @@ import {
   type PolicyEngine,
   type Rule,
 } from "./types.js";
+
+const XSD = "http://www.w3.org/2001/XMLSchema#";
+/** The process protocol groups RDF numeric and temporal datatypes by comparison kind. */
+function contextType(datatype: string): string {
+  if (["integer", "decimal", "double", "float"].some((type) => datatype === `${XSD}${type}`))
+    return "decimal";
+  if (datatype === `${XSD}dateTime` || datatype === `${XSD}date`) return "dateTime";
+  return datatype === `${XSD}anyURI` ? "iri" : "string";
+}
 
 /** SPARQ membership uses scalar text and a delimiter encoding, with no member escaping. */
 function representableSet(c: Constraint, value: unknown): boolean {
@@ -48,12 +57,7 @@ function sparqOperands(store: Store): Store {
     ...policy.values(`${ODRL}prohibition`),
   ]) {
     for (const constraint of rule.values(`${ODRL}constraint`)) {
-      const datatype = constraint.values(`${AGENT}datatype`).length
-        ? constraint.iri(`${AGENT}datatype`)
-        : constraint.iri(`${ODRL}leftOperand`) === leftOperandIri("dateTime")
-          ? "http://www.w3.org/2001/XMLSchema#dateTime"
-          : undefined;
-      if (datatype === undefined) continue;
+      const datatype = constraint.iri(`${AGENT}datatype`);
       const rights = SetFrom.subjectPredicate(
         constraint,
         `${ODRL}rightOperand`,
@@ -124,6 +128,7 @@ export function sparqPolicyEngine(
         const comparable = (r: Rule) =>
           (r.constraints ?? []).every(
             (c) =>
+              !Array.isArray(attributes[c.leftOperand]) &&
               knownOperand(c, attributes[c.leftOperand]) &&
               representableSet(c, attributes[c.leftOperand]),
           );
@@ -144,7 +149,21 @@ export function sparqPolicyEngine(
             .map(({ assignee: _assignee, assigner: _assigner, ...rule }) => ({
               ...rule,
               action: "use",
+              constraints: rule.constraints?.map((c) => ({ ...c, datatype: operandDatatype(c) })),
             }));
+        const permissions = lower(policy.permissions);
+        const prohibitions = lower(policy.prohibitions);
+        const contextTypes = new Map<string, string>();
+        for (const rule of [...permissions, ...prohibitions]) {
+          for (const c of rule.constraints ?? []) {
+            const left = leftOperandIri(c.leftOperand);
+            const type = contextType(c.datatype);
+            // One request context slot cannot carry two incompatible comparison kinds.
+            if (contextTypes.has(left) && contextTypes.get(left) !== type)
+              return { effect: "indeterminate" };
+            contextTypes.set(left, type);
+          }
+        }
         const graph = credentialToRdf({
           id: "urn:example:sparq-envelope",
           issuer: "https://owner.example/#me",
@@ -153,25 +172,26 @@ export function sparqPolicyEngine(
               ...policy,
               assigner: undefined,
               assignee: undefined,
-              permissions: lower(policy.permissions),
-              prohibitions: lower(policy.prohibitions),
+              permissions,
+              prohibitions,
             }),
           },
         });
-        const context = Object.entries(attributes).map(([leftOperand, value]) => ({
-          leftOperand: leftOperandIri(leftOperand),
-          value: {
-            type:
-              leftOperand === "dateTime"
-                ? "dateTime"
-                : typeof value === "number"
-                  ? "decimal"
-                  : typeof value === "string" && value.includes(":")
-                    ? "iri"
-                    : "string",
-            value,
-          },
-        }));
+        const context = Object.entries(attributes).map(([leftOperand, value]) => {
+          const type =
+            contextTypes.get(leftOperandIri(leftOperand)) ??
+            (leftOperand === "dateTime"
+              ? "dateTime"
+              : typeof value === "number"
+                ? "decimal"
+                : typeof value === "string" && value.includes(":")
+                  ? "iri"
+                  : "string");
+          return {
+            leftOperand: leftOperandIri(leftOperand),
+            value: { type, value: type === "decimal" ? Number(value) : value },
+          };
+        });
         const input = JSON.stringify({
           api: SPARQ_DECIDE_API,
           policy: { format: "turtle", text: await turtle(sparqOperands(new Store(graph))) },

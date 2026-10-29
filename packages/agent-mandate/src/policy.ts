@@ -107,6 +107,19 @@ function temporal(value: unknown, datatype: string): boolean {
   );
 }
 
+/** Resolve scalar semantics once for validation and optional backend serialization. */
+export function operandDatatype(c: Constraint): string {
+  const first = Array.isArray(c.rightOperand) ? c.rightOperand[0] : c.rightOperand;
+  return (
+    c.datatype ??
+    (c.leftOperand === "dateTime"
+      ? `${XSD}dateTime`
+      : numericOperands.has(c.leftOperand) || numeric(first, `${XSD}double`)
+        ? `${XSD}double`
+        : `${XSD}string`)
+  );
+}
+
 /** Both sides must be comparable without the upstream lexical fallback for malformed values. */
 export function knownOperand(c: Constraint, value: unknown): boolean {
   const rights: unknown[] = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
@@ -114,13 +127,7 @@ export function knownOperand(c: Constraint, value: unknown): boolean {
   if (rights.length === 0 || lefts.length === 0) return false;
   if (["eq", "neq", "gt", "gteq", "lt", "lteq"].includes(c.operator) && rights.length !== 1)
     return false;
-  const datatype =
-    c.datatype ??
-    (c.leftOperand === "dateTime"
-      ? `${XSD}dateTime`
-      : numericOperands.has(c.leftOperand) || numeric(rights[0], `${XSD}double`)
-        ? `${XSD}double`
-        : `${XSD}string`);
+  const datatype = operandDatatype(c);
   if (c.leftOperand === "dateTime" && ![`${XSD}dateTime`, `${XSD}date`].includes(datatype))
     return false;
   return [...lefts, ...rights].every((v) => {

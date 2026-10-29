@@ -272,6 +272,219 @@ it("filters targets and inherited assignees before removing parties", async () =
 });
 
 const XSD = "http://www.w3.org/2001/XMLSchema#";
+it.each([
+  ...["count", "delegationDepth", `${AGENT}spendPerDay`, `${AGENT}sendsPerDay`, "purpose"].flatMap(
+    (leftOperand) => [
+      { leftOperand, left: "10", right: "2", operator: "gt" as const },
+      { leftOperand, left: 2, right: "10", operator: "lt" as const },
+      { leftOperand, left: "01", right: 1, operator: "eq" as const },
+      { leftOperand, left: "+02e1", right: ["20"], operator: "eq" as const },
+    ],
+  ),
+])("shares inferred numeric types across SPARQ operands: %j", async ({
+  leftOperand,
+  left,
+  right,
+  operator,
+}) => {
+  const request = intent({ action: "read", attributes: { [leftOperand]: left } });
+  for (const type of ["permission", "prohibition"] as const) {
+    const p: Policy = {
+      id: policy.id,
+      [type === "permission" ? "permissions" : "prohibitions"]: [
+        { type, action: "read", constraints: [{ leftOperand, operator, rightOperand: right }] },
+      ],
+    };
+    const original = structuredClone(p);
+    const run = vi.fn((_binary: string, _args: ProcessOptions) => ({
+      stdout: response(
+        type === "prohibition" ? { effect: "deny", matchedRules: ["urn:numeric"] } : {},
+      ),
+      status: 0,
+    }));
+    const adapter = sparqPolicyEngine({ binary: "test", run });
+    const expected = { effect: type === "permission" ? "permit" : "prohibited" };
+    expect(await solidOdrlEngine.evaluate(p, request)).toEqual(expected);
+    expect(await adapter.evaluate(p, request)).toEqual(expected);
+    expect(run).toHaveBeenCalledOnce();
+    const doc = JSON.parse((run.mock.calls[0] as [string, ProcessOptions])[1].input);
+    const store = await parseRdf(doc.policy.text, "text/turtle");
+    const constraint = node(store, "urn:example:sparq-envelope")
+      .one("https://www.w3.org/2018/credentials#credentialSubject")
+      .one(`${AGENT}policy`)
+      .one(`${ODRL}${type}`)
+      .one(`${ODRL}constraint`);
+    const operand = constraint.one(`${ODRL}rightOperand`);
+    expect(operand.termType).toBe("Literal");
+    expect((operand as unknown as Literal).datatype.value).toBe(`${XSD}double`);
+    expect(operand.value).toBe(String(Array.isArray(right) ? right[0] : right));
+    expect(
+      doc.request.context.find(
+        (c: { leftOperand: string }) => c.leftOperand === constraint.iri(`${ODRL}leftOperand`),
+      ).value,
+    ).toEqual({ type: "decimal", value: Number(left) });
+    expect(p).toEqual(original);
+  }
+});
+
+it.each([
+  { datatype: "integer", left: "+0002", right: 2, type: "decimal", value: 2 },
+  { datatype: "decimal", left: "2.50", right: "2.5", type: "decimal", value: 2.5 },
+  { datatype: "double", left: "2e1", right: "20", type: "decimal", value: 20 },
+  { datatype: "float", left: "20", right: 20, type: "decimal", value: 20 },
+  {
+    datatype: "string",
+    left: "urn:example:text",
+    right: "urn:example:text",
+    type: "string",
+    value: "urn:example:text",
+  },
+  {
+    datatype: "anyURI",
+    left: "urn:example:iri",
+    right: "urn:example:iri",
+    type: "iri",
+    value: "urn:example:iri",
+  },
+  {
+    datatype: "date",
+    left: "2026-10-26",
+    right: "2026-10-26",
+    type: "dateTime",
+    value: "2026-10-26",
+  },
+  {
+    datatype: "dateTime",
+    left: "2026-10-26T12:00:00Z",
+    right: "2026-10-26T14:00:00+02:00",
+    type: "dateTime",
+    value: "2026-10-26T12:00:00Z",
+  },
+])("uses the declared constraint type for request context: %j", async ({
+  datatype,
+  left,
+  right,
+  type,
+  value,
+}) => {
+  const run = vi.fn((_binary: string, _args: ProcessOptions) => ({
+    stdout: response(),
+    status: 0,
+  }));
+  const p: Policy = {
+    id: policy.id,
+    permissions: [
+      {
+        type: "permission",
+        action: "read",
+        constraints: [
+          {
+            leftOperand: "purpose",
+            operator: "eq",
+            rightOperand: right,
+            datatype: `${XSD}${datatype}`,
+          },
+        ],
+      },
+    ],
+  };
+  const request = intent({ action: "read", attributes: { purpose: left } });
+  expect(await sparqPolicyEngine({ binary: "test", run }).evaluate(p, request)).toEqual({
+    effect: "permit",
+  });
+  const doc = JSON.parse((run.mock.calls[0] as [string, ProcessOptions])[1].input);
+  expect(
+    doc.request.context.find((c: { leftOperand: string }) => c.leftOperand === `${ODRL}purpose`)
+      .value,
+  ).toEqual({ type, value });
+});
+
+it("requires confirmation when one context value needs incompatible backend types", async () => {
+  const run = vi.fn(() => ({ stdout: response(), status: 0 }));
+  const request = intent({ action: "read", attributes: { purpose: "2026-10-26" } });
+  const p: Policy = {
+    id: policy.id,
+    permissions: [
+      {
+        type: "permission",
+        action: "read",
+        constraints: [
+          {
+            leftOperand: "purpose",
+            operator: "eq",
+            rightOperand: "2026-10-26",
+            datatype: `${XSD}string`,
+          },
+        ],
+      },
+    ],
+    prohibitions: [
+      {
+        type: "prohibition",
+        action: "read",
+        constraints: [
+          {
+            leftOperand: "purpose",
+            operator: "eq",
+            rightOperand: "2026-10-26",
+            datatype: `${XSD}date`,
+          },
+        ],
+      },
+    ],
+  };
+  const adapter = sparqPolicyEngine({ binary: "test", run });
+  expect(await adapter.evaluate(p, request)).toEqual({ effect: "indeterminate" });
+  expect(run).not.toHaveBeenCalled();
+  expect(await evaluateIntent({ ...mandate(), autonomous: p }, request, adapter)).toEqual({
+    decision: "confirm-required",
+    reason: "indeterminate",
+  });
+});
+
+it("shares a numeric context across compatible declared datatypes", async () => {
+  const run = vi.fn((_binary: string, _args: ProcessOptions) => ({
+    stdout: response(),
+    status: 0,
+  }));
+  const constraints: Constraint[] = ["integer", "double"].map((datatype) => ({
+    leftOperand: "count",
+    operator: "eq",
+    rightOperand: "2",
+    datatype: `${XSD}${datatype}`,
+  }));
+  expect(
+    await sparqPolicyEngine({ binary: "test", run }).evaluate(
+      { ...policy, permissions: [{ type: "permission", action: "read", constraints }] },
+      intent({ action: "read", attributes: { count: "2" } }),
+    ),
+  ).toEqual({ effect: "permit" });
+  const doc = JSON.parse((run.mock.calls[0] as [string, ProcessOptions])[1].input);
+  expect(
+    doc.request.context.filter((c: { leftOperand: string }) => c.leftOperand === `${ODRL}count`),
+  ).toEqual([{ leftOperand: `${ODRL}count`, value: { type: "decimal", value: 2 } }]);
+});
+
+it("rejects array context for a scalar SPARQ operand", async () => {
+  const run = vi.fn(() => ({ stdout: response(), status: 0 }));
+  expect(
+    await sparqPolicyEngine({ binary: "test", run }).evaluate(
+      {
+        id: policy.id,
+        prohibitions: [
+          {
+            type: "prohibition",
+            action: "read",
+            constraints: [{ leftOperand: "count", operator: "eq", rightOperand: "2" }],
+          },
+        ],
+      },
+      intent({ action: "read", attributes: { count: [2] } }),
+    ),
+  ).toEqual({ effect: "indeterminate" });
+  expect(run).not.toHaveBeenCalled();
+});
+
 it.each<{
   name: string;
   constraint: Constraint;
@@ -342,8 +555,9 @@ it.each<{
     datatype: `${XSD}string`,
   },
   {
-    name: "untyped IRI stays an IRI",
+    name: "untyped IRI uses inferred string comparison",
     constraint: { leftOperand: "purpose", operator: "eq", rightOperand: "urn:example:purpose" },
+    datatype: `${XSD}string`,
   },
   {
     name: "untyped text stays a string",
@@ -353,7 +567,7 @@ it.each<{
   {
     name: "inferred integer",
     constraint: { leftOperand: "count", operator: "lteq", rightOperand: 2 },
-    datatype: `${XSD}integer`,
+    datatype: `${XSD}double`,
   },
   {
     name: "inferred non-integer",
@@ -655,8 +869,9 @@ it.each([
       .one(`${ODRL}prohibition`)
       .one(`${ODRL}constraint`)
       .values(`${ODRL}rightOperand`)
-      .map((value) => value.value),
-  ).toEqual(Array.isArray(rightOperand) ? rightOperand : [rightOperand]);
+      .map((value) => value.value)
+      .sort(),
+  ).toEqual((Array.isArray(rightOperand) ? [...rightOperand] : [rightOperand]).sort());
 });
 
 it.each([
