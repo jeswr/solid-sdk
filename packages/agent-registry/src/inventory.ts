@@ -40,9 +40,10 @@ function date(value: unknown): string {
     return invalid();
   return text;
 }
-/** Placeholder identifiers are not identities and must not become handle hashes. */
+/** Only blank identifiers and the explicit reserved marker are placeholders. */
 export function isPlaceholder(value: string): boolean {
-  return value.trim() === "" || value.startsWith("to_");
+  const trimmed = value.trim();
+  return trimmed === "" || trimmed === "to_confirm";
 }
 interface RegistryAccount {
   id: string;

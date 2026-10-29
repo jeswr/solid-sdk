@@ -78,6 +78,94 @@ describe("privacy and settings model", () => {
     expect(isPlaceholder("fixture@example.com")).toBe(false);
   });
   it.each([
+    ["email", "to_notify@example.com"],
+    ["email", "to_confirm@example.com"],
+    ["github_notifications", "to_notify"],
+    ["github_notifications", "to_confirmed"],
+  ])("preserves %s identity %s and its historic evidence and conflicts", (channel, identity) => {
+    expect(isPlaceholder(identity)).toBe(false);
+    const snap = parseSnapshot({
+      version: 1,
+      accounts: [
+        {
+          id: "prefix-account",
+          channel,
+          provider: "fixture_provider",
+          organization: "personal",
+          identifiers: { primary: identity, aliases: ["to_confirm", " "] },
+          connector: { target: "fixture", setup_status: "planned" },
+        },
+      ],
+      evidence: [
+        {
+          channel,
+          provider: "other_provider",
+          identifier: identity,
+          method: "historic_connector",
+          source: "synthetic",
+          observedOn: "2026-10-20",
+        },
+      ],
+      notes: [`Identity conflict: ${identity} versus alternate@example.org.`],
+    });
+    expect(snap.accounts[0]?.handles).toEqual([identity]);
+    const hash = hashHandle(identity, salt, channel);
+    const s = inventorySettings(snap, salt);
+    expect(s.connections[0]).toMatchObject({
+      channelHandles: [hash],
+      bindingState: "error",
+      evidence: [{ handleHash: hash, provider: "other_provider" }],
+      identityConflicts: [
+        {
+          kind: "identity-mismatch",
+          handleHashes: [hash, hashHandle("alternate@example.org", salt, "email")].sort(),
+        },
+        { kind: "provider-mismatch", handleHashes: [hash] },
+      ],
+    });
+    expect(s.unmatchedEvidence).toEqual([]);
+    expect(JSON.stringify(s)).not.toContain(identity);
+  });
+  it.each([
+    "",
+    " ",
+    "to_confirm",
+    "  to_confirm  ",
+  ])("omits reserved placeholder %j and refuses it as evidence", (placeholder) => {
+    expect(isPlaceholder(placeholder)).toBe(true);
+    const input = {
+      version: 1,
+      accounts: [
+        {
+          id: "placeholder-account",
+          channel: "email",
+          provider: "google",
+          organization: "personal",
+          identifiers: { primary: placeholder },
+          connector: { target: "gmail", setup_status: "planned" },
+        },
+      ],
+    };
+    expect(inventorySettings(parseSnapshot(input), salt).connections[0]?.channelHandles).toEqual(
+      [],
+    );
+    expect(() =>
+      parseSnapshot({
+        ...input,
+        evidence: [
+          {
+            channel: "email",
+            provider: "google",
+            identifier: placeholder,
+            method: "historic_connector",
+            source: "synthetic",
+            observedOn: "2026-10-20",
+          },
+        ],
+      }),
+    ).toThrow("Invalid registry schema");
+  });
+  it.each([
     "unlisted@example.org",
     "@unlisted:Matrix.example",
     "@unlisted@social.example",

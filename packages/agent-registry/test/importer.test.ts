@@ -202,6 +202,67 @@ describe("synthetic registry import", () => {
       ).toEqual(expected);
     }
   });
+  it("imports a to_ email identity with historic evidence and hash-only conflicts", async () => {
+    const identity = "to_notify@example.com";
+    const alternative = "alternate@example.org";
+    const ports = harness(
+      stringify({
+        version: 1,
+        accounts: [
+          {
+            id: "prefix-account",
+            channel: "email",
+            provider: "google",
+            organization: "personal",
+            identifiers: { primary: identity, aliases: ["to_confirm"] },
+            connector: { target: "gmail", setup_status: "planned" },
+          },
+        ],
+        evidence: [
+          {
+            channel: "email",
+            provider: "microsoft",
+            identifier: identity,
+            method: "historic_connector",
+            source: "synthetic",
+            observedOn: "2026-10-20",
+          },
+        ],
+        notes: [`Identity conflict: ${identity} versus ${alternative}.`],
+      }),
+    );
+    const report = await importRegistry(config, ports);
+    const account = report.settings.connections[0];
+    if (!account) throw new Error("Fixture account absent");
+    const salt = await ports.salt.getSalt();
+    const hash = hashHandle(identity, salt, "email");
+    const conflicts = [
+      {
+        kind: "identity-mismatch",
+        handleHashes: [hash, hashHandle(alternative, salt, "email")].sort(),
+      },
+      { kind: "provider-mismatch", handleHashes: [hash] },
+    ];
+    expect(account.channelHandles).toEqual([hash]);
+    expect(account.identityConflicts).toEqual(conflicts);
+    expect(account.evidence).toMatchObject([{ handleHash: hash }]);
+    expect(account.bindingState).toBe("error");
+    expect(report.settings.unmatchedEvidence).toEqual([]);
+    const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
+    const dataset = ports.storage.resources.get(url)?.dataset;
+    expect(
+      dataset?.getObjects(term(url), term(`${AGENT}channelHandle`), null).map((v) => v.value),
+    ).toEqual([hash]);
+    expect(
+      dataset
+        ?.getObjects(term(url), term(`${AGENT}identityConflict`), null)
+        .map((v) => JSON.parse(v.value)),
+    ).toEqual(conflicts);
+    const output = JSON.stringify({ report, resources: [...ports.storage.resources] });
+    expect(output).not.toContain(identity);
+    expect(output).not.toContain(alternative);
+    expect(output).not.toContain("to_confirm");
+  });
   it.each([
     ["matrix", "@fixture:matrix.example", "@Other:Elsewhere.example"],
     ["matrix_bot", "@fixture:matrix.example", "@Other:Elsewhere.example"],
