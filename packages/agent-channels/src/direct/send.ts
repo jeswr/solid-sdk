@@ -44,7 +44,11 @@ export function createDirectSend(
   async function render(proposal: RenderableProposal, carriage: CarriageProfile): Promise<Wire> {
     if (canonicalJson(carriage) !== canonicalJson(DIRECT))
       throw new ChannelParseError("unsupported direct carriage");
-    const bytes = envelope(proposal.compactJws);
+    // Bound work before serialization and hashing; assertWire still checks encoded bytes.
+    const compactJws = proposal.compactJws;
+    if (typeof compactJws !== "string" || compactJws.length > DIRECT.maxBytes)
+      throw new ChannelParseError("invalid direct signed-message carrier");
+    const bytes = envelope(compactJws);
     const wire = { bytes, digest: digestBytes(bytes), mediaType: "application/ld+json" };
     const message = await verified(assertWire(wire));
     if (canonicalJson(message) !== canonicalJson(proposal.message))

@@ -3,6 +3,7 @@
 import { canonicalJson, DEFAULT_LIMITS, digestBytes } from "@jeswr/agent-model";
 import { describe, expect, it, vi } from "vitest";
 import { createDirectSend } from "../src/direct/send.js";
+import * as carrier from "../src/direct/shared.js";
 import { type DirectMailbox, envelope } from "../src/direct/shared.js";
 import { createDirectReader } from "../src/direct.js";
 import {
@@ -121,6 +122,45 @@ describe("direct loopback", () => {
     const oversized = `${wire.bytes}${" ".repeat(DIRECT.maxBytes - Buffer.byteLength(wire.bytes) + 1)}`;
     for (const raw of [oversized, Buffer.from(oversized)])
       expect(() => binding.ingest.parse({ id: message.id, raw })).toThrow(ChannelParseError);
+  });
+
+  it.each([
+    { input: "missing", compactJws: undefined },
+    { input: "null", compactJws: null },
+    { input: "number", compactJws: 123 },
+    { input: "object", compactJws: { value: "a.b.c" } },
+    { input: "array", compactJws: ["a.b.c"] },
+    { input: "one character over the cap", compactJws: "a".repeat(DIRECT.maxBytes + 1) },
+    { input: "large string", compactJws: "a".repeat(DIRECT.maxBytes * 16) },
+  ])("rejects $input JWS input before serializing the carrier", async ({ compactJws }) => {
+    const config = options();
+    const verify = vi.fn(verifyMessage);
+    const binding = createInMemoryDirectBinding({ ...config, verify });
+    const proposal = { message, compactJws: compactJws as never };
+    const serialize = vi.spyOn(carrier, "envelope");
+    try {
+      await expect(binding.send.render(proposal, DIRECT)).rejects.toThrow(ChannelParseError);
+      expect(serialize.mock.calls).toHaveLength(0);
+      expect(verify).not.toHaveBeenCalled();
+      expect(config.tokens.calls).toEqual([]);
+    } finally {
+      serialize.mockRestore();
+    }
+  });
+
+  it.each([
+    { expansion: "envelope overhead", compactJws: `${"a".repeat(DIRECT.maxBytes - 4)}.b.c` },
+    { expansion: "UTF-8", compactJws: "é".repeat(DIRECT.maxBytes / 2) },
+    { expansion: "JSON escaping", compactJws: '"'.repeat(DIRECT.maxBytes / 2) },
+  ])("retains the encoded carrier bound after $expansion", async ({ compactJws }) => {
+    const verify = vi.fn(verifyMessage);
+    const binding = createInMemoryDirectBinding({ ...options(), verify });
+    expect(compactJws.length).toBeLessThanOrEqual(DIRECT.maxBytes);
+    expect(Buffer.byteLength(envelope(compactJws))).toBeGreaterThan(DIRECT.maxBytes);
+    await expect(binding.send.render({ message, compactJws }, DIRECT)).rejects.toThrow(
+      "invalid direct wire",
+    );
+    expect(verify).not.toHaveBeenCalled();
   });
 
   it.each([
