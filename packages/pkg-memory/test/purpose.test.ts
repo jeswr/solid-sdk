@@ -317,3 +317,62 @@ it("evaluates supported purpose and time constraints with an implicit evaluation
     vi.useRealTimers();
   }
 });
+
+it.each([
+  { operator: "lt", rightOperand: "2026-10-26T12:00:00.1234Z" },
+  { operator: "neq", rightOperand: "2026-10-26T12:00:00.123001Z" },
+  { operator: "lt", rightOperand: "2026-10-26T13:00:00.1230001+01:00" },
+  { operator: "isNoneOf", rightOperand: ["2026-10-26T12:00:00.123001Z"] },
+  { operator: "lt", rightOperand: "2026-10-26T12:00:00.123000Z" },
+] satisfies Partial<OdrlConstraint>[])("denies temporal precision beyond milliseconds: %j", async (fields) => {
+  vi.useFakeTimers().setSystemTime(new Date("2026-10-26T12:00:00.123Z"));
+  try {
+    for (const datatype of [undefined, `${NS.xsd}dateTime`, `${NS.xsd}string`]) {
+      const restricted: OdrlPolicy = {
+        id: policy.id,
+        permissions: [{ type: "permission", action: "read" }],
+        prohibitions: [
+          {
+            type: "prohibition",
+            action: "read",
+            constraints: [{ leftOperand: "dateTime", ...fields, datatype }],
+          },
+        ],
+      };
+      const parsed = await parsePolicy(await policyToTurtle(restricted));
+      expect(parsed).toBeDefined();
+      for (const candidate of [restricted, parsed as OdrlPolicy])
+        for (const purpose of Object.keys(MEMORY_PURPOSES) as MemoryPurpose[])
+          expect(purposeFilter(candidate, purpose, client)({ categories: ["pd:Contact"] })).toBe(
+            false,
+          );
+    }
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it.each(["", ".1", ".12", ".123"])("preserves supported temporal precision %j", (fraction) => {
+  const instant = `2026-10-26T13:00:00${fraction}+01:00`;
+  const milliseconds = Date.parse(instant);
+  vi.useFakeTimers().setSystemTime(new Date(milliseconds));
+  try {
+    const timed: OdrlPolicy = {
+      id: policy.id,
+      permissions: [{ type: "permission", action: "read" }],
+      prohibitions: [
+        {
+          type: "prohibition",
+          action: "read",
+          constraints: [{ leftOperand: "dateTime", operator: "gt", rightOperand: instant }],
+        },
+      ],
+    };
+    const filter = purposeFilter(timed, "ServiceProvision", client);
+    expect(filter({ categories: ["pd:Contact"] })).toBe(true);
+    vi.setSystemTime(new Date(milliseconds + 1));
+    expect(filter({ categories: ["pd:Contact"] })).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});

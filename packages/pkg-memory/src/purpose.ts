@@ -78,6 +78,9 @@ function evaluableConstraint(constraint: OdrlConstraint): boolean {
   return rights.every((value) => {
     if (typeof value !== "string" || value.length === 0) return false;
     if (leftOperand === "purpose") return true;
+    // The delegated evaluator uses Date.parse and compares milliseconds only.
+    // Deny unsupported precision before it can erase a prohibition's boundary.
+    if (/\.\d{4}/.test(value)) return false;
     try {
       dateTime(value);
       return Number.isFinite(Date.parse(value));

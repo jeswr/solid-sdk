@@ -109,6 +109,8 @@ client ID. Every category must be permitted; missing categories, unmatched rules
 and outstanding duties deny. Both full category IRIs and `pd:` names are supported.
 Policies declaring profiles or delegation deny on every read, including direct
 calls: this filter cannot interpret profile semantics or verify delegation authority.
+Temporal constraints accept at most three fractional second digits, matching
+the evaluator's millisecond precision; finer declared precision denies the read.
 `createDefaultPolicy(id, owner)` permits contact/address/preferences for these
 purposes, including contact data used for scheduling; health/genetics/mental
 health/finance deny for all clients until the owner edits the policy. The spec
