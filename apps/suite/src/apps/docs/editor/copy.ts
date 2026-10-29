@@ -26,6 +26,7 @@ import { DocumentReplacedError, sameIncarnation } from "../lib/model/incarnation
 import { baseExtensions } from "./extensions";
 import { loadDocumentContent } from "./persistence";
 import { DocumentUpdateStore } from "./update-store";
+import { relocateAttributes } from "./url-attributes";
 
 /** Resolve only a reciprocal trash pair belonging to the retired incarnation. */
 async function trashedAssets(
@@ -92,8 +93,8 @@ export async function copyDocument(
         node.type = "paragraph";
         delete node.attrs;
         node.content = [{ type: "text", text: `[Image unavailable${alt ? `: ${alt}` : ""}]` }];
-      } else if (mapping) node.attrs.src = mapping.get(source) ?? source;
-      else if (isDirectChild(source, docContainerUrls(stored.url).assets)) assets.push(source);
+      } else if (!mapping && isDirectChild(source, docContainerUrls(stored.url).assets))
+        assets.push(source);
     }
     node.content?.forEach((child) => {
       visit(child, mapping);
@@ -103,7 +104,7 @@ export async function copyDocument(
   const remap = (mapping: ReadonlyMap<string, string>) => {
     const json = structuredClone(captured);
     visit(json, mapping);
-    return json;
+    return relocateAttributes(json, (iri) => mapping.get(iri) || iri);
   };
   let trash: Promise<string | undefined> | undefined;
   let merged: JSONContent | undefined;

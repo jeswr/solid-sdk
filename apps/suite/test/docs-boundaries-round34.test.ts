@@ -95,6 +95,16 @@ it.each([
   "context",
   "encode",
 ])("round34 SVG %s failure never falls back to publishing active bytes", async (failure) => {
+  // Both decoders fail for corrupt images; SVG compatibility is covered in round35.
+  vi.stubGlobal(
+    "Image",
+    class {
+      onerror: (() => void) | null = null;
+      set src(_value: string) {
+        queueMicrotask(() => this.onerror?.());
+      }
+    },
+  );
   const close = vi.fn();
   vi.stubGlobal(
     "createImageBitmap",

@@ -25,7 +25,7 @@ import {
 import { MoreHorizontal, Plus, RefreshCw, Star } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { encodeRef } from "@/lib/refs";
 import type { PodSession } from "@/lib/session/pod-session";
@@ -63,11 +63,15 @@ export function DocumentList({ session }: { session: PodSession }) {
   const [deleting, setDeleting] = useState<DocumentEntry | null>(null);
   const [importing, setImporting] = useState(false);
   const [busy, setBusy] = useState(false);
+  const loadGeneration = useRef(0);
   const reload = useCallback(async () => {
+    const generation = ++loadGeneration.current;
     setError(false);
     try {
-      setEntries(await store.list());
+      const next = await store.list();
+      if (generation === loadGeneration.current) setEntries(next);
     } catch {
+      if (generation !== loadGeneration.current) return;
       setEntries(null);
       setError(true);
     }
@@ -88,6 +92,9 @@ export function DocumentList({ session }: { session: PodSession }) {
   }, [session.webId]);
   useEffect(() => {
     void reload();
+    return () => {
+      ++loadGeneration.current;
+    };
   }, [reload]);
   const rows = entries
     ?.filter(

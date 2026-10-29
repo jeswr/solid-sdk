@@ -11,10 +11,7 @@ import { buildDocument, type PodDocument } from "../lib/model/document";
 import { docContainerUrls } from "../lib/model/layout";
 import { serializeTurtle } from "../lib/model/rdf-io";
 import { assertUpdateIdentities } from "../lib/model/update-store";
-
-const urlAttribute = (key: string) =>
-  ["src", "href", "poster", "cite", "action", "formaction", "xlink:href"].includes(key) ||
-  key.startsWith("data-");
+import { isUrlAttribute, relocateAttributes } from "./url-attributes";
 
 /** Reuse the import pipeline's HTML parser, keeping text and non-URL attributes. */
 function relocateHtml(html: string, relocate: (iri: string) => string): string {
@@ -26,7 +23,7 @@ function relocateHtml(html: string, relocate: (iri: string) => string): string {
     transformTags: {
       "*": (tagName, attribs) => {
         for (const [key, value] of Object.entries(attribs)) {
-          if (urlAttribute(key)) attribs[key] = relocate(value);
+          if (isUrlAttribute(key)) attribs[key] = relocate(value);
           else if (key === "srcset")
             attribs[key] = value.replace(
               /(^|[\s,])(https?:\/\/[^\s,]+)/g,
@@ -88,10 +85,7 @@ async function relocateLog(
           const length = typeof part.insert === "string" ? part.insert.length : 1;
           for (const [mark, attrs] of Object.entries(part.attributes ?? {})) {
             if (!attrs || typeof attrs !== "object") continue;
-            const next: Record<string, unknown> = { ...attrs };
-            for (const [key, value] of Object.entries(next)) {
-              if (urlAttribute(key) && typeof value === "string") next[key] = relocate(value);
-            }
+            const next = relocateAttributes(attrs, relocate, mark);
             if (JSON.stringify(next) !== JSON.stringify(attrs)) {
               node.format(offset, length, { [mark]: next });
               changed = true;
@@ -103,9 +97,8 @@ async function relocateLog(
       }
       if (node instanceof XmlElement) {
         for (const [key, value] of Object.entries(node.getAttributes())) {
-          if (!urlAttribute(key) || typeof value !== "string") continue;
-          const next = relocate(value);
-          if (next !== value) {
+          const next = relocateAttributes(value, relocate, key);
+          if (JSON.stringify(next) !== JSON.stringify(value)) {
             node.setAttribute(key, next);
             changed = true;
           }

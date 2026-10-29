@@ -36,6 +36,12 @@ const codeFont = "Source Code Pro";
 // A4 minus two 1in margins, in CSS pixels (docx converts pixels to EMUs).
 export const PAGE_WIDTH = (11906 - 2880) / 15;
 
+/** Text and image links must both create native Word hyperlink relationships. */
+function hyperlink(href: unknown, runs: ParagraphChild[]): ParagraphChild[] {
+  const link = validLink(String(href ?? ""));
+  return link ? [new ExternalHyperlink({ link, children: runs })] : runs;
+}
+
 function inline(node: JSONContent, quote: boolean): ParagraphChild[] {
   if (node.type === "hardBreak") return [new TextRun({ break: 1 })];
   if (node.type !== "text") return children(node).flatMap((child) => inline(child, quote));
@@ -57,7 +63,7 @@ function inline(node: JSONContent, quote: boolean): ParagraphChild[] {
     ...(href && !marks.has("code") ? { style: "Hyperlink" } : {}),
   };
   const run = new TextRun(options);
-  return [href ? new ExternalHyperlink({ link: href, children: [run] }) : run];
+  return hyperlink(href, [run]);
 }
 
 /** Convert PM JSON directly: no HTML, editor, pod writes or remote snapshot needed. */
@@ -188,14 +194,14 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
               : Math.min(PAGE_WIDTH, Math.max(1, Number(rawWidth)));
             result.push(
               new Paragraph({
-                children: [
+                children: hyperlink(node.attrs?.link?.href, [
                   new ImageRun({
                     data: image.data,
                     type: image.type,
                     transformation: { width, height: (width * image.height) / image.width },
                     altText: { name: alt, title: alt, description: alt },
                   }),
-                ],
+                ]),
               }),
             );
           } catch {

@@ -970,7 +970,9 @@ markdown.instance.use({
       const openParagraph = (tokens: MarkdownToken[]): boolean => {
         const last = tokens.at(-1);
         if (!last) return false;
-        if (last.type === "paragraph" || last.type === "text") return true;
+        // Definitions are paragraphs during CommonMark's block-structure
+        // phase; removing them later must not end lazy quote continuation.
+        if (["paragraph", "text", "def"].includes(String(last.type))) return true;
         if (last.type === "blockquote") return openParagraph(last.tokens as MarkdownToken[]);
         if (last.type === "list") {
           const item = (last.items as MarkdownToken[]).at(-1) as MarkdownToken;
@@ -988,6 +990,9 @@ markdown.instance.use({
         if (index === 0 || /^ {0,3}>/.test(line)) return false;
         if (tokenizer.rules.block.list.test(line)) return true;
         if (!/^ {0,3}>/.test(lines[index - 1] as string)) return false;
+        // Boundary probes must retain def tokens even if a prior probe has
+        // registered the same label in this private lexer's reference table.
+        tokenizer.lexer.tokens.links = {};
         const prefix = tokenizer.blockquote(lines.slice(0, index).join("\n")) as NonNullable<
           ReturnType<typeof tokenizer.blockquote>
         >;
@@ -1123,6 +1128,7 @@ function clean(
   return result;
 }
 function textContent(node: JSONContent): string {
+  if (node.type === "hardBreak") return "\n";
   // Images are text-bearing leaves in descriptions, including nested images.
   if (node.type === "image") return String(node.attrs?.alt ?? "");
   return node.text ?? (node.content ?? []).map(textContent).join(" ");

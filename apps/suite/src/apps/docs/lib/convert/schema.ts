@@ -131,8 +131,13 @@ export function importHtml(source: string, skipped: SkippedItem[] = []) {
   const dom = new window.DOMParser().parseFromString(html, "text/html");
   normaliseHtmlTableSpans(dom.body, () => reportSkipped(skipped, "Invalid table spans"));
   for (const paragraph of dom.body.querySelectorAll("p")) {
-    if (paragraph.querySelector("img") && !paragraph.textContent?.trim())
+    if (paragraph.querySelector("img") && !paragraph.textContent?.trim()) {
+      // List items require a leading paragraph, including image-only steps.
+      // Keep that structural slot before lifting block images out of the p.
+      if (paragraph.parentElement?.tagName === "LI" && !paragraph.previousElementSibling)
+        paragraph.before(dom.createElement("p"));
       paragraph.replaceWith(...paragraph.childNodes);
+    }
   }
   return normaliseImport(
     generateJSON(dom.body.innerHTML, baseExtensions(globalThis.fetch)),
