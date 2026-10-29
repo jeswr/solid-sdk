@@ -308,7 +308,11 @@ describe.each([
   it.each([
     [42, "integer", "42"],
     [0, "integer", "0"],
-    [12.5, "double", "12.5"],
+    [12.5, "double", "1.25E1"],
+    [1e21, "double", "1.0E21"],
+    [0, "double", "0.0E0"],
+    [42, "double", "4.2E1"],
+    ["12.5", "double", "12.5"],
     [true, "boolean", "true"],
     [false, "boolean", "false"],
   ])("fetch and search preserve typed JSON-LD scalar %s", async (value, type, lexical) => {

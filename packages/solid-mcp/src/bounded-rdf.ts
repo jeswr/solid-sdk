@@ -66,8 +66,22 @@ function budgetedFactory(charge: (bytes: number) => void): RdfFactory {
       return DataFactory.blankNode(value);
     },
     // JSON-LD passes native scalars for typed values and null for absent metadata.
-    literal(value, languageOrDatatype) {
-      const lexicalValue = String(value);
+    literal(value: string | number | boolean, languageOrDatatype) {
+      // JSON-LD numeric conversion precedes accounting; supplied strings stay lexical.
+      const double =
+        typeof value === "number" &&
+        (value % 1 !== 0 ||
+          Math.abs(value) >= 1e21 ||
+          (languageOrDatatype &&
+            typeof languageOrDatatype !== "string" &&
+            "value" in languageOrDatatype &&
+            languageOrDatatype.value === "http://www.w3.org/2001/XMLSchema#double"));
+      const lexicalValue =
+        typeof value !== "number"
+          ? String(value)
+          : double
+            ? value.toExponential(15).replace(/(\d)0*e\+?/, "$1E")
+            : value.toFixed(0);
       charge(Buffer.byteLength(lexicalValue));
       // N3 2 supports directional languages; @types/n3 still omits that overload.
       return (DataFactory.literal as RdfFactory["literal"])(

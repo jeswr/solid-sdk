@@ -129,11 +129,22 @@ describe("JSON-LD scalar literals", () => {
     [0, "integer", "0"],
     [42, "integer", "42"],
     [-42, "integer", "-42"],
-    [12.5, "double", "12.5"],
-    [1e21, "double", "1e+21"],
+    [12.5, "double", "1.25E1"],
+    [-12.5, "double", "-1.25E1"],
+    [1e21, "double", "1.0E21"],
+    [-1e21, "double", "-1.0E21"],
+    [1e-7, "double", "1.0E-7"],
+    [0, "double", "0.0E0"],
+    [42, "double", "4.2E1"],
+    [1.2345678901234567, "double", "1.234567890123457E0"],
+    [1000000000000000100, "integer", "1000000000000000128"],
+    [12.5, "decimal", "1.25E1"],
+    [1e21, "integer", "1.0E21"],
     ["001", "integer", "001"],
+    ["12.5", "double", "12.5"],
+    ["1e+21", "double", "1e+21"],
     ["café 🌱", "string", "café 🌱"],
-  ])("preserves typed %s as xsd:%s with lexical value %s", async (value, type, lexical) => {
+  ])("converts typed %s to xsd:%s with lexical value %s", async (value, type, lexical) => {
     const datatype = `http://www.w3.org/2001/XMLSchema#${type}`;
     const dataset = await parseBoundedRdf(
       JSON.stringify({ "@id": "urn:s", "urn:p": { "@value": value, "@type": datatype } }),
@@ -147,6 +158,27 @@ describe("JSON-LD scalar literals", () => {
       language: "",
       datatype: { value: datatype },
     });
+  });
+
+  it.each([
+    [12.5, "double"],
+    [1e21, "double"],
+    [1e-7, "double"],
+    [42, "integer"],
+  ])("gives implicit and explicit %s the same RDF term", async (value, type) => {
+    const dataset = await parseBoundedRdf(
+      JSON.stringify({
+        "@id": "urn:s",
+        "urn:implicit": value,
+        "urn:explicit": { "@value": value, "@type": `http://www.w3.org/2001/XMLSchema#${type}` },
+      }),
+      "application/ld+json",
+      BASE,
+    );
+    expect(dataset.size).toBe(2);
+    const implicit = dataset.getQuads("urn:s", "urn:implicit", null, null)[0]?.object;
+    const explicit = dataset.getQuads("urn:s", "urn:explicit", null, null)[0]?.object;
+    expect(explicit?.equals(implicit)).toBe(true);
   });
 });
 
