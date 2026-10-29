@@ -46,6 +46,13 @@ preserves explicit identity/provider conflicts, and adds a Telegram bot control 
 when no Telegram account exists. Personal Telegram/MTProto remains deferred. Conflict
 notes match complete identifiers with the channel's normalization rules; an
 identifier that only contains another account's handle does not mark that account conflicted.
+Active notes use `Identity conflict: <identity> versus <identity>`, optionally followed
+by `. Unresolved.`; the legacy `Main Gmail identity conflict:` prefix is also accepted.
+Other prose, including negated or resolved notes, does not create a conflict. Each operand
+must be one complete identifier, optionally enclosed in quotes, parentheses or angle brackets.
+Quotes preserve the entire identity, including URI punctuation. Explicit email, Matrix,
+international phone and HTTP(S)/DID/mailto/tel URI alternatives are retained as hashes even
+when absent from accounts and evidence.
 Registry `connected` claims map to `setup-required`; errors and disabled states remain visible.
 Read, triage, draft and send restrictions start false. A changed import resets restrictions
 to false; unchanged resources retain their existing representation. Removed registry rows

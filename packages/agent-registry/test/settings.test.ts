@@ -556,6 +556,111 @@ describe("privacy and settings model", () => {
         }
       }
   });
+  it.each([";v=2", ",v2", "(v2)"])("preserves complete quoted URI suffix %s", (suffix) => {
+    const prefix = "https://profile.example/alice";
+    const own = `${prefix}${suffix}`;
+    const other = "alternate@example.org";
+    for (const quote of ['"', "'", "`"])
+      for (const includeAccount of [true, false]) {
+        const snap = parseSnapshot({
+          version: 1,
+          accounts: (includeAccount ? [prefix, own] : [prefix]).map((handle, index) => ({
+            id: `account-${index}`,
+            channel: "web",
+            provider: "fixture_provider",
+            organization: "personal",
+            identifiers: { primary: handle },
+            connector: { target: "fixture", setup_status: "planned" },
+          })),
+          notes: [`Identity conflict: ${quote}${own}${quote}. versus ${other}. Unresolved.`],
+        });
+        const s = inventorySettings(snap, salt);
+        expect(s.connections[0]).toMatchObject({
+          bindingState: "setup-required",
+          identityConflicts: [],
+        });
+        if (includeAccount)
+          expect(s.connections[1]).toMatchObject({
+            bindingState: "error",
+            identityConflicts: [
+              {
+                kind: "identity-mismatch",
+                handleHashes: [hashHandle(own, salt), hashHandle(other, salt)].sort(),
+              },
+            ],
+          });
+        expect(JSON.stringify(s)).not.toContain(prefix);
+        expect(JSON.stringify(s)).not.toContain(other);
+      }
+  });
+  it.each([
+    "No conflicts for alice@example.com.",
+    "No identity conflict: alice@example.com versus bob@example.org.",
+    "No contradiction between alice@example.com versus bob@example.org.",
+    "Resolved identity conflict: alice@example.com versus bob@example.org.",
+    "The conflict for alice@example.com was resolved.",
+    "Identity conflict: alice@example.com versus bob@example.org. Resolved.",
+    "Identity conflict: alice@example.com versus bob@example.org is resolved.",
+    "Identity conflict: alice@example.com versus bob@example.org. No conflicts remain.",
+    "Identity conflict: alice@example.com versus bob@example.org. Not unresolved.",
+    "Identity conflict: no conflict for alice@example.com versus bob@example.org.",
+    "Identity conflict: alice@example.com.",
+    "Use alice@example.com versus bob@example.org for comparison.",
+  ])("leaves non-affirmative or resolved conflict prose inactive: %s", (note) => {
+    const snap = parseSnapshot({
+      version: 1,
+      accounts: ["alice@example.com", "bob@example.org"].map((handle, index) => ({
+        id: `account-${index}`,
+        channel: "email",
+        provider: "fixture_provider",
+        organization: "personal",
+        identifiers: { primary: handle },
+        connector: { target: "fixture", setup_status: "planned" },
+      })),
+      notes: [note],
+    });
+    for (const account of inventorySettings(snap, salt).connections)
+      expect(account).toMatchObject({ bindingState: "setup-required", identityConflicts: [] });
+  });
+  it.each([
+    "https://profile.example/bob;v=2",
+    "https://profile.example/bob,alternate",
+    "https://profile.example/bob(v2)",
+    "https://profile.example/bob.",
+    "did:example:bob:alternate",
+    "mailto:bob@example.org",
+  ])("retains complete notes-only URI alternative %s", (other) => {
+    const own = "https://profile.example/alice";
+    for (const quote of ['"', "'", "`"]) {
+      const snap = parseSnapshot({
+        version: 1,
+        accounts: [
+          {
+            id: "web-account",
+            channel: "web",
+            provider: "fixture_provider",
+            organization: "personal",
+            identifiers: { primary: own },
+            connector: { target: "fixture", setup_status: "planned" },
+          },
+        ],
+        notes: [`Identity conflict: ${quote}${own}${quote} versus ${quote}${other}${quote}.`],
+      });
+      const s = inventorySettings(snap, salt);
+      expect(s.connections[0]).toMatchObject({
+        bindingState: "error",
+        identityConflicts: [
+          {
+            kind: "identity-mismatch",
+            handleHashes: [hashHandle(own, salt), hashHandle(other, salt)].sort(),
+          },
+        ],
+      });
+      expect(s.unmatchedEvidence).toEqual([]);
+      expect(JSON.stringify(s)).not.toContain(own);
+      expect(JSON.stringify(s)).not.toContain(other);
+    }
+  });
   it.each([".", ":"])("matches a complete evidence URI ending in %s", (suffix) => {
     const prefix = "https://profile.example/alice";
     const own = `${prefix}${suffix}`;
@@ -612,10 +717,10 @@ describe("privacy and settings model", () => {
         ),
         connector: { target: "fixture", setup_status: "planned" },
       })),
-      notes: Array.from(
-        { length: 20 },
-        (_, index) =>
-          `Identity conflict: ${index % 2 ? `@Fixture-${index}-0:matrix.example` : `fixture-${index}-0@example.com`} versus alternate-${index}@example.org! ${"context ".repeat(40)}`,
+      notes: Array.from({ length: 20 }, (_, index) =>
+        `Identity conflict: ${index % 2 ? `@Fixture-${index}-0:matrix.example` : `fixture-${index}-0@example.com`} versus alternate-${index}@example.org. Unresolved.`.padEnd(
+          500,
+        ),
       ),
     });
     const original = String.prototype.normalize;

@@ -244,6 +244,90 @@ describe("synthetic registry import", () => {
     expect(output).not.toContain(other);
   });
   it.each([
+    ";v=2",
+    ",v2",
+    "(v2)",
+  ])("writes complete quoted URI conflicts to RDF: %s", async (suffix) => {
+    const prefix = "https://profile.example/alice";
+    const own = `${prefix}${suffix}`;
+    const other = `https://profile.example/bob${suffix}`;
+    const ports = harness(
+      stringify({
+        version: 1,
+        accounts: [prefix, own].map((handle, index) => ({
+          id: `account-${index}`,
+          channel: "web",
+          provider: "fixture_provider",
+          organization: "personal",
+          identifiers: { primary: handle },
+          connector: { target: "fixture", setup_status: "planned" },
+        })),
+        notes: [`Identity conflict: "${own}" versus "${other}". Unresolved.`],
+      }),
+    );
+    const report = await importRegistry(config, ports);
+    const salt = await ports.salt.getSalt();
+    const conflicts = [
+      {
+        kind: "identity-mismatch",
+        handleHashes: [hashHandle(own, salt), hashHandle(other, salt)].sort(),
+      },
+    ];
+    for (const [index, account] of report.settings.connections.slice(0, 2).entries()) {
+      const expected = index === 0 ? [] : conflicts;
+      const state = index === 0 ? "setup-required" : "error";
+      expect(account).toMatchObject({ identityConflicts: expected, bindingState: state });
+      const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
+      const dataset = ports.storage.resources.get(url)?.dataset;
+      expect(
+        dataset
+          ?.getObjects(term(url), term(`${AGENT}identityConflict`), null)
+          .map((v) => JSON.parse(v.value)),
+      ).toEqual(expected);
+      expect(
+        dataset?.getObjects(term(url), term(`${AGENT}bindingState`), null).map((v) => v.value),
+      ).toEqual([state]);
+    }
+    const output = JSON.stringify({ report, resources: [...ports.storage.resources] });
+    expect(output).not.toContain(prefix);
+    expect(output).not.toContain(other);
+  });
+  it.each([
+    "No conflicts for alice@example.com.",
+    "Resolved identity conflict: alice@example.com versus bob@example.org.",
+    "Identity conflict: alice@example.com versus bob@example.org. Resolved.",
+  ])("omits inactive conflict notes from RDF: %s", async (note) => {
+    const ports = harness(
+      stringify({
+        version: 1,
+        accounts: [
+          {
+            id: "email-account",
+            channel: "email",
+            provider: "fixture_provider",
+            organization: "personal",
+            identifiers: { primary: "alice@example.com" },
+            connector: { target: "fixture", setup_status: "planned" },
+          },
+        ],
+        notes: [note],
+      }),
+    );
+    const report = await importRegistry(config, ports);
+    const account = report.settings.connections[0];
+    if (!account) throw new Error("Fixture account absent");
+    expect(account).toMatchObject({ bindingState: "setup-required", identityConflicts: [] });
+    const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
+    const dataset = ports.storage.resources.get(url)?.dataset;
+    expect(dataset?.getObjects(term(url), term(`${AGENT}identityConflict`), null)).toEqual([]);
+    expect(
+      dataset?.getObjects(term(url), term(`${AGENT}bindingState`), null).map((v) => v.value),
+    ).toEqual(["setup-required"]);
+    expect(JSON.stringify({ report, resources: [...ports.storage.resources] })).not.toContain(
+      "alice@example.com",
+    );
+  });
+  it.each([
     "!",
     "?",
   ])("writes both sentence-final conflict identities to RDF: %s", async (punctuation) => {

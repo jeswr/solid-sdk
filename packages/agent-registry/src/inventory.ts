@@ -236,8 +236,9 @@ const NOTE_IDENTIFIER_PART =
 // Keep phone formatting and adjacent suffixes so longer identities cannot match a prefix.
 const NOTE_IDENTIFIER = `\\+\\d[\\d ().-]{5,}\\d${NOTE_IDENTIFIER_PART}*|${NOTE_IDENTIFIER_PART}+`;
 const NOTE_IDENTIFIERS = new RegExp(
-  // Capture quoted boundaries before matching bare tokens, including formatted phones.
-  `(["'\`])(${NOTE_IDENTIFIER})\\1[.!?:]*(?!${NOTE_IDENTIFIER_PART})|${NOTE_IDENTIFIER}`,
+  // Preserve whole quoted spans, including URI delimiters and formatted phones.
+  // Do not search beyond the first closing quote when it is inside a bare identity.
+  `(["'\`])((?:(?!\\1)[^\\r\\n])+)\\1[.!?:]*(?!${NOTE_IDENTIFIER_PART})|${NOTE_IDENTIFIER}`,
   "gu",
 );
 /** Keep complete phone/handle/URI tokens; strip prose punctuation after a mention. */
@@ -259,16 +260,27 @@ function noteIdentifiers(
     // Sentence marks cannot end an email domain, Matrix server or phone number.
     // Keep them in opaque handles and URIs, and inside explicit identifiers' local parts.
     return noteIdentityChannel(unpunctuated) ? unpunctuated : handle;
-  });
+  }).filter((identifier) => identifier.length > 0);
 }
-/** Discover explicit identities only; Matrix bot MXIDs use the same case-preserving rules. */
+/** Discover explicit identities only; URI alternatives use the existing folded normalization. */
 function noteIdentityChannel(handle: string): string | undefined {
   if (/^[\p{L}\p{M}\p{N}.!#$%&'*+/=?^_`{|}~-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}$/u.test(handle))
     return "email";
   if (/^@[^@\s:]+:(?:[\p{L}\p{N}.-]+|\[[\da-fA-F.]*:[\da-fA-F:.]*\])(?::\d+)?$/u.test(handle))
     return "matrix";
   if (/^\+\d[\d ().-]{5,}\d$/u.test(handle)) return "phone_messages";
+  if (/^(?:https?:\/\/|(?:did|mailto|tel):)[^\s<>"`]+$/iu.test(handle)) return "web";
   return undefined;
+}
+/** Only the affirmative two-identity format denotes an unresolved conflict. */
+function activeConflictNote(note: string, identifiers: string[]): boolean {
+  return (
+    identifiers[1]?.toLowerCase() === "versus" &&
+    (identifiers.length === 3 ||
+      (identifiers.length === 4 &&
+        identifiers[3]?.toLowerCase() === "unresolved" &&
+        /\.\s+Unresolved\.$/iu.test(note)))
+  );
 }
 /** Build privacy-safe settings, applying only the documented ODI correction and Telegram addition. */
 export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array): Settings {
@@ -290,7 +302,12 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
   const known = { folded: new Set<string>(), matrix: new Set<string>() };
   for (const { handle, channel } of knownIdentities)
     (channel === "matrix" || channel === "matrix_bot" ? known.matrix : known.folded).add(handle);
-  const notes = snapshot.notes.map((note) => ({ note, identifiers: noteIdentifiers(note, known) }));
+  const notes = snapshot.notes.map((note) => {
+    const text = note.trim();
+    const affirmative = /^(?:Main Gmail )?Identity conflict:\s*(.+)$/iu.exec(text);
+    const identifiers = noteIdentifiers(affirmative?.[1] ?? text, known);
+    return { identifiers, active: !!affirmative && activeConflictNote(text, identifiers) };
+  });
   const identities = [
     ...knownIdentities,
     ...notes.flatMap(({ identifiers }) =>
@@ -302,10 +319,11 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
   ];
   // Match and hash each note once; account attachment only checks its own normalized handles.
   const noteConflicts = notes
-    .filter(({ note }) => /versus|contradict|conflict/i.test(note))
+    .filter(({ active }) => active)
     .map(({ identifiers }) => {
-      const folded = new Set(identifiers.map((handle) => normaliseHandle(handle)));
-      const matrix = new Set(identifiers.map((handle) => normaliseHandle(handle, "matrix")));
+      const alternatives = identifiers.filter((_, index) => index === 0 || index === 2);
+      const folded = new Set(alternatives.map((handle) => normaliseHandle(handle)));
+      const matrix = new Set(alternatives.map((handle) => normaliseHandle(handle, "matrix")));
       const mentioned = new Map<string, Set<string>>();
       const handleHashes = new Set<string>();
       for (const { handle, channel } of identities) {
