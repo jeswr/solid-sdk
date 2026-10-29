@@ -35,6 +35,7 @@ export function createDirectReader(mailbox: DirectMailbox, tokens: TokenProvider
     ingest: {
       async list(account, cursor, limits) {
         const id = accountId(account);
+        const accountRef = Object.freeze({ id });
         if (
           !Number.isSafeInteger(limits.maxItems) ||
           limits.maxItems <= 0 ||
@@ -51,7 +52,7 @@ export function createDirectReader(mailbox: DirectMailbox, tokens: TokenProvider
         }
         const messages = mailbox.inboxes.get(id) ?? [];
         if (offset > messages.length) throw new TypeError("cursor exceeds inbox");
-        assertGrant(await tokens.read(account), "read");
+        assertGrant(await tokens.read(accountRef), "read");
         const items = [];
         let bytes = 0;
         for (const item of messages.slice(offset, offset + limits.maxItems)) {

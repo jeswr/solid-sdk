@@ -531,6 +531,41 @@ describe("direct loopback", () => {
       );
   });
 
+  it("binds delayed read credentials to a frozen reference for the selected inbox", async () => {
+    const config = options();
+    const raw = envelope(signed().compactJws);
+    const mailbox: DirectMailbox = {
+      inboxes: new Map([[account.id, [{ id: message.id, raw }]]]),
+      accepted: new Map(),
+    };
+    const started = deferred<void>();
+    const resume = deferred<void>();
+    const read = vi.fn(async (ref: Parameters<TokenProvider["read"]>[0]) => {
+      started.resolve();
+      await resume.promise;
+      return config.tokens.read(ref);
+    });
+    const reader = createDirectReader(mailbox, {
+      read,
+      send: config.tokens.send.bind(config.tokens),
+    });
+    const ref = { ...account };
+    const pending = reader.ingest.list(ref, undefined, limits);
+    await started.promise;
+    ref.id = "other-account";
+    resume.resolve();
+    expect(await pending).toEqual({
+      items: [{ id: message.id, raw }],
+      next: JSON.stringify({ account: account.id, offset: 1 }),
+    });
+    expect(config.tokens.calls).toEqual([{ access: "read", account }]);
+    const authorized = read.mock.calls[0]?.[0];
+    expect(authorized).not.toBe(ref);
+    expect(Object.isFrozen(authorized)).toBe(true);
+    expect(Reflect.set(authorized as object, "id", "other-account")).toBe(false);
+    expect(authorized).toEqual(account);
+  });
+
   it("refuses wrong-scope, absent and empty grants before reading or delivering", async () => {
     for (const grant of [
       undefined,
