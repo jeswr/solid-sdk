@@ -24,8 +24,9 @@ function wacAclLink(header: string): string {
       if (params.has(name)) throw new Error("Ambiguous ACL discovery Link header");
       params.set(name, raw.startsWith('"') ? raw.slice(1, -1).replace(/\\(.)/g, "$1") : raw);
     }
-    const relations = (params.get("rel") ?? "").split(/\s+/);
-    if (relations.includes("http://www.w3.org/ns/solid/acp#accessControl"))
+    // RFC 8288 compares registered and extension relations case-insensitively.
+    const relations = (params.get("rel") ?? "").toLowerCase().split(/\s+/);
+    if (relations.includes("http://www.w3.org/ns/solid/acp#accessControl".toLowerCase()))
       throw new Error("Unsupported access-control model: ACP");
     if (relations.includes("acl")) {
       if (params.has("anchor")) throw new Error("Unsupported anchored ACL link");

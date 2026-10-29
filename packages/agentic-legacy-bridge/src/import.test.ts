@@ -206,6 +206,45 @@ describe("importInbound ACL discovery privacy gate", () => {
     for (const [, init] of fetch.mock.calls) expect(init?.redirect).toBe("manual");
   });
   it.each([
+    "ACL",
+    '"AcL"',
+    '"describedby aCl"',
+  ])("discovers case-insensitive ACL relations without changing the target (%s)", async (relation) => {
+    const fetch = pod(`<Owner-Policy>; ReL=${relation}`);
+    expect((await run(fetch)).written).toBe(1);
+    expect(fetch.mock.calls.slice(0, 3).map(([url, init]) => [String(url), init?.method])).toEqual([
+      [CONTAINER, "HEAD"],
+      [`${CONTAINER}Owner-Policy`, "GET"],
+      [`${CONTAINER}Owner-Policy`, "PUT"],
+    ]);
+  });
+  it.each([
+    ['<.acl>; rel="acl", <other>; rel="ACL"', /unique WAC ACL/],
+    ['<other>; rel="AcL", <.acl>; rel="acl"', /unique WAC ACL/],
+    ['<.acl>; rel="ACL", <other>; rel="aCl"', /unique WAC ACL/],
+    ['<.acl>; rel="ACL"; anchor="/other"', /anchored ACL link/],
+    [
+      '<.acl>; rel="acl", <policy>; rel="http://www.w3.org/ns/solid/acp#accessControl"',
+      /Unsupported access-control model: ACP/,
+    ],
+    [
+      '<.acl>; rel="acl", <policy>; rel="http://www.w3.org/ns/solid/acp#accesscontrol"',
+      /Unsupported access-control model: ACP/,
+    ],
+    [
+      '<policy>; rel="HTTP://WWW.W3.ORG/NS/SOLID/ACP#ACCESSCONTROL", <.acl>; rel="acl"',
+      /Unsupported access-control model: ACP/,
+    ],
+    [
+      '<.acl>; rel="acl HTTP://www.w3.org/ns/solid/acp#AccessControl"',
+      /Unsupported access-control model: ACP/,
+    ],
+  ])("refuses unsafe case-insensitive relations before reading or writing ACLs (%s)", async (link, error) => {
+    const fetch = pod(link);
+    await expect(run(fetch)).rejects.toThrow(error);
+    expect(fetch.mock.calls.map(([, init]) => init?.method)).toEqual(["HEAD"]);
+  });
+  it.each([
     ["", 404, 200],
     ['<.acl>; rel="acl", <other>; rel="acl"', 404, 200],
     ['<.acl>; rel="acl"; anchor="/other"', 404, 200],
