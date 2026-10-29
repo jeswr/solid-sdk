@@ -1,8 +1,9 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 // HTTP plumbing shared by the network backends: scope-checked requests, network-error mapping,
 // Link / WAC-Allow parsing and ReadResult construction (ADR-003 §2, §6, §7). Not exported.
 import { assertWithinPodScope, redactUserinfo } from "@jeswr/guarded-fetch";
-import { parseLinkHeaders, parseWacAllow } from "@jeswr/storage-capabilities";
+import { type ParsedLink, parseLinkHeaders, parseWacAllow } from "@jeswr/storage-capabilities";
 import { StorageError, storageErrorFrom } from "./errors.js";
 import { throwIfAborted } from "./internal.js";
 import type { AuthFetch, LinkTarget, ReadResult, ResourceKind } from "./types.js";
@@ -25,7 +26,10 @@ export function scoped(root: string, method: string, url: string): string {
   try {
     // Absolute URLs only: guarded-fetch would resolve a relative reference against the root.
     if (typeof url !== "string" || !URL.canParse(url)) throw new TypeError("not an absolute URL");
-    const canonical = assertWithinPodScope(root, url);
+    // Fetch parses without a base. Same-scheme references like `https:host/path` can resolve
+    // differently with a base, so validate the standalone destination before comparing both.
+    const canonical = assertWithinPodScope(root, new URL(url).href);
+    if (canonical !== assertWithinPodScope(root, url)) throw new TypeError("ambiguous URL");
     // The slashless alias of the root is the root (guarded-fetch accepts both spellings), with
     // any query or fragment kept, so parents and listings never step above the storage.
     // The suffix is sliced from the href, not rebuilt from URL.search/hash, which report an
@@ -45,6 +49,21 @@ export function scoped(root: string, method: string, url: string): string {
       message: `${method} ${shown} is outside the storage ${redacted(root)}`,
     });
   }
+}
+
+/** Scope and validate a listing container before requests or pagination can check aborts. */
+export function listingContainer(root: string, url: string, protocol: "solid" | "lws"): string {
+  const container = scoped(root, "GET", url);
+  // Empty query/fragment delimiters survive in href even though URL.search/hash report "".
+  if (/[?#]/.test(container) || (protocol === "lws" && !container.endsWith("/"))) {
+    const ending = protocol === "lws" ? " ending with '/'" : "";
+    throw new StorageError("bad-request", {
+      method: "GET",
+      url: container,
+      message: `list() takes a container URL${ending} without a query or fragment`,
+    });
+  }
+  return container;
 }
 
 /**
@@ -94,16 +113,39 @@ export function mediaTypeOf(value: string | null): string | null {
 }
 
 /** `rel → targets` for links whose context is the response URL (anchored links are ignored). */
-export function linksOf(response: Response, url: string): Map<string, LinkTarget[]> {
+export function linksOf(
+  response: Response,
+  url: string,
+  method: string,
+): Map<string, LinkTarget[]> {
+  let parsed: readonly ParsedLink[];
+  try {
+    parsed = parseLinkHeaders(response.headers.get("link"), url, {
+      maxBytes: 64 * 1024,
+      maxMembers: 1024,
+      maxResolvedBytes: 1024 * 1024,
+      onOverflow: "throw",
+    });
+  } catch (cause) {
+    discard(response.body);
+    throw new StorageError("invalid-response", {
+      method,
+      url,
+      cause,
+      message: `${method} ${url}: Link headers could not be fully inspected`,
+    });
+  }
   const links = new Map<string, LinkTarget[]>();
-  for (const link of parseLinkHeaders(response.headers.get("link"), url)) {
+  for (const link of parsed) {
     if (link.context !== url) continue;
     const params: Record<string, string> = {};
     for (const [name, value] of link.parameters) {
       if (name !== "rel" && name !== "anchor" && !(name in params)) params[name] = value;
     }
-    for (const rel of link.rel) {
-      links.set(rel, [...(links.get(rel) ?? []), { target: link.target, params }]);
+    for (const rel of new Set(link.rel)) {
+      const targets = links.get(rel) ?? [];
+      targets.push({ target: link.target, params });
+      links.set(rel, targets);
     }
   }
   return links;
