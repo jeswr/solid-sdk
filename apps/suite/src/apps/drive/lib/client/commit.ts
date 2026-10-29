@@ -73,6 +73,45 @@ export async function commitIrreversible<T>(
   return result;
 }
 
+/** The request is fully hydrated before this helper owns the final HTTP checks.
+ * Callers can process the response, but cannot insert work before sending it.
+ * Its If-Match also supplies the final target check, so the two cannot diverge.
+ */
+export function commitHttp<T>(
+  options: CommitChecks &
+    CommitEffects & {
+      readonly http: typeof fetch;
+      readonly url: string;
+      readonly init: RequestInit;
+      readonly error: (status: number, url: string) => Error;
+      readonly allowMissing?: boolean;
+      readonly finalIdentities?: readonly HttpIdentity[];
+      readonly response: (response: Response) => Promise<T>;
+    },
+): Promise<T> {
+  const headers = new Headers(options.init.headers);
+  const etag = headers.get("if-match");
+  const init = { ...options.init, headers };
+  return commitIrreversible({
+    ...options,
+    finalIdentities: [
+      ...(options.finalIdentities ?? []),
+      ...(etag
+        ? [
+            {
+              http: options.http,
+              url: options.url,
+              etag,
+              error: options.error,
+              ...(options.allowMissing ? { allowMissing: true } : {}),
+            },
+          ]
+        : []),
+    ],
+    step: async () => options.response(await options.http(options.url, init)),
+  });
+}
+
 /** Check both the precondition and the response, including servers ignoring If-Match. */
 export async function checkIdentity(
   http: typeof fetch,

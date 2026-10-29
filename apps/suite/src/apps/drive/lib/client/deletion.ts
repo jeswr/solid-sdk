@@ -1,11 +1,6 @@
 // AUTHORED-BY Codex
 
-import {
-  type CommitChecks,
-  type CommitEffects,
-  commitIrreversible,
-  type ResourceIdentity,
-} from "./commit";
+import { type CommitChecks, type CommitEffects, commitHttp, type ResourceIdentity } from "./commit";
 import { type DeletionRequest, deletionLedger, protectionLedger } from "./protection-ledger";
 
 export type DeleteOutcome = "done" | "not-performed" | "unknown";
@@ -99,20 +94,24 @@ export function deletionControl(http: typeof fetch, error: (status: number, url:
     };
     await pending.add(record);
     try {
-      await commitIrreversible({
+      await commitHttp({
         ...commit,
-        finalIdentities: [
-          { http, url, etag, error, allowMissing: true },
-          ...(commit.survivors ?? []).map((identity) => ({ ...identity, http, error })),
-        ],
-        step: async () => {
-          let response: Response;
+        http: async (input, init) => {
           try {
-            response = await http(url, { method: "DELETE", headers: { "if-match": etag } });
+            return await http(input, init);
           } catch (cause) {
-            // Response loss, aborts and timeouts do not establish whether DELETE ran.
+            if (init?.method !== "DELETE") throw cause;
             throw new DriveDeletePendingError(url, { cause });
           }
+        },
+        url,
+        init: { method: "DELETE", headers: { "if-match": etag } },
+        error,
+        allowMissing: true,
+        finalIdentities: [
+          ...(commit.survivors ?? []).map((identity) => ({ ...identity, http, error })),
+        ],
+        response: async (response) => {
           let outcome = classifyDelete(response.status);
           if (outcome === "not-performed") throw refusal(response.status, url);
           if (outcome === "unknown") outcome = await reread(record);

@@ -40,7 +40,7 @@ import {
   type CommitEffects,
   Compensation,
   checkIdentity,
-  commitIrreversible,
+  commitHttp,
   type ResourceIdentity,
 } from "./commit";
 import { deletionControl, isDeletionFailure } from "./deletion";
@@ -56,6 +56,7 @@ export { DriveDeletePendingError } from "./deletion";
 export interface AncestorPolicy {
   readonly kind: "protect-ancestors";
 }
+export type WritePolicy = AncestorPolicy | Extract<ContainerPolicy, { kind: "owner-only" }>;
 export interface PreservePolicy {
   readonly kind: "preserve-source";
 }
@@ -117,7 +118,7 @@ export interface DriveClient {
     url: string,
     body: Blob | string,
     options: WriteOptions,
-    policy: AncestorPolicy,
+    policy: WritePolicy,
   ): Promise<{ etag?: string }>;
   createFolder(url: string, policy: ContainerPolicy): Promise<void>;
   /** Establish owner-only default access before writing the Trash index or bytes. */
@@ -130,9 +131,15 @@ export interface DriveClient {
     from: string,
     to: string,
     policy: PreservePolicy,
+    options?: { readonly ifMatch?: string; readonly sourceGuards?: readonly ResourceIdentity[] },
   ): Promise<Pick<AccessBinding, "recheck"> & { readonly disarm: readonly Compensation[] }>;
   /** Copy a file (folders: recursive). Fails with a conflict when `to` exists. */
-  copy(from: string, to: string, policy: PreservePolicy): Promise<void>;
+  copy(
+    from: string,
+    to: string,
+    policy: PreservePolicy,
+    options?: { readonly sourceGuards?: readonly ResourceIdentity[] },
+  ): Promise<void>;
   /** Move = copy + verified, conditional delete; returns the copied identity. */
   move(
     from: string,
@@ -144,6 +151,8 @@ export interface DriveClient {
       beforeDelete?: () => Promise<void>;
       privateOwner?: string;
       archiveContainers?: (archive: string) => Promise<void>;
+      /** Approved ancestor versions, retained through partial-tree recovery. */
+      readonly sourceGuards?: readonly ResourceIdentity[];
     },
   ): Promise<MoveResult>;
   /** `ifMatch` binds files and recursive roots to the approved version. */
@@ -247,7 +256,6 @@ interface CreatedResource {
   readonly url: string;
   readonly source: SourceSnapshot;
   etag: string | undefined;
-  membershipVersion: number;
   data?: Store;
 }
 
@@ -365,21 +373,12 @@ export function createSolidDriveClient(options: {
   // Scoped to this authenticated client; listings retain their declared metadata for HEAD users.
   const resources = new Map<string, Resource>();
   const responseTypes = new Map<string, string>();
-  // Only our committed descendant mutations can explain a container ETag change.
-  const membershipVersions = new Map<string, number>();
-  const membershipVersion = (url: string) => membershipVersions.get(url) ?? 0;
-  const changedParents = (url: string) => {
-    for (let parent = parentOf(url); parent; parent = parentOf(parent))
-      membershipVersions.set(parent, membershipVersion(parent) + 1);
-  };
   const captureResource = (resource: CreatedResource, etag: string | undefined) => {
     resource.etag = etag;
-    resource.membershipVersion = membershipVersion(resource.url);
   };
   const checkContainerVersion = (resource: CreatedResource, etag: string | undefined) => {
     validator(resource.url, resource.etag);
-    if (etag !== resource.etag && membershipVersion(resource.url) === resource.membershipVersion)
-      throw new DriveError("conflict", 412, resource.url);
+    if (etag !== resource.etag) throw new DriveError("conflict", 412, resource.url);
   };
   const rememberType = (url: string, headers: Headers) => {
     const type = headers.get("content-type");
@@ -495,6 +494,7 @@ export function createSolidDriveClient(options: {
     verifyAccess?: () => Promise<void>,
     scope: AccessScope = new Set(),
     effects: Omit<CommitEffects, "onCommit"> & Pick<CommitChecks, "identityChecks"> = {},
+    required?: OwnAccess,
   ): Promise<Response> => {
     for (
       let target: string | undefined = url;
@@ -512,6 +512,10 @@ export function createSolidDriveClient(options: {
     // validator before the post-write check. Standalone writes use the same helper.
     const binding =
       !creating && !verifyAccess ? await bindAccess(access, url, url, true) : undefined;
+    const verifyProtection = async () => {
+      if (required && accessGains(required, requireAccess(await access.effective(url), url)).length)
+        throw new DriveAccessError("Owner-only protection changed");
+    };
     const headers = new Headers(init.headers);
     let previous: { body: Blob; type: string } | undefined;
     if (binding && headers.get("if-none-match") !== "*") {
@@ -531,52 +535,43 @@ export function createSolidDriveClient(options: {
     let response: Response;
     const compensation = new Compensation(async () => {
       const etag = validator(url, response.headers.get("etag") ?? undefined);
-      // Rollback only our PUT identity, even if access is now unknown.
+      // Removing unchecked bytes needs only our PUT identity. Replaying an old
+      // representation also requires restoring its captured audience first.
       await (binding as AccessBinding).rollback(async () => {
-        if (previous)
-          await guardedWrite(
-            url,
-            {
-              method: "PUT",
-              headers: { "content-type": previous.type, "if-match": etag },
-              body: previous.body,
-            },
-            false,
-            async () => {},
-          );
-        else await deleteVersion(url, etag);
+        if (previous) {
+          await replayProtected(url, required ?? (binding as AccessBinding).source, {
+            method: "PUT",
+            headers: { "content-type": previous.type, "if-match": etag },
+            body: previous.body,
+          });
+        } else await deleteVersion(url, etag);
       });
     });
     const ifMatch = headers.get("if-match");
-    response = await commitIrreversible({
+    if (ifMatch) validator(url, ifMatch);
+    response = await commitHttp({
       ...effects,
-      onCommit: () => changedParents(url),
       arm: [...(binding ? [compensation] : []), ...(effects.arm ?? [])],
       rechecks: [
         async () => {
           await binding?.recheck();
           await recheckScope(scope);
           await verifyAccess?.();
+          await verifyProtection();
         },
       ],
       identityChecks: effects.identityChecks ?? [],
-      finalIdentities: ifMatch
-        ? [
-            {
-              http,
-              url,
-              etag: validator(url, ifMatch),
-              error: (status, url) =>
-                errorFor(status === 404 || status === 410 ? 412 : status, url),
-            },
-          ]
-        : [],
-      step: async () =>
-        ensureOk(await http(url, { ...init, headers: Object.fromEntries(headers) }), url),
+      http,
+      url,
+      init: { ...init, headers },
+      error: (status, url) => errorFor(status === 404 || status === 410 ? 412 : status, url),
+      response: (response) => ensureOk(response, url),
     });
     try {
       await binding?.recheck();
       await recheckScope(scope);
+      await verifyProtection();
+      await verifyAccess?.();
       compensation.disarm();
     } catch (error) {
       await compensation.rollback();
@@ -585,19 +580,73 @@ export function createSolidDriveClient(options: {
     return response;
   };
 
+  /** Every compensation replay restores its captured audience before old bytes/RDF. */
+  const replayProtected = async (
+    url: string,
+    policy: OwnAccess,
+    init: RequestInit,
+    effects?: Pick<CommitChecks, "identityChecks">,
+  ) => {
+    const etag = validator(url, new Headers(init.headers).get("if-match") ?? undefined);
+    await checkIdentity(http, url, etag, errorFor);
+    await provision.protect(url, policy);
+    return guardedWrite(
+      url,
+      init,
+      false,
+      async () => {
+        if (accessGains(policy, requireAccess(await access.effective(url), url)).length)
+          throw new DriveAccessError("Rollback protection changed");
+      },
+      undefined,
+      effects,
+    );
+  };
+
   const write = async (
     url: string,
     body: Blob | string,
     opts: WriteOptions,
-    policy: AncestorPolicy,
+    policy: WritePolicy,
     verifyAccess?: () => Promise<void>,
     scope?: AccessScope,
     effects?: Omit<CommitEffects, "onCommit">,
   ): Promise<{ etag?: string }> => {
-    requirePolicy(policy, ["protect-ancestors"]);
+    requirePolicy(policy, ["protect-ancestors", "owner-only"]);
+    let required: OwnAccess | undefined;
+    let placeholderEtag: string | undefined;
+    if (policy.kind === "owner-only") {
+      const current = await http(url, { method: "HEAD", cache: "no-store" });
+      if (current.headers.get("x-solid-demo-access-control") !== "none") {
+        if (
+          (opts.ifNoneMatch && current.ok) ||
+          (opts.ifMatch && (!current.ok || current.headers.get("etag") !== opts.ifMatch))
+        )
+          throw new DriveError("conflict", 412, url);
+        const webId = policy.webId ?? owner;
+        if (!webId) throw new DriveAccessError("Owner WebID unavailable");
+        required = { url: `${url}.acl`, etag: "", dataset: privateAcl(url, webId) };
+        if (current.ok) await provision.protect(url, required);
+        else {
+          if (current.status !== 404) throw errorFor(current.status, url);
+          const placeholder = await provision.file(
+            url,
+            required,
+            url,
+            () => rawPut(url, "", { "content-type": opts.contentType, "if-none-match": "*" }),
+            () => {},
+          );
+          placeholderEtag = validator(url, placeholder.response.headers.get("etag") ?? undefined);
+        }
+      }
+    }
     const headers: Record<string, string> = { "content-type": opts.contentType };
     if (opts.ifNoneMatch) headers["if-none-match"] = opts.ifNoneMatch;
     if (opts.ifMatch) headers["if-match"] = opts.ifMatch;
+    if (placeholderEtag) {
+      delete headers["if-none-match"];
+      headers["if-match"] = placeholderEtag;
+    }
     // Metadata updates may never mint a container. Even a concurrent deletion
     // must fail its precondition instead of recreating a folder outside its flight.
     if (url.endsWith("/"))
@@ -609,6 +658,7 @@ export function createSolidDriveClient(options: {
       verifyAccess,
       scope,
       effects,
+      required,
     );
     // A replacement supersedes the previous listing's declarations before its refresh completes.
     resources.delete(url);
@@ -669,13 +719,15 @@ export function createSolidDriveClient(options: {
       const children: SourceSnapshot[] = [];
       for (const child of items) children.push(await snapshot(child.url, requireValidator, bodies));
       const own = await policy(headers);
+      // A cached listing cannot certify children inspected after a root replacement.
+      if (requireValidator) await checkIdentity(http, url, validator(url, etag), errorFor);
       return {
         url,
         etag,
         children,
         demo: headers.get("x-solid-demo-access-control") === "none",
-        // Child DELETEs change the validator; retain application RDF even for
-        // deletion-only snapshots before adopting the final empty listing's tag.
+        // Retain application RDF as well as the pinned identity. A matching
+        // empty graph alone cannot authorize deleting a later container version.
         data: containerData(dataset, url),
         access: own,
         ...(binding ? { binding } : {}),
@@ -716,10 +768,6 @@ export function createSolidDriveClient(options: {
   ) => {
     await deletion.remove(url, validator(url, etag), recovery, {
       ...commit,
-      onCommit: () => {
-        changedParents(url);
-        commit.onCommit?.();
-      },
     });
     resources.delete(url);
     responseTypes.delete(url);
@@ -734,9 +782,10 @@ export function createSolidDriveClient(options: {
     identityCheck: (source: SourceSnapshot) => Promise<void>,
     disarm: (url: string) => readonly Compensation[],
     survivors: readonly ResourceIdentity[] = [],
+    ancestors: readonly ResourceIdentity[] = [],
   ) => {
     await verifyCopy(source);
-    let etag = source.etag;
+    const etag = source.etag;
     if (source.children?.length) {
       for (const child of source.children)
         await deleteSnapshot(
@@ -748,16 +797,17 @@ export function createSolidDriveClient(options: {
           identityCheck,
           disarm,
           survivors,
+          [...ancestors, { url: source.url, etag: validator(source.url, source.etag) }],
         );
-      // Our own child deletions change a container's ETag. Read its new empty
-      // representation, then conditionally delete it. Never walk new members.
+      // A membership change can also conceal recreation. Refuse a new validator,
+      // even when our own child DELETEs could explain it; never walk new members.
       const current = await listing(source.url);
       if (
         current.items.length ||
         !sameGraph(source.data as Store, containerData(current.dataset, source.url))
       )
         throw new DriveError("conflict", 409, source.url);
-      etag = current.etag;
+      if (current.etag !== source.etag) throw new DriveError("conflict", 412, source.url);
       await verifyCopy(source);
     }
     await deleteVersion(source.url, etag, recovery?.(source.url), {
@@ -771,7 +821,7 @@ export function createSolidDriveClient(options: {
           await identityCheck(source);
         },
       ],
-      survivors,
+      survivors: [...survivors, ...ancestors],
       disarm: disarm(source.url),
       onCommit: () => {
         deleted.push(source.url);
@@ -797,7 +847,6 @@ export function createSolidDriveClient(options: {
         source,
         etag: undefined,
         data: new Store(),
-        membershipVersion: membershipVersion(to),
       };
       let decision: ContainerPolicy;
       if (policy) decision = { kind: "archived", acl: policy, from: source.url };
@@ -869,7 +918,6 @@ export function createSolidDriveClient(options: {
           url: to,
           source,
           etag: undefined,
-          membershipVersion: membershipVersion(to),
         };
         const result = await provision.file(
           to,
@@ -910,21 +958,20 @@ export function createSolidDriveClient(options: {
           url: to,
           source,
           etag: result.etag,
-          membershipVersion: membershipVersion(to),
         });
       await verifyAccess();
     }
   };
 
   const verifySnapshotIdentity = async (source: SourceSnapshot) => {
-    let etag = source.etag;
+    const etag = source.etag;
     if (source.children) {
       // Membership may change as children are restored. The recovered application
       // RDF must still exist before its destination can be discarded or overwritten.
       const current = await listing(source.url);
       if (!containsGraph(source.data as Store, containerData(current.dataset, source.url)))
         throw new DriveError("conflict", 412, source.url);
-      etag = current.etag;
+      if (current.etag !== source.etag) throw new DriveError("conflict", 412, source.url);
     }
     await checkIdentity(http, source.url, validator(source.url, etag), errorFor);
   };
@@ -1052,7 +1099,7 @@ export function createSolidDriveClient(options: {
             contentType: "application/json",
             ifNoneMatch: "*",
           },
-          { kind: "protect-ancestors" },
+          { kind: "owner-only", webId: privateOwner },
           undefined,
           scope,
         );
@@ -1071,10 +1118,13 @@ export function createSolidDriveClient(options: {
     to: string,
     decision: PreservePolicy,
     scope: AccessScope,
+    opts: Parameters<DriveClient["mergeContainer"]>[3],
   ) => {
     requirePolicy(decision, ["preserve-source"]);
     await provision.check(from);
     const original = await listing(from);
+    if (opts?.ifMatch !== undefined && original.etag !== opts.ifMatch)
+      throw new DriveError("conflict", 412, from);
     const own = await access.snapshot(from, original.headers);
     const source: SourceSnapshot = {
       url: from,
@@ -1087,6 +1137,14 @@ export function createSolidDriveClient(options: {
     const effective = own.status === "none" && !own.demo ? await access.effective(from) : own;
     requireAccess(effective, from);
     const binding = await bindAccess(access, from, to);
+    const verifyMerge = async () => {
+      await binding.recheck();
+      for (const identity of [
+        ...(opts?.sourceGuards ?? []),
+        { url: from, etag: validator(from, original.etag) },
+      ])
+        await checkIdentity(http, identity.url, identity.etag, errorFor);
+    };
     await preparePolicies(source, from, to);
     const policy = source.demo
       ? undefined
@@ -1097,7 +1155,6 @@ export function createSolidDriveClient(options: {
       source,
       etag: undefined,
       data: new Store(),
-      membershipVersion: membershipVersion(to),
     };
     let previous: Store | undefined;
     const compensation = new Compensation(async () => {
@@ -1128,16 +1185,14 @@ export function createSolidDriveClient(options: {
           owns: (data) => sameGraph(expected, data),
           remove: async (etag) => {
             await binding.rollback(() =>
-              guardedWrite(
+              replayProtected(
                 to,
+                binding.destination,
                 {
                   method: "PUT",
                   headers: { "content-type": "text/turtle", "if-match": etag },
                   body,
                 },
-                false,
-                async () => {},
-                undefined,
                 { identityChecks: [() => verifySnapshotIdentity(source)] },
               ),
             );
@@ -1156,7 +1211,7 @@ export function createSolidDriveClient(options: {
           captureResource(resource, response.headers.get("etag") ?? undefined);
         },
         undefined,
-        () => binding.recheck(),
+        verifyMerge,
         { arm: [compensation] },
       );
       if (result.policy) binding.installed(result.policy);
@@ -1200,7 +1255,7 @@ export function createSolidDriveClient(options: {
           ifMatch: validator(to, current.etag),
         },
         { kind: "protect-ancestors" },
-        () => binding.recheck(),
+        verifyMerge,
         undefined,
         { arm: [compensation] },
       );
@@ -1230,6 +1285,7 @@ export function createSolidDriveClient(options: {
     scope: AccessScope,
     acceptedAccess?: OwnAccess,
     approvedEtag?: string,
+    sourceGuards: readonly ResourceIdentity[] = [],
   ): Promise<MoveResult> => {
     if (from.endsWith("/") !== to.endsWith("/") || (from.endsWith("/") && to.startsWith(from))) {
       throw new DriveError("conflict", 409, to);
@@ -1323,6 +1379,8 @@ export function createSolidDriveClient(options: {
           accessFailure = true;
           await recheckScope(scope);
           accessFailure = false;
+          for (const identity of sourceGuards)
+            await checkIdentity(http, identity.url, identity.etag, errorFor);
         };
         const bindDestination = async (url: string, policy?: OwnAccess) => {
           let binding = bindings.get(url);
@@ -1396,6 +1454,8 @@ export function createSolidDriveClient(options: {
                   throw new DriveError("conflict", 409, url);
                 destinations.set(node.url, {
                   url,
+                  // This is a receipt for a newly populated destination, captured
+                  // for the later Undo decision. It never rebases its cleanup.
                   etag: node.children.length ? validator(url, current.etag) : copiedEtag,
                   children: [...expected],
                 });
@@ -1458,6 +1518,7 @@ export function createSolidDriveClient(options: {
                 scope,
                 destination,
                 approvedEtag ?? source.etag,
+                sourceGuards,
               );
             }
             throw error;
@@ -1494,9 +1555,23 @@ export function createSolidDriveClient(options: {
     policy: PreservePolicy,
     held: ReadonlySet<string>,
     scope: AccessScope,
+    opts: Parameters<DriveClient["copy"]>[3],
   ) => {
     requirePolicy(policy, ["preserve-source"]);
-    await transfer(from, to, false, policy, undefined, undefined, undefined, held, scope);
+    await transfer(
+      from,
+      to,
+      false,
+      policy,
+      undefined,
+      undefined,
+      undefined,
+      held,
+      scope,
+      undefined,
+      undefined,
+      opts?.sourceGuards,
+    );
   };
 
   const move = async (
@@ -1520,6 +1595,7 @@ export function createSolidDriveClient(options: {
       scope,
       undefined,
       opts?.ifMatch,
+      opts?.sourceGuards,
     );
   };
 
@@ -1640,10 +1716,10 @@ export function createSolidDriveClient(options: {
       );
     },
     createFolder,
-    mergeContainer(from, to, policy) {
+    mergeContainer(from, to, policy, opts) {
       return sourceOperation(
         [from, to],
-        () => mergeContainer(from, to, policy, scopeFor(this)),
+        () => mergeContainer(from, to, policy, scopeFor(this), opts),
         scopes.get(this),
       );
     },
@@ -1663,10 +1739,10 @@ export function createSolidDriveClient(options: {
         await provision.protect(url, policy);
       }
     },
-    copy(from, to, policy) {
+    copy(from, to, policy, opts) {
       return sourceOperation(
         [from, to],
-        (held) => copy(from, to, policy, held, scopeFor(this)),
+        (held) => copy(from, to, policy, held, scopeFor(this), opts),
         scopes.get(this),
       );
     },

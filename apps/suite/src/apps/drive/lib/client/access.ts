@@ -8,7 +8,7 @@ import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { readSharing } from "../sharing/sharing";
-import { commitIrreversible } from "./commit";
+import { commitHttp } from "./commit";
 import { relocate, sameGraph } from "./rdf";
 
 const ACL = "http://www.w3.org/ns/auth/acl#";
@@ -173,19 +173,19 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       requireAccess(await effective(resource), resource);
     }
     const body = await serialize([...dataset]);
-    const response = await commitIrreversible({
-      finalIdentities: current
-        ? [{ http, url, etag: current.etag, error: (status) => new DriveAccessError(status) }]
-        : [],
-      step: () =>
-        http(url, {
-          method: "PUT",
-          headers: {
-            "content-type": "text/turtle",
-            ...(current ? { "if-match": current.etag } : { "if-none-match": "*" }),
-          },
-          body,
-        }),
+    const response = await commitHttp({
+      http,
+      url,
+      error: (status) => new DriveAccessError(status),
+      init: {
+        method: "PUT",
+        headers: {
+          "content-type": "text/turtle",
+          ...(current ? { "if-match": current.etag } : { "if-none-match": "*" }),
+        },
+        body,
+      },
+      response: async (response) => response,
     });
     if (!response.ok) throw new DriveAccessError(response.status);
     rejectAcp(response.headers);

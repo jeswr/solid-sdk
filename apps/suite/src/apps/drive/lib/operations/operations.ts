@@ -20,6 +20,7 @@ import {
   parentOf,
   policyArchiveOf,
 } from "../client/client";
+import type { ResourceIdentity } from "../client/commit";
 import { rethrowPendingDeletion } from "../client/deletion";
 import { containerData, containsGraph, relocate, sameGraph } from "../client/rdf";
 import { DriveOperationInProgressError } from "../client/source-operations";
@@ -330,7 +331,7 @@ async function updateIndexUnlocked(
         current?.etag
           ? { contentType: "text/turtle", ifMatch: current.etag }
           : { contentType: "text/turtle", ifNoneMatch: "*" },
-        { kind: "protect-ancestors" },
+        { kind: "owner-only" },
       );
       return;
     } catch (error) {
@@ -450,7 +451,7 @@ async function markRecovery(
       contentType: "text/turtle",
       ifNoneMatch: "*",
     },
-    { kind: "protect-ancestors" },
+    { kind: "owner-only" },
   );
 }
 
@@ -907,6 +908,7 @@ async function restoreMissing(
   to: string,
   settled: boolean,
   approvedEtag?: string,
+  ancestors: readonly ResourceIdentity[] = [],
 ): Promise<{ url: string; error: unknown }[]> {
   try {
     if (from.endsWith("/")) {
@@ -916,7 +918,15 @@ async function restoreMissing(
         throw new DriveError("conflict", 412, from);
       if (!original.etag || original.etag.startsWith("W/"))
         throw new DriveError("missing-validator", 409, from);
-      const merged = await client.mergeContainer(from, to, { kind: "preserve-source" });
+      const merged = await client.mergeContainer(
+        from,
+        to,
+        { kind: "preserve-source" },
+        {
+          ifMatch: original.etag,
+          sourceGuards: ancestors,
+        },
+      );
       const remaining: { url: string; error: unknown }[] = [];
       const children = await client.list(from);
       for (const child of children)
@@ -926,6 +936,8 @@ async function restoreMissing(
             child.url,
             `${to}${child.url.slice(from.length)}`,
             settled,
+            child.etag,
+            [...ancestors, { url: from, etag: original.etag }],
           )),
         );
       // Non-recursive removal succeeds only for an empty recovery container.
@@ -936,8 +948,7 @@ async function restoreMissing(
         // empty representation before committing, never after a refused DELETE.
         const current = await client.readRdf(from);
         if (!current) throw new DriveError("not-found", 404, from);
-        if (!children.length && current.etag !== original.etag)
-          throw new DriveError("conflict", 412, from);
+        if (current.etag !== original.etag) throw new DriveError("conflict", 412, from);
         await discardVersion({
           url: from,
           captured: { content: current.dataset, etag: current.etag },
@@ -960,7 +971,7 @@ async function restoreMissing(
               commit: {
                 disarm: merged.disarm,
                 rechecks: [() => merged.recheck()],
-                survivors: [{ url: to, etag: survivor.etag }],
+                survivors: [{ url: to, etag: survivor.etag }, ...ancestors],
               },
             });
           },
@@ -988,7 +999,7 @@ async function restoreMissing(
               await access?.recheck();
             },
           ],
-          survivors: [{ url: to, etag: survivorEtag }],
+          survivors: [{ url: to, etag: survivorEtag }, ...ancestors],
         },
       });
       return [];
@@ -997,14 +1008,14 @@ async function restoreMissing(
       // An expired owner may still have an HTTP DELETE in flight. Even an absent
       // original can be recreated with the same content-derived ETag. Copy it
       // back, but retain recovery until a terminal receipt confirms quiescence.
-      await client.copy(from, to, { kind: "preserve-source" });
+      await client.copy(from, to, { kind: "preserve-source" }, { sourceGuards: ancestors });
       throw new TrashMovingError();
     }
     await client.move(
       from,
       to,
       { kind: "preserve-source" },
-      approvedEtag === undefined ? undefined : { ifMatch: approvedEtag },
+      { ...(approvedEtag === undefined ? {} : { ifMatch: approvedEtag }), sourceGuards: ancestors },
     );
     return [];
   } catch (error) {
