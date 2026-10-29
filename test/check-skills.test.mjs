@@ -758,6 +758,50 @@ describe("skill validation", () => {
     expect(checkSkills(root, { write: true }).errors).toEqual([]);
   });
 
+  it.each(
+    Array.from({ length: 32 }, (_, index) => index + 1),
+  )("trims surrounding C0 controls and spaces after decoding: %i", (codePoint) => {
+    const root = fixture();
+    const literal = String.fromCodePoint(codePoint);
+    const decimal = `&#${codePoint};`;
+    const hex = `&#x${codePoint.toString(16)};`;
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({
+        body: [
+          `<a href="${literal}references/guide.md${literal}">guide</a>`,
+          `<img src="${decimal}references/guide.md${hex}">`,
+          `<a href="${decimal}https://example.invalid/missing.md${hex}">external</a>`,
+          `<svg><a xlink:href="${hex}references/guide.md${decimal}">guide</a></svg>`,
+          `[guide](${decimal}references/guide.md${hex})`,
+          `[doc]: ${hex}references/guide.md${decimal}`,
+        ].join("\n\n"),
+      }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
+    "%01",
+    "%0B",
+    "%1F",
+    "%20",
+    "\u007f",
+    "\u00a0",
+    "&#0;",
+  ])("preserves encoded filename boundaries and characters outside the trim range: %s", (encoding) => {
+    const root = fixture();
+    const character = encoding === "&#0;" ? "\ufffd" : decodeURIComponent(encoding);
+    put(root, `skills/alpha/${character}guide.md${character}`, "# Guide\n");
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({ body: `<a href="${encoding}guide.md${encoding}">guide</a>` }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
   it.each([
     '<a href="references/gu&#9;ide.md">guide</a>',
     '<a href="references/gu&#10;ide.md">guide</a>',
@@ -850,6 +894,7 @@ describe("skill validation", () => {
   it.each([
     '<a href=" missing.md ">broken</a>',
     "<img src='&#32;missing.png&#32;'>",
+    '<a href="&#11;missing.md&#31;">broken</a>',
   ])("still rejects unresolved HTML URLs after trimming: %s", (body) => {
     const root = fixture();
     put(root, "skills/alpha/SKILL.md", skill({ body }));

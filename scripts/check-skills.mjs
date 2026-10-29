@@ -314,9 +314,10 @@ function linksIn(text) {
   const html = markdown.parser(markdown.lexer(text));
   const links = [];
   for (const href of htmlLinksIn(html, definitions, definitionMarker)) {
-    // HTML URL attributes allow surrounding ASCII whitespace, including encoded whitespace.
+    // URL parsing trims surrounding C0 controls and spaces after reference decoding.
     // URL parsing also removes embedded tabs/newlines; percent escapes stay intact.
-    links.push(href.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, "").replace(/[\t\n\r]/g, ""));
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: URL preprocessing requires this range.
+    links.push(href.replace(/^[\u0000-\u0020]+|[\u0000-\u0020]+$/g, "").replace(/[\t\n\r]/g, ""));
   }
   return [...new Set(links)];
 }
