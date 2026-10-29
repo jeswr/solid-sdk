@@ -1,9 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { applyResolvedTheme, readStoredTheme, resolveTheme } from '@jeswr/solid-elements';
 import type { FieldCategory } from '../content/formfill/detect';
 import { FIELD_LABELS } from '../shared/formfill';
 import type { FormFillPreview, FormFillPreviewRequest } from '../shared/messages';
 
 async function main(): Promise<void> {
+  applyResolvedTheme(resolveTheme(readStoredTheme() ?? 'system'));
   const requestId = new URLSearchParams(window.location.search).get('requestId');
   const error = document.getElementById('error')!;
   const picker = document.getElementById('profile') as HTMLSelectElement;
@@ -69,6 +71,7 @@ async function main(): Promise<void> {
     loading = true;
     fill.disabled = true;
     error.hidden = true;
+    error.textContent = '';
     try {
       const view = (await chrome.runtime.sendMessage({
         type: 'SOLID_FORMFILL_PREVIEW',
@@ -77,7 +80,7 @@ async function main(): Promise<void> {
       } satisfies FormFillPreviewRequest)) as FormFillPreview | null;
       if (generation !== version || decided) return;
       if (!view) {
-        showError('This fill request has expired or your profile is no longer available.');
+        showError('This fill request has expired or your account is no longer available.');
         return;
       }
       profileId = view.profileId;
@@ -99,16 +102,31 @@ async function main(): Promise<void> {
         const values = view.values.filter((v) => v.category === category);
         if (!values.length) continue;
         const group = document.createElement('fieldset');
+        group.className = 'data-card category-card';
         const legend = document.createElement('legend');
+        const heading = document.createElement('div');
+        heading.className = 'category-header';
+        const title = category === 'contact' ? 'Contact details' : 'Address';
+        legend.textContent = title;
+        legend.className = 'visually-hidden';
         const label = document.createElement('label');
+        label.className = 'card-check card-title';
         const box = document.createElement('input');
         box.type = 'checkbox';
         box.checked = view.selected.includes(category);
+        box.setAttribute('aria-describedby', `${category}-hint`);
         box.addEventListener('change', updateFill);
         boxes.set(category, box);
-        label.append(box, category === 'contact' ? ' Contact details' : ' Address');
-        legend.append(label);
-        group.append(legend);
+        label.append(box, ` ${title}`);
+        heading.append(label);
+        const hint = document.createElement('p');
+        hint.className = 'hint';
+        hint.id = `${category}-hint`;
+        hint.textContent =
+          category === 'contact'
+            ? 'Fill the matching name, email and phone fields with these values.'
+            : 'Fill the matching address fields with these values.';
+        group.append(legend, heading, hint);
         const list = document.createElement('dl');
         for (const value of values) {
           const term = document.createElement('dt');
@@ -124,7 +142,7 @@ async function main(): Promise<void> {
       loading = false;
       updateFill();
     } catch {
-      if (generation === version) showError('Could not load your profile. Please try again.');
+      if (generation === version) showError('Could not load your account. Please try again.');
     }
   }
   picker.addEventListener('change', () => {

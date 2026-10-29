@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { FormFillPreview } from '../src/shared/messages';
+import { expectAccessible } from './permission-a11y';
 
 let dom: JSDOM;
 let send: ReturnType<typeof vi.fn>;
@@ -27,10 +28,12 @@ const view = (profileId = '1'): FormFillPreview => ({
 async function mount(
   url = 'https://extension.example/formfill/preview.html?requestId=fixture',
   initial: FormFillPreview | null = view(),
+  theme = 'light',
 ) {
   dom = new JSDOM(readFileSync(new URL('../src/formfill/preview.html', import.meta.url), 'utf8'), {
     url,
   });
+  dom.window.localStorage.setItem('app-shell-theme', theme);
   send = vi.fn(async (message: { type: string; profileId?: string }) =>
     message.type === 'SOLID_FORMFILL_PREVIEW'
       ? message.profileId
@@ -50,11 +53,34 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
+it.each([
+  'light',
+  'dark',
+])('renders accessible category cards in the saved %s theme', async (theme) => {
+  await mount(undefined, view(), theme);
+  const document = dom.window.document;
+  await vi.waitFor(() => expect(document.querySelectorAll('.category-card')).toHaveLength(2));
+  expect(document.documentElement.classList.contains('dark')).toBe(theme === 'dark');
+  for (const card of document.querySelectorAll('.category-card')) {
+    expect(card.querySelector('legend')?.textContent).toBe(
+      card.querySelector('.category-header label')?.textContent?.trim(),
+    );
+    const box = card.querySelector('input')!;
+    expect(document.getElementById(box.getAttribute('aria-describedby')!)?.textContent).toContain(
+      'matching',
+    );
+    expect(card.querySelectorAll('dt')).toHaveLength(card.querySelectorAll('dd').length);
+  }
+  expect(document.querySelector('#remember')?.getAttribute('aria-describedby')).toBe(
+    'remember-hint',
+  );
+  await expectAccessible(document);
+});
 it('labels native keyboard controls, renders values as text, and submits only checked categories', async () => {
   await mount();
   const document = dom.window.document;
   await vi.waitFor(() => expect(document.querySelectorAll('dd')).toHaveLength(2));
-  expect(document.querySelector('label[for="profile"]')?.textContent).toBe('Use profile');
+  expect(document.querySelector('label[for="profile"]')?.textContent).toBe('Use account');
   expect(document.querySelector('#origin')?.textContent).toBe('https://shop.example');
   expect(document.querySelector('dd')?.textContent).toContain('<img src=x');
   expect(document.querySelector('#categories img')).toBeNull();
@@ -189,6 +215,11 @@ it('does not enable Fill from old category controls during a profile load or aft
   );
   contact.click();
   expect(fill.disabled).toBe(true);
+  picker.value = '1';
+  picker.dispatchEvent(new dom.window.Event('change'));
+  await vi.waitFor(() => expect(fill.disabled).toBe(false));
+  expect(document.querySelector('#error')?.textContent).toBe('');
+  expect(document.querySelector<HTMLElement>('#error')?.hidden).toBe(true);
 });
 it('keeps Fill disabled when the request has expired', async () => {
   await mount(undefined, null);

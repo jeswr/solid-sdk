@@ -27,6 +27,7 @@
     "@jeswr/federation-registry",
     "@jeswr/federation-trust",
     "@jeswr/guarded-fetch",
+    "@jeswr/ldp-container",
     "@jeswr/matrix-chat-to-pod",
     "n8n-nodes-solid",
     "@jeswr/openclaw-memory-solid",

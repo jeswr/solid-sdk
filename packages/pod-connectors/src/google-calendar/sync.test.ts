@@ -56,6 +56,49 @@ function setup() {
 }
 
 describe("Google Calendar synchronization", () => {
+  it("reconciles legacy scheduling membership and rewrites canonical predicates and classes", async () => {
+    const { pod, run } = setup();
+    const master = { ...EVENTS.items[0], recurrence: ["RRULE:FREQ=WEEKLY;COUNT=10"] };
+    const initial = await run([route({ items: [master], nextSyncToken: "legacy-sync" })]).result;
+    const legacy = (pod.get(DOC) ?? "").replaceAll(
+      "https://jeswr.org/ns/",
+      "https://w3id.org/jeswr/",
+    );
+    expect(legacy).toContain("https://w3id.org/jeswr/sectors/scheduling#recurrence");
+    expect((await pod.fetch(DOC, { method: "PUT", body: legacy })).ok).toBe(true);
+    const next = run(
+      [
+        route({
+          items: [
+            {
+              id: "legacy-cancelled-instance",
+              status: "cancelled",
+              recurringEventId: master.id,
+              originalStartTime: { dateTime: "2026-06-18T08:00:00Z" },
+            },
+          ],
+          nextSyncToken: "canonical-sync",
+        }),
+      ],
+      initial.state,
+    );
+    expect((await next.result).cursor).toBe("canonical-sync");
+    const dataset = pod.dataset(DOC);
+    const event = new GoogleCalendarEvent(`${DOC}#event-${master.id}`, dataset, DataFactory);
+    const ruleIri = `${DOC}#event-${master.id}/recurrence-0`;
+    expect([...event.recurrence]).toEqual([ruleIri]);
+    expect([...new RecurrenceRule(ruleIri, dataset, DataFactory).exceptions]).toContain(
+      "2026-06-18T08:00:00Z",
+    );
+    expect(pod.get(DOC)).not.toContain("https://w3id.org/jeswr/");
+    expect(pod.get(DOC)).toContain(`${SCHED}CalendarEvent`);
+    expect(
+      next.api.mock.calls.every(
+        ([url]) => new URL(String(url)).searchParams.get("syncToken") === "legacy-sync",
+      ),
+    ).toBe(true);
+  });
+
   it("uses event zones before the calendar zone, including metadata on a later page", async () => {
     const { pod, run } = setup();
     const item = (id: string, timeZone?: string) => ({

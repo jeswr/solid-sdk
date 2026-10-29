@@ -506,6 +506,30 @@ describe("unforget (clear the tombstone — inverse of forget)", () => {
 });
 
 describe("list + all", () => {
+  it.each([
+    CONTAINER,
+    `${CONTAINER}/`,
+  ])("list preserves strict root-alias refusal under %s", async (container) => {
+    const fetch: typeof globalThis.fetch = async (_input, init) => {
+      expect(init?.redirect).toBe("manual");
+      return new Response(
+        `@prefix ldp: <http://www.w3.org/ns/ldp#> .
+<${container}> ldp:contains <${container.slice(0, -1)}>, <http://[>,
+  <${container}z>, <${container}a>, <${container}x/../z>, <${container}sub/>,
+  <${container}a%2Fb>, <${container}?self#alias> .`,
+        {
+          headers: { "content-type": "text/turtle" },
+        },
+      );
+    };
+    const store = new MemoryStore({ container, fetch });
+    expect(await store.list()).toEqual([
+      { url: `${container}z`, container: false },
+      { url: `${container}a`, container: false },
+      { url: `${container}sub/`, container: true },
+    ]);
+  });
+
   it("list returns the container members", async () => {
     const { fetchImpl } = makePod();
     const s = new MemoryStore({ container: CONTAINER, fetch: fetchImpl });

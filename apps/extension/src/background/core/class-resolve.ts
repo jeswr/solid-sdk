@@ -33,11 +33,11 @@ const FOR_CLASS = `${SOLID}forClass`;
 const INSTANCE = `${SOLID}instance`;
 const INSTANCE_CONTAINER = `${SOLID}instanceContainer`;
 
-/** Public documents must never carry credentials, even on an authenticated pod origin. */
+/** Public documents must never carry credentials; `url` is the final post-redirect RDF base. */
 export type ResolveFetch = (
   url: string,
   authenticated: boolean,
-) => Promise<{ ok: boolean; text: string }>;
+) => Promise<{ ok: boolean; text: string; url: string }>;
 
 export interface ResolveOptions {
   /** The active session's WebID (the profile document to read the type-index refs from). */
@@ -76,12 +76,14 @@ function normaliseTargetUrl(value: string): { url: string; origin: string } | nu
  * The type-index document URLs advertised on the WebID subject (`solid:publicTypeIndex` +
  * `solid:privateTypeIndex`), NamedNode + http(s) only. Public refs take precedence when a
  * document is advertised both ways, so it is fetched once without credentials. PURE.
+ * `profileUrl` supplies the final document base; `webId` remains the subject to match.
  */
 export function parseTypeIndexRefs(
   webId: string,
   profileTurtle: string,
+  profileUrl = webId,
 ): Array<{ url: string; authenticated: boolean }> {
-  const store = parse(webId, profileTurtle);
+  const store = parse(profileUrl, profileTurtle);
   const out: Array<{ url: string; authenticated: boolean }> = [];
   for (const pred of [PUBLIC_TYPE_INDEX, PRIVATE_TYPE_INDEX]) {
     for (const q of store.getQuads(
@@ -166,7 +168,7 @@ export async function resolveClassTargets(
 
   let refs: ReturnType<typeof parseTypeIndexRefs>;
   try {
-    refs = parseTypeIndexRefs(opts.webId, profile);
+    refs = parseTypeIndexRefs(opts.webId, profile.text, profile.url);
   } catch {
     return [];
   }
@@ -185,7 +187,7 @@ export async function resolveClassTargets(
     if (body === null) continue;
     let targets: PinnedTarget[];
     try {
-      targets = parseTargetsForClass(ref.url, body, classIRI, opts.allowedOrigins);
+      targets = parseTargetsForClass(body.url, body.text, classIRI, opts.allowedOrigins);
     } catch {
       continue;
     }
@@ -212,10 +214,10 @@ async function safeFetch(
   fetchFn: ResolveFetch,
   url: string,
   authenticated: boolean,
-): Promise<string | null> {
+): Promise<{ text: string; url: string } | null> {
   try {
-    const { ok, text } = await fetchFn(url, authenticated);
-    return ok ? text : null;
+    const { ok, text, url: finalUrl } = await fetchFn(url, authenticated);
+    return ok ? { text, url: finalUrl } : null;
   } catch {
     return null;
   }

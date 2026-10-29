@@ -3,8 +3,11 @@
 The **@jeswr Solid suite workspace** — reusable TypeScript SDK packages plus the private
 applications that consume them, consolidated into one pnpm + Turborepo workspace.
 
-Forty publishable packages and thirteen private applications are imported with full git history;
-two maintainer-directed packages (`@jeswr/synthetic-rdf` and `@jeswr/solid-seed`) were added here.
+The workspace contains 72 packages and 18 applications; `suite.json` records the inventory.
+The original forty packages and thirteen applications were imported with full git history.
+Maintainer-directed additions include `@jeswr/synthetic-rdf`, `@jeswr/solid-seed`, and
+[`@jeswr/ldp-container`](packages/ldp-container/README.md), the shared security-critical
+LDP listing helper (sst-8xm.7). The listing helper has no mirror repository configured.
 Libraries live in `packages/`; deployables live in `apps/` and use `workspace:*` for every SDK
 dependency that exists here. Mirror publishing (`--execute`) has not run yet. The package design,
 inventory, and phased migration plan live in
