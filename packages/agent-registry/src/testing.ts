@@ -27,11 +27,12 @@ export class MemoryStorageClient implements StorageClient {
     options: { ifMatch?: string; ifNoneMatch?: "*" },
   ): Promise<void> {
     if (!this.acls.has(url)) throw new Error("ACL required before content");
+    const body = await accountTurtle(dataset);
     const current = this.resources.get(url);
     if (current ? options.ifMatch !== current.etag : options.ifNoneMatch !== "*")
       throw new Error("Precondition failed");
     this.resources.set(url, {
-      body: await accountTurtle(dataset),
+      body,
       etag: `"${++this.revision}"`,
       dataset: new Store([...dataset]),
     });
