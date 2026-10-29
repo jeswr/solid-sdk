@@ -819,3 +819,64 @@ Neither `roborev` nor `sparq-policy-decide` is installed, so per-commit automate
 and native backend execution could not run. Package tests use synthetic data, generated
 keys and injected I/O. No remote was fetched or merged, and nothing was pushed or
 published.
+
+## Fix round 11 — scalar request cardinality and signed timestamp precision at `6f60be3d013a`
+
+2026-10-29. Both requested findings are fixed on `lane/sst-gpa`:
+
+- `841fb124` — `fix(agent-mandate): validate both scalar operands`.
+  Require exactly one value on each side of `eq`, `neq`, `gt`, `gteq`, `lt` and
+  `lteq` before comparison, including permission duties and policy obligations.
+  Multiple request values require confirmation regardless of order or duplicates.
+  Tests retain singleton-array comparisons and multivalued set operators.
+- `19bed963` — `fix(agent-mandate): require lossless signed instants`.
+  Reject nonzero digits beyond milliseconds in the shared instant validator before
+  any `Date.parse` validity comparison. Preserve additional trailing zeros. Tests
+  exercise signed VC loading directly and through TriG parsing, signed legacy JWS
+  loading, signed approval expiry and intent evaluation, including timezone bounds,
+  one-, two- and three-digit fractions, trailing zeros and exact expiry boundaries.
+  Existing policy/adapter tests now expect refusal when the intent timestamp itself
+  has unsupported precision.
+- Final report commit — `docs(agent-mandate): record eleventh fix round validation`.
+
+Validation uses Node v24.22.1 (`PATH=/opt/node24/bin:$PATH`):
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/agent-mandate... --concurrency=4
+pnpm exec vitest run --root packages/agent-mandate test/policy.test.ts --coverage.enabled=false -t 'requires one left value|preserves multiple values'
+pnpm exec vitest run --root packages/agent-mandate test/policy.test.ts test/sparq.test.ts --coverage.enabled=false
+pnpm exec vitest run --root packages/agent-mandate test/policy.test.ts test/mandate.test.ts test/legacy.test.ts test/approval.test.ts --coverage.enabled=false -t 'invalid.*instant|invalid.*expiry|lossless'
+pnpm --filter @jeswr/agent-mandate run lint && pnpm --filter @jeswr/agent-mandate run build && pnpm --filter @jeswr/agent-mandate run typecheck && pnpm --filter @jeswr/agent-mandate run test
+TURBO_SCM_BASE=6f60be3d013af045dfe94bde0c80504cc378088f TURBO_TELEMETRY_DISABLED=1 pnpm run gate
+NEXT_FONT_GOOGLE_MOCKED_RESPONSES=/tmp/sst-gpa-font-responses.cjs NEXT_TELEMETRY_DISABLED=1 TURBO_TELEMETRY_DISABLED=1 pnpm run gate:full
+```
+
+- Prerequisite builds — PASS, 7/7 tasks.
+- Regression reproduction — all six scalar comparison regression rows failed
+  before the cardinality fix; 16 signed/intent timestamp tests failed before the
+  precision fix. The scalar fix then passed all 509 policy and adapter tests.
+- Package gate — PASS, 718 tests in nine files, adding 48 tests relative to the
+  supplied head. Every required per-file coverage metric remains 100%: statements
+  500/500, branches 570/570, functions 129/129 and lines 449/449. Coverage thresholds,
+  exclusions and configured timeouts are unchanged. The existing non-fatal
+  agent-authz-verifier sourcemap warning remains.
+- Affected repository gate — PASS, 11/11 tasks in 10.0 seconds, including root lint
+  and every workspace/layer guard. The local `agent/integration` ref is absent;
+  the comparison base is the supplied pre-fix head.
+- Full workspace gate — FAIL outside the reviewed package, 218 successful tasks
+  of 304 reported in 1m47s. All 686 root tests pass. `@jeswr/app-issues#build` stops
+  with two Turbopack font CSS resolution errors for Geist and Geist Mono (`url not
+  found`) while using the existing temporary synthetic Google Fonts response fixture.
+  The Issues app, suite app, root manifest and lockfile have no diff from the supplied
+  head. No repository configuration was changed to work around this application
+  build failure, and the font response seam avoids contacting a font service.
+- `git diff --check` — PASS.
+
+Conservative timestamp choice: require lossless millisecond representation instead
+of introducing a new timestamp comparison implementation. No dependencies were added,
+so no `check:packages` run was needed. Changes are confined to the reviewed package and
+this required report. No requested finding remains unfinished and there are no open
+questions. The unrelated full-workspace build failure remains outside scope. Neither
+`roborev` nor `sparq-policy-decide` is installed, so per-commit automated review and native
+backend execution could not run. Tests use synthetic data, generated keys and injected
+I/O. No remote was fetched or merged, and nothing was pushed or published.
