@@ -269,3 +269,44 @@ was fetched, no branch was switched, and no other checkout was modified.
 
 The `roborev` executable remains unavailable, so automated per-commit verdicts
 could not be collected. No review tooling or tracker was installed.
+
+## Fix round 5 — review of `54e2275dd1b0`
+
+Both findings are fixed on `lane/sst-31t`. Changes are limited to
+agent-channels, its regression tests and this report.
+
+| Commit | Change |
+| --- | --- |
+| `640b056e` | `fix: preserve effective channel fetch policies` — forward effective cache, mode, keepalive, referrer and referrer-policy settings alongside integrity through guarded-fetch normalization. Preserve inherited referrer settings when constructing the Request snapshot. Tests cover string, URL and Request inputs, partial overrides, explicit replacements and clearing; the real loopback transport confirms cache-bypass headers reach the server. |
+| `07f20321` | `fix: bound direct carrier bytes before decoding` — reject byte carriers exceeding `DIRECT.maxBytes` before invoking TextDecoder. Tests accept the exact raw-byte boundary, reject a BOM-prefixed carrier whose decoded text fits, and prove oversized Buffer and Uint8Array inputs never reach decoding. Existing decoded JSON limits remain enforced. |
+| `16e17da6` | `test: use guarded channel transport type` — use guarded-fetch's exported type for the injected test transport to satisfy the agent layer guard. |
+| This final commit | `docs: record sst-31t round five verification` — this report. |
+
+Verification uses Node 24.22.1 with `PATH=/opt/node24/bin:$PATH` for all pnpm
+commands. Before the fixes, all five initial policy cases failed and the oversized
+BOM-prefixed byte carrier was accepted. The regression suite also exposed Node's
+Request-copy reset of inherited referrer settings; those are now supplied
+explicitly before normalization. All final tests pass.
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/agent-channels` | PASS; 5/5 tasks, preparing workspace prerequisites in this fresh checkout. |
+| `pnpm exec vitest run --root packages/agent-channels test/origins.test.ts test/direct.test.ts --coverage.enabled=false -t 'effective fetch policies\|bounds raw carrier'` (before the fixes) | Expected FAIL; all 6 initial regression cases reproduced. |
+| `pnpm --filter @jeswr/agent-channels run lint && pnpm --filter @jeswr/agent-channels run build && pnpm --filter @jeswr/agent-channels run typecheck && pnpm --filter @jeswr/agent-channels run test` | PASS; 4 test files, 86 tests. Enforced per-file coverage: statements 178/178, branches 126/126, functions 35/35, lines 171/171 — all 100%. |
+| `TURBO_SCM_BASE=54e2275dd1b0c4aa76da123b1da6518e6ecda1a7 pnpm run gate` (first attempt) | FAIL in root agent layer lint: the test's `typeof fetch` annotation was forbidden. Corrected to the guarded-fetch export in `16e17da6`. |
+| `TURBO_SCM_BASE=54e2275dd1b0c4aa76da123b1da6518e6ecda1a7 pnpm run gate` (after the type correction) | PASS; root lint and 25/25 Turbo tasks, including 86 channel tests, 650 legacy-bridge tests, 121 model tests and 531 personal-agent tests. The supplied starting lane SHA scopes this fix round; `agent/integration` remains absent locally. |
+| `pnpm run gate:full` | FAIL outside this fix: 291/346 tasks completed successfully before the existing `@jeswr/federation-trust#test` delegation-credential snapshot failed at `test/characterization.test.ts:196`. Expected JWK property order is `crv,x,kty`; received order is `kty,crv,x`, matching previous lane reports. All 747 root tests passed. |
+| `git diff --check` | PASS. |
+
+No dependencies were added, so no new `check:packages` run was required. Tests
+use only fake transports and loopback traffic. No coverage threshold, timeout
+configuration or unrelated source was changed. Both requested fixes and their
+regression tests are complete, with no open questions or design changes.
+
+The unrelated federation-trust snapshot still blocks a green full-workspace
+gate. The 16 generated app callback and client-ID files were removed; no `dist/`
+is committed. No remote was fetched, no branch was switched, and no other
+checkout was modified.
+
+The `roborev` executable remains unavailable, so automated per-commit verdicts
+could not be collected. No review tooling or tracker was installed.
