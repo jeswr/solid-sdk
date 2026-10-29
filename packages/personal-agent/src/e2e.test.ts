@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The GOLDEN-MASTER end-to-end flow over doubled I/O (an in-memory pod + a mock Gmail):
  * untrusted email → Reader → owner-private pod → deterministic Actor proposal → ODRL-mandate-
@@ -206,6 +207,31 @@ function receiptBody(pod: MemoryPod): string | undefined {
     (k) => k.startsWith(OUTBOX) && k.endsWith(".ttl") && !k.endsWith(".acl"),
   );
   return key ? pod.store.get(key)?.body : undefined;
+}
+
+function failReceiptFinalization(pod: MemoryPod, failure: "http" | "transport" | "lost-response") {
+  const attempts: string[] = [];
+  const writeFetch: typeof fetch = async (input, init) => {
+    const url = String(input);
+    if (
+      init?.method === "PUT" &&
+      url.startsWith(OUTBOX) &&
+      url.endsWith(".ttl") &&
+      new Headers(init.headers).get("if-none-match") !== "*"
+    ) {
+      attempts.push(String(init.body));
+      if (attempts.length === 1) {
+        if (failure === "transport") throw new Error("receipt transport unavailable");
+        if (failure === "lost-response") {
+          await pod.fetch(input, init);
+          throw new Error("receipt response unavailable");
+        }
+        return new Response(null, { status: 503 });
+      }
+    }
+    return pod.fetch(input, init);
+  };
+  return { writeFetch, attempts };
 }
 
 async function rewriteReader(pod: MemoryPod, change: (store: Store) => void) {
@@ -552,6 +578,7 @@ describe("personal-agent end-to-end (Reader → Actor → ODRL-enforced outbox)"
     const result = await runOutboxOnce(outboxConfig(pod, scriptedVerifier(loosePolicy), recorder));
     expect(result.mandateLoaded).toBe(true);
     expect(result.sent).toBe(1);
+    expect(result.receiptErrors).toBe(0);
     expect(recorder.sent.length).toBe(1);
     expect(recorder.sent[0]?.to).toBe("alice@example.com");
     expect(recorder.sent[0]?.textBody).toContain("2026-07-07T14:00:00");
@@ -569,12 +596,159 @@ describe("personal-agent end-to-end (Reader → Actor → ODRL-enforced outbox)"
     expect(recorder.sent.length).toBe(1);
   });
 
+  it.each([
+    "http",
+    "transport",
+    "lost-response",
+  ] as const)("keeps a successful send sent when receipt finalization fails (%s)", async (failure) => {
+    const { pod } = await seededPod();
+    const recorder = new RecordingSender(() => FIXED);
+    const { writeFetch, attempts } = failReceiptFinalization(pod, failure);
+    const config = {
+      ...outboxConfig(pod, scriptedVerifier(loosePolicy), recorder),
+      writeFetch,
+    };
+
+    const result = await runOutboxOnce(config);
+    expect(result).toMatchObject({
+      sent: 1,
+      failed: 0,
+      queuedForConfirmation: 0,
+      receiptErrors: 1,
+    });
+    expect(recorder.sent).toHaveLength(1);
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]).toContain('"sent"');
+    expect(attempts[0]).toContain('"recorded-1"');
+    expect(attempts[0]).not.toContain('"failed"');
+    expect(receiptBody(pod)).toContain(failure === "lost-response" ? '"sent"' : '"claimed"');
+
+    // Either the finalized receipt or the surviving claim prevents a later re-send.
+    expect(await runOutboxOnce(config)).toMatchObject({
+      sent: 0,
+      failed: 0,
+      queuedForConfirmation: 0,
+      skipped: 1,
+      receiptErrors: 0,
+    });
+    expect(recorder.sent).toHaveLength(1);
+    expect(attempts).toHaveLength(1);
+  });
+
+  it("reports a genuine send failure and persists a failed receipt", async () => {
+    const { pod } = await seededPod();
+    const send = vi.fn(async () => {
+      throw new Error("sender unavailable");
+    });
+    const config = {
+      ...outboxConfig(pod, scriptedVerifier(loosePolicy), new RecordingSender(() => FIXED)),
+      senders: { email: send },
+    };
+
+    expect(await runOutboxOnce(config)).toMatchObject({ sent: 0, failed: 1, receiptErrors: 0 });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(receiptBody(pod)).toContain('"failed"');
+    expect(receiptBody(pod)).toContain("send failed after claim");
+    expect(await runOutboxOnce(config)).toMatchObject({ sent: 0, failed: 0, skipped: 1 });
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    "http",
+    "transport",
+    "lost-response",
+  ] as const)("reports both errors when sending and receipt finalization fail (%s)", async (failure) => {
+    const { pod } = await seededPod();
+    const send = vi.fn(async () => {
+      throw new Error("sender unavailable");
+    });
+    const { writeFetch, attempts } = failReceiptFinalization(pod, failure);
+    const config = {
+      ...outboxConfig(pod, scriptedVerifier(loosePolicy), new RecordingSender(() => FIXED)),
+      senders: { email: send },
+      writeFetch,
+    };
+
+    expect(await runOutboxOnce(config)).toMatchObject({
+      sent: 0,
+      failed: 1,
+      queuedForConfirmation: 0,
+      receiptErrors: 1,
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(attempts).toHaveLength(1);
+    expect(attempts[0]).toContain('"failed"');
+    expect(attempts[0]).toContain("send failed after claim");
+    expect(receiptBody(pod)).toContain(failure === "lost-response" ? '"failed"' : '"claimed"');
+
+    expect(await runOutboxOnce(config)).toMatchObject({
+      sent: 0,
+      failed: 0,
+      queuedForConfirmation: 0,
+      skipped: 1,
+      receiptErrors: 0,
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(attempts).toHaveLength(1);
+  });
+
+  it.each([
+    "sent",
+    "failed",
+  ] as const)("continues the pass after a %s receipt write fails", async (outcome) => {
+    const { pod } = await seededPod();
+    const first = (await listProposals(pod.fetch, PROPOSALS))[0]?.proposal;
+    if (!first) throw new Error("missing proposal");
+    const next = { ...first, id: `${first.id}-next` };
+    await createProposal(pod.fetch, PROPOSALS, OWNER, next);
+    await writeConfirmation(
+      pod.fetch,
+      CONFIRMATIONS,
+      OWNER,
+      confirmProposal(next, { confirm: true, confirmedAt: FIXED.toISOString() }),
+    );
+    const recorder = new RecordingSender(() => FIXED);
+    const send = vi.fn(recorder.send);
+    if (outcome === "failed") send.mockRejectedValueOnce(new Error("sender unavailable"));
+    const { writeFetch, attempts } = failReceiptFinalization(pod, "http");
+    const config = {
+      ...outboxConfig(pod, scriptedVerifier(loosePolicy), recorder),
+      senders: { email: send },
+      writeFetch,
+    };
+
+    expect(await runOutboxOnce(config)).toMatchObject({
+      sent: outcome === "sent" ? 2 : 1,
+      failed: outcome === "failed" ? 1 : 0,
+      queuedForConfirmation: 0,
+      receiptErrors: 1,
+      skipped: 0,
+    });
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[0]).toContain(`"${outcome}"`);
+    expect(attempts[1]).toContain('"sent"');
+    expect(pod.store.get(`${OUTBOX}${first.id}.ttl`)?.body).toContain('"claimed"');
+    expect(pod.store.get(`${OUTBOX}${next.id}.ttl`)?.body).toContain('"sent"');
+
+    expect(await runOutboxOnce(config)).toMatchObject({
+      sent: 0,
+      failed: 0,
+      queuedForConfirmation: 0,
+      receiptErrors: 0,
+      skipped: 2,
+    });
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(attempts).toHaveLength(2);
+  });
+
   it("FAIL-CLOSED: a tampered / unverifiable mandate makes the executor refuse ALL actions", async () => {
     const { pod } = await seededPod();
     const recorder = new RecordingSender(() => FIXED);
     const result = await runOutboxOnce(outboxConfig(pod, REFUSING_VERIFIER, recorder));
     expect(result.mandateLoaded).toBe(false);
     expect(result.sent).toBe(0);
+    expect(result.receiptErrors).toBe(0);
     expect(recorder.sent.length).toBe(0);
     expect((await listProposals(pod.fetch, PROPOSALS))[0]?.proposal.status).toBe("pending");
   });

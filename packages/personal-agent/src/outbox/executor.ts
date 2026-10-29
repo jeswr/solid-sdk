@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The OUTBOX EXECUTOR — the deterministic, NO-LLM enforcement point (§2/§5/§7 + the ODRL
  * mandate directive). It is the security boundary: it holds the per-channel send tokens, it
@@ -39,7 +40,7 @@ import type { ActionProposal } from "../pod/proposals.js";
 import { putResource, refuseRedirect, throwIfNotWritten } from "../pod/write.js";
 import { provenanceRequiresConfirmation } from "./provenance.js";
 import { type ReceiptOutcome, type SendReceiptInput, serializeSendReceipt } from "./receipt.js";
-import type { ChannelSender, OutboundMessage } from "./sender.js";
+import type { ChannelSender, OutboundMessage, SendReceipt } from "./sender.js";
 
 /** Config for {@link runOutboxOnce}. */
 export interface ExecutorConfig {
@@ -81,6 +82,8 @@ export interface ExecutorResult {
   readonly prohibited: number;
   /** Number of intents that failed to send. */
   readonly failed: number;
+  /** Number of final receipt writes that failed, independently of the sent/failed counts. */
+  readonly receiptErrors: number;
   /** Number of proposals skipped (already have a receipt, or lost the claim race). */
   readonly skipped: number;
 }
@@ -91,6 +94,7 @@ const EMPTY_RESULT: ExecutorResult = {
   queuedForConfirmation: 0,
   prohibited: 0,
   failed: 0,
+  receiptErrors: 0,
   skipped: 0,
 };
 
@@ -236,6 +240,7 @@ export async function runOutboxOnce(config: ExecutorConfig): Promise<ExecutorRes
   let queuedForConfirmation = 0;
   let prohibited = 0;
   let failed = 0;
+  let receiptErrors = 0;
   let skipped = 0;
   let outboxAclEnsured = false;
   const ensureOutboxAcl = async () => {
@@ -345,37 +350,49 @@ export async function runOutboxOnce(config: ExecutorConfig): Promise<ExecutorRes
       continue;
     }
 
+    let outcome: "sent" | "failed";
+    let receipt: SendReceipt | undefined;
     try {
       const carrier = await buildCarrier(proposal, executedAt, config);
       const message = assembleMessage(proposal, carrier);
-      const receipt = await sender(message); // the actual transmit — the token lives here
-      await putReceipt(
-        config,
-        proposal,
-        url,
-        executedAt,
-        "sent",
-        basis,
-        receipt.channelMessageId ? { channelMessageId: receipt.channelMessageId } : {},
-        false,
-        mandate.credentialId,
-      );
+      receipt = await sender(message); // the actual transmit — the token lives here
+      outcome = "sent";
       sent += 1;
     } catch {
+      outcome = "failed";
+      failed += 1;
+    }
+
+    // Transmission determines the outcome. A finalization error must never turn a sent
+    // message into a failed one; the existing claim still prevents any later re-send.
+    try {
       await putReceipt(
         config,
         proposal,
         url,
         executedAt,
-        "failed",
+        outcome,
         basis,
-        { note: "send failed after claim" },
+        outcome === "failed"
+          ? { note: "send failed after claim" }
+          : receipt?.channelMessageId
+            ? { channelMessageId: receipt.channelMessageId }
+            : {},
         false,
         mandate.credentialId,
       );
-      failed += 1;
+    } catch {
+      receiptErrors += 1;
     }
   }
 
-  return { mandateLoaded: true, sent, queuedForConfirmation, prohibited, failed, skipped };
+  return {
+    mandateLoaded: true,
+    sent,
+    queuedForConfirmation,
+    prohibited,
+    failed,
+    receiptErrors,
+    skipped,
+  };
 }
