@@ -141,6 +141,84 @@ describe("skill validation", () => {
     expect(checkSkills(root).errors.join("\n")).toContain("relative link");
   });
 
+  it.each([
+    '<img srcset="missing.png 2x">',
+    "<IMG SRCSET='missing.png 320w'>",
+    "<img srcset=missing.png>",
+    '<img src="references/guide.md" srcset="missing.png 2x">',
+    '<img srcset="references/guide.md 1x, missing.png 2x">',
+    '<img srcset="missing.png 1x, references/guide.md 2x">',
+    '<img srcset="references/guide.md, missing.png">',
+    '<img srcset=" , , missing.png,, ">',
+    '<img srcset="references/guide.md&#32;1x&#44;&#9;missing.png&#32;2x">',
+    '<img srcset="https://example.invalid/image.png 1x, missing.png 2x">',
+    '<img srcset="data:image/png;base64,AAAA 1x, missing.png 2x">',
+    '<picture><source srcset="references/guide.md 320w, missing.png 640w"><img src="references/guide.md"></picture>',
+    '<img srcset="missing.png 320w 240h">',
+    '<img srcset="missing.png 2e0x">',
+    '<img srcset="ignored.png invalid(a,b), missing.png 2x">',
+  ])("validates each relative srcset candidate: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+  });
+
+  it.each([
+    '<img srcset="references/guide.md 1x, references/other.png 2x">',
+    '<img srcset="references/guide.md, references/other.png">',
+    '<img srcset="references/guide.md&#9;1x,&#10;references/other.png&#13;2x">',
+    '<img srcset="references/a,b.png 2x">',
+    '<img srcset="references/space%20name.png 2x">',
+    '<img srcset="references/a&amp;b.png 2x">',
+    '<img srcset="references/&amp;copy;.png 2x">',
+    '<img srcset="data:image/png;base64,AAAA 1x, references/guide.md 2x">',
+    '<img srcset="data:image/png;base64,AAAA, references/guide.md 2x">',
+    '<img srcset="https://example.invalid/image.png 1x, //example.invalid/other.png 2x, /root.png 3x">',
+    '<picture><source srcset="references/guide.md 320w, references/other.png 640w"><img src="references/guide.md"></picture>',
+    '<img srcset="references/guide.md?raw=1#section 2x">',
+    '<img srcset=" , , ">',
+  ])("accepts resolved and non-relative srcset candidates: %s", (body) => {
+    const root = fixture();
+    for (const filename of ["other.png", "a,b.png", "space name.png", "a&b.png", "&copy;.png"]) {
+      put(root, `skills/alpha/references/${filename}`, "Image fixture\n");
+    }
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
+    '<!-- <img srcset="missing.png 2x"> -->',
+    '`<img srcset="missing.png 2x">`',
+    '```html\n<img srcset="missing.png 2x">\n```',
+    '<textarea><img srcset="missing.png 2x"></textarea>',
+    '<img title="srcset=missing.png" data-srcset="missing.png 2x">',
+    '<div srcset="missing.png 2x"></div>',
+    '<svg><image srcset="missing.png 2x" /></svg>',
+    '<img srcset="missing.png 2x"',
+    '<img srcset="missing.png invalid">',
+    '<img srcset="missing.png 1x 2x">',
+    '<img srcset="missing.png 0w">',
+    '<img srcset="missing.png -1x">',
+    '<img srcset="missing.png 320w 2x">',
+    '<img srcset="missing.png 240h">',
+    '<img srcset="missing.png invalid(a,b), references/guide.md 2x">',
+    '<img srcset="missing.png invalid(a,b, references/guide.md 2x">',
+  ])("ignores inert srcset text and discarded candidates: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it("checks srcset URL encoding without exposing the destination", () => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body: '<img srcset="private%ZZ.png 2x">' }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link has invalid URL encoding (target omitted)",
+    ]);
+  });
+
   it("resolves encoded paths, queries and fragments; ignores links in code and external URLs", () => {
     const root = fixture();
     put(root, "skills/alpha/references/space (name).md", "# Guide\n");

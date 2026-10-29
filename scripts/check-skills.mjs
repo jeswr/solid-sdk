@@ -86,6 +86,67 @@ function decodeCharacterReferences(text) {
   );
 }
 
+function srcsetLinksIn(input) {
+  const links = [];
+  let cursor = 0;
+  while (cursor < input.length) {
+    while (cursor < input.length && /[\t\n\f\r ,]/.test(input[cursor])) cursor++;
+    const start = cursor;
+    while (cursor < input.length && !/[\t\n\f\r ]/.test(input[cursor])) cursor++;
+    let url = input.slice(start, cursor);
+    const descriptors = [];
+    if (url.endsWith(",")) {
+      url = url.replace(/,+$/, "");
+    } else {
+      // Srcset URLs may contain commas (including data URLs). A comma ends a
+      // candidate only after its URL, outside a parenthesized descriptor.
+      let descriptor = "";
+      let inParens = false;
+      while (cursor < input.length) {
+        const char = input[cursor++];
+        if (inParens) {
+          descriptor += char;
+          if (char === ")") inParens = false;
+        } else if (char === ",") {
+          break;
+        } else if (/[\t\n\f\r ]/.test(char)) {
+          if (descriptor) descriptors.push(descriptor);
+          descriptor = "";
+        } else {
+          descriptor += char;
+          if (char === "(") inParens = true;
+        }
+      }
+      if (descriptor) descriptors.push(descriptor);
+    }
+    // Discard candidates that the HTML srcset descriptor parser rejects.
+    let valid = url !== "";
+    let width = false;
+    let density = false;
+    let height = false;
+    for (const descriptor of descriptors) {
+      const number = Number(descriptor.slice(0, -1));
+      if (/^\d+w$/.test(descriptor) && number > 0 && !width && !density) {
+        width = true;
+      } else if (
+        /^-?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?x$/.test(descriptor) &&
+        number >= 0 &&
+        !width &&
+        !density &&
+        !height
+      ) {
+        density = true;
+      } else if (/^\d+h$/.test(descriptor) && number > 0 && !height && !density) {
+        height = true;
+      } else {
+        valid = false;
+      }
+    }
+    if (valid && (!height || width)) links.push(url);
+  }
+  return links;
+}
+
 function htmlLinksIn(html, definitions, definitionMarker) {
   const links = [];
   const elements = [];
@@ -110,7 +171,7 @@ function htmlLinksIn(html, definitions, definitionMarker) {
       continue;
     }
     if (token[1] !== undefined) {
-      links.push(definitions[Number(token[1])]);
+      links.push(decodeCharacterReferences(definitions[Number(token[1])]));
       continue;
     }
     const closing = token[0].startsWith("</");
@@ -147,7 +208,7 @@ function htmlLinksIn(html, definitions, definitionMarker) {
         value = html.slice(start, cursor);
       }
       if (firstAttribute) elementAttributes.set(name, value);
-      if (!closing && /^(?:href|src|xlink:href)$/.test(name)) attributes.push([name, value]);
+      if (!closing && /^(?:href|src|srcset|xlink:href)$/.test(name)) attributes.push([name, value]);
     }
     // An incomplete tag does not create an element or active URL attributes.
     tokens.lastIndex = cursor + 1;
@@ -187,8 +248,16 @@ function htmlLinksIn(html, definitions, definitionMarker) {
     }
     if (namespace === "html" && (tag === "svg" || tag === "math")) namespace = tag;
     for (const [name, value] of attributes) {
+      if (name === "srcset") {
+        if (namespace === "html" && /^(?:img|source)$/.test(tag)) {
+          // Decode before splitting: character references can introduce delimiters.
+          links.push(...srcsetLinksIn(decodeCharacterReferences(value)));
+        }
+        continue;
+      }
       // XLink href is a URL only when adjusted as a foreign-content attribute.
-      if (name !== "xlink:href" || namespace !== "html") links.push(value);
+      if (name !== "xlink:href" || namespace !== "html")
+        links.push(decodeCharacterReferences(value));
     }
     // A slash closes foreign elements; HTML text elements ignore it.
     if (
@@ -244,7 +313,7 @@ function linksIn(text) {
   const links = [];
   for (const href of htmlLinksIn(html, definitions, definitionMarker)) {
     // HTML URL attributes allow surrounding ASCII whitespace, including encoded whitespace.
-    links.push(decodeCharacterReferences(href).replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, ""));
+    links.push(href.replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, ""));
   }
   return [...new Set(links)];
 }
