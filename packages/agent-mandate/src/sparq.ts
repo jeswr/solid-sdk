@@ -120,8 +120,9 @@ export function sparqPolicyEngine(
           ...request.attributes,
           dateTime: request.at,
         };
+        // The shared evaluator matches prohibitions independently of their duties.
         const comparable = (r: Rule) =>
-          (r.duties ?? []).length === 0 &&
+          (r.type === "prohibition" || (r.duties ?? []).length === 0) &&
           supportedPolicy({ id: policy.id, permissions: [r] }) &&
           (r.constraints ?? []).every(
             (c) =>
@@ -146,7 +147,7 @@ export function sparqPolicyEngine(
         const lower = (rules: readonly Rule[] = []) =>
           rules
             .filter((r) => candidate(r, policy, request) && comparable(r))
-            .map(({ assignee: _assignee, assigner: _assigner, ...rule }) => ({
+            .map(({ assignee: _assignee, assigner: _assigner, duties: _duties, ...rule }) => ({
               ...rule,
               action: "use",
               constraints: rule.constraints?.map((c) => ({ ...c, datatype: operandDatatype(c) })),

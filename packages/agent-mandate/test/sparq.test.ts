@@ -1042,13 +1042,15 @@ const uncertainPolicies: { name: string; policy: Policy }[] = [
           constraints: [{ leftOperand: "purpose", operator: "unknown", rightOperand: "x" }],
         },
       },
-    ].map(({ name, rule }) => ({
-      name: `${type} ${name}`,
-      policy: {
-        ...policy,
-        [type === "permission" ? "permissions" : "prohibitions"]: [{ type, ...rule }],
-      } as Policy,
-    })),
+    ]
+      .filter(({ name }) => type === "permission" || name !== "duty")
+      .map(({ name, rule }) => ({
+        name: `${type} ${name}`,
+        policy: {
+          ...policy,
+          [type === "permission" ? "permissions" : "prohibitions"]: [{ type, ...rule }],
+        } as Policy,
+      })),
   ),
 ];
 
@@ -1126,6 +1128,49 @@ it.each(
     await adapter.evaluate(uncertain, intent({ action: "read", attributes: { purpose: "x" } })),
   ).toEqual({ effect: "indeterminate" });
   expect(run).not.toHaveBeenCalled();
+});
+
+it.each([
+  { effect: "deny", matchedRules: ["urn:duty-prohibition"], expected: "prohibited" },
+  { effect: "deny", matchedRules: [], expected: "indeterminate" },
+  { effect: "permit", matchedRules: [], expected: "indeterminate" },
+])("retains a supported prohibition carrying its own duty: %j", async ({
+  expected,
+  ...backend
+}) => {
+  const p: Policy = {
+    ...policy,
+    prohibitions: [
+      {
+        type: "prohibition",
+        action: "read",
+        duties: [{ action: "inform" }],
+        constraints: [{ leftOperand: "count", operator: "gt", rightOperand: "2" }],
+      },
+    ],
+  };
+  const request = intent({ action: "read", attributes: { count: "10" } });
+  expect(await solidOdrlEngine.evaluate(p, request)).toEqual({ effect: "prohibited" });
+  const run = vi.fn((_binary: string, _args: ProcessOptions) => ({
+    stdout: response(backend),
+    status: 0,
+  }));
+  const adapter = sparqPolicyEngine({ binary: "test", run });
+  expect(await adapter.evaluate(p, request)).toEqual({ effect: expected });
+  expect(run).toHaveBeenCalledOnce();
+  const doc = JSON.parse((run.mock.calls[0] as [string, ProcessOptions])[1].input);
+  const store = await parseRdf(doc.policy.text, "text/turtle");
+  const prohibition = node(store, "urn:example:sparq-envelope")
+    .one("https://www.w3.org/2018/credentials#credentialSubject")
+    .one(`${AGENT}policy`)
+    .one(`${ODRL}prohibition`);
+  expect(prohibition.values(`${ODRL}duty`)).toHaveLength(0);
+  expect(prohibition.one(`${ODRL}constraint`).text(`${ODRL}rightOperand`)).toBe("2");
+  expect(await evaluateIntent({ ...mandate(), autonomous: p }, request, adapter)).toEqual(
+    expected === "prohibited"
+      ? { decision: "prohibited", reason: "prohibition" }
+      : { decision: "confirm-required", reason: "indeterminate" },
+  );
 });
 
 it("types a definite prohibition independently of permissions in an unsupported policy", async () => {
