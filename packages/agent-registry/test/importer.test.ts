@@ -44,6 +44,14 @@ const inactivePrivateNotes = [
   'No conflicts for "private-user".',
   "The account <private-user> was checked.",
   "The account (private-user) was checked.",
+  "Identity conflict: alice@example.com versus (first-user) and (private-user).",
+  "Identity conflict: (private-user) and (other-user) versus alice@example.com.",
+  "Identity conflict: alice@example.com versus (private-user) was resolved (other-user).",
+  "Identity conflict: (other-user) was resolved (private-user) versus alice@example.com.",
+  "Identity conflict: alice@example.com versus (private-user) (other-user).",
+  "Identity conflict: alice@example.com versus (private-user) versus (other-user).",
+  "Identity conflict: alice@example.com versus (other-user (private-user).",
+  "Identity conflict: (other-user (private-user) versus alice@example.com.",
 ];
 
 describe("synthetic registry import", () => {
@@ -275,6 +283,59 @@ describe("synthetic registry import", () => {
     }
   });
   it.each([
+    ["alternate@example.xn--p1ai", "", ""],
+    ["ALTERNATE@EXAMPLE.XN--P1AI", '"', '"'],
+    ["alternate@example.xn--fiqs8s", "(", ")"],
+    ["alternate@example.рф", "<", ">"],
+  ])("keeps both hashes for notes-only IDN email %s", async (other, open, close) => {
+    const own = "alice@example.com";
+    const ports = harness(
+      stringify({
+        version: 1,
+        accounts: [
+          {
+            id: "fixture-account",
+            channel: "email",
+            provider: "google",
+            organization: "personal",
+            identifiers: { primary: own },
+            connector: { target: "gmail", setup_status: "planned" },
+          },
+        ],
+        notes: [`Identity conflict: ${own} versus ${open}${other}${close}.`],
+      }),
+    );
+    const report = await importRegistry(config, ports);
+    const account = report.settings.connections[0];
+    if (!account) throw new Error("Fixture account absent");
+    const salt = await ports.salt.getSalt();
+    const expected = [
+      {
+        kind: "identity-mismatch",
+        handleHashes: [hashHandle(own, salt, "email"), hashHandle(other, salt, "email")].sort(),
+      },
+    ];
+    expect(account).toMatchObject({ bindingState: "error", identityConflicts: expected });
+    const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
+    expect(
+      ports.storage.resources
+        .get(url)
+        ?.dataset.getObjects(term(url), term(`${AGENT}identityConflict`), null)
+        .map((v) => JSON.parse(v.value)),
+    ).toEqual(expected);
+    const output = JSON.stringify({
+      report,
+      resources: [...ports.storage.resources],
+    }).toLowerCase();
+    expect(output).not.toContain(own);
+    expect(output).not.toContain(other.toLowerCase());
+    expect(await importRegistry(config, ports)).toMatchObject({
+      imported: 0,
+      updated: 0,
+      unchanged: 2,
+    });
+  });
+  it.each([
     "private-user",
     "Private.User",
     "café-user",
@@ -346,6 +407,54 @@ describe("synthetic registry import", () => {
     await expect(importRegistry(config, ports)).rejects.toThrow("private identifier");
     expect(ports.storage.events).toEqual([]);
     expect(ports.storage.resources.size).toBe(0);
+  });
+  it("screens nested private mentions independently of active conflict operands", async () => {
+    const input = {
+      version: 1,
+      accounts: [
+        {
+          id: "fixture-account",
+          channel: "email",
+          provider: "google",
+          organization: "Contact PRIVATE-USER",
+          identifiers: { primary: "alice@example.com" },
+          connector: { target: "gmail", setup_status: "planned" },
+        },
+      ],
+      notes: ["Identity conflict: alice@example.com versus (first-user (private-user))."],
+    };
+    const ports = harness(stringify(input));
+    const report = await importRegistry(config, ports);
+    const account = report.settings.connections[0];
+    if (!account) throw new Error("Fixture account absent");
+    expect(account).toMatchObject({
+      organisation: "redacted",
+      bindingState: "error",
+      identityConflicts: [
+        {
+          kind: "identity-mismatch",
+          handleHashes: [hashHandle("alice@example.com", await ports.salt.getSalt(), "email")],
+        },
+      ],
+    });
+    expect(
+      JSON.stringify({ report, resources: [...ports.storage.resources] }).toLowerCase(),
+    ).not.toContain("private-user");
+    for (const ref of [
+      "profile:private-user",
+      "op://PRIVATE-USER/item/credential",
+      "op://test-vault/%70rivate-user/credential",
+    ]) {
+      const rejected = harness(
+        stringify({
+          ...input,
+          accounts: input.accounts.map((a) => ({ ...a, credential_ref: ref })),
+        }),
+      );
+      await expect(importRegistry(config, rejected)).rejects.toThrow("private identifier");
+      expect(rejected.storage.events).toEqual([]);
+      expect(rejected.storage.resources.size).toBe(0);
+    }
   });
   it.each(inactivePrivateNotes)("screens private identities in inactive note %s", async (note) => {
     const input = {
@@ -535,6 +644,7 @@ describe("synthetic registry import", () => {
     [";v=2", ",v2", "(v2)"].flatMap((suffix) => [
       ['"', suffix, '"'],
       ["<", suffix, ">"],
+      ["(", suffix, ")"],
     ]),
   )("writes complete delimited URI conflicts to RDF: %s%s%s", async (open, suffix, close) => {
     const prefix = "https://profile.example/alice";

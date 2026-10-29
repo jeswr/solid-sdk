@@ -269,7 +269,11 @@ function noteIdentifiers(
 }
 /** Discover explicit identities only; URI alternatives retain case-sensitive components. */
 function noteIdentityChannel(handle: string): string | undefined {
-  if (/^[\p{L}\p{M}\p{N}.!#$%&'*+/=?^_`{|}~-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}$/u.test(handle))
+  if (
+    /^[\p{L}\p{M}\p{N}.!#$%&'*+/=?^_`{|}~-]+@[\p{L}\p{N}.-]+\.(?:[\p{L}]{2,}|xn--[a-z\d](?:[a-z\d-]*[a-z\d])?)$/iu.test(
+      handle,
+    )
+  )
     return "email";
   if (/^@[^@\s:]+:(?:[\p{L}\p{N}.-]+|\[[\da-fA-F.]*:[\da-fA-F:.]*\])(?::\d+)?$/u.test(handle))
     return "matrix";
@@ -293,8 +297,20 @@ function conflictIdentifiers(
   if (!match) return undefined;
   const operands = [match[1], match[2]].map((operand) => {
     if (!operand) return invalid();
-    const delimited = /^(?:(["'`])(.+)\1|<([^<>]+)>|\((.+)\))[.!?:,;]*$/u.exec(operand);
-    if (delimited) return delimited[2] ?? delimited[3] ?? delimited[4] ?? invalid();
+    if (operand.startsWith("(")) {
+      // Stop at the balanced outer boundary, never at a later span's closing parenthesis.
+      let depth = 0;
+      for (let index = 0; index < operand.length; index++) {
+        if (operand[index] === "(") depth++;
+        else if (operand[index] === ")" && --depth === 0)
+          return index > 1 && /^[.!?:,;]*$/u.test(operand.slice(index + 1))
+            ? operand.slice(1, index)
+            : undefined;
+      }
+      return undefined;
+    }
+    const delimited = /^(?:(["'`])(.+)\1|<([^<>]+)>)[.!?:,;]*$/u.exec(operand);
+    if (delimited) return delimited[2] ?? delimited[3] ?? invalid();
     if (
       known.folded.has(normaliseHandle(operand)) ||
       known.matrix.has(normaliseHandle(operand, "matrix")) ||
@@ -305,7 +321,8 @@ function conflictIdentifiers(
     const unpunctuated = handle.replace(/[.!?:,;]+$/u, "");
     return noteIdentityChannel(unpunctuated) ? unpunctuated : handle;
   });
-  return [operands[0] ?? invalid(), "versus", operands[1] ?? invalid()];
+  const [left, right] = operands;
+  return left && right ? [left, "versus", right] : undefined;
 }
 /** Build privacy-safe settings, applying only the documented ODI correction and Telegram addition. */
 export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array): Settings {
@@ -331,14 +348,16 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
     const text = note.trim();
     const conflict = conflictIdentifiers(text, known);
     const body = /^(?:Main Gmail )?Identity conflict:\s*(.+)$/iu.exec(text)?.[1] ?? text;
-    const identifiers = conflict ?? noteIdentifiers(body, known);
+    const mentions = noteIdentifiers(body, known);
+    const identifiers = conflict ?? mentions;
     return {
       identifiers,
       active: !!conflict,
-      // Inactive notes retain identity mentions without treating prose words as handles.
-      privateIdentifiers: conflict
-        ? conflict.filter((_, index) => index === 0 || index === 2)
-        : identifiers,
+      // Screen mentions independently, even when an active operand encloses another identity.
+      privateIdentifiers: [
+        ...mentions,
+        ...(conflict?.filter((_, index) => index === 0 || index === 2) ?? []),
+      ],
     };
   });
   const identities = [
