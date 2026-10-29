@@ -86,6 +86,8 @@ export function commitHttp<T>(
       readonly error: (status: number, url: string) => Error;
       readonly allowMissing?: boolean;
       readonly finalIdentities?: readonly HttpIdentity[];
+      /** ACL writes also bind their protected representation after checking the ACL. */
+      readonly resourceGuards?: readonly ResourceIdentity[];
       readonly response: (response: Response) => Promise<T>;
     },
 ): Promise<T> {
@@ -107,6 +109,11 @@ export function commitHttp<T>(
             },
           ]
         : []),
+      ...(options.resourceGuards ?? []).map((identity) => ({
+        ...identity,
+        http: options.http,
+        error: options.error,
+      })),
     ],
     step: async () => options.response(await options.http(options.url, init)),
   });

@@ -311,7 +311,9 @@ export function PreviewBody({
       // biome-ignore lint/performance/noImgElement: blob URLs bypass the Next image loader
       return <img className="drv-preview-image" src={loaded.url} alt={item.name} />;
     case "pdf":
-      return <iframe className="drv-preview-frame" src={loaded.url} title={item.name} sandbox="" />;
+      // Chromium blocks its native PDF viewer in sandboxed frames. The loader
+      // verifies the PDF signature and forces application/pdf before creating this URL.
+      return <iframe className="drv-preview-frame" src={loaded.url} title={item.name} />;
     case "audio":
       // biome-ignore lint/a11y/useMediaCaption: user files have no caption track
       return <audio controls src={loaded.url} />;

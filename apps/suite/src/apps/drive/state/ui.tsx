@@ -352,20 +352,20 @@ async function refreshAfter<T>(
   const touched = new Set(urls);
   const tracked: DriveClient = {
     ...client,
-    copy(from, to, policy) {
+    copy(from, to, policy, options) {
       touched.add(from);
       touched.add(to);
-      return client.copy.call(this, from, to, policy);
+      return client.copy.call(this, from, to, policy, options);
     },
     move(from, to, policy, options) {
       touched.add(from);
       touched.add(to);
       return client.move.call(this, from, to, policy, options);
     },
-    mergeContainer(from, to, policy) {
+    mergeContainer(from, to, policy, options) {
       touched.add(from);
       touched.add(to);
-      return client.mergeContainer.call(this, from, to, policy);
+      return client.mergeContainer.call(this, from, to, policy, options);
     },
     remove(url, options) {
       touched.add(url);

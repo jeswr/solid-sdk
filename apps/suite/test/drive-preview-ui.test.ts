@@ -281,13 +281,13 @@ it("rejects HTML advertised as PDF before creating a blob URL", async () => {
   expect(create).not.toHaveBeenCalled();
   await view.unmount();
 });
-it("forces validated PDF bytes to application/pdf and sandboxes its iframe", async () => {
+it("round 55: valid PDF uses the native viewer without Chromium's sandbox navigation block", async () => {
   client.read.mockResolvedValue(new Blob(["%PDF-1.7\nbytes"], { type: "text/html" }));
   const view = await mount(h(PreviewBody, { item }));
   const createdBlob = create.mock.calls[0]?.[0];
   expect(createdBlob).toBeInstanceOf(Blob);
   expect((createdBlob as Blob).type).toBe("application/pdf");
-  expect(view.host.querySelector("iframe")?.getAttribute("sandbox")).toBe("");
+  expect(view.host.querySelector("iframe")?.getAttribute("sandbox")).toBeNull();
   await view.unmount();
   expect(revoke).toHaveBeenCalledWith("blob:preview");
 });

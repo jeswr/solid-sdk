@@ -72,16 +72,22 @@ it("all Drive overwrites and deletes follow their final conditional identity che
   await client.remove(PRIVATE, { recursive: true });
   const mutations = requests.flatMap((request, index) =>
     request.method === "DELETE" || (request.method === "PUT" && request.headers.has("if-match"))
-      ? [{ request, prior: requests[index - 1] }]
+      ? [{ request, prior: requests[index - 1], aclCheck: requests[index - 2] }]
       : [],
   );
   expect(mutations.length).toBeGreaterThan(10);
-  for (const { request, prior } of mutations) {
+  for (const { request, prior, aclCheck } of mutations) {
     expect(prior?.method).toBe("HEAD");
     expect(prior?.headers.has("if-match")).toBe(true);
     if (request.method === "PUT") {
-      expect(prior?.url).toBe(request.url);
-      expect(prior?.headers.get("if-match")).toBe(request.headers.get("if-match"));
+      if (prior?.url !== request.url) {
+        // An ACL commit checks its own pinned validator, then the protected
+        // representation last. Both checks remain raw conditional HTTP reads.
+        expect(request.url).toBe(`${prior?.url}.policy`);
+        expect(aclCheck?.method).toBe("HEAD");
+        expect(aclCheck?.url).toBe(request.url);
+        expect(aclCheck?.headers.get("if-match")).toBe(request.headers.get("if-match"));
+      } else expect(prior.headers.get("if-match")).toBe(request.headers.get("if-match"));
     }
   }
 });

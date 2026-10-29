@@ -57,6 +57,13 @@ const steps = [
   "receipt cleanup",
   "slot cleanup",
   "ancestor cleanup",
+  "owner-only ACL",
+  "owner-only overwrite",
+  "owner-only folder overwrite",
+  "private folder ACL",
+  "protection receipt repair",
+  "retained recovery ACL",
+  "replay repair ACL",
 ] as const;
 type Step = (typeof steps)[number];
 
@@ -68,7 +75,10 @@ async function scenario(step: Step, events: string[]) {
     const url = String(input);
     const method = init?.method ?? "GET";
     const headers = new Headers(init?.headers);
-    if (method === "DELETE" || (method === "PUT" && headers.has("if-match")))
+    if (
+      method === "DELETE" ||
+      (method === "PUT" && (headers.has("if-match") || url.endsWith(".policy")))
+    )
       mutations.push({ url, prior: events.at(-1) });
     const response = await f.fetch(input, init);
     if (method === "HEAD" && headers.has("if-match")) await afterIdentity?.(url, response);
@@ -79,6 +89,7 @@ async function scenario(step: Step, events: string[]) {
   const folder = [
     "recursive remove",
     "folder metadata",
+    "owner-only folder overwrite",
     "partial folder Restore",
     "container rollback",
     "metadata undo",
@@ -89,6 +100,7 @@ async function scenario(step: Step, events: string[]) {
   if (!selected.etag) throw new Error("Missing source validator");
   let target = source;
   let targetCheck = 1;
+  let identityTarget: string | undefined;
   let run: () => Promise<unknown>;
   if (
     [
@@ -186,6 +198,74 @@ async function scenario(step: Step, events: string[]) {
         { contentType: "text/plain", ifNoneMatch: "*" },
         { kind: "protect-ancestors" },
       );
+  } else if (step === "protection receipt repair") {
+    target = `${source}.policy`;
+    identityTarget = source;
+    await protectionLedger(http).set(source, {
+      acl: `${PRIVATE}.policy`,
+      from: PRIVATE,
+      turtle: f.policies.get(`${PRIVATE}.policy`) as string,
+      etag: selected.etag,
+    });
+    run = () => client.read(source);
+  } else if (step === "private folder ACL") {
+    target = `${PRIVATE}.policy`;
+    run = () => accessControl(http, ROOT).privateFolder(PRIVATE, OWNER);
+  } else if (step === "owner-only overwrite" || step === "owner-only folder overwrite") {
+    targetCheck = 2;
+    run = () =>
+      client.write(
+        source,
+        step === "owner-only folder overwrite" ? "" : "private upload",
+        {
+          contentType: step === "owner-only folder overwrite" ? "text/turtle" : "text/plain",
+        },
+        { kind: "owner-only" },
+      );
+  } else if (step === "owner-only ACL") {
+    target = `${source}.policy`;
+    f.policies.set(target, await aclBody(source, true));
+    run = () =>
+      client.write(
+        source,
+        "private upload",
+        {
+          contentType: "text/plain",
+          ifMatch: selected.etag as string,
+        },
+        { kind: "owner-only" },
+      );
+  } else if (step === "retained recovery ACL") {
+    const destination = `${PRIVATE}copy`;
+    target = `${destination}.policy`;
+    // Placeholder installation is the first own ACL write (If-None-Match).
+    // Recovery repair is the first conditional overwrite of that policy.
+    let copied = false;
+    f.after(async (url, method, response) => {
+      if (
+        !copied &&
+        url === destination &&
+        method === "PUT" &&
+        response.ok &&
+        (await (await f.pod.fetch(url)).text()) === "secret contents"
+      ) {
+        copied = true;
+        f.policies.set(target, await aclBody(destination, true));
+        await f.pod.fetch(source, { method: "PUT", body: "edited source" });
+      }
+      return response;
+    });
+    run = () => client.copy(source, destination, { kind: "preserve-source" });
+  } else if (step === "replay repair ACL") {
+    target = `${source}.policy`;
+    targetCheck = 2;
+    let puts = 0;
+    f.after(async (url, method, response) => {
+      if (url === source && method === "PUT" && response.ok && ++puts <= 2)
+        f.policies.set(target, await aclBody(source, true));
+      return response;
+    });
+    run = () => uploadFile(client, PRIVATE, new Blob(["upload"]), "secret", "replace", selected);
   } else if (step === "replacement rollback") {
     let uploaded = false;
     f.after(async (url, method, response) => {
@@ -217,6 +297,7 @@ async function scenario(step: Step, events: string[]) {
     run,
     target,
     targetCheck,
+    identityTarget: identityTarget ?? target,
     mutations,
     race: (check: typeof afterIdentity) => {
       afterIdentity = check;
@@ -226,21 +307,22 @@ async function scenario(step: Step, events: string[]) {
 
 it.each(
   steps,
-)("round 54 shape a: %s retains a replacement at its final identity check", async (step) => {
+)("round 55 shape a: %s retains a replacement at its final identity check", async (step) => {
   const events: string[] = [];
   const s = await scenario(step, events);
   let checks = 0;
   let replacementEtag: string | null = null;
   s.race(async (url, response) => {
-    if (url !== s.target || !response.ok || ++checks !== s.targetCheck) return;
-    if (url.endsWith(".policy")) {
+    if (url !== s.identityTarget || !response.ok || ++checks !== s.targetCheck) return;
+    const target = s.target;
+    if (target.endsWith(".policy")) {
       const body = await aclBody(PRIVATE, true);
-      s.f.policies.set(url, body);
+      s.f.policies.set(target, body);
       replacementEtag = JSON.stringify(body);
     } else {
-      const current = await s.f.pod.fetch(url);
-      await s.f.pod.fetch(url, { method: "PUT", body: await current.text() });
-      replacementEtag = (await s.f.pod.fetch(url, { method: "HEAD" })).headers.get("etag");
+      const current = await s.f.pod.fetch(target);
+      await s.f.pod.fetch(target, { method: "PUT", body: await current.text() });
+      replacementEtag = (await s.f.pod.fetch(target, { method: "HEAD" })).headers.get("etag");
     }
   });
   await s.run().catch(() => undefined);
@@ -253,7 +335,7 @@ it.each(
 
 it.each(
   steps,
-)("round 54 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
+)("round 55 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   const events: string[] = [];
   const s = await scenario(step, events);

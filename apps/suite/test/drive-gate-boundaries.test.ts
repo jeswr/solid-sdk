@@ -67,7 +67,7 @@ it("owner-only creation keeps an empty protected placeholder when its PUT has no
       { contentType: "text/plain", ifNoneMatch: "*" },
       { kind: "owner-only" },
     ),
-  ).rejects.toMatchObject({ kind: "missing-validator", url });
+  ).rejects.toMatchObject({ kind: "private-access-unavailable" });
   expect(
     f.calls.filter(({ url: target, method }) => target === url && method === "PUT"),
   ).toHaveLength(1);

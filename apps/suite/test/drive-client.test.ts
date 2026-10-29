@@ -382,6 +382,7 @@ describe("Drive error handling and foreign server responses", () => {
   });
 
   it("handles missing HEAD/write headers and the fallback copy media type", async () => {
+    let versioned = false;
     const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
       const method = init?.method ?? "GET";
       if (method === "PUT") return new Response(null, { status: 201 });
@@ -391,7 +392,10 @@ describe("Drive error handling and foreign server responses", () => {
           headers: { "x-solid-demo-access-control": "none" },
         });
       return new Response(method === "HEAD" ? null : new Uint8Array([0, 255]), {
-        headers: { "x-solid-demo-access-control": "none" },
+        headers: {
+          "x-solid-demo-access-control": "none",
+          ...(versioned ? { etag: '"source"' } : {}),
+        },
       });
     });
     const client = stubClient(fetch);
@@ -409,6 +413,10 @@ describe("Drive error handling and foreign server responses", () => {
         { kind: "protect-ancestors" },
       ),
     ).toEqual({});
+    await expect(
+      client.copy(file, `${DRIVE}copy`, { kind: "preserve-source" }),
+    ).rejects.toMatchObject({ kind: "missing-validator" });
+    versioned = true;
     await client.copy(file, `${DRIVE}copy`, { kind: "preserve-source" });
     const copied = fetch.mock.calls.filter(([, init]) => init?.method === "PUT").at(-1);
     expect(

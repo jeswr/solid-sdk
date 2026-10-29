@@ -1427,3 +1427,29 @@ it.each([
   expect(pod.has(`${ROOT}A.txt`)).toBe(false);
   await view.unmount();
 });
+
+it.each([
+  "rename",
+  "new-folder",
+] as const)("round 55: %s validation is announced while submit keeps focus", async (kind) => {
+  const view = await mount(tree(items, true));
+  await act(async () =>
+    ui.openDialog(
+      kind === "rename" ? { kind, item: items[0] as DriveItem } : { kind, parent: ROOT },
+    ),
+  );
+  const input = document.querySelector('input[autocomplete="off"]') as HTMLInputElement;
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  await act(async () => {
+    setter?.call(input, "");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const submit = document.querySelector('button[type="submit"]') as HTMLButtonElement;
+  await act(async () => submit.focus());
+  await click(submit);
+  const error = document.getElementById(input.getAttribute("aria-describedby") as string);
+  expect(error?.textContent).toBe("Enter a name");
+  expect(error?.getAttribute("role")).toBe("alert");
+  expect(document.activeElement).toBe(submit);
+  await view.unmount();
+});

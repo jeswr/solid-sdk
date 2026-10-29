@@ -149,17 +149,15 @@ it.each([
     await expect(
       client.write(PRIVATE, "", { contentType: "text/turtle" }, { kind: "protect-ancestors" }),
     ).rejects.toThrow();
-  } else if (operation === "existing folder") {
-    await expect(client.createFolder(PRIVATE, { kind: "inherit-verified" })).rejects.toMatchObject({
-      kind: "conflict",
-      status: 412,
-    });
-    expect(await protectionLedger(f.fetch).get(PRIVATE)).toBeUndefined();
-    expect((await f.anonymous(PRIVATE)).status).toBe(403);
   } else {
-    await client.write(PRIVATE, "", { contentType: "text/turtle" }, { kind: "protect-ancestors" });
-    expect(await protectionLedger(f.fetch).get(PRIVATE)).toBeUndefined();
-    expect((await f.anonymous(PRIVATE)).status).toBe(403);
+    // Missing creation receipts cannot be repaired by adopting a later HEAD.
+    await expect(
+      operation === "existing folder"
+        ? client.createFolder(PRIVATE, { kind: "inherit-verified" })
+        : client.write(PRIVATE, "", { contentType: "text/turtle" }, { kind: "protect-ancestors" }),
+    ).rejects.toMatchObject({ kind: "private-access-unavailable" });
+    expect(await protectionLedger(f.fetch).get(PRIVATE)).toBeDefined();
+    expect(f.pod.has(`${PRIVATE}first`)).toBe(false);
   }
   expect(f.exposures).toEqual([]);
 });
@@ -219,7 +217,15 @@ function payloadWrites(text: string, name: string): string[] {
         expect(initializer && ts.isArrowFunction(initializer)).toBe(true);
         const body = (initializer as ts.ArrowFunction).body;
         expect(ts.isBlock(body)).toBe(true);
-        const returned = (body as ts.Block).statements.find(ts.isReturnStatement)?.expression;
+        const returns: ts.ReturnStatement[] = [];
+        const findReturns = (node: ts.Node) => {
+          if (ts.isReturnStatement(node)) returns.push(node);
+          else ts.forEachChild(node, findReturns);
+        };
+        findReturns(body);
+        const expression = returns[0]?.expression;
+        const returned =
+          expression && ts.isAwaitExpression(expression) ? expression.expression : expression;
         expect(returned && ts.isCallExpression(returned)).toBe(true);
         const call = returned as ts.CallExpression;
         expect(call.expression.getText(source)).toBe("guardedWrite");
@@ -444,7 +450,13 @@ it.each([
   expect(f.exposures).toEqual([]);
   f.intercept(undefined);
   f.after(undefined);
-  if (mode === "ACL and cleanup failure") await f.fetch(PRIVATE, { method: "DELETE" });
+  if (mode === "hidden headers")
+    await expect(upload(reloaded, "still blocked")).rejects.toMatchObject({
+      kind: "private-access-unavailable",
+      cause: "Protection receipt unavailable",
+    });
+  // A fresh, explicit recreation obtains its own receipt instead of adopting HEAD.
+  await f.fetch(PRIVATE, { method: "DELETE" });
   await upload(reloaded, "repaired");
   expect((await f.anonymous(`${PRIVATE}repaired`)).status).toBe(403);
   expect(f.exposures).toEqual([]);

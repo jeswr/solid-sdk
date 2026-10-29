@@ -5,6 +5,7 @@ import { serialize } from "@jeswr/rdf-serialize";
 import { Store } from "n3";
 import { trashEntries, trashIndexFrom } from "../operations/trash-index";
 import {
+  type AccessWriteGuard,
   type accessControl,
   accessGains,
   bindAccess,
@@ -96,10 +97,18 @@ export function ancestorGuard(options: {
     dataset: await parseRdf(required.turtle, "text/turtle", { baseIRI: required.acl }),
   });
   const verify = async (url: string, headers: Headers, required: ProtectionRequirement) => {
+    if (required.etag && headers.get("etag") !== required.etag)
+      throw new DriveAccessError("Required resource changed");
     const policy = await policyFor(required);
     const own = await access.snapshot(url, headers);
     if (own.status === "none" && !own.demo) {
-      await access.install(policy, required.from, url);
+      // A requirement written before a refused creation owns no representation.
+      // Its later appearance must not authorize applying the intended ACL.
+      if (!required.etag) throw new DriveAccessError("Protection receipt unavailable");
+      await access.install(policy, required.from, url, {
+        identity: { url, etag: required.etag },
+        restrict: true,
+      });
     } else if (
       own.status !== "known" ||
       !sameGraph(
@@ -117,8 +126,13 @@ export function ancestorGuard(options: {
     }
     await ledger.clear(url);
   };
-  const install = async (url: string, policy: OwnAccess, from: string) => {
-    const saved = await access.install(policy, from, url);
+  const install = async (
+    url: string,
+    policy: OwnAccess,
+    from: string,
+    guard?: AccessWriteGuard,
+  ) => {
+    const saved = await access.install(policy, from, url, guard);
     await ledger.clear(url);
     return saved;
   };
@@ -174,11 +188,18 @@ export function ancestorGuard(options: {
       });
       onCreated?.(response);
       try {
+        if (decision.kind === "archived")
+          await ledger.set(url, {
+            ...(await requirementFor(decision.acl, decision.from)),
+            etag: response.headers.get("etag") ?? "",
+          });
         await verifyAccess?.();
         await binding.recheck();
         const policy =
           decision.kind === "archived"
-            ? await install(url, decision.acl, decision.from)
+            ? await install(url, decision.acl, decision.from, {
+                identity: { url, etag: response.headers.get("etag") ?? "" },
+              })
             : undefined;
         if (policy) binding.installed(policy);
         await binding.recheck();
@@ -429,16 +450,26 @@ export function ancestorGuard(options: {
         verifyAccess,
         effects,
       ),
-    async protect(url: string, policy: OwnAccess, from = url): Promise<void> {
+    async protect(
+      url: string,
+      policy: OwnAccess,
+      from: string,
+      protectionGuard: AccessWriteGuard,
+    ): Promise<OwnAccess> {
       await guard(url, true);
+      let saved = policy;
       await singleFlight(
         url,
         async () => {
-          await ledger.set(url, await requirementFor(policy, from));
-          await install(url, policy, from);
+          await ledger.set(url, {
+            ...(await requirementFor(policy, from)),
+            etag: protectionGuard.identity.etag,
+          });
+          saved = await install(url, policy, from, protectionGuard);
         },
         false,
       );
+      return saved;
     },
   };
 }

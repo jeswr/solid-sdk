@@ -194,7 +194,7 @@ function NameDialog({
               autoComplete="off"
             />
             {error ? (
-              <p id={`${inputId}-error`} className="drv-field-error">
+              <p id={`${inputId}-error`} className="drv-field-error" role="alert">
                 {error}
               </p>
             ) : null}

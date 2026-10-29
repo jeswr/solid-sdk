@@ -8,7 +8,7 @@ import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { readSharing } from "../sharing/sharing";
-import { commitHttp } from "./commit";
+import { commitHttp, type ResourceIdentity } from "./commit";
 import { relocate, sameGraph } from "./rdf";
 
 const ACL = "http://www.w3.org/ns/auth/acl#";
@@ -52,6 +52,15 @@ export interface OwnAccess {
   url: string;
   dataset: Store;
   etag: string;
+}
+
+/** ACL mutations protect the captured representation, including after local hydration. */
+export interface AccessWriteGuard {
+  readonly identity: ResourceIdentity;
+  /** Recovery may remove grants, but must never undo a concurrent revocation. */
+  readonly restrict?: boolean;
+  /** Previously verified own endpoint, usable to secure recovery if Link disappears. */
+  readonly knownAcl?: string;
 }
 
 /** None means a discovered own ACL's 404 (inheritance unresolved), or an explicit demo pod. */
@@ -164,18 +173,27 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       return { status: "unknown", cause: error };
     }
   };
-  const store = async (url: string, dataset: Store, resource?: string): Promise<OwnAccess> => {
+  const store = async (
+    url: string,
+    dataset: Store,
+    resource?: string,
+    guard?: AccessWriteGuard,
+  ): Promise<OwnAccess> => {
     const state = await read(url);
     if (state.status === "unknown") throw new DriveAccessError(state.cause);
     const current = state.status === "known" ? state.policy : undefined;
+    let effectivePolicy = current;
     if (!current) {
       if (!resource) throw new DriveAccessError("WAC model could not be identified");
-      requireAccess(await effective(resource), resource);
+      effectivePolicy = requireAccess(await effective(resource), resource);
     }
+    if (guard?.restrict)
+      dataset = intersectAccess(dataset, effectivePolicy as OwnAccess, guard.identity.url);
     const body = await serialize([...dataset]);
     const response = await commitHttp({
       http,
       url,
+      resourceGuards: guard ? [guard.identity] : [],
       error: (status) => new DriveAccessError(status),
       init: {
         method: "PUT",
@@ -252,11 +270,18 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     read,
     store,
     snapshot,
-    async install(source: OwnAccess, from: string, to: string): Promise<OwnAccess> {
+    async install(
+      source: OwnAccess,
+      from: string,
+      to: string,
+      guard?: AccessWriteGuard,
+    ): Promise<OwnAccess> {
       const response = await http(to, { method: "HEAD", cache: "no-store" });
       if (!response.ok) throw new DriveAccessError(response.status);
-      const url = discover(to, response.headers);
+      const url = discover(to, response.headers) ?? guard?.knownAcl;
       if (!url) throw new DriveAccessError("Destination has no ACL support");
+      const etag = guard?.identity.etag ?? response.headers.get("etag");
+      if (!etag || etag.startsWith("W/")) throw new DriveAccessError("Missing resource validator");
       return store(
         url,
         relocate(source.dataset, [
@@ -264,6 +289,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
           [from, to],
         ]),
         to,
+        { ...guard, identity: { url: to, etag } },
       );
     },
     async privateFolder(url: string, webId?: string): Promise<void> {
@@ -273,13 +299,61 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
         rejectAcp(response.headers);
         if (response.headers.get("x-solid-demo-access-control") === "none") return;
         const acl = discover(url, response.headers);
-        if (!acl || !webId) throw new DriveAccessError();
-        await store(acl, privateAcl(url, webId), url);
+        const etag = response.headers.get("etag");
+        if (!acl || !webId || !etag || etag.startsWith("W/")) throw new DriveAccessError();
+        await store(acl, privateAcl(url, webId), url, { identity: { url, etag } });
       } catch (error) {
         throw new DriveAccessError(error);
       }
     },
   };
+}
+
+/** A conservative intersection: retain only clauses covered by the current policy.
+ * Uncertain origin/group relationships drop a grant instead of widening recovery.
+ */
+function intersectAccess(desired: Store, current: OwnAccess, resource: string): Store {
+  const result = new Store();
+  const deny = new WritableAuthorization(DataFactory.blankNode(), result, DataFactory);
+  deny.type.add(`${ACL}Authorization`);
+  deny.accessTo = resource;
+  for (const authorization of new AclResource(desired, DataFactory).authorizations) {
+    const rule = new WritableAuthorization(authorization as Term, desired, DataFactory);
+    for (const target of ["accessTo", "default"] as const) {
+      const targets = [
+        ...rule.values(`${ACL}${target}`),
+        ...(target === "default" ? rule.values(`${ACL}defaultForNew`) : []),
+      ];
+      if (!targets.includes(resource)) continue;
+      const ceiling = projectAccess(current, resource, resource, target === "default");
+      for (const selector of SELECTORS) {
+        for (const agent of rule.values(`${ACL}${selector}`)) {
+          for (const mode of rule.values(`${ACL}mode`)) {
+            const candidate = new Store();
+            const grant = new WritableAuthorization(
+              DataFactory.blankNode(),
+              candidate,
+              DataFactory,
+            );
+            grant.type.add(`${ACL}Authorization`);
+            grant.accessTo = resource;
+            grant.values(`${ACL}${selector}`).add(agent);
+            grant.values(`${ACL}mode`).add(mode);
+            for (const origin of rule.values(`${ACL}origin`))
+              grant.values(`${ACL}origin`).add(origin);
+            if (accessGains(ceiling, { url: current.url, etag: "", dataset: candidate }).length)
+              continue;
+            // Compare resource and default grants independently: a public listing
+            // must never imply public access to previously private descendants.
+            grant.accessTo = undefined;
+            grant.values(`${ACL}${target}`).add(resource);
+            result.addQuads([...candidate]);
+          }
+        }
+      }
+    }
+  }
+  return result;
 }
 
 export class DriveAccessChangedError extends DriveAccessError {

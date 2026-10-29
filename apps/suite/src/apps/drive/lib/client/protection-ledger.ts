@@ -5,6 +5,8 @@ export interface ProtectionRequirement {
   readonly acl: string;
   readonly from: string;
   readonly turtle: string;
+  /** A repair of an existing representation may never change a replacement's ACL. */
+  readonly etag?: string;
 }
 
 // Non-browser transports have no durable store. Keep their independent pods isolated.
