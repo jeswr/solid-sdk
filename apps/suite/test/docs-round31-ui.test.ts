@@ -7,6 +7,8 @@ import { act, click, h, key, mount } from "./drive-ui-dom";
 
 const { SlashMenu } = await import("../src/apps/docs/components/slash-menu");
 const { CountPopover } = await import("../src/apps/docs/components/editor-popovers");
+const { LinkPopover } = await import("../src/apps/docs/components/editor-popovers");
+const { ImageUpload } = await import("../src/apps/docs/components/image-upload");
 HTMLElement.prototype.scrollIntoView = vi.fn();
 Object.defineProperty(window.Range.prototype, "getClientRects", { value: () => [new DOMRect()] });
 Object.defineProperty(window.Range.prototype, "getBoundingClientRect", {
@@ -104,6 +106,69 @@ it("round31 selecting a slash command consumes its query instead of restoring it
     expect(editor.getText()).not.toContain("Heading 1");
     expect(document.querySelector('input[aria-label="Filter blocks"]')).toBeNull();
   } finally {
+    await view.unmount();
+    editor.destroy();
+  }
+});
+
+it.each(
+  ["count", "link", "image", "slash"].flatMap((kind) =>
+    ["pointer", "focus", "Escape"].map((dismissal) => ({ kind, dismissal })),
+  ),
+)("round32 $dismissal dismissal of $kind preserves the intended typing focus", async ({
+  kind,
+  dismissal,
+}) => {
+  const editor = editorWith("Count me");
+  function Harness() {
+    const [open, setOpen] = useState(true);
+    const close = () => setOpen(false);
+    const popover =
+      kind === "count"
+        ? h(CountPopover, { editor, close, pinned: false, setPinned: vi.fn() })
+        : kind === "link"
+          ? h(LinkPopover, { editor, close })
+          : kind === "image"
+            ? h(ImageUpload, { editor, close, file: null, runtime: {} as never })
+            : h(SlashMenu, {
+                editor,
+                close,
+                image: vi.fn(),
+                position: { from: 9, to: 9, left: 0, top: 0, query: "" },
+              });
+    return h(
+      "div",
+      null,
+      h("input", { "aria-label": "Document title", defaultValue: "Old title" }),
+      open ? popover : null,
+    );
+  }
+  const view = await mount(h(Harness));
+  vi.useFakeTimers();
+  try {
+    const title = document.querySelector('input[aria-label="Document title"]') as HTMLInputElement;
+    if (dismissal === "Escape") {
+      await key(document.activeElement as Element, "Escape");
+      await act(() => vi.advanceTimersByTimeAsync(100));
+      expect(document.querySelector('[role="dialog"]')).toBeNull();
+      expect(document.activeElement).toBe(editor.view.dom);
+      return;
+    }
+    await act(async () => {
+      if (dismissal === "pointer")
+        title.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+      title.focus();
+      if (dismissal === "pointer") title.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.activeElement).toBe(title);
+    const focused = document.activeElement as HTMLInputElement;
+    focused.value = "New title";
+    expect(title.value).toBe("New title");
+    expect(editor.getText()).not.toContain("New title");
+  } finally {
+    vi.useRealTimers();
     await view.unmount();
     editor.destroy();
   }

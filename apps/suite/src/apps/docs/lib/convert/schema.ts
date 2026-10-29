@@ -74,10 +74,15 @@ export function normaliseImport(json: JSONContent, skipped: SkippedItem[] = []) 
     try {
       // JSON marks are an unordered multiset from importers. Canonicalize with
       // the schema's rank/exclusion rules before check() can reject the text.
+      // Inline wrappers can also surround lifted images/rules. Suite block
+      // containers accept no marks, so remove those at this common boundary
+      // before a marked block can invalidate its parent and the whole document.
       if (mapped.marks)
-        mapped.marks = mapped.marks
-          .reduce((set, mark) => importSchema.markFromJSON(mark).addToSet(set), Mark.none)
-          .map((mark) => mark.toJSON());
+        mapped.marks = type.isInline
+          ? mapped.marks
+              .reduce((set, mark) => importSchema.markFromJSON(mark).addToSet(set), Mark.none)
+              .map((mark) => mark.toJSON())
+          : [];
       const parsed = importSchema.nodeFromJSON(mapped);
       parsed.check();
       return [parsed.toJSON() as JSONContent];

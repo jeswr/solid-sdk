@@ -1185,9 +1185,7 @@ export class DocumentPersistence {
             await this.provider?.whenSynced;
           }
           await this.refreshLocalState();
-          await this.provider?.persistFullState();
-          this.needsFullState = false;
-          this.providerError = undefined;
+          await this.persistFullState();
           this.creation = "created";
           await this.linkMirror(stored.url, this.local.name);
           this.onCreated(stored.url);
@@ -1284,6 +1282,19 @@ export class DocumentPersistence {
     }
     this.notify();
   }
+  private async persistFullState() {
+    const provider = this.provider;
+    const updates = this.updates;
+    const error = this.providerError;
+    await provider?.persistFullState();
+    // This acknowledgement covers only the state captured before the PUT.
+    // New edits, provider replacements and later failures retain their retry
+    // intent, including incremental writes racing either promotion or reconnect.
+    if (provider === this.provider && updates === this.updates && error === this.providerError) {
+      this.providerError = undefined;
+      this.needsFullState = false;
+    }
+  }
   private async persistUpdates() {
     await this.recoverRetiredMirrors();
     await this.refreshLocalState();
@@ -1295,9 +1306,7 @@ export class DocumentPersistence {
     if (this.providerError || this.needsFullState) {
       // Failed or retired incremental writes remain in IndexedDB. Merge the
       // entire local state into the active log before clearing pending edits.
-      await this.provider?.persistFullState();
-      this.providerError = undefined;
-      this.needsFullState = false;
+      await this.persistFullState();
     }
     await this.provider?.flush();
     if (this.providerError) throw this.providerError;

@@ -113,6 +113,81 @@ async function replay(log: string, session: PodSession) {
 
 it.each([
   "reconnect",
+  "promotion",
+])("round32 an older full-state success cannot acknowledge a newer failed incremental PUT during %s", async (mode) => {
+  const { pod, session, url } = await fixture();
+  let intercept = false;
+  let fullStarted = false;
+  let incrementalFailed = false;
+  let release = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const runtime = new DocumentPersistence({
+    ...session,
+    fetch: async (input, init) => {
+      if (
+        intercept &&
+        init?.method === "PUT" &&
+        String(input).includes("/updates/") &&
+        new Headers(init.headers).get("content-type") === "application/octet-stream"
+      ) {
+        if (!fullStarted) {
+          fullStarted = true;
+          await gate;
+        } else {
+          incrementalFailed = true;
+          return new Response(null, { status: 503 });
+        }
+      }
+      return pod.fetch(input, init);
+    },
+  });
+  runtimes.push(runtime);
+  await runtime.open(mode === "reconnect" ? url : undefined);
+  if (mode === "reconnect") runtime.provider?.destroy();
+  else {
+    const paragraph = new XmlElement("paragraph");
+    const text = new XmlText();
+    text.insert(0, "Original");
+    paragraph.insert(0, [text]);
+    runtime.doc.getXmlFragment("prosemirror").insert(0, [paragraph]);
+  }
+  runtime.online = false;
+  bodyText(runtime).insert(8, " offline");
+  runtime.change("<p>Original offline</p>", json("Original offline"));
+  await runtime.flush();
+  intercept = true;
+  const reconnecting = runtime.reconnect();
+  try {
+    await vi.waitFor(() => expect(fullStarted).toBe(true));
+    bodyText(runtime).insert(16, " newer");
+    runtime.change("<p>Original offline newer</p>", json("Original offline newer"));
+    await runtime.provider?.flush();
+    expect(incrementalFailed).toBe(true);
+  } finally {
+    release();
+  }
+  await reconnecting;
+  expect(runtime.state).toBe("retrying");
+  expect(mirrors.get(runtime.local as object)?.get("pending")).toBe(1);
+  intercept = false;
+  await runtime.reconnect();
+  expect(runtime.state).toBe("saved");
+  expect(mirrors.get(runtime.local as object)?.get("pending")).not.toBe(1);
+  const saved = runtime.stored;
+  expect(saved).toBeDefined();
+  expect(await replay(saved?.data.updateLog as string, session)).toBe(
+    "<paragraph>Original offline newer</paragraph>",
+  );
+  const fresh = new DocumentPersistence(session);
+  runtimes.push(fresh);
+  await fresh.open(saved?.url);
+  expect(fresh.body).toBe("<p>Original offline newer</p>");
+});
+
+it.each([
+  "reconnect",
   "reload",
 ])("recovers offline edits instead of merging a reused document URL on %s", async (mode) => {
   const { session, original, client, url, log } = await fixture();

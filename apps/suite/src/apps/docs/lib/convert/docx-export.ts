@@ -44,11 +44,11 @@ function inline(node: JSONContent, quote: boolean): ParagraphChild[] {
   const href = validLink(String(link?.attrs?.href ?? ""));
   const options: IRunOptions = {
     text: node.text ?? "",
-    bold: marks.has("bold"),
-    italics: marks.has("italic"),
-    strike: marks.has("strike"),
-    subScript: marks.has("subscript"),
-    superScript: marks.has("superscript"),
+    ...(marks.has("bold") ? { bold: true } : {}),
+    ...(marks.has("italic") ? { italics: true } : {}),
+    ...(marks.has("strike") ? { strike: true } : {}),
+    ...(marks.has("subscript") ? { subScript: true } : {}),
+    ...(marks.has("superscript") ? { superScript: true } : {}),
     ...(marks.has("underline") ? { underline: {} } : {}),
     ...(marks.has("highlight") ? { highlight: "yellow" } : {}),
     ...(marks.has("code")

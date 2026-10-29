@@ -776,9 +776,25 @@ const inlineHtml = Extension.create({
       if (/^(img|br|hr)$/i.test(opening[1] as string))
         return { type: "docsInlineHtml", raw: opening[0], text: opening[0] };
       const tags = /<\/?([a-z][\w-]*)(?=[\s/>])(?:[^<>"']|"[^"]*"|'[^']*')*>/gi;
+      // Boundary scanning must use CommonMark's literal contexts too. Consume
+      // escapes and complete code spans before looking at tags; reuse marked's
+      // tokenizer for exact delimiter lengths, padding and multiline spans.
+      const boundaries = new RegExp(`${/\\[!-/:-@[-`{-~]|`+/.source}|${tags.source}`, "gi");
+      const tokenizer = new markdown.instance.Tokenizer();
+      tokenizer.lexer = new markdown.instance.Lexer({ gfm: true, tokenizer });
+      const literalCode = opening[1]?.toLowerCase() === "code";
       let depth = 0;
       let unsupported = false;
-      for (const tag of source.matchAll(tags)) {
+      let end = 0;
+      for (const tag of source.matchAll(literalCode ? tags : boundaries)) {
+        if (tag.index < end) continue;
+        if (!tag[1]) {
+          if (tag[0].startsWith("`")) {
+            const code = tokenizer.codespan(source.slice(tag.index));
+            if (code) end = tag.index + code.raw.length;
+          }
+          continue;
+        }
         if (!inlineHtmlTags.has((tag[1] as string).toLowerCase())) unsupported = true;
         if (tag[1]?.toLowerCase() !== opening[1]?.toLowerCase()) continue;
         depth += tag[0].startsWith("</") ? -1 : 1;
