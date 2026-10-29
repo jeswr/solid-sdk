@@ -5,6 +5,7 @@
 import {
   existsSync,
   globSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -370,14 +371,20 @@ export function checkSkills(root, { write = false } = {}) {
     files.add(path);
     const skillDir = dirname(path);
     const companionDir = path.startsWith("skills/") ? skillDir : join(skillDir, "references");
-    if (existsSync(join(root, companionDir))) {
+    if (lstatSync(join(root, companionDir), { throwIfNoEntry: false })?.isSymbolicLink()) {
+      report(companionDir, "symbolic-link companions are forbidden");
+    } else if (existsSync(join(root, companionDir))) {
       // Directory enumeration includes dotfiles and dot-directories within this scope.
       for (const companion of readdirSync(join(root, companionDir), {
         recursive: true,
         withFileTypes: true,
       })) {
-        if (companion.isFile())
-          files.add(relative(root, join(companion.parentPath, companion.name)));
+        const companionPath = relative(root, join(companion.parentPath, companion.name));
+        if (companion.isSymbolicLink()) {
+          report(companionPath, "symbolic-link companions are forbidden");
+        } else if (companion.isFile()) {
+          files.add(companionPath);
+        }
       }
     }
 

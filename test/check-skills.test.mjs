@@ -9,6 +9,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -885,6 +886,37 @@ describe("skill validation", () => {
       put(root, path, "TOKEN=fixture-credential-value\n/Users/someone/private\n");
     }
     expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
+    ["skills/alpha/references/linked.md", "file"],
+    ["skills/alpha/scripts/.linked", "file"],
+    ["skills/alpha/assets/linked", "dir"],
+    ["skills/alpha/.private/linked", "dir"],
+    ["packages/widget/references/nested/linked.md", "file"],
+    ["packages/widget/references/linked", "dir"],
+    ["packages/widget/references", "dir"],
+    ["skills/alpha/references/dangling.md", "dangling"],
+    ["packages/widget/references", "dangling"],
+  ])("rejects symbolic-link companions without exposing their targets: %s (%s)", (path, type) => {
+    const root = fixture();
+    const target = join(fixture(), "private-fixture-target");
+    if (type === "file") writeFileSync(target, "[broken](missing.md)\n");
+    if (type === "dir") mkdirSync(target);
+    mkdirSync(dirname(join(root, path)), { recursive: true });
+    symlinkSync(target, join(root, path));
+    const indexPath = join(root, "skills/INDEX.md");
+    for (const previousIndex of [undefined, "Previously generated index\n"]) {
+      if (previousIndex !== undefined) writeFileSync(indexPath, previousIndex);
+      for (const args of [[], ["--write"]]) {
+        const result = cli(root, ...args);
+        expect(result.status).toBe(1);
+        expect(result.stderr.trim()).toBe(`${path}: symbolic-link companions are forbidden`);
+        expect(result.stdout).toBe("");
+        if (previousIndex === undefined) expect(existsSync(indexPath)).toBe(false);
+        else expect(readFileSync(indexPath, "utf8")).toBe(previousIndex);
+      }
+    }
   });
 
   it.each([
