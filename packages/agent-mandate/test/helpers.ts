@@ -19,6 +19,24 @@ export const ID = "https://pod.example/agent/mandates/default";
 export const STATUS = "https://pod.example/agent/mandates/status.ttl";
 export const NOW = new Date("2026-10-26T12:00:00Z");
 export const HASH = `sha256:${"a".repeat(64)}`;
+/** Invalid instants that permissive date parsers may normalize or accept. */
+export const INVALID_INSTANTS = [
+  "2026-02-29T00:00:00Z",
+  "2026-02-30T00:00:00Z",
+  "2026-04-31T00:00:00Z",
+  "2100-02-29T00:00:00Z",
+  "2026-10-25T24:00:00Z",
+  "2026-10-25T12:00:00+14:01",
+  "2026-10-25T12:00:00-14:01",
+  "2026-10-25T12:00:00+15:00",
+  "2026-10-25T12:00:00-15:00",
+  "2026-10-25T12:00:00+23:59",
+  "2026-10-25T12:00:00+13:60",
+  "2026-10-25T12:00:00",
+  "2026-10-25",
+  "2026-10-25 12:00:00Z",
+  "2026-10-25T12:00Z",
+];
 export const clock = () => NOW;
 export const mandate = (): Mandate =>
   defaultMandate({

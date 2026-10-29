@@ -12,6 +12,7 @@ import {
   type OdrlRule,
   OPERATORS,
 } from "@jeswr/solid-odrl";
+import { validInstant } from "./instant.js";
 import {
   AGENT,
   type Constraint,
@@ -233,9 +234,9 @@ export async function evaluateIntent(
 ): Promise<Decision> {
   if (
     !mandate ||
-    !Number.isFinite(Date.parse(intent.at)) ||
-    !Number.isFinite(Date.parse(mandate.validFrom)) ||
-    !Number.isFinite(Date.parse(mandate.validUntil))
+    !validInstant(intent.at) ||
+    !validInstant(mandate.validFrom) ||
+    !validInstant(mandate.validUntil)
   )
     return { decision: "refuse-all", reason: "mandate-invalid" };
   if (Date.parse(mandate.validUntil) <= Date.parse(intent.at))

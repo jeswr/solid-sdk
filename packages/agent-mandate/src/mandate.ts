@@ -23,6 +23,7 @@ import {
   encodePolicy,
   encodeProhibitions,
 } from "./codec.js";
+import { validInstant } from "./instant.js";
 import { node, RDF_TYPE } from "./rdf.js";
 import {
   AGENT,
@@ -165,7 +166,12 @@ export function createVcMandateVerifier(options: VcMandateOptions): MandateVerif
           return undefined;
         // Match the Turtle path's structural date-time checks before comparing instants.
         const store = new Store(credentialToRdf(vc));
-        if (!readValidCredential(store).valid) return undefined;
+        if (
+          !readValidCredential(store).valid ||
+          !validInstant(vc.validFrom) ||
+          !validInstant(vc.validUntil)
+        )
+          return undefined;
         const now = options.now();
         if (
           !(Date.parse(vc.validFrom) <= now.getTime()) ||

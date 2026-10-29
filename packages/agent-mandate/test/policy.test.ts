@@ -14,7 +14,19 @@ import {
   type Policy,
   type Rule,
 } from "../src/types.js";
-import { ACTOR, clock, intent, mandate } from "./helpers.js";
+import { ACTOR, clock, INVALID_INSTANTS, intent, mandate } from "./helpers.js";
+
+it.each(INVALID_INSTANTS)("refuses invalid intent and mandate instants: %s", async (value) => {
+  for (const [m, q] of [
+    [mandate(), intent({ at: value })],
+    [{ ...mandate(), validFrom: value }, intent()],
+    [{ ...mandate(), validUntil: value }, intent()],
+  ] as const)
+    expect(await evaluateIntent(m, q)).toEqual({
+      decision: "refuse-all",
+      reason: "mandate-invalid",
+    });
+});
 
 const effects: Effect[] = ["permit", "prohibited", "not-applicable", "indeterminate"];
 const matrix = effects.flatMap((auto) =>
@@ -63,7 +75,7 @@ it("fails closed before asking any engine", async () => {
   });
   for (const [field, value, reason] of [
     ["validUntil", clock().toISOString(), "mandate-expired"],
-    ["validFrom", "2099-01-01", "mandate-not-yet-valid"],
+    ["validFrom", "2099-01-01T00:00:00Z", "mandate-not-yet-valid"],
     ["validUntil", "invalid", "mandate-invalid"],
     ["validFrom", "invalid", "mandate-invalid"],
     ["subject", "https://other.example/#me", "wrong-agent"],

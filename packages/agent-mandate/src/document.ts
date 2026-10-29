@@ -13,6 +13,7 @@ import {
 } from "@jeswr/solid-vc";
 import { Store } from "n3";
 import { decodeLimit, decodePolicy, decodeProhibitions } from "./codec.js";
+import { validInstant } from "./instant.js";
 import { mandateCredential } from "./mandate.js";
 import { matchesProofConfiguration, node, RDF_TYPE, SEC, turtle, writeProof } from "./rdf.js";
 import { AGENT, ODRL } from "./types.js";
@@ -36,8 +37,8 @@ export async function parseMandateCredential(
     const result = readValidCredential(store);
     if (
       !result.valid ||
-      !result.credential.validFrom ||
-      !result.credential.validUntil ||
+      !validInstant(result.credential.validFrom) ||
+      !validInstant(result.credential.validUntil) ||
       !result.credential.types.includes(`${SVC}AgentAuthorizationCredential`)
     )
       return undefined;

@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { compactVerify, decodeProtectedHeader } from "jose";
+import { validInstant } from "./instant.js";
 import { supportedPolicy } from "./policy.js";
 import type { Mandate, MandateVerifier, Policy } from "./types.js";
 
@@ -16,14 +17,6 @@ function iri(value: unknown): value is string {
     value.length <= 512 &&
     /^[A-Za-z][A-Za-z0-9+.-]*:[^\s<>"{}|\\^`]+$/.test(value) &&
     value.split("#").length <= 2
-  );
-}
-function instant(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length <= 64 &&
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
-    Number.isFinite(Date.parse(value))
   );
 }
 function fields(value: object, allowed: readonly string[]): boolean {
@@ -131,8 +124,8 @@ export function createLegacyMandateVerifier(options: {
           !Number.isInteger(m.version) ||
           m.version < 1 ||
           !iri(m.id) ||
-          !instant(m.validFrom) ||
-          !instant(m.validUntil) ||
+          !validInstant(m.validFrom) ||
+          !validInstant(m.validUntil) ||
           m.issuer !== options.ownerWebId ||
           m.subject !== options.agentWebId ||
           !(Date.parse(m.validFrom) <= now) ||

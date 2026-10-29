@@ -8,7 +8,7 @@ import { beforeAll, expect, it } from "vitest";
 import { createLegacyMandateVerifier } from "../src/legacy.js";
 import { evaluateIntent, solidOdrlEngine } from "../src/policy.js";
 import type { Intent, Policy } from "../src/types.js";
-import { ACTOR, clock, intent, OWNER } from "./helpers.js";
+import { ACTOR, clock, INVALID_INSTANTS, intent, OWNER } from "./helpers.js";
 
 const fixture = JSON.parse(
   readFileSync(new URL("./fixtures/legacy.json", import.meta.url), "utf8"),
@@ -75,13 +75,14 @@ async function signed(
     .setProtectedHeader(header as { alg: string })
     .sign(signing);
 }
-async function loadSigned(payload: unknown) {
+async function loadSigned(payload: unknown, now = clock) {
   const pair = await generateKeyPair("EdDSA");
   const jws = await new CompactSign(new TextEncoder().encode(JSON.stringify(payload)))
     .setProtectedHeader({ alg: "EdDSA", kid: "test-key", typ: "awp-mandate+jws" })
     .sign(pair.privateKey);
   return createLegacyMandateVerifier({
     ...base(),
+    now,
     read: async () => jws,
     resolvePinned: async () => ({
       publicKey: pair.publicKey as CryptoKey,
@@ -90,6 +91,24 @@ async function loadSigned(payload: unknown) {
     }),
   }).load();
 }
+it.each([
+  "validFrom",
+  "validUntil",
+] as const)("rejects signed legacy calendar instants and timezone bounds in %s", async (field) => {
+  for (const value of INVALID_INSTANTS)
+    expect(
+      await loadSigned(
+        {
+          ...fixture.payload,
+          validFrom: "2025-01-01T00:00:00Z",
+          validUntil: "2027-01-01T00:00:00Z",
+          [field]: value,
+        },
+        () => new Date(field === "validFrom" ? "2026-12-01T00:00:00Z" : "2026-01-01T00:00:00Z"),
+      ),
+      value,
+    ).toBeUndefined();
+});
 it("fails closed for absent, malformed, unverifiable and revoked legacy mandates", async () => {
   for (const read of [
     async () => undefined,

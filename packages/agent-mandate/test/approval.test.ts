@@ -11,6 +11,7 @@ import {
   approvalKey,
   clock,
   edKey,
+  INVALID_INSTANTS,
   NOW,
   OWNER,
   profileResolver,
@@ -33,6 +34,15 @@ const options = () => ({
   termsDigest: a.termsDigest,
   webIdKeyResolver: resolver,
   now: clock,
+});
+it.each(INVALID_INSTANTS)("rejects a signed invalid approval expiry: %s", async (expires) => {
+  const doc = await issueApproval({ ...a, expires }, key, NOW);
+  expect(
+    await verifyApproval(doc, {
+      ...options(),
+      now: () => new Date("2026-01-01T00:00:00Z"),
+    }),
+  ).toEqual({ valid: false, reason: "expired" });
 });
 beforeAll(async () => {
   key = await approvalKey();

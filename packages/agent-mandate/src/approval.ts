@@ -8,6 +8,7 @@ import {
   type WebIdKeyResolver,
 } from "@jeswr/solid-vc";
 import { Store } from "n3";
+import { validInstant } from "./instant.js";
 import { matchesProofConfiguration, node, RDF_TYPE, SEC, turtle, writeProof } from "./rdf.js";
 import { AGENT } from "./types.js";
 
@@ -128,7 +129,8 @@ export async function verifyApproval(
     if (!(await sameDigest(a.text(`${AGENT}termsDigest`), options.termsDigest)))
       return fail("terms-digest");
     const expires = a.text(`${AGENT}expires`);
-    if (!(Date.parse(expires) > options.now().getTime())) return fail("expired");
+    if (!validInstant(expires) || !(Date.parse(expires) > options.now().getTime()))
+      return fail("expired");
     const decision = a.text(`${AGENT}decision`);
     if (decision !== "approve" && decision !== "deny") return fail("decision");
     return {

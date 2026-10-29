@@ -30,6 +30,7 @@ import {
   clock,
   edKey,
   ID,
+  INVALID_INSTANTS,
   intent,
   mandate,
   NOW,
@@ -100,7 +101,10 @@ it.each([
   "Z",
   "+02:00",
   "-02:00",
-  "",
+  "+13:59",
+  "-13:59",
+  "+14:00",
+  "-14:00",
 ])("accepts structural date-time validity with timezone %j on both loading paths", async (zone) => {
   const claims = {
     ...mandateCredential(mandate(), { statusListCredential: STATUS, statusListIndex: "1" }),
@@ -117,6 +121,30 @@ it.each([
       validFrom: claims.validFrom,
       validUntil: claims.validUntil,
     });
+});
+it.each([
+  "validFrom",
+  "validUntil",
+] as const)("rejects signed invalid calendar instants and timezone bounds in %s", async (field) => {
+  for (const value of INVALID_INSTANTS) {
+    const claims = {
+      ...mandateCredential(mandate(), { statusListCredential: STATUS, statusListIndex: "1" }),
+      validFrom: "2025-01-01T00:00:00Z",
+      validUntil: "2027-01-01T00:00:00Z",
+      [field]: value,
+    };
+    const signed = await issue({ credential: claims, key, options: { created: NOW } });
+    expect(await parseMandateCredential(await mandateToTurtle(signed)), value).toBeUndefined();
+    expect(
+      await createVcMandateVerifier({
+        ...options,
+        read: async () => signed,
+        now: () =>
+          new Date(field === "validFrom" ? "2026-12-01T00:00:00Z" : "2026-01-01T00:00:00Z"),
+      }).load(),
+      value,
+    ).toBeUndefined();
+  }
 });
 it.each([
   "prototype",
