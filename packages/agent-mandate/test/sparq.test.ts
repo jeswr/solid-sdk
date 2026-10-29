@@ -741,3 +741,60 @@ it("fails closed before invoking SPARQ when a declared datatype is not an IRI", 
   expect(result).toEqual({ effect: "indeterminate" });
   expect(invoked).toBe(false);
 });
+
+it.each<Constraint>([
+  {
+    leftOperand: "purpose",
+    operator: "eq",
+    rightOperand: "1.0000000000000000001",
+    datatype: `${XSD}decimal`,
+  },
+  { leftOperand: "purpose", operator: "isAnyOf", rightOperand: ["two words", "safe"] },
+])("retains definite prohibitions alongside an indeterminate comparison: %j", async (constraint) => {
+  const request = intent({
+    action: "read",
+    attributes: { purpose: constraint.datatype ? "1" : "two words" },
+  });
+  for (const type of ["permission", "prohibition"] as const) {
+    const uncertain: Rule = { type, action: "read", constraints: [constraint] };
+    const p: Policy = {
+      ...policy,
+      permissions: [...(policy.permissions ?? []), ...(type === "permission" ? [uncertain] : [])],
+      prohibitions: [
+        { type: "prohibition", action: "read" },
+        ...(type === "prohibition" ? [uncertain] : []),
+      ],
+    };
+    expect(await solidOdrlEngine.evaluate(p, request)).toEqual({ effect: "prohibited" });
+    for (const backend of [
+      { effect: "deny", matchedRules: ["urn:definite-prohibition"] },
+      { effect: "deny", matchedRules: [] },
+      { effect: "permit", matchedRules: [] },
+    ]) {
+      const run = vi.fn((_binary: string, _args: ProcessOptions) => ({
+        stdout: response(backend),
+        status: 0,
+      }));
+      const adapter = sparqPolicyEngine({ binary: "test", run });
+      const prohibited = backend.matchedRules.length > 0;
+      expect(await adapter.evaluate(p, request)).toEqual({
+        effect: prohibited ? "prohibited" : "indeterminate",
+      });
+      expect(run).toHaveBeenCalledOnce();
+      const doc = JSON.parse((run.mock.calls[0] as [string, ProcessOptions])[1].input);
+      const store = await parseRdf(doc.policy.text, "text/turtle");
+      const lowered = node(store, "urn:example:sparq-envelope")
+        .one("https://www.w3.org/2018/credentials#credentialSubject")
+        .one(`${AGENT}policy`);
+      for (const kind of ["permission", "prohibition"]) {
+        expect(lowered.values(`${ODRL}${kind}`)).toHaveLength(1);
+        expect(lowered.one(`${ODRL}${kind}`).values(`${ODRL}constraint`)).toHaveLength(0);
+      }
+      expect(await evaluateIntent({ ...mandate(), autonomous: p }, request, adapter)).toEqual(
+        prohibited
+          ? { decision: "prohibited", reason: "prohibition" }
+          : { decision: "confirm-required", reason: "indeterminate" },
+      );
+    }
+  }
+});

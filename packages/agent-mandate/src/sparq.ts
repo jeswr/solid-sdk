@@ -121,23 +121,26 @@ export function sparqPolicyEngine(
           ...request.attributes,
           dateTime: request.at,
         };
+        const comparable = (r: Rule) =>
+          (r.constraints ?? []).every(
+            (c) =>
+              knownOperand(c, attributes[c.leftOperand]) &&
+              representableSet(c, attributes[c.leftOperand]),
+          );
+        const missing = [...(policy.permissions ?? []), ...(policy.prohibitions ?? [])]
+          .filter((r) => candidate(r, policy, request))
+          .some((r) => !comparable(r));
+        // Only a definite prohibition may decide a policy with unresolved candidates.
         if (
-          [...(policy.permissions ?? []), ...(policy.prohibitions ?? [])]
-            .filter((r) => candidate(r, policy, request))
-            .some((r) =>
-              (r.constraints ?? []).some(
-                (c) =>
-                  !knownOperand(c, attributes[c.leftOperand]) ||
-                  !representableSet(c, attributes[c.leftOperand]),
-              ),
-            )
+          missing &&
+          !(policy.prohibitions ?? []).some((r) => candidate(r, policy, request) && comparable(r))
         )
           return { effect: "indeterminate" };
         // The backend's use umbrella is broader than the shared suite profile.
         // Select candidates here, then use one exact action for rules and request.
         const lower = (rules: readonly Rule[] = []) =>
           rules
-            .filter((r) => candidate(r, policy, request))
+            .filter((r) => candidate(r, policy, request) && comparable(r))
             .map(({ assignee: _assignee, assigner: _assigner, ...rule }) => ({
               ...rule,
               action: "use",
@@ -220,7 +223,7 @@ export function sparqPolicyEngine(
                 ? "prohibited"
                 : "not-applicable"
               : "indeterminate";
-        return { effect };
+        return { effect: missing && effect !== "prohibited" ? "indeterminate" : effect };
       } catch {
         return { effect: "indeterminate" };
       }
