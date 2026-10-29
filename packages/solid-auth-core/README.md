@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # @jeswr/solid-auth-core
 
@@ -49,6 +50,16 @@ Call `logout()` for intentional sign-out or a definitive invalid grant.
 - `authenticatedFetch` and `publicFetch`: explicit credential boundary.
 - `reArmAllowedOrigins`, `rememberAccount`, `dropLiveSession`, `recentAccounts`.
 - React: `SessionProvider` and `useSolidSession` from `@jeswr/solid-auth-core/react`.
+
+## Proactive resource origins
+
+`deriveProactiveAllowedOrigins({ podRoot, webId, issuer })` includes the pod/storage origin
+and the WebID origin by default. Set `includeWebIdOrigin: false` when the WebID document is
+not served by the pod. The issuer origin is excluded unless `includeIssuerOrigin: true`
+explicitly opts in. A pod on the issuer origin stays allowed through `podRoot`.
+
+`computeAllowedOrigins` keeps its separate default of including the issuer origin. See the
+[proactive API behavior report](./etc/proactive-fetch.api.md) for the helper's contract.
 
 ## Links
 

@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # @jeswr/solid-elements
 
@@ -48,6 +49,17 @@ Or use the registered tags directly:
 - React wrappers: `@jeswr/solid-elements/react` (client-only under SSR frameworks).
 - Optional auth adapter: `createReactiveAuthController` from `@jeswr/solid-elements/auth`.
 - Theme and feedback helpers are exported from the root.
+
+## Proactive resource origins
+
+`deriveProactiveAllowedOrigins` from `@jeswr/solid-elements/auth` derives the proactive
+credential boundary from `podRoot`, `extraOrigins`, and the WebID origin. Set
+`includeWebIdOrigin: false` when the WebID document is not served by the pod. Passing
+`issuer` does not add its origin by default; `includeIssuerOrigin: true` explicitly opts in.
+A pod on the issuer origin stays allowed through `podRoot`.
+
+`computeAllowedOrigins` keeps its separate default of including the issuer origin. See the
+[proactive API behavior report](./etc/proactive-fetch.api.md) for the helper's contract.
 
 ## Links
 
