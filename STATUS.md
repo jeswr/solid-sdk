@@ -771,3 +771,53 @@ fetch/merge or dependency lifecycle script was used. The requested finding is
 fixed; no implementation work or open questions remain. The outstanding
 validation limitations are the full-workspace font download and unavailable
 roborev.
+
+## Codex fix round 5 — review of `9db763ba4cc8`
+
+- `91a046e6 fix: normalize ACL discovery relations` lowercases received Link
+  relations and the ACP comparison constant before ACL uniqueness, anchored-link
+  and unsupported-model checks. Target URL casing is preserved.
+- `docs: record ACL relation validation` records this round's gate results.
+
+Added eleven fixture regression cases for quoted/unquoted and multiple
+relations, mixed-case ACL discovery, duplicate ACLs in either order, anchored
+ACLs, and canonical/lowercase/mixed-case ACP relations. Unsafe cases assert
+discovery stops after HEAD, before any ACL read or write. Nine cases fail against
+the reviewed source; all **47 focused tests** pass with the fix.
+
+Validation used Node 24 and the existing fixture-only network guard:
+
+```sh
+export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"
+export NODE_OPTIONS=--require=/tmp/sst-9s2-round2-network-guard.cjs
+export GIT_ALLOW_PROTOCOL=file
+pnpm exec turbo run build --filter '@jeswr/agentic-legacy-bridge^...' --concurrency=4
+pnpm --filter @jeswr/agentic-legacy-bridge run gate
+pnpm --filter @jeswr/agentic-legacy-bridge run test:coverage
+TURBO_SCM_BASE=9db763ba4cc877f86b0293f5d0077c7e7b7975e7 pnpm run gate
+```
+
+All commands pass (exit 0). The package gate runs lint, build, typecheck and
+**691 tests across 37 files**; coverage repeats those tests successfully.
+Coverage is 94.01% statements, 86.68% branches, 97.34% functions and 96.32% lines.
+The affected repository gate, including root lint, passes **23/23 tasks**,
+6 cached.
+
+The session-close full-workspace gate ran before the final documentation commit:
+
+```sh
+pnpm run gate:full
+```
+
+It exits 1 after **109 successful tasks out of 282**, 12 cached, at the unchanged
+`@jeswr/app-suite#build`. Its `next/font` build cannot download Onest, Source Code
+Pro and Source Serif 4 from Google Fonts because the fixture-only guard refuses
+external connections. This is the same environment limitation recorded in the
+previous round; no unrelated changes were made.
+
+`git diff --check` passes. `roborev status` exits 127 because roborev is unavailable,
+so automated per-commit review could not run. No dependencies or manifests
+changed; `check:packages` is not applicable. No push, publication, remote Git
+fetch/merge or dependency lifecycle script was used. The requested finding is
+fixed, with no implementation work or open questions remaining. Validation
+limitations are the full-workspace font download and unavailable roborev.
