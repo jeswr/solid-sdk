@@ -266,6 +266,14 @@ describe("synthetic registry import", () => {
   it.each([
     ["matrix", "@fixture:matrix.example", "@Other:Elsewhere.example"],
     ["matrix_bot", "@fixture:matrix.example", "@Other:Elsewhere.example"],
+    ["matrix", "@fixture:[2001:db8::1]", "@Other:[2001:DB8::2]"],
+    ["matrix_bot", "@fixture:[2001:db8::1]", "@Other:[2001:DB8::2]"],
+    ["matrix", "@fixture:[2001:db8::1]:8448", "@Other:[2001:DB8::2]:9448"],
+    ["matrix_bot", "@fixture:[2001:db8::1]:8448", "@Other:[2001:DB8::2]:9448"],
+    ["matrix", "@fixture:matrix.example", "@Other:[2001:DB8::2]"],
+    ["matrix_bot", "@fixture:matrix.example", "@Other:[2001:DB8::2]"],
+    ["matrix", "@fixture:matrix.example", "@Other:[2001:DB8::2]:9448"],
+    ["matrix_bot", "@fixture:matrix.example", "@Other:[2001:DB8::2]:9448"],
     ["phone_messages", "+1 (202) 555-0100", "+1 202 555 0101"],
   ])("writes both %s conflict identities from notes as hashes in RDF", async (channel, own, other) => {
     const ports = harness(

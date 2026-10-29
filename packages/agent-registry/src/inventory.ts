@@ -230,10 +230,12 @@ export function bindingStateFromSetup(status: string): BindingState {
   if (["none", "not_applicable"].includes(status)) return "none";
   return "setup-required";
 }
-const NOTE_IDENTIFIER_CHARS = "[\\p{L}\\p{M}\\p{N}._@%+:/#=~!$&'*?^`{|}-]";
+// Keep bracketed IPv6 hosts inside identifiers without consuming surrounding prose brackets.
+const NOTE_IDENTIFIER_PART =
+  "(?:[\\p{L}\\p{M}\\p{N}._@%+:/#=~!$&'*?^`{|}-]|\\[[\\da-fA-F.]*:[\\da-fA-F:.]*\\])";
 const NOTE_IDENTIFIERS = new RegExp(
   // Keep phone formatting and any adjacent suffix, so a longer identity cannot match a prefix.
-  `['\`]?\\+\\d[\\d ().-]{5,}\\d${NOTE_IDENTIFIER_CHARS}*|${NOTE_IDENTIFIER_CHARS}+`,
+  `['\`]?\\+\\d[\\d ().-]{5,}\\d${NOTE_IDENTIFIER_PART}*|${NOTE_IDENTIFIER_PART}+`,
   "gu",
 );
 /** Keep complete phone/handle/URI tokens; strip prose punctuation after a mention. */
@@ -246,7 +248,8 @@ function noteIdentifiers(note: string): string[] {
 function noteIdentityChannel(handle: string): string | undefined {
   if (/^[\p{L}\p{M}\p{N}.!#$%&'*+/=?^_`{|}~-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}$/u.test(handle))
     return "email";
-  if (/^@[^@\s:]+:[\p{L}\p{N}.-]+(?::\d+)?$/u.test(handle)) return "matrix";
+  if (/^@[^@\s:]+:(?:[\p{L}\p{N}.-]+|\[[\da-fA-F.]*:[\da-fA-F:.]*\])(?::\d+)?$/u.test(handle))
+    return "matrix";
   if (/^\+\d[\d ().-]{5,}\d$/u.test(handle)) return "phone_messages";
   return undefined;
 }

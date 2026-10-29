@@ -350,6 +350,32 @@ describe("privacy and settings model", () => {
       "@fixture:matrix.example.org",
       "@fixture:matrix.example.org",
     ],
+    [
+      "matrix",
+      "@fixture:[2001:db8::1]",
+      "@fixture:[2001:db8::1]:8448",
+      "@fixture:[2001:db8::1]:8448",
+    ],
+    [
+      "matrix_bot",
+      "@fixture:[2001:db8::1]",
+      "@fixture:[2001:db8::1]:8448",
+      "@fixture:[2001:db8::1]:8448",
+    ],
+    [
+      "matrix",
+      "@fixture:[2001:db8::1]:8448",
+      "@fixture:[2001:db8::1]:84480",
+      "@fixture:[2001:db8::1]:84480",
+    ],
+    [
+      "matrix_bot",
+      "@fixture:[2001:db8::1]:8448",
+      "@fixture:[2001:db8::1]:84480",
+      "@fixture:[2001:db8::1]:84480",
+    ],
+    ["matrix", "@fixture:[2001:db8::1]", "@fixture:[2001:DB8::1]", "@fixture:[2001:DB8::1]"],
+    ["matrix_bot", "@fixture:[2001:db8::1]", "@fixture:[2001:DB8::1]", "@fixture:[2001:DB8::1]"],
     ["github_notifications", "fixture", "prefixture", "PREFIXTURE"],
   ])("matches complete %s identities rather than substrings of %s", (channel, own, other, mention) => {
     const snap = parseSnapshot({
@@ -469,6 +495,16 @@ describe("privacy and settings model", () => {
   it.each([
     ["matrix", "@fixture:matrix.example", "@Other:Elsewhere.example"],
     ["matrix_bot", "@fixture:matrix.example", "@Other:Elsewhere.example"],
+    ["matrix", "@fixture:[2001:db8::1]", "@Other:[2001:DB8::2]"],
+    ["matrix_bot", "@fixture:[2001:db8::1]", "@Other:[2001:DB8::2]"],
+    ["matrix", "@fixture:[2001:db8::1]:8448", "@Other:[2001:DB8::2]:9448"],
+    ["matrix_bot", "@fixture:[2001:db8::1]:8448", "@Other:[2001:DB8::2]:9448"],
+    ["matrix", "@fixture:matrix.example", "@Other:[2001:DB8::2]"],
+    ["matrix_bot", "@fixture:matrix.example", "@Other:[2001:DB8::2]"],
+    ["matrix", "@fixture:matrix.example", "@Other:[2001:DB8::2]:9448"],
+    ["matrix_bot", "@fixture:matrix.example", "@Other:[2001:DB8::2]:9448"],
+    ["matrix", "@fixture:[::ffff:192.0.2.1]", "@Other:[::ffff:192.0.2.2]:9448"],
+    ["matrix_bot", "@fixture:[::ffff:192.0.2.1]", "@Other:[::ffff:192.0.2.2]:9448"],
     ["phone_messages", "+12025550100", "+1 (202) 555-0101"],
     ["signal", "+1 202 555 0100", "+12025550101"],
   ])("retains notes-only %s alternatives with channel normalization", (channel, own, other) => {
