@@ -1,11 +1,75 @@
 #!/usr/bin/env node
 // AUTHORED-BY Codex GPT-5.6 (Sol)
 // AUTHORED-BY Codex GPT-6.1 (Sol)
+// AUTHORED-BY Codex GPT-6
 
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, globSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+
+// Top-level properties from https://openapi.vercel.sh/vercel.json (2026-10-28).
+// Keep this local so the guard stays deterministic and works without network access.
+const vercelProperties = new Set([
+  "$schema",
+  "alias",
+  "build",
+  "buildCommand",
+  "builds",
+  "bulkRedirectsPath",
+  "bunVersion",
+  "ci",
+  "cleanUrls",
+  "crons",
+  "daemons",
+  "devCommand",
+  "env",
+  "experimentalAtproto",
+  "experimentalBYOC",
+  "experimentalEnvironmentVariables",
+  "experimentalServiceGroups",
+  "experimentalServices",
+  "experimentalServicesV2",
+  "fluid",
+  "framework",
+  "functionFailoverRegions",
+  "functions",
+  "git",
+  "github",
+  "headers",
+  "ignoreCommand",
+  "images",
+  "installCommand",
+  "manualProvisioning",
+  "name",
+  "outputDirectory",
+  "passiveRegions",
+  "proxy",
+  "redirects",
+  "regions",
+  "relatedProjects",
+  "rewrites",
+  "routes",
+  "schedules",
+  "scope",
+  "services",
+  "skipMiddlewareRequestBody",
+  "trailingSlash",
+  "version",
+  "wildcard",
+]);
+
+function checkTopLevelProperties(config, path, failures) {
+  if (Array.isArray(config)) {
+    failures.push(`${path}: expected a configuration object`);
+    return;
+  }
+  for (const key of Object.keys(config)) {
+    if (!vercelProperties.has(key)) {
+      failures.push(`${path}: unknown top-level property ${key}`);
+    }
+  }
+}
 
 function readJson(root, path, failures) {
   let source;
@@ -30,6 +94,40 @@ function isDirectory(path) {
     return statSync(path).isDirectory();
   } catch {
     return false;
+  }
+}
+
+function matchesGitDeployment(value, suite) {
+  return suite
+    ? value !== null &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        Object.keys(value).length === 2 &&
+        value["**"] === false &&
+        value.main === true
+    : value === false;
+}
+
+function gitDeploymentPolicy(suite) {
+  return suite ? '{ "**": false, "main": true } (main only)' : "false";
+}
+
+function checkGitDeployment(root, app, failures) {
+  const path = `${app.rootDirectory}/vercel.json`;
+  const config = readJson(root, path, failures);
+  if (!config) return;
+  checkTopLevelProperties(config, path, failures);
+  // Vercel enables unspecified branches. ** also covers branch names containing /.
+  const suite = app.rootDirectory === "apps/suite" && app.project === "solid-suite";
+  const policy = gitDeploymentPolicy(suite);
+  if (!matchesGitDeployment(app.gitDeploymentEnabled, suite)) {
+    failures.push(`${app.project}: gitDeploymentEnabled must be ${policy}`);
+  }
+  if (!matchesGitDeployment(config.git?.deploymentEnabled, suite)) {
+    failures.push(`${path}: git.deploymentEnabled must be ${policy}`);
+  }
+  if (suite && config.ignoreCommand !== app.vercelIgnore) {
+    failures.push(`${path}: ignoreCommand must match vercelIgnore`);
   }
 }
 
@@ -197,6 +295,8 @@ function checkVercelConfig(root) {
     failures.push(`${path}: expected a non-empty array of deployments`);
   }
   if (Array.isArray(apps)) {
+    const directories = new Set();
+    const projects = new Set();
     for (const [index, app] of apps.entries()) {
       if (
         !app ||
@@ -217,6 +317,11 @@ function checkVercelConfig(root) {
         continue;
       }
       const directory = app.rootDirectory;
+      if (directories.has(directory) || projects.has(app.project)) {
+        failures.push(`${path}[${index}]: duplicate deployment root or project`);
+      }
+      directories.add(directory);
+      projects.add(app.project);
       if (!isDirectory(join(root, directory))) {
         failures.push(`${app.project}: rootDirectory ${directory} is missing or not a directory`);
         continue;
@@ -230,11 +335,48 @@ function checkVercelConfig(root) {
         failures.push(`${directory}/package.json: deployed package must be private`);
       }
       checkIgnoreCommand(root, app, failures);
+      checkGitDeployment(root, app, failures);
       if (app.framework === "vite") checkViteConfig(root, directory, failures);
       // Client ID documents are required unless the deployment explicitly opts out.
       if (app.clientIdDocument !== false) {
         checkBuildEnv(root, app, failures);
         checkClientIdBuild(root, app, manifest, failures);
+      }
+    }
+    // Discover deployable apps even when neither inventory nor config exists yet.
+    const configs = new Set(
+      globSync(["apps/*/vercel.json", "apps/*/web/vercel.json"], {
+        cwd: root,
+      }),
+    );
+    for (const path of globSync(["apps/*/package.json", "apps/*/web/package.json"], {
+      cwd: root,
+    })) {
+      const directory = path.slice(0, -"/package.json".length);
+      if (directories.has(directory)) continue;
+      const manifest = readJson(root, path, failures);
+      if (!manifest) continue;
+      const hasBuild =
+        typeof manifest.scripts?.build === "string" && manifest.scripts.build.trim() !== "";
+      const hasFramework = [
+        "dependencies",
+        "devDependencies",
+        "peerDependencies",
+        "optionalDependencies",
+      ].some((field) =>
+        ["next", "vite"].some((name) => Object.hasOwn(manifest[field] ?? {}, name)),
+      );
+      if (hasBuild || hasFramework) configs.add(`${directory}/vercel.json`);
+    }
+    // Retain checks for config-only apps as well as newly discovered manifests.
+    for (const config of configs) {
+      if (!directories.has(config.slice(0, -"/vercel.json".length))) {
+        const value = readJson(root, config, failures);
+        if (value) checkTopLevelProperties(value, config, failures);
+        const suite = config === "apps/suite/vercel.json";
+        if (value && !matchesGitDeployment(value.git?.deploymentEnabled, suite)) {
+          failures.push(`${config}: git.deploymentEnabled must be ${gitDeploymentPolicy(suite)}`);
+        }
       }
     }
   }

@@ -30,6 +30,11 @@ export function normalizeUploadName(name: string, entryKind: UploadKind = "file"
     .trim();
   const fitted = fitName(cleaned, "", entryKind).trim();
   requireValue(fitted.length > 0 && fitted !== "." && fitted !== "..", "invalid-name");
+  // A stem capped to only dots would make later calls reinterpret the extension.
+  requireValue(
+    entryKind !== "file" || extensionChain(fitted) === extensionChain(cleaned),
+    "invalid-name",
+  );
   return fitted;
 }
 

@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { type ReactNode, useEffect, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -91,6 +92,14 @@ function Frame({
   );
 }
 beforeEach(() => {
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    },
+  );
   desktop = true;
   update.mockClear();
   vi.stubGlobal("matchMedia", () => ({
@@ -112,6 +121,52 @@ async function accessible() {
 }
 
 describe("shell layout", () => {
+  it("shows TopBar and DetailsPane tooltips along the keyboard path without toggling regions", async () => {
+    render(<Frame />);
+    const user = userEvent.setup();
+    for (const [label, slot] of [
+      ["Toggle sidebar", "top-bar-sidebar-toggle"],
+      ["Toggle details pane", "top-bar-details-toggle"],
+      ["Close details", "details-pane-close"],
+    ] as const) {
+      const button = screen.getByRole("button", { name: label });
+      for (let i = 0; i < 20 && document.activeElement !== button; i++) await user.tab();
+      expect(document.activeElement).toBe(button);
+      expect(button.dataset.slot).toBe(slot);
+      expect((await screen.findByRole("tooltip")).textContent).toBe(label);
+      if (label !== "Close details") expect(button.getAttribute("aria-expanded")).toBe("true");
+      expect(update).not.toHaveBeenCalled();
+      await accessible();
+      await user.keyboard("{Escape}");
+      expect(screen.queryByRole("tooltip")).toBeNull();
+      expect(update).not.toHaveBeenCalled();
+    }
+  }, 15000);
+  it.each([
+    "sidebar",
+    "details",
+  ])("shows the %s sheet close tooltip and restores toggle focus", async (region) => {
+    desktop = false;
+    render(<Frame />);
+    const user = userEvent.setup();
+    const toggle = screen.getByRole("button", {
+      name: region === "sidebar" ? "Toggle sidebar" : "Toggle details pane",
+    });
+    await user.click(toggle);
+    const close = screen.getByRole("button", {
+      name: region === "sidebar" ? "Close drive sections" : "Close details",
+    });
+    await waitFor(() => expect(document.activeElement).toBe(close));
+    expect(close.dataset.slot).toBe("shell-sheet-close");
+    expect((await screen.findByRole("tooltip")).textContent).toBe(
+      region === "sidebar" ? "Close drive sections" : "Close details",
+    );
+    await accessible();
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  });
   it("provides landmarks, one content title and the document title", async () => {
     render(<Frame />);
     expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
@@ -345,6 +400,9 @@ describe("shell layout", () => {
     expect(screen.queryByRole("dialog", { name: "Drive sections" })).toBeNull();
     expect(screen.getByRole("dialog", { name: "Details" })).toBeTruthy();
     await accessible();
+    // The auto-focused close control opens a tooltip, which owns the first Escape.
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    expect(screen.queryByRole("tooltip")).toBeNull();
     fireEvent.keyDown(screen.getByRole("dialog", { name: "Details" }), { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await waitFor(() =>
@@ -376,6 +434,8 @@ describe("shell layout", () => {
   it("closes both saved regions with Escape on a narrow viewport instead of revealing the other sheet", async () => {
     desktop = false;
     render(<Frame initial={{ sidebarOpen: true, detailsOpen: true }} />);
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    expect(screen.queryByRole("tooltip")).toBeNull();
     fireEvent.keyDown(screen.getByRole("dialog", { name: "Drive sections" }), { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(update).toHaveBeenLastCalledWith({ sidebarOpen: false, detailsOpen: false });
@@ -453,6 +513,19 @@ it.each([false, true])("supports all TopBar slots and refresh state %s", async (
     "/drive/my",
   );
   await accessible();
+});
+it("shows the Back link tooltip on keyboard focus and hover", async () => {
+  render(<TopBar appName="Drive" back={{ href: "/drive/my", label: "Back to My Drive" }} />);
+  const user = userEvent.setup();
+  const back = screen.getByRole("link", { name: "Back to My Drive" });
+  await user.tab();
+  expect(document.activeElement).toBe(back);
+  expect(back.getAttribute("href")).toBe("/drive/my");
+  expect((await screen.findByRole("tooltip")).textContent).toBe("Back to My Drive");
+  await user.keyboard("{Escape}");
+  await user.tab();
+  await user.hover(back);
+  expect((await screen.findByRole("tooltip")).textContent).toBe("Back to My Drive");
 });
 it.each([
   "ready",

@@ -53,6 +53,13 @@ See [`AGENTS.md`](AGENTS.md) for the repo charter (conventions, merge rules, pro
 Package imports happen per the phased plan in `decisions/0001`; application histories are grafted
 under `apps/<slug>` and remain private deployables.
 
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+The ten Vite web apps are published together at
+[jeswr.github.io/solid-sdk](https://jeswr.github.io/solid-sdk/) by the Pages workflow.
+Only `apps/suite` keeps Vercel git deployments, on `main`. See
+[deployment locations and setup](docs/deployment.md) for every app and local build commands.
+
 <!-- AUTHORED-BY Codex GPT-5 -->
 ## Agent skills
 
