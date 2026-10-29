@@ -14,6 +14,7 @@ import {
 import sanitizeHtml from "sanitize-html";
 import { baseExtensions } from "../../editor/extensions";
 import { normaliseDestination } from "../editor/destination";
+import { normaliseHtmlLists } from "../editor/html-lists";
 import { normaliseHtmlTableSpans } from "../editor/table-spans";
 import { MAX_IMPORT_BYTES } from "./docx-import";
 import { normaliseImport } from "./schema";
@@ -467,6 +468,12 @@ function containerBoundaries(source: string): string {
     .join("\n");
 }
 
+// Lazy container lines continue prose but cannot underline it. Preserve that
+// distinction when list and quote source is passed through the block lexer again.
+function lazyParagraphLine(line: string): string {
+  return /^[ \t]*(?:=+|-+)[ \t]*$/.test(line) ? `    ${line.trimStart()}` : line;
+}
+
 function listItemSource(raw: string): { text: string; indent: number } {
   const lines = raw.replace(/\n$/, "").split("\n");
   const first = lines[0] as string;
@@ -486,7 +493,7 @@ function listItemSource(raw: string): { text: string; indent: number } {
         .map((line) =>
           indentation(line, containerColumn) >= indent
             ? stripIndent(line, indent, containerColumn)
-            : line,
+            : lazyParagraphLine(line),
         ),
     ].join("\n"),
   };
@@ -682,6 +689,7 @@ function parseHtml(token: MarkdownToken): JSONContent[] {
     else reportSkipped(mappingSkipped, "Unsafe images");
   }
   normaliseHtmlTableSpans(dom.body, () => reportSkipped(mappingSkipped, "Invalid table spans"));
+  normaliseHtmlLists(dom.body);
   const rules = SchemaDOMParser.fromSchema(schema).rules;
   const parser = new SchemaDOMParser(
     schema,
@@ -1011,7 +1019,9 @@ markdown.instance.use({
       const marker = (/^[ \t]*>[ \t]?/.exec(token.raw) as RegExpExecArray)[0];
       const indent = indentation(marker, containerColumn) + 1 + (marker.endsWith(">") ? 0 : 1);
       const text = token.raw
-        .replace(this.rules.other.blockquoteSetextReplace, "\n    $1")
+        .split("\n")
+        .map(lazyParagraphLine)
+        .join("\n")
         .replace(/(?<=^|\n)[ \t]*>[ \t]?/g, (prefix) => {
           const leading = indentation(prefix, containerColumn);
           if (leading > 3) return prefix;

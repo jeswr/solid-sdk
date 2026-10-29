@@ -105,17 +105,25 @@ export function EditorToolbar({
   const activeControl = useRef<HTMLElement | null>(null);
   // A command chosen from the More menu returns the caret to the document, rather than
   // the menu handing focus back to its trigger, so typing continues where it applied.
-  const chose = useRef(false);
-  const choose = (run: () => unknown) => () => {
-    chose.current = true;
-    run();
-  };
+  const chose = useRef<{ run: () => unknown; opensControl: boolean } | null>(null);
+  const choose =
+    (run: () => unknown, opensControl = false) =>
+    () => {
+      chose.current = { run, opensControl };
+      if (!opensControl) run();
+    };
   const returnToDocument = (event: Event) => {
     if (!chose.current) return;
-    chose.current = false;
-    // A command that opened a dialog keeps focus there.
-    if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
+    const destination = chose.current;
+    chose.current = null;
     event.preventDefault();
+    // Open controls after the menu's focus trap has gone. This includes the
+    // non-modal Find bar, whose autofocus must survive menu teardown.
+    if (destination.opensControl) {
+      destination.run();
+      return;
+    }
+    if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
     editor.commands.focus();
   };
   const controls = () =>
@@ -244,7 +252,10 @@ export function EditorToolbar({
             </Tooltip>
             <DropdownMenuContent onCloseAutoFocus={returnToDocument}>
               {align.map((action) => (
-                <DropdownMenuItem key={action.label} onSelect={choose(action.run)}>
+                <DropdownMenuItem
+                  key={action.label}
+                  onSelect={choose(action.run, action.opensControl)}
+                >
                   {action.label}
                   <Kbd>{keyboardLabel(action.keys, mac)}</Kbd>
                 </DropdownMenuItem>
@@ -279,7 +290,7 @@ export function EditorToolbar({
                 <DropdownMenuItem
                   key={action.label}
                   disabled={!online && action.label === "Insert image"}
-                  onSelect={choose(action.run)}
+                  onSelect={choose(action.run, action.opensControl)}
                 >
                   <Icon aria-hidden="true" />
                   {action.label}

@@ -5,6 +5,7 @@ import { generateJSON, getSchema, type JSONContent } from "@tiptap/react";
 import { baseExtensions } from "../../editor/extensions";
 import { normaliseImageLink } from "../../editor/image-link";
 import { normaliseDestination } from "../editor/destination";
+import { normaliseHtmlLists } from "../editor/html-lists";
 import { normaliseHtmlTableSpans, normaliseTableSpan } from "../editor/table-spans";
 import { sanitiseImport } from "./sanitise";
 import { reportSkipped, type SkippedItem } from "./skipped";
@@ -130,15 +131,7 @@ export function importHtml(source: string, skipped: SkippedItem[] = []) {
   const html = sanitiseImport(source, skipped);
   const dom = new window.DOMParser().parseFromString(html, "text/html");
   normaliseHtmlTableSpans(dom.body, () => reportSkipped(skipped, "Invalid table spans"));
-  for (const paragraph of dom.body.querySelectorAll("p")) {
-    if (paragraph.querySelector("img") && !paragraph.textContent?.trim()) {
-      // List items require a leading paragraph, including image-only steps.
-      // Keep that structural slot before lifting block images out of the p.
-      if (paragraph.parentElement?.tagName === "LI" && !paragraph.previousElementSibling)
-        paragraph.before(dom.createElement("p"));
-      paragraph.replaceWith(...paragraph.childNodes);
-    }
-  }
+  normaliseHtmlLists(dom.body);
   return normaliseImport(
     generateJSON(dom.body.innerHTML, baseExtensions(globalThis.fetch)),
     skipped,

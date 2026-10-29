@@ -336,6 +336,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
       label: "Alt text",
       icon: ImagePlus,
       keys: "",
+      opensControl: true,
       run: () => setImage({ file: null }),
     });
   return (

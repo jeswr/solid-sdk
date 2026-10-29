@@ -58,8 +58,7 @@ export function DocumentList({ session }: { session: PodSession }) {
   );
   const drafts = localDrafts?.webId === session.webId ? localDrafts.entries : [];
   const [error, setError] = useState(false);
-  const [renaming, setRenaming] = useState<DocumentEntry | null>(null);
-  const [title, setTitle] = useState("");
+  const [renaming, setRenaming] = useState<{ entry: DocumentEntry; title: string } | null>(null);
   const [deleting, setDeleting] = useState<DocumentEntry | null>(null);
   const [importing, setImporting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -266,8 +265,7 @@ export function DocumentList({ session }: { session: PodSession }) {
                         <DropdownMenuItem
                           disabled={entry.readOnly}
                           onSelect={() => {
-                            setTitle(entry.title);
-                            setRenaming(entry);
+                            setRenaming({ entry, title: entry.title });
                           }}
                         >
                           Rename
@@ -338,16 +336,16 @@ export function DocumentList({ session }: { session: PodSession }) {
                 event.preventDefault();
                 if (!renaming) return;
                 void act(async () => {
-                  const stored = await store.read(renaming.url);
+                  const stored = await store.read(renaming.entry.url);
                   if (stored)
                     await store.save(
                       stored,
-                      { title },
+                      { title: renaming.title },
                       {
                         regenerate: () => ({ body: stored.data.body, format: stored.data.format }),
                       },
                     );
-                  setRenaming(null);
+                  setRenaming((current) => (current === renaming ? null : current));
                   await reload();
                 });
               }}
@@ -356,8 +354,11 @@ export function DocumentList({ session }: { session: PodSession }) {
               <Input
                 id="rename-title"
                 maxLength={200}
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
+                value={renaming?.title ?? ""}
+                onChange={(event) => {
+                  const title = event.target.value;
+                  setRenaming((current) => current && { ...current, title });
+                }}
               />
               <DialogFooter>
                 <Button type="submit" disabled={busy}>

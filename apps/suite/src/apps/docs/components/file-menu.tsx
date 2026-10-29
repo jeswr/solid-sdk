@@ -34,21 +34,29 @@ export function FileMenu({
   print: () => void;
   importFile: () => void;
 }) {
-  const renameOnClose = useRef(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const afterClose = useRef<(() => void) | null>(null);
+  const choose = (run: () => void) => () => {
+    afterClose.current = run;
+  };
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <IconButton label="File menu" variant="ghost">
+        <IconButton ref={trigger} label="File menu" variant="ghost">
           <MoreHorizontal aria-hidden="true" />
         </IconButton>
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="end"
         onCloseAutoFocus={(event) => {
-          if (renameOnClose.current) {
+          const run = afterClose.current;
+          if (run) {
             event.preventDefault();
-            renameOnClose.current = false;
-            rename();
+            afterClose.current = null;
+            // Dialogs capture a durable invoking control, after the transient
+            // menu item has unmounted. Rename can then move focus to the title.
+            trigger.current?.focus();
+            run();
           }
         }}
       >
@@ -58,24 +66,23 @@ export function FileMenu({
         <DropdownMenuItem onSelect={copy} disabled={draft}>
           Make a copy
         </DropdownMenuItem>
-        <DropdownMenuItem
-          onSelect={() => {
-            renameOnClose.current = true;
-          }}
-          disabled={readOnly}
-        >
+        <DropdownMenuItem onSelect={choose(rename)} disabled={readOnly}>
           Rename
         </DropdownMenuItem>
         <DownloadMenu download={download} print={print} />
-        <DropdownMenuItem disabled={readOnly} onSelect={importFile}>
+        <DropdownMenuItem disabled={readOnly} onSelect={choose(importFile)}>
           Import to replace…
         </DropdownMenuItem>
         <DropdownMenuItem disabled>Details — Coming soon</DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={remove} disabled={draft || readOnly} variant="destructive">
+        <DropdownMenuItem
+          onSelect={choose(remove)}
+          disabled={draft || readOnly}
+          variant="destructive"
+        >
           Move to trash
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={shortcuts}>Keyboard shortcuts</DropdownMenuItem>
+        <DropdownMenuItem onSelect={choose(shortcuts)}>Keyboard shortcuts</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

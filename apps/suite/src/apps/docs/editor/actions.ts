@@ -39,6 +39,7 @@ export interface EditorAction {
   icon: typeof Bold;
   keys: string;
   active?: boolean;
+  opensControl?: boolean;
   run: () => void;
 }
 export function runSlash(editor: Editor, item: SlashItem, image: () => void) {
@@ -103,6 +104,10 @@ export function editorActions(
     },
     ...(active !== undefined ? { active } : {}),
   });
+  const control = (...args: Parameters<typeof action>): EditorAction => ({
+    ...action(...args),
+    opensControl: true,
+  });
   return [
     action("Undo", Undo2, "Mod+Z", () => e.chain().focus().undo().run()),
     action("Redo", Redo2, "Mod+Shift+Z", () => e.chain().focus().redo().run()),
@@ -135,8 +140,8 @@ export function editorActions(
       () => e.chain().focus().toggleHighlight().run(),
       e.isActive("highlight"),
     ),
-    action("Link", Link, "Mod+K", open.link, e.isActive("link")),
-    action("Insert image", ImagePlus, "", open.image),
+    control("Link", Link, "Mod+K", open.link, e.isActive("link")),
+    control("Insert image", ImagePlus, "", open.image),
     action("Insert table", Table2, "", () =>
       e.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
     ),
@@ -191,8 +196,8 @@ export function editorActions(
       e.isActive("superscript"),
     ),
     action("Horizontal rule", Minus, "", () => e.chain().focus().setHorizontalRule().run()),
-    action("Find and replace", Search, "Mod+F", open.find),
-    action("Word count", WholeWord, "Mod+Shift+C", open.count),
+    control("Find and replace", Search, "Mod+F", open.find),
+    control("Word count", WholeWord, "Mod+Shift+C", open.count),
     action("Normal text", Pilcrow, "Mod+Alt+0", () => e.chain().focus().setParagraph().run()),
     action("Heading 1", Heading1, "Mod+Alt+1", () =>
       e.chain().focus().toggleHeading({ level: 1 }).run(),

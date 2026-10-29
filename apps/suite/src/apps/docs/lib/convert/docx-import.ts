@@ -60,6 +60,12 @@ function mapLists(
     const ancestors: { path: string; key: string; list: string }[] = [];
     for (const child of element.children ?? []) {
       const metadata = child.type === "paragraph" ? numbering[paragraphIndex++] : undefined;
+      if (child.type === "paragraph" && metadata) {
+        // Use the same effective style/direct numbering as the counter. Explicit
+        // numId=0 suppresses inherited numbering, including Mammoth's fallback.
+        if (metadata.id === "0") child.numbering = null;
+        else if (metadata.numbering) child.numbering = metadata.numbering;
+      }
       const styleName = child.styleName?.toLowerCase();
       const indentLevel = Math.round(Number(child.indent?.start) / 720 - 1);
       const continuation =
@@ -190,6 +196,7 @@ export async function importDocx(data: ArrayBuffer, options: DocxImportOptions) 
     archive.exists("word/numbering.xml")
       ? await archive.read("word/numbering.xml", "utf-8")
       : `<w:numbering xmlns:w="${WORD}"/>`,
+    archive.exists("word/styles.xml") ? await archive.read("word/styles.xml", "utf-8") : "",
   );
   archive.write("word/document.xml", inspected.xml);
   const images: { data: ArrayBuffer; contentType: string; placeholder: string }[] = [];

@@ -30,6 +30,57 @@ beforeEach(() => {
   state.store.read.mockReset();
   state.store.save.mockReset();
 });
+
+it.each([
+  "other document",
+  "same document",
+  "current dialog",
+])("round36 a completed rename cannot close a newer dialog for %s", async (target) => {
+  const first = entry("First");
+  const second = { ...entry("Second"), url: "https://pod.test/docs/other.ttl" };
+  state.store.list.mockResolvedValue([first, second]);
+  state.store.read.mockResolvedValue({ data: { body: "<p>Body</p>", format: "text/html" } });
+  const save = deferred<void>();
+  state.store.save.mockReturnValue(save.promise);
+  const { root } = await mount();
+  const rename = async (name: string) => {
+    await act(async () =>
+      button(`Actions for ${name}`).dispatchEvent(
+        new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
+      ),
+    );
+    const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+      (node) => node.textContent === "Rename",
+    );
+    await act(async () => item?.click());
+  };
+  try {
+    await rename("First");
+    await act(async () => button("Save title").click());
+    if (target !== "current dialog") {
+      await act(async () =>
+        (document.querySelector('[role="dialog"]') as HTMLElement).dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+        ),
+      );
+      await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+      await rename(target === "same document" ? "First" : "Second");
+    }
+    const input = document.querySelector<HTMLInputElement>("#rename-title") as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        input,
+        "Unsaved title",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => save.resolve());
+    expect(document.querySelector("#rename-title")).toBe(input);
+    expect(input.value).toBe("Unsaved title");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
 afterEach(() => {
   vi.unstubAllGlobals();
   document.body.replaceChildren();
