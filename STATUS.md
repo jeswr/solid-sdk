@@ -546,3 +546,73 @@ decision binary remain unavailable; automated per-commit review and a real binar
 could not be performed. Tests use injected process results and synthetic data. No
 external review/model service, provider or pod was called; no remote was fetched or
 merged, and nothing was pushed or published.
+
+## Fix round 7 — SPARQ scalar types and prohibition precedence at `7801fe5c9572`
+
+2026-10-29. Both requested findings are fixed on `lane/sst-gpa`:
+
+- `85694ced` — `fix(agent-mandate): align SPARQ scalar operand types`.
+  Reuse the operand validator's datatype resolution for both RDF right operands and
+  request context. Inferred numeric strings become numeric literals and numeric
+  context, including mixed string/number values, lexical zeros, signs and exponents.
+  Explicit numeric, string, URI and temporal types also determine request encoding.
+  Scalar array context and incompatible types sharing one context slot are
+  indeterminate. The signed codec and input policies are unchanged.
+- `07196551` — `fix(agent-mandate): prioritize definite SPARQ prohibitions`.
+  Check supported, comparable prohibition candidates before rejecting unsupported
+  profiles, conflict strategies, vocabulary, obligations or duties. Unresolved policies
+  send only supported prohibitions to the backend, with prohibition precedence and
+  unsupported metadata removed. A matching prohibition wins; every other outcome
+  stays indeterminate. Candidate action, target and assignee filters still apply.
+- `b551aa46` — `fix(agent-mandate): retain prohibitions with supported duties`.
+  Preserve the shared evaluator's prohibition applicability when the prohibition
+  itself carries a supported duty. Omit that duty from the backend projection while
+  retaining the indeterminate outcome for anything except a matching prohibition.
+- Final report commit — `docs(agent-mandate): record seventh fix round validation`.
+
+Validation uses Node v24.22.1 (`PATH=/opt/node24/bin:$PATH`):
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/agent-mandate... --concurrency=4
+pnpm exec vitest run --root packages/agent-mandate test/sparq.test.ts --coverage.enabled=false -t 'shares inferred numeric types|uses the declared constraint type|one context value|array context for a scalar'
+pnpm exec vitest run --root packages/agent-mandate test/sparq.test.ts --coverage.enabled=false -t 'checks definite prohibitions before rejecting|without a definite prohibition for'
+pnpm exec vitest run --root packages/agent-mandate test/sparq.test.ts --coverage.enabled=false -t 'supported prohibition carrying its own duty'
+pnpm --filter @jeswr/agent-mandate run lint && pnpm --filter @jeswr/agent-mandate run build && pnpm --filter @jeswr/agent-mandate run typecheck && pnpm --filter @jeswr/agent-mandate run test
+TURBO_SCM_BASE=7801fe5c95727aaed6cbc11efad9134f844e3919 pnpm run gate
+pnpm run gate:full
+```
+
+- Prerequisite builds — PASS, 7/7 tasks. Before those builds the initial regression
+  command could not resolve an unbuilt workspace dependency; it ran after building.
+- Regression reproduction — 29 scalar cases, 14 precedence cases and three cases
+  involving a prohibition's own duty failed before their fixes. All final regressions
+  pass as part of the package gate.
+- Package gate — PASS, 474 tests in 8 files, including 215 adapter tests. This adds
+  66 tests relative to the supplied head. Per-file coverage remains 100%:
+  statements 453/453, branches 542/542, functions 124/124 and lines 406/406.
+  Coverage thresholds, exclusions and timeouts are unchanged. The existing non-fatal
+  agent-authz-verifier sourcemap warning remains.
+- Affected repository gate — PASS on the final code, 11/11 tasks in 9.6 seconds,
+  including `pnpm run lint:root` and every workspace/layer guard. The comparison base
+  is the supplied pre-fix head.
+- Full workspace gate — FAIL outside this fix round, including on the final code:
+  126 successful tasks of 288 reported in 12 seconds (116 cached). The first run
+  completed 211 tasks and passed all 686 root tests before the same two
+  federation-codegen failures; the final run stopped before root tests finished.
+  In unchanged `tools/federation-codegen/test/generator.test.ts`, the
+  bookmarks target-class expectation uses the old `w3id.org` namespace, and committed
+  generated `ontology.ttl` differs from the current `jeswr.org/ns` vocabulary. The
+  codegen project and suite vocabulary have no diff from the supplied pre-fix head.
+- `git diff --check` — PASS.
+
+Conservative choice: when one backend context value cannot represent every required
+comparison type, require confirmation. No alternate evaluator or conversion fallback
+was introduced. No dependencies were added, so no `check:packages` run was needed.
+Changes are confined to the reviewed package and this required report.
+
+No requested finding remains unfinished and there are no open questions. The unrelated
+full-workspace failures remain outside scope. `roborev` and the native SPARQ decision
+binary remain unavailable, so automated per-commit review and a real binary run could
+not be performed. Tests use injected process results and synthetic data. No external
+review/model service, provider or pod was called; no remote was fetched or merged,
+and nothing was pushed or published.
