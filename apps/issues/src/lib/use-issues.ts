@@ -323,6 +323,7 @@ export function useIssues(
   const liveSyncs = useRef(new Map<string, ReturnType<typeof watchContainer>>());
   const liveRefreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const liveRefreshMaxTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const liveRefreshRun = useRef<{ queued: boolean } | null>(null);
 
   // Keep queued invalidations and unchanged watchers across membership changes.
   // Tear down only when the tracker, identity, or storage scope changes, or on unmount.
@@ -335,6 +336,7 @@ export function useIssues(
       liveRefreshTimer.current = undefined;
       if (liveRefreshMaxTimer.current) clearTimeout(liveRefreshMaxTimer.current);
       liveRefreshMaxTimer.current = undefined;
+      liveRefreshRun.current = null;
     };
   }, [fetchInto, ownStorageKey]);
 
@@ -349,7 +351,20 @@ export function useIssues(
       liveRefreshTimer.current = undefined;
       if (liveRefreshMaxTimer.current) clearTimeout(liveRefreshMaxTimer.current);
       liveRefreshMaxTimer.current = undefined;
-      void fetchInto();
+      // Let a slow live read apply before starting another. Coalesce due
+      // invalidations into one follow-up rather than superseding every result.
+      if (liveRefreshRun.current) {
+        liveRefreshRun.current.queued = true;
+        return;
+      }
+      const run = { queued: false };
+      liveRefreshRun.current = run;
+      void fetchInto().finally(() => {
+        // Scope cleanup cancels the follow-up even if this read finishes later.
+        if (liveRefreshRun.current !== run) return;
+        liveRefreshRun.current = null;
+        if (run.queued) flush();
+      });
     };
     const onChange = () => {
       // Keep burst debouncing, but bound the wait so staggered per-topic polls

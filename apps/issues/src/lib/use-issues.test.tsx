@@ -79,7 +79,7 @@ describe("useIssues live subscriptions", () => {
     expect(list).toHaveBeenCalledTimes(2);
   });
 
-  it("keeps refreshing with 40 polling fallbacks staggered 625 ms apart", async () => {
+  it.each([0, 6_000])("keeps refreshing with 40 staggered polling fallbacks and %i ms reads", async (readMs) => {
     const { watchContainer } = await vi.importActual<typeof import("./notifications")>("./notifications");
     const initialIssues = Array.from({ length: 39 }, (_, index) => issue(`issue-${index}`));
     list.mockResolvedValue({ issues: initialIssues, canCreate: true });
@@ -96,24 +96,73 @@ describe("useIssues live subscriptions", () => {
     const { result, unmount } = renderHook(() => useIssues(TRACKER, WEBID, OWN));
     await act(async () => {});
     expect(watch).toHaveBeenCalledTimes(40);
-    list.mockResolvedValue({
-      issues: initialIssues.map((record) => ({ ...record, status: "in-progress" })), canCreate: true,
+    let activeReads = 0;
+    let maxActiveReads = 0;
+    let revision = 0;
+    list.mockImplementation(async () => {
+      activeReads++;
+      maxActiveReads = Math.max(maxActiveReads, activeReads);
+      const title = `read-${++revision}`;
+      if (readMs) await new Promise((resolve) => setTimeout(resolve, readMs));
+      activeReads--;
+      return {
+        issues: initialIssues.map((record) => ({ ...record, title, status: "in-progress" })), canCreate: true,
+      };
     });
     await act(async () => { await vi.advanceTimersByTimeAsync(29_999); });
     expect(list).toHaveBeenCalledTimes(1);
     await act(async () => { await vi.advanceTimersByTimeAsync(1); });
     expect(list).toHaveBeenCalledTimes(2);
+    await act(async () => { await vi.advanceTimersByTimeAsync(readMs); });
     expect(result.current.issues[0].status).toBe("in-progress");
+    expect(result.current.issues[0].title).toBe("read-1");
     // Check progress throughout the review's 125-second reproduction window.
-    for (const elapsed of [25_000, 25_000, 25_000, 20_000]) {
+    let elapsed = 30_000 + readMs;
+    for (const checkpoint of [55_000, 80_000, 105_000, 125_000]) {
       const reads = list.mock.calls.length;
-      await act(async () => { await vi.advanceTimersByTimeAsync(elapsed); });
+      const title = result.current.issues[0].title;
+      await act(async () => { await vi.advanceTimersByTimeAsync(checkpoint - elapsed); });
+      elapsed = checkpoint;
       expect(list.mock.calls.length).toBeGreaterThan(reads);
+      expect(result.current.issues[0].title).not.toBe(title);
     }
+    expect(maxActiveReads).toBe(1);
     unmount();
     const reads = list.mock.calls.length;
     await act(async () => { await vi.advanceTimersByTimeAsync(30_000); });
     expect(list).toHaveBeenCalledTimes(reads);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([false, true])("coalesces invalidations during a slow live read (reject: %s)", async (reject) => {
+    const { result } = renderHook(() => useIssues(TRACKER, WEBID, OWN));
+    await act(async () => {});
+    const first = Promise.withResolvers<{ issues: IssueRecord[]; canCreate: boolean }>();
+    const second = Promise.withResolvers<{ issues: IssueRecord[]; canCreate: boolean }>();
+    list.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const container = channels.find((channel) => channel.topic === CONTAINER)!;
+    act(() => container.onChange());
+    await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+    expect(list).toHaveBeenCalledTimes(2);
+    for (let i = 0; i < 3; i++) {
+      act(() => container.onChange());
+      await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+    }
+    expect(list).toHaveBeenCalledTimes(2);
+    // This trailing hint must be absorbed by the follow-up, too.
+    act(() => container.onChange());
+    await act(async () => {
+      if (reject) first.reject(new Error("Temporary read failure"));
+      else first.resolve({ issues: [issue("one", "in-progress")], canCreate: true });
+    });
+    expect(list).toHaveBeenCalledTimes(3);
+    if (reject) expect(result.current.error).toBe("Temporary read failure");
+    else expect(result.current.issues[0].status).toBe("in-progress");
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(list).toHaveBeenCalledTimes(3);
+    await act(async () => { second.resolve({ issues: [issue("one", "done")], canCreate: true }); });
+    expect(result.current.issues[0].status).toBe("done");
+    expect(result.current.error).toBeNull();
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -181,6 +230,34 @@ describe("useIssues live subscriptions", () => {
     expect(watch).toHaveBeenLastCalledWith(issue("one").url, expect.any(Function), { ownStorageUrls: next.own });
     unmount();
     expect(channels.every((channel) => channel.close.mock.calls.length === 1)).toBe(true);
+  });
+
+  it.each(["tracker", "identity", "storage roots", "unmount"])("cancels an in-flight read's queued follow-up on %s change", async (change) => {
+    const { rerender, unmount } = renderHook(
+      ({ tracker, creator, own }) => useIssues(tracker, creator, own),
+      { initialProps: { tracker: TRACKER, creator: WEBID, own: OWN } },
+    );
+    await act(async () => {});
+    const pending = Promise.withResolvers<{ issues: IssueRecord[]; canCreate: boolean }>();
+    list.mockReturnValueOnce(pending.promise);
+    const container = channels.find((channel) => channel.topic === CONTAINER)!;
+    act(() => container.onChange());
+    await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+    act(() => container.onChange());
+    await act(async () => { await vi.advanceTimersByTimeAsync(800); });
+    expect(list).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      if (change === "unmount") unmount();
+      else rerender({
+        tracker: change === "tracker" ? "https://pod.example/alice/other/index.ttl" : TRACKER,
+        creator: change === "identity" ? "https://pod.example/bob/profile/card#me" : WEBID,
+        own: change === "storage roots" ? ["https://pod.example/bob/"] : OWN,
+      });
+    });
+    const reads = list.mock.calls.length;
+    await act(async () => { pending.resolve({ issues: [issue("one")], canCreate: true }); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(list).toHaveBeenCalledTimes(reads);
   });
 
   it("keeps subscriptions across content refreshes and cancels pending refreshes on unmount", async () => {
