@@ -128,7 +128,7 @@ describe.each([false, true])("ChatGPT tool contracts (fetch PodPort: %s)", (port
     const fetched = await client.callTool({ name: "fetch", arguments: { id } });
     expect(fetched.isError).toBeUndefined();
     const content = fetched.content as { type: "text"; text: string }[];
-    const document = JSON.parse(content[0]!.text);
+    const document = JSON.parse(content[0]?.text ?? "{}");
     expect(document.metadata.truncated).toBe(false);
     expect(
       (await parseRdf(document.text, "text/turtle")).getQuads("urn:s", "urn:p", null, null)[0]
@@ -139,6 +139,26 @@ describe.each([false, true])("ChatGPT tool contracts (fetch PodPort: %s)", (port
     expect(searched.content).toEqual([
       { type: "text", text: JSON.stringify({ results: [{ id, title: "data.ttl", url: id }] }) },
     ]);
+  });
+
+  it.each([
+    ["text/turtle", '?s <urn:p> "avocado".'],
+    ["text/turtle", '<urn:s> = "avocado".'],
+    ["application/x-turtle", '?s <urn:p> "avocado".'],
+    ["application/x-turtle", '<urn:s> = "avocado".'],
+    ["application/trig", '?s <urn:p> "avocado".'],
+    ["application/trig", '<urn:s> = "avocado".'],
+  ])("fetch rejects and search skips N3 extensions in %s: %s", async (contentType, body) => {
+    const id = `${POD}data.ttl`;
+    const pod = makeFakePod({
+      [POD]: { contentType: "text/turtle", body: containerTurtle(POD, [{ name: "data.ttl" }]) },
+      [id]: { contentType, body },
+    });
+    const client = await connect(pod.fetch);
+    expect((await client.callTool({ name: "fetch", arguments: { id } })).isError).toBe(true);
+    const searched = await client.callTool({ name: "search", arguments: { query: "avocado" } });
+    expect(searched.isError).toBeUndefined();
+    expect(searched.content).toEqual([{ type: "text", text: '{"results":[]}' }]);
   });
 
   it("returns tool errors for fetch failures and invalid search limits", async () => {

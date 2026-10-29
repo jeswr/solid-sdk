@@ -111,7 +111,10 @@ function budgetN3Directives(format: string, baseIRI: string, charge: (bytes: num
         callback(error, token);
       });
     }
-  })({ lineMode: format === "application/n-triples" || format === "application/n-quads" });
+  })({
+    lineMode: format === "application/n-triples" || format === "application/n-quads",
+    n3: false,
+  });
 }
 
 /** Bound buffered jobs and key-path copying before streaming parsing starts. */

@@ -36,6 +36,17 @@ describe.each([
   it("rejects malformed input ending in a non-ASCII byte", async () => {
     await expect(parseBoundedRdf('<urn:s> <urn:p> "x". é', format, BASE)).rejects.toThrow();
   });
+
+  it.each([
+    '?s <urn:p> "x".',
+    '<urn:s> ?p "x".',
+    "<urn:s> <urn:p> ?o.",
+    "<urn:s> = <urn:o>.",
+    "<urn:s> => <urn:o>.",
+    "<urn:s> <= <urn:o>.",
+  ])("rejects N3 extensions: %s", async (source) => {
+    await expect(parseBoundedRdf(source, format, BASE)).rejects.toThrow();
+  });
 });
 
 describe("RDF expansion and serialization budgets", () => {
