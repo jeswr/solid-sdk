@@ -478,3 +478,71 @@ No requested code change remains unfinished and there are no new open questions.
 The unrelated full-workspace gate failures remain outside scope. `roborev` is
 unavailable, so automated per-commit review could not run. No remote was fetched or
 merged, and nothing was pushed or published.
+
+## Fix round 6 — SPARQ operand validation and atomic sets at `e2f3547c1d31`
+
+2026-10-29. Both requested findings are fixed on `lane/sst-gpa`:
+
+- `aea2becb` — `fix(agent-mandate): share SPARQ operand validation`.
+  Reuse the default engine's operand validator for candidate SPARQ permissions and
+  prohibitions before invoking the backend. Unsupported datatypes, malformed lexical
+  values, unsafe integers, lossy decimals, sub-millisecond timestamps, missing context
+  and invalid scalar cardinalities require confirmation. Rules excluded by action,
+  target or assignee matching do not introduce spurious operand failures. Existing
+  datatype emission tests now supply comparable request context.
+- `0ef849ac` — `fix(agent-mandate): reject lossy SPARQ set operands`.
+  Refuse empty members, pipes, commas and whitespace, including Unicode whitespace,
+  across scalar, singleton and multiple right operands. Preserve clean textual set
+  members and scalar comparisons containing delimiters. Require confirmation for
+  typed/numeric/temporal sets, array context and the unsupported `isAllOf` operator
+  instead of changing the signed set's meaning through SPARQ's textual representation.
+  Tests cover both rule kinds, member order, the permit-plus-prohibition bypass,
+  percent-encoded delimiters, emitted RDF and the final confirmation decision.
+- `5e6bf876` — `fix(agent-mandate): retain definite SPARQ prohibitions`.
+  Only comparable candidates reach the backend. If another candidate is indeterminate,
+  a matching comparable prohibition still wins; a backend permit or an unmatched deny
+  remains indeterminate. Regression tests cover invalid operands in either rule kind
+  and verify that no invalid constraint reaches the subprocess.
+- Final report commit — `docs(agent-mandate): record sixth fix round validation`.
+
+Each regression group failed before its fix: 44 operand cases, 38 set cases and two
+prohibition-precedence cases. All final checks use Node v24.22.1
+(`PATH=/opt/node24/bin:$PATH`):
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/agent-mandate... --concurrency=4
+pnpm exec vitest run --root packages/agent-mandate test/sparq.test.ts --coverage.enabled=false
+pnpm --filter @jeswr/agent-mandate run lint && pnpm --filter @jeswr/agent-mandate run build && pnpm --filter @jeswr/agent-mandate run typecheck && pnpm --filter @jeswr/agent-mandate run test
+TURBO_SCM_BASE=e2f3547c1d317fc5a33d93d2fd059cf7ed6eb156 pnpm run gate
+pnpm run gate:full
+```
+
+- Prerequisite builds — PASS, 7/7 tasks.
+- Package gate — PASS, 408 tests in 8 files, including 149 adapter tests. Per-file
+  coverage remains 100%: statements 434/434, branches 526/526, functions 121/121 and
+  lines 388/388. No coverage thresholds, exclusions or timeouts changed. The existing
+  non-fatal agent-authz-verifier sourcemap warning remains.
+- Affected repository gate — PASS on the final code, 11/11 tasks in 8.6 seconds,
+  including root lint and every workspace/layer guard. The comparison base is the
+  supplied pre-fix head.
+- Full workspace gate — FAIL outside this fix round, including on the final code:
+  123 successful tasks of 286 reported in 14.9 seconds (115 cached). The first run
+  completed 210 tasks before the same failure. All 686 root tests pass. The same two
+  previously recorded federation-codegen tests fail in `test/generator.test.ts`:
+  bookmarks still expects the legacy `w3id.org` target class, and committed generated
+  `ontology.ttl` differs from current `jeswr.org/ns` source vocabulary. That project's
+  source, tests and outputs are unchanged from the supplied pre-fix head.
+- `git diff --check` — PASS.
+
+Conservative choice: retain the signed operands and require confirmation whenever the
+optional backend cannot preserve their types, precision or atomic membership; no
+alternate comparison engine or delimiter-escaping scheme was introduced. Definite
+prohibitions retain precedence. No dependencies were added, so no new `check:packages`
+run was needed. Changes are confined to the reviewed package and this required report.
+
+No requested finding remains unfinished and there are no new open questions. The
+unrelated full-workspace failures remain outside scope. `roborev` and the native SPARQ
+decision binary remain unavailable; automated per-commit review and a real binary run
+could not be performed. Tests use injected process results and synthetic data. No
+external review/model service, provider or pod was called; no remote was fetched or
+merged, and nothing was pushed or published.
