@@ -12,7 +12,7 @@ import { type Attribute, Extension } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import type { Doc } from "yjs";
 import { codeWhitespaceTextblocks, compatibleCodeExtensions } from "../lib/editor/code-mark";
-import { normaliseDestination } from "../lib/editor/destination";
+import { normaliseDestination, normaliseImageDestination } from "../lib/editor/destination";
 import { validLink } from "../lib/editor/logic";
 import { normaliseTableSpan } from "../lib/editor/table-spans";
 import { FindDecorations } from "./find-plugin";
@@ -31,9 +31,10 @@ const PasteDestinations = Extension.create({
             fragment.innerHTML = html;
             for (const element of fragment.content.querySelectorAll("a[href], img[src]")) {
               const key = element.tagName === "A" ? "href" : "src";
-              const destination = normaliseDestination(element.getAttribute(key) as string);
-              if (destination && (key === "href" || /^https?:/.test(destination)))
-                element.setAttribute(key, destination);
+              const url = element.getAttribute(key) as string;
+              const destination =
+                key === "src" ? normaliseImageDestination(url) : normaliseDestination(url);
+              if (destination) element.setAttribute(key, destination);
               else element.removeAttribute(key);
             }
             return fragment.innerHTML;

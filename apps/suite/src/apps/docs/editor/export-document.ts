@@ -4,15 +4,16 @@ import { Packer } from "docx";
 import type { PodSession } from "@/lib/session/pod-session";
 import { type ExportImage, toDocx } from "../lib/convert/docx-export";
 import { exportMarkdown } from "../lib/convert/markdown";
-import { validLink } from "../lib/editor/logic";
+import { normaliseImageDestination } from "../lib/editor/destination";
 import { imagePng } from "./image-blob";
 import { loadDocumentContent } from "./persistence";
 import { podScopedFetch } from "./private-image";
 
 export type DownloadFormat = "docx" | "md";
 export async function readExportImage(session: PodSession, src: string): Promise<ExportImage> {
-  if (!validLink(src) || !/^https?:/.test(src)) throw new Error("Invalid image URL");
-  const response = await podScopedFetch(session.fetch, session.storageUrl)(src, {
+  const url = normaliseImageDestination(src);
+  if (!url) throw new Error("Invalid image URL");
+  const response = await podScopedFetch(session.fetch, session.storageUrl)(url, {
     redirect: "error",
   });
   if (!response.ok) throw new Error("Image unavailable");

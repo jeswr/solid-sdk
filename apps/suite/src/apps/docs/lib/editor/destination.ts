@@ -19,3 +19,9 @@ export function normaliseDestination(input: string): string | null {
     return null;
   }
 }
+
+/** Images share URL normalization, but only HTTP(S) can supply their bytes. */
+export function normaliseImageDestination(input: string): string | null {
+  const destination = normaliseDestination(input);
+  return destination && /^https?:\/\//.test(destination) ? destination : null;
+}

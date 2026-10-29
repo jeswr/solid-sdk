@@ -76,10 +76,14 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-async function mountEditor(initial?: JSONContent, storedUrl?: string) {
+async function mountEditor(
+  initial?: JSONContent,
+  storedUrl?: string,
+  fetchImpl: typeof fetch = vi.fn(async () => new Response(null, { status: 404 })),
+) {
   const session = {
     storageUrl: "https://pod.test/",
-    fetch: vi.fn(async () => new Response(null, { status: 404 })),
+    fetch: fetchImpl,
   } as unknown as PodSession;
   const doc = initial
     ? prosemirrorJSONToYDoc(getSchema(baseExtensions(session.fetch)), initial)
@@ -129,6 +133,58 @@ async function mountEditor(initial?: JSONContent, storedUrl?: string) {
     },
   };
 }
+
+it("round39 leaving a document cancels all pending File menu prints before another document is visible", async () => {
+  const view = await mountEditor(
+    {
+      type: "doc",
+      content: [
+        { type: "paragraph" },
+        { type: "image", attrs: { src: "https://pod.test/logo.png", alt: "Loading logo" } },
+      ],
+    },
+    "https://pod.test/docs/plan.ttl",
+    vi.fn(() => new Promise<Response>(() => {})),
+  );
+  const print = vi.spyOn(window, "print").mockImplementation(() => {});
+  vi.useFakeTimers();
+  try {
+    const image = view.body.querySelector("img") as HTMLImageElement;
+    expect(image.hasAttribute("src")).toBe(false);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await act(async () => {
+        view.host
+          .querySelector<HTMLButtonElement>('[aria-label="File menu"]')
+          ?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }));
+      });
+      const download = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+        (item) => item.textContent === "Download",
+      );
+      expect(download).toBeDefined();
+      await act(async () => {
+        download?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+      });
+      const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+        (item) => item.textContent === "Print / Save as PDF",
+      );
+      expect(item).toBeDefined();
+      await act(async () => item?.click());
+      await act(() => vi.advanceTimersByTimeAsync(100));
+    }
+    expect(print).not.toHaveBeenCalled();
+    await view.close();
+    document.body.textContent = "Another document";
+    await vi.advanceTimersByTimeAsync(10_000);
+    image.dispatchEvent(new Event("load"));
+    await Promise.resolve();
+    expect(print).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    print.mockRestore();
+    vi.useRealTimers();
+    if (view.host.isConnected && view.host.hasChildNodes()) await view.close();
+  }
+});
 
 it("round38 save-error dialog restores focus to its invoking Why button", async () => {
   const view = await mountEditor(undefined, "https://pod.test/docs/plan.ttl");

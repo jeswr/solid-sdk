@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex
 import Image from "@tiptap/extension-image";
 import type { DOMOutputSpec } from "@tiptap/pm/model";
-import { validLink } from "../lib/editor/logic";
+import { normaliseImageDestination } from "../lib/editor/destination";
 import { displayImageBlob } from "./image-blob";
 import { imageLinkFromHtml, normaliseImageLink } from "./image-link";
 /**
@@ -33,11 +33,10 @@ export function privateImage(fetchImpl: typeof fetch) {
       return [
         {
           tag: "img[src]",
-          getAttrs: (element) =>
-            /^https?:/.test(element.getAttribute("src") ?? "") &&
-            validLink(element.getAttribute("src") ?? "")
-              ? null
-              : false,
+          getAttrs: (element) => {
+            const src = normaliseImageDestination(element.getAttribute("src") ?? "");
+            return src ? { src } : false;
+          },
         },
       ];
     },
@@ -89,9 +88,9 @@ export function privateImage(fetchImpl: typeof fetch) {
         dom.dataset.docsImageState = "loading";
         dom.className = "docs-private-image";
         present();
-        const src = String(node.attrs.src);
+        const src = normaliseImageDestination(String(node.attrs.src));
         const load = () => {
-          if (!alive || !validLink(src) || !/^https?:/.test(src)) return;
+          if (!alive || !src) return;
           dom.dataset.docsImageState = "loading";
           present();
           void fetchImpl(src, { signal: abort.signal, redirect: "error" })
@@ -117,7 +116,7 @@ export function privateImage(fetchImpl: typeof fetch) {
           if (dom.dataset.docsImageState === "error") load();
         };
         window.addEventListener("online", reconnect);
-        if (validLink(src) && /^https?:/.test(src)) load();
+        if (src) load();
         else {
           dom.dataset.docsImageState = "error";
           present();

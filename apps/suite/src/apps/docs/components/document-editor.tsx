@@ -18,7 +18,7 @@ import { BubbleMenu } from "@tiptap/react/menus";
 import { ArrowLeft, ImagePlus, Share2, Star } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { encodeRef } from "@/lib/refs";
 import type { PodSession } from "@/lib/session/pod-session";
@@ -103,6 +103,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
   const router = useRouter();
   const params = useSearchParams();
   const printed = useRef(false);
+  const printAbort = useRef<AbortController | null>(null);
   const [importing, setImporting] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
   const topRef = useRef<HTMLAnchorElement>(null);
@@ -256,19 +257,26 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
     addEventListener("keydown", outsideKeys);
     return () => removeEventListener("keydown", outsideKeys);
   }, []);
-  useEffect(() => {
-    if (!editor || params.get("print") !== "1" || printed.current) return;
-    printed.current = true;
+  const print = useCallback(() => {
+    if (!editor) return;
+    printAbort.current?.abort();
     const abort = new AbortController();
-    const frame = requestAnimationFrame(() => {
-      void printDocument(editor.view.dom, abort.signal);
-    });
+    printAbort.current = abort;
+    void printDocument(editor.view.dom, abort.signal);
+  }, [editor]);
+  useEffect(() => {
+    let frame: number | undefined;
+    if (editor && params.get("print") === "1" && !printed.current) {
+      printed.current = true;
+      frame = requestAnimationFrame(print);
+    }
+    // Both entry points belong to this editor, including repeated menu actions.
     return () => {
-      abort.abort();
-      cancelAnimationFrame(frame);
+      printAbort.current?.abort();
+      if (frame !== undefined) cancelAnimationFrame(frame);
       printed.current = false;
     };
-  }, [editor, params]);
+  }, [editor, params, print]);
   handlers.current.image = (file) => {
     if (!runtime.online) {
       toast.error("Reconnect to add images");
@@ -434,7 +442,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
                   toast.success(`Downloaded ${name}`);
                 })
               }
-              print={() => editor && void printDocument(editor.view.dom)}
+              print={print}
               importFile={() => setImporting(true)}
               draft={!runtime.stored}
               readOnly={runtime.readOnly}

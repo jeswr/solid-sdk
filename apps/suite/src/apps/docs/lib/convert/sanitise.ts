@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex
 import sanitizeHtml from "sanitize-html";
-import { normaliseDestination } from "../editor/destination";
+import { normaliseDestination, normaliseImageDestination } from "../editor/destination";
 import { reportSkipped, type SkippedItem } from "./skipped";
 
 /** Only the editor's supported HTML surface; no styles, active content or embedded data. */
@@ -62,8 +62,9 @@ export function sanitiseImport(html: string, skipped: SkippedItem[] = []): strin
         for (const key of ["src", "href"]) {
           const url = attribs[key];
           if (url === undefined) continue;
-          const destination = normaliseDestination(url);
-          if (!destination || (key === "src" && !/^https?:/.test(destination))) {
+          const destination =
+            key === "src" ? normaliseImageDestination(url) : normaliseDestination(url);
+          if (!destination) {
             delete attribs[key];
             reportSkipped(skipped, "Unsafe URLs");
           } else attribs[key] = destination;

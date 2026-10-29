@@ -13,7 +13,7 @@ import {
 } from "@tiptap/react";
 import sanitizeHtml from "sanitize-html";
 import { baseExtensions } from "../../editor/extensions";
-import { normaliseDestination } from "../editor/destination";
+import { normaliseDestination, normaliseImageDestination } from "../editor/destination";
 import { normaliseHtmlLists } from "../editor/html-lists";
 import { normaliseHtmlTableSpans } from "../editor/table-spans";
 import { MAX_IMPORT_BYTES } from "./docx-import";
@@ -531,10 +531,29 @@ function openParagraph(tokens: MarkdownToken[]): boolean {
   return false;
 }
 
+/** An indented line can continue prose; indented code cannot interrupt it. */
+function setextHeading<ParserOutput, RendererOutput>(
+  this: InstanceType<typeof markdown.instance.Tokenizer<ParserOutput, RendererOutput>>,
+  source: string,
+) {
+  const rules = {
+    ...this.rules,
+    block: {
+      ...this.rules.block,
+      // Marked excludes indented code from both the first line and continuation
+      // lines. Code already has precedence over headings for the first line.
+      // Remove that exclusion so a later indented prose line can be underlined.
+      lheading: new RegExp(this.rules.block.lheading.source.replaceAll("|(?: {4}| {0,3}\\t)", "")),
+    },
+  };
+  return markdown.instance.Tokenizer.prototype.lheading.call({ ...this, rules }, source);
+}
+
 /** Both container boundary probes use the same paragraph-continuation rules. */
 function containerTokenizer() {
   const tokenizer = new markdown.instance.Tokenizer();
   tokenizer.lexer = new markdown.instance.Lexer({ gfm: true, tokenizer });
+  tokenizer.lheading = setextHeading;
   tokenizer.rules = {
     ...tokenizer.rules,
     other: {
@@ -727,8 +746,8 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
             {
               tag: "img[src]",
               getAttrs: (element: HTMLElement) => {
-                const src = element.getAttribute("src") as string;
-                return /^https?:/.test(src) && safeDestination(src) ? null : false;
+                const src = normaliseImageDestination(element.getAttribute("src") as string);
+                return src ? { src } : false;
               },
             },
           ];
@@ -765,8 +784,8 @@ function parseHtml(token: MarkdownToken): JSONContent[] {
   // The DOM schema rejects unsafe images before clean() can report them. Apply
   // the URL policy here too, retaining normalized valid URLs and warning on loss.
   for (const image of dom.body.querySelectorAll("img")) {
-    const src = normaliseDestination(image.getAttribute("src") ?? "");
-    if (src && /^https?:/.test(src)) image.setAttribute("src", src);
+    const src = normaliseImageDestination(image.getAttribute("src") ?? "");
+    if (src) image.setAttribute("src", src);
     else reportSkipped(mappingSkipped, "Unsafe images");
   }
   normaliseHtmlTableSpans(dom.body, () => reportSkipped(mappingSkipped, "Invalid table spans"));
@@ -977,6 +996,7 @@ const markdown = new MarkdownManager({
 });
 markdown.instance.use({
   tokenizer: {
+    lheading: setextHeading,
     link(source) {
       // Keep marked's boundary recognition, but suppress its early attribute
       // unescaping and extra label-bracket unescaping. Inline label parsing uses
@@ -1148,12 +1168,12 @@ function clean(
       if (!keep) reportSkipped(skipped, "Unsupported marks");
       return keep;
     });
-  if (
-    result.type === "image" &&
-    (!/^https?:\/\//.test(String(result.attrs?.src)) || !safeDestination(String(result.attrs?.src)))
-  ) {
-    reportSkipped(skipped, "Unsafe images");
-    return { type: "paragraph" };
+  if (result.type === "image") {
+    const src = normaliseImageDestination(String(result.attrs?.src));
+    if (!src) {
+      reportSkipped(skipped, "Unsafe images");
+      return { type: "paragraph" };
+    }
   }
   if (result.content)
     result.content = result.content.flatMap((child) =>

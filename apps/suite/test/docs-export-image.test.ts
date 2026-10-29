@@ -32,6 +32,17 @@ function imageEnvironment() {
   return { close, drawImage, bitmap };
 }
 describe("DOCX authenticated image loading", () => {
+  it("round39 normalizes mixed-case image schemes before authenticated export", async () => {
+    imageEnvironment();
+    const fetchImpl = vi.fn<typeof fetch>(
+      async () => new Response("pixels", { headers: { "content-type": "image/png" } }),
+    );
+    await readExportImage(sessionFor(fetchImpl), "HTTPS://pod.test/logo.png");
+    expect(fetchImpl).toHaveBeenCalledExactlyOnceWith("https://pod.test/logo.png", {
+      redirect: "error",
+    });
+  });
+
   it("authenticates only pod-origin images, refuses redirects and strips credentials from external requests", async () => {
     const { close, drawImage, bitmap } = imageEnvironment();
     const response = () =>

@@ -5,7 +5,7 @@ import { openArrayBuffer } from "mammoth/lib/zipfile";
 import mammoth from "mammoth/mammoth.browser";
 import { SaxesParser } from "saxes";
 import { baseExtensions } from "../../editor/extensions";
-import { normaliseDestination } from "../editor/destination";
+import { normaliseImageDestination } from "../editor/destination";
 import { readNumbering } from "./docx-numbering";
 import { embeddedDocument } from "./docx-payload";
 import { WORD } from "./docx-xml";
@@ -236,8 +236,8 @@ async function uploadImage(
   image: { data: ArrayBuffer; contentType: string },
   options: DocxImportOptions,
 ) {
-  const url = normaliseDestination(await options.uploadImage(image.data, image.contentType));
-  if (!url || !/^https?:/.test(url)) throw new Error("Invalid uploaded image URL");
+  const url = normaliseImageDestination(await options.uploadImage(image.data, image.contentType));
+  if (!url) throw new Error("Invalid uploaded image URL");
   // JSON keeps the normalized URL; only the HTML replacement needs entity escaping.
   return { url, src: url.replaceAll("&", "&amp;") };
 }

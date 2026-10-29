@@ -4,7 +4,7 @@ import { Mark } from "@tiptap/pm/model";
 import { generateJSON, getSchema, type JSONContent } from "@tiptap/react";
 import { baseExtensions } from "../../editor/extensions";
 import { normaliseImageLink } from "../../editor/image-link";
-import { normaliseDestination } from "../editor/destination";
+import { normaliseDestination, normaliseImageDestination } from "../editor/destination";
 import { normaliseHtmlLists } from "../editor/html-lists";
 import { normaliseHtmlTableSpans, normaliseTableSpan } from "../editor/table-spans";
 import { sanitiseImport } from "./sanitise";
@@ -24,8 +24,8 @@ export function normaliseDestinations(node: JSONContent, skipped: SkippedItem[])
       return [];
     });
   if (node.type === "image") {
-    const src = normaliseDestination(String(node.attrs?.src ?? ""));
-    if (!src || !/^https?:/.test(src)) {
+    const src = normaliseImageDestination(String(node.attrs?.src ?? ""));
+    if (!src) {
       reportSkipped(skipped, "Unsafe URLs");
       return { type: "paragraph" };
     }
