@@ -1,10 +1,18 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { digestBytes } from "@jeswr/agent-model";
+import { DEFAULT_LIMITS, digestBytes, parseBoundedJson } from "@jeswr/agent-model";
 import type { ChannelBinding } from "./binding.js";
 import { accountId, assertGrant, type DirectMailbox, readEnvelope } from "./direct/shared.js";
 import { ChannelParseError } from "./errors.js";
 import { DIRECT } from "./profiles.js";
 import type { TokenProvider } from "./types.js";
+
+// Fits a maximally JSON-escaped 2048-character account id and a safe-integer offset.
+const MAX_CURSOR_LENGTH = 16 * 1024;
+const CURSOR_LIMITS = Object.freeze({
+  ...DEFAULT_LIMITS,
+  maxEnvelopeBytes: MAX_CURSOR_LENGTH,
+  maxJsonDepth: 2,
+});
 
 /** Direct is strictly local; it has no network origins. */
 export const ORIGINS: ReadonlySet<string> = new Set<string>();
@@ -46,8 +54,22 @@ export function createDirectReader(mailbox: DirectMailbox, tokens: TokenProvider
           throw new RangeError("list bounds must be positive safe integers");
         let offset = 0;
         if (cursor !== undefined) {
-          const parsed = JSON.parse(cursor) as { account: string; offset: number };
-          if (parsed?.account !== id || !Number.isSafeInteger(parsed.offset) || parsed.offset < 0)
+          if (typeof cursor !== "string" || cursor.length > MAX_CURSOR_LENGTH)
+            throw new TypeError("invalid account cursor");
+          const parsed = parseBoundedJson(cursor, CURSOR_LIMITS) as {
+            account?: unknown;
+            offset?: unknown;
+          } | null;
+          if (
+            parsed === null ||
+            typeof parsed !== "object" ||
+            Array.isArray(parsed) ||
+            Object.keys(parsed).length !== 2 ||
+            parsed.account !== id ||
+            typeof parsed.offset !== "number" ||
+            !Number.isSafeInteger(parsed.offset) ||
+            parsed.offset < 0
+          )
             throw new TypeError("invalid account cursor");
           offset = parsed.offset;
         }

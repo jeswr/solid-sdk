@@ -625,6 +625,85 @@ describe("direct loopback", () => {
       );
   });
 
+  it("caps encoded cursors before parsing or requesting credentials", async () => {
+    const config = options();
+    const reader = createDirectReader({ inboxes: new Map(), accepted: new Map() }, config.tokens);
+    const cursor = JSON.stringify({ account: account.id, offset: 0 });
+    const atCap = cursor.padEnd(16 * 1024);
+    expect(await reader.ingest.list(account, atCap, limits)).toEqual({ items: [], next: cursor });
+    config.tokens.calls.length = 0;
+    const parse = vi.spyOn(JSON, "parse");
+    try {
+      for (const oversized of [`${atCap} `, "[".repeat(100_000)])
+        await expect(reader.ingest.list(account, oversized, limits)).rejects.toThrow();
+      expect(parse).not.toHaveBeenCalled();
+      expect(config.tokens.calls).toEqual([]);
+    } finally {
+      parse.mockRestore();
+    }
+  });
+
+  it("bounds cursor nesting before JSON parsing", async () => {
+    const config = options();
+    const reader = createDirectReader({ inboxes: new Map(), accepted: new Map() }, config.tokens);
+    const cursor = `{"account":"${account.id}","offset":0,"extra":${"[".repeat(100)}0${"]".repeat(100)}}`;
+    const parse = vi.spyOn(JSON, "parse");
+    try {
+      await expect(reader.ingest.list(account, cursor, limits)).rejects.toThrow();
+      expect(parse).not.toHaveBeenCalled();
+      expect(config.tokens.calls).toEqual([]);
+    } finally {
+      parse.mockRestore();
+    }
+  });
+
+  it.each(
+    [
+      undefined,
+      null,
+      true,
+      0,
+      "test-account",
+      [],
+      ["test-account", 0],
+      {},
+      { account: "test-account" },
+      { account: "test-account", offset: 0, extra: true },
+      { account: "test-account", offset: 0, extra: {} },
+      { account: "test-account", offset: "0" },
+      { account: "test-account", offset: null },
+      { account: "test-account", offset: {} },
+      { account: "test-account", offset: Number.MAX_SAFE_INTEGER + 1 },
+    ].map((value) => ({ value })),
+  )("refuses malformed cursor shape $value before authorization", async ({ value }) => {
+    const config = options();
+    const reader = createDirectReader({ inboxes: new Map(), accepted: new Map() }, config.tokens);
+    await expect(
+      reader.ingest.list(account, JSON.stringify(value) ?? "undefined", limits),
+    ).rejects.toThrow();
+    expect(config.tokens.calls).toEqual([]);
+  });
+
+  it("refuses non-string cursors without coercion", async () => {
+    const config = options();
+    const reader = createDirectReader({ inboxes: new Map(), accepted: new Map() }, config.tokens);
+    const coerce = vi.fn(() => JSON.stringify({ account: account.id, offset: 0 }));
+    await expect(
+      reader.ingest.list(account, { toString: coerce } as never, limits),
+    ).rejects.toThrow();
+    expect(coerce).not.toHaveBeenCalled();
+    expect(config.tokens.calls).toEqual([]);
+  });
+
+  it("round-trips cursors for the longest accounts with JSON escapes", async () => {
+    const config = options();
+    const reader = createDirectReader({ inboxes: new Map(), accepted: new Map() }, config.tokens);
+    for (const id of ["\u0000".repeat(2048), "\uD800".repeat(2048), "😀".repeat(1024)]) {
+      const first = await reader.ingest.list({ id }, undefined, limits);
+      expect(await reader.ingest.list({ id }, first.next, limits)).toEqual(first);
+    }
+  });
+
   it("binds delayed read credentials to a frozen reference for the selected inbox", async () => {
     const config = options();
     const raw = envelope(signed().compactJws);
