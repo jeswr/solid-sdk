@@ -236,9 +236,9 @@ const NOTE_IDENTIFIER_PART =
 // Keep phone formatting and adjacent suffixes so longer identities cannot match a prefix.
 const NOTE_IDENTIFIER = `\\+\\d[\\d ().-]{5,}\\d${NOTE_IDENTIFIER_PART}*|${NOTE_IDENTIFIER_PART}+`;
 const NOTE_IDENTIFIERS = new RegExp(
-  // Preserve whole quoted spans, including URI delimiters and formatted phones.
+  // Preserve whole quoted and angle-bracketed spans, including URI delimiters and phones.
   // Do not search beyond the first closing quote when it is inside a bare identity.
-  `(["'\`])((?:(?!\\1)[^\\r\\n])+)\\1[.!?:]*(?!${NOTE_IDENTIFIER_PART})|${NOTE_IDENTIFIER}`,
+  `(["'\`])((?:(?!\\1)[^\\r\\n])+)\\1[.!?:]*(?!${NOTE_IDENTIFIER_PART})|<([^<>\\r\\n]+)>[.!?:]*(?!${NOTE_IDENTIFIER_PART})|${NOTE_IDENTIFIER}`,
   "gu",
 );
 /** Keep complete phone/handle/URI tokens; strip prose punctuation after a mention. */
@@ -248,6 +248,7 @@ function noteIdentifiers(
 ): string[] {
   return Array.from(note.normalize("NFC").matchAll(NOTE_IDENTIFIERS), (match) => {
     if (match[2] !== undefined) return match[2];
+    if (match[3] !== undefined) return match[3];
     const identifier = match[0];
     // Exact known identities take precedence over unquoted prose punctuation.
     if (
@@ -262,7 +263,7 @@ function noteIdentifiers(
     return noteIdentityChannel(unpunctuated) ? unpunctuated : handle;
   }).filter((identifier) => identifier.length > 0);
 }
-/** Discover explicit identities only; URI alternatives use the existing folded normalization. */
+/** Discover explicit identities only; URI alternatives retain case-sensitive components. */
 function noteIdentityChannel(handle: string): string | undefined {
   if (/^[\p{L}\p{M}\p{N}.!#$%&'*+/=?^_`{|}~-]+@[\p{L}\p{N}.-]+\.[\p{L}]{2,}$/u.test(handle))
     return "email";
@@ -341,10 +342,23 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
       return { mentioned, handleHashes: [...handleHashes].sort() };
     });
   // Redaction deliberately checks case-insensitively, independently of identity matching.
-  const rawHandles = [...new Set(identities.map(({ handle }) => normaliseHandle(handle)))];
+  const foldPrivateIdentifier = (value: string) => value.normalize("NFC").trim().toLowerCase();
+  const rawHandles = [
+    ...new Set(
+      [
+        ...identities.map(({ handle }) => handle),
+        // Opaque operands are private even when their channel cannot be inferred.
+        ...notes.flatMap(({ identifiers }) =>
+          identifiers[1]?.toLowerCase() === "versus"
+            ? identifiers.filter((_, index) => index === 0 || index === 2)
+            : [],
+        ),
+      ].map(foldPrivateIdentifier),
+    ),
+  ];
   // Recognizable identities remain private even when absent from accounts, evidence and notes.
   const containsPrivateIdentifier = (value: string) => {
-    const normalised = normaliseHandle(value);
+    const normalised = foldPrivateIdentifier(value);
     return (
       /@|(?:https?|mailto|tel|did):|\+\d[\d ().-]{5,}\d/i.test(value) ||
       rawHandles.some((h) => normalised.includes(h))

@@ -3,10 +3,13 @@
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer forbids scheme imports
 import { createHmac } from "crypto";
 
-/** NFC and trim; preserve Matrix case, otherwise lowercase. Never merge aliases. */
+/** NFC and trim; preserve Matrix and URI component case. Never merge aliases. */
 export function normaliseHandle(handle: string, channel?: string): string {
   const normalised = handle.normalize("NFC").trim();
-  return channel === "matrix" || channel === "matrix_bot" ? normalised : normalised.toLowerCase();
+  if (channel === "matrix" || channel === "matrix_bot") return normalised;
+  // A URI's scheme is case-insensitive; its remaining components can identify distinct accounts.
+  const scheme = /^[a-z][a-z0-9+.-]*:/iu.exec(normalised)?.[0];
+  return scheme ? scheme.toLowerCase() + normalised.slice(scheme.length) : normalised.toLowerCase();
 }
 /** HMAC-SHA-256(salt, normalised handle), lowercase hex. Salt must have at least 256 bits. */
 export function hashHandle(handle: string, salt: Uint8Array, channel?: string): string {

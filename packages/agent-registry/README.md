@@ -33,10 +33,11 @@ or RDF; conflict notes become structured hash-only `agent:identityConflict` valu
 
 `SaltProvider.getSalt()` supplies a stable, private salt of at least 32 bytes from the
 daemon store. Handles use HMAC-SHA-256(salt, normaliseHandle(handle, channel)), hexadecimal.
-Normalization applies NFC and trim, preserves Matrix case, and lowercases other channels.
+Normalization applies NFC and trim, preserves Matrix case, and lowercases URI schemes
+while preserving all following URI components. Other identifiers are lowercased.
 The exported `normaliseHandle(handle, channel?)` and `hashHandle(handle, salt, channel?)`
-helpers accept `"matrix"` or `"matrix_bot"` to preserve case; omitting the channel retains
-lowercase normalization.
+helpers accept `"matrix"` or `"matrix_bot"` to preserve case. URI recognition applies
+with or without a channel; no URI component canonicalization beyond the scheme is applied.
 No provider-specific alias folding is applied. Resource ids hash the registry id with
 an `account-id\0` domain prefix, preserving resources across handle/provider corrections.
 Keep the salt stable across imports. Raw handles stay in the daemon's private input.
@@ -50,9 +51,10 @@ Active notes use `Identity conflict: <identity> versus <identity>`, optionally f
 by `. Unresolved.`; the legacy `Main Gmail identity conflict:` prefix is also accepted.
 Other prose, including negated or resolved notes, does not create a conflict. Each operand
 must be one complete identifier, optionally enclosed in quotes, parentheses or angle brackets.
-Quotes preserve the entire identity, including URI punctuation. Explicit email, Matrix,
-international phone and HTTP(S)/DID/mailto/tel URI alternatives are retained as hashes even
-when absent from accounts and evidence.
+Quotes and angle brackets preserve the entire identity, including URI punctuation.
+Every parsed conflict operand is private even when its channel cannot be inferred.
+Explicit email, Matrix, international phone and HTTP(S)/DID/mailto/tel URI alternatives
+are retained as hashes even when absent from accounts and evidence.
 Registry `connected` claims map to `setup-required`; errors and disabled states remain visible.
 Read, triage, draft and send restrictions start false. A changed import resets restrictions
 to false; unchanged resources retain their existing representation. Removed registry rows

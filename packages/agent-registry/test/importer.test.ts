@@ -202,6 +202,151 @@ describe("synthetic registry import", () => {
       ).toEqual(expected);
     }
   });
+  it.each([
+    "private-user",
+    "Private.User",
+    "café-user",
+  ])("redacts notes-only opaque conflict operand %s from settings and RDF", async (identity) => {
+    const ports = harness(
+      stringify({
+        version: 1,
+        accounts: [
+          {
+            id: "fixture-account",
+            channel: "email",
+            provider: "google",
+            organization: `Contact ${identity.toUpperCase()}`,
+            identifiers: { primary: "alice@example.com" },
+            connector: { target: "gmail", setup_status: "planned" },
+          },
+        ],
+        notes: [`Identity conflict: alice@example.com versus "${identity}".`],
+        communicationRules: {
+          decision_policy: { ask_when_uncertain_about: ["identity"] },
+          capability_policy: {
+            default_allowed: ["read"],
+            requires_current_instruction_or_narrow_active_authorization_rule: ["draft"],
+            always_requires_fresh_explicit_instruction: ["send"],
+          },
+          triage_taxonomy: { action: `Contact ${identity}` },
+        },
+      }),
+    );
+    const report = await importRegistry(config, ports);
+    const account = report.settings.connections[0];
+    if (!account) throw new Error("Fixture account absent");
+    expect(account.organisation).toBe("redacted");
+    expect(report.settings.workflowPolicy?.taxonomy).toEqual({ action: "redacted" });
+    const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
+    expect(
+      ports.storage.resources
+        .get(url)
+        ?.dataset.getObjects(term(url), term(`${AGENT}organisation`), null)
+        .map((value) => value.value),
+    ).toEqual(["redacted"]);
+    const output = JSON.stringify({ report, resources: [...ports.storage.resources] });
+    expect(output.toLowerCase()).not.toContain(identity.toLowerCase());
+  });
+  it.each([
+    "profile:private-user",
+    "op://private-user/item/credential",
+    "op://test-vault/PRIVATE-USER/credential",
+    "op://test-vault/item/%70rivate-user",
+    "op://test-vault/cafe%CC%81-user/credential",
+  ])("rejects notes-only opaque identities in reference %s before storage", async (ref) => {
+    const ports = harness(
+      stringify({
+        version: 1,
+        accounts: [
+          {
+            id: "placeholder-account",
+            channel: "email",
+            provider: "google",
+            organization: "personal",
+            identifiers: { primary: "to_confirm" },
+            credential_ref: ref,
+            connector: { target: "gmail", setup_status: "planned" },
+          },
+        ],
+        notes: ['Identity conflict: "private-user" versus "café-user".'],
+      }),
+    );
+    await expect(importRegistry(config, ports)).rejects.toThrow("private identifier");
+    expect(ports.storage.events).toEqual([]);
+    expect(ports.storage.resources.size).toBe(0);
+  });
+  it.each([
+    "Alice",
+    "alice?key=Value",
+    "alice#Me",
+  ])("keeps URI case in evidence, conflicts and RDF: %s", async (component) => {
+    const own = `https://id.example/${component}`;
+    const lower = own.toLowerCase();
+    const other = "alternate@example.org";
+    const ports = harness(
+      stringify({
+        version: 1,
+        accounts: [own, lower].map((handle, index) => ({
+          id: `web-${index}`,
+          channel: "web",
+          provider: "fixture_provider",
+          organization: "personal",
+          identifiers: { primary: handle },
+          connector: { target: "fixture", setup_status: "planned" },
+        })),
+        evidence: [
+          {
+            channel: "web",
+            provider: "other_provider",
+            identifier: own,
+            method: "historic_connector",
+            source: "synthetic",
+            observedOn: "2026-10-20",
+          },
+        ],
+        notes: [`Identity conflict: <${own}> versus ${other}.`],
+      }),
+    );
+    const report = await importRegistry(config, ports);
+    const salt = await ports.salt.getSalt();
+    const ownHash = hashHandle(own, salt, "web");
+    const lowerHash = hashHandle(lower, salt, "web");
+    expect(ownHash).not.toBe(lowerHash);
+    const expected = [
+      {
+        kind: "identity-mismatch",
+        handleHashes: [ownHash, hashHandle(other, salt, "email")].sort(),
+      },
+      { kind: "provider-mismatch", handleHashes: [ownHash] },
+    ];
+    for (const [index, account] of report.settings.connections.slice(0, 2).entries()) {
+      expect(account).toMatchObject({
+        channelHandles: [index === 0 ? ownHash : lowerHash],
+        evidence: index === 0 ? [{ handleHash: ownHash, provider: "other_provider" }] : [],
+        identityConflicts: index === 0 ? expected : [],
+        bindingState: index === 0 ? "error" : "setup-required",
+      });
+      const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
+      const dataset = ports.storage.resources.get(url)?.dataset;
+      expect(
+        dataset?.getObjects(term(url), term(`${AGENT}channelHandle`), null).map((v) => v.value),
+      ).toEqual([index === 0 ? ownHash : lowerHash]);
+      expect(
+        dataset
+          ?.getObjects(term(url), term(`${AGENT}identityConflict`), null)
+          .map((v) => JSON.parse(v.value)),
+      ).toEqual(index === 0 ? expected : []);
+      expect(
+        dataset
+          ?.getObjects(term(url), term(`${AGENT}historicEvidence`), null)
+          .map((v) => JSON.parse(v.value)),
+      ).toEqual(account.evidence);
+    }
+    expect(report.settings.unmatchedEvidence).toEqual([]);
+    const output = JSON.stringify({ report, resources: [...ports.storage.resources] });
+    expect(output.toLowerCase()).not.toContain(lower);
+    expect(output).not.toContain(other);
+  });
   it.each([".", ":"])("keeps terminal URI %s in hash-only conflict RDF", async (suffix) => {
     const prefix = "https://profile.example/alice";
     const own = `${prefix}${suffix}`;
@@ -243,11 +388,12 @@ describe("synthetic registry import", () => {
     expect(output).not.toContain(prefix);
     expect(output).not.toContain(other);
   });
-  it.each([
-    ";v=2",
-    ",v2",
-    "(v2)",
-  ])("writes complete quoted URI conflicts to RDF: %s", async (suffix) => {
+  it.each(
+    [";v=2", ",v2", "(v2)"].flatMap((suffix) => [
+      ['"', suffix, '"'],
+      ["<", suffix, ">"],
+    ]),
+  )("writes complete delimited URI conflicts to RDF: %s%s%s", async (open, suffix, close) => {
     const prefix = "https://profile.example/alice";
     const own = `${prefix}${suffix}`;
     const other = `https://profile.example/bob${suffix}`;
@@ -262,7 +408,9 @@ describe("synthetic registry import", () => {
           identifiers: { primary: handle },
           connector: { target: "fixture", setup_status: "planned" },
         })),
-        notes: [`Identity conflict: "${own}" versus "${other}". Unresolved.`],
+        notes: [
+          `Identity conflict: ${open}${own}${close} versus ${open}${other}${close}. Unresolved.`,
+        ],
       }),
     );
     const report = await importRegistry(config, ports);

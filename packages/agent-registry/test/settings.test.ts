@@ -213,12 +213,16 @@ describe("privacy and settings model", () => {
     });
     expect(JSON.stringify(s)).not.toContain(identity);
   });
-  it("filters every metadata field supplied directly to the settings builder", () => {
+  it.each([
+    "https://unlisted.example/profile#me",
+    "private-user",
+    "urn:example:Alice",
+  ])("filters notes-only identity %s from every metadata field", (identity) => {
     const snap = matrixSnapshot();
     const first = snap.accounts[0];
     const evidence = snap.evidence[0];
     if (!first || !evidence) throw new Error("Fixture account or evidence absent");
-    const identity = "https://unlisted.example/profile#me";
+    snap.notes = [`Identity conflict: "${identity}" versus alternate@example.org.`];
     first.channel = identity;
     first.provider = identity;
     first.organisation = identity;
@@ -270,6 +274,53 @@ describe("privacy and settings model", () => {
     expect(hashHandle("FIXTURE@example.com", salt, "email")).toBe(
       hashHandle("fixture@example.com", salt, "email"),
     );
+  });
+  it.each([
+    ["HTTPS://id.example/Alice", "https://id.example/Alice"],
+    ["https://id.example/alice?key=Value", "https://id.example/alice?key=Value"],
+    ["https://id.example/alice#Me", "https://id.example/alice#Me"],
+    ["DID:example:Alice", "did:example:Alice"],
+    ["urn:example:Alice", "urn:example:Alice"],
+  ])("preserves case-sensitive URI components in %s", (identity, normalised) => {
+    for (const channel of [undefined, "web"]) {
+      expect(normaliseHandle(`  ${identity}  `, channel)).toBe(normalised);
+      expect(hashHandle(identity, salt, channel)).toBe(
+        createHmac("sha256", salt).update(normalised).digest("hex"),
+      );
+      expect(hashHandle(identity, salt, channel)).not.toBe(
+        hashHandle(identity.toLowerCase(), salt, channel),
+      );
+    }
+  });
+  it("keeps differently cased URI evidence unmatched", () => {
+    const snap = parseSnapshot({
+      version: 1,
+      accounts: [
+        {
+          id: "web-account",
+          channel: "web",
+          provider: "fixture_provider",
+          organization: "personal",
+          identifiers: { primary: "https://id.example/Alice" },
+          connector: { target: "fixture", setup_status: "planned" },
+        },
+      ],
+      evidence: [
+        {
+          channel: "web",
+          provider: "other_provider",
+          identifier: "https://id.example/alice",
+          method: "historic_connector",
+          source: "synthetic",
+          observedOn: "2026-10-20",
+        },
+      ],
+    });
+    const s = inventorySettings(snap, salt);
+    expect(s.connections[0]).toMatchObject({ evidence: [], identityConflicts: [] });
+    expect(s.unmatchedEvidence).toMatchObject([
+      { handleHash: hashHandle("https://id.example/alice", salt, "web") },
+    ]);
   });
   it.each([
     "matrix",
@@ -560,7 +611,12 @@ describe("privacy and settings model", () => {
     const prefix = "https://profile.example/alice";
     const own = `${prefix}${suffix}`;
     const other = "alternate@example.org";
-    for (const quote of ['"', "'", "`"])
+    for (const [open, close] of [
+      ['"', '"'],
+      ["'", "'"],
+      ["`", "`"],
+      ["<", ">"],
+    ])
       for (const includeAccount of [true, false]) {
         const snap = parseSnapshot({
           version: 1,
@@ -572,7 +628,7 @@ describe("privacy and settings model", () => {
             identifiers: { primary: handle },
             connector: { target: "fixture", setup_status: "planned" },
           })),
-          notes: [`Identity conflict: ${quote}${own}${quote}. versus ${other}. Unresolved.`],
+          notes: [`Identity conflict: ${open}${own}${close}. versus ${other}. Unresolved.`],
         });
         const s = inventorySettings(snap, salt);
         expect(s.connections[0]).toMatchObject({
@@ -1015,6 +1071,7 @@ describe("privacy and settings model", () => {
     ["café@example.com", "cafe%CC%81%40example.com"],
     ["123456789", "%31%32%33%34%35%36%37%38%39"],
     ["@fixture:Example.org", "%40fixture%3AExample.org"],
+    ["urn:example:Alice", "urn%3Aexample%3Aalice"],
   ])("rejects encoded private handle %s in every reference component", (handle, encoded) => {
     for (const ref of [
       `op://${encoded}/item/credential`,
