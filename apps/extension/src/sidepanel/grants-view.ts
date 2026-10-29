@@ -1,35 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { ClassGrant } from '../background/core/class-grant';
 import type { OriginGrant } from '../background/core/origin-grant';
+import { accessModeLabel, dataClassCopy } from '../shared/data-labels';
 import type { Confirmation, GrantsController, GrantsState } from './grants-controller';
-
-const CLASS_LABELS: Readonly<Record<string, string>> = {
-  'https://schema.org/TextDigitalDocument': 'Documents',
-  'http://schema.org/TextDigitalDocument': 'Documents',
-  'https://schema.org/Person': 'Contacts',
-  'http://schema.org/Person': 'Contacts',
-  'http://www.w3.org/2006/vcard/ns#Individual': 'Contacts',
-  'http://www.w3.org/2002/12/cal/ical#Vevent': 'Calendar events',
-  'https://schema.org/Event': 'Calendar events',
-  'http://www.w3.org/ns/pim/meeting#LongChat': 'Chats',
-};
-const MODES: Readonly<Record<string, string>> = {
-  read: 'Read',
-  append: 'Add',
-  write: 'Edit and delete',
-};
-
-function classLabel(value: string): string {
-  if (CLASS_LABELS[value]) return CLASS_LABELS[value];
-  // Unknown vocabularies still get a readable local name, never a raw technical URL.
-  try {
-    const url = new URL(value);
-    const local = decodeURIComponent(url.hash.slice(1) || url.pathname.split('/').pop() || '');
-    return local.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ') || 'Other data';
-  } catch {
-    return 'Other data';
-  }
-}
 
 function date(value: number): string {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
@@ -189,11 +162,22 @@ export function mountGrantsView(root: HTMLElement, controller: GrantsController)
 
   function renderClass(grant: ClassGrant, parent: OriginGrant) {
     const row = element('li', undefined, 'grants-class');
+    const label = dataClassCopy(grant.dataClass).label;
     const expiry = Math.min(grant.expiresAt, parent.expiresAt ?? Number.POSITIVE_INFINITY);
     row.append(
-      element('strong', classLabel(grant.dataClass)),
-      element('p', grant.modes.map((mode) => MODES[mode] ?? 'Other access').join(' · ')),
-      element('p', `Expires ${date(expiry)}`),
+      element('strong', label),
+      element(
+        'p',
+        grant.purpose ? `Used to ${grant.purpose}` : `Used by ${parent.origin}`,
+        'grants-feature',
+      ),
+      element('p', grant.modes.map(accessModeLabel).join(' · '), 'grants-modes'),
+      element('p', `Expires ${date(expiry)}`, 'grants-expiry'),
+      element(
+        'p',
+        `Revoking site access means ${parent.origin} will lose access to your ${label}.`,
+        'grants-consequence',
+      ),
     );
     return row;
   }
@@ -202,6 +186,7 @@ export function mountGrantsView(root: HTMLElement, controller: GrantsController)
     const busy = state.phase !== 'ready';
     const row = element('article', undefined, 'permission-row');
     row.setAttribute('aria-label', grant.origin);
+    const permissionHeader = element('div', undefined, 'permission-header');
     const header = element('div', undefined, 'grants-site-header');
     const avatar = element(
       'span',
@@ -239,14 +224,13 @@ export function mountGrantsView(root: HTMLElement, controller: GrantsController)
     );
     const classes = grant.scope.classes;
     const chips = element('div', undefined, 'grants-summary');
-    chips.append(
-      element(
-        'span',
-        classes === undefined
-          ? 'All data in connected storage'
-          : `${classes.length} data ${classes.length === 1 ? 'type' : 'types'}`,
-      ),
-    );
+    const labels = [...new Set(classes?.map((item) => dataClassCopy(item.dataClass).label))];
+    if (classes === undefined) chips.append(element('span', 'All data in connected storage'));
+    else if (!classes.length) chips.append(element('span', 'No data access'));
+    else {
+      for (const label of labels.slice(0, 4)) chips.append(element('span', label));
+      if (labels.length > 4) chips.append(element('span', `+${labels.length - 4}`));
+    }
     chips.append(
       element(
         'span',
@@ -334,7 +318,10 @@ export function mountGrantsView(root: HTMLElement, controller: GrantsController)
       durations.append(chip);
     }
     details.append(classList, label, warning, durations, reason);
-    row.append(header, bound, chips, revoke, toggle, details);
+    const actions = element('div', undefined, 'grants-row-actions');
+    actions.append(toggle, revoke);
+    permissionHeader.append(header, bound, chips, actions);
+    row.append(permissionHeader, details);
     return row;
   }
 
