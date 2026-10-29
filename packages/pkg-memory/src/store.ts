@@ -222,12 +222,12 @@ export class NanopubStore {
         [q.subject, q.object].some((term) => term.termType === "BlankNode"),
       )
     )
-      for (const name of sharedGraphNames(previous, original.dataset)) {
-        if (name === previous.assertionId) continue;
-        const contents = graph(original.dataset, name);
-        if (contents.size === 0) continue;
-        putGraph(dataset, name, contents);
-        new RdfNode(np.id, provenance).link(`${NS.prov}wasDerivedFrom`, name);
+      for (const batch of correspondenceBatches(previous, original.dataset)) {
+        new RdfNode(np.id, provenance).text(`${NS.pkg}correspondenceBatch`, batch);
+        for (const kind of ["sources", "entities"]) {
+          const name = pkgId("batch", batch, kind);
+          putGraph(dataset, name, graph(original.dataset, name));
+        }
       }
     putGraph(dataset, np.provenanceId, provenance);
     np.assertionId = previous.assertionId;
@@ -354,19 +354,27 @@ export class NanopubStore {
   }
 }
 
-function sharedGraphNames(np: Nanopublication, dataset: DatasetCore): string[] {
-  const names = new Set([
-    np.assertionId,
-    pkgId("batch", np.batch, "sources"),
-    pkgId("batch", np.batch, "entities"),
-  ]);
-  // Retractions can carry the original batch's graphs as explicit provenance
-  // context. Ordinary derivation links without a local graph add no context.
+/** Batch-scoped context retains only source/entity graphs, never other envelopes. */
+function correspondenceBatches(np: Nanopublication, dataset: DatasetCore): Set<string> {
+  const batches = new Set([np.batch]);
   for (const term of new RdfNode(np.id, graph(dataset, np.provenanceId)).terms(
-    `${NS.prov}wasDerivedFrom`,
-  ))
-    if (term.termType === "NamedNode" && graph(dataset, term.value).size > 0) names.add(term.value);
-  return [...names];
+    `${NS.pkg}correspondenceBatch`,
+  )) {
+    if (term.termType !== "Literal" || term.datatype.value !== `${NS.xsd}string`)
+      throw new Error("Expected a correspondence batch string");
+    batches.add(term.value);
+  }
+  return batches;
+}
+
+function sharedGraphNames(np: Nanopublication, dataset: DatasetCore): string[] {
+  return [
+    np.assertionId,
+    ...[...correspondenceBatches(np, dataset)].flatMap((batch) => [
+      pkgId("batch", batch, "sources"),
+      pkgId("batch", batch, "entities"),
+    ]),
+  ];
 }
 
 function nanopubParts(value: Nanopublications) {

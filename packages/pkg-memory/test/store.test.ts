@@ -802,12 +802,16 @@ it.each([
 
 it("keeps ordinary envelope derivation links separate from named graph context", async () => {
   const { store } = setup();
-  const value = await sharedBlankAssertions(["one"]);
+  const value = await sharedBlankAssertions();
   const np = value.nanopubs[0]!;
+  const other = value.nanopubs[1]!;
   const provenance = graph(value.dataset, np.provenanceId);
   const local = DataFactory.blankNode();
   new RdfNode(np.id, provenance)
     .link(`${NS.prov}wasDerivedFrom`, "https://example.org/document")
+    .link(`${NS.prov}wasDerivedFrom`, other.id)
+    .link(`${NS.prov}wasDerivedFrom`, other.provenanceId)
+    .link(`${NS.prov}wasDerivedFrom`, other.pubinfoId)
     .add(`${NS.prov}wasDerivedFrom`, local);
   new RdfNode(local, provenance).text(`${NS.schema}name`, "Local derivation");
   putGraph(value.dataset as Store, np.provenanceId, provenance);
@@ -819,7 +823,21 @@ it("keeps ordinary envelope derivation links separate from named graph context",
     generatedAt: "2026-10-26T12:00:00Z",
   });
   expect(revision.nanopubs[0]!.validity).toBe("Retracted");
-  expect((await store.list()).nanopubs).toHaveLength(2);
+  expect((await store.list()).nanopubs).toHaveLength(3);
+});
+
+it.each([
+  DataFactory.namedNode("https://example.org/batch"),
+  DataFactory.literal("context", "en"),
+])("rejects malformed correspondence batch metadata before any write: %s", async (term) => {
+  const { store, write } = setup();
+  const value = await build();
+  const np = value.nanopubs[0]!;
+  const provenance = graph(value.dataset, np.provenanceId);
+  new RdfNode(np.id, provenance).add(`${NS.pkg}correspondenceBatch`, term);
+  putGraph(value.dataset as Store, np.provenanceId, provenance);
+  await expect(store.put(value)).rejects.toThrow("Expected a correspondence batch string");
+  expect(write).not.toHaveBeenCalled();
 });
 
 it.each([

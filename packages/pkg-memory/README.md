@@ -155,7 +155,7 @@ provenance graphs) rejects before any Pod write; local cross-graph sharing remai
 supported. Owner-only WAC ACLs are written before creating
 containers and data. Existing shared ancestor containers and their ACLs are
 preserved; replacement is limited to the store's own `mcp/` ACL and the dedicated
-ACLs of nanopub and policy resources. Each nanopub's owner-only ACL is established
+ACLs of nanopub, policy and lock resources. Each nanopub's owner-only ACL is established
 conditionally before writing its private bytes, replacing any orphan resource ACL
 that would override the container default. The adapter must support the spec's
 `.acl` convention; ACL failures stop the operation. Existing ACL replacement needs
@@ -193,7 +193,7 @@ unchanged, and the withdrawal reuses the original assertion graph and IRI,
 including skolemized nodes. Later classification recognizes the withdrawal across resources.
 For assertions with blank nodes, the withdrawal also retains the original batch's
 source/entity graphs and any inherited correspondence context. Envelope-level
-`prov:wasDerivedFrom` links identify these locally retained graphs for splitting,
+`pkg:correspondenceBatch` string values identify these batches for splitting,
 matching and listing, so jointly distinguished nodes remain retractable without
 changing the assertion or the withdrawal's new batch identity.
 The withdrawal's provenance also identifies the revised nanopub envelope. That
