@@ -1,6 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { Parser } from "n3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { InMemoryChannelAdapter } from "./channel.js";
 import { importInbound } from "./import.js";
 
@@ -21,6 +21,9 @@ function recordingFetch(
 ): typeof globalThis.fetch {
   return (async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
+    if (init?.method === "HEAD")
+      return new Response(null, { headers: { link: '<.acl>; rel="acl"' } });
+    if (init?.method === "GET") return new Response(null, { status: 404 });
     const ov = overrides?.(url);
     if (ov !== undefined) return ov;
     puts.push({
@@ -161,5 +164,81 @@ describe("importInbound", () => {
       now: NOW,
     });
     expect(puts.some((p) => p.url.endsWith(".acl"))).toBe(false);
+  });
+});
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+
+describe("importInbound ACL discovery privacy gate", () => {
+  const run = (writeFetch: typeof fetch) =>
+    importInbound({
+      adapter: new InMemoryChannelAdapter("email", [{ id: "private", raw: EMAIL }]),
+      writeFetch,
+      container: CONTAINER,
+      ownerWebId: OWNER,
+      now: NOW,
+    });
+  const wac = `<#owner> a <http://www.w3.org/ns/auth/acl#Authorization> ;
+    <http://www.w3.org/ns/auth/acl#accessTo> <${CONTAINER}> .`;
+  function pod(link: string, aclBody: string | number = 404, headStatus = 200) {
+    return vi.fn<typeof fetch>(async (_input, init) => {
+      if (init?.method === "HEAD")
+        return new Response(null, { status: headStatus, headers: { link } });
+      if (init?.method === "GET")
+        return typeof aclBody === "number"
+          ? new Response(null, { status: aclBody })
+          : new Response(aclBody, { headers: { "content-type": "text/turtle" } });
+      return new Response(null, { status: 201 });
+    });
+  }
+  it.each([
+    404,
+    wac,
+  ])("writes the advertised nonstandard ACL before private data (%s)", async (body) => {
+    const fetch = pod('<owner-policy>; rel="acl"', body);
+    expect((await run(fetch)).written).toBe(1);
+    expect(fetch.mock.calls.map(([url, init]) => [String(url), init?.method])).toEqual([
+      [CONTAINER, "HEAD"],
+      [`${CONTAINER}owner-policy`, "GET"],
+      [`${CONTAINER}owner-policy`, "PUT"],
+      ...[".eml", ".ttl", ".chat.ttl"].map((ext) => [`${CONTAINER}alb-cHJpdmF0ZQ${ext}`, "PUT"]),
+    ]);
+    for (const [, init] of fetch.mock.calls) expect(init?.redirect).toBe("manual");
+  });
+  it.each([
+    ["", 404, 200],
+    ['<.acl>; rel="acl", <other>; rel="acl"', 404, 200],
+    ['<.acl>; rel="acl"; anchor="/other"', 404, 200],
+    ['<.acl>; rel="acl"; rel="acl"', 404, 200],
+    ["broken", 404, 200],
+    ['<.acr>; rel="acl"', 404, 200],
+    ['<ftp://pod.example/inbox/.acl>; rel="acl"', 404, 200],
+    ['<.acr>; rel="http://www.w3.org/ns/solid/acp#accessControl"', 404, 200],
+    ['<https://foreign.example/owner.acl>; rel="acl"', 404, 200],
+    ['<../other.acl>; rel="acl"', 404, 200],
+    ['<https://user:pass@pod.example/inbox/.acl>; rel="acl"', 404, 200],
+    ['<.acl?x=1>; rel="acl"', 404, 200],
+    ['<.acl#owner>; rel="acl"', 404, 200],
+    ['<>; rel="acl"', 404, 200],
+    ['<.acl>; rel="acl"', 404, 302],
+    ['<.acl>; rel="acl"', 404, 404],
+    ['<.acl>; rel="acl"', 403, 200],
+    ['<.acl>; rel="acl"', 302, 200],
+    ['<.acl>; rel="acl"', "<#p> a <http://www.w3.org/ns/solid/acp#Policy> .", 200],
+    ['<.acl>; rel="acl"', `${wac}<#p> a <http://www.w3.org/ns/solid/acp#Policy> .`, 200],
+    ['<.acl>; rel="acl"', wac.replace(CONTAINER, "https://pod.example/other/"), 200],
+    ['<.acl>; rel="acl"', "invalid turtle", 200],
+  ] as const)("refuses writes when ACL discovery or validation is unsafe (%s)", async (link, body, status) => {
+    const fetch = pod(link, body, status);
+    await expect(run(fetch)).rejects.toThrow();
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === "PUT")).toEqual([]);
+  });
+  it("does not pull inbound messages when discovery fails", async () => {
+    const adapter = new InMemoryChannelAdapter("email", []);
+    const pull = vi.spyOn(adapter, "pullInbound");
+    await expect(
+      importInbound({ adapter, writeFetch: pod(""), container: CONTAINER, ownerWebId: OWNER }),
+    ).rejects.toThrow();
+    expect(pull).not.toHaveBeenCalled();
   });
 });

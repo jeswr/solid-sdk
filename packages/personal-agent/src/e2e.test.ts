@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 // AUTHORED-BY Codex GPT-6
 /**
@@ -66,6 +67,7 @@ class MemoryPod {
     const url = typeof input === "string" ? input : String(input);
     const method = (init?.method ?? "GET").toUpperCase();
     const headers = new Headers((init?.headers ?? {}) as Record<string, string>);
+    if (method === "HEAD") return new Response(null, { headers: { link: '<.acl>; rel="acl"' } });
     if (method === "GET") {
       if (url.endsWith("/")) return this.containerListing(url);
       const rec = this.store.get(url);

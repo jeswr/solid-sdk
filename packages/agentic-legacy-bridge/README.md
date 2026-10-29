@@ -39,6 +39,9 @@ choices in [`docs/DECISIONS.md`](./docs/DECISIONS.md).
    step aborts; the floor is always a working channel). Wire protocol in `PROTOCOL.md`.
 
 Persistence (`importInbound`) is **owner-private** (fail-closed ACL written first).
+The default privacy gate requires an existing container with a unique advertised WAC ACL
+inside that container. It reads and validates that ACL before replacing it; missing or
+ambiguous links, ACP, shared ACLs, unsafe URLs and read/write failures abort before content.
 
 ## The metadata protocol (M2.6 — deterministic first, LLM last)
 

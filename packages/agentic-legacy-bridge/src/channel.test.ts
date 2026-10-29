@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 import { Parser, Store } from "n3";
 import { describe, expect, it } from "vitest";
@@ -73,6 +74,9 @@ interface Put {
 
 function recordingFetch(puts: Put[]): typeof globalThis.fetch {
   return (async (input: string | URL | Request, init?: RequestInit) => {
+    if (init?.method === "HEAD")
+      return new Response(null, { headers: { link: '<.acl>; rel="acl"' } });
+    if (init?.method === "GET") return new Response(null, { status: 404 });
     puts.push({
       url: String(input),
       contentType: String((init?.headers as Record<string, string>)?.["content-type"] ?? ""),
