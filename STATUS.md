@@ -1078,3 +1078,52 @@ remote Git fetch/merge or dependency lifecycle script was used. The requested
 finding is fixed, with no implementation work or open questions remaining.
 Validation limitations are the full-workspace font download and unavailable
 roborev.
+
+## Codex fix round 10 — review of `7677e4f4e47e`
+
+- `badc90fe fix: normalize JSON-LD scalar literals` converts native scalar
+  values to lexical strings before byte accounting and literal construction,
+  preserving the supplied datatype and existing string lexical values.
+- `docs: record round-ten validation` records this round's results.
+
+Added **19 fixture cases**: nine parser cases for typed booleans, zero,
+positive/negative integers, fractional/exponential numbers and preserved strings;
+ten MCP cases exercising fetch serialization and search matching through both
+adapters. Before the fix, 17 cases fail and the two string cases pass. After the
+fix, all 19 cases pass. No API, dependency, manifest or design changes were needed.
+
+Validation used Node 24 and the existing fixture-only network guard:
+
+```sh
+export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"
+export NODE_OPTIONS=--require=/tmp/sst-9s2-round8-network-guard.cjs
+export GIT_ALLOW_PROTOCOL=file
+pnpm exec turbo run build --filter '@jeswr/solid-mcp^...' --concurrency=4
+pnpm --filter @jeswr/solid-mcp exec vitest run test/bounded-rdf.test.ts test/chatgpt-tools.test.ts -t 'JSON-LD scalar'
+pnpm --filter @jeswr/solid-mcp run lint
+pnpm --filter @jeswr/solid-mcp run build
+pnpm --filter @jeswr/solid-mcp run typecheck
+pnpm --filter @jeswr/solid-mcp run test
+pnpm --filter @jeswr/solid-mcp run test:coverage
+TURBO_SCM_BASE=7677e4f4e47ee1a8c4b477daf926b0aeb9740f5e pnpm run gate
+pnpm run gate:full
+```
+
+All commands except `gate:full` pass (exit 0). The package gate and coverage run
+each pass **675 tests across 11 files**. Aggregate coverage is 98.13% lines /
+90.65% branches; configured thresholds pass. The affected repository gate passes
+**23/23 tasks**, 7 cached, including root lint and dependent-package checks.
+
+The full gate exits 1 after **87 successful tasks out of 267**, 12 cached, at the
+unchanged `@jeswr/app-suite#build`: `next/font` cannot download Onest, Source Code
+Pro or Source Serif 4 from Google Fonts through the fixture-only network guard.
+The root suite passes **745 tests across 9 files**. This is the font-download
+limitation already recorded in prior rounds; unrelated code remains untouched.
+
+`git diff --check` passes. `roborev status` exits 127 because roborev is
+unavailable, so automated per-commit review could not run. `check:packages` is
+not applicable because no dependencies were added. No push, publication,
+remote Git fetch/merge or dependency lifecycle script was used. The requested
+finding is fixed, with no implementation work or open questions remaining.
+Validation limitations are the full-workspace font download and unavailable
+roborev.
