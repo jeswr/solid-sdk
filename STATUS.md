@@ -480,3 +480,61 @@ per-commit review remains outstanding. No implementation work or open questions
 remain. No pushes, PRs, branch switches, remote fetches/merges, tracker changes,
 or edits to other checkouts were performed. The earlier pilot/live-server
 verification limits still apply.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Review fix round 4 — cross-put correspondence and revision term types
+
+Review/fix base and affected-gate comparison:
+`fd29f26fa168a6321fa084f6c29887336d2139d7`; branch remains `lane/sst-vcij`.
+
+- `c2bf65dc` — `fix(pkg-memory): validate stored graph correspondence`: check
+  every incoming resource against existing copies before any Pod mutation,
+  using only their common assertion, sources, and entities graphs. Reuse the
+  listing URL guards and exact joint graph comparison. Regressions cover both
+  put orders, fresh store instances, unchanged stored bytes/ETags, rejection
+  before writing any member of a mixed input, repeated/reversed listings,
+  supported jointly distinguished nodes, conflicting graph contents, and
+  collection/resource read errors.
+- `bb3349a9` — `fix(pkg-memory): ignore literal revision targets`: resolve
+  envelope revisions only through NamedNode targets. Literal targets neither
+  retire Current nanopubs nor suppress valid assertion-wide revisions. Both
+  cases round-trip through serialization and parsing before classification.
+- Final documentation commit — `docs: record sst-vcij round four validation`:
+  this report, committed last after the required gate runs.
+
+Conservative choice: reject an incoming put when its common graphs cannot
+uniquely establish correspondence with a stored copy. No persistent identity
+mapping or new storage format was introduced.
+
+### Validation
+
+Commands ran in this checkout with Node v24.22.1 and pnpm 10.4.1, using
+`/opt/node24/bin` first on `PATH`.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/pkg-memory...` | PASS; four dependency-first builds. |
+| `pnpm --filter @jeswr/pkg-memory exec vitest run test/store.test.ts test/belief.test.ts --coverage.enabled=false` | PASS; 106 focused tests. |
+| `pnpm --filter @jeswr/pkg-memory run lint` | PASS. |
+| `pnpm --filter @jeswr/pkg-memory run build` | PASS. |
+| `pnpm --filter @jeswr/pkg-memory run typecheck` | PASS, including tests. |
+| `pnpm --filter @jeswr/pkg-memory run test` | PASS; 11 files, 599 tests; 100% statements, branches, functions, and lines. |
+| `pnpm run lint:root` (via the affected gate) | PASS. |
+| `TURBO_SCM_BASE=fd29f26fa168a6321fa084f6c29887336d2139d7 pnpm run gate` | PASS; 8 successful tasks. |
+| `pnpm run gate:full` | FAIL outside this lane; 72 successful tasks before the root pathological-spec timing assertion measured 224.46 ms against its 50 ms limit; 685 other root tests passed. |
+| `pnpm exec turbo run test:root` | FAIL on the same timing assertion without competing builds, measuring 78.14 ms; 685 other root tests passed. |
+| `git diff fd29f26fa168a6321fa084f6c29887336d2139d7 --check` | PASS. |
+
+The root test and its guard are unchanged from this round's base, verified with
+`git diff fd29f26fa168a6321fa084f6c29887336d2139d7 --exit-code -- test/check-sdk-layers.test.mjs scripts/check-sdk-layers.mjs`.
+The full gate remains blocked by that timing assertion. No unrelated fix was
+made, and the full gate left no untracked or modified build artifacts.
+
+Both requested findings are implemented with ten added regression cases. No
+dependency, manifest, or lockfile changed; no dependency policy check was
+needed. Tests use fictional identities and the memory PodPort. `roborev` remains
+unavailable (`command -v roborev` found no executable), so independent automated
+per-commit review remains outstanding. No implementation work or open questions
+remain. No pushes, PRs, branch switches, remote fetches/merges, tracker changes,
+or edits to other checkouts were performed. The earlier pilot/live-server
+verification limits still apply.
