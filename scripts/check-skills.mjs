@@ -309,7 +309,8 @@ function htmlLinksIn(html, definitions, definitionMarker) {
         value = html.slice(start, cursor);
       }
       if (firstAttribute) elementAttributes.set(name, value);
-      if (!closing && /^(?:href|src|srcset|xlink:href)$/.test(name)) attributes.push([name, value]);
+      if (firstAttribute && !closing && /^(?:href|src|srcset|xlink:href)$/.test(name))
+        attributes.push([name, value]);
     }
     // An incomplete tag does not create an element or active URL attributes.
     tokens.lastIndex = cursor + 1;

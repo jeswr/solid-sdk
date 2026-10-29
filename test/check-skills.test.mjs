@@ -489,6 +489,42 @@ describe("skill validation", () => {
   });
 
   it.each([
+    '<a href="references/guide.md" href="missing.md">guide</a>',
+    "<a HREF='references/guide.md' href=missing.md>guide</a>",
+    '<a href href="missing.md">guide</a>',
+    '<a href="" HREF="missing.md">guide</a>',
+    '<img src="references/guide.md" SRC="missing.png">',
+    '<img src src="missing.png">',
+    '<img srcset="references/guide.md 1x" SRCSET="missing.png 2x">',
+    '<img srcset srcset="missing.png 2x">',
+    '<svg><image href="references/guide.md" HREF="missing.png" /></svg>',
+    '<svg><image xlink:href="references/guide.md" XLINK:HREF="missing.png" /></svg>',
+    '<svg><image xlink:href xlink:href="missing.png" /></svg>',
+    '<a href="references/guide.md" href="ignored.md > <img src=missing.png>">guide</a>',
+  ])("ignores duplicate URL attributes after the first occurrence: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+    expect(checkSkills(root).errors).toEqual([]);
+  });
+
+  it.each([
+    '<a href="missing.md" href="references/guide.md">broken</a>',
+    '<img src="missing.png" SRC="references/guide.md">',
+    '<img srcset="missing.png 1x" srcset="references/guide.md 2x">',
+    '<svg><image xlink:href="missing.png" xlink:href="references/guide.md" /></svg>',
+    '<img src="references/guide.md" src="ignored.png" srcset="missing.png 2x">',
+    '<a href="references/guide.md" href="ignored.md > <img src=ignored.png>">guide</a><img src="missing.png">',
+  ])("checks active URLs alongside duplicate URL attributes: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+  });
+
+  it.each([
     '<a title="<!--" href="missing.md">broken</a>',
     "<img alt='<!--' src='missing.png'>",
     '<div>\n<a title="<!-- >" HREF = missing.md>broken</a>\n<!-- actual comment -->\n</div>',
