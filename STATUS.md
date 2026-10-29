@@ -662,3 +662,82 @@ All work remained in this checkout on `lane/sst-j2y`; no branch switch, fetch,
 merge, push, PR or modifications to another checkout were performed. No generated
 untracked files remain. This report is committed after validation, and the
 checkout is left clean.
+
+## Fix round 10
+
+Addressed exactly the two findings against `a3233c56f714` on `lane/sst-j2y`:
+
+- `e919d2a6` — `fix(agent-registry): screen references and parse full operands`:
+  screen both original and decoded credential references before settings export or
+  storage; parse the complete affirmative conflict-note grammar before matching
+  identities, preserving bare URI semicolons, commas and parentheses. Keep shorter
+  accounts isolated and retain complete notes-only alternatives as salted hashes
+  in settings and RDF. Preserve privacy screening for inactive notes and sentence
+  punctuation handling for email, Matrix and phone operands. Added or expanded
+  regressions covering all reference components, identifiers supplied by accounts,
+  evidence, active and resolved notes, both conflict operands, binding states,
+  complete URI boundaries and resolved or extra-prose rejection.
+- Final report commit — `docs(agent-registry): record fix round 10 validation`
+  (this file).
+
+Conservative choice: bare URI operands retain terminal punctuation. Quotes or
+angle brackets separate an identity from following sentence punctuation. The
+existing affirmative prefixes and optional `. Unresolved.` suffix remain the
+supported conflict grammar. No dependencies, manifests, lockfiles or test
+configuration changed; `check:packages` was not applicable. All added test inputs
+use synthetic identifiers and in-memory transports.
+
+The initial diagnostic run reproduced all 21 newly added failing cases; its
+export suite also required fresh dist output, supplied by the normal build.
+Final validation used Node `v24.22.1` via `export PATH=/opt/node24/bin:$PATH`.
+The package gate passed **277 tests in 4 files**:
+
+```sh
+pnpm --filter @jeswr/agent-registry run lint
+pnpm --filter @jeswr/agent-registry run build
+pnpm --filter @jeswr/agent-registry run typecheck
+pnpm --filter @jeswr/agent-registry run test
+```
+
+After removing generated web files, the final affected repository gate passed
+**5/5 tasks**, including `pnpm run lint:root` (3 cached). The local
+`agent/integration` ref is unavailable, so the supplied review head was used as
+the existing local baseline:
+
+```sh
+TURBO_SCM_BASE=a3233c56f7145921723e95fcccd75449f8ee5fa3 pnpm run gate
+```
+
+An intermediate affected run also passed **42/42 tasks** while generated web
+files broadened its scope. The 16 generated
+`apps/pod-*/web/public/{callback.html,clientid.jsonld}` files were removed before
+the final affected gate and handoff.
+
+`pnpm run gate:full` remains failed. Its three attempts stopped in unchanged
+projects:
+
+- Initial attempt: `@jeswr/app-suite#build` failed in Next.js's Google font loader
+  while processing `packages/suite-ui/dist/fonts.js`, with
+  `TypeError: Cannot read properties of null (reading '1')`.
+  Turbo reported **83/222 successful tasks**, 4 cached, after **41.594s**.
+- Retry: `@jeswr/federation-codegen#test` reported **2 failed and 23 passed tests**.
+  `test/generator.test.ts:81` expects the legacy `w3id.org` bookmarks namespace
+  while the ontology uses `jeswr.org/ns`; the generated-output comparison also
+  detects the corresponding ontology drift. These failures were recorded in
+  earlier rounds. Turbo reported **265/344 successful tasks**, 58 cached, after
+  **4m9.373s**. Both earlier attempts passed all **686 root tests in 7 files**.
+- Final attempt against `e919d2a6`: `@jeswr/rdf-engine#test` reported **1 failed
+  and 108 passed tests**. `src/contract.real.test.ts:252`, the LocalIndex
+  SELECT/ASK/CONSTRUCT test over 1,000 resource graphs, exceeded its default
+  **5,000ms** timeout. Turbo reported **165/197 successful tasks**, 159 cached,
+  after **51.785s**. This attempt replayed all **277 passing registry tests**.
+
+No unrelated source, assertions or timeout configuration changed. No in-scope
+implementation remains unfinished and there are no open questions. A green
+full-workspace gate remains blocked by the unrelated failures above. `roborev`
+is unavailable and no post-commit hook is installed in this checkout, so automated
+per-commit review could not run; no review tooling or model endpoint was installed
+or invoked. Both commits use the required two co-author trailers. All work
+remained in this checkout on `lane/sst-j2y`; no branch switch, fetch, merge, push,
+PR or modifications to another checkout were performed. This report is committed
+after validation, and the checkout is left clean.
