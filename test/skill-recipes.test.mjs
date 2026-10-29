@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // Execute the documented examples so API and credential-boundary regressions fail the gate.
 import * as nodeCrypto from "node:crypto";
@@ -21,7 +22,7 @@ const jose = await import(fixtureRequire.resolve("jose"));
 const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor;
 
 function blocks(skill, language, section = "", file = "SKILL.md") {
-  const directory = skill === "solid-fetch-rdf" ? "packages/fetch-rdf" : `skills/${skill}`;
+  const directory = skill === "fetch-rdf" ? "packages/fetch-rdf" : `skills/${skill}`;
   const markdown = readFileSync(new URL(`../${directory}/${file}`, import.meta.url), "utf8");
   const start = section ? markdown.indexOf(section) : 0;
   if (start < 0) throw new Error(`Missing section: ${section}`);
@@ -183,7 +184,7 @@ describe("Solid skill recipes", () => {
   });
 
   it("uses the exported pod-scope APIs and refuses escaping write targets before fetch", async () => {
-    const code = blocks("solid-fetch-rdf", "ts", "### Writing to a pod location safely")[0];
+    const code = blocks("fetch-rdf", "ts", "### Writing to a pod location safely")[0];
     const authenticatedFetch = vi.fn(async () => new Response(null, { status: 204 }));
     const bindings = {
       podBase: "https://pod.example/alice/",
@@ -414,7 +415,9 @@ describe("reviewed recipe failure boundaries", () => {
   });
 
   it("treats storage acquisition and read errors as misses without weakening identity checks", async () => {
-    const code = blocks("solid-offline", "ts").find((block) => block.includes("function read("));
+    const code = blocks("solid-offline-patterns", "ts").find((block) =>
+      block.includes("function read("),
+    );
     const webId = "https://pod.example/alice/card#me";
     const resource = "https://pod.example/alice/items";
     const keyFor = (identity, url) => `${identity}\u0000${url}`;

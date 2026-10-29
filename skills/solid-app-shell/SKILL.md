@@ -21,7 +21,7 @@ For the component API, [packages/app-shell/SKILL.md](../../packages/app-shell/SK
 # App shell — optimistic, non-blocking pod mutations
 
 Read the companion [`AGENTS.md`](../../AGENTS.md)
-first; pairs with the [`solid-offline`](../solid-offline/SKILL.md)
+first; pairs with the [`solid-offline-patterns`](../solid-offline-patterns/SKILL.md)
 skill (instant-load reads) — this one is the **write** side of the same "the app feels instant" goal.
 
 A pod write is a network round-trip (often a conditional PUT/PATCH plus a refresh). Blocking the
@@ -132,7 +132,7 @@ An optimistic mutation that **debounces** the pod write (coalescing rapid edits 
 gap the optimistic path itself doesn't cover: if the user **closes the tab, navigates away, or
 backgrounds it** while a debounced write is still pending, the timer never fires and the **last edit
 is lost** — the UI showed "Saving…" (or even "Saved" optimistically) but nothing reached the pod. The
-durable cache (`solid-offline`) preserves it for *that* browser, but a different device never sees it.
+durable cache (`solid-offline-patterns`) preserves it for *that* browser, but a different device never sees it.
 
 Flush pending writes on the teardown signals — and mind the `keepalive` body cap:
 
@@ -159,7 +159,7 @@ Flush pending writes on the teardown signals — and mind the `keepalive` body c
   keepalive flush onto a non-keepalive in-flight save** — a normal debounced save already in flight is
   cancelled by the teardown, so the keepalive flush must still run; only coalesce keepalive-with-keepalive.
 
-This is the teardown corner of the optimistic-mutation / `solid-offline` invariant: optimistic +
+This is the teardown corner of the optimistic-mutation / `solid-offline-patterns` invariant: optimistic +
 durable-cache makes the edit *survive locally*; the keepalive flush is what makes it *reach the pod*
 when the tab dies mid-debounce. (Cited: the five jeswr OSS Solid forks — Linkding, Elk, Excalidraw,
 Miniflux, Actual — 2026-06; Excalidraw's debounced scene-persist needed the `pagehide` keepalive
@@ -169,7 +169,7 @@ flush + the 64 KB cap fallback, hardened over roborev's fetch/unload rounds.)
 
 - **A move that doesn't change anything is a no-op** — a drop onto the card's *current* column must
   not fire a write or show "Saving…". Compare the patch with `visibleValue(edits)` and bail.
-- **Keep the optimistic state in the durable cache too** (see `solid-offline`), so a reopen
+- **Keep the optimistic state in the durable cache too** (see `solid-offline-patterns`), so a reopen
   mid-write paints the optimistic state rather than the pre-write one.
 - **Reconcile in the background after a successful persist** (a non-blocking refresh), so a change
   the server coupled to your write — e.g. a workflow status that also flips an open/closed flag —

@@ -1,7 +1,9 @@
 ---
 name: solid-rdf
-description: Use when implementing Solid server RDF parsing or serialization, JSON-LD context security, RDF content negotiation, byte-exact storage, LDP container graphs, or SPARQL PATCH parsing. Covers N3.js, jsonld, and @rdfjs/wrapper typed accessors; client pod reads use solid-fetch-rdf.
+description: Use when implementing Solid server RDF parsing or serialization, JSON-LD context security, RDF content negotiation, byte-exact storage, LDP container graphs, or SPARQL PATCH parsing. Covers N3.js, jsonld, and @rdfjs/wrapper typed accessors; client pod reads use fetch-rdf.
 ---
+
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 ## Quick reference
 
