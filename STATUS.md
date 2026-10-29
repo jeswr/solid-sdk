@@ -8,6 +8,71 @@ Implemented on `lane/sst-4s8h`, originally based on
 at `73879200bba1baa53b1634101a0e33e113b6d55c`.
 No push, PR, publish, branch switch, network remote fetch/merge, or dependency lifecycle scripts.
 
+## Codex fix round 4 — compressed profile responses
+
+Review: `solid-sdk-lane-sst-4s8h-37ecac1d8f12.md`, read in full. Its one
+finding is addressed on `lane/sst-4s8h`, based on
+`37ecac1d8f12a900eb788314c9862e5b092e47a7`.
+
+- `fd96cf79` — `fix: decode compressed WebID profile responses`: stream-decode
+  gzip (including x-gzip), deflate and Brotli responses from the existing
+  DNS-pinned anonymous profile dispatcher. Decode supported encoding chains in
+  reverse order, with at most five layers. Preserve response headers, status and
+  URL; leave redirect bodies available for the existing cancellation path.
+- Final commit — `docs: record compressed profile fix validation`: this status
+  update, committed last.
+
+Only the CLI transport and its existing discovery regression test file changed,
+plus this status update. Twenty-one additional regression cases cover compressed
+Type Index discovery through both fetch and PodPort, case-insensitive encodings,
+stacked encodings, chunked bodies, preserved metadata, malformed data,
+unsupported chains, and compressed redirect cancellation. The initial regression
+run reproduced eight compressed-profile discovery failures before the fix. The
+final discovery file passes all 80 tests. Existing bodyless-response cases also
+exercise Content-Encoding headers. DNS and transport I/O use fixtures/mocks.
+
+Validation on Node `v24.22.1`, pnpm `10.4.1`. Git transport was disabled for
+builds and gates; no dependency installation or addition was needed
+(`check:packages` is not applicable).
+
+```sh
+PATH=/opt/node24/bin:$PATH GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.allow GIT_CONFIG_VALUE_0=never pnpm exec turbo run build --filter='@jeswr/solid-mcp^...' --concurrency=4
+```
+
+PASS: four workspace dependency builds.
+
+```sh
+PATH=/opt/node24/bin:$PATH GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.allow GIT_CONFIG_VALUE_0=never bash -c 'pnpm --filter @jeswr/solid-mcp run lint && pnpm --filter @jeswr/solid-mcp run build && pnpm --filter @jeswr/solid-mcp run typecheck && pnpm --filter @jeswr/solid-mcp run test'
+```
+
+PASS: lint, build, typecheck and all **385 tests / 10 files**.
+
+```sh
+PATH=/opt/node24/bin:$PATH GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.allow GIT_CONFIG_VALUE_0=never TURBO_SCM_BASE=37ecac1d8f12a900eb788314c9862e5b092e47a7 pnpm run gate
+```
+
+PASS: root lint and guards; **18/18 tasks**, four cached. Includes solid-mcp
+and its personal-agent dependent (**537 tests / 56 files**).
+
+```sh
+PATH=/opt/node24/bin:$PATH GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.allow GIT_CONFIG_VALUE_0=never pnpm run gate:full
+```
+
+FAIL outside this fix: **306 successful / 360 tasks**, 14 cached, stopping at
+`@jeswr/federation-trust#test`, `test/characterization.test.ts:196`,
+“delegation credential structure is stable”. The existing snapshot expects
+serialized JWK keys in `crv,x,kty` order; this runtime emits `kty,crv,x`.
+`git diff 37ecac1d8f12a900eb788314c9862e5b092e47a7 -- packages/federation-trust`
+is empty. The full run passed all **745 root tests / 9 files** and the
+**385 solid-mcp tests / 10 files**. No unrelated source or snapshot changed.
+
+Generated app `web/public/{callback.html,clientid.jsonld}` files were removed
+after validation. `git diff --check` passes. No implementation work or open
+questions remain for this finding; full-workspace validation retains the
+inherited snapshot failure. `roborev` is unavailable (`command -v roborev`
+finds no executable), so automated per-commit verdicts could not be obtained.
+Reviewer configuration is unchanged.
+
 ## Fix round 5 — integrate main
 
 - `65887325` — `chore: integrate main into stdio lane`: fetch from the prescribed
