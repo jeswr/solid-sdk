@@ -9,6 +9,14 @@ import { createServer } from "http";
 import { expect, it, vi } from "vitest";
 import { createOriginScopedFetch, type OriginFetchOptions } from "../src/origins.js";
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 it("refuses an undeclared local origin before connecting, and permits listed loopback only in tests", async () => {
   let requests = 0;
   let cacheControl: string | undefined;
@@ -103,6 +111,167 @@ it.each([
       server.close((error) => (error ? reject(error) : resolve())),
     );
   }
+});
+
+it.each([
+  "keepalive",
+  "no-cors",
+] as const)("bounds buffered %s bodies and cancels overflow before transport", async (policy) => {
+  const origin = "https://allowed.example";
+  const cap = 1024 * 1024;
+  const transport = vi.fn<typeof guardedFetch>(async (_input, init) => {
+    const bytes = Buffer.from(await new Response(init?.body).arrayBuffer());
+    expect(bytes.equals(Buffer.alloc(cap))).toBe(true);
+    return new Response("bounded fixture");
+  });
+  const scoped = createOriginScopedFetch(new Set([origin]), {
+    createTransport: () => transport,
+    dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }],
+  });
+  const init: RequestInit = {
+    method: "POST",
+    keepalive: policy === "keepalive",
+    mode: policy === "no-cors" ? "no-cors" : "cors",
+  };
+  expect(
+    await (await scoped(new Request(origin, { ...init, body: new Uint8Array(cap) }))).text(),
+  ).toBe("bounded fixture");
+  transport.mockClear();
+  // A small Blob's stream can be arbitrarily large; never trust its declared size.
+  const cancel = vi.fn(() => new Promise<void>(() => {}));
+  let chunk = 0;
+  const stream = new ReadableStream<Uint8Array<ArrayBuffer>>(
+    {
+      pull(controller) {
+        if (chunk < 2) controller.enqueue(new Uint8Array(chunk++ === 0 ? cap : 1));
+        else controller.close();
+      },
+      cancel,
+    },
+    { highWaterMark: 0 },
+  );
+  const blob = new Blob(["fixture"]);
+  vi.spyOn(blob, "stream").mockReturnValue(stream);
+  await expect(scoped(origin, { ...init, body: blob })).rejects.toThrow(/request body.*cap/i);
+  expect(cancel).toHaveBeenCalledTimes(1);
+  expect(stream.locked).toBe(false);
+  expect(transport).not.toHaveBeenCalled();
+});
+
+it.each([
+  "keepalive",
+  "no-cors",
+] as const)("includes DNS time in the deadline while buffering a stalled %s body", async (policy) => {
+  vi.useFakeTimers();
+  try {
+    const origin = "https://allowed.example";
+    const lookupStarted = deferred<void>();
+    const lookup = deferred<Array<{ address: string; family: 4 }>>();
+    const reading = deferred<void>();
+    const cancel = vi.fn(() => new Promise<void>(() => {}));
+    const stream = new ReadableStream<Uint8Array<ArrayBuffer>>(
+      { pull: () => reading.resolve(), cancel },
+      { highWaterMark: 0 },
+    );
+    const blob = new Blob(["fixture"]);
+    vi.spyOn(blob, "stream").mockReturnValue(stream);
+    const transport = vi.fn<typeof guardedFetch>(async () => new Response("unexpected"));
+    const scoped = createOriginScopedFetch(new Set([origin]), {
+      createTransport: () => transport,
+      dnsLookup: () => {
+        lookupStarted.resolve();
+        return lookup.promise;
+      },
+    });
+    const result = expect(
+      scoped(origin, {
+        method: "POST",
+        body: blob,
+        keepalive: policy === "keepalive",
+        mode: policy === "no-cors" ? "no-cors" : "cors",
+      }),
+    ).rejects.toThrow(/timed out/i);
+    await lookupStarted.promise;
+    await vi.advanceTimersByTimeAsync(6_000);
+    lookup.resolve([{ address: "1.1.1.1", family: 4 }]);
+    await reading.promise;
+    await vi.advanceTimersByTimeAsync(3_999);
+    expect(cancel).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await result;
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(stream.locked).toBe(false);
+    expect(transport).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it.each([
+  { policy: "keepalive", stage: "before" },
+  { policy: "keepalive", stage: "during" },
+  { policy: "no-cors", stage: "before" },
+  { policy: "no-cors", stage: "during" },
+])("cancels $policy buffering when aborted $stage reading", async ({ policy, stage }) => {
+  const origin = "https://allowed.example";
+  const controller = new AbortController();
+  const reading = deferred<void>();
+  const pull = vi.fn(() => reading.resolve());
+  const cancel = vi.fn(async () => {
+    throw new Error("fixture cancellation failure");
+  });
+  const stream = new ReadableStream<Uint8Array<ArrayBuffer>>(
+    { pull, cancel },
+    { highWaterMark: 0 },
+  );
+  const blob = new Blob(["fixture"]);
+  vi.spyOn(blob, "stream").mockReturnValue(stream);
+  const transport = vi.fn<typeof guardedFetch>(async () => new Response("unexpected"));
+  const scoped = createOriginScopedFetch(new Set([origin]), {
+    createTransport: () => transport,
+    dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }],
+  });
+  if (stage === "before") controller.abort();
+  const result = expect(
+    scoped(origin, {
+      method: "POST",
+      body: blob,
+      keepalive: policy === "keepalive",
+      mode: policy === "no-cors" ? "no-cors" : "cors",
+      signal: controller.signal,
+    }),
+  ).rejects.toThrow(/timed out|aborted/i);
+  if (stage === "during") {
+    await reading.promise;
+    controller.abort();
+  }
+  await result;
+  expect(pull).toHaveBeenCalledTimes(stage === "before" ? 0 : 1);
+  expect(cancel).toHaveBeenCalledTimes(1);
+  expect(stream.locked).toBe(false);
+  expect(transport).not.toHaveBeenCalled();
+});
+
+it("refuses a failed buffered body without sending a partial request", async () => {
+  const origin = "https://allowed.example";
+  const stream = new ReadableStream<Uint8Array<ArrayBuffer>>({
+    start(controller) {
+      controller.error(new Error("fixture body failure"));
+    },
+  });
+  const blob = new Blob(["fixture"]);
+  vi.spyOn(blob, "stream").mockReturnValue(stream);
+  const transport = vi.fn<typeof guardedFetch>(async () => new Response("unexpected"));
+  const scoped = createOriginScopedFetch(new Set([origin]), {
+    createTransport: () => transport,
+    dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }],
+  });
+  await expect(scoped(origin, { method: "POST", body: blob, keepalive: true })).rejects.toThrow(
+    "fixture body failure",
+  );
+  expect(stream.locked).toBe(false);
+  expect(transport).not.toHaveBeenCalled();
 });
 
 it("checks string, URL and Request inputs and refuses redirects before forwarding credentials", async () => {
@@ -368,4 +537,72 @@ it("refuses malformed origins, userinfo, unsupported schemes and unsafe destinat
   ])
     await expect(scoped(input)).rejects.toThrow();
   expect(transport).not.toHaveBeenCalled();
+});
+
+it.each([
+  "https://fixture-user:fixture-password@allowed.example/private",
+  "https://fixture-user@allowed.example/private",
+  "https://:fixture-password@allowed.example/private",
+  new URL("https://fixture-user:fixture-password@allowed.example/private"),
+  "https://fixture-user:fixture-password@ho st.example/private",
+  "ht!tp://fixture-user:fixture-password@allowed.example/private",
+  "//fixture-user:fixture-password@allowed.example/private",
+])("sanitizes credential-bearing request URL errors (%s)", async (input) => {
+  const transport = vi.fn<typeof guardedFetch>(async () => new Response("unexpected"));
+  const dnsLookup = vi.fn(async () => [{ address: "1.1.1.1", family: 4 as const }]);
+  const scoped = createOriginScopedFetch(new Set(["https://allowed.example"]), {
+    createTransport: () => transport,
+    dnsLookup,
+  });
+  const result = scoped(input);
+  await expect(result).rejects.toThrow(/userinfo|request URL/i);
+  await expect(result).rejects.not.toThrow(/fixture-user|fixture-password/);
+  await expect(result).rejects.not.toHaveProperty("cause");
+  expect(dnsLookup).not.toHaveBeenCalled();
+  expect(transport).not.toHaveBeenCalled();
+});
+
+it("rejects URL userinfo before Request construction reads init", async () => {
+  const readMethod = vi.fn(() => "POST");
+  const scoped = createOriginScopedFetch(new Set(["https://allowed.example"]));
+  await expect(
+    scoped("https://fixture-user:fixture-password@allowed.example", {
+      get method() {
+        return readMethod();
+      },
+    }),
+  ).rejects.toThrow(/userinfo/i);
+  expect(readMethod).not.toHaveBeenCalled();
+});
+
+it.each([
+  "string",
+  "URL",
+  "Request",
+] as const)("sanitizes Request normalization failures for %s inputs", async (kind) => {
+  const origin = "https://allowed.example";
+  const input = kind === "string" ? origin : kind === "URL" ? new URL(origin) : new Request(origin);
+  const transport = vi.fn<typeof guardedFetch>(async () => new Response("unexpected"));
+  const dnsLookup = vi.fn(async () => [{ address: "1.1.1.1", family: 4 as const }]);
+  const scoped = createOriginScopedFetch(new Set([origin]), {
+    createTransport: () => transport,
+    dnsLookup,
+  });
+  const result = scoped(input, {
+    referrer: "ht!tp://fixture-user:fixture-password@referrer.example/private",
+  });
+  await expect(result).rejects.toThrow("invalid binding request");
+  await expect(result).rejects.not.toThrow(/fixture-user|fixture-password/);
+  await expect(result).rejects.not.toHaveProperty("cause");
+  expect(dnsLookup).not.toHaveBeenCalled();
+  expect(transport).not.toHaveBeenCalled();
+});
+
+it("sanitizes malformed binding origin errors", () => {
+  expect(() =>
+    createOriginScopedFetch(new Set(["https://fixture-user:fixture-password@ho st.example"])),
+  ).toThrow("invalid binding origin");
+  expect(() =>
+    createOriginScopedFetch(new Set(["https://fixture-user:fixture-password@ho st.example"])),
+  ).not.toThrow(/fixture-user|fixture-password/);
 });
