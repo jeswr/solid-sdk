@@ -538,3 +538,75 @@ per-commit review remains outstanding. No implementation work or open questions
 remain. No pushes, PRs, branch switches, remote fetches/merges, tracker changes,
 or edits to other checkouts were performed. The earlier pilot/live-server
 verification limits still apply.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Review fix round 5 — joint correspondence, concurrent puts and temporal precision
+
+Review/fix base and affected-gate comparison:
+`5cba7c07d46811847301aeeaedc595f7aa33caa4`; branch remains `lane/sst-vcij`.
+
+- `19211f5b` — `fix(pkg-memory): validate joint collection correspondence`:
+  reuse listing's exact joint graph merge during put validation, then validate
+  the aligned collection's cross-resource anchors. Reject unsupported node
+  mergers before any Pod write, including when a bridging resource was stored
+  first. Seven new cases cover all six insertion orders, both listing orders,
+  mixed inputs, unchanged stored bytes/ETags, and supported independent nodes.
+- `c2f1db49` — `fix(pkg-memory): coordinate collection writers`: conditionally
+  create an empty private `.write-lock`, revalidate while holding it, and release
+  it with its strong creation ETag. Eleven new cases cover concurrent writes
+  through one instance and separate adapters, compatible retries, conflicting
+  retries, intervening completed writers, read/acquisition failures, missing or
+  weak ETags, and failed/conditional lock release. Existing fallback assertions
+  continue to check nanopub writes specifically. Document the lock behavior.
+- `0930afde` — `fix(pkg-memory): reject unsupported temporal precision`:
+  reject temporal constraint operands declaring more than three fractional
+  second digits before delegation to the millisecond evaluator. Nine new cases
+  cover scalar and array operands, timezone offsets, both purposes, direct/RDF
+  policy inputs, supported datatypes, and second-to-millisecond boundaries.
+- Final documentation commit — `docs: record sst-vcij round five validation`:
+  this report, committed last after the required gates.
+
+Conservative choices: reject unsupported node mergers and temporal precision
+rather than inventing a persistent identity mapping or a separate evaluator.
+The collection mutex has no automatic expiry/takeover: a crashed writer or an
+unusable creation ETag leaves the lock in place until owner recovery. Concurrent
+puts receive HTTP 412 and may retry after the active writer finishes. No new
+storage dependency or PodPort API was introduced. No open design questions remain.
+
+### Validation
+
+Commands ran with `/opt/node24/bin` first on `PATH` (Node v24.22.1, pnpm 10.4.1).
+The new regressions reproduced all three findings before their respective fixes:
+all six joint-correspondence orders, all four concurrency cases, and all five
+unsupported temporal-precision cases failed as expected.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/pkg-memory...` | PASS; four dependency-first builds. |
+| `pnpm --filter @jeswr/pkg-memory run lint` | PASS. |
+| `pnpm --filter @jeswr/pkg-memory run build` | PASS. |
+| `pnpm --filter @jeswr/pkg-memory run typecheck` | PASS, including tests. |
+| `pnpm --filter @jeswr/pkg-memory run test` | PASS; 11 files, 626 tests; 100% statements, branches, functions, and lines. |
+| `pnpm run lint:root` (via the affected gate) | PASS. |
+| `TURBO_SCM_BASE=5cba7c07d46811847301aeeaedc595f7aa33caa4 pnpm run gate` | PASS; 8 successful tasks. |
+| `pnpm run gate:full` (first attempt) | FAIL outside this lane; three root agent-layer fixtures exceeded 5000 ms; 683 other root tests passed and 72 tasks succeeded. |
+| `pnpm exec turbo run test:root` | PASS without competing builds; all 686 root tests. |
+| `pnpm run gate:full` (retry) | FAIL outside this lane; 282 successful tasks before `@jeswr/federation-codegen#test` stopped the run (2 failed, 23 passed tests). Passing root tests were cached. |
+| `git diff 5cba7c07d46811847301aeeaedc595f7aa33caa4 --check` | PASS. |
+
+The retry reproduced the previously documented Bookmark target-class and
+ontology-byte namespace mismatches in `tools/federation-codegen/test/generator.test.ts`.
+The tool/vocabulary inputs and timed-out root test/guard are unchanged from this
+round's base, verified with
+`git diff 5cba7c07d46811847301aeeaedc595f7aa33caa4 --exit-code -- tools/federation-codegen packages/solid-federation-vocab test/agent-layers.test.mjs scripts/check-agent-layers.mjs`.
+Sixteen generated web-public callback/client-ID files were removed after the gate.
+
+All three requested findings are implemented with 27 added regression cases.
+No dependency, manifest, or lockfile changed; no dependency policy check was
+needed. Tests use fictional identities and the memory PodPort. `roborev` remains
+unavailable (`command -v roborev` found no executable), so independent automated
+per-commit review remains outstanding. The full workspace gate remains blocked
+by the unrelated codegen tests; no implementation work or open questions remain.
+No pushes, PRs, branch switches, remote fetches/merges, tracker changes, or edits
+to other checkouts were performed. Earlier pilot/live-server verification limits
+still apply.
