@@ -11,7 +11,7 @@ import {
   SPARQ_DECIDE_API,
   sparqPolicyEngine,
 } from "../src/sparq.js";
-import type { Constraint, Policy, Rule } from "../src/types.js";
+import type { Constraint, Intent, Policy, Rule } from "../src/types.js";
 import { AGENT, ODRL } from "../src/types.js";
 import { ACTOR, intent, mandate } from "./helpers.js";
 
@@ -95,6 +95,23 @@ it("sends typed context, explicit process limits, and only this agent's rules", 
       {
         ...policy,
         assignee: ACTOR,
+        permissions: [
+          {
+            type: "permission",
+            action: "read",
+            constraints: [
+              {
+                leftOperand: "purpose",
+                operator: "eq",
+                rightOperand: "urn:purpose",
+                datatype: "http://www.w3.org/2001/XMLSchema#anyURI",
+              },
+              { leftOperand: "count", operator: "eq", rightOperand: 4 },
+              { leftOperand: `${AGENT}binding`, operator: "eq", rightOperand: "gmail" },
+              { leftOperand: "dateTime", operator: "eq", rightOperand: intent().at },
+            ],
+          },
+        ],
         prohibitions: [{ type: "prohibition", action: "read", assignee: "urn:other" }],
       },
       intent({
@@ -102,7 +119,7 @@ it("sends typed context, explicit process limits, and only this agent's rules", 
         attributes: {
           purpose: "urn:purpose",
           count: 4,
-          binding: "gmail",
+          [`${AGENT}binding`]: "gmail",
           "https://example.org/operand": "value",
         },
       }),
@@ -116,9 +133,9 @@ it("sends typed context, explicit process limits, and only this agent's rules", 
     "iri",
     "decimal",
     "string",
-    "string",
     "dateTime",
   ]);
+  expect(doc.request.context).toHaveLength(4);
   expect(
     await e.evaluate(
       { id: "urn:empty" },
@@ -168,7 +185,7 @@ it.each([
   expect(doc.request.context[0].leftOperand).toBe(
     "https://w3id.org/jeswr/odrl-delegation#delegationDepth",
   );
-  expect(doc.request.context[1].leftOperand).toBe(`${AGENT}binding`);
+  expect(doc.request.context).toHaveLength(1);
   const store = await parseRdf(doc.policy.text, "text/turtle");
   const rule = node(store, "urn:example:sparq-envelope")
     .one("https://www.w3.org/2018/credentials#credentialSubject")
@@ -272,6 +289,93 @@ it("filters targets and inherited assignees before removing parties", async () =
 });
 
 const XSD = "http://www.w3.org/2001/XMLSchema#";
+it.each([
+  { key: "count", iri: `${ODRL}count`, trusted: 1, alias: 9 },
+  { key: "count", iri: `${ODRL}count`, trusted: "1", alias: "invalid" },
+  { key: "purpose", iri: `${ODRL}purpose`, trusted: "restricted", alias: "allowed" },
+  {
+    key: "delegationDepth",
+    iri: "https://w3id.org/jeswr/odrl-delegation#delegationDepth",
+    trusted: 1,
+    alias: 9,
+  },
+  {
+    key: "dateTime",
+    iri: `${ODRL}dateTime`,
+    trusted: intent().at,
+    alias: "2099-01-01T00:00:00Z",
+  },
+])("rejects conflicting canonical context aliases: $key", async ({ key, iri, trusted, alias }) => {
+  for (const type of ["permission", "prohibition"] as const) {
+    for (const entries of [
+      [
+        [key, trusted],
+        [iri, alias],
+      ],
+      [
+        [iri, alias],
+        [key, trusted],
+      ],
+    ]) {
+      const run = vi.fn(() => ({ stdout: response(), status: 0 }));
+      const adapter = sparqPolicyEngine({ binary: "test", run });
+      const p: Policy = {
+        id: policy.id,
+        permissions: policy.permissions,
+        [type === "permission" ? "permissions" : "prohibitions"]: [
+          {
+            type,
+            action: "read",
+            constraints: [{ leftOperand: key, operator: "eq", rightOperand: trusted }],
+          },
+        ],
+      };
+      const request = intent({ action: "read", attributes: Object.fromEntries(entries) });
+      expect(await adapter.evaluate(p, request)).toEqual({ effect: "indeterminate" });
+      expect(await evaluateIntent({ ...mandate(), autonomous: p }, request, adapter)).toEqual({
+        decision: "confirm-required",
+        reason: "indeterminate",
+      });
+      expect(run).not.toHaveBeenCalled();
+    }
+  }
+});
+
+it.each<{ attributes: NonNullable<Intent["attributes"]>; expected: string }>([
+  { attributes: { count: "2", [`${ODRL}count`]: "2" }, expected: "permit" },
+  { attributes: { [`${ODRL}count`]: "2" }, expected: "permit" },
+  { attributes: { [`${ODRL}count`]: "invalid" }, expected: "indeterminate" },
+])("validates canonical context once and emits one slot: %j", async ({ attributes, expected }) => {
+  const run = vi.fn((_binary: string, _args: ProcessOptions) => ({
+    stdout: response(),
+    status: 0,
+  }));
+  const p: Policy = {
+    ...policy,
+    permissions: [
+      {
+        type: "permission",
+        action: "read",
+        constraints: [{ leftOperand: "count", operator: "eq", rightOperand: 2 }],
+      },
+    ],
+  };
+  expect(
+    await sparqPolicyEngine({ binary: "test", run }).evaluate(
+      p,
+      intent({ action: "read", attributes }),
+    ),
+  ).toEqual({ effect: expected });
+  if (expected === "indeterminate") expect(run).not.toHaveBeenCalled();
+  else {
+    expect(run).toHaveBeenCalledOnce();
+    const doc = JSON.parse((run.mock.calls[0] as [string, ProcessOptions])[1].input);
+    expect(doc.request.context).toEqual([
+      { leftOperand: `${ODRL}count`, value: { type: "decimal", value: 2 } },
+    ]);
+  }
+});
+
 it.each([
   ...["count", "delegationDepth", `${AGENT}spendPerDay`, `${AGENT}sendsPerDay`, "purpose"].flatMap(
     (leftOperand) => [
@@ -627,7 +731,11 @@ it.each<{
     }
     expect(
       doc.request.context.find((c: { leftOperand: string }) => c.leftOperand === `${ODRL}dateTime`),
-    ).toEqual({ leftOperand: `${ODRL}dateTime`, value: { type: "dateTime", value: request.at } });
+    ).toEqual(
+      constraint.leftOperand === "dateTime"
+        ? { leftOperand: `${ODRL}dateTime`, value: { type: "dateTime", value: request.at } }
+        : undefined,
+    );
     expect(p).toEqual(original);
   }
 });

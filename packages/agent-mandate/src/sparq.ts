@@ -13,7 +13,6 @@ import {
   AGENT,
   type Constraint,
   type Effect,
-  type Intent,
   ODRL,
   type PolicyEngine,
   type Rule,
@@ -116,19 +115,25 @@ export function sparqPolicyEngine(
               options.timeoutMs > 30000))
         )
           return { effect: "indeterminate" };
-        const attributes: NonNullable<Intent["attributes"]> = {
+        const attributes = new Map<string, unknown>();
+        for (const [key, value] of Object.entries({
           ...request.attributes,
           dateTime: request.at,
-        };
+        })) {
+          const left = leftOperandIri(key);
+          if (attributes.has(left) && !Object.is(attributes.get(left), value))
+            return { effect: "indeterminate" };
+          attributes.set(left, value);
+        }
         // The shared evaluator matches prohibitions independently of their duties.
         const comparable = (r: Rule) =>
           (r.type === "prohibition" || (r.duties ?? []).length === 0) &&
           supportedPolicy({ id: policy.id, permissions: [r] }) &&
           (r.constraints ?? []).every(
             (c) =>
-              !Array.isArray(attributes[c.leftOperand]) &&
-              knownOperand(c, attributes[c.leftOperand]) &&
-              representableSet(c, attributes[c.leftOperand]),
+              !Array.isArray(attributes.get(leftOperandIri(c.leftOperand))) &&
+              knownOperand(c, attributes.get(leftOperandIri(c.leftOperand))) &&
+              representableSet(c, attributes.get(leftOperandIri(c.leftOperand))),
           );
         const rules = [...(policy.permissions ?? []), ...(policy.prohibitions ?? [])];
         const unresolved =
@@ -182,18 +187,11 @@ export function sparqPolicyEngine(
             }),
           },
         });
-        const context = Object.entries(attributes).map(([leftOperand, value]) => {
-          const type =
-            contextTypes.get(leftOperandIri(leftOperand)) ??
-            (leftOperand === "dateTime"
-              ? "dateTime"
-              : typeof value === "number"
-                ? "decimal"
-                : typeof value === "string" && value.includes(":")
-                  ? "iri"
-                  : "string");
+        // Only validated rule operands reach the backend, with one slot per canonical IRI.
+        const context = [...contextTypes].map(([leftOperand, type]) => {
+          const value = attributes.get(leftOperand);
           return {
-            leftOperand: leftOperandIri(leftOperand),
+            leftOperand,
             value: { type, value: type === "decimal" ? Number(value) : value },
           };
         });
