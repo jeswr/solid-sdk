@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { parseRdf } from "@jeswr/fetch-rdf";
 import { validateWacAcl } from "@jeswr/solid-chat-interop";
 import { DataFactory } from "n3";
+import { readAclRdf } from "./acl-rdf.js";
 import { assertNoRedirect } from "./import.js";
 import { canonicalContainer, isWithinBase } from "./safe-iri.js";
 
@@ -69,7 +69,7 @@ export async function discoverWacAcl(
     if (!existing.ok) throw new Error(`ACL read failed: HTTP ${existing.status}`);
     const type = (existing.headers.get("content-type") ?? "").split(";")[0]?.trim().toLowerCase();
     if (type !== "text/turtle") throw new Error("Unsupported ACL content type");
-    const dataset = await parseRdf(await existing.text(), type, { baseIRI: acl.href });
+    const dataset = await readAclRdf(existing, acl.href);
     // The shared validator does not inspect this legacy inheritance scope.
     // Refuse it anywhere in the document before replacing access-bearing data.
     if (

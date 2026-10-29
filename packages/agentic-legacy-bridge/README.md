@@ -42,6 +42,9 @@ Persistence (`importInbound`) is **owner-private** (fail-closed ACL written firs
 The default privacy gate requires an existing container with a unique advertised WAC ACL
 inside that container. It reads and validates that ACL before replacing it; missing or
 ambiguous links, ACP, shared ACLs, unsafe URLs and read/write failures abort before content.
+ACL reads stream through a 1 MiB byte cap and a Turtle parser capped at 16,384 input quads
+(including duplicates), 1 MiB of expanded quad terms, 64 nesting levels, and a shared 1 MiB
+term-allocation/work budget. Exhausting a budget cancels the body and aborts before any write.
 
 ## The metadata protocol (M2.6 — deterministic first, LLM last)
 
