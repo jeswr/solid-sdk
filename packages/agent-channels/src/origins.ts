@@ -60,7 +60,7 @@ export interface OriginFetchOptions {
 export function createOriginScopedFetch(
   origins: ReadonlySet<string>,
   options: OriginFetchOptions = {},
-): typeof guardedFetch {
+): ReturnType<typeof createGuardedFetch> {
   const allowed = new Set(origins);
   for (const origin of allowed) {
     let url: URL;

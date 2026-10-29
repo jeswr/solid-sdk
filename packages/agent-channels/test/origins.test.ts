@@ -8,7 +8,7 @@ import { createHash } from "crypto";
 import { createServer } from "http";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer uses bare builtins
 import { inspect } from "util";
-import { expect, it, vi } from "vitest";
+import { expect, expectTypeOf, it, vi } from "vitest";
 import { createOriginScopedFetch, type OriginFetchOptions } from "../src/origins.js";
 
 function deferred<T>() {
@@ -18,6 +18,12 @@ function deferred<T>() {
   });
   return { promise, resolve };
 }
+
+it("exposes the supported fetch signature without per-request guard policies", () => {
+  expectTypeOf<ReturnType<typeof createOriginScopedFetch>>().toEqualTypeOf<
+    ReturnType<typeof createGuardedFetch>
+  >();
+});
 
 it("refuses an undeclared local origin before connecting, and permits listed loopback only in tests", async () => {
   let requests = 0;
