@@ -32,11 +32,9 @@ const secretPatterns = [
     "Authorization header",
     /\bAuthorization["']?\s*:\s*["'`]?(?:(?:Bearer|DPoP|Basic)\s+)?([^\s"'`]+)/gi,
   ],
-  [
-    "environment secret",
-    /^[\t ]*(?:export[\t ]+)?(?=[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY))[A-Z_][A-Z0-9_]*[\t ]*=[\t ]*["']?([^\s"'`#]+)/gm,
-  ],
 ];
+const environmentAssignments =
+  /^[\t ]*(?:export[\t ]+)?(?=[A-Z0-9_]*(?:TOKEN|SECRET|PASSWORD|KEY))[A-Z_][A-Z0-9_]*[\t ]*=[\t ]*(?:"((?:\\[\s\S]|[^"\\])*)"|'((?:\\[\s\S]|[^'\\])*)'|([^\s"'`#]+))/gm;
 
 function isPlaceholder(value) {
   return /^(?:\$|<|\{|\[|\.\.\.|…|(?:your|example|placeholder|redacted|dummy|test)(?:[-_]|$))/i.test(
@@ -54,6 +52,12 @@ function scanSecrets(text, report) {
       if (match[1] && isPlaceholder(match[1])) continue;
       report(category, match.index);
     }
+  }
+  for (const match of text.matchAll(environmentAssignments)) {
+    // Quotes may contain whitespace, comments, and escaped quotes. Classify the
+    // complete value, not the first unquoted-looking fragment of the assignment.
+    const value = (match[1] ?? match[2] ?? match[3]).trim();
+    if (value && !isPlaceholder(value)) report("environment secret", match.index);
   }
 }
 

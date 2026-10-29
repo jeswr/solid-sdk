@@ -1060,6 +1060,63 @@ describe("skill validation", () => {
     expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
   });
 
+  it.each([
+    'TOKEN=" fixture-credential-value"',
+    "PASSWORD='\tfixture credential value'",
+    'export API_KEY = " #fixture credential value " # comment',
+    "  SECRET='\nfixture-credential-value\n'",
+    'TOKEN=" \\"fixture-credential-value\\" "',
+  ])("scans complete quoted environment assignments: %s", (assignment) => {
+    const root = fixture();
+    const path = "skills/alpha/references/guide.md";
+    put(root, path, `# Guide\n${assignment}\n`);
+    const indexPath = join(root, "skills/INDEX.md");
+    for (const previousIndex of [undefined, "Previously generated index\n"]) {
+      if (previousIndex !== undefined) writeFileSync(indexPath, previousIndex);
+      for (const args of [[], ["--write"]]) {
+        const result = cli(root, ...args);
+        expect(result.status).toBe(1);
+        expect(result.stderr.trim()).toBe(
+          `${path}: line 2: possible environment secret (value omitted)`,
+        );
+        expect(result.stdout).toBe("");
+        if (previousIndex === undefined) expect(existsSync(indexPath)).toBe(false);
+        else expect(readFileSync(indexPath, "utf8")).toBe(previousIndex);
+      }
+    }
+  });
+
+  it.each([
+    'TOKEN="  your-token  "',
+    "SECRET='\t[REDACTED] '",
+    'PASSWORD=" <password> "',
+    'API_KEY=""',
+    "TOKEN=' \t '",
+    "TOKEN= # no value",
+    'TOKEN="your-token" # fixture-credential-value',
+  ])("applies placeholder and empty-value exemptions after parsing: %s", (assignment) => {
+    const root = fixture();
+    put(root, "skills/alpha/references/guide.md", `${assignment}\n`);
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it("scans quoted assignments in decoded metadata and non-Markdown companions", () => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({
+        description: JSON.stringify('Use when testing.\nTOKEN=" fixture-credential-value"'),
+      }),
+    );
+    put(root, "skills/alpha/assets/config.env", "PASSWORD=' fixture credential value'\n");
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: decoded metadata: possible environment secret (value omitted)",
+      "skills/alpha/assets/config.env: line 1: possible environment secret (value omitted)",
+    ]);
+    expect(existsSync(join(root, "skills/INDEX.md"))).toBe(false);
+  });
+
   it.each(
     secrets,
   )("rejects YAML-escaped %s before creating or replacing the index", (category, value) => {
