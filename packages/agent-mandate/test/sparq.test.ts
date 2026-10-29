@@ -244,7 +244,7 @@ it.each([
   const doc = JSON.parse(input);
   expect(doc.request.action).toBe(`${ODRL}use`);
   expect(doc.request.context[0].leftOperand).toBe(
-    "https://w3id.org/jeswr/odrl-delegation#delegationDepth",
+    "https://jeswr.org/ns/odrl-delegation#delegationDepth",
   );
   expect(doc.request.context).toHaveLength(1);
   const store = await parseRdf(doc.policy.text, "text/turtle");
@@ -254,7 +254,7 @@ it.each([
     .one(`${ODRL}permission`);
   expect(rule.iri(`${ODRL}action`)).toBe(`${ODRL}use`);
   expect(rule.one(`${ODRL}constraint`).iri(`${ODRL}leftOperand`)).toBe(
-    "https://w3id.org/jeswr/odrl-delegation#delegationDepth",
+    "https://jeswr.org/ns/odrl-delegation#delegationDepth",
   );
 });
 
@@ -350,10 +350,29 @@ it("filters targets and inherited assignees before removing parties", async () =
 });
 
 const XSD = "http://www.w3.org/2001/XMLSchema#";
-it.each([
+it.each<{
+  key: string;
+  iri: string;
+  trusted: string | number;
+  alias: string | number;
+  operand?: string;
+}>([
   { key: "count", iri: `${ODRL}count`, trusted: 1, alias: 9 },
   { key: "count", iri: `${ODRL}count`, trusted: "1", alias: "invalid" },
   { key: "purpose", iri: `${ODRL}purpose`, trusted: "restricted", alias: "allowed" },
+  {
+    key: "delegationDepth",
+    iri: "https://jeswr.org/ns/odrl-delegation#delegationDepth",
+    trusted: 1,
+    alias: 9,
+  },
+  {
+    key: "https://jeswr.org/ns/odrl-delegation#delegationDepth",
+    iri: "https://w3id.org/jeswr/odrl-delegation#delegationDepth",
+    operand: "delegationDepth",
+    trusted: 1,
+    alias: 9,
+  },
   {
     key: "delegationDepth",
     iri: "https://w3id.org/jeswr/odrl-delegation#delegationDepth",
@@ -366,7 +385,13 @@ it.each([
     trusted: intent().at,
     alias: "2099-01-01T00:00:00Z",
   },
-])("rejects conflicting canonical context aliases: $key", async ({ key, iri, trusted, alias }) => {
+])("rejects conflicting canonical context aliases: $key", async ({
+  key,
+  iri,
+  trusted,
+  alias,
+  operand = key,
+}) => {
   for (const type of ["permission", "prohibition"] as const) {
     for (const entries of [
       [
@@ -387,7 +412,7 @@ it.each([
           {
             type,
             action: "read",
-            constraints: [{ leftOperand: key, operator: "eq", rightOperand: trusted }],
+            constraints: [{ leftOperand: operand, operator: "eq", rightOperand: trusted }],
           },
         ],
       };
@@ -435,6 +460,45 @@ it.each<{ attributes: NonNullable<Intent["attributes"]>; expected: string }>([
       { leftOperand: `${ODRL}count`, value: { type: "decimal", value: 2 } },
     ]);
   }
+});
+
+it.each<NonNullable<Intent["attributes"]>>([
+  { "https://w3id.org/jeswr/odrl-delegation#delegationDepth": 1 },
+  { "https://jeswr.org/ns/odrl-delegation#delegationDepth": 1 },
+  {
+    delegationDepth: 1,
+    "https://w3id.org/jeswr/odrl-delegation#delegationDepth": 1,
+    "https://jeswr.org/ns/odrl-delegation#delegationDepth": 1,
+  },
+])("emits one canonical context slot for delegation-depth aliases: %j", async (attributes) => {
+  const run = vi.fn((_binary: string, _args: ProcessOptions) => ({
+    stdout: response(),
+    status: 0,
+  }));
+  const p: Policy = {
+    id: "urn:policy",
+    permissions: [
+      {
+        type: "permission",
+        action: "read",
+        constraints: [{ leftOperand: "delegationDepth", operator: "eq", rightOperand: 1 }],
+      },
+    ],
+  };
+  expect(
+    await sparqPolicyEngine({ binary: "test", run }).evaluate(
+      p,
+      intent({ action: "read", attributes }),
+    ),
+  ).toEqual({ effect: "permit" });
+  expect(run).toHaveBeenCalledOnce();
+  const doc = JSON.parse((run.mock.calls[0] as [string, ProcessOptions])[1].input);
+  expect(doc.request.context).toEqual([
+    {
+      leftOperand: "https://jeswr.org/ns/odrl-delegation#delegationDepth",
+      value: { type: "decimal", value: 1 },
+    },
+  ]);
 });
 
 it.each([

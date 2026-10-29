@@ -7,7 +7,6 @@ import {
   digestQuads,
   readValidCredential,
   STATUS,
-  SVC,
   VC,
   type VerifiableCredential,
 } from "@jeswr/solid-vc";
@@ -25,6 +24,9 @@ import {
   writeProof,
 } from "./rdf.js";
 import { AGENT, ODRL } from "./types.js";
+
+// solid-vc's phase-1 builder keeps this wire type for existing signed payloads.
+const MANDATE_CREDENTIAL_TYPE = "https://w3id.org/jeswr/solid-vc#AgentAuthorizationCredential";
 
 /** Serialize a single-proof mandate as application/trig; the historical export name is retained. */
 export async function mandateToTurtle(vc: VerifiableCredential): Promise<string> {
@@ -47,7 +49,7 @@ export async function parseMandateCredential(
       !result.valid ||
       !validInstant(result.credential.validFrom) ||
       !validInstant(result.credential.validUntil) ||
-      !result.credential.types.includes(`${SVC}AgentAuthorizationCredential`)
+      !result.credential.types.includes(MANDATE_CREDENTIAL_TYPE)
     )
       return undefined;
     const meta = result.credential;

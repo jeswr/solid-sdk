@@ -111,7 +111,7 @@ it("preserves ACL, delegation and extension vocabulary in signed mandate TriG", 
     [...store].filter((q) => q.predicate.value === `${ODRL}leftOperand`).map((q) => q.object.value),
   ).toEqual(
     expect.arrayContaining([
-      "https://w3id.org/jeswr/odrl-delegation#delegationDepth",
+      "https://jeswr.org/ns/odrl-delegation#delegationDepth",
       `${AGENT}binding`,
     ]),
   );

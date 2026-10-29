@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 
+import { IRI_TO_LEFT_OPERAND } from "@jeswr/solid-odrl";
 import { credentialToRdf } from "@jeswr/solid-vc";
 import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 // biome-ignore lint/style/useNodejsImportProtocol: the agent import guard requires bare module names
@@ -125,7 +126,12 @@ export function sparqPolicyEngine(
           ...request.attributes,
           dateTime: request.at,
         })) {
-          const left = leftOperandIri(key);
+          // Normalize known read aliases only in evaluation context. The signed
+          // codec preserves explicit IRIs; both spellings must share one slot here.
+          const operand = Object.hasOwn(IRI_TO_LEFT_OPERAND, key)
+            ? (IRI_TO_LEFT_OPERAND[key] as string)
+            : key;
+          const left = leftOperandIri(operand);
           if (attributes.has(left) && !Object.is(attributes.get(left), value))
             return { effect: "indeterminate" };
           attributes.set(left, value);
