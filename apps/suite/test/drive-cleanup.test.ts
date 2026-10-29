@@ -25,21 +25,23 @@ it.each([
   ).rejects.toMatchObject({ kind: "missing-validator" });
   expect(remove).not.toHaveBeenCalled();
 });
-it("cleanup uses a new validator only after reading and checking the matching graph", async () => {
+it("cleanup retains a replacement even when its graph still matches", async () => {
   const data = await parseRdf(`<${url}> <https://example.test/note> "ours".`, "text/turtle");
   const remove = vi
     .fn()
     .mockRejectedValueOnce(new DriveError("conflict", 412, url))
     .mockResolvedValue(undefined);
   const read = vi.fn(async () => ({ content: data, etag: '"new"' }));
-  await discardVersion({
-    url,
-    captured: { content: data, etag: '"old"' },
-    read,
-    owns: (current) => ownsEmptyContainer(url, data, current),
-    remove,
-  });
-  expect(remove.mock.calls).toEqual([['"old"'], ['"new"']]);
+  await expect(
+    discardVersion({
+      url,
+      captured: { content: data, etag: '"old"' },
+      read,
+      owns: (current) => ownsEmptyContainer(url, data, current),
+      remove,
+    }),
+  ).rejects.toMatchObject({ status: 412 });
+  expect(remove.mock.calls).toEqual([['"old"']]);
   expect(read).toHaveBeenCalledOnce();
 });
 it("cleanup refuses foreign RDF after 412 and never deletes with its newer validator", async () => {
@@ -98,7 +100,7 @@ it("cleanup stops under continuous validator churn", async () => {
       remove,
     }),
   ).rejects.toMatchObject({ status: 412 });
-  expect(remove).toHaveBeenCalledTimes(3);
+  expect(remove).toHaveBeenCalledTimes(1);
 });
 it("graph inclusion checks merged data even when the survivor also has its own RDF", async () => {
   const data = await parseRdf(

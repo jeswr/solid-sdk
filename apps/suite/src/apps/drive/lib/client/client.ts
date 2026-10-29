@@ -41,6 +41,7 @@ import {
   Compensation,
   checkIdentity,
   commitIrreversible,
+  type ResourceIdentity,
 } from "./commit";
 import { deletionControl, isDeletionFailure } from "./deletion";
 import { protectionLedger } from "./protection-ledger";
@@ -138,18 +139,24 @@ export interface DriveClient {
     to: string,
     policy: MovePolicy,
     options?: {
+      /** Source version approved by the caller; never refreshed during retries. */
+      ifMatch?: string;
       beforeDelete?: () => Promise<void>;
       privateOwner?: string;
       archiveContainers?: (archive: string) => Promise<void>;
     },
   ): Promise<MoveResult>;
-  /** Non-recursive `ifMatch` deletes exactly that version without refreshing its validator. */
+  /** `ifMatch` binds files and recursive roots to the approved version. */
   remove(
     url: string,
     options?: {
       recursive?: boolean;
       ifMatch?: string;
-      commit?: CommitChecks & Pick<CommitEffects, "disarm">;
+      commit?: CommitChecks &
+        Pick<CommitEffects, "disarm"> & {
+          /** Pre-hydrated survivor identities checked immediately before DELETE. */
+          readonly survivors?: readonly ResourceIdentity[];
+        };
     },
   ): Promise<void>;
   /** Re-read durable deletion guards on load or Retry without sending DELETE. */
@@ -240,6 +247,7 @@ interface CreatedResource {
   readonly url: string;
   readonly source: SourceSnapshot;
   etag: string | undefined;
+  membershipVersion: number;
   data?: Store;
 }
 
@@ -357,6 +365,22 @@ export function createSolidDriveClient(options: {
   // Scoped to this authenticated client; listings retain their declared metadata for HEAD users.
   const resources = new Map<string, Resource>();
   const responseTypes = new Map<string, string>();
+  // Only our committed descendant mutations can explain a container ETag change.
+  const membershipVersions = new Map<string, number>();
+  const membershipVersion = (url: string) => membershipVersions.get(url) ?? 0;
+  const changedParents = (url: string) => {
+    for (let parent = parentOf(url); parent; parent = parentOf(parent))
+      membershipVersions.set(parent, membershipVersion(parent) + 1);
+  };
+  const captureResource = (resource: CreatedResource, etag: string | undefined) => {
+    resource.etag = etag;
+    resource.membershipVersion = membershipVersion(resource.url);
+  };
+  const checkContainerVersion = (resource: CreatedResource, etag: string | undefined) => {
+    validator(resource.url, resource.etag);
+    if (etag !== resource.etag && membershipVersion(resource.url) === resource.membershipVersion)
+      throw new DriveError("conflict", 412, resource.url);
+  };
   const rememberType = (url: string, headers: Headers) => {
     const type = headers.get("content-type");
     if (type) responseTypes.set(url, type);
@@ -405,6 +429,8 @@ export function createSolidDriveClient(options: {
   };
 
   const stat: DriveClient["stat"] = async (url, opts) => {
+    // Hydrate before HEAD: callers use this as their final HTTP identity check.
+    const protectedState = await protection(url);
     const response = await ensureOk(
       await http(url, {
         method: "HEAD",
@@ -428,7 +454,7 @@ export function createSolidDriveClient(options: {
       ...(length !== null && !isFolder ? { size: Number(length) } : {}),
       ...(modified ? { modified: new Date(modified) } : {}),
       ...(etag ? { etag } : {}),
-      ...(await protection(url)),
+      ...protectedState,
     };
   };
 
@@ -468,7 +494,7 @@ export function createSolidDriveClient(options: {
     creating = false,
     verifyAccess?: () => Promise<void>,
     scope: AccessScope = new Set(),
-    effects: CommitEffects & Pick<CommitChecks, "identityChecks"> = {},
+    effects: Omit<CommitEffects, "onCommit"> & Pick<CommitChecks, "identityChecks"> = {},
   ): Promise<Response> => {
     for (
       let target: string | undefined = url;
@@ -524,6 +550,7 @@ export function createSolidDriveClient(options: {
     const ifMatch = headers.get("if-match");
     response = await commitIrreversible({
       ...effects,
+      onCommit: () => changedParents(url),
       arm: [...(binding ? [compensation] : []), ...(effects.arm ?? [])],
       rechecks: [
         async () => {
@@ -532,17 +559,18 @@ export function createSolidDriveClient(options: {
           await verifyAccess?.();
         },
       ],
-      identityChecks: [
-        ...(ifMatch
-          ? [
-              () =>
-                checkIdentity(http, url, validator(url, ifMatch), (status, url) =>
-                  errorFor(status === 404 || status === 410 ? 412 : status, url),
-                ),
-            ]
-          : []),
-        ...(effects.identityChecks ?? []),
-      ],
+      identityChecks: effects.identityChecks ?? [],
+      finalIdentities: ifMatch
+        ? [
+            {
+              http,
+              url,
+              etag: validator(url, ifMatch),
+              error: (status, url) =>
+                errorFor(status === 404 || status === 410 ? 412 : status, url),
+            },
+          ]
+        : [],
       step: async () =>
         ensureOk(await http(url, { ...init, headers: Object.fromEntries(headers) }), url),
     });
@@ -564,7 +592,7 @@ export function createSolidDriveClient(options: {
     policy: AncestorPolicy,
     verifyAccess?: () => Promise<void>,
     scope?: AccessScope,
-    effects?: CommitEffects,
+    effects?: Omit<CommitEffects, "onCommit">,
   ): Promise<{ etag?: string }> => {
     requirePolicy(policy, ["protect-ancestors"]);
     const headers: Record<string, string> = { "content-type": opts.contentType };
@@ -614,7 +642,7 @@ export function createSolidDriveClient(options: {
       }),
     error: errorFor,
     owner: () => owner,
-    deleteVersion: (url, etag) => deletion.remove(url, etag),
+    deleteVersion: (url, etag) => deleteVersion(url, etag),
     ...(options.onPrivateFolder ? { onPrivateFolder: options.onPrivateFolder } : {}),
     ...(options.onProtectionChange ? { onProtectionChange: options.onProtectionChange } : {}),
   });
@@ -683,9 +711,16 @@ export function createSolidDriveClient(options: {
     url: string,
     etag: string | undefined,
     recovery?: string,
-    commit: CommitChecks & CommitEffects = {},
+    commit: CommitChecks &
+      CommitEffects & { readonly survivors?: readonly ResourceIdentity[] } = {},
   ) => {
-    await deletion.remove(url, validator(url, etag), recovery, commit);
+    await deletion.remove(url, validator(url, etag), recovery, {
+      ...commit,
+      onCommit: () => {
+        changedParents(url);
+        commit.onCommit?.();
+      },
+    });
     resources.delete(url);
     responseTypes.delete(url);
   };
@@ -698,12 +733,22 @@ export function createSolidDriveClient(options: {
     retired: (url: string) => void,
     identityCheck: (source: SourceSnapshot) => Promise<void>,
     disarm: (url: string) => readonly Compensation[],
+    survivors: readonly ResourceIdentity[] = [],
   ) => {
     await verifyCopy(source);
     let etag = source.etag;
     if (source.children?.length) {
       for (const child of source.children)
-        await deleteSnapshot(child, deleted, verifyCopy, recovery, retired, identityCheck, disarm);
+        await deleteSnapshot(
+          child,
+          deleted,
+          verifyCopy,
+          recovery,
+          retired,
+          identityCheck,
+          disarm,
+          survivors,
+        );
       // Our own child deletions change a container's ETag. Read its new empty
       // representation, then conditionally delete it. Never walk new members.
       const current = await listing(source.url);
@@ -726,6 +771,7 @@ export function createSolidDriveClient(options: {
           await identityCheck(source);
         },
       ],
+      survivors,
       disarm: disarm(source.url),
       onCommit: () => {
         deleted.push(source.url);
@@ -746,7 +792,13 @@ export function createSolidDriveClient(options: {
     const policy =
       source.targetAccess ?? (source.access.status === "known" ? source.access.policy : undefined);
     if (source.children) {
-      const resource: CreatedResource = { url: to, source, etag: undefined, data: new Store() };
+      const resource: CreatedResource = {
+        url: to,
+        source,
+        etag: undefined,
+        data: new Store(),
+        membershipVersion: membershipVersion(to),
+      };
       let decision: ContainerPolicy;
       if (policy) decision = { kind: "archived", acl: policy, from: source.url };
       else if (source.demo) decision = { kind: "inherit-verified" };
@@ -770,7 +822,7 @@ export function createSolidDriveClient(options: {
         to,
         decision,
         (response) => {
-          resource.etag = response.headers.get("etag") ?? undefined;
+          captureResource(resource, response.headers.get("etag") ?? undefined);
           created.push(resource);
         },
         undefined,
@@ -793,7 +845,7 @@ export function createSolidDriveClient(options: {
           undefined,
           { arm: [compensation] },
         );
-        resource.etag = saved.etag;
+        captureResource(resource, saved.etag);
         resource.data = data;
         await verifyAccess();
         const current = await listing(to);
@@ -813,7 +865,12 @@ export function createSolidDriveClient(options: {
       let placeholder: CreatedResource | undefined;
       if (!source.demo) {
         if (!policy) await bindAccess(to);
-        const resource: CreatedResource = { url: to, source, etag: undefined };
+        const resource: CreatedResource = {
+          url: to,
+          source,
+          etag: undefined,
+          membershipVersion: membershipVersion(to),
+        };
         const result = await provision.file(
           to,
           policy,
@@ -824,7 +881,7 @@ export function createSolidDriveClient(options: {
               "if-none-match": "*",
             }),
           (response) => {
-            resource.etag = response.headers.get("etag") ?? undefined;
+            captureResource(resource, response.headers.get("etag") ?? undefined);
             created.push(resource);
           },
           verifyAccess,
@@ -847,8 +904,14 @@ export function createSolidDriveClient(options: {
         undefined,
         { arm: [compensation] },
       );
-      if (placeholder) placeholder.etag = result.etag;
-      else created.push({ url: to, source, etag: result.etag });
+      if (placeholder) captureResource(placeholder, result.etag);
+      else
+        created.push({
+          url: to,
+          source,
+          etag: result.etag,
+          membershipVersion: membershipVersion(to),
+        });
       await verifyAccess();
     }
   };
@@ -873,9 +936,14 @@ export function createSolidDriveClient(options: {
       try {
         if (resource.url.endsWith("/")) {
           const expected = resource.data as Store;
+          validator(resource.url, resource.etag);
+          // Our completed child cleanup changed membership. Capture the empty
+          // representation once; a subsequent 412 must never refresh its identity.
+          const current = await listing(resource.url);
+          checkContainerVersion(resource, current.etag);
           await discardVersion({
             url: resource.url,
-            captured: { content: expected, etag: resource.etag },
+            captured: { content: current.dataset, etag: current.etag },
             read: async () => {
               const current = await listing(resource.url);
               return { content: current.dataset, etag: current.etag };
@@ -912,6 +980,28 @@ export function createSolidDriveClient(options: {
       }
     }
     return { retained, pending };
+  };
+
+  /** Archived grants describe the original; the recovery copy is deliberately private. */
+  const recoveryPolicy = async (url: string, own: AccessState): Promise<OwnAccess | undefined> => {
+    const archiveUrl = policyArchiveOf(url);
+    if (!archiveUrl) return undefined;
+    const response = await http(archiveUrl);
+    if (response.status === 404) return undefined;
+    if (!response.ok) throw new DriveAccessError(response.status);
+    const saved = ((await response.json()) as Record<string, ArchivedAcl | null>)[url];
+    if (saved === undefined) throw new DriveAccessError("Missing archived policy");
+    if (saved === null)
+      return requireAccess(own.status === "known" ? own : await access.effective(url), url);
+    const acl = own.status === "known" ? own.policy.url : saved.acl;
+    return {
+      url: acl,
+      etag: "",
+      dataset: relocate(await parseRdf(saved.turtle, "text/turtle", { baseIRI: saved.acl }), [
+        [saved.acl, acl],
+        [saved.resource, url],
+      ]),
+    };
   };
 
   const preparePolicies = async (
@@ -968,42 +1058,9 @@ export function createSolidDriveClient(options: {
         );
         await verifyAccess?.();
       } else {
-        const archiveUrl = policyArchiveOf(from);
-        if (archiveUrl) {
-          const response = await http(archiveUrl);
-          if (!response.ok && response.status !== 404) throw new DriveAccessError(response.status);
-          if (response.ok) {
-            const archive = (await response.json()) as Record<
-              string,
-              { resource: string; acl: string; turtle: string } | null
-            >;
-            for (const node of snapshots(source)) {
-              const saved = archive[node.url];
-              if (saved === undefined) throw new DriveAccessError("Missing archived policy");
-              node.targetAccess =
-                saved === null
-                  ? requireAccess(
-                      node.access.status === "known"
-                        ? node.access
-                        : await access.effective(node.url),
-                      node.url,
-                    )
-                  : {
-                      url: node.access.status === "known" ? node.access.policy.url : saved.acl,
-                      etag: "",
-                      dataset: relocate(
-                        await parseRdf(saved.turtle, "text/turtle", { baseIRI: saved.acl }),
-                        [
-                          [
-                            saved.acl,
-                            node.access.status === "known" ? node.access.policy.url : saved.acl,
-                          ],
-                          [saved.resource, node.url],
-                        ],
-                      ),
-                    };
-            }
-          }
+        for (const node of snapshots(source)) {
+          const saved = await recoveryPolicy(node.url, node.access);
+          if (saved) node.targetAccess = saved;
         }
       }
     }
@@ -1035,7 +1092,13 @@ export function createSolidDriveClient(options: {
       ? undefined
       : (source.targetAccess ?? requireAccess(effective, from));
     let created = false;
-    const resource: CreatedResource = { url: to, source, etag: undefined, data: new Store() };
+    const resource: CreatedResource = {
+      url: to,
+      source,
+      etag: undefined,
+      data: new Store(),
+      membershipVersion: membershipVersion(to),
+    };
     let previous: Store | undefined;
     const compensation = new Compensation(async () => {
       // An ambiguous recovery DELETE may have committed despite response loss.
@@ -1048,14 +1111,16 @@ export function createSolidDriveClient(options: {
         const cleanup = await rollback([resource], binding);
         if (cleanup.pending) throw cleanup.pending;
       } else if (previous && resource.etag) {
-        // Restored children change the container validator too. Accept a newer
-        // validator only while its application RDF is exactly our merged graph;
-        // preserve the survivor, its membership and any foreign metadata edits.
+        // Our restored children changed membership. Hydrate the resulting
+        // representation before committing the undo; a refusal never rebases it.
         const body = await serialize([...previous]);
         const expected = resource.data as Store;
+        validator(to, resource.etag);
+        const current = await listing(to);
+        checkContainerVersion(resource, current.etag);
         await discardVersion({
           url: to,
-          captured: { content: expected, etag: resource.etag },
+          captured: { content: containerData(current.dataset, to), etag: current.etag },
           read: async () => {
             const current = await listing(to);
             return { content: containerData(current.dataset, to), etag: current.etag };
@@ -1088,7 +1153,7 @@ export function createSolidDriveClient(options: {
         to,
         policy ? { kind: "archived", acl: policy, from } : { kind: "inherit-verified" },
         (response) => {
-          resource.etag = response.headers.get("etag") ?? undefined;
+          captureResource(resource, response.headers.get("etag") ?? undefined);
         },
         undefined,
         () => binding.recheck(),
@@ -1139,7 +1204,7 @@ export function createSolidDriveClient(options: {
         undefined,
         { arm: [compensation] },
       );
-      resource.etag = saved.etag;
+      captureResource(resource, saved.etag);
       resource.data = data;
       await binding.recheck();
       if (!sameGraph(data, containerData((await listing(to)).dataset, to)))
@@ -1164,6 +1229,7 @@ export function createSolidDriveClient(options: {
     held: ReadonlySet<string>,
     scope: AccessScope,
     acceptedAccess?: OwnAccess,
+    approvedEtag?: string,
   ): Promise<MoveResult> => {
     if (from.endsWith("/") !== to.endsWith("/") || (from.endsWith("/") && to.startsWith(from))) {
       throw new DriveError("conflict", 409, to);
@@ -1172,6 +1238,8 @@ export function createSolidDriveClient(options: {
       moving && decision.kind === "confirm-move" && !privateOwner && !policyArchiveOf(from);
     await deletion.guard(from);
     const source = await snapshot(from, moving, true);
+    if (approvedEtag !== undefined && source.etag !== validator(from, approvedEtag))
+      throw new DriveError("conflict", 412, from);
     // Reserve the captured tree before copying or removing any node. Child
     // cleanup shares the flight, including rollback after a failed copy.
     return sourceOperation(
@@ -1389,6 +1457,7 @@ export function createSolidDriveClient(options: {
                 transferHeld,
                 scope,
                 destination,
+                approvedEtag ?? source.etag,
               );
             }
             throw error;
@@ -1449,6 +1518,8 @@ export function createSolidDriveClient(options: {
       opts?.archiveContainers,
       held,
       scope,
+      undefined,
+      opts?.ifMatch,
     );
   };
 
@@ -1470,6 +1541,8 @@ export function createSolidDriveClient(options: {
       };
       if (url.endsWith("/") && opts.recursive) {
         const source = await snapshot(url, true, false);
+        if (source.etag !== validator(url, capturedEtag))
+          throw new DriveError("conflict", 412, url);
         const deleted: string[] = [];
         try {
           await sourceOperation(
@@ -1486,6 +1559,7 @@ export function createSolidDriveClient(options: {
                   ...compensationsFor(scope, nodeUrl),
                   ...(nodeUrl === url ? (opts.commit?.disarm ?? []) : []),
                 ],
+                opts.commit?.survivors ?? [],
               ),
             held,
           );
@@ -1504,6 +1578,7 @@ export function createSolidDriveClient(options: {
         await deleteVersion(url, capturedEtag, undefined, {
           rechecks: [verify],
           identityChecks: [identityCheck],
+          survivors: opts.commit?.survivors ?? [],
           disarm: [...compensationsFor(scope, url), ...(opts.commit?.disarm ?? [])],
           onCommit: () => retireScope(scope, url),
         });
@@ -1524,7 +1599,13 @@ export function createSolidDriveClient(options: {
     ...(options.confirmAccess ? { confirmAccess: options.confirmAccess } : {}),
     async bindAccess(from, to) {
       const binding = await bindAccess(access, from, to);
-      if (accessGains(binding.source, binding.destination).length)
+      const archived = await recoveryPolicy(from, { status: "known", policy: binding.source });
+      if (
+        accessGains(
+          archived ? access.forResource(archived, from) : binding.source,
+          binding.destination,
+        ).length
+      )
         throw new DriveAccessError("Recovery destination grants wider access");
       scopeFor(this).add({ binding });
       return binding;

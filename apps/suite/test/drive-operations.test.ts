@@ -365,6 +365,7 @@ describe("app-managed trash against the demo pod", () => {
     expect(pod.has(first.url)).toBe(true);
     expect(first).toEqual({
       url: first.url,
+      etag: expect.any(String),
       original: NOTES,
       trashedAt: new Date(NOW - DAY),
       trashedBy: DEMO_WEBID,
@@ -420,6 +421,7 @@ describe("app-managed trash against the demo pod", () => {
       const entry = result.done[0] as TrashEntry;
       expect(entry).toEqual({
         url: entry.url,
+        etag: expect.any(String),
         original: `${DRIVE}Work/`,
         name: "Work",
         trashedAt: new Date(NOW),
@@ -617,7 +619,10 @@ describe("app-managed trash against the demo pod", () => {
       });
     else {
       const result = await operation;
-      expect(await listTrash(client, DRIVE)).toEqual([result.done[0], concurrent]);
+      expect(await listTrash(client, DRIVE)).toEqual([
+        result.done[0],
+        { ...concurrent, etag: (await client.stat(concurrent.url)).etag },
+      ]);
     }
     expect(writes).toBe(twice ? 2 : 3);
     expectConditionalWrites(fetch);

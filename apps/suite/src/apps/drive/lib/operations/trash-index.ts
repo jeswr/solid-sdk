@@ -31,6 +31,8 @@ const ENTITY = `${PROV}Entity`;
 export interface TrashEntry {
   /** Where the item lives now (inside `.trash/<uuid>/`). */
   readonly url: string;
+  /** Recovery identity presented to the user, hydrated with the listing. */
+  readonly etag?: string;
   /** Where it was before it was trashed. */
   readonly original: string;
   readonly trashedAt: Date;

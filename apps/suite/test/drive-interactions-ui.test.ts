@@ -453,7 +453,7 @@ it.each([
   expect(pod.has(`${entries[0]?.url}b`)).toBe(true);
   expect(await (await client.read(`${ROOT}Folder/b`)).text()).toBe("B");
   await pod.fetch(`${ROOT}Folder/b`, { method: "DELETE" });
-  await act(async () => actions.removeForever(entries));
+  await act(async () => actions.removeForever(await operations.listTrash(client, ROOT)));
   expect(await operations.listTrash(client, ROOT)).toEqual([]);
   expect(pod.has(entries[0]?.url as string)).toBe(false);
   await view.unmount();

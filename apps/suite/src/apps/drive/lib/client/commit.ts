@@ -1,7 +1,19 @@
 // AUTHORED-BY Codex
 
+export interface ResourceIdentity {
+  readonly url: string;
+  readonly etag: string;
+}
+
+interface HttpIdentity extends ResourceIdentity {
+  readonly allowMissing?: boolean;
+  readonly http: typeof fetch;
+  readonly error: (status: number, url: string) => Error;
+}
+
 export interface CommitChecks {
   readonly rechecks?: readonly (() => Promise<void>)[];
+  /** Content proofs and hydration, before the helper's raw final HEAD checks. */
   readonly identityChecks?: readonly (() => Promise<void>)[];
 }
 
@@ -37,10 +49,23 @@ export interface CommitEffects {
  * The step resolves only once its mutation is confirmed; ambiguous deletes keep their undo.
  */
 export async function commitIrreversible<T>(
-  options: CommitChecks & CommitEffects & { readonly step: () => Promise<T> },
+  options: CommitChecks &
+    CommitEffects & {
+      readonly step: () => Promise<T>;
+      /** Data only: the helper owns the final HTTP checks, with no hydration callbacks. */
+      readonly finalIdentities?: readonly HttpIdentity[];
+    },
 ): Promise<T> {
   for (const recheck of options.rechecks ?? []) await recheck();
   for (const check of options.identityChecks ?? []) await check();
+  for (const identity of options.finalIdentities ?? [])
+    await checkIdentity(
+      identity.http,
+      identity.url,
+      identity.etag,
+      identity.error,
+      identity.allowMissing,
+    );
   const result = await options.step();
   for (const compensation of options.disarm ?? []) compensation.disarm();
   for (const compensation of options.arm ?? []) compensation.arm();

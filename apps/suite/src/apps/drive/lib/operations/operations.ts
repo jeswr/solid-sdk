@@ -216,36 +216,49 @@ export function validateName(name: string): string | undefined {
 
 export async function renameItem(
   client: DriveClient,
-  item: Pick<DriveItem, "url" | "kind" | "name">,
+  item: Pick<DriveItem, "url" | "kind" | "name" | "etag">,
   newName: string,
 ): Promise<string> {
   const parent = parentOf(item.url);
   if (!parent || newName.trim() === item.name) return item.url;
   const name = normalizeUploadName(newName, item.kind === "folder" ? "folder" : "file");
   return (
-    await client.move(item.url, childUrl(parent, name, item.kind === "folder"), {
-      kind: "confirm-move",
-    })
+    await client.move(
+      item.url,
+      childUrl(parent, name, item.kind === "folder"),
+      {
+        kind: "confirm-move",
+      },
+      item.etag === undefined ? undefined : { ifMatch: item.etag },
+    )
   ).url;
 }
 
 export async function moveItems(
   client: DriveClient,
-  urls: readonly string[],
+  urls: readonly (string | Pick<DriveItem, "url" | "etag">)[],
   targetFolder: string,
 ): Promise<BatchResult<{ from: string; to: string; identity: MoveResult }>> {
   const result: BatchResult<{ from: string; to: string; identity: MoveResult }> = {
     done: [],
     failed: [],
   };
-  for (const url of urls) {
+  for (const selected of urls) {
+    const url = typeof selected === "string" ? selected : selected.url;
     try {
       if (parentOf(url) === targetFolder) continue;
       if (url.endsWith("/") && targetFolder.startsWith(url)) {
         throw new DriveError("conflict", 409, targetFolder);
       }
       const to = childUrl(targetFolder, nameOf(url), url.endsWith("/"));
-      const identity = await client.move(url, to, { kind: "confirm-move" });
+      const identity = await client.move(
+        url,
+        to,
+        { kind: "confirm-move" },
+        typeof selected === "string" || selected.etag === undefined
+          ? undefined
+          : { ifMatch: selected.etag },
+      );
       result.done.push({ from: url, to: identity.url, identity });
     } catch (error) {
       result.failed.push({ url, error });
@@ -569,10 +582,12 @@ export async function listTrash(
       continue;
     }
     try {
+      const identity = await client.stat(entry.url);
+      const displayed = { ...entry, ...(identity.etag ? { etag: identity.etag } : {}) };
       entries.push(
         status === "partial"
-          ? { ...entry, status, remaining: await recoveryItems(client, entry.url) }
-          : entry,
+          ? { ...displayed, status, remaining: await recoveryItems(client, entry.url) }
+          : displayed,
       );
     } catch (error) {
       if (!isMissingItem(error)) throw error;
@@ -704,13 +719,14 @@ async function runTrash(
     };
   }
   const partial: TrashEntry[] = [];
-  for (const entry of entries) {
+  for (const [index, entry] of entries.entries()) {
     try {
-      await client.move(
+      const identity = await client.move(
         entry.original,
         entry.url,
         { kind: "preserve-source" },
         {
+          ...(items[index]?.etag !== undefined ? { ifMatch: items[index]?.etag as string } : {}),
           ...(options.webId ? { privateOwner: options.webId } : {}),
           archiveContainers: async (archive) => {
             await updateIndex(client, driveRoot, (index) => {
@@ -723,7 +739,7 @@ async function runTrash(
           },
         },
       );
-      result.done.push(entry);
+      result.done.push({ ...entry, ...(identity.etag ? { etag: identity.etag } : {}) });
     } catch (error) {
       result.failed.push({ url: entry.original, error });
       if (error instanceof DrivePartialFailureError && error.retainedDestinations.length > 0)
@@ -890,14 +906,20 @@ async function restoreMissing(
   from: string,
   to: string,
   settled: boolean,
+  approvedEtag?: string,
 ): Promise<{ url: string; error: unknown }[]> {
   try {
     if (from.endsWith("/")) {
       const original = await client.readRdf(from);
       if (!original) throw new DriveError("not-found", 404, from);
+      if (approvedEtag !== undefined && original.etag !== approvedEtag)
+        throw new DriveError("conflict", 412, from);
+      if (!original.etag || original.etag.startsWith("W/"))
+        throw new DriveError("missing-validator", 409, from);
       const merged = await client.mergeContainer(from, to, { kind: "preserve-source" });
       const remaining: { url: string; error: unknown }[] = [];
-      for (const child of await client.list(from))
+      const children = await client.list(from);
+      for (const child of children)
         remaining.push(
           ...(await restoreMissing(
             client,
@@ -910,37 +932,35 @@ async function restoreMissing(
       if (remaining.length === 0) {
         if (!settled) throw new TrashMovingError();
         const data = containerData(original.dataset, from);
+        // Removing our restored children changed membership; hydrate its final
+        // empty representation before committing, never after a refused DELETE.
+        const current = await client.readRdf(from);
+        if (!current) throw new DriveError("not-found", 404, from);
+        if (!children.length && current.etag !== original.etag)
+          throw new DriveError("conflict", 412, from);
         await discardVersion({
           url: from,
-          captured: { content: data, etag: original.etag },
+          captured: { content: current.dataset, etag: current.etag },
           read: async () => {
             const fresh = await client.readRdf(from);
             return fresh && { content: fresh.dataset, etag: fresh.etag };
           },
           owns: (current) => ownsEmptyContainer(from, data, current),
           remove: async (etag) => {
+            const survivor = await client.readRdf(to);
+            if (
+              !survivor ||
+              !containsGraph(relocate(data, [[from, to]]), containerData(survivor.dataset, to))
+            )
+              throw new DriveError("conflict", 412, to);
+            if (!survivor.etag || survivor.etag.startsWith("W/"))
+              throw new DriveError("missing-validator", 409, to);
             await client.remove(from, {
               ifMatch: etag,
               commit: {
                 disarm: merged.disarm,
                 rechecks: [() => merged.recheck()],
-                identityChecks: [
-                  async () => {
-                    const survivor = await client.readRdf(to);
-                    if (
-                      !survivor ||
-                      !containsGraph(
-                        relocate(data, [[from, to]]),
-                        containerData(survivor.dataset, to),
-                      )
-                    )
-                      throw new DriveError("conflict", 412, to);
-                    if (!survivor.etag || survivor.etag.startsWith("W/"))
-                      throw new DriveError("missing-validator", 409, to);
-                    const final = await client.stat(to, { ifMatch: survivor.etag });
-                    if (final.etag !== survivor.etag) throw new DriveError("conflict", 412, to);
-                  },
-                ],
+                survivors: [{ url: to, etag: survivor.etag }],
               },
             });
           },
@@ -952,6 +972,8 @@ async function restoreMissing(
       if (!settled) throw new TrashMovingError();
       const access = await client.bindAccess?.(from, to);
       const compared = await sameRecoveryFile(client, from, to);
+      if (approvedEtag !== undefined && compared.etag !== approvedEtag)
+        throw new DriveError("conflict", 412, from);
       if (!compared.same) throw new DriveError("conflict", 412, to);
       if (!compared.etag || compared.etag.startsWith("W/"))
         throw new DriveError("missing-validator", 409, from);
@@ -966,13 +988,7 @@ async function restoreMissing(
               await access?.recheck();
             },
           ],
-          identityChecks: [
-            async () => {
-              const survivor = await client.stat(to, { ifMatch: survivorEtag });
-              // Also check servers that ignore HEAD preconditions, as the move client does.
-              if (survivor.etag !== survivorEtag) throw new DriveError("conflict", 412, to);
-            },
-          ],
+          survivors: [{ url: to, etag: survivorEtag }],
         },
       });
       return [];
@@ -984,7 +1000,12 @@ async function restoreMissing(
       await client.copy(from, to, { kind: "preserve-source" });
       throw new TrashMovingError();
     }
-    await client.move(from, to, { kind: "preserve-source" });
+    await client.move(
+      from,
+      to,
+      { kind: "preserve-source" },
+      approvedEtag === undefined ? undefined : { ifMatch: approvedEtag },
+    );
     return [];
   } catch (error) {
     return [{ url: from, error }];
@@ -1018,6 +1039,10 @@ async function restoreItemsUnlocked(
       const slot = slotOf(driveRoot, entry);
       validateOriginal(driveRoot, entry);
       const status = await requireTrashEntry(client, driveRoot, entry);
+      if (entry.etag !== undefined) {
+        const current = await client.stat(entry.url, { ifMatch: entry.etag });
+        if (current.etag !== entry.etag) throw new DriveError("conflict", 412, entry.url);
+      }
       const archive = await capturePolicyArchive(client, entry.url);
       if (status === "partial") {
         const current = await client.readRdf(indexUrlOf(driveRoot));
@@ -1026,7 +1051,13 @@ async function restoreItemsUnlocked(
           !owner ||
           stoppedTransfers.has(owner) ||
           !!(await recoveryStatus(client, driveRoot, entry));
-        const remaining = await restoreMissing(client, entry.url, entry.original, settled);
+        const remaining = await restoreMissing(
+          client,
+          entry.url,
+          entry.original,
+          settled,
+          entry.etag,
+        );
         if (remaining.length) throw new TrashRestorePartialError(remaining);
         await removeRecoveryMarker(client, driveRoot, entry);
         await removePolicyArchive(client, entry.url, archive);
@@ -1050,7 +1081,12 @@ async function restoreItemsUnlocked(
         renamed = true;
       }
       // The client verifies original or owner-only ACLs on missing ancestors first.
-      const { url } = await client.move(entry.url, target, { kind: "preserve-source" });
+      const { url } = await client.move(
+        entry.url,
+        target,
+        { kind: "preserve-source" },
+        entry.etag === undefined ? undefined : { ifMatch: entry.etag },
+      );
       await removeRecoveryMarker(client, driveRoot, entry);
       // The slot may contain another writer's resources; only remove it empty.
       await removePolicyArchive(client, entry.url, archive);
@@ -1091,7 +1127,7 @@ async function deleteForeverUnlocked(
       slotOf(driveRoot, entry);
       await requireTrashEntry(client, driveRoot, entry);
       const archive = await capturePolicyArchive(client, entry.url);
-      await removeTrashItem(client, entry.url);
+      await removeTrashItem(client, entry.url, entry.etag);
       await removeRecoveryMarker(client, driveRoot, entry);
       await removePolicyArchive(client, entry.url, archive);
       await removeEmptySlot(client, slotOf(driveRoot, entry));
@@ -1109,10 +1145,23 @@ async function deleteForeverUnlocked(
 }
 
 /** A missing descendant is a stale traversal, not proof the entry itself is gone. */
-async function removeTrashItem(client: DriveClient, url: string): Promise<void> {
+async function removeTrashItem(client: DriveClient, url: string, etag?: string): Promise<void> {
+  try {
+    const current = await client.stat(url);
+    etag ??= current.etag;
+  } catch (error) {
+    if (isMissingItem(error)) {
+      await client.recheckDeletions?.();
+      return;
+    }
+    throw error;
+  }
   for (let attempt = 0; ; attempt += 1) {
     try {
-      await client.remove(url, { recursive: true });
+      await client.remove(url, {
+        recursive: true,
+        ...(etag !== undefined ? { ifMatch: etag } : {}),
+      });
     } catch (error) {
       const cause = error instanceof DrivePartialFailureError ? error.cause : error;
       if (!(cause instanceof DriveError && cause.kind === "not-found")) throw error;

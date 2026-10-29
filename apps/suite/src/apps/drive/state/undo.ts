@@ -4,8 +4,8 @@ import { createSolidDriveClient, DriveError, type MoveResource } from "../lib/cl
 
 /**
  * Bind a reverse move to the version captured after the original move. The
- * current client has no conditional move API, so apply the validators at its
- * authenticated fetch seam. Copy/delete and MIME handling stay in the client.
+ * authenticated fetch seam checks the captured tree as well as the root validator.
+ * Copy/delete and MIME handling stay in the client.
  */
 export async function moveWithValidator(
   options: Parameters<typeof createSolidDriveClient>[0],
@@ -103,5 +103,5 @@ export async function moveWithValidator(
     await verify(from);
     if (seen.size !== identities.size) throw new Error("This move cannot be safely undone");
   }
-  await client.move(from, to, { kind: "confirm-move" });
+  await client.move(from, to, { kind: "confirm-move" }, { ifMatch: etag });
 }

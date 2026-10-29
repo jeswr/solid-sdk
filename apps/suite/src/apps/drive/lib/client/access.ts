@@ -8,7 +8,7 @@ import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { readSharing } from "../sharing/sharing";
-import { checkIdentity, commitIrreversible } from "./commit";
+import { commitIrreversible } from "./commit";
 import { relocate, sameGraph } from "./rdf";
 
 const ACL = "http://www.w3.org/ns/auth/acl#";
@@ -174,8 +174,8 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     }
     const body = await serialize([...dataset]);
     const response = await commitIrreversible({
-      identityChecks: current
-        ? [() => checkIdentity(http, url, current.etag, (status) => new DriveAccessError(status))]
+      finalIdentities: current
+        ? [{ http, url, etag: current.etag, error: (status) => new DriveAccessError(status) }]
         : [],
       step: () =>
         http(url, {

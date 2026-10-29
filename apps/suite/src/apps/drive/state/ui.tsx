@@ -477,7 +477,7 @@ export function useDriveActions() {
           ...urls,
           ...items.map((item) => childUrl(target, nameOf(item.url), item.kind === "folder")),
         ],
-        (tracked) => moveItems(tracked, urls, target),
+        (tracked) => moveItems(tracked, items, target),
       );
       toast.dismiss(pending);
       // A star follows the item; leaving it on the old URL would star a replacement.
@@ -665,6 +665,11 @@ export function useDriveActions() {
       )
         return;
       try {
+        items = await Promise.all(
+          items.map(async (item) =>
+            item.etag !== undefined ? item : { ...item, ...(await client.stat(item.url)) },
+          ),
+        );
         const result = await refreshAfter(
           client,
           invalidate,
@@ -740,7 +745,11 @@ export function useDriveActions() {
       const done: DriveItem[] = [];
       for (const item of items) {
         try {
-          await client.remove(item.url, { recursive: item.kind === "folder" });
+          if (!item.etag || item.etag.startsWith("W/"))
+            throw new Error(
+              "This item has no confirmed version. Refresh and confirm deletion again.",
+            );
+          await client.remove(item.url, { recursive: item.kind === "folder", ifMatch: item.etag });
           done.push(item);
         } catch (error) {
           reportFailure(error, "Couldn't delete", client, invalidate);

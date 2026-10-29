@@ -284,7 +284,7 @@ describe("Drive data-safety regressions", () => {
   it.each([
     false,
     true,
-  ])("permanent deletion retries a vanished descendant and retains unfinished records (second race: %s)", async (twice) => {
+  ])("permanent deletion never refreshes the confirmed root after a descendant vanishes (second race: %s)", async (twice) => {
     let recovery: string | undefined;
     let vanished = 0;
     const { pod, client } = setupPartial(async (url, init) => {
@@ -315,16 +315,14 @@ describe("Drive data-safety regressions", () => {
     const result = await deleteForever(client, DRIVE, entries);
     recovery = undefined;
     expect(remove.mock.calls.filter(([url]) => url === entry.url)).toHaveLength(2);
-    if (twice) {
-      expect(result.done).toEqual([]);
-      expect(result.failed).toHaveLength(1);
-      expect(await (await client.read(`${entry.url}c`)).text()).toBe("C");
-      expect(await listTrash(client, DRIVE)).toHaveLength(1);
-    } else {
-      expect(result).toEqual({ done: entries, failed: [] });
-      expect(pod.has(entry.url)).toBe(false);
-      expect(await listTrash(client, DRIVE)).toEqual([]);
-    }
+    expect(result.done).toEqual([]);
+    expect(result.failed).toHaveLength(1);
+    expect(await (await client.read(`${entry.url}c`)).text()).toBe("C");
+    const refreshed = await listTrash(client, DRIVE);
+    expect(refreshed).toHaveLength(1);
+    expect((await deleteForever(client, DRIVE, refreshed)).failed).toEqual([]);
+    expect(pod.has(entry.url)).toBe(false);
+    expect(await listTrash(client, DRIVE)).toEqual([]);
   });
 
   it("permanent deletion retries a descendant 404 wrapped by partial deletion", async () => {

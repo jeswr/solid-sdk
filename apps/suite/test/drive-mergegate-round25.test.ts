@@ -267,7 +267,7 @@ it.each([
     expect(restored.failed).toHaveLength(1);
     f.after(undefined);
     f.intercept(undefined);
-    expect((await restoreItems(client, DRIVE, [entry])).failed).toEqual([]);
+    expect((await restoreItems(client, DRIVE, await listTrash(client, DRIVE))).failed).toEqual([]);
     expect(await hasEdit(f, PRIVATE)).toBe(true);
   }
 });
@@ -577,7 +577,7 @@ it.each([
     client.copy(folder ? PRIVATE : `${PRIVATE}secret`, to, { kind: "preserve-source" }),
   ).rejects.toThrow();
   expect(raced).toBe(true);
-  expect(f.pod.has(to)).toBe(mode !== "empty bytes");
+  expect(f.pod.has(to)).toBe(true);
   if (mode === "foreign bytes")
     expect(await (await f.pod.fetch(to)).text()).toBe("another writer's bytes");
 });

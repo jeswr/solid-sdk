@@ -1,6 +1,11 @@
 // AUTHORED-BY Codex
 
-import { type CommitChecks, type CommitEffects, checkIdentity, commitIrreversible } from "./commit";
+import {
+  type CommitChecks,
+  type CommitEffects,
+  commitIrreversible,
+  type ResourceIdentity,
+} from "./commit";
 import { type DeletionRequest, deletionLedger, protectionLedger } from "./protection-ledger";
 
 export type DeleteOutcome = "done" | "not-performed" | "unknown";
@@ -80,7 +85,8 @@ export function deletionControl(http: typeof fetch, error: (status: number, url:
     url: string,
     etag: string,
     recovery?: string,
-    commit: CommitChecks & CommitEffects = {},
+    commit: CommitChecks &
+      CommitEffects & { readonly survivors?: readonly ResourceIdentity[] } = {},
   ) => {
     await guard(url);
     // Persist both sides before the request: reload or response loss cannot turn
@@ -95,9 +101,9 @@ export function deletionControl(http: typeof fetch, error: (status: number, url:
     try {
       await commitIrreversible({
         ...commit,
-        identityChecks: [
-          () => checkIdentity(http, url, etag, error, true),
-          ...(commit.identityChecks ?? []),
+        finalIdentities: [
+          { http, url, etag, error, allowMissing: true },
+          ...(commit.survivors ?? []).map((identity) => ({ ...identity, http, error })),
         ],
         step: async () => {
           let response: Response;
