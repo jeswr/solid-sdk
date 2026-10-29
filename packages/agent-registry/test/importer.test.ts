@@ -202,6 +202,47 @@ describe("synthetic registry import", () => {
       ).toEqual(expected);
     }
   });
+  it.each([".", ":"])("keeps terminal URI %s in hash-only conflict RDF", async (suffix) => {
+    const prefix = "https://profile.example/alice";
+    const own = `${prefix}${suffix}`;
+    const other = "alternate@example.org";
+    const ports = harness(
+      stringify({
+        version: 1,
+        accounts: [prefix, own].map((handle, index) => ({
+          id: `account-${index}`,
+          channel: "web",
+          provider: "fixture_provider",
+          organization: "personal",
+          identifiers: { primary: handle },
+          connector: { target: "fixture", setup_status: "planned" },
+        })),
+        notes: [`Identity conflict: "${own}". versus ${other}.`],
+      }),
+    );
+    const report = await importRegistry(config, ports);
+    const salt = await ports.salt.getSalt();
+    const expected = [
+      {
+        kind: "identity-mismatch",
+        handleHashes: [hashHandle(own, salt, "web"), hashHandle(other, salt, "email")].sort(),
+      },
+    ];
+    for (const [index, account] of report.settings.connections.slice(0, 2).entries()) {
+      expect(account.bindingState).toBe(index === 0 ? "setup-required" : "error");
+      expect(account.identityConflicts).toEqual(index === 0 ? [] : expected);
+      const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
+      expect(
+        ports.storage.resources
+          .get(url)
+          ?.dataset.getObjects(term(url), term(`${AGENT}identityConflict`), null)
+          .map((v) => JSON.parse(v.value)),
+      ).toEqual(index === 0 ? [] : expected);
+    }
+    const output = JSON.stringify({ report, resources: [...ports.storage.resources] });
+    expect(output).not.toContain(prefix);
+    expect(output).not.toContain(other);
+  });
   it.each([
     "!",
     "?",

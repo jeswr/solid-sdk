@@ -338,6 +338,7 @@ describe("privacy and settings model", () => {
     ["email", "alice@example.com", "alice@example.com.example", "ALICE@example.com.example"],
     ["email", "alice@example.com", "alice+tag@example.com", "ALICE+TAG@example.com"],
     ["email", "alice@example.com", "o'alice@example.com", "O'ALICE@example.com"],
+    ["email", "alice@example.com", "'alice'@example.com", "'ALICE'@example.com"],
     [
       "matrix",
       "@fixture:matrix.example",
@@ -377,6 +378,7 @@ describe("privacy and settings model", () => {
     ["matrix", "@fixture:[2001:db8::1]", "@fixture:[2001:DB8::1]", "@fixture:[2001:DB8::1]"],
     ["matrix_bot", "@fixture:[2001:db8::1]", "@fixture:[2001:DB8::1]", "@fixture:[2001:DB8::1]"],
     ["github_notifications", "fixture", "prefixture", "PREFIXTURE"],
+    ["github_notifications", "fixture", "'fixture'suffix", "'FIXTURE'SUFFIX"],
   ])("matches complete %s identities rather than substrings of %s", (channel, own, other, mention) => {
     const snap = parseSnapshot({
       version: 1,
@@ -500,6 +502,95 @@ describe("privacy and settings model", () => {
           handleHashes: [hashHandle(own, salt, channel), hashHandle(other, salt, channel)].sort(),
         },
       ]);
+  });
+  it.each([
+    ["web", "https://profile.example/alice", "."],
+    ["web", "https://profile.example/alice", ":"],
+    ["web", "https://profile.example/alice", ".:"],
+    ["web", "did:example:alice", ":"],
+    ["github_notifications", "fixture", "."],
+    ["github_notifications", "fixture", ":"],
+  ])("keeps terminal punctuation on complete %s identities: %s%s", (channel, prefix, suffix) => {
+    const own = `${prefix}${suffix}`;
+    const other = "alternate@example.org";
+    for (const quote of ["", '"', "'", "`"])
+      for (const punctuation of quote ? ["", ".", ":", "!?"] : [""]) {
+        const snap = parseSnapshot({
+          version: 1,
+          accounts: [prefix, own].map((handle, index) => ({
+            id: `account-${index}`,
+            channel,
+            provider: "fixture_provider",
+            organization: "personal",
+            identifiers: { primary: handle },
+            connector: { target: "fixture", setup_status: "planned" },
+          })),
+          notes: [`Identity conflict: ${quote}${own}${quote}${punctuation} versus ${other}.`],
+        });
+        const s = inventorySettings(snap, salt);
+        expect(s.connections[0]).toMatchObject({
+          bindingState: "setup-required",
+          identityConflicts: [],
+        });
+        expect(s.connections[1]).toMatchObject({
+          bindingState: "error",
+          identityConflicts: [
+            {
+              kind: "identity-mismatch",
+              handleHashes: [
+                hashHandle(own, salt, channel),
+                hashHandle(other, salt, "email"),
+              ].sort(),
+            },
+          ],
+        });
+        expect(JSON.stringify(s)).not.toContain(prefix);
+        expect(JSON.stringify(s)).not.toContain(other);
+        // Quotes fix the boundary even if the punctuated identity is not in the inventory.
+        if (quote) {
+          snap.accounts.pop();
+          expect(inventorySettings(snap, salt).connections[0]).toMatchObject({
+            bindingState: "setup-required",
+            identityConflicts: [],
+          });
+        }
+      }
+  });
+  it.each([".", ":"])("matches a complete evidence URI ending in %s", (suffix) => {
+    const prefix = "https://profile.example/alice";
+    const own = `${prefix}${suffix}`;
+    const other = "alternate@example.org";
+    const snap = parseSnapshot({
+      version: 1,
+      accounts: [
+        {
+          id: "fixture-account",
+          channel: "web",
+          provider: "fixture_provider",
+          organization: "personal",
+          identifiers: { primary: prefix },
+          connector: { target: "fixture", setup_status: "planned" },
+        },
+      ],
+      evidence: [
+        {
+          channel: "web",
+          provider: "fixture_provider",
+          identifier: own,
+          method: "historic_connector",
+          source: "synthetic",
+          observedOn: "2026-10-20",
+        },
+      ],
+      notes: [`Identity conflict: ${own} versus ${other}.`],
+    });
+    const s = inventorySettings(snap, salt);
+    expect(s.connections[0]).toMatchObject({
+      bindingState: "setup-required",
+      identityConflicts: [],
+      evidence: [],
+    });
+    expect(s.unmatchedEvidence).toMatchObject([{ handleHash: hashHandle(own, salt, "web") }]);
   });
   it("bounds normalization work for maximum account, handle and note counts", () => {
     const snap = parseSnapshot({

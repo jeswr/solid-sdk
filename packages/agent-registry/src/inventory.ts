@@ -233,16 +233,29 @@ export function bindingStateFromSetup(status: string): BindingState {
 // Keep bracketed IPv6 hosts inside identifiers without consuming surrounding prose brackets.
 const NOTE_IDENTIFIER_PART =
   "(?:[\\p{L}\\p{M}\\p{N}._@%+:/#=~!$&'*?^`{|}-]|\\[[\\da-fA-F.]*:[\\da-fA-F:.]*\\])";
+// Keep phone formatting and adjacent suffixes so longer identities cannot match a prefix.
+const NOTE_IDENTIFIER = `\\+\\d[\\d ().-]{5,}\\d${NOTE_IDENTIFIER_PART}*|${NOTE_IDENTIFIER_PART}+`;
 const NOTE_IDENTIFIERS = new RegExp(
-  // Keep phone formatting and any adjacent suffix, so a longer identity cannot match a prefix.
-  `['\`]?\\+\\d[\\d ().-]{5,}\\d${NOTE_IDENTIFIER_PART}*|${NOTE_IDENTIFIER_PART}+`,
+  // Capture quoted boundaries before matching bare tokens, including formatted phones.
+  `(["'\`])(${NOTE_IDENTIFIER})\\1[.!?:]*(?!${NOTE_IDENTIFIER_PART})|${NOTE_IDENTIFIER}`,
   "gu",
 );
 /** Keep complete phone/handle/URI tokens; strip prose punctuation after a mention. */
-function noteIdentifiers(note: string): string[] {
-  return (note.normalize("NFC").match(NOTE_IDENTIFIERS) ?? []).map((identifier) => {
-    const handle = identifier.replace(/[.:]+$/u, "").replace(/^(['`])(.*)\1$/u, "$2");
-    const unpunctuated = handle.replace(/[.!?:]+$/u, "").replace(/^(['`])(.*)\1$/u, "$2");
+function noteIdentifiers(
+  note: string,
+  known: { folded: Set<string>; matrix: Set<string> },
+): string[] {
+  return Array.from(note.normalize("NFC").matchAll(NOTE_IDENTIFIERS), (match) => {
+    if (match[2] !== undefined) return match[2];
+    const identifier = match[0];
+    // Exact known identities take precedence over unquoted prose punctuation.
+    if (
+      known.folded.has(normaliseHandle(identifier)) ||
+      known.matrix.has(normaliseHandle(identifier, "matrix"))
+    )
+      return identifier;
+    const handle = identifier.replace(/[.:]+$/u, "");
+    const unpunctuated = handle.replace(/[.!?:]+$/u, "");
     // Sentence marks cannot end an email domain, Matrix server or phone number.
     // Keep them in opaque handles and URIs, and inside explicit identifiers' local parts.
     return noteIdentityChannel(unpunctuated) ? unpunctuated : handle;
@@ -270,17 +283,23 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
       refs: [],
       setupStatus: "not_configured",
     });
-  const notes = snapshot.notes.map((note) => ({ note, identifiers: noteIdentifiers(note) }));
-  const identities = [
+  const knownIdentities = [
     ...accounts.flatMap((a) => a.handles.map((handle) => ({ handle, channel: a.channel }))),
     ...snapshot.evidence.map((e) => ({ handle: e.identifier, channel: e.channel })),
+  ].map(({ handle, channel }) => ({ handle: normaliseHandle(handle, channel), channel }));
+  const known = { folded: new Set<string>(), matrix: new Set<string>() };
+  for (const { handle, channel } of knownIdentities)
+    (channel === "matrix" || channel === "matrix_bot" ? known.matrix : known.folded).add(handle);
+  const notes = snapshot.notes.map((note) => ({ note, identifiers: noteIdentifiers(note, known) }));
+  const identities = [
+    ...knownIdentities,
     ...notes.flatMap(({ identifiers }) =>
       identifiers.flatMap((handle) => {
         const channel = noteIdentityChannel(handle);
-        return channel ? [{ handle, channel }] : [];
+        return channel ? [{ handle: normaliseHandle(handle, channel), channel }] : [];
       }),
     ),
-  ].map(({ handle, channel }) => ({ handle: normaliseHandle(handle, channel), channel }));
+  ];
   // Match and hash each note once; account attachment only checks its own normalized handles.
   const noteConflicts = notes
     .filter(({ note }) => /versus|contradict|conflict/i.test(note))
