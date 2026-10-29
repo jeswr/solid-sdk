@@ -555,6 +555,68 @@ it("requires confirmation for an empty constraint right operand", async () => {
   ).toEqual({ effect: "indeterminate" });
 });
 
+it.each([
+  { operator: "eq", matching: 1, other: 2 },
+  { operator: "neq", matching: 2, other: 1 },
+  { operator: "gt", matching: 2, other: 0 },
+  { operator: "gteq", matching: 1, other: 0 },
+  { operator: "lt", matching: 0, other: 2 },
+  { operator: "lteq", matching: 1, other: 2 },
+] as const)("requires one left value for scalar $operator in rules and duties", async ({
+  operator,
+  matching,
+  other,
+}) => {
+  const c: OdrlConstraint = { leftOperand: "count", operator, rightOperand: [1] };
+  const policies = [
+    policy({ permissions: [{ ...permit, constraints: [c] }] }),
+    policy({ prohibitions: [{ ...permit, type: "prohibition", constraints: [c] }] }),
+    policy({ permissions: [{ ...permit, duties: [{ action: "inform", constraints: [c] }] }] }),
+    policy({ obligations: [{ action: "inform", constraints: [c] }] }),
+  ];
+  for (const [index, p] of policies.entries()) {
+    for (const count of [
+      [matching, other],
+      [other, matching],
+      [matching, matching],
+    ]) {
+      const q = intent({ action: "read", attributes: { count, "fulfilled:inform": true } });
+      expect(await solidOdrlEngine.evaluate(p, q)).toEqual({ effect: "indeterminate" });
+      expect(await evaluateIntent({ ...mandate(), autonomous: p }, q)).toEqual({
+        decision: "confirm-required",
+        reason: "indeterminate",
+      });
+    }
+    for (const count of [matching, [matching]])
+      expect(
+        await solidOdrlEngine.evaluate(
+          p,
+          intent({ action: "read", attributes: { count, "fulfilled:inform": true } }),
+        ),
+      ).toEqual({ effect: index === 1 ? "prohibited" : "permit" });
+  }
+});
+
+it.each([
+  { operator: "isAnyOf", rightOperand: [2, 3] },
+  { operator: "isAllOf", rightOperand: [1, 2] },
+  { operator: "isNoneOf", rightOperand: [3, 4] },
+] as const)("preserves multiple values for set operator $operator", async ({
+  operator,
+  rightOperand,
+}) => {
+  expect(
+    await solidOdrlEngine.evaluate(
+      policy({
+        permissions: [
+          { ...permit, constraints: [{ leftOperand: "count", operator, rightOperand }] },
+        ],
+      }),
+      intent({ action: "read", attributes: { count: [1, 2] } }),
+    ),
+  ).toEqual({ effect: "permit" });
+});
+
 const XSD = "http://www.w3.org/2001/XMLSchema#";
 it.each([
   { datatype: "integer", left: "2", right: "1" },

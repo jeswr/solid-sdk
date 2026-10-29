@@ -128,7 +128,10 @@ export function knownOperand(c: Constraint, value: unknown): boolean {
   const rights: unknown[] = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
   const lefts: unknown[] = Array.isArray(value) ? value : [value];
   if (rights.length === 0 || lefts.length === 0) return false;
-  if (["eq", "neq", "gt", "gteq", "lt", "lteq"].includes(c.operator) && rights.length !== 1)
+  if (
+    ["eq", "neq", "gt", "gteq", "lt", "lteq"].includes(c.operator) &&
+    (lefts.length !== 1 || rights.length !== 1)
+  )
     return false;
   const datatype = operandDatatype(c);
   if (c.leftOperand === "dateTime" && ![`${XSD}dateTime`, `${XSD}date`].includes(datatype))
