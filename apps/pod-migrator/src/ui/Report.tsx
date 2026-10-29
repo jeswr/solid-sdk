@@ -10,6 +10,7 @@ const kindLabels: Record<ReportKind, string> = {
   "owner-mapped": "Owner permissions",
   "source-owner-kept": "Source account permissions",
   "inheritance-narrowed": "Folder permission differences",
+  "resource-unreadable": "Unreadable resource",
   "acl-unreadable": "Unreadable permissions",
   "acl-system-unknown": "Unrecognized permission system",
   "target-exists": "Files already at the destination",

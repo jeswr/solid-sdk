@@ -13,7 +13,7 @@ import {
   unionPolicies,
 } from "./policy.js";
 import { aclLink, parent, parse, requireOk, requireRepresentation, serialize } from "./rdf.js";
-import { readResourceBytes } from "./resource-body.js";
+import { ResourceReadError, readResourceBytes } from "./resource-body.js";
 import { assertSpecificAccess, targetAccessLinks } from "./target-access.js";
 import type {
   AccessDocument,
@@ -130,7 +130,20 @@ export async function executeMigration(
         if (!docs.has(url)) {
           docs.set(
             url,
-            await readAccess(side, url, system, opts.signal, undefined, side === state.target),
+            await readAccess(
+              side,
+              url,
+              system,
+              opts.signal,
+              undefined,
+              side === state.target,
+            ).catch((error: unknown) => {
+              throw new ResourceReadError(
+                url as string,
+                error instanceof Error ? error.message : String(error),
+                error,
+              );
+            }),
           );
         }
         url = parent(url, side.root);
@@ -215,6 +228,7 @@ export async function executeMigration(
     }
     for (const [group, expected] of state.groups) {
       const url = group.split("#")[0] as string;
+      current = url;
       const dataset = await parse(
         requireOk(
           await (state.source.publicHttp as NonNullable<PodSide["publicHttp"]>).get(url, {
@@ -223,6 +237,8 @@ export async function executeMigration(
           }),
         ),
         url,
+        state.source.publicHttp,
+        opts.signal,
       );
       const actual = [...new Group(group, dataset, DataFactory).hasMember];
       if (JSON.stringify(actual.sort()) !== JSON.stringify([...expected].sort()))
@@ -270,6 +286,41 @@ export async function executeMigration(
       if (doc?.etag) aclEtags.set(current, doc.etag);
     }
     proveExecutionPhases(state, resources, targetDocs);
+    const files = active.filter((e) => e.state.resource.kind === "resource");
+    const validated = new Map<string, { bytes: Uint8Array; contentType: string }>();
+    // Validate and retain every body before the attempt creates any destination state.
+    for (const entry of files) {
+      checkCancel();
+      current = entry.state.resource.targetUrl;
+      const source = requireRepresentation(
+        await state.source.http.get(entry.state.resource.sourceUrl, { signal: opts.signal }),
+      );
+      let bytes = await readResourceBytes(source, entry.state.resource.sourceUrl, {
+        http: state.source.http,
+        signal: opts.signal,
+      });
+      let contentType = source.headers.get("content-type") ?? "application/octet-stream";
+      if (
+        state.rewriteIris &&
+        SUPPORTED_RDF_MEDIA_TYPES.some((type) => type === extractMediaType(contentType))
+      ) {
+        bytes = await rewriteRdf(
+          bytes,
+          contentType,
+          state.source.root,
+          new URL(
+            current.slice(
+              0,
+              current.length -
+                entry.state.resource.sourceUrl.slice(state.source.root.length).length,
+            ),
+          ).href,
+          entry.state.resource.sourceUrl,
+        );
+        contentType = "application/trig";
+      }
+      validated.set(current, { bytes, contentType });
+    }
     const containers = active
       .filter((e) => e.state.resource.kind === "container")
       .sort((a, b) => a.state.resource.targetUrl.length - b.state.resource.targetUrl.length);
@@ -294,34 +345,13 @@ export async function executeMigration(
       }
       progress("lock", index + 1, containers.length, current);
     }
-    const files = active.filter((e) => e.state.resource.kind === "resource");
     for (const [index, entry] of files.entries()) {
       checkCancel();
       current = entry.state.resource.targetUrl;
-      const source = requireRepresentation(
-        await state.source.http.get(entry.state.resource.sourceUrl, { signal: opts.signal }),
-      );
-      let bytes = await readResourceBytes(source, entry.state.resource.sourceUrl);
-      let contentType = source.headers.get("content-type") ?? "application/octet-stream";
-      if (
-        state.rewriteIris &&
-        SUPPORTED_RDF_MEDIA_TYPES.some((type) => type === extractMediaType(contentType))
-      ) {
-        bytes = await rewriteRdf(
-          bytes,
-          contentType,
-          state.source.root,
-          new URL(
-            current.slice(
-              0,
-              current.length -
-                entry.state.resource.sourceUrl.slice(state.source.root.length).length,
-            ),
-          ).href,
-          entry.state.resource.sourceUrl,
-        );
-        contentType = "application/trig";
-      }
+      const { bytes, contentType } = validated.get(current) as {
+        bytes: Uint8Array;
+        contentType: string;
+      };
       checkCancel();
       let etag = entry.state.targetEtag;
       if (!entry.state.exists) {
@@ -420,7 +450,10 @@ export async function executeMigration(
           extractMediaType(copied.contentType)
         )
           throw new TypeError("Content type verification failed");
-        const actual = new Uint8Array(await response.arrayBuffer());
+        const actual = await readResourceBytes(response, current, {
+          http: state.target.http,
+          signal: opts.signal,
+        });
         const { bytes } = copied;
         if (actual.length !== bytes.length || actual.some((value, i) => value !== bytes[i]))
           throw new TypeError("Content verification failed");
@@ -445,7 +478,11 @@ export async function executeMigration(
       log("warn", "Migration cancelled; completed writes retain their safe permissions");
     } else {
       const message = error instanceof Error ? error.message : String(error);
-      result.failed.push({ url: current, error: message });
+      const affected = error instanceof ResourceReadError ? error.resourceUrl : current;
+      const url =
+        resources.find((entry) => entry.state.resource.sourceUrl === affected)?.state.resource
+          .targetUrl ?? affected;
+      result.failed.push({ url, error: message });
       log("error", message);
     }
   }

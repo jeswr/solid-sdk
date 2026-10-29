@@ -291,7 +291,9 @@ describe("system detection and access safety", () => {
         `GET ${source.acl(source.root)}`,
         () => new Response("not turtle", { headers: { "content-type": "text/turtle" } }),
       );
-      expect(await detectAccessSystem(source.side())).toBe("unknown");
+      await expect(detectAccessSystem(source.side())).rejects.toThrow(
+        "Invalid or truncated RDF body",
+      );
       source.responses.set(
         `GET ${source.acl(source.root)}`,
         () => new Response("", { headers: { "content-type": "text/turtle" } }),

@@ -1,17 +1,8 @@
 // AUTHORED-BY Codex GPT-6
 import { DataFactory } from "n3";
 import { assertNotWider, ownerPolicy, policiesEqual, scopePolicy } from "./policy.js";
-import {
-  ACL,
-  ACP,
-  aclLink,
-  links,
-  parse,
-  RDF,
-  requireOk,
-  requireRepresentation,
-  serialize,
-} from "./rdf.js";
+import { ACL, ACP, aclLink, links, parse, RDF, requireOk, serialize } from "./rdf.js";
+import type { ResourceReadError } from "./resource-body.js";
 import { type AcpDialect, readAcp, writeAcp } from "./systems/acp.js";
 import { readWac, writeWac } from "./systems/wac.js";
 import { assertSpecificAccess } from "./target-access.js";
@@ -20,7 +11,7 @@ export async function detectAccessSystem(
   side: PodSide,
   signal?: AbortSignal,
 ): Promise<AccessSystem> {
-  const head = requireOk(await side.http.head(side.root, { signal }));
+  const head = requireOk(await side.http.head(side.root, { signal }), side.root);
   const url = aclLink(head, side.root, side.root);
   if (!url) return "unknown";
   const response = await side.http.get(url, { accept: "text/turtle", signal });
@@ -28,29 +19,30 @@ export async function detectAccessSystem(
     links(head, side.root, "type").includes(`${ACP}AccessControlResource`) ||
     links(response, url, "type").includes(`${ACP}AccessControlResource`);
   if (!response.ok) return advertised ? "acp" : "unknown";
-  try {
-    const dataset = await parse(response, url);
-    const acp = [...dataset].some(
-      (q) =>
-        q.predicate.value.startsWith(ACP) ||
-        (q.object.termType === "NamedNode" && q.object.value.startsWith(ACP)),
-    );
-    const wac =
-      dataset.match(
-        null,
-        DataFactory.namedNode(`${RDF}type`),
-        DataFactory.namedNode(`${ACL}Authorization`),
-      ).size > 0;
-    return (acp || advertised) && wac
-      ? "unknown"
-      : acp || advertised
-        ? "acp"
-        : wac
-          ? "wac"
-          : "unknown";
-  } catch {
-    return "unknown";
-  }
+  const dataset = await parse(response, url, side.http, signal).catch(
+    (error: ResourceReadError) => {
+      error.resourceUrl = side.root;
+      throw error;
+    },
+  );
+  const acp = [...dataset].some(
+    (q) =>
+      q.predicate.value.startsWith(ACP) ||
+      (q.object.termType === "NamedNode" && q.object.value.startsWith(ACP)),
+  );
+  const wac =
+    dataset.match(
+      null,
+      DataFactory.namedNode(`${RDF}type`),
+      DataFactory.namedNode(`${ACL}Authorization`),
+    ).size > 0;
+  return (acp || advertised) && wac
+    ? "unknown"
+    : acp || advertised
+      ? "acp"
+      : wac
+        ? "wac"
+        : "unknown";
 }
 export async function readAccess(
   side: PodSide,
@@ -66,8 +58,12 @@ export async function readAccess(
   const response = await side.http.get(url, { accept: "text/turtle", signal });
   if (response.status === 404) return undefined;
   requireOk(response);
-  const turtle = await requireRepresentation(response).text();
-  const dataset = await parse(new Response(turtle, { headers: response.headers }), url);
+  const dataset = await parse(response, url, side.http, signal).catch(
+    (error: ResourceReadError) => {
+      error.resourceUrl = resource;
+      throw error;
+    },
+  );
   if (system === "unknown") throw new TypeError("Cannot read unknown access system");
   const inactiveGrants: NonNullable<AccessDocument["inactiveGrants"]> = [];
   const document: AccessDocument = {

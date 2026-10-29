@@ -123,9 +123,14 @@ describe("adversarial transport, metadata and planning edges", () => {
         ? without(response, "content-type", "content-length")
         : response,
     );
-    source.responses.set(`GET ${source.acl(`${source.root}file`)}`, () => {
-      throw "unreadable";
-    });
+    const get = sourceSide.http.get;
+    sourceSide.http = {
+      ...sourceSide.http,
+      get: async (url, init) => {
+        if (url === source.acl(`${source.root}file`)) throw "unreadable";
+        return get(url, init);
+      },
+    };
     const report = await planMigration({ source: sourceSide, target: target.side() });
     expect(report.stats.bytes).toBe(0);
     expect(report.report.find((i) => i.kind === "acl-unreadable")?.explanation).toContain(

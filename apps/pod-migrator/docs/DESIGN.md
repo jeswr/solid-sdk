@@ -60,7 +60,12 @@ Data crosses from source to target only as bytes plus a content type. No header,
 4. **Review** (UI). Show the plan: resource counts, bytes, and every report item with its
    options. Nothing has been written yet. The user resolves each item or aborts. Resolutions can
    be applied in bulk per item kind.
-5. **Execute** (writes, target only). Three phases, in order:
+5. **Execute** (writes, target only). Four phases, in order:
+   - *Validate.* Before any destination mutation, recheck source and target access, then
+     fetch, validate and retain every selected file body (including any requested IRI rewrite).
+     A failure in a nested file therefore leaves no containers, placeholders or ACLs from this
+     attempt. The retained bodies consume memory proportional to the selected content; this
+     implementation buffers the complete migration rather than re-fetching bodies after validation.
    - *Lock.* Create each target container top down. Immediately after creating one, write an
      owner-only ACL/ACR on it (owner gets Read, Write, Control on the container and its members;
      nothing else). Before writing any resource directly into a target container that already
@@ -71,16 +76,48 @@ Data crosses from source to target only as bytes plus a content type. No header,
      overwrite unless the user chose "overwrite" for that path). RDF documents may optionally have
      source-pod IRIs rewritten to target-pod IRIs (parse with `@jeswr/fetch-rdf`, rewrite terms,
      serialise with `n3.Writer`); off by default the bytes are copied verbatim.
-     Before creating a file placeholder or replacing content, consume the source body and
-     check its Content-Length against received bytes when Content-Encoding does not transform
-     the body. Parse supported RDF with strict UTF-8 decoding even when rewriting is off.
-     Stream, length, decoding and parse failures stop execution with a resource entry in
-     `MigrationResult.failed`; the failing content is never written. CSS 7.2's memory backend
-     can undercount string chunks after PATCH, so Fetch may return a truncated body whose
-     byte count matches its incorrect header. HEAD repeats that incorrect length; RDF
-     validation detects the malformed representation in this case. These checks cannot
-     establish completeness for arbitrary opaque bytes or a syntactically valid RDF prefix
-     when the server consistently advertises an incorrect length.
+     All network RDF reads use one validated reader: file bodies, containers, anonymous groups,
+     access-system discovery, ACLs/ACRs, execution rechecks and verification. It consumes bytes,
+     compares Content-Length for identity-encoded responses, and decodes RDF with fatal UTF-8.
+     Stream, length, decoding and integrity failures carry the resource URL. Planning failures
+     become blocking report items; execution failures appear against the affected destination
+     resource in `MigrationResult.failed`, with the source/document URL in the explanation.
+
+     CSS 7.2's memory backend can count string characters after PATCH, so a response can end
+     exactly between triples, parse successfully, and match an incorrect Content-Length. HEAD
+     repeats that length. For non-JSON RDF with non-ASCII bytes and identity Content-Length,
+     request **one** different serialization: N-Quads, or TriG when the original is N-Quads.
+     Require the requested returned media type, no Content-Length, strict parsing, and dataset
+     isomorphism (including blank nodes and named graphs) with the original bytes. Do not use
+     matching lengths, ETags, an echoed serialization, or a second length-framed response as
+     independent evidence. Installed/live CSS 7.2 confirms conversion consumes the full stored
+     stream and omits the stored length. A mismatch or unavailable conversion fails closed;
+     the engine does not silently substitute converted bytes. ASCII RDF, opaque resources and
+     representations without identity length framing need no second GET. No implementation
+     name is treated as proof that Content-Length counts bytes.
+
+     JSON-LD copies validate the complete JSON syntax and UTF-8 without expanding any context.
+     JSON's closing delimiters establish the document boundary, so a character-count cut cannot
+     discard graph data while leaving a valid complete JSON document. Access reads and IRI
+     rewriting additionally parse RDF with remote contexts refused. The migrator never fetches
+     remote JSON-LD contexts, even for an otherwise intact document.
+
+     An access document whose byte integrity or completeness cannot be established offers
+     **skip / abort**, including for descendants. It cannot be downgraded to an owner-only copy.
+     Other unsupported but intact source policy shapes retain the conservative owner-only option.
+
+     Residual limits: these checks target transport truncation and character-counted metadata,
+     not an adversarial server consistently omitting the same triples from every representation.
+     They assume successful length-free/chunked or content-decoded streams represent the full
+     serialization; an arbitrary wrong byte length on all-ASCII RDF or opaque bytes cannot be
+     proven complete without a trusted digest or server-side snapshot. Graph-equivalent loss of
+     comments or trailing whitespace is not detected. Separate reads are not an atomic snapshot:
+     a concurrent graph change can cause safe refusal. JSON syntax validation is integrity evidence,
+     not JSON-LD context expansion or semantic validation. The extra completeness check is bounded
+     to one alternate RDF GET and one graph comparison per affected read; other media types incur
+     no extra request. Isomorphism uses a bijection of at most 64 blank nodes and a 100,000-step
+     search budget; larger or harder proofs, and non-identical quoted-triple graphs, fail closed.
+     There is no new remote-context, HEAD-length or unbounded negotiation loop.
    - *Grant.* Write the final ACLs/ACRs **bottom up** (deepest first, containers after their
      members). Every intermediate state is a subset of the final state, which is a subset of the
      source.
@@ -320,6 +357,7 @@ controls the target pod.
 | Grant to the source owner's WebID | kept verbatim (it is the same person, and they may still use that WebID) | same | info item |
 | WAC child ACL narrower than an inherited default | write the child ACL | ACP inheritance is additive, so the parent's member rules would reach the child | `inheritance-narrowed`: **per-resource** (no member controls on that parent; every existing descendant gets its own explicit controls; new files added later inherit nothing) / **abort** |
 | ACP member controls + own controls | CSS source: union; ESS source: own grants suppress inherited grants, inherited denials remain | CSS source: union; ESS source: materialize strict effective controls per resource | ESS→ACP: `inheritance-narrowed`: **per-resource** / **abort** |
+| Source ACL/ACR with unproven integrity/completeness | — | — | `acl-unreadable`: **skip the resource and subtree** / **abort** |
 | Unreadable source ACL/ACR | — | — | `acl-unreadable`: **owner-only** / **skip the resource** / **abort** |
 | Unreadable, ambiguous or shared target ACL/ACR | — | — | `acl-unreadable`: **skip the resource** / **abort**. Owner-only cannot remove unproven existing restrictions or additive ancestor grants |
 | Unknown source access-control system | — | — | `acl-system-unknown`: **owner-only for everything** / **abort** |

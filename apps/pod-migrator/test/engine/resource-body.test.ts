@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6
 import { LiteralFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
 import { serialize } from "../../src/engine/rdf.js";
 import { readResourceBytes } from "../../src/engine/resource-body.js";
@@ -29,6 +29,15 @@ describe("resource body integrity before copying", () => {
           },
         }),
         url,
+        {
+          http: {
+            get: vi
+              .fn()
+              .mockResolvedValue(
+                new Response(bytes, { headers: { "content-type": "application/n-quads" } }),
+              ),
+          } as never,
+        },
       ),
     ).toEqual(bytes);
   });
@@ -132,4 +141,64 @@ describe("resource body integrity before copying", () => {
       );
     else expect(target.data.has(targetUrl)).toBe(false);
   });
+});
+
+it("requires a full response and independent evidence for ambiguous Unicode RDF", async () => {
+  await expect(readResourceBytes(new Response(null, { status: 206 }), url)).rejects.toThrow(
+    "complete representation (206)",
+  );
+  const bytes = new TextEncoder().encode(await unicodeTurtle());
+  await expect(
+    readResourceBytes(
+      new Response(bytes, {
+        headers: { "content-type": "text/turtle", "content-length": String(bytes.length) },
+      }),
+      url,
+    ),
+  ).rejects.toThrow("completeness cannot be established");
+});
+
+it.each([
+  () => new Response(null, { status: 406 }),
+  () =>
+    new Response("", { headers: { "content-type": "application/n-quads", "content-length": "0" } }),
+  () => new Response(null, { status: 206, headers: { "content-type": "application/n-quads" } }),
+  () => new Response("incomplete", { headers: { "content-type": "application/n-quads" } }),
+])("refuses unavailable or still length-framed independent responses", async (independent) => {
+  const bytes = new TextEncoder().encode(await unicodeTurtle());
+  const get = vi.fn().mockImplementation(independent);
+  await expect(
+    readResourceBytes(
+      new Response(bytes, {
+        headers: { "content-type": "text/turtle", "content-length": String(bytes.length) },
+      }),
+      url,
+      { http: { get } as never },
+    ),
+  ).rejects.toThrow("completeness cannot be established");
+  expect(get).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  "urn:g",
+  "urn:other",
+])("compares blank nodes isomorphically while preserving named graph %s", async (graph) => {
+  const original = '_:a <urn:p> "é" <urn:g> .\n';
+  const converted = `<${graph}> { _:new <urn:p> "é". }\n`;
+  const get = vi
+    .fn()
+    .mockResolvedValue(
+      new Response(converted, { headers: { "content-type": "application/trig" } }),
+    );
+  const bytes = new TextEncoder().encode(original);
+  const reading = readResourceBytes(
+    new Response(bytes, {
+      headers: { "content-type": "application/n-quads", "content-length": String(bytes.length) },
+    }),
+    url,
+    { http: { get } as never },
+  );
+  if (graph === "urn:g") expect(await reading).toEqual(bytes);
+  else await expect(reading).rejects.toThrow("graph mismatch");
+  expect(get).toHaveBeenCalledWith(url, { accept: "application/trig", signal: undefined });
 });

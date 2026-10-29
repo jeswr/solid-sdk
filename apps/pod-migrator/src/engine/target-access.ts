@@ -22,13 +22,15 @@ export async function targetAccessLinks(
     seen.add(url);
     if (seen.size > 10000) throw new TypeError("Target inventory exceeds 10000 resources");
     const head = await side.http.head(url, { signal });
-    if (head.status !== 404) requireOk(head);
+    if (head.status !== 404) requireOk(head, url);
     const acl = aclLink(head, url, side.root);
     if (acl) found.set(url, acl);
     if (!head.ok || !url.endsWith("/")) continue;
     const dataset = await parse(
-      requireOk(await side.http.get(url, { accept: "text/turtle", signal })),
+      requireOk(await side.http.get(url, { accept: "text/turtle", signal }), url),
       url,
+      side.http,
+      signal,
     );
     for (const member of new Container(url, dataset, DataFactory).contains) {
       const child = assertWithinPodScope(side.root, member.id);

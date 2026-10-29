@@ -13,6 +13,7 @@ import {
   unionPolicies,
 } from "./policy.js";
 import { aclLink, links, parent, parse, requireOk } from "./rdf.js";
+import { ResourceReadError } from "./resource-body.js";
 import { type AcpDialect, PolicyTooComplex } from "./systems/acp.js";
 import { assertSpecificAccess, targetAccessLinks } from "./target-access.js";
 import { reportItem, type TranslationContext, translatePolicy } from "./translation.js";
@@ -88,7 +89,7 @@ function decisionFor(
   const item = plan.report.find((item) => item.resourceUrl === url && item.kind === kind);
   return item && resolutions[item.id];
 }
-export async function planMigration(opts: {
+async function buildPlan(opts: {
   source: PodSide;
   target: PodSide;
   targetContainer?: string;
@@ -112,7 +113,7 @@ export async function planMigration(opts: {
     const url = queue.shift() as string;
     seen.add(url);
     if (seen.size > 10000) throw new PolicyTooComplex("Pod has more than 10000 resources");
-    const head = requireOk(await source.http.head(url, { signal: opts.signal }));
+    const head = requireOk(await source.http.head(url, { signal: opts.signal }), url);
     const acl = aclLink(head, url, source.root);
     for (const auxiliary of [...links(head, url, "acl"), ...links(head, url, "describedby")])
       auxiliaries.add(auxiliary);
@@ -129,8 +130,10 @@ export async function planMigration(opts: {
     discovered.push({ resource, acl });
     if (resource.kind === "container") {
       const dataset = await parse(
-        requireOk(await source.http.get(url, { accept: "text/turtle", signal: opts.signal })),
+        requireOk(await source.http.get(url, { accept: "text/turtle", signal: opts.signal }), url),
         url,
+        source.http,
+        opts.signal,
       );
       for (const member of new Container(url, dataset, DataFactory).contains) {
         const child = assertWithinPodScope(source.root, member.id);
@@ -196,6 +199,7 @@ export async function planMigration(opts: {
   const materializeMembers =
     targetSystem === "acp" && (sourceSystem === "wac" || source.implementation === "ess");
   const sourceErrors = new Set<string>();
+  const sourceIntegrityErrors = new Set<string>();
   for (const [index, item] of resources.entries()) {
     if (sourceSystem !== "unknown")
       try {
@@ -221,12 +225,15 @@ export async function planMigration(opts: {
       } catch (error) {
         opts.signal?.throwIfAborted();
         sourceErrors.add(item.resource.sourceUrl);
+        if (error instanceof ResourceReadError) sourceIntegrityErrors.add(item.resource.sourceUrl);
         report.push(
           reportItem(
             error instanceof PolicyTooComplex ? "too-complex" : "acl-unreadable",
             item.resource.sourceUrl,
             error instanceof Error ? error.message : "The access document could not be read.",
-            ["owner-only", "skip", "abort"],
+            error instanceof ResourceReadError
+              ? ["skip", "abort"]
+              : ["owner-only", "skip", "abort"],
           ),
         );
       }
@@ -245,7 +252,7 @@ export async function planMigration(opts: {
     while (url !== undefined) {
       if (!targetHeads.has(url)) {
         const head = await target.http.head(url, { signal: opts.signal });
-        if (head.status !== 404) requireOk(head);
+        if (head.status !== 404) requireOk(head, url);
         targetHeads.set(url, head);
         if (targetSystem !== "unknown")
           try {
@@ -281,6 +288,8 @@ export async function planMigration(opts: {
               }),
             ),
             documentUrl,
+            source.publicHttp,
+            opts.signal,
           );
           groups.set(subject.group, [...new Group(subject.group, dataset, DataFactory).hasMember]);
         } catch {
@@ -316,7 +325,9 @@ export async function planMigration(opts: {
           "acl-unreadable",
           resource.sourceUrl,
           "An ancestor's access controls could not be read; inheritance cannot be proven safe.",
-          ["owner-only", "skip", "abort"],
+          hasError(resource.sourceUrl, source.root, sourceIntegrityErrors)
+            ? ["skip", "abort"]
+            : ["owner-only", "skip", "abort"],
         ),
       );
     const sourceEffective = unreadable
@@ -469,6 +480,21 @@ export async function planMigration(opts: {
   });
   opts.onProgress?.({ phase: "plan", done: resources.length, total: resources.length });
   return plan;
+}
+export async function planMigration(opts: Parameters<typeof buildPlan>[0]): Promise<MigrationPlan> {
+  try {
+    return await buildPlan(opts);
+  } catch (error) {
+    opts.signal?.throwIfAborted();
+    if (!(error instanceof ResourceReadError)) throw error;
+    return {
+      sourceSystem: "unknown",
+      targetSystem: "unknown",
+      resources: [],
+      report: [reportItem("resource-unreadable", error.resourceUrl, error.message, ["abort"])],
+      stats: { containers: 0, resources: 0, bytes: 0, aclDocuments: 0 },
+    };
+  }
 }
 export function finalizePlan(plan: MigrationPlan, resolutions: Resolutions): ExecutablePlan {
   if (Object.values(resolutions).includes("abort"))
