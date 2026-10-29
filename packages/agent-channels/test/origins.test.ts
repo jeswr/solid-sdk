@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer uses bare builtins
+import { createHash } from "crypto";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer uses bare builtins
 import { createServer } from "http";
 import { expect, it, vi } from "vitest";
 import { createOriginScopedFetch } from "../src/origins.js";
@@ -56,6 +58,42 @@ it("checks string, URL and Request inputs and refuses redirects before forwardin
     }),
   ).rejects.toThrow();
   expect(redirect).toHaveBeenCalledTimes(1);
+});
+
+it("enforces effective response integrity from Request inputs and init overrides", async () => {
+  const body = "local integrity fixture";
+  const integrity = `sha256-${createHash("sha256").update(body).digest("base64")}`;
+  const mismatch = `sha256-${createHash("sha256").update("different fixture").digest("base64")}`;
+  let requests = 0;
+  const server = createServer((_req, res) => {
+    requests++;
+    res.end(body);
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("no local fixture address");
+    const origin = `http://127.0.0.1:${address.port}`;
+    const scoped = createOriginScopedFetch(new Set([origin]), { allowLoopback: true });
+    const inputs: Array<(policy: string) => Parameters<typeof scoped>> = [
+      (policy) => [origin, { integrity: policy }],
+      (policy) => [new URL(origin), { integrity: policy }],
+      (policy) => [new Request(origin, { integrity: policy })],
+      (policy) => [new Request(origin, { integrity: mismatch }), { integrity: policy }],
+    ];
+    for (const input of inputs) {
+      expect(await (await scoped(...input(integrity))).text()).toBe(body);
+      await expect(scoped(...input(mismatch))).rejects.toThrow();
+    }
+    expect(
+      await (await scoped(new Request(origin, { integrity: mismatch }), { integrity: "" })).text(),
+    ).toBe(body);
+    expect(requests).toBe(inputs.length * 2 + 1);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
 });
 
 it("refuses same-origin and unlisted-origin redirects through the default transport", async () => {

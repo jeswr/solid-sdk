@@ -45,6 +45,6 @@ export function createOriginScopedFetch(
     const request = new Request(input, init);
     const url = new URL(request.url);
     if (!allowed.has(url.origin)) throw new TypeError("request origin is outside binding ORIGINS");
-    return guarded(request, { redirect: "manual" });
+    return guarded(request, { redirect: "manual", integrity: request.integrity });
   };
 }
