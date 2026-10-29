@@ -105,22 +105,26 @@ export function purposeFilter(
 ): (fact: Pick<Nanopublication, "categories">) => boolean {
   if (!Object.hasOwn(MEMORY_PURPOSES, purpose)) throw new Error("Unsupported memory purpose");
   if (iri(clientId) !== clientId) throw new Error("Unsafe client identity");
-  return (fact) =>
-    fact.categories.length > 0 &&
-    evaluablePolicy(policy) &&
-    fact.categories.every(
-      (category) =>
-        evaluate(
-          policy,
-          {
-            agent: clientId,
-            action: "read",
-            target: categoryIri(category),
-            attributes: { purpose: MEMORY_PURPOSES[purpose] },
-          },
-          { requireDuties: true },
-        ).decision === "permit",
+  return (fact) => {
+    const now = new Date();
+    return (
+      fact.categories.length > 0 &&
+      evaluablePolicy(policy) &&
+      fact.categories.every(
+        (category) =>
+          evaluate(
+            policy,
+            {
+              agent: clientId,
+              action: "read",
+              target: categoryIri(category),
+              attributes: { purpose: MEMORY_PURPOSES[purpose] },
+            },
+            { requireDuties: true, now },
+          ).decision === "permit",
+      )
     );
+  };
 }
 /** Owner-editable default policy; deny health/finance for every client and purpose. */
 export function createDefaultPolicy(id: string, owner: string): OdrlPolicy {

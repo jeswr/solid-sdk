@@ -319,6 +319,50 @@ it("evaluates supported purpose and time constraints with an implicit evaluation
 });
 
 it.each([
+  false,
+  true,
+])("uses one fresh instant for all categories (disjoint windows: %s)", (disjoint) => {
+  const boundary = "2026-10-27T00:00:00Z";
+  const start = Date.parse(boundary) - 1;
+  const RealDate = Date;
+  let samples = 0;
+  vi.stubGlobal(
+    "Date",
+    class extends RealDate {
+      constructor(value?: string | number | Date) {
+        super(value ?? start + samples++);
+      }
+    },
+  );
+  try {
+    const timed: OdrlPolicy = {
+      id: policy.id,
+      permissions: ["Contact", "Preference"].map((category) => ({
+        type: "permission",
+        action: "read",
+        target: NS.pd + category,
+        constraints: [
+          {
+            leftOperand: "dateTime",
+            operator: disjoint && category === "Preference" ? "gteq" : "lt",
+            rightOperand: boundary,
+          },
+        ],
+      })),
+    };
+    const filter = purposeFilter(timed, "ServiceProvision", client);
+    const fact = { categories: ["pd:Contact", "pd:Preference"] };
+    expect(samples).toBe(0);
+    expect(filter(fact)).toBe(!disjoint);
+    expect(samples).toBe(1);
+    expect(filter(fact)).toBe(false);
+    expect(samples).toBe(2);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
+
+it.each([
   { operator: "lt", rightOperand: "2026-10-26T12:00:00.1234Z" },
   { operator: "neq", rightOperand: "2026-10-26T12:00:00.123001Z" },
   { operator: "lt", rightOperand: "2026-10-26T13:00:00.1230001+01:00" },
