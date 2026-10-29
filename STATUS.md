@@ -2,6 +2,82 @@
 
 # sst-8xm.15 lane report
 
+## Fix round 4
+
+The callback-persistence finding against `011d99c676a0` is addressed.
+The package gate and affected workspace gate pass. The full workspace gate
+still fails in the same unchanged root guard tests recorded in fix round 3.
+
+| Commit | Change |
+| --- | --- |
+| `ca4b0f8b` — `fix: require persisted session refresh updates` | Guard both documented JWT callbacks with `trigger: "update"`; require a browser session-update POST that persists the returned cookie. Document shared server-side token storage for refresh during read-only calls. Add eight regressions using the actual documented callbacks and Auth.js session HTTP/JWT handling. |
+| This report commit — `docs: record callback persistence fix` | Record validation, security evidence, and remaining verification blockers. |
+
+### Security property and regression evidence
+
+Read-only session calls, including zero-argument `auth()` in React Server
+Components, must not redeem a single-use refresh token whose replacement
+would be lost with a discarded cookie. The conservative example flow now
+refreshes only on explicit browser `useSession().update({})` requests.
+Passing `{}` selects a CSRF-protected POST and `trigger: "update"`;
+plain `update()` and `getSession()` use GET and skip refresh. The browser
+must apply the response cookie before starting the next server-side pod
+request. Client update payloads are ignored. Applications needing refresh
+inside read-only calls must atomically read, refresh, and persist the entire
+current Solid state in shared server-side storage on every call.
+
+The eight new cases execute both documentation examples with real
+`@auth/core` CSRF validation, encrypted JWT encoding/decoding, and session
+responses over in-memory requests. They prove that sequential read-only
+calls with expired or unknown expiry do no token HTTP and leave the stored
+JWT state unchanged. Sequential update POSTs persist rotated credentials
+before the next request, including with omitted or zero lifetimes. A mock
+endpoint rejects reuse of a spent refresh token with `invalid_grant`.
+Tests also check that the persisted key survives and browser-visible
+session JSON excludes Solid token state. All issuer HTTP remains mocked.
+
+Before the documentation fix, all eight new regressions failed. After the
+fix, all **151 refresh tests** and **232 package tests in 4 files** pass.
+Production source, exported APIs, manifests, and lockfile are unchanged.
+No dependencies were added; dependency-policy checks and installation are
+not applicable. No API report update is needed for this documentation fix.
+
+### Fix-round validation
+
+Commands used `PATH=/opt/node24/bin:$PATH` (Node **v24.22.1**, pnpm **10.4.1**).
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter='@jeswr/auth-solid^...'` | PASS: both workspace dependencies built. |
+| `pnpm --filter @jeswr/auth-solid exec vitest run test/refresh.test.ts -t 'sequential read-only\|persists rotated credentials'` | Expected FAIL before the fix: **8 failed / 143 skipped**. |
+| `pnpm --filter @jeswr/auth-solid exec vitest run test/refresh.test.ts` | PASS after the fix: **151 passed**. |
+| `pnpm --filter @jeswr/auth-solid run lint && pnpm --filter @jeswr/auth-solid run build && pnpm --filter @jeswr/auth-solid run typecheck && pnpm --filter @jeswr/auth-solid run test` | PASS: lint/build/strict typecheck; **232 tests passed**. |
+| `TURBO_SCM_BASE=011d99c676a06f9163af801d469e2310b606a234 pnpm run gate` | PASS, including `lint:root`: **7/7 tasks** succeeded. |
+| `pnpm run gate:full` | FAIL (exit 1): `//#test:root`; **161 failed / 739 passed** root tests across 4 failing files. Turbo stopped with **47 successful / 211 total tasks**. |
+| `roborev status` | Unavailable: exit 127, `roborev: command not found`. |
+| `git diff --check` | PASS. |
+
+The failing root files are `test/agent-layers.test.mjs`,
+`test/agent-layers-reachability.test.mjs`, `test/check-packages-guard.test.mjs`,
+and `test/check-sdk-layers.test.mjs`. Their empty child-process output
+assertions match the previously recorded failures.
+`git diff --quiet 011d99c676a06f9163af801d469e2310b606a234 -- test scripts guardrails vitest.config.ts package.json pnpm-lock.yaml`
+passed, confirming those sources and configuration are unchanged this round.
+
+Logs: `/tmp/sst-8xm.15-fix4-{deps-build,regressions-red,regressions-green,package-gate,affected-gate,full-gate}.log`.
+
+### Remaining work and open questions
+
+- The requested finding is fixed. Full-workspace verification remains
+  blocked by existing root-test failures; automated roborev is unavailable.
+  Jesse retains the security review and merge decision.
+- No open questions. The conservative choice is explicit browser session
+  updates for JWT refresh, with no token consumption during read-only calls.
+- No push, PR, branch switch, remote fetch/merge, publishing, or edits to
+  another checkout were performed.
+
+---
+
 ## Fix round 3
 
 The nonce-persistence finding against `1df6f8958bfc` is addressed. The
