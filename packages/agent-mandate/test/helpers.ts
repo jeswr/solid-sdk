@@ -42,7 +42,15 @@ export const INVALID_INSTANTS = [
   "2026-10-25",
   "2026-10-25 12:00:00Z",
   "2026-10-25T12:00Z",
+  "2026-10-26T12:00:00.0001Z",
+  "2026-10-26T12:00:00.0011Z",
+  "2026-10-26T12:00:00.1234Z",
+  "2026-10-26T12:00:00.1230001Z",
+  "2026-10-26T12:00:00.0001+14:00",
+  "2026-10-26T12:00:00.0001-14:00",
 ];
+/** Fractions that Date.parse represents without discarding any nonzero digit. */
+export const MILLISECOND_FRACTIONS = ["1", "12", "123", "123000", "0000"];
 export const clock = () => NOW;
 export const mandate = (): Mandate =>
   defaultMandate({

@@ -32,6 +32,7 @@ import {
   ID,
   INVALID_INSTANTS,
   intent,
+  MILLISECOND_FRACTIONS,
   mandate,
   NOW,
   OWNER,
@@ -122,10 +123,26 @@ it.each([
       validUntil: claims.validUntil,
     });
 });
+it.each(
+  MILLISECOND_FRACTIONS,
+)("preserves lossless signed validity fractions: %s", async (fraction) => {
+  const claims = {
+    ...mandateCredential(mandate(), { statusListCredential: STATUS, statusListIndex: "1" }),
+    validFrom: `2026-10-25T12:00:00.${fraction}+14:00`,
+    validUntil: `2026-11-25T12:00:00.${fraction}-14:00`,
+  };
+  const signed = await issue({ credential: claims, key, options: { created: NOW } });
+  const parsed = await parseMandateCredential(await mandateToTurtle(signed));
+  expect(parsed).toBeDefined();
+  for (const vc of [signed, parsed])
+    expect(
+      await createVcMandateVerifier({ ...options, read: async () => vc }).load(),
+    ).toMatchObject({ validFrom: claims.validFrom, validUntil: claims.validUntil });
+});
 it.each([
   "validFrom",
   "validUntil",
-] as const)("rejects signed invalid calendar instants and timezone bounds in %s", async (field) => {
+] as const)("rejects signed invalid or lossy instants in %s", async (field) => {
   for (const value of INVALID_INSTANTS) {
     const claims = {
       ...mandateCredential(mandate(), { statusListCredential: STATUS, statusListIndex: "1" }),

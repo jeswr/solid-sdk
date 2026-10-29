@@ -8,7 +8,7 @@ import { beforeAll, expect, it } from "vitest";
 import { createLegacyMandateVerifier } from "../src/legacy.js";
 import { evaluateIntent, solidOdrlEngine } from "../src/policy.js";
 import type { Intent, Policy } from "../src/types.js";
-import { ACTOR, clock, INVALID_INSTANTS, intent, OWNER } from "./helpers.js";
+import { ACTOR, clock, INVALID_INSTANTS, intent, MILLISECOND_FRACTIONS, OWNER } from "./helpers.js";
 
 const fixture = JSON.parse(
   readFileSync(new URL("./fixtures/legacy.json", import.meta.url), "utf8"),
@@ -91,10 +91,19 @@ async function loadSigned(payload: unknown, now = clock) {
     }),
   }).load();
 }
+it.each(
+  MILLISECOND_FRACTIONS,
+)("preserves lossless legacy validity fractions: %s", async (fraction) => {
+  const validity = {
+    validFrom: `2026-10-25T12:00:00.${fraction}+14:00`,
+    validUntil: `2026-11-25T12:00:00.${fraction}-14:00`,
+  };
+  expect(await loadSigned({ ...fixture.payload, ...validity })).toMatchObject(validity);
+});
 it.each([
   "validFrom",
   "validUntil",
-] as const)("rejects signed legacy calendar instants and timezone bounds in %s", async (field) => {
+] as const)("rejects signed invalid or lossy legacy instants in %s", async (field) => {
   for (const value of INVALID_INSTANTS)
     expect(
       await loadSigned(

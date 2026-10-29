@@ -14,6 +14,7 @@ import {
   edKey,
   expectStandardProof,
   INVALID_INSTANTS,
+  MILLISECOND_FRACTIONS,
   NOW,
   OWNER,
   PROOF_GRAPH_CHANGES,
@@ -38,7 +39,9 @@ const options = () => ({
   webIdKeyResolver: resolver,
   now: clock,
 });
-it.each(INVALID_INSTANTS)("rejects a signed invalid approval expiry: %s", async (expires) => {
+it.each(
+  INVALID_INSTANTS,
+)("rejects a signed invalid or lossy approval expiry: %s", async (expires) => {
   const doc = await issueApproval({ ...a, expires }, key, NOW);
   expect(
     await verifyApproval(doc, {
@@ -46,6 +49,21 @@ it.each(INVALID_INSTANTS)("rejects a signed invalid approval expiry: %s", async 
       now: () => new Date("2026-01-01T00:00:00Z"),
     }),
   ).toEqual({ valid: false, reason: "expired" });
+});
+it.each(
+  MILLISECOND_FRACTIONS,
+)("preserves lossless signed approval fractions: %s", async (fraction) => {
+  const approval = { ...a, expires: `2026-10-26T12:00:00.${fraction}Z` };
+  const doc = await issueApproval(approval, key, NOW);
+  const expiry = Date.parse(approval.expires);
+  expect(await verifyApproval(doc, { ...options(), now: () => new Date(expiry - 1) })).toEqual({
+    valid: true,
+    approval,
+  });
+  expect(await verifyApproval(doc, { ...options(), now: () => new Date(expiry) })).toEqual({
+    valid: false,
+    reason: "expired",
+  });
 });
 beforeAll(async () => {
   key = await approvalKey();

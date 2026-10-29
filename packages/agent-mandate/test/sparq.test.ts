@@ -13,7 +13,7 @@ import {
 } from "../src/sparq.js";
 import type { Constraint, Intent, Policy, Rule } from "../src/types.js";
 import { AGENT, ODRL } from "../src/types.js";
-import { ACTOR, intent, mandate } from "./helpers.js";
+import { ACTOR, INVALID_INSTANTS, intent, mandate } from "./helpers.js";
 
 const policy: Policy = { id: "urn:policy", permissions: [{ type: "permission", action: "read" }] };
 const response = (extra = {}): string =>
@@ -1280,10 +1280,11 @@ it.each([
     expect(await solidOdrlEngine.evaluate(p, request)).toEqual({ effect: "indeterminate" });
     expect(await adapter.evaluate(p, request)).toEqual({ effect: "indeterminate" });
     expect(run).not.toHaveBeenCalled();
-    expect(await evaluateIntent({ ...mandate(), autonomous: p }, request, adapter)).toEqual({
-      decision: "confirm-required",
-      reason: "indeterminate",
-    });
+    expect(await evaluateIntent({ ...mandate(), autonomous: p }, request, adapter)).toEqual(
+      INVALID_INSTANTS.includes(request.at)
+        ? { decision: "refuse-all", reason: "mandate-invalid" }
+        : { decision: "confirm-required", reason: "indeterminate" },
+    );
     run.mockClear();
   }
 });

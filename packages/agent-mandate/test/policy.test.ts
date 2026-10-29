@@ -14,7 +14,14 @@ import {
   type Policy,
   type Rule,
 } from "../src/types.js";
-import { ACTOR, clock, INVALID_INSTANTS, intent, mandate } from "./helpers.js";
+import {
+  ACTOR,
+  clock,
+  INVALID_INSTANTS,
+  intent,
+  MILLISECOND_FRACTIONS,
+  mandate,
+} from "./helpers.js";
 
 it.each(INVALID_INSTANTS)("refuses invalid intent and mandate instants: %s", async (value) => {
   for (const [m, q] of [
@@ -26,6 +33,24 @@ it.each(INVALID_INSTANTS)("refuses invalid intent and mandate instants: %s", asy
       decision: "refuse-all",
       reason: "mandate-invalid",
     });
+});
+it.each(
+  MILLISECOND_FRACTIONS,
+)("compares lossless intent validity fractions: %s", async (fraction) => {
+  const validFrom = `2026-10-26T12:00:00.${fraction}Z`;
+  const validUntil = new Date(Date.parse(validFrom) + 1).toISOString();
+  const m = { ...mandate(), validFrom, validUntil };
+  expect(await evaluateIntent(m, intent({ at: validFrom }))).toEqual({
+    decision: "confirm-required",
+    reason: "owner-approval",
+  });
+  expect(
+    await evaluateIntent(m, intent({ at: new Date(Date.parse(validFrom) - 1).toISOString() })),
+  ).toEqual({ decision: "refuse-all", reason: "mandate-not-yet-valid" });
+  expect(await evaluateIntent(m, intent({ at: validUntil }))).toEqual({
+    decision: "refuse-all",
+    reason: "mandate-expired",
+  });
 });
 
 const effects: Effect[] = ["permit", "prohibited", "not-applicable", "indeterminate"];
@@ -809,9 +834,10 @@ it.each([
     policy({ obligations: [{ action: "inform", constraints: [c as OdrlConstraint] }] }),
   ]) {
     expect(await solidOdrlEngine.evaluate(p, q)).toEqual({ effect: "indeterminate" });
-    expect(await evaluateIntent({ ...mandate(), autonomous: p }, q)).toEqual({
-      decision: "confirm-required",
-      reason: "indeterminate",
-    });
+    expect(await evaluateIntent({ ...mandate(), autonomous: p }, q)).toEqual(
+      INVALID_INSTANTS.includes(q.at)
+        ? { decision: "refuse-all", reason: "mandate-invalid" }
+        : { decision: "confirm-required", reason: "indeterminate" },
+    );
   }
 });
