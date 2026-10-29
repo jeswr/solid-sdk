@@ -113,12 +113,7 @@ export function sparqPolicyEngine(
           (options.timeoutMs !== undefined &&
             (!Number.isFinite(options.timeoutMs) ||
               options.timeoutMs <= 0 ||
-              options.timeoutMs > 30000)) ||
-          !supportedPolicy(policy) ||
-          (policy.obligations ?? []).length > 0 ||
-          [...(policy.permissions ?? []), ...(policy.prohibitions ?? [])].some(
-            (r) => (r.duties ?? []).length > 0,
-          )
+              options.timeoutMs > 30000))
         )
           return { effect: "indeterminate" };
         const attributes: NonNullable<Intent["attributes"]> = {
@@ -126,18 +121,23 @@ export function sparqPolicyEngine(
           dateTime: request.at,
         };
         const comparable = (r: Rule) =>
+          (r.duties ?? []).length === 0 &&
+          supportedPolicy({ id: policy.id, permissions: [r] }) &&
           (r.constraints ?? []).every(
             (c) =>
               !Array.isArray(attributes[c.leftOperand]) &&
               knownOperand(c, attributes[c.leftOperand]) &&
               representableSet(c, attributes[c.leftOperand]),
           );
-        const missing = [...(policy.permissions ?? []), ...(policy.prohibitions ?? [])]
-          .filter((r) => candidate(r, policy, request))
-          .some((r) => !comparable(r));
+        const rules = [...(policy.permissions ?? []), ...(policy.prohibitions ?? [])];
+        const unresolved =
+          !supportedPolicy(policy) ||
+          (policy.obligations ?? []).length > 0 ||
+          rules.some((r) => (r.duties ?? []).length > 0) ||
+          rules.filter((r) => candidate(r, policy, request)).some((r) => !comparable(r));
         // Only a definite prohibition may decide a policy with unresolved candidates.
         if (
-          missing &&
+          unresolved &&
           !(policy.prohibitions ?? []).some((r) => candidate(r, policy, request) && comparable(r))
         )
           return { effect: "indeterminate" };
@@ -151,7 +151,8 @@ export function sparqPolicyEngine(
               action: "use",
               constraints: rule.constraints?.map((c) => ({ ...c, datatype: operandDatatype(c) })),
             }));
-        const permissions = lower(policy.permissions);
+        // Unresolved policies can establish only a prohibition; permissions add no evidence.
+        const permissions = unresolved ? [] : lower(policy.permissions);
         const prohibitions = lower(policy.prohibitions);
         const contextTypes = new Map<string, string>();
         for (const rule of [...permissions, ...prohibitions]) {
@@ -172,6 +173,9 @@ export function sparqPolicyEngine(
               ...policy,
               assigner: undefined,
               assignee: undefined,
+              conflict: "prohibit",
+              profile: undefined,
+              obligations: [],
               permissions,
               prohibitions,
             }),
@@ -243,7 +247,7 @@ export function sparqPolicyEngine(
                 ? "prohibited"
                 : "not-applicable"
               : "indeterminate";
-        return { effect: missing && effect !== "prohibited" ? "indeterminate" : effect };
+        return { effect: unresolved && effect !== "prohibited" ? "indeterminate" : effect };
       } catch {
         return { effect: "indeterminate" };
       }

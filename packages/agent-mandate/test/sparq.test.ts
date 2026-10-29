@@ -1002,8 +1002,9 @@ it.each<Constraint>([
         .one("https://www.w3.org/2018/credentials#credentialSubject")
         .one(`${AGENT}policy`);
       for (const kind of ["permission", "prohibition"]) {
-        expect(lowered.values(`${ODRL}${kind}`)).toHaveLength(1);
-        expect(lowered.one(`${ODRL}${kind}`).values(`${ODRL}constraint`)).toHaveLength(0);
+        const rules = lowered.values(`${ODRL}${kind}`);
+        expect(rules).toHaveLength(kind === "permission" ? 0 : 1);
+        for (const rule of rules) expect(rule.values(`${ODRL}constraint`)).toHaveLength(0);
       }
       expect(await evaluateIntent({ ...mandate(), autonomous: p }, request, adapter)).toEqual(
         prohibited
@@ -1012,4 +1013,212 @@ it.each<Constraint>([
       );
     }
   }
+});
+
+const uncertainPolicies: { name: string; policy: Policy }[] = [
+  { name: "permit conflict strategy", policy: { ...policy, conflict: "perm" } },
+  { name: "unknown profile", policy: { ...policy, profile: "urn:unsupported-profile" } },
+  { name: "policy obligation", policy: { ...policy, obligations: [{ action: "inform" }] } },
+  {
+    name: "unknown obligation",
+    policy: { ...policy, obligations: [{ action: "unknown" as "inform" }] },
+  },
+  ...["permission", "prohibition"].flatMap((type) =>
+    [
+      { name: "duty", rule: { action: "read", duties: [{ action: "inform" }] } },
+      { name: "unknown duty", rule: { action: "read", duties: [{ action: "unknown" }] } },
+      { name: "unknown action", rule: { action: "urn:unknown-action" } },
+      {
+        name: "unknown operand",
+        rule: {
+          action: "read",
+          constraints: [{ leftOperand: "urn:unknown-operand", operator: "eq", rightOperand: "x" }],
+        },
+      },
+      {
+        name: "unknown operator",
+        rule: {
+          action: "read",
+          constraints: [{ leftOperand: "purpose", operator: "unknown", rightOperand: "x" }],
+        },
+      },
+    ].map(({ name, rule }) => ({
+      name: `${type} ${name}`,
+      policy: {
+        ...policy,
+        [type === "permission" ? "permissions" : "prohibitions"]: [{ type, ...rule }],
+      } as Policy,
+    })),
+  ),
+];
+
+it.each(uncertainPolicies)("checks definite prohibitions before rejecting $name", async ({
+  policy: uncertain,
+}) => {
+  const p: Policy = {
+    ...uncertain,
+    prohibitions: [
+      ...(uncertain.prohibitions ?? []),
+      {
+        type: "prohibition",
+        action: "read",
+        constraints: [{ leftOperand: "count", operator: "gt", rightOperand: "2" }],
+      },
+    ],
+  };
+  const request = intent({ action: "read", attributes: { count: "10", purpose: "x" } });
+  expect(await solidOdrlEngine.evaluate(p, request)).toEqual({ effect: "prohibited" });
+  for (const backend of [
+    { effect: "deny", matchedRules: ["urn:definite-prohibition"] },
+    { effect: "deny", matchedRules: [] },
+    { effect: "permit", matchedRules: [] },
+    { effect: "indeterminate", matchedRules: [] },
+  ]) {
+    const run = vi.fn((_binary: string, _args: ProcessOptions) => ({
+      stdout: response(backend),
+      status: 0,
+    }));
+    const adapter = sparqPolicyEngine({ binary: "test", run });
+    const prohibited = backend.matchedRules.length > 0;
+    expect(await adapter.evaluate(p, request)).toEqual({
+      effect: prohibited ? "prohibited" : "indeterminate",
+    });
+    expect(run).toHaveBeenCalledOnce();
+    const doc = JSON.parse((run.mock.calls[0] as [string, ProcessOptions])[1].input);
+    const store = await parseRdf(doc.policy.text, "text/turtle");
+    const lowered = node(store, "urn:example:sparq-envelope")
+      .one("https://www.w3.org/2018/credentials#credentialSubject")
+      .one(`${AGENT}policy`);
+    expect(lowered.iri(`${ODRL}conflict`)).toBe(`${ODRL}prohibit`);
+    expect(lowered.values(`${ODRL}profile`)).toHaveLength(0);
+    expect(lowered.values(`${ODRL}obligation`)).toHaveLength(0);
+    expect(lowered.values(`${ODRL}permission`)).toHaveLength(0);
+    const prohibitions = lowered.values(`${ODRL}prohibition`);
+    expect(prohibitions).toHaveLength(1);
+    expect(prohibitions[0]?.one(`${ODRL}constraint`).text(`${ODRL}rightOperand`)).toBe("2");
+    for (const rule of [...lowered.values(`${ODRL}permission`), ...prohibitions]) {
+      expect(rule.iri(`${ODRL}action`)).toBe(`${ODRL}use`);
+      expect(rule.values(`${ODRL}duty`)).toHaveLength(0);
+      for (const constraint of rule.values(`${ODRL}constraint`)) {
+        expect(constraint.iri(`${ODRL}leftOperand`)).toBe(`${ODRL}count`);
+        expect(constraint.iri(`${ODRL}operator`)).toBe(`${ODRL}gt`);
+      }
+    }
+    expect(await evaluateIntent({ ...mandate(), autonomous: p }, request, adapter)).toEqual(
+      prohibited
+        ? { decision: "prohibited", reason: "prohibition" }
+        : { decision: "confirm-required", reason: "indeterminate" },
+    );
+  }
+});
+
+it.each(
+  uncertainPolicies,
+)("requires confirmation without a definite prohibition for $name", async ({
+  policy: uncertain,
+}) => {
+  const run = vi.fn(() => ({
+    stdout: response({ effect: "deny", matchedRules: ["urn:unexpected"] }),
+    status: 0,
+  }));
+  const adapter = sparqPolicyEngine({ binary: "test", run });
+  expect(
+    await adapter.evaluate(uncertain, intent({ action: "read", attributes: { purpose: "x" } })),
+  ).toEqual({ effect: "indeterminate" });
+  expect(run).not.toHaveBeenCalled();
+});
+
+it("types a definite prohibition independently of permissions in an unsupported policy", async () => {
+  const run = vi.fn((_binary: string, _args: ProcessOptions) => ({
+    stdout: response({ effect: "deny", matchedRules: ["urn:temporal"] }),
+    status: 0,
+  }));
+  const p: Policy = {
+    id: policy.id,
+    profile: "urn:unsupported-profile",
+    permissions: [
+      {
+        type: "permission",
+        action: "read",
+        constraints: [
+          {
+            leftOperand: "purpose",
+            operator: "eq",
+            rightOperand: "2026-10-26",
+            datatype: `${XSD}string`,
+          },
+        ],
+      },
+    ],
+    prohibitions: [
+      {
+        type: "prohibition",
+        action: "read",
+        constraints: [
+          {
+            leftOperand: "purpose",
+            operator: "eq",
+            rightOperand: "2026-10-26",
+            datatype: `${XSD}date`,
+          },
+        ],
+      },
+    ],
+  };
+  const request = intent({ action: "read", attributes: { purpose: "2026-10-26" } });
+  expect(await sparqPolicyEngine({ binary: "test", run }).evaluate(p, request)).toEqual({
+    effect: "prohibited",
+  });
+  const doc = JSON.parse((run.mock.calls[0] as [string, ProcessOptions])[1].input);
+  expect(
+    doc.request.context.find((c: { leftOperand: string }) => c.leftOperand === `${ODRL}purpose`)
+      .value,
+  ).toEqual({ type: "dateTime", value: "2026-10-26" });
+  const store = await parseRdf(doc.policy.text, "text/turtle");
+  expect(
+    node(store, "urn:example:sparq-envelope")
+      .one("https://www.w3.org/2018/credentials#credentialSubject")
+      .one(`${AGENT}policy`)
+      .values(`${ODRL}permission`),
+  ).toHaveLength(0);
+});
+
+it.each<Partial<Rule>>([
+  { action: "write" },
+  { target: "urn:other-target" },
+  { assignee: "urn:other-agent" },
+  { constraints: [{ leftOperand: "count", operator: "eq", rightOperand: "invalid" }] },
+])("does not promote excluded or incomparable prohibitions in unsupported policies: %j", async (rule) => {
+  const run = vi.fn(() => ({
+    stdout: response({ effect: "deny", matchedRules: ["urn:unexpected"] }),
+    status: 0,
+  }));
+  expect(
+    await sparqPolicyEngine({ binary: "test", run }).evaluate(
+      {
+        ...policy,
+        conflict: "perm",
+        prohibitions: [{ type: "prohibition", action: "read", ...rule }],
+      },
+      intent({ action: "read", attributes: { count: 1 } }),
+    ),
+  ).toEqual({ effect: "indeterminate" });
+  expect(run).not.toHaveBeenCalled();
+});
+
+it("requires confirmation on process failure while checking an unsupported policy's prohibition", async () => {
+  const adapter = engine(response({ effect: "deny", matchedRules: ["urn:rule"] }), {
+    error: new Error("timeout"),
+  });
+  const p: Policy = {
+    ...policy,
+    conflict: "perm",
+    prohibitions: [{ type: "prohibition", action: "read" }],
+  };
+  const request = intent({ action: "read" });
+  expect(await adapter.evaluate(p, request)).toEqual({ effect: "indeterminate" });
+  expect(await evaluateIntent({ ...mandate(), autonomous: p }, request, adapter)).toEqual({
+    decision: "confirm-required",
+    reason: "indeterminate",
+  });
 });
