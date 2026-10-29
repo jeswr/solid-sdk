@@ -1127,3 +1127,69 @@ remote Git fetch/merge or dependency lifecycle script was used. The requested
 finding is fixed, with no implementation work or open questions remaining.
 Validation limitations are the full-workspace font download and unavailable
 roborev.
+
+## Codex fix round 11 — review of `407947965b5c`
+
+- `87d51978 fix: canonicalize typed JSON-LD numbers` applies numeric lexical
+  conversion before byte accounting and literal construction, retaining supplied
+  datatypes and string values. Fractional numbers, numbers of magnitude at least
+  1e21, and numbers explicitly typed as xsd:double use canonical double forms;
+  other native numbers use canonical integer forms, following
+  [JSON-LD object-to-RDF conversion](https://www.w3.org/TR/json-ld11-api/#object-to-rdf-conversion).
+- `docs: record round-eleven validation` records this round's results.
+
+Added **23 fixture cases** and corrected existing scalar expectations. Cases cover
+negative and exponential numbers, double-typed zero and integers, precision,
+preserved strings, implicit/explicit RDF-term equivalence, and fetch/search through
+both adapters. Before the fix, the focused suite has **22 failures and 20 passes**;
+afterward, all **42 selected cases pass**. No API, dependency, manifest or design
+changes were needed.
+
+Validation used Node 24.22.1 and the existing fixture-only network guard:
+
+```sh
+export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"
+export NODE_OPTIONS=--require=/tmp/sst-9s2-round8-network-guard.cjs
+export GIT_ALLOW_PROTOCOL=file
+pnpm exec turbo run build --filter '@jeswr/solid-mcp^...' --concurrency=4
+pnpm --filter @jeswr/solid-mcp exec vitest run test/bounded-rdf.test.ts test/chatgpt-tools.test.ts -t 'JSON-LD scalar'
+pnpm --filter @jeswr/solid-mcp run lint
+pnpm --filter @jeswr/solid-mcp run build
+pnpm --filter @jeswr/solid-mcp run typecheck
+pnpm --filter @jeswr/solid-mcp run test
+pnpm --filter @jeswr/solid-mcp run test:coverage
+TURBO_SCM_BASE=407947965b5cef614665095fd5e69f6aaf1553a4 pnpm run gate
+pnpm run gate:full
+```
+
+The dependency build, focused regressions after the fix, package gate, coverage,
+and affected repository gate pass (exit 0). Package tests and coverage each pass
+**698 tests across 11 files**. Aggregate coverage is **98.13% lines / 90.83%
+branches**; configured thresholds pass. The affected gate passes **23/23 tasks**,
+7 cached, including root lint and dependent-package checks.
+
+The first full gate exits 1 after **58 successful tasks out of 222**, 12 cached:
+three unchanged root layer-guard fixtures exceed their 5000 ms timeout under
+concurrent build load. An isolated root run and full-gate retry use:
+
+```sh
+pnpm exec turbo run test:root --concurrency=1
+pnpm run gate:full
+```
+
+The isolated root run exits 1 with **744/745 tests passing**: the earlier timeout
+cases pass, but an unchanged SDK-layer performance assertion takes 154.55 ms
+against a 50 ms limit. The full-gate retry passes all **745 root tests across
+9 files**, then exits 1 after **97 successful tasks out of 273**, 57 cached, at
+the unchanged `@jeswr/app-suite#build`: `next/font` cannot download Onest,
+Source Code Pro or Source Serif 4 from Google Fonts through the fixture-only
+network guard. This is the font-download limitation recorded in earlier rounds.
+No unrelated test, timeout or build configuration was changed.
+
+`git diff --check` passes. `roborev status` exits 127 because roborev is
+unavailable, so automated per-commit review could not run. `check:packages` is
+not applicable because no dependencies were added. No push, publication,
+remote Git fetch/merge or dependency lifecycle script was used. The requested
+finding is fixed, with no implementation work or open questions remaining.
+Validation limitations are the full-workspace font download and unavailable
+roborev.
