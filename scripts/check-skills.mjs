@@ -132,16 +132,12 @@ function htmlLinksIn(html) {
 function linksIn(text) {
   const tokens = marked.lexer(text);
   const links = Object.values(tokens.links).map((link) => decodeCharacterReferences(link.href));
-  marked.walkTokens(tokens, (token) => {
-    if (token.type === "link" || token.type === "image")
-      links.push(decodeCharacterReferences(token.href));
-    if (token.type === "html") {
-      for (const href of htmlLinksIn(token.text)) {
-        // HTML URL attributes allow surrounding ASCII whitespace, including encoded whitespace.
-        links.push(decodeCharacterReferences(href).replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, ""));
-      }
-    }
-  });
+  // Render once so HTML text-element state spans inline tokens and blank-line block splits.
+  // The renderer escapes code samples, keeping their apparent tags inactive.
+  for (const href of htmlLinksIn(marked.parser(tokens))) {
+    // HTML URL attributes allow surrounding ASCII whitespace, including encoded whitespace.
+    links.push(decodeCharacterReferences(href).replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, ""));
+  }
   return [...new Set(links)];
 }
 
@@ -225,9 +221,12 @@ export function checkSkills(root, { write = false } = {}) {
       continue;
     }
     const { name, description } = data;
-    // These decoded fields are emitted into the index; YAML escapes/folding can hide secrets.
+    // These fields enter the index; YAML escapes/folding can hide secrets and local paths.
     for (const value of [name, description]) {
       if (typeof value !== "string") continue;
+      if (value.includes("/Users/")) {
+        report(path, "decoded metadata: absolute user path is forbidden");
+      }
       scanSecrets(value, (category) => {
         report(path, `decoded metadata: possible ${category} (value omitted)`);
       });

@@ -275,6 +275,54 @@ describe("skill validation", () => {
     "noframes",
   ];
 
+  it.each(textElements)("preserves HTML %s text state across inline Markdown tokens", (tag) => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({
+        body: `Example: <${tag}><a href="missing.md">literal text</a><img src="missing.png"></${tag}-extra><a href="also-missing.md">still text</a></${tag}> <a href="references/guide.md">guide</a>`,
+      }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each(textElements)("preserves HTML %s text state across blank lines", (tag) => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({
+        body: `<div>\n<${tag}>\n\n<a href="missing.md">literal text</a>\n\n![literal image](missing.png)\n\n</${tag}>\n<a href="references/guide.md">guide</a>\n</div>`,
+      }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each(textElements)("checks links after HTML %s closes in a later token", (tag) => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({
+        body: `Example: <${tag}><a href="ignored.md">literal text</a></${tag}> <a href="missing.md">broken</a>`,
+      }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+  });
+
+  it.each(textElements)("keeps unclosed HTML %s text state across tokens to the end", (tag) => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({ body: `Example: <${tag}>literal\n\n<a href="missing.md">still text</a>` }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
   it.each(textElements)("checks active links after the end of HTML %s content", (tag) => {
     const root = fixture();
     put(
@@ -398,6 +446,29 @@ describe("skill validation", () => {
       skill({ name: path.includes("widget") ? "widget" : "alpha", body: "/Users/someone/private" }),
     );
     expect(checkSkills(root).errors.join("\n")).toContain("absolute user path is forbidden");
+  });
+
+  it.each([
+    ["description", '"Use when checking \\u002fUsers/private-fixture/path."'],
+    ["description", '"Use when checking /Us\\x65rs/private-fixture/path."'],
+    ["description", '"Use when checking /Us\\\n  ers/private-fixture/path."'],
+    ["name", '"\\u002fUsers/private-fixture/path"'],
+  ])("rejects forbidden paths in decoded %s: %s", (field, encoded) => {
+    const root = fixture();
+    const indexPath = join(root, "skills/INDEX.md");
+    put(root, "skills/alpha/SKILL.md", skill({ [field]: encoded }));
+    for (const previousIndex of [undefined, "Previously generated index\n"]) {
+      if (previousIndex !== undefined) put(root, "skills/INDEX.md", previousIndex);
+      for (const args of [[], ["--write"]]) {
+        const result = cli(root, ...args);
+        expect(result.status).toBe(1);
+        expect(result.stderr).toContain("decoded metadata: absolute user path is forbidden");
+        expect(result.stderr).not.toContain("private-fixture");
+        expect(result.stdout).toBe("");
+        if (previousIndex === undefined) expect(existsSync(indexPath)).toBe(false);
+        else expect(readFileSync(indexPath, "utf8")).toBe(previousIndex);
+      }
+    }
   });
 
   // Synthetic examples only; construct credential-shaped strings so the test source contains no keys.
