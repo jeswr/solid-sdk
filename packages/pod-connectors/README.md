@@ -362,7 +362,10 @@ const recorder = createFixtureRecorder({
 ```
 
 Recording preserves the original response for the adapter. Saved fixtures contain the static
-route prefix, method, status and redacted JSON only. Recording and replay select the longest
+route prefix, method, status and redacted JSON only. The recorder uses guarded-fetch's
+`snapshotFetchInput` to select a route from the real request target and forward that same
+snapshot, ignoring shadowed Request URLs and capturing mutable URLs once.
+Recording and replay select the longest
 matching prefix on the same origin and complete path segments, independently of route or request
 order. Responses sharing a method and static prefix replay in request order, even if recording
 responses complete out of order. Repeated

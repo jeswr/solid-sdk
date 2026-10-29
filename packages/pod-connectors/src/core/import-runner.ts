@@ -11,7 +11,7 @@
  * Documents land at `<podRoot>integrations/<adapterId>/<slug>` — deterministic
  * URLs, so a re-import overwrites in place (idempotent).
  */
-import { refuseRedirects } from "@jeswr/guarded-fetch";
+import { refuseRedirects, snapshotFetchInput } from "@jeswr/guarded-fetch";
 import { IntegrationSyncError } from "./errors.js";
 import { fixtureFetch } from "./fixture-fetch.js";
 import { createImportSession } from "./import-session.js";
@@ -145,9 +145,11 @@ export function createSourceAuth(
   );
   const sourceFetch = refuseRedirects(fetchImpl);
   const impl = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
-    const url = new URL(
-      typeof input === "string" ? input : input instanceof URL ? input.href : input.url,
-    );
+    // Main read headers directly before spreading init. Preserve both reads when headers
+    // is enumerable, and the direct lookup for inherited/non-enumerable headers.
+    const explicitHeaders = init?.headers;
+    const snapshot = snapshotFetchInput(input, init, { forward: true, initSemantics: "spread" });
+    const url = new URL(snapshot.url);
     if (url.protocol !== "https:" || !origins.has(url.origin) || url.username || url.password) {
       throw new IntegrationSyncError(
         adapterId,
@@ -155,12 +157,12 @@ export function createSourceAuth(
       );
     }
     const headers = new Headers(
-      init?.headers ?? (input instanceof Request ? input.headers : undefined),
+      explicitHeaders ?? (typeof snapshot.input === "string" ? undefined : snapshot.input.headers),
     );
     headers.set("authorization", `Bearer ${token.accessToken}`);
     for (const [k, v] of Object.entries(adapter.apiHeaders ?? {})) headers.set(k, v);
-    const next: RequestInit = { ...init, headers };
-    return sourceFetch(input as RequestInfo, next);
+    const next: RequestInit = { ...snapshot.init, headers };
+    return sourceFetch(snapshot.input, next);
   };
   return { fetch: impl as typeof fetch };
 }

@@ -311,6 +311,28 @@ describe("owner-only checkpoint", () => {
 });
 
 describe("Pod client credentials", () => {
+  it("refuses the real target of a shadowed Request before Pod I/O", async () => {
+    const { transport, requests } = fixturePod();
+    const authenticated = await createClientCredentialsFetch(config, transport);
+    const request = new Request("https://outside.test/private");
+    Object.defineProperty(request, "url", { value: `${TEST_POD_ROOT}allowed` });
+    await expect(authenticated(request)).rejects.toThrow();
+    expect(requests).toEqual([]);
+  });
+
+  it("captures stringifiable inputs once before credentialed Pod I/O", async () => {
+    const { transport, requests } = fixturePod();
+    const authenticated = await createClientCredentialsFetch(config, transport);
+    const target = `${TEST_POD_ROOT}missing`;
+    const stringify = vi
+      .fn()
+      .mockReturnValueOnce(target)
+      .mockReturnValue("https://outside.test/private");
+    expect((await authenticated({ toString: stringify } as unknown as URL)).status).toBe(404);
+    expect(stringify).toHaveBeenCalledOnce();
+    expect(requests.map((request) => request.url)).toEqual([target]);
+  });
+
   it.each([
     "https://second.test/alice/",
     "https://pod.test/second/",
@@ -441,6 +463,8 @@ describe("Pod client credentials", () => {
     "init",
     "request",
     "override",
+    "inherited",
+    "hidden",
   ])("refuses an already-aborted PUT signal from %s before resource I/O or refresh", async (kind) => {
     const { transport } = fixturePod();
     let now = Date.now();
@@ -466,11 +490,15 @@ describe("Pod client credentials", () => {
         input,
         kind === "request"
           ? undefined
-          : {
-              method: "PUT",
-              body: "synthetic-body",
-              signal: controller.signal,
-            },
+          : kind === "inherited"
+            ? Object.create({ signal: controller.signal })
+            : kind === "hidden"
+              ? Object.defineProperty({}, "signal", { value: controller.signal })
+              : {
+                  method: "PUT",
+                  body: "synthetic-body",
+                  signal: controller.signal,
+                },
       ),
     ).rejects.toBe(reason);
     expect(fetch).not.toHaveBeenCalled();
@@ -486,6 +514,26 @@ describe("Pod client credentials", () => {
     await expect(
       authenticated(request, { signal: new AbortController().signal }),
     ).resolves.toMatchObject({ status: 201 });
+  });
+  it.each([
+    "inherited",
+    "hidden",
+  ])("honours %s method, body and headers in client-credentials init", async (kind) => {
+    const { transport, requests } = fixturePod();
+    const authenticated = await createClientCredentialsFetch(config, transport);
+    const url = `${TEST_POD_ROOT}integrations/spotify/item.ttl`;
+    const values = { method: "PUT", body: "replacement", headers: { "x-option": "keep" } };
+    const init =
+      kind === "inherited"
+        ? Object.create(values)
+        : Object.defineProperties(
+            {},
+            Object.fromEntries(Object.entries(values).map(([key, value]) => [key, { value }])),
+          );
+    await expect(authenticated(new Request(url), init)).resolves.toMatchObject({ status: 201 });
+    expect(requests.at(-1)).toMatchObject({ url, method: "PUT" });
+    expect(requests.at(-1)?.headers.get("x-option")).toBe("keep");
+    expect(await new Response(requests.at(-1)?.body as BodyInit).text()).toBe("replacement");
   });
   it.each([
     "init",
