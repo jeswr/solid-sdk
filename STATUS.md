@@ -553,3 +553,73 @@ merged, no branch was switched, and nothing was pushed or published.
 The requested integration is complete. Full-workspace validation and automated
 review retain the environmental limitations above. No open questions or
 unfinished implementation work remain for this round.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Review fixes — `adbad7509fc8`
+
+- `21ece678 fix(mcp): inline private OAuth metadata helper` bundles the existing
+  `@jeswr/mcp-oauth/metadata` helper and declares `@jeswr/mcp-oauth` in
+  `mirrorPublish.inlined`. Mirror rewriting requires only the existing public
+  dependency SHAs. Tests check rewritten pins, absence of private-package imports
+  in emitted JavaScript and declarations, and the built HTTP handler's metadata
+  challenges for root, nested and trailing-slash resource URLs.
+- `9de376da fix(mcp): default headerless portable RDF to Turtle` restores the
+  Turtle fallback only when a portable search read returns an empty content type.
+  Fixtures cover profiles, indexes, direct instance literals and scanned literals,
+  preserve relative URL bases, and confirm explicit binary media types stay refused.
+- `docs: record MCP review fix validation` records this review round's validation.
+
+The changes address exactly the two supplied findings. Eleven new fixture cases
+were added. Seven regressions fail against the original implementation; all 21
+cases in the two focused files pass after the fixes. No dependencies were added,
+so `check:packages` is not applicable. Frozen offline lockfile verification passes
+and the lockfile is unchanged.
+
+Validation used Node 24 with the following environment:
+
+```sh
+export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"
+export NODE_OPTIONS=--require=/tmp/sst-9s2-round2-network-guard.cjs
+export GIT_ALLOW_PROTOCOL=file
+```
+
+The temporary guard permits loopback fixtures and refuses external connections.
+All package gate commands pass (exit 0):
+
+```sh
+pnpm --filter @jeswr/solid-mcp run lint
+pnpm --filter @jeswr/solid-mcp run build
+pnpm --filter @jeswr/solid-mcp run typecheck
+pnpm --filter @jeswr/solid-mcp run test
+```
+
+The package suite passes **509 tests across 11 files**. The affected repository
+gate passes (exit 0; **23/23 tasks successful**, 7 cached), including root lint
+and dependent agent-model/personal-agent checks:
+
+```sh
+TURBO_SCM_BASE=adbad7509fc885de5a007adf20512fb478c86b40 pnpm run gate
+```
+
+The required full-workspace gate was run before the final documentation commit:
+
+```sh
+pnpm run gate:full
+```
+
+It exits 1 after **132 successful tasks out of 274**, 12 cached, at the unchanged
+`@jeswr/app-suite#build`. `next/font` tries to download Onest, Source Code Pro and
+Source Serif 4 from Google Fonts, which the fixture-only network guard refuses.
+The root suite passes **745 tests across 9 files** during this run. No unrelated
+source was changed to address this environmental limitation.
+
+```sh
+pnpm install --offline --frozen-lockfile --ignore-scripts --lockfile-only
+```
+
+The frozen offline check passes (exit 0). `git diff --check` passes.
+`roborev status` exits 127 because roborev is not installed, so automated
+per-commit review is unavailable. No remote Git fetch/merge, push, publication,
+new dependency or lifecycle script was used. Both requested fixes are complete;
+no open questions or unfinished implementation work remain.
