@@ -616,3 +616,73 @@ binary remain unavailable, so automated per-commit review and a real binary run 
 not be performed. Tests use injected process results and synthetic data. No external
 review/model service, provider or pod was called; no remote was fetched or merged,
 and nothing was pushed or published.
+
+## Fix round 8 — float semantics, canonical context and prohibition precedence at `d297d605c84c`
+
+2026-10-29. All three requested findings are fixed on `lane/sst-gpa`:
+
+- `da5e7c8a` — `fix(agent-mandate): reject lossy float operands`.
+  Both engines require confirmation when a typed float's Number value changes under
+  binary32 rounding. This conservative subset avoids introducing a new conversion
+  path. Tests cover either operand, the binary32 integer boundary, fractional rounding,
+  underflow, overflow, sets, duties and obligations. Exactly representable values,
+  including the smallest positive subnormal and largest finite float, remain supported.
+- `a12092b4` — `fix(agent-mandate): reject canonical context collisions`.
+  Validate and serialize through the same canonical operand map. Reject aliases with
+  different raw values in either insertion order, including aliases of authoritative
+  request time. Validate canonical-only input, collapse identical aliases, and emit
+  only context slots referenced by validated rules. Tests cover standard operands,
+  delegation depth, request time and malformed aliases.
+- `8f285dc9` — `fix(agent-mandate): preserve prohibitions across type conflicts`.
+  When context comparison kinds conflict, evaluate comparable prohibitions in separate
+  projections. A definite prohibition wins; partial permits and unmatched prohibitions
+  remain indeterminate. Skip internally conflicting prohibitions while checking other
+  prohibitions. Tests cover both rule orders, unrelated permission conflicts, conflicts
+  within one rule, and policies without an independently decidable prohibition.
+- Final report commit — `docs(agent-mandate): record eighth fix round validation`.
+
+Validation uses Node v24.22.1 (`PATH=/opt/node24/bin:$PATH`):
+
+```sh
+pnpm exec turbo run build --filter=@jeswr/agent-mandate... --concurrency=4
+pnpm exec vitest run --root packages/agent-mandate test/policy.test.ts test/sparq.test.ts --coverage.enabled=false -t 'float'
+pnpm exec vitest run --root packages/agent-mandate test/sparq.test.ts --coverage.enabled=false -t 'canonical context'
+pnpm exec vitest run --root packages/agent-mandate test/sparq.test.ts --coverage.enabled=false -t 'incompatible context types|across conflicting|conflicting prohibitions|internally conflicting'
+pnpm --filter @jeswr/agent-mandate run lint && pnpm --filter @jeswr/agent-mandate run build && pnpm --filter @jeswr/agent-mandate run typecheck && pnpm --filter @jeswr/agent-mandate run test
+TURBO_SCM_BASE=d297d605c84c2c907c80ca2d08300a177b25953c pnpm run gate
+pnpm run gate:full
+```
+
+- Prerequisite builds — PASS, 7/7 tasks.
+- Regression reproduction — 18 float cases, seven canonical-context cases and eight
+  context-conflict cases failed before their fixes. Final package verification includes
+  all regressions and 41 additional tests relative to the supplied head.
+- Package gate — PASS, 515 tests in eight files. Per-file coverage remains 100%:
+  statements 470/470, branches 542/542, functions 125/125 and lines 420/420. No coverage
+  thresholds, exclusions or timeouts changed. The existing non-fatal verifier sourcemap
+  warning remains.
+- Affected repository gate — PASS on the final code, 11/11 tasks in 30.6 seconds,
+  including `pnpm run lint:root` and every workspace/layer guard. The local
+  `agent/integration` ref is absent, so the comparison base is the supplied pre-fix head.
+- Full workspace gate — FAIL outside this fix round, 91 successful tasks of 213
+  reported in 2m17s. Root tests have 682 passes and four timing failures: three module-load
+  cases in `test/agent-layers.test.mjs` exceed five seconds, and the pathological-spec
+  performance case in `test/check-sdk-layers.test.mjs` takes 175 ms against its 50 ms
+  limit. Those tests and both guard implementations are unchanged from the supplied head.
+- Isolated root rechecks — PASS, the performance case with its 50 ms assertion unchanged,
+  and all 13 selected module-load cases (including the three full-gate timeouts):
+
+  ```sh
+  pnpm exec vitest run test/check-sdk-layers.test.mjs -t 'validates pathological specs' --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000
+  pnpm exec vitest run test/agent-layers.test.mjs -t 'rejects disallowed path characters globally' --maxWorkers=1 --testTimeout=30000 --hookTimeout=30000
+  ```
+
+- `git diff --check` — PASS.
+
+No dependencies were added, so no `check:packages` run was needed. Changes are confined
+to the reviewed package and this required report. No requested finding is unfinished
+and there are no open questions. The full-workspace timing failures remain outside scope.
+Neither `roborev` nor `sparq-policy-decide` is available on PATH, so automated per-commit
+review and native backend execution could not run. Tests use synthetic data and injected
+process results. No live provider, pod or external model service was called; no remote
+was fetched or merged, and nothing was pushed or published.
