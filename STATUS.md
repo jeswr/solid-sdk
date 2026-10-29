@@ -701,3 +701,73 @@ installed, so automated per-commit review remains unavailable. No remote Git
 fetch/merge, push, publication, new dependency or lifecycle script was used.
 No implementation work or open questions remain; the outstanding validation
 limitations are the full-workspace font download and unavailable roborev.
+
+## Codex fix round 4 — review of `08506c4d36cc`
+
+- `90c96bd4 fix(mcp): preserve opaque JSON literal values` removes the recursive
+  context/import scan while retaining JSON parse/stringify normalization. The
+  existing bounded parser's refusing document loader rejects actual remote
+  contexts and imports, leaving opaque JSON literal contents intact. This is the
+  existing-loader option explicitly allowed by the review; no API or dependency
+  changes were needed.
+- `docs: record MCP round-four validation` records this round's gate results.
+
+Ten new regression cases fail against the reviewed source and pass with the fix.
+Fetch fixtures preserve the JSON value and RDF JSON datatype with explicit,
+context-coerced and aliased typing. Search fixtures cover profile, Type Index,
+container and literal reads through both fetch-backed interfaces. Four additional
+security cases confirm scoped imports and actual remote contexts alongside JSON
+literals remain refused without parser network requests. The existing nested
+context fixture now maps its property so the parser actually processes it.
+The two focused files pass **206 tests**; the full package passes **539 tests
+across 11 files**.
+
+Validation used Node 24 and the existing temporary fixture network guard:
+
+```sh
+export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"
+export NODE_OPTIONS=--require=/tmp/sst-9s2-round2-network-guard.cjs
+export GIT_ALLOW_PROTOCOL=file
+```
+
+Local workspace prerequisites were built without remote Git operations:
+
+```sh
+pnpm exec turbo run build --filter '@jeswr/solid-mcp^...' --concurrency=4
+```
+
+The package gate passes (exit 0 for each command):
+
+```sh
+pnpm --filter @jeswr/solid-mcp run lint
+pnpm --filter @jeswr/solid-mcp run build
+pnpm --filter @jeswr/solid-mcp run typecheck
+pnpm --filter @jeswr/solid-mcp run test
+```
+
+The affected repository gate passes (exit 0; **23/23 tasks successful**, 7 cached),
+including root lint and checks for the dependent agent packages:
+
+```sh
+TURBO_SCM_BASE=08506c4d36cc796d1f80fe4a5062fea403ceadac pnpm run gate
+```
+
+The full-workspace gate ran before the final documentation commit:
+
+```sh
+pnpm run gate:full
+```
+
+It exits 1 after **121 successful tasks out of 270**, 12 cached, at the unchanged
+`@jeswr/app-suite#build`. Its `next/font` build attempts to download Onest, Source
+Code Pro and Source Serif 4 from Google Fonts; the fixture-only network guard
+refuses those connections. Root tests pass **745 tests across 9 files**. No
+unrelated changes were made to address this existing environment limitation.
+
+`git diff --check` passes. `roborev status` exits 127 because roborev is unavailable,
+so automated per-commit review remains unavailable. No dependencies or manifests
+changed; `check:packages` is not applicable. No push, publication, remote Git
+fetch/merge or dependency lifecycle script was used. The requested finding is
+fixed; no implementation work or open questions remain. The outstanding
+validation limitations are the full-workspace font download and unavailable
+roborev.
