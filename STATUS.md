@@ -1009,3 +1009,72 @@ remote Git fetch/merge or dependency lifecycle script was used. The requested
 finding is fixed, with no implementation work or open questions remaining.
 Validation limitations are the full-workspace font download and unavailable
 roborev.
+
+## Codex fix round 9 — review of `049227c5466b`
+
+- `ee2698f8 fix: bound legacy ACL validation` replaces the unbounded ACL `text()`
+  read with incremental streaming and budgeted Turtle parsing before validation.
+  Byte, parser, and stream failures abort before any ACL write or inbound pull;
+  budget exhaustion cancels the body, releases its reader, and destroys the
+  parser. Cancellation errors or stalled cancellation hooks cannot delay refusal.
+- `docs: record round-nine validation` records this round's results.
+
+The conservative internal limits match this branch's existing RDF adapter:
+1 MiB of response bytes, 16,384 input quads including duplicates, 1 MiB of
+expanded quad terms, 64 nesting levels, and a shared 1 MiB allocation/work
+budget. Work reservations include tokens, pending contexts, generated blank
+nodes, unused declarations, and the quadratic cost of base normalization.
+Reservations can reject a document before its exact output reaches 1 MiB.
+The installed `parseRdf` exposes no factory or budget hooks, so the local
+adapter uses its existing N3 parser directly without adding dependencies.
+
+Added **29 fixture cases** covering absent/false Content-Length, early declared
+size rejection, exact byte/quad/depth boundaries, UTF-8 chunk splits and EOF,
+expanded prefixes and duplicate terms, unused declarations, base work,
+generated nodes, stalled tails/cancellation, nonstream shims, incomplete RDF,
+and stream failures. Four complete-document regressions fail against the
+original implementation and pass with the fix. The complete package suite has
+**740 passing tests across 38 files**.
+
+Validation used Node 24 and the existing fixture-only network guard:
+
+```sh
+export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"
+export NODE_OPTIONS=--require=/tmp/sst-9s2-round8-network-guard.cjs
+export GIT_ALLOW_PROTOCOL=file
+pnpm exec turbo run build --filter '@jeswr/agentic-legacy-bridge^...' --concurrency=4
+pnpm --filter @jeswr/agentic-legacy-bridge run gate
+pnpm --filter @jeswr/agentic-legacy-bridge run test:coverage
+TURBO_SCM_BASE=049227c5466b2875c1923706171f19e663fac765 pnpm run gate
+pnpm run gate:full
+```
+
+The dependency build, package gate, coverage run, and affected repository gate
+pass (exit 0). Package gate and coverage each pass all 740 tests. Aggregate
+coverage is 96.32% lines / 86.88% branches; the ACL parser helper has 96.42%
+lines / 92.30% branches. The affected gate passes **23/23 tasks**, 6 cached,
+including root lint and dependent agent-model/personal-agent checks.
+
+The first full gate exits 1 after **84 successful tasks out of 265**, 12 cached:
+seven unchanged root layer-guard tests exceed their 5000 ms timeout under
+concurrent build load. An isolated root run and full-gate retry then use:
+
+```sh
+pnpm exec turbo run test:root --concurrency=1
+pnpm run gate:full
+```
+
+The isolated root suite passes **745 tests across 9 files** (exit 0), caching
+its result without changing any test or configuration. The full-gate retry
+exits 1 after **106 successful tasks out of 284**, 84 cached, at the unchanged
+`@jeswr/app-suite#build`: `next/font` cannot download Onest, Source Code Pro,
+or Source Serif 4 from Google Fonts through the fixture-only network guard.
+This is the font-download limitation already recorded in earlier rounds.
+
+`git diff --check` passes. `roborev status` exits 127 because roborev is
+unavailable, so automated per-commit review could not run. No dependencies or
+manifests changed; `check:packages` is not applicable. No push, publication,
+remote Git fetch/merge or dependency lifecycle script was used. The requested
+finding is fixed, with no implementation work or open questions remaining.
+Validation limitations are the full-workspace font download and unavailable
+roborev.
