@@ -407,6 +407,103 @@ it("rejects conflicting shared graph copies in a later put before any write", as
 });
 
 it.each([
+  ["provenanceId", "provenanceId", "hasProvenance"],
+  ["pubinfoId", "pubinfoId", "hasPublicationInfo"],
+  ["provenanceId", "pubinfoId", "hasProvenance"],
+  ["provenanceId", "id", "hasProvenance"],
+  ["provenanceId", "assertionId", "hasProvenance"],
+] as const)("rejects private graph reuse from %s to %s", async (field, target, predicate) => {
+  const first = await build("private-first");
+  const second = await build(
+    "private-second",
+    target === "assertionId" ? { template: "email", value: "other@example.org" } : undefined,
+  );
+  const np = second.nanopubs[0]!;
+  const previousName = np[field];
+  const name = first.nanopubs[0]![target];
+  const contents = graph(second.dataset, previousName);
+  if (field === "provenanceId") {
+    const assertion = new RdfNode(np.assertionId, contents);
+    assertion.terms(`${NS.pkg}epistemicStatus`).clear();
+    assertion.link(`${NS.pkg}epistemicStatus`, `${NS.pkg}Mentioned`);
+  }
+  for (const quad of [...second.dataset])
+    if (quad.graph.value === previousName) second.dataset.delete(quad);
+  putGraph(second.dataset as Store, name, contents);
+  const head = graph(second.dataset, np.id);
+  const envelope = new RdfNode(np.id, head);
+  envelope.terms(NS.np + predicate).clear();
+  envelope.link(NS.np + predicate, name);
+  for (const quad of [...second.dataset])
+    if (quad.graph.value === np.id) second.dataset.delete(quad);
+  putGraph(second.dataset as Store, np.id, head);
+  // Each resource is independently valid, despite its colliding component IRI.
+  const values = [first, await parseNanopublications(await serializeNanopublications(second))];
+  expect(values[1]!.nanopubs[0]![field]).toBe(name);
+
+  for (const reverse of [false, true]) {
+    const [stored, incoming] = reverse ? [...values].reverse() : values;
+    const { store, pod, memory, write } = setup();
+    await store.put(stored!);
+    const url = store.url(stored!.nanopubs[0]!.id);
+    const before = await pod.read(url);
+    write.mockClear();
+    await expect(new NanopubStore(pod).put(incoming!)).rejects.toThrow(
+      "Reused private nanopublication graph",
+    );
+    expect(write).not.toHaveBeenCalled();
+    expect(await pod.read(url)).toEqual(before);
+    expect(
+      (await parseNanopublications(await serializeNanopublications(await store.list()))).nanopubs,
+    ).toEqual(stored!.nanopubs);
+
+    // External writers must not make list() silently union the private graphs.
+    const incomingUrl = store.url(incoming!.nanopubs[0]!.id);
+    await memory.write(
+      incomingUrl,
+      encode(await serializeNanopublications(incoming!)),
+      "application/trig",
+      { ifNoneMatch: "*" },
+    );
+    const external = await pod.read(incomingUrl);
+    const list = pod.list;
+    for (const reversed of [false, true]) {
+      pod.list = async (container) => {
+        const entries = await list(container);
+        return reversed ? entries.reverse() : entries;
+      };
+      for (let i = 0; i < 2; i++)
+        await expect(new NanopubStore(pod).list()).rejects.toThrow(
+          "Reused private nanopublication graph",
+        );
+    }
+    expect(write).not.toHaveBeenCalled();
+    expect(await pod.read(url)).toEqual(before);
+    expect(await pod.read(incomingUrl)).toEqual(external);
+  }
+});
+
+it("rejects identical private graph reuse within one batch before any write", async () => {
+  const { store, write } = setup();
+  const value = await sharedBlankAssertions(["one", "two"], "private-identical");
+  const [first, second] = value.nanopubs;
+  const head = graph(value.dataset, second!.id);
+  const envelope = new RdfNode(second!.id, head);
+  envelope.terms(`${NS.np}hasProvenance`).clear();
+  envelope.link(`${NS.np}hasProvenance`, first!.provenanceId);
+  for (const quad of [...value.dataset])
+    if ([second!.id, second!.provenanceId].includes(quad.graph.value)) value.dataset.delete(quad);
+  putGraph(value.dataset as Store, second!.id, head);
+  const parsed = await parseNanopublications(await serializeNanopublications(value));
+  expect(parsed.nanopubs.map((np) => np.provenanceId)).toEqual([
+    first!.provenanceId,
+    first!.provenanceId,
+  ]);
+  await expect(store.put(parsed)).rejects.toThrow("Reused private nanopublication graph");
+  expect(write).not.toHaveBeenCalled();
+});
+
+it.each([
   { separate: false, conflict: false },
   { separate: false, conflict: true },
   { separate: true, conflict: false },
