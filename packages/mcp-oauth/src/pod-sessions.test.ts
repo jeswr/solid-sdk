@@ -11,7 +11,7 @@ import {
   podIssuer,
 } from "../test/pod-issuer.js";
 import { createPodSessionProvider } from "./pod-sessions.js";
-import { digest, GRANT_TTL, LOGIN_TTL } from "./protocol.js";
+import { digest, GRANT_TTL, LOGIN_TTL, MAX_BYTES } from "./protocol.js";
 import { createSessionVault } from "./vault.js";
 import { MemoryVaultStore } from "./vault-stores.js";
 
@@ -280,6 +280,87 @@ describe("Solid-OIDC pod broker", () => {
     const defaultClock = createPodSessionProvider({ ...f.options, now: undefined });
     f.op.controls.discoveryIssuer = POD_ISSUER;
     await defaultClock.begin(POD_ISSUER, POD_CALLBACK);
+  });
+
+  it.each([
+    "begin",
+    "complete",
+    "restore",
+  ])("rejects and cancels oversized streaming engine discovery during %s", async (phase) => {
+    const f = brokerFixture();
+    let discoveryCount = 0;
+    let response: Response | undefined;
+    const cancel = vi.fn();
+    const fetcher: typeof fetch = async (input, init) => {
+      const request = new Request(input, init);
+      if (
+        request.url.endsWith("/.well-known/openid-configuration") &&
+        (phase !== "begin" || ++discoveryCount === 2)
+      ) {
+        response = new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new Uint8Array(MAX_BYTES));
+              controller.enqueue(new Uint8Array(1));
+              // Leave the stream open so rejection must cancel the source.
+            },
+            cancel,
+          }),
+          { headers: { "content-type": "application/json" } },
+        );
+        return response;
+      }
+      return f.op.fetch(request);
+    };
+    const provider = createPodSessionProvider({ ...f.options, fetch: fetcher });
+    const operation = async () => {
+      if (phase === "begin") return provider.begin(POD_ISSUER, POD_CALLBACK);
+      if (phase === "complete") {
+        const begin = await f.provider.begin(POD_ISSUER, POD_CALLBACK);
+        return provider.complete(f.op.callback(begin.authorizeUrl), begin.state);
+      }
+      const { session } = await f.login();
+      return (await provider.fetchFor(session.id))(`${POD_ROOT}notes`);
+    };
+    await expect(operation()).rejects.toMatchObject({
+      cause: { error: "invalid_request", status: 413 },
+    });
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(response?.bodyUsed).toBe(true);
+    expect(response?.body?.locked).toBe(false);
+  });
+
+  it("passes streamed discovery at the size limit to the engine", async () => {
+    const f = brokerFixture();
+    let discoveryCount = 0;
+    let response: Response | undefined;
+    const cancel = vi.fn();
+    const fetcher: typeof fetch = async (input, init) => {
+      const request = new Request(input, init);
+      const original = await f.op.fetch(request);
+      if (request.url.endsWith("/.well-known/openid-configuration") && ++discoveryCount === 2) {
+        const body = Buffer.from((await original.text()).padEnd(MAX_BYTES));
+        response = new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(body.subarray(0, 100));
+              controller.enqueue(body.subarray(100));
+              controller.close();
+            },
+            cancel,
+          }),
+          original,
+        );
+        return response;
+      }
+      return original;
+    };
+    const provider = createPodSessionProvider({ ...f.options, fetch: fetcher });
+    const begin = await provider.begin(POD_ISSUER, POD_CALLBACK);
+    expect(new URL(begin.authorizeUrl).origin).toBe(new URL(POD_ISSUER).origin);
+    expect(response?.bodyUsed).toBe(true);
+    expect(response?.body?.locked).toBe(false);
+    expect(cancel).not.toHaveBeenCalled();
   });
 
   it("atomically consumes pending state and fails closed on record collisions", async () => {

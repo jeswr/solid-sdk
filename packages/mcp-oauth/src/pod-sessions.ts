@@ -148,8 +148,11 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
         const request = new Request(input, init);
         const response = await fetcher(request, { credentials: "omit" });
         if (discovering && response.status === 200) {
-          const metadata = JSON.parse(await readBody(response.clone()));
+          // Read the original: cancelling a clone can wait for its unread sibling.
+          const body = await readBody(response);
+          const metadata = JSON.parse(body);
           if (metadata.issuer !== issuer) throw new Error("Pod issuer mismatch");
+          return new Response(body, response);
         }
         return response;
       },
