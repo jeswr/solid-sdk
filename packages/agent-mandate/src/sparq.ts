@@ -1,0 +1,292 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+
+import { IRI_TO_LEFT_OPERAND } from "@jeswr/solid-odrl";
+import { credentialToRdf } from "@jeswr/solid-vc";
+import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
+// biome-ignore lint/style/useNodejsImportProtocol: the agent import guard requires bare module names
+import { spawnSync } from "child_process";
+import { Store } from "n3";
+import { actionIri, encodePolicy, leftOperandIri } from "./codec.js";
+import { candidate, knownOperand, operandDatatype, supportedPolicy } from "./policy.js";
+import { Node, node, turtle } from "./rdf.js";
+import {
+  AGENT,
+  type Constraint,
+  type Effect,
+  ODRL,
+  type PolicyEngine,
+  type Rule,
+} from "./types.js";
+
+const XSD = "http://www.w3.org/2001/XMLSchema#";
+const MAX_DECISION_ATTEMPTS = 32;
+/** The process protocol groups RDF numeric and temporal datatypes by comparison kind. */
+function contextType(datatype: string): string {
+  if (["integer", "decimal", "double", "float"].some((type) => datatype === `${XSD}${type}`))
+    return "decimal";
+  if (datatype === `${XSD}dateTime` || datatype === `${XSD}date`) return "dateTime";
+  return datatype === `${XSD}anyURI` ? "iri" : "string";
+}
+
+/** SPARQ membership uses scalar text and a delimiter encoding, with no member escaping. */
+function representableSet(c: Constraint, value: unknown): boolean {
+  if (c.operator === "isAllOf") return false; // Unsupported by the backend.
+  if (c.operator !== "isAnyOf" && c.operator !== "isNoneOf") return true;
+  if (
+    c.leftOperand === "dateTime" ||
+    (c.datatype !== undefined && c.datatype !== "http://www.w3.org/2001/XMLSchema#string")
+  )
+    return false;
+  const rights: unknown[] = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
+  return [value, ...rights].every(
+    (member) =>
+      typeof member === "string" &&
+      member.length > 0 &&
+      !/[\s\u0085|,]/u.test(member) &&
+      !Number.isFinite(Number(member)),
+  );
+}
+
+/** SPARQ reads operand types from RDF literals, not the signed codec's agent:datatype. */
+function sparqOperands(store: Store): Store {
+  const policy = node(store, "urn:example:sparq-envelope")
+    .one("https://www.w3.org/2018/credentials#credentialSubject")
+    .one(`${AGENT}policy`);
+  for (const rule of [
+    ...policy.values(`${ODRL}permission`),
+    ...policy.values(`${ODRL}prohibition`),
+  ]) {
+    for (const constraint of rule.values(`${ODRL}constraint`)) {
+      const datatype = constraint.iri(`${AGENT}datatype`);
+      const rights = SetFrom.subjectPredicate(
+        constraint,
+        `${ODRL}rightOperand`,
+        TermAs.instance(Node),
+        TermFrom.instance,
+      );
+      const values = [...rights];
+      rights.clear();
+      for (const value of values)
+        rights.add(
+          new Node(
+            constraint.factory.literal(value.value, constraint.factory.namedNode(datatype)),
+            store,
+            constraint.factory,
+          ),
+        );
+    }
+  }
+  return store;
+}
+
+/** The pilot's local binary protocol, selected explicitly without fallback. */
+export const SPARQ_DECIDE_API = "sparq-policy-decide/1";
+/** Testable process result. */
+export interface ProcessResult {
+  readonly stdout: string;
+  readonly status: number | null;
+  readonly error?: unknown;
+}
+/** Process invocation; no shell, no inherited environment, bounded input/output/time. */
+export interface ProcessOptions {
+  input: string;
+  encoding: "utf8";
+  timeout: number;
+  killSignal: "SIGKILL";
+  maxBuffer: number;
+  env: Record<string, string>;
+  shell: false;
+}
+/** Optional local binary adapter. The root/browser entry point never imports this module. */
+export function sparqPolicyEngine(
+  options: {
+    binary?: string;
+    timeoutMs?: number;
+    run?: (binary: string, options: ProcessOptions) => ProcessResult;
+  } = {},
+): PolicyEngine {
+  return {
+    id: "sparq-policy",
+    async evaluate(policy, request) {
+      try {
+        const binary = options.binary;
+        if (
+          !binary ||
+          (options.timeoutMs !== undefined &&
+            (!Number.isFinite(options.timeoutMs) ||
+              options.timeoutMs <= 0 ||
+              options.timeoutMs > 30000))
+        )
+          return { effect: "indeterminate" };
+        const deadline = performance.now() + (options.timeoutMs ?? 5000);
+        let attempts = 0;
+        const attributes = new Map<string, unknown>();
+        for (const [key, value] of Object.entries({
+          ...request.attributes,
+          dateTime: request.at,
+        })) {
+          // Normalize known read aliases only in evaluation context. The signed
+          // codec preserves explicit IRIs; both spellings must share one slot here.
+          const operand = Object.hasOwn(IRI_TO_LEFT_OPERAND, key)
+            ? (IRI_TO_LEFT_OPERAND[key] as string)
+            : key;
+          const left = leftOperandIri(operand);
+          if (attributes.has(left) && !Object.is(attributes.get(left), value))
+            return { effect: "indeterminate" };
+          attributes.set(left, value);
+        }
+        // The shared evaluator matches prohibitions independently of their duties.
+        const comparable = (r: Rule) =>
+          (r.type === "prohibition" || (r.duties ?? []).length === 0) &&
+          supportedPolicy({ id: policy.id, permissions: [r] }) &&
+          (r.constraints ?? []).every(
+            (c) =>
+              !Array.isArray(attributes.get(leftOperandIri(c.leftOperand))) &&
+              knownOperand(c, attributes.get(leftOperandIri(c.leftOperand))) &&
+              // The backend's numeric fallback does not preserve lexical ordering.
+              (!["lt", "lteq", "gt", "gteq"].includes(c.operator) ||
+                !["string", "iri"].includes(contextType(operandDatatype(c)))) &&
+              representableSet(c, attributes.get(leftOperandIri(c.leftOperand))),
+          );
+        const rules = [...(policy.permissions ?? []), ...(policy.prohibitions ?? [])];
+        const unresolved =
+          !supportedPolicy(policy) ||
+          (policy.obligations ?? []).length > 0 ||
+          rules.some((r) => (r.duties ?? []).length > 0) ||
+          rules.filter((r) => candidate(r, policy, request)).some((r) => !comparable(r));
+        // Only a definite prohibition may decide a policy with unresolved candidates.
+        if (
+          unresolved &&
+          !(policy.prohibitions ?? []).some((r) => candidate(r, policy, request) && comparable(r))
+        )
+          return { effect: "indeterminate" };
+        // The backend's use umbrella is broader than the shared suite profile.
+        // Select candidates here, then use one exact action for rules and request.
+        const lower = (rules: readonly Rule[] = []) =>
+          rules
+            .filter((r) => candidate(r, policy, request) && comparable(r))
+            .map(({ assignee: _assignee, assigner: _assigner, duties: _duties, ...rule }) => ({
+              ...rule,
+              action: "use",
+              constraints: rule.constraints?.map((c) => ({ ...c, datatype: operandDatatype(c) })),
+            }));
+        // Unresolved policies can establish only a prohibition; permissions add no evidence.
+        const permissions = unresolved ? [] : lower(policy.permissions);
+        const prohibitions = lower(policy.prohibitions);
+        const decide = async (
+          permissions: ReturnType<typeof lower>,
+          prohibitions: ReturnType<typeof lower>,
+        ): Promise<{ effect: Effect } | undefined> => {
+          // Count projections too: conflicting types may otherwise skip subprocess limits.
+          if (attempts++ >= MAX_DECISION_ATTEMPTS || performance.now() >= deadline)
+            return { effect: "indeterminate" };
+          const contextTypes = new Map<string, string>();
+          for (const rule of [...permissions, ...prohibitions]) {
+            for (const c of rule.constraints ?? []) {
+              const left = leftOperandIri(c.leftOperand);
+              const type = contextType(c.datatype);
+              // One request context slot cannot carry two incompatible comparison kinds.
+              if (contextTypes.has(left) && contextTypes.get(left) !== type) return undefined;
+              contextTypes.set(left, type);
+            }
+          }
+          const graph = credentialToRdf({
+            id: "urn:example:sparq-envelope",
+            issuer: "https://owner.example/#me",
+            credentialSubject: {
+              [`${AGENT}policy`]: encodePolicy({
+                ...policy,
+                assigner: undefined,
+                assignee: undefined,
+                conflict: "prohibit",
+                profile: undefined,
+                obligations: [],
+                permissions,
+                prohibitions,
+              }),
+            },
+          });
+          // Only validated rule operands reach the backend, with one slot per canonical IRI.
+          const context = [...contextTypes].map(([leftOperand, type]) => {
+            const value = attributes.get(leftOperand);
+            return {
+              leftOperand,
+              value: { type, value: type === "decimal" ? Number(value) : value },
+            };
+          });
+          const input = JSON.stringify({
+            api: SPARQ_DECIDE_API,
+            policy: { format: "turtle", text: await turtle(sparqOperands(new Store(graph))) },
+            request: {
+              action: actionIri("use"),
+              target: request.target,
+              context,
+            },
+          });
+          if (new TextEncoder().encode(input).length > 256 * 1024)
+            return { effect: "indeterminate" };
+          const run =
+            options.run ??
+            ((binary, args) => {
+              const result = spawnSync(binary, [], args);
+              return { ...result, stdout: result.stdout };
+            });
+          const remaining = deadline - performance.now();
+          if (remaining <= 0) return { effect: "indeterminate" };
+          const result = run(binary, {
+            input,
+            encoding: "utf8",
+            timeout: Math.ceil(remaining),
+            killSignal: "SIGKILL",
+            maxBuffer: 64 * 1024,
+            env: {},
+            shell: false,
+          });
+          if (
+            performance.now() >= deadline ||
+            result.error ||
+            result.status !== 0 ||
+            new TextEncoder().encode(result.stdout).length > 64 * 1024
+          )
+            return { effect: "indeterminate" };
+          const doc = JSON.parse(result.stdout);
+          if (
+            doc?.api !== SPARQ_DECIDE_API ||
+            doc.error !== undefined ||
+            doc.evaluator?.crate !== "sparq-policy" ||
+            doc.evaluator.function !== "decide" ||
+            typeof doc.evaluator.version !== "string" ||
+            !Array.isArray(doc.matchedRules) ||
+            !doc.matchedRules.every((r: unknown) => typeof r === "string")
+          )
+            return { effect: "indeterminate" };
+          if (doc.effect === "permit" && Array.isArray(doc.unresolved) && doc.unresolved.length > 0)
+            return { effect: "indeterminate" };
+          const effect: Effect =
+            doc.effect === "permit"
+              ? "permit"
+              : doc.effect === "deny"
+                ? doc.matchedRules.length > 0
+                  ? "prohibited"
+                  : "not-applicable"
+                : "indeterminate";
+          return { effect: performance.now() >= deadline ? "indeterminate" : effect };
+        };
+        const result = await decide(permissions, prohibitions);
+        if (result !== undefined)
+          return {
+            effect: unresolved && result.effect !== "prohibited" ? "indeterminate" : result.effect,
+          };
+        // Conflicting context types cannot hide an independently decidable prohibition.
+        for (const prohibition of prohibitions) {
+          const result = await decide([], [prohibition]);
+          if (result?.effect === "prohibited" || result?.effect === "indeterminate") return result;
+        }
+        return { effect: "indeterminate" };
+      } catch {
+        return { effect: "indeterminate" };
+      }
+    },
+  };
+}

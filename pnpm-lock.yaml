@@ -2386,8 +2386,8 @@ importers:
         specifier: github:jeswr/solid-odrl#db97922d82f2ec016b7ef705827cf85429458668
         version: https://codeload.github.com/jeswr/solid-odrl/tar.gz/db97922d82f2ec016b7ef705827cf85429458668
       '@jeswr/solid-vc':
-        specifier: github:jeswr/solid-vc#7f7a4e0a5ded7415ac40d63f2ff54077863df14e
-        version: https://codeload.github.com/jeswr/solid-vc/tar.gz/7f7a4e0a5ded7415ac40d63f2ff54077863df14e
+        specifier: workspace:*
+        version: link:../solid-vc
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
@@ -2452,7 +2452,35 @@ importers:
         version: 4.1.10(vitest@4.1.10)
 
   packages/agent-mandate:
+    dependencies:
+      '@jeswr/agent-authz-verifier':
+        specifier: workspace:*
+        version: link:../agent-authz-verifier
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/solid-odrl':
+        specifier: workspace:*
+        version: link:../solid-odrl
+      '@jeswr/solid-vc':
+        specifier: workspace:*
+        version: link:../solid-vc
+      '@rdfjs/wrapper':
+        specifier: ^0.34.0
+        version: 0.34.0
+      jose:
+        specifier: ^6.0.0
+        version: 6.2.3
+      n3:
+        specifier: ^2.0.3
+        version: 2.1.1
     devDependencies:
+      '@rdfjs/types':
+        specifier: ^2.0.1
+        version: 2.0.1
+      '@types/n3':
+        specifier: ^1.16.0
+        version: 1.26.1
       '@vitest/coverage-v8':
         specifier: ^4.1.10
         version: 4.1.10(vitest@4.1.10)
@@ -8198,11 +8226,6 @@ packages:
 
   '@jeswr/solid-vc@https://codeload.github.com/jeswr/solid-vc/tar.gz/1cb4ddfb3901fed2958fc50227713cab17230982':
     resolution: {tarball: https://codeload.github.com/jeswr/solid-vc/tar.gz/1cb4ddfb3901fed2958fc50227713cab17230982}
-    version: 0.1.0
-    engines: {node: '>=24'}
-
-  '@jeswr/solid-vc@https://codeload.github.com/jeswr/solid-vc/tar.gz/7f7a4e0a5ded7415ac40d63f2ff54077863df14e':
-    resolution: {tarball: https://codeload.github.com/jeswr/solid-vc/tar.gz/7f7a4e0a5ded7415ac40d63f2ff54077863df14e}
     version: 0.1.0
     engines: {node: '>=24'}
 
@@ -23616,18 +23639,6 @@ snapshots:
       - encoding
 
   '@jeswr/solid-vc@https://codeload.github.com/jeswr/solid-vc/tar.gz/1cb4ddfb3901fed2958fc50227713cab17230982':
-    dependencies:
-      '@jeswr/guarded-fetch': https://codeload.github.com/jeswr/guarded-fetch/tar.gz/bd4490927fd36d62f6b78a0021e8d40bbb572c3b
-      '@rdfjs/wrapper': 0.34.0
-      '@solid/object': 0.6.0
-      content-type: 1.0.5
-      jose: 6.2.3
-      jsonld-streaming-parser: 5.0.1
-      multiformats: 14.0.4
-      n3: 2.1.1
-      rdf-canonize: 5.0.0
-
-  '@jeswr/solid-vc@https://codeload.github.com/jeswr/solid-vc/tar.gz/7f7a4e0a5ded7415ac40d63f2ff54077863df14e':
     dependencies:
       '@jeswr/guarded-fetch': https://codeload.github.com/jeswr/guarded-fetch/tar.gz/bd4490927fd36d62f6b78a0021e8d40bbb572c3b
       '@rdfjs/wrapper': 0.34.0

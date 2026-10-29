@@ -1,0 +1,224 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+
+import { parseRdf } from "@jeswr/fetch-rdf";
+import type { KeyPair, WebIdKeyResolver } from "@jeswr/solid-vc";
+import { beforeAll, expect, it } from "vitest";
+import { type Approval, issueApproval, verifyApproval } from "../src/approval.js";
+import { node, readProof, SEC, trig } from "../src/rdf.js";
+import {
+  alterProofGraph,
+  alterProofOptions,
+  approvalKey,
+  clock,
+  edKey,
+  expectStandardProof,
+  INVALID_INSTANTS,
+  MILLISECOND_FRACTIONS,
+  NOW,
+  OWNER,
+  PROOF_GRAPH_CHANGES,
+  profileResolver,
+  verifyExportedRdf,
+} from "./helpers.js";
+
+let key: KeyPair;
+let resolver: WebIdKeyResolver;
+const a: Approval = {
+  id: "https://pod.example/agent/approvals/1",
+  approves: "https://pod.example/agent/proposals/1",
+  termsDigest: "sha256:test-terms",
+  expires: "2026-10-27T12:00:00Z",
+  decision: "approve",
+};
+const options = () => ({
+  id: a.id,
+  ownerWebId: OWNER,
+  proposal: a.approves,
+  termsDigest: a.termsDigest,
+  webIdKeyResolver: resolver,
+  now: clock,
+});
+it.each(
+  INVALID_INSTANTS,
+)("rejects a signed invalid or lossy approval expiry: %s", async (expires) => {
+  const doc = await issueApproval({ ...a, expires }, key, NOW);
+  expect(
+    await verifyApproval(doc, {
+      ...options(),
+      now: () => new Date("2026-01-01T00:00:00Z"),
+    }),
+  ).toEqual({ valid: false, reason: "expired" });
+});
+it.each(
+  MILLISECOND_FRACTIONS,
+)("preserves lossless signed approval fractions: %s", async (fraction) => {
+  const approval = { ...a, expires: `2026-10-26T12:00:00.${fraction}Z` };
+  const doc = await issueApproval(approval, key, NOW);
+  const expiry = Date.parse(approval.expires);
+  expect(await verifyApproval(doc, { ...options(), now: () => new Date(expiry - 1) })).toEqual({
+    valid: true,
+    approval,
+  });
+  expect(await verifyApproval(doc, { ...options(), now: () => new Date(expiry) })).toEqual({
+    valid: false,
+    reason: "expired",
+  });
+});
+beforeAll(async () => {
+  key = await approvalKey();
+  resolver = await profileResolver(key);
+});
+it.each(PROOF_GRAPH_CHANGES)("rejects altered approval proof graphs: %s", async (change) => {
+  const document = await alterProofGraph(await issueApproval(a, key, NOW), a.id, change);
+  expect((await verifyApproval(document, options())).valid).toBe(false);
+});
+it("verifies real P-256 signatures using a fixture WebID assertionMethod", async () => {
+  expect(key.privateKey.extractable).toBe(false);
+  for (const decision of ["approve", "deny"] as const) {
+    const doc = await issueApproval({ ...a, decision }, key, NOW);
+    expect(await verifyApproval(doc, options())).toEqual({
+      valid: true,
+      approval: { ...a, decision },
+    });
+  }
+});
+it("verifies the exported approval proof configuration independently with WebCrypto", async () => {
+  const document = await issueApproval(a, key, NOW);
+  expect(await verifyExportedRdf(document, a.id, key.publicKey)).toBe(true);
+  await expectStandardProof(document, a.id);
+  const store = await parseRdf(document, "application/trig");
+  const { p: proof } = readProof(store, a.id);
+  expect(proof.termType).toBe("BlankNode");
+  const cryptosuite = proof.one(`${SEC}cryptosuite`);
+  expect((cryptosuite as unknown as { datatype: { value: string } }).datatype.value).toBe(
+    `${SEC}cryptosuiteString`,
+  );
+  const created = proof.one("http://purl.org/dc/terms/created");
+  expect((created as unknown as { datatype: { value: string } }).datatype.value).toBe(
+    "http://www.w3.org/2001/XMLSchema#dateTime",
+  );
+});
+it.each([
+  "named",
+  "datatype",
+  "cryptosuite-datatype",
+  "extra",
+] as const)("rejects altered approval proof configuration: %s", async (change) => {
+  const document = await alterProofOptions(await issueApproval(a, key, NOW), a.id, change);
+  expect(await verifyExportedRdf(document, a.id, key.publicKey)).toBe(false);
+  expect(await verifyApproval(document, options())).toEqual({ valid: false, reason: "signature" });
+});
+it("rejects a non-P256 signing key", async () => {
+  await expect(issueApproval(a, await edKey(), NOW)).rejects.toThrow("P-256");
+  const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-384" }, false, [
+    "sign",
+    "verify",
+  ]);
+  await expect(
+    issueApproval(a, { ...pair, verificationMethod: key.verificationMethod }, NOW),
+  ).rejects.toThrow("P-256");
+});
+it("checks proof type before consulting a WebID resolver", async () => {
+  const doc = await issueApproval(a, key, NOW);
+  for (const changed of [
+    doc.replace("ecdsa-rdfc-2019", "eddsa-rdfc-2022"),
+    doc.replace("security#DataIntegrityProof", "security#Other"),
+    doc.replace("security#assertionMethod", "security#authentication"),
+  ]) {
+    expect(
+      await verifyApproval(changed, {
+        ...options(),
+        webIdKeyResolver: {
+          resolveKey() {
+            throw new Error("must not resolve");
+          },
+          isControlledBy() {
+            throw new Error("must not resolve");
+          },
+        },
+      }),
+    ).toEqual({ valid: false, reason: "proof-type" });
+  }
+});
+it("rejects unlisted, missing and wrong keys and never uses embedded keys", async () => {
+  const doc = await issueApproval(a, key, NOW);
+  const wrong = await approvalKey();
+  const ed = await edKey();
+  const p384 = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-384" }, false, [
+    "sign",
+    "verify",
+  ]);
+  for (const [publicKey, controlled, reason] of [
+    [key.publicKey, false, "key"],
+    [undefined, true, "key"],
+    [ed.publicKey, true, "key"],
+    [p384.publicKey, true, "key"],
+    [wrong.publicKey, true, "signature"],
+  ] as const) {
+    expect(
+      await verifyApproval(doc, {
+        ...options(),
+        webIdKeyResolver: {
+          isControlledBy: async () => controlled,
+          resolveKey: async () => publicKey,
+        },
+      }),
+    ).toEqual({ valid: false, reason });
+  }
+  const store = await parseRdf(doc, "application/trig");
+  node(store, a.id).setText(`${SEC}publicKeyJwk`, "test-token-0123456789");
+  expect(
+    await verifyApproval(await trig(store), {
+      ...options(),
+      webIdKeyResolver: {
+        isControlledBy: async () => false,
+        resolveKey: async () => key.publicKey,
+      },
+    }),
+  ).toEqual({ valid: false, reason: "key" });
+});
+it("rejects changed signed terms before comparing expected terms", async () => {
+  const doc = await issueApproval(a, key, NOW);
+  expect(await verifyApproval(doc.replace(a.termsDigest, "changed"), options())).toEqual({
+    valid: false,
+    reason: "signature",
+  });
+  expect(
+    await verifyApproval(doc, { ...options(), proposal: "https://pod.example/other" }),
+  ).toEqual({ valid: false, reason: "proposal" });
+  expect(await verifyApproval(doc, { ...options(), termsDigest: "different-length" })).toEqual({
+    valid: false,
+    reason: "terms-digest",
+  });
+  expect(
+    await verifyApproval(
+      await issueApproval({ ...a, expires: NOW.toISOString() }, key, NOW),
+      options(),
+    ),
+  ).toEqual({ valid: false, reason: "expired" });
+  expect(
+    await verifyApproval(await issueApproval({ ...a, expires: "invalid" }, key, NOW), options()),
+  ).toEqual({ valid: false, reason: "expired" });
+  expect(
+    await verifyApproval(
+      await issueApproval({ ...a, decision: "maybe" as "approve" }, key, NOW),
+      options(),
+    ),
+  ).toEqual({ valid: false, reason: "decision" });
+});
+it("rejects malformed RDF and duplicate claims", async () => {
+  expect(await verifyApproval("not RDF", options())).toEqual({ valid: false, reason: "malformed" });
+  const doc = await issueApproval(a, key, NOW);
+  expect(
+    await verifyApproval(doc, {
+      ...options(),
+      webIdKeyResolver: {
+        isControlledBy: async () => {
+          throw new Error("offline");
+        },
+        resolveKey: async () => undefined,
+      },
+    }),
+  ).toEqual({ valid: false, reason: "malformed" });
+});
