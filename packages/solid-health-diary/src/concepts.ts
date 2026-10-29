@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Coded-value CODECS — the bijection between a friendly TypeScript token and the
@@ -20,7 +21,7 @@
  * Pure, no platform, no RDF — client-safe.
  */
 
-import { DIET } from "./vocab.js";
+import { DIET, LEGACY_DIET_NS } from "./vocab.js";
 
 /** A friendly-token ⇄ concept-IRI codec for one coded-value scheme. */
 export interface Codec<T extends string> {
@@ -51,8 +52,9 @@ function makeCodec<T extends string>(pairs: readonly (readonly [T, string])[]): 
       return `${DIET}${local}`;
     },
     fromIri(iri) {
-      if (!iri?.startsWith(DIET)) return undefined;
-      return localToToken.get(iri.slice(DIET.length));
+      const base = iri && [DIET, LEGACY_DIET_NS].find((ns) => iri.startsWith(ns));
+      if (!base || !iri) return undefined;
+      return localToToken.get(iri.slice(base.length));
     },
     isToken(s): s is T {
       return tokenToLocal.has(s);

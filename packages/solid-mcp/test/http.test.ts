@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6 — shutdown regression tests
 // AUTHORED-BY Codex GPT-6 — CORS and parse-error regression tests
+// AUTHORED-BY Claude Opus 5.5 — RFC 9728 metadata URL regression tests (MCP-01F)
 
 import { once } from "node:events";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
@@ -11,9 +12,15 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createMcpHttpHandler, type McpHttpHandler, type McpHttpOptions } from "../src/http.js";
+import {
+  createMcpHttpHandler,
+  type McpHttpHandler,
+  type McpHttpOptions,
+  protectedResourceMetadataUrl,
+} from "../src/http.js";
 
 const RESOURCE = "https://mcp.example/mcp";
+const METADATA = "https://mcp.example/.well-known/oauth-protected-resource/mcp";
 const ORIGIN = "https://client.example";
 const MAX_BYTES = 1024 * 1024;
 const MESSAGE = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" });
@@ -88,6 +95,36 @@ describe("configuration", () => {
     `${RESOURCE}#fragment`,
   ])("rejects unsafe resource URL %s", (resourceUrl) => {
     expect(() => setup({ resourceUrl })).toThrow();
+  });
+
+  it.each([
+    "not a URL",
+    "ftp://mcp.example/.well-known/oauth-protected-resource/mcp",
+    "https://user@mcp.example/.well-known/oauth-protected-resource/mcp",
+    `${METADATA}?query=1`,
+    `${METADATA}#fragment`,
+  ])("rejects unsafe resource metadata URL %s", (resourceMetadataUrl) => {
+    expect(() => setup({ resourceMetadataUrl })).toThrow();
+  });
+
+  it("advertises an explicit resource metadata URL", async () => {
+    const resourceMetadataUrl = "https://auth.example/.well-known/oauth-protected-resource/mcp";
+    const { handler } = setup({ resourceMetadataUrl, authenticate: () => null });
+    const response = await handler(request());
+    expect(response.headers.get("www-authenticate")).toBe(
+      `Bearer resource_metadata="${resourceMetadataUrl}"`,
+    );
+  });
+
+  it("cannot be broken out of the challenge quoted-string", async () => {
+    const { handler } = setup({
+      resourceMetadataUrl: 'https://mcp.example/.well-known/oauth-protected-resource/a"b\\c',
+      authenticate: () => null,
+    });
+    const header = (await handler(request())).headers.get("www-authenticate") ?? "";
+    expect(header).toBe(
+      'Bearer resource_metadata="https://mcp.example/.well-known/oauth-protected-resource/a%22b/c"',
+    );
   });
 
   it.each([
@@ -214,6 +251,29 @@ describe("authority and CORS", () => {
   });
 });
 
+describe("protectedResourceMetadataUrl", () => {
+  it.each([
+    [RESOURCE, METADATA],
+    [`${RESOURCE}/`, METADATA],
+    ["https://mcp.example", "https://mcp.example/.well-known/oauth-protected-resource"],
+    ["https://mcp.example/", "https://mcp.example/.well-known/oauth-protected-resource"],
+    [
+      "http://127.0.0.1:8080/tenant/mcp",
+      "http://127.0.0.1:8080/.well-known/oauth-protected-resource/tenant/mcp",
+    ],
+  ])("inserts the well-known segment after the authority of %s", (resource, expected) => {
+    expect(protectedResourceMetadataUrl(resource)).toBe(expected);
+  });
+
+  it.each([
+    "ftp://mcp.example/mcp",
+    `${RESOURCE}?q=1`,
+    `${RESOURCE}#f`,
+  ])("rejects %s", (resource) => {
+    expect(() => protectedResourceMetadataUrl(resource)).toThrow(TypeError);
+  });
+});
+
 describe("authentication and methods", () => {
   it.each([
     null,
@@ -223,9 +283,7 @@ describe("authentication and methods", () => {
     const { handler, server } = setup({ authenticate: () => principal });
     const response = await handler(request());
     expect(response.status).toBe(401);
-    expect(response.headers.get("www-authenticate")).toBe(
-      'Bearer resource_metadata="https://mcp.example/.well-known/oauth-protected-resource/mcp"',
-    );
+    expect(response.headers.get("www-authenticate")).toBe(`Bearer resource_metadata="${METADATA}"`);
     expect(server).not.toHaveBeenCalled();
   });
 
@@ -273,9 +331,7 @@ describe("authentication and methods", () => {
     });
     const response = await handler(request());
     expect(response.status).toBe(401);
-    expect(response.headers.get("www-authenticate")).toContain(
-      "https://mcp.example/.well-known/oauth-protected-resource/mcp",
-    );
+    expect(response.headers.get("www-authenticate")).toBe(`Bearer resource_metadata="${METADATA}"`);
     expect(await response.text()).not.toContain("private diagnostic");
   });
 
