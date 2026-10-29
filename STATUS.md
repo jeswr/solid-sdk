@@ -254,3 +254,68 @@ earlier configured-webServer startup failure remains recorded above. The package
 build, affected gate, and full gate remain non-green for the recorded failures.
 `roborev status` again returned `/bin/bash: line 1: roborev: command not found`
 (exit 127), so automated per-commit review remains unavailable. Open questions: none.
+
+## Fix round 4 — sst-8xm.1
+
+Review baseline: `6a2229e75f06cd6a3b0c6e3356d778c470b86607`.
+
+- `f6e6dd3d` — `fix: serialize live issue refreshes`: let each live read finish
+  before starting the next, coalesce due invalidations into one follow-up, and
+  cancel that follow-up on tracker, identity, storage-root changes, or unmount.
+- Final documentation commit — `docs: record slow refresh fix validation`:
+  this report.
+
+The delayed-read regression failed before the fix: six-second list reads kept
+the board at its original status while 40 polling fallbacks invalidated it
+625 ms apart. The coalescing cases also failed because later invalidations
+started overlapping reads. After the fix, the board applies the first slow
+result and continues applying newer results throughout the 125-second window,
+with at most one live read in flight. Added coverage checks one coalesced
+follow-up after both successful and failed reads, absorbs trailing hints, and
+cancels an in-flight read's follow-up for each scope change and unmount.
+The existing short-burst debounce and membership-change cases still pass.
+
+Commands used `PATH=/opt/node24/bin:$PATH` (Node `v24.22.1`, pnpm `10.4.1`), with
+dependency lifecycle scripts disabled.
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter='@jeswr/app-issues^...' --concurrency=4` | PASS: 7 dependency builds. The first hook-test attempt lacked workspace `dist`; this bootstrap resolved it. |
+| `pnpm --filter @jeswr/app-issues exec vitest run src/lib/use-issues.test.tsx` | PASS: 17 tests. Before the fix, the delayed-polling case and both coalescing cases failed. |
+| `pnpm --filter @jeswr/app-issues run lint` | PASS; the existing `react-hooks/exhaustive-deps` warning at `src/components/issues-view.tsx:881` remains. |
+| `pnpm --filter @jeswr/app-issues run build` | FAIL: existing Google Fonts connection failures for Geist and Geist Mono. |
+| `pnpm --filter @jeswr/app-issues run typecheck` | PASS after the build attempt. |
+| `pnpm --filter @jeswr/app-issues run test` | PASS: 48 files, 739 tests. |
+| `pnpm run lint:root` (inside the affected gate) | PASS. |
+| `TURBO_SCM_BASE=6a2229e75f06cd6a3b0c6e3356d778c470b86607 pnpm run gate` | FAIL at `@jeswr/app-issues#build`: the same two Google Fonts errors; 9 successful tasks of 10. |
+| `pnpm run gate:full` | FAIL at `//#test:root`: 41 successful tasks of 205. Root tests: 4 files failed, 8 passed; 161 tests failed, 739 passed. Other tasks were interrupted. |
+| `git diff --check 6a2229e75f06cd6a3b0c6e3356d778c470b86607` | PASS. |
+
+The package build and affected gate reported:
+
+```text
+Error: Turbopack build failed with 2 errors:
+[next]/internal/font/google/geist_a71539c9.module.css
+next/font: error:
+Failed to fetch `Geist` from Google Fonts.
+
+[next]/internal/font/google/geist_mono_8d43a2aa.module.css
+next/font: error:
+Failed to fetch `Geist Mono` from Google Fonts.
+```
+
+Both requests failed to establish a connection to `https://fonts.googleapis.com`.
+
+The full gate again failed in `test/agent-layers-reachability.test.mjs`,
+`test/agent-layers.test.mjs`, `test/check-packages-guard.test.mjs`, and
+`test/check-sdk-layers.test.mjs`, including the existing empty CLI-output
+assertion `AssertionError: expected '' to contain 'executor-only'`.
+These failures match the earlier rounds and are outside this fix's scope.
+
+No dependencies were added; `check:packages` was not needed. Browser tests were
+not rerun in this round; their earlier configured-webServer startup failure
+remains recorded above. The package build, affected gate, and full gate remain
+non-green for the recorded failures. `roborev status` returned
+`/bin/bash: line 1: roborev: command not found` (exit 127), so automated
+per-commit review remains unavailable. The requested fix is complete.
+Open questions: none.
