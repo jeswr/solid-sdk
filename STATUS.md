@@ -403,3 +403,43 @@ distributions are committed. Both supplied findings are addressed, with no
 unfinished implementation or open questions. `roborev` remains unavailable in the
 sandbox, so per-commit review remains with the dispatcher. No pushes, PRs, branch
 changes, remote git fetches/merges, or tracker writes occurred.
+
+## Fix round 11 — HTML image aliases and plaintext
+
+Starting commit: `8242886c307609ca88d3862c07fbe942e1f09b90`.
+
+- `246820cd` — `fix(skills): validate HTML image aliases`: normalize HTML
+  `image` start tags to `img` before selecting URL attributes and applying
+  void-element handling. Add 20 cases covering missing and resolved `src`/`srcset`
+  resources, mixed case, duplicate attributes, inert examples, foreign images,
+  HTML integration points, and index preservation.
+- `6731e9e3` — `fix(skills): consume plaintext content to EOF`: consume all
+  remaining HTML plaintext content, including apparent end tags and Markdown
+  blocks. Add 23 cases covering literal links, images, reference definitions,
+  self-closing syntax, HTML integration points, active links before plaintext,
+  inert openers, and foreign plaintext elements.
+- The final `docs:` commit records this round's validation results.
+
+Both supplied findings were reproduced before their fixes. All 695 checker tests
+pass afterward (43 added in this round). No dependencies, package implementations,
+skill content, or generated index changes were needed. Only root tooling changed,
+so individual package gates and dependency-policy checks do not apply. Validation
+used Node `v24.22.1` via `/opt/node24/bin`.
+
+| Exact command | Result |
+| --- | --- |
+| `PATH=/opt/node24/bin:$PATH pnpm exec vitest run test/check-skills.test.mjs` | PASS, 695 tests. |
+| `PATH=/opt/node24/bin:$PATH pnpm exec biome check --write scripts/check-skills.mjs test/check-skills.test.mjs` | PASS; formatted one test string before its implementation commit. |
+| `PATH=/opt/node24/bin:$PATH pnpm exec biome check scripts/check-skills.mjs test/check-skills.test.mjs` | PASS, including after the full gate. |
+| `PATH=/opt/node24/bin:$PATH TURBO_SCM_BASE=8242886c307609ca88d3862c07fbe942e1f09b90 pnpm run gate` | PASS; root lint, 57 skills with current index, and all 1,440 root tests across ten files. |
+| `PATH=/opt/node24/bin:$PATH pnpm run gate:full` | FAIL, 318 successful / 372 total tasks, one cached; the previously recorded `@jeswr/federation-trust#test` JWK-order snapshot mismatch at `test/characterization.test.ts:196`. Root lint passes; all 1,440 root tests replayed from the successful affected-gate cache. |
+| `git diff --exit-code 8242886c307609ca88d3862c07fbe942e1f09b90 -- packages/federation-trust packages/solid-vc` | PASS; both packages are unchanged in this round. |
+| `git diff --check` | PASS. |
+
+The full gate received JWK property order `kty,crv,x` where the snapshot expects
+`crv,x,kty`; that existing failure remains outside this brief. Removed the 16
+generated app `clientid.jsonld`/`callback.html` files after the gate. No generated
+distributions are committed. Both supplied findings are addressed, with no
+unfinished implementation or open questions. `roborev` remains unavailable in the
+sandbox, so per-commit review remains with the dispatcher. No pushes, PRs, branch
+changes, remote git fetches/merges, or tracker writes occurred.
