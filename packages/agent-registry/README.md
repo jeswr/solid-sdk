@@ -51,7 +51,9 @@ Active notes use `Identity conflict: <identity> versus <identity>`, optionally f
 by `. Unresolved.`; the legacy `Main Gmail identity conflict:` prefix is also accepted.
 Other prose, including negated or resolved notes, does not create a conflict. Each operand
 must be one complete identifier, optionally enclosed in quotes, parentheses or angle brackets.
-Quotes and angle brackets preserve the entire identity, including URI punctuation.
+Operands are parsed before identity matching, preserving semicolons, commas and parentheses
+inside bare URIs. Bare URI operands retain terminal punctuation; use quotes or angle brackets
+when sentence punctuation follows a URI. Delimiters preserve the entire enclosed identity.
 Every parsed conflict operand is private even when its channel cannot be inferred.
 Explicit email, Matrix, international phone and HTTP(S)/DID/mailto/tel URI alternatives
 are retained as hashes even when absent from accounts and evidence.

@@ -273,15 +273,35 @@ function noteIdentityChannel(handle: string): string | undefined {
   if (/^(?:https?:\/\/|(?:did|mailto|tel):)[^\s<>"`]+$/iu.test(handle)) return "web";
   return undefined;
 }
-/** Only the affirmative two-identity format denotes an unresolved conflict. */
-function activeConflictNote(note: string, identifiers: string[]): boolean {
-  return (
-    identifiers[1]?.toLowerCase() === "versus" &&
-    (identifiers.length === 3 ||
-      (identifiers.length === 4 &&
-        identifiers[3]?.toLowerCase() === "unresolved" &&
-        /\.\s+Unresolved\.$/iu.test(note)))
-  );
+// Parse operand boundaries before interpreting identifiers: URI punctuation belongs to the URI.
+const CONFLICT_OPERAND =
+  '(?:"[^"\\r\\n]+"|\'[^\'\\r\\n]+\'|`[^`\\r\\n]+`|<[^<>\\r\\n]+>|\\([^\\r\\n]+\\)|\\+\\d[\\d ().-]{5,}\\d|[^\\s<>"`]+)[.!?:,;]*';
+const CONFLICT_NOTE = new RegExp(
+  `^(?:Main Gmail )?Identity conflict:\\s*(${CONFLICT_OPERAND})\\s+versus\\s+(${CONFLICT_OPERAND})(?:\\.\\s+Unresolved\\.)?$`,
+  "iu",
+);
+/** Only the complete affirmative two-operand grammar denotes an unresolved conflict. */
+function conflictIdentifiers(
+  note: string,
+  known: { folded: Set<string>; matrix: Set<string> },
+): string[] | undefined {
+  const match = CONFLICT_NOTE.exec(note.normalize("NFC"));
+  if (!match) return undefined;
+  const operands = [match[1], match[2]].map((operand) => {
+    if (!operand) return invalid();
+    const delimited = /^(?:(["'`])(.+)\1|<([^<>]+)>|\((.+)\))[.!?:,;]*$/u.exec(operand);
+    if (delimited) return delimited[2] ?? delimited[3] ?? delimited[4] ?? invalid();
+    if (
+      known.folded.has(normaliseHandle(operand)) ||
+      known.matrix.has(normaliseHandle(operand, "matrix")) ||
+      /^[a-z][a-z0-9+.-]*:/iu.test(operand)
+    )
+      return operand;
+    const handle = operand.replace(/[.:]+$/u, "");
+    const unpunctuated = handle.replace(/[.!?:,;]+$/u, "");
+    return noteIdentityChannel(unpunctuated) ? unpunctuated : handle;
+  });
+  return [operands[0] ?? invalid(), "versus", operands[1] ?? invalid()];
 }
 /** Build privacy-safe settings, applying only the documented ODI correction and Telegram addition. */
 export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array): Settings {
@@ -305,9 +325,9 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
     (channel === "matrix" || channel === "matrix_bot" ? known.matrix : known.folded).add(handle);
   const notes = snapshot.notes.map((note) => {
     const text = note.trim();
-    const affirmative = /^(?:Main Gmail )?Identity conflict:\s*(.+)$/iu.exec(text);
-    const identifiers = noteIdentifiers(affirmative?.[1] ?? text, known);
-    return { identifiers, active: !!affirmative && activeConflictNote(text, identifiers) };
+    const identifiers = conflictIdentifiers(text, known);
+    const body = /^(?:Main Gmail )?Identity conflict:\s*(.+)$/iu.exec(text)?.[1] ?? text;
+    return { identifiers: identifiers ?? noteIdentifiers(body, known), active: !!identifiers };
   });
   const identities = [
     ...knownIdentities,
@@ -407,7 +427,7 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
         const decoded = credentialReference(ref);
         // Email, MXID/social handles, identity URIs and international phone numbers
         // are private even when no account, evidence or note has supplied that identity.
-        if (containsPrivateIdentifier(decoded))
+        if (containsPrivateIdentifier(ref) || containsPrivateIdentifier(decoded))
           throw new Error("Credential reference contains a private identifier");
       }
       return {

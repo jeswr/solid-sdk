@@ -491,7 +491,7 @@ describe("privacy and settings model", () => {
     ["matrix_bot", "@Alice:[2001:db8::1]:8448", "@Bob:[2001:db8::2]:9448"],
     ["phone_messages", "+1 (202) 555-0100", "+1 202 555 0101"],
   ])("separates sentence punctuation from complete %s identities", (channel, own, other) => {
-    for (const punctuation of ["!", "?", "!?."]) {
+    for (const punctuation of ["!", "?", "!?.", ",", ";"]) {
       for (const quote of ["", "'"]) {
         const snap = parseSnapshot({
           version: 1,
@@ -607,11 +607,12 @@ describe("privacy and settings model", () => {
         }
       }
   });
-  it.each([";v=2", ",v2", "(v2)"])("preserves complete quoted URI suffix %s", (suffix) => {
+  it.each([";v=2", ",v2", "(v2)", ";", ",", "()"])("preserves complete URI suffix %s", (suffix) => {
     const prefix = "https://profile.example/alice";
     const own = `${prefix}${suffix}`;
     const other = "alternate@example.org";
     for (const [open, close] of [
+      ["", ""],
       ['"', '"'],
       ["'", "'"],
       ["`", "`"],
@@ -628,7 +629,9 @@ describe("privacy and settings model", () => {
             identifiers: { primary: handle },
             connector: { target: "fixture", setup_status: "planned" },
           })),
-          notes: [`Identity conflict: ${open}${own}${close}. versus ${other}. Unresolved.`],
+          notes: [
+            `Identity conflict: ${open}${own}${close}${close ? "." : ""} versus ${other}. Unresolved.`,
+          ],
         });
         const s = inventorySettings(snap, salt);
         expect(s.connections[0]).toMatchObject({
@@ -659,6 +662,9 @@ describe("privacy and settings model", () => {
     "Identity conflict: alice@example.com versus bob@example.org is resolved.",
     "Identity conflict: alice@example.com versus bob@example.org. No conflicts remain.",
     "Identity conflict: alice@example.com versus bob@example.org. Not unresolved.",
+    "Identity conflict: alice@example.com versus https://id.example/Bob;v=2 is resolved.",
+    "Identity conflict: alice@example.com versus https://id.example/Bob(v2). Resolved.",
+    "Identity conflict: alice@example.com versus https://id.example/Bob,other versus carol@example.org.",
     "Identity conflict: no conflict for alice@example.com versus bob@example.org.",
     "Identity conflict: alice@example.com.",
     "Use alice@example.com versus bob@example.org for comparison.",
@@ -687,7 +693,7 @@ describe("privacy and settings model", () => {
     "mailto:bob@example.org",
   ])("retains complete notes-only URI alternative %s", (other) => {
     const own = "https://profile.example/alice";
-    for (const quote of ['"', "'", "`"]) {
+    for (const quote of ["", '"', "'", "`"]) {
       const snap = parseSnapshot({
         version: 1,
         accounts: [
@@ -700,7 +706,9 @@ describe("privacy and settings model", () => {
             connector: { target: "fixture", setup_status: "planned" },
           },
         ],
-        notes: [`Identity conflict: ${quote}${own}${quote} versus ${quote}${other}${quote}.`],
+        notes: [
+          `Identity conflict: ${quote}${own}${quote} versus ${quote}${other}${quote}${quote ? "." : ""}`,
+        ],
       });
       const s = inventorySettings(snap, salt);
       expect(s.connections[0]).toMatchObject({

@@ -440,6 +440,55 @@ describe("synthetic registry import", () => {
     expect(output).not.toContain(prefix);
     expect(output).not.toContain(other);
   });
+  it.each(
+    [";v=2", ",v2", "(v2)", ";", ",", "()"].flatMap((suffix) =>
+      ["", ". Unresolved."].map((ending) => [suffix, ending]),
+    ),
+  )("writes complete bare URI conflicts to RDF: %s%s", async (suffix, ending) => {
+    const prefix = "https://id.example/Alice";
+    const own = `${prefix}${suffix}`;
+    const other = `https://id.example/Bob${suffix}`;
+    const ports = harness(
+      stringify({
+        version: 1,
+        accounts: [prefix, own].map((handle, index) => ({
+          id: `account-${index}`,
+          channel: "web",
+          provider: "fixture_provider",
+          organization: "personal",
+          identifiers: { primary: handle },
+          connector: { target: "fixture", setup_status: "planned" },
+        })),
+        notes: [`Identity conflict: ${own} versus ${other}${ending}`],
+      }),
+    );
+    const report = await importRegistry(config, ports);
+    const salt = await ports.salt.getSalt();
+    const conflicts = [
+      {
+        kind: "identity-mismatch",
+        handleHashes: [hashHandle(own, salt), hashHandle(other, salt)].sort(),
+      },
+    ];
+    for (const [index, account] of report.settings.connections.slice(0, 2).entries()) {
+      const expected = index === 0 ? [] : conflicts;
+      const state = index === 0 ? "setup-required" : "error";
+      expect(account).toMatchObject({ identityConflicts: expected, bindingState: state });
+      const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
+      const dataset = ports.storage.resources.get(url)?.dataset;
+      expect(
+        dataset
+          ?.getObjects(term(url), term(`${AGENT}identityConflict`), null)
+          .map((value) => JSON.parse(value.value)),
+      ).toEqual(expected);
+      expect(
+        dataset?.getObjects(term(url), term(`${AGENT}bindingState`), null).map((v) => v.value),
+      ).toEqual([state]);
+    }
+    const output = JSON.stringify({ report, resources: [...ports.storage.resources] });
+    expect(output).not.toContain(prefix);
+    expect(output).not.toContain(other);
+  });
   it.each([
     "No conflicts for alice@example.com.",
     "Resolved identity conflict: alice@example.com versus bob@example.org.",
@@ -741,6 +790,59 @@ describe("fail-closed boundaries", () => {
     const ports = harness(fixture.replace("op://test-vault/account-01/credential", ref));
     await expect(importRegistry(config, ports)).rejects.toThrow(
       /Invalid registry|private identifier/,
+    );
+    expect(ports.storage.events).toEqual([]);
+    expect(ports.storage.resources.size).toBe(0);
+  });
+  it.each(
+    ["account", "evidence", "note", "resolved-note"].flatMap((source) =>
+      [
+        "op://PRIVATE%2DUSER/item/credential",
+        "op://test-vault/PRIVATE%2DUSER/credential",
+        "op://test-vault/item/PRIVATE%2DUSER",
+      ].map((ref) => [source, ref]),
+    ),
+  )("rejects original references containing an encoded %s identity: %s", async (source, ref) => {
+    const identity = "private%2duser";
+    const input = {
+      version: 1,
+      accounts: [
+        {
+          id: "fixture-account",
+          channel: "github_notifications",
+          provider: "github",
+          organization: "personal",
+          identifiers: { primary: source === "account" ? identity : "to_confirm" },
+          credential_ref: ref,
+          connector: { target: "fixture", setup_status: "planned" },
+        },
+      ],
+      evidence:
+        source === "evidence"
+          ? [
+              {
+                channel: "github_notifications",
+                provider: "github",
+                identifier: identity,
+                method: "historic_connector",
+                source: "synthetic",
+                observedOn: "2026-10-20",
+              },
+            ]
+          : [],
+      notes:
+        source === "note" || source === "resolved-note"
+          ? [
+              `Identity conflict: "${identity}" versus "other-user".${source === "resolved-note" ? " Resolved." : ""}`,
+            ]
+          : [],
+    };
+    expect(() => inventorySettings(parseSnapshot(input), new Uint8Array(32).fill(7))).toThrow(
+      "Credential reference contains a private identifier",
+    );
+    const ports = harness(stringify(input));
+    await expect(importRegistry(config, ports)).rejects.toThrow(
+      "Credential reference contains a private identifier",
     );
     expect(ports.storage.events).toEqual([]);
     expect(ports.storage.resources.size).toBe(0);
