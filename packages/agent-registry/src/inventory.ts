@@ -240,9 +240,13 @@ const NOTE_IDENTIFIERS = new RegExp(
 );
 /** Keep complete phone/handle/URI tokens; strip prose punctuation after a mention. */
 function noteIdentifiers(note: string): string[] {
-  return (note.normalize("NFC").match(NOTE_IDENTIFIERS) ?? []).map((handle) =>
-    handle.replace(/[.:]+$/u, "").replace(/^(['`])(.*)\1$/u, "$2"),
-  );
+  return (note.normalize("NFC").match(NOTE_IDENTIFIERS) ?? []).map((identifier) => {
+    const handle = identifier.replace(/[.:]+$/u, "").replace(/^(['`])(.*)\1$/u, "$2");
+    const unpunctuated = handle.replace(/[.!?:]+$/u, "").replace(/^(['`])(.*)\1$/u, "$2");
+    // Sentence marks cannot end an email domain, Matrix server or phone number.
+    // Keep them in opaque handles and URIs, and inside explicit identifiers' local parts.
+    return noteIdentityChannel(unpunctuated) ? unpunctuated : handle;
+  });
 }
 /** Discover explicit identities only; Matrix bot MXIDs use the same case-preserving rules. */
 function noteIdentityChannel(handle: string): string | undefined {

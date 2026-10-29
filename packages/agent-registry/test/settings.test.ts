@@ -432,6 +432,76 @@ describe("privacy and settings model", () => {
     ]);
   });
   it.each([
+    ["email", "alice@example.com", "bob@example.com"],
+    ["email", "alice!tag?@example.com", "bob?tag!@example.com"],
+    ["matrix", "@Alice!?:matrix.example", "@Bob?!:matrix.example"],
+    ["matrix_bot", "@Alice:[2001:db8::1]:8448", "@Bob:[2001:db8::2]:9448"],
+    ["phone_messages", "+1 (202) 555-0100", "+1 202 555 0101"],
+  ])("separates sentence punctuation from complete %s identities", (channel, own, other) => {
+    for (const punctuation of ["!", "?", "!?."]) {
+      for (const quote of ["", "'"]) {
+        const snap = parseSnapshot({
+          version: 1,
+          accounts: [own, other].map((handle, index) => ({
+            id: `account-${index}`,
+            channel,
+            provider: "fixture_provider",
+            organization: "personal",
+            identifiers: { primary: handle },
+            connector: { target: "fixture", setup_status: "planned" },
+          })),
+          notes: [
+            `Identity conflict: ${quote}${own}${quote}${punctuation} versus ${quote}${other}${quote}${punctuation}`,
+          ],
+        });
+        const s = inventorySettings(snap, salt);
+        for (const account of s.connections.slice(0, 2))
+          expect(account).toMatchObject({
+            bindingState: "error",
+            identityConflicts: [
+              {
+                kind: "identity-mismatch",
+                handleHashes: [
+                  hashHandle(own, salt, channel),
+                  hashHandle(other, salt, channel),
+                ].sort(),
+              },
+            ],
+          });
+        expect(JSON.stringify(s)).not.toContain(own);
+        expect(JSON.stringify(s)).not.toContain(other);
+        snap.accounts.pop();
+        expect(inventorySettings(snap, salt).connections[0]?.identityConflicts).toEqual(
+          s.connections[0]?.identityConflicts,
+        );
+      }
+    }
+  });
+  it.each([
+    ["github_notifications", "fixture!", "fixture?"],
+    ["web", "https://profile.example/alice?name=me!", "https://profile.example/bob?name=you!"],
+  ])("preserves valid punctuation in opaque %s identifiers", (channel, own, other) => {
+    const snap = parseSnapshot({
+      version: 1,
+      accounts: [own, other].map((handle, index) => ({
+        id: `account-${index}`,
+        channel,
+        provider: "fixture_provider",
+        organization: "personal",
+        identifiers: { primary: handle },
+        connector: { target: "fixture", setup_status: "planned" },
+      })),
+      notes: [`Identity conflict: ${own} versus ${other}`],
+    });
+    for (const account of inventorySettings(snap, salt).connections.slice(0, 2))
+      expect(account.identityConflicts).toEqual([
+        {
+          kind: "identity-mismatch",
+          handleHashes: [hashHandle(own, salt, channel), hashHandle(other, salt, channel)].sort(),
+        },
+      ]);
+  });
+  it.each([
     ["+1 202 555 0100", '"'],
     ["+1 202 555 0100", "'"],
     ["+1 202 555 0100", "`"],

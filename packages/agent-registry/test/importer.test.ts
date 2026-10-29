@@ -202,6 +202,48 @@ describe("synthetic registry import", () => {
       ).toEqual(expected);
     }
   });
+  it.each([
+    "!",
+    "?",
+  ])("writes both sentence-final conflict identities to RDF: %s", async (punctuation) => {
+    const handles = ["alice@example.com", "bob@example.com"];
+    const ports = harness(
+      stringify({
+        version: 1,
+        accounts: handles.map((handle, index) => ({
+          id: `account-${index}`,
+          channel: "email",
+          provider: "google",
+          organization: "personal",
+          identifiers: { primary: handle },
+          connector: { target: "gmail", setup_status: "planned" },
+        })),
+        notes: [`Identity conflict: alice@example.com versus bob@example.com${punctuation}`],
+      }),
+    );
+    const report = await importRegistry(config, ports);
+    const expected = [
+      {
+        kind: "identity-mismatch",
+        handleHashes: handles
+          .map((handle) => hashHandle(handle, new Uint8Array(32).fill(7)))
+          .sort(),
+      },
+    ];
+    for (const account of report.settings.connections.slice(0, 2)) {
+      expect(account.bindingState).toBe("error");
+      expect(account.identityConflicts).toEqual(expected);
+      const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
+      expect(
+        ports.storage.resources
+          .get(url)
+          ?.dataset.getObjects(term(url), term(`${AGENT}identityConflict`), null)
+          .map((v) => JSON.parse(v.value)),
+      ).toEqual(expected);
+    }
+    const output = JSON.stringify({ report, resources: [...ports.storage.resources] });
+    for (const handle of handles) expect(output).not.toContain(handle);
+  });
   it("imports a to_ email identity with historic evidence and hash-only conflicts", async () => {
     const identity = "to_notify@example.com";
     const alternative = "alternate@example.org";
