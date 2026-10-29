@@ -7,9 +7,10 @@ import {
   limitedBody,
   MAX_CONTENT_BYTES,
   mediaType,
+  RDF_MEDIA_TYPES,
   resourceTitle,
 } from "./content.js";
-import { RDF_MEDIA_TYPES } from "./pod.js";
+import { PodOutput } from "./output.js";
 import { withPodFetchLimits } from "./pod-operation.js";
 import { asPodPort, isFetchPodRead, type PodSource } from "./pod-port.js";
 
@@ -34,9 +35,10 @@ export async function fetchDocument(source: PodSource, id: string): Promise<Fetc
   const target = requirePodScopedUrl({ podRoot: pod.root }, new URL(id).toString());
   const accept = "text/turtle, text/plain;q=0.9, */*;q=0.1";
   const readMethod = pod.read;
+  const output = new PodOutput(pod);
   const read = await withPodFetchLimits(
     (fetcher) => boundFetchBody(fetcher, isFetchPodRead(readMethod)),
-    () => readMethod.call(pod, target, { accept }),
+    () => output.read(target, { accept }),
   );
   const finalUrl = requirePodScopedUrl({ podRoot: pod.root }, read.url ?? target);
   const response = new Response(
@@ -63,29 +65,34 @@ export async function fetchDocument(source: PodSource, id: string): Promise<Fetc
   const rdf = RDF_MEDIA_TYPES.has(contentType);
   if (!rdf && !contentType.startsWith("text/")) {
     void response.body?.cancel().catch(() => {});
-    return result;
+    return output.value(result, target);
   }
   const { bytes, truncated } = await limitedBody(response);
   result.metadata.truncated = truncated;
   if (rdf) {
     // A partial RDF input cannot safely be parsed; empty text is valid Turtle.
-    if (truncated) return result;
+    if (truncated) return output.value(result, target);
     const decoded = decodePrefix(bytes, false);
     try {
       const dataset = await parseBoundedRdf(decoded, contentType, response.url || target);
-      result.text = serializeBoundedTurtle(dataset);
+      const filtered = await output.rdf(target, read, dataset);
+      result.text = serializeBoundedTurtle(filtered);
+      if (filtered !== dataset) delete result.metadata.etag;
     } catch (error) {
       if (!(error instanceof RdfLimitError)) throw error;
       result.metadata.truncated = true;
     }
   } else {
-    result.text = decodePrefix(bytes, truncated);
+    result.text = await output.text(decodePrefix(bytes, truncated), target);
     // Invalid UTF-8 may expand to replacement characters during decoding.
     if (Buffer.byteLength(result.text) > MAX_CONTENT_BYTES) {
       result.text = decodePrefix(Buffer.from(result.text).subarray(0, MAX_CONTENT_BYTES), true);
       result.metadata.truncated = true;
     }
   }
+  // RDF was projected as terms before Writer serialization, never edit its text.
+  result.title = await output.text(result.title, target);
+  result.metadata = await output.value(result.metadata, target);
   return result;
 }
 

@@ -79,8 +79,23 @@ enforced inside that boundary.
 Search records a match only after the target read succeeds, including matches
 based solely on a Type Index hint, filename or URL. Read denials discard the
 candidate; an authorized read with no matching RDF literal can still match by name.
-Container tools and MCP resource listings authorize the container and each child
-before returning metadata, omitting unreadable children.
+All pod output passes through the operation-local `PodOutput` projection. It uses
+the injected port's current methods and successful reads for the caller's purpose;
+list entries and Type Index registrations grant no permission to disclose data.
+Lists, search descriptions, resource reads, tool results, chat results and write
+receipts share this boundary. A write receipt requires read authorization after
+the write; the write can succeed even if that receipt is denied.
+
+Container representations are rebuilt from authorized children through typed
+RDF accessors and the N3 Writer. This applies to container URLs, slashless roots,
+query/redirect aliases and RDF identified as a container or containing membership
+statements. Source membership, child descriptions and container metadata are never
+copied into the rebuilt graph. Other RDF views filter resource references in every
+term position and remove attached blank-node descriptions. Text and metadata
+references use the same read authorization, and denied structured descriptions
+are omitted as a whole. Backend errors are mapped to fixed public diagnostics so
+rejected URLs, names and values cannot escape through error messages. Authorization
+decisions are never retained across operations or callers.
 Decorated reads receive complete bodies up to the input limit; larger downloads
 fail closed so a content-based authorization check cannot inspect a partial body.
 

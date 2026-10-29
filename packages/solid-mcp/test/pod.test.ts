@@ -246,8 +246,13 @@ describe.each(["legacy config", "fetch PodPort"])("pod operations via %s", (mode
           body: containerTurtle(POD, [{ name: "note.ttl" }]),
         },
         [`${POD}note.ttl`]: { contentType: "text/turtle", body: ttl },
+        // The RDF describes this separate resource, whose read must authorize
+        // exposing its literal even though the containing document is readable.
+        [`${POD}note`]: { contentType: "text/turtle", body: "" },
       });
-      const hits = await search(cfg(pod.fetch), "avocado");
+      const rec = recordingFetch(pod.fetch);
+      const hits = await search(cfg(rec.fetch), "avocado");
+      expect(rec.urls).toContain(`${POD}note`);
       const hit = hits.find((h) => h.url === `${POD}note.ttl`);
       expect(hit).toBeDefined();
       expect(hit?.snippet).toContain("avocados");

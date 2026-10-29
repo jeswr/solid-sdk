@@ -15,7 +15,9 @@ import {
   scopedFetch,
   writesEnabled,
 } from "./auth.js";
+import { PodOutput, podOutputError } from "./output.js";
 import { containerCandidates } from "./pod.js";
+import { createFetchPodPort, type PodPort } from "./pod-port.js";
 
 /** Parse a conservative Link-header subset; ambiguous/unsupported discovery fails closed. */
 function wacAclLink(header: string): string {
@@ -50,7 +52,7 @@ function wacAclLink(header: string): string {
 }
 
 /** Adapt only the chat storage surface while MCP-01's shared port is absent. */
-export function createChatPodPort(config: SolidMcpConfig): ChatPodPort {
+export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPodPort {
   const fetch = scopedFetch(config);
   function check(response: Response): void {
     if (!response.ok)
@@ -58,20 +60,33 @@ export function createChatPodPort(config: SolidMcpConfig): ChatPodPort {
         status: response.status,
       });
   }
-  // Container parsing must not let a foreign JSON-LD context bypass pod scope.
-  const rdfFetch: typeof globalThis.fetch = async (input, init) => {
-    const response = await fetch(input, init);
-    if (!response.ok) return response;
-    const mediaType = (response.headers.get("content-type") ?? "text/turtle")
-      .replace(/;.*/, "")
-      .trim()
-      .toLowerCase();
+  async function portOperation<T>(operation: () => Promise<T>): Promise<T> {
+    try {
+      return await operation();
+    } catch (error) {
+      // ChatWriter distinguishes absent/create-conflict resources from failures.
+      // Keep that structural status when using the shared byte port.
+      if (error instanceof Error && !("status" in error)) {
+        const status = /\bHTTP (\d{3})\b/.exec(error.message)?.[1];
+        if (status) Object.assign(error, { status: Number(status) });
+      }
+      throw error;
+    }
+  }
+  function requireChatRdf(contentType: string): void {
+    const mediaType = contentType.replace(/;.*/, "").trim().toLowerCase();
     if (
       !["text/turtle", "application/n-triples", "application/n-quads", "application/trig"].includes(
         mediaType,
       )
     )
       throw new Error("Unsupported chat RDF content type");
+  }
+  // Container parsing must not let a foreign JSON-LD context bypass pod scope.
+  const rdfFetch: typeof globalThis.fetch = async (input, init) => {
+    const response = await fetch(input, init);
+    if (!response.ok) return response;
+    requireChatRdf(response.headers.get("content-type") ?? "text/turtle");
     return response;
   };
   return {
@@ -88,6 +103,13 @@ export function createChatPodPort(config: SolidMcpConfig): ChatPodPort {
       return requirePodScopedWriteUrl(config, acl.href);
     },
     async read(url) {
+      if (pod) {
+        const read = await portOperation(() =>
+          new PodOutput(pod).read(url, { accept: "text/turtle" }),
+        );
+        requireChatRdf(read.contentType || "text/turtle");
+        return { ...read, contentType: read.contentType || "text/turtle" };
+      }
       const response = await rdfFetch(requirePodScopedUrl(config, url), {
         headers: { accept: "text/turtle" },
       });
@@ -100,11 +122,28 @@ export function createChatPodPort(config: SolidMcpConfig): ChatPodPort {
     async list(container) {
       // ChatWriter reads metadata and every message before returning a result.
       // Preserve those read errors instead of silently filtering missing messages.
+      if (pod) {
+        return portOperation(async () => {
+          const output = new PodOutput(pod);
+          const read = await output.read(container, { accept: "text/turtle" });
+          requireChatRdf(read.contentType || "text/turtle");
+          const children = [];
+          for (const child of await containerCandidates(pod, container)) {
+            // Containers are conversation candidates; a denied conversation
+            // cannot enter the writer or leave a title/cursor in its results.
+            // Message files are read by ChatWriter, preserving read failures.
+            const projected = child.isContainer ? await output.value(child, child.url) : child;
+            if (projected !== undefined) children.push(projected);
+          }
+          return children;
+        });
+      }
       return containerCandidates({ ...config, fetch: rdfFetch }, container);
     },
     async write(url, body, contentType, cond) {
       if (!writesEnabled(config)) throw new Error("write disabled: server is read-only");
       const target = requirePodScopedWriteUrl(config, url);
+      if (pod) return portOperation(() => pod.write(target, body, contentType, cond));
       const headers = new Headers({ "content-type": contentType });
       if (cond.ifMatch !== undefined) headers.set("if-match", cond.ifMatch);
       if (cond.ifNoneMatch !== undefined) headers.set("if-none-match", cond.ifNoneMatch);
@@ -123,16 +162,23 @@ export function createChatPodPort(config: SolidMcpConfig): ChatPodPort {
   };
 }
 
-export function registerChatTools(server: McpServer, config: SolidMcpConfig): void {
-  const writer = () => new ChatWriter(createChatPodPort(config));
-  const result = (value: unknown) => ({
-    content: [{ type: "text" as const, text: JSON.stringify(value) }],
+export function registerChatTools(
+  server: McpServer,
+  config: SolidMcpConfig,
+  pod: PodPort = createFetchPodPort(config),
+): void {
+  const writer = () => new ChatWriter(createChatPodPort(config, pod));
+  const result = async (value: unknown) => ({
+    content: [
+      {
+        type: "text" as const,
+        text: JSON.stringify((await new PodOutput(pod).value(value, pod.root)) ?? {}),
+      },
+    ],
   });
   const error = (value: unknown) => ({
     isError: true,
-    content: [
-      { type: "text" as const, text: value instanceof Error ? value.message : String(value) },
-    ],
+    content: [{ type: "text" as const, text: podOutputError(value).message }],
   });
   const provider = z.enum(CHAT_PROVIDERS);
   const id = z.string().regex(/^[a-zA-Z0-9_-]{1,200}$/);
@@ -167,7 +213,7 @@ export function registerChatTools(server: McpServer, config: SolidMcpConfig): vo
           throw new Error(
             "write disabled: server is read-only (set readOnly:false to enable writes)",
           );
-        return result(await writer().save(conversation));
+        return await result(await writer().save(conversation));
       } catch (e) {
         return error(e);
       }
@@ -188,7 +234,7 @@ export function registerChatTools(server: McpServer, config: SolidMcpConfig): vo
     },
     async (options) => {
       try {
-        return result(await writer().list(options));
+        return await result(await writer().list(options));
       } catch (e) {
         return error(e);
       }
@@ -204,7 +250,7 @@ export function registerChatTools(server: McpServer, config: SolidMcpConfig): vo
     },
     async ({ provider, conversationId }) => {
       try {
-        return result(await writer().get(provider, conversationId));
+        return await result(await writer().get(provider, conversationId));
       } catch (e) {
         return error(e);
       }

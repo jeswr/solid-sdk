@@ -3,6 +3,16 @@
 /** Internal byte limits and safe parsing for pod content. */
 export const MAX_CONTENT_BYTES = 1024 * 1024;
 
+/** One media-type vocabulary for all output, discovery and byte-limit decisions. */
+export const RDF_MEDIA_TYPES = new Set([
+  "text/turtle",
+  "application/x-turtle",
+  "application/ld+json",
+  "application/n-triples",
+  "application/n-quads",
+  "application/trig",
+]);
+
 export function mediaType(header: string | null): string {
   return header?.split(";", 1)[0]?.trim().toLowerCase() || "application/octet-stream";
 }

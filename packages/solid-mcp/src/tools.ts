@@ -5,6 +5,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { requirePodScopedUrl } from "./auth.js";
 import { fetchDocument } from "./fetch.js";
+import { podOutputError } from "./output.js";
 import {
   listContainer,
   RDF_MEDIA_TYPES,
@@ -40,7 +41,7 @@ function toolText(text: string): CallToolResult {
 function toolError(error: unknown): CallToolResult {
   return {
     isError: true,
-    content: [{ type: "text", text: error instanceof Error ? error.message : String(error) }],
+    content: [{ type: "text", text: podOutputError(error).message }],
   };
 }
 
