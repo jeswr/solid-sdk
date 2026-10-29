@@ -2,7 +2,8 @@
 // AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { Literal } from "@rdfjs/types";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
+import { evaluateIntent, solidOdrlEngine } from "../src/policy.js";
 import { node } from "../src/rdf.js";
 import {
   type ProcessOptions,
@@ -12,7 +13,7 @@ import {
 } from "../src/sparq.js";
 import type { Constraint, Policy, Rule } from "../src/types.js";
 import { AGENT, ODRL } from "../src/types.js";
-import { ACTOR, intent } from "./helpers.js";
+import { ACTOR, intent, mandate } from "./helpers.js";
 
 const policy: Policy = { id: "urn:policy", permissions: [{ type: "permission", action: "read" }] };
 const response = (extra = {}): string =>
@@ -359,13 +360,21 @@ it.each<{
       ],
     };
     const original = structuredClone(p);
+    const value = Array.isArray(constraint.rightOperand)
+      ? constraint.rightOperand[0]
+      : constraint.rightOperand;
+    const request = intent({
+      action: "read",
+      attributes: { [constraint.leftOperand]: value },
+      ...(constraint.leftOperand === "dateTime" ? { at: value as string } : {}),
+    });
     await sparqPolicyEngine({
       binary: "test",
       run(_binary, args) {
         input = args.input;
         return { stdout: response(), status: 0 };
       },
-    }).evaluate(p, intent({ action: "read" }));
+    }).evaluate(p, request);
     const doc = JSON.parse(input);
     const store = await parseRdf(doc.policy.text, "text/turtle");
     const operands = node(store, "urn:example:sparq-envelope")
@@ -385,9 +394,119 @@ it.each<{
     }
     expect(
       doc.request.context.find((c: { leftOperand: string }) => c.leftOperand === `${ODRL}dateTime`),
-    ).toEqual({ leftOperand: `${ODRL}dateTime`, value: { type: "dateTime", value: intent().at } });
+    ).toEqual({ leftOperand: `${ODRL}dateTime`, value: { type: "dateTime", value: request.at } });
     expect(p).toEqual(original);
   }
+});
+
+it.each([
+  { datatype: "integer", left: "z", right: "1" },
+  { datatype: "integer", left: 1.5, right: 1 },
+  { datatype: "integer", left: 1, right: "1.5" },
+  { datatype: "integer", left: "9007199254740993", right: "1" },
+  { datatype: "integer", left: 1, right: Number.MAX_SAFE_INTEGER + 1 },
+  { datatype: "decimal", left: "z", right: "1.0" },
+  { datatype: "decimal", left: 1, right: "1e2" },
+  { datatype: "decimal", left: "1.0000000000000000001", right: "1" },
+  { datatype: "decimal", left: "1", right: "1.0000000000000000001" },
+  { datatype: "decimal", left: "1.0000000000000000001", right: "1", operator: "neq" },
+  { datatype: "decimal", left: "1", right: "1.0000000000000000001", operator: "lt" },
+  { datatype: "decimal", left: `0.${"0".repeat(400)}1`, right: "0" },
+  { datatype: "decimal", left: ["1", "1.0000000000000000001"], right: ["1"], operator: "isAnyOf" },
+  { datatype: "decimal", left: "1", right: ["1", "1.0000000000000000001"], operator: "isNoneOf" },
+  { datatype: "double", left: 1, right: "0x10" },
+  { datatype: "float", left: "", right: 1 },
+  { datatype: "double", left: 1, right: Infinity },
+  { datatype: "double", left: 1, right: Number.NaN },
+  { datatype: "double", left: 1, right: [1, "z"], operator: "isAnyOf" },
+  { datatype: "dateTime", left: "z", right: "2026-10-26T12:00:00Z" },
+  { datatype: "dateTime", left: "2026-10-26T12:00:00.0001Z", right: "2026-10-26T12:00:00Z" },
+  { datatype: "dateTime", left: "2026-10-26T12:00:00Z", right: "2026-10-26T12:00:00.0001Z" },
+  { leftOperand: "dateTime", left: "2026-10-26T12:00:00.0001Z", right: "2026-10-26T12:00:00Z" },
+  { datatype: "dateTime", left: "2026-10-26T12:00:00Z", right: "invalid" },
+  { datatype: "dateTime", left: "2026-10-26T12:00:00Z", right: "2026-02-30T12:00:00Z" },
+  { datatype: "dateTime", left: "2026-10-26", right: "2026-10-26T12:00:00Z" },
+  { datatype: "date", left: "2026-10-26", right: "2026-02-30" },
+  { datatype: "string", left: 1, right: "x" },
+  { datatype: "string", left: "01", right: "1" },
+  { datatype: "string", left: "0x10", right: "16" },
+  { datatype: "string", left: " 1 ", right: "1" },
+  { datatype: "anyURI", left: "relative", right: "urn:valid" },
+  { datatype: "anyURI", left: 1, right: "urn:valid" },
+  { datatype: "unknown", left: "x", right: "x" },
+  { left: 1, right: "invalid", leftOperand: "count" },
+  { left: true, right: "x" },
+  { left: [], right: "x" },
+  { left: undefined, right: "x" },
+  { left: "x", right: true },
+  { left: "x", right: null },
+  { left: "x", right: {} },
+  { left: "x", right: ["x", "y"] },
+  { left: "x", right: [] },
+  { left: "x", right: undefined },
+  { left: "x", right: ["x", 1], operator: "isAnyOf" },
+  { datatype: "string", left: "2026-10-26T12:00:00Z", right: "z", leftOperand: "dateTime" },
+])("validates both SPARQ operands before delegation: %j", async ({
+  datatype,
+  left,
+  right,
+  operator,
+  leftOperand,
+}) => {
+  const constraint = {
+    leftOperand: leftOperand ?? "purpose",
+    operator: operator ?? "eq",
+    rightOperand: right,
+    ...(datatype === undefined ? {} : { datatype: `${XSD}${datatype}` }),
+  } as Constraint;
+  const request = intent({
+    action: "read",
+    attributes: { [constraint.leftOperand]: left } as NonNullable<
+      ReturnType<typeof intent>["attributes"]
+    >,
+    ...(constraint.leftOperand === "dateTime" ? { at: left as string } : {}),
+  });
+  const run = vi.fn(() => ({ stdout: response(), status: 0 }));
+  const adapter = sparqPolicyEngine({ binary: "test", run });
+  for (const type of ["permission", "prohibition"] as const) {
+    const p: Policy = {
+      id: policy.id,
+      permissions: policy.permissions,
+      [type === "permission" ? "permissions" : "prohibitions"]: [
+        { type, action: "read", constraints: [constraint] },
+      ],
+    };
+    expect(await solidOdrlEngine.evaluate(p, request)).toEqual({ effect: "indeterminate" });
+    expect(await adapter.evaluate(p, request)).toEqual({ effect: "indeterminate" });
+    expect(run).not.toHaveBeenCalled();
+    expect(await evaluateIntent({ ...mandate(), autonomous: p }, request, adapter)).toEqual({
+      decision: "confirm-required",
+      reason: "indeterminate",
+    });
+    run.mockClear();
+  }
+});
+
+it("ignores invalid operands only in rules excluded by the shared candidate matcher", async () => {
+  const constraints: Constraint[] = [{ leftOperand: "count", operator: "eq", rightOperand: "bad" }];
+  const run = vi.fn(() => ({ stdout: response(), status: 0 }));
+  expect(
+    await sparqPolicyEngine({ binary: "test", run }).evaluate(
+      {
+        ...policy,
+        permissions: [
+          ...(policy.permissions ?? []),
+          { type: "permission", action: "write", constraints },
+        ],
+        prohibitions: [
+          { type: "prohibition", action: "read", target: "urn:other", constraints },
+          { type: "prohibition", action: "read", assignee: "urn:other", constraints },
+        ],
+      },
+      intent({ action: "read" }),
+    ),
+  ).toEqual({ effect: "permit" });
+  expect(run).toHaveBeenCalledOnce();
 });
 
 it("fails closed before invoking SPARQ when a declared datatype is not an IRI", async () => {

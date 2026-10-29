@@ -7,9 +7,9 @@ import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { spawnSync } from "child_process";
 import { Store } from "n3";
 import { actionIri, encodePolicy, leftOperandIri } from "./codec.js";
-import { candidate, supportedPolicy } from "./policy.js";
+import { candidate, knownOperand, supportedPolicy } from "./policy.js";
 import { Node, node, turtle } from "./rdf.js";
-import { AGENT, type Effect, ODRL, type PolicyEngine, type Rule } from "./types.js";
+import { AGENT, type Effect, type Intent, ODRL, type PolicyEngine, type Rule } from "./types.js";
 
 /** SPARQ reads operand types from RDF literals, not the signed codec's agent:datatype. */
 function sparqOperands(store: Store): Store {
@@ -90,6 +90,18 @@ export function sparqPolicyEngine(
           )
         )
           return { effect: "indeterminate" };
+        const attributes: NonNullable<Intent["attributes"]> = {
+          ...request.attributes,
+          dateTime: request.at,
+        };
+        if (
+          [...(policy.permissions ?? []), ...(policy.prohibitions ?? [])]
+            .filter((r) => candidate(r, policy, request))
+            .some((r) =>
+              (r.constraints ?? []).some((c) => !knownOperand(c, attributes[c.leftOperand])),
+            )
+        )
+          return { effect: "indeterminate" };
         // The backend's use umbrella is broader than the shared suite profile.
         // Select candidates here, then use one exact action for rules and request.
         const lower = (rules: readonly Rule[] = []) =>
@@ -112,7 +124,6 @@ export function sparqPolicyEngine(
             }),
           },
         });
-        const attributes = { ...request.attributes, dateTime: request.at };
         const context = Object.entries(attributes).map(([leftOperand, value]) => ({
           leftOperand: leftOperandIri(leftOperand),
           value: {

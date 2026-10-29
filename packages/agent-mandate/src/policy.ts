@@ -108,7 +108,7 @@ function temporal(value: unknown, datatype: string): boolean {
 }
 
 /** Both sides must be comparable without the upstream lexical fallback for malformed values. */
-function knownOperand(c: Constraint, value: unknown): boolean {
+export function knownOperand(c: Constraint, value: unknown): boolean {
   const rights: unknown[] = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
   const lefts: unknown[] = Array.isArray(value) ? value : [value];
   if (rights.length === 0 || lefts.length === 0) return false;
