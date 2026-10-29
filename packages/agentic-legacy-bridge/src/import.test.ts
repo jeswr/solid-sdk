@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { Parser } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import { InMemoryChannelAdapter } from "./channel.js";
@@ -217,6 +218,45 @@ describe("importInbound ACL discovery privacy gate", () => {
       [`${CONTAINER}Owner-Policy`, "GET"],
       [`${CONTAINER}Owner-Policy`, "PUT"],
     ]);
+  });
+  it.each([
+    "<Owner-Policy>; rel=\"acl\"; title*=UTF-8'en'Owner",
+    '<Owner-Policy>; rel="acl"; title="Owner"; title*=UTF-8\'\'Owner',
+    '<Owner-Policy>; rel="acl"; hreflang=en; HREFLANG=fr',
+    '<Owner-Policy>; rel="acl"; title="Owner; \\"policy\\", primary"',
+    '<Owner-Policy>; rel="acl"; extension; extension=one; extension=two',
+    "<Owner-Policy>; rel=\"acl\"; !#$%&'*+-.^_`|~0Az=!#$%&'*+-.^_`|~0Az",
+    "<Owner-Policy>; rel=\"acl\"; title=first; title=second; title*=UTF-8''First; title*=UTF-8''Second",
+    '<Owner-Policy>; rel="acl"; media=screen; media=print; type="text/turtle"; type="text/plain"',
+    '<other>; rel="describedby"; title*=UTF-8\'en\'Other; hreflang=en; hreflang=fr, <Owner-Policy>; rel="acl"',
+    '<Owner-Policy>; rel="acl", <other>; rel="describedby"; flag; flag; title*=UTF-8\'en\'Other; hreflang=en; hreflang=fr',
+    '\t<Owner-Policy>\t;\tReL\t=\t"acl"\t;\tflag\t',
+  ])("accepts descriptive and extension Link attributes (%s)", async (link) => {
+    const fetch = pod(link);
+    expect((await run(fetch)).written).toBe(1);
+    expect(fetch.mock.calls.slice(0, 3).map(([url, init]) => [String(url), init?.method])).toEqual([
+      [CONTAINER, "HEAD"],
+      [`${CONTAINER}Owner-Policy`, "GET"],
+      [`${CONTAINER}Owner-Policy`, "PUT"],
+    ]);
+  });
+  it.each([
+    ['<.acl>; rel="acl"; title*=UTF-8\'en\'Owner; ReL="acl"', /Ambiguous ACL/],
+    ['<.acl>; rel="acl"; hreflang=en; hreflang=fr; anchor', /anchored ACL link/],
+    ['<.acl>; rel="acl"; title*=UTF-8\'en\'Owner; anchor="/other"', /anchored ACL link/],
+    ['<.acl>; rel="acl"; hreflang=en; hreflang=fr, <other>; rel="acl"', /unique WAC ACL/],
+    [
+      '<.acl>; rel="acl", <policy>; rel="http://www.w3.org/ns/solid/acp#accessControl"; title*=UTF-8\'en\'Policy',
+      /Unsupported access-control model: ACP/,
+    ],
+    ['<.acl>; rel="acl"; bad/name=value', /Invalid ACL/],
+    ['<.acl>; rel="acl"; extension=', /Invalid ACL/],
+    ['<.acl>; rel="acl"; title="unclosed', /Invalid ACL/],
+    ['<.acl>; rel="acl"; title="closed"junk', /Invalid ACL/],
+  ])("retains ACL association and grammar checks with attributes (%s)", async (link, error) => {
+    const fetch = pod(link);
+    await expect(run(fetch)).rejects.toThrow(error);
+    expect(fetch.mock.calls.map(([, init]) => init?.method)).toEqual(["HEAD"]);
   });
   it.each([
     ['<.acl>; rel="acl", <other>; rel="ACL"', /unique WAC ACL/],

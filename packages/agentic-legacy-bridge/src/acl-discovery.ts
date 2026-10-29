@@ -10,19 +10,24 @@ function wacAclLink(header: string): string {
   let remaining = header;
   while (remaining.trim()) {
     const link =
-      /^\s*<([^<>]*)>((?:\s*;\s*[\w-]+\s*=\s*(?:"(?:[^"\\]|\\.)*"|[^\s;,"]+))*)\s*(?:,|$)/.exec(
+      /^\s*<([^<>]*)>((?:\s*;\s*[!#$%&'*+.^_`|~0-9A-Za-z-]+\s*(?:=\s*(?:"(?:[^"\\]|\\.)*"|[!#$%&'*+.^_`|~0-9A-Za-z-]+))?)*)\s*(?:,|$)/.exec(
         remaining,
       );
     if (!link) throw new Error("Invalid ACL discovery Link header");
     remaining = remaining.slice(link[0].length);
     const params = new Map<string, string>();
     for (const param of (link[2] ?? "").matchAll(
-      /;\s*([\w-]+)\s*=\s*("(?:[^"\\]|\\.)*"|[^\s;,"]+)/g,
+      /;\s*([!#$%&'*+.^_`|~0-9A-Za-z-]+)\s*(?:=\s*("(?:[^"\\]|\\.)*"|[!#$%&'*+.^_`|~0-9A-Za-z-]+))?/g,
     )) {
       const name = (param[1] ?? "").toLowerCase();
       const raw = param[2] ?? "";
-      if (params.has(name)) throw new Error("Ambiguous ACL discovery Link header");
-      params.set(name, raw.startsWith('"') ? raw.slice(1, -1).replace(/\\(.)/g, "$1") : raw);
+      // Repeated hreflang/extension attributes are allowed. Singular descriptive
+      // attributes use their first occurrence (RFC 8288); only rel duplicates
+      // obscure the ACL association and retain our fail-closed rejection.
+      if (name === "rel" && params.has(name))
+        throw new Error("Ambiguous ACL discovery Link header");
+      if (!params.has(name))
+        params.set(name, raw.startsWith('"') ? raw.slice(1, -1).replace(/\\(.)/g, "$1") : raw);
     }
     // RFC 8288 compares registered and extension relations case-insensitively.
     const relations = (params.get("rel") ?? "").toLowerCase().split(/\s+/);
