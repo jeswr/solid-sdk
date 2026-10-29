@@ -482,3 +482,41 @@ No remote was fetched, no branch was switched, and no other checkout was modifie
 
 The `roborev` executable remains unavailable, so automated per-commit verdicts
 could not be collected. No review tooling or tracker was installed.
+
+## Fix round 12 — review of `5c18bc2ce28b`
+
+The requested validation-bounds finding is fixed on `lane/sst-31t`. Changes are
+limited to agent-channels, its regression tests and this report.
+
+| Commit | Change |
+| --- | --- |
+| `6b54ae0c` | `fix: bound direct validation inputs` — apply decoded-payload bounds before proposal canonicalization; check wire byte, digest and carrier bounds before rendering; compare snapshots of the three wire fields directly. Refuse extra wire structure without traversing its values. Add oversized ASCII/UTF-8, nesting, string, array, node-count and cycle regressions, retaining independent checks of verified payloads and the near-limit round trip. |
+| This final commit | `docs: record sst-31t round twelve verification` — this report. |
+
+All pnpm commands used Node 24.22.1 with `PATH=/opt/node24/bin:$PATH`.
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/agent-channels` | PASS; 5/5 prerequisite build tasks. |
+| `pnpm exec vitest run --root packages/agent-channels test/direct.test.ts --coverage.enabled=false -t 'before canonicalization\|unexpected wire structure'` (before the fix) | Expected FAIL; all 9 new regression cases reproduced the finding. |
+| `pnpm --filter @jeswr/agent-channels run lint && pnpm --filter @jeswr/agent-channels run build && pnpm --filter @jeswr/agent-channels run typecheck && pnpm --filter @jeswr/agent-channels run test` (final run) | PASS; 4 files, 162 tests. Enforced per-file coverage: statements 236/236, branches 163/163, functions 40/40, lines 227/227 — all 100%. |
+| `TURBO_SCM_BASE=5c18bc2ce28bd769e7b551b6eb73cdb377495b79 pnpm run gate` | PASS; root lint and 25/25 Turbo tasks, including 162 channel tests, 650 legacy-bridge tests, 121 model tests and 531 personal-agent tests. The supplied starting SHA scopes this round because `agent/integration` remains absent locally. |
+| `pnpm run gate:full` | FAIL outside this fix; 286/346 tasks completed successfully before the existing federation-trust delegation-credential inline snapshot failed at `packages/federation-trust/test/characterization.test.ts:196`. Expected JWK property order is `crv,x,kty`; received order is `kty,crv,x`. The same failure is recorded in the original lane verification above. Root lint and all 747 root tests passed. No federation-trust files, its runtime dependencies or the lockfile were changed in this round. |
+| `git diff --check` | PASS. |
+
+The conservative choice retains rejection of unexpected wire fields instead of
+walking their caller-supplied values. Malformed consequential wire fields now
+fail their bounds/integrity checks with `malformed`; a valid but different wire
+still reports `terms-digest-mismatch`. No dependencies were added, so no new
+`check:packages` run was required. Tests use the existing local fakes and loopback
+fixtures; coverage thresholds and configured timeouts remain unchanged.
+
+The requested implementation is complete, with no open questions. The full gate
+remains blocked by the unrelated snapshot above; no unrelated fix or full-gate
+retry was made. Sixteen generated `callback.html`/`clientid.jsonld` app assets were
+removed after the full gate. No generated output is committed. No remote was
+fetched, no branch was switched and no other checkout was modified.
+
+The `roborev` executable is unavailable, so automated per-commit verdicts could
+not be collected. The supplied review was addressed; no review tooling or tracker
+was installed.
