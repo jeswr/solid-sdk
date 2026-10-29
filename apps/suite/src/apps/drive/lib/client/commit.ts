@@ -5,13 +5,21 @@ export interface ResourceIdentity {
   readonly etag: string;
 }
 
-interface HttpIdentity extends ResourceIdentity {
+export interface PolicyIdentity {
+  readonly url: string;
+  /** null pins the absence of an own ACL. */
+  readonly etag: string | null;
+}
+
+interface HttpIdentity extends PolicyIdentity {
   readonly allowMissing?: boolean;
   readonly http: typeof fetch;
   readonly error: (status: number, url: string) => Error;
 }
 
 export interface CommitChecks {
+  /** Hydrated policy receipts; checked after all persistence and callbacks. */
+  readonly policyGuards?: readonly PolicyIdentity[];
   readonly rechecks?: readonly (() => Promise<void>)[];
   /** Content proofs and hydration, before the helper's raw final HEAD checks. */
   readonly identityChecks?: readonly (() => Promise<void>)[];
@@ -96,9 +104,20 @@ export function commitHttp<T>(
   if (!etag && headers.get("if-none-match") !== "*")
     return Promise.reject(options.error(428, options.url));
   const init = { ...options.init, headers };
+  const policies = new Map(
+    (options.policyGuards ?? []).map((identity) => [
+      JSON.stringify([identity.url, identity.etag]),
+      identity,
+    ]),
+  );
   return commitIrreversible({
     ...options,
     finalIdentities: [
+      ...[...policies.values()].map((identity) => ({
+        ...identity,
+        http: options.http,
+        error: options.error,
+      })),
       ...(options.finalIdentities ?? []),
       ...(etag
         ? [
@@ -125,15 +144,19 @@ export function commitHttp<T>(
 export async function checkIdentity(
   http: typeof fetch,
   url: string,
-  etag: string,
+  etag: string | null,
   error: (status: number, url: string) => Error,
   allowMissing = false,
 ): Promise<void> {
   const response = await http(url, {
     method: "HEAD",
     cache: "no-store",
-    headers: { "if-match": etag },
+    headers: etag === null ? { "if-none-match": "*" } : { "if-match": etag },
   });
+  if (etag === null) {
+    if (response.status === 404 || response.status === 410) return;
+    throw error(response.ok || response.status === 304 ? 412 : response.status, url);
+  }
   if (allowMissing && (response.status === 404 || response.status === 410)) return;
   if (!response.ok) throw error(response.status, url);
   if (response.headers.get("etag") !== etag) throw error(412, url);

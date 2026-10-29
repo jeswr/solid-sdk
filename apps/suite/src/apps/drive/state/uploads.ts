@@ -11,7 +11,7 @@ import { DriveOperationInProgressError } from "../lib/client/source-operations";
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import type { DriveClient, DriveItem } from "../lib/client/client";
-import { DriveError, parentOf } from "../lib/client/client";
+import { DriveError, DrivePartialFailureError, parentOf } from "../lib/client/client";
 import { type ConflictChoice, childUrl, uploadFile } from "../lib/operations/operations";
 import { normalizeUploadName } from "../lib/upload";
 import type { DroppedFile } from "./dropped-files";
@@ -124,6 +124,8 @@ function savedJobs(prefix: string): SavedJob[] {
 }
 
 function describe(error: unknown): string {
+  if (error instanceof DrivePartialFailureError)
+    return `Upload failed. Recovery copies retained at: ${error.retainedDestinations.join(", ")}. Check these locations before retrying.`;
   if (error instanceof DriveDeletePendingError || error instanceof DriveOperationInProgressError)
     return error.message;
   if (error instanceof DriveError) {

@@ -24,6 +24,7 @@ import {
   DriveAccessChangedError,
   DriveAccessError,
   type OwnAccess,
+  ownAccessGuards,
   policyOwner,
   privateAcl,
   requireAccess,
@@ -42,6 +43,7 @@ import {
   Compensation,
   checkIdentity,
   commitHttp,
+  type PolicyIdentity,
   type ResourceIdentity,
 } from "./commit";
 import { containerVersions } from "./container-versions";
@@ -107,6 +109,11 @@ export interface DriveClient {
   readonly confirmAccess?: ConfirmAccess;
   /** Bind recovery and survivor access across a multi-step restore. */
   bindAccess?(from: string, to: string): Promise<Pick<AccessBinding, "recheck">>;
+  /** Pin the policy archive captured at Restore preflight, including its absence. */
+  bindRecoveryPolicy?(
+    url: string,
+    captured: { readonly content: string; readonly etag: string | undefined } | undefined,
+  ): void;
   /** Children of a folder (hidden dot-names included; the UI filters them). */
   list(folderUrl: string, options?: { signal?: AbortSignal }): Promise<DriveItem[]>;
   /** Metadata for one item (HEAD), optionally conditional on the expected version. */
@@ -275,11 +282,15 @@ interface PayloadWrite extends RequestInit {
 }
 
 interface AccessCheck {
-  binding: AccessBinding;
+  binding: Pick<AccessBinding, "recheck" | "retire" | "identities">;
   compensation?: Compensation;
   until?: string;
 }
-type AccessScope = Set<AccessCheck>;
+type PolicyArchiveSnapshot = { readonly content: string; readonly etag: string | undefined };
+type AccessScope = Set<AccessCheck> & { archives?: Map<string, PolicyArchiveSnapshot | null> };
+function scopePolicyGuards(scope: AccessScope): readonly PolicyIdentity[] {
+  return [...scope].flatMap((check) => check.binding.identities);
+}
 
 function compensationsFor(scope: AccessScope, url: string): Compensation[] {
   return [...scope].flatMap((check) =>
@@ -524,20 +535,28 @@ export function createSolidDriveClient(options: {
     if (!webId) throw new DriveAccessError("Recovery owner unavailable");
     const folder = `${storageUrl}.drive-recovery-${crypto.randomUUID()}/`;
     await createFolder(folder, { kind: "owner-only", webId });
+    const recoveryAccess = await bindAccess(access, folder, folder);
     const retained: string[] = [];
+    const survivors: ResourceIdentity[] = [];
+    const backupAccess: AccessBinding[] = [];
     for (const [index, copy] of copies.entries()) {
       const target = `${folder}${index}-${encodeURIComponent(nameOf(url))}`;
-      await write(
+      backupAccess.push(await bindAccess(access, target, target));
+      const saved = await write(
         target,
         copy.body,
         { contentType: copy.type, ifNoneMatch: "*" },
         { kind: "protect-ancestors" },
       );
+      survivors.push({ url: target, etag: validator(target, saved.etag) });
       retained.push(target);
     }
     const required = await ledger.get(url);
     try {
       const cleared = await commitHttp({
+        rechecks: [recoveryAccess, ...backupAccess].map((binding) => () => binding.recheck()),
+        policyGuards: [recoveryAccess, ...backupAccess].flatMap((binding) => binding.identities),
+        finalIdentities: survivors.map((identity) => ({ ...identity, http, error: errorFor })),
         http,
         url,
         error: errorFor,
@@ -557,7 +576,15 @@ export function createSolidDriveClient(options: {
       if (required)
         await ledger.set(url, { ...required, etag: validator(url, cleared.headers.get("etag")) });
     } catch (cause) {
-      throw new DrivePartialFailureError(url, [], [], retained, cause);
+      throw new DrivePartialFailureError(
+        url,
+        [],
+        [],
+        isMissingItem(cause)
+          ? retained.filter((target) => target !== (cause as DriveError).url)
+          : retained,
+        cause,
+      );
     }
     return retained;
   };
@@ -652,6 +679,7 @@ export function createSolidDriveClient(options: {
         } else {
           try {
             await deleteVersion(url, etag, undefined, {
+              policyGuards: ownAccessGuards((binding as AccessBinding).destinationOwn),
               rechecks: [() => access.checkOwn((binding as AccessBinding).destinationOwn)],
             });
           } catch (cause) {
@@ -681,6 +709,7 @@ export function createSolidDriveClient(options: {
         },
       ],
       identityChecks: effects.identityChecks ?? [],
+      policyGuards: [...scopePolicyGuards(scope), ...(binding?.identities ?? [])],
       finalIdentities: parents.map((identity) => ({ ...identity, http, error: errorFor })),
       http,
       url,
@@ -872,7 +901,7 @@ export function createSolidDriveClient(options: {
       }),
     error: errorFor,
     owner: () => owner,
-    deleteVersion: (url, etag) => deleteVersion(url, etag),
+    deleteVersion: (url, etag, checks) => deleteVersion(url, etag, undefined, checks),
     ...(options.onPrivateFolder ? { onPrivateFolder: options.onPrivateFolder } : {}),
     ...(options.onProtectionChange ? { onProtectionChange: options.onProtectionChange } : {}),
   });
@@ -965,6 +994,8 @@ export function createSolidDriveClient(options: {
     disarm: (url: string) => readonly Compensation[],
     survivors: readonly ResourceIdentity[] = [],
     ancestors: readonly ResourceIdentity[] = [],
+    scope: AccessScope = new Set(),
+    policyGuards: readonly PolicyIdentity[] = [],
   ) => {
     await verifyCopy(source);
     if (source.children?.length) {
@@ -979,6 +1010,8 @@ export function createSolidDriveClient(options: {
           disarm,
           survivors,
           [...ancestors, { url: source.url, etag: validator(source.url, source.etag) }],
+          scope,
+          policyGuards,
         );
       // Only the receipts for our child DELETEs can explain a new validator.
       // A later listing cannot authorize recreation or introduce new members.
@@ -1008,6 +1041,7 @@ export function createSolidDriveClient(options: {
           },
         ],
         survivors: [...survivors, ...ancestors],
+        policyGuards: [...scopePolicyGuards(scope), ...policyGuards],
         disarm: disarm(source.url),
         onCommit: () => {
           deleted.push(source.url);
@@ -1024,6 +1058,7 @@ export function createSolidDriveClient(options: {
     bindAccess: (url: string, policy?: OwnAccess) => Promise<void>,
     verifyAccess: () => Promise<void>,
     compensation: Compensation,
+    scope: AccessScope,
   ) => {
     await verifyAccess();
     const policy =
@@ -1048,7 +1083,7 @@ export function createSolidDriveClient(options: {
                 kind: "inherit-verified",
                 original: {
                   ...source.inheritedAccess,
-                  dataset: relocate(source.inheritedAccess.dataset, [[source.url, to]]),
+                  dataset: access.retarget(source.inheritedAccess, source.url, to).dataset,
                 },
               }
             : { kind: "archived", acl: inherited, from: to };
@@ -1078,7 +1113,7 @@ export function createSolidDriveClient(options: {
           },
           { kind: "protect-ancestors" },
           verifyAccess,
-          undefined,
+          scope,
           {
             arm: [compensation],
             onWritten: (response) => {
@@ -1100,6 +1135,7 @@ export function createSolidDriveClient(options: {
           bindAccess,
           verifyAccess,
           compensation,
+          scope,
         );
     } else {
       let placeholder: CreatedResource | undefined;
@@ -1140,7 +1176,7 @@ export function createSolidDriveClient(options: {
         },
         { kind: "protect-ancestors" },
         verifyAccess,
-        undefined,
+        scope,
         {
           arm: [compensation],
           onWritten: (response) => {
@@ -1223,6 +1259,11 @@ export function createSolidDriveClient(options: {
             remove: (etag) =>
               binding.rollback(() =>
                 deleteVersion(resource.url, etag, undefined, {
+                  policyGuards: ownAccessGuards(
+                    resource.protection
+                      ? { url: resource.protection.url, policy: resource.protection }
+                      : resource.ownAcl,
+                  ),
                   rechecks: [
                     () =>
                       access.checkOwn(
@@ -1247,6 +1288,11 @@ export function createSolidDriveClient(options: {
             remove: (etag) =>
               binding.rollback(() =>
                 deleteVersion(resource.url, etag, undefined, {
+                  policyGuards: ownAccessGuards(
+                    resource.protection
+                      ? { url: resource.protection.url, policy: resource.protection }
+                      : resource.ownAcl,
+                  ),
                   rechecks: [
                     () =>
                       access.checkOwn(
@@ -1278,26 +1324,73 @@ export function createSolidDriveClient(options: {
     return { retained, pending };
   };
 
-  /** Archived grants describe the original; the recovery copy is deliberately private. */
-  const recoveryPolicy = async (url: string, own: AccessState): Promise<OwnAccess | undefined> => {
+  const bindRecoveryPolicy = (
+    url: string,
+    captured: PolicyArchiveSnapshot | undefined,
+    scope: AccessScope,
+  ) => {
+    const archiveUrl = policyArchiveOf(url) as string;
+    const identity = {
+      url: archiveUrl,
+      etag: captured ? validator(archiveUrl, captured.etag) : null,
+    };
+    scope.archives ??= new Map();
+    scope.archives.set(archiveUrl, captured ?? null);
+    let active = true;
+    scope.add({
+      binding: {
+        get identities() {
+          return active ? [identity] : [];
+        },
+        recheck: async () => {
+          if (active) await checkIdentity(http, identity.url, identity.etag, errorFor);
+        },
+        retire: (removed) => {
+          if (removed === archiveUrl) active = false;
+        },
+      },
+    });
+  };
+  /** Archived grants describe the original; use the preflight bytes and validator throughout. */
+  const recoveryPolicy = async (
+    url: string,
+    own: AccessState,
+    scope: AccessScope,
+  ): Promise<OwnAccess | undefined> => {
     const archiveUrl = policyArchiveOf(url);
     if (!archiveUrl) return undefined;
-    const response = await http(archiveUrl);
-    if (response.status === 404) return undefined;
-    if (!response.ok) throw new DriveAccessError(response.status);
-    const saved = ((await response.json()) as Record<string, ArchivedAcl | null>)[url];
+    if (!scope.archives?.has(archiveUrl)) {
+      const response = await http(archiveUrl);
+      if (!response.ok && response.status !== 404) throw new DriveAccessError(response.status);
+      bindRecoveryPolicy(
+        url,
+        response.status === 404
+          ? undefined
+          : {
+              content: await response.text(),
+              etag: response.headers.get("etag") ?? undefined,
+            },
+        scope,
+      );
+    }
+    const captured = (scope.archives as Map<string, PolicyArchiveSnapshot | null>).get(archiveUrl);
+    await checkIdentity(http, archiveUrl, captured?.etag ?? null, errorFor);
+    if (!captured) return undefined;
+    const saved = (JSON.parse(captured.content) as Record<string, ArchivedAcl | null>)[url];
     if (saved === undefined) throw new DriveAccessError("Missing archived policy");
     if (saved === null)
       return requireAccess(own.status === "known" ? own : await access.effective(url), url);
     const acl = own.status === "known" ? own.policy.url : saved.acl;
-    return {
-      url: acl,
-      etag: "",
-      dataset: relocate(await parseRdf(saved.turtle, "text/turtle", { baseIRI: saved.acl }), [
-        [saved.acl, acl],
-        [saved.resource, url],
-      ]),
-    };
+    return access.retarget(
+      {
+        url: saved.acl,
+        etag: "",
+        dataset: await parseRdf(saved.turtle, "text/turtle", { baseIRI: saved.acl }),
+      },
+      saved.resource,
+      url,
+      acl,
+    );
   };
 
   const preparePolicies = async (
@@ -1307,7 +1400,7 @@ export function createSolidDriveClient(options: {
     privateOwner?: string,
     archiveContainers?: (archive: string) => Promise<void>,
     verifyAccess?: () => Promise<void>,
-    scope?: AccessScope,
+    scope: AccessScope = new Set(),
   ) => {
     if (!source.demo) {
       if (privateOwner) {
@@ -1355,7 +1448,7 @@ export function createSolidDriveClient(options: {
         await verifyAccess?.();
       } else {
         for (const node of snapshots(source)) {
-          const saved = await recoveryPolicy(node.url, node.access);
+          const saved = await recoveryPolicy(node.url, node.access, scope);
           if (saved) node.targetAccess = saved;
         }
       }
@@ -1397,7 +1490,7 @@ export function createSolidDriveClient(options: {
       ])
         await checkIdentity(http, identity.url, versions.identity(identity).etag, errorFor);
     };
-    await preparePolicies(source, from, to);
+    await preparePolicies(source, from, to, undefined, undefined, undefined, scope);
     const policy = source.demo
       ? undefined
       : (source.targetAccess ?? requireAccess(effective, from));
@@ -1702,7 +1795,15 @@ export function createSolidDriveClient(options: {
                 node.targetAccess = requireAccess(effective.get(node) as AccessState, node.url);
           }
           await bindDestination(to);
-          await copySnapshot(source, to, created, bindDestination, verifyAccess, compensation);
+          await copySnapshot(
+            source,
+            to,
+            created,
+            bindDestination,
+            verifyAccess,
+            compensation,
+            scope,
+          );
           if (moving) {
             await beforeDelete?.();
             verifyingCopy = true;
@@ -1762,6 +1863,8 @@ export function createSolidDriveClient(options: {
               verifyDestination,
               (url) => [compensation, ...compensationsFor(scope, url)],
               sourceGuards,
+              [],
+              scope,
             );
           }
         } catch (error) {
@@ -1929,6 +2032,9 @@ export function createSolidDriveClient(options: {
                   ...(nodeUrl === url ? (opts.commit?.disarm ?? []) : []),
                 ],
                 opts.commit?.survivors ?? [],
+                [],
+                scope,
+                opts.commit?.policyGuards ?? [],
               ),
             held,
           );
@@ -1945,6 +2051,7 @@ export function createSolidDriveClient(options: {
         }
       } else {
         await deleteVersion(url, capturedEtag, undefined, {
+          policyGuards: [...scopePolicyGuards(scope), ...(opts.commit?.policyGuards ?? [])],
           rechecks: [verify],
           identityChecks: [
             identityCheck,
@@ -1975,7 +2082,11 @@ export function createSolidDriveClient(options: {
     ...(options.confirmAccess ? { confirmAccess: options.confirmAccess } : {}),
     async bindAccess(from, to) {
       const binding = await bindAccess(access, from, to);
-      const archived = await recoveryPolicy(from, { status: "known", policy: binding.source });
+      const archived = await recoveryPolicy(
+        from,
+        { status: "known", policy: binding.source },
+        scopeFor(this),
+      );
       if (
         accessGains(
           archived ? access.forResource(archived, from) : binding.source,
@@ -1985,6 +2096,9 @@ export function createSolidDriveClient(options: {
         throw new DriveAccessError("Recovery destination grants wider access");
       scopeFor(this).add({ binding });
       return binding;
+    },
+    bindRecoveryPolicy(url, captured) {
+      bindRecoveryPolicy(url, captured, scopeFor(this));
     },
     list,
     stat,

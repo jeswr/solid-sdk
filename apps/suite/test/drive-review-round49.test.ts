@@ -164,7 +164,7 @@ it.each([
 it.each([
   "equivalent",
   "narrower",
-])("inherited move accepts a newer %s parsed policy", async (mode) => {
+])("inherited move stops when its captured %s policy validator changes", async (mode) => {
   const f = await wacPod();
   const from = `${PRIVATE}secret`;
   const to = `${PUBLIC}secret`;
@@ -180,10 +180,10 @@ it.each([
     }
     return response;
   });
-  await client.move(from, to, { kind: "confirm-move" });
+  await expect(client.move(from, to, { kind: "confirm-move" })).rejects.toThrow();
   expect(changed).toBe(true);
   expect(confirmAccess).not.toHaveBeenCalled();
-  expect(f.pod.has(from)).toBe(false);
+  expect(f.pod.has(from)).toBe(true);
 });
 
 it("copied own access is checked again before sending file bytes", async () => {

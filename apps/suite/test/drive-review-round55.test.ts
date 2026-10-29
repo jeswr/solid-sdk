@@ -56,8 +56,13 @@ it("round 55: compensation preserves a newly revoked public grant", async () => 
     uploadFile(client, PRIVATE, new Blob(["replacement"]), "secret", "replace", selected),
   ).rejects.toThrow();
   expect(revoked).toBe(true);
-  expect(await (await f.pod.fetch(url)).text()).toBe("secret contents");
+  // A revocation is another writer's policy, so preserve it and keep both
+  // versions privately instead of adopting its validator to replay old contents.
+  expect(await (await f.pod.fetch(url)).text()).toBe("");
   expect((await f.anonymous(url)).status).toBe(403);
+  await expectPrivateRecovery(f, "secret contents");
+  await expectPrivateRecovery(f, "replacement");
+  expect(f.calls).not.toContainEqual({ url: `${url}.policy`, method: "PUT" });
 });
 it.each([
   "copy",
@@ -129,7 +134,8 @@ it.each([
   expect(replaced).toBe(true);
   expect(f.calls).not.toContainEqual({ url: `${url}.policy`, method: "PUT" });
   expect(await (await f.pod.fetch(url)).text()).toBe("replacement secret");
-  expect(await (await client.read(url)).text()).toBe("replacement secret");
+  // The failed protection receipt belongs to our upload, never to this replacement.
+  await expect(client.read(url)).rejects.toMatchObject({ kind: "private-access-unavailable" });
   expect((await f.anonymous(url)).status).toBe(403);
 });
 it.each([
@@ -217,11 +223,13 @@ it.each([
     }
   f.policies.set(`${url}.policy`, await turtle(current));
   const etag = (await f.fetch(url, { method: "HEAD" })).headers.get("etag") as string;
+  const captured = await accessControl(f.fetch, ROOT).read(`${url}.policy`);
+  if (captured.status !== "known") throw new Error("Missing captured policy");
   await accessControl(f.fetch, ROOT).install(
     { url: `${url}.policy`, etag: "", dataset: desired },
     url,
     url,
-    { identity: { url, etag }, restrict: true },
+    { identity: { url, etag }, restrict: true, expectedAcl: captured.policy },
   );
   expect((await f.anonymous(url)).status).toBe(mode === "defaults" ? 200 : 403);
   expect((await f.anonymous(`${url}child`)).status).toBe(mode === "resource" ? 200 : 403);

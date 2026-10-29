@@ -60,7 +60,14 @@ it.each([
   ).rejects.toThrow();
   expect(changed).toBe(true);
   expect(f.pod.has(to)).toBe(true);
-  expect((await f.anonymous(to)).status).toBe(403);
+  if (step === "inherited move") expect((await f.anonymous(to)).status).toBe(403);
+  else {
+    // A concurrent ACL removal is not ours to revert. Clear only our bytes after
+    // verifying private recovery, leaving the other client's policy decision intact.
+    expect(f.policies.has(`${to}.policy`)).toBe(false);
+    expect(await (await f.pod.fetch(to)).text()).toBe("");
+    await expectPrivateRecovery(f, "secret contents");
+  }
 });
 
 it("round 56: replacement compensation preserves an owner-and-Bob ACL installed after upload", async () => {

@@ -1071,6 +1071,7 @@ async function restoreItemsUnlocked(
         if (current.etag !== entry.etag) throw new DriveError("conflict", 412, entry.url);
       }
       const archive = await capturePolicyArchive(client, entry.url);
+      client.bindRecoveryPolicy?.(entry.url, archive);
       if (status === "partial") {
         const current = await client.readRdf(indexUrlOf(driveRoot));
         const owner = current && trashIndexFrom(current.dataset).record(entry.url).leaseOwner;
@@ -1154,6 +1155,7 @@ async function deleteForeverUnlocked(
       slotOf(driveRoot, entry);
       await requireTrashEntry(client, driveRoot, entry);
       const archive = await capturePolicyArchive(client, entry.url);
+      client.bindRecoveryPolicy?.(entry.url, archive);
       await removeTrashItem(client, entry.url, entry.etag);
       await removeRecoveryMarker(client, driveRoot, entry);
       await removePolicyArchive(client, entry.url, archive);

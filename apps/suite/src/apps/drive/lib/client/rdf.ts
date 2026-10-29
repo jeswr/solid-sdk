@@ -39,6 +39,7 @@ export function containerData(dataset: DatasetCore, resource: string): Store {
 export function relocate(
   dataset: DatasetCore,
   pairs: readonly (readonly [string, string])[],
+  objectPredicates?: ReadonlySet<string>,
 ): Store {
   const term = <T extends Term>(value: T): T => {
     if (value.termType !== "NamedNode") return value;
@@ -54,7 +55,12 @@ export function relocate(
   };
   return new Store(
     [...dataset].map((q) =>
-      DataFactory.quad(term(q.subject), term(q.predicate), term(q.object), term(q.graph)),
+      DataFactory.quad(
+        term(q.subject),
+        term(q.predicate),
+        !objectPredicates || objectPredicates.has(q.predicate.value) ? term(q.object) : q.object,
+        term(q.graph),
+      ),
     ),
   );
 }

@@ -38,6 +38,7 @@ it("every exported container-creating client method requires a policy at type an
     "recheckDeletions",
     "exclusive",
     "bindAccess",
+    "bindRecoveryPolicy",
   ];
   expect(
     Object.keys(client)

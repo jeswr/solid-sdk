@@ -8,7 +8,7 @@ import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { readSharing } from "../sharing/sharing";
-import { commitHttp, type ResourceIdentity } from "./commit";
+import { commitHttp, type PolicyIdentity, type ResourceIdentity } from "./commit";
 import { relocate, sameGraph } from "./rdf";
 
 const ACL = "http://www.w3.org/ns/auth/acl#";
@@ -67,12 +67,18 @@ export interface OwnAccess {
 /** ACL mutations protect the captured representation, including after local hydration. */
 export interface AccessWriteGuard {
   readonly identity: ResourceIdentity;
+  readonly policyGuards?: readonly PolicyIdentity[];
   /** Recovery may remove grants, but must never undo a concurrent revocation. */
   readonly restrict?: boolean;
   /** Previously verified own endpoint, usable to secure recovery if Link disappears. */
   readonly knownAcl?: string | undefined;
   /** Own ACL approved before the operation; null means conditional creation only. */
   readonly expectedAcl?: OwnAccess | null;
+}
+
+/** Captured own-ACL ownership, including absence, for the final HTTP commit boundary. */
+export function ownAccessGuards(own: AccessState["own"]): readonly PolicyIdentity[] {
+  return own ? [{ url: own.url, etag: own.policy?.etag ?? null }] : [];
 }
 
 /** None means a discovered own ACL's 404 (inheritance unresolved), or an explicit demo pod. */
@@ -196,16 +202,9 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     if (state.status === "unknown") throw new DriveAccessError(state.cause);
     const current = state.status === "known" ? state.policy : undefined;
     const expected = guard?.expectedAcl;
-    if (current && expected !== undefined && current.etag !== expected?.etag) {
-      // A compensation may use a concurrent restriction as-is, but cannot edit
-      // it, including removing sharing grants added by that writer.
-      if (guard?.restrict && !accessGains({ url, etag: "", dataset }, current).length)
-        return current;
+    if (current && expected !== undefined && current.etag !== expected?.etag)
       throw new DriveAccessChangedError(["The item's own ACL changed"]);
-    }
-    if (!current && expected) {
-      if (!guard?.restrict) throw new DriveAccessChangedError(["The item's own ACL was removed"]);
-    }
+    if (!current && expected) throw new DriveAccessChangedError(["The item's own ACL was removed"]);
     let effectivePolicy = current;
     if (!current) {
       if (!resource) throw new DriveAccessError("WAC model could not be identified");
@@ -218,6 +217,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       http,
       url,
       resourceGuards: guard ? [guard.identity] : [],
+      policyGuards: guard?.policyGuards ?? [],
       error: (status) => new DriveAccessError(status),
       init: {
         method: "PUT",
@@ -231,8 +231,15 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     });
     if (!response.ok) throw new DriveAccessError(response.status);
     rejectAcp(response.headers);
+    const receipt = response.headers.get("etag");
+    if (!receipt || receipt.startsWith("W/"))
+      throw new DriveAccessError("Missing policy PUT validator");
     const saved = await read(url);
-    if (saved.status !== "known" || !sameGraph(dataset, saved.policy.dataset))
+    if (
+      saved.status !== "known" ||
+      saved.policy.etag !== receipt ||
+      !sameGraph(dataset, saved.policy.dataset)
+    )
       throw new DriveAccessError("Policy verification failed");
     return saved.policy;
   };
@@ -301,6 +308,8 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     effective,
     forResource: (own: OwnAccess, resource: string): OwnAccess =>
       projectAccess(own, resource, resource, false),
+    materialize: materializeAccess,
+    retarget: retargetAccess,
     defaults: (own: OwnAccess, resource: string): OwnAccess =>
       projectAccess(own, resource, resource, true),
     hasDefaults: (own: OwnAccess, resource: string): boolean =>
@@ -320,20 +329,12 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       if (!url) throw new DriveAccessError("Destination has no ACL support");
       const etag = guard?.identity.etag ?? response.headers.get("etag");
       if (!etag || etag.startsWith("W/")) throw new DriveAccessError("Missing resource validator");
-      return store(
-        url,
-        relocate(source.dataset, [
-          [source.url, url],
-          [from, to],
-        ]),
-        to,
-        {
-          expectedAcl: source.url === url && source.etag ? source : null,
-          ...guard,
-          knownAcl: url,
-          identity: { url: to, etag },
-        },
-      );
+      return store(url, retargetAccess(source, from, to, url).dataset, to, {
+        expectedAcl: source.url === url && source.etag ? source : null,
+        ...guard,
+        knownAcl: url,
+        identity: { url: to, etag },
+      });
     },
     async privateFolder(url: string, webId?: string): Promise<void> {
       try {
@@ -433,12 +434,30 @@ export async function bindAccess(
   let destinationOwn = destination.own;
   const retired = new Set<string>();
   const binding = {
+    get identities(): readonly PolicyIdentity[] {
+      return (
+        [
+          [from, source],
+          [to, destination],
+        ] as const
+      ).flatMap(([resource, baseline]) => {
+        if (retired.has(resource)) return [];
+        return [
+          ...ownAccessGuards(baseline.own),
+          ...[baseline.resource, baseline.defaults].flatMap((policy) =>
+            policy?.etag ? [{ url: policy.url, etag: policy.etag }] : [],
+          ),
+        ];
+      });
+    },
     get destinationOwn() {
       return destinationOwn;
     },
     source: source.resource,
     destination: destination.resource,
-    retire: (url: string) => retired.add(url),
+    retire: (url: string): void => {
+      retired.add(url);
+    },
     /** Re-resolve before removing our unchecked write, even if verification fails.
      * The caller must supply a conditional rollback of its captured PUT identity;
      * an access failure must not strand confidential bytes in a widened copy.
@@ -473,12 +492,12 @@ export async function bindAccess(
           const next = current[key];
           if (!previous || !next) continue;
           const wider = accessGains(previous, next);
-          const narrower = isSource ? accessGains(next, previous) : [];
+          const narrower = accessGains(next, previous);
           if (previous.url !== next.url || wider.length || narrower.length) changed = true;
           for (const agent of wider) gains.add(agent);
-          for (const agent of narrower) gains.add(agent);
+          if (isSource) for (const agent of narrower) gains.add(agent);
           // Narrowing the source can make a previously safe destination wider.
-          if (narrower.length && currentDestination)
+          if (isSource && narrower.length && currentDestination)
             for (const agent of accessGains(next, currentDestination.resource)) gains.add(agent);
         }
       }
@@ -519,6 +538,42 @@ function projectAccess(
         target.values(`${ACL}${predicate}`).add(value);
   }
   return { ...own, dataset };
+}
+
+/** Install only grants applicable at the source; unrelated targets must never activate. */
+function materializeAccess(own: OwnAccess, resource: string): OwnAccess {
+  const dataset = new Store();
+  for (const authorization of new AclResource(own.dataset, DataFactory).authorizations) {
+    const rule = new WritableAuthorization(authorization as Term, own.dataset, DataFactory);
+    const targets = [
+      "accessTo",
+      ...(resource.endsWith("/") ? ["default", "defaultForNew"] : []),
+    ].filter((predicate) => rule.values(`${ACL}${predicate}`).has(resource));
+    if (!targets.length) continue;
+    const target = new WritableAuthorization(authorization as Term, dataset, DataFactory);
+    target.type.add(`${ACL}Authorization`);
+    for (const predicate of targets) target.values(`${ACL}${predicate}`).add(resource);
+    for (const predicate of [...SELECTORS, "origin", "mode"])
+      for (const value of rule.values(`${ACL}${predicate}`))
+        target.values(`${ACL}${predicate}`).add(value);
+  }
+  return { ...own, dataset };
+}
+
+/** Rebase ACL targets and rule identifiers, preserving principal and condition identities. */
+function retargetAccess(source: OwnAccess, from: string, to: string, url = source.url): OwnAccess {
+  return {
+    ...source,
+    url,
+    dataset: relocate(
+      materializeAccess(source, from).dataset,
+      [
+        [source.url, url],
+        [from, to],
+      ],
+      new Set([`${ACL}accessTo`, `${ACL}default`, `${ACL}defaultForNew`]),
+    ),
+  };
 }
 
 export type AccessChoice = "move" | "keep" | "cancel";

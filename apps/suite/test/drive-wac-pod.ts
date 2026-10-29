@@ -104,7 +104,10 @@ export async function wacPod() {
         response = new Response(null, { status: 412 });
       else if (method === "PUT") {
         policies.set(url, String(init?.body));
-        response = new Response(null, { status: 201 });
+        response = new Response(null, {
+          status: 201,
+          headers: { etag: JSON.stringify(policies.get(url)) },
+        });
       } else
         response = new Response(method === "HEAD" ? null : (current ?? null), {
           status: current === undefined ? 404 : 200,

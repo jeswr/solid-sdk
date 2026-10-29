@@ -69,17 +69,23 @@ it("a second Trash is refused while the first source operation is in flight", as
   const item = await client.stat(source);
   let release!: () => void;
   let deletes = 0;
+  let reached!: () => void;
+  const deleting = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
   f.intercept(async (url, init) => {
     if (url !== source || init?.method !== "DELETE") return undefined;
     deletes += 1;
-    if (deletes === 1)
+    if (deletes === 1) {
+      reached();
       await new Promise<void>((resolve) => {
         release = resolve;
       });
+    }
     return new Response(null, { status: 412 });
   });
   const first = trashItems(client, DRIVE, [item], { webId: OWNER });
-  await vi.waitFor(() => expect(deletes).toBe(1));
+  await deleting;
   try {
     const second = await trashItems(client, DRIVE, [item], { webId: OWNER });
     expect(second.failed[0]?.error).toMatchObject({ kind: "operation-in-progress" });

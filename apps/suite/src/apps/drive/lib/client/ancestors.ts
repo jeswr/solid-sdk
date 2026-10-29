@@ -11,14 +11,15 @@ import {
   bindAccess,
   DriveAccessError,
   type OwnAccess,
+  ownAccessGuards,
   privateAcl,
   requireAccess,
 } from "./access";
 import { discardVersion, ownsEmptyContainer } from "./cleanup";
-import { type CommitEffects, Compensation, commitIrreversible } from "./commit";
+import { type CommitChecks, type CommitEffects, Compensation, commitIrreversible } from "./commit";
 import { rethrowPendingDeletion } from "./deletion";
 import { type ProtectionRequirement, protectionLedger } from "./protection-ledger";
-import { relocate, sameGraph } from "./rdf";
+import { sameGraph } from "./rdf";
 
 // Shared by all clients in this tab, including the fresh client used by undo.
 const provisioning = new Map<string, Promise<void>>();
@@ -77,7 +78,7 @@ export function ancestorGuard(options: {
   putFolder: (url: string) => Promise<Response>;
   error: (status: number, url: string) => Error;
   owner: () => string | undefined;
-  deleteVersion: (url: string, etag: string) => Promise<void>;
+  deleteVersion: (url: string, etag: string, checks: CommitChecks) => Promise<void>;
   onPrivateFolder?: (url: string) => void;
   onProtectionChange?: (url: string) => void;
 }) {
@@ -89,7 +90,7 @@ export function ancestorGuard(options: {
   ): Promise<ProtectionRequirement> => ({
     acl: policy.url,
     from,
-    turtle: await serialize([...policy.dataset]),
+    turtle: await serialize([...access.materialize(policy, from).dataset]),
   });
   const policyFor = async (required: ProtectionRequirement): Promise<OwnAccess> => ({
     url: required.acl,
@@ -112,10 +113,7 @@ export function ancestorGuard(options: {
     } else if (
       own.status !== "known" ||
       !sameGraph(
-        relocate(policy.dataset, [
-          [policy.url, own.policy.url],
-          [required.from, url],
-        ]),
+        access.retarget(policy, required.from, url, own.policy.url).dataset,
         own.policy.dataset,
       )
     ) {
@@ -161,7 +159,12 @@ export function ancestorGuard(options: {
         },
         owns: (content) =>
           typeof content === "string" ? content === "" : ownsEmptyContainer(url, empty, content),
-        remove: (validator) => options.deleteVersion(url, validator),
+        remove: (validator) =>
+          options.deleteVersion(url, validator, {
+            policyGuards: ownAccessGuards(
+              endpoint ? { url: endpoint, policy: installed ?? null } : undefined,
+            ),
+          }),
       }).catch(rethrowPendingDeletion);
     }
   };
@@ -209,6 +212,7 @@ export function ancestorGuard(options: {
             ? await install(url, decision.acl, decision.from, {
                 identity: { url, etag: response.headers.get("etag") ?? "" },
                 expectedAcl: null,
+                policyGuards: binding.identities,
               })
             : undefined;
         if (policy) {
@@ -329,7 +333,7 @@ export function ancestorGuard(options: {
             if (
               own.status !== "known" ||
               !sameGraph(
-                relocate(plan.policy.dataset, [[plan.policy.url, own.policy.url]]),
+                access.retarget(plan.policy, container, container, own.policy.url).dataset,
                 own.policy.dataset,
               )
             )
