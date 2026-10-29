@@ -1,6 +1,6 @@
 ---
 name: suite-native
-description: Work on @jeswr/suite-native, the Solid Suite's native-app seams (system-browser Solid-OIDC code driver, share sheet in/out, mobile Client ID Document) used by the Capacitor shells in apps/mobile.
+description: Use when working on @jeswr/suite-native, the Solid Suite's native-app seams (system-browser Solid-OIDC code driver, share sheet in/out, mobile Client ID Document) used by the Capacitor shells in apps/mobile.
 ---
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 

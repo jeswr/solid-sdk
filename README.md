@@ -70,7 +70,7 @@ Reusable agent guidance lives with the code it describes:
 
 - A skill for a workspace package is [`packages/<package>/SKILL.md`](packages/solid-dpop/SKILL.md).
   Keeping it beside the implementation makes API and security guidance reviewable in the same
-  change as the package. The `solid-fetch-rdf` skill is
+  change as the package. The `fetch-rdf` skill is
   [`packages/fetch-rdf/SKILL.md`](packages/fetch-rdf/SKILL.md).
 - Cross-cutting guidance is in [`skills/<skill>/SKILL.md`](skills/solid-server-matrix/SKILL.md).
   This also temporarily holds guidance for external suite packages that have not yet been imported
@@ -80,3 +80,11 @@ Reusable agent guidance lives with the code it describes:
 Every skill has trigger-oriented YAML frontmatter and a concise body. Update the relevant skill when
 a package's public API, security boundary, or recommended workflow changes; avoid copying package
 guidance back into a central catch-all document.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+[`skills/INDEX.md`](skills/INDEX.md) lists every shared and package skill. After editing skills, run
+`pnpm run check:skills --write` to regenerate it. `pnpm run check:skills` validates frontmatter,
+names, descriptions, the 500-line body budget, relative links, local user paths, and secret patterns;
+it also rejects a missing or stale index. This read-only check runs in `lint:root`.
+Shared skill companion files and package `references/` are scanned too. Links are checked locally
+without fetching external URLs; fragments and query strings do not affect file resolution.

@@ -1,6 +1,6 @@
 ---
 name: pkg-memory
-description: Build, serialize, or parse PKG nanopublications and the eight typed memory fact templates.
+description: Use when building, serializing, or parsing PKG nanopublications and the eight typed memory fact templates.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 

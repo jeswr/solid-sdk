@@ -1,6 +1,6 @@
 ---
 name: storage-client
-description: Work on @jeswr/storage-client, the protocol-neutral storage clients for solid and lws package in the Solid SDK workspace.
+description: Use when working on @jeswr/storage-client, the protocol-neutral storage clients for solid and lws package in the Solid SDK workspace.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->

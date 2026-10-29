@@ -1,6 +1,6 @@
 ---
 name: rdf-engine
-description: Work on @jeswr/rdf-engine, the lazy rdf engine facade for local query and validation package in the Solid SDK workspace.
+description: Use when working on @jeswr/rdf-engine, the lazy rdf engine facade for local query and validation package in the Solid SDK workspace.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->
