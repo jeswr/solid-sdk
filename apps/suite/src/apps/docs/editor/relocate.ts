@@ -10,6 +10,7 @@ import { type DriveClient, DriveError, type WriteOptions } from "../../drive/lib
 import { buildDocument, type PodDocument } from "../lib/model/document";
 import { docContainerUrls } from "../lib/model/layout";
 import { serializeTurtle } from "../lib/model/rdf-io";
+import { assertUpdateIdentities } from "../lib/model/update-store";
 
 const urlAttribute = (key: string) =>
   ["src", "href", "poster", "cite", "action", "formaction", "xlink:href"].includes(key) ||
@@ -73,6 +74,7 @@ async function relocateLog(
   const doc = new Doc();
   try {
     try {
+      assertUpdateIdentities(updates.map(({ update }) => update));
       for (const { update } of updates) applyUpdate(doc, update);
     } catch {
       // Keep unrecognised logs recoverable, as Drive's pre-trash compaction does.

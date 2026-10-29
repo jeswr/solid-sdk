@@ -148,6 +148,21 @@ it("round27 aborted offline local transactions never claim device success", asyn
   expect(reopened.body).toContain("Visible but not saved");
 });
 
+it("round31 log compaction preserves the committed local durability acknowledgement", async () => {
+  const { client } = await fixture();
+  const runtime = client();
+  await runtime.open();
+  edit(runtime, "Durable at compaction");
+  await runtime.flush();
+  const compact = vi.spyOn(runtime.provider as NonNullable<typeof runtime.provider>, "compact");
+  for (let i = 0; i < 205; i++) runtime.doc.getMap("compaction-test").set("counter", i);
+  edit(runtime, "Still durable");
+  await runtime.flush();
+  expect(compact).toHaveBeenCalled();
+  expect(runtime.localState).toBe("saved");
+  expect(runtime.hasUnsavedChanges).toBe(false);
+});
+
 it("round27 beforeunload guards the latest edit until its own local transaction commits", async () => {
   const { session } = await fixture();
   const host = document.createElement("div");

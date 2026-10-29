@@ -1,10 +1,11 @@
 // AUTHORED-BY Codex
 "use client";
-import { Button, Input, Popover, PopoverAnchor, PopoverContent, toast } from "@jeswr/suite-ui";
+import { Button, Input, Popover, PopoverAnchor, toast } from "@jeswr/suite-ui";
 import type { Editor } from "@tiptap/react";
 import { useId, useState } from "react";
 import { normaliseDestination } from "../lib/editor/destination";
 import { wordCount } from "../lib/editor/logic";
+import { EditorPopoverContent } from "./editor-popover-content";
 export function LinkPopover({ editor, close }: { editor: Editor; close: () => void }) {
   const [url, setUrl] = useState(String(editor.getAttributes("link").href ?? ""));
   const [text, setText] = useState("");
@@ -18,13 +19,7 @@ export function LinkPopover({ editor, close }: { editor: Editor; close: () => vo
       <PopoverAnchor asChild>
         <span className="docs-popover-anchor" />
       </PopoverAnchor>
-      <PopoverContent
-        aria-label="Insert link"
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          editor.commands.focus();
-        }}
-      >
+      <EditorPopoverContent editor={editor} aria-label="Insert link">
         <form
           className="docs-form"
           onSubmit={(event) => {
@@ -109,7 +104,7 @@ export function LinkPopover({ editor, close }: { editor: Editor; close: () => vo
             </Button>
           )}
         </form>
-      </PopoverContent>
+      </EditorPopoverContent>
     </Popover>
   );
 }
@@ -136,7 +131,7 @@ export function CountPopover({
       <PopoverAnchor asChild>
         <span className="docs-popover-anchor" />
       </PopoverAnchor>
-      <PopoverContent aria-label="Word count">
+      <EditorPopoverContent editor={editor} aria-label="Word count">
         <h2>Word count</h2>
         <dl className="docs-statistics">
           <dt>Words</dt>
@@ -156,7 +151,7 @@ export function CountPopover({
           />
           Show while typing
         </label>
-      </PopoverContent>
+      </EditorPopoverContent>
     </Popover>
   );
 }

@@ -1,2 +1,2 @@
 // AUTHORED-BY Codex
-export { DocumentUpdateStore } from "../lib/model/update-store";
+export { DocumentUpdateStore, InactiveLogError } from "../lib/model/update-store";

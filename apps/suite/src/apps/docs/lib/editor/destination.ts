@@ -11,7 +11,9 @@ export function normaliseDestination(input: string): string | null {
       /%25([0-9a-f]{2})/gi,
       "%$1",
     );
-    return validLink(destination) ? destination : null;
+    return validLink(destination)
+      ? destination.replace(/^(https?|mailto):/i, (scheme) => scheme.toLowerCase())
+      : null;
   } catch {
     // encodeURI rejects unpaired UTF-16 surrogates.
     return null;

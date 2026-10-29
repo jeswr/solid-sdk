@@ -1,8 +1,33 @@
 // AUTHORED-BY Codex
 import { SolidUpdateStore } from "@jeswr/y-solid";
 import { applyUpdate, Doc } from "yjs";
+import { DocumentReplacedError } from "./incarnation";
 
 class IncompleteLogError extends Error {}
+export class InactiveLogError extends Error {}
+
+/** Validate each resource BEFORE merging: Y.Map conflict resolution can hide a
+ * foreign identity in a merged log. Also check identities assembled by deltas. */
+export function assertUpdateIdentities(updates: readonly Uint8Array[], instanceId?: string) {
+  let expected: unknown = instanceId;
+  const inspect = (parts: readonly Uint8Array[]) => {
+    const identity = new Doc();
+    try {
+      for (const update of parts) applyUpdate(identity, update);
+      const recorded = identity.getMap("document").get("instanceId");
+      // Missing identity predates this guard; retain legacy and pending deltas.
+      if (recorded !== undefined) {
+        if (expected !== undefined && recorded !== expected)
+          throw new Error("The update log belongs to a different document");
+        expected = recorded;
+      }
+    } finally {
+      identity.destroy();
+    }
+  };
+  for (const update of updates) inspect([update]);
+  if (updates.length > 1) inspect(updates);
+}
 
 /** Docs requires a complete load; a compactor may retire any listed resource. */
 export class DocumentUpdateStore extends SolidUpdateStore {
@@ -24,6 +49,8 @@ export class DocumentUpdateStore extends SolidUpdateStore {
     const update = await super.readUpdate(url);
     if (!update) throw new IncompleteLogError("An update disappeared during loading");
     await this.checkActive();
+    // Incremental sync calls readUpdate directly, bypassing loadUpdates.
+    assertUpdateIdentities([update], this.instanceId);
     return update;
   }
   override async loadUpdates() {
@@ -32,19 +59,10 @@ export class DocumentUpdateStore extends SolidUpdateStore {
         const updates = await super.loadUpdates();
         if (!updates.length && !this.allowEmpty)
           throw new IncompleteLogError("The document's update log is empty");
-        if (updates.length && this.instanceId) {
-          const identity = new Doc();
-          try {
-            for (const { update } of updates) applyUpdate(identity, update);
-            const recorded = identity.getMap("document").get("instanceId");
-            // Missing identity predates this guard. Only a recorded mismatch
-            // proves that the log belongs to another document.
-            if (recorded !== undefined && recorded !== this.instanceId)
-              throw new Error("The update log belongs to a different document");
-          } finally {
-            identity.destroy();
-          }
-        }
+        assertUpdateIdentities(
+          updates.map(({ update }) => update),
+          this.instanceId,
+        );
         return updates;
       } catch (error) {
         if (!(error instanceof IncompleteLogError) || attempt >= 2) throw error;
@@ -56,7 +74,13 @@ export class DocumentUpdateStore extends SolidUpdateStore {
     await this.checkActive();
     const result = await super.appendUpdate(update);
     // A pointer change racing the PUT must not count as a successful save.
-    await this.checkActive();
+    try {
+      await this.checkActive();
+    } catch (error) {
+      if (error instanceof InactiveLogError || error instanceof DocumentReplacedError)
+        await super.deleteUpdate(result.url).catch(() => {});
+      throw error;
+    }
     return result;
   }
 }

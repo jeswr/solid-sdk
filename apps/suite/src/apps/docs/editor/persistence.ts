@@ -37,9 +37,8 @@ import { draftMirrorName, withDraftLock } from "./drafts";
 import { baseExtensions } from "./extensions";
 import { loadPersistedLocalState } from "./local-state";
 import { updateMirrorMetadata } from "./mirror-metadata";
-import { DocumentUpdateStore } from "./update-store";
+import { DocumentUpdateStore, InactiveLogError } from "./update-store";
 
-class InactiveLogError extends Error {}
 class InvalidSnapshotError extends Error {}
 
 interface PendingEdit {
@@ -116,6 +115,7 @@ export class DocumentPersistence {
   private needsFullState = false;
   private providerError: Error | undefined;
   private updates = 0;
+  private compactionUpdates = 0;
   private bytes = 0;
   notify = () => {};
   onCreated: (url: string) => void = () => {};
@@ -142,6 +142,7 @@ export class DocumentPersistence {
   private trackUpdates() {
     this.doc.on("update", (update: Uint8Array) => {
       this.updates++;
+      this.compactionUpdates++;
       this.bytes += update.byteLength;
     });
   }
@@ -1244,8 +1245,8 @@ export class DocumentPersistence {
         }
       }
       this.state = this.conflict ? "failed" : "saved";
-      if (this.provider && (this.updates >= 200 || this.bytes >= 2 * 1024 * 1024)) {
-        this.updates = 0;
+      if (this.provider && (this.compactionUpdates >= 200 || this.bytes >= 2 * 1024 * 1024)) {
+        this.compactionUpdates = 0;
         this.bytes = 0;
         void this.provider
           .compact()

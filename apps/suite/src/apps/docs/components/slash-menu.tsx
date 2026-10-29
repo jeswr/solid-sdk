@@ -8,12 +8,12 @@ import {
   CommandList,
   Popover,
   PopoverAnchor,
-  PopoverContent,
 } from "@jeswr/suite-ui";
 import type { Editor } from "@tiptap/react";
 import { useState } from "react";
 import { runSlash } from "../editor/actions";
 import { filterSlash } from "../lib/editor/logic";
+import { EditorPopoverContent } from "./editor-popover-content";
 export interface SlashPosition {
   from: number;
   to: number;
@@ -38,8 +38,15 @@ export function SlashMenu({
       open
       onOpenChange={(open) => {
         if (!open) {
+          editor
+            .chain()
+            .insertContentAt(
+              { from: position.from, to: position.to },
+              { type: "text", text: `/${query}` },
+            )
+            .setMeta("docsSlashClosed", true)
+            .run();
           close();
-          editor.commands.focus();
         }
       }}
     >
@@ -48,11 +55,11 @@ export function SlashMenu({
           style={{ position: "fixed", left: position.left, top: position.top, width: 1, height: 1 }}
         />
       </PopoverAnchor>
-      <PopoverContent
+      <EditorPopoverContent
+        editor={editor}
         align="start"
         side="bottom"
         className="docs-slash-popover"
-        onCloseAutoFocus={(event) => event.preventDefault()}
       >
         <Command label="Insert a block" shouldFilter={false}>
           <CommandInput
@@ -73,6 +80,7 @@ export function SlashMenu({
                     .chain()
                     .focus()
                     .deleteRange({ from: position.from, to: position.to })
+                    .setMeta("docsSlashClosed", true)
                     .run();
                   runSlash(editor, item, image);
                 }}
@@ -82,7 +90,7 @@ export function SlashMenu({
             ))}
           </CommandList>
         </Command>
-      </PopoverContent>
+      </EditorPopoverContent>
     </Popover>
   );
 }

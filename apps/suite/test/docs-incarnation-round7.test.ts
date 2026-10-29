@@ -3,11 +3,13 @@
 import { Blob as NodeBlob, File as NodeFile } from "node:buffer";
 import { createRequire } from "node:module";
 import { SolidUpdateStore } from "@jeswr/y-solid";
+import { Editor } from "@tiptap/react";
 import { yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement, XmlText } from "yjs";
 import { copyDocument } from "../src/apps/docs/editor/copy";
 import { rowExportJson } from "../src/apps/docs/editor/export-document";
+import { editorExtensions } from "../src/apps/docs/editor/extensions";
 import { importDocument } from "../src/apps/docs/editor/import-document";
 import { deleteDocument, restoreDocument } from "../src/apps/docs/editor/operations";
 import { DocumentPersistence } from "../src/apps/docs/editor/persistence";
@@ -38,6 +40,7 @@ afterEach(async () => {
     runtime.online = false;
     await runtime.destroy();
   }
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 const json = (text: string) => ({
@@ -101,6 +104,65 @@ async function retire(runtime: DocumentPersistence, session: PodSession) {
   expect(result.failed).toEqual([]);
   return result.done;
 }
+
+it("round31 a delayed retired reconnect PUT cannot enter a replacement through incremental sync", async () => {
+  const { pod, session, client, create } = await fixture();
+  const original = await create("Retired paragraphs");
+  const url = original.stored?.url as string;
+  const log = original.stored?.data.updateLog as string;
+  original.online = false;
+  original.provider?.destroy();
+  edit(original, "Retired pending paragraphs");
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let intercepted = false;
+  let replacement: DocumentPersistence | undefined;
+  let duringWrite: unknown;
+  vi.spyOn(session, "fetch").mockImplementation(async (input, init) => {
+    if (!intercepted && String(input).startsWith(log) && init?.method === "PUT") {
+      intercepted = true;
+      await held;
+      const response = await pod.fetch(input, init);
+      // The replacement reads the resource before the retired PUT returns and
+      // before any post-write cleanup could run.
+      await replacement?.provider?.sync().catch(() => {});
+      duringWrite = yDocToProsemirrorJSON((replacement as DocumentPersistence).doc);
+      return response;
+    }
+    return pod.fetch(input, init);
+  });
+  const reconnect = original.reconnect();
+  await vi.waitFor(() => expect(intercepted).toBe(true));
+  try {
+    expect((await deleteDocument(url, session)).failed).toEqual([]);
+    replacement = await create("Replacement paragraphs");
+    expect(replacement.stored?.url).toBe(url);
+  } finally {
+    release();
+    await reconnect;
+  }
+  expect(duringWrite).toEqual(json("Replacement paragraphs"));
+  const editor = new Editor({
+    element: document.createElement("div"),
+    extensions: editorExtensions(replacement.doc, session.fetch),
+    onUpdate: ({ editor }) => replacement?.change(editor.getHTML(), editor.getJSON()),
+  });
+  try {
+    await replacement.provider?.sync();
+    expect(editor.getText()).toBe("Replacement paragraphs");
+    editor.commands.insertContentAt(editor.state.doc.content.size - 1, " saved");
+    await replacement.flush();
+  } finally {
+    editor.destroy();
+  }
+  await replacement.destroy();
+  const reopened = client();
+  await reopened.open(url);
+  expect(yDocToProsemirrorJSON(reopened.doc)).toEqual(json("Replacement paragraphs saved"));
+  expect((await reopened.store.read(url))?.data.body).not.toContain("Retired");
+});
 
 it("imports a reused filename into an incarnation mirror without replaying the trashed body", async () => {
   const { session, client } = await fixture();

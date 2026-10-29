@@ -48,6 +48,20 @@ function fixture(updates = edits()) {
 }
 
 describe("Docs log compaction before trash", () => {
+  it("round31 never folds separate document incarnations into one winning Y.Map identity", async () => {
+    const updates = ["retired", "replacement"].map((id) => {
+      const doc = new Doc();
+      doc.getMap("document").set("instanceId", id);
+      const update = encodeStateAsUpdate(doc);
+      doc.destroy();
+      return update;
+    });
+    const f = fixture(updates);
+    await f.compact();
+    expect(f.copies()).toEqual([]);
+    expect(f.deletes()).toEqual([]);
+    expect(f.originals.every((url) => f.pod.has(url))).toBe(true);
+  });
   it("bounds parallel requests and verifies the durable merged copy before conditional deletes", async () => {
     const updates = edits(65);
     const f = fixture(updates);

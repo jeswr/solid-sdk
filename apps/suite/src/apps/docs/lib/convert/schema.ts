@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex
+
+import { Mark } from "@tiptap/pm/model";
 import { generateJSON, getSchema, type JSONContent } from "@tiptap/react";
 import { baseExtensions } from "../../editor/extensions";
 import { normaliseDestination } from "../editor/destination";
@@ -70,6 +72,12 @@ export function normaliseImport(json: JSONContent, skipped: SkippedItem[] = []) 
       ...(node.content ? { content: node.content.flatMap(map) } : {}),
     };
     try {
+      // JSON marks are an unordered multiset from importers. Canonicalize with
+      // the schema's rank/exclusion rules before check() can reject the text.
+      if (mapped.marks)
+        mapped.marks = mapped.marks
+          .reduce((set, mark) => importSchema.markFromJSON(mark).addToSet(set), Mark.none)
+          .map((mark) => mark.toJSON());
       const parsed = importSchema.nodeFromJSON(mapped);
       parsed.check();
       return [parsed.toJSON() as JSONContent];

@@ -4,6 +4,7 @@ import { SolidUpdateStore } from "@jeswr/y-solid";
 import { mergeUpdates } from "yjs";
 import { mapConcurrent } from "../../../lib/parallel";
 import { type DriveClient, DriveError } from "../../drive/lib/client/client";
+import { assertUpdateIdentities } from "../lib/model/update-store";
 
 /**
  * Fold immutable Yjs updates before Drive has to copy and verify each one.
@@ -46,6 +47,7 @@ export async function compactDocumentLog(
   );
   let merged: Uint8Array;
   try {
+    assertUpdateIdentities(stored.map(({ update }) => update));
     merged = mergeUpdates(stored.map(({ update }) => update));
   } catch {
     // Unrecognised/corrupt resources must still be recoverable through Drive.

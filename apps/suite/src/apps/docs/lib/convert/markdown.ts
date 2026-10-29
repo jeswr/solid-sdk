@@ -665,6 +665,13 @@ function parseHtml(token: MarkdownToken): JSONContent[] {
     (token.text as string).trimEnd().replace(/(<\/?h)[4-6](?=[\s>])/gi, "$13"),
     "text/html",
   );
+  // The DOM schema rejects unsafe images before clean() can report them. Apply
+  // the URL policy here too, retaining normalized valid URLs and warning on loss.
+  for (const image of dom.body.querySelectorAll("img")) {
+    const src = normaliseDestination(image.getAttribute("src") ?? "");
+    if (src && /^https?:/.test(src)) image.setAttribute("src", src);
+    else reportSkipped(mappingSkipped, "Unsafe images");
+  }
   const rules = SchemaDOMParser.fromSchema(schema).rules;
   const parser = new SchemaDOMParser(
     schema,
@@ -737,29 +744,86 @@ function parseHtml(token: MarkdownToken): JSONContent[] {
 
 // Tiptap's default HTML bridge trims fragment edges. Parse complete inline
 // elements with full whitespace preservation, including nested equal-name tags.
+const inlineHtmlTags = new Set([
+  "a",
+  "b",
+  "strong",
+  "em",
+  "i",
+  "s",
+  "strike",
+  "del",
+  "code",
+  "mark",
+  "u",
+  "sub",
+  "sup",
+  "span",
+  "img",
+  "br",
+  "hr",
+]);
 const inlineHtml = Extension.create({
   name: "docsInlineHtml",
   markdownTokenizer: {
     name: "docsInlineHtml",
     level: "inline",
     start: (source: string) => source.indexOf("<"),
-    tokenize(source) {
+    tokenize(source, _tokens, lexer) {
       if (typeof window === "undefined") return;
-      const opening = /^<(a|b|strong|em|i|s|strike|del|code|mark|u|sub|sup|span)\b/i.exec(source);
-      if (!opening) return;
-      const tags = /<\/?([a-z][\w-]*)\b(?:[^<>"']|"[^"]*"|'[^']*')*>/gi;
+      const opening = /^<([a-z][\w-]*)(?=[\s/>])(?:[^<>"']|"[^"]*"|'[^']*')*>/i.exec(source);
+      if (!opening || !inlineHtmlTags.has((opening[1] as string).toLowerCase())) return;
+      if (/^(img|br|hr)$/i.test(opening[1] as string))
+        return { type: "docsInlineHtml", raw: opening[0], text: opening[0] };
+      const tags = /<\/?([a-z][\w-]*)(?=[\s/>])(?:[^<>"']|"[^"]*"|'[^']*')*>/gi;
       let depth = 0;
+      let unsupported = false;
       for (const tag of source.matchAll(tags)) {
+        if (!inlineHtmlTags.has((tag[1] as string).toLowerCase())) unsupported = true;
         if (tag[1]?.toLowerCase() !== opening[1]?.toLowerCase()) continue;
         depth += tag[0].startsWith("</") ? -1 : 1;
         if (depth === 0) {
           const raw = source.slice(0, tag.index + tag[0].length);
-          return { type: "docsInlineHtml", raw, text: raw };
+          const inner = source.slice(opening[0].length, tag.index);
+          // Preserve inert unknown HTML and parse HTML-only fragments once.
+          // Rich exports encode punctuation as references, so they need no
+          // CommonMark pass regardless of their number of overlapping marks.
+          const prose = inner.replace(tags, "");
+          if (
+            unsupported ||
+            opening[1]?.toLowerCase() === "code" ||
+            !/[\\*_~`[\]<\n:@.]|&(?!(?:#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6}|[a-zA-Z][a-zA-Z0-9]*);)/.test(
+              prose,
+            )
+          )
+            return { type: "docsInlineHtml", raw, text: raw };
+          // Parse source text with CommonMark before HTML entity decoding.
+          // Parse the wrapper separately to retain schema attrs/whitespace and
+          // let nested wrappers, links, images and marks share this same path.
+          return {
+            type: "docsInlineHtml",
+            raw,
+            text: raw,
+            html: `${opening[0]}DOCSINLINE${tag[0]}`,
+            tokens: lexer.inlineTokens(inner),
+          };
         }
       }
     },
   },
-  parseMarkdown: parseHtml,
+  parseMarkdown(token, helpers) {
+    if (typeof token.html !== "string") return parseHtml(token);
+    const content = helpers.parseInline(token.tokens as NonNullable<typeof token.tokens>);
+    // A plain span adds no schema marks. Avoid a DOM parse for the neutral
+    // wrapper used by every rich inline export, including nested fragments.
+    if (/^<span>DOCSINLINE<\/span>$/i.test(token.html)) return content;
+    return parseHtml({ ...token, text: token.html as string }).flatMap((wrapper) =>
+      content.map((node) => ({
+        ...node,
+        marks: [...(wrapper.marks ?? []), ...(node.marks ?? [])],
+      })),
+    );
+  },
 });
 const markdown = new MarkdownManager({
   extensions: [
@@ -919,11 +983,16 @@ markdown.instance.use({
   },
 });
 const schema = getSchema(extensions);
+const blockTypes = new Set(
+  Object.values(schema.nodes)
+    .filter((type) => type.isBlock)
+    .map((type) => type.name),
+);
 export const MARKDOWN_NOTES =
   "Formatting uses GFM where lossless and HTML for richer content. Images link to their absolute URL.";
 
-/** Markdown images are inline tokens; the editor's images are block nodes. */
-function splitImages(node: JSONContent): JSONContent[] {
+/** Lift block HTML tokens out of inline containers before schema validation. */
+function splitInlineBlocks(node: JSONContent): JSONContent[] {
   if (!["paragraph", "heading"].includes(String(node.type)) || !node.content) return [node];
   const blocks: JSONContent[] = [];
   let inline: JSONContent[] = [];
@@ -933,7 +1002,7 @@ function splitImages(node: JSONContent): JSONContent[] {
   };
   for (const child of node.content) {
     // Sanitizing an unsafe image also produces a block (an empty paragraph).
-    if (["image", "paragraph"].includes(String(child.type))) {
+    if (blockTypes.has(String(child.type))) {
       flush();
       blocks.push(child);
     } else inline.push(child);
@@ -966,11 +1035,12 @@ function clean(
   }
   if (result.content)
     result.content = result.content.flatMap((child) =>
-      splitImages(clean(child, dropHighlights, skipped)),
+      splitInlineBlocks(clean(child, dropHighlights, skipped)),
     );
   if (
     ["listItem", "taskItem"].includes(String(result.type)) &&
-    result.content?.[0]?.type === "image"
+    result.content?.length &&
+    (result.content[0] as JSONContent).type !== "paragraph"
   )
     result.content.unshift({ type: "paragraph" });
   return result;

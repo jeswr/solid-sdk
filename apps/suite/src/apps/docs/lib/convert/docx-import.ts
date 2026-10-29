@@ -57,7 +57,7 @@ function mapLists(
 ) {
   let paragraphIndex = 0;
   function container(element: DocxElement) {
-    const ancestors: { path: string; key: string }[] = [];
+    const ancestors: { path: string; key: string; list: string }[] = [];
     for (const child of element.children ?? []) {
       const metadata = child.type === "paragraph" ? numbering[paragraphIndex++] : undefined;
       const styleName = child.styleName?.toLowerCase();
@@ -90,17 +90,22 @@ function mapLists(
             ),
           ),
         );
-        const list = task
-          ? "ul[data-type='taskList']"
-          : child.numbering?.isOrdered
-            ? `ol[start='${metadata?.start ?? 1}']`
-            : "ul";
-        const key = `${list}:${task ? "" : (metadata?.id ?? "")}`;
+        const kind = task ? "taskList" : child.numbering?.isOrdered ? "orderedList" : "bulletList";
+        const key = `${kind}:${task ? "" : (metadata?.id ?? "")}`;
+        // A document may start at an indented level without supplying its parents.
+        const depth = Math.min(level, ancestors.length);
+        const previous = ancestors[depth];
+        const list =
+          previous?.key === key
+            ? previous.list
+            : task
+              ? "ul[data-type='taskList']"
+              : child.numbering?.isOrdered
+                ? `ol[start='${metadata?.start ?? 1}']`
+                : "ul";
         const item = task
           ? `li[data-type='taskItem'][data-checked='${styleName === "task checked"}']`
           : "li";
-        // A document may start at an indented level without supplying its parents.
-        const depth = Math.min(level, ancestors.length);
         const fresh = ancestors[depth]?.key === key ? "" : ":fresh";
         const path = [
           ...ancestors.slice(0, depth).map((ancestor) => ancestor.path),
@@ -108,7 +113,7 @@ function mapLists(
         ].join(" > ");
         mappedStyle(path);
         ancestors.length = depth;
-        ancestors.push({ path: `${list} > ${item}`, key });
+        ancestors.push({ path: `${list} > ${item}`, key, list });
       } else {
         ancestors.length = 0;
         container(child);

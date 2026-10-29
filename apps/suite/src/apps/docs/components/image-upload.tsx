@@ -1,11 +1,12 @@
 // AUTHORED-BY Codex
 "use client";
-import { Button, Input, Popover, PopoverAnchor, PopoverContent } from "@jeswr/suite-ui";
+import { Button, Input, Popover, PopoverAnchor } from "@jeswr/suite-ui";
 import type { Editor } from "@tiptap/react";
 import { useId, useState } from "react";
 import type { DocumentPersistence } from "../editor/persistence";
 import { insertionAnchor } from "../lib/editor/insertion-anchor";
 import { docContainerUrls } from "../lib/model";
+import { EditorPopoverContent } from "./editor-popover-content";
 export function ImageUpload({
   editor,
   runtime,
@@ -83,13 +84,7 @@ export function ImageUpload({
       <PopoverAnchor asChild>
         <span className="docs-popover-anchor" />
       </PopoverAnchor>
-      <PopoverContent
-        aria-label="Image alt text"
-        onCloseAutoFocus={(event) => {
-          event.preventDefault();
-          if (!editor.isDestroyed) editor.commands.focus();
-        }}
-      >
+      <EditorPopoverContent editor={editor} aria-label="Image alt text">
         <form
           className="docs-form"
           onSubmit={(event) => {
@@ -129,7 +124,7 @@ export function ImageUpload({
             {state === "error" ? "Remove" : "Cancel"}
           </Button>
         </form>
-      </PopoverContent>
+      </EditorPopoverContent>
     </Popover>
   );
 }
