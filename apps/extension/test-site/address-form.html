@@ -1,0 +1,21 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Address form</title></head>
+<body>
+  <h1>Delivery details</h1>
+  <form action="/submitted" method="get">
+    <p><label for="name">Full name</label> <input id="name" name="name" autocomplete="name"></p>
+    <p><label for="email">Email</label> <input id="email" name="email" type="email" autocomplete="email"></p>
+    <p><label for="street">Street address</label> <input id="street" name="street" autocomplete="street-address"></p>
+    <p><label for="city">City</label> <input id="city" name="city" autocomplete="address-level2"></p>
+    <p><label for="postal">Postal code</label> <input id="postal" name="postal" autocomplete="postal-code"></p>
+    <p><label for="country">Country</label> <select id="country" name="country" autocomplete="country-name"><option value="">Choose country</option><option value="GB">United Kingdom</option><option value="US">United States</option></select></p>
+    <p><label for="secret">Password</label> <input id="secret" type="password" autocomplete="new-password"></p>
+    <p><label for="payment">Card number</label> <input id="payment" autocomplete="cc-number"></p>
+    <p><label for="code">Security code</label> <input id="code" autocomplete="one-time-code"></p>
+    <p><label for="off">Do not fill</label> <input id="off" autocomplete="off"></p>
+    <button type="submit">Submit delivery</button>
+  </form>
+</body>
+</html>

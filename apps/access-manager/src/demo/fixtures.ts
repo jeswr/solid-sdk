@@ -70,7 +70,7 @@ const PREFIXES = `
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 @prefix odrl: <http://www.w3.org/ns/odrl/2/> .
 @prefix dpv: <https://w3id.org/dpv#> .
-@prefix accm: <https://w3id.org/jeswr/accm#> .
+@prefix accm: <https://jeswr.org/ns/accm#> .
 `;
 
 /** Ada's profile: storage + inbox + the public type index; publicly readable. */

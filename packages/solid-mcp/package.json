@@ -61,6 +61,7 @@
   "dependencies": {
     "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
+    "@jeswr/solid-chat-interop": "workspace:*",
     "@jeswr/solid-dpop": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@rdfjs/types": "^2.0.1",
@@ -74,6 +75,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.3",
     "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/mcp-oauth": "workspace:*",
     "@microsoft/api-extractor": "7.58.9",
     "@types/n3": "^1.16.0",
     "@types/node": "^26.1.1",

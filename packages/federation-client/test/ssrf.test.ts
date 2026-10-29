@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Adversarial tests for the SSRF guard. The registry URL is a user/config-supplied
@@ -973,9 +974,10 @@ describe("SSRF guard — Request object input", () => {
   it("carries a Request's method + headers (not just its url) into the guarded fetch", async () => {
     let seenMethod: string | undefined;
     let seenHeader: string | null = null;
-    const fetch = (async (_url: string | URL | Request, init?: RequestInit) => {
-      seenMethod = (init as RequestInit).method;
-      seenHeader = new Headers(init?.headers ?? {}).get("x-trace");
+    const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+      const effective = new Request(input, init);
+      seenMethod = effective.method;
+      seenHeader = effective.headers.get("x-trace");
       return new Response("ok", { status: 200, headers: { "content-type": "text/turtle" } });
     }) as typeof globalThis.fetch;
     const guarded = createGuardedFetch({ fetch, dnsLookup: PUBLIC_DNS });

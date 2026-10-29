@@ -1,0 +1,7 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": { "env": ["APP_ORIGIN", "APP_BASE_PATH", "CLIENT_BASE_PATH"], "inputs": ["$TURBO_DEFAULT$", ".env*"] }
+  }
+}

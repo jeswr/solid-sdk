@@ -47,6 +47,7 @@ const outdir = join(root, "dist");
  * this list. fetch-rdf's own runtime deps stay external (npm-published).
  */
 const EXTERNAL = [
+  "@jeswr/solid-chat-interop",
   "@jeswr/rdf-serialize",
   "@jeswr/solid-dpop",
   "@modelcontextprotocol/sdk",
