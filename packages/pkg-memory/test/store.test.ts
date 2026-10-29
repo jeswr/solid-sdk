@@ -345,6 +345,168 @@ it("rejects conflicting shared graph copies in a later put before any write", as
   expect(isomorphic([...(await store.list()).dataset], [...first.dataset])).toBe(true);
 });
 
+it.each([
+  { separate: false, conflict: false },
+  { separate: false, conflict: true },
+  { separate: true, conflict: false },
+  { separate: true, conflict: true },
+])("coordinates concurrent puts through the pod: %j", async ({ separate, conflict }) => {
+  const { store, pod, memory, write } = setup();
+  const otherPod = separate ? { ...memory } : pod;
+  const other = separate ? new NanopubStore(otherPod) : store;
+  const seed: Fact = { template: "email", value: "initialize@example.org" };
+  await store.put(await build("initialize-one", seed));
+  await other.put(await build("initialize-two", seed));
+  const first = await sharedBlankAssertions(["one"], "concurrent-first");
+  const second = await sharedBlankAssertions(["two"], "concurrent-second");
+  if (conflict) {
+    const name = second.nanopubs[0]!.assertionId;
+    const assertion = graph(second.dataset, name);
+    new RdfNode(identity.webId, assertion).text(`${NS.schema}description`, "Different contents");
+    putGraph(second.dataset as Store, name, assertion);
+  }
+  const firstUrl = store.url(first.nanopubs[0]!.id);
+  const secondUrl = store.url(second.nanopubs[0]!.id);
+  let reached!: () => void;
+  let release!: () => void;
+  const atWrite = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  const resumeWrite = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  write.mockImplementation(async (url, body, type, cond) => {
+    if (url === firstUrl) {
+      reached();
+      await resumeWrite;
+    }
+    return memory.write(url, body, type, cond);
+  });
+  const firstPut = store.put(first);
+  await Promise.race([atWrite, firstPut]);
+  // The first writer has validated but has not persisted its graph yet.
+  const [result] = await Promise.allSettled([other.put(second)]);
+  release();
+  await firstPut;
+  expect(result).toMatchObject({ status: "rejected", reason: { status: 412 } });
+  await expect(memory.read(secondUrl)).rejects.toMatchObject({ status: 404 });
+  await expect(memory.read(`${secondUrl}.acl`)).rejects.toMatchObject({ status: 404 });
+  expect((await store.list()).nanopubs).toHaveLength(3);
+  await expect(memory.read(`${store.container}.write-lock`)).rejects.toMatchObject({ status: 404 });
+  if (conflict) await expect(other.put(second)).rejects.toThrow("Conflicting copies");
+  else {
+    await expect(other.put(second)).resolves.toEqual([secondUrl]);
+    const list = pod.list;
+    for (const reverse of [false, true]) {
+      pod.list = async (container) => {
+        const entries = await list(container);
+        return reverse ? entries.reverse() : entries;
+      };
+      const loaded = await store.list();
+      expect(loaded.nanopubs).toHaveLength(4);
+      expect(graph(loaded.dataset, first.nanopubs[0]!.assertionId).size).toBe(4);
+    }
+  }
+});
+
+it("revalidates after acquiring the lock when another writer completed after preflight", async () => {
+  const { store, pod, memory, write } = setup();
+  await store.writeDefaultPolicy();
+  const first = await sharedBlankAssertions(["one"], "intervening-first");
+  const second = await sharedBlankAssertions(["two"], "intervening-second");
+  const name = second.nanopubs[0]!.assertionId;
+  const assertion = graph(second.dataset, name);
+  new RdfNode(identity.webId, assertion).text(`${NS.schema}description`, "Conflicting contents");
+  putGraph(second.dataset as Store, name, assertion);
+  const lockUrl = `${store.container}.write-lock`;
+  const remove = vi.spyOn(pod, "delete");
+  write.mockClear();
+  write.mockImplementation(async (url, body, type, cond) => {
+    if (url === lockUrl) await new NanopubStore(memory).put(first);
+    return memory.write(url, body, type, cond);
+  });
+  await expect(store.put(second)).rejects.toThrow("Conflicting copies");
+  expect(write.mock.calls.some((call) => call[0].endsWith(".trig"))).toBe(false);
+  expect(remove).toHaveBeenCalledExactlyOnceWith(lockUrl, { ifMatch: expect.any(String) });
+  await expect(memory.read(lockUrl)).rejects.toMatchObject({ status: 404 });
+  expect((await store.list()).nanopubs.map((np) => np.id)).toEqual([first.nanopubs[0]!.id]);
+});
+
+it("releases the lock after a failed validation read and permits a later retry", async () => {
+  const { store, pod, memory, write } = setup();
+  await store.writeDefaultPolicy();
+  const list = vi.spyOn(pod, "list");
+  list.mockImplementationOnce(memory.list).mockRejectedValueOnce(statusError(403));
+  write.mockClear();
+  const value = await build();
+  await expect(store.put(value)).rejects.toMatchObject({ status: 403 });
+  expect(write.mock.calls.map((call) => call[0])).toEqual([`${store.container}.write-lock`]);
+  await expect(memory.read(`${store.container}.write-lock`)).rejects.toMatchObject({ status: 404 });
+  list.mockRestore();
+  await expect(store.put(value)).resolves.toHaveLength(1);
+});
+
+it("writes no nanopub and deletes no lock when lock acquisition fails", async () => {
+  const { store, pod, memory, write } = setup();
+  await store.writeDefaultPolicy();
+  const remove = vi.spyOn(pod, "delete");
+  write.mockRejectedValueOnce(statusError(403));
+  const value = await build();
+  await expect(store.put(value)).rejects.toMatchObject({ status: 403 });
+  expect(remove).not.toHaveBeenCalled();
+  await expect(memory.read(store.url(value.nanopubs[0]!.id))).rejects.toMatchObject({
+    status: 404,
+  });
+  await expect(store.put(value)).resolves.toHaveLength(1);
+});
+
+it.each([
+  undefined,
+  'W/"lock"',
+])("retains a lock without a strong creation ETag: %s", async (etag) => {
+  const { store, pod, memory, write } = setup();
+  await store.writeDefaultPolicy();
+  const lockUrl = `${store.container}.write-lock`;
+  const remove = vi.spyOn(pod, "delete");
+  write.mockClear();
+  write.mockImplementation(async (url, body, type, cond) => {
+    const result = await memory.write(url, body, type, cond);
+    return url === lockUrl ? { etag } : result;
+  });
+  const value = await build();
+  await expect(store.put(value)).rejects.toThrow("strong ETag");
+  expect(write.mock.calls.map((call) => call[0])).toEqual([lockUrl]);
+  expect(remove).not.toHaveBeenCalled();
+  const before = await memory.read(lockUrl);
+  expect(before.body).toHaveLength(0);
+  await expect(store.put(value)).rejects.toMatchObject({ status: 412 });
+  expect(await memory.read(lockUrl)).toEqual(before);
+  await expect(memory.read(store.url(value.nanopubs[0]!.id))).rejects.toMatchObject({
+    status: 404,
+  });
+});
+
+it.each([
+  403, 412,
+])("fails closed without deleting an unowned lock after release HTTP %s", async (status) => {
+  const { store, pod, memory } = setup();
+  await store.writeDefaultPolicy();
+  const lockUrl = `${store.container}.write-lock`;
+  vi.spyOn(pod, "delete").mockImplementation(async (url, cond) => {
+    expect(url).toBe(lockUrl);
+    expect(cond).toEqual({ ifMatch: (await memory.read(url)).etag });
+    if (status === 403) throw statusError(403);
+    await memory.write(url, new Uint8Array(), "application/octet-stream", {});
+    return memory.delete(url, cond);
+  });
+  const value = await build();
+  await expect(store.put(value)).rejects.toMatchObject({ status });
+  expect((await store.list()).nanopubs).toHaveLength(1);
+  const before = await memory.read(lockUrl);
+  await expect(store.put(await build("later"))).rejects.toMatchObject({ status: 412 });
+  expect(await memory.read(lockUrl)).toEqual(before);
+});
+
 it("allows the first put when the collection listing returns 404", async () => {
   const { store, pod, memory } = setup();
   pod.list = async (container) => {
@@ -1078,7 +1240,8 @@ it("conditionally replaces only the store's ACL and retains existing containers"
   expect(write.mock.calls.filter((call) => call[0].endsWith(".acl"))).toHaveLength(2);
   expect(write.mock.calls[0]![0]).toBe(`${store.container}.acl`);
   expect(write.mock.calls[0]![3].ifMatch).toBeDefined();
-  expect(write.mock.calls[1]![3]).toEqual({ ifNoneMatch: "*" });
+  const resourceAcl = write.mock.calls.find((call) => call[0].endsWith(".trig.acl"))!;
+  expect(resourceAcl[3]).toEqual({ ifNoneMatch: "*" });
   expect(write.mock.calls.some((call) => call[0].endsWith("/"))).toBe(false);
 });
 
@@ -1167,7 +1330,12 @@ it.each([401, 403, 412, 500])("does not treat HTTP %i as TriG rejection", async 
     return memory.write(url, body, type, cond);
   });
   await expect(store.put(await build())).rejects.toMatchObject({ status });
-  expect(write.mock.calls.some((call) => call[2] === "application/octet-stream")).toBe(false);
+  expect(
+    write.mock.calls.some(
+      (call) => call[0].endsWith(".trig") && call[2] === "application/octet-stream",
+    ),
+  ).toBe(false);
+  await expect(memory.read(`${store.container}.write-lock`)).rejects.toMatchObject({ status: 404 });
 });
 
 it.each(["missing", "weak"])("refuses a rewritten representation with a %s ETag", async (kind) => {
@@ -1199,7 +1367,8 @@ it("propagates a fallback write failure without another representation", async (
   const { store, memory, write } = setup();
   write.mockImplementation((url, body, type, cond) => {
     if (type === "application/trig") return Promise.reject(statusError(415));
-    if (type === "application/octet-stream") return Promise.reject(statusError(403));
+    if (url.endsWith(".trig") && type === "application/octet-stream")
+      return Promise.reject(statusError(403));
     return memory.write(url, body, type, cond);
   });
   await expect(store.put(await build())).rejects.toMatchObject({ status: 403 });

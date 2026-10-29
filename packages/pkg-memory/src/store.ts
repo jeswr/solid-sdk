@@ -78,7 +78,20 @@ export class NanopubStore {
       })),
     );
     await this.initialize();
-    for (const resource of resources) await this.writeNanopub(resource.url, resource.bytes);
+    // The private container supplies the owner-only ACL. This empty resource is
+    // a pod-wide mutex, including across instances and processes, not a lease.
+    const lockUrl = `${this.container}.write-lock`;
+    const lock = await this.pod.write(lockUrl, new Uint8Array(), "application/octet-stream", {
+      ifNoneMatch: "*",
+    });
+    const condition = this.condition(lock);
+    try {
+      // A writer may have completed since the mutation-free preflight above.
+      await this.validatePut(parts);
+      for (const resource of resources) await this.writeNanopub(resource.url, resource.bytes);
+    } finally {
+      await this.pod.delete(lockUrl, condition);
+    }
     return resources.map((resource) => resource.url);
   }
 

@@ -144,8 +144,10 @@ authors, reject before any Pod write, including single-resource puts whose graph
 may recur in later calls. Listing older or externally written copies with such
 ties also rejects. Symmetry confined to private graphs in one resource remains
 supported. Each put also checks incoming resources against existing copies,
-using only their common graphs, before any Pod write. A batch's extra graphs
-cannot resolve an ambiguity shared with a different stored batch.
+using only their common graphs, before any Pod write. It validates the joint
+correspondence against the accumulated collection and rejects mergers of nodes
+that were stored independently, regardless of insertion order. A batch's extra
+graphs cannot resolve an ambiguity shared with a different stored batch.
 Other cross-resource sharing (such as evidence targets used only in separate
 provenance graphs) rejects before any Pod write; local cross-graph sharing remains
 supported. Owner-only WAC ACLs are written before creating
@@ -156,6 +158,15 @@ conditionally before writing its private bytes, replacing any orphan resource AC
 that would override the container default. The adapter must support the spec's
 `.acl` convention; ACL failures stop the operation. Existing ACL replacement needs
 a strong ETag.
+
+An empty `/private/pkg/mcp/.write-lock`, created with `If-None-Match: *` after
+container protection, coordinates puts across store instances and processes.
+The writer revalidates the collection while holding the lock, then writes its
+resources and releases the lock using its strong creation ETag. A competing put
+fails with HTTP 412 and can retry after the writer finishes. Lock acquisition,
+validation and release failures propagate. A missing/weak lock ETag or an
+interrupted writer leaves the lock in place; subsequent puts fail closed until
+the owner recovers it. There is no automatic lock expiry or takeover.
 
 The store tries `application/trig` and reads the representation back. An HTTP 415
 or changed bytes/media type triggers the sole fallback, `application/octet-stream`,
