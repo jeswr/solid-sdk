@@ -21,7 +21,8 @@ Use this package only when Auth.js owns the OAuth/OIDC orchestration. It injects
 ## Refresh in the Auth.js JWT callback
 
 Capture a pristine fetch before any global patch. After the first-sign-in persistence branch,
-refresh the stored `SolidJwtState` when expiry is unknown or within 60 seconds:
+refresh the stored `SolidJwtState` when expiry is unknown or within 60 seconds, only on an
+explicit browser session-update POST that persists the returned cookie:
 
 ```ts
 import {
@@ -33,11 +34,14 @@ import {
 const pristineFetch = globalThis.fetch.bind(globalThis); // before global patching
 
 // Inside NextAuth({ callbacks: { ... } }), alongside your first-sign-in branch:
-async function jwt({ token, account }) {
+async function jwt({ token, account, trigger }) {
   if (account) {
     // Persist with persistSolidTokensIntoJwt as described above and in the README.
     return token;
   }
+  // Only the browser's cookie-writing session-update POST may refresh.
+  // Ignore the client-supplied update payload; use only the encrypted JWT state.
+  if (trigger !== "update") return token;
   const state = token[SOLID_JWT_KEY] as SolidJwtState | undefined;
   if (
     state &&
@@ -52,6 +56,24 @@ async function jwt({ token, account }) {
 }
 ```
 
+Mount the NextAuth `handlers.GET` and `handlers.POST` at `app/api/auth/[...nextauth]/route.ts`.
+From an authenticated Client Component under `SessionProvider`, call `await update({})` using
+the `update` returned by `useSession()` in an event handler. Wait for a successful session
+response and its browser-applied `Set-Cookie` before starting the next server-side pod request.
+Passing `{}` is required for the CSRF-protected `/api/auth/session` POST and JWT
+`trigger: "update"`; plain `update()` and `getSession()` use GET and skip refresh here.
+An internal server fetch that discards the cookie does not satisfy this persistence requirement.
+See the [Auth.js client update implementation](https://github.com/nextauthjs/next-auth/blob/next-auth%405.0.0-beta.30/packages/next-auth/src/react.tsx#L478-L488).
+
+Zero-argument `auth()` in a React Server Component invokes the callback but
+[discards its updated cookie](https://github.com/nextauthjs/next-auth/blob/next-auth%405.0.0-beta.30/packages/next-auth/src/lib/index.ts#L172-L177).
+The trigger guard skips refresh for these read-only calls, preserving single-use refresh
+tokens. A successful read does not imply fresh Solid tokens: when refresh is needed, complete
+the browser update flow before starting a new server-side pod request. If read-only calls must
+refresh, store the entire current Solid state in shared server-side storage and atomically read,
+refresh, and persist it there on every call, rather than using the cookie's token snapshot.
+Concurrent-refresh coordination alone does not fix a discarded rotated-token cookie.
+
 Pass the original provider's `clientSecret` too for confidential clients (Basic auth).
 `refreshSolidSession` needs the persisted issuer, refresh token and private JWK; never use the
 current provider instance's possibly regenerated key. It returns new state, preserves verified
@@ -59,8 +81,8 @@ identity/ID-token fields, and retains an omitted rotated refresh token. `expires
 seconds. Persist the entire returned state: its `authorizationServerNonce` carries the latest
 token-response DPoP nonce into the next refresh and is never used for pod requests. Missing or
 empty nonce headers retain the previous nonce. If `expires_in` is omitted, the helper clears the
-old `expiresAt` because the new lifetime is unknown; the callback refreshes on every subsequent
-invocation while it remains unknown.
+old `expiresAt` because the new lifetime is unknown; the callback refreshes on every explicit
+session update while it remains unknown.
 Coordinate concurrent refreshes when the AS rotates single-use refresh tokens.
 
 Handle `SolidSessionRefreshError.code` without logging state or raw tokens. Fail the callback

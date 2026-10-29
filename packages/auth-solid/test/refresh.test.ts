@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
+import { Auth } from "@auth/core";
+import { encode, getToken } from "@auth/core/jwt";
 import { exportDpopKeyPairJwk, generateDpopKeyPair } from "@jeswr/solid-dpop";
 import {
   calculateJwkThumbprint,
@@ -84,7 +86,10 @@ async function expectCode(promise: Promise<unknown>, code: SolidSessionRefreshEr
   await expect(promise).rejects.toBeInstanceOf(SolidSessionRefreshError);
 }
 
-type JwtCallback = (params: { token: Record<string, unknown> }) => Promise<Record<string, unknown>>;
+type JwtCallback = (params: {
+  token: Record<string, unknown>;
+  trigger?: "signIn" | "signUp" | "update";
+}) => Promise<Record<string, unknown>>;
 
 async function documentedJwt(file: string, fetch: FetchLike): Promise<JwtCallback> {
   const markdown = readFileSync(new URL(`../${file}`, import.meta.url), "utf8");
@@ -119,7 +124,110 @@ async function documentedJwt(file: string, fetch: FetchLike): Promise<JwtCallbac
   return callback;
 }
 
+// Exercise Auth.js's real CSRF, encrypted JWT and Set-Cookie paths without a Next.js server.
+async function sessionBrowser(jwt: JwtCallback, state: SolidJwtState) {
+  const secret = "auth-solid-test-only-session-secret";
+  const cookieName = "__Secure-authjs.session-token";
+  const cookies = new Map([
+    [cookieName, await encode({ secret, salt: cookieName, token: { [SOLID_JWT_KEY]: state } })],
+  ]);
+  const error = vi.fn();
+  const cookieHeader = () => [...cookies].map(([name, value]) => `${name}=${value}`).join("; ");
+  async function request(action: string, init: RequestInit = {}, persistCookies = true) {
+    const response = await Auth(
+      new Request(`https://app.example/api/auth/${action}`, {
+        ...init,
+        headers: { cookie: cookieHeader(), ...init.headers },
+      }),
+      {
+        basePath: "/api/auth",
+        secret,
+        trustHost: true,
+        providers: [],
+        session: { strategy: "jwt" },
+        callbacks: { jwt },
+        logger: { error },
+      },
+    );
+    expect(response.status).toBe(200);
+    if (persistCookies) {
+      for (const cookie of response.headers.getSetCookie()) {
+        const [pair = ""] = cookie.split(";");
+        const separator = pair.indexOf("=");
+        const name = pair.slice(0, separator);
+        const value = pair.slice(separator + 1);
+        if (value === "") cookies.delete(name);
+        else cookies.set(name, value);
+      }
+    }
+    return response.json();
+  }
+  return {
+    error,
+    // A read-only server session call consumes JSON and discards Set-Cookie, like auth().
+    read: () => request("session", {}, false),
+    async update() {
+      const { csrfToken } = await request("csrf");
+      // useSession().update({}) posts data; update() without an argument only makes a GET.
+      return request("session", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ csrfToken, data: {} }),
+      });
+    },
+    token: () => getToken({ req: { headers: { cookie: cookieHeader() } }, secret, cookieName }),
+  };
+}
+
 describe.each(["README.md", "SKILL.md"])("%s refresh callback", (file) => {
+  it.each([
+    undefined,
+    NOW,
+  ])("does not consume refresh tokens on sequential read-only calls with expiry %s", async (expiry) => {
+    const op = mockEndpoint();
+    const jwt = await documentedJwt(file, op.fetch);
+    const { expiresAt: _expiresAt, ...withoutExpiry } = session;
+    const state = { ...withoutExpiry, ...(expiry === undefined ? {} : { expiresAt: expiry }) };
+    const browser = await sessionBrowser(jwt, state);
+    expect(await browser.read()).not.toBeNull();
+    expect(await browser.read()).not.toBeNull();
+    expect((await browser.token())?.[SOLID_JWT_KEY]).toEqual(state);
+    expect(op.fetch).not.toHaveBeenCalled();
+    expect(browser.error).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    undefined,
+    0,
+  ])("persists rotated credentials before the next request with expires_in %s", async (lifetime) => {
+    let refreshToken = session.refreshToken;
+    const op = mockEndpoint((init) => {
+      if (new URLSearchParams(String(init.body)).get("refresh_token") !== refreshToken) {
+        return json({ error: "invalid_grant" }, 400);
+      }
+      refreshToken = `rotated-refresh-fixture-${op.tokenCalls.length}`;
+      return json(tokens({ refresh_token: refreshToken, expires_in: lifetime }));
+    });
+    const browser = await sessionBrowser(await documentedJwt(file, op.fetch), session);
+
+    // Reading the original cookie must not spend its single-use refresh token.
+    expect(await browser.read()).not.toBeNull();
+    expect(op.tokenCalls).toHaveLength(0);
+    for (let count = 1; count <= 2; count++) {
+      const clientSession = await browser.update();
+      expect(clientSession).not.toBeNull();
+      expect(JSON.stringify(clientSession)).not.toContain("fixture");
+      expect(clientSession).not.toHaveProperty(SOLID_JWT_KEY);
+      const persisted = (await browser.token())?.[SOLID_JWT_KEY] as SolidJwtState;
+      expect(persisted.refreshToken).toBe(`rotated-refresh-fixture-${count}`);
+      expect(persisted.accessToken).toBe("new-access-fixture");
+      expect(persisted.dpopKeyJwk).toEqual(session.dpopKeyJwk);
+      expect(await browser.read()).not.toBeNull();
+      expect(op.tokenCalls).toHaveLength(count);
+    }
+    expect(browser.error).not.toHaveBeenCalled();
+  });
+
   it("keeps refreshing after omitted lifetimes and reuses the rotated refresh token", async () => {
     vi.spyOn(Date, "now").mockReturnValue(NOW * 1000);
     const op = mockEndpoint(() =>
@@ -127,12 +235,12 @@ describe.each(["README.md", "SKILL.md"])("%s refresh callback", (file) => {
     );
     const jwt = await documentedJwt(file, op.fetch);
     const token = { [SOLID_JWT_KEY]: session };
-    expect(await jwt({ token })).toBe(token);
+    expect(await jwt({ token, trigger: "update" })).toBe(token);
     expect(token[SOLID_JWT_KEY]).not.toHaveProperty("expiresAt");
     expect(token[SOLID_JWT_KEY].refreshToken).toBe("rotated-refresh-fixture");
     expect(op.tokenCalls).toHaveLength(1);
 
-    expect(await jwt({ token })).toBe(token);
+    expect(await jwt({ token, trigger: "update" })).toBe(token);
     expect(token[SOLID_JWT_KEY]).not.toHaveProperty("expiresAt");
     expect(op.tokenCalls).toHaveLength(2);
     expect(new URLSearchParams(String(op.tokenCalls[1]?.body)).get("refresh_token")).toBe(
@@ -154,7 +262,7 @@ describe.each(["README.md", "SKILL.md"])("%s refresh callback", (file) => {
     const { expiresAt: _expiresAt, ...withoutExpiry } = session;
     const state = { ...withoutExpiry, ...(expiry === undefined ? {} : { expiresAt: expiry }) };
     const token = { [SOLID_JWT_KEY]: state };
-    expect(await jwt({ token })).toBe(token);
+    expect(await jwt({ token, trigger: "update" })).toBe(token);
     expect(op.tokenCalls).toHaveLength(count);
     if (count === 0) expect(op.fetch).not.toHaveBeenCalled();
   });
@@ -163,7 +271,7 @@ describe.each(["README.md", "SKILL.md"])("%s refresh callback", (file) => {
     const op = mockEndpoint();
     const jwt = await documentedJwt(file, op.fetch);
     const token = {};
-    expect(await jwt({ token })).toBe(token);
+    expect(await jwt({ token, trigger: "update" })).toBe(token);
     expect(op.fetch).not.toHaveBeenCalled();
   });
 });
