@@ -512,6 +512,81 @@ describe("skill validation", () => {
     "noframes",
   ];
 
+  it.each([
+    "<!--<script></script><textarea>",
+    "<!--<ScRiPt ></sCrIpT ><textarea>",
+    "<!--<script\t></script\t><textarea>",
+    "<!--<script\n></script\n><textarea>",
+    "<!--<script\f></script\f><textarea>",
+    "<!--<script\r></script\r><textarea>",
+    "<!--<script/></script/><textarea>",
+    "<!--<other><script></script><textarea>",
+    "<!--<script></script><script></script><textarea>",
+    "<!--<script>--!></script><textarea>",
+    "<!--<script>--<script></script><textarea>",
+  ])("checks active links after a double-escaped script closes: %s", (content) => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({ body: `<script>\n${content}\n</script>\n\n[broken](missing.md)` }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+  });
+
+  it.each([
+    '<!--<script></script><a href="missing.md">still script</a></script>',
+    '<!--<script></script><a href="missing.md">unclosed script',
+    '<!--<script></script-extra></script><a href="missing.md">unclosed script',
+    '<!--<script></script!></script><a href="missing.md">unclosed script',
+    '<!--<script>--!></script><a href="missing.md">still script</a></script>',
+    "<!--<script></script>\n\n[unused]: missing.md\n\n</script>",
+  ])("keeps double-escaped end-tag text inside the script: %s", (content) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body: `<script>\n${content}` }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
+    "<!--<script>-->",
+    "<!--<script>--->",
+    "<!--<script></script>-->",
+    "<!--<script-extra>",
+    "<!--<script!>",
+    "<!--<scripté>",
+    "<!-<script>",
+    "<!<script>",
+    "<!-->",
+    "<!--->",
+  ])("resumes script data or escaped state at the correct boundary: %s", (content) => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({ body: `<script>\n${content}</script>\n\n[broken](missing.md)` }),
+    );
+    expect(checkSkills(root).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+  });
+
+  it.each([
+    "[broken][doc]\n\n[doc]: missing.md",
+    '<a href="missing.md">broken</a>',
+  ])("checks references and HTML URLs after double-escaped inline script: %s", (link) => {
+    const root = fixture();
+    put(
+      root,
+      "skills/alpha/SKILL.md",
+      skill({ body: `Example: <script><!--<script></script><textarea></script>\n\n${link}` }),
+    );
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+  });
+
   it.each(textElements)("preserves HTML %s text state across inline Markdown tokens", (tag) => {
     const root = fixture();
     put(

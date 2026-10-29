@@ -151,6 +151,101 @@ function srcsetLinksIn(input) {
   return links;
 }
 
+function scriptEndTagOffset(html, start) {
+  // HTML script tokenization (§13.2.5.15–31): an end tag in double-escaped
+  // content only returns to escaped text. Tokenize escapes before resuming markup.
+  let state = "data";
+  let buffer = "";
+  const endTag = /<\/script(?=[\t\n\f\r />])/iy;
+  for (let cursor = start; cursor < html.length; cursor++) {
+    const char = html[cursor];
+    if (char === "<" && ["data", "escaped", "escaped-dash", "escaped-dash-dash"].includes(state)) {
+      endTag.lastIndex = cursor;
+      if (endTag.test(html)) return cursor;
+    }
+    switch (state) {
+      case "data":
+        if (char === "<" && html[cursor + 1] === "!") {
+          state = "escape-start";
+          cursor++;
+        }
+        break;
+      case "escape-start":
+        if (char === "-") state = "escape-start-dash";
+        else {
+          state = "data";
+          cursor--;
+        }
+        break;
+      case "escape-start-dash":
+        if (char === "-") state = "escaped-dash-dash";
+        else {
+          state = "data";
+          cursor--;
+        }
+        break;
+      case "escaped":
+        if (char === "-") state = "escaped-dash";
+        else if (char === "<") state = "escaped-less-than";
+        break;
+      case "escaped-dash":
+        if (char === "-") state = "escaped-dash-dash";
+        else state = char === "<" ? "escaped-less-than" : "escaped";
+        break;
+      case "escaped-dash-dash":
+        if (char === "<") state = "escaped-less-than";
+        else if (char === ">") state = "data";
+        else if (char !== "-") state = "escaped";
+        break;
+      case "escaped-less-than":
+        // Appropriate end tags were recognized at '<' above. Other end-tag
+        // names remain escaped text; ASCII start names enter double-escape tests.
+        if (/[a-zA-Z]/.test(char)) {
+          buffer = char.toLowerCase();
+          state = "double-escape-start";
+        } else {
+          state = "escaped";
+          cursor--;
+        }
+        break;
+      case "double-escape-start":
+      case "double-escape-end":
+        if (/[\t\n\f\r />]/.test(char)) {
+          const entering = state === "double-escape-start";
+          state = (buffer === "script") === entering ? "double-escaped" : "escaped";
+        } else if (/[a-zA-Z]/.test(char)) buffer += char.toLowerCase();
+        else {
+          state = state === "double-escape-start" ? "escaped" : "double-escaped";
+          cursor--;
+        }
+        break;
+      case "double-escaped":
+        if (char === "-") state = "double-escaped-dash";
+        else if (char === "<") state = "double-escaped-less-than";
+        break;
+      case "double-escaped-dash":
+        if (char === "-") state = "double-escaped-dash-dash";
+        else state = char === "<" ? "double-escaped-less-than" : "double-escaped";
+        break;
+      case "double-escaped-dash-dash":
+        if (char === "<") state = "double-escaped-less-than";
+        else if (char === ">") state = "data";
+        else if (char !== "-") state = "double-escaped";
+        break;
+      case "double-escaped-less-than":
+        if (char === "/") {
+          buffer = "";
+          state = "double-escape-end";
+        } else {
+          state = "double-escaped";
+          cursor--;
+        }
+        break;
+    }
+  }
+  return html.length;
+}
+
 function htmlLinksIn(html, definitions, definitionMarker) {
   const links = [];
   const elements = [];
@@ -286,9 +381,11 @@ function htmlLinksIn(html, definitions, definitionMarker) {
           )),
       mathText: namespace === "math" && /^(?:mi|mo|mn|ms|mtext)$/.test(tag),
     });
-    if (
+    if (namespace === "html" && tag === "script") {
+      tokens.lastIndex = scriptEndTagOffset(html, tokens.lastIndex);
+    } else if (
       namespace === "html" &&
-      /^(?:textarea|title|script|style|xmp|iframe|noembed|noframes)$/.test(tag)
+      /^(?:textarea|title|style|xmp|iframe|noembed|noframes)$/.test(tag)
     ) {
       // Raw-text/RCDATA contents cannot start tags or comments. Only a matching
       // end tag returns to markup, even inside apparent quoted attributes.
