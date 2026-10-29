@@ -72,6 +72,12 @@ alias. Both adapter and server default to read-only; opt into writes at both lay
 The configured WebID remains readable for Type Index discovery even when off-pod;
 off-pod profile redirects are refused. Client tools and resources are always confined to the pod root. A custom PodPort
 must enforce its data boundary and mutation policy too.
+Every tool, including `fetch` and both search names, uses the injected port's current
+`read` and `list` methods. Authorization decorators, filtered listings, and redacted
+read results remain authoritative. Fetch-backed streaming and parsing limits are
+enforced inside that boundary.
+Decorated reads receive complete bodies up to the input limit; larger downloads
+fail closed so a content-based authorization check cannot inspect a partial body.
 
 The existing fetch-based server configuration and exported pod operations remain
 supported. Operations also accept a PodPort directly. The programmatic `search` operation retains its ranked array output; the MCP
@@ -99,7 +105,7 @@ Metadata contains `contentType`, `truncated`, and an optional `etag`. RDF is
 parsed with bounded N3/JSON-LD parsers and serialized as Turtle; `text/*` is
 returned as text. Named-graph RDF is rendered as a union graph (Turtle has no graph labels).
 Other media types, including non-RDF `application/json`, return empty text
-and metadata without downloading the body through a fetch-backed adapter.
+and metadata without downloading the body through an undecorated fetch-backed adapter.
 Custom PodPorts return byte arrays and must bound their own backend reads; the
 server still bounds parsing and tool output.
 

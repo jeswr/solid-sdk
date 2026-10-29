@@ -12,18 +12,17 @@
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { isContainerUrl } from "@jeswr/guarded-fetch";
 import { serialize } from "@jeswr/rdf-serialize";
-import { ContainerDataset } from "@solid/object";
 import { DataFactory } from "n3";
 import {
   podScopedUrlOrUndefined,
   requirePodScopedUrl,
   requirePodScopedWriteUrl,
   type SolidMcpConfig,
-  scopedFetch,
 } from "./auth.js";
-import { fetchBoundedRdf, parseBoundedRdf, RdfLimitError } from "./bounded-rdf.js";
+import { parseBoundedRdf, RdfLimitError } from "./bounded-rdf.js";
 import { MAX_CONTENT_BYTES, mediaType, resourceTitle } from "./content.js";
-import { asPodPort, fetchConfig, type PodSource } from "./pod-port.js";
+import { withPodFetchLimits } from "./pod-operation.js";
+import { asPodPort, type PodSource, podSearchLimits } from "./pod-port.js";
 
 import { SearchBudget, searchLimit } from "./search-budget.js";
 
@@ -142,43 +141,6 @@ export async function listContainer(source: PodSource, url: string): Promise<Pod
       { ...child, url: scoped, name: child.name ?? resourceName(scoped), type: child.type ?? [] },
     ];
   });
-}
-
-async function containerChildren(
-  config: SolidMcpConfig,
-  url: string,
-  read: typeof fetchBoundedRdf,
-): Promise<PodChild[]> {
-  const target = requirePodScopedUrl(config, url);
-  const { dataset } = await read(target, { fetch: scopedFetch(config) });
-  const container = new ContainerDataset(dataset, DataFactory).container;
-  const children: PodChild[] = [];
-  for (const r of container?.contains ?? []) {
-    // child.id may be relative to the container; resolve against the container URL,
-    // then re-validate it is within the pod (the listing is untrusted — drop any
-    // entry that escapes the pod scope rather than trusting it).
-    let resolvedChild: string;
-    try {
-      resolvedChild = new URL(r.id, target).toString();
-    } catch {
-      continue; // unparseable child id — skip.
-    }
-    const childUrl = podScopedUrlOrUndefined(config, resolvedChild);
-    if (childUrl === undefined) {
-      continue; // out-of-pod child entry in the listing — drop it (SSRF guard).
-    }
-    const child: PodChild = {
-      url: childUrl,
-      name: r.name,
-      isContainer: r.isContainer,
-      type: [...r.type],
-    };
-    if (r.mimeType !== undefined) child.mimeType = r.mimeType;
-    if (r.size !== undefined) child.size = r.size;
-    if (r.modified !== undefined) child.modified = r.modified.toISOString();
-    children.push(child);
-  }
-  return children;
 }
 
 /**
@@ -361,10 +323,7 @@ async function scanContainers(
 
     let children: PodChild[];
     try {
-      const transport = fetchConfig(config);
-      children = transport
-        ? await containerChildren(transport, url, fetchBoundedRdf)
-        : await listContainer(config, url);
+      children = await listContainer(config, url);
     } catch {
       continue; // unreadable container — skip.
     }
@@ -404,8 +363,9 @@ export async function search(
   options: SearchOptions = {},
 ): Promise<SearchMatch[]> {
   const pod = asPodPort(source);
-  const config: Pick<SolidMcpConfig, "podRoot" | "searchLimits"> = fetchConfig(source) ?? {
+  const config: Pick<SolidMcpConfig, "podRoot" | "searchLimits"> = {
     podRoot: pod.root,
+    searchLimits: podSearchLimits(source),
   };
   const q = (query ?? "").trim().toLowerCase();
   if (q.length === 0) {
@@ -425,23 +385,20 @@ export async function search(
   const matches = new RankedMatches();
   if (maxResources === 0 || maxTimeMs === 0) return [];
   const budget = new SearchBudget(maxResources, maxTimeMs);
-  const transport = fetchConfig(source);
-  const bounded: PodSource = transport
-    ? { ...transport, fetch: budget.wrap(transport.fetch) }
-    : {
-        root: pod.root,
-        webId: pod.webId,
-        write: (...args) => pod.write(...args),
-        delete: (...args) => pod.delete(...args),
-        async read(url, options) {
-          if (!budget.claim(url)) throw new Error("Search resource/time budget exhausted.");
-          return pod.read(url, options);
-        },
-        async list(url) {
-          if (!budget.claim(url)) throw new Error("Search resource/time budget exhausted.");
-          return pod.list(url);
-        },
-      };
+  const bounded: PodSource = {
+    root: pod.root,
+    webId: pod.webId,
+    write: (...args) => pod.write(...args),
+    delete: (...args) => pod.delete(...args),
+    async read(url, options) {
+      if (!budget.claim(url)) throw new Error("Search resource/time budget exhausted.");
+      return pod.read(url, options);
+    },
+    async list(url) {
+      if (!budget.claim(url)) throw new Error("Search resource/time budget exhausted.");
+      return pod.list(url);
+    },
+  };
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<void>((resolve) => {
     timer = setTimeout(() => {
@@ -449,10 +406,14 @@ export async function search(
       resolve();
     }, maxTimeMs);
   });
-  const crawl = async () => {
-    const seeds = await seedContainers(bounded, q, scope, matches, budget);
-    await scanContainers(bounded, q, seeds, maxDepth, matches, budget);
-  };
+  const crawl = () =>
+    withPodFetchLimits(
+      (fetcher) => budget.wrap(fetcher),
+      async () => {
+        const seeds = await seedContainers(bounded, q, scope, matches, budget);
+        await scanContainers(bounded, q, seeds, maxDepth, matches, budget);
+      },
+    );
   try {
     await Promise.race([crawl(), deadline]);
     return matches.ranked();
@@ -606,19 +567,6 @@ async function searchRdf(
   url: string,
   profile = false,
 ): Promise<import("n3").Store> {
-  const transport = fetchConfig(source);
-  if (transport) {
-    // Match the adapter's discovery policy: only the configured off-pod WebID
-    // bypasses the pod scope, and its redirects are never followed. In-pod
-    // profiles use the guarded loop over the budget-wrapped transport so every
-    // permitted hop is validated and charged before issuing its request.
-    const offPodProfile =
-      profile && url === transport.webId && podScopedUrlOrUndefined(transport, url) === undefined;
-    const fetcher: typeof fetch = offPodProfile
-      ? (input, init) => transport.fetch(input, { ...init, redirect: "manual" })
-      : scopedFetch(transport);
-    return (await fetchBoundedRdf(url, { fetch: fetcher })).dataset;
-  }
   const pod = asPodPort(source);
   const { body, contentType, url: finalUrl } = await pod.read(url, { accept: RDF_ACCEPT });
   if (body.byteLength > MAX_CONTENT_BYTES) throw new RdfLimitError();

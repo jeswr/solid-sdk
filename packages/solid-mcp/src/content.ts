@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 /** Internal byte limits and safe parsing for pod content. */
 export const MAX_CONTENT_BYTES = 1024 * 1024;
@@ -10,6 +11,9 @@ export function mediaType(header: string | null): string {
 export async function limitedBody(
   response: Response,
   signal?: AbortSignal,
+  // Preserve the overflow probe when passing a bounded prefix through PodPort's
+  // byte-array seam, so the tool can detect truncation after read decorators run.
+  retainOverflowByte = false,
 ): Promise<{
   bytes: Uint8Array;
   truncated: boolean;
@@ -30,8 +34,9 @@ export async function limitedBody(
       if (done) return { bytes: Buffer.concat(chunks, size), truncated: false };
       const remaining = MAX_CONTENT_BYTES - size;
       // Copy only the retained prefix; do not retain a potentially huge chunk.
-      chunks.push(value.slice(0, remaining));
-      size += Math.min(value.byteLength, remaining);
+      const retained = remaining + (retainOverflowByte ? 1 : 0);
+      chunks.push(value.slice(0, retained));
+      size += Math.min(value.byteLength, retained);
       if (value.byteLength > remaining) {
         void reader.cancel().catch(() => {});
         return { bytes: Buffer.concat(chunks, size), truncated: true };

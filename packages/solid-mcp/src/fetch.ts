@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { requirePodScopedUrl, scopedFetch } from "./auth.js";
+import { requirePodScopedUrl } from "./auth.js";
 import { parseBoundedRdf, RdfLimitError, serializeBoundedTurtle } from "./bounded-rdf.js";
 import {
   decodePrefix,
@@ -10,7 +10,8 @@ import {
   resourceTitle,
 } from "./content.js";
 import { RDF_MEDIA_TYPES } from "./pod.js";
-import { asPodPort, fetchConfig, type PodSource } from "./pod-port.js";
+import { withPodFetchLimits } from "./pod-operation.js";
+import { asPodPort, isFetchPodRead, type PodSource } from "./pod-port.js";
 
 /** ChatGPT fetch result; binary bodies are omitted from text. */
 export interface FetchResult {
@@ -29,33 +30,27 @@ export interface FetchResult {
 /** Fetch one absolute pod URL with a 1 MiB input and output cap. */
 export async function fetchDocument(source: PodSource, id: string): Promise<FetchResult> {
   const pod = asPodPort(source);
-  const config = fetchConfig(source);
   // Unlike the lower-level pod helpers, tool ids must be absolute resource URLs.
   const target = requirePodScopedUrl({ podRoot: pod.root }, new URL(id).toString());
   const accept = "text/turtle, text/plain;q=0.9, */*;q=0.1";
-  let response: Response;
-  if (config) {
-    response = await scopedFetch(config)(target, { headers: { accept } });
-  } else {
-    const read = await pod.read(target, { accept });
-    const finalUrl = requirePodScopedUrl({ podRoot: pod.root }, read.url ?? target);
-    response = new Response(
-      new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.enqueue(read.body);
-          controller.close();
-        },
-      }),
-      {
-        headers: { "content-type": read.contentType, ...(read.etag ? { etag: read.etag } : {}) },
+  const readMethod = pod.read;
+  const read = await withPodFetchLimits(
+    (fetcher) => boundFetchBody(fetcher, isFetchPodRead(readMethod)),
+    () => readMethod.call(pod, target, { accept }),
+  );
+  const finalUrl = requirePodScopedUrl({ podRoot: pod.root }, read.url ?? target);
+  const response = new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(read.body);
+        controller.close();
       },
-    );
-    Object.defineProperty(response, "url", { value: finalUrl });
-  }
-  if (!response.ok) {
-    void response.body?.cancel().catch(() => {});
-    throw new Error(`Failed to fetch pod resource: HTTP ${response.status}`);
-  }
+    }),
+    {
+      headers: { "content-type": read.contentType, ...(read.etag ? { etag: read.etag } : {}) },
+    },
+  );
+  Object.defineProperty(response, "url", { value: finalUrl });
   const contentType = mediaType(response.headers.get("content-type"));
   const etag = response.headers.get("etag");
   const result: FetchResult = {
@@ -92,4 +87,37 @@ export async function fetchDocument(source: PodSource, id: string): Promise<Fetc
     }
   }
   return result;
+}
+
+/** Bound the adapter's download without bypassing any injected read decorator. */
+function boundFetchBody(fetcher: typeof fetch, nativeRead: boolean): typeof fetch {
+  return async (input, init) => {
+    const response = await fetcher(input, init);
+    // Redirects and errors belong to the adapter's scope/status checks.
+    if (!response.ok) return response;
+    const contentType = mediaType(response.headers.get("content-type"));
+    let body: Uint8Array | null = null;
+    if (!nativeRead || RDF_MEDIA_TYPES.has(contentType) || contentType.startsWith("text/")) {
+      // One overflow byte carries truncation across the raw-byte PodPort seam.
+      const limited = await limitedBody(response, undefined, nativeRead);
+      // A decorator may authorize only after examining the entire body. Never
+      // let truncation hide a denial, or omit binary bytes from such a check.
+      if (limited.truncated && !nativeRead) {
+        throw new Error("Resource exceeds the bounded read limit.");
+      }
+      body = limited.bytes;
+    } else {
+      void response.body?.cancel().catch(() => {});
+    }
+    const bounded = new Response(
+      response.body === null || body === null ? null : new Uint8Array(body),
+      {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers,
+      },
+    );
+    Object.defineProperty(bounded, "url", { value: response.url });
+    return bounded;
+  };
 }
