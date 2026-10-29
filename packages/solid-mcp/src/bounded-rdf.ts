@@ -60,7 +60,9 @@ function budgetedFactory(charge: (bytes: number) => void): RdfFactory {
       return DataFactory.namedNode(value);
     },
     blankNode(value) {
-      if (value) charge(Buffer.byteLength(value));
+      // Reserve the generated label and node overhead before the factory runs,
+      // including anonymous nodes that never contribute to an emitted quad.
+      charge(value ? Buffer.byteLength(value) : 64);
       return DataFactory.blankNode(value);
     },
     // JSON-LD's factory calls use null for an absent datatype/language.
@@ -77,15 +79,33 @@ function budgetedFactory(charge: (bytes: number) => void): RdfFactory {
   };
 }
 
-/** N3 resolves base directives without calling the RDF factory. */
-function budgetN3Directives(format: string, baseIRI: string, charge: (bytes: number) => void) {
+/** Meter N3 contexts and base resolution before forwarding tokens to the parser. */
+function budgetN3Lexer(format: string, baseIRI: string, charge: (bytes: number) => void) {
   let baseBytes = Buffer.byteLength(baseIRI);
   // N3's base-path normalization regex can rescan a long path segment from
   // every position. Charge its quadratic worst case, including the initial
   // base processed by the parser constructor, before entering that work.
   charge(baseBytes ** 2);
   let baseDirective = false;
+  const closingTokens = new Map([
+    ["[", "]"],
+    ["(", ")"],
+    ["{", "}"],
+    ["<<", ">>"],
+    ["<<(", ")>>"],
+    ["{|", "|}"],
+  ]);
+  const pending: string[] = [];
   const meter = (token: Token) => {
+    const closing = closingTokens.get(token.type);
+    if (closing) {
+      // N3 retains a context object before any quad is available to meter.
+      // Charge cumulatively, so repeated empty structures consume the budget
+      // too. Count graph/annotation scopes conservatively alongside contexts.
+      if (pending.length >= 64) throw new RdfLimitError();
+      charge(128);
+      pending.push(closing);
+    } else if (pending.at(-1) === token.type) pending.pop();
     if (baseDirective && token.type === "IRI") {
       const iri = token.value ?? "";
       const bytes = Buffer.byteLength(iri);
@@ -233,7 +253,7 @@ export async function parseBoundedRdf(source: string, contentType: string, baseI
           format,
           baseIRI,
           factory,
-          lexer: budgetN3Directives(format, baseIRI, charge),
+          lexer: budgetN3Lexer(format, baseIRI, charge),
         };
   const parser =
     format === "application/ld+json"

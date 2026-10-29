@@ -142,6 +142,31 @@ describe.each([false, true])("ChatGPT tool contracts (fetch PodPort: %s)", (port
   });
 
   it.each([
+    ["nesting", "text/turtle", `${"[ <urn:p> ".repeat(2_000)}"x"${"]".repeat(2_000)} .`],
+    ["empty nodes", "text/turtle", "<urn:s> <urn:p> [] .\n".repeat(10_000)],
+    ["empty graphs", "application/trig", "{}\n".repeat(20_000)],
+  ])("fetch truncates and search skips excessive N3 %s", async (_kind, contentType, expansion) => {
+    const id = `${POD}data.ttl`;
+    const body = `<urn:s> <urn:p> "avocado" .\n${expansion}`;
+    expect(Buffer.byteLength(body)).toBeLessThan(CAP);
+    const pod = makeFakePod({
+      [POD]: { contentType: "text/turtle", body: containerTurtle(POD, [{ name: "data.ttl" }]) },
+      [id]: { contentType, body },
+    });
+    const client = await connect(pod.fetch);
+    const fetched = await client.callTool({ name: "fetch", arguments: { id } });
+    expect(fetched.isError).toBeUndefined();
+    const content = fetched.content as { type: "text"; text: string }[];
+    expect(JSON.parse(content[0]?.text ?? "{}")).toMatchObject({
+      text: "",
+      metadata: { contentType, truncated: true },
+    });
+    const searched = await client.callTool({ name: "search", arguments: { query: "avocado" } });
+    expect(searched.isError).toBeUndefined();
+    expect(searched.content).toEqual([{ type: "text", text: '{"results":[]}' }]);
+  });
+
+  it.each([
     ["text/turtle", '?s <urn:p> "avocado".'],
     ["text/turtle", '<urn:s> = "avocado".'],
     ["application/x-turtle", '?s <urn:p> "avocado".'],

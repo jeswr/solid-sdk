@@ -110,6 +110,8 @@ Content-Type is treated as binary. JSON-LD inline contexts are supported; remote
 contexts and `@import` are refused to prevent parser-initiated network requests.
 Parsing stops before storing more than 16,384 quads (including duplicate input
 statements), 1 MiB of expanded term values, or 1 MiB of term bytes across quads.
+N3-family structural nesting is capped at 64 levels; pending contexts and
+generated blank nodes also consume the shared 1 MiB allocation budget.
 The Turtle writer retains at most 1 MiB and stops as soon as its output exceeds
 that limit. These parsing budgets also apply to search profiles, Type Indexes,
 container listings, and literal reads; search skips documents that exceed them.

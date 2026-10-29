@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { JsonLdParser } from "jsonld-streaming-parser";
-import { Store, Writer } from "n3";
+import { DataFactory, Parser, Store, Writer } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   MAX_RDF_QUADS,
@@ -10,6 +10,18 @@ import {
 } from "../src/bounded-rdf.js";
 
 const BASE = "https://alice.example/pod/data";
+const N3_STRUCTURES = [
+  ["blank nodes", (depth: number) => `${"[ <urn:p> ".repeat(depth)}"leaf"${"]".repeat(depth)}`],
+  ["collections", (depth: number) => `${"(".repeat(depth)}"leaf"${")".repeat(depth)}`],
+  [
+    "reified triples",
+    (depth: number) => `${"<< ".repeat(depth)}<urn:s>${" <urn:p> <urn:o> >>".repeat(depth)}`,
+  ],
+  [
+    "triple terms",
+    (depth: number) => `${"<<( <urn:s> <urn:p> ".repeat(depth)}<urn:o>${")>>".repeat(depth)}`,
+  ],
+] as const;
 afterEach(() => vi.restoreAllMocks());
 
 describe.each([
@@ -49,7 +61,87 @@ describe.each([
   });
 });
 
+describe.each([
+  "text/turtle",
+  "application/x-turtle",
+  "application/trig",
+])("bounded %s structure", (format) => {
+  it.each(
+    N3_STRUCTURES,
+  )("limits pending %s before generating nodes or quads", async (_kind, value) => {
+    const source = `<urn:s> <urn:p> ${value(2_000)} .`;
+    expect(Buffer.byteLength(source)).toBeLessThan(1024 * 1024);
+    const saveContext = vi.spyOn(
+      Parser.prototype as unknown as Record<"_saveContext", (...args: unknown[]) => void>,
+      "_saveContext",
+    );
+    const blankNode = vi.spyOn(DataFactory, "blankNode");
+    const addQuad = vi.spyOn(Store.prototype, "addQuad");
+    await expect(parseBoundedRdf(source, format, BASE)).rejects.toBeInstanceOf(RdfLimitError);
+    expect(saveContext.mock.calls.length).toBeLessThanOrEqual(64);
+    expect(blankNode.mock.calls.length).toBeLessThanOrEqual(64);
+    expect(addQuad).not.toHaveBeenCalled();
+  });
+
+  it.each(
+    N3_STRUCTURES,
+  )("accepts 64 levels of %s and rejects the next level", async (_kind, value) => {
+    const source = (depth: number) => `<urn:s> <urn:p> ${value(depth)} .`;
+    expect((await parseBoundedRdf(source(64), format, BASE)).size).toBeGreaterThan(0);
+    await expect(parseBoundedRdf(source(65), format, BASE)).rejects.toBeInstanceOf(RdfLimitError);
+  });
+
+  it("charges repeated sibling contexts before the quad limit", async () => {
+    const statement = "<urn:s> <urn:p> [] .\n";
+    expect((await parseBoundedRdf(statement.repeat(100), format, BASE)).size).toBe(100);
+    const blankNode = vi.spyOn(DataFactory, "blankNode");
+    const addQuad = vi.spyOn(Store.prototype, "addQuad");
+    await expect(parseBoundedRdf(statement.repeat(20_000), format, BASE)).rejects.toBeInstanceOf(
+      RdfLimitError,
+    );
+    expect(blankNode.mock.calls.length).toBeLessThan(16_384);
+    expect(addQuad.mock.calls.length).toBeLessThan(16_384);
+  });
+
+  it("shares generated list-node allocations with directive work", async () => {
+    const base = `${BASE}/${"long".repeat(64)}/`;
+    const directives = "@base <> .\n".repeat(9);
+    const list = `<urn:s> <urn:p> (${'"" '.repeat(3_500)}) .`;
+    expect((await parseBoundedRdf(directives, format, base)).size).toBe(0);
+    expect((await parseBoundedRdf(list, format, base)).size).toBe(7_001);
+    await expect(parseBoundedRdf(directives + list, format, base)).rejects.toBeInstanceOf(
+      RdfLimitError,
+    );
+  });
+
+  it("treats structural characters in literals, IRIs and comments as data", async () => {
+    const value = "[(){}<< >> <<( )>> {| |}]".repeat(100);
+    const iri = `urn:${"()".repeat(100)}`;
+    const dataset = await parseBoundedRdf(`<${iri}> <urn:p> "${value}" . # ${value}`, format, BASE);
+    expect(dataset.getQuads(iri, "urn:p", null, null)[0]?.object.value).toBe(value);
+  });
+});
+
 describe("RDF expansion and serialization budgets", () => {
+  it.each([
+    ["TriG graphs", "application/trig", "{ <urn:s> <urn:p> ", " . }"],
+    ["annotations", "text/turtle", "<urn:s> <urn:p> <urn:o> {| <urn:a> ", " |} ."],
+  ])("counts %s alongside nested collections", async (_kind, format, open, close) => {
+    const source = (depth: number) =>
+      `${open}${"(".repeat(depth)}"leaf"${")".repeat(depth)}${close}`;
+    expect((await parseBoundedRdf(source(63), format, BASE)).size).toBeGreaterThan(0);
+    await expect(parseBoundedRdf(source(64), format, BASE)).rejects.toBeInstanceOf(RdfLimitError);
+  });
+
+  it("bounds repeated empty TriG graphs without RDF terms or quads", async () => {
+    expect((await parseBoundedRdf("{}\n".repeat(100), "application/trig", BASE)).size).toBe(0);
+    const addQuad = vi.spyOn(Store.prototype, "addQuad");
+    await expect(
+      parseBoundedRdf("{}\n".repeat(20_000), "application/trig", BASE),
+    ).rejects.toBeInstanceOf(RdfLimitError);
+    expect(addQuad).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["objects", '{"unmapped":', "}", 10_000],
     ["arrays", "[", "]", 10_000],
