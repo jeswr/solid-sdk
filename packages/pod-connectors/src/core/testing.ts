@@ -31,6 +31,9 @@ const PROFILE_TURTLE = `@prefix foaf: <http://xmlns.com/foaf/0.1/>.
 
 interface StoredResource {
   body: string;
+  /** Raw bytes of a non-RDF resource; `body` is then empty. */
+  bytes?: Uint8Array;
+  contentType: string;
   version: number;
 }
 
@@ -39,6 +42,10 @@ export interface MemoryPod {
   fetch: typeof fetch;
   /** Raw Turtle of a stored resource. */
   get(url: string): string | undefined;
+  /** Raw bytes of a stored non-RDF resource. */
+  bytes(url: string): Uint8Array | undefined;
+  /** Content type the resource was stored with. */
+  contentType(url: string): string | undefined;
   /** Parsed quads of a stored resource. */
   dataset(url: string): Store;
   /** Every stored resource URL (sorted). */
@@ -50,11 +57,17 @@ export interface MemoryPod {
 /** An in-memory pod pre-seeded with a WebID profile (no type index — like CSS). */
 export function createMemoryPod(): MemoryPod {
   const resources = new Map<string, StoredResource>();
-  resources.set(TEST_PROFILE_DOC, { body: PROFILE_TURTLE, version: 1 });
+  resources.set(TEST_PROFILE_DOC, {
+    body: PROFILE_TURTLE,
+    contentType: "text/turtle",
+    version: 1,
+  });
 
   const pod: MemoryPod = {
     putCount: 0,
     get: (url) => resources.get(stripFragment(url))?.body,
+    bytes: (url) => resources.get(stripFragment(url))?.bytes,
+    contentType: (url) => resources.get(stripFragment(url))?.contentType,
     dataset: (url) => {
       const body = resources.get(stripFragment(url))?.body;
       return parseTurtle(body ?? "", stripFragment(url));
@@ -67,12 +80,13 @@ export function createMemoryPod(): MemoryPod {
       const method = (init?.method ?? "GET").toUpperCase();
       const existing = resources.get(url);
 
-      if (method === "GET") {
+      if (method === "GET" || method === "HEAD") {
         if (existing) {
-          return new Response(existing.body, {
+          const body = existing.bytes ? (existing.bytes as Uint8Array<ArrayBuffer>) : existing.body;
+          return new Response(method === "HEAD" ? null : body, {
             status: 200,
             headers: {
-              "content-type": "text/turtle",
+              "content-type": existing.contentType,
               etag: `"v${existing.version}"`,
             },
           });
@@ -102,7 +116,15 @@ export function createMemoryPod(): MemoryPod {
           return new Response("Precondition failed", { status: 412 });
         }
         const version = (existing?.version ?? 0) + 1;
-        resources.set(url, { body: String(init?.body ?? ""), version });
+        const raw = init?.body;
+        if (raw instanceof Uint8Array) {
+          const contentType = headers.get("content-type") ?? "application/octet-stream";
+          resources.set(url, { body: "", bytes: new Uint8Array(raw), contentType, version });
+        } else {
+          // Text bodies are RDF; some callers omit the header.
+          const contentType = headers.get("content-type") ?? "text/turtle";
+          resources.set(url, { body: String(raw ?? ""), contentType, version });
+        }
         pod.putCount += 1;
         return new Response(null, {
           status: existing ? 205 : 201,
@@ -270,3 +292,6 @@ export async function fileImport(
 
 /** Recorded source fetch for fixture-only tests. */
 export { fixtureFetch, getJson } from "./fixture-fetch.js";
+
+/** Fail-closed fixture recorder; hosts explicitly allowlist non-personal fields. */
+export { createFixtureRecorder, redactFixture } from "./fixture-recorder.js";

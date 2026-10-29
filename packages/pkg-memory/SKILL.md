@@ -3,6 +3,7 @@ name: pkg-memory
 description: Build, parse and classify PKG nanopublications, enforce purpose policies, and store memory through PodPort.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # PKG nanopublications
 
@@ -17,6 +18,7 @@ canonicalization compatible with RDFlib 7's builder; RDFC-1.0 labels are differe
 Use only fictional `example.org` identities in fixtures. The five synthetic claims
 and Python-generated expected outputs in `test/fixtures` replace private pilot data.
 Supply source digests explicitly; this data-model package never reads source files.
+
 Use `classifyNanopublications` for derived belief views; acting on a fact also
 requires Current validity. Preserve graph-scoped provenance when assertions are
 shared. Past/revised claims stay in history; Mentioned is never an inference input.
@@ -34,3 +36,9 @@ TriG rejection (HTTP 415) or rewriting permits only the same bytes stored as
 octet-stream. Strong ETags are required for replacements. Never use a Turtle or
 flattened-graph fallback. Retraction appends a revising nanopub; it does not edit
 or delete the original. Use the exported memory PodPort for offline tests.
+
+New templates write canonical `https://jeswr.org/ns/sectors/health#` and
+`https://jeswr.org/ns/core#` terms. Keep supplied assertion graphs and the
+reference parser's implicit legacy prefixes unchanged: they are hash inputs.
+For new Turtle bodies, declare canonical prefixes explicitly. Read legacy and
+mixed graphs without rewriting the terms or their content-derived identifiers.

@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-/** PKG nanopublication model, belief, purpose policy and pod storage. */
+// AUTHORED-BY Codex GPT-6
+/** PKG nanopublication model, fact templates, belief, purpose policy and pod storage. */
 export type { Belief, ClassifiedNanopublication } from "./belief.js";
 export { classifyNanopublications } from "./belief.js";
 export {
+  UnsupportedBlankNodeLabelError,
   UnsupportedLiteralCharacterError,
   UnsupportedLiteralDatatypeError,
   UnsupportedLiteralLexicalFormError,

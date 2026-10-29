@@ -7,10 +7,11 @@ import {
   FileText,
   HeartPulse,
   ImageIcon,
+  type LucideIcon,
+  Mail,
   MessageCircle,
   UserRound,
   Wallet,
-  type LucideIcon,
 } from "lucide-react";
 import type { CategoryIconName } from "@/lib/categories";
 
@@ -25,6 +26,7 @@ const ICONS: Record<CategoryIconName, LucideIcon> = {
   "car-front": CarFront,
   "file-text": FileText,
   "message-circle": MessageCircle,
+  mail: Mail,
   boxes: Boxes,
 };
 

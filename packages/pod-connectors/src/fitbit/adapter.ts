@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Fitbit → Health. Your logged activities (`/1/user/-/activities/list.json`)
  * as `schema:ExerciseAction` (type, start time, duration, distance).
@@ -13,12 +15,14 @@ import { getJson } from "../core/fixture-fetch.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, ExerciseAction } from "../core/vocab.js";
 import { FITBIT_FIXTURES, type FitbitActivitiesAnswer } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "fitbit";
 const API = "https://api.fitbit.com";
 const SCOPES = ["activity", "heartrate", "sleep"] as const;
 
 export const fitbitAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "Fitbit",
@@ -40,6 +44,7 @@ export const fitbitAdapter: IntegrationAdapter = {
     scopes: SCOPES,
     tokenExchange: "proxy",
     tokenProxyUrl: undefined,
+    tokenRequest: "basic-form",
   },
   fixtures: () => FITBIT_FIXTURES,
 
