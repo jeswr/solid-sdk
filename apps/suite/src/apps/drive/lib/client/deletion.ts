@@ -81,7 +81,10 @@ export function deletionControl(http: typeof fetch, error: (status: number, url:
     etag: string,
     recovery?: string,
     commit: CommitChecks &
-      CommitEffects & { readonly survivors?: readonly ResourceIdentity[] } = {},
+      CommitEffects & {
+        readonly survivors?: readonly ResourceIdentity[];
+        readonly afterCommit?: () => Promise<void>;
+      } = {},
   ) => {
     await guard(url);
     // Persist both sides before the request: reload or response loss cannot turn
@@ -120,6 +123,7 @@ export function deletionControl(http: typeof fetch, error: (status: number, url:
           throw new DriveDeletePendingError(url, { cause: error(response.status, url) });
         },
       });
+      await commit.afterCommit?.();
     } catch (cause) {
       if (!(cause instanceof DriveDeletePendingError)) await retire(record);
       throw cause;

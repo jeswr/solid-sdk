@@ -86,12 +86,19 @@ it.each([
   const compensation = new Compensation(undo);
   compensation.arm();
   const disarm = vi.spyOn(compensation, "disarm");
+  let snapshotChecks = 0;
+  let finalChecks = 0;
   const http: typeof fetch = async (input, init) => {
     const url = String(input);
     if (url === PRIVATE && init?.method === "HEAD" && new Headers(init.headers).has("if-match")) {
-      // Removing a child is not the commit that makes the root's undo unsafe.
-      expect(pod.has(`${PRIVATE}secret`)).toBe(false);
       expect(disarm).not.toHaveBeenCalled();
+      // Round 54 also pins the populated root before descendant deletion.
+      if (pod.has(`${PRIVATE}secret`)) {
+        snapshotChecks += 1;
+        return pod.fetch(input, init);
+      }
+      // Removing a child is not the commit that makes the root's undo unsafe.
+      finalChecks += 1;
       if (outcome === "fails identity") return new Response(null, { status: 412 });
     }
     return pod.fetch(input, init);
@@ -100,6 +107,8 @@ it.each([
   const remove = client.remove(PRIVATE, { recursive: true, commit: { disarm: [compensation] } });
   if (outcome === "commits") await remove;
   else await expect(remove).rejects.toMatchObject({ cause: { status: 412, url: PRIVATE } });
+  expect(snapshotChecks).toBeGreaterThan(0);
+  expect(finalChecks).toBe(1);
   expect(disarm).toHaveBeenCalledTimes(outcome === "commits" ? 1 : 0);
   await compensation.rollback();
   expect(undo).toHaveBeenCalledTimes(outcome === "commits" ? 0 : 1);

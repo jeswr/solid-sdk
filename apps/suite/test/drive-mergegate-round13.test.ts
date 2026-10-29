@@ -185,35 +185,72 @@ it("checks protection requirements on the storage root before writing descendant
   expect(f.exposures).toEqual([]);
 });
 
+function payloadWrites(text: string, name: string): string[] {
+  const source = ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true);
+  const mutations: string[] = [];
+  const visit = (node: ts.Node) => {
+    if (
+      ts.isPropertyAssignment(node) &&
+      node.name.getText(source) === "method" &&
+      ts.isStringLiteral(node.initializer) &&
+      ["PUT", "POST", "PATCH"].includes(node.initializer.text)
+    ) {
+      let enclosing: ts.Node = node;
+      while (!ts.isCallExpression(enclosing)) enclosing = enclosing.parent;
+      const callee = enclosing.expression.getText(source);
+      if (callee === "replayProtected") {
+        // Round 54 restores access before replaying a captured representation.
+        // Verify that this wrapper still forwards the original URL and init to
+        // guardedWrite; merely having a helper with this name is insufficient.
+        const find = (statement: ts.Node): ts.VariableDeclaration[] => {
+          if (
+            ts.isVariableDeclaration(statement) &&
+            statement.name.getText(source) === "replayProtected"
+          )
+            return [statement];
+          const found: ts.VariableDeclaration[] = [];
+          ts.forEachChild(statement, (child) => {
+            found.push(...find(child));
+          });
+          return found;
+        };
+        const declaration = source.statements.flatMap((statement) => find(statement))[0];
+        const initializer = declaration?.initializer;
+        expect(initializer && ts.isArrowFunction(initializer)).toBe(true);
+        const body = (initializer as ts.ArrowFunction).body;
+        expect(ts.isBlock(body)).toBe(true);
+        const returned = (body as ts.Block).statements.find(ts.isReturnStatement)?.expression;
+        expect(returned && ts.isCallExpression(returned)).toBe(true);
+        const call = returned as ts.CallExpression;
+        expect(call.expression.getText(source)).toBe("guardedWrite");
+        expect(call.arguments.slice(0, 2).map((arg) => arg.getText(source))).toEqual([
+          "url",
+          "init",
+        ]);
+      } else expect(callee, `${name}: ${node.getText(source)}`).toBe("guardedWrite");
+      mutations.push(node.initializer.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return mutations;
+}
+
+it.each([
+  'http(url, { method: "PUT" })',
+  'replayProtected(url, policy, { method: "POST" }); const replayProtected = async (url, policy, init) => { return http(url, init); }',
+  'replayProtected(url, policy, { method: "PATCH" }); const replayProtected = async (url, policy, init) => { return guardedWrite(url, other); }',
+])("payload guard rejects an unguarded mutation: %s", (source) => {
+  expect(() => payloadWrites(source, "unsafe.ts")).toThrow();
+});
+
 it("every Drive payload PUT/POST/PATCH is sent through guardedWrite", () => {
   const directory = new URL("../src/apps/drive/lib/client/", import.meta.url);
   const mutations: string[] = [];
   for (const name of readdirSync(directory)) {
     // ACL writes have their own conditional store-and-verify protocol in access.ts.
     if (!name.endsWith(".ts") || name === "access.ts") continue;
-    const source = ts.createSourceFile(
-      name,
-      readFileSync(new URL(name, directory), "utf8"),
-      ts.ScriptTarget.Latest,
-      true,
-    );
-    const visit = (node: ts.Node) => {
-      if (
-        ts.isPropertyAssignment(node) &&
-        node.name.getText(source) === "method" &&
-        ts.isStringLiteral(node.initializer) &&
-        ["PUT", "POST", "PATCH"].includes(node.initializer.text)
-      ) {
-        let enclosing: ts.Node = node;
-        while (!ts.isCallExpression(enclosing)) enclosing = enclosing.parent;
-        expect(enclosing.expression.getText(source), `${name}: ${node.getText(source)}`).toBe(
-          "guardedWrite",
-        );
-        mutations.push(node.initializer.text);
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(source);
+    mutations.push(...payloadWrites(readFileSync(new URL(name, directory), "utf8"), name));
   }
   expect(mutations).toEqual(["PUT", "PUT", "PUT", "PUT"]);
 });

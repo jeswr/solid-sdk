@@ -937,7 +937,7 @@ async function restoreMissing(
             `${to}${child.url.slice(from.length)}`,
             settled,
             child.etag,
-            [...ancestors, { url: from, etag: original.etag }],
+            [...ancestors, merged.source ?? { url: from, etag: original.etag }],
           )),
         );
       // Non-recursive removal succeeds only for an empty recovery container.
@@ -948,7 +948,8 @@ async function restoreMissing(
         // empty representation before committing, never after a refused DELETE.
         const current = await client.readRdf(from);
         if (!current) throw new DriveError("not-found", 404, from);
-        if (current.etag !== original.etag) throw new DriveError("conflict", 412, from);
+        if (current.etag !== (merged.source?.etag ?? original.etag))
+          throw new DriveError("conflict", 412, from);
         await discardVersion({
           url: from,
           captured: { content: current.dataset, etag: current.etag },

@@ -411,7 +411,12 @@ describe("Drive error handling and foreign server responses", () => {
     ).toEqual({});
     await client.copy(file, `${DRIVE}copy`, { kind: "preserve-source" });
     const copied = fetch.mock.calls.filter(([, init]) => init?.method === "PUT").at(-1);
-    expect(copied).toEqual([
+    expect(
+      copied && [
+        copied[0],
+        { ...copied[1], headers: Object.fromEntries(new Headers(copied[1]?.headers)) },
+      ],
+    ).toEqual([
       `${DRIVE}copy`,
       expect.objectContaining({
         method: "PUT",
