@@ -65,8 +65,9 @@ function instancesOf(data, type, visited = new Set()) {
   ];
 }
 
-// Untargeted helper NodeShapes are reached through sh:node callers.
-function targets(shapes, data, shape, visited = new Set()) {
+// Callers apply sh:node and sh:property to their value nodes. Follow property
+// paths with the validator's evaluator so helper coverage uses the same nodes.
+function targets(shapes, data, shape, validator, visited = new Set()) {
   if (visited.has(shape.value)) return [];
   visited.add(shape.value);
   return [
@@ -78,9 +79,15 @@ function targets(shapes, data, shape, visited = new Set()) {
     ...objects(shapes, shape, `${SH}targetObjectsOf`).flatMap((property) =>
       data.getObjects(null, property, null),
     ),
-    ...shapes
-      .getSubjects(`${SH}node`, shape, null)
-      .flatMap((caller) => targets(shapes, data, caller, visited)),
+    ...["node", "property"].flatMap((constraint) =>
+      shapes
+        .getSubjects(`${SH}${constraint}`, shape, null)
+        .flatMap((caller) =>
+          targets(shapes, data, caller, validator, new Set(visited)).flatMap((focus) =>
+            validator.shapesGraph.getShape(caller).getValueNodes(focus, validator.$data),
+          ),
+        ),
+    ),
   ];
 }
 
@@ -166,7 +173,8 @@ export async function validateSectorFixtures(root, log = console.log) {
           throw new Error("invalid fixture must start with # expect: <absolute sh:path IRI>");
         }
         const data = parse(join(fixtureDir, file));
-        const report = await new SHACLValidator(shapes).validate(data);
+        const validator = new SHACLValidator(shapes);
+        const report = await validator.validate(data);
         const results = [
           ...new Map(
             leafResults(report.results).map((result) => [
@@ -196,7 +204,7 @@ export async function validateSectorFixtures(root, log = console.log) {
         }
         const coverage = coverageResults(report.results);
         for (const entry of covered) {
-          const focusNodes = targets(shapes, data, entry.shape);
+          const focusNodes = targets(shapes, data, entry.shape, validator);
           if (!invalid && focusNodes.length) entry.valid = true;
           if (
             invalid &&

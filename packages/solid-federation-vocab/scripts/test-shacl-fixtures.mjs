@@ -103,6 +103,52 @@ try {
   writeValuation();
   assert.equal((await check()).sectorCount, 3);
 
+  // The helper must also be covered exclusively through its callers' property paths.
+  const collectiblesShapesFile = join(scratch, "sectors", "collectibles", "collectibles.shacl.ttl");
+  const collectiblesShapesText = readFileSync(collectiblesShapesFile, "utf8");
+  const collectiblesShapes = new Store(new Parser().parse(collectiblesShapesText));
+  SetFrom.subjectPredicate(
+    new TermWrapper(
+      "https://jeswr.org/ns/sectors/collectibles/shapes#MonetaryAmountShape",
+      collectiblesShapes,
+      DataFactory,
+    ),
+    "http://www.w3.org/ns/shacl#targetClass",
+    NamedNodeAs.string,
+    NamedNodeFrom.string,
+  ).clear();
+  writeRdf(collectiblesShapesFile, collectiblesShapes);
+  assert.equal((await check()).sectorCount, 3);
+
+  // The unlinked amount still exists, but the helper never validates it.
+  writeFileSync(valuation, valuationText);
+  await assert.rejects(check, /MonetaryAmountShape has no negative fixture coverage/);
+  writeValuation();
+
+  const collectiblesPositive = join(scratch, "test", "fixtures", "collectibles", "valid.ttl");
+  const collectiblesValid = readFileSync(collectiblesPositive, "utf8");
+  const unlinkedData = new Store(new Parser().parse(collectiblesValid));
+  for (const type of ["Valuation", "Appraisal", "InsurancePolicy"]) {
+    const classIri = `https://jeswr.org/ns/sectors/collectibles#${type}`;
+    for (const subject of unlinkedData.getSubjects(
+      DataFactory.namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type"),
+      DataFactory.namedNode(classIri),
+      null,
+    )) {
+      SetFrom.subjectPredicate(
+        new TermWrapper(subject, unlinkedData, DataFactory),
+        "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+        NamedNodeAs.string,
+        NamedNodeFrom.string,
+      ).delete(classIri);
+    }
+  }
+  writeRdf(collectiblesPositive, unlinkedData);
+  await assert.rejects(check, /MonetaryAmountShape has no positive fixture coverage/);
+  writeFileSync(collectiblesPositive, collectiblesValid);
+  writeFileSync(collectiblesShapesFile, collectiblesShapesText);
+  console.log("✓ Untargeted helpers receive positive and negative coverage through properties.");
+
   // Wrapper paths cannot replace the expected leaf path, or hide a second failure.
   writeFileSync(
     valuation,
