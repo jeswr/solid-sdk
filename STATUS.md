@@ -750,3 +750,61 @@ outstanding. Full-workspace validation remains blocked by the unrelated root
 test timeout. No implementation work or open questions remain. No pushes, PRs,
 branch switches, remote fetches/merges, tracker changes or edits to other
 checkouts were performed. Earlier pilot/live-server verification limits remain.
+
+<!-- AUTHORED-BY Codex GPT-6 -->
+## Review fix round 8 — reject undeclared stored graphs
+
+Review/fix base and affected-gate comparison:
+`2c9a81bf01a153e6f52b6b4611e01a8ff493ffee`; branch remains `lane/sst-vcij`.
+
+- `3cc09b24` — `fix(pkg-memory): reject undeclared stored graphs`: reject every
+  stored graph outside the nanopub's head, assertion, provenance, publication-info
+  and declared batch source/entity graphs before merging. This validation applies
+  to listing, put preflight and locked revalidation. Nine added regression cases
+  cover conflicting and identical extra assertion/source/entity graphs containing
+  blank nodes, both listing orders, a collision with an incoming graph whose copy
+  is not yet stored, unrelated named graphs, default graphs and blank-node graphs.
+  Rejections preserve stored bytes/ETags and perform no Pod writes or deletes.
+  Adjust the existing extra-provenance-graph test and document the rejection rule.
+- Final documentation commit — `docs: record sst-vcij round eight validation`:
+  this report, committed last after validation.
+
+The review explicitly allows rejecting undeclared graphs. This conservative
+choice rejects even an identical undeclared copy before it can enter the
+collection. Declared correspondence batches retain their existing joint
+blank-node validation. No new design ambiguity or open question was introduced.
+
+### Validation
+
+Commands ran with `/opt/node24/bin` first on `PATH` (Node v24.22.1, pnpm 10.4.1).
+All nine new regression cases failed against the reviewed code, which accepted
+their undeclared graphs.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/pkg-memory...` | PASS; four dependency-first builds. |
+| `pnpm --filter @jeswr/pkg-memory run lint` | PASS. |
+| `pnpm --filter @jeswr/pkg-memory run build` | PASS. |
+| `pnpm --filter @jeswr/pkg-memory run typecheck` | PASS, including tests. |
+| `pnpm --filter @jeswr/pkg-memory run test` | PASS; 11 files, 664 tests; 100% statements, branches, functions and lines. |
+| `pnpm run lint:root` (via the affected gate) | PASS. |
+| `TURBO_SCM_BASE=2c9a81bf01a153e6f52b6b4611e01a8ff493ffee pnpm run gate` | PASS; 8 successful tasks. |
+| `pnpm run gate:full` | FAIL outside this lane; 73 successful tasks before one root-test timeout stopped the run (685 passed, 1 failed). |
+| `git diff 2c9a81bf01a153e6f52b6b4611e01a8ff493ffee --check` | PASS. |
+
+The full gate failed in `test/agent-layers.test.mjs`, in
+`rejects disallowed path characters globally: type Value = import(TARGET).Value;`.
+The test took 8432 ms against its unchanged 5000 ms timeout. Root tests and
+scripts are unchanged from this round's base, verified with
+`git diff 2c9a81bf01a153e6f52b6b4611e01a8ff493ffee --exit-code -- test scripts`.
+No unrelated guard behavior or timing limits were changed. The full gate left
+no untracked or modified build artifacts.
+
+The requested finding is implemented. No dependency, manifest or lockfile
+changed; no dependency policy check was needed. Tests use fictional identities
+and the memory PodPort. `roborev` remains unavailable (`command -v roborev`
+found no executable), so automated per-commit review remains outstanding.
+Full-workspace validation remains blocked by the unrelated root-test timeout.
+No implementation work or open questions remain. No pushes, PRs, branch switches,
+remote fetches/merges, tracker changes or edits to other checkouts were performed.
+Earlier pilot/live-server verification limits remain.
