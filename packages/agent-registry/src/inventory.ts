@@ -275,16 +275,18 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
   ].map(({ handle, channel }) => ({ handle: normaliseHandle(handle, channel), channel }));
   // Redaction deliberately checks case-insensitively, independently of identity matching.
   const rawHandles = [...new Set(identities.map(({ handle }) => normaliseHandle(handle)))];
+  // Recognizable identities remain private even when absent from accounts, evidence and notes.
+  const containsPrivateIdentifier = (value: string) =>
+    /@|(?:https?|mailto|tel|did):|\+\d[\d ().-]{5,}\d/i.test(value) ||
+    rawHandles.some((h) => normaliseHandle(value).includes(h));
   const safe = (value: string) =>
-    rawHandles.some((h) => normaliseHandle(value).includes(h)) || /@|op:\/\//i.test(value)
-      ? "redacted"
-      : value;
+    containsPrivateIdentifier(value) || /op:\/\//i.test(value) ? "redacted" : value;
   const evidenceFor = (e: RegistrySnapshot["evidence"][number]) => ({
     channel: safe(e.channel),
     provider: safe(e.provider),
     handleHash: hashHandle(e.identifier, salt, e.channel),
     method: safe(e.method),
-    observedOn: e.observedOn,
+    observedOn: safe(e.observedOn),
   });
   const matches = (a: RegistryAccount, e: RegistrySnapshot["evidence"][number]) =>
     a.channel === e.channel &&
@@ -330,10 +332,7 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
         const decoded = credentialReference(ref);
         // Email, MXID/social handles, identity URIs and international phone numbers
         // are private even when no account, evidence or note has supplied that identity.
-        if (
-          /@|(?:https?|mailto|tel|did):|\+\d[\d ().-]{5,}\d/i.test(decoded) ||
-          rawHandles.some((h) => normaliseHandle(decoded).includes(h))
-        )
+        if (containsPrivateIdentifier(decoded))
           throw new Error("Credential reference contains a private identifier");
       }
       return {
@@ -349,8 +348,8 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
         evidence: snapshot.evidence.filter((e) => matches(a, e)).map(evidenceFor),
         inventory: {
           setupStatus: safe(a.setupStatus),
-          ...(snapshot.observedAt ? { observedAt: snapshot.observedAt } : {}),
-          ...(a.lastTested ? { lastTested: a.lastTested } : {}),
+          ...(snapshot.observedAt ? { observedAt: safe(snapshot.observedAt) } : {}),
+          ...(a.lastTested ? { lastTested: safe(a.lastTested) } : {}),
         },
       };
     }),

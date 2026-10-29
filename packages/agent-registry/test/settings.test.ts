@@ -77,6 +77,100 @@ describe("privacy and settings model", () => {
     expect(isPlaceholder(" ")).toBe(true);
     expect(isPlaceholder("fixture@example.com")).toBe(false);
   });
+  it.each([
+    "unlisted@example.org",
+    "@unlisted:Matrix.example",
+    "@unlisted@social.example",
+    "https://unlisted.example/profile#me",
+    "http://unlisted.example/profile#me",
+    "mailto:unlisted@example.org",
+    "tel:+12025550100",
+    "did:web:unlisted.example",
+    "+12025550100",
+    "+1 (202) 555-0100",
+    "+1 202 555 0100",
+    "op://test-vault/item/credential",
+  ])("redacts unlisted metadata identity %s without account or evidence handles", (identity) => {
+    const snap = parseSnapshot({
+      version: 1,
+      accounts: [
+        {
+          id: "placeholder-account",
+          channel: "email",
+          provider: "google",
+          organization: `Private organisation: ${identity}`,
+          identifiers: { primary: "to_confirm" },
+          connector: { target: "gmail", setup_status: "planned" },
+        },
+      ],
+      communicationRules: {
+        decision_policy: { ask_when_uncertain_about: ["identity"] },
+        capability_policy: {
+          default_allowed: ["read"],
+          requires_current_instruction_or_narrow_active_authorization_rule: ["draft"],
+          always_requires_fresh_explicit_instruction: ["send"],
+        },
+        triage_taxonomy: { action: `Contact ${identity}`, routine: "Needs owner attention" },
+      },
+    });
+    const s = inventorySettings(snap, salt);
+    expect(s.connections[0]).toMatchObject({ organisation: "redacted", channelHandles: [] });
+    expect(s.unmatchedEvidence).toEqual([]);
+    expect(s.workflowPolicy).toEqual({
+      askWhenUncertain: ["identity"],
+      defaultAllowed: ["read"],
+      requiresCurrentInstruction: ["draft"],
+      requiresFreshExplicitInstruction: ["send"],
+      taxonomy: { action: "redacted", routine: "Needs owner attention" },
+    });
+    expect(JSON.stringify(s)).not.toContain(identity);
+  });
+  it("filters every metadata field supplied directly to the settings builder", () => {
+    const snap = matrixSnapshot();
+    const first = snap.accounts[0];
+    const evidence = snap.evidence[0];
+    if (!first || !evidence) throw new Error("Fixture account or evidence absent");
+    const identity = "https://unlisted.example/profile#me";
+    first.channel = identity;
+    first.provider = identity;
+    first.organisation = identity;
+    first.setupStatus = identity;
+    first.lastTested = identity;
+    snap.observedAt = identity;
+    evidence.channel = identity;
+    evidence.provider = identity;
+    evidence.method = identity;
+    evidence.observedOn = identity;
+    snap.evidence.push({ ...evidence, identifier: "unmatched@example.org" });
+    snap.workflowPolicy = {
+      askWhenUncertain: [identity],
+      defaultAllowed: [identity],
+      requiresCurrentInstruction: [identity],
+      requiresFreshExplicitInstruction: [identity],
+      taxonomy: { [identity]: identity },
+    };
+    const s = inventorySettings(snap, salt);
+    expect(s.connections[0]).toMatchObject({
+      channel: "redacted",
+      provider: "redacted",
+      organisation: "redacted",
+      inventory: { setupStatus: "redacted", observedAt: "redacted", lastTested: "redacted" },
+      evidence: [
+        { channel: "redacted", provider: "redacted", method: "redacted", observedOn: "redacted" },
+      ],
+    });
+    expect(s.unmatchedEvidence).toMatchObject([
+      { channel: "redacted", provider: "redacted", method: "redacted", observedOn: "redacted" },
+    ]);
+    expect(s.workflowPolicy).toEqual({
+      askWhenUncertain: ["redacted"],
+      defaultAllowed: ["redacted"],
+      requiresCurrentInstruction: ["redacted"],
+      requiresFreshExplicitInstruction: ["redacted"],
+      taxonomy: { redacted: "redacted" },
+    });
+    expect(JSON.stringify(s)).not.toContain(identity);
+  });
   it.each(["matrix", "matrix_bot"])("preserves %s case in normalisation and HMAC", (channel) => {
     expect(normaliseHandle("  @fixture:MATRIX.example  ", channel)).toBe("@fixture:MATRIX.example");
     expect(hashHandle("  @fixture:MATRIX.example  ", salt, channel)).toBe(

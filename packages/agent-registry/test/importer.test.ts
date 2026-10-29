@@ -124,6 +124,51 @@ describe("synthetic registry import", () => {
     expect(output).toContain("op://test-vault/account-01/credential");
     expect(output).not.toContain("test-token-0123456789");
   });
+  it.each([
+    "https://unlisted.example/profile#me",
+    "did:web:unlisted.example",
+    "+1 (202) 555-0100",
+  ])("redacts metadata-only identity %s before exporting settings and RDF", async (identity) => {
+    const ports = harness(
+      stringify({
+        version: 1,
+        accounts: [
+          {
+            id: "placeholder-account",
+            channel: "email",
+            provider: "google",
+            organization: `Contact ${identity}`,
+            identifiers: { primary: "to_confirm" },
+            connector: { target: "gmail", setup_status: "planned" },
+          },
+        ],
+        communicationRules: {
+          decision_policy: { ask_when_uncertain_about: ["identity"] },
+          capability_policy: {
+            default_allowed: ["read"],
+            requires_current_instruction_or_narrow_active_authorization_rule: ["draft"],
+            always_requires_fresh_explicit_instruction: ["send"],
+          },
+          triage_taxonomy: { action: `Contact ${identity}` },
+        },
+      }),
+    );
+    const report = await importRegistry(config, ports);
+    const account = report.settings.connections[0];
+    if (!account) throw new Error("Fixture account absent");
+    expect(account.organisation).toBe("redacted");
+    expect(report.settings.workflowPolicy?.taxonomy).toEqual({ action: "redacted" });
+    const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
+    expect(
+      ports.storage.resources
+        .get(url)
+        ?.dataset.getObjects(term(url), term(`${AGENT}organisation`), null)
+        .map((v) => v.value),
+    ).toEqual(["redacted"]);
+    expect(JSON.stringify({ report, resources: [...ports.storage.resources] })).not.toContain(
+      identity,
+    );
+  });
   it("writes conflict RDF only for complete email identities", async () => {
     const ports = harness(
       stringify({
