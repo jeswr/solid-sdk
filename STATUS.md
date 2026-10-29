@@ -441,3 +441,44 @@ No remote was fetched, no branch was switched, and no other checkout was modifie
 
 The `roborev` executable remains unavailable, so automated per-commit verdicts
 could not be collected. No review tooling or tracker was installed.
+
+## Fix round 10 — review of `37cd5ac17c93`
+
+Both requested findings are fixed on `lane/sst-31t`. Changes are limited to
+agent-channels, its regression tests and this report.
+
+| Commit | Change |
+| --- | --- |
+| `6bc55520` | `fix: sanitize inner channel transport errors` — replace errors from the inner transport/refusal wrapper with a fixed error without the original cause. Loopback tests cover malformed credential-bearing redirect locations through default and injected Node transports; a fake transport verifies nested error details are discarded. |
+| `77898534` | `fix: bound direct cursors before parsing` — cap encoded cursor length at 16 KiB before parsing, reuse bounded JSON parsing with a 16 KiB byte limit and depth limit of two, and require exactly the account and nonnegative safe-integer offset fields before read authorization. Tests cover parse avoidance, exact length boundaries, malformed shapes, non-string inputs and the longest accounts with JSON escapes. |
+| This final commit | `docs: record sst-31t round ten verification` — this report. |
+
+Verification uses Node 24.22.1 with `PATH=/opt/node24/bin:$PATH` for all pnpm
+commands. Before the fixes, eight regression cases failed, reproducing both
+findings. Final package tests pass with all coverage thresholds intact.
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/agent-channels` | PASS; 5/5 prerequisite build tasks. |
+| `pnpm exec vitest run --root packages/agent-channels test/origins.test.ts test/direct.test.ts --coverage.enabled=false -t 'sanitizes inner\|complete inner\|encoded cursors\|cursor nesting\|cursor shape\|non-string cursors\|longest accounts'` (before the fixes) | Expected FAIL; 8 failed, 14 passed, 80 skipped. |
+| `pnpm --filter @jeswr/agent-channels run lint && pnpm --filter @jeswr/agent-channels run build && pnpm --filter @jeswr/agent-channels run typecheck && pnpm --filter @jeswr/agent-channels run test` (final run) | PASS; 4 test files, 142 tests. Enforced per-file coverage: statements 226/226, branches 154/154, functions 40/40, lines 217/217 — all 100%. An initial lint attempt caught test formatting, corrected before this passing run. |
+| `TURBO_SCM_BASE=37cd5ac17c93d09d93f94d07f4b6ddc61fa20174 pnpm run gate` | PASS; root lint and 25/25 Turbo tasks, including 142 channel tests, 650 legacy-bridge tests, 121 model tests and 531 personal-agent tests. The supplied starting SHA scopes this round; `agent/integration` remains absent locally. |
+| `pnpm run gate:full` | FAIL outside this fix; 83/262 tasks completed successfully before two existing cases at `test/agent-layers.test.mjs:546` exceeded 5000 ms (`export * from TARGET;` and `module.require.resolve(TARGET);`). Root tests: 745 passed, 2 timed out. These are the root timing failures recorded in earlier rounds. |
+| `pnpm exec vitest run test/agent-layers.test.mjs --testTimeout=60000` | PASS; all 345 tests, including both cases that timed out in the full gate. Only the command-line timeout was changed, as permitted by the original brief. |
+| `git diff --check` | PASS. |
+
+The conservative transport-error choice discards the original inner diagnostic
+chain entirely. The cursor cap accommodates the existing 2048-character account
+limit even with maximal JSON escaping. No dependencies were added, so no new
+`check:packages` run was required. Tests use only existing fakes and loopback
+traffic. Coverage thresholds, configured timeouts and unrelated source remain
+unchanged. Both requested fixes are complete, with no open questions or
+unfinished implementation work.
+
+The full-workspace gate remains blocked by the unrelated root timeouts above;
+the isolated test file passes. No further full-gate retry or unrelated fix was
+made. No generated app files required cleanup, and no `dist/` is committed.
+No remote was fetched, no branch was switched, and no other checkout was modified.
+
+The `roborev` executable remains unavailable, so automated per-commit verdicts
+could not be collected. No review tooling or tracker was installed.
