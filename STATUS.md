@@ -229,3 +229,45 @@ full-workspace snapshot failure remains outside this brief. `roborev` is still
 unavailable in the sandbox, so the dispatcher must obtain per-commit review before
 merge. Tracker state remains with the dispatcher; no pushes, PRs, branch changes,
 or remote git fetches/merges were performed.
+
+## Fix round 7 — companion symlinks, instructions, and URL controls
+
+Starting commit: `d9697dc9a68803236b2c52ad505b8376b9ae01bb`.
+
+- `7cb0e675` — `fix(skills): reject symbolic-link companions`: reject file,
+  directory, hidden, nested, and dangling companion symlinks, including a linked
+  package `references/` directory. Conservative policy: reject links rather than
+  traverse their targets. Diagnostics omit targets; validation preserves an existing
+  index and cannot create an index when a companion is rejected.
+- `20c43dda` — `fix(skills): consume processing instructions`: consume `<?`
+  instruction data through the next `>` or EOF before scanning more tags. Apparent
+  tags inside instructions cannot hide active links or produce false link errors.
+  Quoted attributes, text elements, and foreign CDATA retain their existing behavior.
+- `123dc612` — `fix(skills): trim URL boundary controls`: trim U+0000–U+0020
+  after character-reference decoding, preserving percent escapes until filesystem
+  resolution. Embedded tabs/newlines keep their existing normalization.
+- Add 65 regression cases: nine symlink cases, 16 instruction cases, and 40 URL
+  cases covering the C0 range, encoded filename boundaries, and unresolved links.
+  All 491 checker tests pass. Each finding was reproduced before its fix.
+- The final `docs:` commit records this round's validation. No dependencies,
+  package implementations, skill content, or generated index changes were needed.
+
+Validation used Node 24 through `/opt/node24/bin`. This round changes root tooling
+only, so no individual package gates or dependency-policy checks apply.
+
+| Exact command | Result |
+| --- | --- |
+| `PATH=/opt/node24/bin:$PATH pnpm exec vitest run test/check-skills.test.mjs` | PASS, 491 tests. |
+| `PATH=/opt/node24/bin:$PATH pnpm exec biome check scripts/check-skills.mjs test/check-skills.test.mjs` | PASS. |
+| `PATH=/opt/node24/bin:$PATH TURBO_SCM_BASE=d9697dc9a68803236b2c52ad505b8376b9ae01bb pnpm run gate` | PASS; root lint, 57 skills with current index, and all 1,236 root tests across 10 files. |
+| `PATH=/opt/node24/bin:$PATH pnpm run gate:full` | FAIL, 289 successful / 351 total tasks, 1 cached; the previously recorded `@jeswr/federation-trust#test` JWK-order snapshot mismatch at `test/characterization.test.ts:196`. |
+| `git diff --exit-code d9697dc9a68803236b2c52ad505b8376b9ae01bb -- packages/federation-trust packages/solid-vc` | PASS; both packages are unchanged in this round. |
+| `git diff --check` | PASS. |
+
+The full gate received JWK property order `kty,crv,x` where the snapshot expects
+`crv,x,kty`; that existing failure remains outside this brief. Removed the 16
+generated app `clientid.jsonld`/`callback.html` files after the gate. No generated
+distributions are committed. All three supplied findings are addressed, with no
+unfinished implementation or new open questions. `roborev` remains unavailable in
+the sandbox, so the dispatcher must obtain per-commit review before merge.
+No pushes, PRs, branch changes, remote git fetches/merges, or tracker writes occurred.
