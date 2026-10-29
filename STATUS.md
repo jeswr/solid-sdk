@@ -3,7 +3,7 @@
 
 # sst-j2y — A-036 lane report
 
-Current validation and fixes are recorded in [Fix round 12](#fix-round-12).
+Current validation and fixes are recorded in [Fix round 13](#fix-round-13).
 The original implementation report below is historical.
 
 Implemented `@jeswr/agent-registry` on `lane/sst-j2y`. Only the package, the workspace
@@ -884,3 +884,73 @@ or invoked. Both commits use the required two co-author trailers. All work remai
 in this checkout on `lane/sst-j2y`; no branch switch, fetch, merge, push, PR or
 modifications to another checkout were performed. This report is committed after
 validation, and the checkout is left clean.
+
+## Fix round 13
+
+Addressed exactly the two findings against `1c89f4006976` on `lane/sst-j2y`:
+
+- `6b66ef63` — `fix(agent-registry): bound operands and retain IDNA emails`:
+  stop parenthesized operands at their balanced outer boundary and refuse spans
+  containing extra prose or additional operands. Collect private note mentions
+  independently of conflict activation, including nested mentions in active
+  operands. Recognize email alternatives with IDNA ASCII TLD labels. Add 16
+  regressions covering separate and unbalanced parenthesized spans, reference
+  rejection before storage writes, metadata redaction, nested URI parentheses,
+  notes-only IDN alternatives in settings and RDF, and idempotence.
+- Final report commit — `docs(agent-registry): record fix round 13 validation`
+  (this file).
+
+Conservative choice: malformed or compound parenthesized operands do not activate
+a conflict, while their independently recognized private mentions remain screened.
+Balanced nested parentheses preserve the complete operand. Ordinary prose is
+still excluded from the privacy set. No dependencies, manifests, lockfiles or test
+configuration changed; `check:packages` was not applicable. All new inputs are
+synthetic and importer transports remain in memory.
+
+The targeted diagnostic reproduced **10 failing cases** before the fix. Final
+validation used Node `v24.22.1` via `export PATH=/opt/node24/bin:$PATH`. The package
+gate passed **344 tests in 4 files**:
+
+```sh
+pnpm --filter @jeswr/agent-registry run lint
+pnpm --filter @jeswr/agent-registry run build
+pnpm --filter @jeswr/agent-registry run typecheck
+pnpm --filter @jeswr/agent-registry run test
+```
+
+The affected repository gate passed **5/5 tasks**, including `pnpm run lint:root`
+and all 344 registry tests, in **12.489s** (0 cached). The local
+`agent/integration` ref is unavailable, so the supplied review head was used as
+the existing local baseline:
+
+```sh
+TURBO_SCM_BASE=1c89f4006976cc58d0a45cc93794532e21256054 pnpm run gate
+```
+
+`pnpm run gate:full` failed in unchanged `@jeswr/federation-codegen#test`:
+**2 failed and 23 passed tests**. `test/generator.test.ts:81` expects the legacy
+`w3id.org` bookmarks namespace while the ontology uses `jeswr.org/ns`; line 126
+also detects the corresponding generated ontology drift. These failures were
+recorded in earlier rounds. Turbo reported **220/291 successful tasks**, 4 cached,
+after **3m31.768s**. All **686 root tests in 7 files** passed, and the run replayed
+all **344 passing registry tests**. Repository gates used this environment to
+disable telemetry and keep external requests offline:
+
+```sh
+export NEXT_TELEMETRY_DISABLED=1
+export HTTP_PROXY=http://127.0.0.1:9
+export HTTPS_PROXY=http://127.0.0.1:9
+export ALL_PROXY=http://127.0.0.1:9
+export NODE_USE_ENV_PROXY=1
+pnpm run gate:full
+```
+
+No unrelated source or assertions changed, and no generated untracked files
+remain. No in-scope implementation remains unfinished and there are no open
+questions. A green full-workspace gate remains blocked by the unrelated failures
+above. `roborev` is unavailable and no post-commit hook is installed, so automated
+per-commit review could not run; no review tooling or model endpoint was installed
+or invoked. Both commits use the required two co-author trailers. All work
+remained in this checkout on `lane/sst-j2y`; no branch switch, fetch, merge, push,
+PR or modifications to another checkout were performed. This report is committed
+after validation, and the checkout is left clean.
