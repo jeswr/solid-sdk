@@ -197,6 +197,9 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
         }
       },
       onSelectionUpdate: () => updateSelection((n) => n + 1),
+      onTransaction: ({ transaction }) => {
+        if (transaction.storedMarksSet) updateSelection((n) => n + 1);
+      },
       onBlur: () => {
         void runtime.flush();
       },
@@ -562,7 +565,14 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
           }}
         />
         <Dialog open={help} onOpenChange={setHelp}>
-          <DialogContent className="docs-shortcuts">
+          <DialogContent
+            className="docs-shortcuts"
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              if (editor && !editor.isDestroyed)
+                editor.commands.focus(undefined, { scrollIntoView: false });
+            }}
+          >
             <DialogTitle>Keyboard shortcuts</DialogTitle>
             <DialogDescription>These shortcuts work while you are writing.</DialogDescription>
             <dl>

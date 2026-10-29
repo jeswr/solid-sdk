@@ -661,10 +661,15 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
 let mappingSkipped: SkippedItem[] = [];
 function parseHtml(token: MarkdownToken): JSONContent[] {
   if (typeof window === "undefined") return [];
-  const dom = new window.DOMParser().parseFromString(
-    (token.text as string).trimEnd().replace(/(<\/?h)[4-6](?=[\s>])/gi, "$13"),
-    "text/html",
-  );
+  const dom = new window.DOMParser().parseFromString((token.text as string).trimEnd(), "text/html");
+  // Normalize parsed elements, never source text inside quoted attributes.
+  for (const heading of dom.body.querySelectorAll("h4,h5,h6")) {
+    const replacement = dom.createElement("h3");
+    for (const attribute of heading.attributes)
+      replacement.setAttribute(attribute.name, attribute.value);
+    replacement.append(...heading.childNodes);
+    heading.replaceWith(replacement);
+  }
   // The DOM schema rejects unsafe images before clean() can report them. Apply
   // the URL policy here too, retaining normalized valid URLs and warning on loss.
   for (const image of dom.body.querySelectorAll("img")) {
@@ -779,7 +784,7 @@ const inlineHtml = Extension.create({
       // Boundary scanning must use CommonMark's literal contexts too. Consume
       // escapes and complete code spans before looking at tags; reuse marked's
       // tokenizer for exact delimiter lengths, padding and multiline spans.
-      const boundaries = new RegExp(`${/\\[!-/:-@[-`{-~]|`+/.source}|${tags.source}`, "gi");
+      const boundaries = new RegExp(`${/\\[!-/:-@[-`{-~]|`+|!?\[/.source}|${tags.source}`, "gi");
       const tokenizer = new markdown.instance.Tokenizer();
       tokenizer.lexer = new markdown.instance.Lexer({ gfm: true, tokenizer });
       const literalCode = opening[1]?.toLowerCase() === "code";
@@ -792,6 +797,11 @@ const inlineHtml = Extension.create({
           if (tag[0].startsWith("`")) {
             const code = tokenizer.codespan(source.slice(tag.index));
             if (code) end = tag.index + code.raw.length;
+          } else if (tag[0].endsWith("[")) {
+            // Links/images own their destination and title, whose tag-like
+            // text must not change the enclosing HTML wrapper's boundaries.
+            const link = tokenizer.link(source.slice(tag.index));
+            if (link) end = tag.index + link.raw.length;
           }
           continue;
         }
@@ -935,12 +945,20 @@ markdown.instance.use({
         ...tokenizer.rules,
         other: { ...tokenizer.rules.other, blockquoteSetextReplace2: quotePrefix },
       };
-      // The code tokenizer already handled indentation of four or more columns;
-      // a remaining quote prefix always matches, and its raw excludes final LF.
-      const token = tokenizer.blockquote(containerBoundaries(source)) as NonNullable<
-        ReturnType<typeof tokenizer.blockquote>
-      >;
-      const count = token.raw.split("\n").length;
+      // The code tokenizer already handled indentation of four or more columns.
+      // A new unquoted list cannot be a lazy continuation. Marked's list
+      // re-entry otherwise absorbs it after a lazy line. Its list grammar
+      // covers every bullet/ordered marker and indentation at every depth.
+      const lines = containerBoundaries(source).split("\n");
+      const interruption = lines.findIndex(
+        (line, index) => index > 0 && tokenizer.rules.block.list.test(line),
+      );
+      const token = tokenizer.blockquote(
+        lines.slice(0, interruption < 0 ? undefined : interruption).join("\n"),
+      ) as NonNullable<ReturnType<typeof tokenizer.blockquote>>;
+      // The boundary lexer may append LF when re-entering a quoted list.
+      // A terminal LF is not an additional source line to attribute to it.
+      const count = token.raw.replace(/\n+$/, "").split("\n").length;
       token.raw = source.split("\n").slice(0, count).join("\n");
       const marker = (/^[ \t]*>[ \t]?/.exec(token.raw) as RegExpExecArray)[0];
       const indent = indentation(marker, containerColumn) + 1 + (marker.endsWith(">") ? 0 : 1);

@@ -657,13 +657,14 @@ describe("Docs persistence review regressions", () => {
     runtime.change("<p>After offline</p>", json("After offline"));
     vi.useFakeTimers();
     await vi.advanceTimersByTimeAsync(2000);
-    const sync = vi
-      .spyOn(runtime.provider as SolidPersistence, "sync")
-      .mockRejectedValueOnce(new TypeError("unavailable"));
+    const previous = runtime.provider as SolidPersistence;
+    const sync = vi.spyOn(previous, "sync").mockRejectedValueOnce(new TypeError("unavailable"));
     await runtime.reconnect();
     expect(runtime.state).toBe("retrying");
     await vi.advanceTimersByTimeAsync(4000);
-    expect(sync).toHaveBeenCalledTimes(2);
+    expect(sync).toHaveBeenCalledOnce();
+    expect(previous.destroyed).toBe(true);
+    expect(runtime.provider).not.toBe(previous);
     expect(runtime.state).toBe("saved");
     expect(runtime.stored?.data.body).toBe("<p>After offline</p>");
   });

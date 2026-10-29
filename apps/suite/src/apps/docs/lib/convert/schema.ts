@@ -42,6 +42,20 @@ export function normaliseImport(json: JSONContent, skipped: SkippedItem[] = []) 
       return [];
     }
     const attrs = { ...node.attrs };
+    if (node.type === "tableCell" || node.type === "tableHeader") {
+      // ProseMirror's schema checks content, but not numeric attributes. Both
+      // row/column spans reach renderers that allocate/iterate by their value.
+      for (const key of ["colspan", "rowspan"]) {
+        if (!(key in attrs)) continue;
+        const value: unknown = attrs[key];
+        const span = typeof value === "number" || typeof value === "string" ? Number(value) : NaN;
+        if (Number.isInteger(span) && span >= 1 && span <= 1000) attrs[key] = span;
+        else {
+          attrs[key] = 1;
+          reportSkipped(skipped, "Invalid table spans");
+        }
+      }
+    }
     if (node.type === "heading") {
       const level = Number(attrs.level);
       attrs.level = Number.isFinite(level) ? Math.min(3, Math.max(1, Math.round(level))) : 1;

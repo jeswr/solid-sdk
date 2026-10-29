@@ -12,14 +12,23 @@ export function useDocument(session: PodSession, resource: string | undefined) {
   const current = useRef<DocumentPersistence | null>(null);
   const [runtime, setRuntime] = useState<DocumentPersistence | null>(null);
   const [error, setError] = useState<unknown>(null);
-  const [recovery, setRecovery] = useState(0);
+  const [recovery, setRecovery] = useState<{
+    session: PodSession;
+    resource: string | undefined;
+    draft: string | null;
+  } | null>(null);
+  const consumedRecovery = useRef<typeof recovery>(null);
   const [, render] = useState(0);
   useEffect(() => {
+    const request = recovery !== consumedRecovery.current ? recovery : null;
+    consumedRecovery.current = recovery;
+    const recovering =
+      request?.session === session && request.resource === resource && request.draft === draft;
     if (
       current.current?.session === session &&
       current.current.stored?.url === resource &&
       resource &&
-      recovery === 0
+      !recovering
     )
       return;
     if (
@@ -27,7 +36,7 @@ export function useDocument(session: PodSession, resource: string | undefined) {
       draft &&
       current.current?.session === session &&
       current.current.draftId === draft &&
-      recovery === 0
+      !recovering
     )
       return;
     const next = new DocumentPersistence(session, resource ? undefined : currentDraftId());
@@ -42,7 +51,7 @@ export function useDocument(session: PodSession, resource: string | undefined) {
     next.onCreated = (url) => {
       if (current.current === next) router.replace(`/docs/d/${encodeRef(url)}`);
     };
-    void next.open(resource, recovery > 0).then(
+    void next.open(resource, recovering).then(
       () => {
         if (current.current === next) {
           next.online = next.online && navigator.onLine;
@@ -100,5 +109,11 @@ export function useDocument(session: PodSession, resource: string | undefined) {
       if (last) void last.destroy();
     };
   }, []);
-  return { runtime, error, recover: () => setRecovery((n) => n + 1) };
+  return {
+    runtime,
+    error,
+    recover: () => {
+      setRecovery({ session, resource, draft });
+    },
+  };
 }

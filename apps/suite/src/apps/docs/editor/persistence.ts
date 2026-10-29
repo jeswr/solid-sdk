@@ -1381,7 +1381,15 @@ export class DocumentPersistence {
     try {
       await this.refreshLocalState();
       if (this.creation === "created" && !this.readOnly) await this.reconcileProvider();
-      await this.provider?.sync();
+      const provider = this.provider;
+      try {
+        await provider?.sync();
+      } catch (error) {
+        // sync() can advance its known-URL cursor before applying the batch.
+        // A fresh provider must replay the complete log on the next attempt.
+        provider?.destroy();
+        throw error;
+      }
       this.assertActive();
       if (this.provider && this.version !== this.savedVersion) this.needsFullState = true;
       await this.flush();
