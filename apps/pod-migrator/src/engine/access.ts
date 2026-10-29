@@ -2,28 +2,46 @@
 import { DataFactory } from "n3";
 import { assertNotWider, ownerPolicy, policiesEqual, scopePolicy } from "./policy.js";
 import { ACL, ACP, aclLink, links, parse, RDF, requireOk, serialize } from "./rdf.js";
-import type { ResourceReadError } from "./resource-body.js";
+import { ResourceReadError } from "./resource-body.js";
 import { type AcpDialect, readAcp, writeAcp } from "./systems/acp.js";
 import { readWac, writeWac } from "./systems/wac.js";
 import { assertSpecificAccess } from "./target-access.js";
 import type { AccessDocument, AccessSystem, EffectivePolicy, PodSide } from "./types.js";
+
+async function accessRequest<T>(
+  resource: string,
+  document: string,
+  request: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await request();
+  } catch (cause) {
+    throw new ResourceReadError(
+      resource,
+      `Cannot read access document ${document}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      cause,
+    );
+  }
+}
 export async function detectAccessSystem(
   side: PodSide,
   signal?: AbortSignal,
 ): Promise<AccessSystem> {
-  const head = requireOk(await side.http.head(side.root, { signal }), side.root);
+  const head = requireOk(
+    await accessRequest(side.root, side.root, () => side.http.head(side.root, { signal })),
+    side.root,
+  );
   const url = aclLink(head, side.root, side.root);
   if (!url) return "unknown";
-  const response = await side.http.get(url, { accept: "text/turtle", signal });
+  const response = await accessRequest(side.root, url, () =>
+    side.http.get(url, { accept: "text/turtle", signal }),
+  );
   const advertised =
     links(head, side.root, "type").includes(`${ACP}AccessControlResource`) ||
     links(response, url, "type").includes(`${ACP}AccessControlResource`);
   if (!response.ok) return advertised ? "acp" : "unknown";
-  const dataset = await parse(response, url, side.http, signal).catch(
-    (error: ResourceReadError) => {
-      error.resourceUrl = side.root;
-      throw error;
-    },
+  const dataset = await accessRequest(side.root, url, () =>
+    parse(response, url, side.http, signal, true),
   );
   const acp = [...dataset].some(
     (q) =>
@@ -53,16 +71,20 @@ export async function readAccess(
   requireSpecific = false,
 ): Promise<AccessDocument | undefined> {
   const url =
-    advertised ?? aclLink(await side.http.head(resource, { signal }), resource, side.root);
+    advertised ??
+    aclLink(
+      await accessRequest(resource, resource, () => side.http.head(resource, { signal })),
+      resource,
+      side.root,
+    );
   if (!url) return undefined;
-  const response = await side.http.get(url, { accept: "text/turtle", signal });
+  const response = await accessRequest(resource, url, () =>
+    side.http.get(url, { accept: "text/turtle", signal }),
+  );
   if (response.status === 404) return undefined;
   requireOk(response);
-  const dataset = await parse(response, url, side.http, signal).catch(
-    (error: ResourceReadError) => {
-      error.resourceUrl = resource;
-      throw error;
-    },
+  const dataset = await accessRequest(resource, url, () =>
+    parse(response, url, side.http, signal, true),
   );
   if (system === "unknown") throw new TypeError("Cannot read unknown access system");
   const inactiveGrants: NonNullable<AccessDocument["inactiveGrants"]> = [];

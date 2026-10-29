@@ -230,7 +230,8 @@ async function buildPlan(opts: {
           reportItem(
             error instanceof PolicyTooComplex ? "too-complex" : "acl-unreadable",
             item.resource.sourceUrl,
-            error instanceof Error ? error.message : "The access document could not be read.",
+            // readAccess normalizes non-Error transport rejections at its boundary.
+            (error as Error).message,
             error instanceof ResourceReadError
               ? ["skip", "abort"]
               : ["owner-only", "skip", "abort"],

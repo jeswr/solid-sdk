@@ -233,7 +233,9 @@ it("attributes a transport rejection with no Error object during execution prefl
   const plan = await planMigration(options);
   reject = true;
   const result = await executeMigration(finalizePlan(plan, resolve(plan)), options);
-  expect(result.failed).toEqual([{ url: `${target.root}file`, error: "read refused" }]);
+  expect(result.failed).toEqual([
+    { url: `${target.root}file`, error: `Cannot read access document ${url}: read refused` },
+  ]);
 });
 
 it("attributes a write transport rejection without an Error object", async () => {

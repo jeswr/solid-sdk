@@ -13,6 +13,17 @@ more accessible than it was in the source, at any moment, including partway thro
 rule cannot be expressed faithfully, the migrator either drops it, substitutes something
 strictly narrower, or stops. It never substitutes something broader.
 
+### Threat model and completeness
+
+The migrator trusts the SOURCE server's representation of its own data: that server also
+defines and enforces the source policy. A malicious source server can lie about its ACRs
+with or without truncation. Completeness against an adversarial server cannot be proven and
+is out of scope, including consistently omitting a denial from both serializations. In scope
+are honest-but-buggy servers (including CSS 7.2's character-counted Content-Length bug and
+similar framing bugs) and broken transports. Independent evidence below means a different
+server conversion path consuming the stored stream, under this trust assumption; graph
+agreement alone is not a cryptographic snapshot or proof against a lying server.
+
 ## 1. Two sessions, two fences
 
 The app holds two independent `createSolidAuth()` instances from `@jeswr/solid-auth-core`,
@@ -78,23 +89,41 @@ Data crosses from source to target only as bytes plus a content type. No header,
      serialise with `n3.Writer`); off by default the bytes are copied verbatim.
      All network RDF reads use one validated reader: file bodies, containers, anonymous groups,
      access-system discovery, ACLs/ACRs, execution rechecks and verification. It consumes bytes,
-     compares Content-Length for identity-encoded responses, and decodes RDF with fatal UTF-8.
+     checks for bodies shorter than visible Content-Length when no non-identity encoding is
+     exposed, and decodes RDF with fatal UTF-8. Fetch decodes compression, and browser CORS can
+     hide Content-Encoding while exposing Content-Length. A longer decoded body is therefore
+     accepted; its size is not proof of truncation. Exposed compressed lengths are not compared.
      Stream, length, decoding and integrity failures carry the resource URL. Planning failures
      become blocking report items; execution failures appear against the affected destination
      resource in `MigrationResult.failed`, with the source/document URL in the explanation.
 
      CSS 7.2's memory backend can count string characters after PATCH, so a response can end
      exactly between triples, parse successfully, and match an incorrect Content-Length. HEAD
-     repeats that length. For non-JSON RDF with non-ASCII bytes and identity Content-Length,
-     request **one** different serialization: N-Quads, or TriG when the original is N-Quads.
+     repeats that length. For non-JSON RDF with non-ASCII bytes matching a visible length and
+     no exposed non-identity encoding, request **one** different serialization: N-Quads, or TriG
+     when the original is N-Quads. **ACLs and ACRs require this check even when the first response
+     has no Content-Length or exposes compression**: no supported server has independent evidence
+     that its original representation always counts bytes. Merely lacking Content-Length is not
+     completeness evidence for an access document from CSS or another unestablished server.
      Require the requested returned media type, no Content-Length, strict parsing, and dataset
-     isomorphism (including blank nodes and named graphs) with the original bytes. Do not use
-     matching lengths, ETags, an echoed serialization, or a second length-framed response as
-     independent evidence. Installed/live CSS 7.2 confirms conversion consumes the full stored
-     stream and omits the stored length. A mismatch or unavailable conversion fails closed;
-     the engine does not silently substitute converted bytes. ASCII RDF, opaque resources and
-     representations without identity length framing need no second GET. No implementation
-     name is treated as proof that Content-Length counts bytes.
+     isomorphism (including blank nodes and named graphs) with the original bytes. The different
+     media type must exercise conversion; an echoed original serialization does not qualify.
+     Installed/live CSS 7.2 confirms conversion consumes the full stored stream and omits the
+     stored length. This CSS conversion behaviour supplies independent evidence within the
+     stated threat model. Matching lengths, ETags or a second length-framed response do not.
+     A mismatch or unavailable conversion fails closed. ASCII RDF, opaque resources and
+     length-free non-access representations need no second GET.
+
+     **Verbatim copying warns when completeness depends on graph isomorphism.** A dataset
+     deduplicates triples, so even an agreeing complete alternate graph cannot establish that
+     the original bytes include a trailing duplicate triple, comment or whitespace. Those
+     carry no RDF meaning, and refusing would block every non-ASCII Turtle file on servers
+     that stream conversions, so the data file is copied from the received bytes with a
+     `warn` log entry naming it. Access documents are never copied as bytes; they are
+     translated from the proven graph. Explicit IRI rewriting
+     parses and reserializes RDF anyway; duplicate lexical triples are not preserved in
+     that mode. Byte verification compares against the complete retained body actually written,
+     so it can use semantic validation followed by exact byte equality with that body.
 
      JSON-LD copies validate the complete JSON syntax and UTF-8 without expanding any context.
      JSON's closing delimiters establish the document boundary, so a character-count cut cannot
@@ -106,16 +135,15 @@ Data crosses from source to target only as bytes plus a content type. No header,
      **skip / abort**, including for descendants. It cannot be downgraded to an owner-only copy.
      Other unsupported but intact source policy shapes retain the conservative owner-only option.
 
-     Residual limits: these checks target transport truncation and character-counted metadata,
-     not an adversarial server consistently omitting the same triples from every representation.
-     They assume successful length-free/chunked or content-decoded streams represent the full
-     serialization; an arbitrary wrong byte length on all-ASCII RDF or opaque bytes cannot be
-     proven complete without a trusted digest or server-side snapshot. Graph-equivalent loss of
-     comments or trailing whitespace is not detected. Separate reads are not an atomic snapshot:
-     a concurrent graph change can cause safe refusal. JSON syntax validation is integrity evidence,
-     not JSON-LD context expansion or semantic validation. The extra completeness check is bounded
-     to one alternate RDF GET and one graph comparison per affected read; other media types incur
-     no extra request. Isomorphism uses a bijection of at most 64 blank nodes and a 100,000-step
+     Residual limits: these checks operate within the source-server trust assumption above.
+     Successful conversion streams are assumed to serialize the stored graph completely;
+     a server consistently lying in both responses is out of scope. An arbitrary wrong byte
+     length on all-ASCII RDF or opaque bytes cannot be proven complete without a trusted digest
+     or server-side snapshot. Separate reads are not an atomic snapshot: a concurrent graph
+     change can cause safe refusal. JSON syntax validation is integrity evidence, not JSON-LD
+     context expansion or semantic validation. The extra completeness check is bounded to one
+     alternate RDF GET and one graph comparison per affected read; other media types incur no
+     extra request. Isomorphism uses a bijection of at most 64 blank nodes and a 100,000-step
      search budget; larger or harder proofs, and non-identical quoted-triple graphs, fail closed.
      There is no new remote-context, HEAD-length or unbounded negotiation loop.
    - *Grant.* Write the final ACLs/ACRs **bottom up** (deepest first, containers after their

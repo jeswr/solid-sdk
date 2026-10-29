@@ -5,6 +5,7 @@ import { fetchRdf, parseRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { LiteralFrom, NamedNodeAs, NamedNodeFrom, SetFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";
 import { afterAll, beforeAll, expect, it } from "vitest";
+import { readAccess } from "../../src/engine/access.js";
 import {
   createPodHttp,
   executeMigration,
@@ -12,10 +13,12 @@ import {
   type PodSide,
   planMigration,
 } from "../../src/engine/index.js";
+import { ownerPolicy } from "../../src/engine/policy.js";
 import { serialize } from "../../src/engine/rdf.js";
+import { writeWac } from "../../src/engine/systems/wac.js";
 import { type CssAccount, createAccount } from "./account.js";
 import { ownerRule, putFixture, setAccess } from "./fixtures.js";
-import { appendProbeBody } from "./probe.js";
+import { accessLink, appendProbeBody } from "./probe.js";
 import { type CssServer, startServer } from "./server.js";
 
 let server: CssServer;
@@ -46,6 +49,53 @@ async function wireGet(url: string): Promise<{ headers: string; body: Buffer }> 
     socket.destroy();
   }
 }
+
+it("uses real CSS conversion evidence for Unicode access reads even without an initial length", async () => {
+  const url = `${account.podRoot}access-completeness`;
+  await putFixture(account.side, "access-completeness", "private", "text/plain");
+  const document = accessLink(await account.side.http.head(url), url);
+  const prefix = await writeWac(ownerPolicy(account.webId), url, document, `${document}/café`);
+  const tail = await writeWac(ownerPolicy(account.webId), url, document, `${document}/tail`);
+  const written = await account.side.http.put(document, prefix + tail, {
+    contentType: "text/turtle",
+  });
+  expect(written.ok).toBe(true);
+  await written.arrayBuffer();
+  for (const truncated of [false, true]) {
+    const lengths: (string | null)[] = [];
+    const side = {
+      ...account.side,
+      http: {
+        ...account.side.http,
+        get: async (resource: string, init?: { accept?: string; signal?: AbortSignal }) => {
+          const response = await account.side.http.get(resource, init);
+          if (resource === document && init?.accept === "application/n-quads") {
+            expect(response.headers.get("content-type")).toContain("application/n-quads");
+            lengths.push(response.headers.get("content-length"));
+          }
+          if (resource === document && init?.accept === "text/turtle") {
+            const body = await response.text();
+            expect(body).toBe(prefix + tail);
+            const headers = new Headers(response.headers);
+            headers.delete("content-length");
+            return new Response(truncated ? prefix : body, { headers });
+          }
+          return response;
+        },
+      },
+    };
+    const reading = readAccess(side, url, "wac");
+    if (truncated) {
+      await expect(reading).rejects.toMatchObject({
+        resourceUrl: url,
+        message: expect.stringContaining("graph mismatch"),
+      });
+    } else {
+      expect((await reading)?.policy.grants).toHaveLength(2);
+    }
+    expect(lengths).toEqual([null]);
+  }
+});
 
 it("CSS 7.2 counts string chunks as characters after PATCH and Fetch accepts truncated bytes", async () => {
   const store = new Store();

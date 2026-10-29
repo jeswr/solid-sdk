@@ -120,6 +120,12 @@ DESIGN.md as follows. These notes are colocated with the engine and reflected in
   The same anonymous snapshot is rechecked before execution.
 - RDF rewriting is opt-in. Parsed term positions are mapped; literal text stays untouched.
   Rewritten data uses TriG so named graphs survive. Default copying preserves the source bytes.
+  If completeness depends on graph agreement with a converted representation, default copying
+  refuses before writes: graphs cannot prove preservation of duplicate triples or other lexical
+  bytes. Explicit rewriting may use that semantic proof. Unicode ACLs/ACRs require an agreeing
+  length-free conversion even when the first response lacks Content-Length. These checks trust
+  the source server's account of its own data; a server lying in both representations is outside
+  the [documented threat model](../../docs/DESIGN.md#threat-model-and-completeness).
   Partial representations and redirects are refused. No remote JSON-LD contexts are fetched.
 
 Before the first write the executor rechecks relevant source and target controls, group snapshots,

@@ -17,6 +17,14 @@ interface ReadOptions {
   http?: PodHttp;
   signal?: AbortSignal;
   semantic?: boolean;
+  accessDocument?: boolean;
+  /** False only for explicit RDF rewriting or comparison with known complete bytes. */
+  verbatim?: boolean;
+  /**
+   * Accept a verbatim copy whose completeness rests on graph isomorphism alone. Called with
+   * the reason; without it such a read is refused.
+   */
+  onGraphProofOnly?: (reason: string) => void;
 }
 
 /** All network RDF readers share byte validation, strict decoding and completeness proof. */
@@ -40,7 +48,9 @@ export async function readBody(response: Response, url: string, options: ReadOpt
   if (length !== null && identity) {
     if (!/^\d+$/.test(length) || !Number.isSafeInteger(Number(length)))
       throw new ResourceReadError(url, `Invalid Content-Length at ${url}`);
-    if (bytes.byteLength !== Number(length))
+    // CORS can expose Content-Length while hiding Content-Encoding. A decoded
+    // body longer than the encoded length is not evidence of truncation.
+    if (bytes.byteLength < Number(length))
       throw new ResourceReadError(
         url,
         `Incomplete resource body at ${url}: Content-Length is ${length} bytes, received ${bytes.byteLength}`,
@@ -49,6 +59,7 @@ export async function readBody(response: Response, url: string, options: ReadOpt
   const contentType = response.headers.get("content-type");
   const type = extractMediaType(contentType);
   let dataset: Awaited<ReturnType<typeof parseRdf>> | undefined;
+  let graphProofOnly = false;
   if (options.semantic || SUPPORTED_RDF_MEDIA_TYPES.some((supported) => supported === type)) {
     let text: string;
     try {
@@ -65,13 +76,14 @@ export async function readBody(response: Response, url: string, options: ReadOpt
         cause,
       );
     }
-    // With identity framing, a non-ASCII string's character count can masquerade as
-    // a byte count even when the received prefix is syntactically valid RDF.
+    // With ambiguous framing, a non-ASCII string's character count can masquerade
+    // as a byte count even when the prefix is valid RDF. Access documents also
+    // require conversion evidence when the first response has no visible length.
     // A complete JSON document already establishes its syntactic boundary.
     if (
       type !== "application/ld+json" &&
-      length !== null &&
-      identity &&
+      (options.accessDocument ||
+        (length !== null && identity && bytes.byteLength === Number(length))) &&
       bytes.some((b) => b > 127)
     ) {
       try {
@@ -93,6 +105,7 @@ export async function readBody(response: Response, url: string, options: ReadOpt
           )
         )
           throw new Error("Independent RDF graphs differ");
+        graphProofOnly = true;
       } catch (cause) {
         throw new ResourceReadError(
           url,
@@ -102,7 +115,7 @@ export async function readBody(response: Response, url: string, options: ReadOpt
       }
     }
   }
-  return { bytes, dataset };
+  return { bytes, dataset, graphProofOnly };
 }
 
 /** Validate before creating any destination state, preserving the original bytes. */
@@ -111,5 +124,11 @@ export async function readResourceBytes(
   url: string,
   options: ReadOptions = {},
 ): Promise<Uint8Array> {
-  return (await readBody(response, url, options)).bytes;
+  const body = await readBody(response, url, options);
+  if (body.graphProofOnly && options.verbatim !== false) {
+    const reason = `Byte-verbatim completeness cannot be established at ${url}: graph equality cannot prove original bytes, including duplicate triples`;
+    if (!options.onGraphProofOnly) throw new ResourceReadError(url, reason);
+    options.onGraphProofOnly(reason);
+  }
+  return body.bytes;
 }

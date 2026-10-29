@@ -137,12 +137,10 @@ export async function executeMigration(
               opts.signal,
               undefined,
               side === state.target,
-            ).catch((error: unknown) => {
-              throw new ResourceReadError(
-                url as string,
-                error instanceof Error ? error.message : String(error),
-                error,
-              );
+            ).catch((error: Error) => {
+              // Access transports and body reads now always normalize failures
+              // to Error objects, including non-Error transport rejections.
+              throw new ResourceReadError(url as string, error.message, error);
             }),
           );
         }
@@ -298,6 +296,12 @@ export async function executeMigration(
       let bytes = await readResourceBytes(source, entry.state.resource.sourceUrl, {
         http: state.source.http,
         signal: opts.signal,
+        verbatim: !state.rewriteIris,
+        onGraphProofOnly: (reason) =>
+          log(
+            "warn",
+            `${reason}. Copied the received bytes; their RDF graph matches the complete source graph, but duplicate triples, comments or formatting may differ.`,
+          ),
       });
       let contentType = source.headers.get("content-type") ?? "application/octet-stream";
       if (
@@ -453,6 +457,9 @@ export async function executeMigration(
         const actual = await readResourceBytes(response, current, {
           http: state.target.http,
           signal: opts.signal,
+          // The following byte-for-byte comparison supplies independent evidence
+          // against the complete body retained before writing.
+          verbatim: false,
         });
         const { bytes } = copied;
         if (actual.length !== bytes.length || actual.some((value, i) => value !== bytes[i]))

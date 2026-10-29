@@ -134,7 +134,7 @@ describe("adversarial transport, metadata and planning edges", () => {
     const report = await planMigration({ source: sourceSide, target: target.side() });
     expect(report.stats.bytes).toBe(0);
     expect(report.report.find((i) => i.kind === "acl-unreadable")?.explanation).toContain(
-      "could not be read",
+      `Cannot read access document ${source.acl(`${source.root}file`)}: unreadable`,
     );
   });
   it("reports unreadable target ancestors and skips without touching their contents", async () => {

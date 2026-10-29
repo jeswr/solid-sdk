@@ -65,10 +65,10 @@ export async function parse(
   url: string,
   http?: PodHttp,
   signal?: AbortSignal,
+  accessDocument = false,
 ): Promise<Awaited<ReturnType<typeof parseRdf>>> {
-  return (await readBody(response, url, { http, signal, semantic: true })).dataset as Awaited<
-    ReturnType<typeof parseRdf>
-  >;
+  return (await readBody(response, url, { http, signal, semantic: true, accessDocument }))
+    .dataset as Awaited<ReturnType<typeof parseRdf>>;
 }
 export function requireRepresentation(response: Response): Response {
   if (response.status !== 200)
