@@ -191,6 +191,11 @@ not apply to this comparison.
 with `prov:wasRevisionOf` and `prov:invalidatedAtTime`; original bytes remain
 unchanged, and the withdrawal reuses the original assertion graph and IRI,
 including skolemized nodes. Later classification recognizes the withdrawal across resources.
+For assertions with blank nodes, the withdrawal also retains the original batch's
+source/entity graphs and any inherited correspondence context. Envelope-level
+`prov:wasDerivedFrom` links identify these locally retained graphs for splitting,
+matching and listing, so jointly distinguished nodes remain retractable without
+changing the assertion or the withdrawal's new batch identity.
 The withdrawal's provenance also identifies the revised nanopub envelope. That
 target takes precedence over the shared assertion revision link, so a later batch
 can reassert identical facts as Current without changing assertion deduplication.

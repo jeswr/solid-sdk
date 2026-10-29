@@ -108,7 +108,7 @@ export class NanopubStore {
     }
     for (const id of this.resourceIds(entries)) {
       const stored = await this.get(id);
-      const names = sharedGraphNames(stored.nanopubs[0] as Nanopublication);
+      const names = sharedGraphNames(stored.nanopubs[0] as Nanopublication, stored.dataset);
       for (const { dataset, sharedGraphs } of parts) {
         const common = new Set(sharedGraphs.filter((name) => names.includes(name)));
         // Later batches may share fewer graphs than this call's resources do.
@@ -214,6 +214,21 @@ export class NanopubStore {
     );
     putGraph(dataset, np.id, head);
     putGraph(dataset, previous.assertionId, graph(original.dataset, previous.assertionId));
+    // Symmetric assertion nodes may be distinguished only by the original batch
+    // graphs. Retain those exact graphs and declare their correspondence context
+    // on the new envelope, without changing its batch or the assertion's nodes.
+    if (
+      [...graph(original.dataset, previous.assertionId)].some((q) =>
+        [q.subject, q.object].some((term) => term.termType === "BlankNode"),
+      )
+    )
+      for (const name of sharedGraphNames(previous, original.dataset)) {
+        if (name === previous.assertionId) continue;
+        const contents = graph(original.dataset, name);
+        if (contents.size === 0) continue;
+        putGraph(dataset, name, contents);
+        new RdfNode(np.id, provenance).link(`${NS.prov}wasDerivedFrom`, name);
+      }
     putGraph(dataset, np.provenanceId, provenance);
     np.assertionId = previous.assertionId;
     const revision = await parseNanopublications(
@@ -339,19 +354,26 @@ export class NanopubStore {
   }
 }
 
-function sharedGraphNames(np: Nanopublication): string[] {
-  return [
+function sharedGraphNames(np: Nanopublication, dataset: DatasetCore): string[] {
+  const names = new Set([
     np.assertionId,
     pkgId("batch", np.batch, "sources"),
     pkgId("batch", np.batch, "entities"),
-  ];
+  ]);
+  // Retractions can carry the original batch's graphs as explicit provenance
+  // context. Ordinary derivation links without a local graph add no context.
+  for (const term of new RdfNode(np.id, graph(dataset, np.provenanceId)).terms(
+    `${NS.prov}wasDerivedFrom`,
+  ))
+    if (term.termType === "NamedNode" && graph(dataset, term.value).size > 0) names.add(term.value);
+  return [...names];
 }
 
 function nanopubParts(value: Nanopublications) {
   // An incoming create may repeat a stored identity; it is still one resource.
   const nanopubs = new Map(value.nanopubs.map((np) => [np.id, np]));
   return [...nanopubs.values()].map((np) => {
-    const sharedGraphs = sharedGraphNames(np);
+    const sharedGraphs = sharedGraphNames(np, value.dataset);
     const dataset = new Store();
     for (const name of [np.id, np.provenanceId, np.pubinfoId, ...sharedGraphs])
       putGraph(dataset, name, graph(value.dataset, name));
@@ -366,7 +388,7 @@ function mergeNanopublication(
   result: Nanopublications,
 ): void {
   const np = result.nanopubs[0] as Nanopublication;
-  const graphs = sharedGraphNames(np).map((name) => {
+  const graphs = sharedGraphNames(np, result.dataset).map((name) => {
     const contents = graph(result.dataset, name);
     const canonical =
       contents.size === 0

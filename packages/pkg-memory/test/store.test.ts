@@ -163,21 +163,34 @@ async function symmetricSharedAuthors(ids = ["one", "two"]) {
   return { value, author, other, sourcesId };
 }
 
-async function symmetricAssertionBatch(batch: string, ids = ["one"]) {
+async function symmetricAssertionBatch(
+  batch: string,
+  ids = ["one"],
+  context: "sources" | "entities" | "joint" = "sources",
+) {
   const value = await sharedBlankAssertions(ids, batch);
   const assertionId = value.nanopubs[0]!.assertionId;
   const assertion = new Store();
   const sourcesId = pkgId("batch", batch, "sources");
   const sources = graph(value.dataset, sourcesId);
-  const nodes = [DataFactory.blankNode(), DataFactory.blankNode()];
+  const entitiesId = pkgId("batch", batch, "entities");
+  const entities = graph(value.dataset, entitiesId);
+  const nodes = Array.from({ length: context === "joint" ? 4 : 2 }, () => DataFactory.blankNode());
   for (const [index, node] of nodes.entries()) {
     new RdfNode(identity.webId, assertion).add(`${NS.schema}hasPreference`, node);
     new RdfNode(node, assertion).text(`${NS.schema}value`, "tea");
-    new RdfNode("https://example.org/document", sources).add(`${NS.schema}about`, node);
-    new RdfNode(node, sources).text(`${NS.schema}name`, `Preference ${index}`);
+    const contents = context === "entities" ? entities : sources;
+    new RdfNode("https://example.org/document", contents).add(`${NS.schema}about`, node);
+    new RdfNode(node, contents).text(
+      `${NS.schema}name`,
+      `Preference ${context === "joint" ? index % 2 : index}`,
+    );
+    if (context === "joint")
+      new RdfNode(node, entities).text(`${NS.schema}description`, `Group ${Math.floor(index / 2)}`);
   }
   putGraph(value.dataset as Store, assertionId, assertion);
   putGraph(value.dataset as Store, sourcesId, sources);
+  putGraph(value.dataset as Store, entitiesId, entities);
   for (const np of value.nanopubs) {
     const provenance = graph(value.dataset, np.provenanceId);
     new RdfNode(np.id, provenance).add(`${NS.prov}primarySource`, nodes[0]!);
@@ -785,6 +798,28 @@ it.each([
       ).toBe(true);
     }
   }
+});
+
+it("keeps ordinary envelope derivation links separate from named graph context", async () => {
+  const { store } = setup();
+  const value = await sharedBlankAssertions(["one"]);
+  const np = value.nanopubs[0]!;
+  const provenance = graph(value.dataset, np.provenanceId);
+  const local = DataFactory.blankNode();
+  new RdfNode(np.id, provenance)
+    .link(`${NS.prov}wasDerivedFrom`, "https://example.org/document")
+    .add(`${NS.prov}wasDerivedFrom`, local);
+  new RdfNode(local, provenance).text(`${NS.schema}name`, "Local derivation");
+  putGraph(value.dataset as Store, np.provenanceId, provenance);
+  await store.put(value);
+  expect(isomorphic([...(await store.list()).dataset], [...value.dataset])).toBe(true);
+  const revision = await store.retract(np.id, {
+    batchId: "ordinary-derivation-withdrawal",
+    clientId: np.agent,
+    generatedAt: "2026-10-26T12:00:00Z",
+  });
+  expect(revision.nanopubs[0]!.validity).toBe("Retracted");
+  expect((await store.list()).nanopubs).toHaveLength(2);
 });
 
 it.each([
@@ -1608,6 +1643,80 @@ it("validates UUID inputs, RDF and stored identity before using data", async () 
   await expect(store.get(id)).rejects.toThrow("identity mismatch");
   await memory.write(url, new Uint8Array([255]), "application/trig", {});
   await expect(store.get(id)).rejects.toThrow();
+});
+
+it.each([
+  "sources",
+  "entities",
+  "joint",
+] as const)("retracts symmetric assertion nodes distinguished by %s graphs", async (context) => {
+  const { store, pod } = setup();
+  const value = await symmetricAssertionBatch("context-original", ["one", "two"], context);
+  await store.put(value);
+  const [previous, other] = value.nanopubs;
+  const before = await Promise.all(value.nanopubs.map((np) => pod.read(store.url(np.id))));
+  const revision = await new NanopubStore(pod).retract(previous!.id, {
+    batchId: "context-withdrawal",
+    clientId: "https://example.org/client",
+    generatedAt: "2026-10-26T12:00:00Z",
+  });
+  const np = revision.nanopubs[0]!;
+  expect(np.batch).toBe("context-withdrawal");
+  expect(np.assertionId).toBe(previous!.assertionId);
+  expect(
+    isomorphic(
+      [...graph(revision.dataset, np.assertionId)],
+      [...graph(value.dataset, previous!.assertionId)],
+    ),
+  ).toBe(true);
+  expect(isomorphic([...revision.dataset], [...(await store.get(np.id)).dataset])).toBe(true);
+  expect(await Promise.all(value.nanopubs.map((entry) => pod.read(store.url(entry.id))))).toEqual(
+    before,
+  );
+  const list = pod.list;
+  for (const reverse of [false, true]) {
+    pod.list = async (url) => {
+      const entries = await list(url);
+      return reverse ? entries.reverse() : entries;
+    };
+    const loaded = await new NanopubStore(pod).list();
+    expect(graph(loaded.dataset, np.assertionId).size).toBe(
+      graph(value.dataset, np.assertionId).size,
+    );
+    const result = classifyNanopublications(loaded);
+    expect(result.find((item) => item.id === previous!.id)).toMatchObject({
+      belief: "past",
+      replacedBy: [np.id],
+    });
+    expect(result.find((item) => item.id === other!.id)).toMatchObject({
+      belief: "definitely",
+      validity: "Current",
+      replacedBy: [],
+    });
+    expect(result.find((item) => item.id === np.id)).toMatchObject({
+      belief: "past",
+      validity: "Retracted",
+    });
+    const author = new RdfNode(other!.id, graph(loaded.dataset, other!.provenanceId)).one(
+      `${NS.prov}primarySource`,
+    );
+    const name = pkgId(
+      "batch",
+      "context-original",
+      context === "entities" ? "entities" : "sources",
+    );
+    expect(new RdfNode(author, graph(loaded.dataset, name)).oneText(`${NS.schema}name`)).toBe(
+      "Preference 0",
+    );
+  }
+  // A withdrawal remains self-contained correspondence context for a later revision.
+  const repeated = await new NanopubStore(pod).retract(np.id, {
+    batchId: "context-withdrawal-again",
+    clientId: np.agent,
+    generatedAt: "2026-10-27T12:00:00Z",
+  });
+  expect(repeated.nanopubs[0]!.assertionId).toBe(previous!.assertionId);
+  expect((await new NanopubStore(pod).list()).nanopubs).toHaveLength(4);
 });
 
 it.each([
