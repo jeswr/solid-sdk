@@ -147,10 +147,9 @@ function htmlLinksIn(html, definitions, definitionMarker) {
         value = html.slice(start, cursor);
       }
       if (firstAttribute) elementAttributes.set(name, value);
-      if (!closing && (name === "href" || name === "src")) attributes.push(value);
+      if (!closing && /^(?:href|src|xlink:href)$/.test(name)) attributes.push([name, value]);
     }
     // An incomplete tag does not create an element or active URL attributes.
-    if (html[cursor] === ">") links.push(...attributes);
     tokens.lastIndex = cursor + 1;
     if (html[cursor] !== ">") continue;
     if (closing) {
@@ -187,6 +186,10 @@ function htmlLinksIn(html, definitions, definitionMarker) {
       namespace = "html";
     }
     if (namespace === "html" && (tag === "svg" || tag === "math")) namespace = tag;
+    for (const [name, value] of attributes) {
+      // XLink href is a URL only when adjusted as a foreign-content attribute.
+      if (name !== "xlink:href" || namespace !== "html") links.push(value);
+    }
     // A slash closes foreign elements; HTML text elements ignore it.
     if (
       (namespace !== "html" && selfClosing) ||

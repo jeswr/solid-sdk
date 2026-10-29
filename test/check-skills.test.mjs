@@ -489,6 +489,56 @@ describe("skill validation", () => {
   });
 
   it.each([
+    '<svg><a xlink:href="missing.md"><text>Guide</text></a></svg>',
+    '<svg><use xlink:href="missing.svg#icon" /></svg>',
+    '<svg><image xlink:href="missing.png" /></svg>',
+    '<SVG><A XLINK:HREF="missing.md">broken</A></SVG>',
+    "<svg><a xlink:href='missing.md'>broken</a></svg>",
+    "<svg><a xlink:href=missing.md>broken</a></svg>",
+    '<svg><a xlink:href=" &#32;miss&#105;ng.md?raw=1#section&#9; ">broken</a></svg>',
+    '<svg><a xlink:href="bad%ZZ.md">broken</a></svg>',
+    '<svg><foreignObject><svg><a xlink:href="missing.md">broken</a></svg></foreignObject></svg>',
+    '<svg><![CDATA[<a xlink:href="ignored.md">literal</a>]]><a xlink:href="missing.md">broken</a></svg>',
+    '<math><maction xlink:href="missing.md"><mi>x</mi></maction></math>',
+  ])("validates XLink destinations in foreign content: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([
+      `skills/alpha/SKILL.md: relative link ${body.includes("%ZZ") ? "has invalid URL encoding" : "does not resolve"} (target omitted)`,
+    ]);
+  });
+
+  it.each([
+    '<svg><a xlink:href="references/guide.md"><text>Guide</text></a></svg>',
+    '<svg xmlns:xlink="http://www.w3.org/1999/xlink"><use xlink:href="references/gu&#105;de.md#icon" /></svg>',
+    '<svg><a xlink:href=" &#32;references/guide.md?raw=1#section&#9; ">guide</a></svg>',
+    '<svg><a xlink:href="https://example.invalid/missing.md">external</a></svg>',
+    '<svg><use xlink:href="#icon" /></svg>',
+    '<svg><use xlink:href="/icons.svg#icon" /></svg>',
+    '<math><maction xlink:href="references/guide.md"><mi>x</mi></maction></math>',
+  ])("accepts resolved or non-relative XLink destinations: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
+    '<a xlink:href="missing.md">HTML link</a>',
+    '<svg><foreignObject><a xlink:href="missing.md">HTML link</a></foreignObject></svg>',
+    '<svg><title><a xlink:href="missing.md">HTML link</a></title></svg>',
+    '<svg><desc><a xlink:href="missing.md">HTML link</a></desc></svg>',
+    '<svg><div xlink:href="missing.md">HTML breakout</div>',
+    '<math><mtext><a xlink:href="missing.md">HTML link</a></mtext></math>',
+    '<math><annotation-xml encoding="text/html"><a xlink:href="missing.md">HTML link</a></annotation-xml></math>',
+    '<svg><![CDATA[<a xlink:href="missing.md">literal</a>]]></svg>',
+    '<svg><a data-xlink:href="missing.md" custom:href="other.md">text</a></svg>',
+  ])("ignores XLink lookalikes outside foreign attributes: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
     "<title />\n\n[ignored](missing.md)",
     "<svg /><title />\n\n[ignored](missing.md)",
     "<svg><foreignObject><textarea/>\n\n[ignored](missing.md)\n\n</textarea></foreignObject></svg>",
