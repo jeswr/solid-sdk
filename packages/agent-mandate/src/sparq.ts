@@ -92,6 +92,7 @@ export interface ProcessOptions {
   input: string;
   encoding: "utf8";
   timeout: number;
+  killSignal: "SIGKILL";
   maxBuffer: number;
   env: Record<string, string>;
   shell: false;
@@ -137,6 +138,9 @@ export function sparqPolicyEngine(
             (c) =>
               !Array.isArray(attributes.get(leftOperandIri(c.leftOperand))) &&
               knownOperand(c, attributes.get(leftOperandIri(c.leftOperand))) &&
+              // The backend's numeric fallback does not preserve lexical ordering.
+              (!["lt", "lteq", "gt", "gteq"].includes(c.operator) ||
+                !["string", "iri"].includes(contextType(operandDatatype(c)))) &&
               representableSet(c, attributes.get(leftOperandIri(c.leftOperand))),
           );
         const rules = [...(policy.permissions ?? []), ...(policy.prohibitions ?? [])];
@@ -228,6 +232,7 @@ export function sparqPolicyEngine(
             input,
             encoding: "utf8",
             timeout: Math.ceil(remaining),
+            killSignal: "SIGKILL",
             maxBuffer: 64 * 1024,
             env: {},
             shell: false,

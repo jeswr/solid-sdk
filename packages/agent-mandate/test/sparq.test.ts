@@ -26,6 +26,60 @@ const response = (extra = {}): string =>
   });
 const engine = (stdout: string, extra: Partial<ProcessResult> = {}) =>
   sparqPolicyEngine({ binary: "test-binary", run: () => ({ stdout, status: 0, ...extra }) });
+it.each([
+  "lt",
+  "lteq",
+  "gt",
+  "gteq",
+] as const)("requires confirmation for SPARQ textual ordering: %s", async (operator) => {
+  for (const datatype of [undefined, `${XSD}string`, `${XSD}anyURI`]) {
+    for (const type of ["permission", "prohibition"] as const) {
+      const right = operator.startsWith("lt") ? "urn:z" : "urn:a";
+      const rule: Rule = {
+        type,
+        action: "read",
+        constraints: [{ leftOperand: "purpose", operator, rightOperand: right, datatype }],
+      };
+      const p: Policy = {
+        id: "urn:policy",
+        permissions: type === "permission" ? [rule] : [{ type: "permission", action: "read" }],
+        prohibitions: type === "prohibition" ? [rule] : [],
+      };
+      const q = intent({ action: "read", attributes: { purpose: "urn:m" } });
+      expect(await solidOdrlEngine.evaluate(p, q)).toEqual({
+        effect: type === "prohibition" ? "prohibited" : "permit",
+      });
+      const run = vi.fn(() => ({ stdout: response(), status: 0 }));
+      expect(await sparqPolicyEngine({ binary: "test", run }).evaluate(p, q)).toEqual({
+        effect: "indeterminate",
+      });
+      expect(run).not.toHaveBeenCalled();
+    }
+  }
+});
+it("retains definite prohibitions beside unsupported textual ordering", async () => {
+  const run = vi.fn(() => ({
+    stdout: response({ effect: "deny", matchedRules: ["urn:deny"] }),
+    status: 0,
+  }));
+  expect(
+    await sparqPolicyEngine({ binary: "test", run }).evaluate(
+      {
+        id: "urn:policy",
+        prohibitions: [
+          {
+            type: "prohibition",
+            action: "read",
+            constraints: [{ leftOperand: "purpose", operator: "gt", rightOperand: "a" }],
+          },
+          { id: "urn:deny", type: "prohibition", action: "read" },
+        ],
+      },
+      intent({ action: "read", attributes: { purpose: "z" } }),
+    ),
+  ).toEqual({ effect: "prohibited" });
+  expect(run).toHaveBeenCalledOnce();
+});
 it("maps the pilot protocol decisions without engine fallback", async () => {
   for (const [effect, matchedRules, expected] of [
     ["permit", [], "permit"],
@@ -125,7 +179,12 @@ it("sends typed context, explicit process limits, and only this agent's rules", 
       }),
     ),
   ).toEqual({ effect: "permit" });
-  expect(captured).toMatchObject({ maxBuffer: 65536, shell: false, env: {} });
+  expect(captured).toMatchObject({
+    maxBuffer: 65536,
+    shell: false,
+    env: {},
+    killSignal: "SIGKILL",
+  });
   expect(captured?.timeout).toBeGreaterThan(0);
   expect(captured?.timeout).toBeLessThanOrEqual(42);
   const doc = JSON.parse(captured?.input as string);
