@@ -19,6 +19,7 @@ import {
 import type { DatasetCore } from "@rdfjs/types";
 import { Agent } from "@solid/object";
 import { DataFactory, Store } from "n3";
+import { canonicalJeswrIri } from "../core/canonical-vocab.js";
 import { freshRdf } from "./rdf-read.js";
 import { ResourceWriteError, writeResource } from "./resource.js";
 import {
@@ -134,7 +135,8 @@ export async function ensureTypeRegistrations(opts: {
   const index = new TypeIndexDataset(indexDs, DataFactory);
 
   let added = 0;
-  for (const desired of registrations) {
+  for (const registration of registrations) {
+    const desired = { ...registration, forClass: canonicalJeswrIri(registration.forClass) };
     const exists = index.locate(desired.forClass).some((l) => l.container === desired.container);
     if (exists) continue;
     const reg = new TypeRegistration(

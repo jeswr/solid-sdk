@@ -52,6 +52,8 @@ export interface ImportReport {
   cursor?: string;
   /** Items the adapter skipped because the live API sent a malformed shape. */
   skipped?: number;
+  /** Unsupported export products or formats, grouped by product folder. */
+  unsupported?: readonly string[];
   /** The type-index document used/created. */
   indexUrl: string;
 }

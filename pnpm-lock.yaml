@@ -3267,12 +3267,18 @@ importers:
       '@jeswr/solid-dpop':
         specifier: workspace:*
         version: link:../solid-dpop
+      '@jeswr/suite-vocab':
+        specifier: workspace:*
+        version: link:../suite-vocab
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
       '@solid/object':
         specifier: ^0.6.0
         version: 0.6.0
+      fflate:
+        specifier: 0.8.3
+        version: 0.8.3
       jsonld-streaming-parser:
         specifier: ^5.0.0
         version: 5.0.1

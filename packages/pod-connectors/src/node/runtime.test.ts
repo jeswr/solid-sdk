@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { stderr as nodeStderr, stdout as nodeStdout } from "node:process";
 import * as dpop from "@jeswr/solid-dpop";
 import { AclResource, Agent } from "@solid/object";
+import { strToU8, zipSync } from "fflate";
 import { DataFactory } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as importRunner from "../core/import-runner.js";
@@ -20,11 +21,12 @@ import {
   TEST_WEBID,
 } from "../core/testing.js";
 import type { ConnectorState } from "../core/types.js";
+import { googleTakeoutFileAdapter } from "../google-takeout/file-adapter.js";
 import { writeResource } from "../pod/resource.js";
 import { ProfileTypeIndexAnchor, TypeIndexDataset } from "../pod/type-index.js";
 import * as registryModule from "../registry.js";
 import { spotifyAdapter } from "../spotify/adapter.js";
-import { parseImportArgs, runCli } from "./cli.js";
+import { importFile, parseImportArgs, runCli } from "./cli.js";
 import type { NodeConfig } from "./config.js";
 import * as loopback from "./loopback.js";
 import { createClientCredentialsFetch } from "./pod-auth.js";
@@ -1498,5 +1500,35 @@ describe("CLI import", () => {
     ].map((args) => ({ args })),
   )("rejects malformed argv #%#", ({ args }) => {
     expect(() => parseImportArgs(args)).toThrow();
+  });
+});
+
+describe("streaming CLI export files", () => {
+  it("supplies stat size, bounded text, and byte ranges backed by temporary files", async () => {
+    const path = await configPath();
+    const exportPath = join(path, "..", "export.zip");
+    const bytes = zipSync({ "Takeout/Drive/a.txt": strToU8("synthetic") });
+    await writeFile(exportPath, bytes);
+    const file = await importFile(exportPath, googleTakeoutFileAdapter);
+    expect(file.size).toBe(bytes.length);
+    expect(new Uint8Array(await new Response(file.slice!(2, 9).stream()).arrayBuffer())).toEqual(
+      bytes.slice(2, 9),
+    );
+    expect(await new Response(file.slice!(0, 0).stream()).text()).toBe("");
+    expect(await file.text()).toBe(Buffer.from(bytes).toString("utf8"));
+    expect(() => file.slice!(-1, 0).stream()).toThrow(/range/);
+    const { transport } = fixturePod();
+    expect(
+      await runCli(["import", "google-takeout", "--file", exportPath], {
+        configPath: path,
+        podTransport: transport,
+        stdout: vi.fn(),
+        stderr: vi.fn(),
+      }),
+    ).toBe(0);
+    await truncate(exportPath, 65 * 1024 * 1024);
+    const large = await importFile(exportPath, googleTakeoutFileAdapter);
+    expect(large.size).toBe(65 * 1024 * 1024);
+    await expect(large.text()).rejects.toThrow(/limit/);
   });
 });
