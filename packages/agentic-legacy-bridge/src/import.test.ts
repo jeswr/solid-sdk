@@ -241,4 +241,17 @@ describe("importInbound ACL discovery privacy gate", () => {
     ).rejects.toThrow();
     expect(pull).not.toHaveBeenCalled();
   });
+
+  it.each([
+    `<${CONTAINER}>`,
+    "<https://pod.example/other/>",
+    `<${CONTAINER}>, <https://pod.example/other/>`,
+    '"malformed scope"',
+    "_:scope",
+  ])("refuses legacy defaultForNew scopes before replacing the ACL (%s)", async (scope) => {
+    const body = `${wac}\n<#owner> <http://www.w3.org/ns/auth/acl#defaultForNew> ${scope} .`;
+    const fetch = pod('<owner-policy>; rel="acl"', body);
+    await expect(run(fetch)).rejects.toThrow(/defaultForNew/);
+    expect(fetch.mock.calls.map(([, init]) => init?.method)).toEqual(["HEAD", "GET"]);
+  });
 });
