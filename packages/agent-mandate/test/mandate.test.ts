@@ -69,6 +69,56 @@ it("loads a signed embedded agreement and evaluates the default mandate", async 
   );
 });
 it.each([
+  "validFrom",
+  "validUntil",
+] as const)("rejects signed non-date-time %s literals on both loading paths", async (field) => {
+  const date = field === "validFrom" ? "2026-10-25" : "2026-11-25";
+  for (const value of [
+    date,
+    `${date} 12:00:00Z`,
+    `${date}T12:00Z`,
+    `${date}t12:00:00z`,
+    date.replaceAll("-", "/"),
+  ]) {
+    const claims = {
+      ...mandateCredential(mandate(), {
+        statusListCredential: STATUS,
+        statusListIndex: "1",
+      }),
+      [field]: value,
+    };
+    // Sign the malformed lexical value so integrity alone cannot explain rejection.
+    const signed = await issue({ credential: claims, key, options: { created: NOW } });
+    expect(Number.isFinite(Date.parse(value))).toBe(true);
+    expect(await parseMandateCredential(await mandateToTurtle(signed))).toBeUndefined();
+    expect(
+      await createVcMandateVerifier({ ...options, read: async () => signed }).load(),
+    ).toBeUndefined();
+  }
+});
+it.each([
+  "Z",
+  "+02:00",
+  "-02:00",
+  "",
+])("accepts structural date-time validity with timezone %j on both loading paths", async (zone) => {
+  const claims = {
+    ...mandateCredential(mandate(), { statusListCredential: STATUS, statusListIndex: "1" }),
+    validFrom: `2026-10-25T12:00:00.000${zone}`,
+    validUntil: `2026-11-25T12:00:00.000${zone}`,
+  };
+  const signed = await issue({ credential: claims, key, options: { created: NOW } });
+  const parsed = await parseMandateCredential(await mandateToTurtle(signed));
+  expect(parsed).toBeDefined();
+  for (const vc of [signed, parsed])
+    expect(
+      await createVcMandateVerifier({ ...options, read: async () => vc }).load(),
+    ).toMatchObject({
+      validFrom: claims.validFrom,
+      validUntil: claims.validUntil,
+    });
+});
+it.each([
   "prototype",
   "non-enumerable",
 ] as const)("calls resolver callbacks with their receiver when key control is %s", async (placement) => {

@@ -8,6 +8,7 @@ import {
   digestQuads,
   issue,
   type KeyPair,
+  readValidCredential,
   type VerifiableCredential,
   type VerifyCredentialOptions,
   type WebIdKeyResolver,
@@ -162,6 +163,9 @@ export function createVcMandateVerifier(options: VcMandateOptions): MandateVerif
         const vc = await options.read();
         if (!vc?.id || vc.issuer !== options.ownerWebId || !vc.validFrom || !vc.validUntil)
           return undefined;
+        // Match the Turtle path's structural date-time checks before comparing instants.
+        const store = new Store(credentialToRdf(vc));
+        if (!readValidCredential(store).valid) return undefined;
         const now = options.now();
         if (
           !(Date.parse(vc.validFrom) <= now.getTime()) ||
@@ -180,7 +184,7 @@ export function createVcMandateVerifier(options: VcMandateOptions): MandateVerif
           !options.statusListCredential.endsWith("/agent/mandates/status.ttl")
         )
           return undefined;
-        const root = node(new Store(credentialToRdf(vc)), vc.issuer).one(`${AGENT}agreement`);
+        const root = node(store, vc.issuer).one(`${AGENT}agreement`);
         if (root.iri(RDF_TYPE) !== `${ODRL}Agreement`) return undefined;
         const id = root.iri(`${ODRL}uid`);
         const issuer = root.iri(`${ODRL}assigner`);
