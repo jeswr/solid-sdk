@@ -356,3 +356,42 @@ other checkout was modified.
 
 The `roborev` executable remains unavailable, so automated per-commit verdicts
 could not be collected. No review tooling or tracker was installed.
+
+## Fix round 8 — review of `90a5770083ec`
+
+The requested no-cors body regression is fixed on `lane/sst-31t`. Changes are
+limited to agent-channels, its regression tests and this report.
+
+| Commit | Change |
+| --- | --- |
+| `08b55b64` | `fix: preserve no-cors request bodies` — buffer the normalized Request body for `mode: "no-cors"`, as already done for keepalive, before forwarding to guarded-fetch. Extend the loopback POST regression to check string, URL and Request inputs, inherited and overridden bodies and modes, URLSearchParams, content types and a non-keepalive cors control. |
+| This final commit | `docs: record sst-31t round eight verification` — this report. |
+
+Verification uses Node 24.22.1 with `PATH=/opt/node24/bin:$PATH` for all pnpm
+commands. Before the fix, the new no-cors case failed with the reported
+ReadableStream/mode error; the existing keepalive case passed. Both cases pass
+after the fix. The final package gate passes with all coverage thresholds intact.
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter=@jeswr/agent-channels` | PASS; 5/5 prerequisite build tasks. |
+| `pnpm exec vitest run --root packages/agent-channels test/origins.test.ts --coverage.enabled=false -t 'body-bearing'` (before the fix) | Expected FAIL; the no-cors case reproduced the streaming-body construction error, and the keepalive case passed. |
+| `pnpm exec vitest run --root packages/agent-channels test/origins.test.ts --coverage.enabled=false -t 'body-bearing'` (after the fix) | PASS; both cases. |
+| `pnpm --filter @jeswr/agent-channels run lint && pnpm --filter @jeswr/agent-channels run build && pnpm --filter @jeswr/agent-channels run typecheck && pnpm --filter @jeswr/agent-channels run test` | PASS; 4 test files, 99 tests. Enforced per-file coverage: statements 179/179, branches 133/133, functions 35/35, lines 172/172 — all 100%. |
+| `TURBO_SCM_BASE=90a5770083ec387ea64a254c517f45a525fad6c5 pnpm run gate` | PASS; root lint and 25/25 Turbo tasks, including 99 channel tests, 650 legacy-bridge tests, 121 model tests and 531 personal-agent tests. The supplied starting SHA scopes this round; `agent/integration` remains absent locally. |
+| `pnpm run gate:full` | FAIL outside this fix; 77/244 tasks completed successfully before one existing case at `test/agent-layers.test.mjs:546` exceeded 5000 ms. Root tests: 746 passed, 1 timed out. This is the same root timeout recorded in round seven. |
+| `pnpm exec vitest run test/agent-layers.test.mjs --testTimeout=60000` | PASS; all 345 tests, including the case that timed out in the full gate. Only the command-line timeout was changed, as permitted by the original brief. |
+| `git diff --check` | PASS. |
+
+No dependencies were added, so no new `check:packages` run was required. Tests
+use only loopback traffic and existing fakes. Coverage thresholds, configured
+timeouts and unrelated source remain unchanged. The requested fix and its
+regression coverage are complete, with no open questions or design changes.
+
+The full-workspace gate remains blocked by the unrelated root timeout above;
+the isolated test file passes. No further full-gate retry or unrelated fix was
+made. No generated app files required cleanup, and no `dist/` is committed.
+No remote was fetched, no branch was switched, and no other checkout was modified.
+
+The `roborev` executable remains unavailable, so automated per-commit verdicts
+could not be collected. No review tooling or tracker was installed.
