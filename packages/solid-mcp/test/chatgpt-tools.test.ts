@@ -346,6 +346,48 @@ describe.each([
   });
 
   it.each([
+    [1000000000000000100, "integer", "1000000000000000128"],
+    [-1000000000000000100, "integer", "-1000000000000000128"],
+    [-1e21, "double", "-1.0E21"],
+    [-1e22, "double", "-1.0E22"],
+  ])("fetch and search preserve implicit/coerced JSON-LD scalar %s", async (value, type, lexical) => {
+    const id = `${POD}data.jsonld`;
+    const datatype = `http://www.w3.org/2001/XMLSchema#${type}`;
+    const pod = makeFakePod({
+      [POD]: { contentType: "text/turtle", body: containerTurtle(POD, [{ name: "data.jsonld" }]) },
+      [id]: {
+        contentType: "application/ld+json",
+        body: JSON.stringify({
+          "@context": { coerced: { "@id": "urn:coerced", "@type": datatype } },
+          "@id": id,
+          "urn:implicit": value,
+          coerced: value,
+        }),
+      },
+    });
+    const client = await connectClient(pod.fetch, undefined, portable);
+    const fetched = await client.callTool({ name: "fetch", arguments: { id } });
+    expect(fetched.isError).toBeUndefined();
+    const content = fetched.content as { type: "text"; text: string }[];
+    const document = JSON.parse(content[0]?.text ?? "{}");
+    expect(document.metadata).toEqual({ contentType: "application/ld+json", truncated: false });
+    const dataset = await parseRdf(document.text, "text/turtle");
+    expect(dataset.size).toBe(2);
+    for (const predicate of ["urn:implicit", "urn:coerced"]) {
+      expect(dataset.getQuads(id, predicate, null, null)[0]?.object).toMatchObject({
+        termType: "Literal",
+        value: lexical,
+        datatype: { value: datatype },
+      });
+    }
+    const searched = await client.callTool({ name: "search", arguments: { query: lexical } });
+    expect(searched.isError).toBeUndefined();
+    expect(searched.content).toEqual([
+      { type: "text", text: JSON.stringify({ results: [{ id, title: "data.jsonld", url: id }] }) },
+    ]);
+  });
+
+  it.each([
     "explicit",
     "coerced",
     "aliased",
@@ -359,6 +401,7 @@ describe.each([
       "@context": "https://evil.example/context",
       "@import": "http://127.0.0.1/context",
       nested: [{ "@context": { "@import": "https://evil.example/nested" } }],
+      numbers: [1000000000000000100, -1e21, 0, 1.25],
     };
     const document = {
       "@context": {

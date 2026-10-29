@@ -6,6 +6,7 @@ import type { DataFactory as RdfFactory, Term } from "@rdfjs/types";
 import { NamedGraphDataset } from "@rdfjs/wrapper";
 import { JsonLdParser } from "jsonld-streaming-parser";
 import type { ParsingContext } from "jsonld-streaming-parser/lib/ParsingContext.js";
+import type { Util } from "jsonld-streaming-parser/lib/Util.js";
 import {
   DataFactory,
   Lexer,
@@ -30,6 +31,16 @@ export class RdfLimitError extends Error {
   constructor() {
     super("RDF expansion/output budget exhausted.");
   }
+}
+
+const XSD_INTEGER = "http://www.w3.org/2001/XMLSchema#integer";
+const XSD_DOUBLE = "http://www.w3.org/2001/XMLSchema#double";
+
+/** JSON-LD 1.1 object-to-RDF conversion applies only to native numbers. */
+function numberLexicalValue(value: number, datatype?: string): string {
+  return value % 1 !== 0 || Math.abs(value) >= 1e21 || datatype === XSD_DOUBLE
+    ? value.toExponential(15).replace(/(\d)0*e\+?/, "$1E")
+    : value.toFixed(0);
 }
 
 function termBytes(term: Term, depth = 0): number {
@@ -68,20 +79,17 @@ function budgetedFactory(charge: (bytes: number) => void): RdfFactory {
     // JSON-LD passes native scalars for typed values and null for absent metadata.
     literal(value: string | number | boolean, languageOrDatatype) {
       // JSON-LD numeric conversion precedes accounting; supplied strings stay lexical.
-      const double =
-        typeof value === "number" &&
-        (value % 1 !== 0 ||
-          Math.abs(value) >= 1e21 ||
-          (languageOrDatatype &&
-            typeof languageOrDatatype !== "string" &&
-            "value" in languageOrDatatype &&
-            languageOrDatatype.value === "http://www.w3.org/2001/XMLSchema#double"));
       const lexicalValue =
         typeof value !== "number"
           ? String(value)
-          : double
-            ? value.toExponential(15).replace(/(\d)0*e\+?/, "$1E")
-            : value.toFixed(0);
+          : numberLexicalValue(
+              value,
+              languageOrDatatype &&
+                typeof languageOrDatatype !== "string" &&
+                "value" in languageOrDatatype
+                ? languageOrDatatype.value
+                : undefined,
+            );
       charge(Buffer.byteLength(lexicalValue));
       // N3 2 supports directional languages; @types/n3 still omits that overload.
       return (DataFactory.literal as RdfFactory["literal"])(
@@ -165,6 +173,23 @@ function budgetJsonLdStructure(value: unknown, charge: (bytes: number) => void, 
   if (value && typeof value === "object") {
     for (const child of Object.values(value)) budgetJsonLdStructure(child, charge, depth + 1);
   }
+}
+
+/** Normalize implicit/coerced scalars before upstream loses their native type. */
+function normalizeJsonLdNumbers(parser: JsonLdParser): void {
+  // Like the context budget adapter, this targets only the v5 parser instance.
+  const util = (parser as unknown as { util: Util }).util;
+  util.intToString = (value, datatype) =>
+    typeof value === "number" ? numberLexicalValue(value, datatype?.value) : value;
+  const stringValueToTerm = util.stringValueToTerm.bind(util);
+  util.stringValueToTerm = (depth, context, key, value, datatype) => {
+    // Upstream's default type uses value < 1e21 instead of its magnitude.
+    // Context coercion still takes precedence inside stringValueToTerm.
+    if (typeof value === "number" && Math.abs(value) >= 1e21 && datatype?.value === XSD_INTEGER) {
+      datatype = util.dataFactory.namedNode(XSD_DOUBLE);
+    }
+    return stringValueToTerm(depth, context, key, value, datatype);
+  };
 }
 
 /** Context normalization never calls the RDF factory. Account for it separately. */
@@ -285,7 +310,10 @@ export async function parseBoundedRdf(source: string, contentType: string, baseI
           },
         })
       : new StreamParser(n3Options);
-  if (parser instanceof JsonLdParser) budgetJsonLdContexts(parser, charge);
+  if (parser instanceof JsonLdParser) {
+    normalizeJsonLdNumbers(parser);
+    budgetJsonLdContexts(parser, charge);
+  }
   const dataset = new Store();
   // Small chunks keep parser queues bounded as well as the retained dataset.
   function* chunks() {

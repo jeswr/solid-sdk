@@ -163,8 +163,12 @@ describe("JSON-LD scalar literals", () => {
   it.each([
     [12.5, "double"],
     [1e21, "double"],
+    [-1e21, "double"],
+    [-1e22, "double"],
     [1e-7, "double"],
     [42, "integer"],
+    [1000000000000000100, "integer"],
+    [-1000000000000000100, "integer"],
   ])("gives implicit and explicit %s the same RDF term", async (value, type) => {
     const dataset = await parseBoundedRdf(
       JSON.stringify({
@@ -179,6 +183,72 @@ describe("JSON-LD scalar literals", () => {
     const implicit = dataset.getQuads("urn:s", "urn:implicit", null, null)[0]?.object;
     const explicit = dataset.getQuads("urn:s", "urn:explicit", null, null)[0]?.object;
     expect(explicit?.equals(implicit)).toBe(true);
+  });
+
+  it.each([
+    [1000000000000000100, "integer", "1000000000000000128"],
+    [-1000000000000000100, "integer", "-1000000000000000128"],
+    [-1e21, "double", "-1.0E21"],
+    [-1e22, "double", "-1.0E22"],
+    [0, "double", "0.0E0"],
+    [42, "double", "4.2E1"],
+    [12.5, "decimal", "1.25E1"],
+    [-1e21, "integer", "-1.0E21"],
+    [-1e21, "decimal", "-1.0E21"],
+    ["001", "integer", "001"],
+    ["-1e21", "double", "-1e21"],
+  ])("preserves context-coerced JSON-LD scalar %s as xsd:%s %s", async (value, type, lexical) => {
+    const datatype = `http://www.w3.org/2001/XMLSchema#${type}`;
+    const dataset = await parseBoundedRdf(
+      JSON.stringify({
+        "@context": { p: { "@id": "urn:p", "@type": datatype } },
+        "@id": "urn:s",
+        p: [value],
+      }),
+      "application/ld+json",
+      BASE,
+    );
+    expect(dataset.size).toBe(1);
+    expect(dataset.getQuads("urn:s", "urn:p", null, null)[0]?.object).toMatchObject({
+      termType: "Literal",
+      value: lexical,
+      datatype: { value: datatype },
+    });
+  });
+
+  it("normalizes JSON-LD scalar numbers in untyped value objects, lists and scoped contexts", async () => {
+    const dataset = await parseBoundedRdf(
+      JSON.stringify({
+        "@context": {
+          value: "@value",
+          nested: {
+            "@id": "urn:nested",
+            "@context": {
+              p: { "@id": "urn:p", "@type": "http://www.w3.org/2001/XMLSchema#integer" },
+            },
+          },
+        },
+        "@id": "urn:s",
+        "urn:value": { value: -1e21 },
+        "urn:list": { "@list": [-1e21, 1000000000000000100] },
+        nested: { "@id": "urn:n", p: 1000000000000000100 },
+      }),
+      "application/ld+json",
+      BASE,
+    );
+    const literals = [...dataset]
+      .map((quad) => quad.object)
+      .filter((term) => term.termType === "Literal");
+    expect(literals).toHaveLength(4);
+    expect(literals.map((term) => term.value).sort()).toEqual([
+      "-1.0E21",
+      "-1.0E21",
+      "1000000000000000128",
+      "1000000000000000128",
+    ]);
+    expect(dataset.getQuads("urn:s", "urn:value", null, null)[0]?.object).toMatchObject({
+      datatype: { value: "http://www.w3.org/2001/XMLSchema#double" },
+    });
   });
 });
 
