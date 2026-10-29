@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Typed @rdfjs/wrapper accessors over the M2 intent graph, the SHACL shapes, and
@@ -32,6 +33,7 @@ import {
   ACTION_TYPE_IRI,
   type IntentAction,
   IRI_TO_ACTION,
+  legacyA2aIri,
   RDF_TYPE,
   SCHEMA_AGENT,
   SCHEMA_OBJECT,
@@ -45,8 +47,22 @@ import {
  * malformed objects (e.g. a literal where an IRI is required). The factory is
  * shared so term identity / Set de-duplication hold.
  */
-function objectTerms(node: TermWrapper, predicate: string): Set<TermWrapperType> {
-  return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
+export function objectTerms(node: TermWrapper, predicate: string): Set<TermWrapperType> {
+  const values: TermWrapperType[] = [];
+  for (const iri of new Set([predicate, legacyA2aIri(predicate)])) {
+    const terms = SetFrom.subjectPredicate(
+      node,
+      iri,
+      TermAs.instance(TermWrapper),
+      TermFrom.instance,
+    );
+    for (const term of terms) {
+      if (!values.some((value) => value.equals(TermFrom.instance(term, node.factory)))) {
+        values.push(term);
+      }
+    }
+  }
+  return new Set(values);
 }
 
 /** A typed view of an `a2a:Parameter` node. */
@@ -89,20 +105,19 @@ export class ActionNode extends TermWrapper {
 export class IntentNode extends TermWrapper {
   /** Linked action node(s), projected to typed wrappers (term-type-preserving). */
   get actions(): Set<ActionNode> {
-    return SetFrom.subjectPredicate(
-      this,
-      A2A_ACTION,
-      TermAs.instance(ActionNode),
-      TermFrom.instance,
+    return new Set(
+      [...objectTerms(this, A2A_ACTION)].map(
+        (term) => new ActionNode(TermFrom.instance(term, this.factory), this.dataset, this.factory),
+      ),
     );
   }
   /** Linked parameter node(s). */
   get parameters(): Set<ParameterNode> {
-    return SetFrom.subjectPredicate(
-      this,
-      A2A_PARAMETER,
-      TermAs.instance(ParameterNode),
-      TermFrom.instance,
+    return new Set(
+      [...objectTerms(this, A2A_PARAMETER)].map(
+        (term) =>
+          new ParameterNode(TermFrom.instance(term, this.factory), this.dataset, this.factory),
+      ),
     );
   }
   /** The intent-node-level `schema:agent` (the requester), if present. */
@@ -115,7 +130,14 @@ export class IntentNode extends TermWrapper {
 export class IntentDataset extends DatasetWrapper {
   /** Every `a2a:Intent` subject in the dataset. */
   intents(): IntentNode[] {
-    return [...this.instancesOf(A2A_INTENT, IntentNode)];
+    const canonical = [...this.instancesOf(A2A_INTENT, IntentNode)];
+    const legacy = [...this.instancesOf(legacyA2aIri(A2A_INTENT), IntentNode)];
+    return [
+      ...canonical,
+      ...legacy.filter(
+        (node) => !canonical.some((other) => other.equals(TermFrom.instance(node, this.factory))),
+      ),
+    ];
   }
 }
 
@@ -186,13 +208,13 @@ function addLiteral(node: TermWrapper, predicate: string, value: string): void {
 /** A `a2a:Parameter` node opened for writing. */
 class WritableParameter extends TermWrapper {
   typeParameter(): void {
-    addIri(this, RDF_TYPE, A2A_PARAMETER_CLASS);
+    addIri(this, RDF_TYPE, legacyA2aIri(A2A_PARAMETER_CLASS));
   }
   setKey(key: string): void {
-    addLiteral(this, A2A_PARAM_KEY, key);
+    addLiteral(this, legacyA2aIri(A2A_PARAM_KEY), key);
   }
   setValue(value: string): void {
-    addLiteral(this, A2A_PARAM_VALUE, value);
+    addLiteral(this, legacyA2aIri(A2A_PARAM_VALUE), value);
   }
 }
 
@@ -228,14 +250,14 @@ class WritableAction extends TermWrapper {
     addRequiredIri(this, SCHEMA_AGENT, iri, "agent");
   }
   addMode(modeIri: string): void {
-    addIri(this, A2A_MODE, modeIri);
+    addIri(this, legacyA2aIri(A2A_MODE), modeIri);
   }
 }
 
 /** An `a2a:Intent` node opened for WRITING. */
 class WritableIntent extends TermWrapper {
   typeIntent(): void {
-    addIri(this, RDF_TYPE, A2A_INTENT);
+    addIri(this, RDF_TYPE, legacyA2aIri(A2A_INTENT));
   }
   setAgent(iri: string): void {
     addRequiredIri(this, SCHEMA_AGENT, iri, "agent");
@@ -243,14 +265,22 @@ class WritableIntent extends TermWrapper {
 
   /** Link a fresh blank-node action node, typed with the action-type IRI. */
   linkAction(actionTypeIri: string): WritableAction {
-    const node = new WritableAction(this.linkBlank(A2A_ACTION), this.dataset, this.factory);
+    const node = new WritableAction(
+      this.linkBlank(legacyA2aIri(A2A_ACTION)),
+      this.dataset,
+      this.factory,
+    );
     node.typeAction(actionTypeIri);
     return node;
   }
 
   /** Link a fresh blank-node parameter node, typed `a2a:Parameter`. */
   linkParameter(): WritableParameter {
-    const node = new WritableParameter(this.linkBlank(A2A_PARAMETER), this.dataset, this.factory);
+    const node = new WritableParameter(
+      this.linkBlank(legacyA2aIri(A2A_PARAMETER)),
+      this.dataset,
+      this.factory,
+    );
     node.typeParameter();
     return node;
   }
@@ -292,7 +322,7 @@ export class IntentBuilder {
 
   /** Map an intent action kind to its RDF action-type IRI. */
   static actionTypeIri(action: IntentAction): string {
-    return ACTION_TYPE_IRI[action];
+    return legacyA2aIri(ACTION_TYPE_IRI[action]);
   }
 
   /** The accumulated quads. */

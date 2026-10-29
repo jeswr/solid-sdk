@@ -1,8 +1,8 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 export type Protocol = "solid" | "lws";
 
 export interface ServiceEntry {
-  /** Expanded IRIs. Bare LWS terms expand to `https://www.w3.org/ns/lws#<Term>`. */
+  /** Expanded IRIs. Known solid-sd terms expand through its fixed context; other bare terms use LWS. */
   type: readonly string[];
   endpoint: string; // absolute URL
   id?: string;
@@ -30,6 +30,8 @@ export interface StorageDescription {
   services: readonly ServiceEntry[];
   capabilities: readonly CapabilityEntry[];
   sources: readonly DescriptionSource[];
+  /** Resolver evidence for an assumed root; legacy foreign-description evidence stays readable. */
+  evidence?: readonly string[];
   fetchedAt: number; // Date.now()
   etag: string | null;
   maxAgeMs: number; // from Cache-Control max-age, else DEFAULT_TTL_MS (3_600_000)
@@ -39,9 +41,14 @@ export interface StorageDescription {
     type: string;
     controller: string;
     publicKeyJwk: JsonWebKey;
+    /** CID revocation timestamp; verifiers must enforce this when using the method. */
+    revoked?: string;
+    /** CID expiration timestamp; verifiers must enforce this even for cached descriptions. */
+    expires?: string;
   }[];
 }
 
+/** Missing description entries mean unknown, never unavailable (SSD-CLI-10). */
 export type FeatureState = "available" | "unavailable" | "unknown";
 export interface Feature<T = undefined> {
   state: FeatureState;
@@ -80,6 +87,7 @@ export interface Features {
     >;
   }>;
   resumableUploads: Feature;
+  /** POST {container} through RecursiveDeleteService; not a change to resource DELETE. */
   recursiveDelete: Feature;
   pagination: Feature;
   /** RDF can be stored and content-negotiated (always available on Solid; on LWS bodies are opaque). */
@@ -97,17 +105,30 @@ export interface ResolveOptions {
 }
 
 export interface DescriptionCache {
-  get(
-    storageId: string,
-  ): Promise<{ description: StorageDescription; probe?: ProbeResult } | undefined>;
-  set(
-    storageId: string,
-    v: { description: StorageDescription; probe?: ProbeResult },
-  ): Promise<void>;
+  get(storageId: string): Promise<DescriptionCacheRecord | undefined>;
+  set(storageId: string, v: DescriptionCacheRecord): Promise<void>;
   delete(storageId: string): Promise<void>;
   /** Maps resource URL prefix → storageId so the next lookup for a sibling needs no network. */
   rememberPrefix(root: string, storageId: string): Promise<void>;
   lookupPrefix(url: string): Promise<string | undefined>;
+  /**
+   * Optional atomic compare-and-set used by `capabilities()`: store `probe` with the record only
+   * if the record still holds exactly `description` (not deleted or replaced meanwhile).
+   * Resolves whether the probe was attached. Without it, a best-effort get/compare/set is used.
+   */
+  attachProbe?(
+    storageId: string,
+    description: StorageDescription,
+    probe: ProbeResult,
+  ): Promise<boolean>;
+}
+
+/** Parsed metadata is reusable only with the resolver's current record version. */
+export interface DescriptionCacheRecord {
+  /** Missing versions identify records written before parsed-cache versioning. */
+  version?: number;
+  description: StorageDescription;
+  probe?: ProbeResult;
 }
 
 /** Access modes reported by WAC-Allow. */

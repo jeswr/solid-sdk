@@ -1,0 +1,85 @@
+{
+  "name": "@jeswr/agentic-legacy-bridge",
+  "version": "0.0.1",
+  "description": "The path FROM today's channels (email first) TO the accountable web of agents: parse an inbound legacy message, model its sender as a Person/agent, interpret it into structured RDF with a per-datum reliability score, persist it owner-private in a Solid pod, and answer with a structured, upgrade-negotiating reply.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./email": {
+      "types": "./dist/email/index.d.ts",
+      "import": "./dist/email/index.js"
+    },
+    "./webhook": {
+      "types": "./dist/webhook/index.d.ts",
+      "import": "./dist/webhook/index.js"
+    },
+    "./metadata": {
+      "types": "./dist/metadata/index.d.ts",
+      "import": "./dist/metadata/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "PROTOCOL.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "biome check src scripts",
+    "lint:fix": "biome check --write src scripts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
+    "fix:lockfile-transport": "node scripts/normalize-lockfile.mjs",
+    "gate": "pnpm run lint && pnpm run build && pnpm run typecheck && pnpm run test",
+    "test:coverage": "vitest run --coverage"
+  },
+  "keywords": [
+    "solid",
+    "rdf",
+    "email",
+    "rfc5322",
+    "mime",
+    "agentic",
+    "provenance",
+    "prov-o",
+    "legacy-interop",
+    "reliability",
+    "verifiable-credential"
+  ],
+  "author": "Jesse Wright",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jeswr/agentic-legacy-bridge.git"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/solid-chat-interop": "workspace:*",
+    "n3": "^2.0.3",
+    "rdf-canonize": "5.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@rdfjs/types": "^2.0.1",
+    "@types/n3": "^1.26.1",
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9",
+    "@vitest/coverage-v8": "^4.1.9"
+  },
+  "mirrorPublish": {
+    "inlined": []
+  }
+}

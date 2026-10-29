@@ -122,3 +122,25 @@ describe("normaliseOrigin", () => {
     expect(() => normaliseOrigin("ftp://x.example")).toThrow();
   });
 });
+
+// AUTHORED-BY Codex GPT-6
+describe("GitHub Pages client identity", () => {
+  it("includes the app base in every identity and redirect URL", () => {
+    const doc = clientIdDocument("https://jeswr.github.io", "/solid-sdk/pod-drive/");
+    expect(doc.client_id).toBe("https://jeswr.github.io/solid-sdk/pod-drive/clientid.jsonld");
+    expect(doc.client_uri).toBe("https://jeswr.github.io/solid-sdk/pod-drive/");
+    expect(doc.redirect_uris).toEqual([
+      "https://jeswr.github.io/solid-sdk/pod-drive/callback.html",
+      "https://jeswr.github.io/solid-sdk/pod-drive/",
+    ]);
+  });
+  it.each([
+    "https://other.example/",
+    "//other.example/",
+    "/missing-slash",
+    "/query?x/",
+    "/hash#x/",
+  ])("rejects an invalid client base: %s", (path) => {
+    expect(() => clientIdDocument("https://jeswr.github.io", path)).toThrow("CLIENT_BASE_PATH");
+  });
+});

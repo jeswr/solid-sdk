@@ -5,6 +5,7 @@
 ```ts
 
 import type { Driver } from 'unstorage';
+import { RedirectRefusedError as SolidRedirectError } from '@jeswr/guarded-fetch';
 
 // @public
 const solidDriver: (opts: SolidDriverOptions) => Driver<SolidDriverOptions, undefined>;
@@ -43,14 +44,7 @@ export class SolidPreconditionFailedError extends Error {
     readonly url: string;
 }
 
-// @public
-export class SolidRedirectError extends Error {
-    constructor(url: string, status: number);
-    // (undocumented)
-    readonly status: number;
-    // (undocumented)
-    readonly url: string;
-}
+export { SolidRedirectError }
 
 // @public
 export interface WatchSocket {
