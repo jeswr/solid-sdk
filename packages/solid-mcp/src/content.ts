@@ -56,7 +56,14 @@ export function normalizeLocalJsonLd(text: string, validate: (document: unknown)
   // Resolve duplicate keys before the streaming parser sees them. Contexts and
   // @import inside JSON literals are opaque data; the parser's refusing loader
   // rejects actual remote contexts without inspecting literal contents.
-  return JSON.stringify(document);
+  return JSON.stringify(document, (_key, value: unknown) => {
+    // JSON.parse accepts numeric overflow as Infinity. Refuse it before
+    // stringify substitutes null, including inside opaque JSON literals.
+    if (typeof value === "number" && !Number.isFinite(value)) {
+      throw new Error("Non-finite JSON numbers are unsupported.");
+    }
+    return value;
+  });
 }
 
 export function resourceTitle(url: string): string {

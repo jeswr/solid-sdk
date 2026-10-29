@@ -252,6 +252,55 @@ describe("JSON-LD scalar literals", () => {
   });
 });
 
+describe.each(["1e400", "-1e400"])("non-finite JSON-LD numbers (%s)", (number) => {
+  it.each([
+    ["implicit", `{"urn:p":${number}}`],
+    ["untyped value", `{"urn:p":{"@value":${number}}}`],
+    [
+      "typed value",
+      `{"urn:p":{"@value":${number},"@type":"http://www.w3.org/2001/XMLSchema#double"}}`,
+    ],
+    [
+      "coerced value",
+      `{"@context":{"p":{"@id":"urn:p","@type":"http://www.w3.org/2001/XMLSchema#double"}},"p":${number}}`,
+    ],
+    ["JSON scalar", `{"urn:p":{"@value":${number},"@type":"@json"}}`],
+    ["nested JSON", `{"urn:p":{"@value":{"nested":[${number}]},"@type":"@json"}}`],
+    [
+      "coerced JSON",
+      `{"@context":{"p":{"@id":"urn:p","@type":"@json"}},"p":{"nested":[${number}]}}`,
+    ],
+    [
+      "aliased JSON",
+      `{"@context":{"v":"@value","t":"@type"},"urn:p":{"v":[${number}],"t":"@json"}}`,
+    ],
+    ["ignored property", `{"ignored":[${number}]}`],
+  ])("rejects %s before streaming instead of substituting null", async (_kind, source) => {
+    const transform = vi.spyOn(JsonLdParser.prototype, "_transform");
+    await expect(parseBoundedRdf(source, "application/ld+json", BASE)).rejects.toThrow(
+      "Non-finite JSON numbers are unsupported.",
+    );
+    expect(transform).not.toHaveBeenCalled();
+  });
+});
+
+it("preserves finite JSON-LD numbers, lexical strings and null in opaque JSON", async () => {
+  const value = {
+    numbers: [Number.MAX_VALUE, -Number.MAX_VALUE, Number.MIN_VALUE, 0],
+    strings: ["1e400", "-1e400"],
+    absent: null,
+  };
+  const dataset = await parseBoundedRdf(
+    JSON.stringify({ "@id": "urn:s", "urn:p": { "@value": value, "@type": "@json" } }),
+    "application/ld+json",
+    BASE,
+  );
+  expect(dataset.size).toBe(1);
+  expect(
+    JSON.parse(dataset.getQuads("urn:s", "urn:p", null, null)[0]?.object.value ?? "null"),
+  ).toEqual(value);
+});
+
 describe("RDF expansion and serialization budgets", () => {
   it.each([
     ["TriG graphs", "application/trig", "{ <urn:s> <urn:p> ", " . }"],

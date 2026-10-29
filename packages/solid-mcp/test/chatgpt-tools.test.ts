@@ -388,6 +388,35 @@ describe.each([
   });
 
   it.each([
+    ["implicit positive", "1e400"],
+    ["implicit negative", "-1e400"],
+    ["typed", '{"@value":1e400,"@type":"http://www.w3.org/2001/XMLSchema#double"}'],
+    ["opaque positive", '{"@value":{"nested":[1e400]},"@type":"@json"}'],
+    ["opaque negative", '{"@value":{"nested":[-1e400]},"@type":"@json"}'],
+  ])("rejects overflowing JSON-LD numbers in %s values", async (_kind, value) => {
+    const id = `${POD}data.jsonld`;
+    const pod = makeFakePod({
+      [POD]: { contentType: "text/turtle", body: containerTurtle(POD, [{ name: "data.jsonld" }]) },
+      [id]: {
+        contentType: "application/ld+json",
+        body: `{"@id":${JSON.stringify(id)},"urn:p":${value}}`,
+      },
+    });
+    await expect(fetchDocument({ fetch: pod.fetch, podRoot: POD }, id)).rejects.toThrow(
+      "Non-finite JSON numbers are unsupported.",
+    );
+    const client = await connectClient(pod.fetch, undefined, portable);
+    const fetched = await client.callTool({ name: "fetch", arguments: { id } });
+    expect(fetched.isError).toBe(true);
+    expect(fetched.content).toEqual([
+      { type: "text", text: "Non-finite JSON numbers are unsupported." },
+    ]);
+    const searched = await client.callTool({ name: "search", arguments: { query: "null" } });
+    expect(searched.isError).toBeUndefined();
+    expect(searched.content).toEqual([{ type: "text", text: '{"results":[]}' }]);
+  });
+
+  it.each([
     "explicit",
     "coerced",
     "aliased",
