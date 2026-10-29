@@ -821,3 +821,62 @@ changed; `check:packages` is not applicable. No push, publication, remote Git
 fetch/merge or dependency lifecycle script was used. The requested finding is
 fixed, with no implementation work or open questions remaining. Validation
 limitations are the full-workspace font download and unavailable roborev.
+
+## Codex fix round 6 — review of `3a58d89d055d`
+
+- `fde161a2 fix: bound JSON-LD structural buffering` validates the parsed JSON
+  before normalization or streaming. Value depth is capped at 64; every value,
+  including empty containers, ignored properties and JSON literals, reserves job
+  overhead and depth-weighted key-path work against the existing shared budget.
+  Excess throws `RdfLimitError`; fetch returns empty text with `truncated: true`.
+- `89adeedd fix: accept valid ACL Link attributes` supports the full parameter
+  token alphabet, optional extension values, extended attributes such as `title*`,
+  and repeated `hreflang` and extension attributes. Singular descriptive attributes
+  keep their first occurrence. Conservatively retains duplicate `rel` rejection,
+  unique ACL association, anchor refusal, ACP rejection and ACL URL checks.
+- `docs: record round-six validation` records this round's results.
+
+Added 31 fixture regression cases covering excessive object/array/mixed/literal
+depth, wide and depth-weighted job buffering, accepted depth and string contents,
+fetch truncation through both adapters, valid descriptive/extension attributes on
+ACL and unrelated links, and preserved association/grammar rejection. Before the
+fix, all three initial depth cases and ten valid attribute cases failed. With the
+fix, the focused suites pass 29 RDF budget tests and 67 bridge import tests.
+
+Validation used Node 24 and the existing fixture-only network guard:
+
+```sh
+export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"
+export NODE_OPTIONS=--require=/tmp/sst-9s2-round2-network-guard.cjs
+export GIT_ALLOW_PROTOCOL=file
+pnpm exec turbo run build --filter '@jeswr/solid-mcp^...' --filter '@jeswr/agentic-legacy-bridge^...' --concurrency=4
+pnpm --filter @jeswr/solid-mcp run lint
+pnpm --filter @jeswr/solid-mcp run build
+pnpm --filter @jeswr/solid-mcp run typecheck
+pnpm --filter @jeswr/solid-mcp run test
+pnpm --filter @jeswr/agentic-legacy-bridge run gate
+pnpm --filter @jeswr/solid-mcp run test:coverage
+pnpm --filter @jeswr/agentic-legacy-bridge run test:coverage
+TURBO_SCM_BASE=3a58d89d055d848b281dea9842286defcb2cb7ec pnpm run gate
+```
+
+All commands pass (exit 0). Package gates run lint, build, typecheck and tests:
+solid-mcp passes **550 tests across 11 files**; agentic-legacy-bridge passes
+**711 tests across 37 files**. Coverage runs pass, including configured thresholds.
+The affected repository gate, including root lint and dependent packages, passes
+**26/26 tasks**, 7 cached.
+
+The session-close `pnpm run gate:full` ran before the final documentation commit.
+It exits 1 after **130 successful tasks out of 265**, 13 cached, at the unchanged
+`@jeswr/app-suite#build`. Its `next/font` build cannot download Onest, Source Code
+Pro and Source Serif 4 from Google Fonts because the fixture-only guard refuses
+external connections. Root tests pass **745 tests across 9 files**. This is the
+same environment limitation recorded in earlier rounds; no unrelated changes
+were made.
+
+`git diff --check` passes. `roborev status` exits 127 because roborev is unavailable,
+so automated per-commit review could not run. No dependencies or manifests changed;
+`check:packages` is not applicable. No push, publication, remote Git fetch/merge or
+dependency lifecycle script was used. Both requested findings are fixed; no
+implementation work or open questions remain. Validation limitations are the
+full-workspace font download and unavailable roborev.
