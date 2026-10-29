@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # @jeswr/y-solid
@@ -44,6 +45,9 @@ await provider.flush();
 
 Call `sync()` after a Solid notification or on a polling interval to apply remote updates appended
 since the last load.
+
+Listing membership parsing uses `@jeswr/ldp-container`. The update store keeps its capped
+streaming reads and redirect refusal, skips sub-containers, and sorts update URLs locally.
 
 ## Links
 

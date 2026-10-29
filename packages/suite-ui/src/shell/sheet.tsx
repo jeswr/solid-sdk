@@ -5,6 +5,7 @@
 import { X } from "lucide-react";
 import { Dialog } from "radix-ui";
 import type { ReactNode } from "react";
+import { IconButton } from "../components/ui/icon-button.js";
 
 /** Shell-only shadcn Sheet anatomy; Radix owns modality, Escape and focus trapping. */
 export function ShellSheet({
@@ -39,13 +40,15 @@ export function ShellSheet({
         >
           <div className="suite-sheet-heading">
             <Dialog.Title>{title}</Dialog.Title>
-            <Dialog.Close
-              data-slot="shell-sheet-close"
-              className="suite-shell-icon-button"
-              aria-label={`Close ${title.toLowerCase()}`}
-              title="Close (Esc)"
-            >
-              <X size={20} strokeWidth={1.75} aria-hidden="true" />
+            <Dialog.Close asChild>
+              <IconButton
+                variant="ghost"
+                data-slot="shell-sheet-close"
+                className="suite-shell-icon-button"
+                label={`Close ${title.toLowerCase()}`}
+              >
+                <X size={20} strokeWidth={1.75} aria-hidden="true" />
+              </IconButton>
             </Dialog.Close>
           </div>
           {children}

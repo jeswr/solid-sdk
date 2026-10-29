@@ -1,0 +1,20 @@
+{
+  "@context": "https://www.w3.org/ns/solid/oidc-context.jsonld",
+  "client_id": "https://jeswr.github.io/solid-browser-extension/clientid.jsonld",
+  "client_name": "Solid Browser Extension",
+  "client_uri": "https://github.com/jeswr/solid-browser-extension",
+  "logo_uri": "https://jeswr.github.io/solid-browser-extension/icon128.png",
+  "redirect_uris": [
+    "https://bicabcdahgfbkgmlidjpmiadmjlppikk.chromiumapp.org/"
+  ],
+  "grant_types": [
+    "authorization_code",
+    "refresh_token"
+  ],
+  "response_types": [
+    "code"
+  ],
+  "scope": "openid webid offline_access",
+  "token_endpoint_auth_method": "none",
+  "application_type": "web"
+}
