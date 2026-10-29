@@ -87,13 +87,20 @@ export function createOriginScopedFetch(
       const effective = init as RequestInit & { signal: AbortSignal };
       const body = effective.body;
       // Explicit streams are incompatible with keepalive and no-cors.
-      return singleHop(input, {
+      const transportInit = {
         ...effective,
         body:
           body instanceof ReadableStream && (effective.keepalive || effective.mode === "no-cors")
             ? await bufferRequestBody(body, effective.signal)
             : body,
-      });
+      };
+      try {
+        return await singleHop(input, transportInit);
+      } catch {
+        // An inner guard may parse Location before refusal and retain it in its cause.
+        // Replace the whole error rather than passing untrusted transport details outward.
+        throw new TypeError("binding transport failed or refused redirect");
+      }
     },
     allowLoopback: options.allowLoopback,
     dnsLookup: options.dnsLookup,

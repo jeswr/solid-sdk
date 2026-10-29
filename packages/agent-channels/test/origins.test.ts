@@ -6,6 +6,8 @@ import { createNodeGuardedFetch } from "@jeswr/guarded-fetch/node";
 import { createHash } from "crypto";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer uses bare builtins
 import { createServer } from "http";
+// biome-ignore lint/style/useNodejsImportProtocol: agent layer uses bare builtins
+import { inspect } from "util";
 import { expect, it, vi } from "vitest";
 import { createOriginScopedFetch, type OriginFetchOptions } from "../src/origins.js";
 
@@ -605,4 +607,57 @@ it("sanitizes malformed binding origin errors", () => {
   expect(() =>
     createOriginScopedFetch(new Set(["https://fixture-user:fixture-password@ho st.example"])),
   ).not.toThrow(/fixture-user|fixture-password/);
+});
+
+it.each([
+  "default",
+  "injected",
+] as const)("sanitizes inner %s Node transport redirect errors and their causes", async (kind) => {
+  let location = "";
+  let requests = 0;
+  const server = createServer((_req, res) => {
+    requests++;
+    res.writeHead(302, { location }).end();
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    if (!address || typeof address === "string") throw new Error("no local fixture address");
+    const origin = `http://127.0.0.1:${address.port}`;
+    const scoped = createOriginScopedFetch(new Set([origin]), {
+      allowLoopback: true,
+      createTransport: kind === "injected" ? createNodeGuardedFetch : undefined,
+    });
+    const locations = [
+      "https://fixture-user:fixture-password@ho st.example/private",
+      "https://fixture-user:fixture-password@[invalid]/private",
+      "//fixture-user:fixture-password@ho st.example/private",
+      "https://fixture-user:fixture-password@target.example/private",
+    ];
+    for (location of locations) {
+      const error: unknown = await scoped(origin).catch((reason: unknown) => reason);
+      expect(error).toBeInstanceOf(Error);
+      expect(inspect(error)).not.toMatch(/fixture-user|fixture-password/);
+    }
+    expect(requests).toBe(locations.length);
+  } finally {
+    await new Promise<void>((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  }
+});
+
+it("discards the complete inner transport error chain", async () => {
+  const origin = "https://allowed.example";
+  const transport = vi.fn<typeof guardedFetch>(async () => {
+    throw new Error("fixture-user", { cause: new Error("fixture-password") });
+  });
+  const scoped = createOriginScopedFetch(new Set([origin]), {
+    createTransport: () => transport,
+    dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }],
+  });
+  const error: unknown = await scoped(origin).catch((reason: unknown) => reason);
+  expect(error).toBeInstanceOf(Error);
+  expect(inspect(error)).not.toMatch(/fixture-user|fixture-password/);
+  expect(transport).toHaveBeenCalledTimes(1);
 });
