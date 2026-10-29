@@ -1,9 +1,22 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { AGENT, canonicalJson, digestBytes, parseBoundedJson } from "@jeswr/agent-model";
+import {
+  AGENT,
+  canonicalJson,
+  DEFAULT_LIMITS,
+  digestBytes,
+  parseBoundedJson,
+} from "@jeswr/agent-model";
 import type { InboundRawMessage } from "../channel.js";
 import { ChannelParseError } from "../errors.js";
 import { DIRECT } from "../profiles.js";
 import type { AccountRef, ReadGrant, SendGrant, Wire } from "../types.js";
+
+// The compact JWS encodes the whole payload; its string bound is the carriage byte limit.
+const CARRIER_LIMITS = Object.freeze({
+  ...DEFAULT_LIMITS,
+  maxEnvelopeBytes: DIRECT.maxBytes,
+  maxStringLength: DIRECT.maxBytes,
+});
 
 /** Internal loopback storage; exact bytes are retained for positive-evidence lookup. */
 export interface DirectMailbox {
@@ -24,7 +37,7 @@ export function readEnvelope(raw: string | Uint8Array): { text: string; compactJ
   try {
     const text =
       typeof raw === "string" ? raw : new TextDecoder("utf-8", { fatal: true }).decode(raw);
-    const parsed = parseBoundedJson(text) as Record<string, unknown>;
+    const parsed = parseBoundedJson(text, CARRIER_LIMITS) as Record<string, unknown>;
     const compactJws = parsed["agent:compactJws"];
     if (
       typeof compactJws !== "string" ||

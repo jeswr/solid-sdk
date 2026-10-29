@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { canonicalJson, digestBytes, validateMessage } from "@jeswr/agent-model";
+import { assertJsonBounds, canonicalJson, digestBytes, validateMessage } from "@jeswr/agent-model";
 import type { CarriageProfile, ChannelBinding } from "../binding.js";
 import { createDirectReader } from "../direct.js";
 import { ChannelParseError, ProviderRejectedError } from "../errors.js";
@@ -26,7 +26,9 @@ export function createDirectSend(
   const pending = pendingByMailbox.get(mailbox) ?? new Set<{ readonly bytes: string }>();
   pendingByMailbox.set(mailbox, pending);
   async function verified(compactJws: string) {
-    const result = validateMessage(await options.verify(compactJws));
+    const payload = await options.verify(compactJws);
+    assertJsonBounds(payload);
+    const result = validateMessage(payload);
     if (!result.ok) throw new ChannelParseError("unverifiable direct message");
     return result.message;
   }

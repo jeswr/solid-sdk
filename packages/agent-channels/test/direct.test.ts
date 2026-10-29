@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { canonicalJson, digestBytes } from "@jeswr/agent-model";
+import { canonicalJson, DEFAULT_LIMITS, digestBytes } from "@jeswr/agent-model";
 import { describe, expect, it, vi } from "vitest";
 import { createDirectSend } from "../src/direct/send.js";
 import { type DirectMailbox, envelope } from "../src/direct/shared.js";
@@ -86,6 +86,80 @@ describe("direct loopback", () => {
     expect(
       createDirectReader({ inboxes: new Map(), accepted: new Map() }, config.tokens).send,
     ).toBeUndefined();
+  });
+
+  it("round-trips a bounded payload near the carriage byte limit", async () => {
+    const config = options();
+    const binding = createInMemoryDirectBinding(config);
+    const description = {
+      first: "x".repeat(DEFAULT_LIMITS.maxStringLength),
+      second: "x".repeat(DEFAULT_LIMITS.maxStringLength),
+      third: "",
+    };
+    const payload = { ...message, kind: "description", body: { description } };
+    const unpaddedBytes = Buffer.byteLength(envelope(signed(payload).compactJws));
+    description.third = "x".repeat(Math.floor(((DIRECT.maxBytes - unpaddedBytes) * 3) / 4));
+    expect(description.third.length).toBeLessThanOrEqual(DEFAULT_LIMITS.maxStringLength);
+    const proposal = signed(payload);
+    expect(proposal.compactJws.length).toBeGreaterThan(DEFAULT_LIMITS.maxStringLength);
+    const wire = await binding.send.render(proposal, DIRECT);
+    expect(Buffer.byteLength(wire.bytes)).toBeLessThanOrEqual(DIRECT.maxBytes);
+    expect(Buffer.byteLength(wire.bytes)).toBeGreaterThan(DIRECT.maxBytes - 4);
+    expect(await binding.send.validate(wire, proposal)).toEqual({ ok: true });
+    const result = { outcome: "accepted", providerRef: `direct:${wire.digest}` };
+    expect(
+      await binding.send.transmit(wire, { account, tokens: config.tokens, dryRun: false }),
+    ).toEqual(result);
+    expect(await binding.send.lookup?.(wire)).toEqual({
+      outcome: "found",
+      providerRef: result.providerRef,
+    });
+    const page = await binding.ingest.list(account, undefined, limits);
+    expect(page.items).toEqual([{ id: message.id, raw: wire.bytes }]);
+    for (const item of page.items)
+      expect(binding.ingest.parse(item).jsonLdBlocks).toEqual([wire.bytes]);
+    const oversized = `${wire.bytes}${" ".repeat(DIRECT.maxBytes - Buffer.byteLength(wire.bytes) + 1)}`;
+    for (const raw of [oversized, Buffer.from(oversized)])
+      expect(() => binding.ingest.parse({ id: message.id, raw })).toThrow(ChannelParseError);
+  });
+
+  it.each([
+    { bound: "string length", value: "x".repeat(DEFAULT_LIMITS.maxStringLength + 1) },
+    {
+      bound: "depth",
+      value: Array.from({ length: DEFAULT_LIMITS.maxJsonDepth }).reduce<unknown>(
+        (nested) => ({ nested }),
+        null,
+      ),
+    },
+    { bound: "array length", value: Array(DEFAULT_LIMITS.maxArrayLength + 1).fill(0) },
+    {
+      bound: "node count",
+      value: Array.from({ length: 10 }, () => Array(DEFAULT_LIMITS.maxArrayLength).fill(0)),
+    },
+  ])("enforces decoded payload $bound independently of carrier parsing", async ({ value }) => {
+    const config = options();
+    const verify = vi.fn(verifyMessage);
+    const binding = createInMemoryDirectBinding({ ...config, verify });
+    const proposal = signed({
+      ...message,
+      kind: "description",
+      body: { description: { value } },
+    });
+    const bytes = envelope(proposal.compactJws);
+    const wire = { bytes, digest: digestBytes(bytes), mediaType: "application/ld+json" };
+    expect(Buffer.byteLength(bytes)).toBeLessThan(DIRECT.maxBytes);
+    expect(binding.ingest.parse({ id: message.id, raw: bytes }).warnings).toEqual([
+      "signature-unverified",
+    ]);
+    await expect(binding.send.render(proposal, DIRECT)).rejects.toThrow();
+    expect(await binding.send.validate(wire, proposal)).toEqual({ ok: false, reason: "malformed" });
+    await expect(
+      binding.send.transmit(wire, { account, tokens: config.tokens, dryRun: false }),
+    ).rejects.toThrow();
+    await expect(binding.send.lookup?.(wire)).rejects.toThrow();
+    expect(verify).toHaveBeenCalledTimes(4);
+    expect(config.tokens.calls).toEqual([]);
   });
 
   it.each([
