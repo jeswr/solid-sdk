@@ -3,8 +3,10 @@
 export { capabilities } from "./capabilities.js";
 export { CapabilitiesError } from "./errors.js";
 export { deriveFeatures } from "./features.js";
+export { type ParsedLink, parseLinkHeaders } from "./link.js";
 export { parseLwsDescription } from "./lws-description.js";
 export { probe } from "./probe.js";
+export { parseWacAllow } from "./probe-headers.js";
 export { resolveStorageDescription } from "./resolve.js";
 export type {
   CapabilityEntry,

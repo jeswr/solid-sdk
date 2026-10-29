@@ -270,7 +270,8 @@
   display: flex;
   gap: 4px;
 }
-.suite-launcher button:disabled {
+.suite-launcher button:disabled,
+.suite-launcher button[aria-disabled="true"] {
   opacity: 0.55;
   cursor: default;
 }

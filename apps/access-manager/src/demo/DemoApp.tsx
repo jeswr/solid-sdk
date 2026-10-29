@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
 //
 // The demo root: the REAL app shell + the REAL four views (Dashboard /
@@ -24,7 +25,7 @@ const TAB_FOR_VIEW: Record<DemoView, Tab> = {
 export function DemoApp({ view }: { view: DemoView }) {
   const session = useMemo(() => createDemoSession().session, []);
   return (
-    <ThemeProvider>
+    <ThemeProvider storageKey="access-manager:app-shell-theme">
       <div className="demo-banner" role="note" data-testid="demo-banner">
         <strong>Demo</strong> — sample data (not a real pod). You are browsing Ada&rsquo;s simulated
         pod; changes are disabled.

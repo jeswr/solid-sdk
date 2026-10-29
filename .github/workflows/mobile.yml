@@ -10,6 +10,7 @@ on:
       - "apps/mobile/**"
       - "packages/suite-native/**"
       - ".github/workflows/mobile.yml"
+      - ".github/scripts/mobile-lock-scope.py"
       - "pnpm-lock.yaml"
   push:
     branches: [main]
@@ -17,6 +18,7 @@ on:
       - "apps/mobile/**"
       - "packages/suite-native/**"
       - ".github/workflows/mobile.yml"
+      - ".github/scripts/mobile-lock-scope.py"
       - "pnpm-lock.yaml"
 
 permissions:
@@ -27,7 +29,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Lockfile-only PRs are frequent and macOS runners are scarce, so a PR whose only trigger is the
+  # lockfile runs the native jobs only when the mobile dependency closure changed. Main pushes always
+  # run, and so does any PR where the scope job fails.
+  scope:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.scope.outputs.run }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # HEAD is the PR merge commit; its first parent is the base. Any difference under the
+          # mobile paths, or any git error, means the native jobs run.
+          if ! git diff --quiet --no-renames HEAD^1 HEAD -- apps/mobile packages/suite-native \
+            .github/workflows/mobile.yml .github/scripts/mobile-lock-scope.py; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          python3 -c "import yaml" 2>/dev/null || pip install --quiet pyyaml
+          git show HEAD^1:pnpm-lock.yaml > "$RUNNER_TEMP/base-lock.yaml" || true
+          # Anything but an explicit "false" from a clean run means the native jobs run.
+          result="$(python3 .github/scripts/mobile-lock-scope.py "$RUNNER_TEMP/base-lock.yaml" pnpm-lock.yaml)" || result=true
+          [ "$result" = "false" ] || result=true
+          echo "run=$result" >> "$GITHUB_OUTPUT"
+
   android:
+    needs: scope
+    if: ${{ !cancelled() && !(needs.scope.result == 'success' && needs.scope.outputs.run == 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -61,6 +99,8 @@ jobs:
           retention-days: 7
 
   android-e2e:
+    needs: scope
+    if: ${{ !cancelled() && !(needs.scope.result == 'success' && needs.scope.outputs.run == 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -149,6 +189,8 @@ jobs:
           retention-days: 7
 
   ios:
+    needs: scope
+    if: ${{ !cancelled() && !(needs.scope.result == 'success' && needs.scope.outputs.run == 'false') }}
     runs-on: macos-15
     timeout-minutes: 40
     steps:

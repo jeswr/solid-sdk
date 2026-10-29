@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // Per-class editable form tests (jeswr-task-form / jeswr-contact-form /
 // jeswr-bookmark-form):
@@ -13,15 +14,35 @@
 
 import "../src/index.js";
 import { Store } from "n3";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { JeswrBookmarkForm } from "../src/components/bookmark-form.js";
+import type { AbstractFormElement } from "../src/components/form-base.js";
 import { JeswrTaskForm } from "../src/components/task-form.js";
 import type { MergeSaveCallback } from "../src/index.js";
-import { parseRdfTurtle, parseTurtle, waitFor } from "./fixtures.js";
+import {
+  BOOKMARKS_TTL,
+  CONTACTS_TTL,
+  parseRdfTurtle,
+  parseTurtle,
+  TASKS_TTL,
+  waitFor,
+} from "./fixtures.js";
 
-afterEach(() => {
+// shacl-form's 200 ms initialization debounce outlives Lit's updateComplete.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+});
+
+afterEach(async () => {
   document.body.innerHTML = "";
-  vi.restoreAllMocks();
+  try {
+    // Finish detached forms' initialization while jsdom still provides document.
+    await vi.runAllTimersAsync();
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  }
 });
 
 const TURTLE = "text/turtle";
@@ -141,21 +162,34 @@ describe("per-class forms register + mount the editable form", () => {
     expect(customElements.get("jeswr-bookmark-form")).toBeDefined();
   });
 
-  it("a task form with a src mounts an inner <jeswr-shacl-form>", async () => {
-    const el = document.createElement("jeswr-task-form") as JeswrTaskForm;
-    el.fetch = (async () =>
-      ttlRes(
-        `@prefix wf: <http://www.w3.org/2005/01/wf/flow#> . @prefix dct: <http://purl.org/dc/terms/> . <https://pod.example/tasks/1#it> a wf:Task ; dct:title "T" .`,
-        '"v1"',
-      )) as unknown as typeof globalThis.fetch;
-    el.src = "https://pod.example/tasks/1";
+  it.each([
+    { tag: "jeswr-task-form", src: "https://pod.example/tasks/1", data: TASKS_TTL },
+    { tag: "jeswr-bookmark-form", src: "https://pod.example/bookmarks/1", data: BOOKMARKS_TTL },
+    { tag: "jeswr-contact-form", src: "https://pod.example/contacts/alice", data: CONTACTS_TTL },
+  ])("$tag drains pending initialization after removal", async ({ tag, src, data }) => {
+    const el = document.createElement(tag) as AbstractFormElement;
+    el.fetch = (async () => ttlRes(data, '"v1"')) as unknown as typeof globalThis.fetch;
+    el.src = src;
     document.body.appendChild(el);
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 60; i++) {
       await el.updateComplete;
       await Promise.resolve();
-      if (el.querySelector("jeswr-shacl-form")) break;
+      if (el.querySelector("shacl-form")) break;
     }
     expect(el.querySelector("jeswr-shacl-form")).not.toBeNull();
+    const form = el.querySelector("shacl-form");
+    expect(form).not.toBeNull();
+    expect(form?.hasAttribute("loading")).toBe(true);
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+
+    // Removal alone leaves shacl-form's initialization debounce pending.
+    el.remove();
+    expect(el.isConnected).toBe(false);
+    await vi.runAllTimersAsync();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(form?.hasAttribute("loading")).toBe(false);
+    const root = form?.shadowRoot ?? form;
+    expect(root?.querySelector("shacl-node")).not.toBeNull();
   });
 
   it("with no src shows the empty placeholder", async () => {
