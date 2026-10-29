@@ -3,7 +3,7 @@
 
 # sst-j2y — A-036 lane report
 
-Current validation and fixes are recorded in [Fix round 11](#fix-round-11).
+Current validation and fixes are recorded in [Fix round 12](#fix-round-12).
 The original implementation report below is historical.
 
 Implemented `@jeswr/agent-registry` on `lane/sst-j2y`. Only the package, the workspace
@@ -812,3 +812,75 @@ remained in this checkout on `lane/sst-j2y`; no branch switch, fetch, merge, pus
 PR or modifications to another checkout were performed. No generated untracked
 files remain. This report is committed after validation, and the checkout is
 left clean.
+
+## Fix round 12
+
+Addressed exactly the ordinary-note false-positive finding against `da27bbc18c88`
+on `lane/sst-j2y`:
+
+- `85215f58` — `fix(agent-registry): exclude prose from private identities`:
+  extract known, recognizable or explicitly delimited identities from inactive
+  notes instead of adding every prose word to the privacy set. Preserve opaque
+  handles in quotes, backticks, angle brackets and parentheses. Add 19 regressions
+  covering unchanged settings and original/encoded/profile references, offline
+  RDF imports and idempotence, metadata redaction, known account/evidence handles,
+  and continued rejection of private references before storage writes.
+- Final report commit — `docs(agent-registry): record fix round 12 validation`
+  (this file).
+
+Conservative choice: opaque mentions in inactive prose remain private when known
+or explicitly delimited; ordinary bare words are not inferred to be handles.
+Recognizable identity formats and all parsed active-conflict operands remain
+private. Conflict activation is unchanged. No dependencies, manifests, lockfiles
+or test configuration changed; `check:packages` was not applicable. All new
+fixtures are synthetic and all importer transports are in memory.
+
+The new ordinary-prose regressions reproduced both reference rejection and
+metadata over-redaction before the fix. Final validation used Node `v24.22.1`
+via `export PATH=/opt/node24/bin:$PATH`. The package gate passed **328 tests in
+4 files**:
+
+```sh
+pnpm --filter @jeswr/agent-registry run lint
+pnpm --filter @jeswr/agent-registry run build
+pnpm --filter @jeswr/agent-registry run typecheck
+pnpm --filter @jeswr/agent-registry run test
+```
+
+The affected repository gate passed **5/5 tasks**, including `pnpm run lint:root`
+and all 328 registry tests, in **15.712s** (0 cached). The local `agent/integration`
+ref is unavailable, so the supplied review head was used as the existing local
+baseline:
+
+```sh
+TURBO_SCM_BASE=da27bbc18c882616cc63c41f4f813e074d7b9bcd pnpm run gate
+```
+
+`pnpm run gate:full` failed in unchanged `@jeswr/federation-codegen#test`:
+**2 failed and 23 passed tests**. `test/generator.test.ts:81` expects the legacy
+`w3id.org` bookmarks namespace while the ontology uses `jeswr.org/ns`; line 126
+also detects the corresponding generated ontology drift. These failures were
+recorded in earlier rounds. Turbo reported **288/350 successful tasks**, 4 cached,
+after **5m23.256s**. All **686 root tests in 7 files** passed, and the run replayed
+all **328 passing registry tests**. Repository gates used the following environment
+to disable telemetry and keep external requests offline:
+
+```sh
+export NEXT_TELEMETRY_DISABLED=1
+export HTTP_PROXY=http://127.0.0.1:9
+export HTTPS_PROXY=http://127.0.0.1:9
+export ALL_PROXY=http://127.0.0.1:9
+export NODE_USE_ENV_PROXY=1
+pnpm run gate:full
+```
+
+Removed the 16 generated `apps/pod-*/web/public/{callback.html,clientid.jsonld}`
+files after the full gate. No unrelated source, assertions or timeout configuration
+changed. No in-scope implementation remains unfinished and there are no open
+questions. A green full-workspace gate remains blocked by the unrelated failures
+above. `roborev` is unavailable and no post-commit hook is installed, so automated
+per-commit review could not run; no review tooling or model endpoint was installed
+or invoked. Both commits use the required two co-author trailers. All work remained
+in this checkout on `lane/sst-j2y`; no branch switch, fetch, merge, push, PR or
+modifications to another checkout were performed. This report is committed after
+validation, and the checkout is left clean.
