@@ -281,12 +281,38 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
       }),
     ),
   ].map(({ handle, channel }) => ({ handle: normaliseHandle(handle, channel), channel }));
+  // Match and hash each note once; account attachment only checks its own normalized handles.
+  const noteConflicts = notes
+    .filter(({ note }) => /versus|contradict|conflict/i.test(note))
+    .map(({ identifiers }) => {
+      const folded = new Set(identifiers.map((handle) => normaliseHandle(handle)));
+      const matrix = new Set(identifiers.map((handle) => normaliseHandle(handle, "matrix")));
+      const mentioned = new Map<string, Set<string>>();
+      const handleHashes = new Set<string>();
+      for (const { handle, channel } of identities) {
+        const tokens = channel === "matrix" || channel === "matrix_bot" ? matrix : folded;
+        if (!tokens.has(handle)) continue;
+        let handles = mentioned.get(channel);
+        if (!handles) {
+          handles = new Set();
+          mentioned.set(channel, handles);
+        }
+        if (handles.has(handle)) continue;
+        handles.add(handle);
+        handleHashes.add(hashHandle(handle, salt, channel));
+      }
+      return { mentioned, handleHashes: [...handleHashes].sort() };
+    });
   // Redaction deliberately checks case-insensitively, independently of identity matching.
   const rawHandles = [...new Set(identities.map(({ handle }) => normaliseHandle(handle)))];
   // Recognizable identities remain private even when absent from accounts, evidence and notes.
-  const containsPrivateIdentifier = (value: string) =>
-    /@|(?:https?|mailto|tel|did):|\+\d[\d ().-]{5,}\d/i.test(value) ||
-    rawHandles.some((h) => normaliseHandle(value).includes(h));
+  const containsPrivateIdentifier = (value: string) => {
+    const normalised = normaliseHandle(value);
+    return (
+      /@|(?:https?|mailto|tel|did):|\+\d[\d ().-]{5,}\d/i.test(value) ||
+      rawHandles.some((h) => normalised.includes(h))
+    );
+  };
   const safe = (value: string) =>
     containsPrivateIdentifier(value) || /op:\/\//i.test(value) ? "redacted" : value;
   const evidenceFor = (e: RegistrySnapshot["evidence"][number]) => ({
@@ -304,29 +330,19 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
   const settings: Settings = {
     version: 1,
     connections: accounts.map((a): Account => {
-      const hashes = [...new Set(a.handles.map((h) => hashHandle(h, salt, a.channel)))].sort();
+      const handles = [...new Set(a.handles.map((h) => normaliseHandle(h, a.channel)))];
+      const hashes = handles.map((h) => hashHandle(h, salt, a.channel)).sort();
       const conflicts: Account["identityConflicts"] = [];
       const provider =
         a.channel === "email" && /^(odi|open[ _-]data[ _-]institute)$/i.test(a.organisation)
           ? "google_workspace"
           : a.provider;
-      for (const { note, identifiers } of notes) {
-        if (!/versus|contradict|conflict/i.test(note)) continue;
-        const mentioned = identities.filter(({ handle, channel }) =>
-          identifiers.some((identifier) => normaliseHandle(identifier, channel) === handle),
-        );
-        if (
-          mentioned.some(
-            ({ handle, channel }) =>
-              a.channel === channel &&
-              a.handles.some((own) => normaliseHandle(own, channel) === handle),
-          )
-        )
+      for (const { mentioned, handleHashes } of noteConflicts) {
+        const channelMentions = mentioned.get(a.channel);
+        if (channelMentions && handles.some((handle) => channelMentions.has(handle)))
           conflicts.push({
             kind: "identity-mismatch",
-            handleHashes: [
-              ...new Set(mentioned.map(({ handle, channel }) => hashHandle(handle, salt, channel))),
-            ].sort(),
+            handleHashes: [...handleHashes],
           });
       }
       for (const e of snapshot.evidence) {

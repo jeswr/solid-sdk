@@ -4,7 +4,7 @@
 import { createHmac } from "crypto";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer forbids scheme imports
 import { readFile } from "fs/promises";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   bindingStateFromSetup,
   capabilityMatrix,
@@ -500,6 +500,70 @@ describe("privacy and settings model", () => {
           handleHashes: [hashHandle(own, salt, channel), hashHandle(other, salt, channel)].sort(),
         },
       ]);
+  });
+  it("bounds normalization work for maximum account, handle and note counts", () => {
+    const snap = parseSnapshot({
+      version: 1,
+      accounts: Array.from({ length: 199 }, (_, index) => ({
+        id: `account-${index}`,
+        channel: index % 2 ? "matrix_bot" : "email",
+        provider: "fixture_provider",
+        organization: "personal",
+        identifiers: Object.fromEntries(
+          [0, 1].map((group) => [
+            `group-${group}`,
+            Array.from({ length: 10 }, (_, alias) =>
+              index % 2
+                ? `@Fixture-${index}-${group * 10 + alias}:matrix.example`
+                : `fixture-${index}-${group * 10 + alias}@example.com`,
+            ),
+          ]),
+        ),
+        connector: { target: "fixture", setup_status: "planned" },
+      })),
+      notes: Array.from(
+        { length: 20 },
+        (_, index) =>
+          `Identity conflict: ${index % 2 ? `@Fixture-${index}-0:matrix.example` : `fixture-${index}-0@example.com`} versus alternate-${index}@example.org! ${"context ".repeat(40)}`,
+      ),
+    });
+    const original = String.prototype.normalize;
+    let calls = 0;
+    // Count work, not wall time; abort excessive work before a regression can stall the test.
+    const normalization = vi.spyOn(String.prototype, "normalize").mockImplementation(function (
+      this: string,
+      form?: string,
+    ) {
+      if (++calls > 100_000) throw new Error("Excessive registry normalization work");
+      return original.call(this, form);
+    });
+    let s: ReturnType<typeof inventorySettings>;
+    try {
+      s = inventorySettings(snap, salt);
+    } finally {
+      normalization.mockRestore();
+    }
+    expect(calls).toBeLessThanOrEqual(100_000);
+    expect(s.connections).toHaveLength(200);
+    for (const [index, account] of s.connections.entries()) {
+      if (index >= 20) {
+        expect(account.identityConflicts).toEqual([]);
+        continue;
+      }
+      const input = snap.accounts[index];
+      if (!input?.handles[0]) throw new Error("Fixture identity absent");
+      expect(account.channelHandles).toHaveLength(20);
+      expect(account.bindingState).toBe("error");
+      expect(account.identityConflicts).toEqual([
+        {
+          kind: "identity-mismatch",
+          handleHashes: [
+            hashHandle(input.handles[0], salt, input.channel),
+            hashHandle(`alternate-${index}@example.org`, salt, "email"),
+          ].sort(),
+        },
+      ]);
+    }
   });
   it.each([
     ["+1 202 555 0100", '"'],
