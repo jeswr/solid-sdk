@@ -704,3 +704,40 @@ it("shares merge, provenance and host state with file imports", async () => {
   );
   expect(doc.derivedFrom.has("urn:solid:connector:incremental:export")).toBe(true);
 });
+
+// AUTHORED-BY Codex GPT-6
+it("combines file adapter skip calls and outcome skips in the report and state", async () => {
+  const pod = createMemoryPod();
+  const port = writer(pod);
+  const report = await runFileImport({
+    adapter: {
+      metadata: {
+        ...spotifyAdapter.metadata,
+        id: "incremental",
+        tier: "C",
+        authKind: "export-file",
+      },
+      accept: ".txt",
+      fileHint: "Synthetic file",
+      async importFile(_file, ctx) {
+        expect(ctx.webId).toBe(TEST_WEBID);
+        ctx.skip();
+        ctx.skip();
+        const dataset = new Store();
+        song(dataset, `${ctx.resolve("items.ttl")}#one`, "one", "File");
+        await ctx.write({
+          slug: "items.ttl",
+          category: "media",
+          forClass: CLASSES.MusicRecording,
+          dataset,
+        });
+        return { skipped: 3, unsupported: ["Synthetic product"] };
+      },
+    },
+    podWriter: port,
+    file: memoryFile("synthetic.txt", "fixture"),
+  });
+  expect(report.skipped).toBe(5);
+  expect(report.state?.counts).toEqual({ documents: 1, items: 1, skipped: 5 });
+  expect(report.unsupported).toEqual(["Synthetic product"]);
+});

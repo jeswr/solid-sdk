@@ -108,13 +108,90 @@ collections it reconciles so each dataset uses the ETag from its own read. An in
 retains its cleanup inventory in that RDF for replay; a missing document is a no-op. Attachment
 media types from mail are untrusted: RDF and malformed types are stored as `application/octet-stream`.
 
+## Google Takeout
+
+`./adapters/google-takeout` accepts the downloaded `.zip` directly, plus legacy single
+`MyActivity.json` files. ZIP detection uses the `PK\x03\x04` signature. Archive imports
+require `ImportFile.stream()` for signature detection and a reopenable ranged-read port,
+`slice(start, end): { stream(): ReadableStream<Uint8Array> }`, with an exclusive end (native
+File/Blob and the Node CLI provide both). ZIP input never goes through `text()` and has
+no whole-file fallback. The mailbox account comes only from the first message's header
+block in the first valid mbox entry (at most 64 KiB); absent a valid Delivered-To address,
+it is `google-takeout`. No full archive preflight pass is needed.
+
+The reader locates the central directory, including ZIP64 records/extra fields and offsets
+above 4 GiB, with a 64 MiB directory cap and 100,000-entry ceiling. Archive-wide structural
+errors, ceiling violations and multi-disk ZIPs fail before dispatch. Every local name,
+method, flag and data range is validated before import; overlapping and duplicate entries
+are skipped. Descriptor signatures inside file contents cannot create entries. Entry
+sizes come from the directory. Pinned fflate 0.8.3 `Inflate` receives at most 64 KiB per
+piece, awaiting downstream work between pieces. Its pinned completion/pending state is
+checked after each push; early DEFLATE completion, incomplete streams, size mismatches and
+CRC-32 mismatches skip the entry.
+Decoder exceptions abort the archive, including during mailbox-header sniffing, because
+fflate may throw after producing internal output without reporting its byte count.
+Whole-file JSON/CSV/ICS/vCard handlers retain at most 64 MiB, each mail message at most
+Gmail's 36 MiB, and each Drive copy at most 25 MiB. The run caps inflated data at 16 GiB
+and entries at 100,000. Every emitted byte counts, including mailbox-header sniffing and
+output rejected by later entry checks;
+exceeding the actual-byte budget stops the archive before snapshot reconciliation. Each rejected
+entry/message counts in `report.skipped`. Oversized Drive files keep metadata with
+`contentSkipped`, remove stale copied content and also count as skipped. Names are untrusted:
+path segments are escaped with mail `pathId`, with traversal/empty/absolute paths and depth
+above 16 rejected. Encrypted entries and unsupported compression methods are skipped and
+reported. URLs inside exports are never fetched.
+
+Dispatch supports mail `.mbox` (shared MailWriter, Gmail labels/read flags and decimal-to-hex
+thread ids), calendar `.ics` (shared Calendar mapping/recurrence), contacts `.vcf` (shared
+People mapping and SolidOS address-book index), owned files below `Drive/`, YouTube watch
+history and `My Activity/**/MyActivity.json`, Semantic Location History place visits, and Fit
+daily CSV metrics. Fit retains the Apple Health/Fitbit `schema:ExerciseAction` daily-activity
+model with typed steps, distance, calories, heart-point and move-minute measurements. Raw
+`Records.json` points are unsupported. Unknown entries are grouped by product in
+`report.unsupported`; `archive_browser.html` and directory entries are ignored.
+
+Drive binaries live at `drive/takeout/<escaped path>` and metadata in the separate
+`drive/takeout-meta/<escaped path>.ttl` tree to avoid collisions with source filenames.
+Calendar, activity, location and Fit documents have deterministic paths per export entry;
+a later complete product snapshot replaces them, including removed optional fields.
+Any skipped/capped/corrupt/unparseable entry makes its product incomplete: successful
+entries only add/update records and preserve previous membership. Archive-wide inflation
+limits suppress destructive reconciliation for every product. Deferred snapshot and contacts
+reconciliation share a budget of 1,000,000 retained identifiers and 64 MiB of UTF-8 identifier
+text (contact display names also count). A product that would exceed it reports
+`reconciliation-state-cap-exceeded`, releases its retained identifiers and continues with
+adds/updates only; other products can still reconcile. Calendar entries require balanced
+`VCALENDAR > VEVENT` components; other components are skipped as balanced blocks. vCards
+cannot nest. Missing or mismatched END markers make the whole entry incomplete.
+Complete empty activity
+snapshots remove their category documents after reading the ETag, and clearing alone is
+a successful import. Contacts replace membership and delete stale indexed people only
+when every contacts entry succeeded; malformed nonempty vCards preserve membership. Mail reuses
+Gmail's shared message/thread/folder writer and its membership reconciliation.
+Location rows require a visit with a usable location (name, address, place id, or a valid
+coordinate pair) and valid duration, or an
+`activitySegment` object. Malformed visits and unknown row shapes count as skipped and
+preserve previous location membership. Contact rows, including duplicate cards, share
+one run-level ceiling across entries, even after reconciliation manifests are released;
+excess contacts are skipped before any contact or membership writes.
+
+File adapters receive `ctx.read(slug)` through the same import-session port as API adapters,
+including ETag retention. `importFile` may return `{ skipped?, unsupported? }`; both appear on
+`ImportReport`, and skipped counts enter connector state. Existing void-returning adapters
+keep working. An unsupported-only archive returns its report even when it writes no documents.
+Only adapters declaring `streaming: true` bypass the runner's 64 MiB whole-upload size check;
+they must enforce their own streaming limits. Legacy Takeout JSON still has the 64 MiB cap.
+
 ## Node CLI
 
 Build the package and run `pod-connectors import spotify`, or
 `node packages/pod-connectors/dist/node/bin.js import spotify` from the workspace.
 `import netflix --file ./NetflixViewingHistory.csv` uses the file runner. Add the bare
 `--since` flag to an API import to resume its stored cursor; omission starts a full import.
-File imports reject `--since`. `--help` prints usage.
+File imports reject `--since`. `--help` prints usage. Streaming adapters receive the stat
+size and `stream()`/`slice()` backed by bounded filesystem read streams; the CLI never
+loads their entire upload. `text()` remains capped at 64 MiB. The whole-upload size limit
+applies only to adapters without `streaming: true`.
 
 The CLI reads `~/.config/solid-mcp/config.json` (W9 MCP-12's location). It refuses symlinks,
 non-regular files, another user's files, and any mode other than **0600**, including 0400.
@@ -251,20 +328,38 @@ source-specific deletions with replacement writes. ETags and create-only conditi
 write modes; a 412 surfaces to the host without advancing its checkpoint. Repeated writes re-read
 the current ETag.
 
+Item counts retain one counter per written document. Replacement counts the adapter's current
+local subjects (excluding the document URL); merging counts each local source subject once per document
+in the current run, using stored provenance to detect repeats. Removal drops the document's
+count. Subjects added only by sector mappings are excluded. Session accounting therefore
+scales with documents, including when Takeout releases its reconciliation manifests.
+
+Run provenance retains at most `MAX_RUN_SOURCES = 1,000` distinct source IRIs, including
+the connector's own source IRI, added first. `createImportSession` accepts `maxRunSources`
+to lower this limit (minimum 1). Once full, the run summary ignores further sources;
+every document and item still retains its complete `prov:wasDerivedFrom` derivation.
+
 Imported documents and resources inside the writer's resolved connector container carry
 `prov:wasDerivedFrom` and `prov:wasGeneratedBy`. Externally linked identities retain their
 required typing without import-generation provenance and are excluded from item counts. Item
 `schema:url` supplies its source; `NormalisedDoc.sourceUrl` can supply a document-specific
 fallback. Otherwise the source API origin or a connector export URN is used. Each run has one
-activity in the connector's reserved `_provenance.ttl`, with source IRIs, connector IRI and
-start/end times. This companion document is excluded from imported-document counts and Type
-Index registration. Failed runs attempt provenance recording and retain the original error.
+activity in the connector's reserved `_provenance.ttl`, with the bounded source summary,
+connector IRI and start/end times. This companion document is excluded from imported-document
+counts and Type Index registration. Failed runs attempt provenance recording and retain the original error.
 
 Each adapter exposes a `vocab-map.ts` seam, applied by the runner without mutating adapter
 input. Existing music, calendar and social class alignments add sector types alongside legacy
-types. Detailed adapter field mappings remain with their later connector tasks. The ontology
-package currently has no runtime API, so its exact term IRIs are isolated in
-`core/federation-vocab.ts` for the subsequent constants switch (see root `QUESTIONS.md`).
+types. Detailed adapter field mappings remain with their later connector tasks. Namespace
+bases come from `@jeswr/suite-vocab` (`NS`), with adapter terms assembled in
+`core/federation-vocab.ts` and adapter vocab modules. Import-session reads and run provenance
+resolve legacy `https://w3id.org/jeswr/` vocabulary predicates and class IRIs through
+`canonicalize()` before typed access and incremental reconciliation. Rewrites of these
+connector-owned documents use canonical jeswr vocabulary while resource identifiers, literal
+contents and standard namespaces retain their spelling (mail keeps `http://schema.org/`).
+Shared WebID profiles and Type Index datasets retain their raw terms. Type Index comparisons
+accept legacy classes without changing existing registrations; only new registrations use
+canonical class IRIs.
 
 ## Streaming file imports
 
@@ -362,7 +457,10 @@ const recorder = createFixtureRecorder({
 ```
 
 Recording preserves the original response for the adapter. Saved fixtures contain the static
-route prefix, method, status and redacted JSON only. Recording and replay select the longest
+route prefix, method, status and redacted JSON only. The recorder uses guarded-fetch's
+`snapshotFetchInput` to select a route from the real request target and forward that same
+snapshot, ignoring shadowed Request URLs and capturing mutable URLs once.
+Recording and replay select the longest
 matching prefix on the same origin and complete path segments, independently of route or request
 order. Responses sharing a method and static prefix replay in request order, even if recording
 responses complete out of order. Repeated
@@ -447,7 +545,8 @@ Folder ids, rather than names, identify folders; `schema:isPartOf` links mirror 
 tree without moving resources on rename. Metadata uses `https://schema.org/`:
 `DigitalDocument` for files, `Collection` for folders, source id/URL, name, media type,
 size and timestamps. `schema:DigitalDocument` is registered once for `drive/`.
-`poddrive:md5Checksum` and `poddrive:contentSkipped` use `https://jeswr.org/ns/pod-drive#`.
+`poddrive:md5Checksum` and `poddrive:contentSkipped` use `NS.POD_DRIVE` from
+`@jeswr/suite-vocab` (`https://jeswr.org/ns/pod-drive#`).
 `schema:encoding` links identify successfully copied content.
 
 Only explicitly owned files are copied. Non-owned files, unknown binary sizes, unsupported

@@ -349,6 +349,13 @@ describe("deriveFeatures: one case per ADR-002 mapping row", () => {
       preservesIdentifier: true,
     });
     expect(deriveFeatures(moveCapability({})).move.detail.preservesIdentifier).toBeNull();
+    // Hand-built or cached descriptions can omit `extra`: still available, with no detail claims.
+    const bare = { type: [LWS.MoveResource] } as unknown as CapabilityEntry;
+    expect(deriveFeatures(lws([], [bare])).move).toEqual({
+      state: "available",
+      evidence: "lws-cid:MoveResource",
+      detail: { native: true, containers: false, preservesIdentifier: null },
+    });
     expect(deriveFeatures(sparq).move).toEqual({
       state: "unknown",
       evidence: "lws-cid:absent:MoveResource",

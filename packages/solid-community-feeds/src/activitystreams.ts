@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see prod-solid-server docs/MODEL-PROVENANCE.md
 /**
  * Optional ActivityStreams 2.0 (AS2 / JSON-LD) projection of the unified model.
@@ -17,6 +18,8 @@
 import type { CommunityChannel, CommunityMessage, CommunityThread } from "./types.js";
 
 const AS2_CONTEXT = "https://www.w3.org/ns/activitystreams";
+// Canonical source: @jeswr/suite-vocab LEGACY_NAMESPACES catch-all (no NS.COMMUNITY entry).
+const COMMUNITY_NS = "https://jeswr.org/ns/community#";
 
 /** A minimal AS2 JSON-LD object. */
 export interface As2Object {
@@ -42,7 +45,7 @@ export function messageToAs2(message: CommunityMessage): As2Object {
     published: message.createdAt,
     url: message.permalink,
     // A non-AS extension marker recording which backend this came from.
-    "https://w3id.org/jeswr/community#source": message.source,
+    [`${COMMUNITY_NS}source`]: message.source,
   };
   if (message.bodyHtml) {
     note.mediaType = "text/html";
@@ -64,7 +67,7 @@ export function threadToAs2(thread: CommunityThread): As2Object {
     totalItems: thread.messageCount ?? items.length,
     published: thread.lastActivityAt,
     items,
-    "https://w3id.org/jeswr/community#source": thread.source,
+    [`${COMMUNITY_NS}source`]: thread.source,
   };
 }
 
@@ -79,7 +82,7 @@ export function channelToAs2(channel: CommunityChannel): As2Object {
     url: channel.permalink,
     totalItems: items.length,
     items,
-    "https://w3id.org/jeswr/community#source": channel.source,
+    [`${COMMUNITY_NS}source`]: channel.source,
   };
   if (channel.topic) {
     out.summary = channel.topic;

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // resolveComponent + the committed static resolver map — "given an RDF class (or a
@@ -25,7 +26,13 @@
 // parallel registry abstraction — the map IS the registry, and the resolver is the
 // one selection function over it.
 
-import { LDP_BASIC_CONTAINER, LDP_CONTAINER, RDF_TYPE } from "./vocab.js";
+import {
+  BOOKMARK_CLASS,
+  LDP_BASIC_CONTAINER,
+  LDP_CONTAINER,
+  LEGACY_BOOKMARK_CLASS,
+  RDF_TYPE,
+} from "./vocab.js";
 
 /** How an element renders the class — view (read) or edit (write; Phase-2). */
 export type ComponentMode = "view" | "edit";
@@ -85,7 +92,14 @@ export const RESOLVER_ENTRIES: readonly ComponentEntry[] = [
     priority: 65,
   },
   {
-    targetClass: "https://w3id.org/jeswr/bookmark#Bookmark",
+    targetClass: BOOKMARK_CLASS,
+    tagName: "jeswr-bookmark-list",
+    importSpec: "@jeswr/solid-components",
+    mode: "view",
+    priority: 70,
+  },
+  {
+    targetClass: LEGACY_BOOKMARK_CLASS,
     tagName: "jeswr-bookmark-list",
     importSpec: "@jeswr/solid-components",
     mode: "view",
@@ -138,7 +152,14 @@ export const RESOLVER_ENTRIES: readonly ComponentEntry[] = [
     priority: 65,
   },
   {
-    targetClass: "https://w3id.org/jeswr/bookmark#Bookmark",
+    targetClass: BOOKMARK_CLASS,
+    tagName: "jeswr-bookmark-form",
+    importSpec: "@jeswr/solid-components",
+    mode: "edit",
+    priority: 70,
+  },
+  {
+    targetClass: LEGACY_BOOKMARK_CLASS,
     tagName: "jeswr-bookmark-form",
     importSpec: "@jeswr/solid-components",
     mode: "edit",

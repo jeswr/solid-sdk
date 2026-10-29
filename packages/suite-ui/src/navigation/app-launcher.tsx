@@ -5,6 +5,7 @@
 import { Grid2X2, MoreHorizontal, Plus, X } from "lucide-react";
 import { Popover } from "radix-ui";
 import { useId, useRef, useState } from "react";
+import { IconButton } from "../components/ui/icon-button.js";
 import { AppGrid } from "./app-grid.js";
 import { type AppSlug, type NavigationApp, suiteApps } from "./apps.js";
 import { CustomiseRail } from "./customise-rail.js";
@@ -62,7 +63,8 @@ export function AppLauncher({
       }}
     >
       <Popover.Trigger asChild>
-        <button
+        <IconButton
+          variant="ghost"
           type="button"
           data-slot="app-launcher-trigger"
           className={
@@ -71,11 +73,10 @@ export function AppLauncher({
               : trigger === "more"
                 ? "suite-rail-button"
                 : trigger === "tab"
-                  ? "suite-tab"
-                  : "suite-action"
+                  ? "suite-tab size-auto"
+                  : "suite-action size-auto"
           }
-          aria-label={trigger === "brand" || trigger === "button" ? "Apps" : "More apps"}
-          title={trigger === "brand" || trigger === "button" ? "Apps" : "More apps"}
+          label={trigger === "brand" || trigger === "button" ? "Apps" : "More apps"}
         >
           {trigger === "brand" ? (
             <span className="suite-app-icon suite-brand-mark">
@@ -85,7 +86,7 @@ export function AppLauncher({
               <Grid2X2
                 size={16}
                 strokeWidth={1.75}
-                className="suite-app-glyph"
+                className="suite-app-glyph size-4"
                 aria-hidden="true"
               />
             </span>
@@ -97,7 +98,7 @@ export function AppLauncher({
           {(trigger === "tab" || trigger === "button") && (
             <span>{trigger === "tab" ? "More" : "Apps"}</span>
           )}
-        </button>
+        </IconButton>
       </Popover.Trigger>
       <Popover.Portal>
         <Popover.Content
@@ -115,15 +116,16 @@ export function AppLauncher({
           <header className="suite-launcher-heading">
             <h2>Apps</h2>
             <Popover.Close asChild>
-              <button
+              <IconButton
+                variant="ghost"
+                size="icon-sm"
                 type="button"
                 data-slot="navigation-icon-button"
                 className="suite-icon-button"
-                aria-label="Close apps"
-                title="Close apps"
+                label="Close apps"
               >
                 <X size={20} aria-hidden="true" />
-              </button>
+              </IconButton>
             </Popover.Close>
           </header>
           <label className="suite-filter" htmlFor={id}>

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Inline SHACL shapes for the per-class EDITABLE forms. These drive the generated
@@ -37,9 +38,10 @@ export const TASK_SHAPE_TTL = `
 `;
 
 /** The editable `book:Bookmark` shape (aligned to @jeswr/solid-bookmark). */
+// Canonical source: @jeswr/suite-vocab NS.BOOKMARK
 export const BOOKMARK_SHAPE_TTL = `
 @prefix sh:     <http://www.w3.org/ns/shacl#> .
-@prefix book:   <https://w3id.org/jeswr/bookmark#> .
+@prefix book:   <https://jeswr.org/ns/bookmark#> .
 @prefix schema: <http://schema.org/> .
 @prefix dct:    <http://purl.org/dc/terms/> .
 @prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .

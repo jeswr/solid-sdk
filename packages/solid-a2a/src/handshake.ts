@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // The NL→RDF UPGRADE-HANDSHAKE codec. Transport-agnostic: this encodes/decodes the
@@ -12,11 +13,13 @@
 
 import { parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore, Quad } from "@rdfjs/types";
+import { DatasetWrapper, TermFrom, TermWrapper } from "@rdfjs/wrapper";
+import { DataFactory, Store } from "n3";
 import { requireHttpIri } from "./iri.js";
 import { serialize } from "./serialize.js";
 import type { HandshakeMessage, UpgradeOffer, UpgradeResponse } from "./types.js";
-import { A2A, RDF_TYPE, XSD } from "./vocab.js";
-import { GraphBuilder } from "./wrappers.js";
+import { A2A, legacyA2aIri, RDF_TYPE, XSD } from "./vocab.js";
+import { GraphBuilder, objectTerms } from "./wrappers.js";
 
 // Minted handshake terms (under the a2a: extension — no standard equivalent).
 const A2A_UPGRADE_OFFER = `${A2A}UpgradeOffer` as const;
@@ -31,6 +34,21 @@ const XSD_BOOLEAN = `${XSD}boolean` as const;
 
 /** A subject IRI for an anonymous handshake message (a stable urn). */
 const HANDSHAKE_SUBJECT = "urn:a2a:handshake" as const;
+
+/** Typed class lookup, deduplicating subjects asserted with both class aliases. */
+class HandshakeDataset extends DatasetWrapper {
+  subjects(type: string): TermWrapper[] {
+    const nodes: TermWrapper[] = [];
+    for (const iri of [type, legacyA2aIri(type)]) {
+      for (const node of this.instancesOf(iri, TermWrapper)) {
+        if (!nodes.some((other) => other.equals(TermFrom.instance(node, this.factory)))) {
+          nodes.push(node);
+        }
+      }
+    }
+    return nodes;
+  }
+}
 
 /**
  * Encode an offer to UPGRADE to the RDF/SHACL protocol `protocolHash`, fetchable
@@ -173,27 +191,38 @@ export function mayDowngradeToNl(offer: UpgradeOffer, response: UpgradeResponse)
 
 /** The RDF (quads) form of a handshake message — for an RDF-native DataPart. */
 export function handshakeToRdf(message: HandshakeMessage): Quad[] {
+  // Canonical emission is deferred to phase 2: pinned verifiers would reject it.
   const b = new GraphBuilder();
   if (message.kind === "upgrade-offer") {
-    b.addIri(HANDSHAKE_SUBJECT, RDF_TYPE, A2A_UPGRADE_OFFER);
-    b.addLiteral(HANDSHAKE_SUBJECT, A2A_PROTOCOL_HASH, message.protocolHash);
+    b.addIri(HANDSHAKE_SUBJECT, RDF_TYPE, legacyA2aIri(A2A_UPGRADE_OFFER));
+    b.addLiteral(HANDSHAKE_SUBJECT, legacyA2aIri(A2A_PROTOCOL_HASH), message.protocolHash);
     // `protocolSource` is an untrusted http(s) IRI object (a fetch target for the
     // peer) and is REQUIRED for a usable offer. FAIL CLOSED: a non-http(s) / malformed
     // value THROWS rather than being silently dropped — so the RDF form never omits a
     // source the structured UpgradeOffer still claims (the object-desync / fail-open
     // class), and an unfetchable source is caught at encode time, not silently on read.
     const source = requireHttpIri(message.protocolSource, "protocolSource");
-    b.addIri(HANDSHAKE_SUBJECT, A2A_PROTOCOL_SOURCE, source);
-    b.addLiteral(HANDSHAKE_SUBJECT, A2A_REQUIRED, message.required ? "true" : "false", XSD_BOOLEAN);
+    b.addIri(HANDSHAKE_SUBJECT, legacyA2aIri(A2A_PROTOCOL_SOURCE), source);
+    b.addLiteral(
+      HANDSHAKE_SUBJECT,
+      legacyA2aIri(A2A_REQUIRED),
+      message.required ? "true" : "false",
+      XSD_BOOLEAN,
+    );
     if (message.protocolName !== undefined) {
-      b.addLiteral(HANDSHAKE_SUBJECT, A2A_PROTOCOL_NAME, message.protocolName);
+      b.addLiteral(HANDSHAKE_SUBJECT, legacyA2aIri(A2A_PROTOCOL_NAME), message.protocolName);
     }
   } else {
-    b.addIri(HANDSHAKE_SUBJECT, RDF_TYPE, A2A_UPGRADE_RESPONSE);
-    b.addLiteral(HANDSHAKE_SUBJECT, A2A_PROTOCOL_HASH, message.protocolHash);
-    b.addLiteral(HANDSHAKE_SUBJECT, A2A_ACCEPT, message.accept ? "true" : "false", XSD_BOOLEAN);
+    b.addIri(HANDSHAKE_SUBJECT, RDF_TYPE, legacyA2aIri(A2A_UPGRADE_RESPONSE));
+    b.addLiteral(HANDSHAKE_SUBJECT, legacyA2aIri(A2A_PROTOCOL_HASH), message.protocolHash);
+    b.addLiteral(
+      HANDSHAKE_SUBJECT,
+      legacyA2aIri(A2A_ACCEPT),
+      message.accept ? "true" : "false",
+      XSD_BOOLEAN,
+    );
     if (message.reason !== undefined) {
-      b.addLiteral(HANDSHAKE_SUBJECT, A2A_REASON, message.reason);
+      b.addLiteral(HANDSHAKE_SUBJECT, legacyA2aIri(A2A_REASON), message.reason);
     }
   }
   return b.quads();
@@ -229,43 +258,27 @@ export async function handshakeFromRdf(
   // ONLY for that subject (never globally), and reject an ambiguous graph (zero,
   // multiple, or mixed handshake subjects) rather than splicing triples from
   // unrelated subjects together — a spoofing vector.
-  const offerSubjects = new Set<string>();
-  const responseSubjects = new Set<string>();
-  for (const q of quads) {
-    // The rdf:type object must be a NamedNode (an IRI) — a literal-valued
-    // `rdf:type "…UpgradeOffer"` is malformed RDF and must not be treated as a
-    // typed handshake subject.
-    if (q.predicate.value !== RDF_TYPE || q.object.termType !== "NamedNode") {
-      continue;
-    }
-    if (q.object.value === A2A_UPGRADE_OFFER) {
-      offerSubjects.add(q.subject.value);
-    } else if (q.object.value === A2A_UPGRADE_RESPONSE) {
-      responseSubjects.add(q.subject.value);
-    }
-  }
+  const dataset = new HandshakeDataset(new Store(quads), DataFactory);
+  const offerSubjects = dataset.subjects(A2A_UPGRADE_OFFER);
+  const responseSubjects = dataset.subjects(A2A_UPGRADE_RESPONSE);
 
-  const total = offerSubjects.size + responseSubjects.size;
+  const total = offerSubjects.length + responseSubjects.length;
   if (total !== 1) {
     // Zero → no handshake; >1 (incl. a mixed offer+response) → ambiguous: refuse.
     return undefined;
   }
-  const isOffer = offerSubjects.size === 1;
-  const subject = isOffer ? [...offerSubjects][0] : [...responseSubjects][0];
+  const isOffer = offerSubjects.length === 1;
+  const subject = (isOffer ? offerSubjects : responseSubjects)[0] as TermWrapper;
 
-  // Readers scoped to the single handshake subject (never global). If a predicate
-  // appears more than once on the subject the graph is malformed → undefined.
+  // Readers scoped to the single handshake subject (never global). Multiple
+  // distinct values across either namespace are malformed → undefined.
   const single = (predicate: string, termType: "Literal" | "NamedNode"): string | undefined => {
-    const matches = quads.filter(
-      (q) =>
-        q.subject.value === subject &&
-        q.predicate.value === predicate &&
-        q.object.termType === termType,
-    );
+    const matches = [...objectTerms(subject, predicate)];
     if (matches.length !== 1) {
       return undefined;
     }
-    return matches[0]?.object.value;
+    const term = matches[0];
+    return term?.termType === termType ? term.value : undefined;
   };
   const lit = (predicate: string): string | undefined => single(predicate, "Literal");
   const iri = (predicate: string): string | undefined => single(predicate, "NamedNode");

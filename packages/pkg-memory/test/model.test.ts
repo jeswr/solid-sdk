@@ -184,14 +184,17 @@ describe.each(examples)("$template template", (fact) => {
   });
 });
 
-it("templates reproduce the five independent Python assertions", async () => {
+it("templates reproduce the Python assertions with explicitly canonical namespace bindings", async () => {
   const input: Batch = JSON.parse(await fixture("synthetic.claims.json"));
   for (const fact of examples.filter((f) =>
     ["address", "preference", "condition", "medication", "relationship"].includes(f.template),
   )) {
     const claim = input.claims.find((c) => c.id === fact.template)!;
     const fromPythonInput = canonicalizeAssertion(
-      await parseAssertion(claim.assertion as string, owner),
+      await parseAssertion(
+        `@prefix health: <${NS.health}> . @prefix core: <${NS.core}> .\n${claim.assertion}`,
+        owner,
+      ),
     );
     const fromTemplate = canonicalizeAssertion(createFactAssertion(owner, fact));
     expect(fromTemplate.id).toBe(fromPythonInput.id);
