@@ -143,7 +143,7 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
     const { dataset } = await fetchRdf(webUrl(webId).href, { fetch: fetcher });
     return new Profile(webId, dataset, DataFactory);
   };
-  const clientFor = async (issuer: string, key?: PrivateJwk) => {
+  const clientFor = async (issuer: string, key?: PrivateJwk, sessionId?: string) => {
     // Construction performs discovery; the same transport later fetches pod resources.
     let discovering = true;
     const client = await createSolidOidcClient({
@@ -154,6 +154,15 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
       ...(key === undefined ? {} : { dpopKeyPair: await importDpopKeyPairJwk(key) }),
       fetch: async (input, init) => {
         const request = new Request(input, init);
+        // Public-client discovery/token calls carry no Authorization header. Check each
+        // credentialed resource attempt after body buffering and DPoP proof generation,
+        // including nonce retries that bypass fetchFor's earlier liveness check.
+        if (
+          sessionId !== undefined &&
+          request.headers.has("authorization") &&
+          !(await provider.isActive(sessionId))
+        )
+          throw new Error("Pod session is inactive");
         const response = await fetcher(request, { credentials: "omit" });
         if (discovering && response.status === 200) {
           // Read the original: cancelling a clone can wait for its unread sibling.
@@ -258,7 +267,8 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
         throw new Error("Pod login already consumed");
       await vault.delete(id);
       if (pending.expiresAt <= now()) throw new Error("Expired pod login");
-      const client = await clientFor(pending.issuer, pending.key);
+      const sessionId = opaque();
+      const client = await clientFor(pending.issuer, pending.key, sessionId);
       const session = await client.handleCallback({ url: callbackUrl }, pending.state);
       // The callback requires an ID token and checks its nonce against pending.state.nonce.
       const claims = verifiedIdTokenClaims(session.tokens.idToken as string);
@@ -269,7 +279,7 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
       if (!session.tokens.refreshToken) throw new Error("offline_access was not granted");
       const roots = [...view.storages];
       for (const root of roots) secureUrl(root);
-      const identity = { id: opaque(), webId: session.webId };
+      const identity = { id: sessionId, webId: session.webId };
       const stored: StoredPodSession = {
         kind: "session",
         identity,
@@ -328,7 +338,7 @@ export function createPodSessionProvider(options: PodSessionProviderOptions): Po
           if (!(await vault.compareAndSwap(sessionKey(id), bytes, claimed)))
             throw new Error("Pod session conflict");
           try {
-            const client = await clientFor(value.issuer, value.key);
+            const client = await clientFor(value.issuer, value.key, id);
             const tokens = await client.refresh(value.refreshToken);
             if (tokens.idToken !== undefined) {
               const claims = verifiedIdTokenClaims(tokens.idToken);

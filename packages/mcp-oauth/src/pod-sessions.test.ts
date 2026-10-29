@@ -525,6 +525,86 @@ describe("Solid-OIDC pod broker", () => {
     await expect(expiredFetch(`${POD_ROOT}notes`)).rejects.toThrow("inactive");
   });
 
+  it.each(
+    ["cached", "restored"].flatMap((client) =>
+      ["revocation", "expiry", "outage"].map((failure) => ({ client, failure })),
+    ),
+  )("rejects $client resource dispatch after $failure during body buffering", async ({
+    client,
+    failure,
+  }) => {
+    const f = brokerFixture();
+    const { session } = await f.login();
+    const provider = client === "cached" ? f.provider : createPodSessionProvider(f.options);
+    const fetcher = await provider.fetchFor(session.id);
+    let started!: () => void;
+    const reading = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let finish!: () => void;
+    const body = new ReadableStream<Uint8Array>(
+      {
+        pull(controller) {
+          controller.enqueue(new TextEncoder().encode("delayed body"));
+          started();
+          return new Promise<void>((resolve) => {
+            finish = () => {
+              controller.close();
+              resolve();
+            };
+          });
+        },
+      },
+      { highWaterMark: 0 },
+    );
+    const init = { method: "PUT", body, duplex: "half" };
+    const running = fetcher(`${POD_ROOT}notes`, init);
+    const rejected = expect(running).rejects.toThrow(failure === "outage" ? "offline" : "inactive");
+    await reading;
+    if (failure === "revocation") await createPodSessionProvider(f.options).revoke(session.id);
+    if (failure === "expiry") f.advance(GRANT_TTL);
+    if (failure === "outage") vi.spyOn(f.vault, "get").mockRejectedValue(new Error("offline"));
+    finish();
+    await rejected;
+    expect(f.op.captured.filter((r) => r.url.startsWith(POD_ROOT))).toHaveLength(0);
+  });
+
+  it.each([
+    "cached",
+    "restored",
+  ])("rejects %s resource nonce retries after durable retirement", async (client) => {
+    const f = brokerFixture();
+    let sessionId!: string;
+    const cancel = vi.fn(async () => {
+      await f.provider.revoke(sessionId);
+    });
+    const options = {
+      ...f.options,
+      fetch: (async (input, init) => {
+        const request = new Request(input, init);
+        const response = await f.op.fetch(request);
+        if (request.url.startsWith(POD_ROOT) && response.status === 401)
+          return new Response(new ReadableStream({ cancel }), response);
+        return response;
+      }) satisfies typeof fetch,
+    };
+    const original = createPodSessionProvider(options);
+    const begin = await original.begin(POD_ISSUER, POD_CALLBACK);
+    const session = await original.complete(f.op.callback(begin.authorizeUrl), begin.state);
+    sessionId = session.id;
+    const provider = client === "cached" ? original : createPodSessionProvider(options);
+    const fetcher = await provider.fetchFor(session.id);
+    f.op.controls.resourceNonce = true;
+    await expect(
+      fetcher(`${POD_ROOT}notes`, { method: "PUT", body: "fixture body" }),
+    ).rejects.toThrow("inactive");
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(await provider.isActive(session.id)).toBe(false);
+    const resources = f.op.captured.filter((r) => r.url.startsWith(POD_ROOT));
+    expect(resources).toHaveLength(1);
+    expect(resources[0]?.body).toBe("fixture body");
+  });
+
   it("rejects cross-client and corrupt session records", async () => {
     const f = brokerFixture();
     const { session } = await f.login();
