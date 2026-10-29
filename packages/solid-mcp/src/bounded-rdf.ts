@@ -65,11 +65,15 @@ function budgetedFactory(charge: (bytes: number) => void): RdfFactory {
       charge(value ? Buffer.byteLength(value) : 64);
       return DataFactory.blankNode(value);
     },
-    // JSON-LD's factory calls use null for an absent datatype/language.
+    // JSON-LD passes native scalars for typed values and null for absent metadata.
     literal(value, languageOrDatatype) {
-      charge(Buffer.byteLength(value));
+      const lexicalValue = String(value);
+      charge(Buffer.byteLength(lexicalValue));
       // N3 2 supports directional languages; @types/n3 still omits that overload.
-      return (DataFactory.literal as RdfFactory["literal"])(value, languageOrDatatype ?? undefined);
+      return (DataFactory.literal as RdfFactory["literal"])(
+        lexicalValue,
+        languageOrDatatype ?? undefined,
+      );
     },
     quad(subject, predicate, object, graph = DataFactory.defaultGraph()) {
       bytes += termBytes(subject) + termBytes(predicate) + termBytes(object) + termBytes(graph);

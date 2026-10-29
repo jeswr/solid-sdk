@@ -122,6 +122,34 @@ describe.each([
   });
 });
 
+describe("JSON-LD scalar literals", () => {
+  it.each([
+    [true, "boolean", "true"],
+    [false, "boolean", "false"],
+    [0, "integer", "0"],
+    [42, "integer", "42"],
+    [-42, "integer", "-42"],
+    [12.5, "double", "12.5"],
+    [1e21, "double", "1e+21"],
+    ["001", "integer", "001"],
+    ["café 🌱", "string", "café 🌱"],
+  ])("preserves typed %s as xsd:%s with lexical value %s", async (value, type, lexical) => {
+    const datatype = `http://www.w3.org/2001/XMLSchema#${type}`;
+    const dataset = await parseBoundedRdf(
+      JSON.stringify({ "@id": "urn:s", "urn:p": { "@value": value, "@type": datatype } }),
+      "application/ld+json",
+      BASE,
+    );
+    expect(dataset.size).toBe(1);
+    expect(dataset.getQuads("urn:s", "urn:p", null, null)[0]?.object).toMatchObject({
+      termType: "Literal",
+      value: lexical,
+      language: "",
+      datatype: { value: datatype },
+    });
+  });
+});
+
 describe("RDF expansion and serialization budgets", () => {
   it.each([
     ["TriG graphs", "application/trig", "{ <urn:s> <urn:p> ", " . }"],

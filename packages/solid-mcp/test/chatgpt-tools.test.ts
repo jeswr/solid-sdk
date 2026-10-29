@@ -306,6 +306,42 @@ describe.each([
   });
 
   it.each([
+    [42, "integer", "42"],
+    [0, "integer", "0"],
+    [12.5, "double", "12.5"],
+    [true, "boolean", "true"],
+    [false, "boolean", "false"],
+  ])("fetch and search preserve typed JSON-LD scalar %s", async (value, type, lexical) => {
+    const id = `${POD}data.jsonld`;
+    const datatype = `http://www.w3.org/2001/XMLSchema#${type}`;
+    const pod = makeFakePod({
+      [POD]: { contentType: "text/turtle", body: containerTurtle(POD, [{ name: "data.jsonld" }]) },
+      [id]: {
+        contentType: "application/ld+json",
+        body: JSON.stringify({ "@id": id, "urn:value": { "@value": value, "@type": datatype } }),
+      },
+    });
+    const client = await connectClient(pod.fetch, undefined, portable);
+    const fetched = await client.callTool({ name: "fetch", arguments: { id } });
+    expect(fetched.isError).toBeUndefined();
+    const content = fetched.content as { type: "text"; text: string }[];
+    const document = JSON.parse(content[0]?.text ?? "{}");
+    expect(document.metadata).toEqual({ contentType: "application/ld+json", truncated: false });
+    const dataset = await parseRdf(document.text, "text/turtle");
+    expect(dataset.size).toBe(1);
+    expect(dataset.getQuads(id, "urn:value", null, null)[0]?.object).toMatchObject({
+      termType: "Literal",
+      value: lexical,
+      datatype: { value: datatype },
+    });
+    const searched = await client.callTool({ name: "search", arguments: { query: lexical } });
+    expect(searched.isError).toBeUndefined();
+    expect(searched.content).toEqual([
+      { type: "text", text: JSON.stringify({ results: [{ id, title: "data.jsonld", url: id }] }) },
+    ]);
+  });
+
+  it.each([
     "explicit",
     "coerced",
     "aliased",
