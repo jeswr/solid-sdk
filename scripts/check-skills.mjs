@@ -14,7 +14,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { JSON_SCHEMA, load } from "js-yaml";
-import { marked } from "marked";
+import { Marked } from "marked";
 import characterReferences from "./html-character-references.json" with { type: "json" };
 
 // W9 DESIGN §6 categories. Scan examples too, but allow explicit template values.
@@ -74,14 +74,21 @@ function decodeCharacterReferences(text) {
   );
 }
 
-function htmlLinksIn(html) {
+function htmlLinksIn(html, definitions, definitionMarker) {
   const links = [];
   const elements = [];
   // Recognize comments only between tags; attribute values are consumed in full below.
-  const tokens = /<!--(?:-?>|[\s\S]*?(?:-->|$))|<\/?[a-zA-Z][^\t\n\f\r />]*/g;
+  const tokens = new RegExp(
+    `<!--(?:-?>|[\\s\\S]*?(?:-->|$))|<\\/?[a-zA-Z][^\\t\\n\\f\\r />]*|${definitionMarker}(\\d+)\0`,
+    "g",
+  );
   const whitespace = /[\t\n\f\r ]/;
   for (let token = tokens.exec(html); token; token = tokens.exec(html)) {
     if (token[0].startsWith("<!--")) continue;
+    if (token[1] !== undefined) {
+      links.push(definitions[Number(token[1])]);
+      continue;
+    }
     const closing = token[0].startsWith("</");
     const tag = token[0].slice(closing ? 2 : 1).toLowerCase();
     let cursor = tokens.lastIndex;
@@ -193,11 +200,22 @@ function htmlLinksIn(html) {
 }
 
 function linksIn(text) {
-  const tokens = marked.lexer(text);
-  const links = Object.values(tokens.links).map((link) => decodeCharacterReferences(link.href));
+  const definitions = [];
+  let definitionMarker = "\0check-skills-definition:";
+  while (text.includes(definitionMarker)) definitionMarker += ":";
+  const markdown = new Marked({
+    renderer: {
+      def({ href }) {
+        // Inert placeholders retain definition order without introducing HTML syntax.
+        return `${definitionMarker}${definitions.push(href) - 1}\0`;
+      },
+    },
+  });
   // Render once so HTML text-element state spans inline tokens and blank-line block splits.
-  // The renderer escapes code samples, keeping their apparent tags inactive.
-  for (const href of htmlLinksIn(marked.parser(tokens))) {
+  // The scanner consumes placeholders only in markup context, outside comments/attributes/text.
+  const html = markdown.parser(markdown.lexer(text));
+  const links = [];
+  for (const href of htmlLinksIn(html, definitions, definitionMarker)) {
     // HTML URL attributes allow surrounding ASCII whitespace, including encoded whitespace.
     links.push(decodeCharacterReferences(href).replace(/^[\t\n\f\r ]+|[\t\n\f\r ]+$/g, ""));
   }

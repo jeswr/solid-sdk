@@ -412,6 +412,49 @@ describe("skill validation", () => {
   });
 
   it.each([
+    ...textElements.map((tag) => `Example: <${tag}>\n\n[unused]: missing.md\n\n</${tag}>`),
+    "Example: <textarea>\n\n[unused]: missing.md\n\n</textarea>\n\n[guide]: references/guide.md",
+    "```md\n[unused]: missing.md\n```",
+  ])("ignores inactive reference definitions in their HTML or code context: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
+    ...textElements.map(
+      (tag) =>
+        `Example: <${tag}>\n\n[ignored]: references/guide.md\n\n</${tag}>\n\n[broken]: missing.md`,
+    ),
+    "Example: <textarea>\n\n[broken]: missing.md\n\n</textarea>\n\n[active][broken]",
+    "Example: <!--\n\n[ignored]: missing.md\n\n-->\n\n[active]: missing.md",
+    "<svg><title /></svg>\n\n[broken]: missing.md",
+    "[unused]: &#32;missing.md&#9;",
+  ])("checks active reference definitions and uses after HTML content: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root).errors).toEqual([
+      "skills/alpha/SKILL.md: relative link does not resolve (target omitted)",
+    ]);
+  });
+
+  it.each([
+    "[doc]: &#32;https://example.invalid/guide.md",
+    "[doc]: &#32;https://example.invalid/guide.md\n\n[doc]",
+    "[doc]: &#9;references/guide.md&#32;",
+    "[doc]: &#9;references/guide.md&#32;\n\n[doc]",
+    "[doc]: &#32;//example.invalid/guide.md&#10;",
+    "[doc]: &#32;#section&#32;",
+    "[doc]: &#32;?view=1&#32;",
+    "[doc]: &#32;/docs&#32;",
+    "[doc]: &#32;&#9;",
+  ])("normalizes decoded reference destinations consistently: %s", (body) => {
+    const root = fixture();
+    put(root, "skills/alpha/SKILL.md", skill({ body }));
+    expect(checkSkills(root, { write: true }).errors).toEqual([]);
+  });
+
+  it.each([
     '<a href=" references/guide.md ">guide</a>',
     "<img src=' \t\nreferences/guide.md\r\f '>",
     '<a href=" https://example.invalid/missing.md ">external</a>',
