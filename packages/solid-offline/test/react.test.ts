@@ -13,9 +13,10 @@
  */
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createOfflineClient } from '../src/index.js';
 import { useOfflineResource, useOfflineStatus } from '../src/react.js';
 import { createStatusSurface } from '../src/status.js';
-import type { UpdatedEvent } from '../src/types.js';
+import type { OfflineEvent } from '../src/types.js';
 
 const CHANNEL = 'solid-offline';
 
@@ -24,7 +25,7 @@ afterEach(() => {
 });
 
 /** Broadcast an `updated` event the way the SWR engine does. */
-async function broadcast(event: UpdatedEvent): Promise<void> {
+async function broadcast(event: OfflineEvent): Promise<void> {
   const ch = new BroadcastChannel(CHANNEL);
   await act(async () => {
     ch.postMessage(event);
@@ -35,6 +36,53 @@ async function broadcast(event: UpdatedEvent): Promise<void> {
 }
 
 describe('useOfflineStatus', () => {
+  // AUTHORED-BY Codex GPT-6.1-Sol
+  it.each([
+    'revalidated',
+    'updated',
+    'revalidate-failed',
+  ] as const)('keeps lazy client syncing after an unseen %s', async (event) => {
+    const channelName = `lazy-status-${crypto.randomUUID()}`;
+    const publisher = new BroadcastChannel(channelName);
+    const offline = createOfflineClient({ channelName });
+    // The lazy status channel does not exist when this attempt starts.
+    publisher.postMessage({ url: 'https://pod/doc', event: 'revalidating', attemptId: 'older' });
+    const surface = offline.status;
+    surface.markStale('https://pod/doc');
+    surface.markStale('https://pod/barrier');
+    const { result, unmount } = renderHook(() => useOfflineStatus(surface));
+    try {
+      await act(async () => {
+        publisher.postMessage({
+          url: 'https://pod/doc',
+          event: 'revalidating',
+          attemptId: 'newer',
+        });
+      });
+      await waitFor(() => expect(result.current.syncing).toBe(true));
+      await act(async () => {
+        publisher.postMessage({ url: 'https://pod/doc', event, attemptId: 'older' });
+        publisher.postMessage({ url: 'https://pod/barrier', event: 'updated' });
+      });
+      // Same-channel ordering proves the old completion has been processed.
+      await waitFor(() => expect(result.current.resources['https://pod/barrier']).toBe('updated'));
+      expect(result.current.syncing).toBe(true);
+      expect(result.current.pending).toBe(1);
+      await act(async () => {
+        publisher.postMessage({
+          url: 'https://pod/doc',
+          event: 'revalidate-failed',
+          attemptId: 'newer',
+        });
+      });
+      await waitFor(() => expect(result.current.syncing).toBe(false));
+    } finally {
+      unmount();
+      offline.close();
+      publisher.close();
+    }
+  });
+
   it('re-renders when a tracked resource is broadcast updated', async () => {
     const surface = createStatusSurface({ channelName: CHANNEL, isOnline: () => true });
     surface.markFresh('https://pod/doc'); // track it
@@ -48,6 +96,81 @@ describe('useOfflineStatus', () => {
     expect(result.current.updated).toBe(1);
     expect(result.current.resources['https://pod/doc']).toBe('updated');
     surface.close();
+  });
+
+  // AUTHORED-BY Codex GPT-6.1-Sol
+  it.each([
+    'revalidated',
+    'updated',
+    'revalidate-failed',
+  ] as const)('reports syncing until %s arrives', async (event) => {
+    const surface = createStatusSurface({ channelName: CHANNEL });
+    surface.markStale('https://pod/doc');
+    const { result, rerender } = renderHook(() => useOfflineStatus(surface));
+    expect(result.current.syncing).toBe(false);
+    const initial = result.current;
+    rerender();
+    expect(result.current).toBe(initial);
+    await broadcast({ url: 'https://pod/doc', event: 'revalidating' });
+    await waitFor(() => expect(result.current.syncing).toBe(true));
+    expect(result.current.pending).toBe(1);
+    await broadcast({ url: 'https://pod/doc', event });
+    await waitFor(() => expect(result.current.syncing).toBe(false));
+    expect(result.current.pending).toBe(0);
+    surface.close();
+  });
+
+  it('includes manually pending resources in syncing', () => {
+    const surface = createStatusSurface({ channelName: CHANNEL });
+    const { result } = renderHook(() => useOfflineStatus(surface));
+    act(() => surface.markPending('https://pod/doc'));
+    expect(result.current.syncing).toBe(true);
+    act(() => surface.markFresh('https://pod/doc'));
+    expect(result.current.syncing).toBe(false);
+    surface.close();
+  });
+
+  it.each([
+    'late tracking',
+    'forget and retrack',
+  ] as const)('keeps syncing through %s until both attempts settle', (tracking) => {
+    const listeners = new Set<(event: MessageEvent) => void>();
+    const surface = createStatusSurface({
+      channel: {
+        addEventListener: (_type, listener) => {
+          listeners.add(listener);
+        },
+        removeEventListener: (_type, listener) => {
+          listeners.delete(listener);
+        },
+        close() {},
+      },
+    });
+    const emit = (event: OfflineEvent['event']) => {
+      for (const listener of listeners) {
+        listener(new MessageEvent('message', { data: { url: 'https://pod/doc', event } }));
+      }
+    };
+    const { result, unmount } = renderHook(() => useOfflineStatus(surface));
+    try {
+      act(() => {
+        if (tracking === 'forget and retrack') surface.markStale('https://pod/doc');
+        emit('revalidating');
+        if (tracking === 'forget and retrack') surface.forget('https://pod/doc');
+        surface.markStale('https://pod/doc');
+        emit('revalidating');
+      });
+      expect(result.current.syncing).toBe(true);
+      act(() => emit('revalidated'));
+      expect(result.current.syncing).toBe(true);
+      expect(result.current.pending).toBe(1);
+      act(() => emit('revalidate-failed'));
+      expect(result.current.syncing).toBe(false);
+      expect(result.current.pending).toBe(0);
+    } finally {
+      unmount();
+      surface.close();
+    }
   });
 
   it('re-renders on connectivity change', async () => {

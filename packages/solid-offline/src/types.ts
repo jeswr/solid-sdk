@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Public + internal types for solid-offline (P0/P1).
  *
@@ -124,7 +125,7 @@ export interface OfflineClientConfig {
   workerUrl?: string;
   /** Service-worker registration scope. Default: '/'. */
   scope?: string;
-  /** BroadcastChannel name for 'updated' events. Default: 'solid-offline'. */
+  /** BroadcastChannel name for revalidation events. Default: 'solid-offline'. */
   channelName?: string;
 }
 
@@ -202,9 +203,22 @@ export type AclStatus = 'ok' | 'forbidden' | 'not-found';
 export interface UpdatedEvent {
   url: string;
   event: 'updated';
-  /** The new ETag after revalidation. */
+  /** Opaque lifecycle identifier; optional for compatibility with older senders. */
+  attemptId?: string;
+  /** Optional legacy field; current worker messages omit response metadata. */
   etag?: string;
 }
+
+/** Progress messages; never include response bytes, headers or credentials. */
+export interface RevalidationEvent {
+  url: string;
+  event: 'revalidating' | 'revalidated' | 'revalidate-failed';
+  /** Opaque lifecycle identifier; optional for compatibility with older senders. */
+  attemptId?: string;
+}
+
+/** All messages on the offline BroadcastChannel. UpdatedEvent remains source-compatible. */
+export type OfflineEvent = UpdatedEvent | RevalidationEvent;
 
 /**
  * The Solid Notifications Protocol change types we react to. They mirror the
