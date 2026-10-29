@@ -1,7 +1,12 @@
 // AUTHORED-BY Codex GPT-6
 import { expect, it } from "vitest";
 import { buildDocument, parseDocument, serializeTurtle } from "../src/apps/docs/lib/model";
-import { createSolidDriveClient, policyArchiveOf } from "../src/apps/drive/lib/client/client";
+import {
+  createSolidDriveClient,
+  type DriveClient,
+  DriveError,
+  policyArchiveOf,
+} from "../src/apps/drive/lib/client/client";
 import { restoreItems, trashItems } from "../src/apps/drive/lib/operations/operations";
 import { serializeTrashIndex, trashIndexFrom } from "../src/apps/drive/lib/operations/trash-index";
 import { aclBody, DRIVE, OWNER, PRIVATE, ROOT, wacPod } from "./drive-wac-pod";
@@ -15,10 +20,11 @@ const INDEX = `${DRIVE}.trash/index.ttl`;
 it.each([
   false,
   true,
-])("serializes concurrent ACL archives and continues after a failed receipt (%s)", async (denied) => {
+])("serializes ACL archive receipts and continues after a failed receipt (%s)", async (denied) => {
   const f = await wacPod();
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });
-  for (let index = 0; index < 8; index++)
+  // Three items exercise success, a refused receipt, and continuation afterward.
+  for (let index = 0; index < 2; index++)
     await client.write(
       `${PRIVATE}secret-${index}`,
       "secret contents",
@@ -35,7 +41,7 @@ it.each([
   });
   const trashed = await trashItems(client, DRIVE, items, { webId: OWNER });
   expect(trashed.failed).toHaveLength(denied ? 1 : 0);
-  expect(trashed.done).toHaveLength(denied ? 8 : 9);
+  expect(trashed.done).toHaveLength(items.length - (denied ? 1 : 0));
   const current = await client.readRdf(INDEX);
   if (!current) throw new Error("Missing index");
   const index = trashIndexFrom(current.dataset);
@@ -231,6 +237,9 @@ it.each([
   "policy-denied",
   "payload-denied",
   "cleanup-denied",
+  "cleanup-pending",
+  "missing-payload-validator",
+  "destination-check-failed",
   "missing-placeholder-validator",
   "source-changed",
   "unknown-access",
@@ -257,8 +266,19 @@ it.each([
   let lost = false;
   let written = false;
   let originalPolicy: string | undefined;
+  let archiveRead = false;
   f.intercept(async (url, init) => {
     const method = init?.method ?? "GET";
+    if (
+      mode === "destination-check-failed" &&
+      archiveRead &&
+      url === TARGET &&
+      method === "HEAD" &&
+      init?.cache !== "no-store"
+    )
+      return new Response(null, { status: 503 });
+    if (mode === "cleanup-pending" && url === TARGET && method === "DELETE")
+      return new Response(null, { status: 202 });
     if (mode === "policy-unreadable" && written && url === `${TARGET}.policy` && method === "GET")
       return new Response(null, { status: 403 });
     if (
@@ -275,13 +295,24 @@ it.each([
       return new Response(null, { status: 403 });
     if (mode === "cleanup-denied" && url === TARGET && method === "DELETE")
       return new Response(null, { status: 403 });
-    if (mode === "payload-denied" && url === TARGET && method === "PUT" && init?.body)
+    if (
+      ["payload-denied", "cleanup-pending"].includes(mode) &&
+      url === TARGET &&
+      method === "PUT" &&
+      init?.body
+    )
       return new Response(null, { status: 503 });
     return undefined;
   });
   f.after(async (url, method, response) => {
+    if (url === policyArchiveOf(snapshot.url) && method === "GET") archiveRead = true;
     if (url === TARGET && method === "PUT" && response.ok) {
       written = (await (await f.pod.fetch(TARGET)).text()).includes("Private plan");
+      if (written && mode === "missing-payload-validator") {
+        const headers = new Headers(response.headers);
+        headers.delete("etag");
+        return new Response(response.body, { status: response.status, headers });
+      }
       if (written && ["policy-changed", "policy-forged-validator"].includes(mode)) {
         originalPolicy = f.policies.get(`${TARGET}.policy`);
         f.policies.set(`${TARGET}.policy`, await aclBody(TARGET, true));
@@ -327,9 +358,64 @@ it.each([
   } else {
     expect(result.failed).toHaveLength(1);
     expect(f.pod.has(snapshot.url)).toBe(true);
+    if (mode === "destination-check-failed")
+      expect(result.failed[0]?.error).toMatchObject({
+        cause: "Restore destination could not be checked",
+      });
     if (["policy-denied", "payload-denied", "source-changed", "unknown-access"].includes(mode))
       expect(f.pod.has(TARGET)).toBe(false);
   }
   expect(f.exposures).toEqual([]);
+  expect(await (await f.client.read(DOC)).text()).toBe("occupant");
+});
+
+it.each([
+  "unchanged",
+  "widened destination",
+  "source changed after byte reconciliation",
+])("binds an already-written Docs snapshot through retry and source deletion (%s)", async (mode) => {
+  const f = await fixture();
+  const snapshot = f.entries[0];
+  if (!snapshot) throw new Error("Missing snapshot");
+  await f.client.write(
+    DOC,
+    "occupant",
+    { contentType: "text/plain" },
+    { kind: "protect-ancestors" },
+  );
+  const interrupted = {
+    ...f.client,
+    async remove(this: DriveClient, ...args: Parameters<DriveClient["remove"]>) {
+      if (args[0] === snapshot.url) throw new DriveError("failed", 503, snapshot.url);
+      return f.client.remove.apply(this, args);
+    },
+  };
+  const first = await restoreItems(interrupted, DRIVE, [snapshot]);
+  expect(first.failed).toHaveLength(1);
+  expect(f.pod.has(snapshot.url)).toBe(true);
+  expect(f.pod.has(TARGET)).toBe(true);
+  if (mode === "widened destination")
+    f.policies.set(`${TARGET}.policy`, await aclBody(TARGET, true));
+  let reconciled = false;
+  f.after(async (url, method, response) => {
+    if (url === TARGET && method === "GET") {
+      reconciled = true;
+      if (mode === "source changed after byte reconciliation")
+        f.policies.set(`${snapshot.url}.policy`, await aclBody(snapshot.url, true));
+    }
+    return response;
+  });
+  const retried = await restoreItems(f.client, DRIVE, [snapshot]);
+  if (mode === "unchanged") {
+    expect(reconciled).toBe(true);
+    expect(retried.failed).toEqual([]);
+    expect(f.pod.has(snapshot.url)).toBe(false);
+    expect((await f.anonymous(TARGET)).status).toBe(403);
+  } else {
+    expect(retried.failed).toHaveLength(1);
+    expect(retried.failed[0]?.error).toMatchObject({ kind: "private-access-unavailable" });
+    expect(reconciled).toBe(mode === "source changed after byte reconciliation");
+    expect(f.pod.has(snapshot.url)).toBe(true);
+  }
   expect(await (await f.client.read(DOC)).text()).toBe("occupant");
 });

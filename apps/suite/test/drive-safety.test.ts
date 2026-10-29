@@ -76,7 +76,7 @@ function setupPartial(intercept?: Parameters<typeof setup>[0]) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("Drive data-safety regressions", () => {
-  it("bounds independent trash and restore moves while keeping every intent durable before deletion", async () => {
+  it("serializes trash and restore moves while keeping every intent durable before deletion", async () => {
     let deleting = false;
     const { pod, client } = setup(async (url, init) => {
       if (deleting && url.startsWith(FROM) && init?.method === "DELETE") {
@@ -115,44 +115,48 @@ describe("Drive data-safety regressions", () => {
     deleting = false;
     expect(trashed.failed).toEqual([]);
     expect(trashed.done.map((entry) => entry.original)).toEqual(items.map((item) => item.url));
-    expect(peak).toBe(8);
+    expect(peak).toBe(1);
     expect(active).toBe(0);
     peak = 0;
     const restored = await restoreItems(client, DRIVE, trashed.done);
     expect(restored.failed).toEqual([]);
     expect(restored.done.map((entry) => entry.url)).toEqual(items.map((item) => item.url));
-    expect(peak).toBe(8);
+    expect(peak).toBe(1);
     expect(active).toBe(0);
     expect(items.every(({ url }) => pod.has(url))).toBe(true);
   });
 
-  it("drains concurrent destination checks before retaining copies after a failed verification", async () => {
-    let release: (() => void) | undefined;
-    let entered: (() => void) | undefined;
-    const checking = new Promise<void>((resolve) => {
-      entered = resolve;
-    });
+  it("retains copies without starting another identity check after a destination check fails", async () => {
+    const checking = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
     const { pod, fetch, client } = setup(async (url, init) => {
-      if (init?.method !== "HEAD") return undefined;
-      if (url === `${TO}a`) return new Response(null, { status: 503 });
-      if (url === `${TO}b`) {
-        entered?.();
-        await new Promise<void>((resolve) => {
-          release = resolve;
-        });
+      if (
+        init?.method === "HEAD" &&
+        url === `${TO}a` &&
+        new Headers(init.headers).has("if-match")
+      ) {
+        checking.resolve();
+        await release.promise;
+        return new Response(null, { status: 503 });
       }
       return undefined;
     });
     const moving = client.move(FROM, TO, { kind: "confirm-move" });
     const settled = vi.fn();
     void moving.catch(settled);
-    await checking;
+    await checking.promise;
     expect(settled).not.toHaveBeenCalled();
     expect(fetch.mock.calls.filter(([, init]) => init?.method === "DELETE")).toEqual([]);
-    release?.();
+    release.resolve();
     await expect(moving).rejects.toMatchObject({ kind: "partial-failure" });
     expect([`${FROM}a`, `${FROM}b`, `${TO}a`, `${TO}b`].every((url) => pod.has(url))).toBe(true);
     expect(fetch.mock.calls.filter(([, init]) => init?.method === "DELETE")).toEqual([]);
+    expect(
+      fetch.mock.calls.filter(
+        ([url, init]) =>
+          url === `${TO}b` && init?.method === "HEAD" && new Headers(init.headers).has("if-match"),
+      ),
+    ).toEqual([]);
   });
 
   it.each([
@@ -256,7 +260,14 @@ describe("Drive data-safety regressions", () => {
     const deletion = fetch.mock.calls.findIndex(
       ([url, init]) => url === `${entry.url}b` && init?.method === "DELETE",
     );
-    const preceding = fetch.mock.calls[deletion - 1];
+    const preceding = fetch.mock.calls
+      .slice(0, deletion)
+      .findLast(
+        ([url, init]) =>
+          url === `${FROM}b` &&
+          init?.method === "HEAD" &&
+          new Headers(init.headers).has("if-match"),
+      );
     expect(preceding?.[0]).toBe(`${FROM}b`);
     expect(preceding?.[1]?.method).toBe("HEAD");
     expect(new Headers(preceding?.[1]?.headers).get("if-match")).toBe(comparedEtag);
@@ -336,10 +347,17 @@ describe("Drive data-safety regressions", () => {
     const deletes = fetch.mock.calls.filter(
       ([url, init]) => url === `${entry.url}b` && init?.method === "DELETE",
     );
+    expect(deletes).toEqual([]);
     if (mode === "changed") {
-      expect(deletes).toHaveLength(1);
-      expect(new Headers(deletes[0]?.[1]?.headers).get("if-match")).toBe(comparedEtag);
-    } else expect(deletes).toEqual([]);
+      expect(
+        fetch.mock.calls.some(
+          ([url, init]) =>
+            url === `${entry.url}b` &&
+            init?.method === "HEAD" &&
+            new Headers(init.headers).get("if-match") === comparedEtag,
+        ),
+      ).toBe(true);
+    }
     expect(await (await client.read(`${entry.url}b`)).text()).toBe(
       mode === "changed" ? "unique new recovery contents" : "B",
     );

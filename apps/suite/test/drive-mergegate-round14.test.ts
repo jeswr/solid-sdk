@@ -37,6 +37,7 @@ it("every exported container-creating client method requires a policy at type an
     "remove",
     "recheckDeletions",
     "exclusive",
+    "bindAccess",
   ];
   expect(
     Object.keys(client)
@@ -357,13 +358,20 @@ it.each([
     }
     return undefined;
   });
+  if (unknown) {
+    await expect(client.move(from, to, { kind: "confirm-move" })).rejects.toThrow("Private access");
+    expect(beforePut).not.toHaveBeenCalled();
+    expect(confirmAccess).not.toHaveBeenCalled();
+    expect(f.pod.has(`${from}file`)).toBe(true);
+    return;
+  }
   await client.move(from, to, { kind: "confirm-move" });
   expect(confirmAccess).toHaveBeenCalledWith(expect.objectContaining({ canKeep: !unknown }));
   expect(beforePut).toHaveBeenCalledOnce();
   expect((await f.anonymous(`${to}file`)).status).toBe(200);
 });
 
-it("inheritance is rechecked inside the creation flight before omitting its ledger", async () => {
+it("inheritance widening inside the creation flight stops the transfer before file bytes", async () => {
   const f = await wacPod();
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });
   const from = `${PRIVATE}nested/`;
@@ -385,7 +393,8 @@ it("inheritance is rechecked inside the creation flight before omitting its ledg
     }
     return undefined;
   });
-  await client.move(from, to, { kind: "confirm-move" });
-  expect(beforePut).toHaveBeenCalledOnce();
-  expect((await f.anonymous(`${to}file`)).status).toBe(403);
+  await expect(client.move(from, to, { kind: "confirm-move" })).rejects.toThrow("Private access");
+  expect(beforePut).not.toHaveBeenCalled();
+  expect(f.pod.has(`${from}file`)).toBe(true);
+  expect(f.pod.has(`${to}file`)).toBe(false);
 });

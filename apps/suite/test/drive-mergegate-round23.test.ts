@@ -48,7 +48,11 @@ it("classifies lost responses as unknown without marking unrelated failures as D
 it.each(
   deleteOutcomes.filter(refusedDelete),
 )("DELETE %s retires only deletion guards without polling or discarding ACL protection", async (status) => {
-  const http = vi.fn<typeof fetch>(async () => unknownDelete(status));
+  const http = vi.fn<typeof fetch>(async (_url, init) =>
+    init?.method === "HEAD"
+      ? new Response(null, { headers: { etag: '"old"' } })
+      : unknownDelete(status),
+  );
   const protection = { acl: `${source}.acl`, from: source, turtle: "required ACL" };
   await protectionLedger(http).set(source, protection);
   await expect(
@@ -56,8 +60,7 @@ it.each(
   ).rejects.toMatchObject({
     status,
   });
-  expect(http).toHaveBeenCalledTimes(1);
-  expect(http.mock.calls[0]?.[1]?.method).toBe("DELETE");
+  expect(http.mock.calls.map(([, init]) => init?.method)).toEqual(["HEAD", "DELETE"]);
   expect(await deletionLedger(http).get(source)).toBeUndefined();
   expect(await deletionLedger(http).get(recovery)).toBeUndefined();
   expect(await protectionLedger(http).get(source)).toEqual(protection);
@@ -106,7 +109,9 @@ it.each([
   const http: typeof fetch = async (_url, init) =>
     init?.method === "DELETE"
       ? new Response(null, { status })
-      : new Response(null, { headers: { etag: '"new"' } });
+      : new Response(null, {
+          headers: { etag: new Headers(init?.headers).has("if-match") ? '"old"' : '"new"' },
+        });
   await expect(
     deletionControl(http, errorFor).remove(source, '"old"', recovery),
   ).rejects.toMatchObject({

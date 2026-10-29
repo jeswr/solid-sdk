@@ -60,7 +60,10 @@ it.each([202, 302, 408])("a non-terminal DELETE %s is pending until confirmed", 
   const url = "https://delete.test/file";
   const http = vi.fn<typeof fetch>(
     async (_input, init) =>
-      new Response(null, { status: init?.method === "DELETE" ? status : 200 }),
+      new Response(null, {
+        status: init?.method === "DELETE" ? status : 200,
+        headers: { etag: '"original"' },
+      }),
   );
   const control = deletionControl(http, (status) => new Error(String(status)));
   await expect(control.remove(url, '"original"')).rejects.toBeInstanceOf(DriveDeletePendingError);
@@ -92,7 +95,10 @@ it.each([
 ])("an uncertain DELETE %s retains both guards and its error as the cause", async (status) => {
   const url = "https://delete.test/source";
   const recovery = "https://delete.test/recovery";
-  const http: typeof fetch = async () => new Response(null, { status });
+  const http: typeof fetch = async (_url, init) =>
+    new Headers(init?.headers).has("if-match") && init?.method === "HEAD"
+      ? new Response(null, { headers: { etag: '"original"' } })
+      : new Response(null, { status });
   const control = deletionControl(http, (status) => new Error(`Rejected ${status}`));
   await expect(control.remove(url, '"original"', recovery)).rejects.toMatchObject({
     kind: "delete-pending",

@@ -62,12 +62,18 @@ async function fixture() {
       { path: "drive/folder/nested/file", body: "payload", contentType: "text/plain" },
     ],
   });
+  const deleted = new Set<string>();
+  const confirmationReads: string[] = [];
   const http = vi.fn<typeof fetch>(async (input, init) => {
     // A completed DELETE must not depend on a later confirmation read. Model
     // the read endpoint being unavailable after the demo's definitive 205.
-    if (init?.method === "HEAD" && init.cache === "no-store")
+    if (init?.method === "HEAD" && init.cache === "no-store" && deleted.has(String(input))) {
+      confirmationReads.push(String(input));
       return new Response(null, { status: 503 });
-    return pod.fetch(input, init);
+    }
+    const response = await pod.fetch(input, init);
+    if (init?.method === "DELETE" && response.status === 205) deleted.add(String(input));
+    return response;
   });
   const session: PodSession = {
     mode: "demo",
@@ -79,15 +85,15 @@ async function fixture() {
     reset: async () => {},
   };
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: http });
-  return { pod, http, client, session };
+  return { pod, http, client, session, confirmationReads };
 }
 
 it("Docs dialog trash completes its whole pair on DELETE 205 without waiting for confirmation reads under strict Web Locks", async () => {
-  const { pod, client, session, http } = await fixture();
+  const { pod, client, session, http, confirmationReads } = await fixture();
   expect(await trashDocumentWithUndo(DOC, session, vi.fn())).toBe(true);
   expect(toast).toHaveBeenCalledWith("Moved to trash", expect.any(Object));
   expect(toast.error).not.toHaveBeenCalled();
-  expect(http.mock.calls.filter(([, init]) => init?.cache === "no-store")).toEqual([]);
+  expect(confirmationReads).toEqual([]);
   const current = await client.readRdf(`${DRIVE}.trash/index.ttl`);
   if (!current) throw new Error("Missing trash index");
   const index = trashIndexFrom(current.dataset);
@@ -104,13 +110,13 @@ it("Docs dialog trash completes its whole pair on DELETE 205 without waiting for
 }, 2_000);
 
 it("Drive folder trash completes nested DELETE 205 responses without waiting for confirmation reads under strict Web Locks", async () => {
-  const { pod, client, session, http } = await fixture();
+  const { pod, client, session, http, confirmationReads } = await fixture();
   const source = `${DRIVE}folder/`;
   const result = await trashItems(client, DRIVE, [await client.stat(source)], {
     webId: session.webId,
   });
   expect(result.failed).toEqual([]);
-  expect(http.mock.calls.filter(([, init]) => init?.cache === "no-store")).toEqual([]);
+  expect(confirmationReads).toEqual([]);
   expect(result.done).toHaveLength(1);
   const entry = result.done[0];
   if (!entry) throw new Error("Missing folder record");

@@ -9,6 +9,7 @@ import {
 } from "../src/apps/drive/lib/client/client";
 import type { DriveDialog } from "../src/apps/drive/state/ui";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
+import { nonWacPod } from "./drive-non-wac-pod";
 import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 
 const mocks = vi.hoisted(() => ({
@@ -1396,22 +1397,20 @@ it("uploads a folder dropped on the listing or a folder row with its structure",
   expect(drive.uploads.enqueue).toHaveBeenCalledTimes(2);
 });
 
-it("offers confirmed Delete forever when private Trash access cannot be established", async () => {
-  const { DriveAccessError } = await import("../src/apps/drive/lib/client/access");
-  const error = new DriveAccessError();
-  const pod = createDemoPod({
-    root: "https://pod.example/",
-    seed: [{ path: "drive/A.txt", body: "Private data", contentType: "text/plain" }],
-  });
-  drive.client = createSolidDriveClient({ storageUrl: "https://pod.example/", fetch: pod.fetch });
-  vi.spyOn(operations, "trashItems").mockResolvedValue({
-    done: [],
-    failed: [{ url: `${ROOT}A.txt`, error }],
+it.each([
+  "ACP",
+  "unreadable ACL",
+] as const)("offers confirmed Delete forever after real Trash access failure on %s storage", async (model) => {
+  const pod = nonWacPod(model, "https://pod.example/", `${ROOT}A.txt`);
+  drive.client = createSolidDriveClient({
+    storageUrl: "https://pod.example/",
+    fetch: pod.fetch,
+    webId: drive.session.webId,
   });
   const view = await mount(tree(items, true));
   await act(async () => actions.trash([items[0] as DriveItem]));
   expect(mocks.toast.error).toHaveBeenCalledWith(
-    error.message,
+    expect.stringContaining("Private access could not be established"),
     expect.objectContaining({ action: expect.objectContaining({ label: "Delete forever" }) }),
   );
   const options = mocks.toast.error.mock.calls.at(-1)?.[1] as { action: { onClick(): void } };

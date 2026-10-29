@@ -362,7 +362,7 @@ it.each([
   );
   expect(result.failed[0]?.error).toMatchObject({
     kind: "private-access-unavailable",
-    message: expect.stringContaining("Delete forever"),
+    message: expect.stringContaining("Retry once its access can be verified"),
   });
   expect(f.pod.has(`${FROM}a`)).toBe(true);
   expect(f.pod.has(INDEX)).toBe(false);
@@ -715,13 +715,14 @@ it("rechecks an existing Trash ACL before every batch", async () => {
     (await trashItems(f.client, DRIVE, [await f.client.stat(`${FROM}a`)], { webId: OWNER })).failed,
   ).toEqual([]);
   f.policies.set(`${DRIVE}.trash/.policy`, "");
-  expect(
-    (await trashItems(f.client, DRIVE, [await f.client.stat(`${FROM}b`)], { webId: OWNER })).failed,
-  ).toEqual([]);
-  const acl = await parseRdf(f.policies.get(`${DRIVE}.trash/.policy`) ?? "", "text/turtle");
-  expect(
-    [...new AclResource(acl, DataFactory).authorizations].flatMap((rule) => [...rule.agent]),
-  ).toEqual([OWNER]);
+  const result = await trashItems(f.client, DRIVE, [await f.client.stat(`${FROM}b`)], {
+    webId: OWNER,
+  });
+  // An empty document might be an ACR: it must not be overwritten as known WAC.
+  expect(result.done).toEqual([]);
+  expect(result.failed).toHaveLength(1);
+  expect(f.policies.get(`${DRIVE}.trash/.policy`)).toBe("");
+  expect(f.pod.has(`${FROM}b`)).toBe(true);
 });
 
 it("keeps a recovery container if its application RDF cannot be verified after merging", async () => {

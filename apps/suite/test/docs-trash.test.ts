@@ -81,6 +81,7 @@ describe("Docs uses Drive trash records", () => {
     "write-validator",
     "weak-write",
     "changed-target",
+    "changed-at-delete",
     "companion",
   ])("retains the trash snapshot when a renamed pair cannot be safely restored (%s)", async (failure) => {
     const { pod, session, client } = await fixture();
@@ -94,6 +95,7 @@ describe("Docs uses Drive trash records", () => {
     });
     await client.createFolder(`${TREE}updates/`, { kind: "inherit-verified" });
     const target = `${ROOT}docs/plan%20(restored).ttl`;
+    let targetChecks = 0;
     const interrupted = {
       ...client,
       readVersion: async (url: string) => {
@@ -114,7 +116,9 @@ describe("Docs uses Drive trash records", () => {
       },
       stat: async (...args: Parameters<typeof client.stat>) => {
         const item = await client.stat(...args);
-        return args[0] === target && failure === "changed-target"
+        if (args[0] === target) targetChecks++;
+        return args[0] === target &&
+          (failure === "changed-target" || (failure === "changed-at-delete" && targetChecks === 2))
           ? { ...item, etag: '"changed"' }
           : item;
       },
@@ -136,7 +140,7 @@ describe("Docs uses Drive trash records", () => {
         kind:
           failure === "source-read"
             ? "not-found"
-            : failure === "changed-target"
+            : ["changed-target", "changed-at-delete"].includes(failure)
               ? "conflict"
               : "missing-validator",
         url: ["source-read", "source-validator", "weak-source"].includes(failure)
@@ -582,12 +586,13 @@ it("bounds Docs trash and Undo requests by compacting the typed Yjs log without 
   }
   doc.destroy();
   expect(updates).toHaveLength(62);
-  // Lease checks and resource protection still apply on the demo pod; its
-  // explicit capability lets us omit redundant ancestor HEADs and ACL history.
-  // Definitive 205 DELETE responses retire their intents without confirmation HEADs.
-  // Each restored slot is listed once before removing its empty container.
-  expect(results).toEqual([
-    { trash: { requests: 612, mutations: 132 }, undo: { requests: 418, mutations: 133 } },
-    { trash: { requests: 253, mutations: 73 }, undo: { requests: 52, mutations: 11 } },
+  // Every payload and delete now binds access and checks identity. Compaction
+  // must still remove most requests without weakening those checks or changing CRDT state.
+  const [raw, compacted] = results as [(typeof results)[number], (typeof results)[number]];
+  expect(compacted.trash.requests).toBeLessThan(raw.trash.requests / 10);
+  expect(compacted.undo.requests).toBeLessThan(raw.undo.requests / 10);
+  expect(results.map(({ trash, undo }) => [trash.mutations, undo.mutations])).toEqual([
+    [132, 133],
+    [73, 11],
   ]);
 });

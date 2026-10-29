@@ -104,7 +104,7 @@ it.each([
   "acp",
   "unknown",
   "parent-denied",
-])("unknown source access prompts and disables Keep: %s", async (mode) => {
+])("unknown source access refuses before writes: %s", async (mode) => {
   const f = await wacPod();
   f.intercept(async (url, init) => {
     if (mode === "unreadable" && url === `${PRIVATE}.policy`)
@@ -125,13 +125,8 @@ it.each([
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, confirmAccess });
   await expect(
     client.move(`${PRIVATE}secret`, `${PUBLIC}secret`, { kind: "confirm-move" }),
-  ).rejects.toThrow("cancelled");
-  expect(confirmAccess).toHaveBeenCalledWith(
-    expect.objectContaining({
-      canKeep: false,
-      gains: [expect.stringContaining("could not be determined")],
-    }),
-  );
+  ).rejects.toThrow("Private access");
+  expect(confirmAccess).not.toHaveBeenCalled();
   expect(f.pod.has(`${PRIVATE}secret`)).toBe(true);
 });
 it("unknown source cannot be kept even if a caller requests Keep", async () => {
@@ -149,16 +144,21 @@ it("unknown source cannot be kept even if a caller requests Keep", async () => {
   ).rejects.toThrow("Private access");
   expect(f.pod.has(`${PUBLIC}secret`)).toBe(false);
 });
-it("unknown destination can still keep the known source policy", async () => {
+it("unknown destination refuses Keep when its WAC model cannot be identified", async () => {
   const f = await wacPod();
   f.intercept(async (url, init) =>
     url === PUBLIC && init?.method === "HEAD" ? new Response(null) : undefined,
   );
   const confirmAccess = vi.fn(async () => "keep" as const);
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, confirmAccess });
-  await client.move(`${PRIVATE}secret`, `${PUBLIC}secret`, { kind: "confirm-move" });
-  expect(confirmAccess).toHaveBeenCalledWith(expect.objectContaining({ canKeep: true }));
-  expect((await f.anonymous(`${PUBLIC}secret`)).status).toBe(403);
+  await expect(
+    client.move(`${PRIVATE}secret`, `${PUBLIC}secret`, { kind: "confirm-move" }),
+  ).rejects.toThrow("Private access");
+  expect(confirmAccess).not.toHaveBeenCalled();
+  // Knowing the source ACL does not prove that writing WAC at the destination is safe.
+  expect(f.pod.has(`${PRIVATE}secret`)).toBe(true);
+  expect(f.policies.has(`${PUBLIC}secret.policy`)).toBe(false);
+  expect(f.pod.has(`${PUBLIC}secret`)).toBe(false);
 });
 it("moves to equivalent or narrower inherited defaults without prompting; demo pods never prompt", async () => {
   const f = await wacPod();
@@ -201,7 +201,7 @@ it("no confirmation handler fails closed on widening", async () => {
 it.each([
   false,
   true,
-])("unreadable own ACL in a moved tree prompts before writes (folder: %s)", async (folder) => {
+])("unreadable own ACL in a moved tree refuses before writes (folder: %s)", async (folder) => {
   const f = await wacPod();
   f.intercept(async (url) =>
     url === `${PRIVATE}secret.policy` ? new Response(null, { status: 403 }) : undefined,
@@ -214,20 +214,23 @@ it.each([
       folder ? `${PUBLIC}private/` : `${PUBLIC}secret`,
       { kind: "confirm-move" },
     ),
-  ).rejects.toThrow("cancelled");
-  expect(confirmAccess).toHaveBeenCalledWith(expect.objectContaining({ canKeep: false }));
+  ).rejects.toThrow("Private access");
+  expect(confirmAccess).not.toHaveBeenCalled();
   expect(f.calls.some((call) => call.method === "PUT")).toBe(false);
 });
-it("explicit Move acknowledges unknown source policies; Keep remains unavailable", async () => {
+it("explicit Move cannot authorize unknown source policies", async () => {
   const f = await wacPod();
   f.intercept(async (url) =>
     url === `${PRIVATE}secret.policy` ? new Response(null, { status: 403 }) : undefined,
   );
   const confirmAccess = vi.fn(async () => "move" as const);
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, confirmAccess });
-  await client.move(`${PRIVATE}secret`, `${PUBLIC}secret`, { kind: "confirm-move" });
-  expect(confirmAccess).toHaveBeenCalledWith(expect.objectContaining({ canKeep: false }));
-  expect((await f.anonymous(`${PUBLIC}secret`)).status).toBe(200);
+  await expect(
+    client.move(`${PRIVATE}secret`, `${PUBLIC}secret`, { kind: "confirm-move" }),
+  ).rejects.toThrow("Private access");
+  expect(confirmAccess).not.toHaveBeenCalled();
+  expect(f.pod.has(`${PUBLIC}secret`)).toBe(false);
+  expect(f.pod.has(`${PRIVATE}secret`)).toBe(true);
 });
 it("Keep on a folder materializes accessTo and defaults before any child bytes", async () => {
   const f = await wacPod();
@@ -352,7 +355,7 @@ it.each([
   expect(confirmAccess).toHaveBeenCalledTimes(mode === "copy" ? 0 : 1);
 });
 
-it("folder Undo asks about unknown ACP instead of rejecting policy discovery during tree verification", async () => {
+it("folder Undo refuses unknown ACP during tree verification", async () => {
   const f = await wacPod();
   const confirmAccess = vi.fn(async () => "cancel" as const);
   const options = { storageUrl: ROOT, fetch: f.fetch, confirmAccess };
@@ -368,7 +371,7 @@ it("folder Undo asks about unknown ACP instead of rejecting policy discovery dur
   const { moveWithValidator } = await import("../src/apps/drive/state/undo");
   await expect(
     moveWithValidator(options, moved.url, PUBLIC, moved.etag as string, moved.tree),
-  ).rejects.toThrow("cancelled");
-  expect(confirmAccess).toHaveBeenCalledWith(expect.objectContaining({ canKeep: false }));
+  ).rejects.toThrow("Private access");
+  expect(confirmAccess).not.toHaveBeenCalled();
   expect(f.pod.has(moved.url)).toBe(true);
 });

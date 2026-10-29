@@ -1,17 +1,20 @@
 // AUTHORED-BY Codex
-import { parseRdf } from "@jeswr/fetch-rdf";
+import { fetchRdf, parseRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { serialize } from "@jeswr/rdf-serialize";
-import type { Store } from "n3";
+import { Store } from "n3";
 import { trashEntries, trashIndexFrom } from "../operations/trash-index";
 import {
   type accessControl,
   accessGains,
+  bindAccess,
   DriveAccessError,
   type OwnAccess,
   privateAcl,
   requireAccess,
 } from "./access";
+import { discardVersion, ownsEmptyContainer } from "./cleanup";
+import { type CommitEffects, Compensation, commitIrreversible } from "./commit";
 import { rethrowPendingDeletion } from "./deletion";
 import { type ProtectionRequirement, protectionLedger } from "./protection-ledger";
 import { relocate, sameGraph } from "./rdf";
@@ -123,7 +126,23 @@ export function ancestorGuard(options: {
     const etag = response.headers.get("etag");
     // Unknown/foreign control documents are not ours to remove with the resource.
     if (etag && (await access.snapshot(url, response.headers)).status !== "unknown") {
-      await options.deleteVersion(url, etag).catch(rethrowPendingDeletion);
+      const empty = new Store();
+      await discardVersion<Store | string>({
+        url,
+        captured: { content: url.endsWith("/") ? empty : "", etag },
+        read: async () => {
+          if (url.endsWith("/")) {
+            const current = await fetchRdf(url, { fetch: http });
+            return { content: current.dataset, etag: current.etag ?? undefined };
+          }
+          const current = await http(url);
+          if (!current.ok) throw options.error(current.status, url);
+          return { content: await current.text(), etag: current.headers.get("etag") ?? undefined };
+        },
+        owns: (content) =>
+          typeof content === "string" ? content === "" : ownsEmptyContainer(url, empty, content),
+        remove: (validator) => options.deleteVersion(url, validator),
+      }).catch(rethrowPendingDeletion);
     }
   };
   // The sole raw creation seam, private to the provisioner. Callers hold this
@@ -133,20 +152,40 @@ export function ancestorGuard(options: {
     decision: Exclude<ContainerPolicy, { kind: "owner-only" }>,
     onCreated?: (response: Response) => void,
     put = () => options.putFolder(url),
+    verifyAccess?: () => Promise<void>,
+    effects: CommitEffects = {},
   ): Promise<{ response: Response; policy?: OwnAccess }> => {
+    const binding = await bindAccess(access, url, url, true);
+    let response: Response;
+    const compensation = new Compensation(() => binding.rollback(() => cleanup(url, response)));
     try {
       if (decision.kind === "archived")
         await ledger.set(url, await requirementFor(decision.acl, decision.from));
-      const response = await put();
+      response = await commitIrreversible({
+        ...effects,
+        arm: [compensation, ...(effects.arm ?? [])],
+        rechecks: [
+          async () => {
+            await verifyAccess?.();
+            await binding.recheck();
+          },
+        ],
+        step: put,
+      });
       onCreated?.(response);
       try {
+        await verifyAccess?.();
+        await binding.recheck();
         const policy =
           decision.kind === "archived"
             ? await install(url, decision.acl, decision.from)
             : undefined;
+        if (policy) binding.installed(policy);
+        await binding.recheck();
+        compensation.disarm();
         return { response, ...(policy ? { policy } : {}) };
       } catch (error) {
-        await cleanup(url, response);
+        await compensation.rollback();
         throw error;
       }
     } finally {
@@ -314,6 +353,8 @@ export function ancestorGuard(options: {
     decision: ContainerPolicy,
     onCreated?: (response: Response) => void,
     put?: () => Promise<Response>,
+    verifyAccess?: () => Promise<void>,
+    effects?: CommitEffects,
   ): Promise<{ response: Response; policy?: OwnAccess }> => {
     requirePolicy(decision, ["inherit-verified", "archived", "owner-only"]);
     const from = decision.kind === "archived" ? decision.from : url;
@@ -369,6 +410,8 @@ export function ancestorGuard(options: {
           policy ? { kind: "archived", acl: policy, from } : { kind: "inherit-verified" },
           onCreated,
           put,
+          verifyAccess,
+          effects,
         );
       },
       false,
@@ -382,11 +425,21 @@ export function ancestorGuard(options: {
     folder: resource,
     file: (
       url: string,
-      policy: OwnAccess,
+      policy: OwnAccess | undefined,
       from: string,
       put: () => Promise<Response>,
       onCreated: (response: Response) => void,
-    ) => resource(url, { kind: "archived", acl: policy, from }, onCreated, put),
+      verifyAccess?: () => Promise<void>,
+      effects?: CommitEffects,
+    ) =>
+      resource(
+        url,
+        policy ? { kind: "archived", acl: policy, from } : { kind: "inherit-verified" },
+        onCreated,
+        put,
+        verifyAccess,
+        effects,
+      ),
     async protect(url: string, policy: OwnAccess, from = url): Promise<void> {
       await guard(url, true);
       await singleFlight(

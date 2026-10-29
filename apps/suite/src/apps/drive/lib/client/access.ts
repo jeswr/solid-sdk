@@ -4,15 +4,15 @@ import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { safeHttpIri, serialize } from "@jeswr/rdf-serialize";
 import type { Term } from "@rdfjs/types";
-import { DatasetWrapper, NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
-import { AccessControlResource, AclResource, Authorization } from "@solid/object";
+import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
+import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { readSharing } from "../sharing/sharing";
+import { checkIdentity, commitIrreversible } from "./commit";
 import { relocate, sameGraph } from "./rdf";
 
 const ACL = "http://www.w3.org/ns/auth/acl#";
 const ACP_NS = "http://www.w3.org/ns/solid/acp#";
-const ACP = `${ACP_NS}accessControl`;
 export class DriveAccessError extends Error {
   readonly kind = "private-access-unavailable";
   constructor(
@@ -20,7 +20,7 @@ export class DriveAccessError extends Error {
     detail?: string,
   ) {
     super(
-      "Private access could not be established or verified. Drive can't confirm who can access the item and stopped the transfer. You can choose Delete forever instead." +
+      "Private access could not be established or verified. Drive can't confirm who can access the item and stopped the transfer. Retry once its access can be verified." +
         (detail ? ` ${detail}` : ""),
     );
   }
@@ -30,16 +30,9 @@ class WritableAuthorization extends Authorization {
     return SetFrom.subjectPredicate(this, predicate, NamedNodeAs.string, NamedNodeFrom.string);
   }
 }
-class PolicyDocument extends DatasetWrapper {
-  get isAcp(): boolean {
-    return (
-      [
-        ...this.instancesOf(`${ACP_NS}AccessControlResource`, AccessControlResource),
-        ...this.subjectsOf(`${ACP_NS}accessControl`, AccessControlResource),
-        ...this.subjectsOf(`${ACP_NS}memberAccessControl`, AccessControlResource),
-      ].length > 0
-    );
-  }
+function rejectAcp(headers: Headers): void {
+  if ([...headers].some(([name, value]) => /^(acp|acr)(-|$)/i.test(name) || value.includes(ACP_NS)))
+    throw new DriveAccessError("ACP privacy cannot be verified by this adapter");
 }
 export function privateAcl(resource: string, webId: string): Store {
   const owner = safeHttpIri(webId);
@@ -107,6 +100,7 @@ export function accessLabel(state: AccessState, resource: string, webId: string)
 
 export function accessControl(http: typeof globalThis.fetch, storageUrl: string) {
   function discover(resource: string, headers: Headers): string | undefined {
+    rejectAcp(headers);
     // This explicit fixture capability never substitutes for discovery on a real pod.
     if (headers.get("x-solid-demo-access-control") === "none") return undefined;
     const links = headers.get("link") ?? "";
@@ -116,24 +110,40 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       if (/;\s*anchor\s*=/i.test(params)) continue;
       const rel = /;\s*rel\s*=\s*(?:"([^"]*)"|([^;\s]+))/i.exec(params);
       const relations = (rel?.[1] ?? rel?.[2] ?? "").split(/\s+/);
-      if (relations.includes(ACP))
-        throw new DriveAccessError("ACP privacy cannot be verified by this adapter");
-      if (relations.includes("acl"))
+      if (relations.includes("acl")) {
+        if (acl) throw new DriveAccessError("Ambiguous ACL discovery");
         acl = assertWithinPodScope(storageUrl, new URL(match[1] as string, resource).href);
+        if (/\.acr\/?$/i.test(new URL(acl).pathname))
+          throw new DriveAccessError("ACP privacy cannot be verified by this adapter");
+      }
     }
     return acl;
   }
   const read = async (url: string): Promise<AccessState> => {
     try {
-      const result = await fetchRdf(url, { fetch: http });
+      const result = await fetchRdf(url, {
+        fetch: async (input, init) => {
+          const response = await http(input, { ...init, cache: "no-store" });
+          rejectAcp(response.headers);
+          return response;
+        },
+      });
       if (!result.etag || result.etag.startsWith("W/"))
         throw new DriveAccessError("Missing policy validator");
       // Some ACP deployments advertise their ACR using the legacy rel="acl".
       // Never PUT a WAC document to an ACP endpoint just because it echoes RDF.
-      if (new PolicyDocument(result.dataset, DataFactory).isAcp)
+      if (
+        [...result.dataset].some((quad) =>
+          [quad.subject, quad.predicate, quad.object, quad.graph].some(
+            (term) => term.termType === "NamedNode" && term.value.startsWith(ACP_NS),
+          ),
+        )
+      )
         throw new DriveAccessError("ACP privacy cannot be verified by this adapter");
       // Validate the known authorization model through its typed reader.
-      for (const rule of new AclResource(result.dataset, DataFactory).authorizations) {
+      const rules = [...new AclResource(result.dataset, DataFactory).authorizations];
+      if (!rules.length) throw new DriveAccessError("WAC model could not be identified");
+      for (const rule of rules) {
         const typed = new WritableAuthorization(rule as Term, result.dataset, DataFactory);
         for (const predicate of [
           "accessTo",
@@ -154,19 +164,31 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       return { status: "unknown", cause: error };
     }
   };
-  const store = async (url: string, dataset: Store): Promise<OwnAccess> => {
+  const store = async (url: string, dataset: Store, resource?: string): Promise<OwnAccess> => {
     const state = await read(url);
     if (state.status === "unknown") throw new DriveAccessError(state.cause);
     const current = state.status === "known" ? state.policy : undefined;
-    const response = await http(url, {
-      method: "PUT",
-      headers: {
-        "content-type": "text/turtle",
-        ...(current ? { "if-match": current.etag } : { "if-none-match": "*" }),
-      },
-      body: await serialize([...dataset]),
+    if (!current) {
+      if (!resource) throw new DriveAccessError("WAC model could not be identified");
+      requireAccess(await effective(resource), resource);
+    }
+    const body = await serialize([...dataset]);
+    const response = await commitIrreversible({
+      identityChecks: current
+        ? [() => checkIdentity(http, url, current.etag, (status) => new DriveAccessError(status))]
+        : [],
+      step: () =>
+        http(url, {
+          method: "PUT",
+          headers: {
+            "content-type": "text/turtle",
+            ...(current ? { "if-match": current.etag } : { "if-none-match": "*" }),
+          },
+          body,
+        }),
     });
     if (!response.ok) throw new DriveAccessError(response.status);
+    rejectAcp(response.headers);
     const saved = await read(url);
     if (saved.status !== "known" || !sameGraph(dataset, saved.policy.dataset))
       throw new DriveAccessError("Policy verification failed");
@@ -174,6 +196,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
   };
   const snapshot = async (resource: string, headers: Headers): Promise<AccessState> => {
     try {
+      rejectAcp(headers);
       if (headers.get("x-solid-demo-access-control") === "none")
         return { status: "none", demo: true };
       const url = discover(resource, headers);
@@ -182,12 +205,26 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       return { status: "unknown", cause };
     }
   };
-  const effective = async (resource: string, inherit = false): Promise<AccessState> => {
+  const effective = async (
+    resource: string,
+    inherit = false,
+    allowAbsent = false,
+  ): Promise<AccessState> => {
     try {
       let current: string | undefined = inherit ? parent(resource) : resource;
       while (current?.startsWith(storageUrl)) {
-        const response = await http(current, { method: "HEAD" });
-        if (!response.ok) throw new DriveAccessError(response.status);
+        const response = await http(current, { method: "HEAD", cache: "no-store" });
+        if (!response.ok && !(allowAbsent && response.status === 404))
+          throw new DriveAccessError(response.status);
+        if (
+          response.status === 404 &&
+          response.headers.get("x-solid-demo-access-control") !== "none" &&
+          !discover(current, response.headers)
+        ) {
+          current = parent(current);
+          inherit = true;
+          continue;
+        }
         const own = await snapshot(current, response.headers);
         if (own.status === "unknown" || (own.status === "none" && own.demo)) return own;
         if (own.status === "known") {
@@ -208,13 +245,16 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     effective,
     forResource: (own: OwnAccess, resource: string): OwnAccess =>
       projectAccess(own, resource, resource, false),
+    defaults: (own: OwnAccess, resource: string): OwnAccess =>
+      projectAccess(own, resource, resource, true),
     hasDefaults: (own: OwnAccess, resource: string): boolean =>
       projectAccess(own, resource, resource, true).dataset.size > 0,
     read,
     store,
     snapshot,
     async install(source: OwnAccess, from: string, to: string): Promise<OwnAccess> {
-      const response = await http(to, { method: "HEAD" });
+      const response = await http(to, { method: "HEAD", cache: "no-store" });
+      if (!response.ok) throw new DriveAccessError(response.status);
       const url = discover(to, response.headers);
       if (!url) throw new DriveAccessError("Destination has no ACL support");
       return store(
@@ -223,22 +263,101 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
           [source.url, url],
           [from, to],
         ]),
+        to,
       );
     },
     async privateFolder(url: string, webId?: string): Promise<void> {
       try {
-        const response = await http(url, { method: "HEAD" });
+        const response = await http(url, { method: "HEAD", cache: "no-store" });
         if (!response.ok) throw new DriveAccessError(response.status);
+        rejectAcp(response.headers);
         if (response.headers.get("x-solid-demo-access-control") === "none") return;
         const acl = discover(url, response.headers);
         if (!acl || !webId) throw new DriveAccessError();
-        await store(acl, privateAcl(url, webId));
+        await store(acl, privateAcl(url, webId), url);
       } catch (error) {
         throw new DriveAccessError(error);
       }
     },
   };
 }
+
+export class DriveAccessChangedError extends DriveAccessError {
+  constructor(readonly gains: readonly string[]) {
+    super("Bound access changed");
+  }
+}
+
+/** A policy decision is bound to BOTH endpoints, never to a previously discovered ACL URL.
+ * Every check starts discovery again, including own ACLs installed since preflight.
+ * Only an explicitly selected, verified policy installation may change the destination baseline.
+ */
+export async function bindAccess(
+  access: ReturnType<typeof accessControl>,
+  from: string,
+  to: string,
+  destinationOnly = false,
+) {
+  const resolve = async (url: string) => ({
+    resource: requireAccess(await access.effective(url, false, true), url),
+    defaults: url.endsWith("/")
+      ? requireAccess(await access.effective(`${url}.access-binding`, true, true), url)
+      : undefined,
+  });
+  let source = await resolve(from);
+  let destination = from === to ? source : await resolve(to);
+  const retired = new Set<string>();
+  const binding = {
+    source: source.resource,
+    destination: destination.resource,
+    retire: (url: string) => retired.add(url),
+    /** Re-resolve before removing our unchecked write, even if verification fails.
+     * The caller must supply a conditional rollback of its captured PUT identity;
+     * an access failure must not strand confidential bytes in a widened copy.
+     */
+    async rollback<T>(work: () => Promise<T>): Promise<T> {
+      await binding.recheck().catch(() => undefined);
+      return work();
+    },
+    installed(policy: OwnAccess) {
+      const defaults = access.defaults(policy, to);
+      destination = {
+        resource: access.forResource(policy, to),
+        defaults: to.endsWith("/") && defaults.dataset.size ? defaults : destination.defaults,
+      };
+      if (from === to) source = destination;
+    },
+    async recheck(): Promise<void> {
+      const currentSource = retired.has(from) ? undefined : await resolve(from);
+      const currentDestination = retired.has(to) ? undefined : await resolve(to);
+      const gains = new Set<string>();
+      let changed = false;
+      for (const [before, current, isSource] of [
+        [source, currentSource, !destinationOnly],
+        [destination, currentDestination, false],
+      ] as const) {
+        if (!current) continue;
+        for (const key of ["resource", "defaults"] as const) {
+          const previous = before[key];
+          const next = current[key];
+          if (!previous || !next) continue;
+          const wider = accessGains(previous, next);
+          const narrower = isSource ? accessGains(next, previous) : [];
+          if (previous.url !== next.url || wider.length || narrower.length) changed = true;
+          for (const agent of wider) gains.add(agent);
+          for (const agent of narrower) gains.add(agent);
+          // Narrowing the source can make a previously safe destination wider.
+          if (narrower.length && currentDestination)
+            for (const agent of accessGains(next, currentDestination.resource)) gains.add(agent);
+        }
+      }
+      if (changed) throw new DriveAccessChangedError([...gains]);
+    },
+  };
+  return binding;
+}
+
+export type AccessBinding = Awaited<ReturnType<typeof bindAccess>>;
 
 function parent(resource: string): string | undefined {
   if (new URL(resource).pathname === "/") return undefined;

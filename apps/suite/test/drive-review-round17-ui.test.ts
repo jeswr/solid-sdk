@@ -128,11 +128,17 @@ it.each([
   const pending = deferred<void>();
   const listing = deferred<void>();
   const list = operations.listTrash;
-  if (delay === "listing")
-    vi.spyOn(operations, "listTrash").mockImplementation(async (...args) => {
-      await listing.promise;
+  const listings = new Set<ReturnType<typeof list>>();
+  vi.spyOn(operations, "listTrash").mockImplementation((...args) => {
+    const flight = (async () => {
+      if (delay === "listing") await listing.promise;
       return list(...args);
-    });
+    })();
+    listings.add(flight);
+    const settled = () => listings.delete(flight);
+    void flight.then(settled, settled);
+    return flight;
+  });
   const remove = operations.deleteForever;
   const restore = operations.restoreItems;
   const mutation =
@@ -159,35 +165,37 @@ it.each([
     // lifecycle event, independent of the runner's polling/time budget.
     await returnedFocus.promise;
     expect(document.activeElement).toBe(trigger);
+    await vi.waitFor(() => expect(document.activeElement).toBe(trigger), { timeout: 10_000 });
   }
-  if (delay === "listing")
-    await act(async () => {
-      pending.resolve();
-      await mutation.mock.results[0]?.value;
-    });
   const search = view.host.querySelector<HTMLInputElement>(
     'input[type="search"]',
   ) as HTMLInputElement;
-  await focus(search);
-  const removedFromDom = deferred<void>();
-  const observer = new MutationObserver(() => {
-    if (!removed.isConnected) removedFromDom.resolve();
-  });
-  observer.observe(view.host, { childList: true, subtree: true });
-  try {
-    await act(async () => {
+  await act(async () => {
+    try {
+      if (delay === "listing") {
+        pending.resolve();
+        const result = await mutation.mock.results[0]?.value;
+        expect(result?.failed).toEqual([]);
+      }
+      search.focus();
+      expect(document.activeElement).toBe(search);
       pending.resolve();
       const result = await mutation.mock.results[0]?.value;
       expect(result?.failed).toEqual([]);
+    } finally {
+      // Release the deliberate listing gate before asking React to drain work.
+      // Otherwise act can wait for the very listing this test is still holding.
       listing.resolve();
-    });
-    // Notification-driven listing renders may finish after the operation.
-    if (removed.isConnected) await removedFromDom.promise;
-    await act(async () => {});
-    expect(removed.isConnected).toBe(false);
-  } finally {
-    observer.disconnect();
-  }
+    }
+    while (listings.size) await Promise.all([...listings]);
+  });
+  await vi.waitFor(
+    async () => {
+      await act(async () => {});
+      expect(removed.isConnected).toBe(false);
+    },
+    { timeout: 10_000 },
+  );
   expect(document.activeElement).toBe(search);
 });
 

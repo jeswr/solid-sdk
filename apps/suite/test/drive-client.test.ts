@@ -382,45 +382,45 @@ describe("Drive error handling and foreign server responses", () => {
   });
 
   it("handles missing HEAD/write headers and the fallback copy media type", async () => {
-    const responses = [
-      new Response(null),
-      new Response(null),
-      new Response(null), // Existing parent before write.
-      new Response(null), // Recheck after acquiring the ancestor Web Lock.
-      new Response(null, { status: 201 }),
-      new Response(new Uint8Array([0, 255]), {
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input, init) => {
+      const method = init?.method ?? "GET";
+      if (method === "PUT") return new Response(null, { status: 201 });
+      if (String(input) === `${DRIVE}new`)
+        return new Response(null, {
+          status: 404,
+          headers: { "x-solid-demo-access-control": "none" },
+        });
+      return new Response(method === "HEAD" ? null : new Uint8Array([0, 255]), {
         headers: { "x-solid-demo-access-control": "none" },
-      }),
-      new Response(null), // Existing parent before transfer.
-      new Response(null), // Recheck after acquiring the ancestor Web Lock.
-      new Response(null), // Existing parent immediately before payload.
-      new Response(null), // Recheck after acquiring the ancestor Web Lock.
-      new Response(null, { status: 201 }),
-    ];
-    const fetch = vi.fn<typeof globalThis.fetch>(async () => {
-      const response = responses.shift();
-      if (!response) throw new Error("unexpected request");
-      return response;
+      });
     });
     const client = stubClient(fetch);
     const file = `${DRIVE}file`;
     expect(await client.stat(file)).toEqual({ url: file, name: "file", kind: "file" });
     expect(await client.stat(DRIVE)).toEqual({ url: DRIVE, name: "drive", kind: "folder" });
+    await expect(
+      client.write(file, "", { contentType: "text/plain" }, { kind: "protect-ancestors" }),
+    ).rejects.toMatchObject({ kind: "missing-validator" });
     expect(
-      await client.write(file, "", { contentType: "text/plain" }, { kind: "protect-ancestors" }),
+      await client.write(
+        `${DRIVE}new`,
+        "",
+        { contentType: "text/plain" },
+        { kind: "protect-ancestors" },
+      ),
     ).toEqual({});
     await client.copy(file, `${DRIVE}copy`, { kind: "preserve-source" });
-    expect(fetch).toHaveBeenLastCalledWith(
+    const copied = fetch.mock.calls.filter(([, init]) => init?.method === "PUT").at(-1);
+    expect(copied).toEqual([
       `${DRIVE}copy`,
       expect.objectContaining({
         method: "PUT",
         headers: { "content-type": "application/octet-stream", "if-none-match": "*" },
         body: expect.any(Blob),
       }),
-    );
-    const copiedBody = fetch.mock.lastCall?.[1]?.body as Blob;
+    ]);
+    const copiedBody = copied?.[1]?.body as Blob;
     expect(new Uint8Array(await copiedBody.arrayBuffer())).toEqual(new Uint8Array([0, 255]));
-    expect(responses).toHaveLength(0);
   });
 
   it("omits malformed optional metadata while preserving listing entries", async () => {

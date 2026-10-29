@@ -9,10 +9,12 @@
  */
 
 import { fetchRdf } from "@jeswr/fetch-rdf";
+import { Store } from "n3";
 import { mapConcurrent } from "../../../../lib/parallel";
 import { relocateDocument, writeRestoreSnapshot } from "../../../docs/editor/relocate";
 import { type PodDocument, parseDocument } from "../../../docs/lib/model/document";
 import { docContainerUrls } from "../../../docs/lib/model/layout";
+import { discardVersion, ownsEmptyContainer } from "../client/cleanup";
 import {
   type DriveClient,
   DriveError,
@@ -25,6 +27,7 @@ import {
   policyArchiveOf,
 } from "../client/client";
 import { rethrowPendingDeletion } from "../client/deletion";
+import { containerData, containsGraph, relocate, sameGraph } from "../client/rdf";
 import { DriveOperationInProgressError } from "../client/source-operations";
 import { guessContentType } from "../files";
 import { keepBothName, normalizeUploadName } from "../upload";
@@ -278,13 +281,38 @@ function indexUrlOf(driveRoot: string): string {
   return `${trashFolderOf(driveRoot)}index.ttl`;
 }
 
-/** Apply `change` to the trash index with a conditional write; one retry on 412. */
+const indexUpdates = new Map<string, Promise<void>>();
+
+/** Serialize this tab's bookkeeping across operations and live reconciliation.
+ * Source reservations deliberately refuse duplicate user operations; independent
+ * items sharing an index must wait for its read/modify/write instead. Conditional
+ * writes still detect changes from other tabs and uncoordinated clients.
+ */
 async function updateIndex(
   client: DriveClient,
   driveRoot: string,
   change: (index: ReturnType<typeof emptyTrashIndex>) => void,
 ): Promise<void> {
   const url = indexUrlOf(driveRoot);
+  const pending = (indexUpdates.get(url) ?? Promise.resolve()).then(() =>
+    updateIndexUnlocked(client, url, change),
+  );
+  // A refused update must not poison later bookkeeping for this Drive.
+  const settled = pending.catch(() => undefined);
+  indexUpdates.set(url, settled);
+  try {
+    await pending;
+  } finally {
+    if (indexUpdates.get(url) === settled) indexUpdates.delete(url);
+  }
+}
+
+/** Apply `change` with a conditional write; one retry on 412. */
+async function updateIndexUnlocked(
+  client: DriveClient,
+  url: string,
+  change: (index: ReturnType<typeof emptyTrashIndex>) => void,
+): Promise<void> {
   for (let attempt = 0; ; attempt += 1) {
     const current = await client.readRdf(url);
     const index = current ? trashIndexFrom(current.dataset) : emptyTrashIndex();
@@ -696,10 +724,9 @@ async function runTrash(
     };
   }
   const partial: TrashEntry[] = [];
-  // Parallel transfers share one index. Serialize their archive receipts so
-  // their own writes cannot exhaust the bounded retry for external conflicts.
-  let archiving = Promise.resolve();
-  const moved = await mapConcurrent(entries, async (entry) => {
+  // Preserve Drive's transfer order: shared access bindings must never observe
+  // another entry between its placeholder creation and ACL installation.
+  for (const entry of entries) {
     try {
       await client.move(
         entry.original,
@@ -707,33 +734,22 @@ async function runTrash(
         { kind: "preserve-source" },
         {
           ...(options.webId ? { privateOwner: options.webId } : {}),
-          archiveContainers: async (archive) => {
-            const saved = archiving.then(() =>
-              updateIndex(client, driveRoot, (index) => {
-                index.record(entry.url).containerAcls = archive;
-              }),
-            );
-            archiving = saved.catch(() => undefined);
-            await saved;
-          },
+          archiveContainers: (archive) =>
+            updateIndex(client, driveRoot, (index) => {
+              index.record(entry.url).containerAcls = archive;
+            }),
           beforeDelete: async () => {
             await requireTrashEntry(client, driveRoot, entry, true, owner);
             await client.stat(entry.url);
           },
         },
       );
-      return { entry };
+      result.done.push(entry);
     } catch (error) {
-      return { entry, error };
-    }
-  });
-  for (const outcome of moved) {
-    if ("error" in outcome) {
-      const { entry, error } = outcome;
       result.failed.push({ url: entry.original, error });
       if (error instanceof DrivePartialFailureError && error.retainedDestinations.length > 0)
         partial.push(entry);
-    } else result.done.push(outcome.entry);
+    }
   }
   if (result.done.length > 0 || partial.length > 0) {
     try {
@@ -811,15 +827,78 @@ function validateOriginal(client: DriveClient, driveRoot: string, entry: TrashEn
   }
 }
 
-async function removePolicyArchive(client: DriveClient, url: string): Promise<void> {
+async function capturePolicyArchive(client: DriveClient, url: string) {
   const archive = policyArchiveOf(url) as string;
-  if (await exists(client, archive)) await client.remove(archive);
+  if (!(await exists(client, archive))) return undefined;
+  const current = await client.readVersion(archive);
+  return { content: await current.body.text(), etag: current.etag };
+}
+
+async function removePolicyArchive(
+  client: DriveClient,
+  url: string,
+  captured: Awaited<ReturnType<typeof capturePolicyArchive>>,
+): Promise<void> {
+  if (!captured) return;
+  const archive = policyArchiveOf(url) as string;
+  await discardVersion({
+    url: archive,
+    captured,
+    read: async () => {
+      const fresh = await client.readVersion(archive);
+      return { content: await fresh.body.text(), etag: fresh.etag };
+    },
+    owns: (current) => current === captured.content,
+    remove: (etag) => client.remove(archive, { ifMatch: etag }),
+  });
+}
+
+async function removeRecoveryMarker(
+  client: DriveClient,
+  driveRoot: string,
+  entry: TrashEntry,
+): Promise<void> {
+  const url = recoveryMarker(driveRoot, entry);
+  const current = await client.readRdf(url);
+  if (!current) return;
+  const record = trashIndexFrom(current.dataset).record(entry.url);
+  const status = record.status;
+  if (
+    (status !== "partial" && status !== "complete") ||
+    record.originalLocation !== entry.original ||
+    record.trashedAt?.getTime() !== entry.trashedAt.getTime()
+  )
+    return;
+  const expected = emptyTrashIndex();
+  addTrashRecord(expected, entry);
+  expected.record(entry.url).status = status;
+  await discardVersion({
+    url,
+    captured: { content: current.dataset, etag: current.etag },
+    read: async () => {
+      const fresh = await client.readRdf(url);
+      return fresh && { content: fresh.dataset, etag: fresh.etag };
+    },
+    owns: (data) => sameGraph(expected, data),
+    remove: (etag) => client.remove(url, { ifMatch: etag }),
+  });
 }
 
 /** Foreign slot members belong to another writer; leave their container intact. */
 async function removeEmptySlot(client: DriveClient, slot: string): Promise<void> {
   try {
-    if ((await client.list(slot)).length === 0) await client.remove(slot);
+    const current = await client.readRdf(slot);
+    if (!current) return;
+    await discardVersion({
+      url: slot,
+      captured: { content: current.dataset, etag: current.etag },
+      read: async () => {
+        const fresh = await client.readRdf(slot);
+        return fresh && { content: fresh.dataset, etag: fresh.etag };
+      },
+      owns: (data) => ownsEmptyContainer(slot, new Store(), data),
+      remove: (etag) => client.remove(slot, { ifMatch: etag }),
+    });
   } catch (error) {
     rethrowPendingDeletion(error);
   }
@@ -866,7 +945,9 @@ async function restoreMissing(
 ): Promise<{ url: string; error: unknown }[]> {
   try {
     if (from.endsWith("/")) {
-      await client.mergeContainer(from, to, { kind: "preserve-source" });
+      const original = await client.readRdf(from);
+      if (!original) throw new DriveError("not-found", 404, from);
+      const merged = await client.mergeContainer(from, to, { kind: "preserve-source" });
       const remaining: { url: string; error: unknown }[] = [];
       for (const child of await client.list(from))
         remaining.push(
@@ -880,24 +961,72 @@ async function restoreMissing(
       // Non-recursive removal succeeds only for an empty recovery container.
       if (remaining.length === 0) {
         if (!settled) throw new TrashMovingError();
-        await client.remove(from);
+        const data = containerData(original.dataset, from);
+        await discardVersion({
+          url: from,
+          captured: { content: data, etag: original.etag },
+          read: async () => {
+            const fresh = await client.readRdf(from);
+            return fresh && { content: fresh.dataset, etag: fresh.etag };
+          },
+          owns: (current) => ownsEmptyContainer(from, data, current),
+          remove: async (etag) => {
+            await client.remove(from, {
+              ifMatch: etag,
+              commit: {
+                disarm: merged.disarm,
+                rechecks: [() => merged.recheck()],
+                identityChecks: [
+                  async () => {
+                    const survivor = await client.readRdf(to);
+                    if (
+                      !survivor ||
+                      !containsGraph(
+                        relocate(data, [[from, to]]),
+                        containerData(survivor.dataset, to),
+                      )
+                    )
+                      throw new DriveError("conflict", 412, to);
+                    if (!survivor.etag || survivor.etag.startsWith("W/"))
+                      throw new DriveError("missing-validator", 409, to);
+                    const final = await client.stat(to, { ifMatch: survivor.etag });
+                    if (final.etag !== survivor.etag) throw new DriveError("conflict", 412, to);
+                  },
+                ],
+              },
+            });
+          },
+        });
       }
       return remaining;
     }
     if (await exists(client, to)) {
       if (!settled) throw new TrashMovingError();
+      const access = await client.bindAccess?.(from, to);
       const compared = await sameRecoveryFile(client, from, to);
       if (!compared.same) throw new DriveError("conflict", 412, to);
       if (!compared.etag || compared.etag.startsWith("W/"))
         throw new DriveError("missing-validator", 409, from);
       if (!compared.survivorEtag || compared.survivorEtag.startsWith("W/"))
         throw new DriveError("missing-validator", 409, to);
-      const survivor = await client.stat(to, { ifMatch: compared.survivorEtag });
-      // Also check servers that ignore HEAD preconditions, as the move client does.
-      if (survivor.etag !== compared.survivorEtag) throw new DriveError("conflict", 412, to);
-      // Without an atomic server operation, the survivor can still disappear between
-      // this verification and the recovery DELETE. Keep that cross-resource window small.
-      await client.remove(from, { ifMatch: compared.etag });
+      const survivorEtag = compared.survivorEtag;
+      await client.remove(from, {
+        ifMatch: compared.etag,
+        commit: {
+          rechecks: [
+            async () => {
+              await access?.recheck();
+            },
+          ],
+          identityChecks: [
+            async () => {
+              const survivor = await client.stat(to, { ifMatch: survivorEtag });
+              // Also check servers that ignore HEAD preconditions, as the move client does.
+              if (survivor.etag !== survivorEtag) throw new DriveError("conflict", 412, to);
+            },
+          ],
+        },
+      });
       return [];
     }
     if (!settled) {
@@ -1119,6 +1248,7 @@ async function restoreEntriesUnlocked(
     try {
       if ("error" in plan) throw plan.error;
       const { slot, status, target } = plan;
+      const archive = await capturePolicyArchive(client, entry.url);
       if (plan.merge) {
         // A failed merge must retry in place even after assets have been restored.
         if (status !== "partial")
@@ -1133,9 +1263,8 @@ async function restoreEntriesUnlocked(
           !!(await recoveryStatus(client, driveRoot, entry));
         const remaining = await restoreMissing(client, entry.url, entry.original, settled);
         if (remaining.length) throw new TrashRestorePartialError(remaining);
-        if (await recoveryStatus(client, driveRoot, entry))
-          await client.remove(recoveryMarker(driveRoot, entry));
-        await removePolicyArchive(client, entry.url);
+        await removeRecoveryMarker(client, driveRoot, entry);
+        await removePolicyArchive(client, entry.url, archive);
         await removeEmptySlot(client, slot);
         outcome.done.push({ entry, url: entry.original, renamed: false });
         outcomes.set(entry, outcome);
@@ -1160,16 +1289,25 @@ async function restoreEntriesUnlocked(
         const current = await client.stat(target, { ifMatch: written.etag });
         if (current.etag !== written.etag) throw new DriveError("conflict", 412, target);
         try {
-          await client.remove(entry.url, { ifMatch: etag });
+          await client.remove(entry.url, {
+            ifMatch: etag,
+            commit: {
+              identityChecks: [
+                async () => {
+                  const final = await client.stat(target, { ifMatch: written.etag as string });
+                  if (final.etag !== written.etag) throw new DriveError("conflict", 412, target);
+                },
+              ],
+            },
+          });
         } catch (error) {
           if (await exists(client, entry.url)) throw error;
         }
       } else await client.move(entry.url, target, { kind: "preserve-source" });
       // The client verifies original or owner-only ACLs on missing ancestors first.
-      if (await recoveryStatus(client, driveRoot, entry))
-        await client.remove(recoveryMarker(driveRoot, entry));
+      await removeRecoveryMarker(client, driveRoot, entry);
       // The slot may contain another writer's resources; only remove it empty.
-      await removePolicyArchive(client, entry.url);
+      await removePolicyArchive(client, entry.url, archive);
       await removeEmptySlot(client, slot);
       outcome.done.push({ entry, url: target, renamed });
     } catch (error) {
@@ -1179,14 +1317,9 @@ async function restoreEntriesUnlocked(
     return outcome;
   };
   // A renamed snapshot is advertised only after its companion has been restored.
-  await mapConcurrent(
-    plans.filter(({ entry }) => entry.original.endsWith("/")),
-    restore,
-  );
-  await mapConcurrent(
-    plans.filter(({ entry }) => !entry.original.endsWith("/")),
-    restore,
-  );
+  for (const plan of plans.filter(({ entry }) => entry.original.endsWith("/"))) await restore(plan);
+  for (const plan of plans.filter(({ entry }) => !entry.original.endsWith("/")))
+    await restore(plan);
   for (const entry of entries) {
     const outcome = outcomes.get(entry) as typeof result;
     result.done.push(...outcome.done);
@@ -1222,10 +1355,10 @@ async function deleteForeverUnlocked(
     try {
       slotOf(driveRoot, entry);
       await requireTrashEntry(client, driveRoot, entry);
+      const archive = await capturePolicyArchive(client, entry.url);
       await removeTrashItem(client, entry.url);
-      if (await recoveryStatus(client, driveRoot, entry))
-        await client.remove(recoveryMarker(driveRoot, entry));
-      await removePolicyArchive(client, entry.url);
+      await removeRecoveryMarker(client, driveRoot, entry);
+      await removePolicyArchive(client, entry.url, archive);
       await removeEmptySlot(client, slotOf(driveRoot, entry));
       result.done.push(entry);
     } catch (error) {

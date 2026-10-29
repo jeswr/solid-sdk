@@ -72,7 +72,9 @@ it("a history read cannot hold a folder flight needed by a pending file restore"
   release.resolve();
   const results = await Promise.allSettled([restoring, recreating]);
   expect(results[0]?.status).toBe("fulfilled");
-  expect(results[1]).toMatchObject({ status: "rejected", reason: { kind: "conflict" } });
+  // Access discovery now precedes the file flight, so the independent
+  // ancestor recreation can finish before the restore rechecks it.
+  expect(results[1].status).toBe("fulfilled");
   expect(await (await client.read(index)).text()).toBe("private metadata");
   expect((await f.anonymous(index)).status).toBe(403);
 }, 3_000);
@@ -109,10 +111,20 @@ it("demo writes use the explicit no-access-control response without rechecking e
     { contentType: "text/plain" },
     { kind: "protect-ancestors" },
   );
-  expect(fetch.mock.calls.map(([url, init]) => [String(url), init?.method])).toEqual([
-    [`${DRIVE}folder/nested/`, "HEAD"],
-    [`${DRIVE}folder/nested/file`, "PUT"],
+  const target = `${DRIVE}folder/nested/file`;
+  // The demo capability still avoids redundant ancestor probes; endpoint access
+  // and the final identity check remain mandatory before its one payload PUT.
+  expect(fetch.mock.calls.filter(([url]) => String(url) !== target)).toEqual([
+    [`${DRIVE}folder/nested/`, { method: "HEAD" }],
   ]);
+  const writes = fetch.mock.calls.filter(([, init]) => init?.method === "PUT");
+  expect(writes).toHaveLength(1);
+  const put = fetch.mock.calls.findIndex(([, init]) => init?.method === "PUT");
+  expect(fetch.mock.calls[put - 1]).toEqual([
+    target,
+    { method: "HEAD", cache: "no-store", headers: { "if-match": expect.any(String) } },
+  ]);
+  expect(await (await client.read(target)).text()).toBe("changed");
 }, 3_000);
 
 async function fixture() {

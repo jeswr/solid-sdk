@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex
+
+import { type CommitChecks, type CommitEffects, checkIdentity, commitIrreversible } from "./commit";
 import { type DeletionRequest, deletionLedger, protectionLedger } from "./protection-ledger";
 
 export type DeleteOutcome = "done" | "not-performed" | "unknown";
@@ -74,7 +76,12 @@ export function deletionControl(http: typeof fetch, error: (status: number, url:
     }
     if (unresolved) throw new DriveDeletePendingError(unresolved);
   };
-  const remove = async (url: string, etag: string, recovery?: string) => {
+  const remove = async (
+    url: string,
+    etag: string,
+    recovery?: string,
+    commit: CommitChecks & CommitEffects = {},
+  ) => {
     await guard(url);
     // Persist both sides before the request: reload or response loss cannot turn
     // a retained copy into a disposable duplicate while its source is deleting.
@@ -85,28 +92,35 @@ export function deletionControl(http: typeof fetch, error: (status: number, url:
       ...(recovery ? { recovery } : {}),
     };
     await pending.add(record);
-    let response: Response;
     try {
-      response = await http(url, { method: "DELETE", headers: { "if-match": etag } });
+      await commitIrreversible({
+        ...commit,
+        identityChecks: [
+          () => checkIdentity(http, url, etag, error, true),
+          ...(commit.identityChecks ?? []),
+        ],
+        step: async () => {
+          let response: Response;
+          try {
+            response = await http(url, { method: "DELETE", headers: { "if-match": etag } });
+          } catch (cause) {
+            // Response loss, aborts and timeouts do not establish whether DELETE ran.
+            throw new DriveDeletePendingError(url, { cause });
+          }
+          let outcome = classifyDelete(response.status);
+          if (outcome === "not-performed") throw refusal(response.status, url);
+          if (outcome === "unknown") outcome = await reread(record);
+          if (outcome === "done") return;
+          if (outcome === "not-performed") throw refusal(412, url);
+          throw new DriveDeletePendingError(url, { cause: error(response.status, url) });
+        },
+      });
     } catch (cause) {
-      // Response loss, aborts and timeouts do not establish whether DELETE ran.
-      throw new DriveDeletePendingError(url, { cause });
+      if (!(cause instanceof DriveDeletePendingError)) await retire(record);
+      throw cause;
     }
-    let outcome = classifyDelete(response.status);
-    if (outcome === "not-performed") {
-      await retire(record);
-      throw refusal(response.status, url);
-    }
-    if (outcome === "unknown") outcome = await reread(record);
-    if (outcome === "done") {
-      await retire(record, true);
-      return;
-    }
-    if (outcome === "not-performed") {
-      await retire(record);
-      throw refusal(412, url);
-    }
-    throw new DriveDeletePendingError(url, { cause: error(response.status, url) });
+    // Compensations are already disarmed, even if this persistence now fails.
+    await retire(record, true);
   };
   const recheck = async (root: string): Promise<readonly string[]> => {
     const unresolved = new Set<string>();

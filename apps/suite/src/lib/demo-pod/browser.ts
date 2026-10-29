@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 /**
  * Browser demo storage. Requests arriving together share a snapshot commit,
  * with a revision compare-and-set in one IndexedDB transaction. A stale tab
@@ -202,10 +203,10 @@ export function getDemoPod(): Promise<DemoPod> {
       const request = new Request(input, init);
       const mutation = !["GET", "HEAD", "OPTIONS"].includes(request.method);
       const body = request.body ? new Uint8Array(await request.arrayBuffer()) : undefined;
-      // Simulated network latency belongs outside the storage queue. Concurrent
-      // requests travel together and share a commit, including conditional edits.
+      // Batch concurrent requests without artificial network latency. IndexedDB
+      // already yields; Drive access rechecks must not pay a delay per request.
       return new Promise<Response>((resolve, reject) => {
-        if (!pending.length) setTimeout(flush, 60);
+        if (!pending.length) queueMicrotask(flush);
         pending.push({
           request,
           body,

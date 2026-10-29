@@ -133,6 +133,8 @@ it.each([
       new File(["replacement content"], "report.txt", { type: "text/plain" }),
     ]);
   });
+  await vi.waitFor(() => expect(drive.uploads.tasks[0]?.status).toBe("conflict"));
+  await click(button("Replace"));
   expect(drive.uploads.tasks[0]?.status).toBe("uploading");
   if (kind === "dialog") await act(async () => ui.setPreview({ items: [item], index: 0 }));
   else await view.render(tree(h(PreviewRouteView)));
@@ -140,8 +142,6 @@ it.each([
   expect(preview()?.textContent).toBe("old");
   await click(button("Details"));
   await act(async () => pendingPut.resolve());
-  expect(drive.uploads.tasks[0]?.status).toBe("conflict");
-  await click(button("Replace"));
   await vi.waitFor(async () => {
     await act(async () => {});
     expect(drive.uploads.tasks[0]?.status).toBe("done");

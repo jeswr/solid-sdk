@@ -59,7 +59,9 @@ function memory(existingStatus: 409 | 412 = 409, storageUrl = storage, container
       const preconditionFails = () =>
         (headers.get("If-None-Match") === "*" && files.has(url)) ||
         (headers.has("If-Match") && headers.get("If-Match") !== `"${files.get(url)?.version}"`);
-      if (method === "GET") {
+      if (method === "HEAD") {
+        response = new Response(null, { status: file ? 200 : 404 });
+      } else if (method === "GET") {
         response = file
           ? new Response(file.body, {
               headers: {
@@ -181,6 +183,7 @@ function memory(existingStatus: 409 | 412 = 409, storageUrl = storage, container
         }
       } else throw new Error(`Unexpected method ${method}`);
     }
+    response.headers.set("x-solid-demo-access-control", "none");
     Object.defineProperty(response, "url", { value: url });
     calls.push({ url, method, headers, status: response.status });
     return response;
@@ -290,9 +293,9 @@ describe("ensureDriveRoot", () => {
     expect(await failure.resume()).toBe(root);
     expect(puts).toHaveLength(failures + 1);
     expect(puts.every((headers) => headers.get("If-None-Match") === "*")).toBe(true);
-    expect(m.calls.filter((call) => call.url === root && call.status === 404)).toHaveLength(
-      failures,
-    );
+    expect(
+      m.calls.filter((call) => call.url === root && call.method === "GET" && call.status === 404),
+    ).toHaveLength(failures);
     expect(m.rootCreates).toBe(1);
     expect(m.indexWrites).toBe(1);
     expect(await failure.resume()).toBe(root);
@@ -375,7 +378,9 @@ describe("ensureDriveRoot", () => {
     const retried = await initializationFailure(failure.resume());
     expect(retried.cause).toMatchObject({ name: "RdfFetchError", status: 404, url: root });
     expect(m.calls.filter((call) => call.url === root && call.method === "PUT")).toHaveLength(2);
-    expect(m.calls.filter((call) => call.url === root && call.status === 404)).toHaveLength(2);
+    expect(
+      m.calls.filter((call) => call.url === root && call.method === "GET" && call.status === 404),
+    ).toHaveLength(2);
     expect(m.indexWrites).toBe(0);
     m.setBefore(undefined);
     expect(await retried.resume()).toBe(root);
@@ -388,7 +393,7 @@ describe("ensureDriveRoot", () => {
     const cause = new TypeError("Disconnected while reading");
     let disconnected = true;
     const fetch: typeof globalThis.fetch = async (input, init) => {
-      if (String(input) === root && init?.method !== "PUT" && disconnected) throw cause;
+      if (String(input) === root && (init?.method ?? "GET") === "GET" && disconnected) throw cause;
       return m.fetch(input, init);
     };
     const failure = await initializationFailure(ensureDriveRoot(fetch, options));
