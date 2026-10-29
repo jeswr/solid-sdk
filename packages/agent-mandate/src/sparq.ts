@@ -2,13 +2,51 @@
 // AUTHORED-BY Codex GPT-6
 
 import { credentialToRdf } from "@jeswr/solid-vc";
+import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 // biome-ignore lint/style/useNodejsImportProtocol: the agent import guard requires bare module names
 import { spawnSync } from "child_process";
 import { Store } from "n3";
 import { actionIri, encodePolicy, leftOperandIri } from "./codec.js";
 import { candidate, supportedPolicy } from "./policy.js";
-import { turtle } from "./rdf.js";
-import { AGENT, type Effect, type PolicyEngine, type Rule } from "./types.js";
+import { Node, node, turtle } from "./rdf.js";
+import { AGENT, type Effect, ODRL, type PolicyEngine, type Rule } from "./types.js";
+
+/** SPARQ reads operand types from RDF literals, not the signed codec's agent:datatype. */
+function sparqOperands(store: Store): Store {
+  const policy = node(store, "urn:example:sparq-envelope")
+    .one("https://www.w3.org/2018/credentials#credentialSubject")
+    .one(`${AGENT}policy`);
+  for (const rule of [
+    ...policy.values(`${ODRL}permission`),
+    ...policy.values(`${ODRL}prohibition`),
+  ]) {
+    for (const constraint of rule.values(`${ODRL}constraint`)) {
+      const datatype = constraint.values(`${AGENT}datatype`).length
+        ? constraint.iri(`${AGENT}datatype`)
+        : constraint.iri(`${ODRL}leftOperand`) === leftOperandIri("dateTime")
+          ? "http://www.w3.org/2001/XMLSchema#dateTime"
+          : undefined;
+      if (datatype === undefined) continue;
+      const rights = SetFrom.subjectPredicate(
+        constraint,
+        `${ODRL}rightOperand`,
+        TermAs.instance(Node),
+        TermFrom.instance,
+      );
+      const values = [...rights];
+      rights.clear();
+      for (const value of values)
+        rights.add(
+          new Node(
+            constraint.factory.literal(value.value, constraint.factory.namedNode(datatype)),
+            store,
+            constraint.factory,
+          ),
+        );
+    }
+  }
+  return store;
+}
 
 /** The pilot's local binary protocol, selected explicitly without fallback. */
 export const SPARQ_DECIDE_API = "sparq-policy-decide/1";
@@ -91,7 +129,7 @@ export function sparqPolicyEngine(
         }));
         const input = JSON.stringify({
           api: SPARQ_DECIDE_API,
-          policy: { format: "turtle", text: await turtle(new Store(graph)) },
+          policy: { format: "turtle", text: await turtle(sparqOperands(new Store(graph))) },
           request: {
             action: actionIri("use"),
             target: request.target,

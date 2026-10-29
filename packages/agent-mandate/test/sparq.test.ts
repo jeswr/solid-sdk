@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
+import type { Literal } from "@rdfjs/types";
 import { expect, it } from "vitest";
 import { node } from "../src/rdf.js";
 import {
@@ -9,7 +10,7 @@ import {
   SPARQ_DECIDE_API,
   sparqPolicyEngine,
 } from "../src/sparq.js";
-import type { Policy, Rule } from "../src/types.js";
+import type { Constraint, Policy, Rule } from "../src/types.js";
 import { AGENT, ODRL } from "../src/types.js";
 import { ACTOR, intent } from "./helpers.js";
 
@@ -267,4 +268,156 @@ it("filters targets and inherited assignees before removing parties", async () =
     .one(`${AGENT}policy`);
   expect(serialized.values(`${ODRL}permission`)).toHaveLength(1);
   expect(serialized.values(`${ODRL}prohibition`)).toHaveLength(0);
+});
+
+const XSD = "http://www.w3.org/2001/XMLSchema#";
+it.each<{
+  name: string;
+  constraint: Constraint;
+  datatype?: string;
+}>([
+  {
+    name: "inferred request-time bound",
+    constraint: { leftOperand: "dateTime", operator: "lt", rightOperand: "2026-10-27T00:00:00Z" },
+    datatype: `${XSD}dateTime`,
+  },
+  {
+    name: "explicit temporal bound",
+    constraint: {
+      leftOperand: "dateTime",
+      operator: "gteq",
+      rightOperand: "2026-10-26T07:00:00-05:00",
+      datatype: `${XSD}dateTime`,
+    },
+    datatype: `${XSD}dateTime`,
+  },
+  {
+    name: "explicit date overrides time inference",
+    constraint: {
+      leftOperand: "dateTime",
+      operator: "lt",
+      rightOperand: "2026-10-27",
+      datatype: `${XSD}date`,
+    },
+    datatype: `${XSD}date`,
+  },
+  {
+    name: "every member of an inferred temporal set",
+    constraint: {
+      leftOperand: "dateTime",
+      operator: "isAnyOf",
+      rightOperand: ["2026-10-26T12:00:00Z", "2026-10-27T00:00:00Z"],
+    },
+    datatype: `${XSD}dateTime`,
+  },
+  ...["integer", "decimal", "double", "float"].map((datatype) => ({
+    name: `declared ${datatype} with lexical operands`,
+    constraint: {
+      leftOperand: "count",
+      operator: "isAnyOf" as const,
+      rightOperand: ["+0002", "10"],
+      datatype: `${XSD}${datatype}`,
+    },
+    datatype: `${XSD}${datatype}`,
+  })),
+  {
+    name: "declared string overrides IRI detection",
+    constraint: {
+      leftOperand: `${AGENT}binding`,
+      operator: "eq",
+      rightOperand: "urn:example:binding",
+      datatype: `${XSD}string`,
+    },
+    datatype: `${XSD}string`,
+  },
+  {
+    name: "untyped IRI stays an IRI",
+    constraint: { leftOperand: "purpose", operator: "eq", rightOperand: "urn:example:purpose" },
+  },
+  {
+    name: "untyped text stays a string",
+    constraint: { leftOperand: `${AGENT}binding`, operator: "eq", rightOperand: "gmail" },
+    datatype: `${XSD}string`,
+  },
+  {
+    name: "inferred integer",
+    constraint: { leftOperand: "count", operator: "lteq", rightOperand: 2 },
+    datatype: `${XSD}integer`,
+  },
+  {
+    name: "inferred non-integer",
+    constraint: { leftOperand: `${AGENT}spendPerDay`, operator: "lteq", rightOperand: 2.5 },
+    datatype: `${XSD}double`,
+  },
+])("emits backend-readable RDF operand types: $name", async ({ constraint, datatype }) => {
+  for (const type of ["permission", "prohibition"] as const) {
+    let input = "";
+    const p: Policy = {
+      id: policy.id,
+      [type === "permission" ? "permissions" : "prohibitions"]: [
+        { type, action: "read", constraints: [constraint] },
+      ],
+    };
+    const original = structuredClone(p);
+    await sparqPolicyEngine({
+      binary: "test",
+      run(_binary, args) {
+        input = args.input;
+        return { stdout: response(), status: 0 };
+      },
+    }).evaluate(p, intent({ action: "read" }));
+    const doc = JSON.parse(input);
+    const store = await parseRdf(doc.policy.text, "text/turtle");
+    const operands = node(store, "urn:example:sparq-envelope")
+      .one("https://www.w3.org/2018/credentials#credentialSubject")
+      .one(`${AGENT}policy`)
+      .one(`${ODRL}${type}`)
+      .one(`${ODRL}constraint`)
+      .values(`${ODRL}rightOperand`);
+    const expected = Array.isArray(constraint.rightOperand)
+      ? constraint.rightOperand
+      : [constraint.rightOperand];
+    expect(operands.map((v) => v.value)).toEqual(expected.map(String));
+    for (const operand of operands) {
+      expect(operand.termType).toBe(datatype === undefined ? "NamedNode" : "Literal");
+      if (datatype !== undefined)
+        expect((operand as unknown as Literal).datatype.value).toBe(datatype);
+    }
+    expect(
+      doc.request.context.find((c: { leftOperand: string }) => c.leftOperand === `${ODRL}dateTime`),
+    ).toEqual({ leftOperand: `${ODRL}dateTime`, value: { type: "dateTime", value: intent().at } });
+    expect(p).toEqual(original);
+  }
+});
+
+it("fails closed before invoking SPARQ when a declared datatype is not an IRI", async () => {
+  let invoked = false;
+  const result = await sparqPolicyEngine({
+    binary: "test",
+    run() {
+      invoked = true;
+      return { stdout: response(), status: 0 };
+    },
+  }).evaluate(
+    {
+      id: policy.id,
+      permissions: [
+        {
+          type: "permission",
+          action: "read",
+          constraints: [
+            {
+              leftOperand: "dateTime",
+              operator: "lt",
+              rightOperand: "2026-10-27T00:00:00Z",
+              datatype: "dateTime",
+            },
+          ],
+        },
+      ],
+    },
+    intent({ action: "read" }),
+  );
+  expect(result).toEqual({ effect: "indeterminate" });
+  expect(invoked).toBe(false);
 });
