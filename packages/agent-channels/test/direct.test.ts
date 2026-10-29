@@ -185,6 +185,68 @@ describe("direct loopback", () => {
   });
 
   it.each([
+    "proposal",
+    "verified",
+  ] as const)("bounds wide %s objects before expanding property values", async (source) => {
+    const config = options();
+    const verify = vi.fn(verifyMessage);
+    const binding = createInMemoryDirectBinding({ ...config, verify });
+    const proposal = signed();
+    const wire = await binding.send.render(proposal, DIRECT);
+    verify.mockClear();
+    const read = vi.fn(() => null);
+    const value = Object.defineProperties(
+      {},
+      Object.fromEntries(
+        Array.from({ length: DEFAULT_LIMITS.maxJsonNodes }, (_, index) => [
+          index,
+          { enumerable: true, get: read },
+        ]),
+      ),
+    );
+    const oversized = { ...message, kind: "description", body: { description: value } };
+    if (source === "proposal") proposal.message = oversized as never;
+    else verify.mockResolvedValue(oversized);
+    await expect(binding.send.render(proposal, DIRECT)).rejects.toThrow();
+    expect(await binding.send.validate(wire, proposal)).toEqual({ ok: false, reason: "malformed" });
+    expect(read).not.toHaveBeenCalled();
+    expect(verify).toHaveBeenCalledTimes(source === "proposal" ? 0 : 2);
+    expect(config.tokens.calls).toEqual([]);
+  });
+
+  it.each([
+    { label: "expired", timestamps: { expiresAt: "2026-10-26T12:00:00Z" }, ok: false },
+    { label: "future", timestamps: { createdAt: "2026-10-26T12:01:00Z" }, ok: false },
+    { label: "current", timestamps: {}, ok: true },
+  ])("checks the verified $label timestamps after delayed rendering", async ({
+    timestamps,
+    ok,
+  }) => {
+    for (const mutation of ["replace", "mutate"]) {
+      const config = options();
+      const verify = vi.fn(verifyMessage);
+      const binding = createInMemoryDirectBinding({ ...config, verify });
+      const proposal = signed({ ...message, ...timestamps });
+      const wire = await binding.send.render(proposal, DIRECT);
+      const started = deferred<void>();
+      const resume = deferred<void>();
+      verify.mockImplementationOnce(async (jws) => {
+        started.resolve();
+        await resume.promise;
+        return verifyMessage(jws);
+      });
+      const pending = binding.send.validate(wire, proposal);
+      await started.promise;
+      const replacement = { ...message, ...(ok ? { expiresAt: message.createdAt } : {}) };
+      if (mutation === "replace") proposal.message = replacement;
+      else Object.assign(proposal.message, replacement);
+      resume.resolve();
+      expect(await pending).toEqual(ok ? { ok: true } : { ok: false, reason: "malformed" });
+      expect(config.tokens.calls).toEqual([]);
+    }
+  });
+
+  it.each([
     { input: "oversized ASCII", bytes: "x".repeat(DIRECT.maxBytes + 1) },
     { input: "oversized UTF-8", bytes: "é".repeat(DIRECT.maxBytes / 2 + 1) },
     {

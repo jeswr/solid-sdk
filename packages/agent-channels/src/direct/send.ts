@@ -5,7 +5,7 @@ import type { CarriageProfile, ChannelBinding } from "../binding.js";
 import { createDirectReader } from "../direct.js";
 import { ChannelParseError, ProviderRejectedError } from "../errors.js";
 import { DIRECT } from "../profiles.js";
-import type { RenderableProposal, TokenProvider, Wire } from "../types.js";
+import type { RenderableProposal, TokenProvider } from "../types.js";
 import { accountId, assertGrant, assertWire, type DirectMailbox, envelope } from "./shared.js";
 
 /** All senders sharing a mailbox must observe its in-flight attempts before claiming absence. */
@@ -41,7 +41,7 @@ export function createDirectSend(
     )
       throw new ChannelParseError("direct message is expired or not yet valid");
   }
-  async function render(proposal: RenderableProposal, carriage: CarriageProfile): Promise<Wire> {
+  async function renderVerified(proposal: RenderableProposal, carriage: CarriageProfile) {
     if (canonicalJson(carriage) !== canonicalJson(DIRECT))
       throw new ChannelParseError("unsupported direct carriage");
     // Bound work before serialization and hashing; assertWire still checks encoded bytes.
@@ -56,10 +56,12 @@ export function createDirectSend(
     const message = await verified(assertWire(wire));
     if (canonicalJson(message) !== proposedJson)
       throw new ChannelParseError("signed payload differs from proposal");
-    return wire;
+    return { wire, message };
   }
   return {
-    render,
+    async render(proposal, carriage) {
+      return (await renderVerified(proposal, carriage)).wire;
+    },
     async validate(wire, proposal) {
       try {
         // Refuse extra structure without walking its values or serializing the wire.
@@ -67,8 +69,8 @@ export function createDirectSend(
           return { ok: false, reason: "terms-digest-mismatch" };
         const snapshot = { bytes: wire.bytes, digest: wire.digest, mediaType: wire.mediaType };
         assertWire(snapshot);
-        const expected = await render(proposal, DIRECT);
-        assertCurrent(proposal.message);
+        const { wire: expected, message } = await renderVerified(proposal, DIRECT);
+        assertCurrent(message);
         return snapshot.bytes === expected.bytes &&
           snapshot.digest === expected.digest &&
           snapshot.mediaType === expected.mediaType
