@@ -89,6 +89,9 @@
   "publishConfig": {
     "access": "public"
   },
+  "mirrorPublish": {
+    "inlined": ["@jeswr/mcp-oauth"]
+  },
   "securityCritical": true,
   "sideEffects": false
 }

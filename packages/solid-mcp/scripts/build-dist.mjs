@@ -14,8 +14,8 @@
  * our emitted `dist/*.js`.
  *
  * Externalisation contract (the load-bearing part):
- *   - INLINED  (bundled into dist): the off-npm `@jeswr/fetch-rdf` — by virtue of
- *       being ABSENT from the EXTERNAL list below.
+ *   - INLINED  (bundled into dist): the off-npm `@jeswr/fetch-rdf` and the private
+ *       `@jeswr/mcp-oauth/metadata` helper — both absent from EXTERNAL below.
  *   - EXTERNAL (resolved by the consumer): everything else —
  *       `@jeswr/rdf-serialize`, `@modelcontextprotocol/sdk`, `zod`, `n3`,
  *       `@solid/object`, `@rdfjs/wrapper`, `@rdfjs/types`, AND fetch-rdf's OWN npm runtime deps
@@ -43,11 +43,11 @@ const outdir = join(root, "dist");
 
 /**
  * Everything that must stay EXTERNAL (resolved by the consumer, not inlined). The
- * ONLY package bundled in is `@jeswr/fetch-rdf` — by virtue of being absent from
- * this list. fetch-rdf's own runtime deps stay external (npm-published).
+ * `@jeswr/fetch-rdf` and the private `@jeswr/mcp-oauth/metadata` helper are bundled
+ * by virtue of being absent here. Neither leaks types into emitted declarations.
+ * fetch-rdf's own runtime deps stay external (npm-published).
  */
 const EXTERNAL = [
-  "@jeswr/mcp-oauth",
   "@jeswr/solid-chat-interop",
   "@jeswr/rdf-serialize",
   "@modelcontextprotocol/sdk",
@@ -87,7 +87,7 @@ async function main(buildDir = outdir) {
     format: "esm",
     platform: "node",
     target: "node20",
-    // Inline ONLY @jeswr/fetch-rdf; keep the npm-published deps external.
+    // Inline fetch-rdf and the private OAuth metadata helper; keep other deps external.
     external: EXTERNAL,
     sourcemap: true,
     legalComments: "none",
