@@ -17,6 +17,7 @@ import {
 } from "./auth.js";
 import { PodOutput, podOutputError } from "./output.js";
 import { containerCandidates } from "./pod.js";
+import { withPodReadLimits } from "./pod-operation.js";
 import { createFetchPodPort, type PodPort } from "./pod-port.js";
 
 /** Parse a conservative Link-header subset; ambiguous/unsupported discovery fails closed. */
@@ -123,20 +124,22 @@ export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPo
       // ChatWriter reads metadata and every message before returning a result.
       // Preserve those read errors instead of silently filtering missing messages.
       if (pod) {
-        return portOperation(async () => {
-          const output = new PodOutput(pod);
-          const read = await output.read(container, { accept: "text/turtle" });
-          requireChatRdf(read.contentType || "text/turtle");
-          const children = [];
-          for (const child of await containerCandidates(pod, container)) {
-            // Containers are conversation candidates; a denied conversation
-            // cannot enter the writer or leave a title/cursor in its results.
-            // Message files are read by ChatWriter, preserving read failures.
-            const projected = child.isContainer ? await output.value(child, child.url) : child;
-            if (projected !== undefined) children.push(projected);
-          }
-          return children;
-        });
+        return portOperation(() =>
+          withPodReadLimits(async () => {
+            const output = new PodOutput(pod);
+            const read = await output.read(container, { accept: "text/turtle" });
+            requireChatRdf(read.contentType || "text/turtle");
+            const children = [];
+            for (const child of await containerCandidates(pod, container)) {
+              // Containers are conversation candidates; a denied conversation
+              // cannot enter the writer or leave a title/cursor in its results.
+              // Message files are read by ChatWriter, preserving read failures.
+              const projected = child.isContainer ? await output.resource(child) : child;
+              if (projected !== undefined) children.push(projected);
+            }
+            return children;
+          }),
+        );
       }
       return containerCandidates({ ...config, fetch: rdfFetch }, container);
     },
@@ -172,7 +175,7 @@ export function registerChatTools(
     content: [
       {
         type: "text" as const,
-        text: JSON.stringify((await new PodOutput(pod).value(value, pod.root)) ?? {}),
+        text: JSON.stringify(value),
       },
     ],
   });
@@ -213,7 +216,8 @@ export function registerChatTools(
           throw new Error(
             "write disabled: server is read-only (set readOnly:false to enable writes)",
           );
-        return await result(await writer().save(conversation));
+        const saved = await writer().save(conversation);
+        return await result((await new PodOutput(pod).resource(saved)) ?? {});
       } catch (e) {
         return error(e);
       }
@@ -234,7 +238,17 @@ export function registerChatTools(
     },
     async (options) => {
       try {
-        return await result(await writer().list(options));
+        const listed = await writer().list(options);
+        const output = new PodOutput(pod);
+        const conversations = [];
+        for (const conversation of listed.conversations) {
+          const permitted = await output.resource(conversation);
+          if (permitted) conversations.push(permitted);
+        }
+        const cursor = listed.nextCursor
+          ? await output.resource({ url: listed.nextCursor })
+          : undefined;
+        return await result({ conversations, ...(cursor ? { nextCursor: cursor.url } : {}) });
       } catch (e) {
         return error(e);
       }
@@ -250,7 +264,8 @@ export function registerChatTools(
     },
     async ({ provider, conversationId }) => {
       try {
-        return await result(await writer().get(provider, conversationId));
+        const conversation = await writer().get(provider, conversationId);
+        return await result((await new PodOutput(pod).resource(conversation)) ?? {});
       } catch (e) {
         return error(e);
       }

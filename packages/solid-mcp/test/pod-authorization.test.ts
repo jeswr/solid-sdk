@@ -422,7 +422,7 @@ describe("injected fetch PodPort authorization boundary", () => {
 
     expect(await client.callTool({ name: "pod_read", arguments: { url: NOTE } })).toMatchObject({
       isError: true,
-      content: [{ text: "purpose denied" }],
+      content: [{ text: _kind === "oversized text" ? "Pod operation failed" : "purpose denied" }],
     });
     const fetched = await client.callTool({ name: "fetch", arguments: { id: NOTE } });
     expect(fetched.isError).toBe(true);

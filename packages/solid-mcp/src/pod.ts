@@ -22,7 +22,7 @@ import {
 import { parseBoundedRdf, RdfLimitError } from "./bounded-rdf.js";
 import { MAX_CONTENT_BYTES, mediaType, RDF_MEDIA_TYPES, resourceTitle } from "./content.js";
 import { PodOutput } from "./output.js";
-import { withPodFetchLimits } from "./pod-operation.js";
+import { withPodFetchLimits, withPodReadLimits } from "./pod-operation.js";
 import { asPodPort, type PodReadResult, type PodSource, podSearchLimits } from "./pod-port.js";
 
 import { SearchBudget, searchLimit } from "./search-budget.js";
@@ -156,22 +156,27 @@ export async function containerCandidates(source: PodSource, url: string): Promi
  * fetch" error, and on any other non-2xx with the status.
  */
 export async function readResource(source: PodSource, url: string): Promise<ReadResult> {
-  const pod = asPodPort(source);
-  const target = requirePodScopedUrl({ podRoot: pod.root }, url);
-  const output = new PodOutput(pod);
-  const {
-    body,
-    contentType: rawContentType,
-    etag,
-  } = await output.representation(target, await output.read(target));
-  const contentType = (rawContentType.split(";").shift() ?? "").trim().toLowerCase();
-  const result: ReadResult = { ...(contentType ? { contentType } : {}), ...(etag ? { etag } : {}) };
-  if (isTextualContentType(contentType)) {
-    result.text = new TextDecoder().decode(body);
-  } else {
-    result.base64 = Buffer.from(body).toString("base64");
-  }
-  return result;
+  return withPodReadLimits(async () => {
+    const pod = asPodPort(source);
+    const target = requirePodScopedUrl({ podRoot: pod.root }, url);
+    const output = new PodOutput(pod);
+    const {
+      body,
+      contentType: rawContentType,
+      etag,
+    } = await output.representation(target, await output.read(target));
+    const contentType = (rawContentType.split(";").shift() ?? "").trim().toLowerCase();
+    const result: ReadResult = {
+      ...(contentType ? { contentType } : {}),
+      ...(etag ? { etag } : {}),
+    };
+    if (isTextualContentType(contentType)) {
+      result.text = new TextDecoder().decode(body);
+    } else {
+      result.base64 = Buffer.from(body).toString("base64");
+    }
+    return result;
+  });
 }
 
 /**
@@ -179,21 +184,23 @@ export async function readResource(source: PodSource, url: string): Promise<Read
  * hand-concatenated) plus the parsed dataset.
  */
 export async function readRdf(source: PodSource, url: string): Promise<ReadRdfResult> {
-  const pod = asPodPort(source);
-  const target = requirePodScopedUrl({ podRoot: pod.root }, url);
-  const output = new PodOutput(pod);
-  const read = await output.read(target, {
-    accept: RDF_ACCEPT,
+  return withPodReadLimits(async () => {
+    const pod = asPodPort(source);
+    const target = requirePodScopedUrl({ podRoot: pod.root }, url);
+    const output = new PodOutput(pod);
+    const read = await output.read(target, {
+      accept: RDF_ACCEPT,
+    });
+    const dataset = await output.rdf(
+      target,
+      read,
+      await parseRdf(new TextDecoder().decode(read.body), read.contentType || null, {
+        baseIRI: read.url ?? target,
+      }),
+    );
+    const turtle = await serializeTurtle(dataset);
+    return { turtle, dataset };
   });
-  const dataset = await output.rdf(
-    target,
-    read,
-    await parseRdf(new TextDecoder().decode(read.body), read.contentType || null, {
-      baseIRI: read.url ?? target,
-    }),
-  );
-  const turtle = await serializeTurtle(dataset);
-  return { turtle, dataset };
 }
 
 /** Serialise an n3.Store to Turtle via the shared serializer (no hand-built triples). */
@@ -574,7 +581,7 @@ export async function writeResource(
   const output = new PodOutput(pod);
   // Mutation permission does not grant permission to describe the stored data.
   await output.read(target);
-  return output.value({ url: target, ...(result.etag ? { etag: result.etag } : {}) }, target);
+  return { url: target, ...(result.etag ? { etag: result.etag } : {}) };
 }
 
 /** Derive a name when a portable backend only supplies URL and container status. */

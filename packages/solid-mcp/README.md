@@ -89,14 +89,15 @@ the write; the write can succeed even if that receipt is denied.
 Container representations are rebuilt from authorized children through typed
 RDF accessors and the N3 Writer. This applies to container URLs, slashless roots,
 query/redirect aliases and RDF identified as a container or containing membership
-statements. Source membership, child descriptions and container metadata are never
-copied into the rebuilt graph. Other RDF views filter resource references in every
-term position and remove attached blank-node descriptions. Text and metadata
-references use the same read authorization, and denied structured descriptions
-are omitted as a whole. Backend errors are mapped to fixed public diagnostics so
+statements. Membership and server-managed descriptions are retained only for authorized
+children. The content of an authorized document is its own data: prose, JSON
+fields and RDF terms are never scanned for URLs, redacted or followed for further
+authorization. Backend errors are mapped to fixed public diagnostics so
 rejected URLs, names and values cannot escape through error messages. Authorization
 decisions are never retained across operations or callers.
-Decorated reads receive complete bodies up to the input limit; larger downloads
+Initial reads and container projection share a 5000 ms deadline and a 1 MiB
+per-response limit. Native authorization-only reads discard unused bodies;
+decorated reads receive complete bodies up to the input limit. Larger downloads
 fail closed so a content-based authorization check cannot inspect a partial body.
 
 The existing fetch-based server configuration and exported pod operations remain

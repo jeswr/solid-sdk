@@ -7,7 +7,6 @@ import { ContainerDataset } from "@solid/object";
 import { DataFactory } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fetchDocument } from "../src/fetch.js";
-import { PodOutput } from "../src/output.js";
 import { listContainer, readRdf, readResource, search } from "../src/pod.js";
 import { createFetchPodPort, type PodPort } from "../src/pod-port.js";
 import { createSolidMcpServer } from "../src/server.js";
@@ -221,94 +220,106 @@ describe.each(["decorated fetch", "portable"])("shared output authorization: %s"
     expect(JSON.stringify(await client.readResource({ uri: ALLOWED }))).toContain(ALLOWED);
   });
 
-  it("filters resource references from ordinary RDF, text, metadata and snippets", async () => {
+  it.each([
+    "url",
+    "uri",
+    "id",
+    "@id",
+  ])("preserves authorized JSON data with %s fields", async (key) => {
     const { client, pod, resources } = await fixture(adapter);
-    resources[ALLOWED] = {
-      contentType: "text/turtle",
-      body: `<> <urn:link> <${SECRET}>; <urn:text> "record ${SECRET}"; <urn:allowed> <${ALLOWED}>.`,
-      etag: `"${SECRET}"`,
-    };
+    const body = JSON.stringify(
+      {
+        url: "https://example.org/article",
+        title: "Public article",
+        resources: [{ [key]: SECRET, description: PRIVATE }],
+      },
+      null,
+      2,
+    ).replaceAll("/", "\\/");
+    resources[ALLOWED] = { contentType: "application/json", body, etag: '"bookmark"' };
+    vi.mocked(pod.read).mockClear();
+    expect(await readResource(pod, ALLOWED)).toMatchObject({ text: body });
+    for (const name of ["pod_read", "solid_read"]) {
+      const result = await client.callTool({ name, arguments: { url: ALLOWED } });
+      expect(result.isError).toBeFalsy();
+      expect(result.content).toEqual([{ type: "text", text: body }]);
+    }
+    const result = await client.readResource({ uri: ALLOWED });
+    expect(result.contents[0]).toMatchObject({ text: body });
+    expect(vi.mocked(pod.read).mock.calls.every(([url]) => url === ALLOWED)).toBe(true);
+  });
+
+  it("preserves prose links, filenames and trailing punctuation without following them", async () => {
+    const { client, pod, resources } = await fixture(adapter);
+    const body = `See ${SECRET}. Also (${ROOT}report.txt), sensitive-record.ttl!`;
+    resources[ALLOWED] = { contentType: "text/plain", body, etag: `"${SECRET}"` };
+    vi.mocked(pod.read).mockClear();
+    expect(await readResource(pod, ALLOWED)).toMatchObject({ text: body });
+    expect(await fetchDocument(pod, ALLOWED)).toMatchObject({ text: body });
+    for (const name of ["pod_read", "solid_read"]) {
+      const result = await client.callTool({ name, arguments: { url: ALLOWED } });
+      expect(result.content).toEqual([{ type: "text", text: body }]);
+    }
+    const fetched = await client.callTool({ name: "fetch", arguments: { id: ALLOWED } });
+    const content = fetched.content as { text: string }[];
+    expect(JSON.parse(content[0].text).text).toBe(body);
+    expect((await client.readResource({ uri: ALLOWED })).contents[0]).toMatchObject({ text: body });
+    expect(vi.mocked(pod.read).mock.calls.every(([url]) => url === ALLOWED)).toBe(true);
+  });
+
+  it("preserves all terms and attached descriptions in an authorized RDF document", async () => {
+    const { client, pod, resources } = await fixture(adapter);
+    const body = `<${SECRET}> <urn:detail> _:a.
+      _:a <urn:next> _:b. _:b <urn:value> "${PRIVATE}".
+      <${ALLOWED}> <urn:link> <${SECRET}>; <urn:value> "record ${SECRET}".`;
+    resources[ALLOWED] = { contentType: "text/turtle", body };
+    vi.mocked(pod.read).mockClear();
+    expect((await readResource(pod, ALLOWED)).text).toBe(body);
+    const rdf = await readRdf(pod, ALLOWED);
+    expect(rdf.dataset.size).toBe(5);
+    for (const name of ["fetch", "pod_read", "solid_read"]) {
+      const result = await client.callTool({ name, arguments: { url: ALLOWED, id: ALLOWED } });
+      expect(result.isError).toBeFalsy();
+      expect(JSON.stringify(result)).toContain(PRIVATE);
+      expect(JSON.stringify(result)).toContain(SECRET);
+    }
+    expect(JSON.stringify(await client.readResource({ uri: ALLOWED }))).toContain(PRIVATE);
+    expect(vi.mocked(pod.read).mock.calls.every(([url]) => url === ALLOWED)).toBe(true);
+    for (const name of ["search", "solid_search"]) {
+      const result = await client.callTool({ name, arguments: { query: "private medical" } });
+      expect(result.isError).toBeFalsy();
+      const content = result.content as { text: string }[];
+      const parsed = JSON.parse(content[0].text);
+      expect(
+        name === "search"
+          ? parsed.results.map((hit: { id: string }) => hit.id)
+          : parsed.map((hit: { url: string }) => hit.url),
+      ).toEqual([ALLOWED]);
+      if (name === "solid_search") expect(content[0].text).toContain(PRIVATE);
+    }
+  });
+
+  it("keeps server-managed descriptions only for authorized container children", async () => {
+    const { pod } = await fixture(adapter);
     const list = pod.list;
     pod.list = async (url) =>
       (await list(url)).map((entry) => ({
         ...entry,
-        type: [SECRET],
-        mimeType: `text/turtle; description="${SECRET}"`,
-        name: entry.url === ALLOWED ? `allowed-record.ttl ${SECRET}` : "sensitive-record.ttl",
+        name: entry.url === SECRET ? PRIVATE : "Allowed description",
+        size: 123,
+        modified: "2026-10-01T00:00:00.000Z",
+        type: ["urn:Document"],
       }));
-    for (const name of [
-      "fetch",
-      "pod_read",
-      "solid_read",
-      "pod_list",
-      "solid_list",
-      "search",
-      "solid_search",
-    ]) {
-      const result = await client.callTool({
-        name,
-        arguments: { id: ALLOWED, url: ALLOWED, container: ROOT, query: "record" },
-      });
-      expect(result.isError).toBeFalsy();
-      noSecret(result);
-      expect(JSON.stringify(result)).toContain(ALLOWED);
-    }
-    noSecret(await client.listResources());
-    noSecret(await client.readResource({ uri: ALLOWED }));
-    resources[ALLOWED] = { contentType: "text/plain", body: `${SECRET}\n${ALLOWED}` };
-    for (const name of ["fetch", "pod_read", "solid_read"]) {
-      const result = await client.callTool({ name, arguments: { id: ALLOWED, url: ALLOWED } });
-      noSecret(result);
-      expect(JSON.stringify(result)).toContain(ALLOWED);
-    }
-  });
-
-  it("omits a denied structured description as a whole, including its private values", async () => {
-    const { pod } = await fixture(adapter);
-    const result = await new PodOutput(pod).value(
-      {
-        resources: [
-          { url: SECRET, title: PRIVATE },
-          { url: ALLOWED, title: "allowed record" },
-        ],
-        nextCursor: SECRET,
-      },
-      ROOT,
-    );
-    noSecret(result);
-    expect(result.resources).toEqual([{ url: ALLOWED, title: "allowed record" }]);
-  });
-
-  it("drops blank-node descriptions belonging to a denied RDF resource", async () => {
-    const { pod, resources } = await fixture(adapter);
-    resources[ALLOWED] = {
-      contentType: "text/turtle",
-      body: `<${SECRET}> <urn:detail> _:a.
-        _:a <urn:next> _:b. _:b <urn:value> "${PRIVATE}".
-        <${ALLOWED}> <urn:value> "allowed record".`,
-    };
-    noSecret(await readRdf(pod, ALLOWED));
-    const result = await fetchDocument(pod, ALLOWED);
-    noSecret(result);
-    expect(result.text).toContain(ALLOWED);
-  });
-
-  it.each([
-    "search",
-    "solid_search",
-  ])("%s projects RDF before inspecting literal descriptions", async (name) => {
-    const { client, resources } = await fixture(adapter);
-    resources[ALLOWED] = {
-      contentType: "text/turtle",
-      body: `<${SECRET}> <urn:text> "${PRIVATE}".
-        <${ALLOWED}> <urn:text> "medical allowed guidance".`,
-    };
-    const result = await client.callTool({ name, arguments: { query: "medical" } });
-    expect(result.isError).toBeFalsy();
-    noSecret(result);
-    expect(JSON.stringify(result)).toContain(ALLOWED);
-    if (name === "solid_search")
-      expect(JSON.stringify(result)).toContain("medical allowed guidance");
+    const result = await readRdf(pod, ROOT);
+    noSecret(result.turtle);
+    const children = [
+      ...(new ContainerDataset(result.dataset, DataFactory).container?.contains ?? []),
+    ];
+    expect(children).toHaveLength(1);
+    expect(children[0].name).toBe("Allowed description");
+    expect(children[0].size).toBe(123);
+    expect(children[0].modified?.toISOString()).toBe("2026-10-01T00:00:00.000Z");
+    expect([...children[0].type]).toContain("urn:Document");
   });
 
   it("authorizes an alias's final resource before returning any of its content", async () => {
@@ -403,28 +414,6 @@ describe.each(["decorated fetch", "portable"])("shared output authorization: %s"
       expect(JSON.stringify(result)).toContain(ALLOWED);
     }
     const result = await client.readResource({ uri: alias });
-    noSecret(result);
-    expect(JSON.stringify(result)).toContain(ALLOWED);
-  });
-
-  it("projects JSON resource descriptions after decoding escaped URLs", async () => {
-    const { client, resources } = await fixture(adapter);
-    resources[ALLOWED] = {
-      contentType: "application/json",
-      body: JSON.stringify({
-        resources: [
-          { url: SECRET, title: PRIVATE },
-          { url: ALLOWED, title: "allowed record" },
-        ],
-      }).replaceAll("/", "\\/"),
-    };
-    for (const name of ["pod_read", "solid_read"]) {
-      const result = await client.callTool({ name, arguments: { url: ALLOWED } });
-      expect(result.isError).toBeFalsy();
-      noSecret(result);
-      expect(JSON.stringify(result)).toContain(ALLOWED);
-    }
-    const result = await client.readResource({ uri: ALLOWED });
     noSecret(result);
     expect(JSON.stringify(result)).toContain(ALLOWED);
   });
