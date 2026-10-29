@@ -211,3 +211,71 @@ security-critical package must not be auto-merged.
 Both requested fixes are complete. Remaining verification is the workspace-gate rerun
 and unavailable per-commit review. No open design question remains; tracking continues
 to control snapshot membership while attempt accounting follows the observed lifecycle.
+
+## Fix round 3 — subscription race
+
+This round starts at `c7529c34a279431c5dff118a999f89468b3564cc` and fixes the single
+supplied finding: a terminal event for an attempt started before subscription could clear
+newer observed work for the same URL.
+
+Commits:
+
+- `ee0df226` — `fix: correlate revalidation attempts across subscriptions`: give each
+  lifecycle pair an opaque random `attemptId` and settle only matching observed attempts.
+  Preserve legacy ID-less messages with separate counts. Add regression coverage, update
+  README/SKILL and the interpretation record, and regenerate the public API report.
+- The final report commit — `docs: record subscription race verification`.
+
+Security property corrected: an unseen or duplicate completion cannot clear a newer
+identified attempt or make React `syncing` false prematurely. Both lifecycle messages
+contain exactly URL, event, and an opaque random attempt ID; response bytes, headers,
+credentials, and error details remain excluded. The optional type field preserves existing
+consumers. The review explicitly allowed correlation; this minimal protocol extension
+supersedes the original URL/event-only shape, as explained in `QUESTIONS.md` item 4.
+Legacy senders cannot guarantee accounting across missed starts; their messages cannot
+settle identified attempts. Starts missed before subscription are not counted as pending.
+
+Proof: 20 added regression cases cover standalone and lazy client surfaces over real
+BroadcastChannels, independent publishers, all three terminal events, both completion
+orders, React `syncing`, unknown/duplicate IDs, legacy isolation, and distinct IDs shared
+by each start/terminal pair. The 35-case existing worker-path/outcome matrix also verifies
+matching IDs and exact payload keys. All 12 real-channel subscription cases failed before
+the fix and pass after it. Tests use local transports/fixtures, with no production requests.
+Service-worker install/activate/fetch wiring and cache/authentication policy are unchanged.
+
+Verification uses Node `v24.22.1`, pnpm `10.4.1`, and `PATH=/opt/node24/bin:$PATH`:
+
+- `pnpm --filter solid-offline run lint` — passed; the same three existing warnings.
+- `pnpm --filter solid-offline run build` — passed.
+- `pnpm --filter solid-offline run typecheck` — passed.
+- `pnpm --filter solid-offline run test` — passed: 363 tests in 17 files.
+- `pnpm --filter solid-offline run api:report` — regenerated the optional ID fields.
+- `pnpm --filter solid-offline run api:check` — passed.
+- `pnpm run lint:root` — passed as the first stage of the affected gate.
+- `TURBO_SCM_BASE=c7529c34a279431c5dff118a999f89468b3564cc pnpm run gate` —
+  failed: 13/15 Turbo tasks succeeded; all solid-offline checks and 363 tests passed.
+  Unchanged root guardrail tests had 161 failures across `agent-layers`,
+  `agent-layers-reachability`, `check-packages-guard`, and `check-sdk-layers`.
+  Log: `/tmp/sst-8xm.13-round3-gate.log`.
+- `pnpm run gate:full` — failed: 52/213 Turbo tasks succeeded (12 cached), stopping
+  at the same four unchanged root guardrail test files: 162 failures / 900 tests,
+  including one `agent-layers` timeout. All 363 solid-offline tests passed in this run.
+  Log: `/tmp/sst-8xm.13-round3-gate-full.log`.
+- `git diff --check` — passed before both commits.
+
+The root failures assert against empty child-process output; the full gate also had one
+timeout in an unchanged agent-layer test. A direct Node 24 invocation
+of unchanged `scripts/check-sdk-layers.mjs` passed against an empty temporary workspace;
+Node 24 `spawnSync` of that same command returned `error.code: EPERM` with empty stdout
+and stderr. This reproduces the existing sandbox limitation; root guardrail code was not
+changed. The package gate is green; a green workspace gate remains unverified.
+
+Supply chain: no dependency, manifest, or lockfile changes; `check:packages` is not
+applicable. No remote fetch, push, PR, publication, branch switch, or other checkout
+modification occurred. `roborev status` exited 127 (`roborev: command not found`), so the
+required per-commit adversarial review remains for the lead/Jesse before merge. This
+security-critical package must not be auto-merged.
+
+The requested implementation is complete. Outstanding verification is the workspace-gate
+rerun in an appropriate environment and unavailable per-commit review. No open question
+blocks the implementation; the conservative correlation choice is documented above.
