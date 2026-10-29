@@ -146,3 +146,44 @@ ROBOT/HermiT reasoner remain unavailable as documented above; ontology parsing
 and term hygiene passed. The full-workspace gate remains an external verification
 limit; root scripts, tests and guardrails are unchanged from this round's base.
 No push, PR, branch switch or fetch/merge was performed.
+
+## Fix round 3 — helpers reached through property shapes
+
+Base: `67198ef08c5e7175c202d78b1caeed6bebd77e1e`.
+
+- `c70dedfa` — `fix(vocab): cover helpers reached through properties`: follow
+  owning `sh:property` relationships as well as `sh:node` callers and evaluate
+  each caller's value nodes with the installed SHACL validator's path evaluator.
+  Each traversal branch keeps its own visited set so shared owners remain
+  reachable through different properties.
+- `docs: record property helper coverage fix results` — this round's status update.
+
+The regression removes MonetaryAmountShape's direct target from a temporary
+collectibles profile and removes its standalone negative fixture. Both positive
+coverage and the nested Valuation negative now pass through property paths alone.
+It also verifies that an unlinked amount cannot supply negative coverage and
+that amounts without targeted callers cannot supply positive coverage. The
+unchanged validator reproduced both missing helper coverage errors before the
+fix. No permanent profiles or fixture data changed.
+
+Commands use `PATH=/opt/node24/bin:$PATH` (Node `v24.22.1`, pnpm `10.4.1`):
+
+| Exact command | Result |
+| --- | --- |
+| `node packages/solid-federation-vocab/scripts/test-shacl-fixtures.mjs` (new regression before the fix) | FAIL as expected: MonetaryAmountShape had neither positive nor negative fixture coverage. |
+| `pnpm exec biome check --write packages/solid-federation-vocab/scripts/shacl-fixtures.mjs packages/solid-federation-vocab/scripts/test-shacl-fixtures.mjs` | PASS; formatted both changed scripts. |
+| `pnpm exec biome check packages/solid-federation-vocab/scripts/shacl-fixtures.mjs packages/solid-federation-vocab/scripts/test-shacl-fixtures.mjs` | PASS. |
+| `pnpm --filter @jeswr/solid-federation-vocab run gate` | PASS: lint, build, typecheck, test and ontology; 179 fixtures across 14 sectors and all regression checks. |
+| `TURBO_SCM_BASE=67198ef08c5e7175c202d78b1caeed6bebd77e1e pnpm run gate` | PASS: root lint and all affected tasks; 5 successful / 5 total. |
+| `pnpm run gate:full` | FAIL at `//#test:root`: 162 failed tests across the same four unchanged root files listed above (empty subprocess diagnostics and a timeout). Turbo stopped after 61 successful / 230 total tasks. |
+| `git diff --check` and `git diff --check 67198ef08c5e7175c202d78b1caeed6bebd77e1e..HEAD` | PASS. |
+
+No dependencies were added, so `check:packages` is not applicable. No new design
+questions or unfinished implementation work remain. The full-workspace gate
+remains an external verification limit; root scripts, tests and guardrails are
+unchanged from this round's base. `roborev` and its post-commit hook remain
+unavailable; the repository's
+[`roborev-review` skill](skills/roborev-review/SKILL.md) was consulted, but no
+automated review verdict is claimed. The optional ROBOT/HermiT consistency check
+was skipped because the reasoner is unavailable; ontology parsing and term
+hygiene passed. No push, PR, branch switch or fetch/merge was performed.
