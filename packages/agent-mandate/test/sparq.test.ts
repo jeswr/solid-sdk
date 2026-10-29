@@ -125,7 +125,9 @@ it("sends typed context, explicit process limits, and only this agent's rules", 
       }),
     ),
   ).toEqual({ effect: "permit" });
-  expect(captured).toMatchObject({ timeout: 42, maxBuffer: 65536, shell: false, env: {} });
+  expect(captured).toMatchObject({ maxBuffer: 65536, shell: false, env: {} });
+  expect(captured?.timeout).toBeGreaterThan(0);
+  expect(captured?.timeout).toBeLessThanOrEqual(42);
   const doc = JSON.parse(captured?.input as string);
   expect(doc.request.action).toBe(`${ODRL}use`);
   expect(doc.policy.text).not.toContain("urn:other");
@@ -708,6 +710,204 @@ it("skips an internally conflicting prohibition and retains an independent prohi
   expect(run).toHaveBeenCalledOnce();
 });
 
+const fallbackPolicy = (prohibitions: readonly Rule[]): Policy => ({
+  id: policy.id,
+  permissions: [
+    {
+      type: "permission",
+      action: "read",
+      constraints: ["string", "date"].map((datatype) => ({
+        leftOperand: "purpose",
+        operator: "eq",
+        rightOperand: "2026-10-26",
+        datatype: `${XSD}${datatype}`,
+      })),
+    },
+  ],
+  prohibitions,
+});
+const fallbackRequest = intent({ action: "read", attributes: { purpose: "2026-10-26" } });
+const fallbackProhibitions: Rule[] = ["string", "date", "string"].map((datatype) => ({
+  type: "prohibition",
+  action: "read",
+  constraints: [
+    {
+      leftOperand: "purpose",
+      operator: "eq",
+      rightOperand: "2026-10-26",
+      datatype: `${XSD}${datatype}`,
+    },
+  ],
+}));
+
+it.each([undefined, 100])("shares one SPARQ fallback deadline (timeout: %j)", async (timeoutMs) => {
+  let now = 0;
+  const budget = timeoutMs ?? 5000;
+  const time = vi.spyOn(performance, "now").mockImplementation(() => now);
+  try {
+    let calls = 0;
+    const run = vi.fn((_binary: string, _args: ProcessOptions) => {
+      now += budget / 4;
+      return {
+        stdout: response({
+          effect: "deny",
+          matchedRules: ++calls === 3 ? ["urn:rule"] : [],
+        }),
+        status: 0,
+      };
+    });
+    const adapter = sparqPolicyEngine({ binary: "test", timeoutMs, run });
+    // Each evaluation gets a fresh budget, shared across that evaluation's attempts.
+    for (let evaluation = 0; evaluation < 2; evaluation++) {
+      now = 0;
+      calls = 0;
+      run.mockClear();
+      expect(await adapter.evaluate(fallbackPolicy(fallbackProhibitions), fallbackRequest)).toEqual(
+        {
+          effect: "prohibited",
+        },
+      );
+      expect(run.mock.calls.map(([, args]) => args.timeout)).toEqual([
+        budget,
+        budget * 0.75,
+        budget * 0.5,
+      ]);
+    }
+  } finally {
+    time.mockRestore();
+  }
+});
+
+it.each([
+  "before projection",
+  "during serialization",
+])("refuses an exhausted SPARQ deadline %s without starting a process", async (stage) => {
+  const time = vi.spyOn(performance, "now").mockReturnValueOnce(0);
+  if (stage === "during serialization") time.mockReturnValueOnce(0);
+  time.mockReturnValue(100);
+  const run = vi.fn(() => ({ stdout: response(), status: 0 }));
+  try {
+    expect(
+      await sparqPolicyEngine({ binary: "test", timeoutMs: 100, run }).evaluate(policy, intent()),
+    ).toEqual({
+      effect: "indeterminate",
+    });
+    expect(run).not.toHaveBeenCalled();
+  } finally {
+    time.mockRestore();
+  }
+});
+
+it.each([
+  "permit",
+  "deny",
+  "indeterminate",
+])("rejects a late SPARQ %s result and stops fallback processing", async (effect) => {
+  let now = 0;
+  const time = vi.spyOn(performance, "now").mockImplementation(() => now);
+  const run = vi.fn(() => {
+    now = 100;
+    return { stdout: response({ effect, matchedRules: ["urn:rule"] }), status: 0 };
+  });
+  try {
+    expect(
+      await sparqPolicyEngine({ binary: "test", timeoutMs: 100, run }).evaluate(
+        fallbackPolicy(fallbackProhibitions),
+        fallbackRequest,
+      ),
+    ).toEqual({ effect: "indeterminate" });
+    expect(run).toHaveBeenCalledOnce();
+  } finally {
+    time.mockRestore();
+  }
+});
+
+it.each([
+  false,
+  true,
+])("bounds SPARQ fallback attempts even with conflicting projections: %s", async (conflicting) => {
+  const time = vi.spyOn(performance, "now").mockReturnValue(0);
+  const run = vi.fn(() => ({ stdout: response({ effect: "deny", matchedRules: [] }), status: 0 }));
+  const r: Rule = conflicting
+    ? { ...(fallbackPolicy([]).permissions?.[0] as Rule), type: "prohibition" }
+    : (fallbackProhibitions[0] as Rule);
+  // A later rule must not start a new process after either kind of attempt uses the cap.
+  const p = fallbackPolicy([
+    ...Array.from({ length: 100 }, () => r),
+    { type: "prohibition", action: "read" },
+  ]);
+  try {
+    const adapter = sparqPolicyEngine({ binary: "test", run });
+    expect(await adapter.evaluate(p, fallbackRequest)).toEqual({ effect: "indeterminate" });
+    expect(run).toHaveBeenCalledTimes(conflicting ? 0 : 31);
+  } finally {
+    time.mockRestore();
+  }
+});
+
+it("includes SPARQ response validation in the shared deadline", async () => {
+  let now = 0;
+  const time = vi.spyOn(performance, "now").mockImplementation(() => now);
+  const run = vi.fn(() => ({
+    status: 0,
+    get stdout() {
+      now = 100;
+      return response();
+    },
+  }));
+  try {
+    expect(
+      await sparqPolicyEngine({ binary: "test", timeoutMs: 100, run }).evaluate(policy, intent()),
+    ).toEqual({ effect: "indeterminate" });
+    expect(run).toHaveBeenCalledOnce();
+  } finally {
+    time.mockRestore();
+  }
+});
+
+it.each<ProcessResult>([
+  { stdout: response(), status: 0, error: new Error("timeout") },
+  { stdout: response(), status: 1 },
+  { stdout: response(), status: null },
+  { stdout: "invalid JSON", status: 0 },
+  { stdout: response({ api: "wrong" }), status: 0 },
+  { stdout: "x".repeat(65537), status: 0 },
+  { stdout: response({ effect: "indeterminate" }), status: 0 },
+])("stops SPARQ fallback after a process or protocol failure %#", async (failure) => {
+  const run = vi
+    .fn()
+    .mockReturnValueOnce(failure)
+    .mockReturnValue({
+      stdout: response({ effect: "deny", matchedRules: ["urn:later"] }),
+      status: 0,
+    });
+  const adapter = sparqPolicyEngine({ binary: "test", run });
+  const p = fallbackPolicy(fallbackProhibitions);
+  expect(await adapter.evaluate(p, fallbackRequest)).toEqual({ effect: "indeterminate" });
+  expect(run).toHaveBeenCalledOnce();
+  // Other policy sets in the composed decision also receive a failed backend result.
+  run.mockReset().mockReturnValue(failure);
+  expect(await evaluateIntent({ ...mandate(), autonomous: p }, fallbackRequest, adapter)).toEqual({
+    decision: "confirm-required",
+    reason: "indeterminate",
+  });
+});
+
+it("continues SPARQ fallback after an unmatched prohibition in an unsupported policy", async () => {
+  const run = vi
+    .fn()
+    .mockReturnValueOnce({ stdout: response({ effect: "deny", matchedRules: [] }), status: 0 })
+    .mockReturnValue({
+      stdout: response({ effect: "deny", matchedRules: ["urn:later"] }),
+      status: 0,
+    });
+  const p = { ...fallbackPolicy(fallbackProhibitions), profile: "urn:unsupported" };
+  expect(await sparqPolicyEngine({ binary: "test", run }).evaluate(p, fallbackRequest)).toEqual({
+    effect: "prohibited",
+  });
+  expect(run).toHaveBeenCalledTimes(2);
+});
+
 it.each([
   "permission",
   "prohibition",
@@ -952,12 +1152,16 @@ it.each([
   { datatype: "double", left: 1, right: Number.NaN },
   { datatype: "double", left: 1, right: [1, "z"], operator: "isAnyOf" },
   { datatype: "dateTime", left: "z", right: "2026-10-26T12:00:00Z" },
-  ...["+14:01", "-14:01", "+15:00", "-15:00", "+23:59", "-23:59", "+00:60", "-00:60"].flatMap(
-    (zone) => [
-      { datatype: "dateTime", left: `2026-10-26T12:00:00${zone}`, right: "2026-10-26T12:00:00Z" },
-      { datatype: "dateTime", left: "2026-10-26T12:00:00Z", right: `2026-10-26T12:00:00${zone}` },
-    ],
-  ),
+  ...["+14:01", "-14:01", "+15:00", "-15:00", "+23:59", "-23:59", "+00:60", "-00:60"].flatMap<{
+    datatype: string;
+    left: string;
+    right: string;
+    operator?: string;
+    leftOperand?: string;
+  }>((zone) => [
+    { datatype: "dateTime", left: `2026-10-26T12:00:00${zone}`, right: "2026-10-26T12:00:00Z" },
+    { datatype: "dateTime", left: "2026-10-26T12:00:00Z", right: `2026-10-26T12:00:00${zone}` },
+  ]),
   { datatype: "dateTime", left: "2026-10-26T12:00:00.0001Z", right: "2026-10-26T12:00:00Z" },
   { datatype: "dateTime", left: "2026-10-26T12:00:00Z", right: "2026-10-26T12:00:00.0001Z" },
   { leftOperand: "dateTime", left: "2026-10-26T12:00:00.0001Z", right: "2026-10-26T12:00:00Z" },

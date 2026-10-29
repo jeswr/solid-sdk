@@ -19,6 +19,7 @@ import {
 } from "./types.js";
 
 const XSD = "http://www.w3.org/2001/XMLSchema#";
+const MAX_DECISION_ATTEMPTS = 32;
 /** The process protocol groups RDF numeric and temporal datatypes by comparison kind. */
 function contextType(datatype: string): string {
   if (["integer", "decimal", "double", "float"].some((type) => datatype === `${XSD}${type}`))
@@ -116,6 +117,8 @@ export function sparqPolicyEngine(
               options.timeoutMs > 30000))
         )
           return { effect: "indeterminate" };
+        const deadline = performance.now() + (options.timeoutMs ?? 5000);
+        let attempts = 0;
         const attributes = new Map<string, unknown>();
         for (const [key, value] of Object.entries({
           ...request.attributes,
@@ -165,6 +168,9 @@ export function sparqPolicyEngine(
           permissions: ReturnType<typeof lower>,
           prohibitions: ReturnType<typeof lower>,
         ): Promise<{ effect: Effect } | undefined> => {
+          // Count projections too: conflicting types may otherwise skip subprocess limits.
+          if (attempts++ >= MAX_DECISION_ATTEMPTS || performance.now() >= deadline)
+            return { effect: "indeterminate" };
           const contextTypes = new Map<string, string>();
           for (const rule of [...permissions, ...prohibitions]) {
             for (const c of rule.constraints ?? []) {
@@ -216,15 +222,18 @@ export function sparqPolicyEngine(
               const result = spawnSync(binary, [], args);
               return { ...result, stdout: result.stdout };
             });
+          const remaining = deadline - performance.now();
+          if (remaining <= 0) return { effect: "indeterminate" };
           const result = run(binary, {
             input,
             encoding: "utf8",
-            timeout: options.timeoutMs ?? 5000,
+            timeout: Math.ceil(remaining),
             maxBuffer: 64 * 1024,
             env: {},
             shell: false,
           });
           if (
+            performance.now() >= deadline ||
             result.error ||
             result.status !== 0 ||
             new TextEncoder().encode(result.stdout).length > 64 * 1024
@@ -251,14 +260,17 @@ export function sparqPolicyEngine(
                   ? "prohibited"
                   : "not-applicable"
                 : "indeterminate";
-          return { effect: unresolved && effect !== "prohibited" ? "indeterminate" : effect };
+          return { effect: performance.now() >= deadline ? "indeterminate" : effect };
         };
         const result = await decide(permissions, prohibitions);
-        if (result !== undefined) return result;
+        if (result !== undefined)
+          return {
+            effect: unresolved && result.effect !== "prohibited" ? "indeterminate" : result.effect,
+          };
         // Conflicting context types cannot hide an independently decidable prohibition.
         for (const prohibition of prohibitions) {
           const result = await decide([], [prohibition]);
-          if (result?.effect === "prohibited") return result;
+          if (result?.effect === "prohibited" || result?.effect === "indeterminate") return result;
         }
         return { effect: "indeterminate" };
       } catch {
