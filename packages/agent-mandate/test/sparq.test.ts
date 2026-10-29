@@ -303,11 +303,11 @@ it.each<{
     datatype: `${XSD}date`,
   },
   {
-    name: "every member of an inferred temporal set",
+    name: "inferred temporal singleton",
     constraint: {
       leftOperand: "dateTime",
-      operator: "isAnyOf",
-      rightOperand: ["2026-10-26T12:00:00Z", "2026-10-27T00:00:00Z"],
+      operator: "eq",
+      rightOperand: ["2026-10-26T12:00:00Z"],
     },
     datatype: `${XSD}dateTime`,
   },
@@ -315,12 +315,22 @@ it.each<{
     name: `declared ${datatype} with lexical operands`,
     constraint: {
       leftOperand: "count",
-      operator: "isAnyOf" as const,
-      rightOperand: ["+0002", "10"],
+      operator: "eq" as const,
+      rightOperand: ["+0002"],
       datatype: `${XSD}${datatype}`,
     },
     datatype: `${XSD}${datatype}`,
   })),
+  {
+    name: "every member of a declared string set",
+    constraint: {
+      leftOperand: `${AGENT}binding`,
+      operator: "isAnyOf",
+      rightOperand: ["gmail", "urn:example:binding"],
+      datatype: `${XSD}string`,
+    },
+    datatype: `${XSD}string`,
+  },
   {
     name: "declared string overrides IRI detection",
     constraint: {
@@ -507,6 +517,197 @@ it("ignores invalid operands only in rules excluded by the shared candidate matc
     ),
   ).toEqual({ effect: "permit" });
   expect(run).toHaveBeenCalledOnce();
+});
+
+it.each(
+  ["isAnyOf", "isNoneOf", "isAllOf"].flatMap((operator) =>
+    [
+      "",
+      "two words",
+      "pipe|member",
+      "comma,member",
+      "tab\tmember",
+      "line\nmember",
+      "\r",
+      "\u0085",
+      "\u00a0",
+      "\u2003",
+    ].map((member) => ({ operator, member })),
+  ),
+)("rejects non-atomic signed set members: %j", async ({ operator, member }) => {
+  for (const rightOperand of [member, [member], ["safe", member], [member, "safe"]]) {
+    const constraint = { leftOperand: "purpose", operator, rightOperand } as Constraint;
+    const request = intent({
+      action: "read",
+      attributes: {
+        purpose:
+          operator === "isNoneOf" ? "outside" : operator === "isAllOf" ? rightOperand : member,
+      },
+    });
+    const run = vi.fn(() => ({ stdout: response(), status: 0 }));
+    const adapter = sparqPolicyEngine({ binary: "test", run });
+    for (const type of ["permission", "prohibition"] as const) {
+      const p: Policy = {
+        id: policy.id,
+        permissions: policy.permissions,
+        [type === "permission" ? "permissions" : "prohibitions"]: [
+          { type, action: "read", constraints: [constraint] },
+        ],
+      };
+      expect(await solidOdrlEngine.evaluate(p, request)).toEqual({
+        effect: type === "permission" ? "permit" : "prohibited",
+      });
+      expect(await adapter.evaluate(p, request)).toEqual({ effect: "indeterminate" });
+      expect(run).not.toHaveBeenCalled();
+      expect(await evaluateIntent({ ...mandate(), autonomous: p }, request, adapter)).toEqual({
+        decision: "confirm-required",
+        reason: "indeterminate",
+      });
+      run.mockClear();
+    }
+  }
+});
+
+it.each([
+  { right: [1, 2], left: 1 },
+  { right: "1", left: "1" },
+  { right: ["1", "2"], left: "1", datatype: "integer" },
+  { right: ["1.5", "2.5"], left: "1.5", datatype: "decimal" },
+  { right: ["1e1", "2e1"], left: "1e1", datatype: "double" },
+  { right: [1, 2], left: 1, datatype: "float" },
+  {
+    right: ["2026-10-26T12:00:00Z", "2026-10-27T12:00:00Z"],
+    left: "2026-10-26T12:00:00Z",
+    datatype: "dateTime",
+  },
+  { right: ["2026-10-26", "2026-10-27"], left: "2026-10-26", datatype: "date" },
+])("rejects typed set comparisons that SPARQ cannot preserve: %j", async ({
+  right,
+  left,
+  datatype,
+}) => {
+  for (const operator of ["isAnyOf", "isNoneOf", "isAllOf"] as const) {
+    const run = vi.fn(() => ({ stdout: response(), status: 0 }));
+    for (const type of ["permission", "prohibition"] as const) {
+      expect(
+        await sparqPolicyEngine({ binary: "test", run }).evaluate(
+          {
+            id: policy.id,
+            [type === "permission" ? "permissions" : "prohibitions"]: [
+              {
+                type,
+                action: "read",
+                constraints: [
+                  {
+                    leftOperand: "purpose",
+                    operator,
+                    rightOperand: right,
+                    ...(datatype === undefined ? {} : { datatype: `${XSD}${datatype}` }),
+                  },
+                ],
+              },
+            ],
+          },
+          intent({ action: "read", attributes: { purpose: left } }),
+        ),
+      ).toEqual({ effect: "indeterminate" });
+      expect(run).not.toHaveBeenCalled();
+    }
+  }
+});
+
+it.each([
+  "isAnyOf",
+  "isNoneOf",
+  "eq",
+] as const)("preserves representable members and scalar text for %s", async (operator) => {
+  const rightOperand =
+    operator === "eq" ? "two words|comma,tab\t" : ["urn:purpose:a", "plain", "urn:purpose:a%2Cb"];
+  const run = vi.fn((_binary: string, _args: ProcessOptions) => ({
+    stdout: response({ effect: "deny", matchedRules: ["urn:rule"] }),
+    status: 0,
+  }));
+  expect(
+    await sparqPolicyEngine({ binary: "test", run }).evaluate(
+      {
+        id: policy.id,
+        prohibitions: [
+          {
+            type: "prohibition",
+            action: "read",
+            constraints: [{ leftOperand: "purpose", operator, rightOperand }],
+          },
+        ],
+      },
+      intent({
+        action: "read",
+        attributes: { purpose: operator === "eq" ? (rightOperand as string) : "urn:purpose:a" },
+      }),
+    ),
+  ).toEqual({ effect: "prohibited" });
+  expect(run).toHaveBeenCalledOnce();
+  const doc = JSON.parse((run.mock.calls[0] as [string, ProcessOptions])[1].input);
+  const store = await parseRdf(doc.policy.text, "text/turtle");
+  expect(
+    node(store, "urn:example:sparq-envelope")
+      .one("https://www.w3.org/2018/credentials#credentialSubject")
+      .one(`${AGENT}policy`)
+      .one(`${ODRL}prohibition`)
+      .one(`${ODRL}constraint`)
+      .values(`${ODRL}rightOperand`)
+      .map((value) => value.value),
+  ).toEqual(Array.isArray(rightOperand) ? rightOperand : [rightOperand]);
+});
+
+it.each([
+  { operator: "isAllOf", rightOperand: ["plain"], left: ["plain"] },
+  { operator: "isAnyOf", rightOperand: ["plain"], left: ["plain"] },
+  { operator: "isNoneOf", rightOperand: ["plain"], left: "two words" },
+  {
+    operator: "isAnyOf",
+    rightOperand: ["urn:purpose:a", "urn:purpose:b"],
+    left: "urn:purpose:a",
+    datatype: "anyURI",
+  },
+  {
+    operator: "isAnyOf",
+    rightOperand: ["2026-10-26T12:00:00Z"],
+    left: "2026-10-26T12:00:00Z",
+    leftOperand: "dateTime",
+  },
+])("rejects set context or types outside SPARQ's textual representation: %j", async ({
+  operator,
+  rightOperand,
+  left,
+  datatype,
+  leftOperand,
+}) => {
+  const constraint = {
+    leftOperand: leftOperand ?? "purpose",
+    operator,
+    rightOperand,
+    ...(datatype === undefined ? {} : { datatype: `${XSD}${datatype}` }),
+  } as Constraint;
+  const request = intent({
+    action: "read",
+    attributes: { [constraint.leftOperand]: left },
+    ...(leftOperand === "dateTime" ? { at: left as string } : {}),
+  });
+  const run = vi.fn(() => ({ stdout: response(), status: 0 }));
+  for (const type of ["permission", "prohibition"] as const) {
+    expect(
+      await sparqPolicyEngine({ binary: "test", run }).evaluate(
+        {
+          id: policy.id,
+          [type === "permission" ? "permissions" : "prohibitions"]: [
+            { type, action: "read", constraints: [constraint] },
+          ],
+        },
+        request,
+      ),
+    ).toEqual({ effect: "indeterminate" });
+    expect(run).not.toHaveBeenCalled();
+  }
 });
 
 it("fails closed before invoking SPARQ when a declared datatype is not an IRI", async () => {

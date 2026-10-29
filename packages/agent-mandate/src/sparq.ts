@@ -9,7 +9,34 @@ import { Store } from "n3";
 import { actionIri, encodePolicy, leftOperandIri } from "./codec.js";
 import { candidate, knownOperand, supportedPolicy } from "./policy.js";
 import { Node, node, turtle } from "./rdf.js";
-import { AGENT, type Effect, type Intent, ODRL, type PolicyEngine, type Rule } from "./types.js";
+import {
+  AGENT,
+  type Constraint,
+  type Effect,
+  type Intent,
+  ODRL,
+  type PolicyEngine,
+  type Rule,
+} from "./types.js";
+
+/** SPARQ membership uses scalar text and a delimiter encoding, with no member escaping. */
+function representableSet(c: Constraint, value: unknown): boolean {
+  if (c.operator === "isAllOf") return false; // Unsupported by the backend.
+  if (c.operator !== "isAnyOf" && c.operator !== "isNoneOf") return true;
+  if (
+    c.leftOperand === "dateTime" ||
+    (c.datatype !== undefined && c.datatype !== "http://www.w3.org/2001/XMLSchema#string")
+  )
+    return false;
+  const rights: unknown[] = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
+  return [value, ...rights].every(
+    (member) =>
+      typeof member === "string" &&
+      member.length > 0 &&
+      !/[\s\u0085|,]/u.test(member) &&
+      !Number.isFinite(Number(member)),
+  );
+}
 
 /** SPARQ reads operand types from RDF literals, not the signed codec's agent:datatype. */
 function sparqOperands(store: Store): Store {
@@ -98,7 +125,11 @@ export function sparqPolicyEngine(
           [...(policy.permissions ?? []), ...(policy.prohibitions ?? [])]
             .filter((r) => candidate(r, policy, request))
             .some((r) =>
-              (r.constraints ?? []).some((c) => !knownOperand(c, attributes[c.leftOperand])),
+              (r.constraints ?? []).some(
+                (c) =>
+                  !knownOperand(c, attributes[c.leftOperand]) ||
+                  !representableSet(c, attributes[c.leftOperand]),
+              ),
             )
         )
           return { effect: "indeterminate" };
