@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6 — transport shutdown
 // AUTHORED-BY Codex GPT-6 — CORS and parse-error fixes
+
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { metadataUrl } from "@jeswr/mcp-oauth/metadata";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 
@@ -108,7 +110,7 @@ export function createMcpHttpHandler<Principal>(
       throw new TypeError("allowedOrigins must contain exact serialized http(s) origins");
     }
   }
-  const challenge = `Bearer resource_metadata="${resource.href.replace(/\/$/, "")}/.well-known/oauth-protected-resource"`;
+  const challenge = `Bearer resource_metadata="${metadataUrl(resource.href, "oauth-protected-resource")}"`;
   const servers = new WeakSet<McpServer>();
 
   async function dispatch(request: Request): Promise<Response> {

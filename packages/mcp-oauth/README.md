@@ -34,6 +34,8 @@ All endpoints are under the issuer: `/register` (JSON POST), `/authorize` (GET),
 well-known insertion rule: `/.well-known/oauth-authorization-server/auth` and
 `/.well-known/oauth-protected-resource/mcp` for the example above. Metadata, JWKS, errors,
 token responses and redirects carry `Cache-Control: no-store`.
+`metadataUrl(identifier, suffix)` from `@jeswr/mcp-oauth/metadata` shares this construction
+with the MCP HTTP transport without loading the authorization server.
 
 Registration accepts HTTPS or HTTP loopback (`localhost`, 127/8, `::1`) redirect URIs, without
 userinfo or fragments. Redirect comparison is exact, including loopback ports and URI spelling.
