@@ -4,13 +4,17 @@ import { PopoverContent } from "@jeswr/suite-ui";
 import type { Editor } from "@tiptap/react";
 import { type ComponentProps, useRef } from "react";
 
+type EditorPopoverProps = Omit<ComponentProps<typeof PopoverContent>, "onCloseAutoFocus"> & {
+  editor: Editor;
+} & ({ "aria-label": string } | { "aria-labelledby": string });
+
 /** Restore editing focus on close unless an outside interaction moved it. */
 export function EditorPopoverContent({
   editor,
   onInteractOutside,
   onEscapeKeyDown,
   ...props
-}: Omit<ComponentProps<typeof PopoverContent>, "onCloseAutoFocus"> & { editor: Editor }) {
+}: EditorPopoverProps) {
   const outside = useRef(false);
   return (
     <PopoverContent

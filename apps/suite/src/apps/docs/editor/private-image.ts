@@ -44,13 +44,51 @@ export function privateImage(fetchImpl: typeof fetch) {
     addNodeView() {
       return ({ node }) => {
         const dom = document.createElement("img");
+        // Keep a stable node-view root while link wrappers and presentation
+        // attributes change; the loaded image belongs to this source URL.
+        const wrapper = document.createElement("span");
+        wrapper.append(dom);
+        let anchor: HTMLAnchorElement | undefined;
+        let current = node;
+        const present = () => {
+          const alt = String(current.attrs.alt ?? "");
+          dom.alt =
+            dom.dataset.docsImageState === "error"
+              ? alt
+                ? `Image unavailable: ${alt}`
+                : "Image unavailable"
+              : alt;
+          dom.style.width = current.attrs.width ? `${current.attrs.width}px` : "100%";
+          for (const key of ["title", "height"]) {
+            const value: unknown = current.attrs[key];
+            if (value == null) dom.removeAttribute(key);
+            else dom.setAttribute(key, String(value));
+          }
+          const link = normaliseImageLink(current.attrs.link);
+          if (link) {
+            if (!anchor) {
+              anchor = document.createElement("a");
+              // Match text links: clicks select; the link popover opens.
+              anchor.addEventListener("click", (event) => event.preventDefault());
+              wrapper.replaceChildren(anchor);
+              anchor.append(dom);
+            }
+            for (const key of ["href", "title", "target", "rel", "class"]) {
+              const value = link[key];
+              if (value == null) anchor.removeAttribute(key);
+              else anchor.setAttribute(key, value);
+            }
+          } else if (anchor) {
+            wrapper.replaceChildren(dom);
+            anchor = undefined;
+          }
+        };
         let objectUrl: string | undefined;
         let alive = true;
         const abort = new AbortController();
         dom.dataset.docsImageState = "loading";
-        dom.alt = String(node.attrs.alt ?? "");
         dom.className = "docs-private-image";
-        dom.style.width = node.attrs.width ? `${node.attrs.width}px` : "100%";
+        present();
         const src = String(node.attrs.src);
         if (validLink(src) && /^https?:/.test(src)) {
           void fetchImpl(src, { signal: abort.signal, redirect: "error" })
@@ -65,24 +103,20 @@ export function privateImage(fetchImpl: typeof fetch) {
             .catch(() => {
               if (!alive) return;
               dom.dataset.docsImageState = "error";
-              dom.alt = node.attrs.alt
-                ? `Image unavailable: ${node.attrs.alt}`
-                : "Image unavailable";
+              present();
             });
-        } else dom.dataset.docsImageState = "error";
-        const link = normaliseImageLink(node.attrs.link);
-        let wrapper: HTMLElement = dom;
-        if (link) {
-          const anchor = document.createElement("a");
-          for (const [key, value] of Object.entries(link))
-            if (value !== null) anchor.setAttribute(key, value);
-          // Match text links: normal editor clicks select; the link popover opens.
-          anchor.addEventListener("click", (event) => event.preventDefault());
-          anchor.append(dom);
-          wrapper = anchor;
+        } else {
+          dom.dataset.docsImageState = "error";
+          present();
         }
         return {
           dom: wrapper,
+          update(next) {
+            if (next.type !== current.type || next.attrs.src !== current.attrs.src) return false;
+            current = next;
+            present();
+            return true;
+          },
           destroy() {
             alive = false;
             abort.abort();

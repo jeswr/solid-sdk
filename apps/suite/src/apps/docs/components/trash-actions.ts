@@ -13,7 +13,7 @@ function completed<T>(result: BatchResult<T>, failure: string): boolean {
 export async function trashDocumentWithUndo(
   url: string,
   session: PodSession,
-  onRestored: () => void | Promise<void>,
+  onRestored: (restoredUrl: string | undefined) => void | Promise<void>,
 ): Promise<boolean> {
   const result = await deleteDocument(url, session);
   if (
@@ -30,14 +30,16 @@ export async function trashDocumentWithUndo(
       onClick: async () => {
         try {
           const restored = await restoreDocument(result.done, session);
-          if (
-            completed(
-              restored,
-              "Couldn't restore the whole document. Open Drive Trash to recover the remaining items.",
-            )
-          )
-            toast.success("Restored document");
-          await onRestored();
+          const complete = completed(
+            restored,
+            "Couldn't restore the whole document. Open Drive Trash to recover the remaining items.",
+          );
+          if (complete) toast.success("Restored document");
+          // Restore may allocate a new name when the original URL is occupied.
+          // Only a complete restore supplies a document that can be reopened.
+          await onRestored(
+            complete ? restored.done.find(({ entry }) => entry.original === url)?.url : undefined,
+          );
         } catch {
           toast.error("Couldn't restore the document. Open Drive Trash to try again.");
         }

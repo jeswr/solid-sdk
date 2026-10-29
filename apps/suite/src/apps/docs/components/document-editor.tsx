@@ -644,8 +644,8 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
               if (!runtime.stored) return;
               await runtime.flush();
               const url = runtime.stored.url;
-              const complete = await trashDocumentWithUndo(url, runtime.session, () => {
-                router.push(`/docs/d/${encodeRef(url)}`);
+              const complete = await trashDocumentWithUndo(url, runtime.session, (restoredUrl) => {
+                if (restoredUrl) router.push(`/docs/d/${encodeRef(restoredUrl)}`);
               });
               if (!complete) return;
               if (starred.includes(url)) toggle(url);

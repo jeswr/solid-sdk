@@ -471,7 +471,9 @@ function containerBoundaries(source: string): string {
 // Lazy container lines continue prose but cannot underline it. Preserve that
 // distinction when list and quote source is passed through the block lexer again.
 function lazyParagraphLine(line: string): string {
-  return /^[ \t]*(?:=+|-+)[ \t]*$/.test(line) ? `    ${line.trimStart()}` : line;
+  // An escape survives every subsequent container dedent; extra indentation
+  // does not. Inline parsing removes it only after block structure is final.
+  return /^[ \t]*(?:=+|-+)[ \t]*$/.test(line) ? line.replace(/(?=[=-])/, "\\") : line;
 }
 
 function listItemSource(raw: string): { text: string; indent: number } {
@@ -504,6 +506,65 @@ function listItemSource(raw: string): { text: string; indent: number } {
 const quotePrefix = /(?<=^|\n) {0,3}>[ \t]?/g;
 const taskMarker = /^\[[ xX]\](?:[ \t]|$)/;
 
+/** Lazy continuation is legal only at the innermost open paragraph. */
+function openParagraph(tokens: MarkdownToken[]): boolean {
+  const last = tokens.at(-1);
+  if (!last) return false;
+  // Reference definitions remain paragraphs during block-structure detection.
+  if (["paragraph", "text", "def"].includes(String(last.type))) return true;
+  if (last.type === "blockquote") return openParagraph(last.tokens as MarkdownToken[]);
+  if (last.type === "list") {
+    const item = (last.items as MarkdownToken[]).at(-1) as MarkdownToken;
+    return openParagraph(
+      item.task
+        ? containerTokenizer().lexer.blockTokens(item.text as string)
+        : (item.tokens as MarkdownToken[]),
+    );
+  }
+  return false;
+}
+
+/** Both container boundary probes use the same paragraph-continuation rules. */
+function containerTokenizer() {
+  const tokenizer = new markdown.instance.Tokenizer();
+  tokenizer.lexer = new markdown.instance.Lexer({ gfm: true, tokenizer });
+  tokenizer.rules = {
+    ...tokenizer.rules,
+    other: {
+      ...tokenizer.rules.other,
+      blockquoteSetextReplace2: quotePrefix,
+      listIsTask: taskMarker,
+      listReplaceTask: taskMarker,
+    },
+  };
+  const list = tokenizer.list;
+  tokenizer.list = function (source) {
+    const token = list.call(this, source);
+    if (!token) return;
+    let offset = 0;
+    for (const item of token.items) {
+      const lines = item.raw.replace(/\n$/, "").split("\n");
+      const { indent } = listItemSource(item.raw);
+      const interruption = lines.findIndex((line, index) => {
+        if (!index || !line.trim() || indentation(line, containerColumn) >= indent) return false;
+        const { text } = listItemSource(lines.slice(0, index).join("\n"));
+        const prefix = item.task ? text.replace(taskMarker, "") : text;
+        return !openParagraph(containerTokenizer().lexer.blockTokens(prefix));
+      });
+      if (interruption >= 0)
+        return this.list(
+          source
+            .split("\n")
+            .slice(0, offset + interruption)
+            .join("\n"),
+        );
+      offset += lines.length;
+    }
+    return token;
+  };
+  return tokenizer;
+}
+
 // Use exactly the live editor's nodes, marks and attributes. Only Markdown
 // handlers are overridden; HTML parsing still comes from the editor schema.
 const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
@@ -532,19 +593,7 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
             if (!/^[ \t]*(?:[*+-]|\d{1,9}[.)])(?=[ \t]|\n|$)/.test(source)) return;
             // Delegate list boundaries to CommonMark without the upstream
             // line-based list tokenizers or their shared lexer state.
-            const tokenizer = new markdown.instance.Tokenizer();
-            tokenizer.lexer = new markdown.instance.Lexer({ gfm: true, tokenizer });
-            // A task marker is independent of its label's first character.
-            // Clone the rules so other lexer instances keep their own grammar.
-            tokenizer.rules = {
-              ...tokenizer.rules,
-              other: {
-                ...tokenizer.rules.other,
-                blockquoteSetextReplace2: quotePrefix,
-                listIsTask: taskMarker,
-                listReplaceTask: taskMarker,
-              },
-            };
+            const tokenizer = containerTokenizer();
             const token = tokenizer.list(containerBoundaries(source));
             if (!token) return;
             // Marked expands every tab in item.text and trimEnd() also drops
@@ -952,17 +1001,7 @@ markdown.instance.use({
       if (!/^[ \t]*>/.test(source)) return;
       // Boundary detection uses a separate lexer. Re-entering this configured
       // lexer here would parse each nested quote twice at every depth.
-      const tokenizer = new markdown.instance.Tokenizer();
-      tokenizer.lexer = new markdown.instance.Lexer({ gfm: true, tokenizer });
-      tokenizer.rules = {
-        ...tokenizer.rules,
-        other: {
-          ...tokenizer.rules.other,
-          blockquoteSetextReplace2: quotePrefix,
-          listIsTask: taskMarker,
-          listReplaceTask: taskMarker,
-        },
-      };
+      const tokenizer = containerTokenizer();
       // The code tokenizer already handled indentation of four or more columns.
       // A new unquoted list cannot be a lazy continuation. Marked's list
       // re-entry otherwise absorbs it after a lazy line. Its list grammar
@@ -975,25 +1014,6 @@ markdown.instance.use({
       const lines = boundaries
         .split("\n")
         .slice(0, candidate.raw.replace(/\n+$/, "").split("\n").length);
-      const openParagraph = (tokens: MarkdownToken[]): boolean => {
-        const last = tokens.at(-1);
-        if (!last) return false;
-        // Definitions are paragraphs during CommonMark's block-structure
-        // phase; removing them later must not end lazy quote continuation.
-        if (["paragraph", "text", "def"].includes(String(last.type))) return true;
-        if (last.type === "blockquote") return openParagraph(last.tokens as MarkdownToken[]);
-        if (last.type === "list") {
-          const item = (last.items as MarkdownToken[]).at(-1) as MarkdownToken;
-          // Marked strips a task checkbox after block tokenization. Re-lex the
-          // remaining source, matching the real task-item parser above.
-          return openParagraph(
-            item.task
-              ? tokenizer.lexer.blockTokens(item.text as string)
-              : (item.tokens as MarkdownToken[]),
-          );
-        }
-        return false;
-      };
       const interruption = lines.findIndex((line, index) => {
         if (index === 0 || /^ {0,3}>/.test(line)) return false;
         if (tokenizer.rules.block.list.test(line)) return true;

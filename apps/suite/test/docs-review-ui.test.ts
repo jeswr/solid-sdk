@@ -230,7 +230,7 @@ it.each([
   true,
 ])("shows the DOCX formatting warning separately from skipped content (skipped: %s)", async (skipped) => {
   const done = vi.fn();
-  const close = vi.fn();
+  const close = vi.fn(() => root.render(null));
   await act(async () =>
     root.render(
       createElement(ImportDialog, {
@@ -268,5 +268,5 @@ it.each([
       ?.click(),
   );
   expect(close).toHaveBeenCalledOnce();
-  expect(done).toHaveBeenCalledOnce();
+  await vi.waitFor(() => expect(done).toHaveBeenCalledOnce());
 });

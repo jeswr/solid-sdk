@@ -37,6 +37,11 @@ export function ImportDialog({
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ skipped: SkippedItem[]; done: () => void } | null>(null);
   const working = useRef(false);
+  const afterClose = useRef<(() => void) | null>(null);
+  const finish = (imported: { done: () => void }) => {
+    afterClose.current = imported.done;
+    close();
+  };
   const start = async () => {
     if (!file || working.current) return;
     working.current = true;
@@ -46,10 +51,7 @@ export function ImportDialog({
       validateImportFile(file);
       const imported = await run(file, setProgress);
       if (imported.skipped.length) setResult(imported);
-      else {
-        close();
-        imported.done();
-      }
+      else finish(imported);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "We couldn't import this file. Try again.");
     } finally {
@@ -64,15 +66,18 @@ export function ImportDialog({
       open
       onOpenChange={(open: boolean) => {
         if (!open && !busy) {
-          close();
-          result?.done();
+          if (result) finish(result);
+          else close();
         }
       }}
     >
       <DialogContent
         onCloseAutoFocus={(event: Event) => {
           event.preventDefault();
-          if (invokingControl.current?.isConnected) invokingControl.current.focus();
+          const done = afterClose.current;
+          afterClose.current = null;
+          if (done) done();
+          else if (invokingControl.current?.isConnected) invokingControl.current.focus();
         }}
         onEscapeKeyDown={(event: KeyboardEvent) => {
           if (busy) event.preventDefault();
@@ -140,14 +145,7 @@ export function ImportDialog({
         )}
         <DialogFooter>
           {result ? (
-            <Button
-              onClick={() => {
-                close();
-                result.done();
-              }}
-            >
-              Open document
-            </Button>
+            <Button onClick={() => finish(result)}>Open document</Button>
           ) : (
             <>
               <Button variant="outline" disabled={busy} onClick={close}>

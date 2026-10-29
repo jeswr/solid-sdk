@@ -16,6 +16,26 @@ Object.defineProperty(window.Range.prototype, "getBoundingClientRect", {
 });
 afterEach(() => document.body.replaceChildren());
 
+it("round37 the slash insertion dialog has its own accessible name", async () => {
+  const editor = editorWith("/");
+  const view = await mount(
+    h(SlashMenu, {
+      editor,
+      position: { from: 1, to: 2, left: 0, top: 0, query: "" },
+      close: vi.fn(),
+      image: vi.fn(),
+    }),
+  );
+  try {
+    expect(document.querySelector('[role="dialog"]')?.getAttribute("aria-label")).toBe(
+      "Insert a block",
+    );
+  } finally {
+    await view.unmount();
+    editor.destroy();
+  }
+});
+
 function editorWith(text: string) {
   const element = document.createElement("div");
   document.body.append(element);

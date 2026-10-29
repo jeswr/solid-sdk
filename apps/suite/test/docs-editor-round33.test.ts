@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 // AUTHORED-BY Codex
+
+import { File as NodeFile } from "node:buffer";
 import { TooltipProvider } from "@jeswr/suite-ui";
 import { getSchema, type JSONContent } from "@tiptap/react";
 import { prosemirrorJSONToYDoc } from "@tiptap/y-tiptap";
@@ -14,6 +16,17 @@ import type { PodSession } from "../src/lib/session/pod-session";
 const mocks = vi.hoisted(() => ({
   runtime: null as DocumentPersistence | null,
   router: { push: vi.fn(), replace: vi.fn() },
+  remove: vi.fn(),
+  restore: vi.fn(),
+  toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn() }),
+}));
+vi.mock("@jeswr/suite-ui", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@jeswr/suite-ui")>()),
+  toast: mocks.toast,
+}));
+vi.mock("../src/apps/docs/editor/operations", () => ({
+  deleteDocument: mocks.remove,
+  restoreDocument: mocks.restore,
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => mocks.router,
@@ -62,7 +75,7 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-async function mountEditor(initial?: JSONContent) {
+async function mountEditor(initial?: JSONContent, storedUrl?: string) {
   const session = {
     storageUrl: "https://pod.test/",
     fetch: vi.fn(async () => new Response(null, { status: 404 })),
@@ -83,6 +96,7 @@ async function mountEditor(initial?: JSONContent) {
     flush: vi.fn(),
     change: vi.fn(),
     forceSave: vi.fn(),
+    ...(storedUrl ? { stored: { url: storedUrl } } : {}),
   } as unknown as DocumentPersistence;
   const host = document.createElement("div");
   document.body.append(host);
@@ -101,7 +115,7 @@ async function mountEditor(initial?: JSONContent) {
     expect(body).not.toBeNull();
     return body as HTMLElement;
   });
-  await vi.waitFor(() => expect(document.activeElement).toBe(body));
+  if (!storedUrl) await vi.waitFor(() => expect(document.activeElement).toBe(body));
   return {
     host,
     body,
@@ -301,6 +315,87 @@ it("round36 cancelling menu-opened Import restores the File menu trigger", async
     ).find((button) => button.textContent === "Cancel");
     await act(async () => cancel?.click());
     await vi.waitFor(() => expect(document.activeElement).toBe(trigger));
+  } finally {
+    await view.close();
+  }
+});
+
+it.each([
+  "no warnings",
+  "Open document",
+  "Escape",
+])("round37 completed replacement keeps editor focus after %s teardown", async (completion) => {
+  const view = await mountEditor();
+  try {
+    await menuItem(
+      view.host.querySelector('[aria-label="File menu"]') as HTMLElement,
+      "Import to replace…",
+    );
+    const input = document.querySelector('[role="dialog"] input[type="file"]') as HTMLInputElement;
+    const source =
+      completion === "no warnings"
+        ? "Replacement"
+        : "Replacement\n\n![Unsafe](data:image/png;base64,x)";
+    await act(async () => {
+      Object.defineProperty(input, "files", { value: [new NodeFile([source], "plan.md")] });
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    const replace = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'),
+    ).find((button) => button.textContent === "Replace contents");
+    await act(async () => replace?.click());
+    if (completion !== "no warnings") {
+      expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+        "Some items weren't imported",
+      );
+      await act(async () => {
+        if (completion === "Escape")
+          document.activeElement?.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+          );
+        else
+          Array.from(document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button'))
+            .find((button) => button.textContent === "Open document")
+            ?.click();
+      });
+    }
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+    await vi.waitFor(() => expect(document.activeElement).toBe(view.body));
+    expect(view.body.textContent).toContain("Replacement");
+  } finally {
+    await view.close();
+  }
+});
+
+it("round37 editor Undo opens the restored document instead of a reused original URL", async () => {
+  const url = "https://pod.test/docs/plan.ttl";
+  const view = await mountEditor(undefined, url);
+  const restoredUrl = "https://pod.test/docs/plan%20(restored).ttl";
+  const entry = {
+    url: "https://pod.test/drive/.trash/slot/plan.ttl",
+    original: url,
+    name: "plan.ttl",
+    trashedAt: new Date(),
+  };
+  mocks.remove.mockResolvedValue({ done: [entry], failed: [] });
+  mocks.restore.mockResolvedValue({
+    done: [{ entry, url: restoredUrl, renamed: true }],
+    failed: [],
+  });
+  try {
+    await menuItem(
+      view.host.querySelector('[aria-label="File menu"]') as HTMLElement,
+      "Move to trash",
+    );
+    const confirm = Array.from(
+      document.querySelectorAll<HTMLButtonElement>('[role="alertdialog"] button'),
+    ).find((button) => button.textContent === "Move to trash");
+    expect(confirm).toBeDefined();
+    await act(async () => confirm?.click());
+    await vi.waitFor(() => expect(mocks.toast).toHaveBeenCalled());
+    await act(async () => mocks.toast.mock.calls.at(-1)?.[1].action.onClick());
+    const { encodeRef } = await import("../src/lib/refs");
+    expect(mocks.router.push).toHaveBeenLastCalledWith(`/docs/d/${encodeRef(restoredUrl)}`);
   } finally {
     await view.close();
   }

@@ -28,6 +28,25 @@ const entries: TrashEntry[] = ["plan.ttl", "plan/"].map((name) => ({
 const warning = new TrashIndexWarning("index.ttl", new Error("unavailable"));
 afterEach(() => vi.resetAllMocks());
 describe("Docs trash feedback", () => {
+  it.each([
+    false,
+    true,
+  ])("round37 Undo passes the confirmed document URL after renamed=%s restore", async (renamed) => {
+    mocks.remove.mockResolvedValue({ done: entries, failed: [] });
+    const url = renamed ? "https://pod.test/docs/plan%20(restored).ttl" : entries[0]?.original;
+    mocks.restore.mockResolvedValue({
+      done: [
+        { entry: entries[1], url: "https://pod.test/docs/plan%20(restored)/", renamed },
+        { entry: entries[0], url, renamed },
+      ],
+      failed: [],
+    });
+    const onRestored = vi.fn();
+    await trashDocumentWithUndo(entries[0]?.original as string, session, onRestored);
+    await mocks.toast.mock.calls[0]?.[1].action.onClick();
+    expect(onRestored).toHaveBeenCalledExactlyOnceWith(url);
+  });
+
   it("shows Moved to trash with Undo only for a complete batch, and restores both records", async () => {
     mocks.remove.mockResolvedValue({ done: entries, failed: [] });
     mocks.restore.mockResolvedValue({

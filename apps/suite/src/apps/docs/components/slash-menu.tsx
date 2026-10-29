@@ -57,6 +57,7 @@ export function SlashMenu({
       </PopoverAnchor>
       <EditorPopoverContent
         editor={editor}
+        aria-label="Insert a block"
         align="start"
         side="bottom"
         className="docs-slash-popover"
