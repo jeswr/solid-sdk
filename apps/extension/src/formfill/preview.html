@@ -1,19 +1,21 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Fill from your profile</title><link rel="stylesheet" href="preview.css"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Fill from your pod</title><link rel="stylesheet" href="../shared/suite-tokens.css"><link rel="stylesheet" href="preview.css"></head>
 <body>
-  <main>
-    <h1>Fill from your profile</h1>
+  <a class="permission-skip-link" href="#content">Skip to preview</a>
+  <main id="content" class="permission-surface formfill-preview" aria-labelledby="preview-title" tabindex="-1">
+    <p class="eyebrow">Review before filling</p>
+    <h1 id="preview-title">Fill from your pod</h1>
     <p>Choose what to fill on <strong id="origin"></strong>. Review the values each time. Your form stays open for you to submit.</p>
-    <p id="error" role="alert" hidden></p>
+    <p id="error" class="error" role="alert" hidden></p>
     <form id="preview">
-      <label for="profile">Use profile</label>
-      <select id="profile" name="profile" disabled></select>
+      <label for="profile">Use account</label>
+      <select id="profile" name="profile" aria-describedby="error" disabled></select>
       <div id="categories" aria-live="polite"></div>
-      <p id="empty" hidden>No matching values were found in your profile or address book.</p>
-      <label class="remember"><input type="checkbox" id="remember"> Remember for this site</label>
-      <p class="hint">Remembering selects these categories next time. You will still review the values before filling.</p>
+      <p id="empty" class="hint" hidden>No matching values were found in your account or address book.</p>
+      <label class="remember"><input type="checkbox" id="remember" aria-describedby="remember-hint"> Remember for this site</label>
+      <p id="remember-hint" class="hint">Remembering selects these categories next time. You will still review the values before filling.</p>
       <p id="selection-hint" class="hint" aria-live="polite">Choose at least one kind of detail to fill.</p>
       <div class="actions"><button id="cancel" type="button">Cancel</button><button id="fill" type="submit" aria-describedby="selection-hint" disabled>Fill</button></div>
     </form>
