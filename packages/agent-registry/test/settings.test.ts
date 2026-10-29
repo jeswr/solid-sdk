@@ -213,16 +213,28 @@ describe("privacy and settings model", () => {
     });
     expect(JSON.stringify(s)).not.toContain(identity);
   });
-  it.each([
-    "https://unlisted.example/profile#me",
-    "private-user",
-    "urn:example:Alice",
-  ])("filters notes-only identity %s from every metadata field", (identity) => {
+  it.each(
+    [
+      'Identity conflict: "IDENTITY" versus alternate@example.org.',
+      'Resolved identity conflict: "IDENTITY" versus alternate@example.org.',
+      'No identity conflict: alternate@example.org versus "IDENTITY".',
+      'No contradiction between "IDENTITY" versus alternate@example.org.',
+      'Use alternate@example.org versus "IDENTITY" for comparison.',
+      'Identity conflict: no conflict for "IDENTITY" versus alternate@example.org.',
+      'Identity conflict: "IDENTITY" versus alternate@example.org. Resolved.',
+      'Identity conflict: "IDENTITY".',
+      'No conflicts for "IDENTITY".',
+    ].flatMap((note) =>
+      ["https://unlisted.example/profile#me", "private-user", "urn:example:Alice"].map(
+        (identity) => [identity, note.replace("IDENTITY", identity)],
+      ),
+    ),
+  )("filters notes-only identity %s from every metadata field in %s", (identity, note) => {
     const snap = matrixSnapshot();
     const first = snap.accounts[0];
     const evidence = snap.evidence[0];
     if (!first || !evidence) throw new Error("Fixture account or evidence absent");
-    snap.notes = [`Identity conflict: "${identity}" versus alternate@example.org.`];
+    snap.notes = [note];
     first.channel = identity;
     first.provider = identity;
     first.organisation = identity;

@@ -325,9 +325,17 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
     (channel === "matrix" || channel === "matrix_bot" ? known.matrix : known.folded).add(handle);
   const notes = snapshot.notes.map((note) => {
     const text = note.trim();
-    const identifiers = conflictIdentifiers(text, known);
+    const conflict = conflictIdentifiers(text, known);
     const body = /^(?:Main Gmail )?Identity conflict:\s*(.+)$/iu.exec(text)?.[1] ?? text;
-    return { identifiers: identifiers ?? noteIdentifiers(body, known), active: !!identifiers };
+    const identifiers = conflict ?? noteIdentifiers(body, known);
+    return {
+      identifiers,
+      active: !!conflict,
+      // Inactive prose may contain opaque handles: keep every candidate for privacy screening.
+      privateIdentifiers: conflict
+        ? conflict.filter((_, index) => index === 0 || index === 2)
+        : identifiers,
+    };
   });
   const identities = [
     ...knownIdentities,
@@ -367,12 +375,8 @@ export function inventorySettings(snapshot: RegistrySnapshot, salt: Uint8Array):
     ...new Set(
       [
         ...identities.map(({ handle }) => handle),
-        // Opaque operands are private even when their channel cannot be inferred.
-        ...notes.flatMap(({ identifiers }) =>
-          identifiers[1]?.toLowerCase() === "versus"
-            ? identifiers.filter((_, index) => index === 0 || index === 2)
-            : [],
-        ),
+        // Opaque operands stay private regardless of channel inference or conflict activation.
+        ...notes.flatMap(({ privateIdentifiers }) => privateIdentifiers),
       ].map(foldPrivateIdentifier),
     ),
   ];

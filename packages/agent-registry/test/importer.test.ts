@@ -33,6 +33,16 @@ function harness(text = fixture) {
   };
 }
 const term = DataFactory.namedNode;
+const inactivePrivateNotes = [
+  'Resolved identity conflict: alice@example.com versus "private-user".',
+  'No identity conflict: "private-user" versus alice@example.com.',
+  'No contradiction between alice@example.com versus "private-user".',
+  'Use "private-user" versus alice@example.com for comparison.',
+  'Identity conflict: no conflict for alice@example.com versus "private-user".',
+  'Identity conflict: alice@example.com versus "private-user". Resolved.',
+  'Identity conflict: "private-user".',
+  'No conflicts for "private-user".',
+];
 
 describe("synthetic registry import", () => {
   it("imports 28 accounts plus a default-deny Telegram bot as typed RDF, with ACLs first", async () => {
@@ -274,6 +284,77 @@ describe("synthetic registry import", () => {
     await expect(importRegistry(config, ports)).rejects.toThrow("private identifier");
     expect(ports.storage.events).toEqual([]);
     expect(ports.storage.resources.size).toBe(0);
+  });
+  it.each(inactivePrivateNotes)("screens private identities in inactive note %s", async (note) => {
+    const input = {
+      version: 1,
+      accounts: [
+        {
+          id: "fixture-account",
+          channel: "email",
+          provider: "google",
+          organization: "Contact PRIVATE-USER",
+          identifiers: { primary: "alice@example.com" },
+          connector: { target: "gmail", setup_status: "planned" },
+        },
+      ],
+      notes: [note],
+      communicationRules: {
+        decision_policy: { ask_when_uncertain_about: ["identity"] },
+        capability_policy: {
+          default_allowed: ["read"],
+          requires_current_instruction_or_narrow_active_authorization_rule: ["draft"],
+          always_requires_fresh_explicit_instruction: ["send"],
+        },
+        triage_taxonomy: { action: "Contact private-user", routine: "Needs owner attention" },
+      },
+    };
+    const ports = harness(stringify(input));
+    const report = await importRegistry(config, ports);
+    const account = report.settings.connections[0];
+    if (!account) throw new Error("Fixture account absent");
+    expect(account).toMatchObject({
+      organisation: "redacted",
+      bindingState: "setup-required",
+      identityConflicts: [],
+      restrictions: DENY_ALL,
+    });
+    expect(report.settings.workflowPolicy?.taxonomy).toEqual({
+      action: "redacted",
+      routine: "Needs owner attention",
+    });
+    const url = `${config.storageRoot}agent/accounts/${account.id}.ttl`;
+    const dataset = ports.storage.resources.get(url)?.dataset;
+    expect(
+      dataset?.getObjects(term(url), term(`${AGENT}organisation`), null).map((v) => v.value),
+    ).toEqual(["redacted"]);
+    expect(dataset?.getObjects(term(url), term(`${AGENT}identityConflict`), null)).toEqual([]);
+    expect(
+      dataset?.getObjects(term(url), term(`${AGENT}bindingState`), null).map((v) => v.value),
+    ).toEqual(["setup-required"]);
+    expect(
+      JSON.stringify({ report, resources: [...ports.storage.resources] }).toLowerCase(),
+    ).not.toContain("private-user");
+    for (const ref of [
+      "profile:private-user",
+      "op://PRIVATE-USER/item/credential",
+      "op://test-vault/PRIVATE-USER/credential",
+      "op://test-vault/item/%70rivate-user",
+    ]) {
+      const privateInput = {
+        ...input,
+        accounts: input.accounts.map((a) => ({ ...a, credential_ref: ref })),
+      };
+      expect(() =>
+        inventorySettings(parseSnapshot(privateInput), new Uint8Array(32).fill(7)),
+      ).toThrow("Credential reference contains a private identifier");
+      const rejected = harness(stringify(privateInput));
+      await expect(importRegistry(config, rejected)).rejects.toThrow(
+        "Credential reference contains a private identifier",
+      );
+      expect(rejected.storage.events).toEqual([]);
+      expect(rejected.storage.resources.size).toBe(0);
+    }
   });
   it.each([
     "Alice",
