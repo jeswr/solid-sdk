@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # @jeswr/solid-vc
@@ -15,9 +16,16 @@ Phase 1 keeps authorization builders and their inline JSON-LD context on the leg
 `https://w3id.org/jeswr/solid-vc#` wire format. Canonical emission is deferred to phase 2
 because deployed verifiers pinned to earlier packages reject canonical credentials.
 Readers accept `https://jeswr.org/ns/solid-vc#`, legacy and mixed authorization graphs;
-conflicting singleton claims are rejected. Existing signed payloads, historical bare
+conflicting singleton claims and differing action alias sets are rejected. Authorization
+readers require one RDF subject and reject malformed aliases. Existing signed payloads, historical bare
 type/claim expansion, W3C context URLs and cryptosuite identifiers remain unchanged.
 Explicit input IRIs are preserved; rebasing signed data requires a new proof.
+
+New proofs encode `cryptosuite` as `sec:cryptosuiteString`. Both bundled suites also
+verify the historical `xsd:string` proof configuration used by earlier releases.
+The compatibility path verifies the same claims and complete proof options with the
+same key; issuer, proof purpose, validity, and status checks still apply. Retained
+public-key fixtures in `test/fixtures/origin-main-credentials.json` cover both suites.
 
 ## Install
 

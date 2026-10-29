@@ -227,12 +227,15 @@ export interface VerifyAuthorityResult {
 
 // --- reading the bound authorization from a credential ---------------------
 
-/** The credentialSubject as a claim record (first subject if an array). */
+/** Only a single subject record is supported; never ignore signed subjects. */
 function subjectRecord(vc: VerifiableCredential): Record<string, unknown> | undefined {
+  if (Array.isArray(vc.credentialSubject) && vc.credentialSubject.length !== 1) return undefined;
   const subject = Array.isArray(vc.credentialSubject)
     ? vc.credentialSubject[0]
     : vc.credentialSubject;
-  return subject && typeof subject === "object" ? (subject as Record<string, unknown>) : undefined;
+  return subject && typeof subject === "object" && !Array.isArray(subject)
+    ? (subject as Record<string, unknown>)
+    : undefined;
 }
 
 /** Coerce a claim value to a string, or `undefined`. */
@@ -240,20 +243,42 @@ function claimString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-/** Union both claim aliases; malformed values fail closed rather than hiding an alias. */
+/**
+ * Match credentialToRdf's expansion: bare names and explicit legacy keys share
+ * one predicate. Normalize each predicate's set separately, then require aliases
+ * to agree. Unioning different namespace predicates would widen the grant.
+ */
 function authorizationClaimValues(
   subject: Record<string, unknown>,
   claim: string,
 ): string[] | undefined {
-  const values = new Set<string>();
+  let values: Set<string> | undefined;
   for (const namespace of AUTHORIZATION_NAMESPACES) {
-    const value = subject[`${namespace}${claim}`];
-    if (value === undefined) continue;
-    const strings = typeof value === "string" ? [value] : value;
-    if (!Array.isArray(strings) || strings.some((v) => typeof v !== "string")) return undefined;
-    for (const v of strings) values.add(v);
+    const keys =
+      namespace === AUTHORIZATION_NAMESPACES[0]
+        ? [`${namespace}${claim}`, claim]
+        : [`${namespace}${claim}`];
+    const alias = new Set<string>();
+    let present = false;
+    for (const key of keys) {
+      // credentialToRdf signs own enumerable claims, never prototype properties.
+      if (!Object.prototype.propertyIsEnumerable.call(subject, key)) continue;
+      const value = subject[key];
+      if (value === undefined) continue;
+      present = true;
+      const strings = typeof value === "string" ? [value] : value;
+      if (!Array.isArray(strings) || strings.some((v) => typeof v !== "string")) return undefined;
+      for (const v of strings) alias.add(v);
+    }
+    if (!present) continue;
+    if (
+      values !== undefined &&
+      (values.size !== alias.size || [...values].some((v) => !alias.has(v)))
+    )
+      return undefined;
+    values ??= alias;
   }
-  return [...values];
+  return [...(values ?? [])];
 }
 
 /**
@@ -263,7 +288,9 @@ function authorizationClaimValues(
  * for why trusting the subject id would be a chain-of-trust bypass). The subject
  * carries the grant fields `svc:authorizes` / `svc:action` / `svc:target` /
  * `svc:policy` in either namespace. Identical singleton aliases are accepted;
- * conflicting authorizes/target/policy values are rejected. Actions are a set.
+ * conflicting authorizes/target/policy values are rejected. Action aliases must
+ * describe equal sets. Bare names expand to the legacy namespace, as
+ * in the signed graph. Multiple subject records are unsupported and rejected.
  * NOTE this is a pure reader — it does NOT verify the proof; the
  * verifier runs Phase A (`verifyCredential`) and the `subject.id === issuer`
  * fail-closed check before any of these fields are trusted.

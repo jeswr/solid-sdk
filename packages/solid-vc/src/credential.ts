@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // The Credential ↔ RDF lowering + round-trip, and the agent-authorization
@@ -748,8 +749,9 @@ export function agentAuthorizationFromRdf(
     )
   )
     return undefined;
-  const subjectTerm = [...node.subjects].find((t) => t.termType === "NamedNode");
-  if (subjectTerm === undefined) return undefined;
+  const subjects = [...node.subjects];
+  const subjectTerm = subjects[0];
+  if (subjects.length !== 1 || subjectTerm?.termType !== "NamedNode") return undefined;
   const subjectIri = subjectTerm.value;
   const dataset = node.dataset as unknown as DatasetCore;
   const reads = readSubjectClaims(dataset, subjectIri);
@@ -771,12 +773,22 @@ function readSubjectClaims(
 ): { authorizes?: string; action: string[]; target?: string; policy?: string } | undefined {
   const node = new AuthorizationSubjectNode(subjectIri, dataset);
   const authorizes = node.iris("authorizes");
+  const action = node.iris("action");
   const target = node.iris("target");
   const policy = node.iris("policy");
-  if (authorizes.size > 1 || target.size > 1 || policy.size > 1) return undefined;
+  if (
+    authorizes === undefined ||
+    action === undefined ||
+    target === undefined ||
+    policy === undefined ||
+    authorizes.size > 1 ||
+    target.size > 1 ||
+    policy.size > 1
+  )
+    return undefined;
   return {
     authorizes: [...authorizes][0],
-    action: [...node.iris("action")],
+    action: [...action],
     target: [...target][0],
     policy: [...policy][0],
   };
