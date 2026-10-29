@@ -7,11 +7,22 @@ description: Implement or integrate the MCP OAuth authorization server, its meta
 # @jeswr/mcp-oauth
 
 Read this package's README, repository AGENTS.md, and MCP DESIGN §3/§5 before changing the API.
-This package owns MCP-09 authorization server core. MCP-10 supplies PodSessionProvider and
-the upstream credential vault; MCP-11 supplies browser login/consent UI and HTTP composition.
+This package owns MCP-09 authorization server core and MCP-10's `createPodSessionProvider`,
+`createSessionVault`, and ciphertext stores. MCP-11 supplies browser login/consent UI,
+the public Solid Client ID Document, and HTTP composition.
 
 - Use `createAuthorizationServer` and Web Request/Response; keep framework dependencies out.
 - Keep upstream pod credentials inside the injected broker. Only `{id, webId}` enters grants.
+- Use solid-openid-client + solid-dpop for upstream PKCE/state/nonce/DPoP/refresh; retain the
+  original private key with rotating refresh credentials. MCP-15 owns migration to pod-auth.
+- Keep MCP_VAULT_KEY canonical base64 of exactly 32 bytes. Default to Upstash/Vercel KV;
+  memory is explicit and single-process; files use a private local directory and atomic writes.
+- Never weaken vault CAS or deletion tombstones. Consume callbacks once and claim refresh
+  ownership before contacting the issuer. Crashed refreshes fail closed and require new login.
+- Recheck broker `isActive` during MCP verification/issuance and before resource fetches;
+  MCP revocation/reuse retires the pod session and invalidates all grants bound to it.
+- Resolve profiles through fetch-rdf + wrapper accessors, require profile issuer trust, scope
+  authenticated fetch to advertised storage roots, refuse caller credentials and redirects.
 - Require PKCE S256, nonempty state, exact redirects, and an exact configured resource.
 - Keep ES256 access tokens ten minutes and bind `aud` to the MCP resource.
 - Consume codes/refresh credentials atomically. Reuse revokes the entire family; never reset
