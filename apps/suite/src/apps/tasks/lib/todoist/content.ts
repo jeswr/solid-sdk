@@ -7,32 +7,68 @@ export function splitContent(content: string): { title: string; labels: string[]
   let cursor = 0;
   let code = 0;
   let fence = "";
-  let fenceQuotes = 0;
+  let fenceDepth = 0;
+  // Zero denotes a block quote; positive widths denote list-item indentation.
+  const containers: number[] = [];
   let brackets = 0;
   let parentheses = 0;
   let linkQuote = "";
   let angle = false;
   for (let i = 0; i < content.length; i++) {
     const char = content[i];
-    if ((i === 0 || content[i - 1] === "\n" || content[i - 1] === "\r") && !code && !linkQuote) {
+    if (
+      (i === 0 || content[i - 1] === "\n" || (content[i - 1] === "\r" && char !== "\n")) &&
+      !code &&
+      !linkQuote
+    ) {
       let end = i;
       while (end < content.length && content[end] !== "\n" && content[end] !== "\r") end++;
-      let sourceLine = content.slice(i, end);
+      let expanded = 0;
+      // Expand tabs only in the detection copy; preserve the original Markdown.
+      let sourceLine = content.slice(i, end).replace(/\t/g, (_tab, index: number) => {
+        const width = 4 - ((index + expanded) % 4);
+        expanded += width - 1;
+        return " ".repeat(width);
+      });
       if (content[end] === "\r" && content[end + 1] === "\n") end++;
       let offset = 0;
-      let quotes = 0;
-      // Strip only the enclosing quote markers; extra markers inside code are literal.
-      while (!fence || quotes < fenceQuotes) {
-        let start = offset;
-        while (start < offset + 3 && sourceLine[start] === " ") start++;
-        if (sourceLine[start] !== ">") break;
-        quotes++;
-        offset = start + 1;
-        if (sourceLine[offset] === " " || sourceLine[offset] === "\t") offset++;
+      let depth = 0;
+      // Match existing containers before looking for any new ones.
+      for (const indentation of containers) {
+        if (indentation === 0) {
+          const quote = /^ {0,3}> ?/.exec(sourceLine.slice(offset));
+          if (!quote) break;
+          offset += quote[0].length;
+        } else {
+          let spaces = 0;
+          while (spaces < indentation && sourceLine[offset + spaces] === " ") spaces++;
+          // Blank lines may continue a list without its full indentation.
+          if (spaces < indentation && sourceLine.slice(offset + spaces)) break;
+          offset += spaces;
+        }
+        depth++;
+      }
+      if (depth < fenceDepth) fence = "";
+      containers.length = depth;
+      // Markers inside a fence are literal, so strip only its enclosing containers.
+      while (!fence) {
+        const quote = /^ {0,3}> ?/.exec(sourceLine.slice(offset));
+        if (quote) {
+          containers.push(0);
+          offset += quote[0].length;
+          continue;
+        }
+        const item = /^ {0,3}(?:[-+*]|\d{1,9}[.)])(?= |$)/.exec(sourceLine.slice(offset));
+        if (!item) break;
+        let padding = 0;
+        while (sourceLine[offset + item[0].length + padding] === " ") padding++;
+        // Empty items and items starting with indented code use one separator column.
+        if (padding > 4 || offset + item[0].length + padding === sourceLine.length) padding = 1;
+        const width = item[0].length + padding;
+        containers.push(width);
+        offset += width;
       }
       sourceLine = sourceLine.slice(offset);
-      // A fence also ends when its enclosing block quote ends.
-      if (quotes < fenceQuotes) fence = "";
       const marker = /^ {0,3}(`{3,}|~{3,})/.exec(sourceLine);
       if (fence) {
         if (
@@ -51,15 +87,11 @@ export function splitContent(content: string): { title: string; labels: string[]
         ((marker[1] as string)[0] !== "`" || !sourceLine.slice(marker[0].length).includes("`"))
       ) {
         fence = marker[1] as string;
-        fenceQuotes = quotes;
+        fenceDepth = containers.length;
         i = end;
         continue;
       }
-      let indentation = 0;
-      for (let start = 0; sourceLine[start] === " " || sourceLine[start] === "\t"; start++) {
-        indentation += sourceLine[start] === "\t" ? 4 - (indentation % 4) : 1;
-      }
-      if (indentation >= 4) {
+      if (/^ {4}/.test(sourceLine)) {
         i = end;
         continue;
       }

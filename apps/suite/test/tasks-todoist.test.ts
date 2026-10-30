@@ -209,6 +209,104 @@ describe("Todoist project drafts", () => {
 
 describe("content and labels", () => {
   it.each([
+    "\n",
+    "\r\n",
+    "\r",
+  ])("preserves fenced code in list containers with %j line endings", (newline) => {
+    for (const [opening, continuation] of [
+      ["- ", "  "],
+      ["+ ", "  "],
+      ["* ", "  "],
+      ["1. ", "   "],
+      ["12) ", "    "],
+      ["123456789. ", "           "],
+      ["  - ", "    "],
+      ["   -  ", "      "],
+      ["-\t", "\t"],
+      ["  -\t", "\t"],
+      ["> - ", ">   "],
+      ["- > ", "  > "],
+      ["- - ", "    "],
+      ["- > 2. ", "  >    "],
+    ]) {
+      for (const fence of ["~~~", "```ts"]) {
+        const literal = [
+          "Title",
+          "",
+          `${opening}${fence}`,
+          `${continuation}@literal`,
+          `${continuation}${fence.slice(0, 3)}`,
+        ].join(newline);
+        const result = parseTodoistCsv(
+          csv([
+            task({
+              CONTENT: `${literal}${newline}${continuation}@inside${newline}${newline}@real`,
+            }),
+          ]),
+          options,
+        ).tasks[0]!;
+        expect(result.title).toBe(`${literal}${newline}${continuation}`.trim());
+        expect(result.labels).toEqual(["inside", "real"]);
+      }
+    }
+  });
+
+  it.each([
+    "\n",
+    "\r\n",
+    "\r",
+  ])("preserves quoted list fences opened after item text with %j line endings", (newline) => {
+    const literal = [
+      "Title",
+      "",
+      "> 12) item",
+      ">",
+      ">     ~~~",
+      ">     @literal",
+      ">     ~~~",
+    ].join(newline);
+    const result = parseTodoistCsv(
+      csv([task({ CONTENT: `${literal}${newline}>     @inside${newline}${newline}@real` })]),
+      options,
+    ).tasks[0]!;
+    expect(result.title).toBe(`${literal}${newline}>`);
+    expect(result.labels).toEqual(["inside", "real"]);
+  });
+
+  it.each([
+    ["Title\n\n- ~~~\n  @literal\n  ~~~\n\n@real", "Title\n\n- ~~~\n  @literal\n  ~~~"],
+    [
+      "Title\n\n- item\n\n  ~~~\n  @literal\n  ~~~\n\n@real",
+      "Title\n\n- item\n\n  ~~~\n  @literal\n  ~~~",
+    ],
+    ["Title\n\n-\n  ~~~\n  @literal\n  ~~~\n\n@real", "Title\n\n-\n  ~~~\n  @literal\n  ~~~"],
+    ["Title\n\n-   \n  ~~~\n  @literal\n  ~~~\n\n@real", "Title\n\n-   \n  ~~~\n  @literal\n  ~~~"],
+    ["Title\n\n- ~~~\n\n  @literal\n  ~~~\n\n@real", "Title\n\n- ~~~\n\n  @literal\n  ~~~"],
+    ["Title\n\n- ~~~\n \n  @literal\n  ~~~\n\n@real", "Title\n\n- ~~~\n \n  @literal\n  ~~~"],
+    ["Title\n\n- ~~~\n  @literal\n\n@real", "Title\n\n- ~~~\n  @literal"],
+    ["Title\n\n- ~~~\n  @literal\n- @real", "Title\n\n- ~~~\n  @literal\n-"],
+    ["Title\n\n- ~~~\n  @literal\n @real", "Title\n\n- ~~~\n  @literal"],
+    ["Title\n\n- item\n  - ~~~\n    @literal\n  @real", "Title\n\n- item\n  - ~~~\n    @literal"],
+    [
+      "Title\n\n- ~~~\n  - ~~~\n  @literal\n  ~~~\n@real",
+      "Title\n\n- ~~~\n  - ~~~\n  @literal\n  ~~~",
+    ],
+    [
+      "Title\n\n- ~~~\n  > ~~~\n  @literal\n  ~~~\n@real",
+      "Title\n\n- ~~~\n  > ~~~\n  @literal\n  ~~~",
+    ],
+    [
+      "Title\n\n- ~~~\n      ~~~\n  @literal\n  ~~~\n@real",
+      "Title\n\n- ~~~\n      ~~~\n  @literal\n  ~~~",
+    ],
+    ["Title\n\n-     ~~~\n      @literal\n\n@real", "Title\n\n-     ~~~\n      @literal"],
+  ])("preserves list code through container boundaries: %s", (content, title) => {
+    const result = parseTodoistCsv(csv([task({ CONTENT: content })]), options).tasks[0]!;
+    expect(result.title).toBe(title);
+    expect(result.labels).toEqual(["real"]);
+  });
+
+  it.each([
     " \t",
     "  \t",
     "   \t",
@@ -216,7 +314,7 @@ describe("content and labels", () => {
     " \t\t",
   ])("preserves code with mixed space/tab indentation %j", (indent) => {
     for (const newline of ["\n", "\r\n", "\r"]) {
-      for (const prefix of ["", "> ", "> > "]) {
+      for (const prefix of ["", ">   ", "> > "]) {
         const literal = ["Title", "", `${prefix}${indent}@literal`].join(newline);
         const result = parseTodoistCsv(
           csv([task({ CONTENT: `${literal}${newline}${newline}@real` })]),
@@ -234,6 +332,19 @@ describe("content and labels", () => {
       options,
     ).tasks[0]!;
     expect(result.title).toBe("Title");
+    expect(result.labels).toEqual(["real"]);
+  });
+
+  it.each([
+    "> \t",
+    ">  \t",
+    ">  \t ",
+    ">\t",
+    "> \t> \t",
+  ])("imports labels when a quote consumes part of a tab stop: %j", (prefix) => {
+    const literal = `Title\n\n${prefix}`;
+    const result = parseTodoistCsv(csv([task({ CONTENT: `${literal}@real` })]), options).tasks[0]!;
+    expect(result.title).toBe(literal.trim());
     expect(result.labels).toEqual(["real"]);
   });
 
