@@ -10,6 +10,7 @@ import { DataFactory, documentUrl, Node, NS, node, Store } from "./rdf";
  * Establish or verify effective owner-only ACL/ACP access, including inherited
  * policy. Return true only when access is confirmed; unsupported or unreadable
  * policy must fail closed. The callback uses the caller's scoped access client.
+ * Bootstrap also verifies Preferences before persisting/linking its private pointer.
  */
 export type PrivateIndexAccess = (url: string, owner: string) => Promise<boolean>;
 
@@ -33,7 +34,10 @@ export class TypeIndex {
   async locations(forClass: string): Promise<Registration[]> {
     const profile = await this.io.read(documentUrl(this.webId));
     const anchor = node(this.webId, profile.dataset);
+    const preferencesUrl = anchor.iri(`${NS.PIM}preferencesFile`);
+    const preferences = preferencesUrl ? await this.io.optional(preferencesUrl) : undefined;
     const urls = new Set([
+      preferences && node(this.webId, preferences.dataset).iri(`${NS.SOLID}privateTypeIndex`),
       anchor.iri(`${NS.SOLID}privateTypeIndex`),
       anchor.iri(`${NS.SOLID}publicTypeIndex`),
     ]);
@@ -57,14 +61,29 @@ export class TypeIndex {
       throw new TypeError("A private Type Index ACL/ACP access verifier is required.");
     const profile = await this.io.read(documentUrl(this.webId));
     const anchor = node(this.webId, profile.dataset);
-    const existing = anchor.iri(`${NS.SOLID}privateTypeIndex`);
+    const settings = new URL("settings/", this.storage).href;
+    const preferencesLink = anchor.iri(`${NS.PIM}preferencesFile`);
+    const preferencesUrl = preferencesLink ?? new URL("prefs.ttl", settings).href;
+    const legacy = anchor.iri(`${NS.SOLID}privateTypeIndex`);
+    // Inspect unlinked default preferences before creating anything, but retain
+    // legacy profile indexes when no Preferences Document was advertised.
+    let preferences =
+      preferencesLink || !legacy ? await this.io.optional(preferencesUrl) : undefined;
+    const existing =
+      (preferences && node(this.webId, preferences.dataset).iri(`${NS.SOLID}privateTypeIndex`)) ??
+      legacy;
     if (existing) {
       const resource = await this.io.read(existing);
-      if (!(await this.ensurePrivateAccess(resource.url, this.webId)))
+      if ((await this.ensurePrivateAccess(resource.url, this.webId)) !== true)
         throw new ModelError(403, resource.url);
+      if (!preferencesLink && preferences) {
+        if ((await this.ensurePrivateAccess(preferences.url, this.webId)) !== true)
+          throw new ModelError(403, preferences.url);
+        anchor.setIri(`${NS.PIM}preferencesFile`, preferences.url);
+        await this.io.write(profile.url, profile.dataset, { etag: profile.etag });
+      }
       return this.io.read(resource.url);
     }
-    const settings = new URL("settings/", this.storage).href;
     const url = new URL("privateTypeIndex.ttl", settings).href;
     await this.io.container(settings);
     const dataset = new Store();
@@ -77,10 +96,27 @@ export class TypeIndex {
       if (!(error instanceof ModelError && error.status === 412)) throw error;
     }
     const resource = await this.io.read(url);
-    if (!(await this.ensurePrivateAccess(resource.url, this.webId)))
+    if ((await this.ensurePrivateAccess(resource.url, this.webId)) !== true)
       throw new ModelError(403, resource.url);
-    anchor.setIri(`${NS.SOLID}privateTypeIndex`, resource.url);
-    await this.io.write(profile.url, profile.dataset, { etag: profile.etag });
+    // Protect preferences before it contains the private pointer. A failed read
+    // is never treated as absence, and races are reconciled by register's loop.
+    if (!preferences)
+      preferences = await this.io.write(preferencesUrl, new Store(), { create: true });
+    if ((await this.ensurePrivateAccess(preferences.url, this.webId)) !== true)
+      throw new ModelError(403, preferences.url);
+    // Access-control writes may advance the document validator.
+    preferences = await this.io.read(preferences.url);
+    const concurrentIndex = node(this.webId, preferences.dataset).iri(
+      `${NS.SOLID}privateTypeIndex`,
+    );
+    if (concurrentIndex && concurrentIndex !== resource.url)
+      throw new ModelError(412, preferences.url, preferences.etag);
+    node(this.webId, preferences.dataset).setIri(`${NS.SOLID}privateTypeIndex`, resource.url);
+    await this.io.write(preferences.url, preferences.dataset, { etag: preferences.etag });
+    if (!preferencesLink) {
+      anchor.setIri(`${NS.PIM}preferencesFile`, preferences.url);
+      await this.io.write(profile.url, profile.dataset, { etag: profile.etag });
+    }
     return this.io.read(resource.url);
   }
   /** Idempotent by (class, predicate, location). Re-read and merge on bounded 412 conflicts. */

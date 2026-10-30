@@ -20,6 +20,7 @@ import { now, Pod, storage, webId } from "./pod";
 
 const projects = `${storage}tasks/projects/`;
 const indexUrl = `${storage}settings/privateTypeIndex.ttl`;
+const preferencesUrl = `${storage}settings/prefs.ttl`;
 const initializationState = `${NS.SCHEDULING}initializationState`;
 const initializationOwner = `${NS.SCHEDULING}initializationOwner`;
 const cleanupResources = `${NS.SCHEDULING}cleanupResources`;
@@ -68,11 +69,20 @@ describe("project discovery and first use", () => {
     const pod = new Pod();
     const root = `${storage}tasks/`;
     let protectedRoot = false;
+    let release = () => {};
+    let entered = () => {};
+    const protection = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const checking = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
     const verify = vi.fn(async (url: string, owner: string) => {
       expect(url).toBe(root);
       expect(owner).toBe(webId);
       expect((await pod.dataset(root)).size).toBe(1);
-      await Promise.resolve();
+      entered();
+      await protection;
       protectedRoot = true;
       return true;
     });
@@ -82,7 +92,12 @@ describe("project discovery and first use", () => {
       return undefined;
     };
     const tasks = store(pod, { ensurePrivateTasksAccess: verify, typeIndex: false });
-    await tasks.bootstrapInbox();
+    const bootstrap = tasks.bootstrapInbox();
+    await checking;
+    expect(pod.files.has(projects)).toBe(false);
+    expect(pod.mutations().map((request) => request.url)).toEqual([root]);
+    release();
+    await bootstrap;
     const writes = pod.mutations().length;
     verify.mockResolvedValue(false);
     await expect(tasks.bootstrapInbox()).rejects.toMatchObject({ status: 403, url: root });
@@ -1105,6 +1120,198 @@ describe("Type Index merge and bootstrap", () => {
   const desired = [
     { forClass: `${NS.WF}Tracker`, location: projects, kind: "instanceContainer" as const },
   ];
+  it.each([
+    "absent",
+    "unlinked",
+    "linked-missing",
+    "linked",
+  ])("bootstraps the private pointer in Preferences (%s), preserving document data", async (state) => {
+    const pod = new Pod();
+    const prefs = state.startsWith("linked") ? `${storage}settings/custom.ttl` : preferencesUrl;
+    if (state.startsWith("linked"))
+      pod.seed(`${storage}profile/card`, `<${webId}> <${NS.PIM}preferencesFile> <${prefs}>.`);
+    if (state === "unlinked" || state === "linked")
+      pod.seed(prefs, `<${webId}> <${NS.DCT}title> "Keep preferences".`);
+    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId, pod.ensurePrivateIndexAccess);
+    await index.register(desired);
+    const profile = node(webId, await pod.dataset(`${storage}profile/card`));
+    expect(profile.iri(`${NS.PIM}preferencesFile`)).toBe(prefs);
+    expect(profile.iri(`${NS.SOLID}privateTypeIndex`)).toBeUndefined();
+    const preferences = node(webId, await pod.dataset(prefs));
+    expect(preferences.iri(`${NS.SOLID}privateTypeIndex`)).toBe(indexUrl);
+    if (state === "unlinked" || state === "linked")
+      expect(preferences.text(`${NS.DCT}title`)).toBe("Keep preferences");
+    expect(pod.privatePolicies.has(prefs)).toBe(true);
+    const writes = pod.mutations().length;
+    await index.register(desired);
+    expect(pod.mutations()).toHaveLength(writes);
+  });
+  it("discovers Preferences and legacy indexes, and registers in the Preferences index", async () => {
+    const pod = new Pod();
+    pod.seed(`${storage}settings/`, `<${storage}settings/> a <${NS.LDP}BasicContainer>.`);
+    const prefs = `${storage}settings/custom.ttl`;
+    const privateIndex = `${storage}settings/issues.ttl`;
+    const legacyIndex = `${storage}settings/legacy.ttl`;
+    const publicIndex = `${storage}settings/public.ttl`;
+    pod.seed(
+      `${storage}profile/card`,
+      `<${webId}>
+      <${NS.PIM}preferencesFile> <${prefs}>;
+      <${NS.SOLID}privateTypeIndex> <${legacyIndex}>;
+      <${NS.SOLID}publicTypeIndex> <${publicIndex}>.`,
+    );
+    pod.seed(prefs, `<${webId}> <${NS.SOLID}privateTypeIndex> <${privateIndex}>.`);
+    for (const [url, slug] of [
+      [privateIndex, "issues"],
+      [legacyIndex, "legacy"],
+      [publicIndex, "public"],
+    ] as const) {
+      const projectUrl = `${storage}${slug}.ttl`;
+      const tracker = createTracker(projectUrl, slug, `${storage}${slug}/`, [webId], now);
+      pod.seed(projectUrl, await serialize(tracker.dataset));
+      pod.seed(
+        url,
+        `<${url}#registration> a <${NS.SOLID}TypeRegistration>;
+        <${NS.SOLID}forClass> <${NS.WF}Tracker>; <${NS.SOLID}instance> <${projectUrl}#this>.`,
+      );
+    }
+    expect((await store(pod).listProjects()).map((project) => project.tracker.title)).toEqual([
+      "issues",
+      "legacy",
+      "public",
+    ]);
+    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId, pod.ensurePrivateIndexAccess);
+    await index.register(desired);
+    expect(await index.locations(`${NS.WF}Tracker`)).toHaveLength(4);
+    expect(pod.mutations().map((request) => request.url)).toEqual([privateIndex]);
+    expect(pod.files.has(indexUrl)).toBe(false);
+  });
+  it.each([
+    false,
+    true,
+  ])("reuses a legacy profile index (Preferences linked: %s)", async (linked) => {
+    const pod = new Pod();
+    pod.seed(`${storage}settings/`, `<${storage}settings/> a <${NS.LDP}BasicContainer>.`);
+    pod.seed(
+      `${storage}profile/card`,
+      `<${webId}> <${NS.SOLID}privateTypeIndex> <${indexUrl}>.
+      ${linked ? `<${webId}> <${NS.PIM}preferencesFile> <${preferencesUrl}>.` : ""}`,
+    );
+    if (linked) pod.seed(preferencesUrl, `<${webId}> <${NS.DCT}title> "Preferences".`);
+    pod.seed(indexUrl, `<${indexUrl}> a <${NS.SOLID}TypeIndex>.`);
+    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId, pod.ensurePrivateIndexAccess);
+    await index.register(desired);
+    expect(await index.locations(`${NS.WF}Tracker`)).toEqual(desired);
+    expect(pod.mutations().map((request) => request.url)).toEqual([indexUrl]);
+  });
+  it.each([
+    false,
+    true,
+  ])("relinks an existing default Preferences index only after privacy verification (%s)", async (protectedPrefs) => {
+    const pod = new Pod();
+    pod.seed(`${storage}settings/`, `<${storage}settings/> a <${NS.LDP}BasicContainer>.`);
+    pod.seed(preferencesUrl, `<${webId}> <${NS.SOLID}privateTypeIndex> <${indexUrl}>.`);
+    pod.seed(indexUrl, `<${indexUrl}> a <${NS.SOLID}TypeIndex>.`);
+    const verify = vi.fn(async (url: string) => url !== preferencesUrl || protectedPrefs);
+    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId, verify);
+    if (protectedPrefs) {
+      await index.register(desired);
+      expect(await index.locations(`${NS.WF}Tracker`)).toEqual(desired);
+      expect(
+        node(webId, await pod.dataset(`${storage}profile/card`)).iri(`${NS.PIM}preferencesFile`),
+      ).toBe(preferencesUrl);
+    } else {
+      await expect(index.register(desired)).rejects.toMatchObject({
+        status: 403,
+        url: preferencesUrl,
+      });
+      expect(pod.mutations()).toEqual([]);
+    }
+  });
+  it.each([
+    401, 403, 500,
+  ])("does not bootstrap over unreadable Preferences (%s)", async (status) => {
+    const pod = new Pod();
+    pod.seed(
+      `${storage}profile/card`,
+      `<${webId}> <${NS.PIM}preferencesFile> <${preferencesUrl}>.`,
+    );
+    pod.intercept = (request) =>
+      request.url === preferencesUrl ? new Response(null, { status }) : undefined;
+    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId, pod.ensurePrivateIndexAccess);
+    await expect(index.locations(`${NS.WF}Tracker`)).rejects.toMatchObject({ status });
+    await expect(index.register(desired)).rejects.toMatchObject({ status });
+    expect(pod.mutations()).toEqual([]);
+  });
+  it("fails closed before writing a private pointer to unprotected Preferences", async () => {
+    const pod = new Pod();
+    const index = new TypeIndex(
+      new RdfIO(pod.fetch),
+      storage,
+      webId,
+      async (url) => url !== preferencesUrl,
+    );
+    await expect(index.register(desired)).rejects.toMatchObject({
+      status: 403,
+      url: preferencesUrl,
+    });
+    expect((await pod.dataset(preferencesUrl)).size).toBe(0);
+    expect(
+      node(webId, await pod.dataset(`${storage}profile/card`)).iri(`${NS.PIM}preferencesFile`),
+    ).toBeUndefined();
+    expect(
+      (await pod.dataset(indexUrl)).match(null, DataFactory.namedNode(`${NS.SOLID}forClass`)).size,
+    ).toBe(0);
+  });
+  it.each([
+    "create",
+    "update",
+  ])("merges a concurrent Preferences %s without dropping foreign data", async (phase) => {
+    const pod = new Pod();
+    let raced = false;
+    pod.intercept = async (request) => {
+      if (
+        !raced &&
+        request.url === preferencesUrl &&
+        request.method === "PUT" &&
+        request.headers.has(phase === "create" ? "If-None-Match" : "If-Match")
+      ) {
+        raced = true;
+        const dataset = phase === "create" ? new Store() : await pod.dataset(preferencesUrl);
+        node(webId, dataset).setText(`${NS.DCT}title`, "Concurrent preference");
+        pod.seed(preferencesUrl, await serialize(dataset));
+        return new Response(null, { status: 412 });
+      }
+      return undefined;
+    };
+    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId, pod.ensurePrivateIndexAccess);
+    await index.register(desired);
+    expect(raced).toBe(true);
+    expect(node(webId, await pod.dataset(preferencesUrl)).text(`${NS.DCT}title`)).toBe(
+      "Concurrent preference",
+    );
+    expect(await index.locations(`${NS.WF}Tracker`)).toEqual(desired);
+  });
+  it("honours a concurrent private-index pointer installed while Preferences is protected", async () => {
+    const pod = new Pod();
+    const concurrent = `${storage}settings/concurrent.ttl`;
+    const verify = async (url: string, owner: string) => {
+      if (url === preferencesUrl) {
+        pod.seed(concurrent, `<${concurrent}> a <${NS.SOLID}TypeIndex>.`);
+        pod.seed(preferencesUrl, `<${webId}> <${NS.SOLID}privateTypeIndex> <${concurrent}>.`);
+      }
+      return pod.ensurePrivateIndexAccess(url, owner);
+    };
+    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId, verify);
+    await index.register(desired);
+    expect(node(webId, await pod.dataset(preferencesUrl)).iri(`${NS.SOLID}privateTypeIndex`)).toBe(
+      concurrent,
+    );
+    expect(await index.locations(`${NS.WF}Tracker`)).toEqual(desired);
+    expect(
+      (await pod.dataset(indexUrl)).match(null, DataFactory.namedNode(`${NS.SOLID}forClass`)).size,
+    ).toBe(0);
+  });
   it("fails closed without an ACL/ACP verifier before creating or linking an index", async () => {
     const pod = new Pod();
     const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId);
@@ -1117,10 +1324,11 @@ describe("Type Index merge and bootstrap", () => {
       pod.privatePolicies.has(url)
         ? Promise.resolve(new Response(null, { status: 403 }))
         : pod.fetch(url);
-    let checks = 0;
+    const checked = new Set<string>();
     const protect = vi.fn(async (url: string, owner: string) => {
       expect(owner).toBe(webId);
-      if (checks++ === 0) {
+      if (!checked.has(url)) {
+        checked.add(url);
         expect((await anonymous(url)).status).toBe(200);
         expect(
           node(webId, await pod.dataset(`${storage}profile/card`)).iri(
@@ -1147,7 +1355,7 @@ describe("Type Index merge and bootstrap", () => {
     await index.register(desired);
     expect((await anonymous(indexUrl)).status).toBe(403);
     await index.register(desired);
-    expect(protect).toHaveBeenCalledTimes(2);
+    expect(protect).toHaveBeenCalledTimes(3);
     // Public/inherited access after a policy change must block even an idempotent registration.
     pod.privatePolicies.clear();
     const writes = pod.mutations().length;
