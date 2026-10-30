@@ -3,7 +3,7 @@
 // AUTHORED-BY Codex — preferences-based index bootstrap
 
 import { RedirectRefusedError } from "@jeswr/guarded-fetch";
-import { DataFactory } from "n3";
+import { DataFactory, Store } from "n3";
 import { assert, describe, expect, it, vi } from "vitest";
 import { buildDocument, parseDocument } from "../../src/apps/docs/lib/model/document.js";
 import {
@@ -21,7 +21,11 @@ import {
   type Snapshot,
   type StoredDocument,
 } from "../../src/apps/docs/lib/model/store.js";
-import { ProfileTypeIndexAnchor } from "../../src/apps/docs/lib/model/type-index.js";
+import {
+  ProfileTypeIndexAnchor,
+  TypeRegistration,
+} from "../../src/apps/docs/lib/model/type-index.js";
+import { DOCUMENT_CLASS } from "../../src/apps/docs/lib/model/vocab.js";
 import { mockFetch, privateIndexPolicy, type RecordedCall, turtleToStore } from "./helpers.js";
 
 const POD = "https://pod.example/";
@@ -415,13 +419,39 @@ describe("listing", () => {
     ]);
     expect(s.calls.some((c) => c.url.includes("evil.example"))).toBe(false);
   });
-  it("ignores unregistered legacy containers and absent/forbidden canonical locations", async () => {
-    for (const status of [403, 404]) {
+  it("ignores unregistered legacy containers and absent canonical locations", async () => {
+    for (const status of [404]) {
       const s = await server();
       const f: typeof fetch = async (url, init) =>
         String(url) === `${POD}docs/` ? new Response(null, { status }) : s.fetchImpl(url, init);
       expect(await new DocsStore(POD, WEBID, f).list()).toEqual([]);
       expect(s.calls.some((c) => c.url === `${POD}pod-docs/`)).toBe(false);
+    }
+  });
+  it.each([
+    "docs/",
+    "pod-docs/",
+  ])("round47 a denied %s container fails the listing instead of returning partial or empty rows", async (slug) => {
+    const s = await server();
+    const dataset = new Store();
+    const registration = new TypeRegistration(`${INDEX}#legacy`, dataset, DataFactory);
+    registration.markRegistration();
+    registration.forClasses.add(DOCUMENT_CLASS);
+    registration.instanceContainers.add(`${POD}pod-docs/`);
+    s.resources.set(INDEX, {
+      body: await serializeTurtle(dataset),
+      etag: '"i"',
+      contentType: "text/turtle",
+    });
+    s.resources.set(`${POD}docs/`, {
+      body: listing([DOC]),
+      etag: '"c"',
+      contentType: "text/turtle",
+    });
+    for (const status of [401, 403, 500]) {
+      const f: typeof fetch = async (url, init) =>
+        String(url) === `${POD}${slug}` ? new Response(null, { status }) : s.fetchImpl(url, init);
+      await expect(new DocsStore(POD, WEBID, f).list()).rejects.toMatchObject({ status });
     }
   });
   it("handles a dataset with no container and propagates server failures", async () => {

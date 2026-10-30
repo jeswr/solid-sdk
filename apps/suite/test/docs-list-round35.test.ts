@@ -1,11 +1,18 @@
 // @vitest-environment jsdom
 // AUTHORED-BY Codex
 import { TooltipProvider } from "@jeswr/suite-ui";
+import { Container, Resource } from "@solid/object";
+import { DataFactory, Store } from "n3";
 import { act, createElement, type ReactNode } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { DocumentList } from "../src/apps/docs/components/document-list";
-import type { DocumentEntry } from "../src/apps/docs/lib/model";
+import {
+  buildDocument,
+  DocsStore,
+  type DocumentEntry,
+  serializeTurtle,
+} from "../src/apps/docs/lib/model";
 import type { PodSession } from "../src/lib/session/pod-session";
 
 const state = vi.hoisted(() => ({
@@ -125,6 +132,46 @@ function button(label: string) {
   if (!found) throw new Error(`Missing button: ${label}`);
   return found;
 }
+
+it.each([
+  401, 403,
+])("round47 Refresh reports a denied container (%s) and Retry restores documents", async (status) => {
+  const podRoot = "https://pod.test/";
+  const container = `${podRoot}docs/`;
+  const url = `${container}plan.ttl`;
+  const dataset = new Store();
+  const listing = new Container(container, dataset, DataFactory);
+  listing.type.add("http://www.w3.org/ns/ldp#BasicContainer");
+  listing.contains.add(new Resource(url, dataset, DataFactory));
+  const bodies = new Map([
+    [session.webId, ""],
+    [container, await serializeTurtle(dataset)],
+    [url, await serializeTurtle(buildDocument(url, { title: "Plan", body: "Body" }))],
+  ]);
+  let denied = false;
+  const fetchImpl: typeof fetch = async (input) => {
+    if (String(input) === container && denied) return new Response(null, { status });
+    return new Response(bodies.get(String(input)), { headers: { "content-type": "text/turtle" } });
+  };
+  const store = new DocsStore(podRoot, session.webId, fetchImpl);
+  state.store.list.mockImplementation(() => store.list());
+  const { host, root } = await mount();
+  try {
+    expect(host.querySelector("tbody")?.textContent).toContain("Plan");
+    denied = true;
+    await act(async () => button("Refresh documents").click());
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain(
+      "We couldn't load your documents",
+    );
+    expect(host.textContent).not.toContain("No documents yet");
+    denied = false;
+    await act(async () => button("Retry").click());
+    expect(host.querySelector("tbody")?.textContent).toContain("Plan");
+    expect(host.querySelector('[role="alert"]')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
 
 it.each([
   "Rename",

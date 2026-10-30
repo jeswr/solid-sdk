@@ -1105,6 +1105,16 @@ function referenceMask<ParserOutput, RendererOutput>(
       : raw;
   });
 }
+
+/** CommonMark gives an inner link precedence; image alt text is independent. */
+function containsLink(tokens: MarkdownToken[]): boolean {
+  return tokens.some(
+    (token) =>
+      token.type === "link" ||
+      (token.type !== "image" && containsLink((token.tokens ?? []) as MarkdownToken[])),
+  );
+}
+
 markdown.instance.use({
   tokenizer: {
     lheading: setextHeading,
@@ -1136,7 +1146,7 @@ markdown.instance.use({
         other: { ...this.rules.other, outputLinkReplace: /(?!)/g },
       };
       const token = markdown.instance.Tokenizer.prototype.link.call({ ...this, rules }, source);
-      if (!token) return;
+      if (!token || (token.type === "link" && containsLink(token.tokens))) return;
       token.href = decodeMarkdownString(token.href);
       token.title = token.title ? decodeMarkdownString(token.title) : null;
       return token;
@@ -1166,11 +1176,13 @@ markdown.instance.use({
         other: { ...this.rules.other, outputLinkReplace: /(?!)/g },
       };
       // Definitions already contain decoded attributes. Do not decode them again.
-      return markdown.instance.Tokenizer.prototype.reflink.call(
+      const token = markdown.instance.Tokenizer.prototype.reflink.call(
         { ...this, rules },
         source,
         new Proxy(links, { get: (definitions, key: string) => definitions[referenceLabel(key)] }),
       );
+      if (token?.type === "link" && containsLink(token.tokens)) return;
+      return token;
     },
     autolink(source) {
       const token = markdown.instance.Tokenizer.prototype.autolink.call(this, source);

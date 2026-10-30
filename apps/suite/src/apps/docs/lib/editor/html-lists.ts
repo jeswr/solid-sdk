@@ -28,12 +28,28 @@ export function normaliseHtmlLists(root: ParentNode) {
       const label = checks[index]?.closest("label");
       checks[index]?.remove();
       if (label) label.replaceWith(...label.childNodes);
-      // Tiptap renders task content in a div; it is a presentation wrapper.
-      for (const wrapper of item.querySelectorAll(":scope > div"))
-        wrapper.replaceWith(...wrapper.childNodes);
     });
   }
-  const blocks = "h1,h2,h3,h4,h5,h6,blockquote,pre,ul,ol,table,hr,img";
+  const blocks = "p,h1,h2,h3,h4,h5,h6,blockquote,pre,ul,ol,table,hr,img";
+  // A div may hold prose, blocks, or both. Wrap each inline run before lifting
+  // it so sibling/nested div boundaries survive both schema parsing and the
+  // HTML sanitizer. Work inside out, for ordinary lists as well as checklists.
+  for (const wrapper of Array.from(root.querySelectorAll("li div")).reverse()) {
+    let paragraph: HTMLParagraphElement | undefined;
+    for (const child of Array.from(wrapper.childNodes)) {
+      if (child instanceof Element && child.matches(blocks)) paragraph = undefined;
+      else if (!paragraph && child.nodeType === 3 && !child.textContent?.trim()) child.remove();
+      else {
+        if (!paragraph) {
+          paragraph = wrapper.ownerDocument.createElement("p");
+          child.before(paragraph);
+        }
+        paragraph.append(child);
+      }
+    }
+    if (!wrapper.hasChildNodes()) wrapper.append(wrapper.ownerDocument.createElement("p"));
+    wrapper.replaceWith(...wrapper.childNodes);
+  }
   for (const item of root.querySelectorAll("li")) {
     const first = Array.from(item.childNodes).find(
       (node) => node.nodeType === 1 || (node.nodeType === 3 && node.textContent?.trim()),

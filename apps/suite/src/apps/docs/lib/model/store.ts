@@ -199,7 +199,9 @@ export class DocsStore {
         const { dataset } = await readRdf(url, this.fetchImpl);
         listing = new ContainerDataset(dataset, DataFactory);
       } catch (e) {
-        if (e instanceof RdfFetchError && (e.status === 404 || e.status === 403)) continue;
+        // Only a missing container proves absence. An inaccessible canonical
+        // or registered legacy container must fail the whole listing.
+        if (e instanceof RdfFetchError && e.status === 404) continue;
         throw e;
       }
       for (const resource of listing.container?.contains ?? []) {
