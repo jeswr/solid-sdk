@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { UploadDock } from "../src/components/upload-dock.js";
@@ -16,6 +16,8 @@ const items: UploadItem[] = Array.from({ length: 10_000 }, (_, index) => ({
 }));
 const controls = { onPause: vi.fn(), onResume: vi.fn(), onCancel: vi.fn(), onRetry: vi.fn() };
 beforeEach(() => {
+  // Keep Testing Library's async queries moving while owning the virtualizer timers.
+  vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (
     this: HTMLElement,
   ) {
@@ -56,9 +58,20 @@ beforeEach(() => {
     },
   });
 });
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
+afterEach(async () => {
+  try {
+    cleanup();
+    // TanStack's scroll-reset debounce can remain queued after unmount.
+    await act(async () => {
+      await vi.runOnlyPendingTimersAsync();
+    });
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.clearAllTimers();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  }
 });
 
 test("a collapsed 10,000-file queue mounts no rows, including on progress updates", () => {
@@ -106,7 +119,7 @@ test.each([
   "done",
   "skipped",
 ] as const)("an all-%s queue retains a scroll region in the tab order", async (status) => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
   render(
     <>
       <UploadDock {...controls} items={items.map((item) => ({ ...item, status }))} />
@@ -138,7 +151,7 @@ test.each([
   "Home",
   "End",
 ])("completed mounted rows allow Tab into the viewport and %s to offscreen Pause/Cancel", async (key) => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
   render(
     <UploadDock
       {...controls}
@@ -166,7 +179,7 @@ test.each([
   true,
   false,
 ])("mounted controls are the tab entry when canPause=%s", async (canPause) => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
   render(<UploadDock {...controls} items={items} canPause={canPause} />);
   const viewport = screen.getByRole("region", { name: "Upload files" });
   expect(viewport.tabIndex).toBe(-1);
