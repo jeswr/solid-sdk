@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { NS } from "@jeswr/suite-vocab";
+import type { Term } from "@rdfjs/types";
 import { NamedGraphDataset } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
 import { describe, expect, it, vi } from "vitest";
@@ -111,6 +112,64 @@ describe("money validation and pure helpers", () => {
 });
 
 describe("typed money RDF", () => {
+  it.each([
+    "transaction",
+    "balance",
+  ] as const)("replaces exclusively owned legacy money for a %s without stale values", async (kind) => {
+    const record = kind === "transaction" ? row : balance;
+    const document = await model.parseMoney(
+      `
+      <${record.id}> a <${kind === "transaction" ? model.V.transactionClass : model.V.balanceClass}>;
+        <${kind === "transaction" ? model.V.account : model.V.balanceAccount}> <${account}>;
+        <${model.V.postingTime}> "${row.postingTime}";
+        <${model.V.description}> "${row.description}";
+        <${model.V.amountNode}> <#amount> .
+      <#amount> a <${model.V.amountClass}>; <${NS.FINANCE}amount> "12.5";
+        <${NS.FINANCE}currency> "GBP"; <${model.V.label}> "Keep me" .
+      `,
+      base,
+    );
+    expect(document.money(document.node(record.id))).toEqual({ amount: "12.5", currency: "GBP" });
+    const changed = { amount: "50", currency: "EUR" };
+    if (kind === "transaction") model.putTransaction(document, { ...row, ...changed });
+    else model.putBalance(document, { ...balance, ...changed });
+    expect(document.node(record.id).amountNode?.value).toBe(`${base}#amount`);
+    expect(document.money(document.node(record.id))).toEqual(changed);
+    const loaded = await model.parseMoney(await model.serialiseMoney(document), base);
+    expect(loaded.money(loaded.node(record.id))).toEqual(changed);
+    expect(loaded.node(`${base}#amount`).label).toBe("Keep me");
+    for (const predicate of [`${NS.FINANCE}amount`, `${NS.FINANCE}currency`])
+      expect(loaded.dataset.match(null, DataFactory.namedNode(predicate), null).size).toBe(0);
+    loaded.node(`${base}#amount`).amount = undefined;
+    loaded.node(`${base}#amount`).currency = undefined;
+    expect(() => loaded.money(loaded.node(record.id))).toThrow("Incomplete money RDF record");
+  });
+  it.each([
+    "amount",
+    "currency",
+  ] as const)("clears canonical and legacy %s values without reviving fallback data", async (field) => {
+    const document = await model.parseMoney(
+      `
+      <${row.id}> a <${model.V.transactionClass}>; <${model.V.account}> <${account}>;
+        <${model.V.postingTime}> "${row.postingTime}"; <${model.V.amountNode}> _:amount .
+      _:amount <${NS.FINANCE}amount> "12.5"; <${NS.FINANCE}currency> "GBP";
+        <${model.V.amount}> "50"; <${model.V.currency}> "EUR";
+        <${model.V.label}> "Keep me" .
+      `,
+      base,
+    );
+    const amountId = document.node(row.id).amountNode as Term;
+    const amount = document.node(amountId);
+    expect(document.money(document.node(row.id))).toEqual({ amount: "50", currency: "EUR" });
+    amount[field] = undefined;
+    expect(amount[field]).toBeUndefined();
+    expect(amount.label).toBe("Keep me");
+    for (const predicate of [model.V[field], `${NS.FINANCE}${field}`])
+      expect(document.dataset.match(amountId, DataFactory.namedNode(predicate), null).size).toBe(0);
+    expect(() => document.transactions()).toThrow("Incomplete money RDF record");
+    const loaded = await model.parseMoney(await model.serialiseMoney(document), base);
+    expect(() => loaded.transactions()).toThrow("Incomplete money RDF record");
+  });
   it.each(["named", "blank"])("isolates edits to shared %s monetary nodes", (kind) => {
     const document = new model.MoneyDocument();
     model.putTransaction(document, row);

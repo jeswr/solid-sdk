@@ -198,12 +198,14 @@ export class MoneyNode extends TermWrapper {
     return OptionalFrom.subjectPredicate(this, V.currency, LiteralAs.string);
   }
   set currency(value: string | undefined) {
+    OptionalAs.object(this, `${NS.FINANCE}currency`, undefined, LiteralFrom.string);
     OptionalAs.object(this, V.currency, value, LiteralFrom.string);
   }
   get amount(): string | undefined {
     return OptionalFrom.subjectPredicate(this, V.amount, rdfAmount);
   }
   set amount(value: string | undefined) {
+    OptionalAs.object(this, `${NS.FINANCE}amount`, undefined, LiteralFrom.string);
     OptionalAs.object(this, V.amount, value, (text, factory) =>
       LiteralFrom.datatypeTuple([`${NS.XSD}decimal`, text], factory),
     );
