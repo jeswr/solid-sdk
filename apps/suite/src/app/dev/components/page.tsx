@@ -13,6 +13,11 @@ export default function ComponentsPage() {
             {name}
           </a>
         ))}
+        <a href="/dev/components/empty-state">EmptyState</a>
+        <a href="/dev/components/error-state">ErrorState</a>
+        <a href="/dev/components/loading-skeleton">LoadingSkeleton presets</a>
+        <a href="/dev/components/toasts">Toast lifetimes</a>
+        <a href="/dev/components/render-async">Async list lifecycle</a>
         <a href="/dev/components/data-table">DataTable</a>
         <a href="/dev/components/file-grid">FileGrid</a>
         <a href="/dev/components/toolbar">Toolbar</a>

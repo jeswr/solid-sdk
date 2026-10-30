@@ -104,7 +104,7 @@ test("details actions, empty filters and retry are keyboard paths", async ({ pag
   await page.keyboard.press("Enter");
   await expect(filtered.getByRole("heading", { name: "Mira Osei" })).toBeVisible();
   const error = page.locator('[data-fixture-state="Error · unreachable"]');
-  await error.getByRole("button", { name: "Try again" }).focus();
+  await error.getByRole("button", { name: "Retry" }).focus();
   await page.keyboard.press("Enter");
   await expect(error.getByRole("alert")).toHaveCount(0);
   await accessible(page);
