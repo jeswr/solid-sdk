@@ -299,8 +299,20 @@ export function putAccount(document: MoneyDocument, value: Account): void {
   node.types.add(V.accountClass);
   node.label = value.label;
 }
-function putMoney(document: MoneyDocument, id: string, value: Money): string {
-  const amountId = `${id}-amount`;
+function putMoney(document: MoneyDocument, id: string, value: Money): Term {
+  const owner = DataFactory.namedNode(id);
+  let amountId = document.node(id).amountNode;
+  if (
+    amountId === undefined ||
+    amountId.equals(owner) ||
+    document.node(amountId).amountNode !== undefined ||
+    [...document.dataset.match(null, null, amountId)].some(
+      (quad) => !quad.subject.equals(owner) || quad.predicate.value !== V.amountNode,
+    )
+  ) {
+    // Blank nodes cannot overlap record IRIs; the store reserves existing blank labels too.
+    amountId = new Store([...document.dataset]).createBlankNode();
+  }
   const amount = document.node(amountId);
   amount.types.add(V.amountClass);
   amount.amount = value.amount;

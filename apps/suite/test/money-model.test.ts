@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { NS } from "@jeswr/suite-vocab";
+import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
 import * as model from "../src/apps/money/lib/model";
 
@@ -109,6 +110,68 @@ describe("money validation and pure helpers", () => {
 });
 
 describe("typed money RDF", () => {
+  it.each(["named", "blank"])("isolates edits to shared %s monetary nodes", (kind) => {
+    const document = new model.MoneyDocument();
+    model.putTransaction(document, row);
+    model.putBalance(document, balance);
+    const shared =
+      kind === "named" ? DataFactory.namedNode(`${row.id}-amount`) : DataFactory.blankNode();
+    document.node(shared).types.add(model.V.amountClass);
+    document.node(shared).amount = row.amount;
+    document.node(shared).currency = row.currency;
+    document.node(row.id).amountNode = shared;
+    document.node(balance.id).amountNode = shared;
+    const changed = { ...row, amount: "25", currency: "USD" };
+    model.putTransaction(document, changed);
+    expect(document.transactions()).toEqual([changed]);
+    expect(document.balances()).toEqual([{ ...balance, amount: row.amount }]);
+    expect(document.node(row.id).amountNode?.equals(shared)).toBe(false);
+    // The balance now owns the original node exclusively and may update it in place.
+    model.putBalance(document, balance);
+    expect(document.node(balance.id).amountNode?.equals(shared)).toBe(true);
+    expect(document.transactions()).toEqual([changed]);
+    expect(document.balances()).toEqual([balance]);
+  });
+  it("allocates distinct amounts for transaction IDs that contain the old amount suffix", () => {
+    const document = new model.MoneyDocument();
+    const next = { ...row, id: `${row.id}-amount`, amount: "42", currency: "EUR" };
+    model.putTransaction(document, row);
+    model.putTransaction(document, next);
+    expect(document.transactions()).toEqual([row, next]);
+    expect(document.node(row.id).amountNode?.termType).toBe("BlankNode");
+    expect(document.node(next.id).amountNode?.termType).toBe("BlankNode");
+    expect(document.node(row.id).amountNode).not.toEqual(document.node(next.id).amountNode);
+  });
+  it("does not reuse amounts with another record identity or unrelated incoming references", () => {
+    const document = new model.MoneyDocument();
+    model.putTransaction(document, row);
+    const otherRow = { ...row, id: `${row.id}-amount`, amount: "42" };
+    model.putTransaction(document, otherRow);
+    document.node(row.id).amountNode = otherRow.id;
+    model.putTransaction(document, row);
+    expect(document.node(row.id).amountNode?.value).not.toBe(otherRow.id);
+    const amount = DataFactory.namedNode(`${row.id}-external-money`);
+    document.node(amount).amount = row.amount;
+    document.node(amount).currency = row.currency;
+    document.node(row.id).amountNode = amount;
+    document.node(row.id).payee = amount.value;
+    model.putTransaction(document, { ...row, payee: amount.value });
+    expect(document.node(row.id).amountNode?.equals(amount)).toBe(false);
+    // A self-referencing legacy amount must also be separated from its record.
+    document.node(row.id).amountNode = row.id;
+    model.putTransaction(document, row);
+    expect(document.node(row.id).amountNode?.value).not.toBe(row.id);
+  });
+  it("avoids blank node labels already present in a loaded document", () => {
+    const document = new model.MoneyDocument();
+    const existing = DataFactory.blankNode("b0");
+    document.node(existing).amount = "999";
+    document.node(existing).currency = "EUR";
+    model.putTransaction(document, row);
+    expect(document.node(row.id).amountNode?.equals(existing)).toBe(false);
+    expect(document.node(existing).amount).toBe("999");
+    expect(document.node(existing).currency).toBe("EUR");
+  });
   it("round-trips accounts, latest balances, transactions, categories and exact schema decimal values", async () => {
     const document = new model.MoneyDocument();
     model.putAccount(document, { id: account, label: "Current" });

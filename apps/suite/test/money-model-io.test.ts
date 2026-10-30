@@ -69,13 +69,50 @@ describe("injected money store", () => {
     const document = new model.MoneyDocument();
     model.putTransaction(document, row);
     model.putTransaction(document, { ...row, id: `${row.id}-other` });
-    document.node(`${row.id}-other`).amountNode = `${row.id}-amount`;
+    document.node(`${row.id}-other`).amountNode = document.node(row.id).amountNode;
     await store.write("transactions/2026-10.ttl", document, { create: true });
     await store.deleteTransaction("tx", row.postingTime);
     expect((await store.read("transactions/2026-10.ttl")).document.transactions()[0]?.amount).toBe(
       row.amount,
     );
     await store.deleteTransaction("empty", row.postingTime);
+  });
+  it.each([
+    false,
+    true,
+  ])("keeps both suffix-keyed transactions readable after deleting either (%s)", async (deleteFirst) => {
+    const { store } = pod();
+    const next = { ...row, id: `${row.id}-amount`, amount: "42", currency: "EUR" };
+    await store.saveTransactions([row, next]);
+    await store.deleteTransaction(deleteFirst ? "tx" : "tx-amount", row.postingTime);
+    expect((await store.read("transactions/2026-10.ttl")).document.transactions()).toEqual([
+      deleteFirst ? next : row,
+    ]);
+  });
+  it.each([
+    false,
+    true,
+  ])("preserves a legacy subject serving as both transaction and amount (%s)", async (deleteFirst) => {
+    const { store } = pod();
+    const document = new model.MoneyDocument();
+    const next = { ...row, id: `${row.id}-amount`, amount: "42" };
+    model.putTransaction(document, row);
+    model.putTransaction(document, next);
+    // Reproduce a document written by the previous named amount allocator.
+    document.node(row.id).amountNode = next.id;
+    document.node(next.id).types.add(model.V.amountClass);
+    document.node(next.id).amount = row.amount;
+    document.node(next.id).currency = row.currency;
+    const legacy = await model.parseMoney(
+      `<${next.id}> <${NS.FINANCE}amount> "${row.amount}"; <${NS.FINANCE}currency> "GBP" .`,
+      base,
+    );
+    for (const quad of legacy.dataset) document.dataset.add(quad);
+    await store.write("transactions/2026-10.ttl", document, { create: true });
+    await store.deleteTransaction(deleteFirst ? "tx" : "tx-amount", row.postingTime);
+    const remaining = (await store.read("transactions/2026-10.ttl")).document;
+    expect(remaining.transactions()).toEqual([deleteFirst ? next : row]);
+    expect(remaining.node(next.id).amount).toBe(deleteFirst ? undefined : row.amount);
   });
   it("reads account files with latest balances and handles missing resources/shards", async () => {
     const { store, files } = pod();

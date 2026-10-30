@@ -6,6 +6,8 @@ import {
   normalizePodBase,
   refuseRedirects,
 } from "@jeswr/guarded-fetch";
+import { NS } from "@jeswr/suite-vocab";
+import type { Quad } from "@rdfjs/types";
 import { Container } from "@solid/object";
 import { DataFactory } from "n3";
 import { latestBalance, monthKey, monthKeys, runningBalance } from "./helpers";
@@ -29,6 +31,15 @@ export function conditionalHeaders(value: Precondition): Record<string, string> 
 function checked(response: Response): Response {
   if (!response.ok) throw new MoneyIoError(response.status);
   return response;
+}
+function isMonetaryQuad(quad: Quad): boolean {
+  return (
+    quad.predicate.value === V.amount ||
+    quad.predicate.value === V.currency ||
+    quad.predicate.value === `${NS.FINANCE}amount` ||
+    quad.predicate.value === `${NS.FINANCE}currency` ||
+    (quad.predicate.value === V.type && quad.object.value === V.amountClass)
+  );
 }
 /** Caller supplies an authenticated transport and an already provisioned money container. */
 export function createMoneyStore(fetch: typeof globalThis.fetch, moneyContainer: string) {
@@ -138,11 +149,15 @@ export function createMoneyStore(fetch: typeof globalThis.fetch, moneyContainer:
     if (node.types.has(V.transferClass))
       throw new TypeError("Transfer legs must be changed together");
     const amount = node.amountNode;
-    for (const quad of [...loaded.document.dataset.match(DataFactory.namedNode(id))])
-      loaded.document.dataset.delete(quad);
+    const subject = DataFactory.namedNode(id);
+    const referenced = [
+      ...loaded.document.dataset.match(null, DataFactory.namedNode(V.amountNode), subject),
+    ].some((quad) => !quad.subject.equals(subject));
+    for (const quad of [...loaded.document.dataset.match(subject)])
+      if (!referenced || !isMonetaryQuad(quad)) loaded.document.dataset.delete(quad);
     if (amount !== undefined && loaded.document.dataset.match(null, null, amount).size === 0)
       for (const quad of [...loaded.document.dataset.match(amount)])
-        loaded.document.dataset.delete(quad);
+        if (isMonetaryQuad(quad)) loaded.document.dataset.delete(quad);
     await write(path, loaded.document, loaded.condition);
   }
   return {
