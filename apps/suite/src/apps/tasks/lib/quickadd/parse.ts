@@ -156,14 +156,42 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
       );
       // Chrono's "this period" parser reads host-local fields from the surrogate.
       // Resolve period boundaries directly from the injected calendar instead.
-      const period = /^this\s+(week|month|year)s?\b/i.exec(match.text)?.[1]?.toLowerCase();
-      if (period) {
+      const periodMatch = /^this\s+(week|month|year)s?\b/i.exec(match.text);
+      const period = periodMatch?.[1]?.toLowerCase();
+      if (periodMatch) {
         const reference = start.isCertain("timezoneOffset")
           ? new Date(ctx.now.getTime() + Number(start.get("timezoneOffset")) * 60_000)
           : today;
         calendar.setTime(reference.getTime());
-        if (period === "week") calendar.setUTCDate(calendar.getUTCDate() - calendar.getUTCDay());
-        else calendar.setUTCDate(1);
+        if (period === "week") {
+          calendar.setUTCDate(calendar.getUTCDate() - calendar.getUTCDay());
+          // Chrono can also discard weekday metadata when merging "this week Saturday".
+          // Reparse the complete suffix before applying a weekday to the injected boundary.
+          const suffix = match.text
+            .slice(periodMatch[0].length)
+            .trim()
+            .replace(/^at\s+/i, "");
+          if (suffix) {
+            const [qualifier, ...others] = parser.parse(suffix, { instant: today, timezone: 0 });
+            if (
+              !qualifier ||
+              others.length > 0 ||
+              qualifier.index !== 0 ||
+              qualifier.text !== suffix ||
+              qualifier.end ||
+              (["day", "month", "year"] as const).some((part) => qualifier.start.isCertain(part))
+            ) {
+              throw new RangeError("Unsupported quick-add period qualifier");
+            }
+            const weekday = qualifier.start.get("weekday");
+            if (weekday !== null) {
+              if (/\b(?:this|next|last|past|weekday|weekend)\b/i.test(suffix)) {
+                throw new RangeError("Unsupported quick-add period weekday qualifier");
+              }
+              calendar.setUTCDate(calendar.getUTCDate() + weekday);
+            }
+          }
+        } else calendar.setUTCDate(1);
         if (period === "year") calendar.setUTCMonth(0);
       }
       // A lone time qualifies the recurrence's initial day, rather than changing its weekday.
