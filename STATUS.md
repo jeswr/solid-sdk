@@ -82,3 +82,59 @@ underspecified skeleton geometry uses existing tokens and mockup anatomy; the SD
 owns exception classification. ErrorState accepts classified categories and retry metadata,
 never raw exceptions. Request access requires the capability; recovery controls render only
 when their host supplies a handler or destination. No blocking implementation question.
+
+## Fix round 2 — review of c51043e00272
+
+Scope: the two supplied review findings only, based on
+`c51043e002728ea6858f658be0b464be0972f75a` on `lane/sst-18d`.
+
+- `5c66e03b fix: preserve undo timing and surface recovery`: honour the existing
+  `duration: toastDurations.undo` option for React-node/localised Undo actions on all
+  wrapped toast methods and promise results. Literal `"Undo"` still selects eight
+  seconds automatically; ordinary durations remain five seconds and errors persist.
+  Preserve upload/preview `onAction` callbacks as Sign in for reauth and Retry for
+  other categories, matching the existing content adapter's legacy fallback.
+  Update API documentation and regression tests for both findings.
+- The final `docs: record sst-18d round two validation` commit records this round.
+
+Conservative reading: use Sonner's existing duration option to identify Undo with an
+arbitrary React-node label, rather than inspect component output or extend the API.
+Keep the legacy recovery callback rather than add category-specific adapter props.
+
+Validation uses `export PATH=/opt/node24/bin:$PATH` unless noted.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/suite-ui exec vitest run test/toasts.test.tsx test/components.test.tsx` | PASS: 2 files, 124 tests. Before the fixes, the regression run failed 33 tests; all now pass. |
+| `pnpm --filter @jeswr/suite-ui run lint && pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/suite-ui run typecheck && pnpm --filter @jeswr/suite-ui run test` | PASS: 20 test files, 613 tests; two existing navigation.css warnings. Initial lint found test formatting differences, corrected with Biome. |
+| `pnpm run lint:root` | PASS: 74 contrast pairs, zero failures. |
+| `TURBO_SCM_BASE=c51043e002728ea6858f658be0b464be0972f75a pnpm run gate` | PASS: 15/15 tasks, 3m32.437s; 613 UI tests and 9,145 suite app tests. |
+| `pnpm exec turbo run test:root --filter=//` | Initial isolated retry: 984/985 tests passed; one unchanged agent-layer case still hit its five-second timeout. |
+| `taskset -c 0 pnpm exec turbo run test:root --filter=//` | PASS: 14 files, 985 tests; original test limits unchanged. CPU affinity reduces Vitest worker contention. |
+| `taskset -c 0 pnpm exec turbo run test --filter=@jeswr/solid-app-store-web` | PASS: 21 files, 222 tests; 7/7 Turbo tasks, 6 cached. |
+| `pnpm exec turbo run test --filter=@jeswr/pod-connectors` | PASS: 89 files, 1,555 tests; 7/7 Turbo tasks, 6 cached. |
+| `pnpm run gate:full` | PASS on cache retry: 405/405 tasks, 385 cached, 6m16.634s. Uses `export PATH=/tmp/sst-18d-bin:/opt/node24/bin:$PATH`; the existing temporary npm wrapper uses the writable cache described above. |
+| `git diff --check` | PASS. |
+
+The isolated Turbo checks also use the temporary npm wrapper's PATH. Earlier full-gate
+attempts stopped on unchanged timing-sensitive tests under concurrent workspace load:
+ten root timeouts (nine agent-layer path-character cases and one Vercel fixture), then
+one App Store restoration timeout, then three connector timeouts and a connector
+performance assertion (2.46 seconds against a two-second limit). The affected gate
+passed on its first run. All failing full-gate checks passed in the isolated commands
+above and the final full gate reused those successful results. No test threshold,
+repository configuration, unrelated source or dependency changed to obtain the passes.
+
+The added coverage checks the eight-second policy for React-node labels on regular,
+success/info/warning/message/custom toasts, shared and result-specific promise options,
+clicking Undo after five seconds, and error persistence taking precedence. Every error
+category on UploadDock, DropZoneOverlay and PreviewPane retains exactly one working
+recovery action when a callback exists; SurfaceFeedback omits controls without one.
+The existing gallery axe assertions also exercise the restored controls.
+
+No dependencies, manifests, browser specs or fixtures changed. `check:packages` is not
+applicable. No Chromium launch or screenshots, per the lane brief; browser verification
+remains dispatcher-owned. `roborev status` still fails with command not found (exit 127),
+and no post-commit review hook is installed; dispatcher review is required.
+No network fetch/merge, push, PR, branch switch or edits to another checkout.
+No unfinished implementation or open questions for this fix round.
