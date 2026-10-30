@@ -198,6 +198,7 @@ export function ConsentSheet({
               Share
             </Button>
           </div>
+          {offline && <Button onClick={() => onOpenChange(false)}>Close</Button>}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

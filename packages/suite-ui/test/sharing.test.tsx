@@ -601,6 +601,53 @@ describe("consent", () => {
     expect(screen.queryByRole("alertdialog")).toBeNull();
     expect(onCancel).not.toHaveBeenCalled();
   });
+  it.each([
+    true,
+    false,
+  ])("dismisses offline consent without deciding (cached=%s)", async (cached) => {
+    const onOpenChange = vi.fn();
+    const onCancel = vi.fn();
+    const onShare = vi.fn();
+    function OfflineConsent() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>
+            Review request
+          </button>
+          <ConsentSheet
+            {...consent}
+            open={open}
+            onOpenChange={(next) => {
+              onOpenChange(next);
+              setOpen(next);
+            }}
+            state={{ kind: "offline", cached }}
+            onCancel={onCancel}
+            onShare={onShare}
+          />
+        </>
+      );
+    }
+    render(<OfflineConsent />);
+    const trigger = screen.getByRole("button", { name: "Review request" });
+    trigger.focus();
+    fireEvent.click(trigger);
+    for (const name of ["Cancel", "Share"]) {
+      const action = screen.getByRole("button", { name }) as HTMLButtonElement;
+      expect(action.disabled).toBe(true);
+      fireEvent.click(action);
+    }
+    const close = screen.getByRole("button", { name: "Close" }) as HTMLButtonElement;
+    expect(close.disabled).toBe(false);
+    fireEvent.click(close);
+    expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(onShare).not.toHaveBeenCalled();
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
   it.each([true, false])("blocks a pending consent denial offline (cached=%s)", (cached) => {
     const onCancel = vi.fn();
     const { rerender } = render(<ConsentSheet {...consent} onCancel={onCancel} />);
