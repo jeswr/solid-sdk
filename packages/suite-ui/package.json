@@ -20,6 +20,16 @@
     "./styles/tokens.css": "./dist/styles/tokens.css",
     "./styles/theme.css": "./dist/styles/theme.css",
     "./styles/density.css": "./dist/styles/density.css",
+    "./date-time": {
+      "types": "./dist/date-time/index.d.ts",
+      "import": "./dist/date-time/index.js"
+    },
+    "./styles/date-time.css": "./dist/styles/date-time.css",
+    "./date-time/model": {
+      "types": "./dist/date-time/model.d.ts",
+      "import": "./dist/date-time/model.js"
+    },
+    "./styles/sharing.css": "./dist/styles/sharing.css",
     "./styles/components.css": "./dist/styles/components.css",
     "./styles/collections.css": "./dist/styles/collections.css",
     "./styles/navigation.css": "./dist/styles/navigation.css",
@@ -64,6 +74,8 @@
     "@testing-library/user-event": "14.6.1"
   },
   "dependencies": {
+    "@radix-ui/react-popover": "1.1.19",
+    "chrono-node": "2.10.3",
     "radix-ui": "1.6.2",
     "lucide-react": "1.24.0",
     "class-variance-authority": "0.7.1",

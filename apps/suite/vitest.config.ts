@@ -1,6 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { defineConfig } from "vitest/config";
+
+// Recurrence fixtures exercise browser-local calendar arithmetic over UK DST changes.
+process.env.TZ = "Europe/London";
 export default defineConfig({
   test: {
     environment: "node",
@@ -11,6 +14,7 @@ export default defineConfig({
       enabled: true,
       provider: "v8",
       include: [
+        "src/apps/tasks/lib/model/**/*.ts",
         "src/apps/calendar/lib/model/**/*.ts",
         "src/apps/calendar/lib/drag/**/*.ts",
         "src/apps/photos/lib/model/**/*.ts",
@@ -32,11 +36,13 @@ export default defineConfig({
         "src/apps/contacts/lib/postal/**/*.ts",
         "src/apps/contacts/lib/model/**/*.ts",
         "src/apps/money/lib/import/**/*.ts",
+        "src/apps/money/lib/model/**/*.ts",
         "src/apps/calendar/lib/ics/**/*.ts",
         "src/apps/mail/lib/mime/**/*.ts",
         "src/apps/drive/lib/sharing/**/*.ts",
         "src/apps/drive/lib/upload/**/*.ts",
         "src/apps/chat/lib/text/**/*.ts",
+        "src/apps/chat/lib/model/**/*.ts",
         "src/apps/chat/lib/search/**/*.ts",
         "src/apps/photos/lib/exif/**/*.ts",
         "src/apps/photos/lib/transform/**/*.ts",
@@ -95,7 +101,7 @@ export default defineConfig({
         "src/apps/mail/lib/threading/**/*.ts",
         "src/apps/mail/lib/address/**/*.ts",
       ],
-      reporter: ["text", "json-summary"],
+      reporter: ["text", "json", "json-summary"],
       thresholds: {
         perFile: true,
         statements: 100,
