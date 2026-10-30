@@ -48,9 +48,11 @@ small residuals through finite cancellation as well as overflowing partial sums.
 Anchor kinds are `min`, `max`, `number`, `percent`, and `percentile`. The first two
 omit `value`; the others require a finite number (0–100 for percentages).
 Percent interpolates min/max; percentile interpolates sorted numeric samples at
-`(count-1)*value/100`. Resolved anchors must be nondecreasing. Values clamp outside
-the anchors; intervals linearly interpolate RGB channels, rounded to nearest
-integers. Equal anchors select the first colour at the shared value, including
+`(count-1)*value/100`. Anchor interpolation retains the complete affine expression
+before rounding once to a number. Resolved anchors must be nondecreasing. Values
+clamp outside the anchors; intervals linearly interpolate RGB channels using exact
+ratios, rounded once to nearest integers with halves rounded upward.
+Equal anchors select the first colour at the shared value, including
 constant ranges. A range with no numeric cells receives no scale fill; only
 structural anchor validation and explicit numeric-anchor order apply in that case.
 

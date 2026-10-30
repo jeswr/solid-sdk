@@ -16,7 +16,12 @@ function binaryUnits(value: number): bigint {
 }
 
 /** Preserve the complete affine expression, then round once to a double. */
-export function interpolate(low: number, high: number, numerator: number, denominator = 1): number {
+export function interpolate(
+  low: number,
+  high: number,
+  numerator: number,
+  denominator: number,
+): number {
   if (low === high || numerator === 0) return low;
   if (numerator === denominator) return high;
   const lower = binaryUnits(low);
@@ -61,12 +66,14 @@ function position(anchor: ColourAnchor, numbers: readonly number[]): number {
   }
 }
 
-function interpolateRgb(from: string, to: string, fraction: number): string {
+function interpolateRgb(from: string, to: string, numerator: bigint, denominator: bigint): string {
   let result = "#";
   for (const offset of [1, 3, 5]) {
     const low = Number.parseInt(from.slice(offset, offset + 2), 16);
     const high = Number.parseInt(to.slice(offset, offset + 2), 16);
-    result += Math.round(interpolate(low, high, fraction))
+    const channel = BigInt(low) * denominator + BigInt(high - low) * numerator;
+    // Channels are nonnegative; exact halves round upward like Math.round.
+    result += Number((BigInt(2) * channel + denominator) / (BigInt(2) * denominator))
       .toString(16)
       .padStart(2, "0");
   }
@@ -77,7 +84,10 @@ export function colourScale(
   anchors: readonly ColourAnchor[],
   numbers: readonly number[],
 ): (value: number) => string {
-  const points = anchors.map((anchor) => ({ at: position(anchor, numbers), color: anchor.color }));
+  const points = anchors.map((anchor) => {
+    const at = position(anchor, numbers);
+    return { at, units: binaryUnits(at), color: anchor.color };
+  });
   for (let index = 1; index < points.length; index++) {
     if (
       (points[index - 1] as (typeof points)[number]).at >
@@ -92,15 +102,12 @@ export function colourScale(
       const lower = points[index - 1] as (typeof points)[number];
       const upper = points[index] as (typeof points)[number];
       if (value <= upper.at) {
-        const span = upper.at - lower.at;
-        let fraction: number;
-        if (Number.isFinite(span)) {
-          fraction = (value - lower.at) / span;
-        } else {
-          const scale = Math.max(Math.abs(lower.at), Math.abs(upper.at));
-          fraction = (value / scale - lower.at / scale) / (upper.at / scale - lower.at / scale);
-        }
-        return interpolateRgb(lower.color, upper.color, fraction);
+        return interpolateRgb(
+          lower.color,
+          upper.color,
+          binaryUnits(value) - lower.units,
+          upper.units - lower.units,
+        );
       }
     }
     return (points[points.length - 1] as (typeof points)[number]).color;

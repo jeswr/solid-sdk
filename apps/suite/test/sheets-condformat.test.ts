@@ -532,6 +532,54 @@ describe("colour scales", () => {
   });
 
   it.each([
+    ["000000", "0B0B0B", 15, "080808"],
+    ["000000", "0B2137", 15, "081726"],
+    ["0B2137", "000000", 7, "081726"],
+    ["0B0B0B", "161616", 15, "131313"],
+  ])("rounds RGB ties from %s to %s after applying the complete ratio", (from, to, cell, fill) => {
+    expect(
+      evaluateConditionalFormats(
+        [[0, cell, 22]],
+        [scale({ kind: "min", color: hex(from) }, { kind: "max", color: hex(to) })],
+      ),
+    ).toEqual([[{ fill: hex(from) }, { fill: hex(fill) }, { fill: hex(to) }]]);
+  });
+
+  it("distinguishes RGB ties from adjacent cell values", () => {
+    expect(
+      evaluateConditionalFormats(
+        [[0, 14.999999999999998, 15, 15.000000000000002, 22]],
+        [scale(min, { kind: "max", color: hex("0B0B0B") })],
+      ),
+    ).toEqual([
+      [
+        { fill: black },
+        { fill: hex("070707") },
+        { fill: hex("080808") },
+        { fill: hex("080808") },
+        { fill: hex("0B0B0B") },
+      ],
+    ]);
+  });
+
+  it("retains exact channel ratios in both halves of a three-colour scale", () => {
+    expect(
+      evaluateConditionalFormats(
+        [[0, 15, 22, 37, 44]],
+        [scale(min, number(22, hex("0B0B0B")), { kind: "max", color: hex("161616") })],
+      ),
+    ).toEqual([
+      [
+        { fill: black },
+        { fill: hex("080808") },
+        { fill: hex("0B0B0B") },
+        { fill: hex("131313") },
+        { fill: hex("161616") },
+      ],
+    ]);
+  });
+
+  it.each([
     [1, 2, 3],
     [1.2, 1.2000000000000002, 1.2000000000000004],
     [-1.2000000000000004, -1.2000000000000002, -1.2],
