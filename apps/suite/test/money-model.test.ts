@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { NS } from "@jeswr/suite-vocab";
+import { NamedGraphDataset } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as model from "../src/apps/money/lib/model";
 
 import {
@@ -171,6 +172,50 @@ describe("typed money RDF", () => {
     expect(document.node(row.id).amountNode?.equals(existing)).toBe(false);
     expect(document.node(existing).amount).toBe("999");
     expect(document.node(existing).currency).toBe("EUR");
+  });
+  it.each([
+    "before",
+    "after",
+  ])("reserves subject, object and graph blank labels added %s construction", (when) => {
+    const seed = new model.MoneyDocument();
+    const document = when === "after" ? new model.MoneyDocument(seed.dataset) : seed;
+    seed.node(DataFactory.blankNode("b0")).label = "Subject only";
+    seed.node(`${base}#holder`).amountNode = DataFactory.blankNode("b1");
+    const graph = new NamedGraphDataset(DataFactory.blankNode("b2"), seed.dataset, DataFactory);
+    new model.MoneyNode(`${base}#graph-holder`, graph, DataFactory).label = "Graph only";
+    const loaded = when === "before" ? new model.MoneyDocument(seed.dataset) : document;
+    const original = [...loaded.dataset];
+    model.putTransaction(loaded, row);
+    model.putBalance(loaded, balance);
+    for (const id of [row.id, balance.id]) {
+      const amount = loaded.node(id).amountNode;
+      expect(amount?.termType).toBe("BlankNode");
+      expect(["b0", "b1", "b2"]).not.toContain(amount?.value);
+    }
+    expect(loaded.node(row.id).amountNode).not.toEqual(loaded.node(balance.id).amountNode);
+    expect(original.every((quad) => loaded.dataset.has(quad))).toBe(true);
+    expect(loaded.transactions()).toEqual([row]);
+    expect(loaded.balances()).toEqual([balance]);
+  });
+  it("appends a batch of distinct monetary nodes without traversing the full dataset", () => {
+    const document = new model.MoneyDocument();
+    model.putBalance(document, balance);
+    const iterator = vi.spyOn(document.dataset, Symbol.iterator);
+    const rows = Array.from({ length: 250 }, (_, index) => ({
+      ...row,
+      id: `${row.id}-${index}`,
+      amount: String(index),
+    }));
+    try {
+      for (const value of rows) model.putTransaction(document, value);
+      expect(iterator).not.toHaveBeenCalled();
+    } finally {
+      iterator.mockRestore();
+    }
+    const amounts = [balance, ...rows].map((value) => document.node(value.id).amountNode?.value);
+    expect(new Set(amounts).size).toBe(rows.length + 1);
+    expect(document.transactions()).toEqual(rows);
+    expect(document.balances()).toEqual([balance]);
   });
   it("round-trips accounts, latest balances, transactions, categories and exact schema decimal values", async () => {
     const document = new model.MoneyDocument();

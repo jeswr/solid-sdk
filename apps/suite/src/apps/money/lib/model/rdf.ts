@@ -3,7 +3,7 @@
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { serialize } from "@jeswr/rdf-serialize";
 import { canonicalize, NS } from "@jeswr/suite-vocab";
-import type { DatasetCore, Term } from "@rdfjs/types";
+import type { BlankNode, DatasetCore, Term } from "@rdfjs/types";
 import {
   LiteralAs,
   LiteralFrom,
@@ -211,8 +211,27 @@ export class MoneyNode extends TermWrapper {
 }
 export class MoneyDocument {
   readonly dataset: DatasetCore;
+  private readonly blankLabels = new Set<string>();
+  private nextBlankLabel = 0;
   constructor(dataset: DatasetCore = new Store()) {
     this.dataset = migrateMoney(dataset);
+    for (const quad of this.dataset)
+      for (const term of [quad.subject, quad.object, quad.graph])
+        if (term.termType === "BlankNode") this.blankLabels.add(term.value);
+  }
+  allocateAmountNode(): BlankNode {
+    let node: BlankNode;
+    do {
+      node = DataFactory.blankNode(`b${this.nextBlankLabel++}`);
+      // The public dataset/accessors may introduce labels after construction.
+    } while (
+      this.blankLabels.has(node.value) ||
+      this.dataset.match(node, null, null).size > 0 ||
+      this.dataset.match(null, null, node).size > 0 ||
+      this.dataset.match(null, null, null, node).size > 0
+    );
+    this.blankLabels.add(node.value);
+    return node;
   }
   node(id: string | Term): MoneyNode {
     return new MoneyNode(
@@ -339,8 +358,8 @@ function putMoney(document: MoneyDocument, id: string, value: Money): Term {
       (quad) => !quad.subject.equals(owner) || quad.predicate.value !== V.amountNode,
     )
   ) {
-    // Blank nodes cannot overlap record IRIs; the store reserves existing blank labels too.
-    amountId = new Store([...document.dataset]).createBlankNode();
+    // Blank nodes cannot overlap record IRIs; the document reserves existing labels too.
+    amountId = document.allocateAmountNode();
   }
   const amount = document.node(amountId);
   amount.types.add(V.amountClass);
