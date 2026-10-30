@@ -126,6 +126,19 @@ It shares explicit actions' refusal/recovery reporting. Shared partial Restore
 continues to compare against archived original grants, including inherited sharing,
 rather than the owner-only recovery ACL.
 
+The [round 71 audit](../../../../../test/drive-review-round71-audit.md) maps the
+shared ordinary-destination invariant and every audited mutation/confirmation
+caller. Content writes and provisioning reject decoded `.acl`/`.acr` path
+segments and discovered custom access-control endpoints before placeholders or
+ancestor creation. Transfers validate every destination in the captured tree
+before creating any of it; source disposal and conditional clearing share the
+same guard, so ordinary deletion cannot remove an ACL and resume inheritance.
+Details releases its shared targets when a listing
+route unmounts. The boundary matrices cover 70 scenarios for both ordering shapes
+and independently change each captured ACL endpoint and access mode. Partial
+Restore tests also preserve own and inherited person-specific sharing after a
+refused Trash DELETE.
+
 The [round 67 audit](../../../../../test/drive-review-round67-audit.md) maps every
 audited call site, confirmation-to-commit discovery transport, policy/archive and
 survivor assertions, access-mode capture, moved multi-selection hydration, and the

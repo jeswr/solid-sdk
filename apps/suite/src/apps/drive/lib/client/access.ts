@@ -161,6 +161,24 @@ export function accessLabel(state: AccessState, resource: string, webId: string)
 }
 
 export function accessControl(http: typeof globalThis.fetch, storageUrl: string) {
+  const auxiliaryResources = new Set<string>();
+  /** Ordinary content must never create, replace or remove an access-control document,
+   * including encoded names, implicit ancestors and custom discovered endpoints.
+   * ACL installation uses its separate conditional policy-write seam.
+   */
+  function assertContentDestination(resource: string): void {
+    const url = new URL(resource);
+    if (
+      decodeURIComponent(url.pathname)
+        .split("/")
+        .some((part) => /\.(acl|acr)$/i.test(part)) ||
+      auxiliaryResources.has(decodeURIComponent(url.href))
+    )
+      throw new DriveAccessError(
+        "Access-control destination",
+        "This destination identifies an access-control resource. Choose a different file or folder name.",
+      );
+  }
   // Only conditional creation receipts can establish previously undiscoverable
   // endpoints. Existing bindings retain their captured endpoint, even if absent.
   const creations = new Map<string, Headers>();
@@ -192,6 +210,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
           throw new DriveAccessError("ACP privacy cannot be verified by this adapter");
       }
     }
+    if (acl) auxiliaryResources.add(decodeURIComponent(acl));
     return acl;
   }
   /** Capture endpoint, access model and mode discovery as one immutable assertion. */
@@ -425,6 +444,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     }
   };
   return {
+    assertContentDestination,
     recordCreation(resource: string, headers: Headers): void {
       creations.set(resource, new Headers(headers));
     },

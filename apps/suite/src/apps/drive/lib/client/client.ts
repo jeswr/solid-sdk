@@ -696,6 +696,7 @@ export function createSolidDriveClient(options: {
         });
       }
       if (clear) {
+        access.assertContentDestination(url);
         const required = await ledger.get(url);
         const cleared = await commitHttp({
           verifyHeaders: clear.verifyHeaders,
@@ -784,6 +785,7 @@ export function createSolidDriveClient(options: {
       } = {},
     required?: OwnAccess,
   ): Promise<Response> => {
+    access.assertContentDestination(url);
     for (
       let target: string | undefined = url;
       target?.startsWith(storageUrl);
@@ -936,6 +938,9 @@ export function createSolidDriveClient(options: {
       verifyScopeHeaders(scope, url, headers);
       effects.verifyHeaders?.(headers);
     };
+    // Discovery above may reveal a nonstandard ACL endpoint at this URL.
+    // This synchronous invariant also guards demo/direct and replay writes.
+    access.assertContentDestination(url);
     response = await commitHttp({
       ...effects,
       verifyHeaders,
@@ -1106,6 +1111,7 @@ export function createSolidDriveClient(options: {
       },
   ): Promise<{ etag?: string }> => {
     requirePolicy(policy, ["protect-ancestors", "owner-only"]);
+    access.assertContentDestination(url);
     if (opts.ifMatch !== undefined) validator(url, opts.ifMatch);
     let required: OwnAccess | undefined;
     let protectedEtag: string | undefined;
@@ -1302,6 +1308,7 @@ export function createSolidDriveClient(options: {
       },
     scope: AccessScope = new Set(),
   ) => {
+    access.assertContentDestination(url);
     const parents = await versions.prepare(url);
     await deletion.remove(url, validator(url, etag), recovery, {
       ...commit,
@@ -1838,6 +1845,7 @@ export function createSolidDriveClient(options: {
     opts: Parameters<DriveClient["mergeContainer"]>[3],
   ) => {
     requirePolicy(decision, ["preserve-source"]);
+    access.assertContentDestination(to);
     const capturedGuards = (opts?.sourceGuards ?? []).map((identity) =>
       requireResourceAssertion(identity, errorFor),
     );
@@ -2065,6 +2073,8 @@ export function createSolidDriveClient(options: {
     sourceGuards: readonly ResourceIdentity[] = [],
     approvedDiscovery?: ResourceAssertion["verifyHeaders"],
   ): Promise<MoveResult> => {
+    access.assertContentDestination(to);
+    if (moving) access.assertContentDestination(from);
     if (from.endsWith("/") !== to.endsWith("/") || (from.endsWith("/") && to.startsWith(from))) {
       throw new DriveError("conflict", 409, to);
     }
@@ -2089,6 +2099,11 @@ export function createSolidDriveClient(options: {
       sourceUrls(source).flatMap((url) => [url, `${to}${url.slice(from.length)}`]),
       async (transferHeld) => {
         const nodes = snapshots(source);
+        // Validate the whole tree before creating any destination or archive.
+        for (const node of nodes) {
+          access.assertContentDestination(`${to}${node.url.slice(from.length)}`);
+          if (moving) access.assertContentDestination(node.url);
+        }
         // Resolve every node, even for same-folder renames and descendants with own ACLs.
         // A missing Link or unreadable ancestor can never stand in for known absence.
         const effective = new Map<SourceSnapshot, AccessState>();
@@ -2475,6 +2490,7 @@ export function createSolidDriveClient(options: {
     held: ReadonlySet<string> = new Set(),
     scope: AccessScope = new Set(),
   ) => {
+    access.assertContentDestination(url);
     await deletion.guard(url);
     const deleted: string[] = [];
     let recovery: SourceSnapshot | undefined;

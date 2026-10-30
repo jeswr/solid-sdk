@@ -248,6 +248,9 @@ export function FileBrowser(props: FileBrowserProps) {
   const listingFocus = useDriveListingFocus(ids, container);
 
   const { setDetailsItems, setCurrentFolder, uploadRequest } = ui;
+  // Details lives above route bodies. Release this listing's targets when its
+  // route unmounts, including navigation to views without another FileBrowser.
+  useLayoutEffect(() => () => setDetailsItems([]), [setDetailsItems]);
   const selectionRequest = useRef(0);
   const detailsSelection = useRef({ folder, request: selectionRequest.current });
   useEffect(() => {
