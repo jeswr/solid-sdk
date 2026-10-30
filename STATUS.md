@@ -332,3 +332,52 @@ Network Git transports remain disabled; local file transport permits the root te
 The model requires the caller's effective-policy verifier; it does not invent a WAC-only policy writer or accept public/inherited access as sufficient. Unreadable Preferences fail closed rather than triggering an alternate index bootstrap. Both requested fixes are complete and there are no open questions. No UI changes, new dependencies, pushes, PRs, branch switches, remote fetches, or changes to other checkouts were made. No screenshots apply to this model-only fix.
 
 `roborev` is unavailable (`command -v roborev` found no executable), so automated per-commit verdicts could not be read. No review tooling was installed.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Codex fix round 4 — review of `c3edf6845dc7`
+
+Branch: `lane/sst-ef15`. Verification base: `c3edf6845dc790febfd2f578d84e2dfe0b17d5be`.
+Only the supplied subtree-privacy finding and its regression tests are addressed.
+
+### Changes by commit
+
+- `72258d0f` — `fix: scope Tasks privacy checks to initialization targets`: correct the injected verifier contract to check each supplied resource's effective policy and container inheritance, without requiring owner-only access throughout existing descendants. Verify the Tasks root, projects container, selected tracker and stateStore before initialization or Inbox adoption writes. For absent targets, verify the policy they will inherit before creation. Preserve deliberate grants on unrelated projects. Nine new regression cases cover shared projects and tasks remaining unchanged, denied policies at initialization/adoption targets, and awaiting stateStore verification before writes; the existing root-ordering test also covers the scoped calls.
+- Final documentation commit — `docs: record scoped Tasks privacy verification`: this report, committed last.
+
+### Completed verification
+
+Use the installed Node 24 runtime. No dependencies or lockfile changes were needed.
+
+```sh
+export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"
+pnpm --filter @jeswr/app-suite^... run build
+pnpm --filter @jeswr/app-suite run lint
+pnpm --filter @jeswr/app-suite run build
+pnpm --filter @jeswr/app-suite run typecheck
+pnpm --filter @jeswr/app-suite run test
+pnpm run lint:root
+pnpm --filter @jeswr/app-suite exec vitest run test/tasks/model.test.ts test/tasks/store.test.ts test/tasks/recurrence.test.ts --coverage.include='src/apps/tasks/lib/model/**/*.ts'
+git diff --check
+```
+
+All final commands above passed. The initial focused invocation could not import unbuilt `@jeswr/fetch-rdf`; the dependency-first build resolved this. App lint retains 70 existing warnings in unrelated files and reports no errors. Production build and strict typecheck pass. The app suite passes **9,343 tests across 175 files**, with **100%** configured statement, branch, function and line coverage. The focused Tasks suite passes **179 tests across three files**, with model coverage **100% statements (795/795), branches (550/550), functions (157/157), and lines (694/694)**. Coverage thresholds and exclusions are unchanged. Root guards pass, including 74 contrast pairs with zero failures.
+
+Both repository gates passed on the implementation commit before this final report commit:
+
+```sh
+export GIT_CONFIG_COUNT=2
+export GIT_CONFIG_KEY_0=protocol.allow GIT_CONFIG_VALUE_0=never
+export GIT_CONFIG_KEY_1=protocol.file.allow GIT_CONFIG_VALUE_1=always
+export npm_config_offline=true npm_config_cache=/tmp/sst-ef15-npm-cache
+TURBO_SCM_BASE=c3edf6845dc790febfd2f578d84e2dfe0b17d5be pnpm run gate
+pnpm run gate:full --env-mode=loose
+```
+
+Affected gate: **12 successful tasks / 12 total**, zero cached. Full-workspace gate: **405 successful tasks / 405 total**, zero cached, in 14m47s. All **985 root tests** pass; all **9,343 app tests** pass again in the full gate. Network Git transports were disabled; local file transport permits disposable Git test fixtures. npm ran offline with a writable temporary cache. No remote Git fetch occurred.
+
+### Boundaries and remaining work
+
+The caller still supplies effective ACL/ACP verification. The conservative boundary is owner-only effective access and private container inheritance at the resources being initialized or adopted; unreadable or unsupported policy fails closed. Deliberate sharing elsewhere is preserved. The requested fix is complete with no open questions. No UI or screenshots apply.
+
+`roborev` remains unavailable (`command -v roborev` found no executable), so automated per-commit verdicts could not be read. No review tooling was installed.
