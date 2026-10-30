@@ -2,5 +2,6 @@
 // AUTHORED-BY Codex GPT-6
 import { createVocabMap } from "../core/vocab-map.js";
 
-/** Adapter-local sector mapping seam; retain schema.org/FOAF types. */
+/** No equivalent sector class for these source entities (QUESTIONS.md Q2).
+ * Preserve the legacy types rather than asserting an unrelated sector class. */
 export const vocabMap = createVocabMap({});

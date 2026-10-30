@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { MimeParseError, parseMimeMessage, sanitizeMessageHtml } from "../src/apps/mail/lib/mime";
@@ -236,6 +237,64 @@ describe("RFC 5322 and MIME parsing", () => {
     expect(message.html).toContain("<p>Current</p>");
     expect(message.attachments).toHaveLength(1);
     expect(message.attachments[0]?.content).toEqual(new TextEncoder().encode("Current"));
+  });
+
+  describe("nested alternative CID validation", () => {
+    const alternative = (boundary: string, ...parts: string[]) =>
+      `Content-Type: multipart/alternative; boundary=${boundary}\n\n--${boundary}\n${parts.join(`\n--${boundary}\n`)}\n--${boundary}--`;
+    const pair = (boundary: string, label: string, htmlId = "shared@example.org") => {
+      const related = (type: string, id: string) => {
+        const partBoundary = `${boundary}-${type}`;
+        const body = type === "plain" ? label : `<p>${label}</p><img src="cid:${id}">`;
+        return `Content-Type: multipart/related; boundary=${partBoundary}\n\n--${partBoundary}\nContent-Type: text/${type}\n\n${body}\n--${partBoundary}\nContent-Type: image/png\nContent-ID: <${id}>\n\n${label} ${type} resource\n--${partBoundary}--`;
+      };
+      return alternative(boundary, related("plain", "shared@example.org"), related("html", htmlId));
+    };
+
+    it.each([
+      "direct",
+      "alternative",
+      "mixed",
+      "related",
+    ])("discards collisions in a superseded nested pair through %s", async (wrapper) => {
+      let obsolete = pair("old", "Old");
+      if (wrapper !== "direct") {
+        obsolete = `Content-Type: multipart/${wrapper}; boundary=w\n\n--w\n${obsolete}\n--w--`;
+      }
+      const message = await parseMimeMessage(
+        alternative("outer", obsolete, pair("current", "Current", "current@example.org")),
+      );
+      expect(message.text).toBe("Current");
+      expect(message.html).toBe(
+        '<p>Current</p><img alt="" data-inline-cid="current@example.org" />',
+      );
+      expect(message.attachments).toHaveLength(2);
+      expect(message.attachments.map((part) => part.contentId)).toEqual([
+        "shared@example.org",
+        "current@example.org",
+      ]);
+      expect(message.attachments.map((part) => part.content)).toEqual([
+        new TextEncoder().encode("Current plain resource"),
+        new TextEncoder().encode("Current html resource"),
+      ]);
+    });
+
+    it.each([
+      "plain",
+      "html",
+      "both",
+    ])("rejects retained nested collisions after replacing %s", async (replacement) => {
+      const preferred =
+        replacement === "both"
+          ? pair("current", "Current")
+          : `Content-Type: text/${replacement}\n\nCurrent`;
+      const result = parseMimeMessage(alternative("outer", pair("old", "Old"), preferred));
+      await expect(result).rejects.toBeInstanceOf(MimeParseError);
+      await expect(result).rejects.toMatchObject({
+        name: "MimeParseError",
+        code: "EAMBIGUOUSCID",
+      });
+    });
   });
 
   it.each([

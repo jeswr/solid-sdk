@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // §10 MERGE-NOT-REPLACE round-trip — THE correctness invariant. shacl-form's
@@ -22,7 +23,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { JeswrBookmarkForm } from "../src/components/bookmark-form.js";
 import { JeswrContactForm } from "../src/components/contact-form.js";
 import { JeswrTaskForm } from "../src/components/task-form.js";
-import { parseTurtle } from "./fixtures.js";
+import { parseRdfTurtle, parseTurtle } from "./fixtures.js";
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -144,6 +145,110 @@ describe("§10 task merge — preserves untouched triples + the dual-predicate c
 });
 
 describe("§10 bookmark merge — preserves untouched triples", () => {
+  const book = "https://jeswr.org/ns/bookmark#";
+  const legacy = "https://w3id.org/jeswr/bookmark#";
+  const rdfType = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+  const classes = [
+    `<${book}Bookmark>`,
+    `<${legacy}Bookmark>`,
+    `<${legacy}Bookmark>, <${book}Bookmark>`,
+  ];
+  const fields = [
+    { field: `<${book}notes> "edited" ; <${book}archived> false`, notes: "edited" },
+    { field: `<${legacy}notes> "edited" ; <${legacy}archived> false`, notes: "edited" },
+    {
+      field: `<${book}notes> "edited" ; <${legacy}notes> "stale" ; <${book}archived> false ; <${legacy}archived> true`,
+      notes: "edited",
+    },
+    {
+      field: `<${book}notes> "" ; <${legacy}notes> "stale" ; <${book}archived> false ; <${legacy}archived> true`,
+      notes: "",
+    },
+  ];
+
+  it.each(
+    classes.flatMap((type) => fields.map((field) => ({ type, ...field }))),
+  )("canonicalizes legacy and mixed fields through the merge (case $#)", async ({
+    type,
+    field,
+    notes,
+  }) => {
+    const url = "https://pod.example/bookmarks/1";
+    const subj = `${url}#it`;
+    const existing = await parseRdfTurtle(`
+        <${subj}> a <${legacy}Bookmark>, <${book}Bookmark>, <urn:other-type> ;
+          <${book}notes> "old canonical" ; <${legacy}notes> "old legacy" ;
+          <${book}archived> true ; <${legacy}archived> true ;
+          <${SCHEMA}keywords> "remove" ;
+          <${DCT}created> "2026-01-01T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> ;
+          <urn:extension> "keep" .
+        <urn:sibling> <urn:extension> "keep sibling" .
+      `);
+    const formGraph = await parseRdfTurtle(`
+        <urn:minted> a ${type} ; <${SCHEMA}url> <https://example.com/new> ;
+          <${DCT}title> "New" ; <${SCHEMA}keywords> "added" ; ${field} .
+      `);
+    const el = document.createElement("test-bookmark-form") as TestBookmarkForm;
+    // Repeating the save must neither duplicate canonical triples nor revive aliases.
+    el.runMerge(formGraph, existing, url);
+    el.runMerge(formGraph, existing, url);
+    expect(existing.getObjects(subj, rdfType, null).map((o) => o.value)).toEqual([
+      `${book}Bookmark`,
+      "urn:other-type",
+    ]);
+    expect(existing.getObjects(subj, `${book}notes`, null).map((o) => o.value)).toEqual([notes]);
+    expect(existing.getObjects(subj, `${book}archived`, null).map((o) => o.value)).toEqual([
+      "false",
+    ]);
+    expect(existing.getObjects(subj, `${legacy}notes`, null)).toHaveLength(0);
+    expect(existing.getObjects(subj, `${legacy}archived`, null)).toHaveLength(0);
+    expect(existing.getObjects(subj, `${SCHEMA}keywords`, null).map((o) => o.value)).toEqual([
+      "added",
+    ]);
+    expect(existing.getObjects(subj, `${DCT}created`, null)).toHaveLength(1);
+    expect(existing.getObjects(subj, "urn:extension", null).map((o) => o.value)).toEqual(["keep"]);
+    expect(existing.getObjects("urn:sibling", "urn:extension", null).map((o) => o.value)).toEqual([
+      "keep sibling",
+    ]);
+    expect(existing.getQuads("urn:minted", null, null, null)).toHaveLength(0);
+  });
+
+  it.each(
+    classes,
+  )("clearing notes and archived never revives legacy data (case %#)", async (type) => {
+    const url = "https://pod.example/bookmarks/1";
+    const subj = `${url}#it`;
+    const existing = await parseRdfTurtle(`
+      <${subj}> a <${legacy}Bookmark> ;
+        <${book}notes> "current" ; <${legacy}notes> "stale" ;
+        <${book}archived> true ; <${legacy}archived> true .
+    `);
+    const formGraph = await parseRdfTurtle(`
+      <urn:minted> a ${type} ; <${SCHEMA}url> <https://example.com/> .
+    `);
+    const el = document.createElement("test-bookmark-form") as TestBookmarkForm;
+    el.runMerge(formGraph, existing, url);
+    expect(existing.getObjects(subj, `${book}notes`, null)).toHaveLength(0);
+    expect(existing.getObjects(subj, `${legacy}notes`, null)).toHaveLength(0);
+    expect(existing.getObjects(subj, `${legacy}archived`, null)).toHaveLength(0);
+    expect(existing.getObjects(subj, `${book}archived`, null).map((o) => o.value)).toEqual([
+      "false",
+    ]);
+  });
+
+  it("prefers the conventional legacy-typed form subject over another canonical-typed subject", async () => {
+    const url = "https://pod.example/bookmarks/1";
+    const subj = `${url}#it`;
+    const existing = await parseRdfTurtle(`<${subj}> a <${legacy}Bookmark> .`);
+    const formGraph = await parseRdfTurtle(`
+      <urn:other> a <${book}Bookmark> ; <${DCT}title> "Wrong" .
+      <${subj}> a <${legacy}Bookmark> ; <${DCT}title> "Right" .
+    `);
+    const el = document.createElement("test-bookmark-form") as TestBookmarkForm;
+    el.runMerge(formGraph, existing, url);
+    expect(existing.getObjects(subj, `${DCT}title`, null).map((o) => o.value)).toEqual(["Right"]);
+  });
+
   it("editing the title keeps an unrelated triple + the created timestamp", () => {
     const url = "https://pod.example/bookmarks/1";
     const subj = `${url}#it`;

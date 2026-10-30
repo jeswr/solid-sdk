@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Turtle / N-Triples serialisation of a VC graph — a thin adapter over the shared
@@ -10,13 +11,13 @@
 
 import { legacySerialize } from "@jeswr/rdf-serialize";
 import type { Quad } from "@rdfjs/types";
-import { ACL, DC_CREATED, ODRL, RDF, RDFS, SCHEMA, SEC, SVC, VC, XSD } from "./vocab.js";
+import { ACL, DC_CREATED, LEGACY_SVC_NS, ODRL, RDF, RDFS, SCHEMA, SEC, VC, XSD } from "./vocab.js";
 
 /** Prefixes emitted in the serialised Turtle for readability. */
 const PREFIXES = {
   cred: VC,
   sec: SEC,
-  svc: SVC,
+  svc: LEGACY_SVC_NS,
   acl: ACL,
   odrl: ODRL,
   schema: SCHEMA,
