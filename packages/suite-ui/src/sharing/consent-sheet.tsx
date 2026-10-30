@@ -83,9 +83,7 @@ export function ConsentSheet({
     ? { ...duration, disabled: true, reason: "Reconnect to change sharing" }
     : duration;
   const invalidDate =
-    duration.value === "custom" &&
-    !duration.disabled &&
-    !/^\d{4}-\d{2}-\d{2}$/.test(duration.customDate ?? "");
+    duration.value === "custom" && !/^\d{4}-\d{2}-\d{2}$/.test(duration.customDate ?? "");
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>

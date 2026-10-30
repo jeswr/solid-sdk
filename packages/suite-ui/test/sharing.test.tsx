@@ -410,6 +410,47 @@ describe("consent", () => {
       true,
     );
   });
+  it.each([
+    false,
+    true,
+  ])("requires a custom date when duration editing is disabled=%s", (disabled) => {
+    const onShare = vi.fn();
+    const duration = {
+      value: "custom" as const,
+      onChange: vi.fn(),
+      ...(disabled ? { disabled: true as const, reason: "Duration is fixed" } : {}),
+    };
+    const { rerender } = render(
+      <ConsentSheet {...consent} duration={duration} onShare={onShare} />,
+    );
+    const share = screen.getByRole("button", { name: "Share" }) as HTMLButtonElement;
+    expect((screen.getByLabelText("Access ends on") as HTMLInputElement).disabled).toBe(disabled);
+    expect(share.disabled).toBe(true);
+    fireEvent.click(share);
+    expect(onShare).not.toHaveBeenCalled();
+
+    rerender(
+      <ConsentSheet
+        {...consent}
+        duration={{ ...duration, customDate: "2027-01" }}
+        onShare={onShare}
+      />,
+    );
+    expect(share.disabled).toBe(true);
+    fireEvent.click(share);
+    expect(onShare).not.toHaveBeenCalled();
+
+    rerender(
+      <ConsentSheet
+        {...consent}
+        duration={{ ...duration, customDate: "2027-01-02" }}
+        onShare={onShare}
+      />,
+    );
+    expect(share.disabled).toBe(false);
+    fireEvent.click(share);
+    expect(onShare).toHaveBeenCalledOnce();
+  });
   it("calls Share only on activation and asks before denying via Cancel", () => {
     const onCancel = vi.fn();
     const onShare = vi.fn();
