@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The GRADUATED human-confirm gate (§7). When the ODRL mandate does NOT pre-authorize an
  * action autonomously (a `confirm-required` decision), the owner must confirm it — and the
@@ -20,12 +21,33 @@ import { proposalContentDigest } from "../pod/digest.js";
 import type { ActionProposal, ConfirmFriction } from "../pod/proposals.js";
 
 /**
- * Classify the confirmation friction an intent warrants. A reply to a known thread with zero
- * spend is LOW; a fresh send to a possibly-novel recipient, or any nonzero spend, is HIGH.
+ * Evidence read by the owner from an owner-controlled thread record. Never populate this
+ * from the Actor's proposal or inbound assertions: neither proves trusted thread provenance.
  */
-export function classifyFriction(proposal: ActionProposal): ConfirmFriction {
+export interface TrustedReplyThread {
+  readonly inReplyTo: string;
+  readonly channel: string;
+  /** Recipients established as belonging to this thread in the channel's handle namespace. */
+  readonly recipients: readonly string[];
+}
+
+/**
+ * Classify owner-side: only a zero-spend reply with trusted evidence of its thread AND
+ * recipient warrants LOW friction. Missing or mismatched evidence always requires HIGH.
+ */
+export function classifyFriction(
+  proposal: ActionProposal,
+  thread?: TrustedReplyThread,
+): ConfirmFriction {
   if ((proposal.spend ?? 0) > 0) return "high";
-  if (!proposal.inReplyTo) return "high"; // no known thread → treat the recipient as novel
+  if (
+    !proposal.inReplyTo ||
+    !thread ||
+    thread.inReplyTo !== proposal.inReplyTo ||
+    thread.channel !== proposal.channel ||
+    !thread.recipients.includes(proposal.recipient)
+  )
+    return "high";
   return "low";
 }
 
@@ -45,10 +67,14 @@ export interface ConfirmInput {
  * valid owner acknowledgement at the required strength. The caller writes it to the OWNER-ONLY
  * confirmations container (`writeConfirmation`).
  */
-export function confirmProposal(proposal: ActionProposal, input: ConfirmInput): Confirmation {
+export function confirmProposal(
+  proposal: ActionProposal,
+  input: ConfirmInput,
+  thread?: TrustedReplyThread,
+): Confirmation {
   // RECOMPUTE the friction owner-side — never trust the Actor-written `proposal.friction`,
   // or a deceived Actor could downgrade a novel/high-value send to a one-tap confirm.
-  const friction = classifyFriction(proposal);
+  const friction = classifyFriction(proposal, thread);
   if (friction === "high") {
     if (input.typedAcknowledgement !== proposal.recipient) {
       throw new Error("confirmProposal: high-friction confirm requires the recipient typed back");
