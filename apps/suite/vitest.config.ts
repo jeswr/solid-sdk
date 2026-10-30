@@ -35,6 +35,7 @@ export default defineConfig({
         "src/apps/contacts/lib/model/**/*.ts",
         "src/apps/money/lib/import/**/*.ts",
         "src/apps/calendar/lib/ics/**/*.ts",
+        "src/apps/calendar/lib/quickadd/**/*.ts",
         "src/apps/mail/lib/mime/**/*.ts",
         "src/apps/drive/lib/sharing/**/*.ts",
         "src/apps/drive/lib/upload/**/*.ts",
