@@ -455,6 +455,39 @@ describe("numeric population rules", () => {
 
 describe("colour scales", () => {
   it.each([
+    [[0, 1, 2, 3], 0.1, 0.003],
+    [[0, 1, 2, 3], 33.4, 1.002],
+    [[-3, -2, -1, 0], 33.4, -1.998],
+    [[0, 1, 1e16, 1e17], 100 / 3, 1.7105427357601002],
+    [[0, 1e300, 2e300, 3e300], Number.MIN_VALUE, 1.4821969375237398e-25],
+  ] as const)("rounds the complete percentile expression over %j at %s once", (cells, value, at) => {
+    const percentile: ColourAnchor = { kind: "percentile", value, color: black };
+    const numeric = number(at, white);
+    for (const [first, second] of [
+      [percentile, numeric],
+      [numeric, percentile],
+    ] as const) {
+      expect(evaluateConditionalFormats([cells], [scale(first, second)])).toEqual([
+        cells.map((cell) => ({ fill: cell <= at ? first.color : second.color })),
+      ]);
+    }
+  });
+
+  it("rejects percentile anchors reversed by one representable value", () => {
+    const percentile: ColourAnchor = { kind: "percentile", value: 0.1, color: white };
+    rejects(
+      [[0, 1, 2, 3]],
+      [scale(number(0.0030000000000000005, black), percentile)],
+      "INVALID_RULE",
+    );
+    rejects(
+      [[0, 1, 2, 3]],
+      [scale(percentile, number(0.0029999999999999996, black))],
+      "INVALID_RULE",
+    );
+  });
+
+  it.each([
     ["percent", [1, 1.57, 2], [black, black, white]],
     ["percentile", [1, 2], [black, white]],
   ] as const)("accepts equal number and %s anchors after translating endpoints", (kind, cells, fills) => {

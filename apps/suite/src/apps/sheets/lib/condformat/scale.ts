@@ -19,14 +19,14 @@ function binaryUnits(value: number): bigint {
 export function interpolate(
   low: number,
   high: number,
-  numerator: number,
-  denominator: number,
+  numerator: bigint,
+  denominator: bigint,
 ): number {
-  if (low === high || numerator === 0) return low;
+  if (low === high || numerator === BigInt(0)) return low;
   if (numerator === denominator) return high;
   const lower = binaryUnits(low);
-  const divisor = binaryUnits(denominator);
-  const dividend = lower * divisor + (binaryUnits(high) - lower) * binaryUnits(numerator);
+  const divisor = denominator;
+  const dividend = lower * divisor + (binaryUnits(high) - lower) * numerator;
   const zero = BigInt(0);
   const magnitude = dividend < zero ? -dividend : dividend;
   // Keep 53 significant bits, or single subnormal units, and round ties to even.
@@ -51,16 +51,19 @@ function position(anchor: ColourAnchor, numbers: readonly number[]): number {
     case "number":
       return anchor.value;
     case "percent":
-      return interpolate(min, max, anchor.value, 100);
+      return interpolate(min, max, binaryUnits(anchor.value), binaryUnits(100));
     case "percentile": {
-      const numerator = (numbers.length - 1) * anchor.value;
-      const rank = numerator / 100;
-      const lower = Math.floor(rank);
+      // Keep the rank product and fractional remainder exact until the anchor is rounded.
+      const numerator = BigInt(numbers.length - 1) * binaryUnits(anchor.value);
+      const denominator = binaryUnits(100);
+      const lower = Number(numerator / denominator);
+      const remainder = numerator % denominator;
+      const upper = remainder === BigInt(0) ? lower : lower + 1;
       return interpolate(
         numbers[lower] as number,
-        numbers[Math.ceil(rank)] as number,
-        numerator - lower * 100,
-        100,
+        numbers[upper] as number,
+        remainder,
+        denominator,
       );
     }
   }
