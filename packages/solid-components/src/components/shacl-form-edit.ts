@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // <jeswr-shacl-form> — the EDITABLE (edit-mode) Lit element wrapping
@@ -47,6 +48,8 @@ import "@ulb-darmstadt/shacl-form";
 import { html, LitElement, nothing, type PropertyValues } from "lit";
 import type { Store } from "n3";
 import type { SaveStatus } from "../data-writer.js";
+import { parseToStore } from "../rdf.js";
+import { serializeTurtle } from "../serialize.js";
 import {
   type FetchSeam,
   type GraphSource,
@@ -93,7 +96,15 @@ const ALLOWED_DATASET_KEYS = new Set([
 ]);
 
 /** The reactive INPUTS that re-resolve the graphs when changed. */
-const INPUT_PROPS = ["shapes", "values", "shapeSubject", "fetch", "publicFetch", "resolveOptions"];
+const INPUT_PROPS = [
+  "shapes",
+  "values",
+  "shapeSubject",
+  "fetch",
+  "publicFetch",
+  "resolveOptions",
+  "prepareValues",
+];
 
 /**
  * An EDITABLE SHACL form. Drive it imperatively:
@@ -128,6 +139,7 @@ export class JeswrShaclForm extends LitElement {
     publicFetch: { attribute: false },
     resolveOptions: { attribute: false },
     mergeSave: { attribute: false },
+    prepareValues: { attribute: false },
     showSaveButton: { type: Boolean, attribute: "show-save-button" },
     status: { state: true },
     saveStatus: { state: true },
@@ -156,6 +168,8 @@ export class JeswrShaclForm extends LitElement {
    * throws — this base element refuses to do a naive write itself.
    */
   declare mergeSave: MergeSaveCallback | undefined;
+  /** Optional typed migration of the hardened local display graph before shape binding. */
+  declare prepareValues: ((graph: Store) => void) | undefined;
   /** Whether to render the built-in save button (default true). */
   declare showSaveButton: boolean;
 
@@ -181,6 +195,7 @@ export class JeswrShaclForm extends LitElement {
     this.publicFetch = undefined;
     this.resolveOptions = undefined;
     this.mergeSave = undefined;
+    this.prepareValues = undefined;
     this.showSaveButton = true;
     this.status = "idle";
     this.saveStatus = "idle";
@@ -214,6 +229,7 @@ export class JeswrShaclForm extends LitElement {
     const token = ++this.#renderToken;
     const shapes = this.shapes;
     const values = this.values;
+    const prepareValues = this.prepareValues;
     if (!shapes || !values) {
       this.shapesTurtle = "";
       this.valuesTurtle = "";
@@ -238,8 +254,25 @@ export class JeswrShaclForm extends LitElement {
     if (token !== this.#renderToken) return; // a newer resolve superseded us.
 
     if (result.kind === "ready") {
+      let valuesTurtle = result.valuesTurtle;
+      try {
+        if (prepareValues) {
+          const graph = await parseToStore(valuesTurtle, "text/turtle");
+          if (token !== this.#renderToken) return;
+          prepareValues(graph);
+          valuesTurtle = await serializeTurtle(graph);
+        }
+      } catch (error) {
+        if (token !== this.#renderToken) return;
+        this.shapesTurtle = "";
+        this.valuesTurtle = "";
+        this.errorMessage = error instanceof Error ? error.message : String(error);
+        this.status = "error";
+        return;
+      }
+      if (token !== this.#renderToken) return;
       this.shapesTurtle = result.shapesTurtle;
-      this.valuesTurtle = result.valuesTurtle;
+      this.valuesTurtle = valuesTurtle;
       this.status = "ready";
       return;
     }

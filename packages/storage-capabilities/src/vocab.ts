@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 
 /** LWS vocabulary IRIs recognised by ADR-002. */
 export const LWS = {
@@ -61,6 +61,7 @@ export const PIM = {
 /** ACQ vocabulary IRIs recognised by ADR-002. */
 export const ACQ = {
   endpoint: "http://www.w3.org/ns/solid/sparql#endpoint",
+  profile: "https://jeswr.github.io/solid-specs/specs/access-controlled-query/",
 } as const;
 
 /** ACL vocabulary IRIs recognised by ADR-002. */
@@ -76,13 +77,27 @@ export const ACP = {
 /** SSD vocabulary IRIs recognised by ADR-002. */
 export const SSD = {
   SolidNotificationService: "https://jeswr.org/ns/solid-sd#SolidNotificationService",
+  LegacyUpdatesVia: "https://jeswr.org/ns/solid-sd#LegacyUpdatesVia",
   SparqlQueryService: "https://jeswr.org/ns/solid-sd#SparqlQueryService",
   CrdtSyncService: "https://jeswr.org/ns/solid-sd#CrdtSyncService",
   VersioningService: "https://jeswr.org/ns/solid-sd#VersioningService",
   TrashService: "https://jeswr.org/ns/solid-sd#TrashService",
+  RecursiveDeleteService: "https://jeswr.org/ns/solid-sd#RecursiveDeleteService",
   AccessControl: "https://jeswr.org/ns/solid-sd#AccessControl",
   PatchSupport: "https://jeswr.org/ns/solid-sd#PatchSupport",
+  /** @deprecated Recursive deletion is advertised by RecursiveDeleteService. */
   RecursiveDelete: "https://jeswr.org/ns/solid-sd#RecursiveDelete",
+  ResumableUploads: "https://jeswr.org/ns/solid-sd#ResumableUploads",
+  Pagination: "https://jeswr.org/ns/solid-sd#Pagination",
+  ContentNegotiation: "https://jeswr.org/ns/solid-sd#ContentNegotiation",
+  source: "https://jeswr.org/ns/solid-sd#source",
+  patchType: "https://jeswr.org/ns/solid-sd#patchType",
+  target: "https://jeswr.org/ns/solid-sd#target",
+  model: "https://jeswr.org/ns/solid-sd#model",
+  WAC: "https://jeswr.org/ns/solid-sd#WAC",
+  ACP: "https://jeswr.org/ns/solid-sd#ACP",
+  ODRLGrants: "https://jeswr.org/ns/solid-sd#ODRLGrants",
+  yProtocolV1: "https://jeswr.org/ns/solid-sd#y-protocol-v1",
   StreamingHttpChannel: "https://jeswr.org/ns/solid-sd#StreamingHttpChannel",
   SseSubscription: "https://jeswr.org/ns/solid-sd#SseSubscription",
   WebSocketSubscription: "https://jeswr.org/ns/solid-sd#WebSocketSubscription",

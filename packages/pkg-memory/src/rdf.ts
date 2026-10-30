@@ -29,8 +29,10 @@ export const NS = {
   schema: "https://schema.org/",
   vcard: "http://www.w3.org/2006/vcard/ns#",
   foaf: "http://xmlns.com/foaf/0.1/",
-  health: "https://w3id.org/jeswr/sectors/health#",
-  core: "https://w3id.org/jeswr/core#",
+  // Canonical source: @jeswr/suite-vocab NS.HEALTH
+  health: "https://jeswr.org/ns/sectors/health#",
+  // Canonical source: @jeswr/suite-vocab NS.CORE
+  core: "https://jeswr.org/ns/core#",
   fhir: "http://hl7.org/fhir/",
   sct: "http://snomed.info/id/",
   loinc: "https://loinc.org/",
@@ -41,6 +43,11 @@ export const NS = {
   rdfs: "http://www.w3.org/2000/01/rdf-schema#",
   xsd: "http://www.w3.org/2001/XMLSchema#",
 } as const;
+
+// The reference builder's implicit prefixes are hash inputs. Preserve them when
+// parsing historical assertion bodies; templates use NS for new facts.
+export const LEGACY_HEALTH_NS = "https://w3id.org/jeswr/sectors/health#";
+export const LEGACY_CORE_NS = "https://w3id.org/jeswr/core#";
 
 /** Retain RDFlib's language spelling in both the RDF/JS term and N3's store key. */
 function languageLiteral(value: string, language: string): Literal {
