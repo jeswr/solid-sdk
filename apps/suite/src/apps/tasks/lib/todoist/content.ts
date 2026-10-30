@@ -151,8 +151,11 @@ export function splitContent(content: string): { title: string; labels: string[]
       continue;
     }
     if (code) continue;
-    if (char === "[") brackets++;
-    if (char === "]") brackets = Math.max(0, brackets - 1);
+    // Brackets in destinations and autolinks are literal, independent of link text.
+    if (!parentheses && !angle) {
+      if (char === "[") brackets++;
+      if (char === "]") brackets = Math.max(0, brackets - 1);
+    }
     // Angle-delimited destinations may contain unbalanced literal parentheses.
     if (!angle) {
       if (char === "(" && (content[i - 1] === "]" || parentheses)) parentheses++;

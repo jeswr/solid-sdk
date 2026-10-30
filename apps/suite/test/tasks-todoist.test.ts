@@ -422,6 +422,25 @@ describe("content and labels", () => {
   });
 
   it.each([
+    "[read](https://example.org/?q=[)",
+    "[read](https://example.org/?q=])",
+    "[read](https://example.org/?q=[()])",
+    "[read](<https://example.org/?q=[>)",
+    "[read](<https://example.org/?q=]>)",
+    '[read](https://example.org/?q=[ "a @literal title")',
+    '[read](<https://example.org/?q=[> "a @literal title")',
+    "[nested [text]](https://example.org/?q=[)",
+    "![alt](https://example.org/?q=[)",
+    String.raw`[read](https://example.org/?q=\[)`,
+    "<https://example.org/?q=[>",
+    "[outer ![inner](https://example.org/?q=]) @literal](https://example.org/)",
+  ])("keeps destination brackets separate from link text: %s", (link) => {
+    const result = parseTodoistCsv(csv([task({ CONTENT: `${link} @home` })]), options).tasks[0]!;
+    expect(result.title).toBe(link);
+    expect(result.labels).toEqual(["home"]);
+  });
+
+  it.each([
     "\n",
     "\r\n",
     "\r",
