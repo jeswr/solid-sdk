@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Key <-> LDP-path mapping for the Solid unstorage driver.
@@ -19,8 +20,11 @@
 //   - Empty segments (a leading/trailing/double `:`) are rejected — they would
 //     produce `//` or a trailing `/` and so blur the resource/container line.
 //   - A decoded segment equal to `.` or `..` is rejected (traversal guard).
+//   - Encoded path delimiters (`%2F` / `%5C`) are refused by the scope guard.
 //   - The resulting URL is resolved against `base` and re-validated to be a
 //     strict descendant of `base` (defence in depth against any encoding trick).
+
+import { assertWithinPodScope, PodScopeError } from "@jeswr/guarded-fetch";
 
 /** A key segment that, decoded, would traverse the path. */
 const TRAVERSAL_SEGMENTS = new Set([".", ".."]);
@@ -39,7 +43,8 @@ const TRAVERSAL_SEGMENTS = new Set([".", ".."]);
  *     literal `%` in the decoded value a well-formed `%25`).
  *
  * So a single URL segment always maps to a single key segment, and
- * `keyToUrl(base, urlToKey(base, url)) === url` for every member URL we emit.
+ * `keyToUrl(base, urlToKey(base, url)) === url` for every scope-checked member URL
+ * we emit. Encoded path delimiters are refused by the scope guard.
  * (A "nice" segment with none of those four characters is returned decoded
  * verbatim — the human-readable canonical form.)
  */
@@ -119,9 +124,11 @@ function keyToEncodedSegments(key: string): string[] {
         `[unstorage-solid] key segment decodes to \`${decoded}\` (path traversal): ${seg}`,
       );
     }
+    if (decoded.includes("/") || decoded.includes("\\")) {
+      throw new Error("[unstorage-solid] key segment contains an encoded path delimiter (%2F/%5C)");
+    }
     // Re-encode the DECODED form so a key passed in either raw or pre-encoded
-    // shape maps to the same URL (idempotent encoding), and so any `/` that a
-    // caller URI-encoded into a segment stays encoded (cannot become a separator).
+    // shape maps to the same URL (idempotent encoding).
     encoded.push(encodeURIComponent(decoded));
   }
   return encoded;
@@ -154,24 +161,29 @@ export function keyToContainerUrl(base: string, key: string): string {
  * Fail-closed assertion that `url` is `base` itself or a strict descendant of it
  * (same origin, path prefixed by base path). Guards against any
  * encoding/normalisation trick producing a URL outside the pod sub-tree we own.
+ * @deprecated Use `assertWithinPodScope` from `@jeswr/guarded-fetch` for new callers.
  */
 export function assertWithinBase(base: string, url: string): void {
-  const b = new URL(base);
-  let u: URL;
+  // The legacy API accepts ABSOLUTE targets only; the shared primitive also
+  // accepts relative references, so parse without a base before delegating.
+  let target: URL;
   try {
-    u = new URL(url);
+    target = new URL(url);
   } catch {
-    throw new Error(`[unstorage-solid] resolved URL is invalid: ${url}`);
+    throw new Error("[unstorage-solid] target URL is invalid");
   }
-  if (u.origin !== b.origin) {
-    throw new Error(
-      `[unstorage-solid] resolved URL ${url} escapes base origin ${b.origin} (refused)`,
-    );
-  }
-  if (!u.pathname.startsWith(b.pathname)) {
-    throw new Error(
-      `[unstorage-solid] resolved URL ${url} escapes base path ${b.pathname} (refused)`,
-    );
+  try {
+    assertWithinPodScope(base, target.href, {
+      // The shared primitive aliases `/alice` to `/alice/`. The old API rejects
+      // that alias, including `/alice/` for `/alice//`, even for container operations.
+      allowRoot: target.pathname === new URL(base).pathname,
+    });
+  } catch (error) {
+    if (!(error instanceof PodScopeError)) throw error;
+    // Retain the existing diagnostic vocabulary without copying scope logic.
+    throw new Error(`[unstorage-solid] ${error.message.replace("escapes pod", "escapes base")}`, {
+      cause: error,
+    });
   }
 }
 
@@ -184,7 +196,8 @@ export function assertWithinBase(base: string, url: string): void {
  * The returned key is `:`-delimited; each path segment is decoded for
  * readability but its key-level meta-characters (`%`, `:`, `/`, `\`) are
  * re-escaped (see {@link urlSegmentToKeySegment}) so the key round-trips exactly
- * through {@link keyToUrl} — `keyToUrl(base, urlToKey(base, url)) === url`. A
+ * through {@link keyToUrl} for scope-checked members. Encoded delimiter URLs
+ * cannot be used as keys even if this lexical decoder can represent them. A
  * trailing slash (container member) is stripped before mapping — callers track
  * container-ness separately. Returns `undefined` if any segment is not
  * well-formed percent-encoding (a hostile/buggy server cannot inject a malformed
@@ -198,6 +211,7 @@ export function urlToKey(base: string, memberUrl: string): string | undefined {
   } catch {
     return undefined;
   }
+  if (/%2f|%5c/i.test(u.pathname)) return undefined;
   if (u.origin !== b.origin) {
     return undefined;
   }

@@ -268,3 +268,65 @@ describe("Android project", () => {
     expect(activity).toContain('"CapacitorHttpAndroidInterface"');
   });
 });
+
+describe("mobile CI emulator guardrails", () => {
+  const workflow = read("../../.github/workflows/mobile.yml");
+  const job = workflow.match(/^ {2}android-e2e:\n[\s\S]*?(?=^ {2}[\w-]+:|$(?![\s\S]))/m)?.[0] ?? "";
+
+  test("uses only the approved first-party actions throughout mobile CI", () => {
+    const actions = [...workflow.matchAll(/\buses:\s*([^\s#]+)/g)].map((match) => match[1]);
+    expect(actions.length).toBeGreaterThan(0);
+    for (const action of actions) expect(action).toMatch(/^(actions\/[\w-]+|pnpm\/action-setup)@/);
+  });
+
+  test("boots a hardware-accelerated x86_64 google_apis emulator directly", () => {
+    expect(job).toContain("runs-on: ubuntu-latest");
+    expect(job).toContain("timeout-minutes: 45");
+    expect(job).toContain("java-version: 21");
+    expect(job).toContain("node-version: 24");
+    expect(job).toContain('KERNEL=="kvm"');
+    expect(job).toContain("udevadm trigger --name-match=kvm");
+    expect(job).toMatch(/sdkmanager .*system-images;android-(34|35);google_apis;x86_64/);
+    expect(job).toContain("avdmanager create avd");
+    expect(job).toContain("emulator -avd suite-e2e");
+    expect(job).toContain("-accel on");
+    expect(job).toContain("sys.boot_completed");
+    expect(job).toContain("Android boot timed out");
+  });
+
+  test("builds and exercises only the fixture debug APK", () => {
+    expect(job).toContain("SUITE_URL: http://localhost:4173");
+    expect(job).toContain('MOBILE_DEBUG: "1"');
+    expect(job).toContain("pnpm --filter @jeswr/app-mobile run sync:android");
+    expect(job).toMatch(/run: \.\/gradlew --no-daemon --stacktrace assembleDebug\s/);
+    expect(job).not.toMatch(/assembleRelease|bundleRelease|signingConfig|download-artifact/);
+    expect(job).toContain("node apps/mobile/e2e/android-e2e.mjs");
+    const driver = read("e2e/android-e2e.mjs");
+    expect(driver).toContain("../android/app/build/outputs/apk/debug/app-debug.apk");
+    expect(driver).not.toContain("app-release");
+    // A rejected physical device never gets logcat collection or a force-stop.
+    expect(driver).toContain("if (emulatorVerified) {");
+    expect(driver).toContain('() => emulatorVerified && shell("am", "force-stop", APP)');
+    expect(job).toContain("if: failure()");
+    expect(job).toContain("adb logcat -d -v threadtime");
+    expect(job).toContain("name: android-e2e-diagnostics");
+    expect(job).toContain("path: apps/mobile/e2e/artifacts/");
+  });
+
+  test("bounds boot commands and failure diagnostics so artifacts can still upload", () => {
+    const boot = job.match(/ {6}- name: Create and boot the AVD\n[\s\S]*?(?= {6}- )/)?.[0] ?? "";
+    expect(boot).toContain("timeout-minutes: 10");
+    expect(boot).not.toContain("adb wait-for-device");
+    expect(boot).toContain("deadline=$((SECONDS + 420))");
+    expect(job).toMatch(/- name: Print the emulator log\n {8}if: failure\(\)/);
+    expect(boot).toContain('export ANDROID_AVD_HOME="$RUNNER_TEMP/avd"');
+    const shellCalls = boot.split("\n").filter((line) => line.includes("adb shell"));
+    expect(shellCalls).toHaveLength(5);
+    for (const line of shellCalls) expect(line).toContain("timeout 10 adb shell");
+    const diagnostics =
+      job.match(/ {6}- name: Collect emulator logcat\n[\s\S]*?(?= {6}- )/)?.[0] ?? "";
+    expect(diagnostics).toContain("timeout-minutes: 1");
+    expect(diagnostics).toContain("timeout 30 adb logcat -d -v threadtime");
+    expect(diagnostics).toContain("|| true");
+  });
+});

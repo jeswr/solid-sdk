@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-5.6 (Sol)
+// AUTHORED-BY Codex GPT-6.1 (Sol)
+// AUTHORED-BY Codex GPT-6
 
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -25,6 +27,7 @@ const nextApp = {
   originEnv: "NEXT_PUBLIC_APP_ORIGIN",
 };
 const vercelConfig = {
+  git: { deploymentEnabled: false },
   rewrites: [{ source: "/((?!assets/|.*\\.[^/]+$).*)", destination: "/index.html" }],
   headers: [
     {
@@ -42,6 +45,13 @@ export function GET() {
     headers: { "content-type": "application/ld+json" }
   });
 }`;
+const viteConfig = `import { defineConfig, loadEnv } from "vite";
+import { hostedClientIdConfig } from "./src/lib/hosted-client-id.js";
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+  if (!env.APP_ORIGIN) return {};
+  return hostedClientIdConfig(env, { client_id: "/clientid.jsonld" });
+});`;
 
 afterEach(() => {
   for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
@@ -51,6 +61,7 @@ function fixtures(apps = [viteApp]) {
   const files = {
     "scripts/vercel-apps.json": apps.map((app) => ({
       ...app,
+      gitDeploymentEnabled: app.project === "solid-suite" ? { "**": false, main: true } : false,
       vercelIgnore: `node ${relative(app.rootDirectory, "scripts/vercel-ignore-build.mjs")} ${app.package}`,
     })),
     "scripts/vercel-ignore-build.mjs": "// fixture ignored-build script",
@@ -67,6 +78,7 @@ function fixtures(apps = [viteApp]) {
     if (app.framework === "vite") {
       files[`${app.rootDirectory}/vercel.json`] = structuredClone(vercelConfig);
     } else {
+      files[`${app.rootDirectory}/vercel.json`] = { git: { deploymentEnabled: false } };
       files[`${app.rootDirectory}/src/app/clientid.jsonld/route.ts`] = nextRoute;
     }
     if (app.originEnv === "APP_ORIGIN" || app.framework === "vite") {
@@ -110,6 +122,187 @@ function expectFailure(files, message) {
 }
 
 describe("Vercel config guard", () => {
+  it.each([
+    "$comment",
+    "unknownProperty",
+    "buildComand",
+    "__proto__",
+  ])("rejects unknown top-level property %s in listed and unlisted apps", (key) => {
+    for (const path of [
+      "apps/example/web/vercel.json",
+      "apps/next/vercel.json",
+      "apps/unlisted/vercel.json",
+      "apps/unlisted/web/vercel.json",
+    ]) {
+      const files = fixtures([viteApp, nextApp]);
+      files[path] = { ...(files[path] ?? { git: { deploymentEnabled: false } }), [key]: "invalid" };
+      expectFailure(files, `${path}: unknown top-level property ${key}`);
+    }
+  });
+
+  it("accepts schema metadata and supported Vercel top-level options", () => {
+    const files = fixtures();
+    Object.assign(files["apps/example/web/vercel.json"], {
+      // biome-ignore lint/style/useNamingConvention: Vercel's schema metadata key.
+      $schema: "https://openapi.vercel.sh/vercel.json",
+      buildCommand: "vite build",
+      framework: "vite",
+      outputDirectory: "dist",
+      cleanUrls: true,
+      trailingSlash: false,
+    });
+    expect(scan(files).status).toBe(0);
+  });
+
+  it("rejects an array in place of a Vercel configuration object", () => {
+    const files = fixtures();
+    files["apps/example/web/vercel.json"] = [];
+    expectFailure(files, "apps/example/web/vercel.json: expected a configuration object");
+  });
+
+  const suiteApp = {
+    ...nextApp,
+    project: "solid-suite",
+    rootDirectory: "apps/suite",
+    package: "@jeswr/app-suite",
+    clientIdDocument: false,
+  };
+
+  function suiteFixture() {
+    const files = fixtures([suiteApp]);
+    files["apps/suite/vercel.json"] = {
+      git: { deploymentEnabled: { "**": false, main: true } },
+      ignoreCommand: files["scripts/vercel-apps.json"][0].vercelIgnore,
+    };
+    return files;
+  }
+
+  it("allows only main for suite and preserves its ignored-build step", () => {
+    expect(scan(suiteFixture()).status).toBe(0);
+  });
+
+  it.each([
+    undefined,
+    true,
+    false,
+    { main: true },
+    { "*": false },
+    { "*": false, main: true },
+    { "*": true, main: true },
+    { "**": false, main: true, preview: true },
+  ])("rejects a suite git deployment policy that is not main only: %j", (deploymentEnabled) => {
+    const files = suiteFixture();
+    files["apps/suite/vercel.json"].git.deploymentEnabled = deploymentEnabled;
+    expectFailure(files, "apps/suite/vercel.json: git.deploymentEnabled must be");
+  });
+
+  it("requires suite's ignoreCommand in vercel.json", () => {
+    const files = suiteFixture();
+    delete files["apps/suite/vercel.json"].ignoreCommand;
+    expectFailure(files, "ignoreCommand must match vercelIgnore");
+  });
+
+  it.each([
+    viteApp,
+    nextApp,
+  ])("disables git deployments for every non-suite $framework app", (app) => {
+    for (const deploymentEnabled of [undefined, true, { main: true }, { "*": false }]) {
+      const files = fixtures([app]);
+      files[`${app.rootDirectory}/vercel.json`].git.deploymentEnabled = deploymentEnabled;
+      expectFailure(files, "git.deploymentEnabled must be false");
+    }
+  });
+
+  it("prevents a new app from enabling git deploys through the inventory", () => {
+    const files = fixtures();
+    files["scripts/vercel-apps.json"][0].gitDeploymentEnabled = { "**": false, main: true };
+    files["apps/example/web/vercel.json"].git.deploymentEnabled = { "**": false, main: true };
+    expectFailure(files, "solid-example: gitDeploymentEnabled must be false");
+  });
+
+  it("rejects a missing inventory policy and duplicate entries", () => {
+    const files = fixtures();
+    delete files["scripts/vercel-apps.json"][0].gitDeploymentEnabled;
+    expectFailure(files, "gitDeploymentEnabled must be false");
+    files["scripts/vercel-apps.json"].push(files["scripts/vercel-apps.json"][0]);
+    expectFailure(files, "duplicate deployment root or project");
+  });
+
+  it.each([
+    "apps/pod-migrator/vercel.json",
+    "apps/new-app/web/vercel.json",
+  ])("checks deployment policy for unlisted config %s", (path) => {
+    for (const config of [
+      {},
+      { git: null },
+      { git: {} },
+      ...[true, null, "false", { "*": false }, { main: true }].map((deploymentEnabled) => ({
+        git: { deploymentEnabled },
+      })),
+    ]) {
+      expectFailure(
+        { ...fixtures(), [path]: config },
+        `${path}: git.deploymentEnabled must be false`,
+      );
+    }
+    expect(scan({ ...fixtures(), [path]: { git: { deploymentEnabled: false } } }).status).toBe(0);
+    expectFailure({ ...fixtures(), [path]: "{" }, `${path}: invalid JSON`);
+  });
+
+  const deployableManifests = [
+    { scripts: { build: "custom-build" } },
+    ...["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"].flatMap(
+      (field) => ["next", "vite"].map((framework) => ({ [field]: { [framework]: "*" } })),
+    ),
+  ];
+
+  for (const directory of ["apps/pod-migrator", "apps/new-app/web"]) {
+    it.each(
+      deployableManifests,
+    )(`requires an absent disabling config for unlisted ${directory} with %j`, (manifest) => {
+      const files = { ...fixtures(), [`${directory}/package.json`]: manifest };
+      expectFailure(files, `${directory}/vercel.json: missing or unreadable file`);
+      files[`${directory}/vercel.json`] = { git: { deploymentEnabled: false } };
+      expect(scan(files).status).toBe(0);
+    });
+  }
+
+  it.each([viteApp, nextApp])("rejects a missing config for registered $framework apps", (app) => {
+    const files = fixtures([app]);
+    delete files[`${app.rootDirectory}/vercel.json`];
+    expectFailure(files, `${app.rootDirectory}/vercel.json: missing or unreadable file`);
+  });
+
+  it("leaves non-build app directories outside discovery", () => {
+    const files = {
+      ...fixtures(),
+      "apps/mobile/package.json": { scripts: { test: "vitest run", build: " " } },
+      "apps/example/package.json": { private: true },
+    };
+    expect(scan(files).status).toBe(0);
+  });
+
+  it("rejects an unreadable manifest instead of silently omitting a future app", () => {
+    expectFailure(
+      { ...fixtures(), "apps/new-app/package.json": "{" },
+      "apps/new-app/package.json: invalid JSON",
+    );
+  });
+
+  it("keeps the suite's main-only exception when discovered outside the inventory", () => {
+    const files = {
+      ...fixtures(),
+      "apps/suite/package.json": { dependencies: { next: "*" } },
+      "apps/suite/vercel.json": { git: { deploymentEnabled: { "**": false, main: true } } },
+    };
+    expect(scan(files).status).toBe(0);
+    files["apps/suite/vercel.json"].git.deploymentEnabled = true;
+    expectFailure(
+      files,
+      'apps/suite/vercel.json: git.deploymentEnabled must be { "**": false, "main": true }',
+    );
+  });
+
   it("checks every deployment and accepts Next.js framework-inferred public env", () => {
     const result = scan(fixtures([viteApp, nextApp]));
     expect(result.status).toBe(0);
@@ -120,7 +313,7 @@ describe("Vercel config guard", () => {
   it.each([
     viteApp,
     { ...nextApp, originEnv: "APP_ORIGIN" },
-  ])("accepts $framework without a client ID mechanism or origin env config when clientIdDocument is false", (app) => {
+  ])("accepts $framework without a client ID mechanism or Turbo env config when clientIdDocument is false", (app) => {
     const files = fixtures([{ ...app, clientIdDocument: false }]);
     files[`${app.rootDirectory}/package.json`].scripts.build = `${app.framework} build`;
     delete files[`${app.rootDirectory}/src/app/clientid.jsonld/route.ts`];
@@ -132,6 +325,38 @@ describe("Vercel config guard", () => {
 
     delete files["scripts/vercel-apps.json"][0].originEnv;
     expect(scan(files).status).toBe(0);
+  });
+
+  it("accepts Next.js without originEnv or a Turbo config when a request-derived client ID route exists", () => {
+    const files = fixtures([{ ...nextApp, originEnv: undefined }]);
+    files["apps/next/src/app/clientid.jsonld/route.ts"] = `export const dynamic = "force-dynamic";
+export function GET(request) {
+  return new Response(JSON.stringify({
+    client_id: new URL("/clientid.jsonld", request.url).toString(),
+    redirect_uris: [new URL("/callback.html", request.url).toString()]
+  }), { headers: { "content-type": "application/ld+json" } });
+}`;
+    expect(files["apps/next/turbo.json"]).toBeUndefined();
+    const result = scan(files);
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+  });
+
+  it.each([
+    undefined,
+    true,
+  ])("rejects Vite without originEnv when clientIdDocument is %j", (clientIdDocument) => {
+    const files = fixtures([{ ...viteApp, originEnv: undefined, clientIdDocument }]);
+    expectFailure(files, "scripts/vercel-apps.json[0]: invalid deployment entry");
+  });
+
+  it.each([viteApp, nextApp])("rejects unsupported originEnv values for $framework", (app) => {
+    for (const originEnv of [null, "", "VITE_APP_ORIGIN", "OTHER_APP_ORIGIN"]) {
+      for (const clientIdDocument of [undefined, false]) {
+        const files = fixtures([{ ...app, originEnv, clientIdDocument }]);
+        expectFailure(files, "scripts/vercel-apps.json[0]: invalid deployment entry");
+      }
+    }
   });
 
   it.each([
@@ -194,6 +419,71 @@ describe("Vercel config guard", () => {
       { key: "access-control-allow-origin", value: "*" },
     ];
     expect(scan(files).status).toBe(0);
+  });
+
+  it("accepts a Vite config that emits the client ID from APP_ORIGIN during build", () => {
+    const files = fixtures();
+    files["apps/example/web/package.json"].scripts.build =
+      "tsc -p tsconfig.build.json && vite build";
+    files["apps/example/web/vite.config.ts"] = viteConfig;
+    expect(scan(files).status).toBe(0);
+  });
+
+  it.each([
+    "missing config",
+    "no document",
+    "wrong origin",
+    "unrelated build",
+  ])("rejects a Vite client ID mechanism with %s", (kind) => {
+    const files = fixtures();
+    files["apps/example/web/package.json"].scripts.build = "vite build";
+    if (kind !== "missing config") files["apps/example/web/vite.config.ts"] = viteConfig;
+    if (kind === "no document")
+      files["apps/example/web/vite.config.ts"] = viteConfig.replaceAll(
+        "clientid.jsonld",
+        "other.json",
+      );
+    if (kind === "wrong origin")
+      files["apps/example/web/vite.config.ts"] = viteConfig.replaceAll(
+        "APP_ORIGIN",
+        "OTHER_ORIGIN",
+      );
+    if (kind === "unrelated build")
+      files["apps/example/web/package.json"].scripts.build = "echo built";
+    expectFailure(
+      files,
+      "apps/example/web/package.json: build/prebuild must generate clientid.jsonld",
+    );
+  });
+
+  it.each([
+    [
+      "comment-only",
+      `// env.APP_ORIGIN "clientid.jsonld"\n/* env.APP_ORIGIN */\nexport default {};`,
+    ],
+    ["similarly named origin", viteConfig.replaceAll("env.APP_ORIGIN", "env.OTHER_APP_ORIGIN")],
+  ])("rejects a %s Vite client ID config", (_kind, config) => {
+    const files = fixtures();
+    files["apps/example/web/package.json"].scripts.build = "vite build";
+    files["apps/example/web/vite.config.ts"] = config;
+    expectFailure(
+      files,
+      "apps/example/web/package.json: build/prebuild must generate clientid.jsonld",
+    );
+  });
+
+  it.each([
+    "vite build --config other.config.ts",
+    "vite build -c other.config.ts",
+    "vite build --config=other.config.ts",
+  ])("rejects a Vite client ID config bypassed by %s", (build) => {
+    const files = fixtures();
+    files["apps/example/web/package.json"].scripts.build = build;
+    files["apps/example/web/vite.config.ts"] = viteConfig;
+    expectFailure(
+      files,
+      "apps/example/web/package.json: build/prebuild must generate clientid.jsonld",
+    );
   });
 
   it.each(["/(.*)", "/:path*", "/:path(.*)"])("accepts the SPA catch-all %s", (source) => {
@@ -365,13 +655,54 @@ describe("Vercel config guard", () => {
     "missing build",
     "unrelated build",
   ])("rejects a Next.js client ID mechanism with %s", (kind) => {
-    const files = fixtures([nextApp]);
-    const route = "apps/next/src/app/clientid.jsonld/route.ts";
-    if (kind === "missing route") delete files[route];
-    if (kind === "incomplete route")
-      files[route] = "export function GET() { return new Response(''); }";
-    if (kind === "missing build") delete files["apps/next/package.json"].scripts.build;
-    if (kind === "unrelated build") files["apps/next/package.json"].scripts.build = "echo built";
+    for (const originEnv of [nextApp.originEnv, undefined]) {
+      const files = fixtures([{ ...nextApp, originEnv }]);
+      const route = "apps/next/src/app/clientid.jsonld/route.ts";
+      if (kind === "missing route") delete files[route];
+      if (kind === "incomplete route")
+        files[route] = "export function GET() { return new Response(''); }";
+      if (kind === "missing build") delete files["apps/next/package.json"].scripts.build;
+      if (kind === "unrelated build") files["apps/next/package.json"].scripts.build = "echo built";
+      expectFailure(files, "next build with a clientid.jsonld GET route");
+    }
+  });
+
+  it("accepts a request-derived Next.js route formatted with trailing commas", () => {
+    const files = fixtures([{ ...nextApp, originEnv: undefined }]);
+    files["apps/next/src/app/clientid.jsonld/route.ts"] = `export function GET(request) {
+  return new Response(JSON.stringify({
+    client_id: new URL(
+      "/clientid.jsonld",
+      request.url,
+    ).toString(),
+    redirect_uris: [],
+  }), { headers: { "content-type": "application/ld+json" } });
+}`;
+    expect(scan(files).status).toBe(0);
+  });
+
+  it.each([
+    ["a static origin", nextRoute.replace("force-static", "force-dynamic")],
+    [
+      "force-static",
+      `export const dynamic = "force-static";
+export function GET(request) {
+  return new Response(JSON.stringify({
+    client_id: new URL("/clientid.jsonld", request.url).toString(),
+    redirect_uris: [new URL("/callback.html", request.url).toString()]
+  }), { headers: { "content-type": "application/ld+json" } });
+}`,
+    ],
+  ])("rejects a Next.js route without originEnv that has %s", (_kind, route) => {
+    const files = fixtures([{ ...nextApp, originEnv: undefined }]);
+    files["apps/next/src/app/clientid.jsonld/route.ts"] = route;
+    expectFailure(files, "GET route deriving client_id from the request URL");
+  });
+
+  it("requires a Next.js route without originEnv even when a generator is configured", () => {
+    const files = fixtures([{ ...nextApp, originEnv: undefined }]);
+    delete files["apps/next/src/app/clientid.jsonld/route.ts"];
+    files["apps/next/package.json"].scripts.build = "node scripts/gen-clientid.mjs && next build";
     expectFailure(files, "next build with a clientid.jsonld GET route");
   });
 
@@ -414,17 +745,26 @@ describe("Vercel config guard", () => {
   it("checks the actual manifest independent of the invoking directory", () => {
     const result = runNode([guard], { cwd: tmpdir() });
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain("11 deployments checked");
+    expect(result.stdout).toContain("15 deployments checked");
     expect(result.stderr).toBe("");
   });
 });
 
-describe("pod app Vercel routes", () => {
+describe("Vite app Vercel routes", () => {
   const apps = JSON.parse(readFileSync(join(checkout, "scripts/vercel-apps.json"), "utf8"));
   for (const app of apps.filter((app) => app.framework === "vite")) {
     // Rewritten nested paths serve index.html, so Vercel builds need root-absolute assets.
     it(`${app.project} builds root-absolute asset URLs on Vercel`, () => {
       const vite = readFileSync(join(checkout, app.rootDirectory, "vite.config.ts"), "utf8");
+      if (app.rootDirectory === "apps/access-manager") {
+        expect(vite).not.toMatch(/\bbase\s*:/);
+        return;
+      }
+      if (app.rootDirectory === "apps/pod-migrator") {
+        // Absolute base from CLIENT_BASE_PATH ("/" unless a Pages build sets it).
+        expect(vite).toContain("deploymentBasePath(env.CLIENT_BASE_PATH || env.APP_BASE_PATH)");
+        return;
+      }
       expect(vite).toContain('base: process.env.VERCEL === "1" ? "/" : "./",');
       const turbo = JSON.parse(
         readFileSync(join(checkout, app.rootDirectory, "turbo.json"), "utf8"),

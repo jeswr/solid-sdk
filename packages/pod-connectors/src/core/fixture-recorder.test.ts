@@ -5,6 +5,61 @@ import { fixtureFetch } from "./fixture-fetch.js";
 import { createFixtureRecorder, redactFixture } from "./fixture-recorder.js";
 
 describe("fixture recorder redaction", () => {
+  it("refuses a private Request shadowed with a public route before transport or recording", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(Response.json({ total: 42 }));
+    const recorder = createFixtureRecorder({
+      fetch,
+      routes: [{ url: "https://source.test/public", safeFields: ["total"] }],
+    });
+    const request = new Request("https://source.test/private");
+    Object.defineProperty(request, "url", { get: () => "https://source.test/public" });
+    await expect(recorder.fetch(request)).rejects.toThrow("no configured public recorder route");
+    expect(fetch).not.toHaveBeenCalled();
+    expect(recorder.fixtures()).toEqual([]);
+  });
+
+  it("uses the real Request target's scalar allowlist when url is shadowed", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (input, init) => {
+      expect(new Request(input, init).url).toBe("https://source.test/items/special");
+      return Response.json({ special: 1, ordinary: 2 });
+    });
+    const recorder = createFixtureRecorder({
+      fetch,
+      routes: [
+        { url: "https://source.test/items", safeFields: ["ordinary"] },
+        { url: "https://source.test/items/special", safeFields: ["special"] },
+      ],
+    });
+    const request = new Request("https://source.test/items/special");
+    Object.defineProperty(request, "url", { value: "https://source.test/items" });
+    await recorder.fetch(request);
+    expect(recorder.fixtures()).toEqual([
+      {
+        url: "https://source.test/items/special",
+        method: "GET",
+        status: 200,
+        json: { special: 1 },
+      },
+    ]);
+  });
+
+  it("captures mutable URLs before source I/O", async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockImplementation(async (input) => {
+      await Promise.resolve();
+      expect(input).toBe("https://source.test/items");
+      return Response.json({ total: 1 });
+    });
+    const recorder = createFixtureRecorder({
+      fetch,
+      routes: [{ url: "https://source.test/items", safeFields: ["total"] }],
+    });
+    const url = new URL("https://source.test/items");
+    const pending = recorder.fetch(url);
+    url.href = "https://source.test/private";
+    await pending;
+    expect(recorder.fixtures()[0]?.json).toEqual({ total: 1 });
+  });
+
   it("fails closed for unlisted scalars, arbitrary personal keys and nested structures", () => {
     const value = {
       personal: "private-value",
@@ -104,7 +159,12 @@ describe("fixture recorder redaction", () => {
     );
     const response = await recorder.fetch(request);
     expect(await response.json()).toEqual(body);
-    expect(transport).toHaveBeenCalledWith(request, undefined);
+    expect(transport).toHaveBeenCalledOnce();
+    const captured = transport.mock.calls[0]?.[0] as Request;
+    expect(captured).not.toBe(request);
+    expect(captured.url).toBe(request.url);
+    expect(captured.headers.get("authorization")).toBe("Bearer synthetic-request-token");
+    expect(await captured.text()).toBe("synthetic-private-body");
     const fixtures = recorder.fixtures();
     expect(fixtures).toEqual([
       {

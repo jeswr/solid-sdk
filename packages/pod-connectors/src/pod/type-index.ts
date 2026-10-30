@@ -10,6 +10,7 @@
  * app bootstraps them when missing (DESIGN.md §9).
  */
 
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import {
   DatasetWrapper,
@@ -22,6 +23,7 @@ import {
 } from "@rdfjs/wrapper";
 import { WebIdDataset } from "@solid/object";
 import { DataFactory } from "n3";
+import { canonicalJeswrIri } from "../core/canonical-vocab.js";
 import { freshRdf } from "./rdf-read.js";
 
 const SOLID = "http://www.w3.org/ns/solid/terms#";
@@ -31,10 +33,16 @@ const RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 export class TypeRegistration extends TermWrapper {
   /** The RDF class this entry indexes (an IRI). */
   get forClass(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, `${SOLID}forClass`, NamedNodeAs.string);
+    const iri = OptionalFrom.subjectPredicate(this, `${SOLID}forClass`, NamedNodeAs.string);
+    return iri === undefined ? undefined : canonicalJeswrIri(iri);
   }
   set forClass(v: string | undefined) {
-    OptionalAs.object(this, `${SOLID}forClass`, v, NamedNodeFrom.string);
+    OptionalAs.object(
+      this,
+      `${SOLID}forClass`,
+      v === undefined ? undefined : canonicalJeswrIri(v),
+      NamedNodeFrom.string,
+    );
   }
 
   /** A single resource holding instances of `forClass`. */
@@ -93,7 +101,7 @@ export class TypeIndexDataset extends DatasetWrapper {
 
   /** Find the location(s) registered for a class IRI. */
   locate(classIri: string): RegisteredLocation[] {
-    return this.all().filter((l) => l.forClass === classIri);
+    return this.all().filter((l) => l.forClass === canonicalJeswrIri(classIri));
   }
 }
 
