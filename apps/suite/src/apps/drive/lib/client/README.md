@@ -41,6 +41,19 @@ Overwrite PUTs, metadata replay, container merging and root/index/description
 writes assert their captured endpoint on the same final HTTP boundary. Transfer
 preflight also requires a recovery owner before moving non-demo resources, so a
 late revocation can always retain private copies even for children without Control.
+Copy and container merge require that same captured recovery owner. Both transfer
+failure branches pass it explicitly to `secureRetained`; retained bytes never
+materialize an old public grant, including when rollback's source check refuses
+before deletion begins.
+
+DriveProvider's Type Index bootstrap uses `driveBootstrapFetch` for every index,
+preferences and profile write. The adapter shares namespace discovery and
+`commitHttp` with ordinary operations, pins the first discovery for each content
+validator, and advances approval only from its own successful mutation receipts.
+An automatic registration retry cannot adopt a concurrent replacement. Request
+bodies and namespace reads finish before the shared final conditional HEAD.
+The [round 74 audit](../../../../../test/drive-review-round74-audit.md) lists the
+complete call-site audit and 79-scenario ordering/discovery matrix.
 
 Compensation uses the complete captured own ACL, including independent child
 defaults. An unchanged ACL stays intact during content replay; its captured

@@ -16,7 +16,7 @@ import { measureUsage, purgeExpired, trashFolderOf } from "../lib/operations/ope
 import { DriveFocusBoundary } from "../state/app-focus";
 import { DriveProvider, DriveRootDiscoveryError, useDrive } from "../state/drive-context";
 import { claimPurge } from "../state/purge-marker";
-import { DriveUiProvider, reportFailure, useDriveUi } from "../state/ui";
+import { DriveUiProvider, errorMessage, reportFailure, useDriveUi } from "../state/ui";
 import { DetailsPane } from "./details";
 import { DriveDialogs } from "./dialogs";
 import { PreviewDialog } from "./preview";
@@ -148,7 +148,7 @@ function DriveChrome({ children }: { children: ReactNode }) {
           <p>
             {rootError instanceof DriveRootDiscoveryError
               ? rootError.message
-              : "The storage didn't respond."}
+              : errorMessage(rootError, "The storage didn't respond.")}
           </p>
           <Button variant="outline" onClick={() => location.reload()}>
             Retry

@@ -155,6 +155,14 @@ async function roots(pod: Awaited<ReturnType<typeof fixture>>) {
   return locations;
 }
 
+async function waitForDriveRoot() {
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(drive.rootError).toBeUndefined();
+    expect(drive.driveRoot).toBe(DRIVE);
+  });
+}
+
 async function removeFallback(pod: Awaited<ReturnType<typeof fixture>>) {
   for (const path of ["private/secret", "private/", "public/placeholder", "public/", ""]) {
     expect((await pod.pod.fetch(`${DRIVE}${path}`, { method: "DELETE" })).ok).toBe(true);
@@ -210,6 +218,7 @@ it.each(
   const pod = await fixture(path, false);
   await removeFallback(pod);
   await mount(tree());
+  await waitForDriveRoot();
   expect(drive.driveRoot).toBe(DRIVE);
   expect(await roots(pod)).toEqual([expect.objectContaining({ container: DRIVE })]);
   expect(pod.calls.filter((call) => call.method === "PUT").map((call) => call.url)).toEqual([
@@ -265,6 +274,7 @@ it("creates the fallback and registers it once when neither type index has a Dri
   // Start with a genuinely missing fallback, rather than the WAC fixture's default tree.
   await removeFallback(pod);
   const view = await mount(tree());
+  await waitForDriveRoot();
   expect(drive.driveRoot).toBe(DRIVE);
   expect(view.host.textContent).toContain("Your Drive is empty");
   expect(await roots(pod)).toEqual([
@@ -277,11 +287,14 @@ it("creates the fallback and registers it once when neither type index has a Dri
   ).toHaveLength(1);
 });
 
-it("concurrent first-run tabs converge on one registration after an If-Match conflict", async () => {
+it.each([
+  false,
+  true,
+])("concurrent first-run tabs never rebase a registration write (index initially absent: %s)", async (absent) => {
   const pod = await fixture();
   await removeFallback(pod);
-  expect((await pod.pod.fetch(PRIVATE_INDEX, { method: "DELETE" })).ok).toBe(true);
-  const gates = { create: deferred<void>(), update: deferred<void>() };
+  if (absent) expect((await pod.pod.fetch(PRIVATE_INDEX, { method: "DELETE" })).ok).toBe(true);
+  const gate = deferred<void>();
   const writes = { create: 0, update: 0 };
   const outcomes: Record<"create" | "update", number[]> = { create: [], update: [] };
   pod.intercept(async (url, init) => {
@@ -290,25 +303,45 @@ it("concurrent first-run tabs converge on one registration after an If-Match con
     const phase = headers.get("if-none-match") === "*" ? "create" : "update";
     if (phase === "update") expect(headers.has("if-match")).toBe(true);
     writes[phase]++;
-    if (writes[phase] === 2) gates[phase].resolve();
-    await gates[phase].promise;
+    if (writes[absent ? "create" : "update"] === 2) gate.resolve();
+    await gate.promise;
     const response = await pod.pod.fetch(url, init);
     outcomes[phase].push(response.status);
+    response.headers.set("link", `<${PRIVATE_INDEX}.policy>; rel="acl"`);
+    response.headers.delete("x-solid-demo-access-control");
     return response;
   });
-  const first = await mount(tree());
-  const second = await mount(tree());
-  await act(async () => {
-    await gates.update.promise;
-  });
-  expect(first.host.textContent).not.toContain("Loading…");
-  expect(second.host.textContent).not.toContain("Loading…");
-  expect(drive.driveRoot).toBe(DRIVE);
-  for (const statuses of Object.values(outcomes)) {
-    expect(statuses.filter((status) => status >= 200 && status < 300)).toHaveLength(1);
-    expect(statuses).toContain(412);
+  const states: ReturnType<typeof useDrive>[] = [];
+  function Tab({ index }: { index: number }) {
+    states[index] = useDrive();
+    return null;
   }
+  const tab = (index: number) => h(DriveProvider, { session, children: h(Tab, { index }) });
+  const first = await mount(tab(0));
+  const second = await mount(tab(1));
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(outcomes[absent ? "create" : "update"]).toHaveLength(2);
+    expect(
+      states.filter((state) => state.driveRoot === DRIVE),
+      JSON.stringify(
+        states.map(({ rootError }) => rootError),
+        ["name", "message", "cause", "url", "status"],
+      ),
+    ).toHaveLength(absent ? 1 : 2);
+    expect(states.filter((state) => state.rootError)).toHaveLength(absent ? 1 : 0);
+  });
+  expect(
+    outcomes[absent ? "create" : "update"].filter((status) => status >= 200 && status < 300),
+  ).toHaveLength(1);
+  expect(outcomes[absent ? "create" : "update"]).toContain(412);
+  expect(writes).toEqual(absent ? { create: 2, update: 1 } : { create: 0, update: 2 });
   expect(await roots(pod)).toHaveLength(1);
+  await first.unmount();
+  await second.unmount();
+  await mount(tree());
+  await waitForDriveRoot();
+  expect(writes).toEqual(absent ? { create: 2, update: 1 } : { create: 0, update: 2 });
 });
 
 it.each([

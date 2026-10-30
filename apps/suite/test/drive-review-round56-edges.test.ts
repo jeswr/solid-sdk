@@ -108,13 +108,21 @@ it.each([
       return Promise.reject("Backup unavailable");
     return undefined;
   });
+  if (failure === "no controller") {
+    await expect(client.copy(from, to, { kind: "preserve-source" })).rejects.toMatchObject({
+      kind: "private-access-unavailable",
+      cause: "Recovery owner unavailable",
+    });
+    expect(copied).toBe(false);
+    expect(f.pod.has(to)).toBe(false);
+    expect(await (await f.pod.fetch(from)).text()).toBe("secret contents");
+    expect(f.calls.filter(({ method }) => ["PUT", "DELETE"].includes(method))).toEqual([]);
+    return;
+  }
   await expect(client.copy(from, to, { kind: "preserve-source" })).rejects.toMatchObject({
     kind: "partial-failure",
     retainedDestinations: expect.arrayContaining([to]),
-    cause:
-      failure === "no controller"
-        ? { kind: "private-access-unavailable" }
-        : { kind: "partial-failure", retainedDestinations: [], cause: "Backup unavailable" },
+    cause: { kind: "partial-failure", retainedDestinations: [], cause: "Backup unavailable" },
   });
   expect(copied).toBe(true);
   expect(await (await f.pod.fetch(to)).text()).toBe("secret contents");

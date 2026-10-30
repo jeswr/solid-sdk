@@ -25,6 +25,7 @@ import {
   ensureTypeRegistrations,
 } from "@/apps/docs/lib/model/type-index";
 import type { PodSession } from "@/lib/session/pod-session";
+import { driveBootstrapFetch } from "../lib/client/bootstrap";
 import {
   createSolidDriveClient,
   type DriveClient,
@@ -95,7 +96,7 @@ async function resolveDriveRoot(client: DriveClient, session: PodSession): Promi
     webId: session.webId,
     podRoot: session.storageUrl,
     registrations: [{ forClass: DRIVE_ROOT_CLASS, container: root }],
-    fetchImpl: session.fetch,
+    fetchImpl: driveBootstrapFetch(session.fetch, session.storageUrl),
   });
   return root;
 }

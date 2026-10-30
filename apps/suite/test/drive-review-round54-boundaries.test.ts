@@ -3,7 +3,12 @@ import { createRequire } from "node:module";
 import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { afterEach, expect, it, vi } from "vitest";
+import {
+  ensureTypeRegistrations,
+  ProfileTypeIndexAnchor,
+} from "../src/apps/docs/lib/model/type-index";
 import { accessControl, privateAcl } from "../src/apps/drive/lib/client/access";
+import { driveBootstrapFetch } from "../src/apps/drive/lib/client/bootstrap";
 import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
 import { confirmationOptions } from "../src/apps/drive/lib/client/commit";
 import { protectionLedger } from "../src/apps/drive/lib/client/protection-ledger";
@@ -126,6 +131,10 @@ const steps = [
   "custom-name rename",
   "renewed-consent move",
   "renewed-consent move tree",
+  "startup index overwrite",
+  "startup preferences overwrite",
+  "startup profile overwrite",
+  "revoked source recovery ACL",
 ] as const;
 type Step = (typeof steps)[number];
 
@@ -177,6 +186,7 @@ async function scenario(variant: Step, events: string[], captureModes = false) {
   let completionChanged = false;
   const consentDestination = `${DRIVE}consent/`;
   let consentWidened = false;
+  let sourceRevoked = false;
   const http: typeof fetch = async (input, init) => {
     const url = String(input);
     const method = init?.method ?? "GET";
@@ -210,6 +220,11 @@ async function scenario(variant: Step, events: string[], captureModes = false) {
       f.policies.set(`${consentDestination}.policy`, await aclBody(consentDestination, true));
     }
     if (captureModes) response.headers.set("wac-allow", 'user="read write control",public=""');
+    if (variant === "revoked source recovery ACL" && url.startsWith(PRIVATE))
+      response.headers.set(
+        "wac-allow",
+        `user="read write control",public="${sourceRevoked ? "" : "read"}"`,
+      );
     if (url === completionTarget && method === "PUT" && headers.has("if-match") && response.ok)
       completionWritten = true;
     if (method === "HEAD" && headers.has("if-match")) {
@@ -292,7 +307,69 @@ async function scenario(variant: Step, events: string[], captureModes = false) {
   let targetCheck = 1;
   let identityTarget: string | undefined;
   let run: () => Promise<unknown>;
-  if (["root marker PATCH", "description marker PATCH", "Type Index overwrite"].includes(step)) {
+  if (step.startsWith("startup ") && step.endsWith(" overwrite")) {
+    const profile = new URL("profile", ROOT).href;
+    const preferences = `${ROOT}settings/prefs.ttl`;
+    const index = `${ROOT}settings/privateTypeIndex.ttl`;
+    f.policies.set(`${ROOT}.policy`, await aclBody(ROOT));
+    const data = new Store();
+    if (step === "startup index overwrite") {
+      new ProfileTypeIndexAnchor(OWNER, data, DataFactory).privateIndex = index;
+      await f.pod.fetch(index, {
+        method: "PUT",
+        body: "",
+        headers: { "content-type": "text/turtle" },
+      });
+    }
+    if (step === "startup preferences overwrite")
+      await f.pod.fetch(preferences, {
+        method: "PUT",
+        body: "",
+        headers: { "content-type": "text/turtle" },
+      });
+    await f.pod.fetch(profile, {
+      method: "PUT",
+      body: await turtle(data),
+      headers: { "content-type": "text/turtle" },
+    });
+    target =
+      step === "startup index overwrite"
+        ? index
+        : step === "startup preferences overwrite"
+          ? preferences
+          : profile;
+    run = () =>
+      ensureTypeRegistrations({
+        webId: OWNER,
+        podRoot: ROOT,
+        registrations: [{ forClass: "https://example.test/Class", container: DRIVE }],
+        fetchImpl: driveBootstrapFetch(http, ROOT),
+      });
+  } else if (step === "revoked source recovery ACL") {
+    const destination = `${PUBLIC}retained`;
+    f.policies.set(`${PRIVATE}.policy`, await aclBody(PRIVATE, true));
+    f.after(async (url, method, response) => {
+      if (
+        !sourceRevoked &&
+        url === destination &&
+        method === "PUT" &&
+        response.ok &&
+        (await (await f.pod.fetch(destination)).text()) === "secret contents"
+      ) {
+        sourceRevoked = true;
+        f.policies.set(`${PRIVATE}.policy`, await aclBody(PRIVATE));
+      }
+      return response;
+    });
+    target = `${destination}.policy`;
+    identityTarget = destination;
+    // The destination's first conditional HEAD writes its payload; the second
+    // binds owner-only recovery after rollback refuses the revoked source.
+    targetCheck = 2;
+    run = () => client.move(source, destination, { kind: "confirm-move" });
+  } else if (
+    ["root marker PATCH", "description marker PATCH", "Type Index overwrite"].includes(step)
+  ) {
     // Exercise the bootstrap's real shared commit boundary too. The mock pod
     // applies only this known marker PATCH using typed RDF fields.
     for (const url of [`${PRIVATE}secret`, PRIVATE, `${PUBLIC}placeholder`, PUBLIC])
@@ -782,7 +859,7 @@ it.each([
 
 it.each(
   steps,
-)("round 73 shape a: %s retains a replacement at its final identity check", async (step) => {
+)("round 74 shape a: %s retains a replacement at its final identity check", async (step) => {
   const events: string[] = [];
   const s = await scenario(step, events);
   let checks = 0;
@@ -812,7 +889,7 @@ it.each(
 
 it.each(
   steps,
-)("round 73 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
+)("round 74 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   const events: string[] = [];
   const s = await scenario(step, events);
@@ -847,7 +924,7 @@ it.each(
 
 it.each(
   steps.flatMap((step) => ["endpoint", "modes"].map((change) => ({ step, change }))),
-)("round 73 final discovery: $step refuses changed captured $change on its conditional HEAD", async ({
+)("round 74 final discovery: $step refuses changed captured $change on its conditional HEAD", async ({
   step,
   change,
 }) => {

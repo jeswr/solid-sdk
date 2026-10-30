@@ -1632,9 +1632,15 @@ export function createSolidDriveClient(options: {
     await checkResourceIdentity(source.url, etag, source.verifyHeaders);
   };
 
+  const recoveryOwnerFor = (policy: OwnAccess, demo: boolean | undefined) => {
+    const webId = owner ?? policyOwner(policy);
+    if (!demo && !webId) throw new DriveAccessError("Recovery owner unavailable");
+    return webId;
+  };
+
   const secureRetained = async (
     resource: CreatedResource,
-    privateWebId?: string,
+    webId: string | undefined,
   ): Promise<{ urls: string[]; warning?: unknown }> => {
     let policy =
       resource.protection ??
@@ -1642,9 +1648,10 @@ export function createSolidDriveClient(options: {
       resource.source.inheritedAccess ??
       resource.source.binding?.source;
     if (!policy || !resource.etag) return { urls: [resource.url] };
-    if (privateWebId) {
-      policy = { ...policy, dataset: privateAcl(resource.url, privateWebId) };
-    }
+    // Retained transfer bytes are recovery, not a continuation of captured
+    // sharing. Source access can fail before deletion or during rollback itself.
+    // Both branches use this invariant, including Copy and descendant cleanup.
+    if (webId) policy = { ...policy, dataset: privateAcl(resource.url, webId) };
     try {
       const identity = {
         url: resource.url,
@@ -1656,20 +1663,15 @@ export function createSolidDriveClient(options: {
         );
       else {
         const own = createdOwnAccess(resource);
-        await provision.protect(
-          resource.url,
-          policy,
-          privateWebId || resource.protection ? resource.url : resource.source.url,
-          {
-            identity: {
-              ...identity,
-              verifyHeaders: (headers) => access.verifyEndpoint(identity.url, headers, own),
-            },
-            restrict: true,
-            knownAcl: own?.url,
-            expectedAcl: own?.policy ?? null,
+        await provision.protect(resource.url, policy, resource.url, {
+          identity: {
+            ...identity,
+            verifyHeaders: (headers) => access.verifyEndpoint(identity.url, headers, own),
           },
-        );
+          restrict: true,
+          knownAcl: own?.url,
+          expectedAcl: own?.policy ?? null,
+        });
       }
       return { urls: [resource.url] };
     } catch (warning) {
@@ -1694,7 +1696,11 @@ export function createSolidDriveClient(options: {
     }
   };
 
-  const rollback = async (created: CreatedResource[], binding: AccessBinding) => {
+  const rollback = async (
+    created: CreatedResource[],
+    binding: AccessBinding,
+    recoveryOwner: string | undefined,
+  ) => {
     const retained: string[] = [];
     let pending: unknown;
     for (const resource of [...created].reverse()) {
@@ -1751,7 +1757,7 @@ export function createSolidDriveClient(options: {
         // Refused source validation must not strand the retained recovery under
         // widened access. Only its captured destination identity authorizes repair.
         try {
-          const secured = await secureRetained(resource);
+          const secured = await secureRetained(resource, recoveryOwner);
           retained.push(...secured.urls);
           if (!pending) pending = secured.warning;
         } catch (cause) {
@@ -1935,6 +1941,10 @@ export function createSolidDriveClient(options: {
       throw new DriveError("conflict", 412, from);
     const own = await access.snapshot(from, original.headers);
     const binding = await bindAccess(access, from, to, false, own);
+    const recoveryOwner = recoveryOwnerFor(
+      binding.source,
+      original.headers.get("x-solid-demo-access-control") === "none",
+    );
     const source: SourceSnapshot = {
       url: from,
       etag: original.etag,
@@ -1983,7 +1993,7 @@ export function createSolidDriveClient(options: {
       if (recovery.status === 404 || recovery.status === 410) return;
       await ensureOk(recovery, from);
       if (created) {
-        const cleanup = await rollback([resource], binding);
+        const cleanup = await rollback([resource], binding, recoveryOwner);
         if (cleanup.pending) throw cleanup.pending;
       } else if (previous && resource.etag) {
         // Our restored children changed membership. Hydrate the resulting
@@ -2174,9 +2184,7 @@ export function createSolidDriveClient(options: {
       throw new DriveError("conflict", 412, from);
     // A late revocation must leave a private recovery copy. Establish its owner
     // before copying bytes or retiring any node, including children without Control.
-    const recoveryOwner = owner ?? policyOwner((source.binding as AccessBinding).source);
-    if (moving && !source.demo && !recoveryOwner)
-      throw new DriveAccessError("Recovery owner unavailable");
+    const recoveryOwner = recoveryOwnerFor((source.binding as AccessBinding).source, source.demo);
     // Reserve the captured tree before copying or removing any node. Child
     // cleanup shares the flight, including rollback after a failed copy.
     return sourceOperation(
@@ -2247,7 +2255,7 @@ export function createSolidDriveClient(options: {
         const created: CreatedResource[] = [];
         let cleanup: Awaited<ReturnType<typeof rollback>> | undefined;
         const compensation = new Compensation(async () => {
-          cleanup = await rollback(created, destinationBinding);
+          cleanup = await rollback(created, destinationBinding, recoveryOwner);
         });
         const bindings = new Map<string, AccessBinding>();
         for (const node of nodes) bindings.set(`source:${node.url}`, node.binding as AccessBinding);
@@ -2439,10 +2447,7 @@ export function createSolidDriveClient(options: {
             retained.length = 0;
             for (const resource of created) {
               try {
-                const secured = await secureRetained(
-                  resource,
-                  changedBeforeDelete && !privateOwner ? recoveryOwner : undefined,
-                );
+                const secured = await secureRetained(resource, recoveryOwner);
                 retained.push(...secured.urls);
                 if (secured.warning) protectionFailure = secured.warning;
               } catch (cause) {
