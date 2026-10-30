@@ -222,6 +222,13 @@ describe("content and labels", () => {
     '[text]( "a ) @literal title")',
     "[text](https://example.org/it's-here)",
     '[text](<https://example.org/a(b)> "a ) @literal title")',
+    '[text](<https://example.org/a)b> "a @literal title")',
+    "[text](<https://example.org/a)b> 'a @literal title')",
+    '[text](<https://example.org/a(b> "a @literal title")',
+    "[text](<https://example.org/a(b> 'a @literal title')",
+    "[text](<https://example.org/a)b>)",
+    "[text](<https://example.org/a(b>)",
+    String.raw`[text](<https://example.org/a\>b)c> "a @literal title")`,
   ])("preserves quoted link titles and resumes labels after the link: %s", (link) => {
     const result = parseTodoistCsv(csv([task({ CONTENT: `${link} @real` })]), options).tasks[0]!;
     expect(result.title).toBe(link);
