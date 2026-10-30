@@ -81,12 +81,10 @@ describe("injected money store", () => {
     expect(
       (await store.transactions(account, range, money)).map((value) => value.runningBalance),
     ).toEqual(["80", "67.5"]);
-    const amount = (await store.read(path)).document.node(row.id).amountNode;
-    expect(amount?.termType).toBe("BlankNode");
     await store.deleteTransaction("tx", row.postingTime);
     const loaded = await store.read(path);
     expect(loaded.document.transactions()).toHaveLength(1);
-    expect(loaded.document.dataset.match(amount).size).toBe(0);
+    expect(loaded.document.nodes(model.V.amountClass)).toHaveLength(1);
     await store.deleteTransaction("missing", row.postingTime);
     expect(
       requests
