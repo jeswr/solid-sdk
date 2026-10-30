@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 # @jeswr/suite-ui
 
 Normative tokens from `01-design-system` §2.1–2.7 and Amendment 2026-10-25. Import `styles/tokens.css`,
@@ -75,12 +76,15 @@ prioritises first-load → error → empty → content, and accepts a lazy `chil
 Both collections and the content/upload feedback adapters use it. For refreshes, pass
 no loading node and keep content; the host owns the TopBar progress indicator.
 
-Use the exported `toast` with `Toaster`: ordinary messages last 5 seconds, actions
+Use the exported `toast` with `Toaster`: ordinary messages default to 5 seconds, actions
 labelled `Undo` last 8 seconds, and errors persist with a dismiss button. For React-node
 or localised Undo labels, select the same window explicitly with
 `{ duration: toastDurations.undo, action: { label: <span>Undo</span>, onClick: undo } }`.
 This duration option also applies to promise options and extended success results;
-errors always persist. Errors announce alerts; ordinary messages announce status.
+explicit durations override non-error defaults, while errors always persist. ID updates
+preserve the window when `action` and `duration` are omitted; clearing `action` restores
+the normal default unless the update supplies a duration.
+Errors announce alerts; ordinary messages announce status.
 Toast only when the outcome is not already visible in place.
 
 Dev routes: `/dev/components/{empty-state,error-state,loading-skeleton,toasts,render-async}`.

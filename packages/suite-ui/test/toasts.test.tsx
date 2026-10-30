@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import axe from "axe-core";
@@ -23,7 +24,7 @@ test("message updates an existing ID without leaving stale entries", () => {
   const id = toast.message("Saving…", { id: "message-update" });
   expect(toast.message("Saved", { id, duration: 1 })).toBe(id);
   expect(toast.getToasts().filter((entry) => entry.id === id)).toMatchObject([
-    { title: { props: { role: "status", children: "Saved" } }, duration: 5000 },
+    { title: { props: { role: "status", children: "Saved" } }, duration: 1 },
   ]);
 });
 test("message restores a dismissed ID to the active toasts", () => {
@@ -35,7 +36,7 @@ test("message restores a dismissed ID to the active toasts", () => {
     { title: { props: { role: "status", children: "Saved" } }, duration: 5000 },
   ]);
 });
-test("normal and Undo toasts enforce 5s and 8s; errors persist and can be dismissed", async () => {
+test("normal and Undo toasts default to 5s and 8s; errors persist and can be dismissed", async () => {
   vi.useFakeTimers();
   const undo = vi.fn();
   render(<Toaster />);
@@ -43,7 +44,7 @@ test("normal and Undo toasts enforce 5s and 8s; errors persist and can be dismis
   let withUndo: string | number = "";
   let error: string | number = "";
   act(() => {
-    normal = toast.success("Link copied", { duration: 1 });
+    normal = toast.success("Link copied");
     withUndo = toast("Moved to trash", { action: { label: "Undo", onClick: undo } });
     error = toast.error("Can't reach your storage", { duration: 1 });
   });
@@ -68,6 +69,75 @@ test("normal and Undo toasts enforce 5s and 8s; errors persist and can be dismis
   fireEvent.click(screen.getByRole("button", { name: "Close toast" }));
   await act(() => vi.advanceTimersByTimeAsync(300));
   expect(screen.queryByText("Can't reach your storage")).toBeNull();
+});
+test.each([
+  "text",
+  "React-node",
+] as const)("an ID update without action preserves the 8s %s Undo window", async (label) => {
+  vi.useFakeTimers();
+  render(<Toaster />);
+  let id: string | number = "";
+  act(() => {
+    id = toast("Moved to trash", {
+      ...(label === "React-node" ? { duration: toastDurations.undo } : {}),
+      action: { label: label === "text" ? "Undo" : <span>Undo</span>, onClick: vi.fn() },
+    });
+  });
+  await act(() => vi.advanceTimersByTimeAsync(500));
+  act(() => {
+    expect(toast.success("Move complete", { id })).toBe(id);
+  });
+  await act(() => vi.advanceTimersByTimeAsync(0));
+  expect(toast.getToasts().find((entry) => entry.id === id)).toMatchObject({ duration: 8000 });
+  await act(() => vi.advanceTimersByTimeAsync(7900));
+  expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
+  await act(() => vi.advanceTimersByTimeAsync(400));
+  expect(screen.queryByText("Move complete")).toBeNull();
+});
+test.each([
+  undefined,
+  null,
+])("an ID update with action: %s restores the normal duration", async (action) => {
+  vi.useFakeTimers();
+  render(<Toaster />);
+  let id: string | number = "";
+  act(() => {
+    id = toast("Moved to trash", {
+      duration: toastDurations.undo,
+      action: { label: <span>Undo</span>, onClick: vi.fn() },
+    });
+  });
+  await act(() => vi.advanceTimersByTimeAsync(500));
+  act(() => {
+    toast.success("Move complete", { id, action });
+  });
+  await act(() => vi.advanceTimersByTimeAsync(0));
+  expect(toast.getToasts().find((entry) => entry.id === id)).toMatchObject({
+    action,
+    duration: 5000,
+  });
+  expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  await act(() => vi.advanceTimersByTimeAsync(5300));
+  expect(screen.queryByText("Move complete")).toBeNull();
+});
+test.each([
+  1200,
+  12000,
+  Infinity,
+])("an ID update honours an explicit duration of %s", (duration) => {
+  const id = toast("Moved to trash", { action: { label: "Undo", onClick: vi.fn() } });
+  toast.success("Move complete", { id, duration });
+  expect(toast.getToasts().find((entry) => entry.id === id)).toMatchObject({
+    action: { label: "Undo" },
+    duration,
+  });
+  toast.success("Move confirmed", { id });
+  expect(toast.getToasts().find((entry) => entry.id === id)).toMatchObject({ duration });
+});
+test("a success update to a persistent error returns to the normal duration", () => {
+  const id = toast.error("Couldn't save");
+  toast.success("Saved", { id });
+  expect(toast.getToasts().find((entry) => entry.id === id)).toMatchObject({ duration: 5000 });
 });
 test("promise errors inherit persistence and an alert announcement", async () => {
   render(<Toaster />);

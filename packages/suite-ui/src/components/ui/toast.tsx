@@ -1,22 +1,30 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
-import { type ExternalToast, toast as sonnerToast } from "sonner";
+import { type ExternalToast, toast as sonnerToast, type ToastT } from "sonner";
 
 export const toastDurations = {
   default: 5000,
   undo: 8000,
   error: Number.POSITIVE_INFINITY,
 } as const;
-function options(data: Pick<ExternalToast, "action" | "duration"> = {}, error = false) {
-  // React-node/localised labels opt into Undo through Sonner's existing duration option.
-  const undo =
-    data.duration === toastDurations.undo ||
-    (data.action &&
-      typeof data.action === "object" &&
-      "label" in data.action &&
-      data.action.label === "Undo");
+function options(data: Pick<ExternalToast, "id" | "action" | "duration"> = {}, error = false) {
+  // Sonner merges by ID against its history, including previously dismissed toasts.
+  const previous =
+    data.id === undefined
+      ? undefined
+      : sonnerToast
+          .getHistory()
+          .find((entry): entry is ToastT => entry.id === data.id && !("dismiss" in entry));
+  const action = "action" in data ? data.action : previous?.action;
+  const undo = action && typeof action === "object" && "label" in action && action.label === "Undo";
+  // Omitted actions retain their window; replacing/removing one recalculates the default.
+  const duration =
+    data.duration ??
+    (!("action" in data) && previous?.type !== "error" ? previous?.duration : undefined) ??
+    (undo ? toastDurations.undo : toastDurations.default);
   return {
-    duration: error ? toastDurations.error : undo ? toastDurations.undo : toastDurations.default,
+    duration: error ? toastDurations.error : duration,
     ...(error ? { closeButton: true, dismissible: true } : {}),
   };
 }
