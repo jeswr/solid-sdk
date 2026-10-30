@@ -2,7 +2,7 @@
 
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { afterEach, expect, it, vi } from "vitest";
-import { accessControl } from "../src/apps/drive/lib/client/access";
+import { accessControl, DriveAccessError } from "../src/apps/drive/lib/client/access";
 import { ancestorGuard } from "../src/apps/drive/lib/client/ancestors";
 import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
 import { protectionLedger } from "../src/apps/drive/lib/client/protection-ledger";
@@ -278,7 +278,18 @@ it.each([
     release.resolve();
     await done;
   }
-  expect((await done)[1]?.status).toBe(mode === "verified" ? "fulfilled" : "rejected");
+  const uploaded = (await done)[1];
+  if (mode === "verified" && uploaded?.status === "rejected") {
+    // Restore may update this captured parent between the new placeholder and
+    // its payload. Keep the refusal and retry as a new operation after settlement.
+    expect(uploaded.reason).toBeInstanceOf(DriveAccessError);
+    await client.write(
+      `${PRIVATE}concurrent`,
+      "secret contents",
+      { contentType: "text/plain" },
+      { kind: "protect-ancestors" },
+    );
+  } else expect(uploaded?.status).toBe(mode === "verified" ? "fulfilled" : "rejected");
   if (mode !== "verified") {
     expect((await restoring).failed).toHaveLength(1);
     const fresh = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });

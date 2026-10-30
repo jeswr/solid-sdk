@@ -237,7 +237,8 @@ it.each([
       target.includes("/.drive-recovery-") &&
       target.endsWith("/0-secret") &&
       method === "PUT" &&
-      response.ok
+      response.ok &&
+      (await (await f.pod.fetch(target)).text()) === "secret contents"
     ) {
       backupWritten = true;
       response.headers.delete("etag");
@@ -296,7 +297,8 @@ it("round 59: quarantine reports all saved backups when protection-ledger hydrat
       target.includes("/.drive-recovery-") &&
       /\/[01]-secret$/.test(target) &&
       method === "PUT" &&
-      response.ok
+      response.ok &&
+      (await (await f.pod.fetch(target)).text()) !== ""
     )
       backups += 1;
     return response;
@@ -344,7 +346,8 @@ it("round 59: quarantine accumulates earlier and nested backup locations", async
       target.includes("/.drive-recovery-") &&
       target.endsWith("/1-secret") &&
       method === "PUT" &&
-      response.ok
+      response.ok &&
+      (await (await f.pod.fetch(target)).text()) === "replacement"
     ) {
       foreignAcl = `${target}.policy`;
       f.policies.set(foreignAcl, await aclBody(target, true));

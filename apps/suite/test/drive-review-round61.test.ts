@@ -570,7 +570,8 @@ it.each([
         init?.method === "HEAD" &&
         new Headers(init.headers).has("if-match") &&
         !url.endsWith("/") &&
-        !url.endsWith(".policy")
+        !url.endsWith(".policy") &&
+        (await (await f.pod.fetch(url)).text()) === "secret contents"
       )
         return new Response(null, { status: 503 });
     }

@@ -104,7 +104,13 @@ it.each(
   let changed = false;
   f.after(async (url, method, response) => {
     if (hiddenLink && response.status === 404) response.headers.delete("link");
-    if (!changed && url === target && method === "PUT" && response.ok) {
+    if (
+      !changed &&
+      url === target &&
+      method === "PUT" &&
+      response.ok &&
+      (step !== "Upload" || (await (await f.pod.fetch(target)).text()) === "our upload")
+    ) {
       changed = true;
       f.policies.set(alternate, foreign);
     }

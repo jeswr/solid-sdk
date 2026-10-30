@@ -344,7 +344,14 @@ it.each([
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });
   let changed = false;
   f.after(async (url, method, response) => {
-    if (!changed && url === to && method === "PUT" && response.ok) {
+    if (
+      !changed &&
+      url === to &&
+      method === "PUT" &&
+      response.ok &&
+      (operation === "folder metadata" ||
+        (await (await f.pod.fetch(to)).text()) === "secret contents")
+    ) {
       changed = true;
       if (operation === "foreign replacement")
         await f.pod.fetch(to, { method: "PUT", body: "foreign bytes" });
@@ -468,7 +475,13 @@ it("a missing write validator never authorizes unconditional rollback after acce
   const to = `${PRIVATE}no-validator`;
   let changed = false;
   f.after(async (url, method, response) => {
-    if (!changed && url === to && method === "PUT" && response.ok) {
+    if (
+      !changed &&
+      url === to &&
+      method === "PUT" &&
+      response.ok &&
+      (await (await f.pod.fetch(to)).text()) === "secret contents"
+    ) {
       changed = true;
       f.policies.set(`${to}.policy`, await aclBody(to, true));
       response.headers.delete("etag");

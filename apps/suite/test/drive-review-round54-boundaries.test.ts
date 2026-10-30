@@ -101,6 +101,9 @@ const steps = [
   "shared partial file Restore",
   "shared partial folder Restore",
   "verification and replay failure clearing",
+  "Upload payload",
+  "Keep both payload",
+  "unconditional creation payload",
 ] as const;
 type Step = (typeof steps)[number];
 
@@ -224,7 +227,24 @@ async function scenario(variant: Step, events: string[]) {
   let targetCheck = 1;
   let identityTarget: string | undefined;
   let run: () => Promise<unknown>;
-  if (step.endsWith("completion recovery clearing")) {
+  if (["Upload payload", "Keep both payload", "unconditional creation payload"].includes(step)) {
+    target = `${PRIVATE}new-upload`;
+    run = () =>
+      step === "unconditional creation payload"
+        ? client.write(
+            target,
+            "upload",
+            { contentType: "text/plain" },
+            { kind: "protect-ancestors" },
+          )
+        : uploadFile(
+            client,
+            PRIVATE,
+            new Blob(["upload"]),
+            "new-upload",
+            step === "Keep both payload" ? "keep-both" : "fail",
+          );
+  } else if (step.endsWith("completion recovery clearing")) {
     target = step.startsWith("Replace") ? source : `${PRIVATE}copy`;
     completionTarget = target;
     // Transfers first refuse rollback DELETE on the changed endpoint; the next
@@ -610,7 +630,7 @@ async function scenario(variant: Step, events: string[]) {
 
 it.each(
   steps,
-)("round 67 shape a: %s retains a replacement at its final identity check", async (step) => {
+)("round 68 shape a: %s retains a replacement at its final identity check", async (step) => {
   const events: string[] = [];
   const s = await scenario(step, events);
   let checks = 0;
@@ -630,6 +650,8 @@ it.each(
   });
   await s.run().catch(() => undefined);
   expect(replacementEtag).not.toBeNull();
+  if (["Upload payload", "Keep both payload", "unconditional creation payload"].includes(step))
+    expect(s.mutations.some(({ url, method }) => url === s.target && method === "PUT")).toBe(true);
   const current = s.target.endsWith(".policy")
     ? JSON.stringify(s.f.policies.get(s.target))
     : (await s.f.pod.fetch(s.target, { method: "HEAD" })).headers.get("etag");
@@ -638,7 +660,7 @@ it.each(
 
 it.each(
   steps,
-)("round 67 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
+)("round 68 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   const events: string[] = [];
   const s = await scenario(step, events);
@@ -668,7 +690,7 @@ it.each(
 
 it.each(
   steps,
-)("round 67 final discovery: %s refuses an ACL endpoint change on its conditional HEAD", async (step) => {
+)("round 68 final discovery: %s refuses an ACL endpoint change on its conditional HEAD", async (step) => {
   const baseline = await scenario(step, []);
   const baselineOutcome = await baseline.run().catch((error: unknown) => error);
   const boundary = baseline.boundaries.findLast(

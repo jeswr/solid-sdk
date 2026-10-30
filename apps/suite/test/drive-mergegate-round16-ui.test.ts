@@ -125,6 +125,12 @@ it.each([
   f.intercept(undefined);
   if (change === "missing") await f.fetch(url, { method: "DELETE" });
   const writes: (string | null)[] = [];
+  let placeholderReceipt: string | null | undefined;
+  f.after(async (target, method, response) => {
+    if (target === url && method === "PUT" && response.ok && placeholderReceipt === undefined)
+      placeholderReceipt = response.headers.get("etag");
+    return response;
+  });
   f.intercept(async (target, init) => {
     if (target === url && init?.method === "PUT") {
       writes.push(new Headers(init.headers).get("if-match"));
@@ -139,7 +145,8 @@ it.each([
   if (change === "missing") {
     await act(async () => queue.current.resolve(id, "upload"));
     await queue.settled("done");
-    expect(writes).toEqual([null]);
+    expect(placeholderReceipt).toBeTruthy();
+    expect(writes).toEqual([null, placeholderReceipt]);
   } else {
     await act(async () => queue.current.resolve(id, "replace"));
     await queue.settled(change === "unchanged" ? "done" : "conflict");

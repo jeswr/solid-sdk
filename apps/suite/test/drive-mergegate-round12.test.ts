@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex
 import { afterEach, expect, it, vi } from "vitest";
-import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
+import { createSolidDriveClient, DriveError } from "../src/apps/drive/lib/client/client";
 import { restoreItems, trashItems } from "../src/apps/drive/lib/operations/operations";
 import { moveWithValidator } from "../src/apps/drive/state/undo";
 import { exclusiveLocks } from "./drive-locks";
@@ -104,13 +104,22 @@ it("a second client waits until the recreated ancestor ACL has been verified", a
   await reached.promise;
   const other = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });
   const second = upload(other, "second");
-  const done = Promise.all([first, second]);
+  const done = Promise.allSettled([first, second]);
   try {
     await turn();
     expect(f.pod.has(`${PRIVATE}second`)).toBe(false);
   } finally {
     release.resolve();
     await done;
+  }
+  // Separate clients cannot advance each other's captured parent validators.
+  // The extra placeholder/payload boundary may observe the other child creation;
+  // a definite conflict needs a fresh operation, never an in-flight validator refresh.
+  for (const [index, result] of (await done).entries()) {
+    if (result.status === "fulfilled") continue;
+    expect(result.reason).toBeInstanceOf(DriveError);
+    expect(result.reason).toMatchObject({ status: 412, url: PRIVATE });
+    await upload(index === 0 ? client : other, index === 0 ? "first" : "second");
   }
   expect(f.pod.has(`${PRIVATE}first`)).toBe(true);
   expect(f.pod.has(`${PRIVATE}second`)).toBe(true);

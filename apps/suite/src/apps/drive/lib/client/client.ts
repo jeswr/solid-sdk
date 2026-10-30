@@ -824,6 +824,29 @@ export function createSolidDriveClient(options: {
           headers.set("if-match", validator(url, current.headers.get("etag") ?? undefined));
       }
     }
+    // A 404 without discovery says nothing about a pre-existing own ACL. Only
+    // an empty conditional creation may cross that uncertainty. The provisioner
+    // verifies its actual endpoint/policy before this receipt authorizes bytes.
+    // Copy/Move/Restore and owner-only writes already provision their placeholders.
+    if (
+      binding &&
+      headers.get("if-none-match") === "*" &&
+      !headers.has("if-match") &&
+      binding.source.etag
+    ) {
+      const placeholder = await provision.file(
+        url,
+        undefined,
+        url,
+        () =>
+          rawPut(url, "", { "content-type": init.headers["content-type"], "if-none-match": "*" }),
+        () => {},
+        () => recheckScope(scope),
+      );
+      headers.delete("if-none-match");
+      headers.set("if-match", validator(url, placeholder.response.headers.get("etag")));
+      if (placeholder.policy) binding.installed(placeholder.policy);
+    }
     let response: Response;
     const compensation = new Compensation(async () => {
       const receipt = response.headers.get("etag");
@@ -1157,7 +1180,7 @@ export function createSolidDriveClient(options: {
 
   const rawPut = async (
     target: string,
-    body: string,
+    body: "",
     headers: PayloadWrite["headers"],
   ): Promise<Response> => {
     return guardedWrite(

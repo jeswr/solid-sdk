@@ -668,6 +668,10 @@ export async function bindAccess(
         ] as const
       ).flatMap(([resource, baseline]) => {
         if (retired.has(resource)) return [];
+        // Hydrate our conditional creation receipt before callers freeze the
+        // final guard inputs. A later recheck must not discover an own endpoint
+        // whose absence guard was omitted from that already-collected batch.
+        acceptCreation(resource, baseline);
         return [
           ...ownAccessGuards(baseline.own),
           ...[baseline.resource, baseline.defaults].flatMap((policy) =>

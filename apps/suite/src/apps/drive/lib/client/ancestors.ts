@@ -252,6 +252,13 @@ export function ancestorGuard(options: {
     effects: CommitEffects = {},
   ): Promise<{ response: Response; policy?: OwnAccess }> => {
     const binding = await bindAccess(access, url, url, true);
+    // An orphan ACL is not inherited creation access, even when a 404 exposes
+    // its Link. Never adopt it as permission to populate a newly minted item.
+    if (binding.destinationOwn?.policy)
+      throw new DriveAccessError(
+        "Own ACL already exists",
+        "An access policy already exists for this new item. Choose another name or review its sharing before retrying.",
+      );
     let response: Response;
     let installed: OwnAccess | undefined;
     const compensation = new Compensation(() =>
@@ -476,6 +483,15 @@ export function ancestorGuard(options: {
     requirePolicy(decision, ["inherit-verified", "archived", "owner-only"]);
     const from = decision.kind === "archived" ? decision.from : url;
     await guard(url, true);
+    // Archive discovery may read this very URL (the Trash index). Hydrate it
+    // before publishing our flight: guarded reads must never await their own
+    // unfinished placeholder. Keep the captured policy through the flight.
+    const original =
+      decision.kind === "inherit-verified"
+        ? (decision.original ?? (await archived(url)))
+        : decision.kind === "archived" && url.endsWith("/")
+          ? await archived(url)
+          : undefined;
     let result: { response: Response; policy?: OwnAccess } | undefined;
     await singleFlight(
       url,
@@ -499,7 +515,6 @@ export function ancestorGuard(options: {
         } else if (current.headers.get("x-solid-demo-access-control") !== "none") {
           // A reappearing historical folder has an original audience. Only omit
           // its ledger when current inheritance is verified to be no wider.
-          const original = decision.original ?? (await archived(url));
           const inherited = requireAccess(await access.effective(url, true), url);
           if (original && accessGains(access.forResource(original, url), inherited).length)
             policy = original;
@@ -507,7 +522,6 @@ export function ancestorGuard(options: {
         if (decision.kind === "archived" && url.endsWith("/")) {
           // Clearing a completed flight does not discard the historical folder
           // audience recorded in Trash. A different copy may not widen it.
-          const original = await archived(url);
           if (
             original &&
             accessGains(access.forResource(original, url), access.forResource(decision.acl, from))

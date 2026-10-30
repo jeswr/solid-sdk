@@ -119,7 +119,12 @@ it.each(
   const url = `${PRIVATE}${step === "Upload" ? "new" : "secret"}`;
   const selected = await client.stat(`${PRIVATE}secret`);
   f.after(async (target, method, response) => {
-    if (target === url && method === "PUT" && response.ok) {
+    if (
+      target === url &&
+      method === "PUT" &&
+      response.ok &&
+      (await (await f.pod.fetch(url)).text()) === "our upload"
+    ) {
       if (receipt === "missing") response.headers.delete("etag");
       else response.headers.set("etag", 'W/"weak"');
     }

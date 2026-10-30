@@ -83,6 +83,23 @@ Failure keeps a durable
 receipt for the actual installed policy, including narrower intersections, so Retry
 cannot repair another client's replacement or revocation.
 
+Every standalone WAC file creation first provisions an empty placeholder, including
+Keep both, unconditional writes and private recovery backups. Only its original
+strong PUT receipt can authorize the conditional payload overwrite after actual
+own-ACL discovery and verification. An orphan ACL discovered after creation stops
+before confidential bytes, preserving the foreign policy and empty resource.
+An own ACL already exposed by the 404 refuses before creation; it cannot become
+the new item's policy. The shared provisioner enforces this for files and folders,
+and the raw creation seam's body type permits only an empty string.
+Access bindings hydrate conditional creation receipts synchronously when exposing
+their policy guards. A later access recheck cannot introduce an own endpoint
+whose absence guard was missing when the final request inputs were collected;
+uploads and quarantine backups share this invariant.
+Archive policies are hydrated before the provisioning flight, since creating the
+Trash index must not wait on a guarded read of its own unfinished placeholder.
+The [round 68 audit](../../../../../test/drive-review-round68-audit.md) lists all
+audited callers, failing-before reproductions and the 57-variant boundary tables.
+
 Supplemental final resource HEADs carry mandatory `ResourceAssertion` values:
 content validator and captured endpoint assertion travel together. Parent
 preparation captures discovery; scoped and original snapshot assertions prevent
