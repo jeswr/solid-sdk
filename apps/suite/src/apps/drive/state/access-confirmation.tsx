@@ -10,7 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@jeswr/suite-ui";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import type { AccessChange, AccessChoice, ConfirmAccess } from "../lib/client/access";
 import { nameOf } from "../lib/client/client";
 
@@ -23,23 +23,29 @@ interface Pending {
 export function useAccessConfirmation() {
   const queue = useRef<Pending[]>([]);
   const sequence = useRef(0);
+  const mounted = useRef(false);
   const [pending, setPending] = useState<Pending>();
   const cancel = useRef<HTMLButtonElement>(null);
   const confirmAccess: ConfirmAccess = useCallback(
     (change) =>
       new Promise((resolve) => {
+        if (!mounted.current) {
+          resolve("cancel");
+          return;
+        }
         const next = { change, resolve, id: ++sequence.current };
         queue.current.push(next);
         setPending(queue.current[0]);
       }),
     [],
   );
-  useEffect(
-    () => () => {
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
       for (const request of queue.current.splice(0)) request.resolve("cancel");
-    },
-    [],
-  );
+    };
+  }, []);
   const settle = (choice: AccessChoice) => {
     if (!pending || queue.current[0] !== pending) return;
     queue.current.shift();

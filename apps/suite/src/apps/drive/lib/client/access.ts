@@ -168,11 +168,14 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
    */
   function assertContentDestination(resource: string): void {
     const url = new URL(resource);
+    const decoded = decodeURIComponent(url.href).replace(/\/$/, "");
     if (
       decodeURIComponent(url.pathname)
         .split("/")
         .some((part) => /\.(acl|acr)$/i.test(part)) ||
-      auxiliaryResources.has(decodeURIComponent(url.href))
+      [...auxiliaryResources].some(
+        (endpoint) => decoded === endpoint || decoded.startsWith(`${endpoint}/`),
+      )
     )
       throw new DriveAccessError(
         "Access-control destination",
@@ -210,7 +213,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
           throw new DriveAccessError("ACP privacy cannot be verified by this adapter");
       }
     }
-    if (acl) auxiliaryResources.add(decodeURIComponent(acl));
+    if (acl) auxiliaryResources.add(decodeURIComponent(acl).replace(/\/$/, ""));
     return acl;
   }
   /** Capture endpoint, access model and mode discovery as one immutable assertion. */

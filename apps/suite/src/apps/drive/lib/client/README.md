@@ -194,3 +194,19 @@ validator replacement and IndexedDB/Web Lock ordering for every destructive step
 including private retention's conditional payload clearing. The round 56 tests also
 exercise missing atomic receipts on recursive removal, Move, Restore, partial
 Restore, Delete forever, and Empty Trash.
+
+The [round 72 audit](../../../../../test/drive-review-round72-audit.md) maps the
+custom-endpoint discovery and confirmation-lifetime fixes and every audited call
+site. Before any ordinary mutation, Drive discovers WAC/ACP endpoints across the
+readable storage namespace, including absent custom ACLs advertised by siblings
+or resources in other folders. Encoded endpoint aliases and their ancestor paths
+are reserved too. Incomplete, unreadable or paginated discovery refuses before
+mutation. This preflight costs reads proportional to namespace size and never
+populates UI metadata caches or authorizes a newer content validator. Explicit
+root demo mode retains its no-ACL behavior. The shared HTTP commit boundary still
+owns every final conditional identity assertion. A closed confirmation host
+cancels both queued requests and requests arriving after asynchronous preflight,
+so an unmounted Drive cannot retain Move/Undo source reservations indefinitely.
+Bootstrap and resume reuse that namespace helper too; root creation, root or
+description marker PATCH, and Type Index overwrite apply the same content-target
+assertion. A describedby target never authorizes treating an ACL as app metadata.

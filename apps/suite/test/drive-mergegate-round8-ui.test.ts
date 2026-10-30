@@ -89,6 +89,10 @@ it.each([
       ),
     });
   const view = await mount(tree());
+  // Startup mutations may discover the namespace; filtering must add no reads.
+  const discoveryHeads = pod.calls.filter(
+    (call) => call.url === url && call.method === "HEAD",
+  ).length;
   await key(view.host.querySelector(".drv-chips button") as Element, "ArrowDown");
   const option = [...document.querySelectorAll('[role="menuitemcheckbox"]')].find(
     (item) => item.textContent === "Documents",
@@ -102,7 +106,9 @@ it.each([
   expect(view.host.textContent).not.toContain("No items match these filters");
   expect(row?.querySelector(".suite-file-icon")?.getAttribute("data-type")).toBe("text");
   // Filtering must use the listing itself, without a HEAD request per child.
-  expect(pod.calls.filter((call) => call.url === url && call.method === "HEAD")).toHaveLength(1);
+  expect(pod.calls.filter((call) => call.url === url && call.method === "HEAD")).toHaveLength(
+    discoveryHeads,
+  );
   await click(row as Element);
   await key(row as Element, "d");
   expect(view.host.querySelector(".drv-details")?.textContent).toContain("Text file");

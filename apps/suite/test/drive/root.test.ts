@@ -39,6 +39,7 @@ function memory(existingStatus: 409 | 412 = 409, storageUrl = storage, container
   const containerBody = containerDescription(root);
   const index = `${storageUrl}settings/private.ttl`;
   const files = new Map<string, { body: string; version: number }>([
+    [storageUrl, { body: "", version: 1 }],
     [index, { body: "", version: 1 }],
   ]);
   const calls: { url: string; method: string; headers: Headers; status: number }[] = [];

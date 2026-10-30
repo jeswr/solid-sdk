@@ -121,6 +121,9 @@ const steps = [
   "safe-name Upload payload",
   "safe-name copy payload",
   "safe-name rename",
+  "custom-name Upload payload",
+  "custom-name copy payload",
+  "custom-name rename",
 ] as const;
 type Step = (typeof steps)[number];
 
@@ -133,6 +136,7 @@ async function scenario(variant: Step, events: string[], captureModes = false) {
   const shared = variant.startsWith("shared ");
   const denyAll = variant.startsWith("deny-all ");
   const safeName = variant.startsWith("safe-name ");
+  const customName = variant.startsWith("custom-name ");
   const step = (
     tree
       ? variant.slice(0, -5)
@@ -142,7 +146,9 @@ async function scenario(variant: Step, events: string[], captureModes = false) {
           ? variant.slice(9)
           : safeName
             ? variant.slice(10)
-            : variant
+            : customName
+              ? variant.slice(12)
+              : variant
   ) as Step;
   const f = await rdfPod();
   if (shared) f.policies.set(`${PRIVATE}.policy`, await aclBody(PRIVATE, true));
@@ -313,7 +319,7 @@ async function scenario(variant: Step, events: string[], captureModes = false) {
   } else if (
     ["Upload payload", "Keep both payload", "unconditional creation payload"].includes(step)
   ) {
-    target = `${PRIVATE}new-upload${safeName ? ".acl.txt" : ""}`;
+    target = `${PRIVATE}new-upload${safeName ? ".acl.txt" : customName ? "-policy.ttl" : ""}`;
     run = () =>
       step === "unconditional creation payload"
         ? client.write(
@@ -326,7 +332,7 @@ async function scenario(variant: Step, events: string[], captureModes = false) {
             client,
             PRIVATE,
             new Blob(["upload"]),
-            safeName ? "new-upload.acl.txt" : "new-upload",
+            safeName ? "new-upload.acl.txt" : customName ? "new-upload-policy.ttl" : "new-upload",
             step === "Keep both payload" ? "keep-both" : "fail",
           );
   } else if (step.endsWith("completion recovery clearing")) {
@@ -485,7 +491,7 @@ async function scenario(variant: Step, events: string[], captureModes = false) {
     });
     run = () => client.copy(source, target, { kind: "preserve-source" });
   } else if (step === "copy payload" || step === "copy rollback" || step === "container rollback") {
-    target = `${PRIVATE}copy${safeName ? ".acr.txt" : ""}${folder ? "/" : ""}`;
+    target = `${PRIVATE}copy${safeName ? ".acr.txt" : customName ? "-policy.ttl" : ""}${folder ? "/" : ""}`;
     if (step === "container rollback") {
       const data = new Store();
       new WacFields(source, data, DataFactory)
@@ -688,7 +694,12 @@ async function scenario(variant: Step, events: string[], captureModes = false) {
     run = () => uploadFile(client, PRIVATE, new Blob(["upload"]), "secret", "replace", selected);
   } else if (step === "move") run = () => moveItems(client, [selected], `${PRIVATE}target/`);
   else if (step === "rename")
-    run = () => renameItem(client, selected, safeName ? "renamed.acl.txt" : "renamed");
+    run = () =>
+      renameItem(
+        client,
+        selected,
+        safeName ? "renamed.acl.txt" : customName ? "renamed-policy.ttl" : "renamed",
+      );
   else if (step === "Trash") run = () => trashItems(client, DRIVE, [selected], { webId: OWNER });
   else if (step === "overwrite")
     run = () => uploadFile(client, PRIVATE, new Blob(["upload"]), "secret", "replace", selected);
@@ -748,7 +759,7 @@ it.each([
 
 it.each(
   steps,
-)("round 71 shape a: %s retains a replacement at its final identity check", async (step) => {
+)("round 72 shape a: %s retains a replacement at its final identity check", async (step) => {
   const events: string[] = [];
   const s = await scenario(step, events);
   let checks = 0;
@@ -778,7 +789,7 @@ it.each(
 
 it.each(
   steps,
-)("round 71 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
+)("round 72 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   const events: string[] = [];
   const s = await scenario(step, events);
@@ -808,7 +819,7 @@ it.each(
 
 it.each(
   steps.flatMap((step) => ["endpoint", "modes"].map((change) => ({ step, change }))),
-)("round 71 final discovery: $step refuses changed captured $change on its conditional HEAD", async ({
+)("round 72 final discovery: $step refuses changed captured $change on its conditional HEAD", async ({
   step,
   change,
 }) => {

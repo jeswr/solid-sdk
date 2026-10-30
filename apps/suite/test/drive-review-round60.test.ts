@@ -365,6 +365,7 @@ it.each([
     });
   let observed = false;
   let replaced = false;
+  let discoveryReads = 0;
   f.after(async (target, method, response) => {
     if (target === `${url}.policy` && method === "GET") observed = true;
     if (observed && target === url && method === "HEAD") {
@@ -374,7 +375,8 @@ it.each([
     if (
       (step === "owner-only overwrite" || step === "Trash protection") &&
       target === url &&
-      method === "HEAD"
+      method === "HEAD" &&
+      ++discoveryReads > 1
     )
       observed = true;
     return response;

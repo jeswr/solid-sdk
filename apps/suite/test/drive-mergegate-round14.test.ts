@@ -87,8 +87,10 @@ it("raw metadata writes cannot create a container or recreate one deleted after 
       { kind: "protect-ancestors" },
     ),
   ).rejects.toMatchObject({ kind: "not-found" });
+  let reads = 0;
   f.after(async (url, method, response) => {
-    if (url === PRIVATE && method === "HEAD" && response.ok)
+    // Discovery runs first; delete after the metadata operation captures its HEAD.
+    if (url === PRIVATE && method === "HEAD" && response.ok && ++reads === 2)
       await f.pod.fetch(PRIVATE, { method: "DELETE" });
     return response;
   });

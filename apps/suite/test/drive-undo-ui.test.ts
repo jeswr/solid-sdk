@@ -27,7 +27,7 @@ function transport(
     const url = String(input);
     const method = init?.method ?? "GET";
     const headers = new Headers(init?.headers);
-    if (url === `${ROOT}drive/` && method === "HEAD")
+    if ([ROOT, `${ROOT}drive/`].includes(url) && method === "HEAD")
       return new Response(null, { headers: { "x-solid-demo-access-control": "none" } });
     if (method === "DELETE" && url === SOURCE) options.beforeDelete?.(files);
     const current = files.get(url);
@@ -93,7 +93,7 @@ it("Undo never reads or moves a replacement occupying the old destination", asyn
   ).rejects.toMatchObject({ status: 412 });
   expect(files.get(SOURCE)?.etag).toBe('"unrelated"');
   expect(files.has(TARGET)).toBe(false);
-  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch.mock.calls.filter(([url]) => String(url) === SOURCE)).toHaveLength(1);
 });
 it("Undo protects replacement source and destination resources during failed-move cleanup", async () => {
   const { files, fetch } = transport({
@@ -202,7 +202,11 @@ it.each([
 it("Undo rejects replacement bytes even when a transport ignores GET preconditions", async () => {
   const fetch = vi
     .fn<typeof globalThis.fetch>()
-    .mockResolvedValue(new Response("unrelated", { headers: { etag: '"replacement"' } }));
+    .mockImplementation(async (input) =>
+      String(input) === ROOT
+        ? new Response(null, { headers: { "x-solid-demo-access-control": "none" } })
+        : new Response("unrelated", { headers: { etag: '"replacement"' } }),
+    );
   await expect(
     moveWithValidator(
       { storageUrl: ROOT, fetch },
@@ -213,7 +217,7 @@ it("Undo rejects replacement bytes even when a transport ignores GET preconditio
       demoDiscovery(SOURCE, fetch),
     ),
   ).rejects.toMatchObject({ status: 412 });
-  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(fetch.mock.calls.filter(([url]) => String(url) === SOURCE)).toHaveLength(1);
 });
 
 it("reproduces A to B, B elsewhere, unrelated upload at B against the real demo adapter", async () => {

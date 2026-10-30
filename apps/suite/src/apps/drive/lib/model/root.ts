@@ -6,6 +6,7 @@ import { assertWithinPodScope, createPodScopedFetch, normalizePodBase } from "@j
 import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { accessControl, bindAccess } from "../client/access.js";
+import { discoverContentTargets } from "../client/client.js";
 import { assertVersion, type CommitChecks, commitHttp } from "../client/commit.js";
 import { DriveContainer, DriveResource } from "./model.js";
 import { driveRootPatch } from "./patch.js";
@@ -84,6 +85,7 @@ export async function ensureDriveRoot(
   // The index body and its discovery are one preflight capture. A later
   // binding read may verify that capture, never replace its access identity.
   const approvedIndexDiscovery = access.captureEndpoint(indexUrl, index.response.headers);
+  await discoverContentTargets(scopedFetch, storage, access, [rootUrl, indexUrl]);
   const binding = await bindAccess(access, indexUrl, rootUrl);
   let rootEtag: string | undefined;
   // A marker written by this call cannot itself prove ownership, including on resume().
@@ -118,6 +120,7 @@ export async function ensureDriveRoot(
     init: RequestInit,
     verifyHeaders?: CommitChecks["verifyHeaders"],
   ): Promise<Response> {
+    access.assertContentDestination(url);
     return commitHttp({
       verifyHeaders: (headers) => {
         if (url === indexUrl) approvedIndexDiscovery(headers);
@@ -273,6 +276,7 @@ export async function ensureDriveRoot(
   }
 
   async function resume(): Promise<string> {
+    await discoverContentTargets(scopedFetch, storage, access, [rootUrl, indexUrl]);
     await initialize();
     await register();
     return rootUrl;

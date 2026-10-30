@@ -433,6 +433,66 @@ function itemFromResource(resource: Resource, knownType: string | undefined): Dr
   };
 }
 
+/** A target's headers cannot say whether it is another resource's absent ACL.
+ * Discover the storage namespace before ordinary mutations, rather than relying
+ * on which access panes this client happened to open. Custom endpoints may live
+ * outside their protected resource's folder. Incomplete discovery fails closed.
+ * This is preflight hydration; commitHttp still owns every final identity check.
+ */
+export async function discoverContentTargets(
+  http: typeof fetch,
+  storageUrl: string,
+  access: ReturnType<typeof accessControl>,
+  targets: readonly string[],
+): Promise<void> {
+  for (const target of targets) access.assertContentDestination(target);
+  const visit = async (
+    folder: string,
+    verifyHeaders: ResourceAssertion["verifyHeaders"],
+  ): Promise<void> => {
+    const current = await fetchRdf(folder, {
+      fetch: (input, init) => http(input, { ...init, cache: "no-store" }),
+    });
+    verifyHeaders(current.response.headers);
+    access.discover(folder, current.response.headers, true);
+    // A partial containment page cannot prove that a candidate is ordinary
+    // content. Do not silently omit resources beyond the first page.
+    for (const link of (current.response.headers.get("link") ?? "").matchAll(
+      /<([^>]*)>\s*((?:;\s*[^,]*)*)/g,
+    )) {
+      const rel = /;\s*rel\s*=\s*(?:"([^"]*)"|([^;\s]+))/i.exec(link[2] as string);
+      if ((rel?.[1] ?? rel?.[2] ?? "").split(/\s+/).includes("next"))
+        throw new DriveAccessError("Incomplete containment discovery");
+    }
+    const folders: { url: string; verifyHeaders: ResourceAssertion["verifyHeaders"] }[] = [];
+    const members = [...new Container(folder, current.dataset, DataFactory).contains];
+    for (const child of members) validateMember(folder, child.id);
+    for (const item of members) {
+      const response = await http(item.id, { method: "HEAD", cache: "no-store" });
+      if (!response.ok) throw errorFor(response.status, item.id);
+      access.discover(item.id, response.headers, true);
+      if (item.id.endsWith("/"))
+        folders.push({
+          url: item.id,
+          verifyHeaders: access.captureEndpoint(item.id, response.headers),
+        });
+    }
+    for (const folder of folders) await visit(folder.url, folder.verifyHeaders);
+  };
+  try {
+    const root = await http(storageUrl, { method: "HEAD", cache: "no-store" });
+    if (!root.ok) throw errorFor(root.status, storageUrl);
+    if (root.headers.get("x-solid-demo-access-control") !== "none")
+      await visit(storageUrl, access.captureEndpoint(storageUrl, root.headers));
+  } catch (cause) {
+    throw new DriveAccessError(
+      cause,
+      "Drive could not discover the storage's access-control resources. Retry once its contents can be read.",
+    );
+  }
+  for (const target of targets) access.assertContentDestination(target);
+}
+
 export function createSolidDriveClient(options: {
   storageUrl: string;
   fetch: typeof globalThis.fetch;
@@ -569,6 +629,15 @@ export function createSolidDriveClient(options: {
         ...(await protection(item.url)),
       })),
     );
+  };
+
+  const prepareContentTargets = async (targets: readonly string[]): Promise<void> => {
+    for (const target of targets) {
+      access.assertContentDestination(target);
+      // Pending deletion owns both endpoints; preserve its specific retry signal.
+      await deletion.guard(target);
+    }
+    await discoverContentTargets(http, storageUrl, access, targets);
   };
 
   const stat = async (
@@ -2696,6 +2765,8 @@ export function createSolidDriveClient(options: {
       return sourceOperation(
         [url],
         async () => {
+          requirePolicy(args[2], ["protect-ancestors", "owner-only"]);
+          await prepareContentTargets([url]);
           await recheckScope(scopeFor(this));
           const saved = await write(url, ...args, undefined, scopeFor(this));
           await recheckScope(scopeFor(this));
@@ -2704,16 +2775,25 @@ export function createSolidDriveClient(options: {
         scopes.get(this),
       );
     },
-    createFolder,
+    async createFolder(url, policy) {
+      requirePolicy(policy, ["inherit-verified", "archived", "owner-only"]);
+      await prepareContentTargets([url]);
+      await createFolder(url, policy);
+    },
     mergeContainer(from, to, policy, opts) {
       return sourceOperation(
         [from, to],
-        () => mergeContainer(from, to, policy, scopeFor(this), opts),
+        async () => {
+          requirePolicy(policy, ["preserve-source"]);
+          await prepareContentTargets([to]);
+          return mergeContainer(from, to, policy, scopeFor(this), opts);
+        },
         scopes.get(this),
       );
     },
     prepareTrash: async (url, decision) => {
       requirePolicy(decision, ["owner-only"]);
+      await prepareContentTargets([url]);
       const webId = decision.webId;
       if (webId) owner = webId;
       const response = await http(url, { method: "HEAD" });
@@ -2744,14 +2824,22 @@ export function createSolidDriveClient(options: {
     copy(from, to, policy, opts) {
       return sourceOperation(
         [from, to],
-        (held) => copy(from, to, policy, held, scopeFor(this), opts),
+        async (held) => {
+          requirePolicy(policy, ["preserve-source"]);
+          await prepareContentTargets([to]);
+          return copy(from, to, policy, held, scopeFor(this), opts);
+        },
         scopes.get(this),
       );
     },
     move(from, to, ...args) {
       return sourceOperation(
         [from, to],
-        (held) => move(from, to, args[0], args[1], held, scopeFor(this)),
+        async (held) => {
+          requirePolicy(args[0], ["preserve-source", "confirm-move"]);
+          await prepareContentTargets([from, to]);
+          return move(from, to, args[0], args[1], held, scopeFor(this));
+        },
         scopes.get(this),
       );
     },
@@ -2759,6 +2847,7 @@ export function createSolidDriveClient(options: {
       return sourceOperation(
         [url],
         async (held) => {
+          await prepareContentTargets([url]);
           const scope = scopeFor(this);
           await recheckScope(scope);
           await remove(url, opts, held, scope);

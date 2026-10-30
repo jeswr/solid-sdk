@@ -160,7 +160,12 @@ it.each([
   }
   let widened = false;
   f.intercept(async (target, init) => {
-    if (!widened && target === url && init?.method === "HEAD") {
+    if (
+      !widened &&
+      target === url &&
+      init?.method === "HEAD" &&
+      (mode === "public index ACL" || f.pod.has(trash))
+    ) {
       widened = true;
       if (mode === "widened defaults")
         f.policies.set(`${trash}.policy`, await aclBody(trash, true));
