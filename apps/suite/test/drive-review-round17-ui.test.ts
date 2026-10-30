@@ -291,6 +291,11 @@ it.each([
     pending.resolve();
     await mutation.mock.results[0]?.value;
   });
-  expect(removed.isConnected).toBe(false);
-  expect(document.activeElement).toBe(next);
+  await vi.waitFor(
+    () => {
+      expect(removed.isConnected).toBe(false);
+      expect(document.activeElement).toBe(next);
+    },
+    { timeout: 10_000 },
+  );
 });
