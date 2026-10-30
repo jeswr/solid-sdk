@@ -34,6 +34,31 @@ describe("quick-add period weekday qualifiers", () => {
   });
 
   it.each([
+    ["this week midnight", "2026-10-18T00:00:00.000Z"],
+    ["this week at midnight", "2026-10-18T00:00:00.000Z"],
+    ["this week at midnight on Saturday", "2026-10-24T00:00:00.000Z"],
+    ["this week at noon", "2026-10-18T12:00:00.000Z"],
+    ["this week at 9", "2026-10-18T09:00:00.000Z"],
+    ["this week at 9 on Saturday", "2026-10-24T09:00:00.000Z"],
+    ["this week Saturday at 9", "2026-10-24T09:00:00.000Z"],
+    ["this week, at 9", "2026-10-18T09:00:00.000Z"],
+    ["this week, at 9 on Saturday", "2026-10-24T09:00:00.000Z"],
+  ])("preserves the period boundary and explicit weekday in %s", (phrase, dateTime) => {
+    const input = `Call ${phrase}`;
+    for (const locale of ["en-GB", "en-US"] as const) {
+      for (const keepDateText of [false, true]) {
+        expect(parseQuickAdd(input, { now, tz: "UTC", locale, keepDateText })).toEqual({
+          title: keepDateText ? input : "Call",
+          due: { kind: "dateTime", dateTime, timeZone: "UTC" },
+          priority: 4,
+          labels: [],
+          spans: [{ kind: "due", start: 5, end: input.length, text: phrase }],
+        });
+      }
+    }
+  });
+
+  it.each([
     ["this week, at 5pm", "2026-10-18T17:00:00.000Z"],
     ["this week, 5pm", "2026-10-18T17:00:00.000Z"],
     ["this week , \tAT 5pm", "2026-10-18T17:00:00.000Z"],

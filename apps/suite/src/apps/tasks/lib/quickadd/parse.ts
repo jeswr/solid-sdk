@@ -172,7 +172,7 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
             .slice(periodMatch[0].length)
             .trim()
             .replace(/^[,.:∙-]\s*/, "")
-            .replace(/^at\s+/i, "");
+            .replace(/^at\s+(?=(?:morning|afternoon|evening|night|midnight|midday|noon)\b)/i, "");
           if (suffix) {
             const [qualifier, ...others] = parser.parse(suffix, { instant: today, timezone: 0 });
             if (
@@ -186,7 +186,7 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
               throw new RangeError("Unsupported quick-add period qualifier");
             }
             const weekday = qualifier.start.get("weekday");
-            if (weekday !== null) {
+            if (weekday !== null && qualifier.start.isCertain("weekday")) {
               if (/\b(?:this|next|last|past|weekday|weekend)\b/i.test(suffix)) {
                 throw new RangeError("Unsupported quick-add period weekday qualifier");
               }
