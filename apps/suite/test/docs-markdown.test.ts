@@ -324,6 +324,45 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     expect(docsToMarkdown(expected)).toBe(source);
   });
   it.each([
+    "# \u00a0Title\u00a0",
+    "## \u2003Title",
+    "### Title\u202f",
+    "# Title\u00a0 ##",
+    "#\u00a0Title",
+    "\u00a0Title\u00a0\n===",
+    "Title\u2003\n---",
+    "First\nLast\u202f\n===",
+    "> # \u00a0Title\u00a0",
+    "- \u00a0Title\u00a0\n  ===",
+    "- [x] item\n\n  ## Title\u00a0",
+    "- # Title\u00a0",
+    "- outer\n  - > # Title\u00a0",
+    "before\n\n# Title\u00a0\n\nafter",
+  ])("rejects headings whose significant whitespace Marked trims: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("keeps ASCII heading padding and significant whitespace within heading text", () => {
+    expect(roundTrip("# \tTitle \t")).toEqual(doc(b("heading", [t("Title")], { level: 1 })));
+    expect(roundTrip("## Title ### \t")).toEqual(doc(b("heading", [t("Title")], { level: 2 })));
+    expect(roundTrip("   Title \t\n===")).toEqual(doc(b("heading", [t("Title")], { level: 1 })));
+    expect(roundTrip("# First\u00a0Last")).toEqual(
+      doc(b("heading", [t("First\u00a0Last")], { level: 1 })),
+    );
+    expect(roundTrip("First\u2003Last\n---")).toEqual(
+      doc(b("heading", [t("First\u2003Last")], { level: 2 })),
+    );
+    expect(markdownToDocs(`# ${numericReference(160)}Title${numericReference(160)}`)).toEqual(
+      doc(b("heading", [t("\u00a0Title\u00a0")], { level: 1 })),
+    );
+    expect(roundTrip("- # Title\n\n\u00a0outside")).toEqual(
+      doc(
+        b("bulletList", [b("listItem", [p(), b("heading", [t("Title")], { level: 1 })])]),
+        p(t("\u00a0outside")),
+      ),
+    );
+  });
+  it.each([
     "Plan\n***\nNext\n---",
     "Plan\n___\nNext\n===",
     "Plan\n ***\nNext\n--",
@@ -625,6 +664,26 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     errorCode(() => markdownToDocs(source), "unsupported");
     expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
   });
+  it.each([
+    ">\t~~~\n>   code\n>\t~~~",
+    ">\t```\n>   code\n>\t```",
+    ">\t~~~\n>   code",
+    "> ~~~\n>\tcode\n> ~~~",
+    "> ~~~\n> code\n>\t~~~",
+    "> >\t~~~\n> >   code\n> >\t~~~",
+    ">\t> ~~~\n>\t> code\n>\t> ~~~",
+    "- >\t~~~\n  >   code\n  >\t~~~",
+    "before\n\n>\t~~~\n>   code\n>\t~~~\n\nafter",
+  ])("rejects quoted fences after a quote marker consumes a tab: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("keeps tabbed quote paragraphs and separate fences", () => {
+    expect(roundTrip(">\ttext")).toEqual(doc(b("blockquote", [p(t("text"))])));
+    expect(roundTrip(">\ttext\n\n~~~\ncode\n~~~")).toEqual(
+      doc(b("blockquote", [p(t("text"))]), b("codeBlock", [t("code")])),
+    );
+  });
   it("preserves quoted code with space indentation and fenced content tabs", () => {
     expect(roundTrip(">       foo\tbar")).toEqual(
       doc(b("blockquote", [b("codeBlock", [t("  foo\tbar")])])),
@@ -648,6 +707,36 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
       doc(p(t("outer inner end", [m("bold")]))),
     );
     expect(markdownToDocs("> ")).toEqual(doc(b("blockquote", [p()])));
+  });
+  it.each(["x", "X", " "])("removes only the first paragraph task marker [%s]", (marker) => {
+    expect(roundTrip(`- [${marker}] outer\n\n  [ ] inner\n\n  [x] last`)).toEqual(
+      doc(
+        b("taskList", [
+          b("taskItem", [p(t("outer")), p(t("[ ] inner")), p(t("[x] last"))], {
+            checked: marker !== " ",
+          }),
+        ]),
+      ),
+    );
+  });
+  it("keeps later literal task markers in quotes and nested lists", () => {
+    expect(roundTrip("- [x] outer\n\n  > [ ] quoted\n\n  - [ ] nested\n\n    [x] literal")).toEqual(
+      doc(
+        b("taskList", [
+          b(
+            "taskItem",
+            [
+              p(t("outer")),
+              b("blockquote", [p(t("[ ] quoted"))]),
+              b("taskList", [
+                b("taskItem", [p(t("nested")), p(t("[x] literal"))], { checked: false }),
+              ]),
+            ],
+            { checked: true },
+          ),
+        ]),
+      ),
+    );
   });
   it.each(["x", "X", " "])("imports wrapped task descriptions with marker [%s]", (marker) => {
     expect(roundTrip(`- [${marker}]\n  completed`)).toEqual(
@@ -971,6 +1060,7 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     "A footnote[^1]\n\n[^1]: Details",
     "[^note]: footnote",
     "- [x] task\n- plain",
+    "- # Title\n- [x] task\u00a0",
     "1. [x] ordered task",
     "```ts extra metadata\ncode\n```",
     "```a&amp;b\ncode\n```",

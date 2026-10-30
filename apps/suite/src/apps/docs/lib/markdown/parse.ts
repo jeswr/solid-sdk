@@ -52,8 +52,28 @@ class MarkdownTokenizer extends Tokenizer {
     }
   }
 
+  override heading(source: string): Tokens.Heading | undefined {
+    const token = super.heading(source);
+    if (token) {
+      const capture = this.rules.block.heading.exec(token.raw) as RegExpExecArray;
+      // Match Marked's closing-hash handling, but trim only Markdown spaces and tabs.
+      const expected = (capture[2] as string)
+        .replace(/^[\t ]+|[\t ]+$/g, "")
+        .replace(/(?:^| )#+$/, "")
+        .replace(/[\t ]+$/, "");
+      if (expected !== token.text)
+        fail("Heading whitespace altered by tokenization is unsupported");
+    }
+    return token;
+  }
+
   override lheading(source: string): Tokens.Heading | undefined {
     const token = super.lheading(source);
+    if (token) {
+      const capture = this.rules.block.lheading.exec(token.raw) as RegExpExecArray;
+      if ((capture[1] as string).replace(/^[\t ]+|[\t ]+$/g, "") !== token.text)
+        fail("Heading whitespace altered by tokenization is unsupported");
+    }
     if (
       token?.text
         .split("\n")
@@ -90,6 +110,13 @@ class MarkdownTokenizer extends Tokenizer {
   override list(source: string): Tokens.List | undefined {
     const token = super.list(source);
     if (token) {
+      // List trimming happens before the final heading reaches our tokenizer.
+      if (/^[\t ]*[^\S\t \n]/.test(source.slice(token.raw.length))) {
+        walkTokens(token.items, (child) => {
+          if (child.type === "heading" && token.raw.endsWith(child.raw.trimEnd()))
+            fail("Heading whitespace altered by list tokenization is unsupported");
+        });
+      }
       for (const item of token.items) {
         const opening = /^( {0,3}(?:[*+-]|\d{1,9}[.)]))([ \t]*)([^\n]*)/.exec(
           item.raw,
@@ -121,6 +148,12 @@ class MarkdownLexer extends Lexer {
       block: {
         ...tokenizer.rules.block,
         list: listOpening,
+      },
+      other: {
+        ...tokenizer.rules.other,
+        // Marked rewrites the last matching inline source, even in a later paragraph.
+        // Let taskItem remove only the first paragraph's marker instead.
+        listIsTask: /(?!)/,
       },
     };
   }
@@ -231,8 +264,6 @@ function inline(tokens: Token[], marks: DocsMark[], depth: number, paragraph = f
         }
         case "codespan":
           return text(token.text, sortedMarks([...marks, { type: "code" }]));
-        case "checkbox":
-          return [];
         case "br":
           return [block("hardBreak")];
         case "link": {
@@ -259,12 +290,6 @@ function inline(tokens: Token[], marks: DocsMark[], depth: number, paragraph = f
   );
 }
 function taskItem(item: Tokens.ListItem): { tokens: Token[]; checked?: boolean } {
-  if (item.task) {
-    return {
-      tokens: item.tokens.filter((child) => child.type !== "checkbox"),
-      checked: item.checked === true,
-    };
-  }
   const first = item.tokens[0];
   if (first?.type !== "text" && first?.type !== "paragraph") return { tokens: item.tokens };
   const marker = /^\[([ xX])\](?:[\t \n]+|$)/.exec(first.raw);
@@ -363,6 +388,14 @@ function blocks(tokens: Token[], depth: number, tabbedQuote = false): DocsNode[]
       case "hr":
         return [block("horizontalRule")];
       case "blockquote": {
+        // A tab consumed with a quote marker still contributes structural columns.
+        // Its removal can change both fence indentation and fenced content.
+        if (/^ {0,3}>\t/m.test(token.raw)) {
+          walkTokens(token.tokens, (child) => {
+            if (child.type === "code" && child.codeBlockStyle !== "indented")
+              fail("Fenced code in a quote with a tab after its marker is unsupported");
+          });
+        }
         const content = blocks(
           token.tokens,
           depth + 1,
