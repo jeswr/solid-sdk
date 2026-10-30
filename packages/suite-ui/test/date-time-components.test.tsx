@@ -304,6 +304,27 @@ describe("RecurrenceEditor", () => {
     );
   });
   it.each([
+    "15",
+    "15,20",
+    "-1",
+  ])("preserves unrestricted months when editing an explicit yearly BYMONTHDAY=%s", (days) => {
+    const rule = fromRRule(`FREQ=YEARLY;BYMONTHDAY=${days}`);
+    mount(<Editor initial={rule} />);
+    const month = screen.getByLabelText("Month") as HTMLSelectElement;
+    expect(month.value).toBe("all");
+    expect(month.selectedOptions[0]?.textContent).toBe("All months");
+    expect(screen.getByRole("status").textContent).toContain("in all months");
+    change("Day of month", "16");
+    expect(screen.getByTestId("value").textContent).toBe(
+      "RRULE:FREQ=YEARLY;INTERVAL=1;BYMONTHDAY=16",
+    );
+    expect(month.value).toBe("all");
+    change("Month", "2");
+    expect(screen.getByTestId("value").textContent).toBe(
+      "RRULE:FREQ=YEARLY;INTERVAL=1;BYMONTHDAY=16;BYMONTH=2",
+    );
+  });
+  it.each([
     ["2026-10-26", "Monday", "MO,WE"],
     ["2026-11-01", "Sunday", "WE,SU"],
   ])("shows and retains the implicit %s weekday when adding Wednesday", (startDate, day, days) => {

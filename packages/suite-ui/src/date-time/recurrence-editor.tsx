@@ -86,6 +86,7 @@ export function recurrenceSummary(rule: RecurrenceRule | null, locale: string): 
     text += ` on ${rule.bySetPos ? `${rule.bySetPos === -1 ? "last" : ["", "first", "second", "third", "fourth", "fifth"][rule.bySetPos]} ` : ""}${rule.byDay.map((d) => weekdayName(d, locale)).join(", ")}`;
   if (rule.byMonth)
     text += ` in ${rule.byMonth.map((m) => new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" }).format(new Date(Date.UTC(2026, m - 1, 1)))).join(", ")}`;
+  else if (rule.freq === "YEARLY" && rule.byMonthDay) text += " in all months";
   if (rule.byMonthDay)
     text += ` on ${rule.byMonthDay.map((d) => (d === -1 ? "the last day" : `day ${d}`)).join(", ")}`;
   if (rule.count) text += `, ${rule.count} ${rule.count === 1 ? "occurrence" : "occurrences"}`;
@@ -138,6 +139,7 @@ export function RecurrenceEditor({
   const invalidWeek = rule?.freq === "WEEKLY" && rule.byDay?.length === 0;
   const showMonthDay =
     rule?.freq === "YEARLY" || (rule?.freq === "MONTHLY" && rule.bySetPos === undefined);
+  const allMonths = rule?.freq === "YEARLY" && !rule.byMonth && rule.byMonthDay !== undefined;
   return (
     <fieldset className="suite-recurrence suite-date-stack" disabled={disabled}>
       <legend>{label}</legend>
@@ -287,8 +289,8 @@ export function RecurrenceEditor({
                   update({
                     ...rule,
                     byMonthDay: [Number(event.target.value)],
-                    ...(rule.freq === "YEARLY"
-                      ? { byMonth: rule.byMonth ?? [seed.getMonth() + 1] }
+                    ...(rule.freq === "YEARLY" && !rule.byMonth && !rule.byMonthDay
+                      ? { byMonth: [seed.getMonth() + 1] }
                       : {}),
                   })
                 }
@@ -308,9 +310,14 @@ export function RecurrenceEditor({
               <select
                 id={`${id}-month`}
                 className="suite-date-control"
-                value={rule.byMonth?.[0] ?? seed.getMonth() + 1}
+                value={allMonths ? "all" : (rule.byMonth?.[0] ?? seed.getMonth() + 1)}
                 onChange={(event) => update({ ...rule, byMonth: [Number(event.target.value)] })}
               >
+                {allMonths && (
+                  <option value="all" disabled>
+                    All months
+                  </option>
+                )}
                 {Array.from({ length: 12 }, (_, i) => i + 1).map((month) => (
                   <option key={month} value={month}>
                     {new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" }).format(
