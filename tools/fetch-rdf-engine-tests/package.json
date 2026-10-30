@@ -1,0 +1,28 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "name": "@jeswr/fetch-rdf-engine-tests",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Real Node WASM integration tests for fetch-rdf's optional RDF engine.",
+  "type": "module",
+  "sideEffects": false,
+  "securityCritical": false,
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "vitest run"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/rdf-engine": "workspace:*",
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

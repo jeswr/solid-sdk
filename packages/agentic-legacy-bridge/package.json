@@ -64,7 +64,7 @@
     "node": ">=24"
   },
   "dependencies": {
-    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/solid-chat-interop": "workspace:*",
     "n3": "^2.0.3",

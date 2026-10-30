@@ -2527,8 +2527,8 @@ importers:
   packages/agentic-legacy-bridge:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
@@ -3128,8 +3128,8 @@ importers:
         specifier: workspace:*
         version: link:../agentic-legacy-bridge
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
@@ -3694,6 +3694,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.0.0
         version: 2.5.3
+      '@jeswr/rdf-engine':
+        specifier: workspace:*
+        version: link:../rdf-engine
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1
@@ -3703,12 +3706,6 @@ importers:
       '@types/node':
         specifier: ^20
         version: 20.19.43
-      '@zazuko/env-node':
-        specifier: ^3.0.0
-        version: 3.1.0(@rdfjs/types@2.0.1)(@types/clownface@2.0.10)(@types/rdf-dataset-ext@1.0.8)(@types/rdfjs__data-model@2.0.9)(@types/rdfjs__dataset@2.0.7)(@types/rdfjs__environment@1.0.0)(@types/rdfjs__fetch-lite@3.0.11)(@types/rdfjs__formats@4.0.1)(@types/rdfjs__namespace@2.0.10)(@types/rdfjs__term-map@2.0.10)(@types/rdfjs__term-set@2.0.9)(@types/rdfjs__traverser@0.1.5)
-      rdf-validate-shacl:
-        specifier: ^0.6.5
-        version: 0.6.5
       typescript:
         specifier: ^5
         version: 5.9.3
@@ -3743,6 +3740,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.0.0
         version: 2.5.3
+      '@jeswr/rdf-engine':
+        specifier: workspace:*
+        version: link:../rdf-engine
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1
@@ -3752,15 +3752,9 @@ importers:
       '@types/node':
         specifier: ^20
         version: 20.19.43
-      '@zazuko/env-node':
-        specifier: ^3.0.0
-        version: 3.1.0(@rdfjs/types@2.0.1)(@types/clownface@2.0.10)(@types/rdf-dataset-ext@1.0.8)(@types/rdfjs__data-model@2.0.9)(@types/rdfjs__dataset@2.0.7)(@types/rdfjs__environment@1.0.0)(@types/rdfjs__fetch-lite@3.0.11)(@types/rdfjs__formats@4.0.1)(@types/rdfjs__namespace@2.0.10)(@types/rdfjs__term-map@2.0.10)(@types/rdfjs__term-set@2.0.9)(@types/rdfjs__traverser@0.1.5)
       esbuild:
         specifier: ^0.28.1
         version: 0.28.1
-      rdf-validate-shacl:
-        specifier: ^0.6.5
-        version: 0.6.5
       typescript:
         specifier: ^5
         version: 5.9.3
@@ -3961,6 +3955,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.0.0
         version: 2.5.3
+      '@jeswr/rdf-engine':
+        specifier: workspace:*
+        version: link:../rdf-engine
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1
@@ -3970,12 +3967,6 @@ importers:
       '@types/node':
         specifier: ^20
         version: 20.19.43
-      '@zazuko/env-node':
-        specifier: ^3.0.0
-        version: 3.1.0(@rdfjs/types@2.0.1)(@types/clownface@2.0.10)(@types/rdf-dataset-ext@1.0.8)(@types/rdfjs__data-model@2.0.9)(@types/rdfjs__dataset@2.0.7)(@types/rdfjs__environment@1.0.0)(@types/rdfjs__fetch-lite@3.0.11)(@types/rdfjs__formats@4.0.1)(@types/rdfjs__namespace@2.0.10)(@types/rdfjs__term-map@2.0.10)(@types/rdfjs__term-set@2.0.9)(@types/rdfjs__traverser@0.1.5)
-      rdf-validate-shacl:
-        specifier: ^0.6.5
-        version: 0.6.5
       typescript:
         specifier: ^5
         version: 5.9.3
@@ -4120,6 +4111,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.0.0
         version: 2.5.3
+      '@jeswr/rdf-engine':
+        specifier: workspace:*
+        version: link:../rdf-engine
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1
@@ -4129,15 +4123,9 @@ importers:
       '@types/node':
         specifier: ^20
         version: 20.19.43
-      '@zazuko/env-node':
-        specifier: ^3.0.0
-        version: 3.1.0(@rdfjs/types@2.0.1)(@types/clownface@2.0.10)(@types/rdf-dataset-ext@1.0.8)(@types/rdfjs__data-model@2.0.9)(@types/rdfjs__dataset@2.0.7)(@types/rdfjs__environment@1.0.0)(@types/rdfjs__fetch-lite@3.0.11)(@types/rdfjs__formats@4.0.1)(@types/rdfjs__namespace@2.0.10)(@types/rdfjs__term-map@2.0.10)(@types/rdfjs__term-set@2.0.9)(@types/rdfjs__traverser@0.1.5)
       esbuild:
         specifier: ^0.25.0
         version: 0.25.12
-      rdf-validate-shacl:
-        specifier: ^0.6.5
-        version: 0.6.5
       typescript:
         specifier: ^5
         version: 5.9.3
@@ -4236,6 +4224,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.0.0
         version: 2.5.3
+      '@jeswr/rdf-engine':
+        specifier: workspace:*
+        version: link:../rdf-engine
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1
@@ -4593,6 +4584,9 @@ importers:
       '@biomejs/biome':
         specifier: ^2.0.0
         version: 2.5.3
+      '@jeswr/rdf-engine':
+        specifier: workspace:*
+        version: link:../rdf-engine
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1
@@ -4602,15 +4596,9 @@ importers:
       '@types/node':
         specifier: ^20
         version: 20.19.43
-      '@zazuko/env-node':
-        specifier: ^3.0.0
-        version: 3.1.0(@rdfjs/types@2.0.1)(@types/clownface@2.0.10)(@types/rdf-dataset-ext@1.0.8)(@types/rdfjs__data-model@2.0.9)(@types/rdfjs__dataset@2.0.7)(@types/rdfjs__environment@1.0.0)(@types/rdfjs__fetch-lite@3.0.11)(@types/rdfjs__formats@4.0.1)(@types/rdfjs__namespace@2.0.10)(@types/rdfjs__term-map@2.0.10)(@types/rdfjs__term-set@2.0.9)(@types/rdfjs__traverser@0.1.5)
       esbuild:
         specifier: ^0.25.0
         version: 0.25.12
-      rdf-validate-shacl:
-        specifier: ^0.6.5
-        version: 0.6.5
       typescript:
         specifier: ^5
         version: 5.9.3
@@ -5065,6 +5053,27 @@ importers:
       rdf-validate-shacl:
         specifier: ^0.6.5
         version: 0.6.5
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.10(@opentelemetry/api@1.10.0)(@types/node@25.9.5)(@vitest/coverage-v8@4.1.10)(jsdom@29.1.1)(vite@8.1.4(@types/node@25.9.5)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.51.2))
+
+  tools/fetch-rdf-engine-tests:
+    devDependencies:
+      '@biomejs/biome':
+        specifier: ^2.5.1
+        version: 2.5.3
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../../packages/fetch-rdf
+      '@jeswr/rdf-engine':
+        specifier: workspace:*
+        version: link:../../packages/rdf-engine
+      '@types/node':
+        specifier: ^25.9.2
+        version: 25.9.5
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -8154,10 +8163,6 @@ packages:
     resolution: {tarball: https://codeload.github.com/jeswr/federation-registry/tar.gz/601e8a4b4981b2876adb760b3d92179e9326de54}
     version: 0.1.0
     engines: {node: '>=24'}
-
-  '@jeswr/fetch-rdf@0.1.0':
-    resolution: {integrity: sha512-bdugw+QynGEUTUYERuVDY0sMfEiCehx54ahvXVUY/KThq1r6w+uHH0kbhg8s36gvdW3xNDaqAbbnGbRDR9qgkw==}
-    engines: {node: '>=20'}
 
   '@jeswr/guarded-fetch@https://codeload.github.com/jeswr/guarded-fetch/tar.gz/bd4490927fd36d62f6b78a0021e8d40bbb572c3b':
     resolution: {tarball: https://codeload.github.com/jeswr/guarded-fetch/tar.gz/bd4490927fd36d62f6b78a0021e8d40bbb572c3b}
@@ -23559,13 +23564,6 @@ snapshots:
     dependencies:
       '@rdfjs/types': 2.0.1
       '@rdfjs/wrapper': 0.34.0
-      content-type: 1.0.5
-      jsonld-streaming-parser: 5.0.1
-      n3: 2.1.1
-
-  '@jeswr/fetch-rdf@0.1.0':
-    dependencies:
-      '@rdfjs/dataset': 2.0.3
       content-type: 1.0.5
       jsonld-streaming-parser: 5.0.1
       n3: 2.1.1

@@ -1,7 +1,7 @@
 {
   "name": "@jeswr/solid-task-model",
   "version": "0.4.0",
-  "description": "The shared federated Task/Issue RDF model for the Solid app suite — typed read/write accessors over wf:Task (+ Dublin Core / schema.org / PROV-O) so a task written by one app reads identically in another, plus the SHACL shape that pins it.",
+  "description": "The shared federated Task/Issue RDF model for the Solid app suite \u2014 typed read/write accessors over wf:Task (+ Dublin Core / schema.org / PROV-O) so a task written by one app reads identically in another, plus the SHACL shape that pins it.",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Wright",
@@ -79,11 +79,10 @@
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.26.1",
     "@types/node": "^20",
-    "@zazuko/env-node": "^3.0.0",
     "esbuild": "^0.25.0",
-    "rdf-validate-shacl": "^0.6.5",
     "typescript": "^5",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "@jeswr/rdf-engine": "workspace:*"
   },
   "engines": {
     "node": ">=20"

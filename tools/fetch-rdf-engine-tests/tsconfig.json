@@ -1,0 +1,9 @@
+{
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.AsyncIterable"],
+    "noEmit": true
+  },
+  "include": ["test/**/*.ts", "vitest.config.ts"]
+}
