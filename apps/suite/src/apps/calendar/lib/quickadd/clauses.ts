@@ -25,6 +25,8 @@ export interface Clauses {
 const cue =
   /^(?:today|tomorrow|yesterday|tonight|morning|afternoon|evening|about|around|roughly|approximately|on|at|from|to|until|for|all-day|all|every|daily|weekly|monthly|yearly|next|this|in|after|before|except|not|maybe|or|and|through|during|mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?|[+-]?\d.*|noon|midnight)$/i;
 const weekdays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+const recurrenceModifier =
+  /^(?:other|(?:(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)-)?(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth)|tenth|eleventh|twelfth|(?:thir|four|fif|six|seven|eigh|nine)teenth|twentieth|thirtieth|fortieth|fiftieth|sixtieth|seventieth|eightieth|ninetieth|hundredth|thousandth)$/i;
 
 function startsScheduling(tokens: Token[], index: number): boolean {
   const token = tokens[index] as Token;
@@ -38,8 +40,11 @@ function startsScheduling(tokens: Token[], index: number): boolean {
   ) {
     let nextIndex = index + 1;
     // Look through an interval modifier only when it leads to a temporal
-    // construct; ordinary titles such as "Read every other chapter" stay literal.
-    if (token.text.toLowerCase() === "every" && tokens[nextIndex]?.text.toLowerCase() === "other") {
+    // construct; ordinary titles such as "Read every second chapter" stay literal.
+    if (
+      token.text.toLowerCase() === "every" &&
+      recurrenceModifier.test(tokens[nextIndex]?.text ?? "")
+    ) {
       nextIndex++;
     }
     const next = tokens[nextIndex];

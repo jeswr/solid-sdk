@@ -66,6 +66,10 @@ describe("calendar quick-add drafts", () => {
     "Talk about RDF",
     "Read every chapter",
     "Read every other chapter",
+    "Read every second chapter",
+    "Read every third chapter",
+    "Read every twenty-first chapter",
+    'Discuss "every second week"',
     "All hands meeting",
   ])("preserves ordinary title words in %s", (title) => {
     expect(parseEventQuickAdd(`${title} tomorrow 1pm`, context)).toEqual({
@@ -348,6 +352,7 @@ describe("fail-closed errors preserve all input", () => {
     ["Lunch with Sam and", "missing-date"],
     ["Read every", "missing-date"],
     ["Read every other", "missing-date"],
+    ["Read every second", "missing-date"],
     ["Meet Sam at Cafe Rio", "missing-date"],
     ["Meet Sam 1pm", "missing-date"],
     ["tomorrow 1pm", "missing-title"],
@@ -442,6 +447,38 @@ describe("fail-closed errors preserve all input", () => {
         start: input.indexOf("every"),
         end: input.indexOf("other") + "other".length,
         text: "every other",
+      },
+    ]);
+  });
+
+  it.each([
+    ["first", "day"],
+    ["second", "week"],
+    ["third", "weekday"],
+    ["fourth", "month"],
+    ["fifth", "year"],
+    ["sixth", "Monday"],
+    ["seventh", "days"],
+    ["eighth", "weeks"],
+    ["ninth", "weekdays"],
+    ["tenth", "months"],
+    ["eleventh", "years"],
+    ["twelfth", "week"],
+    ["thirteenth", "day"],
+    ["twentieth", "week"],
+    ["twenty-first", "day"],
+    ["hundredth", "week"],
+    ["SECOND", "WEEK"],
+    ["2nd", "week"],
+  ])("rejects unsupported every %s %s before a valid date", (ordinal, period) => {
+    const input = `Standup every ${ordinal} ${period} tomorrow 09:30`;
+    const error = failure(input, "unsupported-phrase");
+    expect(error.issues).toEqual([
+      {
+        code: "unsupported-phrase",
+        start: input.indexOf("every"),
+        end: input.indexOf(ordinal) + ordinal.length,
+        text: `every ${ordinal}`,
       },
     ]);
   });
