@@ -91,7 +91,7 @@ describe("jeswr read aliases", () => {
     ]);
   });
 
-  it("canonicalizes 50,000 legacy type triples with linear dataset reads", () => {
+  it("canonicalizes 50,000 legacy type triples with linear reads and linear scaling", () => {
     const count = 50_000;
     const legacyClass = "https://w3id.org/jeswr/core#Agent";
     const source = new Store();
@@ -121,6 +121,25 @@ describe("jeswr read aliases", () => {
     }
     expect(visited).toBeGreaterThanOrEqual(count);
     expect(visited).toBeLessThanOrEqual(budget);
+
+    // Work on cached arrays or N3 indexes bypasses readQuads, so also check scaling: 4x the input costs
+    // about 4x when linear and 16x when quadratic. Best-of-N timings at both sizes on the same runner keep
+    // this independent of runner speed, unlike an absolute wall-clock bound.
+    const fastest = (store: Store, runs: number) => {
+      let best = Number.POSITIVE_INFINITY;
+      for (let run = 0; run < runs; run++) {
+        const started = performance.now();
+        canonicalizeJeswrDataset(store);
+        best = Math.min(best, performance.now() - started);
+      }
+      return best;
+    };
+    const small = new Store();
+    for (let i = 0; i < count / 4; i++) {
+      new PodThing(`https://pod.test/items#item-${i}`, small, DataFactory).types.add(legacyClass);
+    }
+    fastest(small, 1);
+    expect(fastest(source, 2) / Math.max(fastest(small, 3), 1)).toBeLessThan(10);
     expect(result.size).toBe(count);
     expect(result.getQuads(null, `${NS.RDF}type`, `${NS.CORE}Agent`, null)).toHaveLength(count);
     expect(result.getQuads(null, `${NS.RDF}type`, legacyClass, null)).toHaveLength(0);
