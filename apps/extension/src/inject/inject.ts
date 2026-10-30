@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The MAIN-world injection: defines `window.solid` on every page. This script runs in the
  * page's own JS world (so the page can call it), but it holds NO credential — every
@@ -170,13 +171,18 @@ function installSolidInjection(): void {
         } else if (data.error) {
           pending.reject(new Error(data.error));
         } else {
-          pending.resolve(
-            new Response(data.body ?? null, {
-              status: data.status,
-              statusText: data.statusText,
-              headers: new Headers(data.headers ?? {}),
-            }),
-          );
+          const response = new Response(data.body ?? null, {
+            status: data.status,
+            statusText: data.statusText,
+            headers: new Headers(data.headers ?? {}),
+          });
+          // ResponseInit cannot carry these read-only properties. Preserve the worker's
+          // final URL so apps resolve relative RDF references against the served resource.
+          Object.defineProperties(response, {
+            url: { value: data.url ?? '' },
+            redirected: { value: data.redirected === true },
+          });
+          pending.resolve(response);
         }
         break;
       }

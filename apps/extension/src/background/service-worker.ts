@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The MV3 background service worker — the session manager + message router + the one
  * holder of the access token. It:
@@ -777,6 +778,10 @@ async function handleProfileFetch(
       requestId: message.requestId,
       status: result.response.status,
       statusText: result.response.statusText,
+      url: result.url ?? message.url,
+      // Manual resource sends do not set Response.redirected. Distinct sent URLs record
+      // actual redirect hops, including a return to the original URL; nonce retries dedupe.
+      redirected: sent.size > 1,
       headers,
       body: isHead ? undefined : await cancellable(signal, () => result.response.text()),
     };

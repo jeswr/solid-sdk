@@ -12,6 +12,7 @@
 // shared window could not be reset between tests). We rebind the relevant globals to that
 // window, then re-import the module (which installs at import) under a reset module registry.
 
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { JSDOM } from 'jsdom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -181,13 +182,72 @@ function deliverToPage(message: Record<string, unknown>): void {
   win.dispatchEvent(event);
 }
 
+describe('inject — fetch response URL metadata', () => {
+  it.each([
+    false,
+    true,
+  ])('exposes the worker URL and redirected=%s as read-only properties', async (redirected) => {
+    await importInject();
+    posted.length = 0;
+    const original = 'https://alice.pod.example/private/notes';
+    const final = redirected ? `${original}/?view=1` : original;
+    const solid = (dom.window as unknown as { solid: { fetch: typeof fetch } }).solid;
+    const promise = solid.fetch(original);
+    const routed = posted.find((m) => m.type === 'SOLID_FETCH_REQUEST');
+    deliverToPage({
+      type: 'SOLID_FETCH_RESPONSE',
+      requestId: routed?.requestId,
+      status: 200,
+      statusText: 'OK',
+      headers: { 'content-type': 'text/turtle' },
+      body: '<#it> <relative> <child.ttl> .',
+      url: final,
+      redirected,
+    });
+
+    const response = await promise;
+    expect(response).toBeInstanceOf(Response);
+    expect(response.url).toBe(final);
+    expect(response.redirected).toBe(redirected);
+    expect(Reflect.set(response, 'url', 'https://other.example/')).toBe(false);
+    expect(Reflect.set(response, 'redirected', !redirected)).toBe(false);
+    expect(new URL('child.ttl', response.url).href).toBe(
+      redirected
+        ? 'https://alice.pod.example/private/notes/child.ttl'
+        : 'https://alice.pod.example/private/child.ttl',
+    );
+    expect(response.status).toBe(200);
+    expect(response.statusText).toBe('OK');
+    expect(response.headers.get('content-type')).toBe('text/turtle');
+    expect(await response.text()).toBe('<#it> <relative> <child.ttl> .');
+    expect(nativeFetch).not.toHaveBeenCalled();
+  });
+
+  it('keeps default metadata when an older worker reply omits it', async () => {
+    await importInject();
+    posted.length = 0;
+    const solid = (dom.window as unknown as { solid: { fetch: typeof fetch } }).solid;
+    const promise = solid.fetch('https://alice.pod.example/private/notes');
+    const routed = posted.find((m) => m.type === 'SOLID_FETCH_REQUEST');
+    deliverToPage({ type: 'SOLID_FETCH_RESPONSE', requestId: routed?.requestId, status: 200 });
+    const response = await promise;
+    expect(response.url).toBe('');
+    expect(response.redirected).toBe(false);
+  });
+});
+
 describe('inject — Round-2 High #1: a passthrough sentinel is completed by the page native fetch', () => {
   it('resolves a routed fetch by calling PRISTINE_FETCH with the ORIGINAL input + init, NOT a fabricated Response', async () => {
     await importInject();
     posted.length = 0;
     // Make the native fetch return a distinctive body so we can prove the resolved Response came
     // from PRISTINE_FETCH, not from any SW-supplied bytes.
-    nativeFetch.mockResolvedValueOnce(new Response('NATIVE-IN-PAGE-BYTES', { status: 207 }));
+    const nativeResponse = new Response('NATIVE-IN-PAGE-BYTES', { status: 207 });
+    Object.defineProperties(nativeResponse, {
+      url: { value: 'https://api.thirdparty.example/final' },
+      redirected: { value: true },
+    });
+    nativeFetch.mockResolvedValueOnce(nativeResponse);
 
     const init: RequestInit = { method: 'POST', headers: { 'X-App': 'v1' }, body: 'payload' };
     const promise = (
@@ -206,6 +266,9 @@ describe('inject — Round-2 High #1: a passthrough sentinel is completed by the
 
     const response = await promise;
     // The promise resolved with the PAGE's native fetch result (the SW gave no bytes).
+    expect(response).toBe(nativeResponse);
+    expect(response.url).toBe('https://api.thirdparty.example/final');
+    expect(response.redirected).toBe(true);
     expect(await response.text()).toBe('NATIVE-IN-PAGE-BYTES');
     expect(response.status).toBe(207);
     // PRISTINE_FETCH was called with the ORIGINAL input + a faithful init SNAPSHOT (round-3
