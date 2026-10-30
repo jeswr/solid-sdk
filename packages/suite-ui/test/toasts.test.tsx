@@ -3,6 +3,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import axe from "axe-core";
+import { toast as sonnerToast } from "sonner";
 import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { Toaster, toast, toastDurations } from "../src/components/ui/sonner.js";
 
@@ -18,6 +19,7 @@ beforeAll(() => {
 afterEach(() => {
   cleanup();
   toast.dismiss();
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 test("message updates an existing ID without leaving stale entries", () => {
@@ -35,6 +37,199 @@ test("message restores a dismissed ID to the active toasts", () => {
   expect(toast.getToasts().filter((entry) => entry.id === id)).toMatchObject([
     { title: { props: { role: "status", children: "Saved" } }, duration: 5000 },
   ]);
+});
+test.each([
+  "default",
+  "loading",
+] as const)("%s → Undo → success keeps the full 8s window", async (kind) => {
+  vi.useFakeTimers();
+  render(<Toaster />);
+  const id = `undo-update-${kind}`;
+  act(() => {
+    if (kind === "default") toast("Moving", { id });
+    else toast.loading("Moving", { id });
+    toast("Moved", { id, action: { label: "Undo", onClick: vi.fn() } });
+    toast.success("Confirmed", { id });
+  });
+  expect(toast.getToasts().filter((entry) => entry.id === id)).toEqual(
+    expect.arrayContaining([expect.objectContaining({ duration: 8000 })]),
+  );
+  await act(() => vi.advanceTimersByTimeAsync(5200));
+  expect(screen.getByText("Confirmed")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
+  await act(() => vi.advanceTimersByTimeAsync(3100));
+  expect(screen.queryByText("Confirmed")).toBeNull();
+});
+test.each([
+  "default",
+  "success",
+  "error",
+  "info",
+  "warning",
+  "loading",
+  "message",
+  "custom",
+] as const)("%s records Undo and explicit durations without reading Sonner history", (kind) => {
+  vi.spyOn(sonnerToast, "getHistory").mockImplementation(() => {
+    throw new Error("Toast policy must not read Sonner history");
+  });
+  const create = (data: Parameters<typeof toast>[1]) =>
+    kind === "default"
+      ? toast("Moved", data)
+      : kind === "custom"
+        ? toast.custom(() => <span>Moved</span>, data)
+        : toast[kind]("Moved", data);
+  const id = create({ action: { label: "Undo", onClick: vi.fn() } });
+  toast.success("Confirmed", { id });
+  expect(toast.getToasts().find((entry) => entry.id === id)).toMatchObject({ duration: 8000 });
+  create({ id, duration: 12000 });
+  toast.success("Confirmed again", { id });
+  expect(toast.getToasts().find((entry) => entry.id === id)).toMatchObject({ duration: 12000 });
+});
+test("loading with Undo retains its window on a success update", () => {
+  const id = toast.loading("Moving", { action: { label: "Undo", onClick: vi.fn() } });
+  expect(toast.getToasts().find((entry) => entry.id === id)).toMatchObject({ duration: 8000 });
+  toast.success("Moved", { id });
+  expect(toast.getToasts().find((entry) => entry.id === id)).toMatchObject({ duration: 8000 });
+});
+test.each([
+  undefined,
+  null,
+  { label: "Open", onClick: vi.fn() },
+])("replacing Undo with %s recalculates subsequent updates", (action) => {
+  const id = toast("Moving");
+  toast("Moved", { id, action: { label: "Undo", onClick: vi.fn() } });
+  toast.info("Action changed", { id, action });
+  toast.success("Confirmed", { id });
+  expect(toast.getToasts().filter((entry) => entry.id === id)).toEqual([
+    expect.objectContaining({ action, duration: 5000 }),
+    expect.objectContaining({ action, duration: 5000 }),
+  ]);
+});
+test.each(["id", "all"] as const)("dismiss(%s) clears Undo and explicit duration state", (kind) => {
+  const id = toast("Moved", {
+    id: `dismiss-reset-${kind}`,
+    action: { label: "Undo", onClick: vi.fn() },
+    duration: 12000,
+  });
+  if (kind === "id") toast.dismiss(id);
+  else toast.dismiss();
+  toast.success("Fresh toast", { id });
+  expect(toast.getToasts().find((entry) => entry.id === id)).toMatchObject({
+    duration: 5000,
+    action: undefined,
+  });
+});
+test.each([
+  { source: "shared", loading: true },
+  { source: "shared", loading: false },
+  { source: "result", loading: true },
+  { source: "result", loading: false },
+] as const)("promise records $source Undo with loading=$loading", async ({ source, loading }) => {
+  vi.spyOn(sonnerToast, "getHistory").mockImplementation(() => {
+    throw new Error("Toast policy must not read Sonner history");
+  });
+  const action = { label: "Undo", onClick: vi.fn() };
+  await toast
+    .promise(Promise.resolve("Moved"), {
+      ...(loading ? { loading: "Moving" } : {}),
+      ...(source === "shared" ? { action } : {}),
+      success: (message) => ({ message, ...(source === "result" ? { action } : {}) }),
+    })
+    .unwrap();
+  const entry = toast.getToasts().at(-1);
+  expect(entry).toMatchObject({ action, duration: 8000 });
+  if (!entry) throw new Error("Expected a promise result toast");
+  toast.success("Confirmed", { id: entry.id });
+  expect(toast.getToasts().at(-1)).toMatchObject({ duration: 8000 });
+  toast.info("Confirmed again", { id: entry.id, duration: 12000 });
+  toast.success("Done", { id: entry.id });
+  expect(toast.getToasts().at(-1)).toMatchObject({ duration: 12000 });
+});
+test("promise settlement retains updates made while it was loading", async () => {
+  const id = toast("Moving");
+  toast("Moved", { id, action: { label: "Undo", onClick: vi.fn() } });
+  let resolve = (_value: string) => {};
+  const pending = toast.promise(
+    new Promise<string>((done) => {
+      resolve = done;
+    }),
+    { id, loading: "Confirming", success: "Confirmed" },
+  );
+  toast.info("Still confirming", { id, duration: 12000 });
+  resolve("Confirmed");
+  await pending.unwrap();
+  expect(toast.getToasts().filter((entry) => entry.id === id)).toEqual([
+    expect.objectContaining({ duration: 12000 }),
+    expect.objectContaining({
+      action: { label: "Undo", onClick: expect.any(Function) },
+      duration: 12000,
+    }),
+  ]);
+});
+test.each([
+  { kind: "default", event: "onAutoClose" },
+  { kind: "default", event: "onDismiss" },
+  { kind: "promise-loading", event: "onAutoClose" },
+  { kind: "promise-loading", event: "onDismiss" },
+  { kind: "promise", event: "onAutoClose" },
+  { kind: "promise", event: "onDismiss" },
+] as const)("$kind clears state on $event and preserves the caller's callback", async ({
+  kind,
+  event,
+}) => {
+  vi.useFakeTimers();
+  render(<Toaster />);
+  const id = `lifecycle-${kind}-${event}`;
+  const callback = vi.fn();
+  const data = {
+    id,
+    action: { label: "Undo", onClick: vi.fn() },
+    duration: 12000,
+    closeButton: true,
+    [event]: callback,
+  };
+  await act(async () => {
+    if (kind === "default") toast("Moved", data);
+    else {
+      await toast
+        .promise(Promise.resolve("Moved"), {
+          ...data,
+          ...(kind === "promise-loading" ? { loading: "Moving" } : {}),
+          success: "Moved",
+        })
+        .unwrap();
+    }
+    toast.success("Confirmed", { id });
+  });
+  await act(() => vi.advanceTimersByTimeAsync(0));
+  if (event === "onDismiss") fireEvent.click(screen.getByRole("button", { name: "Close toast" }));
+  await act(() => vi.advanceTimersByTimeAsync(12300));
+  expect(callback).toHaveBeenCalledOnce();
+  expect(callback).toHaveBeenCalledWith(expect.objectContaining({ id }));
+  act(() => {
+    toast.success("Fresh toast", { id });
+  });
+  expect(toast.getToasts().find((entry) => entry.id === id)).toMatchObject({
+    duration: 5000,
+    action: undefined,
+  });
+});
+test("an internally dismissed promise clears its record", async () => {
+  const id = "promise-dismiss-reset";
+  await toast
+    .promise(Promise.resolve("Moved"), {
+      id,
+      loading: "Moving",
+      action: { label: "Undo", onClick: vi.fn() },
+      duration: 12000,
+    })
+    .unwrap();
+  toast.success("Fresh toast", { id });
+  expect(toast.getToasts().find((entry) => entry.id === id)).toMatchObject({
+    duration: 5000,
+    action: undefined,
+  });
 });
 test("normal and Undo toasts default to 5s and 8s; errors persist and can be dismissed", async () => {
   vi.useFakeTimers();

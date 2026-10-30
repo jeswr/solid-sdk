@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { isValidElement } from "react";
 import { type ExternalToast, toast as sonnerToast, type ToastT } from "sonner";
 
 export const toastDurations = {
@@ -8,25 +9,69 @@ export const toastDurations = {
   undo: 8000,
   error: Number.POSITIVE_INFINITY,
 } as const;
-function options(data: Pick<ExternalToast, "id" | "action" | "duration"> = {}, error = false) {
-  // Sonner merges by ID against its history, including previously dismissed toasts.
-  const previous =
-    data.id === undefined
-      ? undefined
-      : sonnerToast
-          .getHistory()
-          .find((entry): entry is ToastT => entry.id === data.id && !("dismiss" in entry));
-  const action = "action" in data ? data.action : previous?.action;
-  const undo = action && typeof action === "object" && "label" in action && action.label === "Undo";
-  // Omitted actions retain their window; replacing/removing one recalculates the default.
-  const duration =
-    data.duration ??
-    (!("action" in data) && previous?.type !== "error" ? previous?.duration : undefined) ??
-    (undo ? toastDurations.undo : toastDurations.default);
-  return {
-    duration: error ? toastDurations.error : duration,
-    ...(error ? { closeButton: true, dismissible: true } : {}),
+type ToastId = string | number;
+type ToastState = { hasUndo: boolean; explicitDuration: number | undefined };
+type PolicyOptions = Pick<
+  ExternalToast,
+  "id" | "action" | "duration" | "onAutoClose" | "onDismiss"
+>;
+const toastStates = new Map<ToastId, ToastState>();
+let nextPromiseId = 0;
+
+function options(data: PolicyOptions = {}, error = false) {
+  const previous = data.id === undefined ? undefined : toastStates.get(data.id);
+  const action = data.action;
+  const state: ToastState = {
+    hasUndo:
+      "action" in data
+        ? !!(action && typeof action === "object" && "label" in action && action.label === "Undo")
+        : (previous?.hasUndo ?? false),
+    // Replacing an action resets its selected window unless a new duration is supplied.
+    explicitDuration:
+      data.duration ?? (!("action" in data) ? previous?.explicitDuration : undefined),
   };
+  const duration =
+    state.explicitDuration ?? (state.hasUndo ? toastDurations.undo : toastDurations.default);
+  const lifecycle = {
+    // Omitted callbacks retain the lifecycle wrappers already installed on this ID.
+    ...(!previous || "onAutoClose" in data
+      ? {
+          onAutoClose: (entry: ToastT) => {
+            toastStates.delete(entry.id);
+            data.onAutoClose?.(entry);
+          },
+        }
+      : {}),
+    ...(!previous || "onDismiss" in data
+      ? {
+          onDismiss: (entry: ToastT) => {
+            toastStates.delete(entry.id);
+            data.onDismiss?.(entry);
+          },
+        }
+      : {}),
+  };
+  return {
+    state,
+    lifecycle,
+    options: {
+      duration: error ? toastDurations.error : duration,
+      ...(error ? { closeButton: true, dismissible: true } : {}),
+      // Sonner retains dismissed entries; a fresh record must not inherit their actions.
+      ...(!previous && !("action" in data) ? { action: undefined } : {}),
+      ...lifecycle,
+    },
+  };
+}
+function publish(
+  create: (data: ExternalToast) => ToastId,
+  data: ExternalToast = {},
+  error = false,
+) {
+  const prepared = options(data, error);
+  const id = create({ ...data, ...prepared.options });
+  toastStates.set(id, prepared.state);
+  return id;
 }
 type Message = Parameters<typeof sonnerToast>[0];
 function announcement(message: Message, error = false) {
@@ -37,27 +82,39 @@ function announcement(message: Message, error = false) {
   );
 }
 const notify = (message: Message, data?: ExternalToast) =>
-  sonnerToast(announcement(message), { ...data, ...options(data) });
+  publish((options) => sonnerToast(announcement(message), options), data);
 
 /** Suite durations apply to all Sonner entry points, including resolved/rejected promises. */
 export const toast: typeof sonnerToast = Object.assign(notify, sonnerToast, {
   success: (message: Message, data?: ExternalToast) =>
-    sonnerToast.success(announcement(message), { ...data, ...options(data) }),
+    publish((options) => sonnerToast.success(announcement(message), options), data),
   info: (message: Message, data?: ExternalToast) =>
-    sonnerToast.info(announcement(message), { ...data, ...options(data) }),
+    publish((options) => sonnerToast.info(announcement(message), options), data),
   warning: (message: Message, data?: ExternalToast) =>
-    sonnerToast.warning(announcement(message), { ...data, ...options(data) }),
+    publish((options) => sonnerToast.warning(announcement(message), options), data),
   message: (message: Message, data?: ExternalToast) =>
-    sonnerToast.message(announcement(message), { ...data, ...options(data) }),
+    publish((options) => sonnerToast.message(announcement(message), options), data),
   error: (message: Message, data?: ExternalToast) =>
-    sonnerToast.error(announcement(message, true), { ...data, ...options(data, true) }),
+    publish((options) => sonnerToast.error(announcement(message, true), options), data, true),
+  loading: (message: Message, data?: ExternalToast) =>
+    publish((options) => sonnerToast.loading(announcement(message), options), data),
   custom: (jsx: Parameters<typeof sonnerToast.custom>[0], data?: ExternalToast) =>
-    sonnerToast.custom(jsx, { ...data, ...options(data) }),
+    publish((options) => sonnerToast.custom(jsx, options), data),
+  dismiss: (id?: ToastId) => {
+    if (id === undefined) toastStates.clear();
+    else toastStates.delete(id);
+    return sonnerToast.dismiss(id);
+  },
   promise: (<T,>(
     promise: Parameters<typeof sonnerToast.promise<T>>[0],
     data?: Parameters<typeof sonnerToast.promise<T>>[1],
   ) => {
     if (!data) return sonnerToast.promise(promise);
+    // A stable ID also lets us track promises that create their first toast on settlement.
+    const id = data.id ?? `suite-ui-promise-${++nextPromiseId}`;
+    const initial = options({ ...data, id });
+    toastStates.set(id, initial.state);
+    let hasResult = false;
     const result = async (value: unknown, kind: "success" | "error") => {
       const renderer = data[kind];
       const rendered = typeof renderer === "function" ? await renderer(value as T) : renderer;
@@ -65,17 +122,43 @@ export const toast: typeof sonnerToast = Object.assign(notify, sonnerToast, {
         rendered && typeof rendered === "object" && "message" in rendered
           ? rendered
           : { message: rendered };
+      const resultId = extended.id ?? id;
+      const prepared = options({ ...extended, id: resultId }, kind === "error");
+      toastStates.set(resultId, prepared.state);
+      hasResult = true;
       return {
+        // Without a loading toast, shared actions and lifecycle handlers are first
+        // installed when the promise settles rather than inherited from a prior toast.
+        ...(data.loading === undefined
+          ? { ...initial.lifecycle, ...("action" in data ? { action: data.action } : {}) }
+          : {}),
         ...extended,
-        ...options({ ...data, ...extended }, kind === "error"),
+        ...prepared.options,
+        id: resultId,
         message: announcement(extended.message, kind === "error"),
       };
     };
-    return sonnerToast.promise(promise, {
-      ...data,
-      ...options(data),
-      ...(data.success !== undefined ? { success: (value: T) => result(value, "success") } : {}),
-      ...(data.error !== undefined ? { error: (value: unknown) => result(value, "error") } : {}),
-    });
+    const observe = (pending: Promise<T>) =>
+      pending.then((value) => {
+        // Sonner displays resolved React elements without invoking a result renderer.
+        if (isValidElement(value)) hasResult = true;
+        return value;
+      });
+    return sonnerToast.promise(
+      typeof promise === "function" ? () => observe(promise()) : observe(promise),
+      {
+        ...data,
+        ...initial.options,
+        id,
+        ...(data.loading !== undefined ? { loading: announcement(data.loading) } : {}),
+        ...(data.success !== undefined ? { success: (value: T) => result(value, "success") } : {}),
+        ...(data.error !== undefined ? { error: (value: unknown) => result(value, "error") } : {}),
+        finally: () => {
+          // Sonner dismisses unresolved loading toasts internally, bypassing our dismiss().
+          if (!hasResult) toastStates.delete(id);
+          return data.finally?.();
+        },
+      },
+    );
   }) satisfies typeof sonnerToast.promise,
 });
