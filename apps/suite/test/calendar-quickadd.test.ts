@@ -65,6 +65,7 @@ describe("calendar quick-add drafts", () => {
     "Walk in the park",
     "Talk about RDF",
     "Read every chapter",
+    "Read every other chapter",
     "All hands meeting",
   ])("preserves ordinary title words in %s", (title) => {
     expect(parseEventQuickAdd(`${title} tomorrow 1pm`, context)).toEqual({
@@ -229,6 +230,26 @@ describe("recurrence", () => {
   });
 
   it.each([
+    ["Pacific/Kiritimati", "daily 09:30", "2000-01-01T19:30:00.000Z"],
+    ["Pacific/Kiritimati", "weekly 09:30", "2000-01-07T19:30:00.000Z"],
+    ["Pacific/Kiritimati", "every Saturday 09:30", "2000-01-07T19:30:00.000Z"],
+    ["Asia/Kathmandu", "daily 00:30", "2000-01-01T18:45:00.000Z"],
+  ])("skips a past instant below the supported range in %s / %s", (tz, phrase, start) => {
+    expect(
+      parseEventQuickAdd(`Standup ${phrase}`, { tz, now: new Date("2000-01-01T00:00:00Z") }).start,
+    ).toBe(start);
+  });
+
+  it("includes a recurrence at the supported instant boundary", () => {
+    expect(
+      parseEventQuickAdd("Standup daily 14:00", {
+        tz: "Pacific/Kiritimati",
+        now: new Date("2000-01-01T00:00:00Z"),
+      }).start,
+    ).toBe("2000-01-01T00:00:00.000Z");
+  });
+
+  it.each([
     ["Europe/London", "2026-03-29T12:00:00Z", "daily 01:30", "2026-03-30T00:30:00.000Z"],
     ["Europe/London", "2026-10-25T12:00:00Z", "daily 01:30", "2026-10-26T01:30:00.000Z"],
     ["Europe/London", "2026-10-25T01:30:00.001Z", "daily 01:30", "2026-10-26T01:30:00.000Z"],
@@ -325,6 +346,8 @@ describe("fail-closed errors preserve all input", () => {
     ["x".repeat(4097), "invalid-input"],
     ["Meet Sam", "missing-date"],
     ["Lunch with Sam and", "missing-date"],
+    ["Read every", "missing-date"],
+    ["Read every other", "missing-date"],
     ["Meet Sam at Cafe Rio", "missing-date"],
     ["Meet Sam 1pm", "missing-date"],
     ["tomorrow 1pm", "missing-title"],
@@ -401,6 +424,32 @@ describe("fail-closed errors preserve all input", () => {
     ),
   ] as const)("rejects %s with %s", (input, code) => {
     failure(input, code);
+  });
+
+  it.each([
+    "day",
+    "week",
+    "weekday",
+    "month",
+    "year",
+    "Monday",
+  ])("rejects unsupported every other %s before a valid date", (period) => {
+    const input = `Standup every other ${period} tomorrow 09:30`;
+    const error = failure(input, "unsupported-phrase");
+    expect(error.issues).toEqual([
+      {
+        code: "unsupported-phrase",
+        start: input.indexOf("every"),
+        end: input.indexOf("other") + "other".length,
+        text: "every other",
+      },
+    ]);
+  });
+
+  it("rejects an explicit recurrence date below the supported instant boundary", () => {
+    const ctx = { tz: "Pacific/Kiritimati", now: new Date("2000-01-01T00:00:00Z") };
+    failure("Standup today 09:30", "invalid-date", ctx);
+    failure("Standup daily 2000-01-01 09:30", "invalid-date", ctx);
   });
 
   it("reports exact Unicode source offsets for unresolved suffixes", () => {

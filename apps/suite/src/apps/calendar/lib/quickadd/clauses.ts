@@ -36,11 +36,17 @@ function startsScheduling(tokens: Token[], index: number): boolean {
       token.text,
     )
   ) {
-    const next = tokens[index + 1];
+    let nextIndex = index + 1;
+    // Look through an interval modifier only when it leads to a temporal
+    // construct; ordinary titles such as "Read every other chapter" stay literal.
+    if (token.text.toLowerCase() === "every" && tokens[nextIndex]?.text.toLowerCase() === "other") {
+      nextIndex++;
+    }
+    const next = tokens[nextIndex];
     return (
       next !== undefined &&
       (/^(?:days?|weeks?|weekdays?|months?|years?)$/i.test(next.text) ||
-        startsScheduling(tokens, index + 1))
+        startsScheduling(tokens, nextIndex))
     );
   }
   return true;

@@ -37,9 +37,10 @@ function occurrenceIsPast(
     // selected occurrence still goes through strict conversion below.
     return wallClockToInstant(wallTime, context.tz, "later") < context.now.getTime();
   } catch (error) {
-    // A gap has no instant; skip it only once its local wall time is past.
-    // Other errors are left for strict conversion to report.
-    return (error as CalendarTimeError).code === "nonexistent-time" && wallTime < nowWallTime;
+    // Skip past gaps and instants below the supported range. Future candidates
+    // and other errors are left for strict conversion to report.
+    const code = (error as CalendarTimeError).code;
+    return (code === "nonexistent-time" || code === "invalid-instant") && wallTime < nowWallTime;
   }
 }
 
