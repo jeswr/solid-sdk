@@ -54,8 +54,8 @@ export async function checkPermissionAccessibility(
   });
   const result = await new AxeBuilder({ page })
     .include(scope)
-    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])
     .options({ rules: { 'color-contrast': { enabled: true } } })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])
     .analyze();
   expect(result.violations, `axe violations in ${artifact}`).toEqual([]);
   // A passing scan must actually measure contrast, rather than silently omit the rule.
