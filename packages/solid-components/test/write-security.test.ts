@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // FILTER-ON-WRITE security regression. The data models' typed SETTERS do NOT apply
@@ -14,7 +15,7 @@ import type { Store } from "n3";
 import { afterEach, describe, expect, it } from "vitest";
 import { JeswrBookmarkForm } from "../src/components/bookmark-form.js";
 import { JeswrTaskForm } from "../src/components/task-form.js";
-import { parseTurtle } from "./fixtures.js";
+import { parseRdfTurtle, parseTurtle } from "./fixtures.js";
 
 afterEach(() => {
   document.body.innerHTML = "";
@@ -37,17 +38,20 @@ if (!customElements.get("sec-bookmark-form"))
 const WF = "http://www.w3.org/2005/01/wf/flow#";
 const SCHEMA = "http://schema.org/";
 
-describe("filter-on-write — bookmark url (a stored-XSS surface)", () => {
+describe.each([
+  "https://jeswr.org/ns/bookmark#",
+  "https://w3id.org/jeswr/bookmark#",
+])("filter-on-write — bookmark url in %s", (namespace) => {
   const url = "https://pod.example/bm/1";
   const subj = `${url}#it`;
 
-  function run(formUrl: string): Store {
-    const existing = parseTurtle(
+  async function run(formUrl: string): Promise<Store> {
+    const existing = await parseRdfTurtle(
       `@prefix book: <https://w3id.org/jeswr/bookmark#> . @prefix schema: <${SCHEMA}> . <${subj}> a book:Bookmark ; schema:url <https://example.com/safe> .`,
       url,
     );
-    const formGraph = parseTurtle(
-      `@prefix book: <https://w3id.org/jeswr/bookmark#> . @prefix schema: <${SCHEMA}> . <urn:m> a book:Bookmark ; schema:url <${formUrl}> .`,
+    const formGraph = await parseRdfTurtle(
+      `@prefix book: <${namespace}> . @prefix schema: <${SCHEMA}> . <urn:m> a book:Bookmark ; schema:url <${formUrl}> .`,
       url,
     );
     const el = document.createElement("sec-bookmark-form") as TestBookmarkForm;
@@ -63,14 +67,14 @@ describe("filter-on-write — bookmark url (a stored-XSS surface)", () => {
     "vbscript:msgbox",
     "file:///etc/passwd",
     "data:text/plain,evil",
-  ])("drops a hostile url %s (never persisted)", (hostile) => {
-    const g = run(hostile);
+  ])("drops a hostile url %s (never persisted)", async (hostile) => {
+    const g = await run(hostile);
     const urls = g.getObjects(subj, `${SCHEMA}url`, null).map((o) => o.value);
     expect(urls).not.toContain(hostile);
   });
 
-  it("KEEPS a benign http(s) url (the filter is not over-broad)", () => {
-    const g = run("https://example.com/new-good");
+  it("KEEPS a benign http(s) url (the filter is not over-broad)", async () => {
+    const g = await run("https://example.com/new-good");
     const urls = g.getObjects(subj, `${SCHEMA}url`, null).map((o) => o.value);
     expect(urls).toEqual(["https://example.com/new-good"]);
   });

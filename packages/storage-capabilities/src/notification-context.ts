@@ -1,5 +1,8 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 import type { DocumentLoader } from "@jeswr/fetch-rdf";
+import cid from "./contexts/cid.js";
+import lws from "./contexts/lws.js";
+import ssd from "./contexts/ssd.js";
 
 // Bundled public W3C context, retrieved 2026-10-26. Resolving a description never
 // sends authenticated requests to a remote JSON-LD context or follows nested contexts.
@@ -33,14 +36,19 @@ const context = {
   },
 };
 
-/** Only the standard notification context is accepted; all other remote contexts fail closed. */
+const trustedContexts = new Map<string, Awaited<ReturnType<DocumentLoader["load"]>>>([
+  ["https://www.w3.org/ns/solid/notifications-context/v1", context],
+  ["https://www.w3.org/ns/solid/notification/v1", context],
+  ["https://www.w3.org/ns/cid/v1", cid],
+  ["https://www.w3.org/ns/lws/v1", lws],
+  ["https://jeswr.org/ns/solid-sd/context/v1", ssd],
+]);
+
+/** Trusted bundled contexts only (SSD-CLI-15); never fetch contexts at run time. */
 export const notificationDocumentLoader: DocumentLoader = {
   async load(url) {
-    if (
-      url !== "https://www.w3.org/ns/solid/notifications-context/v1" &&
-      url !== "https://www.w3.org/ns/solid/notification/v1"
-    )
-      throw new Error("Unsupported remote description context");
-    return structuredClone(context);
+    const bundled = trustedContexts.get(url);
+    if (bundled === undefined) throw new Error("Unsupported remote description context");
+    return structuredClone(bundled);
   },
 };
