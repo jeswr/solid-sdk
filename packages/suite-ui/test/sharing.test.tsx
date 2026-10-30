@@ -219,6 +219,77 @@ describe("people validation", () => {
     expect(screen.getByRole("option").textContent).toContain("Ada Rivers");
     expect(updates.has("https://other.example/me")).toBe(false);
   });
+  it.each([
+    [undefined, "https://bram.example/profile#me"],
+    ["ArrowUp", "https://alice.example/me"],
+    ["ArrowDown", "https://chris.example/me"],
+  ])("preserves the highlighted contact after profile resolution before %s", (key, expectedId) => {
+    const updates = new Map<string, (profile: SharingProfile) => void>();
+    const people = [
+      { webId: "https://alice.example/me" },
+      { webId: contact.webId, displayName: "Amelia Rivers" },
+      { webId: "https://chris.example/me", displayName: "Chris Rivers" },
+    ];
+    function useLiveProfile(webId: string) {
+      const [profile, setProfile] = useState<SharingProfile>({ loading: true });
+      useEffect(() => {
+        updates.set(webId, setProfile);
+        return () => {
+          updates.delete(webId);
+        };
+      }, [webId]);
+      return profile;
+    }
+    render(<Picker people={people} useProfile={useLiveProfile} />);
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "Rivers" } });
+    expect(screen.getAllByRole("option")).toHaveLength(2);
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(screen.getByRole("option", { selected: true }).textContent).toContain(contact.webId);
+
+    act(() =>
+      updates.get("https://alice.example/me")?.({ displayName: "Ada Rivers", loading: false }),
+    );
+    expect(screen.getAllByRole("option")).toHaveLength(3);
+    const highlighted = screen.getByRole("option", { selected: true });
+    expect(highlighted.textContent).toContain(contact.webId);
+    expect(input.getAttribute("aria-activedescendant")).toBe(highlighted.id);
+    if (key) fireEvent.keyDown(input, { key });
+    fireEvent.keyDown(input, { key: "Enter" });
+    const selected = screen.getByRole("list", { name: "Selected people" });
+    expect(within(selected).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(selected).getByText(`Account ID: ${expectedId}`)).toBeDefined();
+  });
+  it("clears the highlight when its profile stops matching instead of selecting another contact", () => {
+    let displayName = "Amelia Rivers";
+    const people = [
+      { webId: contact.webId },
+      { webId: "https://chris.example/me", displayName: "Chris Rivers" },
+    ];
+    const useChangingProfile = (webId: string) => ({
+      ...(webId === contact.webId ? { displayName } : {}),
+      loading: false,
+    });
+    const { rerender } = render(<Picker people={people} useProfile={useChangingProfile} />);
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "Rivers" } });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(screen.getByRole("option", { selected: true }).textContent).toContain(contact.webId);
+    displayName = "Amelia Brooks";
+    rerender(<Picker people={people} useProfile={useChangingProfile} />);
+    expect(screen.getAllByRole("option")).toHaveLength(1);
+    expect(screen.queryByRole("option", { selected: true })).toBeNull();
+    expect(input.getAttribute("aria-activedescendant")).toBeNull();
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.queryByRole("list", { name: "Selected people" })).toBeNull();
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(
+      within(screen.getByRole("list", { name: "Selected people" })).getByText(
+        "Account ID: https://chris.example/me",
+      ),
+    ).toBeDefined();
+  });
   it("adds a raw account ID containing an email", () => {
     const webId = "https://id.example/users/alice@example.org#me";
     render(<Picker people={[]} useProfile={() => ({ loading: false })} />);

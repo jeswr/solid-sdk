@@ -131,7 +131,7 @@ export function PeoplePicker({
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(-1);
+  const [activeWebId, setActiveWebId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [announcement, setAnnouncement] = useState("");
   const [profiles, setProfiles] = useState<Record<string, SharingProfile>>({});
@@ -151,6 +151,7 @@ export function PeoplePicker({
       .toLowerCase()
       .includes(query.toLowerCase()),
   );
+  const active = results.findIndex((person) => person.webId === activeWebId);
   const activePerson = results[active];
   useEffect(() => {
     if (open && active >= 0)
@@ -167,7 +168,7 @@ export function PeoplePicker({
       event.preventDefault();
       event.stopPropagation();
       setOpen(false);
-      setActive(-1);
+      setActiveWebId(null);
     }
     ownerWindow.addEventListener("keydown", dismissSuggestions, true);
     return () => ownerWindow.removeEventListener("keydown", dismissSuggestions, true);
@@ -182,7 +183,7 @@ export function PeoplePicker({
     onChange([...value, person]);
     onQueryChange("");
     setOpen(false);
-    setActive(-1);
+    setActiveWebId(null);
     setError("");
     setAnnouncement(`Added ${person.displayName || person.webId}`);
   }
@@ -244,24 +245,29 @@ export function PeoplePicker({
           onFocus={() => setOpen(true)}
           onBlur={() => {
             setOpen(false);
-            setActive(-1);
+            setActiveWebId(null);
           }}
           onChange={(event) => {
             onQueryChange(event.target.value);
             setOpen(true);
-            setActive(-1);
+            setActiveWebId(null);
             setError("");
           }}
           onKeyDown={(event) => {
             if (event.key === "ArrowDown" || event.key === "ArrowUp") {
               event.preventDefault();
               setOpen(true);
-              if (!results.length) setActive(-1);
-              else if (active < 0) setActive(event.key === "ArrowDown" ? 0 : results.length - 1);
-              else
-                setActive(
-                  (active + (event.key === "ArrowDown" ? 1 : -1) + results.length) % results.length,
-                );
+              if (!results.length) setActiveWebId(null);
+              else {
+                const next =
+                  active < 0
+                    ? event.key === "ArrowDown"
+                      ? 0
+                      : results.length - 1
+                    : (active + (event.key === "ArrowDown" ? 1 : -1) + results.length) %
+                      results.length;
+                setActiveWebId(results[next]?.webId ?? null);
+              }
             }
             if (event.key === "Enter") {
               event.preventDefault();
