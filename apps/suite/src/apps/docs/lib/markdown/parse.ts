@@ -182,11 +182,16 @@ function blocks(tokens: Token[], depth: number): DocsNode[] {
         const content = blocks(token.tokens, depth + 1);
         return [block("blockquote", content.length ? content : [block("paragraph")])];
       }
-      case "code":
+      case "code": {
         if (token.lang && !/^[\w+-]+$/.test(token.lang)) fail("Code fence metadata is unsupported");
-        return [
-          block("codeBlock", text(token.text), token.lang ? { language: token.lang } : undefined),
-        ];
+        // A tab following up to three spaces completes the four-column structural indent.
+        // Marked removes those spaces first; use raw source to leave only actual code tabs.
+        const value =
+          token.codeBlockStyle === "indented"
+            ? token.raw.replace(/^(?: {0,3}\t| {1,4})/gm, "").replace(/\n+$/, "")
+            : token.text;
+        return [block("codeBlock", text(value), token.lang ? { language: token.lang } : undefined)];
+      }
       case "list":
         return [list(token, depth)];
       default:

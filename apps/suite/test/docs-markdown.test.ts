@@ -118,6 +118,29 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     roundTrip(source);
   });
 
+  it.each([
+    "\t",
+    " \t",
+    "  \t",
+    "   \t",
+    "    ",
+  ])("removes four columns of structural code indentation: %j", (indent) => {
+    expect(roundTrip(`${indent}foo\tbar\t\tbaz`)).toEqual(
+      doc(b("codeBlock", [t("foo\tbar\t\tbaz")])),
+    );
+  });
+  it("preserves code indentation after the first four columns on every line", () => {
+    expect(roundTrip("  \tfoo\n \t \tbar\n   \t\tbaz\n    \tend")).toEqual(
+      doc(b("codeBlock", [t("foo\n \tbar\n\tbaz\n\tend")])),
+    );
+  });
+  it.each(["```", "  ```", "~~~"])("preserves content tabs in fenced code: %s", (fence) => {
+    const indent = fence.startsWith("  ") ? "  " : "";
+    expect(roundTrip(`${fence}\n${indent}\tfoo\tbar\n${fence}`)).toEqual(
+      doc(b("codeBlock", [t("\tfoo\tbar")])),
+    );
+  });
+
   it("retains task state independently of checkbox-like item text", () => {
     expect(markdownToDocs("- [ ] [x] literal checkbox")).toEqual(
       doc(b("taskList", [b("taskItem", [p(t("[x] literal checkbox"))], { checked: false })])),
