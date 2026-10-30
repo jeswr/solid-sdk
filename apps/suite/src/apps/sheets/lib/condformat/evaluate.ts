@@ -119,18 +119,6 @@ function matcher(
   return (value) => (matches(value) ? rule.style : undefined);
 }
 
-function compensatedAverage(numbers: readonly number[]): number {
-  let sum = 0;
-  let correction = 0;
-  for (const value of numbers) {
-    const next = sum + value;
-    correction += Math.abs(sum) >= Math.abs(value) ? sum - next + value : value - next + sum;
-    sum = next;
-  }
-  // Divide separately so rounding the total cannot discard the compensation.
-  return sum / numbers.length + correction / numbers.length;
-}
-
 function exactAverage(numbers: readonly number[]): number {
   const view = new DataView(new ArrayBuffer(8));
   const zero = BigInt(0);
@@ -186,9 +174,7 @@ export function evaluateConditionalFormats(
     }
   }
   numbers.sort((a, b) => a - b);
-  // Keep the compensated fast path and accumulate exactly after overflow.
-  const directAverage = numbers.length === 0 ? 0 : compensatedAverage(numbers);
-  const average = Number.isFinite(directAverage) ? directAverage : exactAverage(numbers);
+  const average = numbers.length === 0 ? 0 : exactAverage(numbers);
   const matchers = validated.map((rule) => matcher(rule, numbers, counts, average));
   return values.map((row) =>
     row.map((value) => {

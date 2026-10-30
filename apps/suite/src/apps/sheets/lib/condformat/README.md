@@ -42,8 +42,8 @@ Population rules and scales use numeric cells only, including cells stopped by
 other rules. Absolute `count` is a positive safe integer, capped to the population
 when selecting. Percent `count` is in (0, 100], rounded upward to at least one
 numeric cell using exact decimal percentage arithmetic. Rank ties are included.
-Average uses compensated summation, falling back to exact binary accumulation
-if the direct sum overflows, retaining small residuals through cancellation.
+Average uses exact binary accumulation and a single rounding step, retaining
+small residuals through finite cancellation as well as overflowing partial sums.
 
 Anchor kinds are `min`, `max`, `number`, `percent`, and `percentile`. The first two
 omit `value`; the others require a finite number (0–100 for percentages).

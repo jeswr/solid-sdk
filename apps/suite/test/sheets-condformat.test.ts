@@ -310,6 +310,34 @@ describe("numeric population rules", () => {
   });
 
   it.each([
+    1, -1, 1e-100, -1e-100,
+  ])("retains finite cancellation residual %s and stops only matching cells", (residual) => {
+    for (const [large, small] of [
+      [1e100, 1e50],
+      [1e300, 1e150],
+    ] as const) {
+      const cells = [-large, -small, 0, residual, small, large];
+      for (const kind of ["aboveAverage", "belowAverage"] as const) {
+        expect(
+          evaluateConditionalFormats(
+            [cells],
+            [
+              { kind, style: bold, stopIfTrue: true },
+              { kind: "notBlank", style: { italic: true } },
+            ],
+          ),
+        ).toEqual([
+          cells.map((value) =>
+            (kind === "aboveAverage" ? value > residual / 6 : value < residual / 6)
+              ? bold
+              : { italic: true },
+          ),
+        ]);
+      }
+    }
+  });
+
+  it.each([
     [
       [0, 0],
       [false, false],
