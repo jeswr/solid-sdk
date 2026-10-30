@@ -8,10 +8,12 @@
 // four of the five short-circuited an empty graph to `""`; here both are options
 // so a single implementation reproduces every consumer's observable output.
 //
-// RDF is ALWAYS produced through `n3.Writer` — never hand-concatenated.
+// AUTHORED-BY Codex GPT-6.1-Sol
+// RDF uses n3.Writer or context-free JSON-LD objects — never hand-concatenated.
 
 import type { Quad } from "@rdfjs/types";
 import { Writer } from "n3";
+import { serializeJsonLd } from "./jsonld.js";
 
 /**
  * The default RDF media type used when {@link SerializeOptions.format} is omitted.
@@ -30,7 +32,8 @@ export const DEFAULT_FORMAT = "text/turtle" as const;
  */
 export interface SerializeOptions {
   /**
-   * The RDF media type passed straight through to `n3.Writer`
+   * The RDF media type: `application/ld+json` produces expanded, context-free
+   * JSON-LD; other formats are passed straight through to `n3.Writer`
    * (`text/turtle`, `application/n-triples`, `application/n-quads`,
    * `application/trig`, …).
    *
@@ -44,7 +47,7 @@ export interface SerializeOptions {
 
   /**
    * The prefix declarations emitted in the output (for readability of Turtle /
-   * TriG; ignored by the line-based N-Triples / N-Quads formats), as a map of
+   * TriG; ignored by JSON-LD and the line-based N-Triples / N-Quads formats), as a map of
    * prefix label to namespace IRI passed straight to `n3.Writer`.
    *
    * Defaults to `{}` (no prefixes) so the caller supplies its vocab prefix map.
@@ -54,7 +57,8 @@ export interface SerializeOptions {
   prefixes?: Readonly<Record<string, string>>;
 
   /**
-   * When `true` (the default), a zero-quad input short-circuits to the empty
+   * JSON-LD always emits `[]` for an empty dataset, regardless of this option.
+   * For other formats, when `true` (the default), a zero-quad input short-circuits to the empty
    * string `""` instead of letting `n3.Writer` emit a content-free prefix
    * preamble. This is the behaviour of four of the five consolidated copies
    * (`@jeswr/solid-vc`, `@jeswr/solid-odrl`, `@jeswr/solid-a2a`,
@@ -70,17 +74,21 @@ export interface SerializeOptions {
 }
 
 /**
- * Serialise RDF quads to a string with `n3.Writer` — the single sanctioned
+ * Serialise RDF quads to a string with `n3.Writer` or JSON-LD objects — the single sanctioned
  * serialiser for the `@jeswr` suite (RDF is never hand-concatenated).
  *
  * Defaults to Turtle with no prefixes and the empty-graph short-circuit enabled.
  * Pass {@link SerializeOptions} to choose an RDF media type, supply a prefix map,
  * or opt out of the empty-graph short-circuit.
  *
- * @param quads - The quads to serialise (passed verbatim to `Writer.addQuads`).
+ * JSON-LD relabels blank nodes per document and preserves literal lexical values.
+ * It rejects malformed RDF terms and directional literals with a TypeError.
+ * Contexts are never accepted, emitted or fetched.
+ *
+ * @param quads - The quads to serialise (passed verbatim to `Writer.addQuads` for N3 formats).
  * @param options - Optional {@link SerializeOptions}.
  * @returns A promise resolving to the serialised RDF string, or rejecting with
- *   the error `n3.Writer` reports on failure.
+ *   a JSON-LD validation TypeError or the error `n3.Writer` reports on failure.
  *
  * @example
  * ```ts
@@ -93,6 +101,9 @@ export interface SerializeOptions {
  */
 export function serialize(quads: readonly Quad[], options?: SerializeOptions): Promise<string> {
   const format = options?.format ?? DEFAULT_FORMAT;
+  if (format === "application/ld+json") {
+    return new Promise((resolve) => resolve(serializeJsonLd(quads)));
+  }
   const prefixes = options?.prefixes ?? {};
   const emptyAsEmptyString = options?.emptyAsEmptyString ?? true;
 

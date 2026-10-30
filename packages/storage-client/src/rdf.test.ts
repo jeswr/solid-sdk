@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 import type { Quad, Term } from "@jeswr/fetch-rdf";
 import { DataFactory, Parser, Store } from "n3";
 import { describe, expect, test } from "vitest";
@@ -53,6 +54,39 @@ function expectTurtle(body: string, intended: readonly Quad[] = expected) {
 }
 
 describe("foreign RDF/JS term serialisation", () => {
+  test("JSON-LD reads foreign term fields without using private ids or methods", async () => {
+    const input = misleading.filter((q) => !(q.object as { direction?: string }).direction);
+    const body = await serializeQuads(input, "application/ld+json");
+    expect(body).not.toContain("injected-id");
+    expect(JSON.parse(body)).toEqual([
+      { "@id": "_:b0", "urn:p": [{ "@id": "_:b0" }] },
+      {
+        "@id": "urn:s",
+        "urn:p": [
+          { "@value": 'plain "value"\n' },
+          { "@value": "42", "@type": "http://www.w3.org/2001/XMLSchema#integer" },
+          { "@value": "bonjour", "@language": "fr" },
+          { "@id": "urn:o" },
+        ],
+      },
+    ]);
+  });
+
+  test.each([
+    foreign(literal("v"), { language: "en" }),
+    foreign(literal("v", "en"), { language: "" }),
+    foreign(literal("v"), { direction: "rtl" }),
+  ])("JSON-LD rejects inconsistent literal fields before n3 can discard them: %j", async (term) => {
+    const storage = createMemoryStorage({ root: ROOT });
+    await expect(
+      storage.writeRdf(URL, [quad(s, p, term)], {
+        ifMatch: "*",
+        contentType: "application/ld+json",
+      }),
+    ).rejects.toThrow(TypeError);
+    await expect(storage.head(URL)).rejects.toMatchObject({ code: "not-found" });
+  });
+
   test("serializeQuads ignores misleading ids on every term type", async () => {
     expectTurtle(await serializeQuads(misleading, "text/turtle"));
   });

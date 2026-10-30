@@ -27,6 +27,14 @@ const { url, etag } = await storage.create(storage.root, '{"a":1}', { contentTyp
 await storage.patch(url, { kind: 'json', ops: [{ op: 'replace', path: '/a', value: 2 }] }, { ifMatch: etag! });
 ```
 
+Memory `writeRdf` defaults to Turtle and also supports `contentType: 'application/ld+json'`
+through `@jeswr/rdf-serialize`, in both Solid and LWS protocol modes. JSON-LD output is an
+expanded, context-free array, with named graphs, stable document-local blank-node labels and
+literal lexical values preserved. Empty datasets produce `[]`. Prefixes are ignored, contexts
+are never accepted or fetched, and malformed or directional literals reject with `TypeError`.
+Turtle and N-Triples output behavior is unchanged. JSON-LD RDF patches still return 415;
+Solid HTTP mutations remain pending T-022 and LWS HTTP remains reserved in this checkout.
+
 From the workspace root:
 
 ```sh

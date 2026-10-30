@@ -1,7 +1,7 @@
 {
   "name": "@jeswr/solid-drawing",
   "version": "0.1.0",
-  "description": "RDF vocabulary + typed term constants for vector drawings / whiteboards — the data model for an Excalidraw→Solid fork (a draw:Scene points at a byte-exact .excalidraw JSON blob; the canvas is NOT shredded into triples). Ships the ontology TTL, a SHACL shape, and a committed self-contained dist/.",
+  "description": "RDF vocabulary + typed term constants for vector drawings / whiteboards \u2014 the data model for an Excalidraw\u2192Solid fork (a draw:Scene points at a byte-exact .excalidraw JSON blob; the canvas is NOT shredded into triples). Ships the ontology TTL, a SHACL shape, and a committed self-contained dist/.",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Wright",
@@ -73,10 +73,9 @@
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.26.1",
     "@types/node": "^20",
-    "@zazuko/env-node": "^3.0.0",
-    "rdf-validate-shacl": "^0.6.5",
     "typescript": "^5",
-    "vitest": "^3.2.6"
+    "vitest": "^3.2.6",
+    "@jeswr/rdf-engine": "workspace:*"
   },
   "engines": {
     "node": ">=20"

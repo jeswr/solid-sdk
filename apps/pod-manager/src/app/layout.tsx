@@ -1,17 +1,20 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
-import { ThemeProvider } from "@/components/theme-provider";
-import { TooltipProvider } from "@/components/ui/tooltip";
-import { Toaster } from "@/components/ui/sonner";
-import { SessionProvider } from "@/components/session-provider";
 import { AppShell } from "@/components/app-shell";
+import { SessionProvider } from "@/components/session-provider";
+import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/sonner";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 // Inter: a workhorse UI sans with strong tabular figures — ideal for the
 // data-dense "My data" lists and dashboard counts (web-typography skill).
-const inter = Inter({
+const inter = localFont({
+  src: "../../../../packages/suite-ui/src/font-assets/inter/Inter-Variable.woff2",
   variable: "--font-sans",
-  subsets: ["latin"],
+  weight: "100 900",
+  style: "normal",
   display: "swap",
 });
 
@@ -32,15 +35,9 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{ children: React.ReactNode }>) {
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html
-      lang="en"
-      className={`${inter.variable} h-full antialiased`}
-      suppressHydrationWarning
-    >
+    <html lang="en" className={`${inter.variable} h-full antialiased`} suppressHydrationWarning>
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <ThemeProvider
           attribute="class"

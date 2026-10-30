@@ -88,6 +88,7 @@
     "@jeswr/agent-memory",
     "@jeswr/agent-registry",
     "@jeswr/fetch-rdf",
+    "@jeswr/fetch-rdf-engine-tests",
     "@jeswr/suite-native"
   ],
   "applications": [

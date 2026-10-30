@@ -1,8 +1,10 @@
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # @jeswr/rdf-serialize
 
-The shared `n3.Writer` wrapper for serialising RDF quads across the `@jeswr` Solid suite.
+The shared RDF serialiser for the `@jeswr` Solid suite: `n3.Writer` for Turtle-family formats,
+and plain JSON objects for expanded, context-free JSON-LD.
 
 ## Install
 
@@ -31,8 +33,18 @@ const turtle = await serialize(
 );
 ```
 
-`serialize` defaults to Turtle. Pass `format` for N-Triples, N-Quads, or TriG, and set
+`serialize` defaults to Turtle. Pass `format` for N-Triples, N-Quads, TriG, or
+`application/ld+json`, and set
 `emptyAsEmptyString: false` if an empty graph should retain its prefix preamble.
+
+JSON-LD always returns an array (`[]` for an empty dataset), ignoring prefixes and
+`emptyAsEmptyString`. Named graphs use `@id`/`@graph`; blank nodes receive stable document-local
+`_:bN` labels. Lists stay as RDF first/rest triples. Literal values remain strings: `xsd:string`
+uses `@value`, language strings add `@language`, and other datatypes add `@type`.
+Named-node `rdf:type` objects use `@type`. There is no context option, no emitted `@context`,
+and no network access. Malformed terms, relative or forbidden-character IRIs, language tags
+inconsistent with `rdf:langString`, and directional literals (including `rdf:dirLangString`)
+reject with `TypeError` rather than losing information.
 
 ## Key API
 

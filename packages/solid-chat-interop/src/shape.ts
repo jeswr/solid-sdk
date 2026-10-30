@@ -1,13 +1,14 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Access to the canonical chat-message SHACL shape (`shapes/message.shacl.ttl`).
  *
  * The shape lives in a single `.ttl` file at the package root (the human- and
- * tool-readable artifact `rdf-validate-shacl` consumes directly, and the artifact
+ * tool-readable artifact `rdf-engine.validate` consumes directly, and the artifact
  * the codegen framework's shape-driven message components — `jeswr-message-list`,
  * `jeswr-shacl-view` / `-form` — render from). This module reads it as a string so
  * consumers can feed it into whatever SHACL engine they already depend on (the
- * suite uses `rdf-validate-shacl` over a `@zazuko/env` dataset). Reading the file
+ * suite uses `@jeswr/rdf-engine` with real Node WASM). Reading the file
  * rather than embedding a copy means the string can never drift from the canonical
  * `.ttl`.
  *
@@ -33,7 +34,7 @@ let cachedMessage: string | undefined;
 /**
  * The canonical chat-message SHACL shape (`as:Note`), as a Turtle string. Cached
  * after the first read. Pass it (with the data graph) to a SHACL validator — see
- * `src/message-shape.test.ts` for the `rdf-validate-shacl` pattern — or hand it to
+ * `src/message-shape.test.ts` for the `rdf-engine.validate` pattern — or hand it to
  * the codegen framework's shape-driven message components to render a message from
  * its shape.
  */
