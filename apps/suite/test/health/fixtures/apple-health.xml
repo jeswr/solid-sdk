@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!DOCTYPE HealthData [<!ELEMENT HealthData ANY><!ELEMENT Record EMPTY>]>
+<HealthData locale="en_GB">
+  <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Watch &amp; Phone" startDate="2025-01-01 09:00:00 +0100" value="72" unit="count/min"/>
+  <Record type="HKQuantityTypeIdentifierStepCount" startDate="2025-01-01 09:00:00 +0100" value="1250" unit="count"/>
+  <Record type="HKQuantityTypeIdentifierBodyMass" startDate="2025-01-02 09:00:00 +0100" value="70" unit="kg"/>
+  <Record type="HKQuantityTypeIdentifierBodyMass" startDate="2025-01-03 09:00:00 +0100" value="100" unit="lb"/>
+  <Record type="HKCategoryTypeIdentifierSleepAnalysis" startDate="2025-01-01 22:00:00 +0000" endDate="2025-01-01 23:00:00 +0000" value="HKCategoryValueSleepAnalysisAsleepCore"/>
+  <Record type="HKCategoryTypeIdentifierSleepAnalysis" startDate="2025-01-01 22:00:00 +0000" endDate="2025-01-01 23:00:00 +0000" value="HKCategoryValueSleepAnalysisAwake"/>
+  <Record type="HKQuantityTypeIdentifierBloodPressureSystolic" startDate="2025-01-01 09:00:00 +0100" value="120" unit="mmHg"/>
+  <Record type="HKQuantityTypeIdentifierBloodPressureDiastolic" startDate="2025-01-01 09:00:00 +0100" value="80" unit="mmHg"/>
+</HealthData>

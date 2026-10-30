@@ -1,0 +1,456 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+@prefix agent: <https://jeswr.org/ns/agent#>.
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.
+
+agent:Account rdfs:comment "A channel account descriptor; its channelHandle value is a salted hash, never a raw handle.";
+    rdfs:label "Account".
+agent:Acknowledgement rdfs:comment "Migrated M1 lifecycle or intent term Acknowledgement.";
+    rdfs:label "Acknowledgement".
+agent:ActionIntent rdfs:comment "Exact operation, version, binding, recipient hash, spend, purpose and consequential parameters to be evaluated.";
+    rdfs:label "ActionIntent".
+agent:ActionProposal rdfs:comment "An executable proposal with exact action intent, rendered preview, provenance and lifecycle state.";
+    rdfs:label "ActionProposal".
+agent:AgentWorkspace rdfs:comment "Private agent workspace registered in the owner private type index.";
+    rdfs:label "AgentWorkspace".
+agent:AgreementRecord rdfs:comment "Documentary record relating an identified offer, the accepting message and the exact terms digest (A8).";
+    rdfs:label "AgreementRecord".
+agent:Approval rdfs:comment "Owner decision bound to one proposal and its exact terms digest, with expiry and an opaque proof attachment.";
+    rdfs:label "Approval".
+agent:AuthorisationDecision rdfs:comment "A decision evaluated under an identified grant (e.g. an owner mandate) for one concrete action. The grant is not the decision (CT-05).";
+    rdfs:label "AuthorisationDecision".
+agent:ChannelCapability rdfs:comment "Static and credential-dependent description of one channel binding and its carriage and limits.";
+    rdfs:label "ChannelCapability".
+agent:Configuration rdfs:comment "One coherent mechanism combination (integrity, authentication, representation, authorisation, binding).";
+    rdfs:label "Configuration".
+agent:Confirmation rdfs:comment "The confirmation-record type (owner-only; the Actor cannot write these).";
+    rdfs:label "Confirmation".
+agent:ControlStatement rdfs:comment "Owner control statement to halt, resume, change a binding, dispatch, revoke or forget; requires external proof verification.";
+    rdfs:label "ControlStatement".
+agent:DispatchNow rdfs:comment "Control kind requesting dispatch of a specific proposal through the executor.";
+    rdfs:label "DispatchNow".
+agent:EvidenceLedger rdfs:comment "An append-only hash-chained log kept by one agent. Integrity of the retained entries does not establish completeness (CT-10).";
+    rdfs:label "EvidenceLedger".
+agent:Forget rdfs:comment "Control kind requesting deletion of the referenced memory resource.";
+    rdfs:label "Forget".
+agent:GeneralCommunication rdfs:comment "Migrated M1 lifecycle or intent term GeneralCommunication.";
+    rdfs:label "GeneralCommunication".
+agent:Grant rdfs:comment "A record that a grant artefact (mandate, data-use, access, onward-use or delegation grant) was loaded, identified by digest.";
+    rdfs:label "Grant".
+agent:Halt rdfs:comment "Control kind requesting suspension of all execution.";
+    rdfs:label "Halt".
+agent:HighFriction rdfs:comment "Migrated M1 lifecycle or intent term HighFriction.";
+    rdfs:label "HighFriction".
+agent:ImplementationDescription rdfs:comment "What one agent implements versus accepts: configurations, operations, bindings. Grants no authority.";
+    rdfs:label "ImplementationDescription".
+agent:InboundMessage rdfs:comment "An owner-private inbound message with channel provenance and unverified sender identity.";
+    rdfs:label "InboundMessage".
+agent:LedgerEntry rdfs:comment "One sealed entry of an evidence ledger: sequence number, previous hash, entry hash, and the record it carries.";
+    rdfs:label "LedgerEntry".
+agent:LowFriction rdfs:comment "Friction individuals (§7 graduated confirmation).";
+    rdfs:label "LowFriction".
+agent:MandateReference rdfs:comment "Reference to a signed authorization credential. This graph does not issue or verify that credential.";
+    rdfs:label "MandateReference".
+agent:MessageRecord rdfs:comment "Record that a protected message with a given digest was received or emitted. Sender fields of inbound records are claims.";
+    rdfs:label "MessageRecord".
+agent:Operation rdfs:comment "A versioned interaction operation an agent supports (e.g. schedule-meeting).";
+    rdfs:label "Operation".
+agent:OutcomeConclusion rdfs:comment "Pilot logical-model term OutcomeConclusion; records local evidence and conveys no authority by itself.";
+    rdfs:label "OutcomeConclusion".
+agent:OutcomeRecord rdfs:comment "The recording agent's own conclusion about one activity it attempted: completed, not-executed or uncertain, with the method of observation.";
+    rdfs:label "OutcomeRecord".
+agent:OwnerMandate rdfs:comment "Owner-signed bound on what a software actor may do: autonomous and with-approval ODRL policies plus validity. Not a representation statement.";
+    rdfs:label "OwnerMandate".
+agent:PeerOutcomeReport rdfs:comment "A peer's reported conclusion about the peer's own activity. Attributed to the peer; not independently observed.";
+    rdfs:label "PeerOutcomeReport".
+agent:PolicyModule rdfs:comment "The evaluator an agent actually uses for a policy profile (name, version, interface, current status). Informative; carries no local paths or digests and grants no authority.";
+    rdfs:label "PolicyModule".
+agent:PolicyProfile rdfs:comment "Shared policy semantics a configuration accepts (e.g. the ODRL pilot subset, three-valued). Independent of which evaluator implements it.";
+    rdfs:label "PolicyProfile".
+agent:ProposalConfirmed rdfs:comment "Migrated M1 lifecycle or intent term ProposalConfirmed.";
+    rdfs:label "ProposalConfirmed".
+agent:ProposalExecuted rdfs:comment "Migrated M1 lifecycle or intent term ProposalExecuted.";
+    rdfs:label "ProposalExecuted".
+agent:ProposalFailed rdfs:comment "Migrated M1 lifecycle or intent term ProposalFailed.";
+    rdfs:label "ProposalFailed".
+agent:ProposalPending rdfs:comment "Status individuals — a proposal is NEVER sent until it reaches Confirmed.";
+    rdfs:label "ProposalPending".
+agent:ProposalRejected rdfs:comment "Migrated M1 lifecycle or intent term ProposalRejected.";
+    rdfs:label "ProposalRejected".
+agent:RepresentationAssessment rdfs:comment "An evaluator's conclusion whether a software actor speaks for a party for an operation. Not an authorisation.";
+    rdfs:label "RepresentationAssessment".
+agent:RepresentationStatement rdfs:comment "Party-signed statement that an actor key speaks for the party for listed operations. Authorises nothing at the receiver.";
+    rdfs:label "RepresentationStatement".
+agent:Resume rdfs:comment "Control kind requesting resumption after a halt.";
+    rdfs:label "Resume".
+agent:RevokeMandate rdfs:comment "Control kind requesting revocation of the referenced mandate.";
+    rdfs:label "RevokeMandate".
+agent:SchedulingResponse rdfs:comment "Agentic purpose individuals (the constrainable purpose left-operand values).";
+    rdfs:label "SchedulingResponse".
+agent:SendReceipt rdfs:comment "The outbox SEND RECEIPT type (a PROV entity the executor writes post-send).";
+    rdfs:label "SendReceipt".
+agent:SetBindingState rdfs:comment "Control kind changing the named binding to a specified state.";
+    rdfs:label "SetBindingState".
+agent:SignedMessage rdfs:comment "Structured carrier of a protected logical message.";
+    rdfs:label "SignedMessage".
+agent:SourceAuthorityAssessment rdfs:comment "An evaluator's conclusion whether it recognises a source for a claim type about a subject, under an identified local rule version (CT-03).";
+    rdfs:label "SourceAuthorityAssessment".
+agent:Transmission rdfs:comment "Executor record of a transmission attempt, its wire digest, authority references and observed status.";
+    rdfs:label "Transmission".
+agent:VerificationResult rdfs:comment "Outcome of an integrity and key-attribution check over exact protected bytes. Establishes neither truth, source authority, representation nor permission.";
+    rdfs:label "VerificationResult".
+agent:acceptance rdfs:comment "The accepting message.";
+    rdfs:label "acceptance".
+agent:acceptor rdfs:comment "Software actor that accepted.";
+    rdfs:label "acceptor".
+agent:acceptsConfiguration rdfs:comment "A configuration the agent accepts for interaction (subset of implemented).";
+    rdfs:label "acceptsConfiguration".
+agent:accessMode rdfs:comment "public, represented, agreement, ...";
+    rdfs:label "accessMode".
+agent:action rdfs:comment "The agent:ActionIntent evaluated.";
+    rdfs:label "action".
+agent:actionDigest rdfs:comment "Digest identifying the exact action (all consequential parameters).";
+    rdfs:label "actionDigest".
+agent:activityType rdfs:comment "Informative classification of an activity (e.g. schema:ScheduleAction). Not asserted as rdf:type.";
+    rdfs:label "activityType".
+agent:agreedEvent rdfs:comment "The schema:Event (meeting slot) fixed by the agreement.";
+    rdfs:label "agreedEvent".
+agent:amount rdfs:comment "Declared spend, represented by a value and currency.";
+    rdfs:label "amount".
+agent:approval rdfs:comment "The owner approval relied on.";
+    rdfs:label "approval".
+agent:approves rdfs:comment "Proposal addressed by an approval or denial.";
+    rdfs:label "approves".
+<https://jeswr.org/ns/agent#assessment/accepted> rdfs:comment "accepted value in the assessment concept scheme; an evidence classification, not a grant.";
+    rdfs:label "assessment/accepted".
+<https://jeswr.org/ns/agent#assessment/not-accepted> rdfs:comment "not-accepted value in the assessment concept scheme; an evidence classification, not a grant.";
+    rdfs:label "assessment/not-accepted".
+<https://jeswr.org/ns/agent#assessment/unresolved> rdfs:comment "unresolved value in the assessment concept scheme; an evidence classification, not a grant.";
+    rdfs:label "assessment/unresolved".
+agent:assessmentOutcome rdfs:comment "A concept from agent:AssessmentOutcomes.";
+    rdfs:label "assessmentOutcome".
+agent:attributedKeyHolder rdfs:comment "Identifier the pinned key is bound to in the verifier's local trust store. Attribution of bytes to a key, not of authority.";
+    rdfs:label "attributedKeyHolder".
+<https://jeswr.org/ns/agent#authorisation/approval-required> rdfs:comment "approval-required value in the authorisation concept scheme; an evidence classification, not a grant.";
+    rdfs:label "authorisation/approval-required".
+<https://jeswr.org/ns/agent#authorisation/deny> rdfs:comment "deny value in the authorisation concept scheme; an evidence classification, not a grant.";
+    rdfs:label "authorisation/deny".
+<https://jeswr.org/ns/agent#authorisation/indeterminate> rdfs:comment "indeterminate value in the authorisation concept scheme; an evidence classification, not a grant.";
+    rdfs:label "authorisation/indeterminate".
+<https://jeswr.org/ns/agent#authorisation/permit> rdfs:comment "permit value in the authorisation concept scheme; an evidence classification, not a grant.";
+    rdfs:label "authorisation/permit".
+agent:authorisationOutcome rdfs:comment "A concept from agent:AuthorisationOutcomes.";
+    rdfs:label "authorisationOutcome".
+agent:authorizedByConfirmation rdfs:comment "Records that an action's authorizing basis was an explicit human confirmation.";
+    rdfs:label "authorizedByConfirmation".
+agent:authorizedByPermit rdfs:comment "Links an autonomous action to the specific ODRL permit rule that authorized it.";
+    rdfs:label "authorizedByPermit".
+agent:autonomous rdfs:comment "Policy set evaluated without a per-action owner approval.";
+    rdfs:label "autonomous".
+agent:basis rdfs:comment "The agreement or invocation an activity was performed under.";
+    rdfs:label "basis".
+<https://jeswr.org/ns/agent#basis/autonomous> rdfs:comment "autonomous value in the basis concept scheme; an evidence classification, not a grant.";
+    rdfs:label "basis/autonomous".
+<https://jeswr.org/ns/agent#basis/owner-approval> rdfs:comment "owner-approval value in the basis concept scheme; an evidence classification, not a grant.";
+    rdfs:label "basis/owner-approval".
+agent:binding rdfs:comment "Transport binding identifier.";
+    rdfs:label "binding".
+agent:bindingEndpoint rdfs:comment "Endpoint advertised for a binding.";
+    rdfs:label "bindingEndpoint".
+agent:bindingState rdfs:comment "Account connection state: none, setup-required, connected, error or disabled.";
+    rdfs:label "bindingState".
+agent:carriage rdfs:comment "Versioned metadata carriage profile identifier supported by the binding.";
+    rdfs:label "carriage".
+agent:channel rdfs:comment "Agent record field channel.";
+    rdfs:label "channel".
+agent:channelHandle rdfs:comment "Salted hash of an account or sender handle. Raw handles are held only by the daemon.";
+    rdfs:label "channelHandle".
+agent:channelMessageId rdfs:comment "The channel's own id for the transmitted message (recorded on the receipt).";
+    rdfs:label "channelMessageId".
+agent:claimSubject rdfs:comment "The subject the claim is about.";
+    rdfs:label "claimSubject".
+agent:claimType rdfs:comment "The claim type the source was assessed for.";
+    rdfs:label "claimType".
+agent:claimedOnBehalfOf rdfs:comment "Represented party as CLAIMED in an inbound message. Deliberately not prov:actedOnBehalfOf.";
+    rdfs:label "claimedOnBehalfOf".
+agent:claimedParty rdfs:comment "Party the described agent claims to act for (a claim until assessed).";
+    rdfs:label "claimedParty".
+agent:claimedSender rdfs:comment "Sender actor as CLAIMED in an inbound message (not an assessment).";
+    rdfs:label "claimedSender".
+agent:compactJws rdfs:comment "Opaque compact JWS carried by a signed message envelope.";
+    rdfs:label "compactJws".
+agent:concerns rdfs:comment "The activity an outcome record or report is about.";
+    rdfs:label "concerns".
+agent:conclusion rdfs:comment "A concept from agent:OutcomeConclusions.";
+    rdfs:label "conclusion".
+<https://jeswr.org/ns/agent#conclusion/completed> rdfs:comment "completed value in the conclusion concept scheme; an evidence classification, not a grant.";
+    rdfs:label "conclusion/completed".
+<https://jeswr.org/ns/agent#conclusion/not-executed> rdfs:comment "not-executed value in the conclusion concept scheme; an evidence classification, not a grant.";
+    rdfs:label "conclusion/not-executed".
+<https://jeswr.org/ns/agent#conclusion/uncertain> rdfs:comment "uncertain value in the conclusion concept scheme; an evidence classification, not a grant.";
+    rdfs:label "conclusion/uncertain".
+agent:confirmFriction rdfs:comment "The graduated-confirm friction level (predicate).";
+    rdfs:label "confirmFriction".
+agent:confirmationRequired rdfs:comment "Reliability gate requires owner confirmation even under an autonomous-send mandate.";
+    rdfs:label "confirmationRequired".
+agent:confirmedAt rdfs:comment "When the proposal was confirmed / executed (xsd:dateTime).";
+    rdfs:label "confirmedAt".
+agent:confirmsProposal rdfs:comment "The proposal id the confirmation authorizes.";
+    rdfs:label "confirmsProposal".
+agent:contentDigest rdfs:comment "The sha256:<hex> content digest the confirmation is bound to (content-locks the approval).";
+    rdfs:label "contentDigest".
+agent:controlKind rdfs:comment "Named control action carried by a ControlStatement.";
+    rdfs:label "controlKind".
+agent:conversation rdfs:comment "The conversation a record belongs to.";
+    rdfs:label "conversation".
+agent:costPerMessage rdfs:comment "Cost per channel message as a nonnegative decimal.";
+    rdfs:label "costPerMessage".
+agent:credential rdfs:comment "Reference to a signed mandate authorization credential.";
+    rdfs:label "credential".
+agent:credentialRef rdfs:comment "Daemon profile name or provisioning reference string; never the credential value.";
+    rdfs:label "credentialRef".
+agent:credentialState rdfs:comment "Current binding credential state, without credential values.";
+    rdfs:label "credentialState".
+agent:decision rdfs:comment "Owner choice of approve or deny; never trusted before external proof verification.";
+    rdfs:label "decision".
+agent:decisionBasis rdfs:comment "A concept from agent:DecisionBases.";
+    rdfs:label "decisionBasis".
+agent:deliveryReceipts rdfs:comment "Whether the binding supports delivery receipts.";
+    rdfs:label "deliveryReceipts".
+agent:describes rdfs:comment "The agent an implementation description is about.";
+    rdfs:label "describes".
+agent:digest rdfs:comment "Content digest of an artefact.";
+    rdfs:label "digest".
+agent:direction rdfs:comment "\"in\" or \"out\".";
+    rdfs:label "direction".
+agent:draft rdfs:comment "Whether drafts may be proposed for an account; false by default.";
+    rdfs:label "draft".
+agent:effectKey rdfs:comment "Idempotency key of the effect.";
+    rdfs:label "effectKey".
+agent:endToEndEncrypted rdfs:comment "Whether channel content has end-to-end encryption.";
+    rdfs:label "endToEndEncrypted".
+agent:entryHash rdfs:comment "SHA-256 digest sealing the entry (over seq, time, previous hash and record).";
+    rdfs:label "entryHash".
+agent:evaluatedActor rdfs:comment "The software actor whose representation was assessed.";
+    rdfs:label "evaluatedActor".
+agent:evaluatedPolicy rdfs:comment "The grant or policy the decision was evaluated under.";
+    rdfs:label "evaluatedPolicy".
+agent:evaluatorImplementation rdfs:comment "The policy evaluator implementation and version used.";
+    rdfs:label "evaluatorImplementation".
+agent:executedAt rdfs:comment "Migrated M1 lifecycle or intent term executedAt.";
+    rdfs:label "executedAt".
+agent:executedProposal rdfs:comment "Links a receipt to the proposal it executed.";
+    rdfs:label "executedProposal".
+agent:expires rdfs:comment "Expiry instant of an approval or control statement.";
+    rdfs:label "expires".
+agent:externalId rdfs:comment "Provider-assigned message identifier observed by the executor.";
+    rdfs:label "externalId".
+agent:finalReport rdfs:comment "True if the reporter marked the report final (xsd:boolean).";
+    rdfs:label "finalReport".
+<https://jeswr.org/ns/agent#grant/access> rdfs:comment "access value in the grant concept scheme; an evidence classification, not a grant.";
+    rdfs:label "grant/access".
+<https://jeswr.org/ns/agent#grant/data-use> rdfs:comment "data-use value in the grant concept scheme; an evidence classification, not a grant.";
+    rdfs:label "grant/data-use".
+<https://jeswr.org/ns/agent#grant/delegation> rdfs:comment "delegation value in the grant concept scheme; an evidence classification, not a grant.";
+    rdfs:label "grant/delegation".
+<https://jeswr.org/ns/agent#grant/onward-use> rdfs:comment "onward-use value in the grant concept scheme; an evidence classification, not a grant.";
+    rdfs:label "grant/onward-use".
+<https://jeswr.org/ns/agent#grant/owner-mandate> rdfs:comment "owner-mandate value in the grant concept scheme; an evidence classification, not a grant.";
+    rdfs:label "grant/owner-mandate".
+agent:grantKind rdfs:comment "A concept from agent:GrantKinds.";
+    rdfs:label "grantKind".
+agent:grantee rdfs:comment "The agent a grant is issued to.";
+    rdfs:label "grantee".
+agent:historyWindow rdfs:comment "Available channel history as an xsd:duration.";
+    rdfs:label "historyWindow".
+agent:identityStatus rdfs:comment "Sender identity status; inbound messages remain unverified in the logical record.";
+    rdfs:label "identityStatus".
+agent:implementsConfiguration rdfs:comment "A configuration the agent implements.";
+    rdfs:label "implementsConfiguration".
+agent:inLedger rdfs:comment "The ledger an entry belongs to.";
+    rdfs:label "inLedger".
+agent:inReplyTo rdfs:comment "Reply linkage between channel messages.";
+    rdfs:label "inReplyTo".
+agent:intent rdfs:comment "Agent record field intent.";
+    rdfs:label "intent".
+agent:interactionPattern rdfs:comment "negotiate, invoke, public-read, ...";
+    rdfs:label "interactionPattern".
+<https://jeswr.org/ns/agent#kind/accept> rdfs:comment "accept value in the kind concept scheme; an evidence classification, not a grant.";
+    rdfs:label "kind/accept".
+<https://jeswr.org/ns/agent#kind/deliver> rdfs:comment "deliver value in the kind concept scheme; an evidence classification, not a grant.";
+    rdfs:label "kind/deliver".
+<https://jeswr.org/ns/agent#kind/describe> rdfs:comment "describe value in the kind concept scheme; an evidence classification, not a grant.";
+    rdfs:label "kind/describe".
+<https://jeswr.org/ns/agent#kind/description> rdfs:comment "description value in the kind concept scheme; an evidence classification, not a grant.";
+    rdfs:label "kind/description".
+<https://jeswr.org/ns/agent#kind/indeterminate> rdfs:comment "indeterminate value in the kind concept scheme; an evidence classification, not a grant.";
+    rdfs:label "kind/indeterminate".
+<https://jeswr.org/ns/agent#kind/invoke> rdfs:comment "invoke value in the kind concept scheme; an evidence classification, not a grant.";
+    rdfs:label "kind/invoke".
+<https://jeswr.org/ns/agent#kind/propose> rdfs:comment "propose value in the kind concept scheme; an evidence classification, not a grant.";
+    rdfs:label "kind/propose".
+<https://jeswr.org/ns/agent#kind/receipt> rdfs:comment "receipt value in the kind concept scheme; an evidence classification, not a grant.";
+    rdfs:label "kind/receipt".
+<https://jeswr.org/ns/agent#kind/refuse> rdfs:comment "refuse value in the kind concept scheme; an evidence classification, not a grant.";
+    rdfs:label "kind/refuse".
+<https://jeswr.org/ns/agent#kind/unsupported> rdfs:comment "unsupported value in the kind concept scheme; an evidence classification, not a grant.";
+    rdfs:label "kind/unsupported".
+agent:lastIngest rdfs:comment "Timestamp of the most recent ingestion.";
+    rdfs:label "lastIngest".
+agent:length rdfs:comment "Number of ordered items in a bounded RDF sequence, including zero for an empty sequence.";
+    rdfs:label "length".
+agent:limitation rdfs:comment "A stated limit of what a record establishes.";
+    rdfs:label "limitation".
+agent:matchedRule rdfs:comment "Identifier of the policy rule that determined the outcome.";
+    rdfs:label "matchedRule".
+agent:maxMessageBytes rdfs:comment "Maximum bytes in a channel message.";
+    rdfs:label "maxMessageBytes".
+agent:mechanism rdfs:comment "The integrity mechanism profile applied.";
+    rdfs:label "mechanism".
+agent:message rdfs:comment "The message a record is about.";
+    rdfs:label "message".
+agent:messageKind rdfs:comment "A concept from agent:MessageKinds.";
+    rdfs:label "messageKind".
+agent:method rdfs:comment "A concept from agent:ObservationMethods.";
+    rdfs:label "method".
+<https://jeswr.org/ns/agent#method/direct-response> rdfs:comment "direct-response value in the method concept scheme; an evidence classification, not a grant.";
+    rdfs:label "method/direct-response".
+<https://jeswr.org/ns/agent#method/reconciliation> rdfs:comment "reconciliation value in the method concept scheme; an evidence classification, not a grant.";
+    rdfs:label "method/reconciliation".
+<https://jeswr.org/ns/agent#method/recovery> rdfs:comment "recovery value in the method concept scheme; an evidence classification, not a grant.";
+    rdfs:label "method/recovery".
+<https://jeswr.org/ns/agent#method/timeout> rdfs:comment "timeout value in the method concept scheme; an evidence classification, not a grant.";
+    rdfs:label "method/timeout".
+agent:moduleInterface rdfs:comment "How the evaluator is invoked (e.g. in-process adapter, local process protocol).";
+    rdfs:label "moduleInterface".
+agent:moduleStatus rdfs:comment "Availability of the policy module when the description was produced (ready or unavailable).";
+    rdfs:label "moduleStatus".
+agent:note rdfs:comment "A control-stripped human note (e.g. a send failure reason).";
+    rdfs:label "note".
+agent:odrlAction rdfs:comment "The ODRL action short-name the outbound intent performs (literal ∈ ODRL_ACTIONS).";
+    rdfs:label "odrlAction".
+agent:offer rdfs:comment "The identified offer message.";
+    rdfs:label "offer".
+agent:offeror rdfs:comment "Software actor that made the offer.";
+    rdfs:label "offeror".
+agent:operation rdfs:comment "The operation concerned.";
+    rdfs:label "operation".
+agent:operationVersion rdfs:comment "Version of the referenced operation definition.";
+    rdfs:label "operationVersion".
+agent:operator rdfs:comment "Who runs the software.";
+    rdfs:label "operator".
+agent:organisation rdfs:comment "Organisation label associated with an account.";
+    rdfs:label "organisation".
+agent:outcome rdfs:comment "The outcome recorded on a receipt (sent / rejected / failed).";
+    rdfs:label "outcome".
+agent:parameters rdfs:comment "Consequential action parameters as bounded canonical JSON.";
+    rdfs:label "parameters".
+agent:perDay rdfs:comment "Maximum transmissions per day.";
+    rdfs:label "perDay".
+agent:perRecipient rdfs:comment "Maximum transmissions to one recipient in the applicable limit window.";
+    rdfs:label "perRecipient".
+agent:policyDigest rdfs:comment "Digest of the grant or policy as evaluated.";
+    rdfs:label "policyDigest".
+agent:policyModule rdfs:comment "The policy module an implementation description declares as selected.";
+    rdfs:label "policyModule".
+agent:policyProfile rdfs:comment "The policy profile a policy module evaluates.";
+    rdfs:label "policyProfile".
+agent:previousHash rdfs:comment "Entry hash of the preceding entry, or sha-256:genesis.";
+    rdfs:label "previousHash".
+agent:proof rdfs:comment "Agent record field proof.";
+    rdfs:label "proof".
+agent:proposalStatus rdfs:comment "The proposal's lifecycle status (predicate).";
+    rdfs:label "proposalStatus".
+agent:protectedObjectDigest rdfs:comment "Digest of the exact protected bytes examined.";
+    rdfs:label "protectedObjectDigest".
+agent:provider rdfs:comment "Identifier of the service provider for a channel account.";
+    rdfs:label "provider".
+agent:rateLimit rdfs:comment "Owner-imposed rate limits for the binding.";
+    rdfs:label "rateLimit".
+agent:rawByteLength rdfs:comment "Byte count of the original inbound channel message.";
+    rdfs:label "rawByteLength".
+agent:rawSha256 rdfs:comment "Digest of the original inbound channel bytes.";
+    rdfs:label "rawSha256".
+agent:read rdfs:comment "Whether account ingestion may read; false by default.";
+    rdfs:label "read".
+agent:reasonCode rdfs:comment "Stable reason code; explains an outcome, grants nothing.";
+    rdfs:label "reasonCode".
+agent:recipientHash rdfs:comment "Salted hash of the recipient, bound to the exact action terms.";
+    rdfs:label "recipientHash".
+agent:recordType rdfs:comment "The runtime record type name (for records without a detailed mapping).";
+    rdfs:label "recordType".
+agent:recordsStatement rdfs:comment "The record (or identified thing) an entry carries.";
+    rdfs:label "recordsStatement".
+agent:refersToProposal rdfs:comment "Ordered references from a conversation turn to the proposals it discusses.";
+    rdfs:label "refersToProposal".
+agent:renderedPreview rdfs:comment "Exact rendered preview associated with the proposal.";
+    rdfs:label "renderedPreview".
+agent:representedParty rdfs:comment "The party the actor claims to speak for.";
+    rdfs:label "representedParty".
+agent:requestedAction rdfs:comment "An odrl:Action instance (e.g. odrl:use) naming the action class requested.";
+    rdfs:label "requestedAction".
+agent:restrictions rdfs:comment "Default-deny per-account read, triage, draft and send restrictions.";
+    rdfs:label "restrictions".
+agent:role rdfs:comment "Conversation-turn role: owner or agent.";
+    rdfs:label "role".
+agent:send rdfs:comment "Whether account sends may be considered by the executor; false by default and never proof of authorization.";
+    rdfs:label "send".
+agent:sendSupported rdfs:comment "Whether the binding implements sending; not an authorization to send.";
+    rdfs:label "sendSupported".
+agent:sequence rdfs:comment "Position of an entry in its ledger (xsd:integer).";
+    rdfs:label "sequence".
+agent:source rdfs:comment "The source whose authority was assessed.";
+    rdfs:label "source".
+agent:sourceRule rdfs:comment "The local source-authority rule applied.";
+    rdfs:label "sourceRule".
+agent:sourceRuleVersion rdfs:comment "Version of that rule.";
+    rdfs:label "sourceRuleVersion".
+agent:spend rdfs:comment "The declared spend for the action (xsd:integer; the ODRL count constraint input).";
+    rdfs:label "spend".
+agent:state rdfs:comment "Proposal lifecycle state: proposed, approved, denied, expired, sent or failed.";
+    rdfs:label "state".
+agent:statement rdfs:comment "The representation statement relied on.";
+    rdfs:label "statement".
+agent:status rdfs:comment "Transmission state: attempting, sent, not-sent, uncertain or refused.";
+    rdfs:label "status".
+agent:structuredPart rdfs:comment "Ordered extracted structured data, represented as a sequence of rdf:JSON literals.";
+    rdfs:label "structuredPart".
+agent:structuredPayload rdfs:comment "Whether a binding can carry a structured agent envelope.";
+    rdfs:label "structuredPayload".
+agent:supportsBinding rdfs:comment "Capability descriptor supported by an agent card.";
+    rdfs:label "supportsBinding".
+agent:supportsOperation rdfs:comment "An operation the agent supports.";
+    rdfs:label "supportsOperation".
+agent:target rdfs:comment "Target operation or resource of the action.";
+    rdfs:label "target".
+agent:termsDigest rdfs:comment "JCS/SHA-256 digest of the exact terms.";
+    rdfs:label "termsDigest".
+agent:triage rdfs:comment "Whether account messages may be triaged; false by default.";
+    rdfs:label "triage".
+agent:underApproval rdfs:comment "Approval that the executor evaluated for this transmission.";
+    rdfs:label "underApproval".
+agent:underMandate rdfs:comment "Links an autonomous action to the signed mandate that authorized it (prov:hadPlan-adjacent).";
+    rdfs:label "underMandate".
+agent:validFrom rdfs:comment "Beginning of mandate credential validity.";
+    rdfs:label "validFrom".
+agent:validUntil rdfs:comment "End of validity (exclusive), xsd:dateTime.";
+    rdfs:label "validUntil".
+<https://jeswr.org/ns/agent#verification/invalid> rdfs:comment "invalid value in the verification concept scheme; an evidence classification, not a grant.";
+    rdfs:label "verification/invalid".
+<https://jeswr.org/ns/agent#verification/not-applicable> rdfs:comment "not-applicable value in the verification concept scheme; an evidence classification, not a grant.";
+    rdfs:label "verification/not-applicable".
+<https://jeswr.org/ns/agent#verification/unknown-key> rdfs:comment "unknown-key value in the verification concept scheme; an evidence classification, not a grant.";
+    rdfs:label "verification/unknown-key".
+<https://jeswr.org/ns/agent#verification/unsupported> rdfs:comment "unsupported value in the verification concept scheme; an evidence classification, not a grant.";
+    rdfs:label "verification/unsupported".
+<https://jeswr.org/ns/agent#verification/valid> rdfs:comment "valid value in the verification concept scheme; an evidence classification, not a grant.";
+    rdfs:label "verification/valid".
+agent:verificationMaterial rdfs:comment "Pinned key thumbprint (RFC 7638) used.";
+    rdfs:label "verificationMaterial".
+agent:verificationOutcome rdfs:comment "A concept from agent:VerificationOutcomes.";
+    rdfs:label "verificationOutcome".
+agent:wireDigest rdfs:comment "Digest of the exact rendered channel bytes.";
+    rdfs:label "wireDigest".
+agent:wireFormat rdfs:comment "Protection format of a signed message envelope.";
+    rdfs:label "wireFormat".
+agent:withApproval rdfs:comment "Policy set requiring a matching verified owner approval.";
+    rdfs:label "withApproval".

@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Twitch → Media. `/helix/channels/followed` as `schema:WatchAction` (the
  * channels you follow, with when you followed them). Helix requires a
@@ -11,16 +13,19 @@
 import { DataFactory, Store } from "n3";
 import { IntegrationSyncError } from "../core/errors.js";
 import { getJson } from "../core/fixture-fetch.js";
+import { Pagination } from "../core/pagination.js";
 import { arr, optionalDate, optionalText, SkipCounter } from "../core/safe.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, WatchAction } from "../core/vocab.js";
 import { TWITCH_FIXTURES, type TwitchFollowsAnswer, type TwitchUsersAnswer } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "twitch";
 const API = "https://api.twitch.tv/helix";
 const SCOPES = ["user:read:follows"] as const;
 
 export const twitchAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "Twitch",
@@ -43,6 +48,7 @@ export const twitchAdapter: IntegrationAdapter = {
     scopes: SCOPES,
     tokenExchange: "proxy",
     tokenProxyUrl: undefined,
+    requiresCallbackPort: true,
   },
   // Helix rejects calls without the app's Client-Id header.
   apiHeaders: { "client-id": "" },
@@ -65,15 +71,23 @@ export const twitchAdapter: IntegrationAdapter = {
     }
 
     ctx.progress({ label: "Fetching the channels you follow…", done: 1, total: 2 });
-    const follows = await getJson<TwitchFollowsAnswer>(
-      ID,
-      ctx.api,
-      `${API}/channels/followed?user_id=${encodeURIComponent(myId)}&first=100`,
-    );
+    const follows = [];
+    const pagination = new Pagination(ID);
+    let after: string | undefined;
+    do {
+      const page = await getJson<TwitchFollowsAnswer>(
+        ID,
+        ctx.api,
+        `${API}/channels/followed?user_id=${encodeURIComponent(myId)}&first=100${after ? `&after=${encodeURIComponent(after)}` : ""}`,
+      );
+      follows.push(...arr(page?.data));
+      after = optionalText(page?.pagination?.cursor);
+      if (after) pagination.next(after);
+    } while (after);
 
     const doc = ctx.resolve("media/followed-channels.ttl");
     const dataset = new Store();
-    for (const f of arr(follows?.data)) {
+    for (const f of follows) {
       // A follow with no broadcaster id has no stable fragment IRI — skip it.
       const broadcasterId = f ? optionalText(f.broadcaster_id) : undefined;
       if (!f || broadcasterId === undefined) {
@@ -92,6 +106,7 @@ export const twitchAdapter: IntegrationAdapter = {
       category: "media",
       forClass: CLASSES.WatchAction,
       dataset,
+      sourceUrl: `${API}/channels/followed`,
     });
 
     ctx.progress({ label: "Done", done: 2, total: 2 });

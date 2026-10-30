@@ -6,7 +6,7 @@ import { Parser } from "n3";
 import { afterAll, describe, expect, it } from "vitest";
 import { type SceneData, serializeScene } from "./scene.js";
 import { drawingOntologyTtl, drawingShapeTtl } from "./shape.js";
-import { DRAW_SCENE_IRI } from "./vocab.js";
+import { DRAW_SCENE_IRI, LEGACY_DRAW_NS } from "./vocab.js";
 
 const URL_ = "http://localhost:3000/alice/drawings/diagram.ttl";
 const CANVAS = "http://localhost:3000/alice/drawings/diagram.excalidraw";
@@ -22,6 +22,21 @@ async function validateTtl(ttl: string) {
 }
 
 describe("the SHACL shape + ontology TTLs are themselves valid Turtle", () => {
+  it("ships canonical namespaces, ontology identity and version IRI", () => {
+    for (const ttl of [drawingOntologyTtl(), drawingShapeTtl()]) {
+      expect(ttl).not.toContain(LEGACY_DRAW_NS);
+    }
+    const quads = new Parser().parse(drawingOntologyTtl());
+    expect(
+      quads.some(
+        (q) =>
+          q.subject.value === "https://jeswr.org/ns/drawing" &&
+          q.predicate.value === "http://www.w3.org/2002/07/owl#versionIRI" &&
+          q.object.value === "https://jeswr.org/ns/drawing/0.1.0",
+      ),
+    ).toBe(true);
+  });
+
   it("drawing.shacl.ttl parses and declares a NodeShape targeting draw:Scene", () => {
     const quads = new Parser().parse(drawingShapeTtl());
     expect(quads.length).toBeGreaterThan(0);
@@ -41,7 +56,7 @@ describe("the SHACL shape + ontology TTLs are themselves valid Turtle", () => {
       )
       .map((q) => q.object.value);
     expect(subClassOf).toContain("http://schema.org/CreativeWork");
-    expect(subClassOf).toContain("https://w3id.org/jeswr/core#InformationResource");
+    expect(subClassOf).toContain("https://jeswr.org/ns/core#InformationResource");
   });
 });
 
@@ -69,7 +84,7 @@ describe("SHACL shape (drawing.shacl.ttl)", () => {
 
   it("a scene with NO draw:sceneDocument is non-conforming (minCount 1)", async () => {
     const ttl = `
-      @prefix draw: <https://w3id.org/jeswr/drawing#> .
+      @prefix draw: <https://jeswr.org/ns/drawing#> .
       @prefix dct:  <http://purl.org/dc/terms/> .
       <#it> a draw:Scene ; dct:title "Orphan scene" .
     `;
@@ -80,7 +95,7 @@ describe("SHACL shape (drawing.shacl.ttl)", () => {
 
   it("a draw:sceneDocument that is a literal (not an IRI) is rejected", async () => {
     const ttl = `
-      @prefix draw: <https://w3id.org/jeswr/drawing#> .
+      @prefix draw: <https://jeswr.org/ns/drawing#> .
       <#it> a draw:Scene ; draw:sceneDocument "not-an-iri" .
     `;
     const report = await validateTtl(ttl);
@@ -90,7 +105,7 @@ describe("SHACL shape (drawing.shacl.ttl)", () => {
 
   it("two draw:sceneDocument links are rejected (maxCount 1)", async () => {
     const ttl = `
-      @prefix draw: <https://w3id.org/jeswr/drawing#> .
+      @prefix draw: <https://jeswr.org/ns/drawing#> .
       <#it> a draw:Scene ;
         draw:sceneDocument <${CANVAS}> ,
                            <http://localhost:3000/alice/drawings/other.excalidraw> .
@@ -102,7 +117,7 @@ describe("SHACL shape (drawing.shacl.ttl)", () => {
 
   it("a non-dateTime dct:created is rejected", async () => {
     const ttl = `
-      @prefix draw: <https://w3id.org/jeswr/drawing#> .
+      @prefix draw: <https://jeswr.org/ns/drawing#> .
       @prefix dct:  <http://purl.org/dc/terms/> .
       <#it> a draw:Scene ;
         draw:sceneDocument <${CANVAS}> ;
@@ -115,7 +130,7 @@ describe("SHACL shape (drawing.shacl.ttl)", () => {
 
   it("a thumbnail that is a literal (not an IRI) is rejected", async () => {
     const ttl = `
-      @prefix draw: <https://w3id.org/jeswr/drawing#> .
+      @prefix draw: <https://jeswr.org/ns/drawing#> .
       <#it> a draw:Scene ;
         draw:sceneDocument <${CANVAS}> ;
         draw:thumbnail "preview.png" .

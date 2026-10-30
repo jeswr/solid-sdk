@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -80,10 +81,11 @@ describe.each([
       await client.close();
     });
 
-    it("registers four canonical tools and four one-release aliases", async () => {
+    it("registers canonical tools, aliases and fetch-backed chat tools", async () => {
       const { tools } = await client.listTools();
       const names = tools.map((t) => t.name).sort();
       expect(names).toEqual([
+        ...(mode === "legacy config + aliases" ? ["chat_get", "chat_list", "chat_save"] : []),
         "pod_list",
         "pod_read",
         "pod_write",

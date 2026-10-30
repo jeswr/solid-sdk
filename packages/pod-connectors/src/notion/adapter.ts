@@ -1,24 +1,29 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * Notion → Documents. `POST /v1/search` lists everything the integration can
  * see: pages become `schema:TextDigitalDocument`, databases become
  * `schema:Dataset`. Every call needs the `Notion-Version` header.
  *
  * Live-mode honesty: Notion's token endpoint requires HTTP Basic auth with
- * the client secret (no public PKCE) — live mode needs the maintainer's
- * token proxy. Snapshot semantics (search has page cursors, not change
- * cursors).
+ * the client secret (no public PKCE) — browser live mode needs the maintainer's
+ * token proxy; Node hosts can supply a local secret. Snapshot semantics (search has
+ * page cursors, not change cursors).
  */
 import { DataFactory, Store } from "n3";
 import { postJson } from "../core/fixture-fetch.js";
+import { Pagination } from "../core/pagination.js";
 import { arr, optionalDate, optionalText, SkipCounter } from "../core/safe.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, DataCollection, DigitalDocument } from "../core/vocab.js";
 import { NOTION_FIXTURES, type NotionPage, type NotionSearchAnswer } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
 
 const ID = "notion";
 const API = "https://api.notion.com/v1";
 
 export const notionAdapter: IntegrationAdapter = {
+  vocabMap,
   metadata: {
     id: ID,
     name: "Notion",
@@ -41,6 +46,7 @@ export const notionAdapter: IntegrationAdapter = {
     scopes: [],
     tokenExchange: "proxy",
     tokenProxyUrl: undefined,
+    tokenRequest: "basic-json",
     extraAuthParams: { owner: "user" },
   },
   apiHeaders: { "notion-version": "2022-06-28" },
@@ -50,16 +56,24 @@ export const notionAdapter: IntegrationAdapter = {
     const skipped = new SkipCounter();
 
     ctx.progress({ label: "Searching your Notion workspace…", done: 0, total: 2 });
-    const search = await postJson<NotionSearchAnswer>(ID, ctx.api, `${API}/search`, {
-      page_size: 100,
-    });
+    const results = [];
+    const pagination = new Pagination(ID);
+    let cursor: string | undefined;
+    do {
+      const search = await postJson<NotionSearchAnswer>(ID, ctx.api, `${API}/search`, {
+        page_size: 100,
+        ...(cursor ? { start_cursor: cursor } : {}),
+      });
+      results.push(...arr(search?.results));
+      cursor = search?.has_more ? pagination.next(search.next_cursor) : undefined;
+    } while (cursor);
 
     const pagesDoc = ctx.resolve("documents/pages.ttl");
     const dbDoc = ctx.resolve("documents/databases.ttl");
     const pages = new Store();
     const databases = new Store();
 
-    for (const result of arr(search?.results)) {
+    for (const result of results) {
       // A result with no id has no stable fragment IRI — skip it.
       const id = result ? optionalText(result.id) : undefined;
       if (!result || id === undefined) {
@@ -92,12 +106,14 @@ export const notionAdapter: IntegrationAdapter = {
       category: "documents",
       forClass: CLASSES.TextDigitalDocument,
       dataset: pages,
+      sourceUrl: `${API}/search`,
     });
     await ctx.write({
       slug: "documents/databases.ttl",
       category: "documents",
       forClass: CLASSES.Dataset,
       dataset: databases,
+      sourceUrl: `${API}/search`,
     });
 
     ctx.progress({ label: "Done", done: 2, total: 2 });

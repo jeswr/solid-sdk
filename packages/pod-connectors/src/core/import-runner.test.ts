@@ -201,7 +201,8 @@ it("runs over explicit storage and source ports without using global fetch", asy
       },
     };
     const report = await runImport({ adapter, mode: "live", podWriter, sourceAuth });
-    expect(report.written).toEqual(written);
+    expect(report.written).toEqual(written.filter((w) => w.category !== "provenance"));
+    expect(written.filter((w) => w.category === "provenance")).toHaveLength(1);
     expect(report.indexUrl).toBe("https://memory.test/index");
     expect(resolved).toContain("music/songs.ttl");
     expect(sourceAuth.fetch).toHaveBeenCalledOnce();
@@ -288,10 +289,11 @@ it("restricts bearer credentials to allowed origins and refuses source redirects
   await auth.fetch(
     new Request("https://source.test/items", { headers: { "x-source": "preserved" } }),
   );
-  const init = transport.mock.calls[0]![1];
-  expect(new Headers(init?.headers).get("authorization")).toBe("Bearer fixture-token");
-  expect(new Headers(init?.headers).get("x-source")).toBe("preserved");
-  expect(init?.redirect).toBe("manual");
+  const [input, init] = transport.mock.calls[0] as [RequestInfo | URL, RequestInit | undefined];
+  const effective = new Request(input, init);
+  expect(effective.headers.get("authorization")).toBe("Bearer fixture-token");
+  expect(effective.headers.get("x-source")).toBe("preserved");
+  expect(effective.redirect).toBe("manual");
   await expect(auth.fetch("https://foreign.test/items")).rejects.toBeInstanceOf(
     IntegrationSyncError,
   );
@@ -315,6 +317,73 @@ it("restricts bearer credentials to allowed origins and refuses source redirects
   await expect(auth.fetch("https://source.test/items", { redirect: "follow" })).rejects.toThrow();
   expect(transport).toHaveBeenCalledTimes(2);
   expect(() => createSourceAuth("toy", toyAdapter, undefined, transport)).toThrow();
+});
+
+it("never attaches a source token to a Request's hidden foreign target", async () => {
+  const { vi } = await import("vitest");
+  const transport = vi.fn<typeof fetch>().mockResolvedValue(new Response());
+  const auth = createSourceAuth(
+    "toy",
+    toyAdapter,
+    { accessToken: "fixture-token", tokenType: "Bearer" },
+    transport,
+    ["https://source.test"],
+  );
+  const request = new Request("https://foreign.test/steal");
+  Object.defineProperty(request, "url", { value: "https://source.test/items" });
+  await expect(auth.fetch(request)).rejects.toBeInstanceOf(IntegrationSyncError);
+  expect(transport).not.toHaveBeenCalled();
+});
+
+it("snapshots source URLs and preserves native request body and policies", async () => {
+  const { vi } = await import("vitest");
+  const transport = vi.fn<typeof fetch>(async (input, init) => {
+    await Promise.resolve();
+    const effective = new Request(input, init);
+    expect(effective.url).toBe("https://source.test/items");
+    expect(effective.method).toBe("PUT");
+    expect(await effective.text()).toBe("private body");
+    expect(effective.headers.get("authorization")).toBe("Bearer fixture-token");
+    expect(effective.cache).toBe("no-store");
+    expect(effective.mode).toBe("same-origin");
+    expect(effective.keepalive).toBe(true);
+    expect(effective.credentials).toBe("include");
+    expect(effective.integrity).toBe("sha256-fixture");
+    // refuseRedirects forwards { ...init, redirect: "manual" } with the Request, as on main,
+    // and Fetch resets referrer fields when a Request meets a non-empty init.
+    expect(effective.referrer).toBe("about:client");
+    expect(effective.referrerPolicy).toBe("");
+    expect(effective.redirect).toBe("manual");
+    return new Response();
+  });
+  const auth = createSourceAuth(
+    "toy",
+    toyAdapter,
+    { accessToken: "fixture-token", tokenType: "Bearer" },
+    transport,
+    ["https://source.test"],
+  );
+  const request = new Request("https://source.test/items", {
+    method: "PUT",
+    body: "private body",
+    cache: "no-store",
+    mode: "same-origin",
+    keepalive: true,
+    credentials: "include",
+    integrity: "sha256-fixture",
+    referrer: "https://source.test/referrer",
+    referrerPolicy: "no-referrer",
+  });
+  await auth.fetch(request);
+  transport.mockImplementationOnce(async (input, init) => {
+    await Promise.resolve();
+    expect(new Request(input, init).url).toBe("https://source.test/items");
+    return new Response();
+  });
+  const url = new URL("https://source.test/items");
+  const pending = auth.fetch(url);
+  url.href = "https://foreign.test/steal";
+  await pending;
 });
 
 it("forwards explicit file-import write conditions to the Pod port", async () => {

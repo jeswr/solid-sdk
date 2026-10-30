@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * `diet:Meal` (⊑ `schema:FoodEvent`) + its `diet:FoodItem`s + the derived
@@ -23,16 +24,7 @@
  */
 
 import type { DatasetCore } from "@rdfjs/types";
-import {
-  LiteralAs,
-  LiteralFrom,
-  NamedNodeAs,
-  NamedNodeFrom,
-  OptionalAs,
-  OptionalFrom,
-  SetFrom,
-  TermWrapper,
-} from "@rdfjs/wrapper";
+import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import {
   contextCodec,
@@ -41,6 +33,7 @@ import {
   sourceConfidenceCodec,
 } from "./concepts.js";
 import { docOf, httpIriOrUndefined, isHttpIri } from "./iri.js";
+import { AliasOptionalAs, AliasOptionalFrom, AliasSetFrom, hasType } from "./legacy.js";
 import { assertSubjectSingletons } from "./rdfGuards.js";
 import { parseBody, storeToTurtle } from "./serialize.js";
 import { setIfDefined, tryRead, validDateOrUndefined } from "./util.js";
@@ -59,6 +52,7 @@ import {
   type TriggerSlug,
   triggerIri,
   triggerSlugFromIri,
+  vocabularyAliases,
 } from "./vocab.js";
 
 // --- Enumerations (friendly tokens; stored as diet: concept IRIs) ------------
@@ -221,47 +215,52 @@ export class FoodItem extends TermWrapper {
     return this.value;
   }
   get types(): Set<string> {
-    return SetFrom.subjectPredicate(this, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string);
+    return AliasSetFrom.subjectPredicate(
+      this,
+      rdf("type"),
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
   }
   mark(): this {
     this.types.add(DIET_FOOD_ITEM);
     return this;
   }
   get isFoodItem(): boolean {
-    return this.types.has(DIET_FOOD_ITEM);
+    return hasType(this, DIET_FOOD_ITEM);
   }
 
   get name(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, schema("name"), LiteralAs.string);
+    return AliasOptionalFrom.subjectPredicate(this, schema("name"), LiteralAs.string);
   }
   set name(value: string | undefined) {
-    OptionalAs.object(this, schema("name"), value, LiteralFrom.string);
+    AliasOptionalAs.object(this, schema("name"), value, LiteralFrom.string);
   }
 
   get offBarcode(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("offBarcode"), LiteralAs.string);
+    return AliasOptionalFrom.subjectPredicate(this, diet("offBarcode"), LiteralAs.string);
   }
   set offBarcode(value: string | undefined) {
-    OptionalAs.object(this, diet("offBarcode"), value, LiteralFrom.string);
+    AliasOptionalAs.object(this, diet("offBarcode"), value, LiteralFrom.string);
   }
 
   get offRef(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("offRef"), NamedNodeAs.string);
+    return AliasOptionalFrom.subjectPredicate(this, diet("offRef"), NamedNodeAs.string);
   }
   set offRef(value: string | undefined) {
-    OptionalAs.object(this, diet("offRef"), value, NamedNodeFrom.string);
+    AliasOptionalAs.object(this, diet("offRef"), value, NamedNodeFrom.string);
   }
 
   get ingredientsText(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("ingredientsText"), LiteralAs.string);
+    return AliasOptionalFrom.subjectPredicate(this, diet("ingredientsText"), LiteralAs.string);
   }
   set ingredientsText(value: string | undefined) {
-    OptionalAs.object(this, diet("ingredientsText"), value, LiteralFrom.string);
+    AliasOptionalAs.object(this, diet("ingredientsText"), value, LiteralFrom.string);
   }
 
   /** `diet:declaredAllergen` — OFF tag strings (live set). */
   get declaredAllergen(): Set<string> {
-    return SetFrom.subjectPredicate(
+    return AliasSetFrom.subjectPredicate(
       this,
       diet("declaredAllergen"),
       LiteralAs.string,
@@ -270,7 +269,7 @@ export class FoodItem extends TermWrapper {
   }
   /** `diet:traceAllergen` — OFF tag strings (live set). */
   get traceAllergen(): Set<string> {
-    return SetFrom.subjectPredicate(
+    return AliasSetFrom.subjectPredicate(
       this,
       diet("traceAllergen"),
       LiteralAs.string,
@@ -279,11 +278,16 @@ export class FoodItem extends TermWrapper {
   }
   /** `diet:additive` — OFF tag strings (live set). */
   get additive(): Set<string> {
-    return SetFrom.subjectPredicate(this, diet("additive"), LiteralAs.string, LiteralFrom.string);
+    return AliasSetFrom.subjectPredicate(
+      this,
+      diet("additive"),
+      LiteralAs.string,
+      LiteralFrom.string,
+    );
   }
   /** `diet:offCategory` — OFF tag strings (live set). */
   get offCategory(): Set<string> {
-    return SetFrom.subjectPredicate(
+    return AliasSetFrom.subjectPredicate(
       this,
       diet("offCategory"),
       LiteralAs.string,
@@ -294,11 +298,11 @@ export class FoodItem extends TermWrapper {
   /** `diet:sourceConfidence` → `diet:{concept}`; read back as the friendly token. */
   get sourceConfidence(): SourceConfidence | undefined {
     return sourceConfidenceCodec.fromIri(
-      OptionalFrom.subjectPredicate(this, diet("sourceConfidence"), NamedNodeAs.string),
+      AliasOptionalFrom.subjectPredicate(this, diet("sourceConfidence"), NamedNodeAs.string),
     );
   }
   set sourceConfidence(value: SourceConfidence | undefined) {
-    OptionalAs.object(
+    AliasOptionalAs.object(
       this,
       diet("sourceConfidence"),
       value ? sourceConfidenceCodec.toIri(value) : undefined,
@@ -365,24 +369,29 @@ export class Exposure extends TermWrapper {
     return this.value;
   }
   get types(): Set<string> {
-    return SetFrom.subjectPredicate(this, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string);
+    return AliasSetFrom.subjectPredicate(
+      this,
+      rdf("type"),
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
   }
   mark(): this {
     this.types.add(DIET_EXPOSURE);
     return this;
   }
   get isExposure(): boolean {
-    return this.types.has(DIET_EXPOSURE);
+    return hasType(this, DIET_EXPOSURE);
   }
 
   /** `diet:trigger` → `diet:{slug}`; read back as the slug (unknown IRI ⇒ undefined). */
   get trigger(): TriggerSlug | undefined {
     return triggerSlugFromIri(
-      OptionalFrom.subjectPredicate(this, diet("trigger"), NamedNodeAs.string) ?? "",
+      AliasOptionalFrom.subjectPredicate(this, diet("trigger"), NamedNodeAs.string) ?? "",
     );
   }
   set trigger(value: TriggerSlug | undefined) {
-    OptionalAs.object(
+    AliasOptionalAs.object(
       this,
       diet("trigger"),
       value ? triggerIri(value) : undefined,
@@ -393,11 +402,11 @@ export class Exposure extends TermWrapper {
   /** `diet:exposureLevel` → `diet:{concept}`; read back as the friendly token. */
   get exposureLevel(): ExposureLevel | undefined {
     return exposureLevelCodec.fromIri(
-      OptionalFrom.subjectPredicate(this, diet("exposureLevel"), NamedNodeAs.string),
+      AliasOptionalFrom.subjectPredicate(this, diet("exposureLevel"), NamedNodeAs.string),
     );
   }
   set exposureLevel(value: ExposureLevel | undefined) {
-    OptionalAs.object(
+    AliasOptionalAs.object(
       this,
       diet("exposureLevel"),
       value ? exposureLevelCodec.toIri(value) : undefined,
@@ -407,7 +416,7 @@ export class Exposure extends TermWrapper {
 
   /** `diet:derivedFrom` — the FoodItem IRIs (live set; ⊑ `prov:wasDerivedFrom`). */
   get derivedFrom(): Set<string> {
-    return SetFrom.subjectPredicate(
+    return AliasSetFrom.subjectPredicate(
       this,
       DIET_DERIVED_FROM,
       NamedNodeAs.string,
@@ -416,10 +425,10 @@ export class Exposure extends TermWrapper {
   }
 
   get note(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("note"), LiteralAs.string);
+    return AliasOptionalFrom.subjectPredicate(this, diet("note"), LiteralAs.string);
   }
   set note(value: string | undefined) {
-    OptionalAs.object(this, diet("note"), value, LiteralFrom.string);
+    AliasOptionalAs.object(this, diet("note"), value, LiteralFrom.string);
   }
 }
 
@@ -482,32 +491,37 @@ export class Meal extends TermWrapper {
     return this.value;
   }
   get types(): Set<string> {
-    return SetFrom.subjectPredicate(this, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string);
+    return AliasSetFrom.subjectPredicate(
+      this,
+      rdf("type"),
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
   }
   mark(): this {
     this.types.add(DIET_MEAL);
     return this;
   }
   get isMeal(): boolean {
-    return this.types.has(DIET_MEAL);
+    return hasType(this, DIET_MEAL);
   }
 
   /** `schema:startTime` — ingestion time. */
   get startTime(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, schema("startTime"), LiteralAs.date);
+    return AliasOptionalFrom.subjectPredicate(this, schema("startTime"), LiteralAs.date);
   }
   set startTime(value: Date | undefined) {
-    OptionalAs.object(this, schema("startTime"), value, LiteralFrom.dateTime);
+    AliasOptionalAs.object(this, schema("startTime"), value, LiteralFrom.dateTime);
   }
 
   /** `diet:context` → `diet:{concept}`; read back as the friendly token. */
   get context(): MealContext | undefined {
     return contextCodec.fromIri(
-      OptionalFrom.subjectPredicate(this, diet("context"), NamedNodeAs.string),
+      AliasOptionalFrom.subjectPredicate(this, diet("context"), NamedNodeAs.string),
     );
   }
   set context(value: MealContext | undefined) {
-    OptionalAs.object(
+    AliasOptionalAs.object(
       this,
       diet("context"),
       value ? contextCodec.toIri(value) : undefined,
@@ -516,27 +530,27 @@ export class Meal extends TermWrapper {
   }
 
   get venue(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("venue"), LiteralAs.string);
+    return AliasOptionalFrom.subjectPredicate(this, diet("venue"), LiteralAs.string);
   }
   set venue(value: string | undefined) {
-    OptionalAs.object(this, diet("venue"), value, LiteralFrom.string);
+    AliasOptionalAs.object(this, diet("venue"), value, LiteralFrom.string);
   }
 
   get location(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, schema("location"), NamedNodeAs.string);
+    return AliasOptionalFrom.subjectPredicate(this, schema("location"), NamedNodeAs.string);
   }
   set location(value: string | undefined) {
-    OptionalAs.object(this, schema("location"), value, NamedNodeFrom.string);
+    AliasOptionalAs.object(this, schema("location"), value, NamedNodeFrom.string);
   }
 
   /** `diet:portion` → `diet:{concept}`; read back as the friendly token. */
   get portion(): Portion | undefined {
     return portionCodec.fromIri(
-      OptionalFrom.subjectPredicate(this, diet("portion"), NamedNodeAs.string),
+      AliasOptionalFrom.subjectPredicate(this, diet("portion"), NamedNodeAs.string),
     );
   }
   set portion(value: Portion | undefined) {
-    OptionalAs.object(
+    AliasOptionalAs.object(
       this,
       diet("portion"),
       value ? portionCodec.toIri(value) : undefined,
@@ -545,30 +559,30 @@ export class Meal extends TermWrapper {
   }
 
   get note(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("note"), LiteralAs.string);
+    return AliasOptionalFrom.subjectPredicate(this, diet("note"), LiteralAs.string);
   }
   set note(value: string | undefined) {
-    OptionalAs.object(this, diet("note"), value, LiteralFrom.string);
+    AliasOptionalAs.object(this, diet("note"), value, LiteralFrom.string);
   }
 
   /** `health:patient` — the pod-owner Patient/Person WebID. */
   get patient(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, HEALTH_PATIENT_PROP, NamedNodeAs.string);
+    return AliasOptionalFrom.subjectPredicate(this, HEALTH_PATIENT_PROP, NamedNodeAs.string);
   }
   set patient(value: string | undefined) {
-    OptionalAs.object(this, HEALTH_PATIENT_PROP, value, NamedNodeFrom.string);
+    AliasOptionalAs.object(this, HEALTH_PATIENT_PROP, value, NamedNodeFrom.string);
   }
 
   get created(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, dct("created"), LiteralAs.date);
+    return AliasOptionalFrom.subjectPredicate(this, dct("created"), LiteralAs.date);
   }
   set created(value: Date | undefined) {
-    OptionalAs.object(this, dct("created"), value, LiteralFrom.dateTime);
+    AliasOptionalAs.object(this, dct("created"), value, LiteralFrom.dateTime);
   }
 
   /** `diet:hasItem` → the FoodItem IRIs (live set). */
   get hasItem(): Set<string> {
-    return SetFrom.subjectPredicate(
+    return AliasSetFrom.subjectPredicate(
       this,
       diet("hasItem"),
       NamedNodeAs.string,
@@ -635,13 +649,15 @@ function parseMealImpl(url: string, dataset: DatasetCore): MealData | undefined 
   // Use n3's DataFactory (consistent with the rest of the file) to build the match
   // pattern so discovery works on ANY RDFJS DatasetCore, not just an n3.Store —
   // hand-shaped `{ termType, value } as never` casts only happen to work on n3.
-  for (const q of dataset.match(
-    null,
-    DataFactory.namedNode(RDF_TYPE),
-    DataFactory.namedNode(DIET_EXPOSURE),
-  )) {
-    const subject = (q.subject as { value: string }).value;
-    if (inDocument(subject, url)) exposureSubjects.add(subject);
+  for (const type of vocabularyAliases(DIET_EXPOSURE)) {
+    for (const q of dataset.match(
+      null,
+      DataFactory.namedNode(RDF_TYPE),
+      DataFactory.namedNode(type),
+    )) {
+      const subject = (q.subject as { value: string }).value;
+      if (inDocument(subject, url)) exposureSubjects.add(subject);
+    }
   }
   const exposures = [...exposureSubjects]
     .sort((a, b) => trailingIndex(a) - trailingIndex(b))

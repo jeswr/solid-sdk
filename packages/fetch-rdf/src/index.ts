@@ -12,6 +12,12 @@
  * @packageDocumentation
  */
 
+/**
+ * The RDF/JS types of the parsed dataset, re-exported so that layered consumers (e.g.
+ * `@jeswr/storage-client`) can name them in public declarations without depending on
+ * `@rdfjs/types` themselves.
+ */
+export type { DatasetCore, Quad, Term } from "@rdfjs/types";
 export { createFetchDocumentLoader } from "./document-loader.js";
 export type { RdfFetchErrorOptions } from "./errors.js";
 export { RdfFetchError } from "./errors.js";
