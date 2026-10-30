@@ -1,9 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex
 import { type FetchedRdf, fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, createPodScopedFetch, normalizePodBase } from "@jeswr/guarded-fetch";
 import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { accessControl, bindAccess } from "../client/access.js";
+import { discoverContentTargets } from "../client/client.js";
+import { assertVersion, type CommitChecks, commitHttp } from "../client/commit.js";
 import { DriveContainer, DriveResource } from "./model.js";
 import { driveRootPatch } from "./patch.js";
 import { iri, quadsToTurtle } from "./serialize.js";
@@ -25,7 +29,10 @@ export class DriveWriteError extends Error {
     readonly status: number,
     readonly url: string,
   ) {
-    super(`Drive write failed (${status})`);
+    super(
+      `Drive write failed (${status})` +
+        (status === 412 ? ". The resource changed. Refresh and confirm the operation again." : ""),
+    );
     this.name = "DriveWriteError";
   }
 }
@@ -56,7 +63,7 @@ interface RootIdentity {
 /**
  * Injected-fetch Solid RDF bootstrap, independent of the future SDK façade.
  * Creation, marker insertion, and registration are conditional.
- * Concurrent callers converge through server preconditions and bounded re-reads;
+ * Concurrent completion is observed through server preconditions and read-only checks;
  * initialization failures preserve the container and expose a caller-held resume handle.
  * No module-global account state or rejected-promise cache is retained.
  */
@@ -71,9 +78,15 @@ export async function ensureDriveRoot(
   const existing = findDriveRoots(index.dataset)[0];
   if (existing !== undefined) return assertWithinPodScope(storage, existing);
   // Refuse to create an orphan root if an existing index cannot be updated safely.
-  indexEtag(index.etag);
+  const approvedIndexEtag = indexEtag(index.etag);
 
   const rootUrl = new URL("drive/", storage).href;
+  const access = accessControl(scopedFetch, storage);
+  // The index body and its discovery are one preflight capture. A later
+  // binding read may verify that capture, never replace its access identity.
+  const approvedIndexDiscovery = access.captureEndpoint(indexUrl, index.response.headers);
+  await discoverContentTargets(scopedFetch, storage, access, [rootUrl, indexUrl]);
+  const binding = await bindAccess(access, indexUrl, rootUrl);
   let rootEtag: string | undefined;
   // A marker written by this call cannot itself prove ownership, including on resume().
   let markingIdentity: RootIdentity | undefined;
@@ -86,7 +99,7 @@ export async function ensureDriveRoot(
   }
 
   async function createRoot(): Promise<Response> {
-    return scopedFetch(rootUrl, {
+    const response = await commitRoot(rootUrl, {
       method: "PUT",
       headers: {
         "Content-Type": "text/turtle",
@@ -94,6 +107,33 @@ export async function ensureDriveRoot(
         Link: `<${LDP.BasicContainer}>; rel="type"`,
       },
       body: "",
+    });
+    if (response.ok) {
+      access.recordCreation(rootUrl, response.headers);
+      await binding.recheck();
+    }
+    return response;
+  }
+
+  function commitRoot(
+    url: string,
+    init: RequestInit,
+    verifyHeaders?: CommitChecks["verifyHeaders"],
+  ): Promise<Response> {
+    access.assertContentDestination(url);
+    return commitHttp({
+      verifyHeaders: (headers) => {
+        if (url === indexUrl) approvedIndexDiscovery(headers);
+        binding.verifyEndpoint(url, headers);
+        verifyHeaders?.(headers);
+      },
+      http: scopedFetch,
+      url,
+      init,
+      error: (status, url) => new DriveWriteError(status, url),
+      rechecks: [() => binding.recheck()],
+      policyGuards: binding.identities,
+      response: async (response) => response,
     });
   }
 
@@ -157,75 +197,77 @@ export async function ensureDriveRoot(
 
   async function initialize(current?: FetchedRdf): Promise<void> {
     try {
-      for (let attempt = 0; ; attempt++) {
-        // CSS ignores container PUT bodies; initialize the marker with N3 PATCH.
-        current ??= await readRoot();
-        if (validateRoot(current).isDriveRoot) {
-          markingIdentity = undefined;
-          return;
-        }
-        const identity = rootIdentity(current);
-        rootEtag = identity.etag;
-        let metadataUrl: string | undefined;
-        const links = current.response.headers.get("Link") ?? "";
-        for (const link of links.matchAll(/<([^>]*)>((?:[^",]|"[^"]*")*)/g)) {
-          // Both capture groups are mandatory, even when their strings are empty.
-          const rel = /(?:^|;)\s*rel\s*=\s*(?:"([^"]*)"|([^;\s]+))/i.exec(link[2] as string);
-          if ((rel?.[1] ?? rel?.[2] ?? "").split(/\s+/).includes("describedby")) {
-            metadataUrl = assertWithinPodScope(storage, new URL(link[1] as string, rootUrl).href);
-            break;
-          }
-        }
-        if (metadataUrl === undefined)
-          throw new TypeError("The drive root needs a describedby link.");
-        let patchUrl = metadataUrl;
-        let precondition: Record<string, string>;
-        if (
-          identity.etag !== undefined &&
-          /(?:^|,)\s*text\/n3\s*(?:;|,|$)/i.test(current.response.headers.get("Accept-Patch") ?? "")
-        ) {
-          // Where supported, guard the container representation itself atomically.
-          patchUrl = rootUrl;
-          precondition = { "If-Match": identity.etag };
-        } else {
-          // If-Match on a distinct description protects only that resource.
-          // Its PATCH may change the container ETag, so verify the observed children
-          // independently of the DriveRoot type this call is about to insert.
-          try {
-            const description = await fetchRdf(metadataUrl, { fetch: scopedFetch });
-            const etag = strongEtag(description.etag);
-            if (etag === undefined)
-              throw new TypeError("The drive description needs a strong ETag.");
-            precondition = { "If-Match": etag };
-          } catch (error) {
-            if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
-            precondition = { "If-None-Match": "*" };
-          }
-        }
-        markingIdentity = identity;
-        const patched = await scopedFetch(patchUrl, {
-          method: "PATCH",
-          headers: { "Content-Type": "text/n3", ...precondition },
-          body: await driveRootPatch(rootUrl),
-        });
-        if (patched.status === 412) {
-          // The precondition prevented our marker insertion; another caller's
-          // marker can be validated normally on the bounded retry.
-          markingIdentity = undefined;
-          if (attempt === 0) {
-            current = undefined;
-            continue;
-          }
-        }
-        if (!patched.ok) throw new DriveWriteError(patched.status, patchUrl);
-        const verified = await fetchRdf(rootUrl, { fetch: scopedFetch });
-        const root = validateRoot(verified);
-        if (!root.isDriveRoot) {
-          throw new TypeError("The drive root marker was not persisted.");
-        }
+      // CSS ignores container PUT bodies; initialize the marker with N3 PATCH.
+      current ??= await readRoot();
+      if (validateRoot(current).isDriveRoot) {
         markingIdentity = undefined;
         return;
       }
+      const identity = rootIdentity(current);
+      rootEtag = identity.etag;
+      let metadataUrl: string | undefined;
+      const links = current.response.headers.get("Link") ?? "";
+      for (const link of links.matchAll(/<([^>]*)>((?:[^",]|"[^"]*")*)/g)) {
+        // Both capture groups are mandatory, even when their strings are empty.
+        const rel = /(?:^|;)\s*rel\s*=\s*(?:"([^"]*)"|([^;\s]+))/i.exec(link[2] as string);
+        if ((rel?.[1] ?? rel?.[2] ?? "").split(/\s+/).includes("describedby")) {
+          metadataUrl = assertWithinPodScope(storage, new URL(link[1] as string, rootUrl).href);
+          break;
+        }
+      }
+      if (metadataUrl === undefined)
+        throw new TypeError("The drive root needs a describedby link.");
+      let patchUrl = metadataUrl;
+      let precondition: Record<string, string>;
+      let verifyHeaders: CommitChecks["verifyHeaders"];
+      if (
+        identity.etag !== undefined &&
+        /(?:^|,)\s*text\/n3\s*(?:;|,|$)/i.test(current.response.headers.get("Accept-Patch") ?? "")
+      ) {
+        // Where supported, guard the container representation itself atomically.
+        patchUrl = rootUrl;
+        precondition = { "If-Match": identity.etag };
+      } else {
+        // If-Match on a distinct description protects only that resource.
+        // Its PATCH may change the container ETag, so verify the observed children
+        // independently of the DriveRoot type this call is about to insert.
+        try {
+          const description = await fetchRdf(metadataUrl, { fetch: scopedFetch });
+          verifyHeaders = access.captureEndpoint(metadataUrl, description.response.headers);
+          const etag = strongEtag(description.etag);
+          if (etag === undefined) throw new TypeError("The drive description needs a strong ETag.");
+          precondition = { "If-Match": etag };
+        } catch (error) {
+          if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
+          precondition = { "If-None-Match": "*" };
+        }
+      }
+      markingIdentity = identity;
+      const patched = await commitRoot(
+        patchUrl,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "text/n3", ...precondition },
+          body: await driveRootPatch(rootUrl),
+        },
+        verifyHeaders,
+      );
+      if (patched.status === 412) {
+        // Another caller may have finished initialization. Observe that
+        // result, but never retry our PATCH against its replacement version.
+        markingIdentity = undefined;
+        const concurrent = await readRoot();
+        if (validateRoot(concurrent).isDriveRoot) return;
+      }
+      if (!patched.ok) throw new DriveWriteError(patched.status, patchUrl);
+      await binding.recheck();
+      const verified = await fetchRdf(rootUrl, { fetch: scopedFetch });
+      const root = validateRoot(verified);
+      if (!root.isDriveRoot) {
+        throw new TypeError("The drive root marker was not persisted.");
+      }
+      markingIdentity = undefined;
+      return;
     } catch (error) {
       // A container validator cannot cover independently edited auxiliary resources.
       // Preserve everything; resumption revalidates the container before marking it.
@@ -234,8 +276,9 @@ export async function ensureDriveRoot(
   }
 
   async function resume(): Promise<string> {
+    await discoverContentTargets(scopedFetch, storage, access, [rootUrl, indexUrl]);
     await initialize();
-    await register(true);
+    await register();
     return rootUrl;
   }
 
@@ -259,12 +302,17 @@ export async function ensureDriveRoot(
     throw new DriveWriteError(created.status, rootUrl);
   }
 
-  async function register(retry: boolean): Promise<void> {
-    // Re-read after creation: preserve registrations written while the root was being created.
+  async function register(): Promise<void> {
+    // A concurrent completed registration can be observed. Otherwise the index
+    // approved before root creation remains the only version we may overwrite.
     const current = await fetchRdf(indexUrl, { fetch: scopedFetch });
     if (findDriveRoots(current.dataset).includes(rootUrl)) return;
-    const etag = indexEtag(current.etag);
-    const dataset = new Store([...current.dataset]);
+    assertVersion(
+      { url: indexUrl, etag: approvedIndexEtag },
+      indexEtag(current.etag),
+      (status, url) => new DriveWriteError(status, url),
+    );
+    const dataset = new Store([...index.dataset]);
     const registrationUrl = new URL(indexUrl);
     registrationUrl.hash = "poddrive";
     // Do not replace an occupied registration fragment, even if it belongs to another app.
@@ -272,14 +320,22 @@ export async function ensureDriveRoot(
       registrationUrl.hash += "-drive";
     }
     dataset.addQuads(buildDriveRootRegistration(registrationUrl.href, rootUrl));
-    const response = await scopedFetch(indexUrl, {
-      method: "PUT",
-      headers: { "Content-Type": "text/turtle", "If-Match": etag },
-      body: await quadsToTurtle(dataset),
-    });
-    if (response.status === 412 && retry) return register(false);
-    if (!response.ok) throw new DriveWriteError(response.status, indexUrl);
+    try {
+      const response = await commitRoot(indexUrl, {
+        method: "PUT",
+        headers: { "Content-Type": "text/turtle", "If-Match": approvedIndexEtag },
+        body: await quadsToTurtle(dataset),
+      });
+      if (!response.ok) throw new DriveWriteError(response.status, indexUrl);
+    } catch (error) {
+      if (error instanceof DriveWriteError && error.status === 412) {
+        const concurrent = await fetchRdf(indexUrl, { fetch: scopedFetch });
+        if (findDriveRoots(concurrent.dataset).includes(rootUrl)) return;
+      }
+      throw error;
+    }
+    await binding.recheck();
   }
-  await register(true);
+  await register();
   return rootUrl;
 }

@@ -1,0 +1,904 @@
+// AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex
+"use client";
+/**
+ * Drive's UI state shared across routes: the open dialog, the preview, the
+ * details pane, and the item actions (04-drive §4) with their toasts and
+ * undo. Every mutation goes through the operations layer; listings refresh
+ * through the demo pod's change events (or an explicit invalidate).
+ */
+
+import { toast } from "@jeswr/suite-ui";
+import { useRouter } from "next/navigation";
+import {
+  createContext,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+  useCallback,
+  useContext,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { encodeRef } from "@/lib/refs";
+import { accessControl, accessLabel, DriveAccessError } from "../lib/client/access";
+import {
+  type DriveClient,
+  DriveError,
+  type DriveItem,
+  DrivePartialFailureError,
+  isMissingItem,
+  nameOf,
+} from "../lib/client/client";
+import { unconfirmedIdentityMessage } from "../lib/client/commit";
+import { DriveDeletePendingError } from "../lib/client/deletion";
+import { isOwnStorage } from "../lib/client/ownership";
+import { DriveOperationInProgressError } from "../lib/client/source-operations";
+import {
+  childUrl,
+  copyItem,
+  createFolder,
+  deleteForever,
+  moveItems,
+  renameItem,
+  restoreItems,
+  TrashMovingError,
+  TrashRestorePartialError,
+  TrashTraversalChangedError,
+  trashFolderOf,
+  trashItems,
+} from "../lib/operations/operations";
+import type { TrashEntry } from "../lib/operations/trash-index";
+import { useDrive } from "./drive-context";
+import { pruneDeleted } from "./prefs";
+import { moveWithValidator } from "./undo";
+
+export type DriveDialog =
+  | { kind: "new-folder"; parent: string }
+  | { kind: "rename"; item: DriveItem }
+  | { kind: "move"; items: DriveItem[] }
+  | { kind: "delete-source"; items: DriveItem[] }
+  | {
+      kind: "delete-forever" | "empty-trash";
+      entries: TrashEntry[];
+      onRemoved?: (urls: readonly string[]) => void;
+    };
+
+export interface PreviewState {
+  readonly items: readonly DriveItem[];
+  readonly index: number;
+  readonly activationId?: string;
+}
+
+interface DriveUiValue {
+  readonly dialog: (DriveDialog & { readonly id: number }) | undefined;
+  readonly openDialog: (dialog: DriveDialog) => void;
+  readonly closeDialog: () => void;
+  readonly restoreDialogFocus: (event: Event) => void;
+  readonly preview: PreviewState | undefined;
+  readonly setPreview: (preview: PreviewState | undefined) => void;
+  readonly detailsOpen: boolean;
+  readonly setDetailsOpen: (open: boolean | ((open: boolean) => boolean)) => void;
+  /** Current Details targets, chosen by selection or explicitly opened. */
+  readonly detailsItems: readonly DriveItem[];
+  readonly setDetailsItems: Dispatch<SetStateAction<readonly DriveItem[]>>;
+  /** Ask the current folder view to open the file picker (`folder` = directory picker). */
+  readonly requestUpload: (folder?: boolean) => void;
+  readonly uploadRequest: { id: number; folder: boolean } | undefined;
+  /** The folder new items go into from the New menu. */
+  readonly currentFolder: string | undefined;
+  readonly setCurrentFolder: (url: string | undefined) => void;
+}
+
+const DriveUiContext = createContext<DriveUiValue | undefined>(undefined);
+
+// Radix's modal Sheet/Dialog content does not itself emit aria-modal. Popovers
+// also use role=dialog, so recognize the supported modal components explicitly.
+export const DRIVE_MODAL =
+  '[aria-modal="true"][role="dialog"], [aria-modal="true"][role="alertdialog"], [data-slot="sheet-content"], [data-slot="dialog-content"], [data-slot="alert-dialog-content"], dialog[open]';
+
+/** Return targets must remain exposed, including when a different modal survives. */
+export function isDriveFocusTarget(element: Element | null | undefined): element is HTMLElement {
+  if (
+    !(element instanceof HTMLElement) ||
+    !element.isConnected ||
+    element.matches(":disabled") ||
+    element.closest('[hidden], [inert], [aria-hidden="true"]')
+  )
+    return false;
+  for (let current: HTMLElement | null = element; current; current = current.parentElement) {
+    const style = getComputedStyle(current);
+    if (style.display === "none" || ["hidden", "collapse"].includes(style.visibility)) return false;
+  }
+  return true;
+}
+
+/** Return focus to an item, listing, preview or main region after a control is removed. */
+export function focusDriveListing(
+  url?: string,
+  preferred?: HTMLElement | null,
+  listing = document.querySelector<HTMLElement>("[data-drive-listing]"),
+  scope: ParentNode = document,
+) {
+  const modal = [...document.querySelectorAll<HTMLElement>(DRIVE_MODAL)]
+    .reverse()
+    .find((element) => element.dataset.state !== "closed" && isDriveFocusTarget(element));
+  const row = url ? listing?.querySelector<HTMLElement>(`[data-url="${CSS.escape(url)}"]`) : null;
+  for (const target of [
+    preferred,
+    row,
+    listing,
+    scope.querySelector<HTMLElement>("[data-drive-preview]"),
+    scope.querySelector<HTMLElement>('main, [role="main"]'),
+    ...(modal
+      ? [
+          ...modal.querySelectorAll<HTMLElement>(
+            "button, [href], input, select, textarea, [tabindex]",
+          ),
+          modal,
+        ]
+      : []),
+  ]) {
+    if (
+      !isDriveFocusTarget(target) ||
+      target === document.body ||
+      (modal && !modal.contains(target))
+    )
+      continue;
+    target.focus();
+    // A connected element may have become disabled or hidden during the mutation.
+    if (document.activeElement === target) return;
+  }
+}
+
+/** Capture focus before removal; preserve any surviving control the user moves to. */
+export function captureDriveFocusRemoval(subtree?: Element | null) {
+  const focused = document.activeElement;
+  const inside = subtree?.contains(focused);
+  return (url?: string, preferred?: HTMLElement | null, listing?: HTMLElement | null) => {
+    const active = document.activeElement;
+    if (
+      active &&
+      active !== document.body &&
+      isDriveFocusTarget(active) &&
+      !(inside && active === focused)
+    )
+      return;
+    focusDriveListing(url, preferred, listing);
+  };
+}
+
+export function DriveUiProvider({ children }: { children: ReactNode }) {
+  const [dialog, setDialog] = useState<DriveUiValue["dialog"]>();
+  const [preview, setPreview] = useState<PreviewState>();
+  const [detailsOpen, setDetailsOpenState] = useState(false);
+  const [detailsItems, setDetailsItems] = useState<readonly DriveItem[]>([]);
+  const detailsFocus = useRef<HTMLElement | null>(null);
+  const detailsVisible = useRef(false);
+  const restoreDetailsFocus = useRef<ReturnType<typeof captureDriveFocusRemoval> | undefined>(
+    undefined,
+  );
+  const setDetailsOpen = useCallback((next: boolean | ((open: boolean) => boolean)) => {
+    const open = typeof next === "function" ? next(detailsVisible.current) : next;
+    if (open === detailsVisible.current) return;
+    if (open) {
+      detailsFocus.current =
+        document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+          ? document.activeElement
+          : null;
+    } else {
+      restoreDetailsFocus.current = captureDriveFocusRemoval(
+        document.querySelector(".ish-details, .ish-details-sheet"),
+      );
+    }
+    detailsVisible.current = open;
+    setDetailsOpenState(open);
+  }, []);
+  useLayoutEffect(() => {
+    if (detailsOpen || !restoreDetailsFocus.current) return;
+    const restore = restoreDetailsFocus.current;
+    restoreDetailsFocus.current = undefined;
+    const listing = document.querySelector<HTMLElement>("[data-drive-listing]");
+    const row =
+      listing?.querySelector<HTMLElement>('[data-url][tabindex="0"]') ??
+      (detailsItems[0]
+        ? listing?.querySelector<HTMLElement>(`[data-url="${CSS.escape(detailsItems[0].url)}"]`)
+        : null);
+    restore(detailsItems[0]?.url, row ?? detailsFocus.current, listing);
+  }, [detailsOpen, detailsItems]);
+  const [uploadRequest, setUploadRequest] = useState<{ id: number; folder: boolean }>();
+  const [currentFolder, setCurrentFolder] = useState<string>();
+  const dialogFocus = useRef<
+    | {
+        element: HTMLElement | null;
+        url: string | undefined;
+        restore: ReturnType<typeof captureDriveFocusRemoval>;
+      }
+    | undefined
+  >(undefined);
+  const dialogOpen = useRef<number | undefined>(undefined);
+  const nextDialog = useRef(0);
+  const openDialog = useCallback((next: DriveDialog) => {
+    const item =
+      next.kind === "rename" ? next.item : next.kind === "move" ? next.items[0] : undefined;
+    const url = item?.url ?? ("entries" in next ? next.entries[0]?.url : undefined);
+    dialogFocus.current = {
+      element:
+        document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+          ? document.activeElement
+          : null,
+      url,
+      restore: captureDriveFocusRemoval(),
+    };
+    const id = ++nextDialog.current;
+    dialogOpen.current = id;
+    setDialog({ ...next, id });
+  }, []);
+  const closeDialog = useCallback(() => {
+    // Async submissions retain the close callback of their own opening.
+    if (dialogOpen.current !== dialog?.id) return;
+    dialogOpen.current = undefined;
+    setDialog(undefined);
+  }, [dialog?.id]);
+  const restoreDialogFocus = useCallback((event: Event) => {
+    event.preventDefault();
+    // Name -> extension confirmation replaces one dialog with another.
+    if (dialogOpen.current !== undefined) return;
+    const saved = dialogFocus.current;
+    saved?.restore(saved.url, saved.element);
+  }, []);
+  const value = useMemo<DriveUiValue>(
+    () => ({
+      dialog,
+      openDialog,
+      closeDialog,
+      restoreDialogFocus,
+      preview,
+      setPreview,
+      detailsOpen,
+      setDetailsOpen,
+      detailsItems,
+      setDetailsItems,
+      uploadRequest,
+      requestUpload: (folder = false) =>
+        setUploadRequest((current) => ({ id: (current?.id ?? 0) + 1, folder })),
+      currentFolder,
+      setCurrentFolder,
+    }),
+    [
+      dialog,
+      preview,
+      detailsOpen,
+      detailsItems,
+      uploadRequest,
+      currentFolder,
+      openDialog,
+      closeDialog,
+      restoreDialogFocus,
+      setDetailsOpen,
+    ],
+  );
+  return <DriveUiContext value={value}>{children}</DriveUiContext>;
+}
+
+export function useDriveUi(): DriveUiValue {
+  const value = useContext(DriveUiContext);
+  if (!value) throw new Error("useDriveUi outside DriveUiProvider");
+  return value;
+}
+
+/** User-facing message for a failed operation. */
+function deletionPending(error: unknown): boolean {
+  return (
+    error instanceof DriveDeletePendingError ||
+    (error instanceof DriveAccessError && deletionPending(error.cause)) ||
+    (error instanceof DrivePartialFailureError && deletionPending(error.cause)) ||
+    (error instanceof TrashRestorePartialError &&
+      error.remaining.some(({ error }) => deletionPending(error)))
+  );
+}
+
+/** Explicit actions and background housekeeping surface the same refusal and Retry guidance. */
+export function reportFailure(
+  error: unknown,
+  fallback: string,
+  client: DriveClient,
+  invalidate: (url: string) => void,
+) {
+  const message = errorMessage(error, fallback);
+  if (deletionPending(error))
+    toast.error(message, {
+      action: {
+        label: "Retry",
+        onClick: async () => {
+          try {
+            const unresolved = await client.recheckDeletions?.();
+            invalidate(client.storageUrl);
+            if (unresolved?.length) reportFailure(error, fallback, client, invalidate);
+          } catch (cause) {
+            toast.error(errorMessage(cause));
+          }
+        },
+      },
+    });
+  else toast.error(message);
+}
+
+function recoveryLocations(error: unknown): string[] {
+  if (error instanceof DrivePartialFailureError) {
+    return [
+      ...error.retainedDestinations.filter((url) => url.includes("/.drive-recovery-")),
+      ...recoveryLocations(error.cause),
+    ];
+  }
+  if (error instanceof TrashRestorePartialError)
+    return error.remaining.flatMap(({ error }) => recoveryLocations(error));
+  if (error instanceof Error) return recoveryLocations(error.cause);
+  return [];
+}
+
+export function errorMessage(error: unknown, fallback = "Something went wrong"): string {
+  const recovery = [...new Set(recoveryLocations(error))];
+  const message = failureMessage(error, fallback);
+  return recovery.length ? `${message} Private recovery copies: ${recovery.join(", ")}` : message;
+}
+
+function failureMessage(error: unknown, fallback: string): string {
+  if (deletionPending(error)) return "Still deleting on the server";
+  if (error instanceof DrivePartialFailureError) return failureMessage(error.cause, fallback);
+  if (
+    error instanceof DriveOperationInProgressError ||
+    error instanceof DriveAccessError ||
+    error instanceof TrashMovingError ||
+    error instanceof TrashRestorePartialError ||
+    error instanceof TrashTraversalChangedError
+  )
+    return error.message;
+  if (error instanceof DriveError) {
+    switch (error.kind) {
+      case "missing-validator":
+        return unconfirmedIdentityMessage;
+      case "conflict":
+        return error.status === 412
+          ? "This item changed. Refresh and try again."
+          : "An item with that name already exists";
+      case "forbidden":
+        return "You don't have permission to do that";
+      case "not-found":
+        return "That item no longer exists";
+      case "unauthenticated":
+        return "Sign in again to continue";
+      default:
+        return fallback;
+    }
+  }
+  return fallback;
+}
+
+/** The Drive URL that opens `item`: folders navigate, files preview. */
+export function hrefFor(item: Pick<DriveItem, "url" | "kind">): string {
+  return item.kind === "folder"
+    ? `/drive/f/${encodeRef(item.url)}`
+    : `/drive/p/${encodeRef(item.url)}`;
+}
+
+/** Follow stars to an item's new URL, including the descendants of a moved folder. */
+export function repointStarred(
+  starred: readonly string[],
+  moves: readonly { from: string; to: string }[],
+): string[] {
+  const repointed = starred.map((entry) => {
+    for (const { from, to } of moves) {
+      if (entry === from) return to;
+      if (from.endsWith("/") && to.endsWith("/") && entry.startsWith(from))
+        return to + entry.slice(from.length);
+    }
+    return entry;
+  });
+  // A stale star (for example on a trashed item) may already name the destination.
+  return [...new Set(repointed)];
+}
+
+function folderLabel(url: string, driveRoot: string | undefined): string {
+  return url === driveRoot ? "My Drive" : nameOf(url);
+}
+
+/** Record actual endpoints; refresh after the whole operation, including index writes. */
+async function refreshAfter<T>(
+  client: DriveClient,
+  invalidate: (url: string) => void,
+  urls: Iterable<string>,
+  operation: (client: DriveClient) => Promise<T>,
+  onSuccess?: (result: T) => void,
+): Promise<T> {
+  const touched = new Set(urls);
+  const tracked: DriveClient = {
+    ...client,
+    copy(from, to, policy, options) {
+      touched.add(from);
+      touched.add(to);
+      return client.copy.call(this, from, to, policy, options);
+    },
+    move(from, to, policy, options) {
+      touched.add(from);
+      touched.add(to);
+      return client.move.call(this, from, to, policy, options);
+    },
+    mergeContainer(from, to, policy, options) {
+      touched.add(from);
+      touched.add(to);
+      return client.mergeContainer.call(this, from, to, policy, options);
+    },
+    remove(url, options) {
+      touched.add(url);
+      return client.remove.call(this, url, options);
+    },
+  };
+  try {
+    const result = await operation(tracked);
+    onSuccess?.(result);
+    return result;
+  } finally {
+    for (const url of touched) invalidate(url);
+  }
+}
+
+export function useDriveActions() {
+  const { openDialog, setDetailsItems } = useDriveUi();
+  const retargetDetails = useCallback(
+    (moves: readonly { from: string; to: string }[]) => {
+      setDetailsItems((current) => {
+        const next = current.map((item) => {
+          const move = moves.find(
+            ({ from, to }) =>
+              from !== to &&
+              (item.url === from || (from.endsWith("/") && item.url.startsWith(from))),
+          );
+          if (!move) return item;
+          const url = `${move.to}${item.url.slice(move.from.length)}`;
+          // The old validator belongs to the removed source. The listing/live
+          // metadata stream will hydrate the destination's own write receipt.
+          const { etag: _etag, verifyHeaders: _discovery, ...metadata } = item;
+          return { ...metadata, url, name: nameOf(url) };
+        });
+        return next.every((item, index) => item === current[index]) ? current : next;
+      });
+    },
+    [setDetailsItems],
+  );
+  const { client, driveRoot, session, updatePrefs, prefs, invalidate } = useDrive();
+  const router = useRouter();
+
+  const starred = useMemo(() => new Set(prefs.starred), [prefs.starred]);
+
+  const open = useCallback(
+    (item: DriveItem, siblings?: readonly DriveItem[], setPreview?: DriveUiValue["setPreview"]) => {
+      if (item.kind === "folder") {
+        router.push(hrefFor(item));
+        return;
+      }
+      if (setPreview) {
+        const files = (siblings ?? [item]).filter((entry) => entry.kind === "file");
+        setPreview({
+          activationId: crypto.randomUUID(),
+          items: files,
+          index: Math.max(
+            0,
+            files.findIndex((f) => f.url === item.url),
+          ),
+        });
+      } else router.push(hrefFor(item));
+    },
+    [router],
+  );
+
+  const download = useCallback(
+    async (item: DriveItem) => {
+      try {
+        const blob = await client.read(item.url);
+        const href = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = href;
+        anchor.download = item.name;
+        anchor.click();
+        setTimeout(() => URL.revokeObjectURL(href), 1000);
+      } catch (error) {
+        toast.error(errorMessage(error, "Download failed"));
+      }
+    },
+    [client],
+  );
+
+  const copyLink = useCallback(
+    async (item: DriveItem) => {
+      const link = `${location.origin}${hrefFor(item)}`;
+      try {
+        await navigator.clipboard.writeText(link);
+        const access = await accessControl(session.fetch, session.storageUrl).effective(item.url);
+        toast("Link copied", { description: accessLabel(access, item.url, session.webId) });
+      } catch {
+        toast.error("Couldn't copy the link");
+      }
+    },
+    [session],
+  );
+
+  const toggleStar = useCallback(
+    (items: readonly DriveItem[]) => {
+      const allStarred = items.every((item) => starred.has(item.url));
+      updatePrefs((current) => {
+        const next = new Set(current.starred);
+        for (const item of items) {
+          if (allStarred) next.delete(item.url);
+          else next.add(item.url);
+        }
+        return { ...current, starred: [...next] };
+      });
+      const [first] = items;
+      if (allStarred) toast("Removed star");
+      else
+        toast(
+          items.length === 1 && first ? `Starred ${first.name}` : `Starred ${items.length} items`,
+        );
+    },
+    [starred, updatePrefs],
+  );
+
+  const move = useCallback(
+    async (items: readonly DriveItem[], target: string, { undoable = true } = {}) => {
+      if (
+        !isOwnStorage(target, session.storageUrl) ||
+        items.some((item) => !isOwnStorage(item.url, session.storageUrl))
+      )
+        return;
+      const pending = toast.loading(
+        items.length === 1 ? `Moving ${items[0]?.name}…` : `Moving ${items.length} items…`,
+      );
+      const urls = items.map((item) => item.url);
+      const result = await refreshAfter(
+        client,
+        invalidate,
+        [
+          ...urls,
+          ...items.map((item) => childUrl(target, nameOf(item.url), item.kind === "folder")),
+        ],
+        (tracked) => moveItems(tracked, items, target),
+        (result) => retargetDetails(result.done),
+      );
+      toast.dismiss(pending);
+      // A star follows the item; leaving it on the old URL would star a replacement.
+      updatePrefs((current) => ({
+        ...current,
+        starred: repointStarred(current.starred, result.done),
+      }));
+      if (result.failed.length > 0) {
+        if (result.done.length > 0)
+          toast.error(`Moved ${result.done.length} of ${items.length} items`);
+        for (const { error } of result.failed)
+          reportFailure(error, "Couldn't move", client, invalidate);
+      }
+      if (result.done.length === 0) return result;
+      // An unreadable/absent validator makes Undo fail closed for that item.
+      const undo = result.done;
+      const canUndo =
+        undoable &&
+        undo.every(
+          ({ identity }) =>
+            identity.etag &&
+            !identity.etag.startsWith("W/") &&
+            (!identity.url.endsWith("/") || identity.tree !== undefined),
+        );
+      const label = folderLabel(target, driveRoot);
+      const first = result.done[0];
+      const message =
+        result.done.length === 1 && first
+          ? `Moved ${nameOf(first.from)} to ${label}`
+          : `Moved ${result.done.length} items to ${label}`;
+      toast.success(message, {
+        ...(canUndo
+          ? {
+              action: {
+                label: "Undo",
+                onClick: async () => {
+                  const failed: string[] = [];
+                  let accessError: DriveAccessError | undefined;
+                  const restored: { from: string; to: string }[] = [];
+                  for (const { from, to, identity } of undo) {
+                    try {
+                      if (!identity?.etag) throw new Error("No validator for Undo");
+                      await moveWithValidator(
+                        {
+                          storageUrl: session.storageUrl,
+                          fetch: session.fetch,
+                          webId: session.webId,
+                          onProtectionChange: invalidate,
+                          onPrivateFolder: (url) =>
+                            toast(`${nameOf(url)} was restored as private`, {
+                              description:
+                                "Its original access was unknown. Only you can access this folder and new files in it.",
+                            }),
+                          ...(client.confirmAccess ? { confirmAccess: client.confirmAccess } : {}),
+                        },
+                        to,
+                        from,
+                        identity.etag,
+                        identity.tree,
+                        identity.verifyHeaders,
+                      );
+                      restored.push({ from: to, to: from });
+                      retargetDetails([{ from: to, to: from }]);
+                    } catch (error) {
+                      if (error instanceof DriveAccessError) accessError = error;
+                      if (recoveryLocations(error).length)
+                        reportFailure(error, "Couldn't undo move", client, invalidate);
+                      failed.push(nameOf(from));
+                    } finally {
+                      invalidate(to);
+                      invalidate(from);
+                    }
+                  }
+                  if (restored.length > 0)
+                    updatePrefs((current) => ({
+                      ...current,
+                      starred: repointStarred(current.starred, restored),
+                    }));
+                  if (failed.length > 0)
+                    toast.error(
+                      accessError
+                        ? accessError.message
+                        : `This move cannot be safely undone: ${failed.join(", ")}`,
+                    );
+                },
+              },
+            }
+          : {}),
+      });
+      return result;
+    },
+    [client, driveRoot, invalidate, session, updatePrefs, retargetDetails],
+  );
+
+  const rename = useCallback(
+    async (item: DriveItem, name: string) => {
+      if (!isOwnStorage(item.url, session.storageUrl)) return;
+      try {
+        const url = await refreshAfter(
+          client,
+          invalidate,
+          [item.url],
+          (tracked) => renameItem(tracked, item, name),
+          (url) => retargetDetails([{ from: item.url, to: url }]),
+        );
+        if (url !== item.url) {
+          updatePrefs((current) => ({
+            ...current,
+            starred: repointStarred(current.starred, [{ from: item.url, to: url }]),
+          }));
+          toast.success(`Renamed to ${nameOf(url)}`);
+        }
+        return url;
+      } catch (error) {
+        reportFailure(error, "Couldn't rename", client, invalidate);
+        return undefined;
+      }
+    },
+    [client, invalidate, updatePrefs, session.storageUrl, retargetDetails],
+  );
+
+  const makeCopy = useCallback(
+    async (item: DriveItem) => {
+      if (!isOwnStorage(item.url, session.storageUrl)) return;
+      try {
+        const url = await refreshAfter(client, invalidate, [item.url], (tracked) =>
+          copyItem(tracked, item),
+        );
+        toast.success(`Created ${nameOf(url)}`);
+        return url;
+      } catch (error) {
+        reportFailure(error, "Couldn't make a copy", client, invalidate);
+        return undefined;
+      }
+    },
+    [client, invalidate, session.storageUrl],
+  );
+
+  const newFolder = useCallback(
+    async (parent: string, name: string) => {
+      if (!isOwnStorage(parent, session.storageUrl)) return;
+      try {
+        const url = await createFolder(client, parent, name);
+        invalidate(url);
+        toast.success(`Created ${nameOf(url)}`);
+        return url;
+      } catch (error) {
+        reportFailure(error, "Couldn't create the folder", client, invalidate);
+        return undefined;
+      }
+    },
+    [client, invalidate, session.storageUrl],
+  );
+
+  const restore = useCallback(
+    async (entries: readonly TrashEntry[]) => {
+      if (!driveRoot) return;
+      try {
+        const result = await refreshAfter(
+          client,
+          invalidate,
+          entries.flatMap((entry) => [entry.url, entry.original]),
+          (tracked) => restoreItems(tracked, driveRoot, entries),
+          (result) =>
+            retargetDetails(result.done.map(({ entry, url }) => ({ from: entry.url, to: url }))),
+        );
+        for (const warning of result.warnings ?? [])
+          toast.error(errorMessage(warning, warning.message));
+        const first = result.done[0];
+        for (const { error } of result.failed)
+          reportFailure(error, "Couldn't restore", client, invalidate);
+        if (first && result.done.length === 1) {
+          toast.success(
+            first.renamed ? `Restored as ${nameOf(first.url)}` : `Restored ${first.entry.name}`,
+          );
+        } else if (result.done.length > 1) toast.success(`Restored ${result.done.length} items`);
+        return result;
+      } catch (error) {
+        reportFailure(error, "Couldn't restore", client, invalidate);
+        return undefined;
+      }
+    },
+    [client, driveRoot, invalidate, retargetDetails],
+  );
+
+  const trash = useCallback(
+    async (items: readonly DriveItem[]) => {
+      if (
+        !driveRoot ||
+        items.length === 0 ||
+        items.some((item) => !isOwnStorage(item.url, session.storageUrl))
+      )
+        return;
+      try {
+        items = await Promise.all(
+          items.map(async (item) =>
+            item.etag !== undefined ? item : { ...item, ...(await client.stat(item.url)) },
+          ),
+        );
+        const result = await refreshAfter(
+          client,
+          invalidate,
+          [...items.map((item) => item.url), trashFolderOf(driveRoot)],
+          (tracked) => trashItems(tracked, driveRoot, items, { webId: session.webId }),
+        );
+        for (const warning of result.warnings ?? [])
+          toast.error(errorMessage(warning, warning.message));
+        for (const { url, error: failure } of result.failed) {
+          if (failure instanceof DriveAccessError && !deletionPending(failure)) {
+            toast.error(errorMessage(failure), {
+              action: {
+                label: "Delete forever",
+                onClick: () =>
+                  openDialog({
+                    kind: "delete-source",
+                    items: items.filter((item) => item.url === url),
+                  }),
+              },
+            });
+          } else reportFailure(failure, "Couldn't move to trash", client, invalidate);
+        }
+        const first = result.done[0];
+        if (!first) return;
+        toast(
+          result.done.length === 1
+            ? `Moved ${first.name} to trash`
+            : `Moved ${result.done.length} items to trash`,
+          {
+            duration: 8000,
+            ...(!result.warnings?.length
+              ? { action: { label: "Undo", onClick: () => void restore(result.done) } }
+              : {}),
+          },
+        );
+      } catch (error) {
+        toast.error(errorMessage(error, "Couldn't move to trash"));
+      }
+    },
+    [client, driveRoot, invalidate, restore, session.webId, session.storageUrl, openDialog],
+  );
+
+  const removeForever = useCallback(
+    async (entries: readonly TrashEntry[]) => {
+      if (!driveRoot) return;
+      const result = await refreshAfter(
+        client,
+        invalidate,
+        entries.map((entry) => entry.url),
+        (tracked) => deleteForever(tracked, driveRoot, entries),
+      );
+      for (const warning of result.warnings ?? [])
+        toast.error(errorMessage(warning, warning.message));
+      if (result.done.length) {
+        const absent = await confirmedAbsent(
+          client,
+          result.done.flatMap((entry) => [entry.original, entry.url]),
+        );
+        updatePrefs((prefs) => pruneDeleted(prefs, absent));
+      }
+      for (const { error } of result.failed)
+        reportFailure(error, "Couldn't delete", client, invalidate);
+      if (result.done.length > 0) toast.success("Deleted for ever");
+      return result;
+    },
+    [client, driveRoot, invalidate, updatePrefs],
+  );
+
+  const removeSourcesForever = useCallback(
+    async (items: readonly DriveItem[]) => {
+      if (items.some((item) => !isOwnStorage(item.url, session.storageUrl))) return;
+      const done: DriveItem[] = [];
+      for (const item of items) {
+        try {
+          if (!item.etag || item.etag.startsWith("W/"))
+            throw new Error(
+              "This item has no confirmed version. Refresh and confirm deletion again.",
+            );
+          await client.remove(item.url, {
+            recursive: item.kind === "folder",
+            ifMatch: item.etag,
+            ...(item.verifyHeaders ? { verifyHeaders: item.verifyHeaders } : {}),
+          });
+          done.push(item);
+        } catch (error) {
+          reportFailure(error, "Couldn't delete", client, invalidate);
+        } finally {
+          invalidate(item.url);
+        }
+      }
+      if (done.length) {
+        const absent = await confirmedAbsent(
+          client,
+          done.map(({ url }) => url),
+        );
+        updatePrefs((prefs) => pruneDeleted(prefs, absent));
+        toast.success("Deleted for ever");
+      }
+      return { done };
+    },
+    [client, invalidate, session.storageUrl, updatePrefs],
+  );
+
+  return {
+    starred,
+    open,
+    download,
+    copyLink,
+    toggleStar,
+    move,
+    rename,
+    makeCopy,
+    newFolder,
+    trash,
+    restore,
+    removeForever,
+    removeSourcesForever,
+  };
+}
+
+export type DriveActions = ReturnType<typeof useDriveActions>;
+
+/** A deleted recovery copy says nothing about the resource at its original URL. */
+async function confirmedAbsent(client: DriveClient, urls: readonly string[]): Promise<string[]> {
+  const absent = await Promise.all(
+    urls.map(async (url) => {
+      try {
+        await client.stat(url);
+        return [];
+      } catch (error) {
+        // Unreadable resources and failed reads keep all of their preferences.
+        return isMissingItem(error) ? [url] : [];
+      }
+    }),
+  );
+  return absent.flat();
+}

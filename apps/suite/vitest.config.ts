@@ -5,6 +5,7 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["test/**/*.test.ts"],
+    setupFiles: ["test/drive-locks.setup.ts"],
     // CI safety net: budget tests run slowly under v8 coverage on shared runners (SUITE-T2 bounds them properly).
     testTimeout: 30_000,
     coverage: {
@@ -93,6 +94,11 @@ export default defineConfig({
         "src/apps/drive/lib/activity/**/*.ts",
         "src/apps/drive/lib/model/**/*.ts",
         "src/apps/mail/lib/threading/**/*.ts",
+        "src/lib/demo-pod/{pod,seed,binaries}.ts",
+        "src/lib/refs.ts",
+        "src/apps/drive/lib/client/**/*.ts",
+        "src/apps/drive/lib/operations/**/*.ts",
+        "src/apps/drive/lib/view/**/*.ts",
         "src/apps/mail/lib/address/**/*.ts",
       ],
       reporter: ["text", "json-summary"],
