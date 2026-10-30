@@ -27,6 +27,7 @@ import { copyDocument } from "../editor/copy";
 import { downloadDocument } from "../editor/export-document";
 import { editorExtensions } from "../editor/extensions";
 import { focusDocument } from "../editor/focus";
+import { imageTransferFile } from "../editor/image-transfer";
 import { convertImport, uploadImportImage } from "../editor/import-document";
 import type { DocumentPersistence } from "../editor/persistence";
 import { printDocument } from "../editor/print-document";
@@ -170,17 +171,16 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
         },
         handlePaste: (_view, event) => {
           userEdited.current = true;
-          const file = [...(event.clipboardData?.files ?? [])].find((file) =>
-            file.type.startsWith("image/"),
-          );
+          const file = imageTransferFile(event.clipboardData);
           if (!file) return false;
           event.preventDefault();
           handlers.current.image(file);
           return true;
         },
         handleDrop: (_view, event, _slice, moved) => {
-          const file = event.dataTransfer?.files[0];
-          if (moved || !file) return false;
+          if (moved) return false;
+          const file = imageTransferFile(event.dataTransfer);
+          if (!file) return false;
           event.preventDefault();
           handlers.current.image(file);
           return true;

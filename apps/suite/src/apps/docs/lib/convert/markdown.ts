@@ -536,7 +536,7 @@ function listItemSource(raw: string): { text: string; indent: number } {
 // JavaScript's multiline ^ also matches Unicode line/paragraph separators.
 // CommonMark container prefixes begin only at the start of input or after LF.
 const quotePrefix = /(?<=^|\n) {0,3}>[ \t]?/g;
-const taskMarker = /^\[[ xX]\](?:[ \t]|$)/;
+const taskMarker = /^\[[ xX]\](?:[ \t\n]|$)/;
 
 /** Lazy continuation is legal only at the innermost open paragraph. */
 function openParagraph(tokens: MarkdownToken[]): boolean {

@@ -21,7 +21,6 @@ import {
   WidthType,
 } from "docx";
 import { validLink } from "../editor/logic";
-import { embedDocument } from "./docx-payload";
 
 export interface ExportImage {
   data: Uint8Array<ArrayBuffer>;
@@ -308,6 +307,7 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
       ),
     );
   }
-  await embedDocument(document, json);
+  // Keep content solely in native Word parts. A custom-property JSON snapshot
+  // survives deletions in external editors and leaks the deleted content.
   return document;
 }

@@ -17,6 +17,7 @@ import { importHtml, normaliseImport } from "../src/apps/docs/lib/convert/schema
 import { normaliseDestination } from "../src/apps/docs/lib/editor/destination";
 import { validLink } from "../src/apps/docs/lib/editor/logic";
 import type { PodSession } from "../src/lib/session/pod-session";
+import { legacyDocx } from "./helpers/docs-legacy-docx";
 
 const raw = "https://files.example.org/terms/signed contract.pdf";
 const encoded = "https://files.example.org/terms/signed%20contract.pdf";
@@ -184,7 +185,7 @@ it.each([
   json.content?.push({ type: "image", attrs: { src: "https://pod.test/original.png" } });
   const archive = await openArrayBuffer(
     await Packer.toArrayBuffer(
-      await toDocx(json, async () => ({
+      await (embedded ? legacyDocx : toDocx)(json, async () => ({
         data: new Uint8Array([1]),
         type: "png",
         width: 1,
@@ -216,8 +217,8 @@ it.each([
   );
 });
 
-it("round29 embedded DOCX drops invalid links with a warning and keeps the text", async () => {
-  const data = await Packer.toArrayBuffer(await toDocx(linked("javascript:alert(1)"), vi.fn()));
+it("round29 legacy embedded DOCX drops invalid links with a warning and keeps the text", async () => {
+  const data = await Packer.toArrayBuffer(await legacyDocx(linked("javascript:alert(1)"), vi.fn()));
   const result = await importDocx(data, { uploadImage: vi.fn(), progress: vi.fn() });
   expect(result.json?.content?.[0]?.content).toEqual([{ type: "text", text: "signed contract" }]);
   expect(result.skipped).toEqual([{ label: "Unsafe URLs", count: 1 }]);
@@ -289,7 +290,7 @@ it("round29 every stored href from Markdown, HTML, payload and both DOCX paths p
           progress: vi.fn(),
         });
         const embedded = await importDocx(
-          await Packer.toArrayBuffer(await toDocx(linked(href), vi.fn())),
+          await Packer.toArrayBuffer(await legacyDocx(linked(href), vi.fn())),
           { uploadImage: vi.fn(), progress: vi.fn() },
         );
         const results = [

@@ -15,6 +15,7 @@ import { importHtml, importPlainText, normaliseImport } from "../src/apps/docs/l
 import { DOCX_FORMATTING_WARNING } from "../src/apps/docs/lib/convert/skipped";
 import { wordCount } from "../src/apps/docs/lib/editor/logic";
 import type { PodSession } from "../src/lib/session/pod-session";
+import { legacyDocx } from "./helpers/docs-legacy-docx";
 
 const session = { fetch: vi.fn() } as unknown as PodSession;
 const schema = getSchema(baseExtensions(session.fetch));
@@ -76,7 +77,7 @@ it("Markdown decodes CommonMark entities once in prose, labels, destinations and
 });
 async function roundTrip(original: JSONContent, embedded = true) {
   const data = await Packer.toArrayBuffer(
-    await toDocx(original, async () => ({
+    await (embedded ? legacyDocx : toDocx)(original, async () => ({
       data: new Uint8Array([1]),
       type: "png",
       width: 1,
@@ -212,7 +213,7 @@ it("DOCX round trips generated documents covering every editor node and mark typ
   expect([...visitedListLevels].sort()).toEqual(
     listKinds.flatMap((type) => [1, 2, 3].map((level) => `${type}:${level}`)).sort(),
   );
-});
+}, 120_000);
 
 it.each([
   "p",

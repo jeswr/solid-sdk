@@ -144,6 +144,80 @@ async function mountEditor(
   };
 }
 
+it.each(
+  ["paste", "drop"].flatMap((path) => ["html", "plain"].map((format) => ({ path, format }))),
+)("round50 $path $format takes precedence over its PNG fallback", async ({ path, format }) => {
+  const view = await mountEditor();
+  try {
+    Object.defineProperty(document, "elementFromPoint", {
+      configurable: true,
+      value: () => view.body,
+    });
+    const event = new MouseEvent(path, { bubbles: true, cancelable: true });
+    const html = '<p>First paragraph</p><p><a href="https://example.org/guide">Guide</a></p>';
+    const plain = "First paragraph\nGuide";
+    Object.defineProperty(event, path === "paste" ? "clipboardData" : "dataTransfer", {
+      value: {
+        files: [new File(["png fallback"], "fallback.png", { type: "image/png" })],
+        types: ["Files", "text/plain", ...(format === "html" ? ["text/html"] : [])],
+        getData: (type: string) =>
+          type === "text/html"
+            ? format === "html"
+              ? html
+              : ""
+            : type === "text/plain"
+              ? plain
+              : "",
+      },
+    });
+    await act(async () => view.body.dispatchEvent(event));
+    expect(view.body.textContent).toBe("First paragraphGuide");
+    expect(
+      [...view.body.querySelectorAll("p")]
+        .map((paragraph) => paragraph.textContent)
+        .filter(Boolean),
+    ).toEqual(["First paragraph", "Guide"]);
+    if (format === "html")
+      expect(view.body.querySelector("a")?.getAttribute("href")).toBe("https://example.org/guide");
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(mocks.runtime?.change).toHaveBeenCalled();
+  } finally {
+    await view.close();
+  }
+});
+
+it.each([
+  "paste",
+  "drop",
+])("round50 %s still offers image insertion for image-only transfers", async (path) => {
+  const view = await mountEditor();
+  try {
+    Object.defineProperty(document, "elementFromPoint", {
+      configurable: true,
+      value: () => view.body,
+    });
+    const event = new MouseEvent(path, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, path === "paste" ? "clipboardData" : "dataTransfer", {
+      value: {
+        files: [
+          new File(["ignored"], "notes.txt", { type: "text/plain" }),
+          new File(["png"], "image.png", { type: "image/png" }),
+        ],
+        types: ["Files"],
+        getData: () => "",
+      },
+    });
+    await act(async () => view.body.dispatchEvent(event));
+    expect(event.defaultPrevented).toBe(true);
+    expect(document.querySelector('[aria-label="Image alt text"]')?.textContent).toContain(
+      "Insert image",
+    );
+    expect(view.body.textContent).toBe("");
+  } finally {
+    await view.close();
+  }
+});
+
 it("round45 view-only document bodies are keyboard focusable for outline navigation and Find", async () => {
   const view = await mountEditor(
     {

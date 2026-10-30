@@ -2,11 +2,13 @@
 // AUTHORED-BY Codex
 import { TooltipProvider } from "@jeswr/suite-ui";
 import { Editor } from "@tiptap/react";
+import { yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
 import { act, createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { FindBar } from "../src/apps/docs/components/find-bar";
-import { baseExtensions } from "../src/apps/docs/editor/extensions";
+import { baseExtensions, editorExtensions } from "../src/apps/docs/editor/extensions";
 import { findKey } from "../src/apps/docs/editor/find-plugin";
 
 beforeEach(() => {
@@ -25,16 +27,24 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-async function fixture(editable = true) {
+async function fixture(
+  editable = true,
+  content = `<p>${"Earlier paragraph. ".repeat(200)}</p><p>Needle needle</p>`,
+  doc?: Doc,
+) {
   const host = document.createElement("div");
   const element = document.createElement("div");
   document.body.append(host, element);
   const editor = new Editor({
     element,
-    extensions: baseExtensions(vi.fn()),
-    content: `<p>${"Earlier paragraph. ".repeat(200)}</p><p>Needle needle</p>`,
+    extensions: doc ? editorExtensions(doc, vi.fn()) : baseExtensions(vi.fn()),
+    content: doc ? "" : content,
     editable,
   });
+  if (doc) {
+    editor.commands.setContent(content);
+    editor.commands.setTextSelection(1);
+  }
   const root = createRoot(host);
   const scroll = vi.fn(() => true);
   editor.on("transaction", ({ transaction }) => {
@@ -112,7 +122,81 @@ it.each([
   }
 });
 
-it("round49 Find keeps query, case, navigation and document revisions on the selected match", async () => {
+it.each([
+  {
+    content: "<p>Original</p><p>Needle remains</p>",
+    query: "Needle",
+    expected: "HiOriginalNeedle remains",
+  },
+  { content: "<p>Start cat end</p>", query: "cat", expected: "HiStart cat end" },
+])("round50 Find preserves the typing caret when $query moves after an edit", async ({
+  content,
+  query,
+  expected,
+}) => {
+  const doc = new Doc();
+  const replayed = new Doc();
+  const view = await fixture(true, content, doc);
+  try {
+    await view.query(query);
+    await act(async () => view.editor.commands.setTextSelection(1));
+    view.scroll.mockClear();
+    for (const character of "Hi") {
+      await act(async () => view.editor.commands.insertContent(character));
+      await view.refresh();
+    }
+    expect(view.editor.state.doc.textContent).toBe(expected);
+    expect(view.editor.state.selection.from).toBe(3);
+    expect(view.editor.state.selection.empty).toBe(true);
+    expect(view.host.querySelector('[role="status"]')?.textContent).toBe("1 of 1");
+    expect(view.editor.view.dom.querySelector(".docs-find-active")?.textContent).toBe(query);
+    expect(view.scroll).not.toHaveBeenCalled();
+    applyUpdate(replayed, encodeStateAsUpdate(doc));
+    expect(view.editor.schema.nodeFromJSON(yDocToProsemirrorJSON(replayed)).toJSON()).toEqual(
+      view.editor.getJSON(),
+    );
+    const snapshot = new Editor({
+      extensions: baseExtensions(vi.fn()),
+      content: view.editor.getHTML(),
+    });
+    try {
+      expect(snapshot.state.doc.textContent).toBe(expected);
+    } finally {
+      snapshot.destroy();
+    }
+  } finally {
+    await view.destroy();
+    doc.destroy();
+    replayed.destroy();
+  }
+});
+
+it("round50 Find never selects matches created by edits or a clamped active index", async () => {
+  const view = await fixture(true, "<p>cat cat</p>");
+  try {
+    await view.query("cat");
+    await act(async () =>
+      view.host.querySelector<HTMLButtonElement>('button[aria-label="Next match"]')?.click(),
+    );
+    await act(async () => view.editor.commands.insertContent("dog"));
+    const caret = view.editor.state.selection;
+    await view.refresh();
+    expect(view.editor.state.selection.eq(caret)).toBe(true);
+    expect(view.host.querySelector('[role="status"]')?.textContent).toBe("1 of 1");
+    expect(view.editor.view.dom.querySelector(".docs-find-active")?.textContent).toBe("cat");
+    await view.query("missing");
+    await act(async () => view.editor.commands.insertContent("missing"));
+    const newCaret = view.editor.state.selection;
+    await view.refresh();
+    expect(view.editor.state.selection.eq(newCaret)).toBe(true);
+    expect(newCaret.empty).toBe(true);
+    expect(view.editor.view.dom.querySelector(".docs-find-active")?.textContent).toBe("missing");
+  } finally {
+    await view.destroy();
+  }
+});
+
+it("round49 Find selects for query, case and navigation while revisions only refresh highlights", async () => {
   const view = await fixture();
   try {
     const { editor, host, scroll } = view;
@@ -134,8 +218,8 @@ it("round49 Find keeps query, case, navigation and document revisions on the sel
     expect(scroll).not.toHaveBeenCalled();
     await act(async () => editor.commands.insertContentAt(1, "More "));
     await view.refresh();
-    expect(editor.state.selection.from).toBe(first + 12);
-    expect(scroll).toHaveBeenCalled();
+    expect(editor.state.selection.from).toBe(6);
+    expect(scroll).not.toHaveBeenCalled();
     await view.query("missing");
     const unmatched = editor.state.selection;
     expect(host.querySelector('[role="status"]')?.textContent).toBe("0 of 0");

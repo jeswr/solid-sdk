@@ -41,11 +41,13 @@ export function FindBar({
       editor.state.tr.setMeta(findKey, { query, caseSensitive: matchCase, active: selected }),
     );
   }, [editor, query, matchCase, selected, revision]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: searches and repeated navigation must reveal even an unchanged range
+  // Only an explicit search or navigation may move the caret. Document edits
+  // refresh matches/decorations above without redirecting subsequent typing.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: match positions alone must never select text
   useEffect(() => {
     if (from !== undefined && to !== undefined)
       editor.chain().setTextSelection({ from, to }).scrollIntoView().run();
-  }, [editor, query, matchCase, active, from, to]);
+  }, [editor, query, matchCase, active]);
   useEffect(
     () => () => {
       if (!editor.isDestroyed)

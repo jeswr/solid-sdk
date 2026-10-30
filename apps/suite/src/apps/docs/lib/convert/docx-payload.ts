@@ -1,7 +1,6 @@
 // AUTHORED-BY Codex
 import type { JSONContent } from "@tiptap/react";
-import { type Document, Packer } from "docx";
-import { openArrayBuffer } from "mammoth/lib/zipfile";
+import type { openArrayBuffer } from "mammoth/lib/zipfile";
 import { descendants, readXml, type XmlElement } from "./docx-xml";
 import { importSchema, normaliseDestinations, normaliseImport } from "./schema";
 import type { SkippedItem } from "./skipped";
@@ -118,22 +117,8 @@ function validated(json: JSONContent) {
   return { json: normalised.json, skipped };
 }
 
-export async function embedDocument(document: Document, json: JSONContent) {
-  const archive = await openArrayBuffer(await Packer.toArrayBuffer(document));
-  document.CustomProperties.addCustomProperty({
-    name: PAYLOAD_PROPERTY,
-    value: JSON.stringify({
-      version: 1,
-      ...(await fingerprints(archive)),
-      // Both traversals follow document order. A failed export leaves fewer media entries,
-      // forcing a warned mapped import instead of reviving an unavailable source URL.
-      images: (await packageImages(archive)).map((image) => image.path),
-      json,
-    }),
-  });
-}
-
-/** Missing, damaged, stale or incompatible payloads always fall back to visible DOCX content. */
+/** Read legacy exports only. New exports never embed a second copy of document content.
+ * Missing, damaged, stale or incompatible payloads fall back to visible DOCX content. */
 export async function embeddedDocument(archive: Archive): Promise<EmbeddedDocument | undefined> {
   if (!archive.exists("docProps/custom.xml")) return undefined;
   try {

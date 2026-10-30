@@ -83,7 +83,9 @@ async function expectDocxReplacement(content: JSONContent[]) {
     vi.fn(),
     vi.fn(),
   );
-  expect(converted.skipped).toEqual([]);
+  expect(converted.skipped).toEqual([
+    { label: "Some formatting may differ from the original", count: 1 },
+  ]);
   expect(converted.json).toEqual(original);
   replace(runtime, converted.json, converted.html);
   await runtime.flush();
@@ -177,7 +179,9 @@ it.each([
     vi.fn(),
   );
   expect(converted.json).toEqual(original);
-  expect(converted.skipped).toEqual([]);
+  expect(converted.skipped).toEqual([
+    { label: "Some formatting may differ from the original", count: 1 },
+  ]);
   const archive = await openArrayBuffer(data);
   const xml = await archive.read("word/document.xml", "utf-8");
   expect(xml).toContain('<w:pStyle w:val="Code"');

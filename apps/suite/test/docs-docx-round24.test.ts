@@ -15,7 +15,6 @@ import {
 } from "../src/apps/docs/editor/import-document";
 import { deleteDocument } from "../src/apps/docs/editor/operations";
 import { DocumentPersistence } from "../src/apps/docs/editor/persistence";
-import { toDocx } from "../src/apps/docs/lib/convert/docx-export";
 import { importDocx } from "../src/apps/docs/lib/convert/docx-import";
 import { embeddedDocument } from "../src/apps/docs/lib/convert/docx-payload";
 import { normaliseImport } from "../src/apps/docs/lib/convert/schema";
@@ -23,6 +22,7 @@ import { createDocsStore, docContainerUrls } from "../src/apps/docs/lib/model";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_NAME, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 import type { PodSession } from "../src/lib/session/pod-session";
+import { legacyDocx } from "./helpers/docs-legacy-docx";
 
 const { IDBFactory, IDBKeyRange: KeyRange } = createRequire(
   `${process.cwd()}/../../packages/solid-offline/package.json`,
@@ -78,7 +78,7 @@ async function fixture() {
   const snapshot = { body: generateHTML(json, baseExtensions(session.fetch)), format: "text/html" };
   await store.save(original, snapshot, { regenerate: () => snapshot });
   const data = await Packer.toArrayBuffer(
-    await toDocx(json, async (url) => ({
+    await legacyDocx(json, async (url) => ({
       data: new Uint8Array(await (await session.fetch(url)).arrayBuffer()),
       type: "png",
       width: 1,
@@ -241,7 +241,7 @@ it("round24 warns instead of restoring an image that could not be packaged durin
     content: [{ type: "image", attrs: { src: "https://pod.test/gone.png", alt: "Missing" } }],
   }).json;
   const data = await Packer.toArrayBuffer(
-    await toDocx(json, async () => {
+    await legacyDocx(json, async () => {
       throw new Error("Original asset is missing");
     }),
   );
@@ -323,7 +323,7 @@ it("round24 maps repeated and nested images by package order and preserves canon
   let exported = 0;
   const archive = await openArrayBuffer(
     await Packer.toArrayBuffer(
-      await toDocx(original, async () => {
+      await legacyDocx(original, async () => {
         const index = exported++;
         return {
           data: data[index] as Uint8Array<ArrayBuffer>,

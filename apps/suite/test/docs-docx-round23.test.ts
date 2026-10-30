@@ -13,6 +13,7 @@ import { embeddedDocument } from "../src/apps/docs/lib/convert/docx-payload";
 import { importMarkdown } from "../src/apps/docs/lib/convert/markdown";
 import { normaliseImport } from "../src/apps/docs/lib/convert/schema";
 import type { PodSession } from "../src/lib/session/pod-session";
+import { legacyDocx } from "./helpers/docs-legacy-docx";
 
 const session = { fetch: vi.fn() } as unknown as PodSession;
 const warning = { label: "Some formatting may differ from the original", count: 1 };
@@ -38,7 +39,7 @@ const checklist = importMarkdown(
 const numbered = importMarkdown("7. Seven\n8. Eight\n\nSee step 8 above.", "steps.md").json;
 
 async function exported(json: JSONContent, embedded = true) {
-  const data = await Packer.toArrayBuffer(await toDocx(json, vi.fn()));
+  const data = await Packer.toArrayBuffer(await (embedded ? legacyDocx : toDocx)(json, vi.fn()));
   const zip = await openArrayBuffer(data);
   if (!embedded)
     zip.write(
@@ -255,7 +256,7 @@ it.each([
     content: [{ type: "image", attrs: { src: "https://pod.test/image.png", alt: "Original" } }],
   }).json;
   const data = await Packer.toArrayBuffer(
-    await toDocx(original, async () => ({
+    await legacyDocx(original, async () => ({
       data: new Uint8Array([1, 2, 3]),
       type: "png",
       width: 1,
