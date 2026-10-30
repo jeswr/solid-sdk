@@ -90,6 +90,24 @@ function button(label: string, scope: ParentNode = document) {
 function rows(host: Element) {
   return [...host.querySelectorAll<HTMLElement>("[data-url]")];
 }
+async function openTrash(newerB: boolean) {
+  const view = await setup();
+  await act(async () => {
+    const items = (await drive.client.list(ROOT)).toSorted((a, b) => a.name.localeCompare(b.name));
+    const now = new Date();
+    if (newerB) {
+      for (const [index, item] of items.entries())
+        await operations.trashItems(drive.client, ROOT, [item], {
+          now: new Date(now.getTime() - (items.length - index) * 1000),
+        });
+    } else await operations.trashItems(drive.client, ROOT, items, { now });
+  });
+  await view.render(tree(h(TrashView)));
+  // Trash intentionally sorts newest first. Exercise A's action while B is
+  // first, without depending on whether two real clock reads cross a millisecond.
+  if (newerB) expect(rows(view.host)[0]?.querySelector(".drv-name")?.textContent).toBe("B.txt");
+  return view;
+}
 async function focus(element: HTMLElement) {
   await act(async () => element.focus());
   expect(document.activeElement).toBe(element);
@@ -115,20 +133,18 @@ afterEach(() => {
 });
 
 it.each([
-  ["delete", "row", "operation"],
-  ["delete", "toolbar", "operation"],
-  ["delete", "empty-trash", "operation"],
-  ["restore", "row", "operation"],
-  ["restore", "toolbar", "operation"],
-  ["delete", "row", "listing"],
-  ["restore", "row", "listing"],
-] as const)("Trash %s from %s preserves Search focus while awaiting %s", async (action, source, delay) => {
-  const view = await setup();
-  await act(async () => {
-    await operations.trashItems(drive.client, ROOT, await drive.client.list(ROOT));
-  });
-  await view.render(tree(h(TrashView)));
-  const removed = rows(view.host)[0] as HTMLElement;
+  ["delete", "row", "operation", false],
+  ["delete", "toolbar", "operation", false],
+  ["delete", "empty-trash", "operation", false],
+  ["restore", "row", "operation", false],
+  ["restore", "toolbar", "operation", false],
+  ["delete", "row", "listing", false],
+  ["restore", "row", "listing", false],
+  ["delete", "row", "operation", true],
+  ["restore", "row", "operation", true],
+] as const)("Trash %s from %s preserves Search focus while awaiting %s (newer B: %s)", async (action, source, delay, newerB) => {
+  const view = await openTrash(newerB);
+  const removed = button("Restore: A.txt", view.host).closest("tr") as HTMLElement;
   if (source === "toolbar") await click(removed.querySelector("input") as Element);
   const label = action === "delete" ? "Delete for ever" : "Restore";
   const trigger = button(
@@ -299,15 +315,14 @@ it("Details pane close preserves focus moved elsewhere before removal commits", 
 });
 
 it.each([
-  "row",
-  "toolbar",
-])("Trash restore from %s replaces focus displaced by removal", async (source) => {
-  const view = await setup();
-  await act(async () => {
-    await operations.trashItems(drive.client, ROOT, await drive.client.list(ROOT));
-  });
-  await view.render(tree(h(TrashView)));
-  const [removed, next] = rows(view.host) as [HTMLElement, HTMLElement];
+  ["row", false],
+  ["toolbar", false],
+  ["row", true],
+  ["toolbar", true],
+] as const)("Trash restore from %s replaces focus displaced by removal (newer B: %s)", async (source, newerB) => {
+  const view = await openTrash(newerB);
+  const removed = button("Restore: A.txt", view.host).closest("tr") as HTMLElement;
+  const next = rows(view.host).find((row) => row !== removed) as HTMLElement;
   if (source === "toolbar") await click(removed.querySelector("input") as Element);
   const pending = deferred<void>();
   const restore = operations.restoreItems;

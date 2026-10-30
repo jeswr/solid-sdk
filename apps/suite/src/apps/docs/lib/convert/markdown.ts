@@ -16,6 +16,7 @@ import { baseExtensions } from "../../editor/extensions";
 import { protectiveLinkRel } from "../../editor/link-rel";
 import { normaliseDestination, normaliseImageDestination } from "../editor/destination";
 import { normaliseHtmlLists } from "../editor/html-lists";
+import { parseHtmlDocument } from "../editor/parse-html";
 import { normaliseHtmlTableSpans } from "../editor/table-spans";
 import { MAX_IMPORT_BYTES } from "./docx-import";
 import { normaliseImport } from "./schema";
@@ -858,10 +859,10 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
 let mappingSkipped: SkippedItem[] = [];
 function parseHtml(token: MarkdownToken): JSONContent[] {
   if (typeof window === "undefined") return [];
-  const dom = new window.DOMParser().parseFromString((token.text as string).trimEnd(), "text/html");
+  const dom = parseHtmlDocument((token.text as string).trimEnd());
   // Normalize parsed elements, never source text inside quoted attributes.
   for (const heading of dom.body.querySelectorAll("h4,h5,h6")) {
-    const replacement = dom.createElement("h3");
+    const replacement = dom.body.ownerDocument.createElement("h3");
     for (const attribute of heading.attributes)
       replacement.setAttribute(attribute.name, attribute.value);
     replacement.append(...heading.childNodes);
@@ -926,7 +927,7 @@ function parseHtml(token: MarkdownToken): JSONContent[] {
   // sentinel collisions, then restore them in the parsed text nodes.
   let carriage = "DOCSCARRIAGERETURN";
   while (dom.body.textContent?.includes(carriage)) carriage += "X";
-  const walker = dom.createTreeWalker(dom.body, window.NodeFilter.SHOW_TEXT);
+  const walker = dom.body.ownerDocument.createTreeWalker(dom.body, window.NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     node.textContent = (node.textContent as string).replace(/\r/g, carriage);
   }

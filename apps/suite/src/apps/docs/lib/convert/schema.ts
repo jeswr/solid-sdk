@@ -7,7 +7,7 @@ import { normaliseImageLink } from "../../editor/image-link";
 import { protectiveLinkRel } from "../../editor/link-rel";
 import { normaliseDestination, normaliseImageDestination } from "../editor/destination";
 import { normaliseHtmlLists } from "../editor/html-lists";
-import { parseDocumentHtml } from "../editor/parse-html";
+import { parseDocumentHtml, parseHtmlDocument } from "../editor/parse-html";
 import { normaliseHtmlTableSpans, normaliseTableSpan } from "../editor/table-spans";
 import { sanitiseImport } from "./sanitise";
 import { reportSkipped, type SkippedItem } from "./skipped";
@@ -137,7 +137,7 @@ export function importHtml(source: string, skipped: SkippedItem[] = []) {
   fragment.innerHTML = source;
   normaliseHtmlLists(fragment.content);
   const html = sanitiseImport(fragment.innerHTML, skipped);
-  const dom = new window.DOMParser().parseFromString(html, "text/html");
+  const dom = parseHtmlDocument(html);
   normaliseHtmlTableSpans(dom.body, () => reportSkipped(skipped, "Invalid table spans"));
   normaliseHtmlLists(dom.body);
   return normaliseImport(
