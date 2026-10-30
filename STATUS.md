@@ -138,3 +138,43 @@ remains dispatcher-owned. `roborev status` still fails with command not found (e
 and no post-commit review hook is installed; dispatcher review is required.
 No network fetch/merge, push, PR, branch switch or edits to another checkout.
 No unfinished implementation or open questions for this fix round.
+
+## Fix round 3 — review of 2477980f9a15
+
+Scope: the supplied collection-recovery finding only, based on
+`2477980f9a1500facf11c6f367a2cef1aefa955f` on `lane/sst-18d`.
+
+- `ceda1f1a fix: preserve collection recovery callbacks`: restore the legacy Retry
+  callback on DataTable and FileGrid when no custom or category-specific recovery is
+  supplied. Respect access-request capability gating and preserve the typed retry delay.
+  Add 30 regression cases across both collection components.
+- The final `docs: record sst-18d round three validation` commit records this round.
+
+Conservative reading: retain the existing reauthentication flow, which did not previously
+render a legacy Retry control. Supplied recovery controls retain precedence over fallback.
+
+Validation uses `export PATH=/opt/node24/bin:$PATH` unless noted.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/suite-ui exec vitest run test/collections.test.tsx -t 'legacy\|fallback\|falling back\|category-specific'` | Before the fix: 18 regression failures, 12 passes, 43 skipped. |
+| `pnpm --filter @jeswr/suite-ui exec vitest run test/collections.test.tsx` | PASS: 73 tests. |
+| `pnpm --filter @jeswr/suite-ui run lint && pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/suite-ui run typecheck && pnpm --filter @jeswr/suite-ui run test` | PASS: 20 files, 643 tests; two existing navigation.css warnings. An initial typecheck caught an inline test mock's inferred type; the explicit callback type fixes it. |
+| `pnpm run lint:root` | PASS: 74 contrast pairs, zero failures. |
+| `TURBO_SCM_BASE=2477980f9a1500facf11c6f367a2cef1aefa955f pnpm run gate` | PASS: 15/15 tasks, 3m43.385s; root lint, 643 UI tests and 9,145 suite app tests. |
+| `pnpm exec turbo run test --filter=@jeswr/app-coeliac` | PASS: 73 files, 593 tests; 11/11 tasks, 10 cached, 28.961s. Isolated check after the first full-gate failure. |
+| `pnpm run gate:full` | PASS on cache retry: 405/405 tasks, 295 cached, 3m47.679s. First run stopped after 397 successful tasks because one unchanged Coeliac InsightsView test failed waiting for its empty-state copy. |
+| `git diff --check` | PASS. |
+
+The isolated Coeliac check and full gate use
+`export PATH=/tmp/sst-18d-bin:/opt/node24/bin:$PATH`, with the existing temporary npm cache
+wrapper described above. The initial full gate took 16m42.353s and passed 592 of 593 Coeliac
+tests. All 593 passed unchanged in isolation, and the final full gate reused that successful
+result. No test limits, repository configuration, unrelated source or dependencies changed.
+
+No dependencies, manifests, fixtures or browser specs changed. `check:packages` is not
+applicable. No Chromium launch or screenshots, per the lane brief; browser verification
+remains dispatcher-owned. `roborev status` fails with command not found (exit 127), and no
+post-commit review hook is installed; dispatcher review is required.
+No network fetch/merge, push, PR, branch switch or edits to another checkout.
+No unfinished implementation or open questions for this fix round.
