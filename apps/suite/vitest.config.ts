@@ -94,6 +94,7 @@ export default defineConfig({
         "src/apps/drive/lib/activity/**/*.ts",
         "src/apps/drive/lib/model/**/*.ts",
         "src/apps/mail/lib/threading/**/*.ts",
+        "src/apps/mail/lib/quotes/**/*.ts",
         "src/apps/mail/lib/address/**/*.ts",
       ],
       reporter: ["text", "json-summary"],
