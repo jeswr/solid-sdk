@@ -6,8 +6,8 @@ beforeEach(() => {
   // UI tests replace navigator with jsdom's instance during module evaluation.
   Object.defineProperty(globalThis.navigator, "locks", {
     configurable: true,
-    // Recursive access discovery runs inside the lock, including under v8 coverage.
-    // Keep a deadlock deadline below Vitest's 30s budget without timing out valid IO.
+    // Bound queued acquisitions below Vitest's 30s budget. Work performed
+    // inside an acquired lock keeps its reservation until the callback settles.
     value: exclusiveLocks(20_000),
   });
 });
