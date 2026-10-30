@@ -228,6 +228,29 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
       doc(b("taskList", [b("taskItem", [p(), p(t("completed"))], { checked: true })])),
     );
   });
+  it.each(["x", " "])("preserves an empty task paragraph before a quote: [%s]", (marker) => {
+    const expected = doc(
+      b("taskList", [
+        b("taskItem", [p(), b("blockquote", [p(t("detail"))])], { checked: marker === "x" }),
+      ]),
+    );
+    expect(roundTrip(`- [${marker}]\n\n  > detail`)).toEqual(expected);
+    expect(docsToMarkdown(expected)).toMatch(/^-[ ]\[[x ]\][ ]\n[ ]*\n[ ]{2}> detail$/);
+  });
+  it.each([
+    "- [x]\n\n  ### detail",
+    "- [ ]\n\n  ```\n  code\n  ```",
+    "- [x]\n\n  - nested",
+    "- [ ]\n\n  3. ordered",
+    "- [x]\n\n  ---",
+    "- [x]\n\n  > detail\n\n  another paragraph\n\n- [ ] next",
+    "> - [ ]\n>\n>   > detail",
+  ])("round trips nested blocks after an empty task paragraph: %s", (source) => {
+    const parsed = roundTrip(source);
+    const list = parsed.content?.[0];
+    const task = list?.type === "blockquote" ? list.content?.[0]?.content?.[0] : list?.content?.[0];
+    expect(task?.content?.[0]).toEqual(p());
+  });
   it.each([
     "- [x]tail",
     "- \\[x] completed",

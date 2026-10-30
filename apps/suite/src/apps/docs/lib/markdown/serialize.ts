@@ -264,7 +264,10 @@ function render(node: DocsNode): string {
           const checkbox = node.type === "taskList" ? `[${item.attrs?.checked ? "x" : " "}] ` : "";
           const children = item.content as DocsNode[];
           const skipEmpty =
-            !children[0]?.content && children.length > 1 && children[1]?.type !== "paragraph";
+            node.type !== "taskList" &&
+            !children[0]?.content &&
+            children.length > 1 &&
+            children[1]?.type !== "paragraph";
           const body = (skipEmpty ? children.slice(1) : children).map(render).join("\n\n");
           const [first, ...rest] = body.split("\n");
           return `${first || checkbox ? prefix : prefix.trimEnd()}${checkbox}${first}${rest.map((line) => `\n${" ".repeat(prefix.length)}${line}`).join("")}`;
