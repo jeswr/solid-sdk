@@ -112,7 +112,7 @@ describe("rewriteManifest", () => {
     const manifest = JSON.parse(
       readFileSync(new URL("../packages/fetch-rdf/package.json", import.meta.url), "utf8"),
     );
-    expect(manifest.devDependencies["@jeswr/rdf-engine"]).toBe("workspace:*");
+    expect(manifest.devDependencies).not.toHaveProperty("@jeswr/rdf-engine");
     const out = rewriteManifest(manifest);
     expect(out.dependencies).not.toHaveProperty("@jeswr/rdf-engine");
     expect(out.devDependencies).toBeUndefined();

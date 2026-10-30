@@ -46,6 +46,9 @@ an N3 Store and streams input. The caller owns and disposes the engine; fetch-rd
 uses its own structural `RdfParser` interface and has no production or type
 dependency on rdf-engine. `documentLoader` applies only to the default JSON-LD parser:
 Sparq 0.1.5 rejects remote contexts. Use real Node WASM in parser parity tests.
+Those tests live in `tools/fetch-rdf-engine-tests`, a private workspace that
+depends on both packages; keep the engine dependency out of fetch-rdf's manifest
+to avoid the `fetch-rdf → rdf-engine → solid-odrl → fetch-rdf` workspace cycle.
 
 ### Agent persona
 
