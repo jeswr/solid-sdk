@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { Lexer, type MarkedToken, type Token, type Tokens } from "marked";
+import { Lexer, type MarkedToken, type Token, type Tokens, type TokensList } from "marked";
 import {
   block,
   checkString,
@@ -13,6 +13,21 @@ import {
   text,
 } from "./shared";
 import { type DocsMark, type DocsNode, MarkdownError, type MarkdownOptions } from "./types";
+
+class MarkdownLexer extends Lexer {
+  override blockTokens(source: string, tokens?: Token[], lastParagraphClipped?: boolean): Token[];
+  override blockTokens(
+    source: string,
+    tokens?: TokensList,
+    lastParagraphClipped?: boolean,
+  ): TokensList;
+  override blockTokens(source: string, tokens?: Token[], lastParagraphClipped?: boolean): Token[] {
+    // Marked disables paragraph parsing inside list items. Keep its paragraph-interruption
+    // rules active there too, so a non-1 ordered marker remains continuation text.
+    this.state.top = true;
+    return super.blockTokens(source, tokens, lastParagraphClipped);
+  }
+}
 
 function inline(tokens: Token[], marks: DocsMark[], depth: number, paragraph = false): DocsNode[] {
   depthGuard(depth);
@@ -171,8 +186,6 @@ function blocks(tokens: Token[], depth: number): DocsNode[] {
         return [];
       case "paragraph":
         return [block("paragraph", inline(token.tokens, [], depth + 1, true))];
-      case "text":
-        return [block("paragraph", inline(token.tokens as Token[], [], depth + 1, true))];
       case "heading":
         if (token.depth > 3) fail("Docs supports heading levels 1–3");
         return [block("heading", inline(token.tokens, [], depth + 1), { level: token.depth })];
@@ -218,7 +231,7 @@ export function markdownToDocs(source: string, options: MarkdownOptions = {}): D
   try {
     if (/^---\n[\s\S]*?\n(?:---|\.\.\.)(?:\n|$)/.test(normalized))
       fail("Front matter is unsupported");
-    const content = blocks(Lexer.lex(normalized, { gfm: true }), 0);
+    const content = blocks(new MarkdownLexer({ gfm: true }).lex(normalized), 0);
     return block("doc", content.length ? content : [block("paragraph")]);
   } catch (error) {
     if (error instanceof MarkdownError) {

@@ -118,6 +118,65 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     roundTrip(source);
   });
 
+  it.each([
+    "2026.",
+    "2026)",
+    "0.",
+    "2.",
+  ])("keeps a numbered continuation in one list-item paragraph: %s", (marker) => {
+    const expected = doc(
+      b("bulletList", [b("listItem", [p(t(`Notes\n${marker} Annual review`))])]),
+    );
+    expect(markdownToDocs(`- Notes\n  ${marker} Annual review`)).toEqual(expected);
+    expect(markdownToDocs(docsToMarkdown(expected))).toEqual(expected);
+  });
+  it("preserves formatting and reference links in numbered continuations", () => {
+    expect(
+      roundTrip("- Notes\n  2026. **Annual** [review][ref]\n\n[ref]: https://example.org/"),
+    ).toEqual(
+      doc(
+        b("bulletList", [
+          b("listItem", [
+            p(
+              t("Notes\n2026. "),
+              t("Annual", [m("bold")]),
+              t(" "),
+              t("review", [{ type: "link", attrs: { href: "https://example.org/" } }]),
+            ),
+          ]),
+        ]),
+      ),
+    );
+  });
+  it.each([
+    ["- Notes\n  1. Annual review", 1],
+    ["- Notes\n\n  2026. Annual review", 2026],
+  ])("preserves valid ordered sublists: %s", (source, start) => {
+    expect(roundTrip(source as string)).toEqual(
+      doc(
+        b("bulletList", [
+          b("listItem", [
+            p(t("Notes")),
+            b("orderedList", [b("listItem", [p(t("Annual review"))])], { start }),
+          ]),
+        ]),
+      ),
+    );
+  });
+  it("keeps numbered continuations inside task items and nested quotes", () => {
+    expect(roundTrip("> - [x] Notes\n>   2026. Annual review\n>   2027. Next review")).toEqual(
+      doc(
+        b("blockquote", [
+          b("taskList", [
+            b("taskItem", [p(t("Notes\n2026. Annual review\n2027. Next review"))], {
+              checked: true,
+            }),
+          ]),
+        ]),
+      ),
+    );
+  });
+
   it.each([1, 2])("exports multiline level-%i headings with setext syntax", (level) => {
     const underline = level === 1 ? "===" : "---";
     const source = `First\nSecond\n${underline}`;
@@ -501,7 +560,7 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
       errorCode(() => markdownToDocs("text", options as never), "invalid-input");
     }
     errorCode(() => markdownToDocs(`${"> ".repeat(34)}deep`, { unsupported: "literal" }), "limit");
-    const spy = vi.spyOn(Lexer, "lex").mockImplementationOnce(() => {
+    const spy = vi.spyOn(Lexer.prototype, "lex").mockImplementationOnce(() => {
       throw new Error("Synthetic lexer failure");
     });
     errorCode(() => markdownToDocs("text"), "invalid-input");
