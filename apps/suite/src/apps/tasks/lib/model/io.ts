@@ -54,13 +54,14 @@ export class RdfIO {
     // different data: that could authorize overwriting or deleting another writer.
     const current = await this.read(url);
     const isContainer = node(url, resource.dataset).types.has(`${NS.LDP}BasicContainer`);
-    const expected = new Store([...resource.dataset]);
-    // CSS ignores container PUT bodies and supplies its own generation metadata.
-    // The token distinguishes generations on servers that preserve client metadata.
-    if (isContainer) node(url, expected).clear(`${NS.SCHEDULING}initializationOwner`);
+    // An empty container alone cannot identify the generation created by this PUT.
+    // If a server drops the token, container() can use it without claiming cleanup ownership.
+    const owner = `${NS.SCHEDULING}initializationOwner`;
     if (
       isContainer
-        ? !current.dataset.contains(expected) ||
+        ? !current.dataset.contains(resource.dataset) ||
+          !node(url, resource.dataset).text(owner) ||
+          node(current.url, current.dataset).nodes(owner).size !== 1 ||
           node(current.url, current.dataset).iris(`${NS.LDP}contains`).size > 0
         : !isomorphic([...current.dataset], [...resource.dataset])
     )

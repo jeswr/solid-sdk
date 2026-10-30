@@ -4,7 +4,15 @@ import { Writer } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { classifyError, ModelError } from "../../src/apps/tasks/lib/model/errors";
 import { RdfIO, requireEtag } from "../../src/apps/tasks/lib/model/io";
-import { DataFactory, NS, node, parse, Store, serialize } from "../../src/apps/tasks/lib/model/rdf";
+import {
+  DataFactory,
+  Node,
+  NS,
+  node,
+  parse,
+  Store,
+  serialize,
+} from "../../src/apps/tasks/lib/model/rdf";
 import { TaskStore } from "../../src/apps/tasks/lib/model/store";
 import { createTracker } from "../../src/apps/tasks/lib/model/tracker";
 import { TypeIndex } from "../../src/apps/tasks/lib/model/type-index";
@@ -407,6 +415,66 @@ describe("project discovery and first use", () => {
     expect(pod.files.has(`${projects}home/`)).toBe(false);
     pod.intercept = undefined;
     expect((await tasks.createProject("Home")).url).toBe(`${projects}home.ttl`);
+  });
+  it.each([
+    "missing",
+    "conflicting",
+    "additional",
+  ])("does not compensate a container with a %s generation token in read-back", async (token) => {
+    const pod = new Pod();
+    pod.omitPutEtags = true;
+    const container = `${projects}home/`;
+    let replaced = false;
+    pod.intercept = async (request) => {
+      if (
+        request.method === "GET" &&
+        request.url === container &&
+        pod.files.has(container) &&
+        !replaced
+      ) {
+        replaced = true;
+        const dataset = await pod.dataset(container);
+        const marker = node(container, dataset);
+        if (token === "missing") marker.clear(initializationOwner);
+        else if (token === "conflicting") marker.setText(initializationOwner, "another-owner");
+        else
+          marker
+            .nodes(initializationOwner)
+            .add(new Node(DataFactory.literal("another-owner"), dataset, DataFactory));
+        pod.seed(container, await serialize(dataset));
+      }
+      if (request.method === "PUT" && request.url === indexUrl)
+        return new Response(null, { status: 503 });
+      return undefined;
+    };
+    await expect(store(pod).createProject("Home")).rejects.toMatchObject({ status: 503 });
+    expect(replaced).toBe(true);
+    expect(pod.files.has(container)).toBe(true);
+    expect(pod.files.has(`${projects}home.ttl`)).toBe(false);
+    expect(
+      pod
+        .mutations()
+        .filter((request) => request.method === "DELETE")
+        .map((request) => request.url),
+    ).toEqual([`${projects}home.ttl`]);
+  });
+  it("uses a container without a read-back generation token without claiming cleanup ownership", async () => {
+    const pod = new Pod();
+    pod.omitPutEtags = true;
+    const container = `${projects}home/`;
+    pod.intercept = async (request) => {
+      if (request.method === "PUT" && request.url === container) {
+        await pod.emptyContainer(container);
+        return new Response(null, { status: 201 });
+      }
+      return undefined;
+    };
+    const tasks = store(pod, { typeIndex: false });
+    const project = await tasks.createProject("Home");
+    expect((await tasks.createTask(project, { title: "Usable", state: "open" })).task.title).toBe(
+      "Usable",
+    );
+    expect(pod.mutations().filter((request) => request.method === "DELETE")).toEqual([]);
   });
   it("creates and updates scheduled tasks after blank-node relabelling without PUT ETags", async () => {
     const pod = new Pod();
@@ -1172,7 +1240,8 @@ describe("transport failures and typed classification", () => {
     pod.files.set(`${storage}no-etag.ttl`, { body: "", version: 1, etag: null });
     expect((await io.read(`${storage}no-etag.ttl`)).etag).toBeNull();
     pod.intercept = undefined;
-    expect((await io.container(`${storage}new/`))?.url).toBe(`${storage}new/`);
+    // With neither a PUT validator nor a generation token, creation ownership is unknown.
+    expect(await io.container(`${storage}new/`)).toBeUndefined();
     pod.seed(`${storage}file/`, `<${storage}file/> <${NS.DCT}title> "Not a container".`);
     await expect(io.container(`${storage}file/`)).rejects.toThrow("LDP container");
     pod.seed(`${storage}generic/`, `<${storage}generic/> a <${NS.LDP}Container>.`);
@@ -1243,7 +1312,10 @@ describe("transport failures and typed classification", () => {
     };
     const io = new RdfIO(pod.fetch);
     const dataset = new Store();
-    if (kind !== "document") node(url, dataset).types.add(`${NS.LDP}BasicContainer`);
+    if (kind !== "document") {
+      node(url, dataset).types.add(`${NS.LDP}BasicContainer`);
+      node(url, dataset).setText(initializationOwner, "created-owner");
+    }
     const creation = io.write(url, dataset, { create: true });
     await expect(creation).rejects.toMatchObject({ status: 412 });
     expect(
