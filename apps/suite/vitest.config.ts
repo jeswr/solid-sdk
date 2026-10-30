@@ -25,6 +25,7 @@ export default defineConfig({
         "src/apps/docs/lib/diff/**/*.ts",
         "src/apps/docs/lib/find/**/*.ts",
         "src/apps/tasks/lib/quickadd/**/*.ts",
+        "src/apps/tasks/lib/todoist/**/*.ts",
         "src/apps/music/lib/metadata/**/*.ts",
         "src/apps/music/lib/lyrics/**/*.ts",
         "src/apps/music/lib/scrobbles/**/*.ts",
