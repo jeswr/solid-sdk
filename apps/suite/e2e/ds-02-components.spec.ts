@@ -68,6 +68,30 @@ for (const density of ["comfortable", "compact"] as const)
     await expect(other).not.toBeChecked();
   });
 
+test("calendar: day names include the visible day number", async ({ page }) => {
+  await page.clock.setFixedTime(new Date(2026, 9, 25, 12));
+  await page.goto("/dev/components/calendar");
+  for (const density of ["comfortable", "compact"]) {
+    const calendar = page.getByRole("region", { name: `${density} fixtures`, exact: true });
+    const days = calendar.locator("button[data-day]");
+    await expect(days).toHaveCount(35);
+    for (const day of await days.all()) {
+      const number = (await day.innerText()).trim();
+      await expect(day).toHaveAccessibleName(new RegExp(`\\b${number}\\b`));
+    }
+    await expect(
+      calendar.getByRole("button", {
+        name: "Today, Sunday, 25 October 2026, selected",
+        exact: true,
+      }),
+    ).toHaveText("25");
+    await expect(
+      calendar.getByRole("button", { name: "Sunday, 4 October 2026", exact: true }),
+    ).toBeDisabled();
+  }
+  await accessible(page);
+});
+
 const overlayCases = [
   ["dialog", "Open dialog", "dialog"],
   ["sheet", "Open sheet", "dialog"],
