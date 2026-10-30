@@ -283,6 +283,11 @@ describe("content and labels", () => {
     ["Title\n\n-   \n  ~~~\n  @literal\n  ~~~\n\n@real", "Title\n\n-   \n  ~~~\n  @literal\n  ~~~"],
     ["Title\n\n- ~~~\n\n  @literal\n  ~~~\n\n@real", "Title\n\n- ~~~\n\n  @literal\n  ~~~"],
     ["Title\n\n- ~~~\n \n  @literal\n  ~~~\n\n@real", "Title\n\n- ~~~\n \n  @literal\n  ~~~"],
+    ["Title\n\n- > ~~~\n\n  @real", "Title\n\n- > ~~~"],
+    [
+      "Title\n\n> - - ~~~\n>\n>     @literal\n>     ~~~\n@real",
+      "Title\n\n> - - ~~~\n>\n>     @literal\n>     ~~~",
+    ],
     ["Title\n\n- ~~~\n  @literal\n\n@real", "Title\n\n- ~~~\n  @literal"],
     ["Title\n\n- ~~~\n  @literal\n- @real", "Title\n\n- ~~~\n  @literal\n-"],
     ["Title\n\n- ~~~\n  @literal\n @real", "Title\n\n- ~~~\n  @literal"],
@@ -842,6 +847,25 @@ describe("validation", () => {
 });
 
 describe("input budgets", () => {
+  it.each([
+    "",
+    " ",
+    "\t",
+  ])("keeps string slicing linear across retained list containers and %j blank lines", (blank) => {
+    const title = `Title\n${"- ".repeat(256)}item`;
+    const input = csv([task({ CONTENT: `${title}\n${`${blank}\n`.repeat(256)}@real` })]);
+    const slices = vi.spyOn(String.prototype, "slice");
+    try {
+      const result = parseTodoistCsv(input, options).tasks[0]!;
+      const calls = slices.mock.calls.length;
+      expect(result.title).toBe(title);
+      expect(result.labels).toEqual(["real"]);
+      // Count work rather than time: coverage and shared runners must not affect the budget.
+      expect(calls).toBeLessThan(8 * input.length);
+    } finally {
+      slices.mockRestore();
+    }
+  });
   it("rejects a long inexact decimal without a backtracking suffix expression", () => {
     error(
       csv([task({ DURATION: `1.${"0".repeat(100_000)}1`, DURATION_UNIT: "minute" })]),

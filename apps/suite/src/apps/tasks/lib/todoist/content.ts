@@ -10,6 +10,7 @@ export function splitContent(content: string): { title: string; labels: string[]
   let fenceDepth = 0;
   // Zero denotes a block quote; positive widths denote list-item indentation.
   const containers: number[] = [];
+  const quoteDepths: number[] = [];
   let brackets = 0;
   let parentheses = 0;
   let linkQuote = "";
@@ -33,27 +34,39 @@ export function splitContent(content: string): { title: string; labels: string[]
       if (content[end] === "\r" && content[end + 1] === "\n") end++;
       let offset = 0;
       let depth = 0;
+      let quotes = 0;
+      let textEnd = sourceLine.length;
+      while (sourceLine[textEnd - 1] === " ") textEnd--;
       // Match existing containers before looking for any new ones.
       for (const indentation of containers) {
+        if (offset >= textEnd) {
+          // A blank suffix continues every list up to the next unmatched quote.
+          // Jump there so repeated blank lines never rescan retained list depths.
+          depth = quoteDepths[quotes] ?? containers.length;
+          offset = sourceLine.length;
+          break;
+        }
         if (indentation === 0) {
           const quote = /^ {0,3}> ?/.exec(sourceLine.slice(offset));
           if (!quote) break;
           offset += quote[0].length;
+          quotes++;
         } else {
           let spaces = 0;
           while (spaces < indentation && sourceLine[offset + spaces] === " ") spaces++;
-          // Blank lines may continue a list without its full indentation.
-          if (spaces < indentation && sourceLine.slice(offset + spaces)) break;
+          if (spaces < indentation) break;
           offset += spaces;
         }
         depth++;
       }
       if (depth < fenceDepth) fence = "";
       containers.length = depth;
+      quoteDepths.length = quotes;
       // Markers inside a fence are literal, so strip only its enclosing containers.
       while (!fence) {
         const quote = /^ {0,3}> ?/.exec(sourceLine.slice(offset));
         if (quote) {
+          quoteDepths.push(containers.length);
           containers.push(0);
           offset += quote[0].length;
           continue;
