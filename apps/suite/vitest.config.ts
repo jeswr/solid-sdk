@@ -54,6 +54,7 @@ export default defineConfig({
         "src/apps/tasks/lib/tree/**/*.ts",
         "src/lib/search/**/*.ts",
         "src/apps/docs/lib/anchoring/**/*.ts",
+        "src/apps/docs/lib/markdown/**/*.ts",
         "src/apps/docs/lib/outline/**/*.ts",
         "src/apps/drive/lib/files/**/*.ts",
         "src/apps/sheets/lib/refs/**/*.ts",
