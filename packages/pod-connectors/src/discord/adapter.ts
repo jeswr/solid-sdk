@@ -7,6 +7,7 @@
  */
 import { DataFactory, Store } from "n3";
 import { getJson } from "../core/fixture-fetch.js";
+import { Pagination } from "../core/pagination.js";
 import { arr, optionalNumber, optionalText, SkipCounter } from "../core/safe.js";
 import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
 import { CLASSES, Group, OnlineAccount } from "../core/vocab.js";
@@ -55,22 +56,37 @@ export const discordAdapter: IntegrationAdapter = {
     account.accountName = username;
     account.name = optionalText(user.global_name) ?? username;
     account.identifier = optionalText(user.id);
+    account.sourceUrl = optionalText(user.id) ? `https://discord.com/users/${user.id}` : undefined;
     account.accountServiceHomepage = "https://discord.com/";
     await ctx.write({
       slug: "social/profile.ttl",
       category: "social",
       forClass: CLASSES.OnlineAccount,
       dataset: profile,
+      sourceUrl: `${API}/users/@me`,
     });
 
     ctx.progress({ label: "Fetching your servers…", done: 1, total: 2 });
     // The guilds array can be missing/empty (no `guilds` scope granted, or a
     // brand-new account in no servers).
-    const guilds = await getJson<DiscordGuild[] | null>(ID, ctx.api, `${API}/users/@me/guilds`);
+    const guilds: (DiscordGuild | null)[] = [];
+    const pagination = new Pagination(ID);
+    let after: string | undefined;
+    do {
+      const batch = arr(
+        await getJson<DiscordGuild[] | null>(
+          ID,
+          ctx.api,
+          `${API}/users/@me/guilds?limit=200${after ? `&after=${encodeURIComponent(after)}` : ""}`,
+        ),
+      );
+      guilds.push(...batch);
+      after = batch.length === 200 ? pagination.next(optionalText(batch.at(-1)?.id)) : undefined;
+    } while (after);
 
     const guildsDoc = ctx.resolve("social/servers.ttl");
     const dataset = new Store();
-    for (const g of arr(guilds)) {
+    for (const g of guilds) {
       // A guild with no id has no stable fragment IRI — skip it.
       if (!g || optionalText(g.id) === undefined) {
         skipped.skip();
@@ -79,6 +95,7 @@ export const discordAdapter: IntegrationAdapter = {
       const group = new Group(`${guildsDoc}#guild-${g.id}`, dataset, DataFactory).mark();
       group.name = optionalText(g.name);
       group.identifier = g.id;
+      group.sourceUrl = `https://discord.com/channels/${g.id}`;
       const members = optionalNumber(g.approximate_member_count);
       group.description =
         members !== undefined
@@ -90,6 +107,7 @@ export const discordAdapter: IntegrationAdapter = {
       category: "social",
       forClass: CLASSES.Group,
       dataset,
+      sourceUrl: `${API}/users/@me/guilds`,
     });
 
     ctx.progress({ label: "Done", done: 2, total: 2 });

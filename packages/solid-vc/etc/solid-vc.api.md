@@ -493,10 +493,10 @@ export class SuiteRegistry {
 }
 
 // @public
-export const SVC: "https://w3id.org/jeswr/solid-vc#";
+export const SVC: "https://jeswr.org/ns/solid-vc#";
 
 // @public
-export const SVC_AGENT_AUTHORIZATION: "https://w3id.org/jeswr/solid-vc#AgentAuthorizationCredential";
+export const SVC_AGENT_AUTHORIZATION: "https://jeswr.org/ns/solid-vc#AgentAuthorizationCredential";
 
 // @public
 export type ValidCredentialResult = {

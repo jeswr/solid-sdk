@@ -1,0 +1,19 @@
+# AUTHORED-BY Claude Opus 5.5
+# ACL resource for the public type index
+@prefix acl: <http://www.w3.org/ns/auth/acl#>.
+@prefix foaf: <http://xmlns.com/foaf/0.1/>.
+
+# A solid:publicTypeIndex is public by definition: the extension reads it
+# without credentials during class discovery.
+<#public>
+    a acl:Authorization;
+    acl:agentClass foaf:Agent;
+    acl:accessTo <./type-index>;
+    acl:mode acl:Read.
+
+# The owner has full access to the type index
+<#owner>
+    a acl:Authorization;
+    acl:agent <{{webId}}>;
+    acl:accessTo <./type-index>;
+    acl:mode acl:Read, acl:Write, acl:Control.
