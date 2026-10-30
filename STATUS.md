@@ -381,3 +381,52 @@ Affected gate: **12 successful tasks / 12 total**, zero cached. Full-workspace g
 The caller still supplies effective ACL/ACP verification. The conservative boundary is owner-only effective access and private container inheritance at the resources being initialized or adopted; unreadable or unsupported policy fails closed. Deliberate sharing elsewhere is preserved. The requested fix is complete with no open questions. No UI or screenshots apply.
 
 `roborev` remains unavailable (`command -v roborev` found no executable), so automated per-commit verdicts could not be read. No review tooling was installed.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Codex fix round 5 — review of `562a4f14dd37`
+
+Branch: `lane/sst-ef15`. Verification base: `562a4f14dd373e1f56a13d98e057d7947b511120`.
+Only the supplied missing-resource isolation finding and its regression tests are addressed.
+
+### Changes by commit
+
+- `98ac5b6c` — `fix: skip missing resources in Tasks listings`: skip individual tracker/task reads returning 404 or 410 and continue collecting available entries. Preserve errors for other statuses and unexpected failures. Twelve regression cases cover stale Type Index tracker registrations, concurrent deletion through another client's `deleteTask()`, and propagation of 401, 403, 503 and unexpected read errors for both listings.
+- Final documentation commit — `docs: record Tasks listing verification`: this report, committed last.
+
+### Completed verification
+
+Use the installed Node 24 runtime. No dependencies or lockfile changes were needed.
+
+```sh
+export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"
+pnpm --filter @jeswr/app-suite^... run build
+pnpm --filter @jeswr/app-suite run lint
+pnpm --filter @jeswr/app-suite run build
+pnpm --filter @jeswr/app-suite run typecheck
+pnpm --filter @jeswr/app-suite run test
+pnpm run lint:root
+pnpm --filter @jeswr/app-suite exec vitest run test/tasks/model.test.ts test/tasks/store.test.ts test/tasks/recurrence.test.ts --coverage.include='src/apps/tasks/lib/model/**/*.ts'
+git diff --check
+```
+
+All commands above passed. Before the implementation, the four missing-resource regression cases failed with the expected 404/410 errors. App lint retains 70 existing warnings in unrelated files and reports no errors. Production build and strict typecheck pass. The app suite passes **9,355 tests across 175 files**, with **100%** configured statement, branch, function and line coverage. The focused Tasks suite passes **191 tests across three files**, with model coverage **100% statements (804/804), branches (558/558), functions (158/158), and lines (700/700)**. Coverage thresholds and exclusions are unchanged. Root guards pass, including 74 contrast pairs with zero failures.
+
+Both repository gates passed on the implementation commit before this final report commit:
+
+```sh
+export GIT_CONFIG_COUNT=2
+export GIT_CONFIG_KEY_0=protocol.allow GIT_CONFIG_VALUE_0=never
+export GIT_CONFIG_KEY_1=protocol.file.allow GIT_CONFIG_VALUE_1=always
+export npm_config_offline=true npm_config_cache=/tmp/sst-ef15-npm-cache
+TURBO_SCM_BASE=562a4f14dd373e1f56a13d98e057d7947b511120 pnpm run gate
+pnpm run gate:full --env-mode=loose
+```
+
+Affected gate: **12 successful tasks / 12 total**, zero cached. Full-workspace gate: **405 successful tasks / 405 total**, zero cached, in 15m3.816s. All **985 root tests** pass; all **9,355 app tests** pass again in the full gate. Network Git transports were disabled; local file transport permits disposable Git test fixtures. npm ran offline with a writable temporary cache. No remote Git fetch occurred.
+
+### Boundaries and remaining work
+
+Missing-resource isolation applies to individual entries in project/task listings. Other errors still propagate, and direct resource reads retain their existing error behavior. The requested fix is complete with no open questions. No UI or screenshots apply.
+
+`roborev` remains unavailable (`command -v roborev` found no executable), so automated per-commit verdicts could not be read. No review tooling was installed.
