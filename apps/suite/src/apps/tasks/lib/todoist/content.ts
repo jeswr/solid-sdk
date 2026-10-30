@@ -141,7 +141,8 @@ export function splitContent(content: string): { title: string; labels: string[]
       linkQuote = char;
       continue;
     }
-    if (char === "`") {
+    // Backticks in destinations and autolinks are literal, not code delimiters.
+    if (char === "`" && !parentheses && !angle) {
       let end = i + 1;
       while (content[end] === "`") end++;
       const width = end - i;

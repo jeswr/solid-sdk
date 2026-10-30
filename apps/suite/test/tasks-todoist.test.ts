@@ -422,6 +422,25 @@ describe("content and labels", () => {
   });
 
   it.each([
+    "[read](https://example.org/`path)",
+    "[read](https://example.org/``path)",
+    "[read](https://example.org/a(`path)b)",
+    "[read](<https://example.org/`path>)",
+    '[read](https://example.org/`path "a @literal title")',
+    "![alt](https://example.org/`path)",
+    "[read `@literal`](https://example.org/`path)",
+    "<https://example.org/`path>",
+    "<https://example.org/``path>",
+  ])("keeps destination and autolink backticks literal: %s", (link) => {
+    const result = parseTodoistCsv(
+      csv([task({ CONTENT: `${link} @home` }), task({ CONTENT: `${link} \`@literal\` @home` })]),
+      options,
+    );
+    expect(result.tasks[0]).toMatchObject({ title: link, labels: ["home"] });
+    expect(result.tasks[1]).toMatchObject({ title: `${link} \`@literal\``, labels: ["home"] });
+  });
+
+  it.each([
     "[read](https://example.org/?q=[)",
     "[read](https://example.org/?q=])",
     "[read](https://example.org/?q=[()])",
