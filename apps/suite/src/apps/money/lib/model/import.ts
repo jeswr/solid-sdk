@@ -37,6 +37,9 @@ export async function importStatement(
     body = statement.text;
     contentType = statement.format === "csv" ? "text/csv" : "application/x-ofx";
   }
+  // A known account mixed with an unidentified source is ambiguous too.
+  if (new Set(rows.map((row) => row.accountId)).size > 1)
+    throw new TypeError("Multiple source accounts require separate statement imports");
   const values: Transaction[] = rows.map((row, index) => {
     if (row.currency !== undefined && row.currency !== currency)
       throw new TypeError("Statement currency mismatch");

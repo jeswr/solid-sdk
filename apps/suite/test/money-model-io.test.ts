@@ -2,7 +2,12 @@
 import { NS } from "@jeswr/suite-vocab";
 import { describe, expect, it, vi } from "vitest";
 import * as model from "../src/apps/money/lib/model";
-import { csvStatement, sgmlStatement, xmlStatement } from "./fixtures/money-statements";
+import {
+  csvStatement,
+  qfxStatement,
+  sgmlStatement,
+  xmlStatement,
+} from "./fixtures/money-statements";
 
 import { account, balance, base, money, options, other, range, row } from "./money-model-fixtures";
 
@@ -225,6 +230,49 @@ describe("injected money store", () => {
 });
 
 describe("statement import pipeline", () => {
+  it.each([
+    sgmlStatement,
+    qfxStatement,
+    xmlStatement,
+  ])("rejects multiple OFX/QFX source accounts before any request", async (text) => {
+    for (const accountId of ["EXAMPLE-OTHER", ""]) {
+      const { store, files, requests } = pod();
+      const combined = text.replace(/<(STMTRS|CCSTMTRS)>[\s\S]*?<\/\1>/, (block) => {
+        const next = accountId
+          ? block.replace(/EXAMPLE-(001|CARD)/, accountId)
+          : block.replace(/<ACCTID>[^<]*(<\/ACCTID>)?/, "");
+        return block + next;
+      });
+      await expect(
+        model.importStatement(store, "multi", account, text === xmlStatement ? "USD" : "GBP", {
+          format: "ofx",
+          text: combined,
+        }),
+      ).rejects.toThrow("Multiple source accounts");
+      expect(requests).toEqual([]);
+      expect(files.size).toBe(0);
+    }
+  });
+  it.each([
+    sgmlStatement,
+    qfxStatement,
+    xmlStatement,
+  ])("accepts multiple OFX/QFX statement sections for the same source account", async (text) => {
+    const { store } = pod();
+    const combined = text.replace(/<(STMTRS|CCSTMTRS)>[\s\S]*?<\/\1>/, (block) => block + block);
+    const result = await model.importStatement(
+      store,
+      "same",
+      account,
+      text === xmlStatement ? "USD" : "GBP",
+      { format: "ofx", text: combined },
+    );
+    expect(result.transactions).toHaveLength(text === xmlStatement ? 2 : 4);
+    expect(result.transactions.every((value) => value.account === account)).toBe(true);
+    expect((await store.read("transactions/2026-10.ttl")).document.transactions()).toEqual(
+      result.transactions,
+    );
+  });
   it("keeps CSV, OFX and PDF imports with the same key distinct in a shared shard", async () => {
     const { store, files } = pod();
     const csv = await model.importStatement(store, "bank", account, "GBP", {
