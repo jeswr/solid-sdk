@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 
 import { readFileSync } from "node:fs";
@@ -7,6 +8,7 @@ import axe from "axe-core";
 import { Dialog } from "radix-ui";
 import { useEffect, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { DropZoneOverlay } from "../src/components/drop-zone-overlay.js";
 import { ConsentSheet, type ConsentSheetProps } from "../src/sharing/consent-sheet.js";
 import { DurationChips } from "../src/sharing/duration-chips.js";
 import {
@@ -813,6 +815,93 @@ describe("permission rows", () => {
     expect((screen.getByRole("button", { name: "Revoke all" }) as HTMLButtonElement).disabled).toBe(
       true,
     );
+  });
+});
+
+describe("sharing button styles", () => {
+  function expectStyle(button: Element, expected: Record<string, string>) {
+    const style = getComputedStyle(button);
+    expect(
+      Object.fromEntries(Object.keys(expected).map((key) => [key, style.getPropertyValue(key)])),
+      button.outerHTML,
+    ).toEqual(expected);
+  }
+
+  // Substitute tokens so these assertions exercise the cascade in jsdom.
+  function css(name: "components" | "sharing") {
+    return readFileSync(`src/styles/${name}.css`, "utf8")
+      .replaceAll("var(--primary)", "blue")
+      .replaceAll("var(--primary-foreground)", "white")
+      .replaceAll("var(--surface)", "white")
+      .replaceAll("var(--surface-2)", "lightgray")
+      .replaceAll("var(--destructive-soft)", "pink")
+      .replaceAll("var(--foreground)", "black")
+      .replaceAll("var(--foreground-muted)", "gray")
+      .replaceAll("var(--destructive)", "red")
+      .replaceAll("var(--input)", "gray")
+      .replaceAll("var(--control-h)", "36px")
+      .replaceAll("var(--space-1)", "4px")
+      .replaceAll("var(--space-3)", "12px");
+  }
+
+  it.each([
+    false,
+    true,
+  ])("preserves upload buttons when sharing CSS loads last (disabled=%s)", (disabled) => {
+    render(
+      <>
+        <style>{css("components")}</style>
+        <style>{css("sharing")}</style>
+        <DropZoneOverlay folderName="Documents" onFiles={vi.fn()} disabled={disabled} />
+      </>,
+    );
+    expectStyle(screen.getByRole("button", { name: "Upload files" }), {
+      "background-color": "rgb(0, 0, 255)",
+      color: disabled ? "rgb(128, 128, 128)" : "rgb(255, 255, 255)",
+      "border-top-color": "rgb(0, 0, 255)",
+      "padding-top": "4px",
+      "padding-bottom": "4px",
+      cursor: disabled ? "default" : "pointer",
+    });
+    expectStyle(screen.getByRole("button", { name: "Upload folder" }), {
+      "padding-top": "4px",
+      "padding-bottom": "4px",
+      cursor: disabled ? "default" : "pointer",
+    });
+  });
+
+  it.each([
+    false,
+    true,
+  ])("keeps sharing buttons styled, including portals (shared CSS=%s)", (shared) => {
+    render(
+      <>
+        {shared && <style>{css("components")}</style>}
+        <style>{css("sharing")}</style>
+        <Picker />
+        <PermissionRow {...permission} />
+        <ConsentSheet {...consent} />
+      </>,
+    );
+    function expectSharingButtons(root: ParentNode = document) {
+      const buttons = root.querySelectorAll(".su-button");
+      expect(buttons.length).toBeGreaterThan(0);
+      for (const button of buttons) {
+        expectStyle(button, {
+          display: "inline-flex",
+          "background-color": "rgb(255, 255, 255)",
+          color: button.classList.contains("su-destructive") ? "rgb(255, 0, 0)" : "rgb(0, 0, 0)",
+          "min-height": "36px",
+          "padding-top": "0px",
+          "padding-right": "12px",
+          "font-weight": "500",
+          cursor: "pointer",
+        });
+      }
+    }
+    expectSharingButtons();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expectSharingButtons(screen.getByRole("alertdialog"));
   });
 });
 

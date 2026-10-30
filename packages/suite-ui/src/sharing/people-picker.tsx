@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 
 import { X } from "lucide-react";
@@ -193,7 +194,7 @@ export function PeoplePicker({
     else setError(result.message);
   }
   return (
-    <div className="su-stack">
+    <div className="su-people-picker su-stack">
       {/* Keep profile lookups mounted while contacts are filtered out. */}
       {candidates.map((person) => (
         <ContactProfile

@@ -1,4 +1,5 @@
 /* AUTHORED-BY Codex GPT-6.1-Sol */
+/* AUTHORED-BY Codex GPT-6 */
 /* Anatomy and dimensions from the Home permission rows and shared mockup controls. */
 :root {
   --consent-consequence: oklch(0.97 0.03 85);
@@ -48,7 +49,8 @@
 .su-fieldset legend {
   margin-bottom: var(--space-3);
 }
-.su-button,
+/* Keep sharing button overrides local, including portalled dialogs. */
+:where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-button,
 .su-chip,
 .su-input,
 .su-checkbox,
@@ -62,7 +64,7 @@
   min-height: var(--control-h);
   max-width: 100%;
 }
-.su-button {
+:where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -71,24 +73,24 @@
   font-weight: 500;
   cursor: pointer;
 }
-.su-button:hover,
+:where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-button:hover,
 .su-chip:hover {
   background: var(--surface-2);
 }
-.su-button:disabled,
+:where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-button:disabled,
 .su-chip:disabled,
 .su-input:disabled,
 .su-checkbox:disabled,
 .su-switch:disabled {
   cursor: not-allowed;
 }
-.su-button:disabled,
+:where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-button:disabled,
 .su-chip:disabled,
 .su-input:disabled {
   color: var(--foreground-muted);
 }
 .su-role-option:focus-visible,
-.su-button:focus-visible,
+:where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-button:focus-visible,
 .su-chip:focus-visible,
 .su-input:focus-visible,
 .su-checkbox:focus-visible,
@@ -98,10 +100,10 @@
   outline-offset: 2px;
   scroll-margin: var(--space-4);
 }
-.su-destructive {
+:where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-destructive {
   color: var(--destructive);
 }
-.su-destructive:hover {
+:where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-destructive:hover {
   background: var(--destructive-soft);
 }
 .su-input {
@@ -176,7 +178,7 @@
   height: 100%;
   object-fit: cover;
 }
-.su-icon-button {
+:where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-icon-button {
   min-width: var(--control-h);
   padding: 0;
   flex: none;
@@ -309,7 +311,7 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--space-3);
 }
-.su-equal-actions > .su-button {
+:where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-equal-actions > .su-button {
   width: 100%;
 }
 .su-data-card {
@@ -486,7 +488,7 @@
   .su-permission-header {
     grid-template-columns: var(--space-10) minmax(0, 1fr);
   }
-  .su-permission-header > .su-button {
+  .su-permission .su-permission-header > .su-button {
     grid-column: 1 / -1;
     justify-self: start;
   }
@@ -498,7 +500,7 @@
 }
 @media (pointer: coarse) {
   .su-role-option,
-  .su-button,
+  :where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-button,
   .su-chip,
   .su-input,
   .su-checkbox,
