@@ -184,8 +184,8 @@ export function DriveApp({ children }: { children: ReactNode }) {
     <PodSessionProvider>
       <DriveFocusBoundary>
         <SessionGate>{children}</SessionGate>
+        <Toaster position="bottom-center" />
       </DriveFocusBoundary>
-      <Toaster position="bottom-center" />
     </PodSessionProvider>
   );
 }

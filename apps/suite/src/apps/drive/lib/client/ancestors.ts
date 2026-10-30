@@ -106,11 +106,9 @@ export function ancestorGuard(options: {
   });
   const checkProtection = async (url: string, policy: OwnAccess, etag: string) => {
     await access.checkOwn({ url: policy.url, policy });
-    await checkIdentity(http, url, etag, options.error, false, (headers) => {
-      if (access.discover(url, headers) !== policy.url)
-        throw new DriveAccessError("Protected ACL endpoint changed");
-      return undefined;
-    });
+    await checkIdentity(http, url, etag, options.error, false, (headers) =>
+      access.verifyEndpoint(url, headers, policy),
+    );
   };
   const retireProtection = async (url: string, policy: OwnAccess, etag: string) => {
     // Retain the policy actually installed, including any safe intersection
@@ -205,6 +203,8 @@ export function ancestorGuard(options: {
           typeof content === "string" ? content === "" : ownsEmptyContainer(url, empty, content),
         remove: (validator) =>
           options.deleteVersion(url, validator, {
+            verifyHeaders: (headers) =>
+              access.verifyEndpoint(url, headers, endpoint ? { url: endpoint } : undefined),
             policyGuards: ownAccessGuards(
               endpoint ? { url: endpoint, policy: installed ?? null } : undefined,
             ),

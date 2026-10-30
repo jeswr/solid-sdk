@@ -150,6 +150,15 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     }
     return acl;
   }
+  /** A representation validator cannot identify its associated ACL endpoint. */
+  function verifyEndpoint(
+    resource: string,
+    headers: Headers,
+    own: Pick<NonNullable<AccessState["own"]>, "url"> | undefined,
+  ): undefined {
+    if (discover(resource, headers) !== own?.url)
+      throw new DriveAccessChangedError(["The item's own ACL endpoint changed"]);
+  }
   const read = async (url: string): Promise<AccessState> => {
     try {
       const result = await fetchRdf(url, {
@@ -226,10 +235,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
         ? [
             {
               ...guard.identity,
-              verifyHeaders: (headers) => {
-                if (discover(guard.identity.url, headers) !== url)
-                  throw new DriveAccessChangedError(["The item's own ACL endpoint changed"]);
-              },
+              verifyHeaders: (headers) => verifyEndpoint(guard.identity.url, headers, { url }),
             },
           ]
         : [],
@@ -319,6 +325,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     },
     creationReceipt: (resource: string) => creations.get(resource),
     discover,
+    verifyEndpoint,
     async checkOwn(
       own: { readonly url: string; readonly policy: OwnAccess | null } | undefined,
     ): Promise<void> {
@@ -400,7 +407,7 @@ function intersectAccess(desired: Store, current: OwnAccess, resource: string): 
       ];
       if (!targets.includes(resource)) continue;
       const ceiling = projectAccess(current, resource, resource, target === "default");
-      for (const selector of SELECTORS) {
+      for (const selector of [...SELECTORS, "origin"] as const) {
         for (const agent of rule.values(`${ACL}${selector}`)) {
           for (const mode of rule.values(`${ACL}mode`)) {
             const candidate = new Store();
@@ -685,11 +692,13 @@ export function accessGains(source: OwnAccess, destination: OwnAccess): string[]
       const origins = [...rule.values(`${ACL}origin`)];
       const modes = [...rule.values(`${ACL}mode`)];
       if (modes.includes(`${ACL}Write`)) modes.push(`${ACL}Append`);
-      return SELECTORS.flatMap((predicate) =>
+      return [...SELECTORS, "origin" as const].flatMap((predicate) =>
         [...rule.values(`${ACL}${predicate}`)].map((agent) => ({
           predicate,
           agent,
-          origins,
+          // WAC authorizes the principal and application independently. An
+          // origin-only authorization must survive comparison and intersection.
+          origins: predicate === "origin" ? [] : origins,
           modes,
         })),
       );
@@ -706,20 +715,23 @@ export function accessGains(source: OwnAccess, destination: OwnAccess): string[]
             (grant.origins.length > 0 &&
               grant.origins.every((origin) => existing.origins.includes(origin)))) &&
           ((existing.predicate === grant.predicate && existing.agent === grant.agent) ||
-            (existing.predicate === "agentClass" &&
+            (grant.predicate !== "origin" &&
+              existing.predicate === "agentClass" &&
               (existing.agent === PUBLIC ||
                 (existing.agent === AUTHENTICATED && grant.predicate === "agent")))),
       ),
     );
     if (covered) continue;
     const name =
-      grant.agent === PUBLIC
-        ? "Everyone (public)"
-        : grant.agent === AUTHENTICATED
-          ? "Authenticated agents"
-          : grant.predicate === "agentGroup"
-            ? `Group ${grant.agent}`
-            : grant.agent;
+      grant.predicate === "origin"
+        ? `Application ${grant.agent}`
+        : grant.agent === PUBLIC
+          ? "Everyone (public)"
+          : grant.agent === AUTHENTICATED
+            ? "Authenticated agents"
+            : grant.predicate === "agentGroup"
+              ? `Group ${grant.agent}`
+              : grant.agent;
     gains.add(grant.origins.length ? `${name} from ${grant.origins.join(", ")}` : name);
   }
   return [...gains];

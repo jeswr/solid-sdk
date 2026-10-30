@@ -2,6 +2,8 @@
 
 Drive binds destructive requests to the resource or policy validator approved at
 selection/preflight, or to a receipt of its own successful conditional write.
+WAC application origins are compared independently of principal grants, including
+origin-only authorizations. Recovery intersection preserves only approved origins.
 `commitHttp` hydrates request data and runs access checks before its final raw
 HTTP identity checks. No ledger read, Web Lock, serialization, or other asynchronous
 work intervenes between those checks and the request. A committed destructive
@@ -26,6 +28,9 @@ Drive saves private recovery copies before conditionally clearing only its own
 exposed PUT. Failures report retained recovery locations. Another client can still
 change content or access between requests: conditional mutations and operation
 rechecks surface that limitation instead of attempting to revert the other client.
+Rollback DELETE checks the captured ACL endpoint synchronously on its final
+resource HEAD as well as the resource ETag and captured ACL version. A changed
+endpoint blocks deletion and preserves the concurrent ACL during private evacuation.
 
 Compensation uses the complete captured own ACL, including independent child
 defaults. An unchanged ACL stays intact during content replay; its captured
@@ -59,6 +64,10 @@ own policy or absence, so an unknown historical endpoint cannot authorize repair
 Failure keeps a durable
 receipt for the actual installed policy, including narrower intersections, so Retry
 cannot repair another client's replacement or revocation.
+
+The [round 63 audit](../../../../../test/drive-review-round63-audit.md) maps every
+audited call site, the independent-origin and rollback-endpoint fixes, toast/modal
+focus recovery, and the expanded 42-step mutation matrix for both ordering shapes.
 
 The [round 62 audit](../../../../../test/drive-review-round62-audit.md) maps copied
 policy captures, PUT identity checks and recovery, protection Delete, root writes,

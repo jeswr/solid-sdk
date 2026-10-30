@@ -67,7 +67,7 @@ it("compares modes, subjects and origins conservatively without conflating condi
       restricted,
       policy([{ agent: [OWNER], mode: read, origin: ["https://third.test"] }]),
     ),
-  ).toEqual([`${OWNER} from https://third.test`]);
+  ).toEqual([`${OWNER} from https://third.test`, "Application https://third.test"]);
   expect(accessGains(restricted, policy([{ agent: [OWNER], mode: read }]))).toEqual([OWNER]);
   expect(accessGains(policy([]), policy([{ agent: [OWNER] }]))).toEqual([]);
 });

@@ -773,6 +773,7 @@ export function createSolidDriveClient(options: {
             );
             await deleteVersion(url, etag, undefined, {
               policyGuards: ownAccessGuards(own),
+              verifyHeaders: (headers) => access.verifyEndpoint(url, headers, own),
               rechecks: [() => access.checkOwn(own)],
             });
           } catch (cause) {
@@ -1416,6 +1417,7 @@ export function createSolidDriveClient(options: {
               binding.rollback(() =>
                 deleteVersion(resource.url, etag, undefined, {
                   policyGuards: ownAccessGuards(own),
+                  verifyHeaders: (headers) => access.verifyEndpoint(resource.url, headers, own),
                   rechecks: [() => access.checkOwn(own)],
                   identityChecks: [() => verifySnapshotIdentity(resource.source)],
                 }),
@@ -1434,6 +1436,7 @@ export function createSolidDriveClient(options: {
               binding.rollback(() =>
                 deleteVersion(resource.url, etag, undefined, {
                   policyGuards: ownAccessGuards(own),
+                  verifyHeaders: (headers) => access.verifyEndpoint(resource.url, headers, own),
                   rechecks: [() => access.checkOwn(own)],
                   identityChecks: [() => verifySnapshotIdentity(resource.source)],
                 }),

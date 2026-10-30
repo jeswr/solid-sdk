@@ -62,6 +62,8 @@ const steps = [
   "copy payload",
   "ACL overwrite",
   "replacement rollback",
+  "upload rollback",
+  "new folder rollback",
   "copy rollback",
   "container rollback",
   "metadata undo",
@@ -333,6 +335,25 @@ async function scenario(step: Step, events: string[]) {
       });
     }
     run = () => merged.recheck();
+  } else if (step === "upload rollback" || step === "new folder rollback") {
+    target = `${PRIVATE}new${step === "new folder rollback" ? "/" : ""}`;
+    let written = false;
+    let refused = false;
+    f.after(async (url, method, response) => {
+      if (url === target && method === "PUT" && response.ok) written = true;
+      return response;
+    });
+    f.intercept(async (url, init) => {
+      if (written && !refused && url === `${PRIVATE}.policy` && !init?.method) {
+        refused = true;
+        return new Response(null, { status: 503 });
+      }
+      return undefined;
+    });
+    run = () =>
+      step === "new folder rollback"
+        ? client.createFolder(target, { kind: "inherit-verified" })
+        : uploadFile(client, PRIVATE, new Blob(["upload"]), "new");
   } else if (step === "ancestor cleanup") {
     target = `${PRIVATE}ancestor/`;
     await protectionLedger(http).set(target, {
@@ -479,7 +500,7 @@ async function scenario(step: Step, events: string[]) {
 
 it.each(
   steps,
-)("round 62 shape a: %s retains a replacement at its final identity check", async (step) => {
+)("round 63 shape a: %s retains a replacement at its final identity check", async (step) => {
   const events: string[] = [];
   const s = await scenario(step, events);
   let checks = 0;
@@ -507,7 +528,7 @@ it.each(
 
 it.each(
   steps,
-)("round 62 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
+)("round 63 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   const events: string[] = [];
   const s = await scenario(step, events);

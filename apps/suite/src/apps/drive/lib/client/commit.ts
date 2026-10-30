@@ -29,6 +29,8 @@ interface HttpIdentity extends PolicyIdentity {
 }
 
 export interface CommitChecks {
+  /** Synchronous endpoint assertions on the final target HEAD, using captured data only. */
+  readonly verifyHeaders?: HttpIdentity["verifyHeaders"];
   /** Hydrated policy receipts; checked after all persistence and callbacks. */
   readonly policyGuards?: readonly PolicyIdentity[];
   readonly rechecks?: readonly (() => Promise<void>)[];
@@ -138,6 +140,7 @@ export function commitHttp<T>(
               url: options.url,
               etag,
               error: options.error,
+              ...(options.verifyHeaders ? { verifyHeaders: options.verifyHeaders } : {}),
               ...(options.allowMissing ? { allowMissing: true } : {}),
             },
           ]

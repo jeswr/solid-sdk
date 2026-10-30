@@ -2,19 +2,12 @@
 "use client";
 
 import { type ReactNode, useLayoutEffect, useRef } from "react";
-import { focusDriveListing } from "./ui";
+import { DRIVE_MODAL, focusDriveListing, isDriveFocusTarget } from "./ui";
 
-const MODAL =
-  '[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"], dialog[open]';
 const OVERLAY = '[role="menu"], [role="listbox"], [role="dialog"], [role="alertdialog"]';
 
 function hidden(element: HTMLElement) {
-  const style = getComputedStyle(element);
-  return (
-    Boolean(element.closest("[hidden], [inert]")) ||
-    style.display === "none" ||
-    ["hidden", "collapse"].includes(style.visibility)
-  );
+  return !isDriveFocusTarget(element);
 }
 
 function usable(element: Element | null | undefined): element is HTMLElement {
@@ -67,7 +60,7 @@ export function DriveFocusBoundary({ children }: { children: ReactNode }) {
           if (
             !app.isConnected ||
             (doc.activeElement !== doc.body && usable(doc.activeElement)) ||
-            [...doc.querySelectorAll<HTMLElement>(MODAL)].some(
+            [...doc.querySelectorAll<HTMLElement>(DRIVE_MODAL)].some(
               (modal) => modal.dataset.state !== "closed" && !hidden(modal),
             )
           )
@@ -87,7 +80,7 @@ export function DriveFocusBoundary({ children }: { children: ReactNode }) {
       }
       if (saved.element.isConnected) return;
       focused.current = null;
-      if (!app.isConnected || doc.activeElement !== doc.body || doc.querySelector(MODAL)) return;
+      if (!app.isConnected || doc.activeElement !== doc.body) return;
       // Mutation delivery follows layout effects: row-URL recovery and registered
       // control replacements get first choice, then the shared region fallbacks.
       focusDriveListing(undefined, undefined, app.querySelector("[data-drive-listing]"), app);
@@ -96,7 +89,7 @@ export function DriveFocusBoundary({ children }: { children: ReactNode }) {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["hidden", "inert", "style", "data-state"],
+      attributeFilter: ["hidden", "inert", "aria-hidden", "style", "data-state"],
     });
     return () => {
       clearTimeout(recovery);

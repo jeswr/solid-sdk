@@ -90,6 +90,27 @@ interface DriveUiValue {
 
 const DriveUiContext = createContext<DriveUiValue | undefined>(undefined);
 
+// Radix's modal Sheet/Dialog content does not itself emit aria-modal. Popovers
+// also use role=dialog, so recognize the supported modal components explicitly.
+export const DRIVE_MODAL =
+  '[aria-modal="true"][role="dialog"], [aria-modal="true"][role="alertdialog"], [data-slot="sheet-content"], [data-slot="dialog-content"], [data-slot="alert-dialog-content"], dialog[open]';
+
+/** Return targets must remain exposed, including when a different modal survives. */
+export function isDriveFocusTarget(element: Element | null | undefined): element is HTMLElement {
+  if (
+    !(element instanceof HTMLElement) ||
+    !element.isConnected ||
+    element.matches(":disabled") ||
+    element.closest('[hidden], [inert], [aria-hidden="true"]')
+  )
+    return false;
+  for (let current: HTMLElement | null = element; current; current = current.parentElement) {
+    const style = getComputedStyle(current);
+    if (style.display === "none" || ["hidden", "collapse"].includes(style.visibility)) return false;
+  }
+  return true;
+}
+
 /** Return focus to an item, listing, preview or main region after a control is removed. */
 export function focusDriveListing(
   url?: string,
@@ -97,6 +118,9 @@ export function focusDriveListing(
   listing = document.querySelector<HTMLElement>("[data-drive-listing]"),
   scope: ParentNode = document,
 ) {
+  const modal = [...document.querySelectorAll<HTMLElement>(DRIVE_MODAL)]
+    .reverse()
+    .find((element) => element.dataset.state !== "closed" && isDriveFocusTarget(element));
   const row = url ? listing?.querySelector<HTMLElement>(`[data-url="${CSS.escape(url)}"]`) : null;
   for (const target of [
     preferred,
@@ -104,8 +128,21 @@ export function focusDriveListing(
     listing,
     scope.querySelector<HTMLElement>("[data-drive-preview]"),
     scope.querySelector<HTMLElement>('main, [role="main"]'),
+    ...(modal
+      ? [
+          ...modal.querySelectorAll<HTMLElement>(
+            "button, [href], input, select, textarea, [tabindex]",
+          ),
+          modal,
+        ]
+      : []),
   ]) {
-    if (!target?.isConnected || target === document.body) continue;
+    if (
+      !isDriveFocusTarget(target) ||
+      target === document.body ||
+      (modal && !modal.contains(target))
+    )
+      continue;
     target.focus();
     // A connected element may have become disabled or hidden during the mutation.
     if (document.activeElement === target) return;
@@ -121,8 +158,7 @@ export function captureDriveFocusRemoval(subtree?: Element | null) {
     if (
       active &&
       active !== document.body &&
-      active.isConnected &&
-      !active.matches(":disabled") &&
+      isDriveFocusTarget(active) &&
       !(inside && active === focused)
     )
       return;
