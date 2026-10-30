@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6
 // (Ported from @jeswr/solid-elements test/proactive-fetch.test.ts — this package
 // is the wrapper's new home; only import paths changed in the port.)
 //
@@ -81,7 +82,60 @@ const FOREIGN = "https://evil.example";
 
 afterEach(() => {
   __resetProactiveFetchForTests();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+
+describe("proactiveAuthenticatedFetch — platform URL credential gate", () => {
+  it("checks the native destination even when the constructed Request shadows url", async () => {
+    const NativeRequest = Request;
+    vi.stubGlobal(
+      "Request",
+      class extends NativeRequest {
+        constructor(input: RequestInfo | URL, init?: RequestInit) {
+          super(input, init);
+          Object.defineProperty(this, "url", { value: `${POD}/private/note` });
+        }
+      },
+    );
+    const provider = fakeProvider();
+    const sent: Request[] = [];
+    await proactiveAuthenticatedFetch(
+      { provider, allowedOrigins: new Set([POD]) },
+      async (input, init) => {
+        sent.push(new NativeRequest(input, init));
+        return new Response(null, { status: 401 });
+      },
+      `${FOREIGN}/steal`,
+    );
+    expect(provider.upgradeCalls).toEqual([]);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].url).toBe(`${FOREIGN}/steal`);
+    expect(sent[0].headers.has("Authorization")).toBe(false);
+    expect(sent[0].headers.has("DPoP")).toBe(false);
+  });
+
+  it("rechecks the native destination of the 401 retry source", async () => {
+    const foreignRetry = new Request(`${FOREIGN}/steal`);
+    Object.defineProperty(foreignRetry, "url", { value: `${POD}/private/note` });
+    vi.spyOn(Request.prototype, "clone").mockReturnValueOnce(foreignRetry);
+    const provider = fakeProvider();
+    const sent: Request[] = [];
+    await proactiveAuthenticatedFetch(
+      { provider, allowedOrigins: new Set([POD]) },
+      async (input, init) => {
+        sent.push(new Request(input, init));
+        return new Response(null, { status: 401 });
+      },
+      `${POD}/private/note`,
+    );
+    expect(provider.upgradeCalls).toEqual([`${POD}/private/note`]);
+    expect(sent).toHaveLength(2);
+    expect(sent[0].headers.get("Authorization")).toBe("DPoP tok-abc");
+    expect(sent[1].url).toBe(`${FOREIGN}/steal`);
+    expect(sent[1].headers.has("Authorization")).toBe(false);
+    expect(sent[1].headers.has("DPoP")).toBe(false);
+  });
 });
 
 describe("deriveProactiveAllowedOrigins — the credential boundary (delegates to the seam)", () => {

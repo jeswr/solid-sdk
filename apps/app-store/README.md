@@ -1,5 +1,12 @@
 # Solid App Store
 
+<!-- AUTHORED-BY Codex GPT-6 -->
+
+Hosted at https://jeswr.github.io/solid-sdk/app-store/ by the
+[workspace Pages workflow](../../.github/workflows/pages.yml); Vercel git deployments
+are disabled. See [workspace deployment setup](../../docs/deployment.md).
+The hosting recipes below describe optional standalone deployments.
+
 > A discover-and-launch hub for the whole Solid app suite. Browse every app as a card
 > grouped by category, search/filter, and **Launch** any live app already logged in —
 > the session is re-established securely at your identity provider and **only your public
@@ -99,27 +106,22 @@ npm run build          # gen-clientid + gen-catalog + vite build → web/dist
 The build runs `gen-clientid.mjs` (the per-origin Solid-OIDC Client Identifier Document) and
 `gen-catalog.mjs` (the DCAT catalog) inline — **not** as npm lifecycle hooks, because
 `ignore-scripts=true` (supply-chain hardening) would skip those. The deploy origin is set at
-**deploy** time via `APP_ORIGIN` (e.g. `https://apps.solid-test.jeswr.org`), not baked in at
-build.
+build time via `APP_ORIGIN`; `CLIENT_BASE_PATH` supplies the app's path when it is
+served below a domain root.
 
 ## Deploy
 
-The store deploys as the **10th pod-app subdomain** alongside the others — see
-[`docs/DEPLOY.md`](./docs/DEPLOY.md). In short: a new
-`apps.<domain>` Caddy vhost + a static-file handler with `Accept`-routing for the
-`/catalog` IRI, built on-box in `node:24-alpine` with `APP_ORIGIN` set. (Deploys run from
-the suite's main orchestrating session; this repo documents the recipe but does not touch
-the live box.)
+The workspace Pages workflow publishes the store at
+https://jeswr.github.io/solid-sdk/app-store/. To reproduce its build from the
+monorepo root (Node 24):
 
-**Vercel alternative (committed `web/vercel.json`).** The store is a static SPA, so it
-can also deploy to Vercel with zero server work. Import settings: Framework Preset
-**Vite**, **Root Directory `web`**, build `npm run build`, output `dist`, install
-`npm ci`. Set **`APP_ORIGIN`** (and mirror `VITE_APP_ORIGIN`) to the deploy origin
-(e.g. `https://apps.solid-test.jeswr.org` or `<project>.vercel.app`) so the build
-regenerates `clientid.jsonld` + the DCAT `/catalog` IRIs for that origin. `web/vercel.json`
-serves `clientid.jsonld`/`catalog.jsonld` as `application/ld+json` and `catalog.ttl` as
-`text/turtle`, all with `Access-Control-Allow-Origin: *`, plus the SPA `→ index.html`
-rewrite.
+```sh
+APP_ORIGIN=https://jeswr.github.io node scripts/build-pages.mjs app-store
+```
+
+The generated client identity, redirect URIs, catalog IRIs and links include the
+app's base path. Vercel git deployments are disabled. The older standalone Caddy
+recipe remains in [`docs/DEPLOY.md`](./docs/DEPLOY.md).
 
 ## License
 
