@@ -39,3 +39,31 @@ Limitations and questions:
 - Account selection/currency and the opening balance before the first loaded month are explicit caller inputs. The model does not infer them. The caller provisions the money container and child containers/access controls; hooks and Type Index wiring belong to MON-01.
 - Multi-month imports are conditional per shard, not globally atomic. A later failure leaves the stored original and any earlier successful shards intact for explicit recovery; deterministic row IDs allow inspection. Single-leg transfer edits/deletions are rejected. Paired transfer editing and implicit cross-month moves are outside this brief.
 - `roborev` is not installed (`command -v roborev` returned no executable). Automated per-commit review could not run and remains an integrator/environment follow-up; no verdicts are claimed. Code and protocol edge cases were reviewed locally and exercised in the tests.
+
+## Fix round 2 — sst-kw9b
+
+Review head: `ffa8273b633ddc5c4d748e65db8f3a1f84c1a76a`. Fixed only the four supplied data-integrity findings, their regression tests and the related model documentation.
+
+Commits:
+
+- `db129ab3 fix: isolate money amount nodes from ledger records` — allocate blank monetary nodes without overlapping record IRIs or existing blank labels; reuse exclusively owned amounts; preserve shared amounts on edits and legacy monetary data on deletion. Tests cover named/blank sharing, balance isolation, suffix-keyed transactions, deletion in both orders, and existing mixed transaction/amount subjects.
+- `52699008 fix: qualify imported money rows by statement format` — derive row IDs from statement key, format and index. A shared-shard CSV/OFX/PDF regression preserves all five rows, account associations, currencies and provenance; IDs remain deterministic and accept the full statement-key length.
+- `f3552b2b fix: reject named graphs before writing money Turtle` — keep the existing Turtle API and `.ttl` layout, conservatively rejecting named graphs before serialization or any PUT. Tests read TriG with named/blank graph labels and JSON-LD named graphs, then verify rejection without changing the original resource or in-memory dataset. The API documentation states this write restriction.
+- `7902ac2f test: verify amount cleanup across RDF parses` — count remaining monetary subjects after deletion, so the assertion does not depend on blank node labels surviving separate parses.
+- `docs: record money review fix validation` — final report commit, after the checks below.
+
+Commands ran from this checkout with `export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"` (Node `v24.22.1`, pnpm `10.4.1`). No dependencies were added or installed, and lifecycle scripts stayed disabled.
+
+Validation:
+
+- `pnpm exec turbo run build --filter '@jeswr/app-suite^...' --concurrency=4` — PASS, five prerequisite packages. The first targeted test invocation, before these dist outputs existed, could not resolve workspace entries; building prerequisites resolved it.
+- `pnpm exec biome check apps/suite/src/apps/money/lib/model apps/suite/test/money-model*.ts` — PASS, no warnings in the changed model/tests.
+- `pnpm --filter @jeswr/app-suite exec vitest run test/money-model.test.ts test/money-model-io.test.ts --coverage.include='src/apps/money/lib/model/**/*.ts'` — PASS, 34 tests; 100% statements (362/362), branches (174/174), functions (99/99), lines (328/328). No coverage thresholds or exclusions changed. The import and named-graph regressions failed against the preceding implementations before their fixes.
+- `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` — PASS; 123 files and 6,447 tests, 100% app coverage in all four metrics. Lint exits zero with the same 54 existing warnings in unrelated files.
+- `pnpm run lint:root` — PASS, including workspace/layer guards, tokens and all 74 contrast checks.
+- `TURBO_SCM_BASE=ffa8273b633ddc5c4d748e65db8f3a1f84c1a76a pnpm run gate` — PASS after the final test adjustment, 10/10 tasks (five cached), including lint, build, typecheck and all 6,447 app tests.
+- `pnpm run gate:full` — FAIL outside the changed paths: `test/check-sdk-layers.test.mjs:328`, “validates pathological specs in under 50 ms each,” measured 119.674918 ms against its 50 ms bound. Root tests had 744 passes and one failure; Turbo reported 53 successful tasks of 217 before stopping. No unrelated code or timing threshold was changed.
+- `pnpm run test:root` — PASS on an isolated rerun after the full gate stopped: nine files, all 745 tests, including the timing check. This does not change the failed full-gate result above.
+- `git diff --check` — PASS.
+
+All four requested fixes are complete. The conservative named-graph rejection is intentional; graph-capable writing was not added. No new open questions, UI changes, screenshots or dependency-policy checks apply. The full-workspace timing failure remains recorded above. `roborev` is still unavailable (`command -v roborev` returns no executable); no automated review verdict is claimed. Work stayed on `lane/sst-kw9b` in this checkout, with no pushes, PRs, branch switches or remote fetches/merges.
