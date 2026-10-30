@@ -22,10 +22,13 @@ export function valueDate(value: DateTimeValue): Date {
   return new Date(value.kind === "date" ? `${value.date}T12:00:00` : value.dateTime);
 }
 
-export function formatDateTime(value: DateTimeValue, locale: string): string {
+/** An explicit timezone applies to instants; all-day values keep their wall date. */
+export function formatDateTime(value: DateTimeValue, locale: string, timeZone?: string): string {
   return new Intl.DateTimeFormat(locale, {
     dateStyle: "full",
-    ...(value.kind === "dateTime" ? { timeStyle: "short" as const } : {}),
+    ...(value.kind === "dateTime"
+      ? { timeStyle: "short" as const, ...(timeZone ? { timeZone } : {}) }
+      : {}),
   }).format(valueDate(value));
 }
 

@@ -6,6 +6,7 @@ import { CalendarDays } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { Calendar } from "./calendar.js";
 import { type DateTimeValue, formatDateTime, localDate, valueDate } from "./date-value.js";
+import { useLocalTimeZone } from "./use-local-time-zone.js";
 
 export interface DatePickerPopoverProps {
   label: string;
@@ -27,6 +28,7 @@ export function DatePickerPopover({
   today,
 }: DatePickerPopoverProps) {
   const id = useId();
+  const timeZone = useLocalTimeZone();
   const [open, setOpen] = useState(defaultOpen && !disabled);
   useEffect(() => {
     if (disabled) setOpen(false);
@@ -64,7 +66,7 @@ export function DatePickerPopover({
             <CalendarDays size={16} strokeWidth={1.75} aria-hidden="true" />
             <span id={`${id}-value`}>
               {value
-                ? `${formatDateTime(value, locale)}${allDay ? " · All day" : ""}`
+                ? `${formatDateTime(value, locale, timeZone ?? "UTC")}${allDay ? " · All day" : ""}`
                 : "Choose a date"}
             </span>
           </button>
@@ -149,7 +151,7 @@ export function DatePickerPopover({
       </Popover.Root>
       <span className="suite-date-sr-only" role="status">
         {value
-          ? `${formatDateTime(value, locale)}${allDay ? " · All day" : ""}`
+          ? `${formatDateTime(value, locale, timeZone ?? "UTC")}${allDay ? " · All day" : ""}`
           : "No date selected"}
       </span>
     </div>
