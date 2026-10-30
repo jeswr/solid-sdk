@@ -17,8 +17,8 @@ afterEach(() => {
 });
 
 const PREFIXES = `
-@prefix fin: <https://w3id.org/jeswr/sectors/finance#> .
-@prefix pm: <https://w3id.org/jeswr/pod-money#> .
+@prefix fin: <https://jeswr.org/ns/sectors/finance#> .
+@prefix pm: <https://jeswr.org/ns/pod-money#> .
 @prefix skos: <http://www.w3.org/2004/02/skos/core#> .
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 `;

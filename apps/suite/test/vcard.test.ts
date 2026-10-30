@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parseVCards, serializeVCards, type VCard } from "../src/apps/contacts/lib/vcard";
 import { apple, google, quotedPrintable, version4 } from "./fixtures/vcard/exports";
 
@@ -162,27 +162,42 @@ describe("content lines and values", () => {
   });
 
   it.each([
-    ["ordinary properties", "X-EXTRA:value=\n".repeat(50_000), undefined],
+    ["ordinary properties", "X-EXTRA:value=\n".repeat(1_000), undefined],
     [
       "quoted-printable soft breaks",
-      `NOTE;ENCODING=QUOTED-PRINTABLE:${"=41=\n".repeat(50_000)}=41\n`,
-      "A".repeat(50_001),
+      `NOTE;ENCODING=QUOTED-PRINTABLE:${"=41=\n".repeat(1_000)}=41\n`,
+      "A".repeat(1_001),
     ],
     [
       "empty quoted-printable folds",
-      `NOTE;ENCODING=QUOTED-PRINTABLE:=${"\n ".repeat(50_000)}4\n\t1\n`,
+      `NOTE;ENCODING=QUOTED-PRINTABLE:=${"\n ".repeat(1_000)}4\n\t1\n`,
       "A",
     ],
-  ])("bounds processing of large inputs with %s", (_, properties, note) => {
+  ])("bounds scans and line copies for %s", (_, properties, note) => {
     const text = wrap(`${properties}EMAIL:fiction@example.org`, "3.0");
-    const started = performance.now();
-    const card = first(text);
-    const elapsed = performance.now() - started;
+    // Count observable scans/copies rather than elapsed time under CI coverage.
+    // A small fixture still exposes repeated suffix scans or physical-line copies.
+    const scans = vi.spyOn(RegExp.prototype, "exec");
+    const copies = vi.spyOn(Array.prototype, "slice");
+    let card: VCard;
+    let scanCount: number;
+    let copiedEntries: number;
+    try {
+      card = first(text);
+      scanCount = scans.mock.calls.length;
+      copiedEntries = copies.mock.results.reduce(
+        (total, result) => total + (result.type === "return" ? result.value.length : 0),
+        0,
+      );
+    } finally {
+      scans.mockRestore();
+      copies.mockRestore();
+    }
     expect(card.fn).toBe("Test");
     expect(card.note).toBe(note);
     expect(card.emails[0]?.value).toBe("fiction@example.org");
-    // Generous headroom for a linear pass; repeated suffix copies/scans exceed this budget.
-    expect(elapsed).toBeLessThan(4_000);
+    expect(scanCount).toBeLessThan(8 * text.length);
+    expect(copiedEntries).toBeLessThan(text.length);
   });
 
   it("recognizes QP only in headers and allows folded and quoted parameter headers", () => {

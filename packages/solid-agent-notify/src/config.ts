@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * config.ts — the single source of truth for every limit and runtime constant.
@@ -99,10 +100,10 @@ export const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 /** The LDP `contains` predicate (an inbox container lists its members with this). */
 export const LDP_CONTAINS = "http://www.w3.org/ns/ldp#contains";
 
-// ─── Shared federation task model (https://w3id.org/jeswr/task) ────────────────
+// ─── Shared federation task model (https://jeswr.org/ns/task#) ────────────────
 //
 // The cross-app task/issue model the ecosystem (solid-issues, Pod Manager) agrees
-// on, pinned by the federation vocab at https://w3id.org/jeswr/task. It is the
+// on, described by the federation vocab at https://jeswr.org/ns/task#. It is the
 // canonical RE-USE of established vocabularies (NOT a new ontology): a task is a
 // `wf:Task`, its lifecycle state is `rdf:type wf:Open|wf:Closed`, metadata is
 // `dct:`, assignment is `wf:assignee`, and a cross-app task event is an
@@ -116,5 +117,10 @@ export const WF = "http://www.w3.org/2005/01/wf/flow#";
 /** Dublin Core Terms namespace (`dct:`) — task title / description / created / creator. */
 export const DCT = "http://purl.org/dc/terms/";
 
-/** The shared-task home vocab IRI (`https://w3id.org/jeswr/task`), for `rdfs:seeAlso` / provenance. */
+/** The shared-task namespace; current task RDF reuses standard wf:/dct:/as: terms. */
+// Canonical source: @jeswr/suite-vocab NS.TASK
+export const TASK_NS = "https://jeswr.org/ns/task#";
+
+/** Published vocabulary document URL for `rdfs:seeAlso` / provenance; not a namespace. */
+// Preserve this external document identifier (VOC-07 STOP rule).
 export const TASK_VOCAB = "https://w3id.org/jeswr/task";

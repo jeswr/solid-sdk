@@ -1,9 +1,15 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Claude Fable 5 -->
 
 # The ODRL Agent-Delegation Profile
 
 **Profile IRI:** `https://w3id.org/jeswr/odrl-delegation`
-**Term namespace (`odrld:`):** `https://w3id.org/jeswr/odrl-delegation#`
+**Term namespace (`odrld:`):** `https://jeswr.org/ns/odrl-delegation#`
+
+Readers also accept `https://w3id.org/jeswr/odrl-delegation#` terms, including
+mixed graphs. Phase-1 writers retain the legacy wire vocabulary because pinned
+verifiers reject canonical emission; that switch is deferred to phase 2. The published profile IRI above stays
+unchanged because it identifies the protocol opt-in.
 **Status:** Draft profile specification, implemented by `@jeswr/solid-odrl`
 (`evaluateDelegated`, `delegationProvenance`). Experimental, AI-agent-generated.
 
@@ -306,7 +312,7 @@ passed on; `A` delegates read to summariser `B`:
 
 ```turtle
 @prefix odrl:  <http://www.w3.org/ns/odrl/2/> .
-@prefix odrld: <https://w3id.org/jeswr/odrl-delegation#> .
+@prefix odrld: <https://jeswr.org/ns/odrl-delegation#> .
 
 <https://alice.example/policies/root> a odrl:Agreement ;
   odrl:profile <https://w3id.org/jeswr/odrl-delegation> ;

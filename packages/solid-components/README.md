@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # @jeswr/solid-components
@@ -6,6 +7,11 @@ Codegen-friendly Lit components and controllers for reading, displaying, and con
 
 It provides typed viewers for tasks, contacts, profiles, bookmarks, messages, and containers, plus
 SHACL view/form components and a static RDF-class resolver.
+
+Bookmark views, forms, and class resolution accept both `https://jeswr.org/ns/bookmark#Bookmark`
+and the legacy `https://w3id.org/jeswr/bookmark#Bookmark`, including mixed data. Forms display
+canonical values first and save the canonical class, `notes`, and `archived` predicates,
+clearing legacy aliases on the edited bookmark while preserving unrelated data.
 
 > Experimental and security-sensitive. Keep authenticated and public fetch seams separate, and use
 > an explicit base scope for writes.

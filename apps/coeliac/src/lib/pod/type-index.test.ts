@@ -1,7 +1,7 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-import { DIET_MEAL, DIET_SYMPTOM } from "@jeswr/solid-health-diary";
+import { DIET_MEAL, DIET_SYMPTOM, LEGACY_DIET_NS } from "@jeswr/solid-health-diary";
 import { describe, expect, it, vi } from "vitest";
-import { mealsContainer } from "./layout";
+import { mealsContainer, symptomsContainer } from "./layout";
 import { registerDiaryTypes } from "./type-index";
 
 const WEBID = "https://alice.example/profile/card#me";
@@ -51,4 +51,26 @@ describe("registerDiaryTypes", () => {
       registered: false,
     });
   });
+});
+
+// AUTHORED-BY Codex GPT-6
+it.each([false, true])("keeps existing diary registrations idempotent (legacy: %s)", async (legacy) => {
+  const puts: string[] = [];
+  const meal = legacy ? `${LEGACY_DIET_NS}Meal` : DIET_MEAL;
+  const symptom = legacy ? `${LEGACY_DIET_NS}Symptom` : DIET_SYMPTOM;
+  const index = `${EMPTY_INDEX_TTL}
+    <#meal> a <http://www.w3.org/ns/solid/terms#TypeRegistration> ;
+      <http://www.w3.org/ns/solid/terms#forClass> <${meal}> ;
+      <http://www.w3.org/ns/solid/terms#instanceContainer> <${mealsContainer(ROOT)}> .
+    <#symptom> a <http://www.w3.org/ns/solid/terms#TypeRegistration> ;
+      <http://www.w3.org/ns/solid/terms#forClass> <${symptom}> ;
+      <http://www.w3.org/ns/solid/terms#instanceContainer> <${symptomsContainer(ROOT)}> .`;
+  const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === "PUT") puts.push(input.toString());
+    return new Response(input.toString() === INDEX ? index : PROFILE_TTL, {
+      headers: { "content-type": "text/turtle" },
+    });
+  });
+  expect(await registerDiaryTypes(fetch, { webId: WEBID, storageRoot: ROOT })).toEqual({ registered: true, indexUrl: INDEX });
+  expect(puts).toEqual([]);
 });
