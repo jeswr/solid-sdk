@@ -115,6 +115,65 @@ describe("DateTimeField", () => {
     change("Date", "10/11/2026");
     expect(onChange).toHaveBeenLastCalledWith({ kind: "date", date: "2026-10-11" });
   });
+  it.each<{ name: string; incoming: DateTimeValue | null; expected: string }>([
+    {
+      name: "all-day date",
+      incoming: { kind: "date", date: "2027-01-01" },
+      expected: "Friday, January 1, 2027",
+    },
+    {
+      name: "instant",
+      incoming: { kind: "dateTime", dateTime: "2027-01-01T17:00:00.000Z" },
+      expected: "Friday, January 1, 2027 at 5:00 PM",
+    },
+    { name: "cleared value", incoming: null, expected: "" },
+  ])("accepts a controlled $name together with a locale change without emitting", ({
+    incoming,
+    expected,
+  }) => {
+    const onChange = vi.fn();
+    function Parent() {
+      const [locale, setLocale] = useState("en-GB");
+      const [value, setValue] = useState<DateTimeValue | null>(null);
+      return (
+        <>
+          <DateTimeField
+            label="Date"
+            locale={locale}
+            value={value}
+            onChange={(next) => {
+              onChange(next);
+              setValue(next);
+            }}
+            referenceDate={reference}
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setLocale("en-US");
+              setValue(incoming);
+            }}
+          >
+            Load date and locale
+          </button>
+          <div data-testid="value">{JSON.stringify(value)}</div>
+        </>
+      );
+    }
+    render(<Parent />);
+    change("Date", "10/11/2026");
+    expect(screen.getByTestId("value").textContent).toBe('{"kind":"date","date":"2026-11-10"}');
+    onChange.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Load date and locale" }));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(screen.getByTestId("value").textContent).toBe(JSON.stringify(incoming));
+    expect((screen.getByLabelText("Date") as HTMLInputElement).value).toBe(expected);
+    expect(screen.getByRole("status").textContent).toBe(
+      incoming?.kind === "date" ? `${expected} · All day` : expected || "No date selected",
+    );
+    change("Date", "10/11/2026");
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ kind: "date", date: "2026-10-11" });
+  });
   it("reinterprets an edited numeric date when the account locale changes", () => {
     const onChange = vi.fn();
     const value = { kind: "date" as const, date: "2026-11-10" };

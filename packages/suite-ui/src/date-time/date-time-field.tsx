@@ -39,14 +39,15 @@ export function DateTimeField({
   useEffect(() => {
     if (previousLocale.current === locale) return;
     previousLocale.current = locale;
-    if (!editing) return;
+    // Accept a new controlled value before reinterpreting the previous draft.
+    if (!editing || emitted.current !== signature) return;
     const result = parseDateTime(text, locale, referenceDate ?? clock);
     if (result.status !== "invalid") {
       const next = result.status === "valid" ? result.value : null;
       emitted.current = JSON.stringify(next);
       onChange(next);
     }
-  }, [locale, editing, text, referenceDate, clock, onChange]);
+  }, [locale, editing, text, referenceDate, clock, onChange, signature]);
   useEffect(() => {
     if (emitted.current !== signature) {
       setText(value ? formatDateTime(value, locale, timeZone ?? "UTC") : "");
