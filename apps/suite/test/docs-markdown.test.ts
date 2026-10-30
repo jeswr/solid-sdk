@@ -153,6 +153,17 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     "> > quote\n2. next",
     "> > quote\n> 2. next",
     "- > quote\n  2. next",
+    "> quote\ncontinued\n2. next",
+    "> quote\nfirst\nsecond\n0) next",
+    "> quote\ncontinued\n   2026. next",
+    "> quote\ncontinued\n2.\tnext",
+    "> quote\ncontinued\n2.",
+    "> quote\ncontinued\n2. \n   next",
+    "> # Title\n> quote\ncontinued\n2. next\n> after",
+    "> > quote\ncontinued\n2. next",
+    "> > quote\n> continued\n> 2. next",
+    "- > quote\n  continued\n  2. next",
+    "- [x] item\n\n  > quote\n  continued\n  2. next",
   ])("rejects ordered blocks entering an unprefixed quote continuation: %j", (source) => {
     errorCode(() => markdownToDocs(source), "unsupported");
     expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
@@ -179,6 +190,23 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     expect(roundTrip("> quote\n\n2. next")).toEqual(
       doc(
         b("blockquote", [p(t("quote"))]),
+        b("orderedList", [b("listItem", [p(t("next"))])], { start: 2 }),
+      ),
+    );
+    expect(roundTrip("> quote\ncontinued\n> 2. next")).toEqual(
+      doc(b("blockquote", [p(t("quote\ncontinued\n2. next"))])),
+    );
+    expect(roundTrip("> quote\ncontinued\n> - next")).toEqual(
+      doc(
+        b("blockquote", [
+          p(t("quote\ncontinued")),
+          b("bulletList", [b("listItem", [p(t("next"))])]),
+        ]),
+      ),
+    );
+    expect(roundTrip("> quote\ncontinued\n\n2. next")).toEqual(
+      doc(
+        b("blockquote", [p(t("quote\ncontinued"))]),
         b("orderedList", [b("listItem", [p(t("next"))])], { start: 2 }),
       ),
     );
@@ -305,6 +333,47 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     "- [x] item\n\n  First\n  Second\n  ---",
   ])("round trips multiline headings with inline marks and surrounding blocks: %s", (source) => {
     roundTrip(source);
+  });
+  it.each([
+    "Title\n    subtitle\n---",
+    "Title\n    subtitle\n===",
+    "Title\n\tsubtitle\n=",
+    "Title\n \tsubtitle\n--",
+    "Title\n        subtitle\n-",
+    "Title\n    subtitle\n   --- \t",
+    "Title\n    subtitle\n=== \t",
+    "Title\n    **subtitle**\ncontinued\n---",
+    "before\n\nTitle\n    subtitle\n---\n\nafter",
+    "> Title\n>     subtitle\n> ---",
+    "- Title\n      subtitle\n  ---",
+    "1. Title\n       subtitle\n   ===",
+    "- [x] item\n\n  Title\n      subtitle\n  ---",
+  ])("rejects indented setext continuations or preserves the source literally: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("keeps supported headings and paragraph boundaries around indented continuations", () => {
+    expect(roundTrip("Title\n   subtitle\n---")).toEqual(
+      doc(b("heading", [t("Title\nsubtitle")], { level: 2 })),
+    );
+    expect(roundTrip("Title\n    subtitle")).toEqual(doc(p(t("Title\nsubtitle"))));
+    expect(roundTrip("===\n    subtitle")).toEqual(doc(p(t("===\nsubtitle"))));
+    expect(roundTrip("Title\n    subtitle\n\n---")).toEqual(
+      doc(p(t("Title\nsubtitle")), b("horizontalRule")),
+    );
+    expect(roundTrip("Title\n    subtitle\n***")).toEqual(
+      doc(p(t("Title\nsubtitle")), b("horizontalRule")),
+    );
+    expect(roundTrip("Title\n    subtitle\n    ---")).toEqual(doc(p(t("Title\nsubtitle\n---"))));
+    expect(roundTrip("Title\n    subtitle\n- item")).toEqual(
+      doc(p(t("Title\nsubtitle")), b("bulletList", [b("listItem", [p(t("item"))])])),
+    );
+    expect(roundTrip("Title\n    subtitle\n# Next")).toEqual(
+      doc(p(t("Title\nsubtitle")), b("heading", [t("Next")], { level: 1 })),
+    );
+    expect(roundTrip("    Title\n    subtitle\n---")).toEqual(
+      doc(b("codeBlock", [t("Title\nsubtitle")]), b("horizontalRule")),
+    );
   });
   it.each([
     "- Foo\n===",

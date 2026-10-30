@@ -23,6 +23,7 @@ import {
 import { type DocsMark, type DocsNode, MarkdownError, type MarkdownOptions } from "./types";
 
 const listOpening = /^( {0,3}(?:[*+-]|\d{1,9}[.)]))([ \t][^\n]*)?(?:\n|$)/;
+const setextUnderline = /^ {0,3}(?:=+|-+)[ \t]*(?:\n|$)/;
 
 function columns(prefix: string): number {
   let column = 0;
@@ -31,6 +32,19 @@ function columns(prefix: string): number {
 }
 
 class MarkdownTokenizer extends Tokenizer {
+  override blockquote(source: string): Tokens.Blockquote | undefined {
+    const quote = this.rules.block.blockquote.exec(source);
+    if (quote) {
+      // Check every lazy line before Marked removes quote prefixes and batches lines.
+      // Prefixed list markers still belong to the quote, even after a lazy text line.
+      for (const line of quote[0].split("\n")) {
+        if (!/^ {0,3}>/.test(line) && listOpening.test(line))
+          fail("List block in an unprefixed quote continuation is unsupported");
+      }
+    }
+    return super.blockquote(source);
+  }
+
   override fences(source: string): Tokens.Code | undefined {
     const token = super.fences(source);
     if (token) {
@@ -98,12 +112,11 @@ class MarkdownLexer extends Lexer {
   ): TokensList;
   override blockTokens(source: string, tokens?: Token[], lastParagraphClipped?: boolean): Token[] {
     // Marked appends unprefixed quote lines even after headings and rules.
-    // Only an existing paragraph can receive a lazy continuation, and an incoming
-    // list block cannot be continuation text even when its ordered marker is not 1.
+    // Only an existing paragraph can receive a lazy continuation.
     if (
       lastParagraphClipped &&
       tokens?.length &&
-      ((tokens[tokens.length - 1] as Token).type !== "paragraph" || listOpening.test(source))
+      (tokens[tokens.length - 1] as Token).type !== "paragraph"
     ) {
       fail("Non-paragraph block quote continuation is unsupported");
     }
@@ -270,7 +283,7 @@ function list(token: Tokens.List, depth: number, tabbedQuote: boolean): DocsNode
 }
 function blocks(tokens: Token[], depth: number, tabbedQuote = false): DocsNode[] {
   depthGuard(depth);
-  return tokens.flatMap((entry): DocsNode[] => {
+  return tokens.flatMap((entry, index): DocsNode[] => {
     const token = entry as MarkedToken;
     switch (token.type) {
       case "space":
@@ -279,8 +292,23 @@ function blocks(tokens: Token[], depth: number, tabbedQuote = false): DocsNode[]
         if (/\\&/.test(token.raw)) fail("Escaped link character references are unsupported");
         if (token.tag.startsWith("^")) fail("Footnotes are unsupported");
         return [];
-      case "paragraph":
+      case "paragraph": {
+        // Marked misses setext headings with code-indented continuation lines.
+        // It may keep the underline as text, or start a new rule, list or heading.
+        const next = tokens[index + 1];
+        if (
+          /\n(?: {4}| {0,3}\t)/.test(token.raw) &&
+          (token.raw
+            .split("\n")
+            .slice(1)
+            .some((line) => setextUnderline.test(line)) ||
+            setextUnderline.test(next?.raw ?? "") ||
+            (next?.type === "heading" && !/^ {0,3}#/.test(next.raw)))
+        ) {
+          fail("Setext headings with indented continuation lines are unsupported");
+        }
         return [block("paragraph", inline(token.tokens, [], depth + 1, true))];
+      }
       case "heading":
         if (token.depth > 3) fail("Docs supports heading levels 1–3");
         return [block("heading", inline(token.tokens, [], depth + 1), { level: token.depth })];
