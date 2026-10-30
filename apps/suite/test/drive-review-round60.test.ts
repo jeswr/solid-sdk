@@ -361,6 +361,7 @@ it.each([
       from: PRIVATE,
       turtle: f.policies.get(`${PRIVATE}.policy`) as string,
       etag: selected?.etag as string,
+      ownAcl: { url: `${url}.policy`, etag: null },
     });
   let observed = false;
   let replaced = false;
@@ -439,6 +440,7 @@ it.each([
       from: PRIVATE,
       turtle: await aclBody(PRIVATE),
       etag: selected.etag as string,
+      ownAcl: { url: `${PRIVATE}.policy`, etag: null },
     });
   }
   let replaced = false;

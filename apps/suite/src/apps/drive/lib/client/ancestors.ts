@@ -9,6 +9,7 @@ import {
   type accessControl,
   accessGains,
   bindAccess,
+  DriveAccessChangedError,
   DriveAccessError,
   type OwnAccess,
   ownAccessGuards,
@@ -16,7 +17,13 @@ import {
   requireAccess,
 } from "./access";
 import { discardVersion, ownsEmptyContainer } from "./cleanup";
-import { type CommitChecks, type CommitEffects, Compensation, commitIrreversible } from "./commit";
+import {
+  type CommitChecks,
+  type CommitEffects,
+  Compensation,
+  checkIdentity,
+  commitIrreversible,
+} from "./commit";
 import { rethrowPendingDeletion } from "./deletion";
 import { type ProtectionRequirement, protectionLedger } from "./protection-ledger";
 import { sameGraph } from "./rdf";
@@ -97,22 +104,56 @@ export function ancestorGuard(options: {
     etag: "",
     dataset: await parseRdf(required.turtle, "text/turtle", { baseIRI: required.acl }),
   });
+  const checkProtection = async (url: string, policy: OwnAccess, etag: string) => {
+    await access.checkOwn({ url: policy.url, policy });
+    await checkIdentity(http, url, etag, options.error, false, (headers) => {
+      if (access.discover(url, headers) !== policy.url)
+        throw new DriveAccessError("Protected ACL endpoint changed");
+      return undefined;
+    });
+  };
+  const retireProtection = async (url: string, policy: OwnAccess, etag: string) => {
+    // Retain the policy actually installed, including any safe intersection
+    // with narrower current grants, rather than the broader requested policy.
+    const required = {
+      ...(await requirementFor(policy, url)),
+      etag,
+      ownAcl: { url: policy.url, etag: policy.etag },
+    };
+    await ledger.clear(url);
+    try {
+      await checkProtection(url, policy, etag);
+    } catch (cause) {
+      // A failed retirement check must still block later reads and writes.
+      await ledger.set(url, required);
+      throw cause;
+    }
+  };
   const verify = async (url: string, headers: Headers, required: ProtectionRequirement) => {
     if (required.etag && headers.get("etag") !== required.etag)
       throw new DriveAccessError("Required resource changed");
     const policy = await policyFor(required);
     const own = await access.snapshot(url, headers);
+    if (
+      required.ownAcl &&
+      (own.own?.url !== required.ownAcl.url ||
+        (own.own.policy?.etag ?? null) !== required.ownAcl.etag)
+    )
+      throw new DriveAccessChangedError(["The item's own ACL changed"]);
     if (own.status === "none" && !own.demo) {
       // A requirement written before a refused creation owns no representation.
       // Its later appearance must not authorize applying the intended ACL.
       if (!required.etag) throw new DriveAccessError("Protection receipt unavailable");
-      await access.install(policy, required.from, url, {
+      if (!required.ownAcl) throw new DriveAccessError("Own ACL receipt unavailable");
+      await install(url, policy, required.from, {
         identity: { url, etag: required.etag },
         restrict: true,
-        knownAcl: own.own?.url,
+        knownAcl: required.ownAcl.url,
         expectedAcl: null,
       });
-    } else if (
+      return;
+    }
+    if (
       own.status !== "known" ||
       !sameGraph(
         access.retarget(policy, required.from, url, own.policy.url).dataset,
@@ -124,16 +165,17 @@ export function ancestorGuard(options: {
         `This ${url.endsWith("/") ? "folder" : "file"} still requires protection. Check that pod CORS exposes Link and ETag, then retry.`,
       );
     }
-    await ledger.clear(url);
+    await retireProtection(url, own.policy, headers.get("etag") ?? "");
   };
-  const install = async (
-    url: string,
-    policy: OwnAccess,
-    from: string,
-    guard?: AccessWriteGuard,
-  ) => {
-    const saved = await access.install(policy, from, url, guard);
-    await ledger.clear(url);
+  const install = async (url: string, policy: OwnAccess, from: string, guard: AccessWriteGuard) => {
+    const saved = await access.install(policy, from, url, guard, async (written) => {
+      await ledger.set(url, {
+        ...(await requirementFor(written, url)),
+        etag: guard.identity.etag,
+        ownAcl: { url: written.url, etag: written.etag },
+      });
+    });
+    await retireProtection(url, saved, guard.identity.etag);
     return saved;
   };
   const cleanup = async (url: string, response: Response, installed?: OwnAccess) => {
@@ -200,13 +242,17 @@ export function ancestorGuard(options: {
         ],
         step: put,
       });
+      access.recordCreation(url, response.headers);
       onCreated?.(response);
       try {
-        if (decision.kind === "archived")
+        if (decision.kind === "archived") {
+          const endpoint = access.discover(url, response.headers);
           await ledger.set(url, {
             ...(await requirementFor(decision.acl, decision.from)),
             etag: response.headers.get("etag") ?? "",
+            ...(endpoint ? { ownAcl: { url: endpoint, etag: null } } : {}),
           });
+        }
         await verifyAccess?.();
         await binding.recheck();
         const policy =
@@ -490,6 +536,7 @@ export function ancestorGuard(options: {
           await ledger.set(url, {
             ...(await requirementFor(policy, from)),
             etag: protectionGuard.identity.etag,
+            ownAcl: { url: endpoint, etag: protectionGuard.expectedAcl?.etag ?? null },
           });
           saved = await install(url, policy, from, {
             ...protectionGuard,

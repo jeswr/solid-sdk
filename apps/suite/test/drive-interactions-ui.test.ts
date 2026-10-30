@@ -606,7 +606,7 @@ it("a reopened Move dialog ignores the older folder-tree listing", async () => {
   await view.unmount();
 });
 
-it("Undo uses the move response validator even if a replacement is present before a later HEAD", async () => {
+it("round 61: Move reports a destination replacement before offering Undo", async () => {
   const destination = `${ROOT}Work/A.txt`;
   const original = items[0] as DriveItem;
   const pod = createDemoPod({
@@ -646,16 +646,16 @@ it("Undo uses the move response validator even if a replacement is present befor
   await act(async () => {
     await actions.move([items[0] as DriveItem], `${ROOT}Work/`);
   });
-  const options = mocks.toast.success.mock.calls.at(-1)?.[1] as {
-    action: { onClick: () => Promise<void> };
-  };
-  await act(async () => options.action.onClick());
-  expect(mocks.undoMove).toHaveBeenCalledWith(
-    expect.objectContaining({ onProtectionChange: drive.invalidate }),
-    destination,
-    items[0]?.url,
-    copiedEtag,
-  );
+  expect(copiedEtag).toBeTruthy();
+  expect(mocks.toast.success).not.toHaveBeenCalled();
+  expect(mocks.toast.error).toHaveBeenCalled();
+  expect(mocks.undoMove).not.toHaveBeenCalled();
+  let recovered = false;
+  for (const [url] of pod.snapshot().resources) {
+    if (url.includes("/.drive-recovery-") && (await (await pod.fetch(url)).text()) === "original")
+      recovered = true;
+  }
+  expect(recovered).toBe(true);
   expect(stat).not.toHaveBeenCalled();
   expect(pod.has(original.url)).toBe(false);
   expect(await (await otherTab.read(destination)).text()).toBe("unrelated");

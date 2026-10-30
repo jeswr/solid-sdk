@@ -85,6 +85,7 @@ const steps = [
   "inherited replacement rollback",
   "container provisioning ACL",
   "metadata undo recovery clearing",
+  "post-retirement private backup ACL",
 ] as const;
 type Step = (typeof steps)[number];
 
@@ -157,7 +158,26 @@ async function scenario(step: Step, events: string[]) {
   let targetCheck = 1;
   let identityTarget: string | undefined;
   let run: () => Promise<unknown>;
-  if (step.endsWith("with child defaults")) {
+  if (step === "post-retirement private backup ACL") {
+    f.intercept(async (url, init) =>
+      url === source && init?.method === "DELETE" ? new Response(null, { status: 403 }) : undefined,
+    );
+    expect((await trashItems(client, DRIVE, [selected], { webId: OWNER })).failed).toHaveLength(1);
+    f.intercept(undefined);
+    const [entry] = await listTrash(client, DRIVE);
+    if (!entry) throw new Error("Missing recovery");
+    const id = "9ea04ab3-cd3f-4f52-af04-a415c8318bd7";
+    vi.spyOn(crypto, "randomUUID").mockReturnValue(id);
+    const folder = `${ROOT}.drive-recovery-${id}/`;
+    target = `${folder}.policy`;
+    identityTarget = folder;
+    f.after(async (url, method, response) => {
+      if (url === entry.url && method === "DELETE" && response.ok)
+        await f.pod.fetch(source, { method: "PUT", body: "foreign replacement" });
+      return response;
+    });
+    run = () => restoreItems(client, DRIVE, [entry]);
+  } else if (step.endsWith("with child defaults")) {
     if (step === "partial Restore rollback with child defaults") {
       f.intercept(async (url, init) =>
         url === `${source}child` && init?.method === "DELETE"
@@ -340,6 +360,7 @@ async function scenario(step: Step, events: string[]) {
       from: PRIVATE,
       turtle: f.policies.get(`${PRIVATE}.policy`) as string,
       etag: selected.etag,
+      ownAcl: { url: `${source}.policy`, etag: null },
     });
     run = () => client.read(source);
   } else if (step === "private folder ACL") {
@@ -458,7 +479,7 @@ async function scenario(step: Step, events: string[]) {
 
 it.each(
   steps,
-)("round 60 shape a: %s retains a replacement at its final identity check", async (step) => {
+)("round 61 shape a: %s retains a replacement at its final identity check", async (step) => {
   const events: string[] = [];
   const s = await scenario(step, events);
   let checks = 0;
@@ -486,7 +507,7 @@ it.each(
 
 it.each(
   steps,
-)("round 60 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
+)("round 61 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   const events: string[] = [];
   const s = await scenario(step, events);

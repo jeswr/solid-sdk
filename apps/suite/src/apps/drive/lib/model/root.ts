@@ -75,7 +75,8 @@ export async function ensureDriveRoot(
   indexEtag(index.etag);
 
   const rootUrl = new URL("drive/", storage).href;
-  const binding = await bindAccess(accessControl(scopedFetch, storage), indexUrl, rootUrl);
+  const access = accessControl(scopedFetch, storage);
+  const binding = await bindAccess(access, indexUrl, rootUrl);
   let rootEtag: string | undefined;
   // A marker written by this call cannot itself prove ownership, including on resume().
   let markingIdentity: RootIdentity | undefined;
@@ -98,7 +99,10 @@ export async function ensureDriveRoot(
       },
       body: "",
     });
-    if (response.ok) await binding.recheck();
+    if (response.ok) {
+      access.recordCreation(rootUrl, response.headers);
+      await binding.recheck();
+    }
     return response;
   }
 

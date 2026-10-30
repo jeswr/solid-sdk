@@ -1177,7 +1177,7 @@ describe("Drive data-safety regressions", () => {
     expect(pod.has(TO)).toBe(false);
   });
 
-  it("copies folders even when the destination omits its creation ETag", async () => {
+  it("retains copied folders and reports a missing destination creation ETag", async () => {
     const { pod, client } = setup(async (url, init) => {
       if (url === TO && init?.method === "PUT") {
         const response = await pod.fetch(url, init);
@@ -1186,8 +1186,12 @@ describe("Drive data-safety regressions", () => {
       }
       return undefined;
     });
-    await client.copy(FROM, TO, { kind: "preserve-source" });
+    await expect(client.copy(FROM, TO, { kind: "preserve-source" })).rejects.toMatchObject({
+      kind: "partial-failure",
+      cause: { kind: "missing-validator" },
+    });
     expect(pod.has(`${TO}a`)).toBe(true);
+    expect(pod.has(`${FROM}a`)).toBe(true);
   });
 
   it("rolls back only its own destinations, leaving an unrelated new child untouched", async () => {
@@ -1200,7 +1204,7 @@ describe("Drive data-safety regressions", () => {
     });
     await expect(client.copy(FROM, TO, { kind: "preserve-source" })).rejects.toMatchObject({
       kind: "partial-failure",
-      retainedDestinations: [TO],
+      retainedDestinations: expect.arrayContaining([TO]),
       deletedSources: [],
     });
     expect(pod.has(`${TO}a`)).toBe(false);

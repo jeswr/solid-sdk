@@ -127,6 +127,9 @@ export function accessLabel(state: AccessState, resource: string, webId: string)
 }
 
 export function accessControl(http: typeof globalThis.fetch, storageUrl: string) {
+  // Only conditional creation receipts can establish previously undiscoverable
+  // endpoints. Existing bindings retain their captured endpoint, even if absent.
+  const creations = new Map<string, Headers>();
   function discover(resource: string, headers: Headers): string | undefined {
     rejectAcp(headers);
     // This explicit fixture capability never substitutes for discovery on a real pod.
@@ -197,6 +200,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     dataset: Store,
     resource?: string,
     guard?: AccessWriteGuard,
+    onWritten?: (policy: OwnAccess) => Promise<void>,
   ): Promise<OwnAccess> => {
     const state = await read(url);
     if (state.status === "unknown") throw new DriveAccessError(state.cause);
@@ -246,6 +250,9 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     const receipt = response.headers.get("etag");
     if (!receipt || receipt.startsWith("W/"))
       throw new DriveAccessError("Missing policy PUT validator");
+    // Persist only this conditional PUT's receipt, before a verification read
+    // can fail. A later GET must never invent the installed ACL's identity.
+    await onWritten?.({ url, dataset, etag: receipt });
     const saved = await read(url);
     if (
       saved.status !== "known" ||
@@ -307,6 +314,10 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     }
   };
   return {
+    recordCreation(resource: string, headers: Headers): void {
+      creations.set(resource, new Headers(headers));
+    },
+    creationReceipt: (resource: string) => creations.get(resource),
     discover,
     async checkOwn(
       own: { readonly url: string; readonly policy: OwnAccess | null } | undefined,
@@ -334,6 +345,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       from: string,
       to: string,
       guard?: AccessWriteGuard,
+      onWritten?: (policy: OwnAccess) => Promise<void>,
     ): Promise<OwnAccess> {
       const response = await http(to, { method: "HEAD", cache: "no-store" });
       if (!response.ok) throw new DriveAccessError(response.status);
@@ -341,12 +353,18 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       if (!url) throw new DriveAccessError("Destination has no ACL support");
       const etag = guard?.identity.etag ?? response.headers.get("etag");
       if (!etag || etag.startsWith("W/")) throw new DriveAccessError("Missing resource validator");
-      return store(url, retargetAccess(source, from, to, url).dataset, to, {
-        expectedAcl: source.url === url && source.etag ? source : null,
-        ...guard,
-        knownAcl: guard?.knownAcl ?? url,
-        identity: { url: to, etag },
-      });
+      return store(
+        url,
+        retargetAccess(source, from, to, url).dataset,
+        to,
+        {
+          expectedAcl: source.url === url && source.etag ? source : null,
+          ...guard,
+          knownAcl: guard?.knownAcl ?? url,
+          identity: { url: to, etag },
+        },
+        onWritten,
+      );
     },
     async privateFolder(url: string, webId?: string): Promise<void> {
       try {
@@ -432,10 +450,12 @@ export async function bindAccess(
   destinationOnly = false,
 ) {
   const resolve = async (url: string) => {
+    const creation = access.creationReceipt(url);
     const state = await access.effective(url, false, true);
     return {
       resource: requireAccess(state, url),
       own: state.own,
+      creation,
       defaults: url.endsWith("/")
         ? requireAccess(await access.effective(`${url}.access-binding`, true, true), url)
         : undefined,
@@ -445,6 +465,15 @@ export async function bindAccess(
   let destination = from === to ? source : await resolve(to);
   let destinationOwn = destination.own;
   const retired = new Set<string>();
+  const acceptCreation = (url: string, baseline: typeof source) => {
+    const receipt = access.creationReceipt(url);
+    if (baseline.own || !receipt || receipt === baseline.creation) return;
+    const etag = receipt.get("etag");
+    const endpoint = access.discover(url, receipt);
+    if (!etag || etag.startsWith("W/") || !endpoint) return;
+    baseline.own = { url: endpoint, policy: null };
+    if (url === to) destinationOwn = baseline.own;
+  };
   const binding = {
     get identities(): readonly PolicyIdentity[] {
       return (
@@ -488,6 +517,7 @@ export async function bindAccess(
       if (!inherited) destinationOwn = { url: policy.url, policy };
       const defaults = access.defaults(policy, to);
       destination = {
+        creation: access.creationReceipt(to),
         own: destinationOwn,
         resource: access.forResource(policy, to),
         defaults: to.endsWith("/") && defaults.dataset.size ? defaults : destination.defaults,
@@ -495,6 +525,8 @@ export async function bindAccess(
       if (from === to) source = destination;
     },
     async recheck(): Promise<void> {
+      acceptCreation(from, source);
+      acceptCreation(to, destination);
       const currentSource = retired.has(from) ? undefined : await resolve(from);
       const currentDestination = retired.has(to) ? undefined : await resolve(to);
       const gains = new Set<string>();

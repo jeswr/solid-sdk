@@ -204,7 +204,15 @@ it.each([
   expect(await fresh.stat(to)).toMatchObject({ protectionRequired: true });
   f.intercept(undefined);
   f.after(undefined);
-  await fresh.read(to);
-  expect(await protectionLedger(f.fetch).get(to)).toBeUndefined();
-  expect((await f.anonymous(to)).status).toBe(403);
+  if (mode === "hidden Link") {
+    // Restored discovery cannot invent the endpoint omitted by creation's receipt.
+    f.calls.length = 0;
+    await expect(fresh.read(to)).rejects.toThrow(/sharing could not be secured/);
+    expect(await protectionLedger(f.fetch).get(to)).toBeDefined();
+    expect(f.calls.filter(({ method }) => method === "PUT")).toEqual([]);
+  } else {
+    await fresh.read(to);
+    expect(await protectionLedger(f.fetch).get(to)).toBeUndefined();
+    expect((await f.anonymous(to)).status).toBe(403);
+  }
 });

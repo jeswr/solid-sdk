@@ -362,7 +362,7 @@ it.each([
     ).toEqual([]);
     expect((await f.anonymous(`${PRIVATE}retry`)).status).toBe(403);
   } else {
-    await expect(retry).rejects.toThrow(/folder still requires protection/);
+    await expect(retry).rejects.toThrow(/policy changed during this operation/);
     expect(await protectionLedger(f.fetch).get(PRIVATE)).toBeDefined();
     expect(f.pod.has(`${PRIVATE}retry`)).toBe(false);
   }

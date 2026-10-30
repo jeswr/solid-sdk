@@ -417,7 +417,12 @@ describe("Drive error handling and foreign server responses", () => {
       client.copy(file, `${DRIVE}copy`, { kind: "preserve-source" }),
     ).rejects.toMatchObject({ kind: "missing-validator" });
     versioned = true;
-    await client.copy(file, `${DRIVE}copy`, { kind: "preserve-source" });
+    await expect(
+      client.copy(file, `${DRIVE}copy`, { kind: "preserve-source" }),
+    ).rejects.toMatchObject({
+      kind: "partial-failure",
+      cause: { kind: "missing-validator" },
+    });
     const copied = fetch.mock.calls.filter(([, init]) => init?.method === "PUT").at(-1);
     expect(
       copied && [

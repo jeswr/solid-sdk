@@ -48,7 +48,7 @@ import {
   type ResourceIdentity,
 } from "./commit";
 import { containerVersions } from "./container-versions";
-import { deletionControl, isDeletionFailure } from "./deletion";
+import { DriveDeletePendingError, deletionControl, isDeletionFailure } from "./deletion";
 import { protectionLedger } from "./protection-ledger";
 import { containerData, containsGraph, relocate, sameGraph } from "./rdf";
 import { sourceOperation } from "./source-operations";
@@ -549,17 +549,21 @@ export function createSolidDriveClient(options: {
    */
   const quarantine = async (
     url: string,
-    etag: string,
+    etag: string | null,
     policy: OwnAccess,
     copies: readonly { body: Blob | string; type: string }[],
+    demo = false,
   ): Promise<string[]> => {
     const webId = owner ?? policyOwner(policy);
-    if (!webId) throw new DriveAccessError("Recovery owner unavailable");
+    if (!webId && !demo) throw new DriveAccessError("Recovery owner unavailable");
     const folder = `${storageUrl}.drive-recovery-${crypto.randomUUID()}/`;
     const retained: string[] = [];
     let committedBackup: string | undefined;
     try {
-      await createFolder(folder, { kind: "owner-only", webId });
+      await createFolder(
+        folder,
+        demo ? { kind: "inherit-verified" } : { kind: "owner-only", webId },
+      );
       const recoveryAccess = await bindAccess(access, folder, folder);
       const survivors: ResourceIdentity[] = [];
       const backupAccess: AccessBinding[] = [];
@@ -584,29 +588,37 @@ export function createSolidDriveClient(options: {
         committedBackup = undefined;
         survivors.push({ url: target, etag: validator(target, saved.etag) });
       }
-      const required = await ledger.get(url);
-      const cleared = await commitHttp({
-        rechecks: [recoveryAccess, ...backupAccess].map((binding) => () => binding.recheck()),
-        policyGuards: [recoveryAccess, ...backupAccess].flatMap((binding) => binding.identities),
-        finalIdentities: survivors.map((identity) => ({ ...identity, http, error: errorFor })),
-        http,
-        url,
-        error: errorFor,
-        init: {
-          method: "PUT",
-          headers: {
-            "if-match": etag,
-            "content-type": url.endsWith("/") ? "text/turtle" : "application/octet-stream",
+      if (etag !== null) {
+        const required = await ledger.get(url);
+        const cleared = await commitHttp({
+          rechecks: [recoveryAccess, ...backupAccess].map((binding) => () => binding.recheck()),
+          policyGuards: [recoveryAccess, ...backupAccess].flatMap((binding) => binding.identities),
+          finalIdentities: survivors.map((identity) => ({ ...identity, http, error: errorFor })),
+          http,
+          url,
+          error: errorFor,
+          init: {
+            method: "PUT",
+            headers: {
+              "if-match": etag,
+              "content-type": url.endsWith("/") ? "text/turtle" : "application/octet-stream",
+            },
+            body: "",
           },
-          body: "",
-        },
-        response: async (response) => {
-          await ensureOk(response, url);
-          return response;
-        },
-      });
-      if (required)
-        await ledger.set(url, { ...required, etag: validator(url, cleared.headers.get("etag")) });
+          response: async (response) => {
+            await ensureOk(response, url);
+            return response;
+          },
+        });
+        if (required)
+          await ledger.set(url, { ...required, etag: validator(url, cleared.headers.get("etag")) });
+      }
+      // Retirement may touch IndexedDB even after the exposed PUT was cleared.
+      // Verify the captured backup policies and identities before reporting them.
+      await recoveryAccess.recheck();
+      for (const binding of backupAccess) await binding.recheck();
+      for (const identity of survivors)
+        await checkIdentity(http, identity.url, identity.etag, errorFor);
     } catch (cause) {
       // write() may fail after its PUT commits. Nested quarantine reports the
       // useful replacement locations itself; otherwise retain this receipt too,
@@ -684,6 +696,8 @@ export function createSolidDriveClient(options: {
         if (!headers.has("if-match")) headers.set("if-none-match", "*");
       } else {
         await ensureOk(current, url);
+        const approved = headers.get("if-match");
+        if (approved) assertVersion({ url, etag: approved }, current.headers.get("etag"), errorFor);
         previous = {
           body: await current.blob(),
           type: current.headers.get("content-type") ?? "application/octet-stream",
@@ -771,6 +785,7 @@ export function createSolidDriveClient(options: {
       error: (status, url) => errorFor(status === 404 || status === 410 ? 412 : status, url),
       response: async (response) => {
         await ensureOk(response, url);
+        if (headers.get("if-none-match") === "*") access.recordCreation(url, response.headers);
         effects.onWritten?.(response);
         return response;
       },
@@ -1288,40 +1303,56 @@ export function createSolidDriveClient(options: {
     await checkIdentity(http, source.url, validator(source.url, etag), errorFor);
   };
 
-  const secureRetained = async (resource: CreatedResource): Promise<string[]> => {
+  const secureRetained = async (
+    resource: CreatedResource,
+  ): Promise<{ urls: string[]; warning?: unknown }> => {
     const policy =
-      resource.protection ?? resource.source.targetAccess ?? resource.source.inheritedAccess;
-    if (!policy || !resource.etag) return [resource.url];
+      resource.protection ??
+      resource.source.targetAccess ??
+      resource.source.inheritedAccess ??
+      resource.source.binding?.source;
+    if (!policy || !resource.etag) return { urls: [resource.url] };
     try {
-      const own = createdOwnAccess(resource);
-      await provision.protect(
-        resource.url,
-        policy,
-        resource.protection ? resource.url : resource.source.url,
-        {
-          identity: {
-            url: resource.url,
-            etag: validator(resource.url, versions.current(resource.url, resource.etag)),
+      const identity = {
+        url: resource.url,
+        etag: validator(resource.url, versions.current(resource.url, resource.etag)),
+      };
+      if (resource.source.demo) await checkIdentity(http, identity.url, identity.etag, errorFor);
+      else {
+        const own = createdOwnAccess(resource);
+        await provision.protect(
+          resource.url,
+          policy,
+          resource.protection ? resource.url : resource.source.url,
+          {
+            identity,
+            restrict: true,
+            knownAcl: own?.url,
+            expectedAcl: own?.policy ?? null,
           },
-          restrict: true,
-          knownAcl: own?.url,
-          expectedAcl: own?.policy ?? null,
-        },
+        );
+      }
+      return { urls: [resource.url] };
+    } catch (warning) {
+      const urls = await quarantine(
+        resource.url,
+        validator(resource.url, resource.etag),
+        policy,
+        [
+          {
+            body: resource.source.body ?? (await serialize([...(resource.data as Store)])),
+            type: resource.source.contentType ?? "text/turtle",
+          },
+        ],
+        resource.source.demo,
       );
-      return [resource.url];
-    } catch {
-      return quarantine(resource.url, validator(resource.url, resource.etag), policy, [
-        {
-          body: resource.source.body ?? (await serialize([...(resource.data as Store)])),
-          type: resource.source.contentType ?? "text/turtle",
-        },
-      ]);
+      return { urls, warning };
     }
   };
 
   const rollback = async (created: CreatedResource[], binding: AccessBinding) => {
     const retained: string[] = [];
-    let pending: Error | undefined;
+    let pending: unknown;
     for (const resource of [...created].reverse()) {
       try {
         const own = createdOwnAccess(resource);
@@ -1370,10 +1401,13 @@ export function createSolidDriveClient(options: {
         }
       } catch (error) {
         if (isMissingItem(error) && (error as DriveError).url === resource.url) continue;
+        if (error instanceof DriveDeletePendingError) pending = error;
         // Refused source validation must not strand the retained recovery under
         // widened access. Only its captured destination identity authorizes repair.
         try {
-          retained.push(...(await secureRetained(resource)));
+          const secured = await secureRetained(resource);
+          retained.push(...secured.urls);
+          if (!pending) pending = secured.warning;
         } catch (cause) {
           retained.push(resource.url);
           if (cause instanceof DrivePartialFailureError)
@@ -1834,13 +1868,7 @@ export function createSolidDriveClient(options: {
           const destination = destinations.get(source.url) as MoveResource;
           verifyingCopy = true;
           const etag = validator(destination.url, destination.etag);
-          const response = await ensureOk(
-            await http(destination.url, { method: "HEAD", headers: { "if-match": etag } }),
-            destination.url,
-          );
-          // Also check servers that ignore HEAD preconditions.
-          if (response.headers.get("etag") !== etag)
-            throw new DriveError("conflict", 412, destination.url);
+          await checkIdentity(http, destination.url, etag, errorFor);
           verifyingCopy = false;
         };
         try {
@@ -1933,6 +1961,18 @@ export function createSolidDriveClient(options: {
             // Source retirement includes durable local work. Check surviving
             // access while partial-transfer recovery is still available.
             await verifyAccess();
+            for (const node of nodes) await verifyDestination(node);
+          } else {
+            // Copy also reports success only for the versions our PUTs created.
+            verifyingCopy = true;
+            for (const resource of created)
+              await checkIdentity(
+                http,
+                resource.url,
+                validator(resource.url, versions.current(resource.url, resource.etag)),
+                errorFor,
+              );
+            verifyingCopy = false;
           }
         } catch (error) {
           for (const check of group) scope.delete(check);
@@ -1949,7 +1989,9 @@ export function createSolidDriveClient(options: {
             retained.length = 0;
             for (const resource of created) {
               try {
-                retained.push(...(await secureRetained(resource)));
+                const secured = await secureRetained(resource);
+                retained.push(...secured.urls);
+                if (secured.warning) protectionFailure = secured.warning;
               } catch (cause) {
                 retained.push(resource.url);
                 if (cause instanceof DrivePartialFailureError)
@@ -1992,7 +2034,9 @@ export function createSolidDriveClient(options: {
             deleted,
             unverified,
             retained,
-            protectionFailure ?? cleanup?.pending ?? error,
+            error instanceof DriveDeletePendingError
+              ? error
+              : (protectionFailure ?? cleanup?.pending ?? error),
           );
         }
         compensation.disarm();
@@ -2069,6 +2113,9 @@ export function createSolidDriveClient(options: {
     scope: AccessScope = new Set(),
   ) => {
     await deletion.guard(url);
+    const deleted: string[] = [];
+    let recovery: SourceSnapshot | undefined;
+    const survivors = opts.commit?.survivors ?? [];
     try {
       const capturedEtag = opts.ifMatch ?? (await stat(url)).etag;
       const verify = async () => {
@@ -2078,11 +2125,17 @@ export function createSolidDriveClient(options: {
       const identityCheck = async () => {
         for (const check of opts.commit?.identityChecks ?? []) await check();
       };
+      // Partial Restore discards a duplicate only while its compared survivor
+      // remains intact. Hydrate recoverable bytes before any final DELETE check.
+      if (survivors.length) {
+        recovery = await snapshot(url, true);
+        if (!owner && !recovery.demo && !policyOwner((recovery.binding as AccessBinding).source))
+          throw new DriveAccessError("Recovery owner unavailable");
+      }
       if (url.endsWith("/") && opts.recursive) {
-        const source = await snapshot(url, false);
+        const source = recovery ?? (await snapshot(url, false));
         if (source.etag !== validator(url, capturedEtag))
           throw new DriveError("conflict", 412, url);
-        const deleted: string[] = [];
         try {
           await sourceOperation(
             sourceUrls(source),
@@ -2130,12 +2183,50 @@ export function createSolidDriveClient(options: {
           ],
           survivors: opts.commit?.survivors ?? [],
           disarm: [...compensationsFor(scope, url), ...(opts.commit?.disarm ?? [])],
-          onCommit: () => retireScope(scope, url),
+          onCommit: () => {
+            deleted.push(url);
+            retireScope(scope, url);
+          },
         });
       }
+      if (recovery) {
+        await verify();
+        for (const identity of survivors)
+          await checkIdentity(http, identity.url, versions.identity(identity).etag, errorFor);
+      }
     } catch (error) {
+      if (deleted.length && recovery) {
+        let retained: string[] = [];
+        let recoveryFailure: unknown;
+        try {
+          const copies = await Promise.all(
+            snapshots(recovery).map(async (node) => ({
+              body: node.body ?? (await serialize([...(node.data as Store)])),
+              type: node.contentType ?? "text/turtle",
+            })),
+          );
+          retained = await quarantine(
+            url,
+            null,
+            (recovery.binding as AccessBinding).source,
+            copies,
+            recovery.demo,
+          );
+        } catch (cause) {
+          if (cause instanceof DrivePartialFailureError) retained = [...cause.retainedDestinations];
+          recoveryFailure = cause;
+        }
+        throw new DrivePartialFailureError(
+          url,
+          deleted,
+          sourceUrls(recovery).filter((source) => !deleted.includes(source)),
+          retained,
+          recoveryFailure ?? error,
+        );
+      }
       const cause = error instanceof DrivePartialFailureError ? error.cause : error;
-      if (!isMissingItem(cause) || (cause as DriveError).url !== url) throw error;
+      if (!isMissingItem(cause) || (cause as DriveError).url !== url || survivors.length)
+        throw error;
       for (const check of scope) check.binding.retire(url);
       await deletion.forget(url);
     }

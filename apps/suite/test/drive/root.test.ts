@@ -1272,3 +1272,22 @@ describe("ensureDriveRoot", () => {
     expect(m.calls).toHaveLength(1);
   });
 });
+
+it("round 61: root creation binds the successful PUT endpoint when 404 omits Link", async () => {
+  const { aclBody } = await import("../drive-wac-pod");
+  const m = memory();
+  const policy = await aclBody(storage, true);
+  const http: typeof fetch = async (input, init) => {
+    const url = String(input);
+    if (url.endsWith(".policy"))
+      return new Response(url === `${storage}.policy` ? policy : null, {
+        status: url === `${storage}.policy` ? 200 : 404,
+        headers: { "content-type": "text/turtle", etag: '"policy"' },
+      });
+    const response = url === storage ? new Response(null) : await m.fetch(input, init);
+    response.headers.delete("x-solid-demo-access-control");
+    if (response.ok) response.headers.append("link", `<${url}.policy>; rel="acl"`);
+    return response;
+  };
+  expect(await ensureDriveRoot(http, options)).toBe(root);
+});
