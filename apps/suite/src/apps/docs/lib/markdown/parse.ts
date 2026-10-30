@@ -129,6 +129,10 @@ class MarkdownLexer extends Lexer {
 
 function inline(tokens: Token[], marks: DocsMark[], depth: number, paragraph = false): DocsNode[] {
   depthGuard(depth);
+  const source = tokens.map((token) => token.raw).join("");
+  // Marked may retain tab-only blank lines inside one inline block.
+  // Reject before trimming tabs could erase the paragraph boundary.
+  if (/\n *\t[ \t]*\n/.test(source)) fail("Tab-only blank lines within a block are unsupported");
   let offset = 0;
   const bareLinks = tokens.flatMap((token) => {
     const start = offset;
@@ -138,7 +142,7 @@ function inline(tokens: Token[], marks: DocsMark[], depth: number, paragraph = f
   if (bareLinks.length) {
     // Re-lex the whole inline source: GFM may end a URL before its closing emphasis delimiter.
     offset = 0;
-    for (const token of Lexer.lexInline(tokens.map((entry) => entry.raw).join(""), {
+    for (const token of Lexer.lexInline(source, {
       gfm: false,
     })) {
       const start = offset;
@@ -171,6 +175,18 @@ function inline(tokens: Token[], marks: DocsMark[], depth: number, paragraph = f
           // Marked can wrap ***first* middle *last*** as em(strong(literal text)).
           // Re-lexing with Marked repeats that mistake, so reject unresolved delimiters.
           const delimiter = token.raw.charAt(0);
+          const adjacent = tokens[index + 1];
+          // Splitting a shared run between triple and single emphasis can also
+          // consume literal delimiters, as in ***alpha****beta* (or its reverse).
+          if (
+            token.type === "em" &&
+            adjacent?.type === "em" &&
+            adjacent.raw.startsWith(delimiter) &&
+            token.raw.startsWith(delimiter.repeat(3)) !==
+              adjacent.raw.startsWith(delimiter.repeat(3))
+          ) {
+            fail("Adjacent emphasis with shared delimiter runs is unsupported");
+          }
           if (
             token.type === "em" &&
             token.raw.startsWith(delimiter.repeat(3)) &&
@@ -293,19 +309,22 @@ function blocks(tokens: Token[], depth: number, tabbedQuote = false): DocsNode[]
         if (token.tag.startsWith("^")) fail("Footnotes are unsupported");
         return [];
       case "paragraph": {
-        // Marked misses setext headings with code-indented continuation lines.
+        // Marked misses setext headings with indented or numbered continuations.
         // It may keep the underline as text, or start a new rule, list or heading.
         const next = tokens[index + 1];
+        const numbered = next?.type === "list" && next.ordered && next.start !== 1;
+        const raw = token.raw + (numbered ? next.raw : "");
+        const after = tokens[index + (numbered ? 2 : 1)];
         if (
-          /\n(?: {4}| {0,3}\t)/.test(token.raw) &&
-          (token.raw
+          /\n(?: {4}| {0,3}\t| {0,3}\d{1,9}[.)][ \t])/.test(raw) &&
+          (raw
             .split("\n")
             .slice(1)
             .some((line) => setextUnderline.test(line)) ||
-            setextUnderline.test(next?.raw ?? "") ||
-            (next?.type === "heading" && !/^ {0,3}#/.test(next.raw)))
+            setextUnderline.test(after?.raw ?? "") ||
+            (after?.type === "heading" && !/^ {0,3}#/.test(after.raw)))
         ) {
-          fail("Setext headings with indented continuation lines are unsupported");
+          fail("Setext headings with indented or numbered continuation lines are unsupported");
         }
         return [block("paragraph", inline(token.tokens, [], depth + 1, true))];
       }

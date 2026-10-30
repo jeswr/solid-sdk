@@ -335,6 +335,43 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     roundTrip(source);
   });
   it.each([
+    "Plan\n2026. Annual review\n---",
+    "Plan\n2026. Annual review\n===",
+    "Plan\n2) Annual review\n--",
+    "Plan\n0. Annual review\n=",
+    "Plan\n   2026. Annual review\n   --- \t",
+    "Plan\n2026. **Annual** review\ncontinued\n---",
+    "Plan\n2026. Annual review\n2027. Next review\n===",
+    "before\n\nPlan\n2026. Annual review\n---\n\nafter",
+    "> Plan\n> 2026. Annual review\n> ---",
+    "- Plan\n  2026. Annual review\n  ---",
+    "1. Plan\n   2. Annual review\n   ===",
+    "- [x] Plan\n  2026. Annual review\n  ---",
+  ])("rejects numbered setext continuations or preserves the source literally: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("keeps ordinary numbered continuations and separate ordered lists", () => {
+    expect(roundTrip("Plan\n2026. Annual review")).toEqual(doc(p(t("Plan\n2026. Annual review"))));
+    expect(roundTrip("Plan\n\n2026. Annual review\n\n---")).toEqual(
+      doc(
+        p(t("Plan")),
+        b("orderedList", [b("listItem", [p(t("Annual review"))])], { start: 2026 }),
+        b("horizontalRule"),
+      ),
+    );
+    expect(roundTrip("Plan\n1. Annual review\n---")).toEqual(
+      doc(
+        p(t("Plan")),
+        b("orderedList", [b("listItem", [p(t("Annual review"))])], { start: 1 }),
+        b("horizontalRule"),
+      ),
+    );
+    expect(roundTrip("Plan\n2026. Annual review\n\n---")).toEqual(
+      doc(p(t("Plan\n2026. Annual review")), b("horizontalRule")),
+    );
+  });
+  it.each([
     "Title\n    subtitle\n---",
     "Title\n    subtitle\n===",
     "Title\n\tsubtitle\n=",
@@ -618,6 +655,32 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
   });
   it.each([
+    "***alpha****beta*",
+    "*alpha****beta***",
+    "before ***alpha****beta* after",
+    "# ***alpha****beta*",
+    "[***alpha****beta*](https://example.org/)",
+    "> ***alpha****beta*",
+    "- ***alpha****beta*",
+    "before\n\n***alpha****beta*\n\nafter",
+  ])("rejects adjacent emphasis that loses literal delimiters: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("keeps supported emphasis beside equal or different delimiter runs", () => {
+    expect(roundTrip("***alpha******beta***")).toEqual(
+      doc(p(t("alphabeta", [m("bold"), m("italic")]))),
+    );
+    expect(roundTrip("**alpha***beta*")).toEqual(
+      doc(p(t("alpha", [m("bold")]), t("beta", [m("italic")]))),
+    );
+    expect(roundTrip("***alpha***_beta_")).toEqual(
+      doc(p(t("alpha", [m("bold"), m("italic")]), t("beta", [m("italic")]))),
+    );
+    expect(roundTrip("`***alpha****beta*`")).toEqual(doc(p(t("***alpha****beta*", [m("code")]))));
+    expect(roundTrip("\\*\\*\\*alpha\\*\\*\\*\\*beta\\*")).toEqual(doc(p(t("***alpha****beta*"))));
+  });
+  it.each([
     "***first* middle *last***",
     "___first_ middle _last___",
     "before ***first* middle *last*** after",
@@ -652,6 +715,24 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
           t("*last*", [m("bold"), m("italic"), m("code")]),
         ),
       ),
+    );
+  });
+  it.each([
+    "hello\n\t\nworld",
+    "hello\n \t \nworld",
+    "hello\n\t\t\nworld",
+    "**hello\n\t\nworld**",
+    "hello\n\t\nworld\n---",
+    "> hello\n> \t\n> world",
+    "before\n\nhello\n\t\nworld\n\nafter",
+  ])("rejects tab-only blank lines before inline normalization: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("keeps supported blank separators and tab content in fenced code", () => {
+    expect(roundTrip("hello\n \nworld")).toEqual(doc(p(t("hello")), p(t("world"))));
+    expect(roundTrip("```\nhello\n\t\nworld\n```")).toEqual(
+      doc(b("codeBlock", [t("hello\n\t\nworld")])),
     );
   });
   it.each([

@@ -54,7 +54,9 @@ these are rejected rather than decoded incorrectly. Code content is never entity
 `markdownToDocs(source, { unsupported: "reject" })` is the default. Recognized unsupported
 constructs (including HTML, images, tables, strikethrough, footnotes, front matter, headings 4–6,
 mixed/ordered task lists, nested links, nested emphasis with unresolved same-delimiter text
-(such as `***first* middle *last***`), lazy list setext underlines, setext headings with
+(such as `***first* middle *last***`), adjacent triple/single emphasis sharing a delimiter run
+(such as `***alpha****beta*`), tab-only blank lines retained within an inline block,
+lazy list setext underlines, setext headings with numbered continuation lines or
 continuation lines indented four or more columns, unprefixed quote continuations after
 non-paragraph blocks or starting a list block (including after earlier lazy text lines),
 code in tabbed list items,
