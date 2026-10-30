@@ -55,6 +55,23 @@ function inline(tokens: Token[], marks: DocsMark[], depth: number, paragraph = f
         }
         case "strong":
         case "em": {
+          // Marked can wrap ***first* middle *last*** as em(strong(literal text)).
+          // Re-lexing with Marked repeats that mistake, so reject unresolved delimiters.
+          const delimiter = token.raw.charAt(0);
+          if (
+            token.type === "em" &&
+            token.raw.startsWith(delimiter.repeat(3)) &&
+            (token.tokens as MarkedToken[]).some(
+              (child) =>
+                child.type === "strong" &&
+                child.raw.startsWith(delimiter.repeat(2)) &&
+                child.tokens.some(
+                  (nested: Token) => nested.type === "text" && nested.raw.includes(delimiter),
+                ),
+            )
+          ) {
+            fail("Nested emphasis with unresolved delimiters is unsupported");
+          }
           const type = token.type === "strong" ? "bold" : "italic";
           return inline(
             token.tokens,
@@ -91,26 +108,51 @@ function inline(tokens: Token[], marks: DocsMark[], depth: number, paragraph = f
     }),
   );
 }
+function taskItem(item: Tokens.ListItem): { tokens: Token[]; checked?: boolean } {
+  if (item.task) {
+    return {
+      tokens: item.tokens.filter((child) => child.type !== "checkbox"),
+      checked: item.checked === true,
+    };
+  }
+  const first = item.tokens[0];
+  if (first?.type !== "text" && first?.type !== "paragraph") return { tokens: item.tokens };
+  const marker = /^\[([ xX])\](?:[\t \n]+|$)/.exec(first.raw);
+  if (!marker) return { tokens: item.tokens };
+  let remaining = marker[0].length;
+  const tokens = (first.tokens as Token[]).flatMap((child): Token[] => {
+    if (!remaining) return [child];
+    const consumed = Math.min(remaining, child.raw.length);
+    remaining -= consumed;
+    if (consumed === child.raw.length) return [];
+    // A partial token after marker whitespace is text; retain the existing reference tokens.
+    return [
+      {
+        ...child,
+        raw: child.raw.slice(consumed),
+        text: (child as Tokens.Text).text.slice(consumed),
+      },
+    ];
+  });
+  return {
+    tokens: [{ ...first, tokens }, ...item.tokens.slice(1)],
+    checked: marker[1] !== " ",
+  };
+}
 function list(token: Tokens.List, depth: number): DocsNode {
-  const isTask = (item: Tokens.ListItem) => item.task || /^\[[ xX]\]\s*$/.test(item.text);
-  const task = token.items.some(isTask);
-  if (task && (token.ordered || token.items.some((item) => !isTask(item))))
+  const items = token.items.map(taskItem);
+  const task = items.some((item) => item.checked !== undefined);
+  if (task && (token.ordered || items.some((item) => item.checked === undefined)))
     fail("Mixed or ordered task lists are unsupported");
   return block(
     task ? "taskList" : token.ordered ? "orderedList" : "bulletList",
-    token.items.map((item) => {
-      // Marked includes a checkbox token; taskItem.checked holds that information in Docs.
-      const children = blocks(
-        isTask(item) && !item.task ? [] : item.tokens.filter((child) => child.type !== "checkbox"),
-        depth + 1,
-      );
+    items.map((item) => {
+      const children = blocks(item.tokens, depth + 1);
       if (children[0]?.type !== "paragraph") children.unshift(block("paragraph"));
       return block(
         task ? "taskItem" : "listItem",
         children,
-        task
-          ? { checked: item.task ? item.checked === true : /^\[[xX]\]/.test(item.text) }
-          : undefined,
+        task ? { checked: item.checked } : undefined,
       );
     }),
     token.ordered ? { start: token.start } : undefined,

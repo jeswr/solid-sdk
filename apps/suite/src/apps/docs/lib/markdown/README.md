@@ -30,6 +30,8 @@ paragraph, including an empty paragraph before non-paragraph content. Empty inpu
 containing one empty paragraph. Code spans follow CommonMark whitespace normalization. CRLF and
 CR become LF. Paragraph boundary padding and spaces/tabs around line breaks are removed before
 character references are decoded; code content and encoded spaces remain significant.
+Task markers may be followed by newline whitespace; their descriptions, formatting, and later
+blocks are preserved, including an empty first task paragraph.
 Repeated identical formatting collapses to one mark; adjacent equivalent text
 nodes merge, and marks have a stable order. Markdown spelling, bullet characters, tight/loose list
 layout, and reference definitions are not retained; exports use canonical inline links and fences.
@@ -45,7 +47,8 @@ these are rejected rather than decoded incorrectly. Code content is never entity
 
 `markdownToDocs(source, { unsupported: "reject" })` is the default. Recognized unsupported
 constructs (including HTML, images, tables, strikethrough, footnotes, front matter, headings 4–6,
-mixed/ordered task lists, nested links, and fence metadata) throw `MarkdownError`. With
+mixed/ordered task lists, nested links, nested emphasis with unresolved same-delimiter text
+(such as `***first* middle *last***`), and fence metadata) throw `MarkdownError`. With
 `{ unsupported: "literal" }`, **the entire normalized source** becomes unmarked text in a single
 paragraph when an unsupported construct is encountered. This preserves source without partially
 interpreting a document. Invalid inputs, parser failures, and limits still throw. Syntax the

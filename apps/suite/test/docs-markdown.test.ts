@@ -127,6 +127,111 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     );
     expect(markdownToDocs("> ")).toEqual(doc(b("blockquote", [p()])));
   });
+  it.each(["x", "X", " "])("imports wrapped task descriptions with marker [%s]", (marker) => {
+    expect(roundTrip(`- [${marker}]\n  completed`)).toEqual(
+      doc(b("taskList", [b("taskItem", [p(t("completed"))], { checked: marker !== " " })])),
+    );
+  });
+  it("keeps wrapped and same-line tasks in one checklist", () => {
+    expect(roundTrip("- [x]\n  completed\n- [ ] pending")).toEqual(
+      doc(
+        b("taskList", [
+          b("taskItem", [p(t("completed"))], { checked: true }),
+          b("taskItem", [p(t("pending"))], { checked: false }),
+        ]),
+      ),
+    );
+  });
+  it("preserves formatting, reference links, and later blocks after wrapped task markers", () => {
+    expect(
+      roundTrip(
+        "- [x]\n  **completed** [site][ref]\n\n  second paragraph\n\n  - nested\n\n[ref]: https://example.org/\n[x]: https://example.org/marker",
+      ),
+    ).toEqual(
+      doc(
+        b("taskList", [
+          b(
+            "taskItem",
+            [
+              p(
+                t("completed", [m("bold")]),
+                t(" "),
+                t("site", [{ type: "link", attrs: { href: "https://example.org/" } }]),
+              ),
+              p(t("second paragraph")),
+              b("bulletList", [b("listItem", [p(t("nested"))])]),
+            ],
+            { checked: true },
+          ),
+        ]),
+      ),
+    );
+  });
+  it.each([
+    "- [x]  \n  completed",
+    "- [x]\t\n  completed",
+  ])("consumes task-marker whitespace without adding a hard break: %s", (source) => {
+    expect(roundTrip(source)).toEqual(
+      doc(b("taskList", [b("taskItem", [p(t("completed"))], { checked: true })])),
+    );
+  });
+  it("preserves blocks after an empty task paragraph", () => {
+    expect(roundTrip("- [x]\n\n  completed")).toEqual(
+      doc(b("taskList", [b("taskItem", [p(), p(t("completed"))], { checked: true })])),
+    );
+  });
+  it.each([
+    "- [x]tail",
+    "- \\[x] completed",
+    "- `[x]` completed",
+    "- [y] completed",
+  ])("keeps non-task markers in bullet items: %s", (source) => {
+    expect(roundTrip(source).content?.[0]?.type).toBe("bulletList");
+  });
+  it.each([
+    "- [x]\n  completed\n- ordinary",
+    "1. [x]\n   completed",
+  ])("rejects mixed or ordered lists with wrapped tasks: %s", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it.each([
+    "***first* middle *last***",
+    "___first_ middle _last___",
+    "before ***first* middle *last*** after",
+    "[***first* middle *last***](https://example.org/)",
+  ])("rejects nested emphasis that Marked mis-tokenizes: %s", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("imports equivalent nested emphasis with the exact text and marks", () => {
+    expect(roundTrip("**_first_ middle _last_**")).toEqual(
+      doc(
+        p(
+          t("first", [m("bold"), m("italic")]),
+          t(" middle ", [m("bold")]),
+          t("last", [m("bold"), m("italic")]),
+        ),
+      ),
+    );
+    expect(roundTrip("***first** middle **last***")).toEqual(
+      doc(
+        p(
+          t("first", [m("bold"), m("italic")]),
+          t(" middle ", [m("italic")]),
+          t("last", [m("bold"), m("italic")]),
+        ),
+      ),
+    );
+    expect(roundTrip("***first \\* middle `*last*`***")).toEqual(
+      doc(
+        p(
+          t("first * middle ", [m("bold"), m("italic")]),
+          t("*last*", [m("bold"), m("italic"), m("code")]),
+        ),
+      ),
+    );
+  });
   it.each([
     ["  Plan  ", p(t("Plan"))],
     ["   Plan\t ", p(t("Plan"))],
