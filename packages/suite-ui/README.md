@@ -76,9 +76,12 @@ Both collections and the content/upload feedback adapters use it. For refreshes,
 no loading node and keep content; the host owns the TopBar progress indicator.
 
 Use the exported `toast` with `Toaster`: ordinary messages last 5 seconds, actions
-labelled `Undo` last 8 seconds, and errors persist with a dismiss button. Promise
-results follow the same policy. Errors announce alerts; ordinary messages announce
-status. Toast only when the outcome is not already visible in place.
+labelled `Undo` last 8 seconds, and errors persist with a dismiss button. For React-node
+or localised Undo labels, select the same window explicitly with
+`{ duration: toastDurations.undo, action: { label: <span>Undo</span>, onClick: undo } }`.
+This duration option also applies to promise options and extended success results;
+errors always persist. Errors announce alerts; ordinary messages announce status.
+Toast only when the outcome is not already visible in place.
 
 Dev routes: `/dev/components/{empty-state,error-state,loading-skeleton,toasts,render-async}`.
 The DS-05 browser spec writes all viewport/theme captures to `artifacts/screens/DS-05/`;
@@ -182,7 +185,8 @@ The host owns preview navigation, metadata retrieval, headings and the enclosing
 
 All three accept `state` (`ready`, `loading`, `empty`, `filtered-empty` with `query`,
 `error` with a classified `SurfaceError`) and an `onAction` recovery callback. They do not
-classify SDK errors themselves. Fixtures live at `/dev/components/upload-dock`,
+classify SDK errors themselves. Error feedback keeps that callback available as Sign in
+for reauth and Retry for every other category. Fixtures live at `/dev/components/upload-dock`,
 `/dev/components/drop-zone-overlay`, and `/dev/components/preview-pane` in `apps/suite`.
 
 ## DS-12 typed content and storage

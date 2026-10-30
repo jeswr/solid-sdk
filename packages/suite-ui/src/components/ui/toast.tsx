@@ -7,12 +7,14 @@ export const toastDurations = {
   undo: 8000,
   error: Number.POSITIVE_INFINITY,
 } as const;
-function options(data: Pick<ExternalToast, "action"> = {}, error = false) {
+function options(data: Pick<ExternalToast, "action" | "duration"> = {}, error = false) {
+  // React-node/localised labels opt into Undo through Sonner's existing duration option.
   const undo =
-    data.action &&
-    typeof data.action === "object" &&
-    "label" in data.action &&
-    data.action.label === "Undo";
+    data.duration === toastDurations.undo ||
+    (data.action &&
+      typeof data.action === "object" &&
+      "label" in data.action &&
+      data.action.label === "Undo");
   return {
     duration: error ? toastDurations.error : undo ? toastDurations.undo : toastDurations.default,
     ...(error ? { closeButton: true, dismissible: true } : {}),

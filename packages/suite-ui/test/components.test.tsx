@@ -2,14 +2,18 @@
 // AUTHORED-BY Codex GPT-6
 // @vitest-environment jsdom
 import { Blob as NodeBlob } from "node:buffer";
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { useReducer } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DropZoneOverlay } from "../src/components/drop-zone-overlay.js";
 import { PreviewPane, type PreviewSource, previewKind } from "../src/components/preview-pane.js";
-import { type SurfaceState, surfaceErrorCopy } from "../src/components/surface-state.js";
+import {
+  SurfaceFeedback,
+  type SurfaceState,
+  surfaceErrorCopy,
+} from "../src/components/surface-state.js";
 import { UploadDock } from "../src/components/upload-dock.js";
 import type { UploadItem } from "../src/uploads/queue.js";
 import { uploadQueueReducer } from "../src/uploads/queue.js";
@@ -231,20 +235,12 @@ describe("async feedback", () => {
         const { container } = render(element);
         await accessible(container);
         if (state.status === "error") {
-          expect(screen.getByRole("alert").textContent).toContain(surfaceErrorCopy[state.error]);
-          const label =
-            state.error === "reauth"
-              ? "Sign in"
-              : ["offline", "unreachable"].includes(state.error)
-                ? "Retry"
-                : undefined;
-          if (label) {
-            fireEvent.click(screen.getByRole("button", { name: label }));
-            expect(action).toHaveBeenCalledOnce();
-          } else {
-            expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
-            expect(action).not.toHaveBeenCalled();
-          }
+          const alert = screen.getByRole("alert");
+          expect(alert.textContent).toContain(surfaceErrorCopy[state.error]);
+          const label = state.error === "reauth" ? "Sign in" : "Retry";
+          expect(within(alert).getAllByRole("button")).toHaveLength(1);
+          fireEvent.click(within(alert).getByRole("button", { name: label }));
+          expect(action).toHaveBeenCalledOnce();
         } else if (state.status !== "loading") {
           const buttons = screen.getAllByRole("button");
           fireEvent.click(buttons[buttons.length - 1] as HTMLElement);
@@ -252,6 +248,12 @@ describe("async feedback", () => {
         }
       });
     }
+  it.each(
+    Object.keys(surfaceErrorCopy) as (keyof typeof surfaceErrorCopy)[],
+  )("%s omits recovery controls without a callback", (error) => {
+    render(<SurfaceFeedback state={{ status: "error", error }} />);
+    expect(within(screen.getByRole("alert")).queryByRole("button")).toBeNull();
+  });
 });
 describe("DropZoneOverlay", () => {
   for (const failure of ["read", "callback"] as const) {

@@ -47,7 +47,13 @@ export function SurfaceFeedback({
             error={state.error}
             actions={onAction ? { retry: onAction, signIn: onAction } : undefined}
             loadingPreset="detail"
-          />
+          >
+            {onAction && !["reauth", "offline", "unreachable"].includes(state.error) && (
+              <button type="button" className="suite-async-action" onClick={onAction}>
+                Retry
+              </button>
+            )}
+          </ErrorState>
         ),
         empty:
           state.status === "empty" ? (
