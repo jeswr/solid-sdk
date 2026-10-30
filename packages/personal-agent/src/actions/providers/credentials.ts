@@ -9,10 +9,12 @@
  * output. Configuration comes from a trusted operator file (`ProviderConfig`), never from a
  * browser or an action request, and must not contain tokens.
  */
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { spawn } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 import { isAbsolute } from "node:path";
 import { z } from "zod";
+import { HELPER_TERMINATION_GRACE_MS, HELPER_TIMEOUT_MS } from "../../credentials/deadlines.js";
 import { parseRfc3339 } from "./common.js";
 
 export type ProviderFamily = "google" | "microsoft";
@@ -34,7 +36,7 @@ export interface AccessToken {
 
 export class CredentialError extends Error {
   constructor(
-    readonly code: "not-configured" | "revoked" | "unavailable" | "invalid",
+    readonly code: "not-configured" | "revoked" | "unavailable" | "invalid" | "timeout",
     message: string,
   ) {
     super(message);
@@ -95,7 +97,6 @@ export function loadProviderConfig(path: string): ProviderConfig {
 
 // ------------------------------------------------------------------ helper-process provider
 
-const HELPER_TIMEOUT_MS = 10_000;
 const HELPER_MAX_OUTPUT = 16 * 1024;
 const helperOutput = z.object({
   access_token: z.string().regex(/^[\x21-\x7e]{8,8192}$/),
@@ -143,8 +144,10 @@ export class HelperTokenProvider implements AccessTokenProvider {
 
 /**
  * Run the helper once. Settles exactly once; every failure is a typed CredentialError (never the
- * helper's output); the child is killed on timeout or oversize, and an early exit that closes
- * stdin (EPIPE) is handled rather than crashing the caller.
+ * helper's output). The deadline covers the helper's lock wait + provider call + local work;
+ * `timeoutMs` overrides that budget for tests. On deadline, discard output and send SIGTERM,
+ * then SIGKILL after a bounded persistence grace period. Even a successful exit during grace
+ * is a timeout. Oversized output is killed immediately; early stdin closure (EPIPE) is safe.
  */
 export function runHelper(
   command: string,
@@ -154,22 +157,32 @@ export function runHelper(
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     let settled = false;
+    let timedOut = false;
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
     const settle = (fn: () => void) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      clearTimeout(killTimer);
       fn();
     };
     const child = spawn(command, [...args], { stdio: ["pipe", "pipe", "ignore"], shell: false });
     let out = "";
     let size = 0;
+    const rejectTimeout = () =>
+      reject(new CredentialError("timeout", "the credential helper did not answer in time"));
     const timer = setTimeout(() => {
-      child.kill("SIGKILL");
-      settle(() =>
-        reject(new CredentialError("unavailable", "the credential helper did not answer in time")),
-      );
+      timedOut = true;
+      out = "";
+      // Arm escalation before signalling: a cooperative helper may close immediately.
+      killTimer = setTimeout(() => {
+        child.kill("SIGKILL");
+        settle(rejectTimeout);
+      }, HELPER_TERMINATION_GRACE_MS);
+      child.kill("SIGTERM");
     }, timeoutMs);
     child.stdout.on("data", (d: Buffer) => {
+      if (settled || timedOut) return;
       size += d.byteLength;
       if (size > HELPER_MAX_OUTPUT) child.kill("SIGKILL");
       else out += d.toString("utf8");
@@ -178,6 +191,9 @@ export function runHelper(
     // The helper may exit before reading its request: that is its exit code's business.
     child.stdin.on("error", () => undefined);
     child.on("error", () => {
+      // A signal/exit race must not turn a deadline into a generic start failure or
+      // interrupt persistence. The grace timer still bounds an uncooperative child.
+      if (settled || timedOut) return;
       child.kill("SIGKILL");
       settle(() =>
         reject(new CredentialError("unavailable", "the credential helper could not be started")),
@@ -185,7 +201,8 @@ export function runHelper(
     });
     child.on("close", (code, signal) =>
       settle(() => {
-        if (size > HELPER_MAX_OUTPUT)
+        if (timedOut) rejectTimeout();
+        else if (size > HELPER_MAX_OUTPUT)
           reject(new CredentialError("invalid", "the credential helper answer was too large"));
         else if (code === 3)
           reject(new CredentialError("revoked", "the credential helper reports revoked access"));
