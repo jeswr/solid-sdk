@@ -9,9 +9,11 @@
  * Calendar API calendarList.list; Microsoft identity platform auth-code flow with PKCE, ID token
  * claims, Graph "List calendars".
  */
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { createLocalJWKSet, decodeJwt, type JWTPayload, jwtVerify } from "jose";
 import { z } from "zod";
+import { PROVIDER_CALL_TIMEOUT_MS } from "./deadlines.js";
 import { type Grant, HelperError, type Profile } from "./store.js";
 
 // ------------------------------------------------------------------ transport
@@ -24,7 +26,6 @@ export const ALLOWED_ORIGINS: ReadonlySet<string> = new Set([
   "https://login.microsoftonline.com",
   "https://graph.microsoft.com",
 ]);
-const CALL_TIMEOUT_MS = 15_000;
 const MAX_BODY = 256 * 1024;
 
 /** One bounded call to an allow-listed origin; JSON answer (or a typed error, never the body). */
@@ -47,7 +48,7 @@ export async function call(
     res = await transport(url, {
       ...init,
       redirect: "error",
-      signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
+      signal: AbortSignal.timeout(PROVIDER_CALL_TIMEOUT_MS),
     });
   } catch {
     throw new HelperError("unavailable", `${what}: the provider could not be reached`);

@@ -2,6 +2,7 @@
  * Shared provider-adapter plumbing: bounded HTTP, token acquisition with minimum-scope checks,
  * and time conversion. Every failure becomes a `SourceFailure` (fail closed), never data.
  */
+// AUTHORED-BY Codex GPT-6.1-Sol
 import type { Slot } from "../../pilot/domains/scheduling.js";
 import { localParts } from "../../pilot/domains/scheduling.js";
 import { type AccessTokenProvider, CredentialError, type ProviderFamily } from "./credentials.js";
@@ -62,7 +63,7 @@ export async function tokenFor(
   } catch (error) {
     if (error instanceof CredentialError)
       throw new ProviderCallError(
-        error.code === "unavailable" ? "blocked" : "needs-setup",
+        error.code === "unavailable" || error.code === "timeout" ? "blocked" : "needs-setup",
         error.message,
       );
     throw new ProviderCallError("blocked", "the credential provider failed");

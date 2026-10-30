@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 # Provider configuration and token contract (calendar actions)
 
 This is the interface between the deterministic actions (`src/actions/`) and whatever sets up
@@ -69,8 +70,15 @@ provider call the action runs it once:
 - **stdout** (JSON, ≤ 16 KiB): `{"access_token":"…","expires_at":"<ISO 8601>"?,"scope":"space separated granted scopes"?}`
 - **exit code**: `0` token returned; `3` access revoked / consent withdrawn / no grant (the
   action reports *needs setup*); anything else: unavailable.
-- stderr is discarded (never logged). Time limit: 10 s. The runner settles exactly once:
-  - it kills the helper on timeout or oversize;
+- stderr is discarded (never logged). The shared deadline in `src/credentials/deadlines.ts`
+  is 40 s: 20 s profile-lock wait + 15 s provider refresh + 5 s startup/persistence margin.
+  The runner settles exactly once:
+  - on deadline it sends SIGTERM, allowing 2 s for a cooperative helper to finish persisting
+    a rotated refresh token, then SIGKILL if still running; the bundled token command defers
+    SIGTERM through its exchange;
+  - a deadline always reports a typed `CredentialError` with code `timeout` (availability
+    is *blocked*), discarding all output even if the helper finishes during the grace period;
+  - it kills oversized output immediately;
   - it tolerates a helper that exits before reading its request (EPIPE);
   - it reports each failure as a typed error without the helper's output.
 

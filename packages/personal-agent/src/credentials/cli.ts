@@ -16,6 +16,7 @@
  *   token --profile N
  * Every command needs --dir DIR (or AWP_CREDENTIALS_DIR): the dedicated private directory.
  */
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { spawn } from "node:child_process";
 import {
   closeSync,
@@ -531,10 +532,18 @@ async function run(
       case "token": {
         const name = profileName();
         const request = await (io.readStdin ?? readProcessStdin)();
-        const r = await helperExchange(deps, name, request);
-        if (r.stdout !== undefined) io.stdout(r.stdout);
-        else io.stderr(`awp-credentials token: ${r.problem ?? "failed"}\n`);
-        return r.exit;
+        // The runner allows a short SIGTERM grace before SIGKILL. Defer termination
+        // through the exchange so a received refresh token reaches the atomic store write.
+        const finishExchange = () => undefined;
+        process.on("SIGTERM", finishExchange);
+        try {
+          const r = await helperExchange(deps, name, request);
+          if (r.stdout !== undefined) io.stdout(r.stdout);
+          else io.stderr(`awp-credentials token: ${r.problem ?? "failed"}\n`);
+          return r.exit;
+        } finally {
+          process.removeListener("SIGTERM", finishExchange);
+        }
       }
       default:
         throw new HelperError(
