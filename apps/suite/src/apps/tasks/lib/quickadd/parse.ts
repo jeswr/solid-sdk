@@ -167,9 +167,11 @@ export function parseQuickAdd(text: string, ctx: QuickAddContext): QuickAddResul
           calendar.setUTCDate(calendar.getUTCDate() - calendar.getUTCDay());
           // Chrono can also discard weekday metadata when merging "this week Saturday".
           // Reparse the complete suffix before applying a weekday to the injected boundary.
+          // Normalize Chrono's supported date/time punctuation before checking consumption.
           const suffix = match.text
             .slice(periodMatch[0].length)
             .trim()
+            .replace(/^[,.:∙-]\s*/, "")
             .replace(/^at\s+/i, "");
           if (suffix) {
             const [qualifier, ...others] = parser.parse(suffix, { instant: today, timezone: 0 });

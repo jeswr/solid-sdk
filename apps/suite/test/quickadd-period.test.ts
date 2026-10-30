@@ -34,6 +34,31 @@ describe("quick-add period weekday qualifiers", () => {
   });
 
   it.each([
+    ["this week, at 5pm", "2026-10-18T17:00:00.000Z"],
+    ["this week, 5pm", "2026-10-18T17:00:00.000Z"],
+    ["this week , \tAT 5pm", "2026-10-18T17:00:00.000Z"],
+    ["this week, 9am on Saturday", "2026-10-24T09:00:00.000Z"],
+    ["this week, Saturday at 9am", "2026-10-24T09:00:00.000Z"],
+    ["this week. at 5pm", "2026-10-18T17:00:00.000Z"],
+    ["this week: at 5pm", "2026-10-18T17:00:00.000Z"],
+    ["this week - at 5pm", "2026-10-18T17:00:00.000Z"],
+    ["this week∙ at 5pm", "2026-10-18T17:00:00.000Z"],
+  ])("accepts supported connecting punctuation in %s", (phrase, dateTime) => {
+    const input = `Call ${phrase}`;
+    for (const locale of ["en-GB", "en-US"] as const) {
+      for (const keepDateText of [false, true]) {
+        expect(parseQuickAdd(input, { now, tz: "UTC", locale, keepDateText })).toEqual({
+          title: keepDateText ? input.replace(/\s+/g, " ") : "Call",
+          due: { kind: "dateTime", dateTime, timeZone: "UTC" },
+          priority: 4,
+          labels: [],
+          spans: [{ kind: "due", start: 5, end: input.length, text: phrase }],
+        });
+      }
+    }
+  });
+
+  it.each([
     ["2026-11-01T00:30:00Z", "UTC", "this week Saturday 9am", "2026-11-07T09:00:00.000Z"],
     [
       "2026-11-01T00:30:00Z",
@@ -93,6 +118,11 @@ describe("quick-add period weekday qualifiers", () => {
     "this week next Monday 9am",
     "this week weekday 9am",
     "this week weekend 9am",
+    "this week, tomorrow 9am",
+    "this week, Monday Tuesday 9am",
+    "this week, next Monday 9am",
+    "this week, weekday 9am",
+    "this week, weekend 9am",
   ])("rejects an unsupported merged qualifier in %s with a typed error", (phrase) => {
     expect(() => parseQuickAdd(`Call ${phrase}`, { now, tz: "UTC" })).toThrow(RangeError);
   });
