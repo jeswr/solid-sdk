@@ -144,6 +144,26 @@ describe("people validation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove Bram Kerst" }));
     expect(screen.queryByRole("list", { name: "Selected people" })).toBeNull();
   });
+  it.each([1, 3])("selects the last contact with initial ArrowUp among %i suggestions", (count) => {
+    const people = ["Alice", "Bob", "Chris"].slice(0, count).map((displayName) => ({
+      webId: `https://${displayName.toLowerCase()}.example/profile#me`,
+      displayName,
+    }));
+    render(<Picker people={people} useProfile={() => ({ loading: false })} />);
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    const options = screen.getAllByRole("option");
+    expect(input.getAttribute("aria-activedescendant")).toBeNull();
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    expect(input.getAttribute("aria-activedescendant")).toBe(options.at(-1)?.id);
+    expect(screen.getByRole("option", { selected: true })).toBe(options.at(-1));
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(
+      within(screen.getByRole("list", { name: "Selected people" })).getByText(
+        `Account ID: ${people.at(-1)?.webId}`,
+      ),
+    ).toBeDefined();
+  });
   it.each([
     undefined,
     "Old contact name",

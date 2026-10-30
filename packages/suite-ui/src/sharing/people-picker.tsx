@@ -242,12 +242,12 @@ export function PeoplePicker({
             if (event.key === "ArrowDown" || event.key === "ArrowUp") {
               event.preventDefault();
               setOpen(true);
-              setActive(
-                results.length
-                  ? (active + (event.key === "ArrowDown" ? 1 : -1) + results.length) %
-                      results.length
-                  : -1,
-              );
+              if (!results.length) setActive(-1);
+              else if (active < 0) setActive(event.key === "ArrowDown" ? 0 : results.length - 1);
+              else
+                setActive(
+                  (active + (event.key === "ArrowDown" ? 1 : -1) + results.length) % results.length,
+                );
             }
             if (event.key === "Enter") {
               event.preventDefault();
