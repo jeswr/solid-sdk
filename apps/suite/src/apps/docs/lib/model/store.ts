@@ -60,6 +60,11 @@ export interface SaveOptions {
   /** Injectable clock/backoff seam; default uses real timers. */
   wait?: ((milliseconds: number) => Promise<void>) | undefined;
 }
+type MetadataInput = Partial<Omit<BuildDocumentInput, keyof Snapshot>> & {
+  body?: never;
+  format?: never;
+  wordCount?: never;
+};
 /** Callbacks must use one captured editor state so its log, body and format agree. */
 export interface CopyState {
   /** Resume the same private reservation after an interrupted copy. */
@@ -293,8 +298,18 @@ export class DocsStore {
   /** Conditional snapshot save, preserving remote history and unchanged metadata on 412. */
   async save(
     stored: StoredDocument,
+    input: MetadataInput,
+    options?: Omit<SaveOptions, "regenerate">,
+  ): Promise<StoredDocument>;
+  async save(
+    stored: StoredDocument,
     input: Partial<BuildDocumentInput>,
     options: SaveOptions,
+  ): Promise<StoredDocument>;
+  async save(
+    stored: StoredDocument,
+    input: Partial<BuildDocumentInput>,
+    options: Partial<SaveOptions> = {},
   ): Promise<StoredDocument> {
     this.assertScope(stored.url, true);
     stored = await this.claimIdentity(stored, input.instanceId);
@@ -345,7 +360,15 @@ export class DocsStore {
         const remote = await this.read(stored.url);
         if (!remote) throw new ResourceReadError(stored.url, 422);
         current = remote;
-        snapshot = await options.regenerate();
+        // Metadata has no local body intent. Rebase its coupled snapshot fields
+        // on every remote version rather than replaying the initially read body.
+        snapshot = options.regenerate
+          ? await options.regenerate()
+          : {
+              body: remote.data.body,
+              format: remote.data.format,
+              wordCount: remote.data.wordCount,
+            };
       }
     }
   }

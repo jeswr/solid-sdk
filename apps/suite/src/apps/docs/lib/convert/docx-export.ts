@@ -9,6 +9,7 @@ import {
   ImageRun,
   ImportedXmlComponent,
   type IParagraphOptions,
+  type IParagraphStyleOptions,
   type IRunOptions,
   LevelFormat,
   Paragraph,
@@ -21,6 +22,7 @@ import {
   WidthType,
 } from "docx";
 import { validLink } from "../editor/logic";
+import { type QuoteAncestor, quoteStyleName } from "./docx-quotes";
 
 export interface ExportImage {
   data: Uint8Array<ArrayBuffer>;
@@ -41,9 +43,9 @@ function hyperlink(href: unknown, runs: ParagraphChild[]): ParagraphChild[] {
   return link ? [new ExternalHyperlink({ link, children: runs })] : runs;
 }
 
-function inline(node: JSONContent, quote: boolean): ParagraphChild[] {
+function inline(node: JSONContent): ParagraphChild[] {
   if (node.type === "hardBreak") return [new TextRun({ break: 1 })];
-  if (node.type !== "text") return children(node).flatMap((child) => inline(child, quote));
+  if (node.type !== "text") return children(node).flatMap(inline);
   const marks = new Set((node.marks ?? []).map((mark) => mark.type));
   const link = node.marks?.find((mark) => mark.type === "link");
   const href = validLink(String(link?.attrs?.href ?? ""));
@@ -68,6 +70,7 @@ function inline(node: JSONContent, quote: boolean): ParagraphChild[] {
 /** Convert PM JSON directly: no HTML, editor, pod writes or remote snapshot needed. */
 export async function toDocx(json: JSONContent, readImage: ReadExportImage): Promise<Document> {
   let listInstance = 0;
+  let quoteInstance = 0;
   const numberingConfig = (reference: string, start: number, listLevel: number) => ({
     reference,
     levels: Array.from({ length: 9 }, (_, level) => ({
@@ -81,10 +84,43 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
   });
   const config = [numberingConfig("bullets", 1, 0)];
   const continuationStyles = new Map<string, { id: string; name: string; basedOn: string }>();
+  const quoteStyles = new Map<string, IParagraphStyleOptions>();
+  const tableStyles = new Map<string, ImportedXmlComponent>();
+  const styleName = (style: string) =>
+    style.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/Heading(\d)$/, "Heading $1");
+  const quotedStyle = (quotes: readonly QuoteAncestor[], style: string, table = false) => {
+    const name = quoteStyleName(quotes, styleName(style));
+    const styles = table ? tableStyles : quoteStyles;
+    if (!styles.has(name)) {
+      const id = table
+        ? `SuiteQuoteTable${tableStyles.size}`
+        : style === "Quote" && ![...quoteStyles.values()].some((style) => style.id === "Quote")
+          ? "Quote"
+          : `SuiteQuote${quoteStyles.size}`;
+      if (table) {
+        const tableStyle = new ImportedXmlComponent("w:style", {
+          "w:type": "table",
+          "w:styleId": id,
+        });
+        tableStyle.push(new ImportedXmlComponent("w:name", { "w:val": name }));
+        tableStyles.set(name, tableStyle);
+      } else
+        quoteStyles.set(name, {
+          id,
+          name,
+          ...(id === "Quote" ? { run: { italics: true } } : { basedOn: style }),
+        });
+      return id;
+    }
+    // IDs are deterministic within each style collection.
+    return table
+      ? `SuiteQuoteTable${[...tableStyles.keys()].indexOf(name)}`
+      : (quoteStyles.get(name) as IParagraphStyleOptions).id;
+  };
   async function blocks(
     nodes: JSONContent[],
     depth = -1,
-    quote = false,
+    quotes: readonly QuoteAncestor[] = [],
     marker: {
       numbering: { reference: string; instance: number } | undefined;
       task: string | undefined;
@@ -95,26 +131,29 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
     // unavailable-image text, rules and blocks reached through a wrapper.
     const addParagraph = ({ heading, ...options }: IParagraphOptions) => {
       const level = Math.min(Math.max(0, depth), 8);
-      let style = options.style ?? heading ?? (quote ? "Quote" : undefined);
+      let style = options.style ?? heading ?? (quotes.length ? "Quote" : undefined);
       if (depth >= 0 && !marker.numbering && !marker.task) {
         if (style) {
           const id = `ListContinuation${style}`;
           continuationStyles.set(id, {
             id,
-            name: `List Continuation ${style.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^Heading(\d)$/, "Heading $1")}`,
+            name: `List Continuation ${styleName(style)}`,
             basedOn: style,
           });
           style = id;
         } else style = "ListContinuation";
       }
+      if (marker.task) style = marker.task === "☑ " ? "TaskChecked" : "TaskUnchecked";
+      if (quotes.length) style = quotedStyle(quotes, style as string);
       result.push(
         new Paragraph({
-          ...(quote ? { style: "Quote", indent: { left: 720 }, border: { left: border(24) } } : {}),
           ...options,
           ...(style ? { style } : {}),
           ...(marker.numbering ? { numbering: { ...marker.numbering, level } } : {}),
-          ...(depth >= 0 ? { indent: { left: 720 * (level + 1) } } : {}),
-          ...(marker.task ? { style: marker.task === "☑ " ? "TaskChecked" : "TaskUnchecked" } : {}),
+          ...(depth >= 0 || quotes.length
+            ? { indent: { left: 720 * ((depth >= 0 ? level + 1 : 0) + quotes.length) } }
+            : {}),
+          ...(quotes.length ? { border: { left: border(24), ...options.border } } : {}),
           children: [
             ...(marker.task ? [new TextRun({ text: marker.task, style: "TaskMarker" })] : []),
             ...(options.children ?? []),
@@ -142,7 +181,7 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
             ...(node.type === "heading"
               ? { heading: headings[Number(node.attrs?.level) - 1] ?? HeadingLevel.HEADING_3 }
               : {}),
-            children: [...content.flatMap((child) => inline(child, quote))],
+            children: content.flatMap(inline),
           });
           break;
         }
@@ -157,7 +196,7 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
             );
           for (const item of content) {
             result.push(
-              ...(await blocks(children(item), depth + 1, quote, {
+              ...(await blocks(children(item), depth + 1, quotes, {
                 numbering: node.type === "taskList" ? undefined : { reference, instance },
                 task: node.type === "taskList" ? (item.attrs?.checked ? "☑ " : "☐ ") : undefined,
               })),
@@ -166,7 +205,14 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
           break;
         }
         case "blockquote":
-          result.push(...(await blocks(content, depth, true, marker)));
+          result.push(
+            ...(await blocks(
+              content,
+              depth,
+              [...quotes, { id: ++quoteInstance, lists: depth + 1 }],
+              marker,
+            )),
+          );
           break;
         case "codeBlock":
           addParagraph({
@@ -221,7 +267,8 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
             for (const cell of children(row)) {
               cells.push(
                 new TableCell({
-                  children: await blocks(children(cell), -1, quote),
+                  // The table carries its surrounding context; each cell starts its own.
+                  children: await blocks(children(cell)),
                   columnSpan: Number(cell.attrs?.colspan ?? 1),
                   rowSpan: Number(cell.attrs?.rowspan ?? 1),
                   borders: {
@@ -245,8 +292,14 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
           result.push(
             new Table({
               width: { size: 100, type: WidthType.PERCENTAGE },
-              ...(depth >= 0
-                ? { indent: { size: 720 * (Math.min(depth, 8) + 1), type: WidthType.DXA } }
+              ...(quotes.length ? { style: quotedStyle(quotes, "Table", true) } : {}),
+              ...(depth >= 0 || quotes.length
+                ? {
+                    indent: {
+                      size: 720 * ((depth >= 0 ? Math.min(depth, 8) + 1 : 0) + quotes.length),
+                      type: WidthType.DXA,
+                    },
+                  }
                 : {}),
               rows,
             }),
@@ -254,7 +307,7 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
           break;
         }
         default:
-          result.push(...(await blocks(content, depth, quote, marker)));
+          result.push(...(await blocks(content, depth, quotes, marker)));
       }
     }
     return result;
@@ -265,12 +318,15 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
     styles: {
       paragraphStyles: [
         { id: "Code", name: "Code", run: { font: codeFont, size: 20 } },
-        { id: "Quote", name: "Quote", run: { italics: true } },
+        ...(![...quoteStyles.values()].some((style) => style.id === "Quote")
+          ? [{ id: "Quote", name: "Quote", run: { italics: true } }]
+          : []),
         { id: "ListContinuation", name: "List Continuation" },
         { id: "TaskChecked", name: "Task Checked" },
         { id: "TaskUnchecked", name: "Task Unchecked" },
         { id: "HorizontalRule", name: "Horizontal Rule" },
         ...continuationStyles.values(),
+        ...quoteStyles.values(),
       ],
       characterStyles: [
         { id: "InlineCode", name: "Inline Code", run: { font: codeFont } },
@@ -295,6 +351,8 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
       },
     ],
   });
+  // Append table styles without replacing docx's document/heading defaults.
+  for (const style of tableStyles.values()) document.Styles.addChildElement(style);
   // WordprocessingML specifies font substitution through the font table's alternate name.
   for (const [name, fallback] of [
     ["Source Serif 4", "Georgia"],

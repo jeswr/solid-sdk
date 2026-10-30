@@ -8,6 +8,7 @@ import { baseExtensions } from "../../editor/extensions";
 import { normaliseImageDestination } from "../editor/destination";
 import { readNumbering } from "./docx-numbering";
 import { embeddedDocument } from "./docx-payload";
+import { type QuoteAncestor, quotePaths, readQuoteStyle } from "./docx-quotes";
 import { descendants, readXml, WORD, child as xmlChild } from "./docx-xml";
 import { sanitiseImport } from "./sanitise";
 import { DOCX_FORMATTING_WARNING, reportSkipped, type SkippedItem } from "./skipped";
@@ -94,6 +95,7 @@ function mapLists(
   let tableIndex = 0;
   function container(element: DocxElement) {
     const ancestors: { path: string; key: string; list: string }[] = [];
+    let previousQuotes: readonly QuoteAncestor[] = [];
     for (const child of element.children ?? []) {
       const metadata = child.type === "paragraph" ? numbering[paragraphIndex++] : undefined;
       if (child.type === "paragraph" && metadata) {
@@ -102,14 +104,20 @@ function mapLists(
         if (metadata.id === "0") child.numbering = null;
         else if (metadata.numbering) child.numbering = metadata.numbering;
       }
-      const styleName = child.styleName?.toLowerCase();
+      const quoted = readQuoteStyle(child.styleName ?? "");
+      const quotes = quoted?.quotes ?? [];
+      const precedingQuotes = previousQuotes;
+      previousQuotes = quotes;
+      const styleName = (quoted?.style ?? child.styleName)?.toLowerCase();
       const continuationStyle = styleName?.match(/^list continuation(?: (.+))?$/);
       const blockStyle = continuationStyle ? continuationStyle[1] : styleName;
       const checked = child.type === "paragraph" ? taskChecked(child, styleName) : undefined;
       const task = checked !== undefined;
       const table = child.type === "table";
       const indentLevel = Math.round(
-        (table ? Number(tableIndents[tableIndex++]) : Number(child.indent?.start)) / 720 - 1,
+        (table ? Number(tableIndents[tableIndex++]) : Number(child.indent?.start)) / 720 -
+          1 -
+          quotes.length,
       );
       const continuation =
         (child.type === "paragraph" || table) &&
@@ -125,14 +133,18 @@ function mapLists(
       const mappedStyle = (ancestors: string[]) => {
         const block = table
           ? "table:fresh"
-          : child.styleId === "Code" || child.styleId === "ListContinuationCode"
+          : child.styleId === "Code" ||
+              child.styleId === "ListContinuationCode" ||
+              (quoted && blockStyle === "code")
             ? "pre:fresh"
-            : (paragraphPaths.get(blockStyle ?? "") ?? "p:fresh");
+            : quoted && blockStyle === "quote"
+              ? "p:fresh"
+              : (paragraphPaths.get(blockStyle ?? "") ?? "p:fresh");
         const styleId = `SuiteList${styleMap.length}`;
         // Mammoth uses the first matching rule. Every generated list/continuation
         // path must precede presets while retaining the paragraph's block style.
         styleMap.unshift(
-          `${table ? "table" : "p"}.${styleId} => ${[...ancestors, block].join(" > ")}`,
+          `${table ? "table" : "p"}.${styleId} => ${[...quotePaths(ancestors, quotes, precedingQuotes), block].join(" > ")}`,
         );
         child.styleId = styleId;
       };
@@ -150,7 +162,9 @@ function mapLists(
           Math.max(
             0,
             Math.round(
-              Number(child.numbering?.level ?? Number(child.indent?.start) / 720 - 1) || 0,
+              Number(
+                child.numbering?.level ?? Number(child.indent?.start) / 720 - 1 - quotes.length,
+              ) || 0,
             ),
           ),
         );
@@ -178,7 +192,7 @@ function mapLists(
       } else {
         ancestors.length = 0;
         // A Word edit may remove the list that introduced this continuation.
-        if (child.type === "paragraph" && continuationStyle) mappedStyle([]);
+        if (quoted || (child.type === "paragraph" && continuationStyle)) mappedStyle([]);
         container(child);
       }
     }

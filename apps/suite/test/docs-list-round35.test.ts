@@ -50,6 +50,78 @@ beforeEach(() => {
   state.store.save.mockReset();
 });
 
+it("round52 Rename retries preserve another tab's latest pod body, format and word count", async () => {
+  const url = entry("Plan").url;
+  const initial = {
+    title: "Plan",
+    body: "<p>v1</p>",
+    format: "text/html",
+    wordCount: 1,
+    instanceId: "document",
+  };
+  let body = await serializeTurtle(buildDocument(url, initial));
+  let etag = '"v1"';
+  const writes: string[] = [];
+  const fetchImpl: typeof fetch = async (_input, init) => {
+    if (init?.method === "PUT") {
+      writes.push(String(init.body));
+      if (new Headers(init.headers).get("if-match") !== etag)
+        return new Response(null, { status: 412 });
+      body = String(init.body);
+      etag = '"renamed"';
+      return new Response(null, { status: 205, headers: { etag } });
+    }
+    return new Response(body, { headers: { etag, "content-type": "text/turtle" } });
+  };
+  const store = new DocsStore("https://pod.test/", session.webId, fetchImpl);
+  state.store.list.mockResolvedValue([entry("Plan")]);
+  state.store.read.mockImplementation(async () => {
+    const stored = await store.read(url);
+    // Another tab commits after Rename reads the old snapshot.
+    body = await serializeTurtle(
+      buildDocument(url, { ...initial, body: "# v2 body", format: "text/markdown", wordCount: 3 }),
+    );
+    etag = '"v2"';
+    return stored;
+  });
+  state.store.save.mockImplementation(store.save.bind(store));
+  const { root } = await mount();
+  try {
+    await act(async () =>
+      button("Actions for Plan").dispatchEvent(
+        new MouseEvent("pointerdown", { bubbles: true, button: 0 }),
+      ),
+    );
+    await act(async () =>
+      Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+        .find((node) => node.textContent === "Rename")
+        ?.click(),
+    );
+    const input = document.querySelector<HTMLInputElement>("#rename-title") as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        input,
+        "Renamed",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    vi.useFakeTimers();
+    await act(async () => button("Save title").click());
+    await act(async () => vi.runAllTimersAsync());
+    const reopened = await store.read(url);
+    expect(writes).toHaveLength(2);
+    expect(reopened?.data).toMatchObject({
+      title: "Renamed",
+      body: "# v2 body",
+      format: "text/markdown",
+      wordCount: 3,
+    });
+  } finally {
+    await act(async () => root.unmount());
+    vi.useRealTimers();
+  }
+});
+
 it.each([
   "other document",
   "same document",
@@ -245,11 +317,7 @@ it.each([
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await act(async () => button("Save title").click());
-    expect(state.store.save).toHaveBeenCalledWith(
-      expect.anything(),
-      { title: "After" },
-      expect.anything(),
-    );
+    expect(state.store.save).toHaveBeenCalledWith(expect.anything(), { title: "After" });
     expect(host.querySelector("tbody")?.textContent).toContain("After");
     await act(async () =>
       outcome === "success" ? old.resolve([entry("Before")]) : old.reject(new Error("Offline")),

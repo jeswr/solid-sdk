@@ -353,14 +353,7 @@ export function DocumentList({ session }: { session: PodSession }) {
                 if (!renaming) return;
                 void act(async () => {
                   const stored = await store.read(renaming.entry.url);
-                  if (stored)
-                    await store.save(
-                      stored,
-                      { title: renaming.title },
-                      {
-                        regenerate: () => ({ body: stored.data.body, format: stored.data.format }),
-                      },
-                    );
+                  if (stored) await store.save(stored, { title: renaming.title });
                   await reload();
                   setRenaming((current) => (current === renaming ? null : current));
                 });

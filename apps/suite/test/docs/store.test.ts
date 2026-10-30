@@ -466,6 +466,52 @@ describe("listing", () => {
 
 describe("snapshot conflicts", () => {
   it.each([
+    undefined,
+    7,
+  ])("round52 metadata retries rebase the complete snapshot on every 412 (wordCount %j)", async (wordCount) => {
+    const s = await server();
+    const stored = await document();
+    let conflicts = 0;
+    const fetchImpl: typeof fetch = async (url, init) => {
+      if (init?.method === "PUT" && conflicts < 2) {
+        conflicts++;
+        s.resources.set(DOC, {
+          body: await serializeTurtle(
+            buildDocument(DOC, {
+              ...stored.data,
+              body: `Remote body ${conflicts}`,
+              format: "text/markdown",
+              wordCount,
+            }),
+          ),
+          etag: `"remote-${conflicts}"`,
+          contentType: "text/turtle",
+        });
+        return new Response(null, { status: 412 });
+      }
+      return s.fetchImpl(url, init);
+    };
+    const store = new DocsStore(POD, WEBID, fetchImpl);
+    const wait = vi.fn(WAIT);
+    const saved = await store.save(
+      stored,
+      {
+        title: "Renamed",
+        assets: `${POD}docs/plan/new-assets/`,
+      },
+      { wait },
+    );
+    expect(wait.mock.calls).toEqual([[2000], [4000]]);
+    expect(saved.data).toMatchObject({
+      title: "Renamed",
+      body: "Remote body 2",
+      format: "text/markdown",
+      wordCount,
+      assets: `${POD}docs/plan/new-assets/`,
+    });
+    expect(await store.read(DOC)).toEqual(saved);
+  });
+  it.each([
     ["text/markdown", "text/html", "<p>Regenerated HTML</p>"],
     ["text/html", "text/markdown", "# Regenerated Markdown"],
   ])("keeps regenerated body and format together after a remote %s change", async (remoteFormat, format, body) => {
