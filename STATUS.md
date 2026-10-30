@@ -218,3 +218,54 @@ run, and no other checkouts were touched. `roborev` is unavailable, so automated
 per-commit review could not run; no review tool was installed. Tracker operations
 remain with the dispatcher. There are no new open questions or semantic choices
 for this fix round; the existing conservative interpretations remain unchanged.
+
+## Fix round 4 — finite cancellation and array accessors
+
+Both findings against `409486babe850f7930e0e539d7e93ea13d7bc304` are addressed:
+
+- `3fda0b06` (`fix(sheets): preserve finite average residuals`) uses the existing
+  exact binary accumulator for finite sums as well as overflowing partial sums.
+  Residuals survive cancellation across multiple magnitudes, preserving strict
+  average comparisons and their `stopIfTrue` behavior. The API documentation now
+  describes the calculation accurately.
+- `bf463241` (`fix(sheets): reject array element accessors`) checks own element
+  descriptors before reading cells, rows, rules or scale anchors. Changing and
+  throwing getters, and setter-only elements, are rejected without invocation
+  with the appropriate `INVALID_RANGE` or `INVALID_RULE` typed error. Existing
+  early size-limit checks and sparse-array rejection remain covered.
+
+Nine new regression cases bring conditional-formatting tests to 167. All four
+finite-cancellation cases and all five accessor-location cases failed before
+their corresponding implementation changes. Each accessor-location case checks
+changing getters, throwing getters and setter-only descriptors. No rule shapes,
+dependencies, manifests or unrelated implementation files changed.
+
+All commands below used `PATH=/opt/node24/bin:$PATH` (Node v24.22.1, pnpm 10.4.1).
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/sheets-condformat.test.ts --coverage.enabled=false` | Expected regression failures before each fix: four average cases, then five accessor cases. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/sheets-condformat.test.ts --coverage --coverage.include='src/apps/sheets/lib/condformat/**/*.ts'` | PASS: 167 tests; 100% statements, branches, functions and lines. |
+| `pnpm exec turbo run build --filter='@jeswr/app-suite^...'` | PASS: seven dependency builds. |
+| `pnpm --filter @jeswr/app-suite run lint` | PASS: 604 files; the same 54 existing warnings outside this lane. |
+| `pnpm --filter @jeswr/app-suite run build` | PASS: production compilation, type validation and static generation. |
+| `pnpm --filter @jeswr/app-suite run typecheck` | PASS. |
+| `pnpm --filter @jeswr/app-suite run test` | PASS: 153 files / 7,674 tests; 100% statements, branches, functions and lines. |
+| `pnpm run lint:root` | PASS, including all workspace guards. |
+| `TURBO_SCM_BASE=409486babe850f7930e0e539d7e93ea13d7bc304 pnpm run gate` | PASS: 12/12 tasks, seven cached; 2m22.279s. |
+| `pnpm run gate:full` | FAIL outside this lane: one existing agent-layer case timed out at 5,000ms in `test/agent-layers.test.mjs:509`. 53 tasks succeeded (eight cached), 222 total when Turbo stopped; 1m58.652s. Root tests: 878 passed, one failed. |
+| `git diff --check` | PASS. |
+
+The full-workspace failure exercises disallowed path characters for
+`import TARGET;`, in the same group of root-test timeout failures recorded in
+earlier rounds. Both `test/agent-layers.test.mjs` and
+`scripts/check-agent-layers.mjs` are unchanged relative to this round's starting
+commit. Their implementation and timeout settings remain outside this fix round.
+Full-workspace verification is incomplete; both requested fixes are complete.
+
+The final documentation commit records this fix round's validation. No dependency
+additions, package-policy checks, UI changes or screenshots were required. No
+branches were switched, no remote operations were run, and no other checkouts
+were touched. `roborev` remains unavailable, so automated per-commit review could
+not run; no review tool was installed. Tracker operations remain with the
+dispatcher. There are no new open questions or semantic choices for this round.
