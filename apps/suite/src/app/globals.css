@@ -1,8 +1,10 @@
 /* AUTHORED-BY Codex GPT-6.1-Sol */
+/* AUTHORED-BY Codex GPT-6 */
 @import "tailwindcss";
 @import "@jeswr/suite-ui/styles/tokens.css";
 @import "@jeswr/suite-ui/styles/theme.css";
 @import "@jeswr/suite-ui/styles/density.css";
+@import "@jeswr/suite-ui/styles/date-time.css";
 @import "@jeswr/suite-ui/styles/navigation.css";
 @import "@jeswr/suite-ui/styles/shell.css";
 @import "@jeswr/suite-ui/styles/components.css";
@@ -466,4 +468,23 @@ nav[aria-label="Component fixtures"] {
   width: 24px;
   height: 24px;
   accent-color: var(--primary);
+}
+
+/* DS-08 fixture layout follows the reference card spacing. */
+.date-fixtures > label {
+  max-width: 420px;
+}
+.date-fixtures > nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+}
+.date-fixture-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  align-items: start;
+  gap: var(--space-6);
+}
+.date-fixture-grid h2 {
+  margin: 0 0 var(--space-2);
 }

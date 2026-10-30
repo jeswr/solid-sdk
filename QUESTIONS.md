@@ -1,0 +1,8 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+# DS-08 questions
+
+1. The brief says DS-02 is merged, but the base has only tokens in `packages/suite-ui` and no Calendar or Popover. Options: block on DS-02, or add the minimum shadcn-style React DayPicker Calendar and Radix Popover needed by DS-08 (01-design-system §5). Conservative implementation: add only these internal pieces; no broader primitive library.
+2. Tasks §5.4 and vocabulary V5 specify weekday IRIs but no ordinal for monthly nth-weekday rules. Options: invent a vocabulary term, omit this required mode, or carry an optional UI-domain `bySetPos` number and serialize it as ordinal BYDAY. Conservative implementation: use `bySetPos` only in the TypeScript object, keep `byDay` as weekday names, and leave RDF mapping to the data layer. No new RDF terms. The object uses `freq` and array-valued `byMonthDay` to remain structurally compatible with the existing Tasks quick-add type. Confirm the ordinal's persistence representation before integrating RDF writes.
+3. DateTimeField receives the account locale as a required prop (01 §7.13). Only en-GB/en-US are specified for acceptance. Other locales retain Intl formatting and use chrono's English parser; broader language support requires a separate locale contract. Dates use local wall time; callers own account timezone conversion. All-day values remain `YYYY-MM-DD` strings per V4 rather than midnight instants.
+
+The instruction to open reference mockups in Playwright conflicts with the explicit ban on launching Chromium in this lane. Their HTML/CSS was inspected; browser comparisons and screenshots are deferred to the dispatcher.

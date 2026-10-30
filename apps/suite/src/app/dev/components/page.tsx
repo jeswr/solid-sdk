@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { fixtureNames } from "./fixture-names";
 export default function ComponentsPage() {
   return (
@@ -8,6 +9,9 @@ export default function ComponentsPage() {
       <p>Tokens, foundations and shared components for the suite.</p>
       <nav aria-label="Component fixtures" className="grid gap-3">
         <a href="/dev/components/tokens">Tokens, typography and density</a>
+        <a href="/dev/components/date-time-field">DateTimeField</a>
+        <a href="/dev/components/date-picker-popover">DatePickerPopover</a>
+        <a href="/dev/components/recurrence-editor">RecurrenceEditor</a>
         {fixtureNames.map((name) => (
           <a key={name} href={`/dev/components/${name}`}>
             {name}
