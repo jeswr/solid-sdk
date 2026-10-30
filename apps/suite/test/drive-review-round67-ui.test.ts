@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex
+import { createRequire } from "node:module";
+import type AxeBuilder from "@axe-core/playwright";
 import { Fragment } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { PodSession } from "../src/lib/session/pod-session";
@@ -28,6 +30,23 @@ import {
   useDriveActions,
   useDriveUi,
 } from "../src/apps/drive/state/ui";
+
+// Use the e2e's installed Axe engine without adding a dependency.
+const requireSuite = createRequire(import.meta.url);
+const axe = createRequire(requireSuite.resolve("@axe-core/playwright"))("axe-core") as {
+  setup(node: Node): void;
+  teardown(): void;
+  commons: {
+    text: {
+      accessibleText(node: Element): string;
+      visible(node: Element): string;
+    };
+  };
+  run(
+    node: Element,
+    options: Parameters<AxeBuilder["options"]>[0],
+  ): ReturnType<AxeBuilder["analyze"]>;
+};
 
 let drive: ReturnType<typeof useDrive>;
 let ui: ReturnType<typeof useDriveUi>;
@@ -147,6 +166,70 @@ it("round 67: expanded Move tree items are named only by their own folder", asyn
   expect(
     document.querySelector(`[data-node="${PRIVATE}target/"]`)?.getAttribute("aria-label"),
   ).toBe("target");
+});
+
+it.each([
+  false,
+  true,
+])("round 67 e2e: Move tree names include their visible labels with nested folders expanded=%s", async (expanded) => {
+  await setup();
+  await act(async () =>
+    ui.openDialog({ kind: "move", items: [await drive.client.stat(`${PRIVATE}secret`)] }),
+  );
+  await vi.waitFor(() => expect(document.querySelector(`[data-node="${PRIVATE}"]`)).not.toBeNull());
+  if (expanded) {
+    const disclosure = document.querySelector('[aria-label="Expand private"]');
+    if (!disclosure) throw new Error("Missing disclosure");
+    await click(disclosure);
+    await vi.waitFor(() =>
+      expect(document.querySelector(`[data-node="${PRIVATE}target/"]`)).not.toBeNull(),
+    );
+  }
+  const tree = document.querySelector('[role="tree"]');
+  if (!tree) throw new Error("Missing tree");
+  // jsdom has no layout; give the rendered text a nonempty on-screen box.
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(0, 0, 100, 20),
+  );
+  // Axe's label-content-name-mismatch compares these same text sources. jsdom
+  // cannot run its canvas-based icon-font detection; this tree uses SVG icons.
+  axe.setup(document);
+  try {
+    const labels = [...tree.querySelectorAll('[role="treeitem"]')].map((item) => ({
+      url: item.getAttribute("data-node"),
+      name: axe.commons.text.accessibleText(item),
+      visible: axe.commons.text.visible(item),
+    }));
+    expect(labels).toContainEqual({ url: DRIVE, name: "My Drive", visible: "My Drive" });
+    expect(labels).toContainEqual({ url: PRIVATE, name: "private", visible: "private" });
+    for (const label of labels) expect(label.name).toBe(label.visible);
+  } finally {
+    axe.teardown();
+  }
+  for (const item of tree.querySelectorAll('[role="treeitem"]')) {
+    if (item.getAttribute("aria-expanded") !== "true") {
+      expect(item.hasAttribute("aria-owns")).toBe(false);
+      continue;
+    }
+    const group = document.getElementById(item.getAttribute("aria-owns") ?? "");
+    expect(group?.getAttribute("role")).toBe("group");
+    expect(item.contains(group)).toBe(false);
+    expect(group?.previousElementSibling).toBe(item);
+    expect(group?.querySelector('[role="treeitem"]')).not.toBeNull();
+  }
+  const result = await axe.run(tree, {
+    runOnly: [
+      "aria-valid-attr-value",
+      "aria-required-children",
+      "aria-required-parent",
+      "aria-allowed-attr",
+      "aria-input-field-name",
+      "aria-toggle-field-name",
+      "nested-interactive",
+    ],
+  });
+  expect(result.violations).toEqual([]);
+  expect(result.incomplete).toEqual([]);
 });
 
 it("round 67: queued Replace reports a changed confirmed ACL endpoint and keeps the file", async () => {

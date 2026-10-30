@@ -31,6 +31,7 @@ import {
 import { ChevronRight, Folder, HardDrive } from "lucide-react";
 import {
   type FormEvent,
+  Fragment,
   type KeyboardEvent,
   useCallback,
   useEffect,
@@ -235,6 +236,7 @@ function MoveDialog({
   const [target, setTarget] = useState(driveRoot);
   const [busy, setBusy] = useState(false);
   const tree = useRef<HTMLDivElement>(null);
+  const treeId = useId();
   const generation = useRef(0);
 
   const readNodes = useCallback(
@@ -352,54 +354,61 @@ function MoveDialog({
     const children = nodes[url];
     const isOpen = expanded.has(url);
     const valid = validity(url).valid;
+    const groupId = `${treeId}-${encodeURIComponent(url)}`;
     return (
-      <div
-        key={url}
-        role="treeitem"
-        aria-label={name}
-        aria-level={level}
-        aria-expanded={isOpen}
-        aria-selected={target === url}
-        aria-disabled={!valid || undefined}
-        data-node={url}
-        tabIndex={target === url ? 0 : -1}
-        className="drv-tree-item"
-        onClick={(event) => {
-          event.stopPropagation();
-          setTarget(url);
-        }}
-        onKeyDown={(event) => {
-          if (event.target !== event.currentTarget) return;
-          if (event.key === "Enter" && canMove) {
-            event.preventDefault();
-            void submit();
-          }
-        }}
-      >
-        <span className="drv-tree-row" style={{ paddingInlineStart: `${(level - 1) * 16 + 4}px` }}>
-          <button
-            type="button"
-            tabIndex={-1}
-            className="drv-tree-twisty"
-            aria-label={isOpen ? `Collapse ${name}` : `Expand ${name}`}
-            data-open={isOpen || undefined}
-            onClick={(event) => {
-              event.stopPropagation();
-              toggle(url);
-            }}
+      <Fragment key={url}>
+        <div
+          role="treeitem"
+          aria-label={name}
+          aria-level={level}
+          aria-expanded={isOpen}
+          aria-owns={isOpen ? groupId : undefined}
+          aria-selected={target === url}
+          aria-disabled={!valid || undefined}
+          data-node={url}
+          tabIndex={target === url ? 0 : -1}
+          className="drv-tree-item"
+          onClick={(event) => {
+            event.stopPropagation();
+            setTarget(url);
+          }}
+          onKeyDown={(event) => {
+            if (event.target !== event.currentTarget) return;
+            if (event.key === "Enter" && canMove) {
+              event.preventDefault();
+              void submit();
+            }
+          }}
+        >
+          <span
+            className="drv-tree-row"
+            style={{ paddingInlineStart: `${(level - 1) * 16 + 4}px` }}
           >
-            <ChevronRight aria-hidden="true" size={16} />
-          </button>
-          {level === 1 ? (
-            <HardDrive aria-hidden="true" size={16} />
-          ) : (
-            <Folder aria-hidden="true" size={16} />
-          )}
-          <span>{name}</span>
-        </span>
+            <button
+              type="button"
+              tabIndex={-1}
+              className="drv-tree-twisty"
+              aria-label={isOpen ? `Collapse ${name}` : `Expand ${name}`}
+              data-open={isOpen || undefined}
+              onClick={(event) => {
+                event.stopPropagation();
+                toggle(url);
+              }}
+            >
+              <ChevronRight aria-hidden="true" size={16} />
+            </button>
+            {level === 1 ? (
+              <HardDrive aria-hidden="true" size={16} />
+            ) : (
+              <Folder aria-hidden="true" size={16} />
+            )}
+            <span>{name}</span>
+          </span>
+        </div>
+        {/* Own the child group without including its visible labels in this row. */}
         {isOpen ? (
           // biome-ignore lint/a11y/useSemanticElements: ARIA tree group, not a form fieldset
-          <div role="group">
+          <div role="group" id={groupId}>
             {children === "loading" || children === undefined ? (
               <div className="drv-tree-loading">Loading…</div>
             ) : children === "error" ? (
@@ -414,7 +423,7 @@ function MoveDialog({
             )}
           </div>
         ) : null}
-      </div>
+      </Fragment>
     );
   };
 
