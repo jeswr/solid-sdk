@@ -2,7 +2,7 @@
 import { NS } from "@jeswr/suite-vocab";
 import { NamedGraphDataset, SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Parser, Store } from "n3";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DriveMetadata } from "../google-drive/vocab.js";
 import { TypeIndexDataset } from "../pod/type-index.js";
 import { canonicalizeJeswrDataset, canonicalJeswrIri } from "./canonical-vocab.js";
@@ -91,37 +91,41 @@ describe("jeswr read aliases", () => {
     ]);
   });
 
-  it("canonicalizes 50,000 legacy type triples in linear time", () => {
+  it("canonicalizes 50,000 legacy type triples with linear dataset reads", () => {
+    const count = 50_000;
     const legacyClass = "https://w3id.org/jeswr/core#Agent";
-    const legacyStore = (count: number) => {
-      const store = new Store();
-      for (let i = 0; i < count; i++) {
-        new PodThing(`https://pod.test/items#item-${i}`, store, DataFactory).types.add(legacyClass);
+    const source = new Store();
+    for (let i = 0; i < count; i++) {
+      new PodThing(`https://pod.test/items#item-${i}`, source, DataFactory).types.add(legacyClass);
+    }
+    // Every Store read (iteration, match, getQuads, has) goes through readQuads, so counting the quads it
+    // yields bounds the work by operations rather than wall-clock time: a per-quad scan would be ~count².
+    const readQuads = Store.prototype.readQuads;
+    const budget = count * 4;
+    let visited = 0;
+    const reads = vi.spyOn(Store.prototype, "readQuads").mockImplementation(function* (
+      this: Store,
+      ...args: Parameters<Store["readQuads"]>
+    ) {
+      for (const quad of readQuads.apply(this, args)) {
+        visited += 1;
+        if (visited > budget) throw new Error("canonicalization read budget exceeded");
+        yield quad;
       }
-      return store;
-    };
-    // Best of three runs, so a slow or noisy CI runner affects both sizes alike; no wall-clock bound.
-    const fastest = (store: Store) => {
-      let best = Number.POSITIVE_INFINITY;
-      for (let run = 0; run < 3; run++) {
-        const started = performance.now();
-        canonicalizeJeswrDataset(store);
-        best = Math.min(best, performance.now() - started);
-      }
-      return best;
-    };
-    const small = legacyStore(12_500);
-    const source = legacyStore(50_000);
-    fastest(small);
-    // Four times the input: linear work is about 4x, quadratic about 16x.
-    expect(fastest(source) / Math.max(fastest(small), 1)).toBeLessThan(10);
-
-    const result = canonicalizeJeswrDataset(source);
-    expect(result.size).toBe(50_000);
-    expect(result.getQuads(null, `${NS.RDF}type`, `${NS.CORE}Agent`, null)).toHaveLength(50_000);
+    });
+    let result: Store;
+    try {
+      result = canonicalizeJeswrDataset(source);
+    } finally {
+      reads.mockRestore();
+    }
+    expect(visited).toBeGreaterThanOrEqual(count);
+    expect(visited).toBeLessThanOrEqual(budget);
+    expect(result.size).toBe(count);
+    expect(result.getQuads(null, `${NS.RDF}type`, `${NS.CORE}Agent`, null)).toHaveLength(count);
     expect(result.getQuads(null, `${NS.RDF}type`, legacyClass, null)).toHaveLength(0);
-    expect(source.getQuads(null, `${NS.RDF}type`, legacyClass, null)).toHaveLength(50_000);
-  });
+    expect(source.getQuads(null, `${NS.RDF}type`, legacyClass, null)).toHaveLength(count);
+  }, 60_000);
 
   it("preserves blank nodes, literal metadata and named graph identities in transformed and unchanged quads", () => {
     const source = new Store();
