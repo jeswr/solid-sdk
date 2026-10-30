@@ -274,3 +274,63 @@ were removed after the gate.
 The full-workspace validation limitation is the unrelated snapshot failure above.
 No dependencies, UI, manifests or lockfiles changed; no screenshots or
 `check:packages` run apply. There are no implementation gaps or open questions.
+
+## FHIR conformance review fix, round 3 — 2026-10-30 UTC
+
+Review head: `0d4a9884f2d3530feb3283ccfbedd6ca5d5d3c57`.
+
+- `67547acf` — `fix(health): enforce FHIR text and UUID conformance`.
+  Reject forbidden characters below U+0020 in observation sources and independently
+  checked Observation notes, preserving tab, line feed and carriage return. Keep
+  the existing string bounds and validate sources before injected callbacks run.
+  Return the self-check's normalized lowercase UUID URN in its fresh snapshot.
+  Add 77 regressions covering every forbidden control character for scalar and
+  blood-pressure observations, permitted text, and UUID normalization without
+  caller mutation.
+- Final documentation commit — `docs(health): record FHIR conformance validation`.
+
+All commands used the Node 24 / pnpm 10.4.1 environment prefix:
+`env PATH=/opt/node24/bin:$PATH npm_config_manage_package_manager_versions=false COREPACK_HOME=/tmp/sst-6jil-corepack`.
+Dependency lifecycle scripts stayed disabled.
+
+1. `pnpm --filter @jeswr/app-suite exec vitest run test/health-fhir.test.ts test/health-fhir-check.test.ts --coverage.enabled=false`
+   — Expected FAIL before the fix: 60 failed, 341 passed. Both findings reproduced.
+2. `pnpm exec turbo run build --filter='@jeswr/app-suite^...' --concurrency=4`
+   — PASS, all seven dependency builds.
+3. `pnpm --filter @jeswr/app-suite exec vitest run test/health-fhir.test.ts test/health-fhir-check.test.ts test/health-fhir-proxies.test.ts --coverage --coverage.include='src/apps/health/lib/fhir/**/*.ts'`
+   — PASS, 428 tests; 100% statements, branches, functions and lines in every
+   FHIR file, also confirmed in the complete app coverage report.
+4. The package gate — PASS, exit 0:
+
+   ```sh
+   pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test
+   ```
+
+   Production build and strict typecheck passed. All 7,935 tests in 155 files
+   passed with 100% per-file coverage. Lint reported 54 existing warnings,
+   no errors, and no FHIR diagnostics.
+5. `pnpm run lint:root` — PASS, exit 0, including all repository guards.
+6. `TURBO_SCM_BASE=0d4a9884f2d3530feb3283ccfbedd6ca5d5d3c57 pnpm run gate`
+   — PASS, exit 0; all 12 tasks passed, including all 7,935 app tests.
+7. `pnpm run gate:full` — FAIL, exit 1; 76 successful tasks out of 259 scheduled.
+   Root tests: 873 passed, six exceeded the unchanged 5,000 ms timeout in
+   `test/agent-layers.test.mjs:509`, the parameterized
+   `rejects disallowed path characters globally` group. The failed forms were
+   bare import, require.resolve, module.require.resolve, createRequire,
+   type import-equals-require and type import expression. This test file is
+   unchanged relative to the review head. No unrelated source or timeouts changed.
+8. `pnpm exec vitest run test/agent-layers.test.mjs --maxWorkers=1 -t 'rejects disallowed path characters globally'`
+   — PASS, all 13 selected variants with their original timeout; 330 unrelated
+   tests skipped by the name filter. This supports concurrent workload as the
+   likely cause of the timeouts; the canonical full-gate failure remains recorded.
+9. `git diff --check` — PASS before the final documentation commit.
+
+Logs are local artifacts at `/tmp/sst-6jil-fix3-{red,dependencies,fhir,app-lint,app-gate,root-lint,affected-gate,full-gate,root-timeout-isolation}.log`.
+Coverage summaries are at `/tmp/sst-6jil-fix3-{fhir,app}-coverage-summary.json`.
+
+Both requested fixes and their tests are complete. Full-workspace validation is
+limited by the unrelated root-test timeouts above. `roborev` is unavailable, so
+no per-commit automated verdict could be obtained; the diff was manually reviewed.
+No dependencies, UI, manifests, lockfiles or unrelated source changed. No screenshots
+or `check:packages` run apply. No Git fetch, merge, push, branch switch, PR or tracker
+mutation was performed. There are no open questions.
