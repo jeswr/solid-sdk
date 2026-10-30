@@ -7,6 +7,8 @@ import { accessControl, privateAcl } from "../src/apps/drive/lib/client/access";
 import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
 import { confirmationOptions } from "../src/apps/drive/lib/client/commit";
 import { protectionLedger } from "../src/apps/drive/lib/client/protection-ledger";
+import { ensureDriveRoot } from "../src/apps/drive/lib/model/root";
+import { PODDRIVE, RDF } from "../src/apps/drive/lib/model/vocab";
 import {
   deleteForever,
   listTrash,
@@ -29,6 +31,7 @@ import {
   EVERYONE,
   OWNER,
   PRIVATE,
+  PUBLIC,
   ROOT,
   turtle,
   WacFields,
@@ -104,6 +107,14 @@ const steps = [
   "Upload payload",
   "Keep both payload",
   "unconditional creation payload",
+  "deny-all copy payload",
+  "deny-all move",
+  "deny-all rename",
+  "deny-all Trash",
+  "deny-all Restore",
+  "root marker PATCH",
+  "description marker PATCH",
+  "Type Index overwrite",
 ] as const;
 type Step = (typeof steps)[number];
 
@@ -114,9 +125,13 @@ async function scenario(variant: Step, events: string[]) {
   );
   const tree = variant.endsWith(" tree");
   const shared = variant.startsWith("shared ");
-  const step = (tree ? variant.slice(0, -5) : shared ? variant.slice(7) : variant) as Step;
+  const denyAll = variant.startsWith("deny-all ");
+  const step = (
+    tree ? variant.slice(0, -5) : shared ? variant.slice(7) : denyAll ? variant.slice(9) : variant
+  ) as Step;
   const f = await rdfPod();
   if (shared) f.policies.set(`${PRIVATE}.policy`, await aclBody(PRIVATE, true));
+  if (denyAll) f.policies.set(`${PRIVATE}.policy`, await aclBody(PRIVATE, false, false));
   const mutations: { url: string; method: string; empty: boolean; prior: string | undefined }[] =
     [];
   type IdentityCheck = { url: string; check: number };
@@ -141,6 +156,7 @@ async function scenario(variant: Step, events: string[]) {
     const headers = new Headers(init?.headers);
     if (
       method === "DELETE" ||
+      method === "PATCH" ||
       (method === "PUT" && (headers.has("if-match") || url.endsWith(".policy")))
     ) {
       mutations.push({ url, method, empty: init?.body === "", prior: events.at(-1) });
@@ -169,11 +185,16 @@ async function scenario(variant: Step, events: string[]) {
         finalChecks.push({ url, check: identityCounts.get(url) as number });
         await afterIdentity?.(url, response);
       }
-    } else finalChecks = [];
+    } else if (method !== "HEAD" || !headers.has("if-none-match")) finalChecks = [];
     events.push(method === "HEAD" && headers.has("if-match") ? "identity HEAD" : method);
     return response;
   };
-  const client = createSolidDriveClient({ storageUrl: ROOT, fetch: http, webId: OWNER });
+  const client = createSolidDriveClient({
+    storageUrl: ROOT,
+    fetch: http,
+    webId: OWNER,
+    ...(denyAll ? { confirmAccess: async () => "keep" as const } : {}),
+  });
   const folder =
     tree ||
     [
@@ -227,7 +248,55 @@ async function scenario(variant: Step, events: string[]) {
   let targetCheck = 1;
   let identityTarget: string | undefined;
   let run: () => Promise<unknown>;
-  if (["Upload payload", "Keep both payload", "unconditional creation payload"].includes(step)) {
+  if (["root marker PATCH", "description marker PATCH", "Type Index overwrite"].includes(step)) {
+    // Exercise the bootstrap's real shared commit boundary too. The mock pod
+    // applies only this known marker PATCH using typed RDF fields.
+    for (const url of [`${PRIVATE}secret`, PRIVATE, `${PUBLIC}placeholder`, PUBLIC])
+      await f.pod.fetch(url, { method: "DELETE" });
+    const index = `${ROOT}index.ttl`;
+    const description = `${ROOT}drive-description`;
+    await f.pod.fetch(index, {
+      method: "PUT",
+      body: "",
+      headers: { "content-type": "text/turtle" },
+    });
+    if (step === "description marker PATCH")
+      await f.pod.fetch(description, {
+        method: "PUT",
+        body: "",
+        headers: { "content-type": "text/turtle" },
+      });
+    target =
+      step === "Type Index overwrite" ? index : step === "root marker PATCH" ? DRIVE : description;
+    f.after(async (url, method, response) => {
+      if (url === DRIVE && method === "GET" && response.ok) {
+        response.headers.append("link", `<${description}>; rel="describedby"`);
+        if (step !== "description marker PATCH") response.headers.set("accept-patch", "text/n3");
+      }
+      return response;
+    });
+    f.intercept(async (url, init) => {
+      if (init?.method !== "PATCH") return undefined;
+      const headers = new Headers(init.headers);
+      const current = await f.pod.fetch(url, { method: "HEAD" });
+      if (headers.get("if-match") !== current.headers.get("etag"))
+        return new Response(null, { status: 412 });
+      const data = new Store();
+      new WacFields(DRIVE, data, DataFactory).iris(RDF.type).add(PODDRIVE.DriveRoot);
+      const body = await turtle(data);
+      if (url !== DRIVE)
+        await f.pod.fetch(url, {
+          method: "PUT",
+          body,
+          headers: { "if-match": headers.get("if-match") as string },
+        });
+      await f.pod.fetch(DRIVE, { method: "PUT", body });
+      return new Response(null, { status: 205 });
+    });
+    run = () => ensureDriveRoot(http, { storageUrl: ROOT, typeIndexUrl: index });
+  } else if (
+    ["Upload payload", "Keep both payload", "unconditional creation payload"].includes(step)
+  ) {
     target = `${PRIVATE}new-upload`;
     run = () =>
       step === "unconditional creation payload"
@@ -628,9 +697,35 @@ async function scenario(variant: Step, events: string[]) {
   };
 }
 
+it.each([
+  "endpoint",
+  "modes",
+])("round 69: bootstrap registration retains its first index discovery (%s)", async (change) => {
+  const s = await scenario("Type Index overwrite", []);
+  const index = `${ROOT}index.ttl`;
+  let captured = false;
+  s.f.after(async (url, method, response) => {
+    if (url === index && method === "GET" && !captured) {
+      captured = true;
+      if (change === "endpoint")
+        response.headers.set("link", `<${ROOT}original-index.policy>; rel="acl"`);
+      else response.headers.set("wac-allow", 'user="read write control",public=""');
+    }
+    if (url === DRIVE && method === "GET" && response.ok) {
+      response.headers.append("link", `<${ROOT}drive-description>; rel="describedby"`);
+      response.headers.set("accept-patch", "text/n3");
+    }
+    return response;
+  });
+  const result = await s.run().catch((error: unknown) => error);
+  expect(captured).toBe(true);
+  expect(result).toBeInstanceOf(Error);
+  expect(s.f.calls).not.toContainEqual({ url: index, method: "PUT" });
+});
+
 it.each(
   steps,
-)("round 68 shape a: %s retains a replacement at its final identity check", async (step) => {
+)("round 69 shape a: %s retains a replacement at its final identity check", async (step) => {
   const events: string[] = [];
   const s = await scenario(step, events);
   let checks = 0;
@@ -660,7 +755,7 @@ it.each(
 
 it.each(
   steps,
-)("round 68 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
+)("round 69 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   const events: string[] = [];
   const s = await scenario(step, events);
@@ -690,7 +785,7 @@ it.each(
 
 it.each(
   steps,
-)("round 68 final discovery: %s refuses an ACL endpoint change on its conditional HEAD", async (step) => {
+)("round 69 final discovery: %s refuses an ACL endpoint change on its conditional HEAD", async (step) => {
   const baseline = await scenario(step, []);
   const baselineOutcome = await baseline.run().catch((error: unknown) => error);
   const boundary = baseline.boundaries.findLast(

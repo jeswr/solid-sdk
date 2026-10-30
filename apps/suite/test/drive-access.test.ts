@@ -81,13 +81,13 @@ it("resolves own accessTo, nearest default/defaultForNew and ignores unrelated a
   f.policies.set(`${PRIVATE}.policy`, await turtle(top.dataset));
   const own = await access.effective(PRIVATE);
   expect(accessGains(policy([]), requireAccess(own, PRIVATE))).toEqual([OWNER]);
-  // No applicable default here: the root's public default governs descendants.
+  // The existing nearest ACL ends inheritance even without applicable defaults.
   expect(
     accessGains(
       policy([]),
       requireAccess(await access.effective(`${PRIVATE}secret`), `${PRIVATE}secret`),
     ),
-  ).toContain("Everyone (public)");
+  ).toEqual([]);
   const legacy = policy([{ defaultForNew: [PRIVATE], agent: [OWNER], mode: read }]);
   f.policies.set(`${PRIVATE}.policy`, await turtle(legacy.dataset));
   expect(
@@ -254,14 +254,15 @@ it("Keep on a folder materializes accessTo and defaults before any child bytes",
   expect(f.exposures).toEqual([]);
 });
 
-it("folder own accessTo without defaults still prompts for widening inherited child access", async () => {
+it("folder own accessTo without defaults blocks ancestor grants for children during Move", async () => {
   const f = await wacPod();
+  const confirmAccess = vi.fn(async () => "cancel" as const);
   const client = createSolidDriveClient({
     storageUrl: ROOT,
     fetch: f.fetch,
     // The folder's read-only own policy cannot identify its recovery controller.
     webId: OWNER,
-    confirmAccess: async () => "keep",
+    confirmAccess,
   });
   await client.createFolder(`${PRIVATE}nested/`, { kind: "inherit-verified" });
   await client.write(
@@ -276,6 +277,7 @@ it("folder own accessTo without defaults still prompts for widening inherited ch
   await client.move(`${PRIVATE}nested/`, `${PUBLIC}nested/`, { kind: "confirm-move" });
   expect((await f.anonymous(`${PUBLIC}nested/secret`)).status).toBe(403);
   expect(f.exposures).toEqual([]);
+  expect(confirmAccess).not.toHaveBeenCalled();
 });
 
 it("Undo of a narrowing move prompts before widening access again; Cancel keeps it private", async () => {
@@ -340,7 +342,7 @@ it("copy refuses an unreadable own ACL before any destination writes", async () 
 
 it.each([
   "copy",
-  "keep",
+  "move",
 ])("%s preserves private children when their folder has public own accessTo but no defaults", async (mode) => {
   const f = await wacPod();
   const confirmAccess = vi.fn(async () => "keep" as const);
@@ -366,7 +368,7 @@ it.each([
   else await client.move(from, to, { kind: "confirm-move" });
   expect((await f.anonymous(`${to}secret`)).status).toBe(403);
   expect(f.exposures).toEqual([]);
-  expect(confirmAccess).toHaveBeenCalledTimes(mode === "copy" ? 0 : 1);
+  expect(confirmAccess).not.toHaveBeenCalled();
 });
 
 it("folder Undo refuses unknown ACP during tree verification", async () => {

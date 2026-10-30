@@ -22,12 +22,9 @@ it.each([
 it.each([
   "origin root exhausted",
   "storage boundary reached",
-  "no applicable inherited grants",
 ])("an unresolved ACL chain stays unknown: %s", async (mode) => {
   const f = await wacPod();
   f.policies.clear();
-  if (mode === "no applicable inherited grants")
-    f.policies.set(`${PRIVATE}.policy`, await aclBody(`${PRIVATE}other`));
   const storage = mode === "storage boundary reached" ? PRIVATE : ROOT;
   const resource = `${PRIVATE}secret`;
   const state = await accessControl(f.fetch, storage).effective(resource);
@@ -36,6 +33,18 @@ it.each([
   expect(() => requireAccess(state, resource)).toThrow("can't confirm who can access");
   expect(f.calls).toContainEqual({ url: `${storage}.policy`, method: "GET" });
   expect(f.calls.some(({ url }) => !url.startsWith(storage))).toBe(false);
+});
+
+it("an existing ACL with no applicable inherited grants establishes known deny-all access", async () => {
+  const f = await wacPod();
+  f.policies.set(`${PRIVATE}.policy`, await aclBody(`${PRIVATE}other`));
+  const resource = `${PRIVATE}secret`;
+  const state = await accessControl(f.fetch, ROOT).effective(resource);
+  expect(state).toMatchObject({ status: "known" });
+  expect(requireAccess(state, resource).dataset.size).toBe(0);
+  expect(accessLabel(state, resource, OWNER)).toBe("No one");
+  expect((await f.anonymous(resource)).status).toBe(403);
+  expect(f.calls).not.toContainEqual({ url: ROOT, method: "HEAD" });
 });
 
 it.each([

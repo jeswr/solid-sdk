@@ -2105,9 +2105,8 @@ export function createSolidDriveClient(options: {
           const inherited: SourceSnapshot[] = [];
           const affected = (node: SourceSnapshot, protectedDefaults: boolean) => {
             if (node.access.status === "none" && !protectedDefaults) inherited.push(node);
-            const protectedChildren =
-              protectedDefaults ||
-              (node.access.status === "known" && access.hasDefaults(node.access.policy, node.url));
+            // Any own ACL ends inheritance, including a deny-all default projection.
+            const protectedChildren = protectedDefaults || node.access.status === "known";
             for (const child of node.children ?? []) affected(child, protectedChildren);
           };
           affected(source, false);

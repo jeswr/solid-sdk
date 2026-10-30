@@ -108,6 +108,16 @@ before clearing, and recovery deletion checks survivor assertions before DELETE.
 Payload overwrites keep their approved If-Match verbatim; atomic parent receipts
 advance ancestor guards rather than a later overwrite decision.
 
+The [round 69 audit](../../../../../test/drive-review-round69-audit.md) maps the
+nearest-existing-ACL invariant, deny-all materialization, Details shortcut targets,
+and all audited commit/confirmation paths. The nearest ACL always ends WAC
+inheritance, even when its default projection is empty. Installing that policy
+replaces the previous default capture; transfers preserve the deny-all boundary.
+The mutation matrices include deny-all transfers and bootstrap PATCH/index writes.
+List/grid folder drops and breadcrumb drops share a client-scoped, single-use drag
+capture; neither drop-time HEADs nor newer listing rows may replace its validator
+or discovery assertion.
+
 The [round 67 audit](../../../../../test/drive-review-round67-audit.md) maps every
 audited call site, confirmation-to-commit discovery transport, policy/archive and
 survivor assertions, access-mode capture, moved multi-selection hydration, and the

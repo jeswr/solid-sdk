@@ -81,6 +81,9 @@ export async function ensureDriveRoot(
 
   const rootUrl = new URL("drive/", storage).href;
   const access = accessControl(scopedFetch, storage);
+  // The index body and its discovery are one preflight capture. A later
+  // binding read may verify that capture, never replace its access identity.
+  const approvedIndexDiscovery = access.captureEndpoint(indexUrl, index.response.headers);
   const binding = await bindAccess(access, indexUrl, rootUrl);
   let rootEtag: string | undefined;
   // A marker written by this call cannot itself prove ownership, including on resume().
@@ -117,6 +120,7 @@ export async function ensureDriveRoot(
   ): Promise<Response> {
     return commitHttp({
       verifyHeaders: (headers) => {
+        if (url === indexUrl) approvedIndexDiscovery(headers);
         binding.verifyEndpoint(url, headers);
         verifyHeaders?.(headers);
       },

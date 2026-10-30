@@ -19,7 +19,7 @@ export class WacFields extends TermWrapper {
     return SetFrom.subjectPredicate(this, predicate, NamedNodeAs.string, NamedNodeFrom.string);
   }
 }
-export async function aclBody(resource: string, publicRead = false) {
+export async function aclBody(resource: string, publicRead = false, defaults = true) {
   const data = new Store();
   for (const [name, predicate, agent, modes] of [
     ["owner", "agent", OWNER, ["Read", "Write", "Control"]],
@@ -28,7 +28,7 @@ export async function aclBody(resource: string, publicRead = false) {
     const rule = new WacFields(`${resource}#${name}`, data, DataFactory);
     rule.iris("http://www.w3.org/1999/02/22-rdf-syntax-ns#type").add(`${ACL}Authorization`);
     rule.iris(`${ACL}accessTo`).add(resource);
-    if (resource.endsWith("/")) rule.iris(`${ACL}default`).add(resource);
+    if (resource.endsWith("/") && defaults) rule.iris(`${ACL}default`).add(resource);
     rule.iris(`${ACL}${predicate}`).add(agent);
     for (const mode of modes) rule.iris(`${ACL}mode`).add(`${ACL}${mode}`);
   }
@@ -99,10 +99,9 @@ export async function wacPod() {
               : [...fields.iris(`${ACL}accessTo`)]
           ).includes(resource as string);
         });
-        if (!inherited || applicable.length) {
-          const allowed = applicable.some((rule) => rule.canRead && rule.agentClass.has(EVERYONE));
-          return allowed ? pod.fetch(url) : new Response(null, { status: 403 });
-        }
+        // The nearest existing ACL governs even when no default grants apply.
+        const allowed = applicable.some((rule) => rule.canRead && rule.agentClass.has(EVERYONE));
+        return allowed ? pod.fetch(url) : new Response(null, { status: 403 });
       }
       resource = parentOf(resource);
       inherited = true;

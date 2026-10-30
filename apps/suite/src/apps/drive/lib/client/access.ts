@@ -411,8 +411,9 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
         if (own.status === "unknown" || (own.status === "none" && own.demo)) return own;
         if (own.status === "known") {
           const policy = projectAccess(own.policy, current, resource, inherit);
-          if (!inherit || policy.dataset.size)
-            return { status: "known", policy, ...(endpoint ? { own: endpoint } : {}) };
+          // ACL existence ends WAC inheritance. An empty default projection
+          // denies access; it never authorizes consulting a farther ancestor.
+          return { status: "known", policy, ...(endpoint ? { own: endpoint } : {}) };
         }
         current = parent(current);
         inherit = true;
@@ -451,8 +452,6 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     retarget: retargetAccess,
     defaults: (own: OwnAccess, resource: string): OwnAccess =>
       projectAccess(own, resource, resource, true),
-    hasDefaults: (own: OwnAccess, resource: string): boolean =>
-      projectAccess(own, resource, resource, true).dataset.size > 0,
     read,
     store,
     snapshot,
@@ -723,7 +722,7 @@ export async function bindAccess(
         creation: access.creationReceipt(to),
         own: destinationOwn,
         resource: access.forResource(policy, to),
-        defaults: to.endsWith("/") && defaults.dataset.size ? defaults : destination.defaults,
+        defaults: to.endsWith("/") ? defaults : undefined,
       };
       if (from === to) source = destination;
     },
@@ -822,6 +821,14 @@ function materializeAccess(own: OwnAccess, resource: string): OwnAccess {
     for (const predicate of [...SELECTORS, "origin", "mode"])
       for (const value of rule.values(`${ACL}${predicate}`))
         target.values(`${ACL}${predicate}`).add(value);
+  }
+  // Preserve a known empty projection as an identifiable WAC deny-all ACL.
+  // Omitting its own ACL would reactivate destination inheritance; an empty
+  // document cannot be verified by the typed WAC reader.
+  if (!dataset.size) {
+    const deny = new WritableAuthorization(DataFactory.blankNode(), dataset, DataFactory);
+    deny.type.add(`${ACL}Authorization`);
+    deny.accessTo = resource;
   }
   return { ...own, dataset };
 }
