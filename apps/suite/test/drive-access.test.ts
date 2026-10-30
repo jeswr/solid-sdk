@@ -259,6 +259,8 @@ it("folder own accessTo without defaults still prompts for widening inherited ch
   const client = createSolidDriveClient({
     storageUrl: ROOT,
     fetch: f.fetch,
+    // The folder's read-only own policy cannot identify its recovery controller.
+    webId: OWNER,
     confirmAccess: async () => "keep",
   });
   await client.createFolder(`${PRIVATE}nested/`, { kind: "inherit-verified" });
@@ -335,7 +337,12 @@ it.each([
 ])("%s preserves private children when their folder has public own accessTo but no defaults", async (mode) => {
   const f = await wacPod();
   const confirmAccess = vi.fn(async () => "keep" as const);
-  const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, confirmAccess });
+  const client = createSolidDriveClient({
+    storageUrl: ROOT,
+    fetch: f.fetch,
+    confirmAccess,
+    webId: OWNER,
+  });
   const from = `${PRIVATE}nested/`,
     to = `${PUBLIC}nested/`;
   await client.createFolder(from, { kind: "inherit-verified" });

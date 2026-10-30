@@ -871,14 +871,14 @@ tr:focus .drv-star {
     color: var(--foreground-muted);
     text-decoration: none;
   }
-  .drv-toolbar {
+  .drv-toolbar[aria-label="Folder actions"] {
     flex-wrap: nowrap;
   }
   .drv-toolbar > .drv-chips {
     flex: 1;
     min-width: 0;
   }
-  .drv-toolbar > button:not(.drv-chip) {
+  .drv-toolbar[aria-label="Folder actions"] > button:not(.drv-chip) {
     display: none;
   }
   .drv-hide-sm {

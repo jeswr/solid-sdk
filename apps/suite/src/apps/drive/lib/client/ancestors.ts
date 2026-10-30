@@ -85,7 +85,11 @@ export function ancestorGuard(options: {
   putFolder: (url: string) => Promise<Response>;
   error: (status: number, url: string) => Error;
   owner: () => string | undefined;
-  deleteVersion: (url: string, etag: string, checks: CommitChecks) => Promise<void>;
+  deleteVersion: (
+    url: string,
+    etag: string,
+    checks: CommitChecks & { readonly verifyHeaders: NonNullable<CommitChecks["verifyHeaders"]> },
+  ) => Promise<void>;
   onPrivateFolder?: (url: string) => void;
   onProtectionChange?: (url: string) => void;
 }) {

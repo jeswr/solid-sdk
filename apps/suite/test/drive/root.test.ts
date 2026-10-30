@@ -1309,6 +1309,56 @@ it.each([
   "index",
   "container marker",
   "description marker",
+])("round 64: root %s refuses a changed endpoint on its final HEAD", async (step) => {
+  const { aclBody } = await import("../drive-wac-pod");
+  const m = memory(409, storage, step === "container marker");
+  m.files.set(root, { body: containerBody, version: 1 });
+  m.files.set(metadata, { body: "", version: 1 });
+  const target = step === "index" ? index : step === "container marker" ? root : metadata;
+  const policies = new Map([[`${storage}.policy`, await aclBody(storage, true)]]);
+  const foreign = `${target}.foreign.policy`;
+  let changed = false;
+  const http: typeof fetch = async (input, init) => {
+    const url = String(input);
+    if (url.endsWith(".policy")) {
+      const body = policies.get(url);
+      return new Response(init?.method === "HEAD" ? null : (body ?? null), {
+        status: body ? 200 : 404,
+        headers: { "content-type": "text/turtle", etag: body ? '"policy"' : '"absent"' },
+      });
+    }
+    const response = url === storage ? new Response(null) : await m.fetch(input, init);
+    response.headers.delete("x-solid-demo-access-control");
+    if (
+      !changed &&
+      url === target &&
+      init?.method === "HEAD" &&
+      new Headers(init.headers).has("if-match")
+    ) {
+      changed = true;
+      policies.set(foreign, await aclBody(target));
+    }
+    response.headers.append(
+      "link",
+      `<${changed && url === target ? foreign : `${url}.policy`}>; rel="acl"`,
+    );
+    return response;
+  };
+  await expect(ensureDriveRoot(http, options)).rejects.toThrow();
+  expect(changed).toBe(true);
+  expect(
+    m.calls.filter(
+      ({ url, method }) => url === target && method === (step === "index" ? "PUT" : "PATCH"),
+    ),
+  ).toEqual([]);
+  expect(m.files.get(target)?.version).toBe(1);
+  expect(policies.get(foreign)).toBe(await aclBody(target));
+});
+
+it.each([
+  "index",
+  "container marker",
+  "description marker",
 ])("round 62 shape a: root %s never adopts a later validator", async (step) => {
   const m = memory(409, storage, step === "container marker");
   m.files.set(root, { body: containerBody, version: 1 });

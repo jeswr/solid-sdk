@@ -6,7 +6,7 @@ import { assertWithinPodScope, createPodScopedFetch, normalizePodBase } from "@j
 import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { accessControl, bindAccess } from "../client/access.js";
-import { assertVersion, commitHttp } from "../client/commit.js";
+import { assertVersion, type CommitChecks, commitHttp } from "../client/commit.js";
 import { DriveContainer, DriveResource } from "./model.js";
 import { driveRootPatch } from "./patch.js";
 import { iri, quadsToTurtle } from "./serialize.js";
@@ -110,8 +110,16 @@ export async function ensureDriveRoot(
     return response;
   }
 
-  function commitRoot(url: string, init: RequestInit): Promise<Response> {
+  function commitRoot(
+    url: string,
+    init: RequestInit,
+    verifyHeaders?: CommitChecks["verifyHeaders"],
+  ): Promise<Response> {
     return commitHttp({
+      verifyHeaders: (headers) => {
+        binding.verifyEndpoint(url, headers);
+        verifyHeaders?.(headers);
+      },
       http: scopedFetch,
       url,
       init,
@@ -204,6 +212,7 @@ export async function ensureDriveRoot(
         throw new TypeError("The drive root needs a describedby link.");
       let patchUrl = metadataUrl;
       let precondition: Record<string, string>;
+      let verifyHeaders: CommitChecks["verifyHeaders"];
       if (
         identity.etag !== undefined &&
         /(?:^|,)\s*text\/n3\s*(?:;|,|$)/i.test(current.response.headers.get("Accept-Patch") ?? "")
@@ -217,6 +226,7 @@ export async function ensureDriveRoot(
         // independently of the DriveRoot type this call is about to insert.
         try {
           const description = await fetchRdf(metadataUrl, { fetch: scopedFetch });
+          verifyHeaders = access.captureEndpoint(metadataUrl, description.response.headers);
           const etag = strongEtag(description.etag);
           if (etag === undefined) throw new TypeError("The drive description needs a strong ETag.");
           precondition = { "If-Match": etag };
@@ -226,11 +236,15 @@ export async function ensureDriveRoot(
         }
       }
       markingIdentity = identity;
-      const patched = await commitRoot(patchUrl, {
-        method: "PATCH",
-        headers: { "Content-Type": "text/n3", ...precondition },
-        body: await driveRootPatch(rootUrl),
-      });
+      const patched = await commitRoot(
+        patchUrl,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "text/n3", ...precondition },
+          body: await driveRootPatch(rootUrl),
+        },
+        verifyHeaders,
+      );
       if (patched.status === 412) {
         // Another caller may have finished initialization. Observe that
         // result, but never retry our PATCH against its replacement version.

@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
 import { DriveDeletePendingError, deletionControl } from "../src/apps/drive/lib/client/deletion";
 import { deletionLedger } from "../src/apps/drive/lib/client/protection-ledger";
-import { DRIVE, PRIVATE, ROOT, wacPod } from "./drive-wac-pod";
+import { DRIVE, OWNER, PRIVATE, ROOT, wacPod } from "./drive-wac-pod";
 
 const { IDBFactory } = createRequire(
   new URL("../../../packages/solid-offline/package.json", import.meta.url),
@@ -25,7 +25,7 @@ it("pending source and recovery requirements survive module reload and transport
     }
     return undefined;
   });
-  const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });
+  const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });
   await expect(client.move(source, recovery, { kind: "preserve-source" })).rejects.toMatchObject({
     kind: "partial-failure",
   });
@@ -40,7 +40,7 @@ it("pending source and recovery requirements survive module reload and transport
     "../src/apps/drive/lib/client/protection-ledger"
   );
   const transport: typeof fetch = (input, init) => f.fetch(input, init);
-  const fresh = create({ storageUrl: ROOT, fetch: transport });
+  const fresh = create({ storageUrl: ROOT, fetch: transport, webId: OWNER });
   expect(await freshLedger(transport).get(recovery)).toEqual({ sources: [source] });
   await expect(fresh.remove(recovery)).rejects.toMatchObject({ kind: "delete-pending" });
   await expect(

@@ -8,7 +8,12 @@ import { NamedNodeAs, NamedNodeFrom, SetFrom } from "@rdfjs/wrapper";
 import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { readSharing } from "../sharing/sharing";
-import { commitHttp, type PolicyIdentity, type ResourceIdentity } from "./commit";
+import {
+  type CommitChecks,
+  commitHttp,
+  type PolicyIdentity,
+  type ResourceIdentity,
+} from "./commit";
 import { relocate, sameGraph } from "./rdf";
 
 const ACL = "http://www.w3.org/ns/auth/acl#";
@@ -130,8 +135,12 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
   // Only conditional creation receipts can establish previously undiscoverable
   // endpoints. Existing bindings retain their captured endpoint, even if absent.
   const creations = new Map<string, Headers>();
-  function discover(resource: string, headers: Headers): string | undefined {
-    rejectAcp(headers);
+  function discover(
+    resource: string,
+    headers: Headers,
+    allowUnsupported = false,
+  ): string | undefined {
+    if (!allowUnsupported) rejectAcp(headers);
     // This explicit fixture capability never substitutes for discovery on a real pod.
     if (headers.get("x-solid-demo-access-control") === "none") return undefined;
     const links = headers.get("link") ?? "";
@@ -141,10 +150,13 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       if (/;\s*anchor\s*=/i.test(params)) continue;
       const rel = /;\s*rel\s*=\s*(?:"([^"]*)"|([^;\s]+))/i.exec(params);
       const relations = (rel?.[1] ?? rel?.[2] ?? "").split(/\s+/);
-      if (relations.includes("acl")) {
+      if (
+        relations.includes("acl") ||
+        (allowUnsupported && relations.includes(`${ACP_NS}accessControl`))
+      ) {
         if (acl) throw new DriveAccessError("Ambiguous ACL discovery");
         acl = assertWithinPodScope(storageUrl, new URL(match[1] as string, resource).href);
-        if (/\.acr\/?$/i.test(new URL(acl).pathname))
+        if (!allowUnsupported && /\.acr\/?$/i.test(new URL(acl).pathname))
           throw new DriveAccessError("ACP privacy cannot be verified by this adapter");
       }
     }
@@ -326,6 +338,20 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     creationReceipt: (resource: string) => creations.get(resource),
     discover,
     verifyEndpoint,
+    /** Capture discovery without reading grants. Deletion also supports pods
+     * whose access model cannot be read; pinning their endpoint never permits
+     * installing a policy or adopting a later endpoint.
+     */
+    captureEndpoint(
+      resource: string,
+      captured: Headers,
+    ): NonNullable<CommitChecks["verifyHeaders"]> {
+      const endpoint = discover(resource, captured, true);
+      return (headers) => {
+        if (discover(resource, headers, true) !== endpoint)
+          throw new DriveAccessChangedError(["The item's own ACL endpoint changed"]);
+      };
+    },
     async checkOwn(
       own: { readonly url: string; readonly policy: OwnAccess | null } | undefined,
     ): Promise<void> {
@@ -509,6 +535,11 @@ export async function bindAccess(
     if (url === to) destinationOwn = baseline.own;
   };
   const binding = {
+    /** Synchronous endpoint assertions survive all final identity HEADs. */
+    verifyEndpoint(resource: string, headers: Headers): void {
+      if (resource === from) access.verifyEndpoint(resource, headers, source.own);
+      if (resource === to) access.verifyEndpoint(resource, headers, destinationOwn);
+    },
     get identities(): readonly PolicyIdentity[] {
       return (
         [

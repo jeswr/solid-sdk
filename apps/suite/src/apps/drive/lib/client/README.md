@@ -28,9 +28,19 @@ Drive saves private recovery copies before conditionally clearing only its own
 exposed PUT. Failures report retained recovery locations. Another client can still
 change content or access between requests: conditional mutations and operation
 rechecks surface that limitation instead of attempting to revert the other client.
-Rollback DELETE checks the captured ACL endpoint synchronously on its final
-resource HEAD as well as the resource ETag and captured ACL version. A changed
-endpoint blocks deletion and preserves the concurrent ACL during private evacuation.
+Every DELETE requires a synchronous endpoint assertion on its existing final
+resource HEAD, alongside its captured content and policy validators. Normal
+transfer deletion, duplicate recovery removal, recursive removal and purge share
+the same mandatory boundary as rollback. Scoped Restore bindings retain their
+original endpoints through this assertion. Explicit deletion on unsupported access
+models pins the advertised endpoint without attempting to install a policy.
+A disagreement preserves recovery and the concurrent ACL. Late transfer failures
+keep Trash's private copy; other retained destinations become owner-only through
+conditional writes to their captured ACLs, or use private evacuation if that fails.
+Overwrite PUTs, metadata replay, container merging and root/index/description
+writes assert their captured endpoint on the same final HTTP boundary. Transfer
+preflight also requires a recovery owner before moving non-demo resources, so a
+late revocation can always retain private copies even for children without Control.
 
 Compensation uses the complete captured own ACL, including independent child
 defaults. An unchanged ACL stays intact during content replay; its captured
@@ -64,6 +74,10 @@ own policy or absence, so an unknown historical endpoint cannot authorize repair
 Failure keeps a durable
 receipt for the actual installed policy, including narrower intersections, so Retry
 cannot repair another client's replacement or revocation.
+
+The [round 64 audit](../../../../../test/drive-review-round64-audit.md) lists every
+audited call site, the mandatory deletion endpoint invariant, Unix listing dates,
+mobile Trash commands, and the expanded 48-step matrix for both ordering shapes.
 
 The [round 63 audit](../../../../../test/drive-review-round63-audit.md) maps every
 audited call site, the independent-origin and rollback-endpoint fixes, toast/modal

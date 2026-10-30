@@ -459,7 +459,7 @@ it.each([
   await view.unmount();
 });
 
-it("Empty trash keeps partial recovery visible after two descendant deletion races", async () => {
+it("Empty trash keeps partial recovery when a descendant race changes the approved root", async () => {
   const pod = createDemoPod({
     root: drive.session.storageUrl,
     seed: ["a", "b", "c"].map((name) => ({
@@ -507,7 +507,9 @@ it("Empty trash keeps partial recovery visible after two descendant deletion rac
   if (!confirm) throw new Error("Missing confirmation");
   await click(confirm);
   recovery = undefined;
-  expect(vanished).toBe(2);
+  // A changed approved root stops the retry before another descendant is read.
+  expect(vanished).toBe(1);
+  expect(await (await client.read(`${entry.url}b`)).text()).toBe("b");
   expect(await (await client.read(`${entry.url}c`)).text()).toBe("c");
   expect(await operations.listTrash(client, ROOT)).toHaveLength(1);
   expect(view.host.textContent).toContain("Folder");

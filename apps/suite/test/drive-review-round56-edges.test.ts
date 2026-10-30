@@ -161,7 +161,7 @@ it("round 56: a retained move surfaces backup provisioning failure and keeps pri
 it.each([
   "no controller",
   "unavailable recovery identifier",
-])("round 59: recovery reports %s without hiding the retained destination", async (failure) => {
+])("round 59: recovery reports %s while preserving captured bytes", async (failure) => {
   const f = await rdfPod();
   const from = `${PRIVATE}secret`;
   const to = `${PRIVATE}copy`;
@@ -202,15 +202,23 @@ it.each([
       ? new Response(null, { status: 503 })
       : undefined,
   );
+  if (failure === "no controller") {
+    await expect(client.move(from, to, { kind: "preserve-source" })).rejects.toMatchObject({
+      kind: "private-access-unavailable",
+      cause: "Recovery owner unavailable",
+    });
+    expect(copied).toBe(false);
+    expect(f.pod.has(to)).toBe(false);
+    expect(await (await f.pod.fetch(from)).text()).toBe("secret contents");
+    expect(f.calls.filter(({ method }) => method === "PUT" || method === "DELETE")).toEqual([]);
+    return;
+  }
   await expect(client.move(from, to, { kind: "preserve-source" })).rejects.toMatchObject({
     kind: "partial-failure",
     retainedDestinations: expect.arrayContaining([to]),
     cause: {
       kind: "private-access-unavailable",
-      cause:
-        failure === "no controller"
-          ? "Recovery owner unavailable"
-          : "Recovery identifier unavailable",
+      cause: "Recovery identifier unavailable",
     },
   });
   expect(await (await f.pod.fetch(to)).text()).toBe("secret contents");

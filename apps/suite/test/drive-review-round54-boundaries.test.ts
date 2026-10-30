@@ -88,10 +88,18 @@ const steps = [
   "container provisioning ACL",
   "metadata undo recovery clearing",
   "post-retirement private backup ACL",
+  "move tree",
+  "rename tree",
+  "Trash tree",
+  "Restore tree",
+  "Delete forever tree",
+  "Empty Trash tree",
 ] as const;
 type Step = (typeof steps)[number];
 
-async function scenario(step: Step, events: string[]) {
+async function scenario(variant: Step, events: string[]) {
+  const tree = variant.endsWith(" tree");
+  const step = (tree ? variant.slice(0, -5) : variant) as Step;
   const f = await rdfPod();
   const mutations: { url: string; prior: string | undefined }[] = [];
   let afterIdentity: ((url: string, response: Response) => Promise<void>) | undefined;
@@ -110,22 +118,25 @@ async function scenario(step: Step, events: string[]) {
     return response;
   };
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: http, webId: OWNER });
-  const folder = [
-    "recursive remove",
-    "folder metadata",
-    "owner-only folder overwrite",
-    "partial folder Restore",
-    "container rollback",
-    "metadata undo",
-    "metadata undo recovery clearing",
-    "container merge",
-    "partial folder Restore metadata",
-    "container rollback without Link",
-    "folder overwrite rollback with child defaults",
-    "partial Restore rollback with child defaults",
-  ].includes(step);
+  const folder =
+    tree ||
+    [
+      "recursive remove",
+      "folder metadata",
+      "owner-only folder overwrite",
+      "partial folder Restore",
+      "container rollback",
+      "metadata undo",
+      "metadata undo recovery clearing",
+      "container merge",
+      "partial folder Restore metadata",
+      "container rollback without Link",
+      "folder overwrite rollback with child defaults",
+      "partial Restore rollback with child defaults",
+    ].includes(step);
   const source = folder ? `${PRIVATE}tree/` : `${PRIVATE}secret`;
   if (folder) await f.pod.fetch(source, { method: "PUT", body: "" });
+  if (tree) await f.pod.fetch(`${source}child`, { method: "PUT", body: "child contents" });
   if (step === "container merge" || step === "partial folder Restore metadata") {
     const data = new Store();
     new WacFields(source, data, DataFactory)
@@ -500,7 +511,7 @@ async function scenario(step: Step, events: string[]) {
 
 it.each(
   steps,
-)("round 63 shape a: %s retains a replacement at its final identity check", async (step) => {
+)("round 64 shape a: %s retains a replacement at its final identity check", async (step) => {
   const events: string[] = [];
   const s = await scenario(step, events);
   let checks = 0;
@@ -528,7 +539,7 @@ it.each(
 
 it.each(
   steps,
-)("round 63 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
+)("round 64 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   const events: string[] = [];
   const s = await scenario(step, events);
