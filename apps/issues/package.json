@@ -21,6 +21,7 @@
     "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/solid-odrl": "workspace:*",
     "@jeswr/solid-task-model": "workspace:*",
+    "@jeswr/suite-ui": "workspace:*",
     "@jeswr/suite-vocab": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",

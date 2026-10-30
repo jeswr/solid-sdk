@@ -10,6 +10,9 @@ comfortable rows and 44px controls. Reduced motion zeros motion durations.
 `tokens` exports the typed inventory, including both themes and compact values.
 `fonts` exports `onest`, `sourceSerif`, and `sourceCode` for Next.js root layouts;
 apply their `.variable` classes to `<html>` so the `:root` font aliases resolve.
+Fonts load through `next/font/local` from bundled WOFF2 files; builds need no Google
+Fonts connection. The build ships the assets and their OFL licences in `dist/font-assets/`.
+Upstream sources and checksums are recorded in [src/font-assets/README.md](src/font-assets/README.md).
 The default entry has no Next.js runtime import.
 
 The frozen `test/spec-tokens.json` is the spec transcription; the snapshot and CSS
