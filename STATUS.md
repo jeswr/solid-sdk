@@ -70,3 +70,56 @@ calendar-day intervals and explicit times; treat taking after the due instant as
 late; include late doses in adherence while reporting on-time adherence
 separately; exclude future expectations and return null for zero expectations.
 Limits and supported input ranges are documented in the medication README.
+
+## Review fix round 2 — history-validation work limit
+
+This round starts at `e0cabf2f0900ebadd05b9fcca5e62c6ae08bafbb` and addresses
+the sole finding in `solid-sdk-lane-sst-858y-e0cabf2f0900.md`.
+
+- `4bd3a0dc` — `fix(health): bound medication history validation`: preflight
+  history records (including an appended entry) and all requested periods' candidate
+  slots against one 1024-unit allowance before any inverse time-zone search.
+  Reuse local-slot conversions across history validation and overlapping periods
+  within each call; revalidate caller-owned histories on subsequent calls.
+  Add six regression tests and document the limit.
+- Final `docs: record medication review fix validation` commit — this report.
+
+The conservative allowance counts every history record, including as-needed
+events, and counts repeated periods' slots separately even when a cached
+conversion can be reused. Oversized histories fail before copying or converting
+them. The existing typed `limit-exceeded` error and DST rejection policy remain
+in use. No new dependencies or unrelated source changes.
+
+### Round 2 verification
+
+All commands ran in this checkout with `PATH=/opt/node24/bin:$PATH`
+(Node v24.22.1, pnpm 10.4.1), before the final report commit.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite exec biome check src/apps/health/lib/medication test/health-medication.test.ts` | PASS; no warnings in changed code. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/health-medication.test.ts '--coverage.include=src/apps/health/lib/medication/**/*.ts'` | PASS; 111 tests, 100% statements, branches, functions and lines. |
+| `pnpm --filter @jeswr/app-suite run lint` | PASS; the same 40 existing warnings outside the changed code. |
+| `pnpm --filter @jeswr/app-suite run build` | PASS. |
+| `pnpm --filter @jeswr/app-suite run typecheck` | PASS. |
+| `pnpm --filter @jeswr/app-suite run test` | PASS; 72 files, 4,395 tests, 100% configured coverage. |
+| `TURBO_SCM_BASE=e0cabf2f0900ebadd05b9fcca5e62c6ae08bafbb pnpm run gate` | PASS; 9/9 tasks, including root lint and all app checks. |
+| `pnpm run gate:full` | FAIL; two sequential attempts stopped in unchanged root timing tests, detailed below. |
+| `pnpm run test:root` | FAIL; 744 passed, one unchanged SDK-layer timing test failed, detailed below. |
+| `git diff --check` | PASS. |
+
+The first full gate stopped at `test/agent-layers.test.mjs:509`: the
+`module.require.resolve(TARGET)` path-character case exceeded its 5000 ms
+timeout (67 successful tasks before the run stopped). On the cache-warmed full
+retry, that test passed, but `test/check-sdk-layers.test.mjs:328`,
+`validates pathological specs in under 50 ms each`, measured 121.6 ms against
+its 50 ms limit (101 successful tasks before the run stopped). Running root
+tests without the full-workspace workload also failed that same assertion at
+97.9 ms; the other 744 root tests passed. These root tests and their scripts
+have no diff against this round's base and were left unchanged under the lane
+scope rule. The full-workspace gate therefore remains a verification blocker.
+
+`command -v roborev` again returned exit 1; automated per-commit review remains
+unavailable. No dependency-policy checks, UI screenshots or browser tests apply
+to this change. No fetch, merge, push, PR or branch change was performed.
+Implementation of the requested finding is complete; no open questions.
