@@ -18,6 +18,7 @@ export default defineConfig({
         "src/apps/docs/lib/model/**/*.ts",
         "src/apps/docs/lib/autoformat/**/*.ts",
         "src/apps/health/lib/model/**/*.ts",
+        "src/apps/health/lib/fhir/**/*.ts",
         "src/apps/mail/lib/model/**/*.ts",
         "src/apps/sheets/lib/model/**/*.ts",
         "src/apps/photos/lib/library/**/*.ts",
