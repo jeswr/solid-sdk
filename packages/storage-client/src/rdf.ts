@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 // RDF helpers shared by the backends: serialise through @jeswr/rdf-serialize (n3.Writer) and
 // apply insert/delete quad patches to an n3 Store. Never hand-builds RDF text.
 
@@ -162,13 +163,18 @@ export function mediaType(contentType: string): string | null {
   return extractMediaType(contentType)?.toLowerCase() ?? null;
 }
 
-/** Serialise quads (from a dataset or any iterable) in one of the WRITABLE_RDF formats. */
+/** Serialise quads in a WRITABLE_RDF format or expanded, context-free JSON-LD. */
 export function serializeQuads(
   dataset: DatasetCore | Iterable<Quad>,
   format: string,
   prefixes: Record<string, string> = {},
 ): Promise<string> {
   const quads = [...(dataset as Iterable<Quad>)];
+  if (format === "application/ld+json") {
+    // JSON-LD validates RDF/JS fields itself. Avoid n3 rebuilding, which can discard
+    // inconsistent language/datatype or direction fields before the writer sees them.
+    return serialize(quads, { format });
+  }
   if (TRIPLE_FORMATS.has(format) && quads.some(inNamedGraph)) {
     // n3.Writer would emit graph blocks, which are not valid in a triple-only format.
     throw new TypeError(

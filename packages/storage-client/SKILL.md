@@ -75,9 +75,13 @@ Rules the memory backend enforces, and the real backends must match:
 - LWS `setMetadata` refuses the server-managed rels `linkset`, `type` and `up`. Solid rels that are
   not IRIs map to `http://www.iana.org/assignments/relation/<rel>`.
 - `readRdf` with a matching `ifNoneMatch` resolves with `notModified: true` and an empty dataset
-  (an extension to ADR-003's `RdfReadResult`). `writeRdf` serialises the n3-writable formats.
-  JSON-LD serialisation is `unsupported` (`feature: 'rdfConneg'`) until an allowed dependency
-  provides a JSON-LD writer: a documented deviation from ADR-003 §1, tracked in the suite tracker.
+  (an extension to ADR-003's `RdfReadResult`). Memory `writeRdf` serialises the n3-writable formats
+  and `application/ld+json` through `@jeswr/rdf-serialize`. JSON-LD is an expanded, context-free
+  array (`[]` for an empty dataset), with document-local blank-node labels, named graphs and
+  literal lexical values preserved. Prefixes are ignored; no caller context is accepted and no
+  remote context is emitted or fetched. Malformed terms and directional literals (including
+  `rdf:dirLangString`) reject with `TypeError`. JSON-LD RDF patch support is unchanged (415).
+  The Solid HTTP backend remains read-only pending T-022; LWS HTTP is still reserved.
 
 RDF/JS types (`DatasetCore`, `Quad`, `Term`) come from `@jeswr/fetch-rdf`'s type re-exports, so the
 emitted declarations need no `@rdfjs/types` dependency (which the layer guard does not allow).

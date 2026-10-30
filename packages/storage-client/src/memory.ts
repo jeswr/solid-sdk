@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * `createMemoryStorage()`: a faithful in-memory StorageClient (ADR-003 §8) for unit tests and as
  * the conformance reference. It reproduces ETags (monotonic), 412/428 semantics, container
@@ -661,7 +662,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
 
     async writeRdf(url, dataset, opts) {
       const contentType = opts?.contentType ?? "text/turtle";
-      if (!WRITABLE_RDF.has(contentType)) {
+      if (contentType !== "application/ld+json" && !WRITABLE_RDF.has(contentType)) {
         throw fail("unsupported", "PUT", url, null, {
           feature: "rdfConneg",
           message: `Serialising ${contentType} is not supported; use text/turtle`,
