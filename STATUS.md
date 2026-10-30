@@ -1,0 +1,84 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+# DS-05 / sst-18d lane report
+
+Branch: `lane/sst-18d`. Base: `17987b36fa6b894101bb00d577a90c9af084215e`.
+Implementation complete; affected and full-workspace gates pass. Dispatcher browser/review checks remain pending.
+
+## Commits
+
+- `c4b968b1 feat: add shared async surface states`: EmptyState's five variants;
+  all eleven classified error categories with §9 copy/recovery actions, capability-gated
+  access requests and Retry-After; list/grid/document/detail/table skeletons; renderAsync
+  shared by collection and content/upload feedback; Sonner 5s/8s Undo/persistent-error policy;
+  unit, keyboard, timer and axe coverage; API documentation and conservative spec readings.
+- `8b09fb69 test: add async state fixtures and browser coverage`: five guarded dev fixture
+  routes, component-index links, all states and both densities; dispatcher Playwright
+  screenshots, axe, keyboard and 320px reflow checks; existing Retry browser-copy update.
+- The final `docs: record DS-05 validation results` commit contains this report.
+
+## Validation
+
+All commands run from this checkout with `export PATH=/opt/node24/bin:$PATH`.
+The shell initially selected Node 22; the repository requires Node >=24. No engine check
+was disabled. No lifecycle scripts were enabled.
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/suite-ui run lint` | PASS; two existing navigation.css specificity warnings. |
+| `pnpm --filter @jeswr/suite-ui run build` | PASS. |
+| `pnpm --filter @jeswr/suite-ui run typecheck` | PASS. |
+| `pnpm --filter @jeswr/suite-ui run test` | PASS: 20 files, 579 tests. |
+| `pnpm --filter @jeswr/app-suite run lint` | PASS; 70 existing warnings. |
+| `pnpm --filter '@jeswr/app-suite^...' run build` | PASS; build workspace dependencies before Next resolves their dist exports. |
+| `NEXT_PUBLIC_DEV_FIXTURES=1 pnpm --filter @jeswr/app-suite run build` | PASS; all five new routes prerendered. |
+| `pnpm --filter @jeswr/app-suite run typecheck` | PASS. |
+| `pnpm --filter @jeswr/app-suite run test` | PASS: 172 files, 9,145 tests; reported coverage 100% statements/branches/functions/lines. |
+| `pnpm run lint:root` | PASS; token contrast: 74 pairs, zero failures. |
+| `TURBO_SCM_BASE=17987b36fa6b894101bb00d577a90c9af084215e pnpm run gate` | PASS on retry: 16/16 tasks successful, 12 cached, 25.648s. First run stopped at 12/14 because an unchanged AppLauncher tooltip test timed out at 5s under concurrent builds. All 579 UI tests subsequently passed in the full gate. |
+| `pnpm run gate:full` | PASS on cache retry: 405/405 tasks successful, 297 cached, 3m37.699s. First run stopped after 400 successes because the unchanged create-solid-demo packing test could not write `/root/.npm` (EROFS). |
+| `git diff --check` | PASS. |
+
+The focused DS-05 tests cover exact copy and action sets for every category, all five
+empty variants and skeleton presets, keyboard actions, status/alert roles, Retry-After
+including long delays, toast lifetimes/dismissal and promise failures, and axe with no
+serious/critical violations. jsdom cannot measure layout/contrast; the root token contrast
+check and dispatcher browser specs cover those. An initial full UI test run passed all
+579 assertions but caught a virtualizer timer after jsdom teardown in the existing upload
+scale test; the complete rerun passed without that error. Existing canvas-not-implemented
+messages are non-failing jsdom diagnostics.
+
+The full-gate cache retry uses `export PATH=/tmp/sst-18d-bin:/opt/node24/bin:$PATH`.
+The temporary `npm` wrapper executes `/opt/node24/bin/npm --cache /tmp/sst-18d-npm-cache "$@"`;
+this confines npm cache writes to a writable directory without changing repository config,
+Turbo's environment filtering, dependency manifests or lifecycle-script policy.
+
+## Dependencies and source references
+
+No dependencies or manifests changed. `check:packages`: not applicable; none added.
+The supplied `/home/runner/Documents/GitHub/jeswr/solid-suite-planning` paths do not exist
+here. Read the equivalent files in `/home/user/solid-suite-planning`: the complete design
+system, app conventions and RECONCILE; SDK assumptions §4/§10; and the three mockup sources.
+No network fetch/merge, push, PR, branch switch, mirror publication or other-checkout edits.
+
+## Browser verification and review
+
+No Chromium launch or screenshots taken, as the lane brief requires dispatcher execution.
+`apps/suite/e2e/ds-05-async-states.spec.ts` uses the existing 375/768/1280 × light/dark matrix,
+adds 320px checks, and writes full-page captures to repo-root `artifacts/screens/DS-05/`.
+It covers the full error/empty/preset galleries, each async-list state, success/Undo/error
+toasts, capability gating, keyboard recovery, visible focus and measured density heights.
+No PNGs committed. Browser axe, visual comparison and browser keyboard/layout results remain
+pending with the dispatcher.
+
+`roborev status` failed with `roborev: command not found` (exit 127); this checkout also has
+no installed post-commit review hook. Automated per-commit verdicts require dispatcher review.
+No reviewer was installed or spawned in this lane.
+
+## Open questions / conservative readings
+
+See [QUESTIONS.md](QUESTIONS.md): specialised session/conflict flows stay caller-owned;
+underspecified skeleton geometry uses existing tokens and mockup anatomy; the SDK façade
+owns exception classification. ErrorState accepts classified categories and retry metadata,
+never raw exceptions. Request access requires the capability; recovery controls render only
+when their host supplies a handler or destination. No blocking implementation question.
