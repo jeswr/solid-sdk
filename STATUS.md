@@ -158,3 +158,63 @@ required. No branches were switched, no remote operations were run, and no other
 checkouts were touched. `roborev` is unavailable in this checkout, so automated
 per-commit review could not run; no review tool was installed. Tracker operations
 remain with the dispatcher. No new semantic questions arose in this fix round.
+
+## Fix round 3 — percentile, fractional cutoff and overflow precision
+
+Commit `9c3abf6c` (`fix(sheets): correct conditional format arithmetic`) addresses
+all three findings against `679e37caf31539c06dd940d064b93315f52b82ce`:
+
+- Preserve the percentile interpolation numerator and its denominator of 100,
+  accepting equivalent percent/percentile anchors over two numeric samples.
+- Calculate percentage selection counts as exact decimal ratios before rounding
+  upward. Both top and bottom 8.8% of 375 distinct numeric cells select 33 cells,
+  while genuinely larger percentages still select the additional cell.
+- Keep compensated averaging for finite sums and replace the normalized overflow
+  fallback with exact binary accumulation and a single rounding step. Small
+  residuals survive cancellation of extreme values, preserving average comparisons
+  and their `stopIfTrue` behavior, including subnormal rounding ties.
+
+Twelve regression cases bring conditional-formatting tests to 158; eight failed
+before the implementation change. Coverage remains 100% for every directory
+source file. The API documentation describes the corrected arithmetic. No rule
+shapes, dependencies, manifests or unrelated implementation files changed.
+
+All commands below used `PATH=/opt/node24/bin:$PATH` (Node v24.22.1, pnpm 10.4.1).
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/sheets-condformat.test.ts --coverage.enabled=false` | Expected regression failure before implementation: eight failed, 150 passed. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/sheets-condformat.test.ts --coverage --coverage.include='src/apps/sheets/lib/condformat/**/*.ts'` | PASS: 158 tests; 100% statements, branches, functions and lines. |
+| `pnpm exec turbo run build --filter='@jeswr/app-suite^...'` | PASS: seven dependency builds. |
+| `pnpm --filter @jeswr/app-suite run lint` | PASS: 604 files; the same 54 existing warnings outside this lane. |
+| `pnpm --filter @jeswr/app-suite run build` | PASS: production compilation, type validation and static generation. |
+| `pnpm --filter @jeswr/app-suite run typecheck` | PASS. |
+| `pnpm --filter @jeswr/app-suite run test` | PASS: 153 files / 7,665 tests; 100% statements, branches, functions and lines. |
+| `pnpm run lint:root` | PASS, including all workspace guards. |
+| `TURBO_SCM_BASE=679e37caf31539c06dd940d064b93315f52b82ce pnpm run gate` | PASS: 12/12 tasks, seven cached; 3m0.385s. |
+| `pnpm run gate:full` | FAIL outside this lane: five existing agent-layer cases timed out at 5,000ms in `test/agent-layers.test.mjs:509`. 67 tasks succeeded (eight cached), 240 total when Turbo stopped; 3m21.274s. Root tests: 874 passed, five failed. |
+| `git diff --check` | PASS. |
+
+Supplemental validation bundled the public evaluator into `/tmp` with
+`pnpm --filter @jeswr/app-suite exec esbuild src/apps/sheets/lib/condformat/index.ts --bundle --platform=node --format=esm --outfile=/tmp/sst-uqvt-condformat.mjs`.
+Both average rule results matched Python `Fraction` means across 1,000 synthetic
+fixtures with overflowing partial sums, cancellation, residuals spanning the
+finite exponent range, and probes adjacent to the average. No verification
+artifacts were added to the checkout.
+
+The full-workspace timeout failures exercise disallowed path characters for
+`module.require(TARGET)`, `module["require"](TARGET)`, `require.resolve(TARGET)`,
+`module.require.resolve(TARGET)`, and `createRequire(import.meta.url)(TARGET)`.
+These are the same existing root-test timeout failures recorded in the original
+lane validation. Both `test/agent-layers.test.mjs` and
+`scripts/check-agent-layers.mjs` are unchanged relative to this round's starting
+commit. Their implementation and timeout settings remain outside this fix round.
+Full-workspace verification is incomplete; all three requested fixes are complete.
+
+The final documentation commit records this fix round's validation. No dependency
+additions, package-policy checks, UI changes, screenshots or generated source
+artifacts were required. No branches were switched, no remote operations were
+run, and no other checkouts were touched. `roborev` is unavailable, so automated
+per-commit review could not run; no review tool was installed. Tracker operations
+remain with the dispatcher. There are no new open questions or semantic choices
+for this fix round; the existing conservative interpretations remain unchanged.
