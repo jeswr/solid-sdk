@@ -51,7 +51,10 @@ export function CollectionPlaceholder({
     error: state?.status === "error" && error && (
       <ErrorState
         error={error}
-        actions={{ ...(onRetry ? { retry: onRetry } : {}), ...errorActions }}
+        actions={{
+          ...(onRetry && state.actions == null ? { retry: onRetry } : {}),
+          ...errorActions,
+        }}
         accessRequests={accessRequests}
         loadingPreset={kind}
       >

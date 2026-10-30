@@ -299,7 +299,10 @@ for (const kind of ["table", "grid"] as const) {
       expect(requestAccess).toHaveBeenCalledTimes(accessRequests ? 1 : 0);
       expect(onRetry).toHaveBeenCalledTimes(accessRequests ? 0 : 1);
     });
-    it("keeps custom recovery in place of the legacy fallback", () => {
+    it.each<CollectionErrorKind>([
+      "unknown",
+      "unreachable",
+    ])("keeps custom recovery in place of the legacy fallback for %s", (error) => {
       const onRetry = vi.fn();
       const recover = vi.fn();
       render(
@@ -307,7 +310,7 @@ for (const kind of ["table", "grid"] as const) {
           kind={kind}
           state={{
             status: "error",
-            kind: "unknown",
+            kind: error,
             actions: (
               <button type="button" onClick={recover}>
                 Recover

@@ -39,7 +39,8 @@ export const toast: typeof sonnerToast = Object.assign(notify, sonnerToast, {
     sonnerToast.info(announcement(message), { ...data, ...options(data) }),
   warning: (message: Message, data?: ExternalToast) =>
     sonnerToast.warning(announcement(message), { ...data, ...options(data) }),
-  message: notify,
+  message: (message: Message, data?: ExternalToast) =>
+    sonnerToast.message(announcement(message), { ...data, ...options(data) }),
   error: (message: Message, data?: ExternalToast) =>
     sonnerToast.error(announcement(message, true), { ...data, ...options(data, true) }),
   custom: (jsx: Parameters<typeof sonnerToast.custom>[0], data?: ExternalToast) =>

@@ -19,6 +19,22 @@ afterEach(() => {
   toast.dismiss();
   vi.useRealTimers();
 });
+test("message updates an existing ID without leaving stale entries", () => {
+  const id = toast.message("Saving…", { id: "message-update" });
+  expect(toast.message("Saved", { id, duration: 1 })).toBe(id);
+  expect(toast.getToasts().filter((entry) => entry.id === id)).toMatchObject([
+    { title: { props: { role: "status", children: "Saved" } }, duration: 5000 },
+  ]);
+});
+test("message restores a dismissed ID to the active toasts", () => {
+  const id = toast.message("Saving…", { id: "message-restore" });
+  toast.dismiss(id);
+  expect(toast.getToasts().filter((entry) => entry.id === id)).toEqual([]);
+  expect(toast.message("Saved", { id })).toBe(id);
+  expect(toast.getToasts().filter((entry) => entry.id === id)).toMatchObject([
+    { title: { props: { role: "status", children: "Saved" } }, duration: 5000 },
+  ]);
+});
 test("normal and Undo toasts enforce 5s and 8s; errors persist and can be dismissed", async () => {
   vi.useFakeTimers();
   const undo = vi.fn();
