@@ -120,6 +120,28 @@ const boundedTableSpans = {
   },
 };
 
+const AccessibleTaskItem = TaskItem.extend({
+  addProseMirrorPlugins() {
+    return [
+      ...(this.parent?.() ?? []),
+      new Plugin({
+        view(view) {
+          const sync = () => {
+            for (const checkbox of view.dom.querySelectorAll<HTMLInputElement>(
+              'li[data-checked] > label > input[type="checkbox"]',
+            ))
+              if (checkbox.disabled === view.editable) checkbox.disabled = !view.editable;
+          };
+          sync();
+          // Permission changes also update the view when setEditable suppresses
+          // editor events. New and nested task node views share this invariant.
+          return { update: sync };
+        },
+      }),
+    ];
+  },
+});
+
 export function baseExtensions(fetchImpl: typeof fetch) {
   return [
     SafeStarterKit.configure({
@@ -143,7 +165,7 @@ export function baseExtensions(fetchImpl: typeof fetch) {
     TableCell.extend(boundedTableSpans),
     TableHeader.extend(boundedTableSpans),
     TaskList,
-    TaskItem.configure({
+    AccessibleTaskItem.configure({
       nested: true,
       a11y: { checkboxLabel: (node) => node.textContent || "Empty checklist item" },
     }),

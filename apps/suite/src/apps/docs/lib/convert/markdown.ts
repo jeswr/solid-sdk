@@ -549,14 +549,51 @@ function openParagraph(tokens: MarkdownToken[]): boolean {
   }
   if (last.type === "list") {
     const item = (last.items as MarkdownToken[]).at(-1) as MarkdownToken;
-    const { text, indent } = listItemSource(item.raw as string);
-    return atColumn(containerColumn + indent, () =>
-      openParagraph(
-        containerTokenizer().lexer.blockTokens(item.task ? text.replace(taskMarker, "") : text),
-      ),
-    );
+    return listParagraph(item.raw as string, item.task);
   }
   return false;
+}
+
+function listParagraph(raw: string, task: unknown): boolean {
+  const { text, indent } = listItemSource(raw);
+  return atColumn(containerColumn + indent, () =>
+    openParagraph(
+      containerTokenizer().lexer.blockTokens(task ? text.replace(taskMarker, "") : text),
+    ),
+  );
+}
+
+/** Test interruption of an existing paragraph, rather than a fresh block. */
+function continuesParagraph<ParserOutput, RendererOutput>(
+  source: string,
+  tokenizer: InstanceType<typeof markdown.instance.Tokenizer<ParserOutput, RendererOutput>>,
+): boolean {
+  // Marked's paragraph grammar omits HTML indentation and types 3–5. Normalize
+  // only the permitted three columns; four-column HTML still continues prose.
+  const probe = (source.split("\n", 1)[0] as string).replace(/^ {0,3}(?=<)/, "");
+  if (/^<(?:\?|![A-Z]|!\[CDATA\[)/.test(probe)) return false;
+  // The paragraph regex also stops at apparent one-column tables that the
+  // actual table tokenizer rejects. Check real tables separately, then only
+  // the candidate line so later lazy underlines cannot close this paragraph.
+  if (tokenizer.table(source)) return false;
+  // HTML block tags are case-insensitive. The sentinel always matches the
+  // first paragraph line, regardless of the candidate continuation.
+  const paragraph = new RegExp(tokenizer.rules.block.paragraph, "i");
+  const match = paragraph.exec(`a\n${probe}\n`) as RegExpExecArray;
+  return match[0].startsWith("a\n");
+}
+
+/** Boundary probes may change indentation, but each item owns original source. */
+function restoreListSource(token: { raw: string; items: { raw: string }[] }, source: string) {
+  const lines = source.split("\n");
+  let offset = 0;
+  for (const item of token.items) {
+    const newline = item.raw.endsWith("\n") ? "\n" : "";
+    const count = item.raw.replace(/\n$/, "").split("\n").length;
+    item.raw = lines.slice(offset, offset + count).join("\n") + newline;
+    offset += count;
+  }
+  token.raw = lines.slice(0, offset).join("\n");
 }
 
 /** An indented line can continue prose; indented code cannot interrupt it. */
@@ -602,6 +639,7 @@ function containerTokenizer() {
     const interruption = lines.findIndex((line, index) => {
       if (index === 0 || /^ {0,3}>/.test(line)) return false;
       if (this.rules.block.list.test(line)) return true;
+      if (!continuesParagraph(lines.slice(index).join("\n"), this)) return true;
       if (!/^ {0,3}>/.test(lines[index - 1] as string)) return false;
       const { text, indent } = blockquoteSource(lines.slice(0, index).join("\n"));
       return (
@@ -624,17 +662,37 @@ function containerTokenizer() {
   };
   const list = tokenizer.list;
   tokenizer.list = function (source) {
-    const token = list.call(this, source);
-    if (!token) return;
+    const lines = source.split("\n");
+    const probe = [...lines];
+    let token: ReturnType<typeof list>;
+    for (;;) {
+      token = list.call(this, probe.join("\n"));
+      if (!token) return;
+      restoreListSource(token, source);
+      const count = token.raw.split("\n").length;
+      const next = lines[count];
+      const item = token.items.at(-1) as (typeof token.items)[number];
+      if (
+        next === undefined ||
+        !next.trim() ||
+        this.rules.block.list.test(next) ||
+        !continuesParagraph(lines.slice(count).join("\n"), this) ||
+        !listParagraph(item.raw, item.task)
+      )
+        break;
+      // Marked stops a dedented line after any four-column line, even when
+      // that line continued prose. Let the known lazy line pass its heuristic
+      // and re-probe the entire list, including later sibling items. Content
+      // and all paragraph-state checks always use the original source above.
+      probe[count] = " ".repeat(listItemSource(item.raw).indent) + next;
+    }
     let offset = 0;
     for (const item of token.items) {
       const lines = item.raw.replace(/\n$/, "").split("\n");
       const { indent } = listItemSource(item.raw);
       const interruption = lines.findIndex((line, index) => {
         if (!index || !line.trim() || indentation(line, containerColumn) >= indent) return false;
-        const { text } = listItemSource(lines.slice(0, index).join("\n"));
-        const prefix = item.task ? text.replace(taskMarker, "") : text;
-        return !openParagraph(containerTokenizer().lexer.blockTokens(prefix));
+        return !listParagraph(lines.slice(0, index).join("\n"), item.task);
       });
       if (interruption >= 0)
         return this.list(
@@ -684,15 +742,7 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
             // Marked expands every tab in item.text and trimEnd() also drops
             // code's trailing whitespace. Use it only for container boundaries;
             // recover the content from its untouched source instead.
-            const lines = source.split("\n");
-            let lineOffset = 0;
-            for (const item of token.items) {
-              const newline = item.raw.endsWith("\n") ? "\n" : "";
-              const count = item.raw.replace(/\n$/, "").split("\n").length;
-              item.raw = lines.slice(lineOffset, lineOffset + count).join("\n") + newline;
-              lineOffset += count;
-            }
-            token.raw = lines.slice(0, lineOffset).join("\n");
+            restoreListSource(token, source);
             return {
               ...token,
               type: "docsList",
@@ -1035,14 +1085,15 @@ function referenceLabel(value: string): string {
   // and unifies final sigma. Dotless i must retain its separate equivalence
   // class. Cherokee folds to lowercase here; both cases still share one key.
   return value
+    .trim()
     .replace(/[^ı]+/gu, (part) => part.toLowerCase().toUpperCase().toLowerCase())
     .replace(/\s+/g, " ");
 }
 
 /** Reference labels cannot close emphasis/strike delimiters outside the link. */
-function referenceMask(
+function referenceMask<ParserOutput, RendererOutput>(
   source: string,
-  tokenizer: InstanceType<typeof markdown.instance.Tokenizer>,
+  tokenizer: InstanceType<typeof markdown.instance.Tokenizer<ParserOutput, RendererOutput>>,
 ): string {
   return source.replace(tokenizer.rules.inline.reflinkSearch, (raw) => {
     const match = (tokenizer.rules.inline.reflink.exec(raw) ||
