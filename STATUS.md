@@ -121,3 +121,68 @@ expand this integration into a build-graph change. Open questions: none.
 No pushes, PRs, branch switches, other checkout modifications, generated dist
 commits, snapshot updates or suppressed test failures. STATUS.md is committed
 last; the lane finishes with a clean working tree.
+
+## Codex fix round 2 — 2026-10-30
+
+Applied only the five findings in the review of `cac637e2811f` on
+`lane/sst-8xm.61`, with regression tests and this required lane report.
+
+### Commits
+
+- `393c29c3` — `fix(deps): use the workspace RDF parser`: both imported
+  packages depend on `@jeswr/fetch-rdf` through `workspace:*`; the lockfile
+  links the workspace package and removes the unused registry snapshot.
+- `11ce258d` — `fix(bridge): reject ambiguous verified reply actions`:
+  verified carriers must contain exactly one supported action representation.
+  Conflicting actions, multiple type keys, duplicate action aliases, missing
+  actions and over-limit type sets are rejected before calibrated projection.
+- `c22bb19d` — `fix(agent): require trusted threads for simple confirmation`:
+  optional owner-controlled thread evidence must match the reply anchor,
+  channel and recipient. Without that evidence, typed acknowledgement is
+  required. Existing end-to-end confirmation tests now use that safe default.
+- `49f19902` — `fix(agent): resolve DST overlaps using actual offsets`:
+  candidates use actual nearby zone offsets and round-trip validation rather
+  than assuming a one-hour transition. Tests cover Lord Howe's repeated and
+  skipped half-hours, Microsoft busy-interval widening, and Samoa's skipped day.
+- `28bbdb20` — `fix(agent): bound credential response buffering`:
+  response bytes are counted during incremental consumption; exceeding 256 KiB
+  cancels the reader before buffering more data. Tests cover early cancellation,
+  cancellation failure, exact limits, split UTF-8, and unreadable bodies.
+
+### Validation
+
+All commands used Node v24.22.1 and pnpm 10.4.1 with lifecycle scripts disabled.
+Built fresh workspace prerequisites with their own build scripts in this order:
+`rdf-serialize`, `fetch-rdf`, `guarded-fetch`, `solid-task-model`,
+`solid-chat-interop`, `solid-odrl`, `rdf-engine`, `solid-mcp`, `solid-vc`.
+
+- `pnpm install --lockfile-only --ignore-scripts --offline` — PASS. Discarded
+  unrelated resolver changes to keep the lockfile limited to finding 5.
+- `pnpm install --offline --frozen-lockfile --ignore-scripts` — PASS.
+  Runtime resolution checks in both affected packages also confirm that
+  `@jeswr/fetch-rdf` resolves to `packages/fetch-rdf/dist/`.
+- `pnpm --filter @jeswr/agentic-legacy-bridge run gate` — PASS:
+  lint, build, typecheck and 663 tests across 37 files.
+- `pnpm --filter @jeswr/personal-agent run gate` — PASS:
+  lint, build, typecheck and 549 tests across 57 files.
+- `pnpm run lint:root` — PASS, including every workspace guard.
+- `pnpm --filter @jeswr/agentic-legacy-bridge run test:coverage` — PASS,
+  663 tests; statements 93.98%, branches 86.88%, functions 97.35%, lines 96.32%.
+- `pnpm --filter @jeswr/personal-agent run test:coverage` — PASS,
+  549 tests; statements 87.11%, branches 75.08%, functions 90.5%, lines 89.63%.
+- `git diff cac637e2811fca2162bc6b2d5a63eaf723ebe4c6 --check` — PASS.
+
+`pnpm exec turbo run build typecheck test --filter=...@jeswr/agentic-legacy-bridge --filter=...@jeswr/personal-agent`
+remains blocked before task execution by the existing
+`fetch-rdf → rdf-engine → solid-odrl → fetch-rdf` build cycle. The bridge's only
+workspace dependent is personal-agent, whose direct package gate passes above.
+The brief excludes changes to the build graph and whole-workspace gates.
+
+### Remaining work and questions
+
+All five requested fixes are implemented. Conservative choices: reject ambiguous
+verified carriers entirely, and require typed acknowledgement whenever trusted
+thread evidence is unavailable. No new dependency was added, so `check:packages`
+was not applicable. `roborev` is unavailable, so no new automated verdicts could
+be obtained. The existing Turbo cycle remains outside this fix round.
+Open questions: none.
