@@ -299,7 +299,8 @@ function deletionPending(error: unknown): boolean {
   );
 }
 
-function reportFailure(
+/** Explicit actions and background housekeeping surface the same refusal and Retry guidance. */
+export function reportFailure(
   error: unknown,
   fallback: string,
   client: DriveClient,

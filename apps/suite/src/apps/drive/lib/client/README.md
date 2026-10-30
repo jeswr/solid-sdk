@@ -118,6 +118,14 @@ List/grid folder drops and breadcrumb drops share a client-scoped, single-use dr
 capture; neither drop-time HEADs nor newer listing rows may replace its validator
 or discovery assertion.
 
+The [round 70 audit](../../../../../test/drive-review-round70-audit.md) lists every
+audited call site and all 67 variants in each mutation-boundary table, including
+startup file/tree purge. Startup purge invalidates the Trash subtree after
+settlement even without push notifications or after a partially completed failure.
+It shares explicit actions' refusal/recovery reporting. Shared partial Restore
+continues to compare against archived original grants, including inherited sharing,
+rather than the owner-only recovery ACL.
+
 The [round 67 audit](../../../../../test/drive-review-round67-audit.md) maps every
 audited call site, confirmation-to-commit discovery transport, policy/archive and
 survivor assertions, access-mode capture, moved multi-selection hydration, and the

@@ -12,11 +12,11 @@ import { Info } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
-import { measureUsage, purgeExpired } from "../lib/operations/operations";
+import { measureUsage, purgeExpired, trashFolderOf } from "../lib/operations/operations";
 import { DriveFocusBoundary } from "../state/app-focus";
 import { DriveProvider, DriveRootDiscoveryError, useDrive } from "../state/drive-context";
 import { claimPurge } from "../state/purge-marker";
-import { DriveUiProvider, useDriveUi } from "../state/ui";
+import { DriveUiProvider, reportFailure, useDriveUi } from "../state/ui";
 import { DetailsPane } from "./details";
 import { DriveDialogs } from "./dialogs";
 import { PreviewDialog } from "./preview";
@@ -25,7 +25,7 @@ import { DriveSidebar, NewMenu } from "./sidebar";
 import { UploadDock } from "./upload-dock";
 
 function DriveChrome({ children }: { children: ReactNode }) {
-  const { client, driveRoot, rootError, changes } = useDrive();
+  const { client, driveRoot, rootError, changes, invalidate } = useDrive();
   const ui = useDriveUi();
   const [usage, setUsage] = useState<number>();
   const [usageFailed, setUsageFailed] = useState(false);
@@ -36,15 +36,22 @@ function DriveChrome({ children }: { children: ReactNode }) {
   // Once per session: purge trash older than 30 days (04-drive §4.9).
   useEffect(() => {
     if (!driveRoot || !claimPurge(driveRoot)) return;
-    void purgeExpired(client, driveRoot).then(
-      (result) => {
-        for (const warning of result.warnings ?? []) toast.error(warning.message);
-        if (result.done.length > 0)
-          console.debug(`Drive purged ${result.done.length} expired items`);
-      },
-      () => undefined,
-    );
-  }, [client, driveRoot]);
+    void purgeExpired(client, driveRoot)
+      .then(
+        (result) => {
+          for (const warning of result.warnings ?? []) toast.error(warning.message);
+          for (const { error } of result.failed)
+            reportFailure(error, "Couldn't delete an expired Trash item", client, invalidate);
+          if (result.done.length > 0)
+            console.debug(`Drive purged ${result.done.length} expired items`);
+        },
+        (error: unknown) =>
+          reportFailure(error, "Couldn't finish clearing expired Trash", client, invalidate),
+      )
+      // Purge can finish deletes before its bookkeeping fails. Refresh every
+      // Trash subscriber on settlement, including pods without notifications.
+      .finally(() => invalidate(trashFolderOf(driveRoot)));
+  }, [client, driveRoot, invalidate]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: usageAttempt retries the complete measurement
   useEffect(() => {

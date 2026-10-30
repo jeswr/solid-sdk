@@ -13,6 +13,7 @@ import {
   deleteForever,
   listTrash,
   moveItems,
+  purgeExpired,
   renameItem,
   restoreItems,
   trashItems,
@@ -58,6 +59,7 @@ const steps = [
   "recursive remove",
   "Delete forever",
   "Empty Trash",
+  "startup purge",
   "overwrite",
   "folder metadata",
   "Restore",
@@ -98,6 +100,7 @@ const steps = [
   "Restore tree",
   "Delete forever tree",
   "Empty Trash tree",
+  "startup purge tree",
   "Replace completion recovery clearing",
   "Move completion recovery clearing",
   "Copy completion recovery clearing",
@@ -404,6 +407,7 @@ async function scenario(variant: Step, events: string[]) {
     [
       "Delete forever",
       "Empty Trash",
+      "startup purge",
       "Restore",
       "partial file Restore",
       "partial folder Restore",
@@ -419,7 +423,10 @@ async function scenario(variant: Step, events: string[]) {
           ? new Response(null, { status: 412 })
           : undefined,
       );
-    await trashItems(client, DRIVE, [selected], { webId: OWNER });
+    await trashItems(client, DRIVE, [selected], {
+      webId: OWNER,
+      ...(step === "startup purge" ? { now: new Date(Date.now() - 31 * 86_400_000) } : {}),
+    });
     f.intercept(undefined);
     const [entry] = await listTrash(client, DRIVE);
     if (!entry) throw new Error("Missing recovery");
@@ -443,9 +450,11 @@ async function scenario(variant: Step, events: string[]) {
       });
     }
     run = () =>
-      step === "Restore" || step.startsWith("partial")
-        ? restoreItems(client, DRIVE, [entry])
-        : deleteForever(client, DRIVE, [entry]);
+      step === "startup purge"
+        ? purgeExpired(client, DRIVE)
+        : step === "Restore" || step.startsWith("partial")
+          ? restoreItems(client, DRIVE, [entry])
+          : deleteForever(client, DRIVE, [entry]);
   } else if (step === "container merge") {
     target = `${PRIVATE}merged/`;
     run = () => client.mergeContainer(source, target, { kind: "preserve-source" });
@@ -725,7 +734,7 @@ it.each([
 
 it.each(
   steps,
-)("round 69 shape a: %s retains a replacement at its final identity check", async (step) => {
+)("round 70 shape a: %s retains a replacement at its final identity check", async (step) => {
   const events: string[] = [];
   const s = await scenario(step, events);
   let checks = 0;
@@ -755,7 +764,7 @@ it.each(
 
 it.each(
   steps,
-)("round 69 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
+)("round 70 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   const events: string[] = [];
   const s = await scenario(step, events);
@@ -785,7 +794,7 @@ it.each(
 
 it.each(
   steps,
-)("round 69 final discovery: %s refuses an ACL endpoint change on its conditional HEAD", async (step) => {
+)("round 70 final discovery: %s refuses an ACL endpoint change on its conditional HEAD", async (step) => {
   const baseline = await scenario(step, []);
   const baselineOutcome = await baseline.run().catch((error: unknown) => error);
   const boundary = baseline.boundaries.findLast(
