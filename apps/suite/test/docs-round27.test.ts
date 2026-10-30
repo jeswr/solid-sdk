@@ -108,11 +108,21 @@ it("round27 aborted offline local transactions never claim device success", asyn
   runtime.online = false;
   runtime.provider?.destroy();
   const database = runtime.local?.db as IDBDatabase;
-  const transact = database.transaction.bind(database);
-  const failing = vi.spyOn(database, "transaction").mockImplementation((names, mode, options) => {
-    const transaction = transact(names, mode, options);
+  const prototype = Object.getPrototypeOf(database) as IDBDatabase;
+  const transact = prototype.transaction;
+  const aborted: Promise<void>[] = [];
+  const failing = vi.spyOn(prototype, "transaction").mockImplementation(function (
+    this: IDBDatabase,
+    names,
+    mode,
+    options,
+  ) {
+    const transaction = transact.call(this, names, mode, options);
     // Abort after requests succeed, before commit: request success is not durability.
     if (mode === "readwrite") {
+      aborted.push(
+        new Promise<void>((resolve) => transaction.addEventListener("abort", () => resolve())),
+      );
       queueMicrotask(() => {
         const name = transaction.objectStoreNames[0] as string;
         const request = transaction.objectStore(name).get(name === "custom" ? "pending" : 1);
@@ -129,6 +139,9 @@ it("round27 aborted offline local transactions never claim device success", asyn
     "Offline — Not saved — retrying on this device",
   );
   expect(runtime.body).toContain("Visible but not saved");
+  // Abort deltas in retained draft mirrors too, and drain them before restoring
+  // storage. A committed orphan in any mirror is recoverable after round48.
+  await Promise.all(aborted);
   failing.mockRestore();
   const reader = client();
   await reader.open(runtime.stored?.url);

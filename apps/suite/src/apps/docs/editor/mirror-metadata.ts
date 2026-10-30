@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex
 import { type IndexeddbPersistence, storeState } from "y-indexeddb";
-import { applyUpdate, Doc, encodeStateAsUpdate, equalSnapshots, snapshot } from "yjs";
+import { encodeStateAsUpdate } from "yjs";
+import { coversUpdates } from "./update-coverage";
 
 export type MirrorMetadata = Record<"pending" | "title" | "edit" | "alternateEdits", unknown>;
 /** Keep the comparison and writes in one cross-tab IndexedDB transaction. */
@@ -11,26 +12,7 @@ export async function updateMirrorMetadata(
   confirmed?: Uint8Array,
   localUpdate?: Uint8Array,
 ): Promise<boolean> {
-  const covered = (updates: Uint8Array[]) => {
-    if (!confirmed) return true;
-    const probe = new Doc();
-    try {
-      applyUpdate(probe, confirmed);
-      const durable = snapshot(probe);
-      for (const update of updates) applyUpdate(probe, update);
-      // A state vector must cover every client's clock. Deletion-only updates
-      // do not advance those clocks, so compare the delete sets as well.
-      if (!equalSnapshots(durable, snapshot(probe))) return false;
-      // Unintegrated structs have no clock in the vector yet. Retain them too.
-      const merged = encodeStateAsUpdate(probe);
-      return (
-        merged.length === confirmed.length &&
-        merged.every((byte, index) => byte === confirmed[index])
-      );
-    } finally {
-      probe.destroy();
-    }
-  };
+  const covered = (updates: Uint8Array[]) => !confirmed || coversUpdates(confirmed, updates);
   const keys = ["pending", "title", "edit", "alternateEdits"] as const;
   const database = mirror.db ?? (await mirror._db);
   // In-memory mirror adapters expose the same get/set contract without a database.
@@ -46,6 +28,7 @@ export async function updateMirrorMetadata(
       if (!active()) return false;
       await mirror.set(key, value);
     }
+    if (writes && confirmed) await mirror.set("confirmed", Uint8Array.from(confirmed).buffer);
     if (writes && localUpdate) await storeState(mirror, true);
     return writes !== undefined;
   }
@@ -68,6 +51,7 @@ export async function updateMirrorMetadata(
       if (--remaining || !active() || !covered(updates)) return;
       const writes = update(current);
       for (const [name, value] of Object.entries(writes ?? {})) store.put(value, name);
+      if (writes && confirmed) store.put(Uint8Array.from(confirmed).buffer, "confirmed");
       if (writes && localUpdate) transaction.objectStore("updates").add(localUpdate);
       written = writes !== undefined;
     };

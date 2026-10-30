@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex
 import { IndexeddbPersistence } from "y-indexeddb";
 import { Doc } from "yjs";
+import { hasUnconfirmedLocalState } from "./local-state";
 
 const PREFIX = "suite.docs.draft:";
 const creations = new Map<string, Promise<unknown>>();
@@ -58,7 +59,8 @@ export async function listLocalDrafts(webId: string): Promise<LocalDraft[]> {
     const mirror = new IndexeddbPersistence(name, doc);
     try {
       await mirror.whenSynced;
-      if (!(await mirror.get("pending")) || (await mirror.get("promoted"))) continue;
+      if (await mirror.get("promoted")) continue;
+      if (!(await mirror.get("pending")) && !(await hasUnconfirmedLocalState(mirror))) continue;
       const title: unknown = await mirror.get("title");
       drafts.push({
         id: identity[1],

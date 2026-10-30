@@ -1,12 +1,13 @@
 // AUTHORED-BY Codex
 
 import { Mark } from "@tiptap/pm/model";
-import { generateJSON, getSchema, type JSONContent } from "@tiptap/react";
+import { getSchema, type JSONContent } from "@tiptap/react";
 import { baseExtensions } from "../../editor/extensions";
 import { normaliseImageLink } from "../../editor/image-link";
 import { protectiveLinkRel } from "../../editor/link-rel";
 import { normaliseDestination, normaliseImageDestination } from "../editor/destination";
 import { normaliseHtmlLists } from "../editor/html-lists";
+import { parseDocumentHtml } from "../editor/parse-html";
 import { normaliseHtmlTableSpans, normaliseTableSpan } from "../editor/table-spans";
 import { sanitiseImport } from "./sanitise";
 import { reportSkipped, type SkippedItem } from "./skipped";
@@ -140,7 +141,7 @@ export function importHtml(source: string, skipped: SkippedItem[] = []) {
   normaliseHtmlTableSpans(dom.body, () => reportSkipped(skipped, "Invalid table spans"));
   normaliseHtmlLists(dom.body);
   return normaliseImport(
-    generateJSON(dom.body.innerHTML, baseExtensions(globalThis.fetch)),
+    parseDocumentHtml(dom.body.innerHTML, baseExtensions(globalThis.fetch)),
     skipped,
   );
 }

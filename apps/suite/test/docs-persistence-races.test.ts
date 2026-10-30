@@ -575,7 +575,9 @@ it("reloads a temporarily empty existing log without creating independent CRDT i
   });
   runtimes.push(opening);
   await opening.open(url);
-  expect(lists).toBe(2);
+  // The provider retries once; the new mirror then independently records the
+  // pod-confirmed baseline instead of treating its initial pending=0 as proof.
+  expect(lists).toBe(3);
   expect(encodeStateAsUpdate(opening.doc)).toEqual(encodeStateAsUpdate(original.doc));
 });
 

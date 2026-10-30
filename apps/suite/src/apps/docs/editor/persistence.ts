@@ -2,13 +2,14 @@
 // AUTHORED-BY Codex GPT-6
 import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { type SolidPersistence, SolidUpdateStore } from "@jeswr/y-solid";
-import { generateHTML, generateJSON, getSchema, type JSONContent } from "@tiptap/react";
+import { generateHTML, getSchema, type JSONContent } from "@tiptap/react";
 import { prosemirrorJSONToYDoc, yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
 import { IndexeddbPersistence, storeState } from "y-indexeddb";
-import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
+import { applyUpdate, Doc, encodeStateAsUpdate, mergeUpdates } from "yjs";
 import type { PodSession } from "@/lib/session/pod-session";
 import { createSolidDriveClient } from "../../drive/lib/client/client";
 import { deriveTitle, type SaveState, wordCount } from "../lib/editor/logic";
+import { parseDocumentHtml } from "../lib/editor/parse-html";
 import {
   acknowledgeTitle,
   editTitle,
@@ -35,7 +36,7 @@ import {
 import { copyDocument } from "./copy";
 import { draftMirrorName, withDraftLock } from "./drafts";
 import { baseExtensions } from "./extensions";
-import { loadPersistedLocalState } from "./local-state";
+import { hasUnconfirmedLocalState, loadPersistedLocalState } from "./local-state";
 import { updateMirrorMetadata } from "./mirror-metadata";
 import {
   hasTitleIntent,
@@ -430,7 +431,7 @@ export class DocumentPersistence {
       let previous: unknown;
       try {
         await mirror.whenSynced;
-        pending = Boolean(await mirror.get("pending"));
+        pending = await this.mirrorHasPending(mirror);
         next = await mirror.get("nextMirror");
         previous = this.parseMetadata<unknown>(await mirror.get("previousMirrors"));
       } finally {
@@ -458,12 +459,56 @@ export class DocumentPersistence {
         for (const parent of previous) if (typeof parent === "string") names.push(parent);
     }
   }
+  private async mirrorHasPending(mirror: IndexeddbPersistence) {
+    if (await mirror.get("pending")) return true;
+    return hasUnconfirmedLocalState(mirror, async () => {
+      const cached = this.parseMetadata<{ webId: string; document: StoredDocument }>(
+        await mirror.get("stored"),
+      );
+      const document =
+        cached?.webId === this.session.webId
+          ? cached.document
+          : mirror === this.local || this.previousMirrors.has(mirror)
+            ? this.stored
+            : undefined;
+      if (!document) return undefined;
+      try {
+        const store = new DocumentUpdateStore(
+          documentUpdateLocation(document),
+          this.session.fetch,
+          async () => {},
+          false,
+          document.data.instanceId,
+        );
+        return mergeUpdates((await store.loadUpdates()).map(({ update }) => update));
+      } catch {
+        // An unavailable log cannot prove the cached edits were acknowledged.
+        return undefined;
+      }
+    });
+  }
   private async readPending(assertOpen = true, mirror = this.local): Promise<boolean> {
-    const pending = Boolean(await mirror?.get("pending"));
+    const marked = Boolean(await mirror?.get("pending"));
+    const pending = marked || (mirror ? await this.mirrorHasPending(mirror) : false);
     if (assertOpen) this.assertActive();
     if (pending) {
-      const edit = this.parseMetadata<PendingEdit>(await mirror?.get("edit"));
+      const cached = this.parseMetadata<{ webId: string; document: StoredDocument }>(
+        await mirror?.get("stored"),
+      );
       const persistedTitle = await mirror?.get("title");
+      const bodyTitle =
+        cached?.webId === this.session.webId ? cached.document.data.title : persistedTitle;
+      const edit = marked
+        ? this.parseMetadata<PendingEdit>(await mirror?.get("edit"))
+        : typeof bodyTitle === "string"
+          ? {
+              owner: this.editOwner,
+              title: bodyTitle,
+              baseTitle: bodyTitle,
+              localTitle: null,
+              baseModified: cached?.document.data.modified,
+            }
+          : undefined;
       const observed = JSON.stringify([
         edit?.owner,
         edit?.title,
@@ -835,7 +880,7 @@ export class DocumentPersistence {
     const extensions = baseExtensions(this.session.fetch);
     const seed = prosemirrorJSONToYDoc(
       getSchema(extensions),
-      generateJSON(this.body || "<p></p>", extensions),
+      parseDocumentHtml(this.body || "<p></p>", extensions),
       "prosemirror",
     );
     applyUpdate(this.doc, encodeStateAsUpdate(seed));
