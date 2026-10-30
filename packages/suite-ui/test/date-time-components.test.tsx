@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { DatePickerPopover } from "../src/date-time/date-picker-popover.js";
 import { DateTimeField } from "../src/date-time/date-time-field.js";
 import type { DateTimeValue } from "../src/date-time/date-value.js";
-import { type RecurrenceRule, toRRule } from "../src/date-time/recurrence.js";
+import { fromRRule, type RecurrenceRule, toRRule } from "../src/date-time/recurrence.js";
 import { RecurrenceEditor } from "../src/date-time/recurrence-editor.js";
 
 process.env.TZ = "UTC";
@@ -205,9 +205,78 @@ describe("DatePickerPopover", () => {
     expect((screen.getByRole("button") as HTMLButtonElement).disabled).toBe(true);
     await accessible();
   });
+  it("closes an open picker when disabled and stays closed when re-enabled", () => {
+    const onChange = vi.fn();
+    const picker = (disabled: boolean) => (
+      <DatePickerPopover
+        label="Due date"
+        locale="en-GB"
+        value={{ kind: "dateTime", dateTime: "2026-10-27T17:00:00.000Z" }}
+        onChange={onChange}
+        disabled={disabled}
+        defaultOpen
+        today={reference}
+      />
+    );
+    const view = render(picker(false));
+    const dialog = screen.getByRole("dialog", { name: "Due date" });
+    expect((within(dialog).getByLabelText("Time") as HTMLInputElement).disabled).toBe(false);
+    view.rerender(picker(true));
+    expect(screen.queryByRole("dialog")).toBe(null);
+    const trigger = screen.getByRole("button", { name: /Due date/ });
+    expect((trigger as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(trigger);
+    expect(screen.queryByRole("dialog")).toBe(null);
+    expect(onChange).not.toHaveBeenCalled();
+    view.rerender(picker(false));
+    expect(screen.queryByRole("dialog")).toBe(null);
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(null);
+  });
+  it("keeps a disabled picker closed even with defaultOpen", () => {
+    const onChange = vi.fn();
+    render(
+      <DatePickerPopover
+        label="Date"
+        locale="en-GB"
+        value={null}
+        onChange={onChange}
+        defaultOpen
+        disabled
+        today={reference}
+      />,
+    );
+    expect(screen.queryByRole("dialog")).toBe(null);
+    expect(onChange).not.toHaveBeenCalled();
+  });
 });
 
 describe("RecurrenceEditor", () => {
+  it.each([
+    "MONTHLY",
+    "YEARLY",
+  ] as const)("edits an imported %s rule with a day defaulting to DTSTART", (freq) => {
+    const rule = fromRRule(`FREQ=${freq}`);
+    const onChange = vi.fn();
+    const editor = (startDate: string) => (
+      <RecurrenceEditor locale="en-GB" startDate={startDate} value={rule} onChange={onChange} />
+    );
+    const view = render(editor("2026-10-26"));
+    expect((screen.getByLabelText("Day of month") as HTMLSelectElement).value).toBe("26");
+    expect(onChange).not.toHaveBeenCalled();
+    if (freq === "MONTHLY") {
+      expect((screen.getByLabelText("Monthly pattern") as HTMLSelectElement).value).toBe("day");
+    } else {
+      expect((screen.getByLabelText("Month") as HTMLSelectElement).value).toBe("10");
+    }
+    view.rerender(editor("2026-11-30"));
+    expect((screen.getByLabelText("Day of month") as HTMLSelectElement).value).toBe("30");
+    expect(onChange).not.toHaveBeenCalled();
+    change("Day of month", "15");
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ ...rule, byMonthDay: [15] });
+    expect((screen.getByLabelText("Day of month") as HTMLSelectElement).value).toBe("15");
+  });
   it("builds daily, weekly, monthly ordinal and yearly objects", async () => {
     mount(<Editor />);
     await accessible();
@@ -229,6 +298,7 @@ describe("RecurrenceEditor", () => {
     expect(screen.getByTestId("value").textContent).toContain("BYMONTHDAY=-1");
     await accessible();
     change("Monthly pattern", "weekday");
+    expect(screen.queryByLabelText("Day of month")).toBe(null);
     change("Which week", "-1");
     change("Weekday", "Friday");
     expect(screen.getByTestId("value").textContent).toContain("BYDAY=-1FR");
@@ -265,6 +335,53 @@ describe("RecurrenceEditor", () => {
     change(/Repeat every/, "");
     expect(screen.getByRole("alert").textContent).toContain("whole number");
     await accessible();
+  });
+  it.each([
+    "Repeat every (days)",
+    "Occurrences",
+  ])("blocks form submission for rejected %s drafts and clears validity after correction", (label) => {
+    const onChange = vi.fn();
+    const onSubmit = vi.fn();
+    render(
+      <form
+        aria-label="Repeat schedule"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSubmit();
+        }}
+      >
+        <RecurrenceEditor
+          locale="en-GB"
+          startDate="2026-10-26"
+          value={{ freq: "DAILY", interval: 1, count: 3 }}
+          onChange={onChange}
+        />
+        <button type="submit">Save</button>
+      </form>,
+    );
+    const form = screen.getByRole("form", { name: "Repeat schedule" }) as HTMLFormElement;
+    const input = screen.getByLabelText(label) as HTMLInputElement;
+    expect(form.checkValidity()).toBe(true);
+    for (const draft of ["1e2", "2.0"]) {
+      change(label, draft);
+      expect(input.value).toBe(draft);
+      expect(input.getAttribute("aria-invalid")).toBe("true");
+      expect(input.validity.customError).toBe(true);
+      expect(form.checkValidity()).toBe(false);
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(onChange).not.toHaveBeenCalled();
+    }
+    change(label, "4");
+    expect(input.validity.customError).toBe(false);
+    expect(form.checkValidity()).toBe(true);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({
+      freq: "DAILY",
+      interval: label === "Occurrences" ? 1 : 4,
+      count: label === "Occurrences" ? 4 : 3,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(onSubmit).toHaveBeenCalledOnce();
   });
   it("renders disabled recurrence", async () => {
     mount(

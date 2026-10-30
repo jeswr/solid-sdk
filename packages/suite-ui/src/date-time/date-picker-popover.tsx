@@ -3,7 +3,7 @@
 
 import * as Popover from "@radix-ui/react-popover";
 import { CalendarDays } from "lucide-react";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { Calendar } from "./calendar.js";
 import { type DateTimeValue, formatDateTime, localDate, valueDate } from "./date-value.js";
 
@@ -27,7 +27,10 @@ export function DatePickerPopover({
   today,
 }: DatePickerPopoverProps) {
   const id = useId();
-  const [open, setOpen] = useState(defaultOpen);
+  const [open, setOpen] = useState(defaultOpen && !disabled);
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
   const [clock] = useState(() => today ?? new Date());
   const [emptyAllDay, setEmptyAllDay] = useState(true);
   const [time, setTime] = useState("09:00");
@@ -38,6 +41,7 @@ export function DatePickerPopover({
       ? `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
       : time;
   const select = (selected: Date, dayOnly: boolean, hours = currentTime) => {
+    if (disabled) return;
     if (dayOnly) onChange({ kind: "date", date: localDate(selected) });
     else {
       const [h, m] = hours.split(":").map(Number);
@@ -49,7 +53,7 @@ export function DatePickerPopover({
   return (
     <div className="suite-date-stack">
       <span id={`${id}-label`}>{label}</span>
-      <Popover.Root open={open} onOpenChange={setOpen}>
+      <Popover.Root open={open && !disabled} onOpenChange={(next) => setOpen(next && !disabled)}>
         <Popover.Trigger asChild>
           <button
             type="button"
@@ -80,6 +84,7 @@ export function DatePickerPopover({
                 selected={date}
                 defaultMonth={date ?? clock}
                 today={clock}
+                disabled={disabled}
                 autoFocus
                 onSelect={(selected) => {
                   if (selected) select(selected, allDay);
@@ -89,7 +94,9 @@ export function DatePickerPopover({
                 <input
                   type="checkbox"
                   checked={allDay}
+                  disabled={disabled}
                   onChange={(event) => {
+                    if (disabled) return;
                     const next = event.target.checked;
                     setEmptyAllDay(next);
                     setTime(currentTime);
@@ -105,9 +112,10 @@ export function DatePickerPopover({
                   className="suite-date-control"
                   type="time"
                   value={currentTime}
-                  disabled={allDay || !date}
+                  disabled={disabled || allDay || !date}
                   required={!allDay}
                   onChange={(event) => {
+                    if (disabled) return;
                     const next = event.target.value;
                     if (!/^\d{2}:\d{2}$/.test(next)) return;
                     setTime(next);
@@ -120,7 +128,9 @@ export function DatePickerPopover({
                 <button
                   className="suite-date-button"
                   type="button"
+                  disabled={disabled}
                   onClick={() => {
+                    if (disabled) return;
                     onChange(null);
                     setOpen(false);
                   }}

@@ -35,13 +35,19 @@ function NumberField({
   max?: number;
 }) {
   const id = useId();
+  const input = useRef<HTMLInputElement>(null);
   const [text, setText] = useState(String(value));
   useEffect(() => setText(String(value)), [value]);
   const valid = /^\d+$/.test(text) && Number(text) >= 1 && Number(text) <= max;
+  const error = valid ? "" : `Enter a whole number from 1 to ${max}.`;
+  useEffect(() => {
+    input.current?.setCustomValidity(error);
+  }, [error]);
   return (
     <div className="suite-date-stack">
       <label htmlFor={id}>{label}</label>
       <input
+        ref={input}
         id={id}
         className="suite-date-control"
         type="number"
@@ -61,7 +67,7 @@ function NumberField({
       />
       {!valid && (
         <p id={`${id}-error`} role="alert" className="suite-date-error">
-          Enter a whole number from 1 to {max}.
+          {error}
         </p>
       )}
     </div>
@@ -127,6 +133,8 @@ export function RecurrenceEditor({
   };
   const end = rule?.count !== undefined ? "after" : rule?.until ? "on" : "never";
   const invalidWeek = rule?.freq === "WEEKLY" && rule.byDay?.length === 0;
+  const showMonthDay =
+    rule?.freq === "YEARLY" || (rule?.freq === "MONTHLY" && rule.bySetPos === undefined);
   return (
     <fieldset className="suite-recurrence suite-date-stack" disabled={disabled}>
       <legend>{label}</legend>
@@ -265,13 +273,13 @@ export function RecurrenceEditor({
               )}
             </>
           )}
-          {rule.byMonthDay && (
+          {showMonthDay && (
             <label className="suite-date-stack" htmlFor={`${id}-day`}>
               Day of month
               <select
                 id={`${id}-day`}
                 className="suite-date-control"
-                value={rule.byMonthDay[0]}
+                value={rule.byMonthDay?.[0] ?? seed.getDate()}
                 onChange={(event) => update({ ...rule, byMonthDay: [Number(event.target.value)] })}
               >
                 {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
@@ -302,9 +310,7 @@ export function RecurrenceEditor({
               </select>
             </label>
           )}
-          {rule.byMonthDay && (
-            <p className="suite-date-note">Months without this day are skipped.</p>
-          )}
+          {showMonthDay && <p className="suite-date-note">Months without this day are skipped.</p>}
           <label className="suite-date-stack" htmlFor={`${id}-ends`}>
             Ends
             <select
