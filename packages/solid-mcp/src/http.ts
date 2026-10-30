@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6 — transport shutdown
 // AUTHORED-BY Codex GPT-6 — CORS and parse-error fixes
+// AUTHORED-BY Claude Opus 5.5 — RFC 9728 metadata URL (MCP-01F)
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
@@ -17,6 +18,12 @@ export interface McpHttpOptions<Principal> {
   allowedOrigins: readonly string[];
   /** Public MCP endpoint URL; its authority is the only accepted Host. */
   resourceUrl: string;
+  /**
+   * Protected resource metadata URL advertised in the 401 challenge. Defaults to
+   * {@link protectedResourceMetadataUrl}(resourceUrl), the RFC 9728 §3.1 location that
+   * `@jeswr/mcp-oauth` serves. Pass the authorization server's own URL when composing.
+   */
+  resourceMetadataUrl?: string;
 }
 
 /** The same handler supports native Web requests and Node's http.createServer. */
@@ -51,6 +58,17 @@ function httpUrl(value: string): URL {
     throw new TypeError("Expected an http(s) URL without credentials, query or fragment");
   }
   return url;
+}
+
+/**
+ * RFC 9728 §3.1 well-known URL for a resource identifier: `/.well-known/oauth-protected-resource`
+ * is inserted between the authority and the path, so `https://mcp.example/mcp` maps to
+ * `https://mcp.example/.well-known/oauth-protected-resource/mcp`. A terminating slash is dropped,
+ * matching `@jeswr/mcp-oauth` and the MCP SDK client's discovery fallback.
+ */
+export function protectedResourceMetadataUrl(resourceUrl: string): string {
+  const url = httpUrl(resourceUrl);
+  return `${url.origin}/.well-known/oauth-protected-resource${url.pathname.replace(/\/$/, "")}`;
 }
 
 /** Bound actual streamed bytes as well as the untrusted Content-Length hint. */
@@ -108,7 +126,13 @@ export function createMcpHttpHandler<Principal>(
       throw new TypeError("allowedOrigins must contain exact serialized http(s) origins");
     }
   }
-  const challenge = `Bearer resource_metadata="${resource.href.replace(/\/$/, "")}/.well-known/oauth-protected-resource"`;
+  const metadataUrl =
+    options.resourceMetadataUrl === undefined
+      ? protectedResourceMetadataUrl(resource.href)
+      : httpUrl(options.resourceMetadataUrl).href;
+  // WHATWG URL serialization never leaves a double quote or backslash in href, so the
+  // quoted-string parameter cannot be broken out of.
+  const challenge = `Bearer resource_metadata="${metadataUrl}"`;
   const servers = new WeakSet<McpServer>();
 
   async function dispatch(request: Request): Promise<Response> {

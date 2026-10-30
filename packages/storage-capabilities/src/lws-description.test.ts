@@ -1,9 +1,8 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
-// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY GPT-6.1-Sol
 import { afterEach, expect, test, vi } from "vitest";
-import { CapabilitiesError, parseLwsDescription } from "./index.js";
+import { CapabilitiesError, deriveFeatures, parseLwsDescription } from "./index.js";
 import { sparqLwsCid } from "./testing.js";
-import { LWS, SSD } from "./vocab.js";
+import { LWS, NOTIFY, SSD } from "./vocab.js";
 
 const storageUrl = sparqLwsCid.id;
 const requestUrl = "https://lws.example/documents/note";
@@ -11,6 +10,23 @@ const rootService = { type: "StorageRoot", serviceEndpoint: "https://lws.example
 
 function minimal(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return { id: storageUrl, type: "Storage", service: [{ ...rootService }], ...overrides };
+}
+
+function notification(extra: Record<string, unknown>) {
+  return parseLwsDescription(
+    minimal({
+      service: [
+        rootService,
+        {
+          type: [SSD.SolidNotificationService, NOTIFY.WebSocketChannel2023],
+          serviceEndpoint: "https://lws.example/notifications",
+          ...extra,
+        },
+      ],
+    }),
+    storageUrl,
+    requestUrl,
+  );
 }
 
 function failure(
@@ -36,6 +52,87 @@ test("parses the sparq LWS CID into the expected StorageDescription", () => {
   const before = structuredClone(sparqLwsCid);
   expect(parseLwsDescription(sparqLwsCid, storageUrl, requestUrl)).toMatchSnapshot();
   expect(sparqLwsCid).toEqual(before);
+});
+
+test.each([
+  [],
+  ["WebSocketChannel2023", "StreamingHTTPChannel2023"],
+  ["WebSocketChannel2023", "WebSocketChannel2023"],
+  ["WebSocketChannel2023", { "@value": "bad" }],
+  { "@value": NOTIFY.WebSocketChannel2023 },
+  { "@id": "_:channel" },
+  "invalid",
+  null,
+  42,
+])("malformed CID channels block all notification fallbacks: %j", (channelType) => {
+  for (const key of [
+    "channelType",
+    NOTIFY.channelType,
+    "ssd:channelType",
+    "https://jeswr.org/ns/solid-sd#channelType",
+    "https://www.w3.org/ns/lws#channelType",
+  ]) {
+    const d = notification({ [key]: channelType });
+    expect(d.services[1]?.extra[NOTIFY.channelType]).toEqual([]);
+    expect(deriveFeatures(d).liveUpdates).toMatchObject({
+      state: "unavailable",
+      detail: { channels: [] },
+    });
+  }
+});
+
+test("a missing CID channel cannot fall back to the service's types", () => {
+  const d = notification({});
+  expect(d.services[1]?.extra[NOTIFY.channelType]).toEqual([]);
+  expect(deriveFeatures(d).liveUpdates).toMatchObject({
+    state: "unavailable",
+    detail: { channels: [] },
+  });
+});
+
+test.each([
+  { channelType: [], "ssd:channelType": NOTIFY.WebSocketChannel2023 },
+  { channelType: null, "ssd:channelType": NOTIFY.WebSocketChannel2023 },
+  {
+    [NOTIFY.channelType]: [NOTIFY.WebSocketChannel2023, "bad"],
+    channelType: "WebSocketChannel2023",
+  },
+  { [NOTIFY.channelType]: NOTIFY.StreamingHTTPChannel2023, channelType: "WebSocketChannel2023" },
+  {
+    "ssd:channelType": NOTIFY.WebSocketChannel2023,
+    "https://jeswr.org/ns/solid-sd#channelType": NOTIFY.StreamingHTTPChannel2023,
+  },
+])("malformed CID channel predicates cannot enable a fallback: %j", (extra) => {
+  const d = notification(extra);
+  expect(d.services[1]?.extra[NOTIFY.channelType]).toEqual([]);
+  expect(deriveFeatures(d).liveUpdates.state).toBe("unavailable");
+});
+
+test.each([
+  { channelType: "StreamingHTTPChannel2023" },
+  { channelType: ["StreamingHTTPChannel2023"] },
+  {
+    [NOTIFY.channelType]: NOTIFY.StreamingHTTPChannel2023,
+    "ssd:channelType": "WebSocketChannel2023",
+  },
+  { "ssd:channelType": "StreamingHTTPChannel2023" },
+])("one CID channel IRI enables only that channel: %j", (extra) => {
+  const d = notification(extra);
+  expect(d.services[1]?.extra[NOTIFY.channelType]).toBe(NOTIFY.StreamingHTTPChannel2023);
+  expect(deriveFeatures(d).liveUpdates).toMatchObject({
+    state: "available",
+    detail: { channels: ["sse"] },
+  });
+});
+
+test("an unknown CID channel IRI is retained without enabling service-type fallbacks", () => {
+  const d = notification({ channelType: "urn:example:future-channel", custom: "kept" });
+  expect(d.services[1]?.extra).toMatchObject({
+    channelType: "urn:example:future-channel",
+    [NOTIFY.channelType]: "urn:example:future-channel",
+    custom: "kept",
+  });
+  expect(deriveFeatures(d).liveUpdates.state).toBe("unavailable");
 });
 
 test.each([

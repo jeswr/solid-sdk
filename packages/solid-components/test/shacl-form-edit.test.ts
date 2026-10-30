@@ -1,4 +1,6 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // <jeswr-shacl-form> (the EDITABLE wrapper) tests. The load-bearing ones MIRROR the
 // read view's §9 SSRF tests — the edit form shares the EXACT hardening pipeline
@@ -14,8 +16,9 @@
 
 import "../src/index.js";
 import { Store } from "n3";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { JeswrShaclForm } from "../src/index.js";
+import { waitFor } from "./fixtures.js";
 
 const SHAPES = `
 @prefix sh: <http://www.w3.org/ns/shacl#> .
@@ -57,9 +60,21 @@ async function waitForForm(el: JeswrShaclForm): Promise<HTMLElement> {
   throw new Error(`inner <shacl-form> never rendered (status: ${el.textContent})`);
 }
 
-afterEach(() => {
+// shacl-form's 200 ms initialization debounce outlives Lit's updateComplete.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+});
+
+afterEach(async () => {
   document.body.innerHTML = "";
-  vi.restoreAllMocks();
+  try {
+    // Finish detached forms' initialization while jsdom still provides document.
+    await vi.runAllTimersAsync();
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  }
 });
 
 describe("<jeswr-shacl-form> registration + edit-mode mounting", () => {
@@ -102,6 +117,37 @@ describe("<jeswr-shacl-form> registration + edit-mode mounting", () => {
 });
 
 describe("<jeswr-shacl-form> §9 SSRF discipline (mirrors the read view)", () => {
+  it.each([
+    new Error("migration failed"),
+    "migration failed",
+  ])("fails closed when display migration throws (case %#)", async (error) => {
+    const el = await mount();
+    el.shapes = { kind: "inline", text: SHAPES };
+    el.values = { kind: "inline", text: DATA };
+    el.prepareValues = () => {
+      throw error;
+    };
+    await waitFor(el, (e) => !!e.querySelector('[part="error"]'));
+    expect(el.querySelector('[part="error"]')?.textContent).toContain("migration failed");
+    expect(el.querySelector("shacl-form")).toBeNull();
+  });
+
+  it("drops a display migration superseded by clearing the values source", async () => {
+    const el = await mount();
+    el.shapes = { kind: "inline", text: SHAPES };
+    el.values = { kind: "inline", text: DATA };
+    const prepare = vi.fn(() => {
+      el.values = undefined;
+    });
+    el.prepareValues = prepare;
+    await waitFor(
+      el,
+      (e) => prepare.mock.calls.length === 1 && !!e.querySelector('[part="empty"]'),
+    );
+    expect(el.querySelector("shacl-form")).toBeNull();
+    expect(el.querySelector('[part="error"]')).toBeNull();
+  });
+
   it("never calls the app fetch for INLINE sources", async () => {
     const appFetch = vi.fn(async () => new Response("", { status: 500 }));
     const el = await mount();
@@ -146,7 +192,7 @@ describe("<jeswr-shacl-form> §9 SSRF discipline (mirrors the read view)", () =>
       for (let i = 0; i < 60; i++) {
         await el.updateComplete;
         await Promise.resolve();
-        await new Promise((r) => setTimeout(r, 0));
+        await vi.runAllTimersAsync();
       }
       expect(globalSpy).not.toHaveBeenCalled();
       // Fail-closed: empty shapes never mount a form.
@@ -170,7 +216,7 @@ describe("<jeswr-shacl-form> §9 SSRF discipline (mirrors the read view)", () =>
       const form = await waitForForm(el);
       for (let i = 0; i < 60; i++) {
         await Promise.resolve();
-        await new Promise((r) => setTimeout(r, 0));
+        await vi.runAllTimersAsync();
       }
       expect(globalSpy).not.toHaveBeenCalled();
       const values = form.getAttribute("data-values") ?? "";
@@ -218,6 +264,7 @@ describe("<jeswr-shacl-form> §9 SSRF discipline (mirrors the read view)", () =>
 
   it("FAILS CLOSED on an empty shapes graph — never mounts <shacl-form>", async () => {
     const el = await mount();
+    el.prepareValues = vi.fn();
     el.shapes = { kind: "inline", text: "# only a comment\n" };
     el.values = { kind: "inline", text: DATA };
     for (let i = 0; i < 50; i++) {
@@ -227,6 +274,7 @@ describe("<jeswr-shacl-form> §9 SSRF discipline (mirrors the read view)", () =>
     }
     expect(el.querySelector("shacl-form")).toBeNull();
     expect(el.querySelector('[part="error"]')?.textContent ?? "").toMatch(/empty|shapes/i);
+    expect(el.prepareValues).not.toHaveBeenCalled();
   });
 });
 
