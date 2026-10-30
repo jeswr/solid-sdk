@@ -33,7 +33,8 @@ const paragraphPaths = new Map(
 export const DOCX_STYLE_MAP = [
   // Suite exports one paragraph per code block; fresh keeps adjacent blocks separate.
   "p.Code => pre:fresh",
-  "r[style-name='Task Marker'] => !",
+  // The task parser consumes the marker, preserving any label text in the same run.
+  "r[style-name='Task Marker'] =>",
   "r[style-name='Inline Code'] => code",
   "u => u",
   "highlight => mark",
@@ -50,11 +51,36 @@ export interface DocxImportOptions {
 
 interface DocxElement {
   type: string;
+  value?: string;
   children?: DocxElement[];
   styleId?: string | null;
   styleName?: string | null;
   numbering?: { level: string; isOrdered: boolean } | null;
   indent?: { start: string | null };
+}
+
+/** Visible task edits override stale paragraph styles, regardless of Word's run boundaries. */
+function taskChecked(paragraph: DocxElement, styleName: string | undefined) {
+  if (styleName !== "task checked" && styleName !== "task unchecked") return undefined;
+  const texts: { value: string }[] = [];
+  function visit(element: DocxElement) {
+    if (element.type === "text") texts.push(element as { value: string });
+    else for (const child of element.children ?? []) visit(child);
+  }
+  visit(paragraph);
+  const marker = texts
+    .map((text) => text.value)
+    .join("")
+    .match(/^[☐☑] ?/);
+  if (!marker) return styleName === "task checked";
+  // Remove just the leading marker and one separator, never literal checkboxes in the label.
+  let remaining = marker[0].length;
+  for (const text of texts) {
+    const value = text.value;
+    text.value = value.slice(remaining);
+    remaining -= Math.min(remaining, value.length);
+  }
+  return marker[0].startsWith("☑");
 }
 
 /** Build paths using the actual ancestors, including task-list/item attributes. */
@@ -75,11 +101,13 @@ function mapLists(
         else if (metadata.numbering) child.numbering = metadata.numbering;
       }
       const styleName = child.styleName?.toLowerCase();
+      const checked = child.type === "paragraph" ? taskChecked(child, styleName) : undefined;
+      const task = checked !== undefined;
       const indentLevel = Math.round(Number(child.indent?.start) / 720 - 1);
       const continuation =
         child.type === "paragraph" &&
         !child.numbering &&
-        !["task checked", "task unchecked"].includes(styleName ?? "") &&
+        !task &&
         indentLevel >= 0 &&
         ancestors.length > 0;
       const mappedStyle = (ancestors: string[]) => {
@@ -98,7 +126,6 @@ function mapLists(
         mappedStyle(ancestors.map((ancestor) => ancestor.path));
         continue;
       }
-      const task = styleName === "task checked" || styleName === "task unchecked";
       if (child.type === "paragraph" && (task || child.numbering)) {
         // Suite task markers use half-inch indentation instead of Word numbering.
         const level = Math.min(
@@ -123,9 +150,7 @@ function mapLists(
               : child.numbering?.isOrdered
                 ? `ol[start='${metadata?.start ?? 1}']`
                 : "ul";
-        const item = task
-          ? `li[data-type='taskItem'][data-checked='${styleName === "task checked"}']`
-          : "li";
+        const item = task ? `li[data-type='taskItem'][data-checked='${checked}']` : "li";
         const fresh = ancestors[depth]?.key === key ? "" : ":fresh";
         mappedStyle([
           ...ancestors.slice(0, depth).map((ancestor) => ancestor.path),
