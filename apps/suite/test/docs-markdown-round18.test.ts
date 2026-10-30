@@ -428,7 +428,7 @@ it("round trips generated documents with every schema node and mark including ne
                           attrs: {
                             href: "https://example.org/?x=1&y=2",
                             target: checked ? "_self" : null,
-                            rel: null,
+                            rel: "noopener noreferrer",
                             class: "docs",
                             title: "",
                           },

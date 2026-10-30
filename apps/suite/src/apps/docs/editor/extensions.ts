@@ -16,7 +16,33 @@ import { normaliseDestination, normaliseImageDestination } from "../lib/editor/d
 import { validLink } from "../lib/editor/logic";
 import { normaliseTableSpan } from "../lib/editor/table-spans";
 import { FindDecorations } from "./find-plugin";
+import { protectiveLinkRel } from "./link-rel";
 import { privateImage } from "./private-image";
+
+const SafeStarterKit = StarterKit.extend({
+  addExtensions() {
+    return (this.parent?.() ?? []).map((extension) =>
+      extension.name === "link"
+        ? extension.extend({
+            addAttributes(this: { parent: (() => Record<string, Attribute>) | undefined }) {
+              const attrs = this.parent?.() ?? {};
+              return {
+                ...attrs,
+                rel: {
+                  ...attrs.rel,
+                  parseHTML: (element: HTMLElement) =>
+                    protectiveLinkRel(element.getAttribute("rel")),
+                  renderHTML: (attrs: Record<string, unknown>) => ({
+                    rel: protectiveLinkRel(attrs.rel),
+                  }),
+                },
+              };
+            },
+          })
+        : extension,
+    );
+  },
+});
 
 const PasteDestinations = Extension.create({
   name: "docsPasteDestinations",
@@ -96,7 +122,7 @@ const boundedTableSpans = {
 
 export function baseExtensions(fetchImpl: typeof fetch) {
   return [
-    StarterKit.configure({
+    SafeStarterKit.configure({
       code: false,
       paragraph: false,
       undoRedo: false,

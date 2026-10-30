@@ -13,6 +13,7 @@ import {
 } from "@tiptap/react";
 import sanitizeHtml from "sanitize-html";
 import { baseExtensions } from "../../editor/extensions";
+import { protectiveLinkRel } from "../../editor/link-rel";
 import { normaliseDestination, normaliseImageDestination } from "../editor/destination";
 import { normaliseHtmlLists } from "../editor/html-lists";
 import { normaliseHtmlTableSpans } from "../editor/table-spans";
@@ -468,14 +469,40 @@ function containerBoundaries(source: string): string {
     .join("\n");
 }
 
-// Lazy container lines continue prose but cannot underline it. Preserve that
+// Lazy container lines continue prose but cannot introduce blocks. Preserve that
 // distinction when list and quote source is passed through the block lexer again.
 function lazyParagraphLine(line: string): string {
   // An escape survives every subsequent container dedent; extra indentation
   // does not. Inline parsing removes it only after block structure is final.
   // Escape the whole run: a remaining == can still pair with a later lazy
   // underline as an inline highlight delimiter across intervening prose.
-  return /^[ \t]*(?:=+|-+)[ \t]*$/.test(line) ? line.replace(/[=-]/g, (char) => `\\${char}`) : line;
+  if (/^[ \t]*(?:=+|-+)[ \t]*$/.test(line)) return line.replace(/[=-]/g, (char) => `\\${char}`);
+  if (indentation(line, containerColumn) < 4) return line;
+  if (/^[ \t]*(?:(?:\*[ \t]*){3,}|(?:_[ \t]*){3,}|(?:-[ \t]*){3,})$/.test(line))
+    return line.replace(/[*_-]/g, (char) => `\\${char}`);
+  // Four columns cannot interrupt an open paragraph. Later container dedents
+  // must not turn their literal block markers into headings, lists or fences.
+  return line.replace(
+    /^([ \t]*)(?=(?:#{1,6}(?:[ \t]|$)|>|`{3,}[^`]*$|~{3,}|[*+-](?:[ \t]|$)|\d{1,9}[.)](?:[ \t]|$)))(?:([#>`~*+-])|(\d{1,9})([.)]))/,
+    (_match, leading: string, marker: string | undefined, digits: string, delimiter: string) =>
+      marker ? `${leading}\\${marker}` : `${leading}${digits}\\${delimiter}`,
+  );
+}
+
+/** Use the same source reconstruction for quote boundaries and final parsing. */
+function blockquoteSource(raw: string): { text: string; indent: number } {
+  const marker = (/^[ \t]*>[ \t]?/.exec(raw) as RegExpExecArray)[0];
+  const indent = indentation(marker, containerColumn) + 1 + (marker.endsWith(">") ? 0 : 1);
+  const text = raw
+    .split("\n")
+    .map(lazyParagraphLine)
+    .join("\n")
+    .replace(/(?<=^|\n)[ \t]*>[ \t]?/g, (prefix) => {
+      const leading = indentation(prefix, containerColumn);
+      // Four-column lazy markers were escaped before prefix removal.
+      return stripIndent(prefix.slice(prefix.indexOf(">") + 1), 1, containerColumn + leading + 1);
+    });
+  return { text, indent };
 }
 
 function listItemSource(raw: string): { text: string; indent: number } {
@@ -522,10 +549,11 @@ function openParagraph(tokens: MarkdownToken[]): boolean {
   }
   if (last.type === "list") {
     const item = (last.items as MarkdownToken[]).at(-1) as MarkdownToken;
-    return openParagraph(
-      item.task
-        ? containerTokenizer().lexer.blockTokens(item.text as string)
-        : (item.tokens as MarkdownToken[]),
+    const { text, indent } = listItemSource(item.raw as string);
+    return atColumn(containerColumn + indent, () =>
+      openParagraph(
+        containerTokenizer().lexer.blockTokens(item.task ? text.replace(taskMarker, "") : text),
+      ),
     );
   }
   return false;
@@ -563,7 +591,6 @@ function containerTokenizer() {
       listReplaceTask: taskMarker,
     },
   };
-  const blockquote = tokenizer.blockquote;
   tokenizer.blockquote = function (source) {
     const match = this.rules.block.blockquote.exec(source);
     if (!match) return;
@@ -576,17 +603,24 @@ function containerTokenizer() {
       if (index === 0 || /^ {0,3}>/.test(line)) return false;
       if (this.rules.block.list.test(line)) return true;
       if (!/^ {0,3}>/.test(lines[index - 1] as string)) return false;
-      // Keep reference definitions visible even after a previous probe.
-      this.lexer.tokens.links = {};
-      const prefix = blockquote.call(this, lines.slice(0, index).join("\n")) as NonNullable<
-        ReturnType<typeof blockquote>
-      >;
-      return /^ {0,3}>[ \t]*$/.test(lines[index - 1] as string) || !openParagraph(prefix.tokens);
+      const { text, indent } = blockquoteSource(lines.slice(0, index).join("\n"));
+      return (
+        /^ {0,3}>[ \t]*$/.test(lines[index - 1] as string) ||
+        !openParagraph(
+          atColumn(containerColumn + indent, () => containerTokenizer().lexer.blockTokens(text)),
+        )
+      );
     });
     const raw = (interruption < 0 ? lines : lines.slice(0, interruption)).join("\n");
-    const token = blockquote.call(this, raw) as NonNullable<ReturnType<typeof blockquote>>;
-    token.raw = raw;
-    return token;
+    const { text, indent } = blockquoteSource(raw);
+    return {
+      type: "blockquote",
+      raw,
+      text,
+      tokens: atColumn(containerColumn + indent, () =>
+        containerTokenizer().lexer.blockTokens(text),
+      ),
+    };
   };
   const list = tokenizer.list;
   tokenizer.list = function (source) {
@@ -994,9 +1028,51 @@ const markdown = new MarkdownManager({
   ],
   markedOptions: { gfm: true },
 });
+
+/** Unicode caseless comparison without normalization or decoding label syntax. */
+function referenceLabel(value: string): string {
+  // Lower/upper/lower expands full mappings (including sharp S and ligatures)
+  // and unifies final sigma. Dotless i must retain its separate equivalence
+  // class. Cherokee folds to lowercase here; both cases still share one key.
+  return value
+    .replace(/[^ı]+/gu, (part) => part.toLowerCase().toUpperCase().toLowerCase())
+    .replace(/\s+/g, " ");
+}
+
+/** Reference labels cannot close emphasis/strike delimiters outside the link. */
+function referenceMask(
+  source: string,
+  tokenizer: InstanceType<typeof markdown.instance.Tokenizer>,
+): string {
+  return source.replace(tokenizer.rules.inline.reflinkSearch, (raw) => {
+    const match = (tokenizer.rules.inline.reflink.exec(raw) ||
+      tokenizer.rules.inline.nolink.exec(raw)) as RegExpExecArray;
+    return tokenizer.lexer.tokens.links[referenceLabel((match[2] || match[1]) as string)]
+      ? `[${"a".repeat(raw.length - 2)}]`
+      : raw;
+  });
+}
 markdown.instance.use({
   tokenizer: {
     lheading: setextHeading,
+    emStrong(source, masked, previous) {
+      if (!this.rules.inline.emStrongLDelim.test(source)) return;
+      return markdown.instance.Tokenizer.prototype.emStrong.call(
+        this,
+        source,
+        referenceMask(masked, this),
+        previous,
+      );
+    },
+    del(source, masked, previous) {
+      if (!this.rules.inline.delLDelim.test(source)) return;
+      return markdown.instance.Tokenizer.prototype.del.call(
+        this,
+        source,
+        referenceMask(masked, this),
+        previous,
+      );
+    },
     link(source) {
       // Keep marked's boundary recognition, but suppress its early attribute
       // unescaping and extra label-bracket unescaping. Inline label parsing uses
@@ -1019,6 +1095,7 @@ markdown.instance.use({
       };
       const token = markdown.instance.Tokenizer.prototype.def.call({ ...this, rules }, source);
       if (!token) return;
+      token.tag = referenceLabel(token.tag);
       token.href = decodeMarkdownString(token.href);
       token.title = token.title ? decodeMarkdownString(token.title) : token.title;
       return token;
@@ -1029,7 +1106,11 @@ markdown.instance.use({
         other: { ...this.rules.other, outputLinkReplace: /(?!)/g },
       };
       // Definitions already contain decoded attributes. Do not decode them again.
-      return markdown.instance.Tokenizer.prototype.reflink.call({ ...this, rules }, source, links);
+      return markdown.instance.Tokenizer.prototype.reflink.call(
+        { ...this, rules },
+        source,
+        new Proxy(links, { get: (definitions, key: string) => definitions[referenceLabel(key)] }),
+      );
     },
     autolink(source) {
       const token = markdown.instance.Tokenizer.prototype.autolink.call(this, source);
@@ -1066,21 +1147,7 @@ markdown.instance.use({
       // can be reversed by line without attributing synthetic lines to it.
       const count = token.raw.split("\n").length;
       token.raw = source.split("\n").slice(0, count).join("\n");
-      const marker = (/^[ \t]*>[ \t]?/.exec(token.raw) as RegExpExecArray)[0];
-      const indent = indentation(marker, containerColumn) + 1 + (marker.endsWith(">") ? 0 : 1);
-      const text = token.raw
-        .split("\n")
-        .map(lazyParagraphLine)
-        .join("\n")
-        .replace(/(?<=^|\n)[ \t]*>[ \t]?/g, (prefix) => {
-          const leading = indentation(prefix, containerColumn);
-          if (leading > 3) return prefix;
-          return stripIndent(
-            prefix.slice(prefix.indexOf(">") + 1),
-            1,
-            containerColumn + leading + 1,
-          );
-        });
+      const { text, indent } = blockquoteSource(token.raw);
       const top = this.lexer.state.top;
       this.lexer.state.top = true;
       token.tokens = atColumn(containerColumn + indent, () => this.lexer.blockTokens(text));
@@ -1160,14 +1227,20 @@ function clean(
 ): JSONContent {
   const result = { ...node };
   if (result.marks)
-    result.marks = result.marks.filter((mark) => {
-      const keep =
-        mark.type !== "comment" &&
-        !(dropHighlights && mark.type === "highlight") &&
-        (mark.type !== "link" || safeDestination(String(mark.attrs?.href)));
-      if (!keep) reportSkipped(skipped, "Unsupported marks");
-      return keep;
-    });
+    result.marks = result.marks
+      .filter((mark) => {
+        const keep =
+          mark.type !== "comment" &&
+          !(dropHighlights && mark.type === "highlight") &&
+          (mark.type !== "link" || safeDestination(String(mark.attrs?.href)));
+        if (!keep) reportSkipped(skipped, "Unsupported marks");
+        return keep;
+      })
+      .map((mark) =>
+        mark.type === "link"
+          ? { ...mark, attrs: { ...mark.attrs, rel: protectiveLinkRel(mark.attrs?.rel) } }
+          : mark,
+      );
   if (result.type === "image") {
     const src = normaliseImageDestination(String(result.attrs?.src));
     if (!src) {

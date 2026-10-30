@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex
 import { normaliseDestination } from "../lib/editor/destination";
+import { protectiveLinkRel } from "./link-rel";
 
 /** Block images carry their own link; block containers continue to reject marks. */
 export function normaliseImageLink(value: unknown): Record<string, string | null> | null {
@@ -8,10 +9,9 @@ export function normaliseImageLink(value: unknown): Record<string, string | null
   const href = typeof attrs.href === "string" ? normaliseDestination(attrs.href) : null;
   if (!href) return null;
   const defaults = { title: null, target: "_blank", class: null };
-  const rel = typeof attrs.rel === "string" ? attrs.rel.split(/\s+/).filter(Boolean) : [];
   return {
     href,
-    rel: [...new Set(["noopener", "noreferrer", ...rel])].join(" "),
+    rel: protectiveLinkRel(attrs.rel),
     ...Object.fromEntries(
       Object.entries(defaults).map(([key, fallback]) => [
         key,

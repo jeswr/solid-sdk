@@ -4,6 +4,7 @@ import { Mark } from "@tiptap/pm/model";
 import { generateJSON, getSchema, type JSONContent } from "@tiptap/react";
 import { baseExtensions } from "../../editor/extensions";
 import { normaliseImageLink } from "../../editor/image-link";
+import { protectiveLinkRel } from "../../editor/link-rel";
 import { normaliseDestination, normaliseImageDestination } from "../editor/destination";
 import { normaliseHtmlLists } from "../editor/html-lists";
 import { normaliseHtmlTableSpans, normaliseTableSpan } from "../editor/table-spans";
@@ -19,7 +20,10 @@ export function normaliseDestinations(node: JSONContent, skipped: SkippedItem[])
     result.marks = node.marks.flatMap((mark) => {
       if (mark.type !== "link") return [mark];
       const href = normaliseDestination(String(mark.attrs?.href ?? ""));
-      if (href) return [{ ...mark, attrs: { ...mark.attrs, href } }];
+      if (href)
+        return [
+          { ...mark, attrs: { ...mark.attrs, href, rel: protectiveLinkRel(mark.attrs?.rel) } },
+        ];
       reportSkipped(skipped, "Unsafe URLs");
       return [];
     });
