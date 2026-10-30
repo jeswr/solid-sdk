@@ -2198,8 +2198,8 @@ importers:
   packages/agentic-legacy-bridge:
     dependencies:
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
@@ -2767,8 +2767,8 @@ importers:
         specifier: workspace:*
         version: link:../agentic-legacy-bridge
       '@jeswr/fetch-rdf':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: workspace:*
+        version: link:../fetch-rdf
       '@jeswr/guarded-fetch':
         specifier: workspace:*
         version: link:../guarded-fetch
@@ -6851,10 +6851,6 @@ packages:
     resolution: {tarball: https://codeload.github.com/jeswr/federation-registry/tar.gz/601e8a4b4981b2876adb760b3d92179e9326de54}
     version: 0.1.0
     engines: {node: '>=24'}
-
-  '@jeswr/fetch-rdf@0.1.0':
-    resolution: {integrity: sha512-bdugw+QynGEUTUYERuVDY0sMfEiCehx54ahvXVUY/KThq1r6w+uHH0kbhg8s36gvdW3xNDaqAbbnGbRDR9qgkw==}
-    engines: {node: '>=20'}
 
   '@jeswr/guarded-fetch@https://codeload.github.com/jeswr/guarded-fetch/tar.gz/bd4490927fd36d62f6b78a0021e8d40bbb572c3b':
     resolution: {tarball: https://codeload.github.com/jeswr/guarded-fetch/tar.gz/bd4490927fd36d62f6b78a0021e8d40bbb572c3b}
@@ -19109,13 +19105,6 @@ snapshots:
     dependencies:
       '@rdfjs/types': 2.0.1
       '@rdfjs/wrapper': 0.34.0
-      content-type: 1.0.5
-      jsonld-streaming-parser: 5.0.1
-      n3: 2.1.1
-
-  '@jeswr/fetch-rdf@0.1.0':
-    dependencies:
-      '@rdfjs/dataset': 2.0.3
       content-type: 1.0.5
       jsonld-streaming-parser: 5.0.1
       n3: 2.1.1
