@@ -128,8 +128,36 @@ const AccessibleTaskItem = TaskItem.extend({
     if (!create) return null;
     return (props) => {
       const view = create(props);
+      const checkbox = (view.dom as HTMLElement).querySelector<HTMLInputElement>(
+        ':scope > label > input[type="checkbox"]',
+      );
+      const change = (event: Event) => {
+        if (
+          !checkbox ||
+          checkbox.ownerDocument.activeElement !== checkbox ||
+          !props.editor.isEditable
+        )
+          return;
+        // The inherited change handler calls focus(), asynchronously moving
+        // keyboard users back to the stale text caret. Update the live task
+        // without scheduling editor focus when the checkbox owns focus.
+        event.stopImmediatePropagation();
+        props.editor.commands.command(({ tr }) => {
+          const position = props.getPos();
+          if (typeof position !== "number") return false;
+          const node = tr.doc.nodeAt(position);
+          if (node?.type !== props.node.type) return false;
+          tr.setNodeMarkup(position, undefined, { ...node.attrs, checked: checkbox.checked });
+          return true;
+        });
+      };
+      checkbox?.addEventListener("change", change, true);
       return {
         ...view,
+        destroy: () => {
+          checkbox?.removeEventListener("change", change, true);
+          view.destroy?.();
+        },
         // Controls own their keyboard events. Let native checkbox navigation and
         // activation run without editing the stale ProseMirror text selection.
         stopEvent: (event) =>

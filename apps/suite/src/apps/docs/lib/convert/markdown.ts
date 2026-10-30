@@ -202,10 +202,12 @@ function serializeInline(nodes: JSONContent[], table: boolean, htmlContext = fal
       position += value.length;
       if ("text" in branch) return false;
       // List lexers expand tabs inside code spans; Unicode line separators also
-      // disrupt heading/table lexers. Keep significant whitespace in HTML.
+      // disrupt heading/table lexers. GFM also splits/unescapes pipes before
+      // parsing code spans, so HTML protects both pipes and preceding backslashes.
       if (
         htmlOnlyMark(branch.mark) ||
-        (branch.mark.type === "code" && /[^\S ]|\p{Cf}/u.test(value))
+        (branch.mark.type === "code" &&
+          (/[^\S ]|\p{Cf}/u.test(value) || (table && value.includes("|"))))
       )
         return true;
       if (branch.children.some((child) => "mark" in child)) return true;
@@ -1140,6 +1142,13 @@ markdown.instance.use({
       return token;
     },
     def(source) {
+      // Footnotes are outside the schema. Preserve their markers and complete
+      // bodies as prose instead of consuming a link definition and losing text.
+      // This runs in every block container, after literal code has been handled.
+      if (/^ {0,3}\[\^(?:\\[^\n]|[^\]\\\n])+\]:/.test(source)) {
+        reportSkipped(mappingSkipped, "Footnotes preserved as text");
+        return;
+      }
       const rules = {
         ...this.rules,
         inline: { ...this.rules.inline, anyPunctuation: /(?!)/g },

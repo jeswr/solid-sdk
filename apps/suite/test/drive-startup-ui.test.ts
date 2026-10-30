@@ -41,13 +41,17 @@ it("cold-starts My Drive through the real session and durable pod, then opens Wo
   // heading checkpoint; Chromium's failed script downloads are outside Vitest.
   const view = await mount(h(DriveApp, null, h(FolderView)));
   try {
-    await vi.waitFor(async () => {
-      await act(async () => {});
-      expect(view.host.querySelector("h1")?.textContent).toBe("My Drive");
-      expect(
-        [...view.host.querySelectorAll("tbody .drv-name")].map((row) => row.textContent),
-      ).toEqual(["Archive", "Photos", "Work", "data.ttl", "notes.md"]);
-    });
+    await vi.waitFor(
+      async () => {
+        await act(async () => {});
+        expect(view.host.querySelector("h1")?.textContent).toBe("My Drive");
+        expect(
+          [...view.host.querySelectorAll("tbody .drv-name")].map((row) => row.textContent),
+        ).toEqual(["Archive", "Photos", "Work", "data.ttl", "notes.md"]);
+      },
+      // Coverage and concurrent UI imports can exceed the default one-second poll budget.
+      { timeout: 5_000 },
+    );
     expect(view.host.textContent).not.toContain("Opening your Drive…");
     expect(view.host.textContent).not.toContain("Can't open your Drive");
     const work = view.host.querySelector(`tr[data-url="${DEMO_ROOT}drive/Work/"]`);

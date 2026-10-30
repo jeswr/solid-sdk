@@ -98,6 +98,16 @@ async function activate(element: HTMLElement) {
   await focus(element);
   await click(element);
 }
+async function waitForRemoval(element: HTMLElement, expectedFocus: Element) {
+  await vi.waitFor(
+    async () => {
+      await act(async () => {});
+      expect(element.isConnected).toBe(false);
+      expect(document.activeElement).toBe(expectedFocus);
+    },
+    { timeout: 10_000 },
+  );
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -189,14 +199,7 @@ it.each([
     }
     while (listings.size) await Promise.all([...listings]);
   });
-  await vi.waitFor(
-    async () => {
-      await act(async () => {});
-      expect(removed.isConnected).toBe(false);
-    },
-    { timeout: 10_000 },
-  );
-  expect(document.activeElement).toBe(search);
+  await waitForRemoval(removed, search);
 });
 
 it.each([
@@ -317,6 +320,5 @@ it.each([
     pending.resolve();
     await mutation.mock.results[0]?.value;
   });
-  expect(removed.isConnected).toBe(false);
-  expect(document.activeElement).toBe(next);
+  await waitForRemoval(removed, next);
 });

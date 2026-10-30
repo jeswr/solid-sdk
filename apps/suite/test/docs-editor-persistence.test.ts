@@ -9,6 +9,9 @@ import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement, XmlText } from "yjs"
 import { rowExportJson } from "../src/apps/docs/editor/export-document";
 import { deleteDocument } from "../src/apps/docs/editor/operations";
 import { DocumentPersistence } from "../src/apps/docs/editor/persistence";
+import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
+import { listTrash, restoreItems } from "../src/apps/drive/lib/operations/operations";
+import { trashIndexFrom } from "../src/apps/drive/lib/operations/trash-index";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_NAME, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 import type { PodSession } from "../src/lib/session/pod-session";
@@ -111,6 +114,67 @@ async function fixture() {
   };
 }
 const runtimes: DocumentPersistence[] = [];
+it.each([
+  "snapshot",
+  "companion",
+])("round43 unrenamed restore retries its persisted destination after %s deletion is denied", async (denied) => {
+  vi.stubGlobal("Blob", NodeBlob);
+  const { runtime, session, pod } = await fixture();
+  runtimes.push(runtime);
+  await runtime.open();
+  const paragraph = new XmlElement("paragraph");
+  const text = new XmlText();
+  text.insert(0, "Confidential plan");
+  paragraph.insert(0, [text]);
+  runtime.doc.getXmlFragment("prosemirror").insert(0, [paragraph]);
+  runtime.rename("Plan");
+  runtime.change("<p>Confidential plan</p>", json("Confidential plan"));
+  await runtime.flush();
+  const url = runtime.stored?.url as string;
+  expect(url).toBe(`${DEMO_ROOT}docs/plan.ttl`);
+  const log = runtime.stored?.data.updateLog;
+  runtime.online = false;
+  await runtime.destroy();
+  const trashed = await deleteDocument(url, session);
+  expect(trashed.failed).toEqual([]);
+  const client = createSolidDriveClient({ storageUrl: DEMO_ROOT, fetch: pod.fetch });
+  const snapshot = trashed.done.find((entry) => entry.original === url);
+  if (!snapshot) throw new Error("Missing snapshot");
+  const blocked = trashed.done.find(
+    (entry) => entry.original.endsWith("/") === (denied === "companion"),
+  );
+  if (!blocked) throw new Error("Missing denied entry");
+  const interrupted = createSolidDriveClient({
+    storageUrl: DEMO_ROOT,
+    fetch: async (input, init) =>
+      String(input) === blocked.url && init?.method === "DELETE"
+        ? new Response(null, { status: 403 })
+        : pod.fetch(input, init),
+  });
+  const first = await restoreItems(interrupted, `${DEMO_ROOT}drive/`, [snapshot]);
+  expect(first.failed).toHaveLength(1);
+  expect(first.failed[0]?.url).toBe(blocked.url);
+  const current = await client.readRdf(`${DEMO_ROOT}drive/.trash/index.ttl`);
+  if (!current) throw new Error("Missing trash index");
+  const remaining = await listTrash(client, `${DEMO_ROOT}drive/`);
+  for (const entry of remaining)
+    expect(trashIndexFrom(current.dataset).record(entry.url).restoredLocation).toBe(entry.original);
+  const retry = await restoreItems(client, `${DEMO_ROOT}drive/`, remaining);
+  expect(retry.failed).toEqual([]);
+  expect(retry.done.map((item) => item.url)).toEqual(remaining.map((entry) => entry.original));
+  const reopened = new DocumentPersistence(session);
+  runtimes.push(reopened);
+  await reopened.open(url);
+  expect(reopened.state).toBe("saved");
+  expect(reopened.stored?.data.updateLog).toBe(log);
+  expect(reopened.doc.getXmlFragment("prosemirror").toString()).toBe(
+    "<paragraph>Confidential plan</paragraph>",
+  );
+  expect(await listTrash(client, `${DEMO_ROOT}drive/`)).toEqual([]);
+  expect(pod.snapshot().resources.some(([resource]) => resource.includes("(restored)"))).toBe(
+    false,
+  );
+});
 it("isolates a newly created document from the previous occupant's shared mirror", async () => {
   vi.stubGlobal("Blob", NodeBlob);
   const { runtime, session } = await fixture();

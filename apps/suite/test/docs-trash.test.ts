@@ -50,6 +50,25 @@ async function fixture(companion = true) {
 }
 
 describe("Docs uses Drive trash records", () => {
+  it("round43 retains a lone rewritten snapshot if its destination cannot be recorded", async () => {
+    const { pod, session, client } = await fixture(false);
+    const trashed = await deleteDocument(DOC, session);
+    await pod.fetch(DOC, { method: "PUT", body: "Occupant" });
+    const interrupted = createSolidDriveClient({
+      storageUrl: ROOT,
+      fetch: async (input, init) =>
+        String(input) === `${DRIVE}.trash/index.ttl` && init?.method === "PUT"
+          ? new Response(null, { status: 503 })
+          : pod.fetch(input, init),
+    });
+    const result = await restoreItems(interrupted, DRIVE, trashed.done);
+    expect(result.done).toEqual([]);
+    expect(result.failed).toHaveLength(1);
+    expect((await pod.fetch(trashed.done[0]?.url as string)).ok).toBe(true);
+    expect((await pod.fetch(`${ROOT}docs/plan%20(restored).ttl`)).status).toBe(404);
+    expect(await listTrash(client, DRIVE)).toEqual(trashed.done);
+  });
+
   it("relocates revision links and preserves an undated snapshot's complete body", async () => {
     const { pod, session, client } = await fixture(false);
     const dataset = buildDocument(DOC, {
@@ -591,8 +610,9 @@ it("bounds Docs trash and Undo requests by compacting the typed Yjs log without 
   const [raw, compacted] = results as [(typeof results)[number], (typeof results)[number]];
   expect(compacted.trash.requests).toBeLessThan(raw.trash.requests / 10);
   expect(compacted.undo.requests).toBeLessThan(raw.undo.requests / 10);
+  // Undo also persists the entire batch's destinations before moving either half.
   expect(results.map(({ trash, undo }) => [trash.mutations, undo.mutations])).toEqual([
-    [132, 133],
-    [73, 11],
+    [132, 134],
+    [73, 12],
   ]);
 });

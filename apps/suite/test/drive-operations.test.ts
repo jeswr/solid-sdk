@@ -446,6 +446,51 @@ describe("app-managed trash against the demo pod", () => {
   });
 
   it.each([
+    ["file", false],
+    ["folder", false],
+    ["file", true],
+    ["folder", true],
+  ] as const)("round43 restores an ordinary %s in place after trash deletion is denied (collision %s)", async (kind, collision) => {
+    const { pod, client } = await setup();
+    const source = kind === "file" ? NOTES : `${DRIVE}retry/`;
+    if (kind === "folder")
+      await pod.fetch(`${source}child.txt`, { method: "PUT", body: "Payload" });
+    const payload = kind === "file" ? source : `${source}child.txt`;
+    const before = await (await pod.fetch(payload)).text();
+    const entry = await trashOne(client, source);
+    if (collision)
+      await pod.fetch(kind === "file" ? source : `${source}unrelated`, {
+        method: "PUT",
+        body: "Occupant",
+      });
+    const target = collision
+      ? childUrl(
+          DRIVE,
+          kind === "file" ? "notes (restored).md" : "retry (restored)",
+          kind === "folder",
+        )
+      : source;
+    const interrupted = createSolidDriveClient({
+      storageUrl: DEMO_ROOT,
+      fetch: async (input, init) =>
+        String(input) === entry.url && init?.method === "DELETE"
+          ? new Response(null, { status: 403 })
+          : pod.fetch(input, init),
+    });
+    expect((await restoreItems(interrupted, DRIVE, [entry])).failed).toHaveLength(1);
+    const retry = await restoreItems(client, DRIVE, await listTrash(client, DRIVE));
+    expect(retry).toEqual({ done: [{ entry, url: target, renamed: collision }], failed: [] });
+    expect(await (await pod.fetch(kind === "file" ? target : `${target}child.txt`)).text()).toBe(
+      before,
+    );
+    if (collision)
+      expect(await (await pod.fetch(kind === "file" ? source : `${source}unrelated`)).text()).toBe(
+        "Occupant",
+      );
+    expect(await listTrash(client, DRIVE)).toEqual([]);
+  });
+
+  it.each([
     "notes.md",
     "README",
     "Archive",

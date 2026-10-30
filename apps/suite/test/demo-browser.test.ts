@@ -370,7 +370,8 @@ it.each([
     undoDeletionIntents: deletionIntents(),
   });
   expect(trashCommits).toBeLessThanOrEqual(16);
-  expect(podCommits()).toBeLessThanOrEqual(11);
+  // Undo journals the whole batch's destinations in one additional index commit.
+  expect(podCommits()).toBeLessThanOrEqual(12);
   // Each request records both endpoints together; Undo also removes two slots.
   expect(trashDeletionIntents).toBe(4);
   expect(deletionIntents()).toBe(6);
