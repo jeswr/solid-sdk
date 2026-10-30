@@ -274,3 +274,61 @@ GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=protocol.allow GIT_CONFIG_VALUE_0=never npm_
 ### Remaining work and conservative choices
 
 Both requested fixes and their regression tests are complete. Recovery requires a persisted owner token and valid reserved-resource validators; incomplete legacy markers and malformed records fail closed rather than guessing ownership. The resource list may authorize deletion only of the tracker's recorded stateStore. External verification limitations are the unrelated full-workspace gate failure and unavailable roborev above. No open questions, UI changes, pushes, PRs, branch switches, or remote fetches apply to this round.
+
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+## Codex fix round 3 — review of `a4e44137d406`
+
+Branch: `lane/sst-ef15`. Verification base: `a4e44137d406f81df41f5322bc90daec042bdead`.
+Only the two supplied review findings and their regressions are addressed.
+
+### Changes by commit
+
+- `ff6216f5` — `fix: verify Tasks privacy before project initialization`: require injected `ensurePrivateTasksAccess(root, owner)` before creating project resources, retrying compensation, or adopting an Inbox. Only an empty Tasks root may be created before this check. Missing verifiers, a result other than `true`, and unreadable policy stop initialization before project data is written, including with `typeIndex: false`. The verifier's contract covers effective inherited ACL/ACP policy, existing overrides, and private inheritance for new resources. Tests cover absent, denied and unreadable protection and hold the verifier pending to assert write ordering. The optional CSS transport fixture explicitly stubs this seam; it does not claim to verify privacy.
+- `a6982d50` — `fix: follow Preferences for private Type Indexes`: follow `pim:preferencesFile` for discovery and registration, prefer its private index, and retain legacy profile/public discovery. Reuse legacy profile indexes when Preferences has no private pointer. Bootstrap missing private pointers in Preferences, conditionally create/link missing Preferences, and protect Preferences before persisting a private pointer. Preserve foreign data and reconcile bounded conditional-write races, including a concurrent private-index pointer. This follows the [Type Index bootstrap contract](https://solid.github.io/type-indexes/#supplying-missing-type-index-documents).
+- Final documentation commit — `docs: record Tasks privacy and discovery verification`: this report, committed last.
+
+### Completed verification
+
+Use the installed Node 24 runtime; the default Node 22 shell does not satisfy the repository's engine requirement. No dependency or lockfile changes were needed.
+
+```sh
+export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"
+pnpm --filter @jeswr/app-suite^... run build
+pnpm --filter @jeswr/app-suite run lint
+pnpm --filter @jeswr/app-suite run build
+pnpm --filter @jeswr/app-suite run typecheck
+pnpm --filter @jeswr/app-suite run test
+pnpm run lint:root
+pnpm --filter @jeswr/app-suite exec vitest run test/tasks/model.test.ts test/tasks/store.test.ts test/tasks/recurrence.test.ts --coverage.include='src/apps/tasks/lib/model/**/*.ts'
+git diff --check
+```
+
+All commands above passed after correcting the new test fixtures. App lint reports 70 existing warnings in unrelated files, with no errors. The Next.js production build and strict typecheck pass. The app suite passes **9,334 tests across 175 files**, with **100%** of configured statements, branches, functions and lines covered. The focused Tasks suite passes **170 tests across three files**, with model coverage **100% statements (788/788), branches (546/546), functions (157/157), and lines (688/688)**. Coverage thresholds and exclusions are unchanged. Root guards pass, including 74 contrast pairs with zero failures.
+
+Affected verification also passed against the supplied review head:
+
+```sh
+TURBO_SCM_BASE=a4e44137d406f81df41f5322bc90daec042bdead pnpm run gate
+```
+
+Result: **12 successful tasks / 12 total**, zero cached. The gate reran app lint, build, typecheck and all 9,334 app tests on the committed fixes.
+
+Full-workspace verification also **passed: 405 successful tasks / 405 total**, 296 cached:
+
+```sh
+GIT_CONFIG_COUNT=2 \
+GIT_CONFIG_KEY_0=protocol.allow GIT_CONFIG_VALUE_0=never \
+GIT_CONFIG_KEY_1=protocol.file.allow GIT_CONFIG_VALUE_1=always \
+npm_config_offline=true npm_config_cache=/tmp/sst-ef15-npm-cache \
+pnpm run gate:full --env-mode=loose
+```
+
+Network Git transports remain disabled; local file transport permits the root tests' disposable Git fixtures. The writable temporary npm cache permits `create-solid-demo`'s local `npm pack` test. Earlier attempts hit fixture transport restrictions, root test timeouts, and the read-only default npm cache; the final run resolves these verification limitations without repository changes. All **985 root tests** pass, the packaging regression passes, and all **9,334 app tests** pass again in the full gate. No remote Git fetch occurred.
+
+### Boundaries and conservative choices
+
+The model requires the caller's effective-policy verifier; it does not invent a WAC-only policy writer or accept public/inherited access as sufficient. Unreadable Preferences fail closed rather than triggering an alternate index bootstrap. Both requested fixes are complete and there are no open questions. No UI changes, new dependencies, pushes, PRs, branch switches, remote fetches, or changes to other checkouts were made. No screenshots apply to this model-only fix.
+
+`roborev` is unavailable (`command -v roborev` found no executable), so automated per-commit verdicts could not be read. No review tooling was installed.
