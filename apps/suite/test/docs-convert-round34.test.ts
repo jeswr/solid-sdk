@@ -25,7 +25,7 @@ it.each([
   "-",
   "- [ ]",
   "1. # Ordered heading",
-  "- [ ] # Task heading",
+  "- [ ] Task\n  # Task heading",
   "- > # Nested list heading",
   "| Head |\n| --- |\n| Data |",
   "> # Nested heading",

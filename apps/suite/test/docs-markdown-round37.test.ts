@@ -47,7 +47,7 @@ it.each([
   "- Report\n  --",
   "- | A | B |\n  | - | - |",
   "- First\n- Report\n  ===",
-  "- [ ] > Report\n  > ===",
+  "- [ ] Task\n  > Report\n  > ===",
   "> - Report\n>   ===",
   "- > # Heading",
   "- ```\n  code\n  ```",

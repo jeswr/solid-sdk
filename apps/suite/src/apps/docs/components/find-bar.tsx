@@ -21,7 +21,8 @@ export function FindBar({
   const [query, setQuery] = useState("");
   const [replacement, setReplacement] = useState("");
   const [matchCase, setMatchCase] = useState(false);
-  const [active, setActive] = useState(0);
+  // A fresh object also reveals the current result when navigation wraps to itself.
+  const [active, setActive] = useState({ index: 0 });
   const id = useId();
   let matches: ReturnType<typeof findText> = [];
   try {
@@ -29,7 +30,10 @@ export function FindBar({
   } catch {
     /* Bounded searches can be empty. */
   }
-  const selected = Math.min(active, Math.max(0, matches.length - 1));
+  const selected = Math.min(active.index, Math.max(0, matches.length - 1));
+  const match = matches[selected];
+  const from = match?.from;
+  const to = match?.to;
   // revision is the transaction event: the editor object itself stays stable.
   // biome-ignore lint/correctness/useExhaustiveDependencies: revision triggers a fresh search
   useEffect(() => {
@@ -37,6 +41,11 @@ export function FindBar({
       editor.state.tr.setMeta(findKey, { query, caseSensitive: matchCase, active: selected }),
     );
   }, [editor, query, matchCase, selected, revision]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: searches and repeated navigation must reveal even an unchanged range
+  useEffect(() => {
+    if (from !== undefined && to !== undefined)
+      editor.chain().setTextSelection({ from, to }).scrollIntoView().run();
+  }, [editor, query, matchCase, active, from, to]);
   useEffect(
     () => () => {
       if (!editor.isDestroyed)
@@ -48,12 +57,7 @@ export function FindBar({
   );
   const navigate = (direction: number) => {
     const index = (selected + direction + matches.length) % matches.length;
-    const match = matches[index];
-    if (match) {
-      setActive(index);
-      editor.commands.setTextSelection({ from: match.from, to: match.to });
-      editor.commands.scrollIntoView();
-    }
+    if (matches[index]) setActive({ index });
   };
   const replace = (all: boolean) => {
     if (!editor.isEditable || !matches.length) return;
@@ -90,7 +94,7 @@ export function FindBar({
         maxLength={512}
         onChange={(event) => {
           setQuery(event.target.value);
-          setActive(0);
+          setActive({ index: 0 });
         }}
       />
       <span role="status" className="docs-find-count">

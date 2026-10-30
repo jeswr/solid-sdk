@@ -552,18 +552,29 @@ function openParagraph(tokens: MarkdownToken[]): boolean {
   }
   if (last.type === "list") {
     const item = (last.items as MarkdownToken[]).at(-1) as MarkdownToken;
-    return listParagraph(item.raw as string, item.task);
+    return listParagraph(item.raw as string);
   }
   return false;
 }
 
-function listParagraph(raw: string, task: unknown): boolean {
+/** Keep task markers and container columns intact throughout block parsing and probes. */
+function withListItemTokens<Result>(
+  raw: string,
+  lexer: Pick<MarkdownLexerConfiguration, "blockTokens">,
+  parse: (tokens: MarkdownToken[]) => Result,
+) {
   const { text, indent } = listItemSource(raw);
-  return atColumn(containerColumn + indent, () =>
-    openParagraph(
-      containerTokenizer().lexer.blockTokens(task ? text.replace(taskMarker, "") : text),
-    ),
-  );
+  return atColumn(containerColumn + indent, () => parse(lexer.blockTokens(text)));
+}
+
+function listParagraph(raw: string): boolean {
+  return withListItemTokens(raw, containerTokenizer().lexer, (tokens) => {
+    // A checkbox alone leaves no prose open for a dedented continuation.
+    const first = String(tokens[0]?.text);
+    if (tokens.length === 1 && taskMarker.test(first) && !first.replace(taskMarker, "").trim())
+      return false;
+    return openParagraph(tokens);
+  });
 }
 
 /** Test interruption of an existing paragraph, rather than a fresh block. */
@@ -680,7 +691,7 @@ function containerTokenizer() {
         !next.trim() ||
         this.rules.block.list.test(next) ||
         !continuesParagraph(lines.slice(count).join("\n"), this) ||
-        !listParagraph(item.raw, item.task)
+        !listParagraph(item.raw)
       )
         break;
       // Marked stops a dedented line after any four-column line, even when
@@ -695,7 +706,7 @@ function containerTokenizer() {
       const { indent } = listItemSource(item.raw);
       const interruption = lines.findIndex((line, index) => {
         if (!index || !line.trim() || indentation(line, containerColumn) >= indent) return false;
-        return !listParagraph(lines.slice(0, index).join("\n"), item.task);
+        return !listParagraph(lines.slice(0, index).join("\n"));
       });
       if (interruption >= 0)
         return this.list(
@@ -749,15 +760,10 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
             return {
               ...token,
               type: "docsList",
-              items: token.items.map((item) => {
-                const { text: original, indent } = listItemSource(item.raw);
-                const text = item.task ? original.replace(taskMarker, "") : original;
-                return {
-                  ...item,
-                  text,
-                  tokens: atColumn(containerColumn + indent, () => lexer.blockTokens(text)),
-                };
-              }),
+              items: token.items.map((item) => ({
+                ...item,
+                tokens: withListItemTokens(item.raw, lexer, (tokens) => tokens),
+              })),
             };
           },
         },
@@ -776,9 +782,26 @@ const extensions = flattenExtensions(baseExtensions(globalThis.fetch))
               };
               groups.push(group);
             }
+            const tokens = item.tokens as MarkdownToken[];
+            if (item.task) {
+              // The checkbox starts inline content: removing it before block
+              // lexing would turn literal comparisons, headings, lists, fences
+              // and definitions into blocks. Retokenize only the first inline
+              // span now, after forward reference definitions are available.
+              const first = tokens[0] as MarkdownToken;
+              const inline =
+                first.type === "table"
+                  ? ((first.header as MarkdownToken[])[0] as MarkdownToken)
+                  : first;
+              inline.text = (inline.text as string).replace(taskMarker, "");
+              inline.tokens = (
+                helpers.tokenizeInline as NonNullable<typeof helpers.tokenizeInline>
+              )(inline.text);
+              first.raw = (first.raw as string).replace(taskMarker, "");
+            }
             const content = (
               helpers.parseBlockChildren as NonNullable<typeof helpers.parseBlockChildren>
-            )(item.tokens as MarkdownToken[]);
+            )(tokens);
             if (content[0]?.type !== "paragraph") content.unshift({ type: "paragraph" });
             group.content?.push({
               type: item.task ? "taskItem" : "listItem",
@@ -948,8 +971,9 @@ function parseHtml(token: MarkdownToken): JSONContent[] {
 }
 
 // Tiptap's default HTML bridge trims fragment edges. Parse complete inline
-// elements with full whitespace preservation, including nested equal-name tags.
+// elements and paragraph fallbacks, retaining their whitespace and wrappers.
 const inlineHtmlTags = new Set([
+  "p",
   "a",
   "b",
   "strong",
@@ -988,6 +1012,7 @@ const inlineHtml = Extension.create({
       const tokenizer = new markdown.instance.Tokenizer();
       tokenizer.lexer = new markdown.instance.Lexer({ gfm: true, tokenizer });
       const literalCode = opening[1]?.toLowerCase() === "code";
+      const block = opening[1]?.toLowerCase() === "p";
       let depth = 0;
       let unsupported = false;
       let end = 0;
@@ -1022,7 +1047,7 @@ const inlineHtml = Extension.create({
               prose,
             )
           )
-            return { type: "docsInlineHtml", raw, text: raw };
+            return { type: "docsInlineHtml", raw, text: raw, block };
           // Parse source text with CommonMark before HTML entity decoding.
           // Parse the wrapper separately to retain schema attrs/whitespace and
           // let nested wrappers, links, images and marks share this same path.
@@ -1030,6 +1055,7 @@ const inlineHtml = Extension.create({
             type: "docsInlineHtml",
             raw,
             text: raw,
+            block,
             html: `${opening[0]}DOCSINLINE${tag[0]}`,
             tokens: lexer.inlineTokens(inner),
           };
@@ -1043,11 +1069,13 @@ const inlineHtml = Extension.create({
     // A plain span adds no schema marks. Avoid a DOM parse for the neutral
     // wrapper used by every rich inline export, including nested fragments.
     if (/^<span>DOCSINLINE<\/span>$/i.test(token.html)) return content;
-    return parseHtml({ ...token, text: token.html as string }).flatMap((wrapper) =>
-      content.map((node) => ({
-        ...node,
-        marks: [...(wrapper.marks ?? []), ...(node.marks ?? [])],
-      })),
+    return parseHtml({ ...token, text: token.html as string }).flatMap<JSONContent>((wrapper) =>
+      token.block
+        ? [{ ...wrapper, content }]
+        : content.map((node) => ({
+            ...node,
+            marks: [...(wrapper.marks ?? []), ...(node.marks ?? [])],
+          })),
     );
   },
 });

@@ -141,7 +141,7 @@ it.each([
   "[source]:\n  https://example.org",
   "- [source]: https://example.org",
   "> [source]: https://example.org",
-  "- [ ] [source]: https://example.org",
+  "- [ ] \n\n  [source]: https://example.org",
 ])("round35 quote reference definitions retain lazy paragraph continuation after %s", (definition) => {
   const result = importMarkdown(
     `${definition
