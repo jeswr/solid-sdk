@@ -204,3 +204,82 @@ it("round33 retries a partial incremental read with a fresh provider and applies
   await reader.reconnect();
   expect(reader.doc.getMap("remote-edits").toJSON()).toEqual({ first: "One", second: "Two" });
 });
+
+it.each([
+  "Documents",
+  "another document",
+])("round42 offline body and title retry after navigating to %s without reopening", async (destination) => {
+  const { session, client } = await fixture();
+  const seed = client();
+  await seed.open();
+  edit(seed, "Original");
+  await seed.flush();
+  const url = seed.stored?.url as string;
+  await seed.destroy();
+  const other = client();
+  await other.open();
+  edit(other, "Other");
+  await other.flush();
+  const otherUrl = other.stored?.url as string;
+  await other.destroy();
+  let connected = true;
+  const fetchOnline = session.fetch;
+  const traffic = vi.spyOn(session, "fetch").mockImplementation((...args) => {
+    if (!connected) return Promise.reject(new TypeError("Offline"));
+    return fetchOnline(...args);
+  });
+  const opens = vi.spyOn(DocumentPersistence.prototype, "open");
+  let state!: ReturnType<typeof useDocument>;
+  function Harness({ resource }: { resource: string | undefined }) {
+    state = useDocument(session, resource);
+    return null;
+  }
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  let mounted = true;
+  try {
+    await act(async () => root.render(createElement(Harness, { resource: url })));
+    await act(async () => opens.mock.results.at(-1)?.value);
+    const runtime = state.runtime as DocumentPersistence;
+    runtimes.push(runtime);
+    connected = false;
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+    await act(async () => window.dispatchEvent(new Event("offline")));
+    await act(async () => {
+      edit(runtime, "Changed offline body");
+      runtime.rename("Changed offline title");
+      await runtime.flush();
+    });
+    const reconnect = vi.spyOn(runtime, "reconnect");
+    const destroy = vi.spyOn(runtime, "destroy");
+    if (destination === "Documents") {
+      await act(async () => root.unmount());
+      mounted = false;
+    } else {
+      await act(async () => root.render(createElement(Harness, { resource: otherUrl })));
+      await act(async () => opens.mock.results.at(-1)?.value);
+      runtimes.push(state.runtime as DocumentPersistence);
+    }
+    connected = true;
+    traffic.mockClear();
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    await act(async () => window.dispatchEvent(new Event("online")));
+    await act(async () => {
+      expect(reconnect).toHaveBeenCalled();
+      await Promise.all(reconnect.mock.results.map((result) => result.value));
+      expect(destroy).toHaveBeenCalledTimes(1);
+      await Promise.all(destroy.mock.results.map((result) => result.value));
+    });
+    expect(traffic).toHaveBeenCalled();
+    const remote = await seed.store.read(url);
+    expect(remote?.data.body).toContain("Changed offline body");
+    expect(remote?.data.title).toBe("Changed offline title");
+    const attempts = reconnect.mock.calls.length;
+    await act(async () => window.dispatchEvent(new Event("online")));
+    expect(reconnect).toHaveBeenCalledTimes(attempts);
+  } finally {
+    if (mounted) await act(async () => root.unmount());
+    host.remove();
+  }
+});

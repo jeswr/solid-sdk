@@ -88,6 +88,7 @@ export class DocumentPersistence {
   private readonly editOwner = crypto.randomUUID();
   private offlineCopy = false;
   private destroyed: Promise<void> | undefined;
+  private backgroundCleanup: (() => void) | undefined;
   private version = 0;
   private savedVersion = 0;
   private localVersion = -1;
@@ -1400,9 +1401,42 @@ export class DocumentPersistence {
       this.notify();
     }
   }
+  /** Release the editor while pending writes retain their reconnect/retry owner. */
+  release() {
+    this.onCreated = () => {};
+    this.notify = () => {
+      if (
+        !this.opened ||
+        this.readOnly ||
+        this.state === "failed" ||
+        (this.state === "saved" && this.version === this.savedVersion)
+      )
+        void this.destroy();
+    };
+    this.notify();
+    if (this.stopped || this.backgroundCleanup) return;
+    const online = () => void this.reconnect();
+    const offline = () => {
+      this.online = false;
+    };
+    window.addEventListener("online", online);
+    window.addEventListener("offline", offline);
+    this.backgroundCleanup = () => {
+      window.removeEventListener("online", online);
+      window.removeEventListener("offline", offline);
+    };
+    void this.flush().then(() => {
+      this.notify();
+      if (!this.stopped) this.scheduleRetry();
+    });
+  }
   destroy(): Promise<void> {
     if (this.destroyed) return this.destroyed;
     this.stopped = true;
+    this.backgroundCleanup?.();
+    this.backgroundCleanup = undefined;
+    this.notify = () => {};
+    this.onCreated = () => {};
     if (this.timer) clearTimeout(this.timer);
     this.destroyed = (async () => {
       // An incomplete open must never allocate resources after this teardown.

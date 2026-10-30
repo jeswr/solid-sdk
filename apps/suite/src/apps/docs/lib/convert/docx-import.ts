@@ -15,21 +15,29 @@ import { DOCX_FORMATTING_WARNING, reportSkipped, type SkippedItem } from "./skip
 export type { SkippedItem } from "./skipped";
 
 export const MAX_IMPORT_BYTES = 50 * 1024 * 1024;
+const paragraphStyles = new Map<string, string>([
+  ["Horizontal Rule", "hr:fresh"],
+  ["Title", "h1:fresh"],
+  ...[1, 2, 3, 4, 5, 6].map((level): [string, string] => [
+    `Heading ${level}`,
+    `h${Math.min(level, 3)}:fresh`,
+  ]),
+  ["Quote", "blockquote:fresh > p:fresh"],
+  ["Intense Quote", "blockquote:fresh > p:fresh"],
+  ["Code", "pre:separator('\n')"],
+]);
+// Mammoth's style-name matching is case insensitive, including Word's built-in names.
+const paragraphPaths = new Map(
+  Array.from(paragraphStyles, ([name, path]): [string, string] => [name.toLowerCase(), path]),
+);
 export const DOCX_STYLE_MAP = [
   // Suite exports one paragraph per code block; fresh keeps adjacent blocks separate.
   "p.Code => pre:fresh",
-  "p[style-name='Horizontal Rule'] => hr:fresh",
   "r[style-name='Task Marker'] => !",
   "r[style-name='Inline Code'] => code",
   "u => u",
   "highlight => mark",
-  "p[style-name='Title'] => h1:fresh",
-  ...[1, 2, 3, 4, 5, 6].map(
-    (level) => `p[style-name='Heading ${level}'] => h${Math.min(level, 3)}:fresh`,
-  ),
-  "p[style-name='Quote'] => blockquote:fresh > p:fresh",
-  "p[style-name='Intense Quote'] => blockquote:fresh > p:fresh",
-  "p[style-name='Code'] => pre:separator('\n')",
+  ...Array.from(paragraphStyles, ([name, path]) => `p[style-name='${name}'] => ${path}`),
 ];
 export interface ImportProgress {
   completed: number;
@@ -74,14 +82,20 @@ function mapLists(
         !["task checked", "task unchecked"].includes(styleName ?? "") &&
         indentLevel >= 0 &&
         ancestors.length > 0;
-      const mappedStyle = (path: string) => {
+      const mappedStyle = (ancestors: string[]) => {
+        const block =
+          child.styleId === "Code"
+            ? "pre:fresh"
+            : (paragraphPaths.get(styleName ?? "") ?? "p:fresh");
         const styleId = `SuiteList${styleMap.length}`;
-        styleMap.push(`p.${styleId} => ${path}`);
+        // Mammoth uses the first matching rule. Every generated list/continuation
+        // path must precede presets while retaining the paragraph's block style.
+        styleMap.unshift(`p.${styleId} => ${[...ancestors, block].join(" > ")}`);
         child.styleId = styleId;
       };
       if (continuation) {
         ancestors.length = Math.min(indentLevel + 1, ancestors.length);
-        mappedStyle([...ancestors.map((ancestor) => ancestor.path), "p:fresh"].join(" > "));
+        mappedStyle(ancestors.map((ancestor) => ancestor.path));
         continue;
       }
       const task = styleName === "task checked" || styleName === "task unchecked";
@@ -113,11 +127,10 @@ function mapLists(
           ? `li[data-type='taskItem'][data-checked='${styleName === "task checked"}']`
           : "li";
         const fresh = ancestors[depth]?.key === key ? "" : ":fresh";
-        const path = [
+        mappedStyle([
           ...ancestors.slice(0, depth).map((ancestor) => ancestor.path),
-          `${list}${fresh} > ${item}:fresh > p:fresh`,
-        ].join(" > ");
-        mappedStyle(path);
+          `${list}${fresh} > ${item}:fresh`,
+        ]);
         ancestors.length = depth;
         ancestors.push({ path: `${list} > ${item}`, key, list });
       } else {

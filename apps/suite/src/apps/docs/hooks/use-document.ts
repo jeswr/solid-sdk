@@ -42,7 +42,10 @@ export function useDocument(session: PodSession, resource: string | undefined) {
     const next = new DocumentPersistence(session, resource ? undefined : currentDraftId());
     const previous = current.current;
     current.current = next;
-    if (previous) void previous.destroy();
+    if (previous) {
+      if (previous.session !== session || recovering) void previous.destroy();
+      else previous.release();
+    }
     setRuntime(null);
     setError(null);
     next.notify = () => {
@@ -106,7 +109,7 @@ export function useDocument(session: PodSession, resource: string | undefined) {
       clearInterval(timer);
       const last = current.current;
       current.current = null;
-      if (last) void last.destroy();
+      last?.release();
     };
   }, []);
   return {

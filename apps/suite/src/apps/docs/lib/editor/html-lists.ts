@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex
 
 /** Lift block images and supply the required paragraph before a list's leading block. */
-export function normaliseHtmlLists(root: HTMLElement) {
+export function normaliseHtmlLists(root: ParentNode) {
   for (const paragraph of root.querySelectorAll("p")) {
     if (paragraph.querySelector("img") && !paragraph.textContent?.trim())
       paragraph.replaceWith(...paragraph.childNodes);
@@ -19,7 +19,7 @@ export function normaliseHtmlLists(root: HTMLElement) {
       // Whitespace before a block is structural HTML spacing, not a second
       // paragraph when Markdown's HTML bridge preserves text whitespace.
       while (item.firstChild !== first) item.firstChild?.remove();
-      first.before(root.ownerDocument.createElement("p"));
+      first.before(first.ownerDocument.createElement("p"));
     }
   }
 }

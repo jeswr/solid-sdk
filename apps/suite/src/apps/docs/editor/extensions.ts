@@ -13,6 +13,7 @@ import StarterKit from "@tiptap/starter-kit";
 import type { Doc } from "yjs";
 import { codeWhitespaceTextblocks, compatibleCodeExtensions } from "../lib/editor/code-mark";
 import { normaliseDestination, normaliseImageDestination } from "../lib/editor/destination";
+import { normaliseHtmlLists } from "../lib/editor/html-lists";
 import { validLink } from "../lib/editor/logic";
 import { normaliseTableSpan } from "../lib/editor/table-spans";
 import { FindDecorations } from "./find-plugin";
@@ -55,6 +56,7 @@ const PasteDestinations = Extension.create({
             // keeps pasted images inert until the editor's node view handles them.
             const fragment = document.createElement("template");
             fragment.innerHTML = html;
+            normaliseHtmlLists(fragment.content);
             for (const element of fragment.content.querySelectorAll("a[href], img[src]")) {
               const key = element.tagName === "A" ? "href" : "src";
               const url = element.getAttribute(key) as string;
@@ -121,6 +123,21 @@ const boundedTableSpans = {
 };
 
 const AccessibleTaskItem = TaskItem.extend({
+  addNodeView() {
+    const create = this.parent?.();
+    if (!create) return null;
+    return (props) => {
+      const view = create(props);
+      return {
+        ...view,
+        // Controls own their keyboard events. Let native checkbox navigation and
+        // activation run without editing the stale ProseMirror text selection.
+        stopEvent: (event) =>
+          (event.target instanceof HTMLInputElement && event.target.type === "checkbox") ||
+          (view.stopEvent?.(event) ?? false),
+      };
+    };
+  },
   addProseMirrorPlugins() {
     return [
       ...(this.parent?.() ?? []),
