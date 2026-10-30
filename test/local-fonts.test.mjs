@@ -1,5 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  cpSync,
+  globSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -71,3 +79,69 @@ it("bundles standalone template fonts and licences identical to the suite assets
     expect(readFileSync(join(root, path)).equals(readFileSync(join(root, asset)))).toBe(true);
   }
 });
+
+it("invalidates font consumer builds and selects them when suite-ui changes", () => {
+  const fixture = mkdtempSync(join(tmpdir(), "font-build-graph-"));
+  try {
+    const inputs = globSync(
+      [
+        "package.json",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+        "turbo.json",
+        "biome.json",
+        "tsconfig.base.json",
+        ".gitignore",
+        "{packages,apps,tools}/*/package.json",
+        "apps/*/web/package.json",
+        "apps/*/turbo.json",
+        "apps/*/web/turbo.json",
+        "packages/suite-ui/src/font-assets/**/*.woff2",
+      ],
+      { cwd: root },
+    );
+    for (const path of inputs) {
+      const destination = join(fixture, path);
+      mkdirSync(join(destination, ".."), { recursive: true });
+      cpSync(join(root, path), destination);
+    }
+
+    function buildPlan() {
+      const result = runCommand(
+        process.execPath,
+        [
+          join(root, "node_modules/turbo/bin/turbo"),
+          "run",
+          "build",
+          "--filter=...@jeswr/suite-ui",
+          "--dry=json",
+        ],
+        { cwd: fixture },
+      );
+      expect(result.status, result.stderr).toBe(0);
+      return new Map(JSON.parse(result.stdout).tasks.map((task) => [task.taskId, task]));
+    }
+
+    const before = buildPlan();
+    for (const [app, fonts] of [
+      ["issues", ["geist/Geist-Variable.woff2", "geist-mono/GeistMono-Variable.woff2"]],
+      ["pod-manager", ["inter/Inter-Variable.woff2"]],
+    ]) {
+      const taskId = `@jeswr/app-${app}#build`;
+      expect(before.get(taskId), `${app} must be selected when suite-ui changes`).toBeDefined();
+      expect(before.get(taskId).dependencies).toContain("@jeswr/suite-ui#build");
+      for (const font of fonts) {
+        const path = join(fixture, "packages/suite-ui/src/font-assets", font);
+        const original = readFileSync(path);
+        try {
+          writeFileSync(path, Buffer.concat([original, Buffer.from("font update")]));
+          expect(buildPlan().get(taskId).hash).not.toBe(before.get(taskId).hash);
+        } finally {
+          writeFileSync(path, original);
+        }
+      }
+    }
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
+}, 15000);

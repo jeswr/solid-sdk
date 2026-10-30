@@ -465,6 +465,9 @@ importers:
       '@jeswr/solid-task-model':
         specifier: workspace:*
         version: link:../../packages/solid-task-model
+      '@jeswr/suite-ui':
+        specifier: workspace:*
+        version: link:../../packages/suite-ui
       '@jeswr/suite-vocab':
         specifier: workspace:*
         version: link:../../packages/suite-vocab
@@ -1527,6 +1530,9 @@ importers:
       '@jeswr/pod-connectors':
         specifier: workspace:*
         version: link:../../packages/pod-connectors
+      '@jeswr/suite-ui':
+        specifier: workspace:*
+        version: link:../../packages/suite-ui
       '@rdfjs/wrapper':
         specifier: ^0.34.0
         version: 0.34.0
