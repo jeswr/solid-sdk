@@ -85,6 +85,23 @@ for (const [name, label] of [
     await expect(page.getByRole("button", { name: new RegExp(label as string) })).toBeFocused();
   });
 }
+test.describe("DatePickerPopover hydration across timezones", () => {
+  test.use({ timezoneId: "America/New_York" });
+  test("localizes the fixed fixture instant without hydration errors", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("console", (message) => {
+      if (message.type() === "error") errors.push(message.text());
+    });
+    await page.goto("/dev/components/date-picker-popover");
+    const trigger = page.getByRole("button", { name: /Appointment/ });
+    await expect(trigger).toContainText("Tuesday, 27 October 2026 at 13:00");
+    await trigger.click();
+    await expect(page.getByLabel("Time", { exact: true })).toHaveValue("13:00");
+    expect(errors).toEqual([]);
+    await accessible(page);
+  });
+});
 test("DatePickerPopover: keyboard calendar, time and return focus", async ({ page }, info) => {
   await page.goto("/dev/components/date-picker-popover");
   await page.keyboard.press("Tab");

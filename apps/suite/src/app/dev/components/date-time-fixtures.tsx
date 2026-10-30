@@ -145,7 +145,7 @@ export function DatePickerFixtures() {
           <PickerExample
             label="Appointment"
             locale={locale}
-            initial={{ kind: "dateTime", dateTime: new Date("2026-10-27T17:00:00").toISOString() }}
+            initial={{ kind: "dateTime", dateTime: "2026-10-27T17:00:00.000Z" }}
           />
         </Card>
         <Card title="Unavailable">
