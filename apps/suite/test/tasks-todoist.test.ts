@@ -230,7 +230,7 @@ describe("content and labels", () => {
         ["> ", "> "],
         ["1. ", "   "],
         ["> 1. ", ">    "],
-      ]) {
+      ] as const) {
         const title = [
           "Title",
           "",
