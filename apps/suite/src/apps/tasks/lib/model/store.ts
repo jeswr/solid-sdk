@@ -33,12 +33,15 @@ export interface StoreOptions {
   uuid?: () => string;
   typeIndex?: boolean;
   /**
-   * Required for project initialization, even without a Type Index. Establish or
-   * verify owner-only effective ACL/ACP access on the Tasks root and its existing
-   * descendants (including policy overrides), with private inheritance for new
-   * resources. Return true only when confirmed; unreadable/unsupported policy fails closed.
+   * Required for project initialization, even without a Type Index. Confirm
+   * owner-only effective ACL/ACP access at each supplied URL, including private
+   * inheritance for containers. For absent resources, check the policy they will
+   * inherit before creation. The empty Tasks root may need a policy established.
+   * Check only the target and its effective inheritance/overrides; do not require
+   * privacy across its descendants or remove deliberate grants on other projects.
+   * Return true only when confirmed; unreadable/unsupported policy fails closed.
    */
-  ensurePrivateTasksAccess?: (root: string, owner: string) => Promise<boolean>;
+  ensurePrivateTasksAccess?: (url: string, owner: string) => Promise<boolean>;
   /** Required for registration; verify/establish effective owner-only ACL/ACP access. */
   ensurePrivateIndexAccess?: PrivateIndexAccess;
 }
@@ -92,22 +95,24 @@ export class TaskStore {
       { forClass: `${NS.WF}Task`, location: stateStore, kind: "instanceContainer" },
     ]);
   }
-  private async protectTasks(): Promise<void> {
+  private async protectTasks(url?: string): Promise<void> {
     const verify = this.options.ensurePrivateTasksAccess;
     if (!verify) throw new TypeError("A Tasks ACL/ACP access verifier is required.");
-    const root = new URL("tasks/", this.options.storage).href;
+    const target = url ?? new URL("tasks/", this.options.storage).href;
     // Only an empty app root may be created before protection is established.
-    await this.io.container(root);
-    if ((await verify(root, this.options.webId)) !== true) throw new ModelError(403, root);
+    if (url === undefined) await this.io.container(target);
+    if ((await verify(target, this.options.webId)) !== true) throw new ModelError(403, target);
   }
   async bootstrapInbox(): Promise<StoredProject> {
     await this.protectTasks();
+    await this.protectTasks(this.projects);
     await this.retryCleanup("Inbox", true);
     const url = `${this.projects}inbox.ttl`;
     for (let attempt = 0; ; attempt++) {
       try {
         const existing = await this.io.optional(url);
         if (existing) {
+          await this.protectTasks(url);
           if (
             node(`${existing.url}#this`, existing.dataset).text(initializationState) === "cleanup"
           ) {
@@ -117,6 +122,7 @@ export class TaskStore {
           const project = await this.readProject(url);
           const stateStore = project.tracker.stateStore;
           if (!stateStore) throw new TypeError("Inbox has no stateStore.");
+          await this.protectTasks(stateStore);
           // The tracker coordinates adoption and cleanup; existing LDP containers
           // cannot be replaced with PUT on Community Solid Server.
           let resource = await this.claimResource(project, project.tracker.id);
@@ -138,6 +144,7 @@ export class TaskStore {
   async createProject(title: string, inbox = false): Promise<StoredProject> {
     requireTitle(title);
     await this.protectTasks();
+    await this.protectTasks(this.projects);
     // Retry recoverable failures only for this project, never block unrelated titles.
     await this.retryCleanup(title, inbox);
     await this.io.container(this.projects);
@@ -149,6 +156,8 @@ export class TaskStore {
       const name = inbox ? "inbox" : uniqueSlug(title, used);
       const url = `${this.projects}${name}.ttl`;
       const stateStore = `${this.projects}${name}/`;
+      await this.protectTasks(url);
+      await this.protectTasks(stateStore);
       const { dataset } = createTracker(url, title, stateStore, [this.options.webId], this.now());
       let resource: Resource;
       try {

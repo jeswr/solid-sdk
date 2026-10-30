@@ -78,12 +78,13 @@ describe("project discovery and first use", () => {
       entered = resolve;
     });
     const verify = vi.fn(async (url: string, owner: string) => {
-      expect(url).toBe(root);
       expect(owner).toBe(webId);
-      expect((await pod.dataset(root)).size).toBe(1);
-      entered();
-      await protection;
-      protectedRoot = true;
+      if (url === root) {
+        expect((await pod.dataset(root)).size).toBe(1);
+        entered();
+        await protection;
+        protectedRoot = true;
+      } else expect(protectedRoot).toBe(true);
       return true;
     });
     pod.intercept = (request) => {
@@ -105,6 +106,113 @@ describe("project discovery and first use", () => {
     verify.mockRejectedValue(new Error("Unreadable policy"));
     await expect(tasks.createProject("Another")).rejects.toThrow("Unreadable policy");
     expect(pod.mutations()).toHaveLength(writes);
+  });
+  it("preserves deliberate grants on other projects during creation and Inbox adoption", async () => {
+    const pod = new Pod();
+    const tasks = store(pod, { typeIndex: false });
+    const shared = await tasks.createProject("Shared");
+    const sharedTask = await tasks.createTask(shared, { title: "Shared task", state: "open" });
+    const bob = "https://bob.test/profile#me";
+    const grants = new Map([
+      [shared.url, [webId, bob]],
+      [shared.tracker.stateStore, [webId, bob]],
+      [sharedTask.url, [webId, bob]],
+    ]);
+    const savedGrants = structuredClone(grants);
+    const savedFiles = [shared.url, shared.tracker.stateStore as string, sharedTask.url].map(
+      (url) => [url, { ...pod.files.get(url) }] as const,
+    );
+    const verify = vi.fn(async (url: string, owner: string) => {
+      expect(owner).toBe(webId);
+      // Each target's effective policy is checked; unrelated project grants remain valid.
+      return !grants.has(url);
+    });
+    const privateTasks = store(pod, { ensurePrivateTasksAccess: verify, typeIndex: false });
+    const privateProject = await privateTasks.createProject("Private");
+    const inbox = await privateTasks.bootstrapInbox();
+    expect((await privateTasks.bootstrapInbox()).tracker.id).toBe(inbox.tracker.id);
+    const checked = new Set(verify.mock.calls.map(([url]) => url));
+    expect(checked).toEqual(
+      new Set([
+        `${storage}tasks/`,
+        projects,
+        privateProject.url,
+        privateProject.tracker.stateStore,
+        inbox.url,
+        inbox.tracker.stateStore,
+      ]),
+    );
+    expect(grants).toEqual(savedGrants);
+    for (const [url, file] of savedFiles) expect(pod.files.get(url)).toEqual(file);
+  });
+  it.each([
+    projects,
+    `${projects}private.ttl`,
+    `${projects}private/`,
+  ])("checks effective privacy at %s before initializing project data", async (denied) => {
+    const pod = new Pod();
+    const verify = vi.fn(async (url: string) => url !== denied);
+    const tasks = store(pod, { ensurePrivateTasksAccess: verify, typeIndex: false });
+    await expect(tasks.createProject("Private")).rejects.toMatchObject({
+      status: 403,
+      url: denied,
+    });
+    expect(verify).toHaveBeenCalledWith(denied, webId);
+    expect(
+      pod.mutations().every((request) => [projects, `${storage}tasks/`].includes(request.url)),
+    ).toBe(true);
+    expect(pod.files.has(`${projects}private.ttl`)).toBe(false);
+    expect(pod.files.has(`${projects}private/`)).toBe(false);
+  });
+  it.each([
+    projects,
+    `${projects}inbox.ttl`,
+    `${projects}inbox/`,
+  ])("rejects an unconfirmed policy at %s before adopting the Inbox", async (denied) => {
+    const pod = new Pod();
+    const inbox = await store(pod, { typeIndex: false }).bootstrapInbox();
+    const tracker = { ...pod.files.get(inbox.url) };
+    const container = { ...pod.files.get(inbox.tracker.stateStore as string) };
+    const writes = pod.mutations().length;
+    const verify = vi.fn(async (url: string) => url !== denied);
+    const tasks = store(pod, { ensurePrivateTasksAccess: verify, typeIndex: false });
+    await expect(tasks.bootstrapInbox()).rejects.toMatchObject({ status: 403, url: denied });
+    expect(verify).toHaveBeenCalledWith(denied, webId);
+    expect(pod.mutations()).toHaveLength(writes);
+    expect(pod.files.get(inbox.url)).toEqual(tracker);
+    expect(pod.files.get(inbox.tracker.stateStore as string)).toEqual(container);
+  });
+  it.each(["create", "adopt"])("awaits stateStore privacy before %s writes", async (mode) => {
+    const pod = new Pod();
+    if (mode === "adopt") await store(pod, { typeIndex: false }).bootstrapInbox();
+    const name = mode === "create" ? "private" : "inbox";
+    let release = () => {};
+    let entered = () => {};
+    const protection = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const checking = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const verify = vi.fn(async (url: string) => {
+      if (url === `${projects}${name}/`) {
+        entered();
+        await protection;
+      }
+      return true;
+    });
+    const tasks = store(pod, { ensurePrivateTasksAccess: verify, typeIndex: false });
+    const writes = pod.mutations().length;
+    const pending = mode === "create" ? tasks.createProject("Private") : tasks.bootstrapInbox();
+    await checking;
+    expect(
+      pod
+        .mutations()
+        .slice(writes)
+        .every((request) => [projects, `${storage}tasks/`].includes(request.url)),
+    ).toBe(true);
+    release();
+    expect((await pending).url).toBe(`${projects}${name}.ttl`);
   });
   it.each([
     "container",
