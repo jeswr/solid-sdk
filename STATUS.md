@@ -152,3 +152,48 @@ Roborev remains unavailable (`command -v roborev` found no executable), so no au
 per-commit verdict could be read. No new dependencies or dependency-policy checks were
 needed. No new design questions or unfinished implementation work remain for these four
 findings.
+
+## Fix round 5 — review at `ed6ef79a92ae`
+
+Fixed exactly the three recurrence-editor review findings:
+
+- `eb9f11ef` — `fix(suite-ui): preserve imported recurrence defaults`: materialize
+  the DTSTART month when editing an imported yearly day with no BYMONTH, retain the
+  effective DTSTART weekday when displaying/editing a weekly rule with no BYDAY,
+  and reset the end-date draft and error when accepting a changed controlled value.
+- Final `docs: record sst-ytg round 5 validation` commit records this verification.
+
+Added eight regression cases and adjusted the imported yearly rule expectation.
+Seven cases failed before implementation, reproducing all three findings. The
+111 package tests now pass, including existing interaction and axe checks. Tests
+also cover explicit single/multiple yearly months, a changed DTSTART month,
+Monday/Sunday defaults, removing the sole implicit weekday, and controlled updates
+that retain the same valid end date while changing another rule field. Ordinary
+parent rerenders preserve an invalid local date draft.
+
+Commands used Node `v24.22.1` with:
+
+```sh
+export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"
+```
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/suite-ui run lint && pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/suite-ui run typecheck && pnpm --filter @jeswr/suite-ui run test` | PASS; 3 test files, 111 tests |
+| `pnpm run lint:root` | PASS; all root guards and 74 contrast pairs |
+| `TURBO_SCM_BASE=ed6ef79a92aec3fb1fe54a9da19bf11865a12f9b pnpm run gate` | PASS; 13 successful tasks, 13 total; suite-ui 111 tests and app-suite 5,825 tests with coverage thresholds passed |
+| `pnpm run gate:full` | FAIL outside fix scope; 292 successful tasks, 348 total before abort at `@jeswr/federation-trust#test`; all 745 root tests passed |
+| `git diff --check` | PASS |
+
+Full gate reproduced the previously recorded failure at
+`packages/federation-trust/test/characterization.test.ts:196`, "delegation credential
+structure is stable": identical public JWK fields serialize as `kty,crv,x` rather
+than snapshot order `crv,x,kty`. The other 53 federation-trust tests passed. That
+package is unchanged by this fix round. Build-generated untracked callback/client-ID
+files in the eight pod web apps were removed.
+
+No dependencies changed or dependency-policy checks were needed. No browser was
+launched or screenshots taken; the existing dispatcher browser handoff remains.
+Roborev is unavailable (`command -v roborev` found no executable), so no automated
+per-commit verdicts could be read. No new design questions or unfinished
+implementation work remain for these three findings.
