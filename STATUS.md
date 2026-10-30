@@ -94,3 +94,31 @@ Validation:
 - `git diff --check` — PASS.
 
 Both requested fixes are complete. No new open questions, UI work, screenshots or dependency-policy checks apply. The full-workspace failure remains outside the lane scope. `roborev` is still unavailable (`command -v roborev` returns no executable), so no automated commit review verdict is claimed. Work stayed on `lane/sst-kw9b` in this checkout, with no pushes, PRs, branch switches or remote fetches/merges.
+
+## Fix round 4 — sst-kw9b
+
+Review head and affected-gate base: `33a3a5d7b3f72a6fb723a23dced9e6b9ca12a678`. Fixed only the two supplied RDF reader/allocation findings and added regression tests.
+
+Commits:
+
+- `5b7a01dd fix: normalize legacy money numeric literals` — expand typed double/float exponent notation and normalize supported decimal/integer lexical forms using string operations, preserving every significand digit. Canonical and legacy amount predicates share this reader. Tests cover transaction/balance reads, positive/negative and tiny/large exponents, precision beyond JavaScript numbers, unchanged RDF literals, round trips and invalid/non-finite forms. String-valued amounts retain decimal-only validation.
+- `8d4c6d4e fix: reuse document money blank node allocator` — reserve existing subject/object/graph blank labels once per document and allocate monotonically, with indexed candidate checks protecting labels introduced through the public dataset/accessors after construction. Tests preserve existing labels and records, exercise both construction timings, and append 250 transactions without a full-dataset traversal.
+- `docs: record money round four validation` — final report commit after the checks below.
+
+Commands ran from this checkout with `export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"` (Node `v24.22.1`, pnpm `10.4.1`). No dependencies were added or installed; lifecycle scripts remained disabled.
+
+Validation:
+
+- `pnpm exec turbo run build --filter '@jeswr/app-suite^...' --concurrency=4` — PASS, five prerequisite packages.
+- `pnpm --filter @jeswr/app-suite exec vitest run test/money-model.test.ts --coverage.enabled=false -t 'exact decimal for transactions and balances'` — expected FAIL before the numeric fix, all 11 regression cases rejected by decimal validation.
+- `pnpm --filter @jeswr/app-suite exec vitest run test/money-model.test.ts --coverage.enabled=false -t 'without traversing the full dataset'` — expected FAIL before the allocator fix, observing 250 complete dataset traversals for 250 appends.
+- `pnpm exec biome check --write apps/suite/src/apps/money/lib/model/rdf.ts apps/suite/test/money-model.test.ts` — PASS.
+- `pnpm --filter @jeswr/app-suite exec vitest run test/money-model.test.ts test/money-model-io.test.ts --coverage.include='src/apps/money/lib/model/**/*.ts'` — PASS, all 68 tests; 100% statements (397/397), branches (200/200), functions (103/103), lines (356/356). Coverage thresholds and exclusions are unchanged.
+- `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` — PASS, all 123 files and 6,481 tests; 100% app coverage in all four metrics. Lint exits zero with the same 54 existing warnings in unrelated files.
+- `pnpm run lint:root` — PASS, including workspace/layer guards and all 74 contrast checks.
+- `TURBO_SCM_BASE=33a3a5d7b3f72a6fb723a23dced9e6b9ca12a678 pnpm run gate` — PASS, 10/10 tasks (five cached), including the app build, typecheck and tests.
+- `pnpm run gate:full` — FAIL outside this lane after 65 successful tasks of 243 total (seven cached). `test/check-sdk-layers.test.mjs:328`, “validates pathological specs in under 50 ms each,” measured 275.97329099999934 ms against its 50 ms bound; the other 744 root tests passed. This timing check also failed during fix round 2. No unrelated code or timing threshold was changed.
+- `pnpm run test:root` — PASS in isolation after the full gate stopped: all nine files and 745 tests, including the timing check. This does not change the failed full-gate result above.
+- `git diff --check` — PASS. The gates produced no untracked files requiring cleanup.
+
+Both requested fixes are complete. No new open questions, UI work, screenshots or dependency-policy checks apply. The full-workspace timing failure remains recorded above. `roborev` is still unavailable, so no automated commit review verdict is claimed. Work stayed on `lane/sst-kw9b` in this checkout, with no pushes, PRs, branch switches or remote fetches/merges.
