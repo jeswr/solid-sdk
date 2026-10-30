@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -136,8 +137,8 @@ describe("Google freeBusy adapter", () => {
     expect(minimal.get("primary")).toMatchObject({ ok: true });
   });
 
-  it("credential problems are needs-setup (revoked) or blocked (unavailable), never free", async () => {
-    const failing = (code: "revoked" | "unavailable"): AccessTokenProvider => ({
+  it("credential problems are needs-setup (revoked) or blocked (unavailable/timeout), never free", async () => {
+    const failing = (code: "revoked" | "unavailable" | "timeout"): AccessTokenProvider => ({
       getAccessToken: async () => {
         throw new CredentialError(code, `helper says ${code}`);
       },
@@ -146,6 +147,7 @@ describe("Google freeBusy adapter", () => {
     for (const [code, status] of [
       ["revoked", "needs-setup"],
       ["unavailable", "blocked"],
+      ["timeout", "blocked"],
     ] as const) {
       const r = await googleFreeBusy(
         env(f, failing(code)),
@@ -492,7 +494,7 @@ describe("credential supply (separable, no stored tokens)", () => {
     const hang = Date.now();
     await expect(
       runHelper(process.execPath, [script("setInterval(() => {}, 1000)")], {}, 300),
-    ).rejects.toMatchObject({ code: "unavailable", message: expect.stringMatching(/in time/) });
+    ).rejects.toMatchObject({ code: "timeout", message: expect.stringMatching(/in time/) });
     expect(Date.now() - hang).toBeLessThan(5000);
     await expect(
       runHelper(process.execPath, [script('process.stdout.write("x".repeat(100000))')], {}),

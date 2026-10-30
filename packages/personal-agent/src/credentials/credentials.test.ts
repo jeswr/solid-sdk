@@ -4,6 +4,7 @@
  * the only sockets are the helper's own loopback listener and this test's requests to it.
  * Accounts and addresses are synthetic.
  */
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { createHash, randomBytes } from "node:crypto";
 import {
   chmodSync,
@@ -21,7 +22,7 @@ import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { exportJWK, generateKeyPair, type JWK, SignJWT } from "jose";
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadProviderConfig } from "../actions/providers/credentials.js";
 import { main } from "./cli.js";
 import { accessToken, helperExchange, login } from "./operations.js";
@@ -508,6 +509,52 @@ describe("helper token mode (the action contract)", () => {
     expect(new Set(results.map((r) => JSON.parse(r.stdout as string).access_token)).size).toBe(1);
     expect(fake.refreshCalls).toBe(1);
     expect(() => lstatSync(join(dir, "locks", "personal.lock"))).toThrow();
+  });
+
+  it("defers SIGTERM through persistence of a rotated token and restores signal listeners", async () => {
+    const fake = await setupGoogle();
+    await (await browserLogin(fake)).result;
+    const previous = readGrant().refreshToken;
+    fake.rotate = true;
+    clock += 3600_000;
+    const listeners = process.listeners("SIGTERM");
+    const putGrant = CredentialStore.prototype.putGrant;
+    let interrupted = false;
+    const persist = vi.spyOn(CredentialStore.prototype, "putGrant").mockImplementation(function (
+      this: CredentialStore,
+      grant: Grant,
+    ) {
+      expect(process.listenerCount("SIGTERM")).toBe(listeners.length + 1);
+      expect(grant.refreshToken).not.toBe(previous);
+      // SIGTERM arrives after rotation and before the real atomic write. It must be
+      // handled while the exchange persists, then the helper may exit normally.
+      expect(process.emit("SIGTERM")).toBe(true);
+      interrupted = true;
+      putGrant.call(this, grant);
+    });
+    try {
+      const x = io(fake, { readStdin: async () => request() });
+      expect(await main(["--dir", dir, "token", "--profile", "personal"], x.io)).toBe(0);
+      expect(interrupted).toBe(true);
+      expect(fake.refreshTokens.get(previous as string)).toBe(false);
+      const rotated = readGrant();
+      expect(fake.refreshTokens.get(rotated.refreshToken as string)).toBe(true);
+      expect(JSON.parse(x.out.join("")).access_token).toBe(rotated.access?.token);
+      expect(process.listeners("SIGTERM")).toEqual(listeners);
+    } finally {
+      persist.mockRestore();
+    }
+    // The next refresh proves the persisted replacement is still usable.
+    clock += 3600_000;
+    expect((await helperExchange(deps(fake), "personal", request())).exit).toBe(0);
+  });
+
+  it("restores SIGTERM listeners after a failed token exchange", async () => {
+    const fake = await setupGoogle();
+    const listeners = process.listeners("SIGTERM");
+    const x = io(fake, { readStdin: async () => request() });
+    expect(await main(["--dir", dir, "token", "--profile", "personal"], x.io)).toBe(3);
+    expect(process.listeners("SIGTERM")).toEqual(listeners);
   });
 
   it("revoked (invalid_grant): exit 3, grant marked for re-consent with its tokens removed; outage/malformed: grant kept", async () => {

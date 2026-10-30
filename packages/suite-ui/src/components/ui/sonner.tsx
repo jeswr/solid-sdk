@@ -12,7 +12,7 @@ import {
 import { useTheme } from "next-themes";
 import { Toaster as Sonner, type ToasterProps } from "sonner";
 
-export { toast } from "sonner";
+export { toast, toastDurations } from "./toast.js";
 
 const Toaster = ({ ...props }: ToasterProps) => {
   const { theme = "system" } = useTheme();
@@ -20,6 +20,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
   return (
     <Sonner
       duration={5000}
+      closeButton
       theme={theme as NonNullable<ToasterProps["theme"]>}
       className="toaster group"
       icons={{
