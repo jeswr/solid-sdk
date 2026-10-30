@@ -49,8 +49,10 @@ export function readMessages(dataset: DatasetCore): ChatMessage[] {
     let message: CanonicalMessage | undefined;
     if (tombstone) {
       message = { id, content: "", mediaType: "text/plain" };
-      const author = readRefs(graph, id, `${NS.AS}attributedTo`)[0];
-      const published = readDate(graph, id, `${NS.AS}published`);
+      const author =
+        readRefs(graph, id, `${NS.AS}attributedTo`)[0] ?? readRefs(graph, id, `${NS.FOAF}maker`)[0];
+      const published =
+        readDate(graph, id, `${NS.AS}published`) ?? readDate(graph, id, `${NS.DCT}created`);
       const deletedAt = readDate(graph, id, `${NS.AS}deleted`);
       if (author !== undefined) message.author = author;
       if (published !== undefined) message.published = published;

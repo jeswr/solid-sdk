@@ -265,6 +265,42 @@ it("parses a LongChat fixture through interop and edits without losing its task 
   );
 });
 
+it("round-trips LongChat tombstones with their author, publication time and chronological position", async () => {
+  const body = readFileSync(new URL("./fixtures/longchat.ttl", import.meta.url), "utf8");
+  const dataset = await parseChat(body, dayUrl(room, at));
+  const id = messageSubject(room, at, "m2");
+  const deleted = tombstoneMessage(dataset, id, bob, later);
+  const messages = readMessages(await parseChat(await serializeChat(deleted), dayUrl(room, at)));
+  expect(messages.map((message) => message.id)).toEqual([subject, id]);
+  expect(messages[1]).toMatchObject({
+    author: bob,
+    published: "2026-10-26T11:01:00.000Z",
+    content: "",
+    tombstone: true,
+    updated: later.toISOString(),
+    deletedAt: later.toISOString(),
+  });
+  expect(readRefs(deleted, id, `${NS.FOAF}maker`)).toEqual([bob]);
+  expect(readDate(deleted, id, `${NS.DCT}created`)).toBe("2026-10-26T11:01:00.000Z");
+  expect(readMessages(dataset)[1]?.content).toBe("Bring lunch");
+});
+
+it("prefers valid AS tombstone metadata and falls back per predicate to LongChat metadata", async () => {
+  const dataset = await parseChat(
+    `<#m1> a <${NS.AS}Tombstone>;
+      <${NS.AS}attributedTo> <${alice}>; <${NS.FOAF}maker> <${bob}>;
+      <${NS.AS}published> "2026-10-26T11:00:00Z"; <${NS.DCT}created> "2026-10-26T11:01:00Z".
+    <#m2> a <${NS.AS}Tombstone>;
+      <${NS.AS}attributedTo> "invalid"; <${NS.FOAF}maker> <${bob}>;
+      <${NS.AS}published> "invalid"; <${NS.DCT}created> "2026-10-26T11:01:00Z".`,
+    dayUrl(room, at),
+  );
+  expect(readMessages(dataset).map(({ author, published }) => ({ author, published }))).toEqual([
+    { author: alice, published: at.toISOString() },
+    { author: bob, published: "2026-10-26T11:01:00.000Z" },
+  ]);
+});
+
 it("handles foreign malformed fields per predicate and ignores unrelated/blank/named-graph subjects", async () => {
   const dataset = await parseChat(
     `
