@@ -41,7 +41,8 @@ fences. Tabs crossing that boundary leave spaces for their remaining columns; la
 Quoted fences that consume a tab while removing indentation are conservatively rejected because
 quote-prefix removal changes the original tab stops. Tabs after the removed indentation remain supported.
 Literal tabs within list text or link titles are rejected before expanded content can be imported.
-Structural tabs in list indentation and after list markers remain supported for non-code items.
+Tabs confined to leading list indentation and the item's opening marker spacing remain supported
+for non-code items; tabs after continuation-line markers are conservatively rejected too.
 Code blocks and code spans in list items containing literal tabs are conservatively rejected,
 including tabs in structural whitespace, because list tokenization expands tabs before code parsing.
 This restriction applies per item, including its nested content; tab-free sibling items remain supported.

@@ -296,7 +296,7 @@ function list(token: Tokens.List, depth: number, tabbedQuote: boolean): DocsNode
       // Marked can expand any later tab, including ordinary text and link titles.
       const content = item.raw
         .replace(/^ {0,3}(?:[*+-]|\d{1,9}[.)])[ \t]+(?:\[[ xX]\][ \t]+)?/, "")
-        .replace(/^[ \t]*(?:(?:[*+-]|\d{1,9}[.)])[ \t]+)?/gm, "");
+        .replace(/^[ \t]*/gm, "");
       if (content.includes("\t")) {
         fail("Content tabs in list items are unsupported");
       }
