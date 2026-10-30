@@ -154,6 +154,62 @@ describe("people validation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove Bram Kerst" }));
     expect(screen.queryByRole("list", { name: "Selected people" })).toBeNull();
   });
+  describe.each([
+    { name: "isComposing", composition: { isComposing: true } },
+    { name: "keyCode 229", composition: { isComposing: false, keyCode: 229 } },
+  ])("IME composition via $name", ({ composition }) => {
+    it.each(["ArrowDown", "ArrowUp"])("ignores %s navigation", (key) => {
+      render(
+        <Picker people={[contact, { webId: "https://alice.example/me", displayName: "Alice" }]} />,
+      );
+      const input = screen.getByRole("combobox");
+      fireEvent.focus(input);
+      expect(fireEvent.keyDown(input, { key, ...composition })).toBe(true);
+      expect(input.getAttribute("aria-activedescendant")).toBeNull();
+
+      fireEvent.keyDown(input, { key: "ArrowDown" });
+      const highlighted = screen.getByRole("option", { selected: true });
+      expect(fireEvent.keyDown(input, { key, ...composition })).toBe(true);
+      expect(screen.getByRole("option", { selected: true })).toBe(highlighted);
+      expect(input.getAttribute("aria-activedescendant")).toBe(highlighted.id);
+    });
+    it("ignores Enter on a highlighted contact until composition ends", () => {
+      render(<Picker />);
+      const input = screen.getByRole("combobox");
+      fireEvent.focus(input);
+      fireEvent.keyDown(input, { key: "ArrowDown" });
+      const highlighted = screen.getByRole("option", { selected: true });
+      expect(fireEvent.keyDown(input, { key: "Enter", ...composition })).toBe(true);
+      expect(screen.queryByRole("list", { name: "Selected people" })).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(input.getAttribute("aria-activedescendant")).toBe(highlighted.id);
+
+      fireEvent.keyDown(input, { key: "Enter" });
+      expect(screen.getByRole("list", { name: "Selected people" }).textContent).toContain(
+        contact.webId,
+      );
+    });
+    it.each([
+      "https://raw.example/me",
+      "入力中",
+    ])("ignores Enter on raw entry %s until composition ends", (query) => {
+      render(<Picker people={[]} />);
+      const input = screen.getByRole("combobox") as HTMLInputElement;
+      fireEvent.change(input, { target: { value: query } });
+      expect(fireEvent.keyDown(input, { key: "Enter", ...composition })).toBe(true);
+      expect(input.value).toBe(query);
+      expect(screen.queryByRole("list", { name: "Selected people" })).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+
+      fireEvent.keyDown(input, { key: "Enter" });
+      if (query.startsWith("https://")) {
+        expect(screen.getByRole("list", { name: "Selected people" }).textContent).toContain(query);
+        expect(input.value).toBe("");
+      } else {
+        expect(screen.getByRole("alert").textContent).toContain("Enter an account ID");
+      }
+    });
+  });
   it.each([1, 3])("selects the last contact with initial ArrowUp among %i suggestions", (count) => {
     const people = ["Alice", "Bob", "Chris"].slice(0, count).map((displayName) => ({
       webId: `https://${displayName.toLowerCase()}.example/profile#me`,

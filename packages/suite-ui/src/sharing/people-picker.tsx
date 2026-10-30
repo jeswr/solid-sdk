@@ -254,6 +254,7 @@ export function PeoplePicker({
             setError("");
           }}
           onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
             if (event.key === "ArrowDown" || event.key === "ArrowUp") {
               event.preventDefault();
               setOpen(true);
