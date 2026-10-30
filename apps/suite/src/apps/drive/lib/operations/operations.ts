@@ -96,6 +96,15 @@ export class TrashMovingError extends Error {
   }
 }
 
+export class TrashTraversalChangedError extends Error {
+  constructor(cause: unknown) {
+    super("The folder changed during deletion. Refresh Trash and confirm deletion again.", {
+      cause,
+    });
+    this.name = "TrashTraversalChangedError";
+  }
+}
+
 export class TrashRestorePartialError extends Error {
   readonly kind = "trash-restore-partial";
   constructor(readonly remaining: readonly { url: string; error: unknown }[]) {
@@ -1637,27 +1646,25 @@ async function removeTrashItem(
     }
     throw error;
   }
-  for (let attempt = 0; ; attempt += 1) {
-    try {
-      await client.remove(url, {
-        recursive: true,
-        ...(etag !== undefined ? { ifMatch: etag } : {}),
-        ...discoveryOptions({ verifyHeaders }),
-      });
-    } catch (error) {
-      const cause = error instanceof DrivePartialFailureError ? error.cause : error;
-      await recheckDeletionFailure(client, error);
-      // A DELETE may commit before its response is lost. Absence settles any
-      // ambiguous failure; a surviving resource still follows normal errors.
+  try {
+    await client.remove(url, {
+      recursive: true,
+      ...(etag !== undefined ? { ifMatch: etag } : {}),
+      ...discoveryOptions({ verifyHeaders }),
+    });
+  } catch (error) {
+    const cause = error instanceof DrivePartialFailureError ? error.cause : error;
+    await recheckDeletionFailure(client, error);
+    if (!isMissingItem(cause)) {
       if (!(await exists(client, url))) return;
-      if (!(cause instanceof DriveError && cause.kind === "not-found")) throw error;
-      if (attempt > 0) throw error;
-      // Recursive removal takes a new listing on the one retry.
-      continue;
+      throw error;
     }
-    if (await exists(client, url)) throw new DriveError("conflict", 409, url);
-    return;
+    if (!(await exists(client, url))) return;
+    // Starting another traversal would replace every descendant's captured
+    // validator, even when the approved top-level container is unchanged.
+    throw new TrashTraversalChangedError(error);
   }
+  if (await exists(client, url)) throw new DriveError("conflict", 409, url);
 }
 
 const DAY = 86_400_000;

@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex
 "use client";
 /** Folder breadcrumbs (04-drive §2.2): My Drive › … › current; "‹ Parent" on phones. Crumbs accept drops. */
 
@@ -6,12 +7,10 @@ import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { type DragEvent, useState } from "react";
 import { encodeRef } from "@/lib/refs";
-import type { DriveItem } from "../lib/client/client";
 import { breadcrumbs } from "../lib/files/breadcrumbs";
+import { DRIVE_ITEMS_TYPE, takeDragItems } from "../state/drag-items";
 import { useDrive } from "../state/drive-context";
 import { useDriveActions } from "../state/ui";
-
-const DRAG_TYPE = "application/x-solid-drive-items";
 
 export function Breadcrumbs({ folder }: { folder: string }) {
   const { driveRoot, client } = useDrive();
@@ -29,7 +28,7 @@ export function Breadcrumbs({ folder }: { folder: string }) {
   const parent = crumbs[crumbs.length - 2];
   const dropProps = (url: string) => ({
     onDragOver: (event: DragEvent) => {
-      if (![...event.dataTransfer.types].includes(DRAG_TYPE)) return;
+      if (![...event.dataTransfer.types].includes(DRIVE_ITEMS_TYPE)) return;
       event.preventDefault();
       setOver(url);
     },
@@ -37,13 +36,8 @@ export function Breadcrumbs({ folder }: { folder: string }) {
     onDrop: async (event: DragEvent) => {
       event.preventDefault();
       setOver(undefined);
-      try {
-        const urls = JSON.parse(event.dataTransfer.getData(DRAG_TYPE)) as string[];
-        const items = await Promise.all(urls.map((entry) => client.stat(entry)));
-        await actions.move(items as DriveItem[], url);
-      } catch {
-        // A drop from elsewhere: nothing to move.
-      }
+      const items = takeDragItems(client, event.dataTransfer.getData(DRIVE_ITEMS_TYPE));
+      if (items.length) await actions.move(items, url);
     },
   });
   return (

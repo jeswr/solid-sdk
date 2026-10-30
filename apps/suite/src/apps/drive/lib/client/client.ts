@@ -435,6 +435,73 @@ function itemFromResource(resource: Resource, knownType: string | undefined): Dr
   };
 }
 
+/** A target's headers cannot say whether it is another resource's absent ACL.
+ * Discover the storage namespace before ordinary mutations, rather than relying
+ * on which access panes this client happened to open. Custom endpoints may live
+ * outside their protected resource's folder. Incomplete discovery fails closed.
+ * This is preflight hydration; commitHttp still owns every final identity check.
+ */
+export async function discoverContentTargets(
+  http: typeof fetch,
+  storageUrl: string,
+  access: ReturnType<typeof accessControl>,
+  targets: readonly string[],
+): Promise<void> {
+  for (const target of targets) access.assertContentDestination(target);
+  const requireDiscovery = (url: string, headers: Headers): string => {
+    if (
+      !access.discover(url, headers, true) &&
+      headers.get("x-solid-demo-access-control") !== "none"
+    )
+      throw new DriveAccessError("Missing access-control discovery (expose Link through CORS)");
+    return headers.get("link") ?? "";
+  };
+  const visit = async (
+    folder: string,
+    verifyHeaders: ResourceAssertion["verifyHeaders"],
+  ): Promise<void> => {
+    const current = await fetchRdf(folder, {
+      fetch: (input, init) => http(input, { ...init, cache: "no-store" }),
+    });
+    verifyHeaders(current.response.headers);
+    const links = requireDiscovery(folder, current.response.headers);
+    // A partial containment page cannot prove that a candidate is ordinary
+    // content. Do not silently omit resources beyond the first page.
+    for (const link of links.matchAll(/<([^>]*)>\s*((?:;\s*[^,]*)*)/g)) {
+      const rel = /;\s*rel\s*=\s*(?:"([^"]*)"|([^;\s]+))/i.exec(link[2] as string);
+      if ((rel?.[1] ?? rel?.[2] ?? "").split(/\s+/).includes("next"))
+        throw new DriveAccessError("Incomplete containment discovery");
+    }
+    const folders: { url: string; verifyHeaders: ResourceAssertion["verifyHeaders"] }[] = [];
+    const members = [...new Container(folder, current.dataset, DataFactory).contains];
+    for (const child of members) validateMember(folder, child.id);
+    for (const item of members) {
+      const response = await http(item.id, { method: "HEAD", cache: "no-store" });
+      if (!response.ok) throw errorFor(response.status, item.id);
+      requireDiscovery(item.id, response.headers);
+      if (item.id.endsWith("/"))
+        folders.push({
+          url: item.id,
+          verifyHeaders: access.captureEndpoint(item.id, response.headers),
+        });
+    }
+    for (const folder of folders) await visit(folder.url, folder.verifyHeaders);
+  };
+  try {
+    const root = await http(storageUrl, { method: "HEAD", cache: "no-store" });
+    if (!root.ok) throw errorFor(root.status, storageUrl);
+    requireDiscovery(storageUrl, root.headers);
+    if (root.headers.get("x-solid-demo-access-control") !== "none")
+      await visit(storageUrl, access.captureEndpoint(storageUrl, root.headers));
+  } catch (cause) {
+    throw new DriveAccessError(
+      cause,
+      "Drive could not discover the storage's access-control resources. Retry once its contents can be read.",
+    );
+  }
+  for (const target of targets) access.assertContentDestination(target);
+}
+
 export function createSolidDriveClient(options: {
   storageUrl: string;
   fetch: typeof globalThis.fetch;
@@ -573,6 +640,15 @@ export function createSolidDriveClient(options: {
     );
   };
 
+  const prepareContentTargets = async (targets: readonly string[]): Promise<void> => {
+    for (const target of targets) {
+      access.assertContentDestination(target);
+      // Pending deletion owns both endpoints; preserve its specific retry signal.
+      await deletion.guard(target);
+    }
+    await discoverContentTargets(http, storageUrl, access, targets);
+  };
+
   const stat = async (
     url: string,
     opts?: { ifMatch: string; readonly verifyHeaders?: ResourceAssertion["verifyHeaders"] },
@@ -698,6 +774,7 @@ export function createSolidDriveClient(options: {
         });
       }
       if (clear) {
+        access.assertContentDestination(url);
         const required = await ledger.get(url);
         const cleared = await commitHttp({
           verifyHeaders: clear.verifyHeaders,
@@ -787,6 +864,7 @@ export function createSolidDriveClient(options: {
     required?: OwnAccess,
     provisioned = false,
   ): Promise<Response> => {
+    access.assertContentDestination(url);
     for (
       let target: string | undefined = url;
       target?.startsWith(storageUrl);
@@ -940,6 +1018,9 @@ export function createSolidDriveClient(options: {
       verifyScopeHeaders(scope, url, headers);
       effects.verifyHeaders?.(headers);
     };
+    // Discovery above may reveal a nonstandard ACL endpoint at this URL.
+    // This synchronous invariant also guards demo/direct and replay writes.
+    access.assertContentDestination(url);
     response = await commitHttp({
       ...effects,
       verifyHeaders,
@@ -1110,15 +1191,17 @@ export function createSolidDriveClient(options: {
       },
   ): Promise<{ etag?: string }> => {
     requirePolicy(policy, ["protect-ancestors", "owner-only"]);
+    access.assertContentDestination(url);
     if (opts.restoreFrom) {
       const source = await snapshot(opts.restoreFrom.url, true, opts.restoreFrom.verifyHeaders);
       if (source.etag !== opts.restoreFrom.etag) throw new DriveError("conflict", 412, source.url);
+      const recoveryOwner = recoveryOwnerFor((source.binding as AccessBinding).source, source.demo);
       await provision.guard(url, true);
       const binding = await bindAccess(access, source.url, url);
       const resource: CreatedResource = { url, source, etag: undefined };
       let cleanup: Awaited<ReturnType<typeof rollback>> | undefined;
       const compensation = new Compensation(async () => {
-        cleanup = await rollback([resource], binding);
+        cleanup = await rollback([resource], binding, recoveryOwner);
         if (cleanup.pending) throw cleanup.pending;
       });
       const check = { binding, compensation, until: source.url };
@@ -1412,6 +1495,7 @@ export function createSolidDriveClient(options: {
       },
     scope: AccessScope = new Set(),
   ) => {
+    access.assertContentDestination(url);
     const parents = await versions.prepare(url);
     await deletion.remove(url, validator(url, etag), recovery, {
       ...commit,
@@ -1659,9 +1743,15 @@ export function createSolidDriveClient(options: {
     await checkResourceIdentity(source.url, etag, source.verifyHeaders);
   };
 
+  const recoveryOwnerFor = (policy: OwnAccess, demo: boolean | undefined) => {
+    const webId = owner ?? policyOwner(policy);
+    if (!demo && !webId) throw new DriveAccessError("Recovery owner unavailable");
+    return webId;
+  };
+
   const secureRetained = async (
     resource: CreatedResource,
-    privateWebId?: string,
+    webId: string | undefined,
   ): Promise<{ urls: string[]; warning?: unknown }> => {
     let policy =
       resource.protection ??
@@ -1669,9 +1759,10 @@ export function createSolidDriveClient(options: {
       resource.source.inheritedAccess ??
       resource.source.binding?.source;
     if (!policy || !resource.etag) return { urls: [resource.url] };
-    if (privateWebId) {
-      policy = { ...policy, dataset: privateAcl(resource.url, privateWebId) };
-    }
+    // Retained transfer bytes are recovery, not a continuation of captured
+    // sharing. Source access can fail before deletion or during rollback itself.
+    // Both branches use this invariant, including Copy and descendant cleanup.
+    if (webId) policy = { ...policy, dataset: privateAcl(resource.url, webId) };
     try {
       const identity = {
         url: resource.url,
@@ -1683,20 +1774,15 @@ export function createSolidDriveClient(options: {
         );
       else {
         const own = createdOwnAccess(resource);
-        await provision.protect(
-          resource.url,
-          policy,
-          privateWebId || resource.protection ? resource.url : resource.source.url,
-          {
-            identity: {
-              ...identity,
-              verifyHeaders: (headers) => access.verifyEndpoint(identity.url, headers, own),
-            },
-            restrict: true,
-            knownAcl: own?.url,
-            expectedAcl: own?.policy ?? null,
+        await provision.protect(resource.url, policy, resource.url, {
+          identity: {
+            ...identity,
+            verifyHeaders: (headers) => access.verifyEndpoint(identity.url, headers, own),
           },
-        );
+          restrict: true,
+          knownAcl: own?.url,
+          expectedAcl: own?.policy ?? null,
+        });
       }
       return { urls: [resource.url] };
     } catch (warning) {
@@ -1721,7 +1807,11 @@ export function createSolidDriveClient(options: {
     }
   };
 
-  const rollback = async (created: CreatedResource[], binding: AccessBinding) => {
+  const rollback = async (
+    created: CreatedResource[],
+    binding: AccessBinding,
+    recoveryOwner: string | undefined,
+  ) => {
     const retained: string[] = [];
     let pending: unknown;
     for (const resource of [...created].reverse()) {
@@ -1778,7 +1868,7 @@ export function createSolidDriveClient(options: {
         // Refused source validation must not strand the retained recovery under
         // widened access. Only its captured destination identity authorizes repair.
         try {
-          const secured = await secureRetained(resource);
+          const secured = await secureRetained(resource, recoveryOwner);
           retained.push(...secured.urls);
           if (!pending) pending = secured.warning;
         } catch (cause) {
@@ -1948,6 +2038,7 @@ export function createSolidDriveClient(options: {
     opts: Parameters<DriveClient["mergeContainer"]>[3],
   ) => {
     requirePolicy(decision, ["preserve-source"]);
+    access.assertContentDestination(to);
     const capturedGuards = (opts?.sourceGuards ?? []).map((identity) =>
       requireResourceAssertion(identity, errorFor),
     );
@@ -1961,6 +2052,10 @@ export function createSolidDriveClient(options: {
       throw new DriveError("conflict", 412, from);
     const own = await access.snapshot(from, original.headers);
     const binding = await bindAccess(access, from, to, false, own);
+    const recoveryOwner = recoveryOwnerFor(
+      binding.source,
+      original.headers.get("x-solid-demo-access-control") === "none",
+    );
     const source: SourceSnapshot = {
       url: from,
       etag: original.etag,
@@ -2009,7 +2104,7 @@ export function createSolidDriveClient(options: {
       if (recovery.status === 404 || recovery.status === 410) return;
       await ensureOk(recovery, from);
       if (created) {
-        const cleanup = await rollback([resource], binding);
+        const cleanup = await rollback([resource], binding, recoveryOwner);
         if (cleanup.pending) throw cleanup.pending;
       } else if (previous && resource.etag) {
         // Our restored children changed membership. Hydrate the resulting
@@ -2174,7 +2269,10 @@ export function createSolidDriveClient(options: {
     approvedEtag?: string,
     sourceGuards: readonly ResourceIdentity[] = [],
     approvedDiscovery?: ResourceAssertion["verifyHeaders"],
+    approvedSource?: SourceSnapshot,
   ): Promise<MoveResult> => {
+    access.assertContentDestination(to);
+    if (moving) access.assertContentDestination(from);
     if (from.endsWith("/") !== to.endsWith("/") || (from.endsWith("/") && to.startsWith(from))) {
       throw new DriveError("conflict", 409, to);
     }
@@ -2185,20 +2283,30 @@ export function createSolidDriveClient(options: {
     );
     for (const identity of capturedGuards) versions.track(identity.url);
     await deletion.guard(from);
-    const source = await snapshot(from, true, approvedDiscovery);
+    // Renewed destination consent never renews the source content or policies.
+    // Reuse the entire original capture, including descendants and bindings.
+    const source = approvedSource ?? (await snapshot(from, true, approvedDiscovery));
+    if (approvedSource)
+      for (const node of snapshots(source)) {
+        await (node.binding as AccessBinding).recheck();
+        await verifySnapshotIdentity(node);
+      }
     if (approvedEtag !== undefined && source.etag !== validator(from, approvedEtag))
       throw new DriveError("conflict", 412, from);
     // A late revocation must leave a private recovery copy. Establish its owner
     // before copying bytes or retiring any node, including children without Control.
-    const recoveryOwner = owner ?? policyOwner((source.binding as AccessBinding).source);
-    if (moving && !source.demo && !recoveryOwner)
-      throw new DriveAccessError("Recovery owner unavailable");
+    const recoveryOwner = recoveryOwnerFor((source.binding as AccessBinding).source, source.demo);
     // Reserve the captured tree before copying or removing any node. Child
     // cleanup shares the flight, including rollback after a failed copy.
     return sourceOperation(
       sourceUrls(source).flatMap((url) => [url, `${to}${url.slice(from.length)}`]),
       async (transferHeld) => {
         const nodes = snapshots(source);
+        // Validate the whole tree before creating any destination or archive.
+        for (const node of nodes) {
+          access.assertContentDestination(`${to}${node.url.slice(from.length)}`);
+          if (moving) access.assertContentDestination(node.url);
+        }
         // Resolve every node, even for same-folder renames and descendants with own ACLs.
         // A missing Link or unreadable ancestor can never stand in for known absence.
         const effective = new Map<SourceSnapshot, AccessState>();
@@ -2215,9 +2323,8 @@ export function createSolidDriveClient(options: {
           const inherited: SourceSnapshot[] = [];
           const affected = (node: SourceSnapshot, protectedDefaults: boolean) => {
             if (node.access.status === "none" && !protectedDefaults) inherited.push(node);
-            const protectedChildren =
-              protectedDefaults ||
-              (node.access.status === "known" && access.hasDefaults(node.access.policy, node.url));
+            // Any own ACL ends inheritance, including a deny-all default projection.
+            const protectedChildren = protectedDefaults || node.access.status === "known";
             for (const child of node.children ?? []) affected(child, protectedChildren);
           };
           affected(source, false);
@@ -2259,7 +2366,7 @@ export function createSolidDriveClient(options: {
         const created: CreatedResource[] = [];
         let cleanup: Awaited<ReturnType<typeof rollback>> | undefined;
         const compensation = new Compensation(async () => {
-          cleanup = await rollback(created, destinationBinding);
+          cleanup = await rollback(created, destinationBinding, recoveryOwner);
         });
         const bindings = new Map<string, AccessBinding>();
         for (const node of nodes) bindings.set(`source:${node.url}`, node.binding as AccessBinding);
@@ -2451,10 +2558,7 @@ export function createSolidDriveClient(options: {
             retained.length = 0;
             for (const resource of created) {
               try {
-                const secured = await secureRetained(
-                  resource,
-                  changedBeforeDelete && !privateOwner ? recoveryOwner : undefined,
-                );
+                const secured = await secureRetained(resource, recoveryOwner);
                 retained.push(...secured.urls);
                 if (secured.warning) protectionFailure = secured.warning;
               } catch (cause) {
@@ -2490,6 +2594,7 @@ export function createSolidDriveClient(options: {
                 approvedEtag ?? source.etag,
                 capturedGuards,
                 approvedDiscovery,
+                source,
               );
             }
             throw error;
@@ -2586,6 +2691,7 @@ export function createSolidDriveClient(options: {
     held: ReadonlySet<string> = new Set(),
     scope: AccessScope = new Set(),
   ) => {
+    access.assertContentDestination(url);
     await deletion.guard(url);
     const deleted: string[] = [];
     let recovery: SourceSnapshot | undefined;
@@ -2791,6 +2897,8 @@ export function createSolidDriveClient(options: {
       return sourceOperation(
         [url],
         async () => {
+          requirePolicy(args[2], ["protect-ancestors", "owner-only"]);
+          await prepareContentTargets([url]);
           await recheckScope(scopeFor(this));
           const saved = await write(url, ...args, undefined, scopeFor(this));
           await recheckScope(scopeFor(this));
@@ -2799,16 +2907,25 @@ export function createSolidDriveClient(options: {
         scopes.get(this),
       );
     },
-    createFolder,
+    async createFolder(url, policy) {
+      requirePolicy(policy, ["inherit-verified", "archived", "owner-only"]);
+      await prepareContentTargets([url]);
+      await createFolder(url, policy);
+    },
     mergeContainer(from, to, policy, opts) {
       return sourceOperation(
         [from, to],
-        () => mergeContainer(from, to, policy, scopeFor(this), opts),
+        async () => {
+          requirePolicy(policy, ["preserve-source"]);
+          await prepareContentTargets([to]);
+          return mergeContainer(from, to, policy, scopeFor(this), opts);
+        },
         scopes.get(this),
       );
     },
     prepareTrash: async (url, decision) => {
       requirePolicy(decision, ["owner-only"]);
+      await prepareContentTargets([url]);
       const webId = decision.webId;
       if (webId) owner = webId;
       const response = await http(url, { method: "HEAD" });
@@ -2839,14 +2956,22 @@ export function createSolidDriveClient(options: {
     copy(from, to, policy, opts) {
       return sourceOperation(
         [from, to],
-        (held) => copy(from, to, policy, held, scopeFor(this), opts),
+        async (held) => {
+          requirePolicy(policy, ["preserve-source"]);
+          await prepareContentTargets([to]);
+          return copy(from, to, policy, held, scopeFor(this), opts);
+        },
         scopes.get(this),
       );
     },
     move(from, to, ...args) {
       return sourceOperation(
         [from, to],
-        (held) => move(from, to, args[0], args[1], held, scopeFor(this)),
+        async (held) => {
+          requirePolicy(args[0], ["preserve-source", "confirm-move"]);
+          await prepareContentTargets([from, to]);
+          return move(from, to, args[0], args[1], held, scopeFor(this));
+        },
         scopes.get(this),
       );
     },
@@ -2854,6 +2979,7 @@ export function createSolidDriveClient(options: {
       return sourceOperation(
         [url],
         async (held) => {
+          await prepareContentTargets([url]);
           const scope = scopeFor(this);
           await recheckScope(scope);
           await remove(url, opts, held, scope);

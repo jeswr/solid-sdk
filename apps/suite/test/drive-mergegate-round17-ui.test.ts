@@ -119,7 +119,7 @@ async function setup(hiddenLink = false) {
 it.each([
   false,
   true,
-])("Retry asks again before replacing a public empty file with the identical content ETag (hidden Link: %s)", async (hiddenLink) => {
+])("Retry refuses missing discovery or asks again before replacing an identical content ETag (hidden Link: %s)", async (hiddenLink) => {
   const env = await setup(hiddenLink);
   const { f, urls, failures, writes, settled } = env;
   const url = `${PUBLIC}report.txt`;
@@ -131,6 +131,21 @@ it.each([
   await act(async () =>
     env.drive.uploads.enqueue(PUBLIC, [new File(["secret contents"], "report.txt")]),
   );
+  if (hiddenLink) {
+    // Round 73: namespace discovery refuses the initial attempt. Retry asks
+    // about the existing target, but confirmation still cannot authorize PUT.
+    await settled(["failed"]);
+    await click(button("Retry report.txt"));
+    await settled(["conflict"]);
+    await click(button("Replace"));
+    await settled(["failed"]);
+    expect(env.drive.uploads.tasks[0]?.error).toContain("Drive could not discover");
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(writes).toEqual([]);
+    expect(await (await f.fetch(url)).text()).toBe("");
+    expect((await f.anonymous(url)).status).toBe(403);
+    return;
+  }
   await settled(["conflict"]);
   failures.add(url);
   await click(button("Replace"));

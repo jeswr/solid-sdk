@@ -112,9 +112,10 @@ it("demo writes use the explicit no-access-control response without rechecking e
     { kind: "protect-ancestors" },
   );
   const target = `${DRIVE}folder/nested/file`;
-  // The demo capability still avoids redundant ancestor probes; endpoint access
-  // and the final identity check remain mandatory before its one payload PUT.
+  // Namespace discovery still probes the storage root. The demo capability
+  // avoids redundant ancestor probes while keeping the final identity check.
   expect(fetch.mock.calls.filter(([url]) => String(url) !== target)).toEqual([
+    [ROOT, { method: "HEAD", cache: "no-store" }],
     [`${DRIVE}folder/nested/`, { method: "HEAD" }],
   ]);
   const writes = fetch.mock.calls.filter(([, init]) => init?.method === "PUT");

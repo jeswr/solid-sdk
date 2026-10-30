@@ -281,8 +281,10 @@ it.each([
       { kind: "protect-ancestors" },
     );
   if (mode === "unreadable index")
-    f.intercept(async (url) =>
-      url === `${DRIVE}.trash/index.ttl` ? new Response(null, { status: 403 }) : undefined,
+    f.intercept(async (url, init) =>
+      url === `${DRIVE}.trash/index.ttl` && init?.method !== "HEAD"
+        ? new Response(null, { status: 403 })
+        : undefined,
     );
   const onPrivateFolder = vi.fn();
   const fresh = createSolidDriveClient({
@@ -292,7 +294,8 @@ it.each([
     onPrivateFolder,
   });
   f.audit([PRIVATE]);
-  // A raw upload exercises fallback even when the index itself cannot be read.
+  // Namespace HEAD discovery remains available; the archive body read can fail.
+  // A raw upload still exercises the verified private fallback in that case.
   await fresh.write(
     `${PRIVATE}secret`,
     "secret contents",

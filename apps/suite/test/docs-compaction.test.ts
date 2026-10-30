@@ -91,8 +91,8 @@ describe("Docs log compaction before trash", () => {
     });
     await f.compact();
     expect(peak).toBe(64);
-    // Drive also checks the compacted copy's content and discovery after its PUT.
-    expect(f.http).toHaveBeenCalledTimes(3 * 65 + 11);
+    // Drive discovers the namespace and checks the compacted copy after its PUT.
+    expect(f.http).toHaveBeenCalledTimes(3 * 65 + 12);
     expect(f.deletes()).toHaveLength(65);
     expect(f.copies()).toHaveLength(1);
     expect(f.copies()[0]?.[1].body).toEqual(mergeUpdates(updates));

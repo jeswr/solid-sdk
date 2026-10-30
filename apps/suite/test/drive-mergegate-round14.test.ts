@@ -87,8 +87,10 @@ it("raw metadata writes cannot create a container or recreate one deleted after 
       { kind: "protect-ancestors" },
     ),
   ).rejects.toMatchObject({ kind: "not-found" });
+  let reads = 0;
   f.after(async (url, method, response) => {
-    if (url === PRIVATE && method === "HEAD" && response.ok)
+    // Discovery runs first; delete after the metadata operation captures its HEAD.
+    if (url === PRIVATE && method === "HEAD" && response.ok && ++reads === 2)
       await f.pod.fetch(PRIVATE, { method: "DELETE" });
     return response;
   });
@@ -272,7 +274,11 @@ it.each([
   try {
     expect(await protectionLedger(f.fetch).get(PRIVATE)).toBeDefined();
     await new Promise<void>((resolve) => setImmediate(resolve));
-    expect(settled).not.toHaveBeenCalled();
+    if (mode === "hidden Link") {
+      // Round 73: incomplete namespace discovery refuses before entering the
+      // provisioning flight. Other uploads still wait for that flight to settle.
+      await expect(uploading).rejects.toThrow("Drive could not discover");
+    } else expect(settled).not.toHaveBeenCalled();
     expect(f.pod.has(`${PRIVATE}concurrent`)).toBe(false);
   } finally {
     release.resolve();

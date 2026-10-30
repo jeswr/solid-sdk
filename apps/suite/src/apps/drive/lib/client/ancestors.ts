@@ -253,6 +253,7 @@ export function ancestorGuard(options: {
     effects: CommitEffects = {},
   ): Promise<{ response: Response; policy?: OwnAccess }> => {
     const binding = await bindAccess(access, url, url, true);
+    access.assertContentDestination(url);
     // An orphan ACL is not inherited creation access, even when a 404 exposes
     // its Link. Never adopt it as permission to populate a newly minted item.
     if (binding.destinationOwn?.policy)
@@ -371,6 +372,7 @@ export function ancestorGuard(options: {
     allowAbsent = false,
   ): Promise<boolean> => {
     assertWithinPodScope(storageUrl, destination);
+    access.assertContentDestination(destination);
     let url = parent(destination);
     const missing: string[] = [];
     const containers: string[] = [];

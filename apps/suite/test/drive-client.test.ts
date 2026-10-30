@@ -343,7 +343,7 @@ describe("Drive error handling and foreign server responses", () => {
     [500, "failed"],
   ])("maps HTTP %i for both RDF listings and direct requests", async (status, kind) => {
     const client = stubClient(async (input, init) =>
-      String(input) === DRIVE && init?.method === "HEAD"
+      [DEMO_ROOT, DRIVE].includes(String(input)) && init?.method === "HEAD"
         ? new Response(null, { headers: { "x-solid-demo-access-control": "none" } })
         : new Response(null, { status }),
     );

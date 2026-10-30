@@ -161,6 +161,27 @@ export function accessLabel(state: AccessState, resource: string, webId: string)
 }
 
 export function accessControl(http: typeof globalThis.fetch, storageUrl: string) {
+  const auxiliaryResources = new Set<string>();
+  /** Ordinary content must never create, replace or remove an access-control document,
+   * including encoded names, implicit ancestors and custom discovered endpoints.
+   * ACL installation uses its separate conditional policy-write seam.
+   */
+  function assertContentDestination(resource: string): void {
+    const url = new URL(resource);
+    const decoded = decodeURIComponent(url.href).replace(/\/$/, "");
+    if (
+      decodeURIComponent(url.pathname)
+        .split("/")
+        .some((part) => /\.(acl|acr)$/i.test(part)) ||
+      [...auxiliaryResources].some(
+        (endpoint) => decoded === endpoint || decoded.startsWith(`${endpoint}/`),
+      )
+    )
+      throw new DriveAccessError(
+        "Access-control destination",
+        "This destination identifies an access-control resource. Choose a different file or folder name.",
+      );
+  }
   // Only conditional creation receipts can establish previously undiscoverable
   // endpoints. Existing bindings retain their captured endpoint, even if absent.
   const creations = new Map<string, Headers>();
@@ -192,6 +213,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
           throw new DriveAccessError("ACP privacy cannot be verified by this adapter");
       }
     }
+    if (acl) auxiliaryResources.add(decodeURIComponent(acl).replace(/\/$/, ""));
     return acl;
   }
   /** Capture endpoint, access model and mode discovery as one immutable assertion. */
@@ -411,8 +433,9 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
         if (own.status === "unknown" || (own.status === "none" && own.demo)) return own;
         if (own.status === "known") {
           const policy = projectAccess(own.policy, current, resource, inherit);
-          if (!inherit || policy.dataset.size)
-            return { status: "known", policy, ...(endpoint ? { own: endpoint } : {}) };
+          // ACL existence ends WAC inheritance. An empty default projection
+          // denies access; it never authorizes consulting a farther ancestor.
+          return { status: "known", policy, ...(endpoint ? { own: endpoint } : {}) };
         }
         current = parent(current);
         inherit = true;
@@ -424,6 +447,7 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     }
   };
   return {
+    assertContentDestination,
     recordCreation(resource: string, headers: Headers): void {
       creations.set(resource, new Headers(headers));
     },
@@ -451,8 +475,6 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     retarget: retargetAccess,
     defaults: (own: OwnAccess, resource: string): OwnAccess =>
       projectAccess(own, resource, resource, true),
-    hasDefaults: (own: OwnAccess, resource: string): boolean =>
-      projectAccess(own, resource, resource, true).dataset.size > 0,
     read,
     store,
     snapshot,
@@ -723,7 +745,7 @@ export async function bindAccess(
         creation: access.creationReceipt(to),
         own: destinationOwn,
         resource: access.forResource(policy, to),
-        defaults: to.endsWith("/") && defaults.dataset.size ? defaults : destination.defaults,
+        defaults: to.endsWith("/") ? defaults : undefined,
       };
       if (from === to) source = destination;
     },
@@ -822,6 +844,14 @@ function materializeAccess(own: OwnAccess, resource: string): OwnAccess {
     for (const predicate of [...SELECTORS, "origin", "mode"])
       for (const value of rule.values(`${ACL}${predicate}`))
         target.values(`${ACL}${predicate}`).add(value);
+  }
+  // Preserve a known empty projection as an identifiable WAC deny-all ACL.
+  // Omitting its own ACL would reactivate destination inheritance; an empty
+  // document cannot be verified by the typed WAC reader.
+  if (!dataset.size) {
+    const deny = new WritableAuthorization(DataFactory.blankNode(), dataset, DataFactory);
+    deny.type.add(`${ACL}Authorization`);
+    deny.accessTo = resource;
   }
   return { ...own, dataset };
 }

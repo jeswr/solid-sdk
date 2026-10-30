@@ -41,6 +41,19 @@ Overwrite PUTs, metadata replay, container merging and root/index/description
 writes assert their captured endpoint on the same final HTTP boundary. Transfer
 preflight also requires a recovery owner before moving non-demo resources, so a
 late revocation can always retain private copies even for children without Control.
+Copy and container merge require that same captured recovery owner. Both transfer
+failure branches pass it explicitly to `secureRetained`; retained bytes never
+materialize an old public grant, including when rollback's source check refuses
+before deletion begins.
+
+DriveProvider's Type Index bootstrap uses `driveBootstrapFetch` for every index,
+preferences and profile write. The adapter shares namespace discovery and
+`commitHttp` with ordinary operations, pins the first discovery for each content
+validator, and advances approval only from its own successful mutation receipts.
+An automatic registration retry cannot adopt a concurrent replacement. Request
+bodies and namespace reads finish before the shared final conditional HEAD.
+The [round 74 audit](../../../../../test/drive-review-round74-audit.md) lists the
+complete call-site audit and 79-scenario ordering/discovery matrix.
 
 Compensation uses the complete captured own ACL, including independent child
 defaults. An unchanged ACL stays intact during content replay; its captured
@@ -108,6 +121,37 @@ before clearing, and recovery deletion checks survivor assertions before DELETE.
 Payload overwrites keep their approved If-Match verbatim; atomic parent receipts
 advance ancestor guards rather than a later overwrite decision.
 
+The [round 69 audit](../../../../../test/drive-review-round69-audit.md) maps the
+nearest-existing-ACL invariant, deny-all materialization, Details shortcut targets,
+and all audited commit/confirmation paths. The nearest ACL always ends WAC
+inheritance, even when its default projection is empty. Installing that policy
+replaces the previous default capture; transfers preserve the deny-all boundary.
+The mutation matrices include deny-all transfers and bootstrap PATCH/index writes.
+List/grid folder drops and breadcrumb drops share a client-scoped, single-use drag
+capture; neither drop-time HEADs nor newer listing rows may replace its validator
+or discovery assertion.
+
+The [round 70 audit](../../../../../test/drive-review-round70-audit.md) lists every
+audited call site and all 67 variants in each mutation-boundary table, including
+startup file/tree purge. Startup purge invalidates the Trash subtree after
+settlement even without push notifications or after a partially completed failure.
+It shares explicit actions' refusal/recovery reporting. Shared partial Restore
+continues to compare against archived original grants, including inherited sharing,
+rather than the owner-only recovery ACL.
+
+The [round 71 audit](../../../../../test/drive-review-round71-audit.md) maps the
+shared ordinary-destination invariant and every audited mutation/confirmation
+caller. Content writes and provisioning reject decoded `.acl`/`.acr` path
+segments and discovered custom access-control endpoints before placeholders or
+ancestor creation. Transfers validate every destination in the captured tree
+before creating any of it; source disposal and conditional clearing share the
+same guard, so ordinary deletion cannot remove an ACL and resume inheritance.
+Details releases its shared targets when a listing
+route unmounts. The boundary matrices cover 70 scenarios for both ordering shapes
+and independently change each captured ACL endpoint and access mode. Partial
+Restore tests also preserve own and inherited person-specific sharing after a
+refused Trash DELETE.
+
 The [round 67 audit](../../../../../test/drive-review-round67-audit.md) maps every
 audited call site, confirmation-to-commit discovery transport, policy/archive and
 survivor assertions, access-mode capture, moved multi-selection hydration, and the
@@ -163,3 +207,30 @@ validator replacement and IndexedDB/Web Lock ordering for every destructive step
 including private retention's conditional payload clearing. The round 56 tests also
 exercise missing atomic receipts on recursive removal, Move, Restore, partial
 Restore, Delete forever, and Empty Trash.
+
+The [round 72 audit](../../../../../test/drive-review-round72-audit.md) maps the
+custom-endpoint discovery and confirmation-lifetime fixes and every audited call
+site. Before any ordinary mutation, Drive discovers WAC/ACP endpoints across the
+readable storage namespace, including absent custom ACLs advertised by siblings
+or resources in other folders. Encoded endpoint aliases and their ancestor paths
+are reserved too. Incomplete, unreadable or paginated discovery refuses before
+mutation. This preflight costs reads proportional to namespace size and never
+populates UI metadata caches or authorizes a newer content validator. Explicit
+root demo mode retains its no-ACL behavior. The shared HTTP commit boundary still
+owns every final conditional identity assertion. A closed confirmation host
+cancels both queued requests and requests arriving after asynchronous preflight,
+so an unmounted Drive cannot retain Move/Undo source reservations indefinitely.
+Bootstrap and resume reuse that namespace helper too; root creation, root or
+description marker PATCH, and Type Index overwrite apply the same content-target
+assertion. A describedby target never authorizes treating an ACL as app metadata.
+
+The [round 73 audit](../../../../../test/drive-review-round73-audit.md) records the
+complete discovery and retry audit. Every successful namespace HEAD and containment
+GET must expose WAC/ACP discovery; a hidden child Link stops the entire mutation
+before a placeholder can become that child's absent custom ACL. Renewed destination
+consent retains the original source snapshot, policies and descendant identities.
+Recursive permanent deletion stops on a stale traversal and requires refreshed
+confirmation instead of restarting with newer descendant validators. Delete forever,
+Empty Trash and startup purge share that refusal. The 75-scenario boundary matrices
+cover both ordering shapes and changed final discovery, including renewed-consent
+file and folder moves, with IndexedDB, Web Lock and timer tracing.

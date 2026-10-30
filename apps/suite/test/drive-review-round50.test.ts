@@ -521,9 +521,11 @@ it.each([
       : undefined,
   );
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });
-  await expect(client.mergeContainer(from, to, { kind: "preserve-source" })).rejects.toMatchObject({
-    status: 503,
-  });
+  await expect(client.mergeContainer(from, to, { kind: "preserve-source" })).rejects.toMatchObject(
+    failure === "listing" ? { cause: { status: 503 } } : { status: 503 },
+  );
+  if (failure === "listing")
+    expect(f.calls.some(({ method }) => ["PUT", "DELETE"].includes(method))).toBe(false);
   expect(f.pod.has(from)).toBe(true);
   expect(f.pod.has(to)).toBe(true);
   expect(await (await f.pod.fetch(to)).text()).not.toContain("confidential");

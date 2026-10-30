@@ -122,7 +122,7 @@ it("round 64: late endpoint refusal reports retained private bytes when recovery
   expect(f.calls.filter(({ method }) => method === "DELETE")).toEqual([]);
 });
 
-it("round 64: repeated stale Trash traversals retain the confirmed root validator and recovery", async () => {
+it("round 64/73: a stale Trash traversal stops without refreshing descendant captures", async () => {
   const f = await rdfPod();
   const from = `${PRIVATE}secret`;
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });
@@ -134,8 +134,16 @@ it("round 64: repeated stale Trash traversals retain the confirmed root validato
   const missing = new DriveError("not-found", 404, `${entry.url}/stale-child`);
   const remove = vi.spyOn(client, "remove").mockRejectedValue(missing);
   const result = await deleteForever(client, DRIVE, [entry]);
-  expect(result.failed).toEqual([{ url: entry.url, error: missing }]);
-  expect(remove).toHaveBeenCalledTimes(2);
+  expect(result.failed).toEqual([
+    {
+      url: entry.url,
+      error: expect.objectContaining({
+        message: "The folder changed during deletion. Refresh Trash and confirm deletion again.",
+        cause: missing,
+      }),
+    },
+  ]);
+  expect(remove).toHaveBeenCalledTimes(1);
   for (const [url, options] of remove.mock.calls) {
     expect(url).toBe(entry.url);
     expect(options?.ifMatch).toBe(entry.etag);

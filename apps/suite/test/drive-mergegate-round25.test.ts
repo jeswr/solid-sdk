@@ -610,12 +610,16 @@ it("a direct recovery move refuses an unreadable policy archive before payload w
   const [entry] = (await trashItems(client, DRIVE, [await client.stat(original)], { webId: OWNER }))
     .done;
   if (!entry) throw new Error("Missing recovery");
-  f.intercept(async (url) =>
-    url.endsWith("/.access.json") ? new Response(null, { status: 403 }) : undefined,
+  f.calls.length = 0;
+  f.intercept(async (url, init) =>
+    url.endsWith("/.access.json") && init?.method !== "HEAD"
+      ? new Response(null, { status: 403 })
+      : undefined,
   );
-  await expect(client.move(entry.url, original, { kind: "preserve-source" })).rejects.toThrow(
-    "Private access",
+  await expect(client.move(entry.url, original, { kind: "preserve-source" })).rejects.toMatchObject(
+    { cause: 403 },
   );
+  expect(f.calls.some(({ method }) => ["PUT", "DELETE"].includes(method))).toBe(false);
   expect(f.pod.has(entry.url)).toBe(true);
   expect(f.pod.has(original)).toBe(false);
 });

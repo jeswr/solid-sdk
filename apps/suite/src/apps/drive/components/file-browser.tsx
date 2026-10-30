@@ -69,6 +69,12 @@ import {
   TYPE_FILTER_LABELS,
   viewItems,
 } from "../lib/view/view";
+import {
+  captureDragItems,
+  clearDragItems,
+  DRIVE_ITEMS_TYPE,
+  takeDragItems,
+} from "../state/drag-items";
 import { useDrive } from "../state/drive-context";
 import { readDrop } from "../state/dropped-files";
 import { useDriveListingFocus } from "../state/listing-focus";
@@ -113,7 +119,6 @@ export interface FileBrowserProps {
   readonly footer?: ReactNode;
 }
 
-const DRAG_TYPE = "application/x-solid-drive-items";
 const PLACEHOLDERS = Array.from({ length: 10 }, (_, n) => `placeholder-${n}`);
 
 function locationLabel(folder: string | undefined, driveRoot: string | undefined): string {
@@ -193,7 +198,7 @@ function reconcileItem(item: DriveItem, row: DriveItem): DriveItem {
 
 export function FileBrowser(props: FileBrowserProps) {
   const { title, items, error, onRetry, folder, columns, empty, fixedOrder, refreshing } = props;
-  const { prefs, updatePrefs, uploads, driveRoot, session } = useDrive();
+  const { prefs, updatePrefs, uploads, driveRoot, session, client } = useDrive();
   const ui = useDriveUi();
   const actions = useDriveActions();
   const router = useRouter();
@@ -243,6 +248,9 @@ export function FileBrowser(props: FileBrowserProps) {
   const listingFocus = useDriveListingFocus(ids, container);
 
   const { setDetailsItems, setCurrentFolder, uploadRequest } = ui;
+  // Details lives above route bodies. Release this listing's targets when its
+  // route unmounts, including navigation to views without another FileBrowser.
+  useLayoutEffect(() => () => setDetailsItems([]), [setDetailsItems]);
   const selectionRequest = useRef(0);
   const detailsSelection = useRef({ folder, request: selectionRequest.current });
   useEffect(() => {
@@ -421,8 +429,10 @@ export function FileBrowser(props: FileBrowserProps) {
           actions.open(focused, visible, ui.setPreview);
         }
         return;
-      case (event.key === "Enter" && event.altKey) || (event.key === "d" && !mod):
+      case (event.key === "Enter" && event.altKey) ||
+        ((event.key === "d" || event.key === "]") && !mod && !event.altKey):
         event.preventDefault();
+        event.stopPropagation();
         ui.setDetailsItems(targets);
         return ui.setDetailsOpen((open) => !open);
       case (event.key === "F2" || (event.key === "n" && !mod)) &&
@@ -460,17 +470,8 @@ export function FileBrowser(props: FileBrowserProps) {
       event.preventDefault();
       return;
     }
-    event.dataTransfer.setData(DRAG_TYPE, JSON.stringify(targets.map((t) => t.url)));
+    event.dataTransfer.setData(DRIVE_ITEMS_TYPE, captureDragItems(client, targets));
     event.dataTransfer.effectAllowed = "move";
-  };
-
-  const draggedItems = (event: DragEvent): DriveItem[] => {
-    try {
-      const urls = JSON.parse(event.dataTransfer.getData(DRAG_TYPE)) as string[];
-      return visible.filter((item) => urls.includes(item.url));
-    } catch {
-      return [];
-    }
   };
 
   const dropUpload = (target: string, data: DataTransfer) =>
@@ -484,7 +485,7 @@ export function FileBrowser(props: FileBrowserProps) {
       ? {
           onDragOver: (event: DragEvent) => {
             const types = [...event.dataTransfer.types];
-            if (!types.includes(DRAG_TYPE) && !types.includes("Files")) return;
+            if (!types.includes(DRIVE_ITEMS_TYPE) && !types.includes("Files")) return;
             event.preventDefault();
             event.stopPropagation();
             setDropTarget(item.url);
@@ -498,7 +499,10 @@ export function FileBrowser(props: FileBrowserProps) {
             setDropping(false);
             if (hasFiles(event)) dropUpload(item.url, event.dataTransfer);
             else {
-              const moving = draggedItems(event).filter((entry) => entry.url !== item.url);
+              const moving = takeDragItems(
+                client,
+                event.dataTransfer.getData(DRIVE_ITEMS_TYPE),
+              ).filter((entry) => entry.url !== item.url);
               if (moving.length > 0) void actions.move(moving, item.url);
             }
           },
@@ -756,6 +760,7 @@ export function FileBrowser(props: FileBrowserProps) {
                   }
                   draggable={Boolean(folder)}
                   onDragStart={(event) => onDragStart(event, item)}
+                  onDragEnd={() => clearDragItems(client)}
                   onClick={(event) => onItemClick(event, item)}
                   onDoubleClick={(event) =>
                     fromRow(event) && actions.open(item, visible, ui.setPreview)
@@ -841,6 +846,7 @@ export function FileBrowser(props: FileBrowserProps) {
                     tabIndex={isActive ? 0 : -1}
                     draggable={Boolean(folder)}
                     onDragStart={(event) => onDragStart(event, item)}
+                    onDragEnd={() => clearDragItems(client)}
                     onClick={(event) => onItemClick(event, item)}
                     onDoubleClick={(event) =>
                       fromRow(event) && actions.open(item, visible, ui.setPreview)

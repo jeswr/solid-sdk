@@ -3,14 +3,22 @@ import { createRequire } from "node:module";
 import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { afterEach, expect, it, vi } from "vitest";
+import {
+  ensureTypeRegistrations,
+  ProfileTypeIndexAnchor,
+} from "../src/apps/docs/lib/model/type-index";
 import { accessControl, privateAcl } from "../src/apps/drive/lib/client/access";
+import { driveBootstrapFetch } from "../src/apps/drive/lib/client/bootstrap";
 import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
 import { confirmationOptions } from "../src/apps/drive/lib/client/commit";
 import { protectionLedger } from "../src/apps/drive/lib/client/protection-ledger";
+import { ensureDriveRoot } from "../src/apps/drive/lib/model/root";
+import { PODDRIVE, RDF } from "../src/apps/drive/lib/model/vocab";
 import {
   deleteForever,
   listTrash,
   moveItems,
+  purgeExpired,
   renameItem,
   restoreItems,
   trashItems,
@@ -29,6 +37,7 @@ import {
   EVERYONE,
   OWNER,
   PRIVATE,
+  PUBLIC,
   ROOT,
   turtle,
   WacFields,
@@ -55,6 +64,7 @@ const steps = [
   "recursive remove",
   "Delete forever",
   "Empty Trash",
+  "startup purge",
   "overwrite",
   "folder metadata",
   "Restore",
@@ -95,6 +105,7 @@ const steps = [
   "Restore tree",
   "Delete forever tree",
   "Empty Trash tree",
+  "startup purge tree",
   "Replace completion recovery clearing",
   "Move completion recovery clearing",
   "Copy completion recovery clearing",
@@ -104,19 +115,57 @@ const steps = [
   "Upload payload",
   "Keep both payload",
   "unconditional creation payload",
+  "deny-all copy payload",
+  "deny-all move",
+  "deny-all rename",
+  "deny-all Trash",
+  "deny-all Restore",
+  "root marker PATCH",
+  "description marker PATCH",
+  "Type Index overwrite",
+  "safe-name Upload payload",
+  "safe-name copy payload",
+  "safe-name rename",
+  "custom-name Upload payload",
+  "custom-name copy payload",
+  "custom-name rename",
+  "renewed-consent move",
+  "renewed-consent move tree",
+  "startup index overwrite",
+  "startup preferences overwrite",
+  "startup profile overwrite",
+  "revoked source recovery ACL",
 ] as const;
 type Step = (typeof steps)[number];
 
-async function scenario(variant: Step, events: string[]) {
+async function scenario(variant: Step, events: string[], captureModes = false) {
   let sequence = 0;
   vi.spyOn(crypto, "randomUUID").mockImplementation(
     () => `00000000-0000-4000-8000-${String(++sequence).padStart(12, "0")}`,
   );
   const tree = variant.endsWith(" tree");
+  const renewed = variant.startsWith("renewed-consent ");
+  const base = renewed ? variant.slice("renewed-consent ".length) : variant;
   const shared = variant.startsWith("shared ");
-  const step = (tree ? variant.slice(0, -5) : shared ? variant.slice(7) : variant) as Step;
+  const denyAll = variant.startsWith("deny-all ");
+  const safeName = variant.startsWith("safe-name ");
+  const customName = variant.startsWith("custom-name ");
+  const step = (
+    tree
+      ? base.slice(0, -5)
+      : shared
+        ? variant.slice(7)
+        : denyAll
+          ? variant.slice(9)
+          : safeName
+            ? variant.slice(10)
+            : customName
+              ? variant.slice(12)
+              : base
+  ) as Step;
   const f = await rdfPod();
   if (shared) f.policies.set(`${PRIVATE}.policy`, await aclBody(PRIVATE, true));
+  if (denyAll) f.policies.set(`${PRIVATE}.policy`, await aclBody(PRIVATE, false, false));
   const mutations: { url: string; method: string; empty: boolean; prior: string | undefined }[] =
     [];
   type IdentityCheck = { url: string; check: number };
@@ -135,12 +184,16 @@ async function scenario(variant: Step, events: string[]) {
   let completionTarget: string | undefined;
   let completionWritten = false;
   let completionChanged = false;
+  const consentDestination = `${DRIVE}consent/`;
+  let consentWidened = false;
+  let sourceRevoked = false;
   const http: typeof fetch = async (input, init) => {
     const url = String(input);
     const method = init?.method ?? "GET";
     const headers = new Headers(init?.headers);
     if (
       method === "DELETE" ||
+      method === "PATCH" ||
       (method === "PUT" && (headers.has("if-match") || url.endsWith(".policy")))
     ) {
       mutations.push({ url, method, empty: init?.body === "", prior: events.at(-1) });
@@ -154,6 +207,24 @@ async function scenario(variant: Step, events: string[]) {
       });
     }
     const response = await f.fetch(input, init);
+    if (
+      renewed &&
+      !consentWidened &&
+      url.startsWith(consentDestination) &&
+      !url.endsWith(".policy") &&
+      method === "PUT" &&
+      headers.has("if-match") &&
+      response.ok
+    ) {
+      consentWidened = true;
+      f.policies.set(`${consentDestination}.policy`, await aclBody(consentDestination, true));
+    }
+    if (captureModes) response.headers.set("wac-allow", 'user="read write control",public=""');
+    if (variant === "revoked source recovery ACL" && url.startsWith(PRIVATE))
+      response.headers.set(
+        "wac-allow",
+        `user="read write control",public="${sourceRevoked ? "" : "read"}"`,
+      );
     if (url === completionTarget && method === "PUT" && headers.has("if-match") && response.ok)
       completionWritten = true;
     if (method === "HEAD" && headers.has("if-match")) {
@@ -169,11 +240,20 @@ async function scenario(variant: Step, events: string[]) {
         finalChecks.push({ url, check: identityCounts.get(url) as number });
         await afterIdentity?.(url, response);
       }
-    } else finalChecks = [];
+    } else if (method !== "HEAD" || !headers.has("if-none-match")) finalChecks = [];
     events.push(method === "HEAD" && headers.has("if-match") ? "identity HEAD" : method);
     return response;
   };
-  const client = createSolidDriveClient({ storageUrl: ROOT, fetch: http, webId: OWNER });
+  const client = createSolidDriveClient({
+    storageUrl: ROOT,
+    fetch: http,
+    webId: OWNER,
+    ...(denyAll || renewed ? { confirmAccess: async () => "keep" as const } : {}),
+  });
+  if (renewed) {
+    await f.pod.fetch(consentDestination, { method: "PUT", body: "" });
+    f.policies.set(`${consentDestination}.policy`, await aclBody(consentDestination));
+  }
   const folder =
     tree ||
     [
@@ -227,8 +307,118 @@ async function scenario(variant: Step, events: string[]) {
   let targetCheck = 1;
   let identityTarget: string | undefined;
   let run: () => Promise<unknown>;
-  if (["Upload payload", "Keep both payload", "unconditional creation payload"].includes(step)) {
-    target = `${PRIVATE}new-upload`;
+  if (step.startsWith("startup ") && step.endsWith(" overwrite")) {
+    const profile = new URL("profile", ROOT).href;
+    const preferences = `${ROOT}settings/prefs.ttl`;
+    const index = `${ROOT}settings/privateTypeIndex.ttl`;
+    f.policies.set(`${ROOT}.policy`, await aclBody(ROOT));
+    const data = new Store();
+    if (step === "startup index overwrite") {
+      new ProfileTypeIndexAnchor(OWNER, data, DataFactory).privateIndex = index;
+      await f.pod.fetch(index, {
+        method: "PUT",
+        body: "",
+        headers: { "content-type": "text/turtle" },
+      });
+    }
+    if (step === "startup preferences overwrite")
+      await f.pod.fetch(preferences, {
+        method: "PUT",
+        body: "",
+        headers: { "content-type": "text/turtle" },
+      });
+    await f.pod.fetch(profile, {
+      method: "PUT",
+      body: await turtle(data),
+      headers: { "content-type": "text/turtle" },
+    });
+    target =
+      step === "startup index overwrite"
+        ? index
+        : step === "startup preferences overwrite"
+          ? preferences
+          : profile;
+    run = () =>
+      ensureTypeRegistrations({
+        webId: OWNER,
+        podRoot: ROOT,
+        registrations: [{ forClass: "https://example.test/Class", container: DRIVE }],
+        fetchImpl: driveBootstrapFetch(http, ROOT),
+      });
+  } else if (step === "revoked source recovery ACL") {
+    const destination = `${PUBLIC}retained`;
+    f.policies.set(`${PRIVATE}.policy`, await aclBody(PRIVATE, true));
+    f.after(async (url, method, response) => {
+      if (
+        !sourceRevoked &&
+        url === destination &&
+        method === "PUT" &&
+        response.ok &&
+        (await (await f.pod.fetch(destination)).text()) === "secret contents"
+      ) {
+        sourceRevoked = true;
+        f.policies.set(`${PRIVATE}.policy`, await aclBody(PRIVATE));
+      }
+      return response;
+    });
+    target = `${destination}.policy`;
+    identityTarget = destination;
+    // The destination's first conditional HEAD writes its payload; the second
+    // binds owner-only recovery after rollback refuses the revoked source.
+    targetCheck = 2;
+    run = () => client.move(source, destination, { kind: "confirm-move" });
+  } else if (
+    ["root marker PATCH", "description marker PATCH", "Type Index overwrite"].includes(step)
+  ) {
+    // Exercise the bootstrap's real shared commit boundary too. The mock pod
+    // applies only this known marker PATCH using typed RDF fields.
+    for (const url of [`${PRIVATE}secret`, PRIVATE, `${PUBLIC}placeholder`, PUBLIC])
+      await f.pod.fetch(url, { method: "DELETE" });
+    const index = `${ROOT}index.ttl`;
+    const description = `${ROOT}drive-description`;
+    await f.pod.fetch(index, {
+      method: "PUT",
+      body: "",
+      headers: { "content-type": "text/turtle" },
+    });
+    if (step === "description marker PATCH")
+      await f.pod.fetch(description, {
+        method: "PUT",
+        body: "",
+        headers: { "content-type": "text/turtle" },
+      });
+    target =
+      step === "Type Index overwrite" ? index : step === "root marker PATCH" ? DRIVE : description;
+    f.after(async (url, method, response) => {
+      if (url === DRIVE && method === "GET" && response.ok) {
+        response.headers.append("link", `<${description}>; rel="describedby"`);
+        if (step !== "description marker PATCH") response.headers.set("accept-patch", "text/n3");
+      }
+      return response;
+    });
+    f.intercept(async (url, init) => {
+      if (init?.method !== "PATCH") return undefined;
+      const headers = new Headers(init.headers);
+      const current = await f.pod.fetch(url, { method: "HEAD" });
+      if (headers.get("if-match") !== current.headers.get("etag"))
+        return new Response(null, { status: 412 });
+      const data = new Store();
+      new WacFields(DRIVE, data, DataFactory).iris(RDF.type).add(PODDRIVE.DriveRoot);
+      const body = await turtle(data);
+      if (url !== DRIVE)
+        await f.pod.fetch(url, {
+          method: "PUT",
+          body,
+          headers: { "if-match": headers.get("if-match") as string },
+        });
+      await f.pod.fetch(DRIVE, { method: "PUT", body });
+      return new Response(null, { status: 205 });
+    });
+    run = () => ensureDriveRoot(http, { storageUrl: ROOT, typeIndexUrl: index });
+  } else if (
+    ["Upload payload", "Keep both payload", "unconditional creation payload"].includes(step)
+  ) {
+    target = `${PRIVATE}new-upload${safeName ? ".acl.txt" : customName ? "-policy.ttl" : ""}`;
     run = () =>
       step === "unconditional creation payload"
         ? client.write(
@@ -241,7 +431,7 @@ async function scenario(variant: Step, events: string[]) {
             client,
             PRIVATE,
             new Blob(["upload"]),
-            "new-upload",
+            safeName ? "new-upload.acl.txt" : customName ? "new-upload-policy.ttl" : "new-upload",
             step === "Keep both payload" ? "keep-both" : "fail",
           );
   } else if (step.endsWith("completion recovery clearing")) {
@@ -335,6 +525,7 @@ async function scenario(variant: Step, events: string[]) {
     [
       "Delete forever",
       "Empty Trash",
+      "startup purge",
       "Restore",
       "partial file Restore",
       "partial folder Restore",
@@ -350,7 +541,10 @@ async function scenario(variant: Step, events: string[]) {
           ? new Response(null, { status: 412 })
           : undefined,
       );
-    await trashItems(client, DRIVE, [selected], { webId: OWNER });
+    await trashItems(client, DRIVE, [selected], {
+      webId: OWNER,
+      ...(step === "startup purge" ? { now: new Date(Date.now() - 31 * 86_400_000) } : {}),
+    });
     f.intercept(undefined);
     const [entry] = await listTrash(client, DRIVE);
     if (!entry) throw new Error("Missing recovery");
@@ -374,9 +568,11 @@ async function scenario(variant: Step, events: string[]) {
       });
     }
     run = () =>
-      step === "Restore" || step.startsWith("partial")
-        ? restoreItems(client, DRIVE, [entry])
-        : deleteForever(client, DRIVE, [entry]);
+      step === "startup purge"
+        ? purgeExpired(client, DRIVE)
+        : step === "Restore" || step.startsWith("partial")
+          ? restoreItems(client, DRIVE, [entry])
+          : deleteForever(client, DRIVE, [entry]);
   } else if (step === "container merge") {
     target = `${PRIVATE}merged/`;
     run = () => client.mergeContainer(source, target, { kind: "preserve-source" });
@@ -394,7 +590,7 @@ async function scenario(variant: Step, events: string[]) {
     });
     run = () => client.copy(source, target, { kind: "preserve-source" });
   } else if (step === "copy payload" || step === "copy rollback" || step === "container rollback") {
-    target = `${PRIVATE}copy${folder ? "/" : ""}`;
+    target = `${PRIVATE}copy${safeName ? ".acr.txt" : customName ? "-policy.ttl" : ""}${folder ? "/" : ""}`;
     if (step === "container rollback") {
       const data = new Store();
       new WacFields(source, data, DataFactory)
@@ -595,8 +791,15 @@ async function scenario(variant: Step, events: string[]) {
     });
     targetCheck = 2;
     run = () => uploadFile(client, PRIVATE, new Blob(["upload"]), "secret", "replace", selected);
-  } else if (step === "move") run = () => moveItems(client, [selected], `${PRIVATE}target/`);
-  else if (step === "rename") run = () => renameItem(client, selected, "renamed");
+  } else if (step === "move")
+    run = () => moveItems(client, [selected], renewed ? consentDestination : `${PRIVATE}target/`);
+  else if (step === "rename")
+    run = () =>
+      renameItem(
+        client,
+        selected,
+        safeName ? "renamed.acl.txt" : customName ? "renamed-policy.ttl" : "renamed",
+      );
   else if (step === "Trash") run = () => trashItems(client, DRIVE, [selected], { webId: OWNER });
   else if (step === "overwrite")
     run = () => uploadFile(client, PRIVATE, new Blob(["upload"]), "secret", "replace", selected);
@@ -628,9 +831,35 @@ async function scenario(variant: Step, events: string[]) {
   };
 }
 
+it.each([
+  "endpoint",
+  "modes",
+])("round 69: bootstrap registration retains its first index discovery (%s)", async (change) => {
+  const s = await scenario("Type Index overwrite", []);
+  const index = `${ROOT}index.ttl`;
+  let captured = false;
+  s.f.after(async (url, method, response) => {
+    if (url === index && method === "GET" && !captured) {
+      captured = true;
+      if (change === "endpoint")
+        response.headers.set("link", `<${ROOT}original-index.policy>; rel="acl"`);
+      else response.headers.set("wac-allow", 'user="read write control",public=""');
+    }
+    if (url === DRIVE && method === "GET" && response.ok) {
+      response.headers.append("link", `<${ROOT}drive-description>; rel="describedby"`);
+      response.headers.set("accept-patch", "text/n3");
+    }
+    return response;
+  });
+  const result = await s.run().catch((error: unknown) => error);
+  expect(captured).toBe(true);
+  expect(result).toBeInstanceOf(Error);
+  expect(s.f.calls).not.toContainEqual({ url: index, method: "PUT" });
+});
+
 it.each(
   steps,
-)("round 68 shape a: %s retains a replacement at its final identity check", async (step) => {
+)("round 74 shape a: %s retains a replacement at its final identity check", async (step) => {
   const events: string[] = [];
   const s = await scenario(step, events);
   let checks = 0;
@@ -660,7 +889,7 @@ it.each(
 
 it.each(
   steps,
-)("round 68 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
+)("round 74 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   const events: string[] = [];
   const s = await scenario(step, events);
@@ -680,6 +909,11 @@ it.each(
     events.push("Web Lock");
     return Reflect.apply(request, locks, args);
   });
+  const timeout = globalThis.setTimeout;
+  vi.spyOn(globalThis, "setTimeout").mockImplementation((callback, delay, ...args) => {
+    events.push("timer");
+    return timeout(callback, delay, ...args);
+  });
   await s.run().catch(() => undefined);
   const targetMutations = s.mutations.filter(({ url }) => url === s.target);
   if (["copy rollback without Link", "container rollback without Link"].includes(step))
@@ -689,9 +923,12 @@ it.each(
 });
 
 it.each(
-  steps,
-)("round 68 final discovery: %s refuses an ACL endpoint change on its conditional HEAD", async (step) => {
-  const baseline = await scenario(step, []);
+  steps.flatMap((step) => ["endpoint", "modes"].map((change) => ({ step, change }))),
+)("round 74 final discovery: $step refuses changed captured $change on its conditional HEAD", async ({
+  step,
+  change,
+}) => {
+  const baseline = await scenario(step, [], change === "modes");
   const baselineOutcome = await baseline.run().catch((error: unknown) => error);
   const boundary = baseline.boundaries.findLast(
     (boundary) => boundary.target === baseline.target && boundary.check > 0,
@@ -726,7 +963,7 @@ it.each(
   // boundary, including checks that precede the very last target HEAD.
   expect(boundary.identities.length).toBeGreaterThan(0);
   for (const identity of boundary.identities) {
-    const s = await scenario(step, []);
+    const s = await scenario(step, [], change === "modes");
     let checks = 0;
     let changed = false;
     let mutationsBefore = 0;
@@ -739,10 +976,13 @@ it.each(
           mutation.method === boundary.method &&
           mutation.empty === boundary.empty,
       ).length;
-      const endpoint = `${url}foreign-final.policy`;
-      s.f.endpoints.set(url, endpoint);
-      s.f.policies.set(endpoint, await aclBody(url, true));
-      response.headers.set("link", `<${endpoint}>; rel="acl"`);
+      if (change === "modes") response.headers.set("wac-allow", 'user="read",public=""');
+      else {
+        const endpoint = `${url}foreign-final.policy`;
+        s.f.endpoints.set(url, endpoint);
+        s.f.policies.set(endpoint, await aclBody(url, true));
+        response.headers.set("link", `<${endpoint}>; rel="acl"`);
+      }
     });
     const outcome = await s.run().catch((error: unknown) => error);
     expect(changed, JSON.stringify({ step, identity })).toBe(true);

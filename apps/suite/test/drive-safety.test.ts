@@ -535,7 +535,8 @@ describe("Drive data-safety regressions", () => {
     const remove = vi.spyOn(client, "remove");
     const result = await deleteForever(client, DRIVE, entries);
     recovery = undefined;
-    expect(remove.mock.calls.filter(([url]) => url === entry.url)).toHaveLength(2);
+    expect(remove.mock.calls.filter(([url]) => url === entry.url)).toHaveLength(1);
+    expect(vanished).toBe(1);
     expect(result.done).toEqual([]);
     expect(result.failed).toHaveLength(1);
     expect(await (await client.read(`${entry.url}c`)).text()).toBe("C");
