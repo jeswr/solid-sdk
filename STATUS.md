@@ -414,3 +414,48 @@ No dependencies were added or changed. No browser was launched and no screenshot
 as required by the lane brief. `roborev` remains unavailable, so automated per-commit review
 is pending dispatcher handoff. The requested fix is complete, with no new design assumptions
 or open questions. Nothing was fetched, pushed, published or opened as a PR.
+
+## Fix round 11 — review of `50360ef806b5`
+
+- `7cc2b74b` — `fix: allow dismissing offline consent`: add an enabled Close button in both
+  offline states, calling `onOpenChange(false)` independently of the disabled Cancel and Share
+  actions. Two regression cases cover cached and unavailable offline data, dismissal without
+  denial or sharing, and focus returning to the underlying app's opener.
+- Final documentation commit — `docs: record offline dismissal validation`.
+
+Both regression cases failed before the fix because no Close button existed and pass after
+the fix. Existing offline fixtures and per-state axe coverage include the new control.
+Validation used Node 24 and the checkout's root tool binaries:
+
+```sh
+export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"
+pnpm --filter @jeswr/suite-ui exec vitest run test/sharing.test.tsx -t 'dismisses offline consent'
+pnpm --filter @jeswr/suite-ui run lint && pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/suite-ui run typecheck && pnpm --filter @jeswr/suite-ui run test
+pnpm run lint:root
+TURBO_SCM_BASE=50360ef806b583c15eea05e38ac8b065e74f992e pnpm run gate
+pnpm run gate:full
+pnpm exec turbo run test:root --concurrency=1
+git diff --check
+git diff --check 50360ef806b583c15eea05e38ac8b065e74f992e
+```
+
+- Focused regression run: two failed before the fix; two passed afterwards, 74 skipped.
+- Package gate: passed, 79 tests across 2 files. The initial typecheck caught an unsupported
+  `exact` query option in the new test; it was removed before rerunning the complete gate.
+- Root lint: passed, including workspace, layering, token and contrast guards.
+- Affected gate: passed, 13/13 tasks. The consuming suite app passed all 5,993 tests across
+  114 files with 100% coverage; its lint reported the same 54 existing warnings.
+- Full gate: failed after 57 successful tasks (224 scheduled, 9 cached), at unchanged
+  `test/check-sdk-layers.test.mjs:328`, test “validates pathological specs in under 50 ms each”.
+  One check took 63.8 ms against the 50 ms limit. Root tests had 744 passes and one failure;
+  Turbo cancelled the remaining tasks before reaching the previously recorded federation-trust
+  snapshot failure.
+- Root-only retry without concurrent Turbo builds: reproduced the same timing assertion
+  (600.5 ms against 50 ms), with 744 tests passing and one failing. No root test or dependency
+  guard was changed in this round. The full-workspace gate remains blocked by that test.
+- Diff whitespace checks: passed. No generated files or dist output are committed.
+
+No dependencies were added or changed. No browser was launched and no screenshots were taken,
+as required by the lane brief. `roborev` remains unavailable, so automated per-commit review
+is pending dispatcher handoff. The requested fix is complete, with no new design assumptions
+or open questions. Nothing was fetched, pushed, published or opened as a PR.
