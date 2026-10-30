@@ -289,3 +289,45 @@ No dependencies were added or changed. No browser was launched and no screenshot
 as required by the lane brief. `roborev` remains unavailable, so automated per-commit review
 is pending dispatcher handoff. Both requested fixes are complete, with no new design assumptions
 or open questions. Nothing was fetched, pushed, published or opened as a PR.
+
+## Fix round 8 — review of `0ea13fd81539`
+
+- `e36247f3` — `fix: preserve highlighted contact identity`: store the active WebID and derive
+  its current result index, keeping the highlighted recipient stable when another contact's
+  delayed profile inserts a matching result before it. If the active contact stops matching,
+  expose no active option and prevent Enter from selecting another contact at the old index.
+  Four regression cases cover immediate Enter, ArrowUp/ArrowDown after insertion, active
+  descendant/selected-option consistency, and a highlighted profile that stops matching.
+- Final documentation commit — `docs: record profile selection fix validation`.
+
+All four regression cases failed before the fix and pass afterwards. Existing browser coverage
+already exercises the picker's keyboard selection path; no browser was launched in this round.
+Validation used Node 24 and the checkout's root tool binaries:
+
+```sh
+export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"
+pnpm --filter @jeswr/suite-ui exec vitest run test/sharing.test.tsx -t 'preserves the highlighted contact|clears the highlight'
+pnpm --filter @jeswr/suite-ui run lint && pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/suite-ui run typecheck && pnpm --filter @jeswr/suite-ui run test
+pnpm run lint:root
+TURBO_SCM_BASE=0ea13fd81539cc0ca359172aa585dccb7311b337 pnpm run gate
+pnpm run gate:full
+git diff --check
+git diff --check 0ea13fd81539cc0ca359172aa585dccb7311b337 HEAD
+```
+
+- Focused regression run: four failed before the fix; four passed afterwards, 56 skipped.
+- Package gate: passed, 63 tests across 2 files.
+- Root lint: passed, including workspace, layering, token and contrast guards.
+- Affected gate: passed, 13/13 tasks. The consuming suite app passed all 5,993 tests across
+  114 files with 100% coverage; its lint reported the same 54 existing warnings.
+- Full gate: failed after 289 successful tasks (340 scheduled, 12 cached), at the previously
+  recorded `packages/federation-trust/test/characterization.test.ts:196` test “delegation
+  credential structure is stable”. Expected public JWK field order is `crv,x,kty`; received
+  order is `kty,crv,x`. This round has no changes in that package. Turbo cancelled the remaining
+  tasks; the unrelated snapshot remains a full-workspace gate blocker.
+- Diff whitespace checks: passed. No generated files or dist output are committed.
+
+No dependencies were added or changed. No screenshots were taken. `roborev` remains unavailable,
+so automated per-commit review is pending dispatcher handoff. The requested fix is complete,
+with no new design assumptions or open questions. Nothing was fetched, pushed, published or
+opened as a PR.
