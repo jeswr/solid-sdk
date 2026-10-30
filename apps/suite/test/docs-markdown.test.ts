@@ -118,6 +118,31 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     roundTrip(source);
   });
 
+  it.each([1, 2])("exports multiline level-%i headings with setext syntax", (level) => {
+    const underline = level === 1 ? "===" : "---";
+    const source = `First\nSecond\n${underline}`;
+    const expected = doc(b("heading", [t("First\nSecond")], { level }));
+    expect(roundTrip(source)).toEqual(expected);
+    expect(docsToMarkdown(expected)).toBe(source);
+  });
+  it.each([
+    "Foo *bar\nbaz*\n====",
+    "**First**\n_Second_\n---",
+    "First\\\nSecond\n===",
+    "before\n\nFirst\nSecond\n===\n\nafter",
+    "> First\n> Second\n> ---",
+    "- First\n  Second\n  ===",
+    "- [x] item\n\n  First\n  Second\n  ---",
+  ])("round trips multiline headings with inline marks and surrounding blocks: %s", (source) => {
+    roundTrip(source);
+  });
+  it("rejects multiline level-3 headings that CommonMark cannot represent", () => {
+    errorCode(
+      () => docsToMarkdown(doc(b("heading", [t("First\nSecond")], { level: 3 }))),
+      "unrepresentable",
+    );
+  });
+
   it.each([
     "\t",
     " \t",

@@ -233,8 +233,12 @@ function render(node: DocsNode): string {
   switch (node.type) {
     case "paragraph":
       return inline(content);
-    case "heading":
-      return `${"#".repeat(node.attrs?.level as number)} ${inline(content)}`;
+    case "heading": {
+      const level = node.attrs?.level as number;
+      const value = inline(content);
+      if (level < 3 && value.includes("\n")) return `${value}\n${level === 1 ? "===" : "---"}`;
+      return `${"#".repeat(level)} ${value}`;
+    }
     case "horizontalRule":
       return "---";
     case "codeBlock": {
