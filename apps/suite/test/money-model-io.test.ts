@@ -101,6 +101,24 @@ describe("injected money store", () => {
       "month shard",
     );
   });
+  it("rejects malformed deletion fragments before any request", async () => {
+    const { store, requests } = pod();
+    for (const key of [
+      "",
+      "_bad",
+      "../tx",
+      "tx/other",
+      "tx#other",
+      "tx?query",
+      "tx%20",
+      "tx ",
+      "tx\n",
+    ])
+      await expect(store.deleteTransaction(key, row.postingTime)).rejects.toThrow(
+        "Invalid money ID",
+      );
+    expect(requests).toEqual([]);
+  });
   it("keeps referenced amounts when deleting a transaction, and handles an absent amount", async () => {
     const { store } = pod();
     const document = new model.MoneyDocument();
@@ -230,6 +248,52 @@ describe("injected money store", () => {
 });
 
 describe("statement import pipeline", () => {
+  it.each([
+    "csv",
+    "ofx",
+    "pdf",
+  ] as const)("deletes every %s row imported with a maximum-length statement key", async (format) => {
+    const { store, files } = pod();
+    await store.saveTransactions([row]);
+    const statement: model.Statement =
+      format === "csv"
+        ? { format, text: csvStatement, options }
+        : format === "ofx"
+          ? { format, text: sgmlStatement }
+          : {
+              format,
+              file: new Blob(["%PDF synthetic"]),
+              adapter: async () =>
+                Array.from({ length: 11 }, (_, index) => ({
+                  date: row.postingTime,
+                  amount: "1",
+                  description: `PDF row ${index}`,
+                })),
+            };
+    const result = await model.importStatement(store, "x".repeat(128), account, "GBP", statement);
+    expect((await store.read("transactions/2026-10.ttl")).document.transactions()).toEqual([
+      row,
+      ...result.transactions,
+    ]);
+    for (const transaction of result.transactions) {
+      const fragment = new URL(transaction.id).hash.slice(1);
+      expect(fragment.length).toBeGreaterThan(128);
+      await store.deleteTransaction(fragment, transaction.postingTime);
+    }
+    expect((await store.read("transactions/2026-10.ttl")).document.transactions()).toEqual([row]);
+    expect(files.has(result.source)).toBe(true);
+  });
+  it("keeps the statement-key limit and rejects oversized keys before any request", async () => {
+    const { store, requests } = pod();
+    await expect(
+      model.importStatement(store, "x".repeat(129), account, "GBP", {
+        format: "csv",
+        text: csvStatement,
+        options,
+      }),
+    ).rejects.toThrow("Invalid money ID");
+    expect(requests).toEqual([]);
+  });
   it.each([
     sgmlStatement,
     qfxStatement,

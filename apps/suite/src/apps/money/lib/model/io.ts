@@ -14,7 +14,7 @@ import { latestBalance, monthKey, monthKeys, runningBalance } from "./helpers";
 import { MoneyDocument, putTransaction, serialiseMoney, V } from "./rdf";
 import { createTransfer } from "./transfer";
 import type { Money, Range, Transaction } from "./types";
-import { identifier, validateTransaction } from "./validation";
+import { identifier, transactionIdentifier, validateTransaction } from "./validation";
 
 export type Precondition = { readonly etag: string } | { readonly create: true };
 export class MoneyIoError extends Error {
@@ -142,8 +142,8 @@ export function createMoneyStore(fetch: typeof globalThis.fetch, moneyContainer:
     return pair;
   }
   async function deleteTransaction(key: string, at: string) {
-    const id = transactionId(key, at);
     const path = `transactions/${monthKey(at)}.ttl`;
+    const id = `${resolve(path)}#${transactionIdentifier(key)}`;
     const loaded = await read(path);
     const node = loaded.document.node(id);
     if (node.types.has(V.transferClass))

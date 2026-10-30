@@ -8,7 +8,12 @@ export function iri(value: string): string {
   return value;
 }
 export function identifier(value: string): string {
-  if (!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(value)) throw new TypeError("Invalid money ID");
+  if (value.length > 128) throw new TypeError("Invalid money ID");
+  return transactionIdentifier(value);
+}
+/** Generated fragments append format/index suffixes to a validated, bounded key. */
+export function transactionIdentifier(value: string): string {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(value)) throw new TypeError("Invalid money ID");
   return value;
 }
 export function instant(value: string): number {
