@@ -190,6 +190,31 @@ describe("injected money store", () => {
     expect((await store.accounts())[0]?.balance?.amount).toBe("500");
     expect((await store.read("categories.ttl")).condition).toEqual({ create: true });
   });
+  it.each([
+    true,
+    false,
+  ])("rejects direct updates to loaded transfer legs before mutation (transaction type: %s)", async (transactionType) => {
+    const { store } = pod();
+    const pair = await store.transfer("move", account, other, row.postingTime, money);
+    const path = "transactions/2026-10.ttl";
+    const loaded = await store.read(path);
+    if (!transactionType)
+      for (const leg of pair) loaded.document.node(leg.id).types.delete(model.V.transactionClass);
+    const before = [...loaded.document.dataset];
+    for (const leg of pair) {
+      expect(() =>
+        model.putTransaction(loaded.document, {
+          ...leg,
+          amount: leg.amount.startsWith("-") ? "-50" : "50",
+          currency: "EUR",
+          description: "Changed",
+        }),
+      ).toThrow("Transfer legs must be changed together");
+      expect([...loaded.document.dataset]).toEqual(before);
+    }
+    await store.write(path, loaded.document, loaded.condition);
+    expect((await store.read(path)).document.transactions()).toEqual(pair);
+  });
   it("writes transfer pairs in one shard and refuses an isolated transfer deletion", async () => {
     const { store, requests } = pod();
     const pair = await store.transfer("move", account, other, row.postingTime, money);

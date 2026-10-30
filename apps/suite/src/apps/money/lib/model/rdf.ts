@@ -381,6 +381,8 @@ export function putBalance(document: MoneyDocument, value: Balance): void {
 export function putTransaction(document: MoneyDocument, value: Transaction): void {
   validateTransaction(value);
   const node = document.node(value.id);
+  if (node.types.has(V.transferClass))
+    throw new TypeError("Transfer legs must be changed together");
   node.types.add(V.transactionClass);
   node.account = value.account;
   node.postingTime = value.postingTime;
