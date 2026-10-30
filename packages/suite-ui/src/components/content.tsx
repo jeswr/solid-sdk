@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import { type ErrorCategory, errorStateCopy } from "./async-copy.js";
 import { EmptyState } from "./empty-state.js";
-import { ErrorState } from "./error-state.js";
+import { type ClassifiedError, type ErrorRecovery, ErrorState } from "./error-state.js";
 import { LoadingSkeleton } from "./loading-skeleton.js";
 import { renderAsync } from "./render-async.js";
 
@@ -30,7 +30,13 @@ export type SurfaceState =
   | { status: "ready" }
   | { status: "loading" }
   | { status: "empty"; query?: string; onAction?: () => void }
-  | { status: "error"; category: keyof typeof surfaceErrors; onRetry?: () => void };
+  | (ClassifiedError & {
+      status: "error";
+      actions?: ErrorRecovery;
+      accessRequests?: boolean;
+      /** Legacy recovery callback; explicit signIn/retry actions take precedence. */
+      onRetry?: () => void;
+    });
 
 export function SurfaceFeedback({
   state,
@@ -45,10 +51,20 @@ export function SurfaceFeedback({
     loading: state?.status === "loading" && <LoadingSkeleton preset="detail" />,
     error: state?.status === "error" && (
       <ErrorState
-        error={state.category}
-        actions={state.onRetry ? { retry: state.onRetry } : undefined}
+        error={state}
+        actions={{
+          ...(state.onRetry ? { retry: state.onRetry, signIn: state.onRetry } : {}),
+          ...state.actions,
+        }}
+        accessRequests={state.accessRequests}
         loadingPreset="detail"
-      />
+      >
+        {state.onRetry && !["reauth", "offline", "unreachable"].includes(state.category) && (
+          <button type="button" className="suite-async-action" onClick={state.onRetry}>
+            Retry
+          </button>
+        )}
+      </ErrorState>
     ),
     empty: state?.status === "empty" && (
       <EmptyState

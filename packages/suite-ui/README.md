@@ -64,7 +64,9 @@ Pass the façade's category to `ErrorState error={category}` or
 01 §9 copy/action map. Supply `actions` keyed by recovery action, with callbacks or
 native-link destinations. Access requests additionally require `accessRequests={true}`.
 Reauth retains a skeleton; the host supplies session/conflict dialogs via callbacks
-and `children`. Retry stays disabled until `retryAfterMs` expires. Report links must
+and `children`. Retry stays disabled until `retryAfterMs` expires. Keep each classified
+error object stable between rerenders and replace it for each new error occurrence,
+including repeated errors with the same category and delay. Report links must
 be supplied with redacted context; this component never reads raw exceptions.
 Collections accept `errorActions`, `accessRequests`, and error-state `retryAfterMs`.
 
@@ -210,6 +212,9 @@ share dialog. Render it inside the shell's `DetailsPane` (`@jeswr/suite-ui/shell
 owns the responsive pane or sheet; the consumer owns loading, refresh and errors.
 `PodMeter` takes usage in bytes and an optional quota; absent quota never implies a
 percentage. All three accept `ContentSurfaceState` for loading, empty and classified errors.
+Its error branch accepts `actions: ErrorRecovery`, `accessRequests`, and `retryAfterMs`,
+including `ItemDetails.accessState`. Legacy `onRetry` remains a fallback for Sign in on
+reauth and Retry on other categories; explicit `signIn` / `retry` actions take precedence.
 Upload and preview components use the separately exported `SurfaceState`.
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 ## App navigation (DS-03)

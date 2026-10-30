@@ -17,6 +17,7 @@ export interface ClassifiedError {
 }
 export type ErrorRecovery = Partial<Record<ErrorAction, (() => void) | string>>;
 export interface ErrorStateProps {
+  /** Keep the classified object stable for one occurrence; replace it for each new error. */
   error: ErrorCategory | ClassifiedError;
   actions?: ErrorRecovery | undefined;
   accessRequests?: boolean | undefined;
@@ -25,22 +26,30 @@ export interface ErrorStateProps {
   children?: ReactNode;
 }
 
-function RetryAction({ delay, action }: { delay: number; action: (() => void) | string }) {
-  const [waiting, setWaiting] = useState(delay > 0);
+function RetryAction({
+  error,
+  delay,
+  action,
+}: {
+  error: ErrorStateProps["error"];
+  delay: number;
+  action: (() => void) | string;
+}) {
+  const [elapsed, setElapsed] = useState<{ error: typeof error; delay: number }>();
+  const waiting = delay > 0 && (elapsed?.error !== error || elapsed.delay !== delay);
   useEffect(() => {
-    setWaiting(delay > 0);
     if (!(delay > 0)) return;
     // Chunk long Retry-After values instead of overflowing the browser's 32-bit timeout.
     const deadline = Date.now() + delay;
     let timer: ReturnType<typeof setTimeout>;
     const tick = () => {
       const remaining = deadline - Date.now();
-      if (remaining <= 0) setWaiting(false);
+      if (remaining <= 0) setElapsed({ error, delay });
       else timer = setTimeout(tick, Math.min(remaining, 2_147_483_647));
     };
     tick();
     return () => clearTimeout(timer);
-  }, [delay]);
+  }, [delay, error]);
   return <RecoveryAction name="retry" action={action} disabled={waiting} />;
 }
 
@@ -99,6 +108,7 @@ export function ErrorState({
             return name === "retry" ? (
               <RetryAction
                 key={`${category}:${delay}`}
+                error={error}
                 delay={Number.isFinite(delay) ? Math.max(0, delay) : 0}
                 action={action}
               />

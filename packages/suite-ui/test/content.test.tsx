@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import axe from "axe-core";
 import { afterEach, expect, test, vi } from "vitest";
 import { type SurfaceState, surfaceErrors } from "../src/components/content.js";
+import type { ErrorRecovery } from "../src/components/error-state.js";
 import {
   type AccessSummary,
   accessSummaryText,
@@ -12,7 +13,10 @@ import {
 import { PodMeter } from "../src/components/pod-meter.js";
 import { TypedView, type TypedViewData, typedViewRegistry } from "../src/components/typed-view.js";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 async function accessible(container: HTMLElement) {
   const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
   expect(results.violations).toEqual([]);
@@ -208,4 +212,124 @@ test("empty, filtered and retry actions run their supplied handler", () => {
   rerender(<TypedView state={{ status: "error", category: "unreachable", onRetry: action }} />);
   fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   expect(action).toHaveBeenCalledTimes(3);
+});
+
+const errorCategories = Object.keys(surfaceErrors) as (keyof typeof surfaceErrors)[];
+const contentSurfaces = [TypedView, ItemDetails, PodMeter];
+test.each(contentSurfaces)("%s preserves legacy recovery callbacks for every category", (View) => {
+  const onRetry = vi.fn();
+  const { rerender } = render(<View />);
+  for (const category of errorCategories) {
+    rerender(<View state={{ status: "error", category, onRetry }} />);
+    fireEvent.click(
+      screen.getByRole("button", { name: category === "reauth" ? "Sign in" : "Retry" }),
+    );
+  }
+  expect(onRetry).toHaveBeenCalledTimes(errorCategories.length);
+});
+const recoveryCases: [keyof typeof surfaceErrors, ErrorRecovery, string[]][] = [
+  ["reauth", { signIn: vi.fn<() => void>() }, ["Sign in"]],
+  [
+    "forbidden",
+    { requestAccess: vi.fn<() => void>(), switchAccount: vi.fn<() => void>() },
+    ["Request access", "Switch account"],
+  ],
+  ["not-found", { goToParent: "/drive", home: "/" }, ["Go to parent", "Home"]],
+  ["conflict", { resolveConflict: vi.fn<() => void>() }, ["Review changes"]],
+  ["quota", { manageStorage: vi.fn<() => void>() }, ["Manage storage"]],
+  ["offline", { retry: vi.fn<() => void>() }, ["Retry"]],
+  [
+    "unreachable",
+    { retry: vi.fn<() => void>(), showSavedCopies: vi.fn<() => void>() },
+    ["Retry", "Show saved copies"],
+  ],
+  ["unknown", { reload: vi.fn<() => void>(), report: "/report" }, ["Reload", "Report a problem"]],
+];
+test.each(contentSurfaces)("%s forwards category-specific recovery actions", (View) => {
+  const { rerender } = render(<View />);
+  for (const [category, actions, labels] of recoveryCases) {
+    for (const handler of Object.values(actions))
+      if (typeof handler === "function") vi.mocked(handler).mockClear();
+    rerender(<View state={{ status: "error", category, actions, accessRequests: true }} />);
+    expect(
+      screen
+        .queryAllByRole("button")
+        .concat(screen.queryAllByRole("link"))
+        .map((el) => el.textContent)
+        .sort(),
+    ).toEqual([...labels].sort());
+    for (const button of screen.queryAllByRole("button")) fireEvent.click(button);
+    for (const handler of Object.values(actions))
+      if (typeof handler === "function") expect(handler).toHaveBeenCalledOnce();
+    expect(
+      screen
+        .queryAllByRole("link")
+        .map((link) => link.getAttribute("href"))
+        .sort(),
+    ).toEqual(
+      Object.values(actions)
+        .filter((action) => typeof action === "string")
+        .sort(),
+    );
+  }
+});
+test("content access recovery requires the capability, including ItemDetails.accessState", () => {
+  const requestAccess = vi.fn();
+  const switchAccount = vi.fn();
+  const accessState: SurfaceState = {
+    status: "error",
+    category: "forbidden",
+    actions: { requestAccess, switchAccount },
+  };
+  const { rerender } = render(<ItemDetails title="Plan" accessState={accessState} />);
+  expect(screen.queryByRole("button", { name: "Request access" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Switch account" }));
+  expect(switchAccount).toHaveBeenCalledOnce();
+  rerender(<ItemDetails title="Plan" accessState={{ ...accessState, accessRequests: true }} />);
+  fireEvent.click(screen.getByRole("button", { name: "Request access" }));
+  expect(requestAccess).toHaveBeenCalledOnce();
+});
+test.each([
+  "reauth",
+  "unreachable",
+] as const)("explicit %s recovery overrides the legacy callback", (category) => {
+  const onRetry = vi.fn();
+  const action = vi.fn();
+  render(
+    <TypedView
+      state={{
+        status: "error",
+        category,
+        onRetry,
+        actions: category === "reauth" ? { signIn: action } : { retry: action },
+      }}
+    />,
+  );
+  fireEvent.click(
+    screen.getByRole("button", { name: category === "reauth" ? "Sign in" : "Retry" }),
+  );
+  expect(action).toHaveBeenCalledOnce();
+  expect(onRetry).not.toHaveBeenCalled();
+});
+test("content retries wait again for a new error with the same delay", async () => {
+  vi.useFakeTimers();
+  const retry = vi.fn();
+  const state: SurfaceState = {
+    status: "error",
+    category: "unreachable",
+    retryAfterMs: 8000,
+    actions: { retry },
+  };
+  const { rerender, unmount } = render(<TypedView state={state} />);
+  const button = screen.getByRole("button", { name: "Retry" }) as HTMLButtonElement;
+  expect(button.disabled).toBe(true);
+  await act(() => vi.advanceTimersByTimeAsync(8000));
+  fireEvent.click(button);
+  expect(retry).toHaveBeenCalledOnce();
+  rerender(<TypedView state={{ ...state }} />);
+  expect(button.disabled).toBe(true);
+  await act(() => vi.advanceTimersByTimeAsync(8000));
+  expect(button.disabled).toBe(false);
+  unmount();
+  expect(vi.getTimerCount()).toBe(0);
 });

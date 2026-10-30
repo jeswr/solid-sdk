@@ -5,9 +5,17 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, expect, test, vi } from "vitest";
+import {
+  CollectionPlaceholder,
+  type CollectionState,
+} from "../src/collections/collection-state.js";
 import { type ErrorCategory, errorActionLabels } from "../src/components/async-copy.js";
 import { EmptyState, type EmptyVariant } from "../src/components/empty-state.js";
-import { type ErrorRecovery, ErrorState } from "../src/components/error-state.js";
+import {
+  type ClassifiedError,
+  type ErrorRecovery,
+  ErrorState,
+} from "../src/components/error-state.js";
 import { type LoadingPreset, LoadingSkeleton } from "../src/components/loading-skeleton.js";
 import { renderAsync } from "../src/components/render-async.js";
 
@@ -105,6 +113,66 @@ test("a long Retry-After does not overflow to an immediate retry", async () => {
   );
   await act(() => vi.advanceTimersByTimeAsync(100));
   expect((screen.getByRole("button", { name: "Retry" }) as HTMLButtonElement).disabled).toBe(true);
+  unmount();
+  expect(vi.getTimerCount()).toBe(0);
+});
+test("a repeated error with the same Retry-After starts a new wait", async () => {
+  vi.useFakeTimers();
+  const retry = vi.fn();
+  const error: ClassifiedError = { category: "unreachable", retryAfterMs: 8000 };
+  const { rerender, unmount } = render(<ErrorState error={error} actions={{ retry }} />);
+  const button = screen.getByRole("button", { name: "Retry" }) as HTMLButtonElement;
+  await act(() => vi.advanceTimersByTimeAsync(8000));
+  expect(button.disabled).toBe(false);
+  rerender(<ErrorState error={{ ...error }} actions={{ retry }} />);
+  expect(button.disabled).toBe(true);
+  fireEvent.click(button);
+  expect(retry).not.toHaveBeenCalled();
+  await act(() => vi.advanceTimersByTimeAsync(7999));
+  expect(button.disabled).toBe(true);
+  await act(() => vi.advanceTimersByTimeAsync(1));
+  fireEvent.click(button);
+  expect(retry).toHaveBeenCalledOnce();
+  unmount();
+  expect(vi.getTimerCount()).toBe(0);
+});
+test("an in-flight replacement cancels the old timer and stable errors keep their deadline", async () => {
+  vi.useFakeTimers();
+  const retry = vi.fn();
+  const initialError: ClassifiedError = { category: "unreachable", retryAfterMs: 8000 };
+  const { rerender, unmount } = render(<ErrorState error={initialError} actions={{ retry }} />);
+  const button = screen.getByRole("button", { name: "Retry" }) as HTMLButtonElement;
+  await act(() => vi.advanceTimersByTimeAsync(4000));
+  const nextError = { ...initialError };
+  rerender(<ErrorState error={nextError} actions={{ retry }} />);
+  expect(vi.getTimerCount()).toBe(1);
+  await act(() => vi.advanceTimersByTimeAsync(4000));
+  expect(button.disabled).toBe(true);
+  rerender(<ErrorState error={nextError} actions={{ retry: vi.fn<() => void>() }} />);
+  await act(() => vi.advanceTimersByTimeAsync(4000));
+  expect(button.disabled).toBe(false);
+  rerender(<ErrorState error={nextError} actions={{ retry }} />);
+  expect(button.disabled).toBe(false);
+  unmount();
+  expect(vi.getTimerCount()).toBe(0);
+});
+test("collection retries keep the current deadline and restart for a new error occurrence", async () => {
+  vi.useFakeTimers();
+  const onRetry = vi.fn();
+  const state: CollectionState = { status: "error", kind: "unreachable", retryAfterMs: 8000 };
+  const { rerender, unmount } = render(
+    <CollectionPlaceholder kind="table" count={0} state={state} onRetry={onRetry} />,
+  );
+  const button = screen.getByRole("button", { name: "Retry" }) as HTMLButtonElement;
+  await act(() => vi.advanceTimersByTimeAsync(4000));
+  rerender(<CollectionPlaceholder kind="table" count={1} state={state} onRetry={onRetry} />);
+  await act(() => vi.advanceTimersByTimeAsync(4000));
+  expect(button.disabled).toBe(false);
+  rerender(<CollectionPlaceholder kind="table" count={1} state={{ ...state }} onRetry={onRetry} />);
+  expect(button.disabled).toBe(true);
+  await act(() => vi.advanceTimersByTimeAsync(8000));
+  fireEvent.click(button);
+  expect(onRetry).toHaveBeenCalledOnce();
   unmount();
   expect(vi.getTimerCount()).toBe(0);
 });

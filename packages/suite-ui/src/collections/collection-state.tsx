@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 
-import type { ReactNode } from "react";
+import { type ReactNode, useMemo } from "react";
 import type { ErrorCategory } from "../components/async-copy.js";
 import { EmptyState } from "../components/empty-state.js";
 import { type ErrorRecovery, ErrorState } from "../components/error-state.js";
@@ -34,11 +34,18 @@ export function CollectionPlaceholder({
   errorActions,
   accessRequests,
 }: CollectionSurfaceProps & { kind: "table" | "grid"; count: number }) {
+  const error = useMemo(
+    () =>
+      state?.status === "error"
+        ? { category: state.kind, retryAfterMs: state.retryAfterMs }
+        : undefined,
+    [state],
+  );
   return renderAsync({
     loading: state?.status === "loading" && <LoadingSkeleton preset={kind} label="Loading files" />,
-    error: state?.status === "error" && (
+    error: state?.status === "error" && error && (
       <ErrorState
-        error={{ category: state.kind, retryAfterMs: state.retryAfterMs }}
+        error={error}
         actions={{ ...(onRetry ? { retry: onRetry } : {}), ...errorActions }}
         accessRequests={accessRequests}
         loadingPreset={kind}
