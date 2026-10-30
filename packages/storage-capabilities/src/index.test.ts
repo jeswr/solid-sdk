@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 import { expect, test } from "vitest";
 import * as cache from "./cache.js";
 import * as api from "./index.js";
@@ -9,7 +9,9 @@ test("public parser, errors, fixture and cache entry points load", () => {
     "CapabilitiesError",
     "capabilities",
     "deriveFeatures",
+    "parseLinkHeaders",
     "parseLwsDescription",
+    "parseWacAllow",
     "probe",
     "resolveStorageDescription",
   ]);

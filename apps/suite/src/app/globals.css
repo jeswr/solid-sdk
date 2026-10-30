@@ -6,6 +6,7 @@
 @import "@jeswr/suite-ui/styles/navigation.css";
 @import "@jeswr/suite-ui/styles/shell.css";
 @import "@jeswr/suite-ui/styles/components.css";
+@import "@jeswr/suite-ui/styles/collections.css";
 @source "../../../../packages/suite-ui/src";
 
 * {
@@ -79,6 +80,8 @@ ul {
 .fixture-page {
   padding: var(--space-4);
   display: grid;
+  /* One shrinkable track: wide tables scroll inside their own frame at 320px. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-8);
   min-width: 0;
 }
@@ -201,8 +204,8 @@ ul {
   display: block;
   margin-bottom: var(--space-2);
 }
-input:not([data-slot]),
-button:not([data-slot]) {
+/* Bare-element defaults carry zero specificity so any component class wins. */
+:where(input:not([data-slot]), button:not([data-slot])) {
   font: inherit;
   border-radius: var(--radius-md);
   background: var(--surface);
@@ -215,11 +218,10 @@ button:not([data-slot]) {
   min-height: var(--control-h-sm);
   margin-top: var(--space-2);
 }
-input:not([data-slot]),
-select:not([data-slot]) {
+:where(input:not([data-slot]), select:not([data-slot])) {
   border: 1px solid var(--input);
 }
-button:not([data-slot]) {
+:where(button:not([data-slot])) {
   border: 1px solid var(--border-strong);
 }
 .density-grid-card {
@@ -394,4 +396,74 @@ nav[aria-label="Component fixtures"] {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3) var(--space-6);
+}
+
+.suite-fixture-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-4);
+}
+.suite-fixture-controls label {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+}
+.suite-fixture-controls select {
+  font: inherit;
+  color: var(--foreground);
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  min-height: var(--control-h);
+  padding-inline: var(--cell-px);
+}
+.suite-collection-fixture p {
+  overflow-wrap: anywhere;
+}
+.suite-fixture-states {
+  display: grid;
+  gap: var(--space-8);
+  min-width: 0;
+}
+.ds07-stack {
+  display: grid;
+  gap: var(--space-4);
+}
+.ds07-stack h2 {
+  margin-bottom: 0;
+}
+.ds07-stack > .suite-button {
+  justify-self: start;
+}
+.ds07-page section {
+  min-width: 0;
+}
+.ds07-narrow {
+  width: 100%;
+  max-width: 320px;
+  min-width: 0;
+}
+.ds12-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  align-items: start;
+  gap: var(--space-6);
+}
+.ds12-example {
+  min-width: 0;
+}
+.ds12-example h2 {
+  margin-bottom: var(--space-3);
+}
+.ds12-setting {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+}
+.ds12-setting input {
+  width: 24px;
+  height: 24px;
+  accent-color: var(--primary);
 }

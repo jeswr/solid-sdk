@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // SHACL shape construction for the intent graph. `buildShapeForIntent` builds a
@@ -11,12 +12,13 @@ import type { Quad } from "@rdfjs/types";
 import { requireIri } from "./iri.js";
 import { serialize } from "./serialize.js";
 import {
-  A2A,
   A2A_ACTION,
   A2A_INTENT,
   A2A_MODE,
   ACTION_TYPE_IRI,
   type IntentAction,
+  LEGACY_A2A_NS,
+  legacyA2aIri,
   RDF_TYPE,
   SCHEMA_OBJECT,
   SCHEMA_RECIPIENT,
@@ -61,19 +63,20 @@ export interface BuildShapeOptions {
  * @param action - the intent action kind the shape constrains.
  */
 export function buildShapeForIntent(action: IntentAction, options: BuildShapeOptions = {}): Quad[] {
+  // Canonical emission is deferred to phase 2: pinned verifiers would reject it.
   const b = new GraphBuilder();
   const shapeId = options.shapeId ?? defaultShapeId(action);
 
   // The top NodeShape targets a2a:Intent.
   b.addIri(shapeId, RDF_TYPE, SH_NODE_SHAPE);
-  b.addIri(shapeId, SH_TARGET_CLASS, A2A_INTENT);
+  b.addIri(shapeId, SH_TARGET_CLASS, legacyA2aIri(A2A_INTENT));
 
   // Property: exactly one a2a:action, an IRI/blank node carrying the right type.
   // We constrain the action via a nested node shape (the action must be of the
   // expected class). The action property requires minCount 1, maxCount 1.
   const actionProp = b.linkBlankNode(shapeId, SH_PROPERTY);
   b.addIri(actionProp, RDF_TYPE, SH_PROPERTY_SHAPE);
-  b.addIri(actionProp, SH_PATH, A2A_ACTION);
+  b.addIri(actionProp, SH_PATH, legacyA2aIri(A2A_ACTION));
   b.addLiteral(actionProp, SH_MIN_COUNT, "1", XSD_INTEGER);
   b.addLiteral(actionProp, SH_MAX_COUNT, "1", XSD_INTEGER);
   b.addLiteral(actionProp, SH_NAME, "action");
@@ -85,7 +88,7 @@ export function buildShapeForIntent(action: IntentAction, options: BuildShapeOpt
   const typeProp = b.linkBlankNode(actionNodeShape, SH_PROPERTY);
   b.addIri(typeProp, RDF_TYPE, SH_PROPERTY_SHAPE);
   b.addIri(typeProp, SH_PATH, RDF_TYPE);
-  b.addIri(typeProp, SH_HAS_VALUE, ACTION_TYPE_IRI[action]);
+  b.addIri(typeProp, SH_HAS_VALUE, legacyA2aIri(ACTION_TYPE_IRI[action]));
   b.addLiteral(typeProp, SH_MIN_COUNT, "1", XSD_INTEGER);
 
   // The target IRI on the action node (schema:object, or schema:target for list),
@@ -112,7 +115,7 @@ export function buildShapeForIntent(action: IntentAction, options: BuildShapeOpt
 
     const modeProp = b.linkBlankNode(actionNodeShape, SH_PROPERTY);
     b.addIri(modeProp, RDF_TYPE, SH_PROPERTY_SHAPE);
-    b.addIri(modeProp, SH_PATH, A2A_MODE);
+    b.addIri(modeProp, SH_PATH, legacyA2aIri(A2A_MODE));
     b.addIri(modeProp, SH_NODE_KIND, SH_IRI);
     b.addLiteral(modeProp, SH_MIN_COUNT, "1", XSD_INTEGER);
     b.addLiteral(modeProp, SH_NAME, "mode");
@@ -124,7 +127,7 @@ export function buildShapeForIntent(action: IntentAction, options: BuildShapeOpt
 /** The default NodeShape IRI for an action's request shape. */
 export function defaultShapeId(action: IntentAction): string {
   const titled = action.charAt(0).toUpperCase() + action.slice(1);
-  return `${A2A}${titled}IntentShape`;
+  return `${LEGACY_A2A_NS}${titled}IntentShape`;
 }
 
 /** Serialise an intent SHACL shape to Turtle (default) or another n3 format. */
@@ -147,13 +150,14 @@ export function shapeToTurtle(quads: readonly Quad[], format?: string): Promise<
  *   is accepted (scheme-agnostic); only an unemittable IRI is rejected.
  */
 export function buildResponseShape(responseClassIri: string, shapeId?: string): Quad[] {
+  // Canonical emission is deferred to phase 2: pinned verifiers would reject it.
   const b = new GraphBuilder();
   // `shapeId` (a subject) is escaped scheme-agnostically by the GraphBuilder chokepoint
   // (it may legitimately be a `urn:`). `responseClassIri` is an untrusted class IRI used
   // in OBJECT position (sh:targetClass, sh:hasValue): require a valid absolute IRI and
   // THROW if malformed (never emit an unconstrained response shape, never an injectable
   // object). The single validated+escaped value is reused for both class-bearing triples.
-  const id = shapeId ?? `${A2A}ResponseShape`;
+  const id = shapeId ?? `${LEGACY_A2A_NS}ResponseShape`;
   const responseClass = requireIri(responseClassIri, "responseClassIri");
   b.addIri(id, RDF_TYPE, SH_NODE_SHAPE);
   b.addIri(id, SH_TARGET_CLASS, responseClass);

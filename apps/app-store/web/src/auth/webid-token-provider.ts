@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 // Ported verbatim from create-solid-app's reference provider (which itself ports
 // the published 0.1.2 DPoPTokenProvider). The host shell uses its STATIC Client
@@ -192,12 +193,13 @@ export type GetWebIdCallback = () => Promise<string>;
  * autologin redirect path serialises exactly what {@link
  * WebIdDPoPTokenProvider.completeRedirectLogin} needs to resume after the broker
  * redirects back. ONE key holds ONE record (a single in-flight redirect login per
- * tab — autologin is single-shot, see SessionProvider's sentinel).
+ * app per tab — autologin is single-shot, see SessionProvider's sentinel).
  *
  * Scope: sessionStorage is PER-TAB and same-origin, cleared on tab close — the
  * record never outlives the tab and is never shared across origins.
  */
-export const REDIRECT_FLOW_KEY = "pss.autologin.flow";
+// App-scoped on shared origins. Never read the former unscoped key.
+export const REDIRECT_FLOW_KEY = "app-store:pss.autologin.flow";
 
 /**
  * The serialised state a full-page-redirect login persists to sessionStorage
