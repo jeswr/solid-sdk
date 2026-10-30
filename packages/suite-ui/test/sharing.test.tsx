@@ -107,6 +107,15 @@ describe("people validation", () => {
     expect(validatePersonEntry(value, []).valid).toBe(true);
   });
   it.each([
+    "https://id.example/users/alice@example.org#me",
+    "https://id.example/profile?email=alice@example.org",
+    "https://id.example/profile#alice@example.org",
+  ])("accepts an account ID containing an email: %s", (webId) => {
+    expect(validatePersonEntry(webId, [])).toEqual({ valid: true, person: { webId } });
+    const person = { ...contact, webId };
+    expect(validatePersonEntry(webId, [person])).toEqual({ valid: true, person });
+  });
+  it.each([
     "",
     "https://",
     "ftp://person.example",
@@ -209,6 +218,20 @@ describe("people validation", () => {
     rerender(<Picker people={[people[0] as SharingPerson]} useProfile={useLiveProfile} />);
     expect(screen.getByRole("option").textContent).toContain("Ada Rivers");
     expect(updates.has("https://other.example/me")).toBe(false);
+  });
+  it("adds a raw account ID containing an email", () => {
+    const webId = "https://id.example/users/alice@example.org#me";
+    render(<Picker people={[]} useProfile={() => ({ loading: false })} />);
+    const input = screen.getByRole("combobox") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: webId } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(
+      within(screen.getByRole("list", { name: "Selected people" })).getByText(
+        `Account ID: ${webId}`,
+      ),
+    ).toBeDefined();
+    expect(input.value).toBe("");
+    expect(screen.queryByRole("alert")).toBeNull();
   });
   it("validates raw entry, duplicate entry, unknown email and dismisses suggestions", () => {
     render(<Picker />);

@@ -38,6 +38,12 @@ export function validatePersonEntry(
 ): PersonValidation {
   const value = entry.trim();
   if (!value) return { valid: false, message: "Enter a name, email or account ID" };
+  if (validAccountId(value)) {
+    return {
+      valid: true,
+      person: contacts.find((person) => person.webId === value) ?? { webId: value },
+    };
+  }
   if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
     const contact = contacts.find(
       (person) =>
@@ -47,12 +53,6 @@ export function validatePersonEntry(
     return contact
       ? { valid: true, person: contact }
       : { valid: false, message: "No account found for this email — paste their account ID" };
-  }
-  if (validAccountId(value)) {
-    return {
-      valid: true,
-      person: contacts.find((person) => person.webId === value) ?? { webId: value },
-    };
   }
   return { valid: false, message: "Enter an account ID starting with http:// or https://" };
 }
