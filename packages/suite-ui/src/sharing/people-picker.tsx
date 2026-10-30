@@ -3,7 +3,7 @@
 
 import { X } from "lucide-react";
 import { Avatar } from "radix-ui";
-import { useCallback, useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Button } from "./primitives.js";
 import { hasSharingContent, type SharingState, SharingStatus } from "./state.js";
 
@@ -129,6 +129,7 @@ export function PeoplePicker({
   useProfile,
 }: PeoplePickerProps) {
   const id = useId();
+  const inputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
   const [error, setError] = useState("");
@@ -155,6 +156,22 @@ export function PeoplePicker({
     if (open && active >= 0)
       document.getElementById(`${id}-option-${active}`)?.scrollIntoView?.({ block: "nearest" });
   }, [id, active, open]);
+  useEffect(() => {
+    if (!open) return;
+    const input = inputRef.current;
+    const ownerWindow = input?.ownerDocument.defaultView;
+    if (!input || !ownerWindow) return;
+    // Handle the picker's Escape before a host dialog's document-capture dismissal.
+    function dismissSuggestions(event: KeyboardEvent) {
+      if (event.key !== "Escape" || event.target !== input) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setOpen(false);
+      setActive(-1);
+    }
+    ownerWindow.addEventListener("keydown", dismissSuggestions, true);
+    return () => ownerWindow.removeEventListener("keydown", dismissSuggestions, true);
+  }, [open]);
 
   function add(person: SharingPerson) {
     if (offline) return;
@@ -211,6 +228,7 @@ export function PeoplePicker({
       )}
       <div className="su-picker-input">
         <input
+          ref={inputRef}
           id={`${id}-input`}
           className="su-input"
           role="combobox"
@@ -235,10 +253,6 @@ export function PeoplePicker({
             setError("");
           }}
           onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              setOpen(false);
-              setActive(-1);
-            }
             if (event.key === "ArrowDown" || event.key === "ArrowUp") {
               event.preventDefault();
               setOpen(true);

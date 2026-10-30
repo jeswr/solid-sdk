@@ -3,7 +3,7 @@
 
 import { Check } from "lucide-react";
 import { AlertDialog, Checkbox } from "radix-ui";
-import { type ButtonHTMLAttributes, type ReactNode, useId } from "react";
+import { type ButtonHTMLAttributes, type ReactNode, type RefObject, useId, useRef } from "react";
 
 export function Button({ className = "", ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
   return <button type="button" className={`su-button ${className}`} {...props} />;
@@ -48,6 +48,7 @@ export function ConfirmAction({
   onConfirm,
   disabled = false,
   destructive = true,
+  closeFocusFallback,
 }: {
   trigger: string;
   title: string;
@@ -57,17 +58,27 @@ export function ConfirmAction({
   onConfirm: () => void;
   disabled?: boolean;
   destructive?: boolean;
+  closeFocusFallback?: RefObject<HTMLElement | null>;
 }) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
   return (
     <AlertDialog.Root>
-      <AlertDialog.Trigger asChild>
+      <AlertDialog.Trigger asChild ref={triggerRef}>
         <Button disabled={disabled} className={destructive ? "su-destructive" : ""}>
           {trigger}
         </Button>
       </AlertDialog.Trigger>
       <AlertDialog.Portal>
         <AlertDialog.Overlay className="su-overlay" />
-        <AlertDialog.Content className="su-confirm su-stack">
+        <AlertDialog.Content
+          className="su-confirm su-stack"
+          onCloseAutoFocus={(event) => {
+            if (triggerRef.current?.disabled && closeFocusFallback?.current) {
+              event.preventDefault();
+              closeFocusFallback.current.focus();
+            }
+          }}
+        >
           <AlertDialog.Title className="su-title">{title}</AlertDialog.Title>
           <AlertDialog.Description className="su-muted">{description}</AlertDialog.Description>
           <div className="su-equal-actions">

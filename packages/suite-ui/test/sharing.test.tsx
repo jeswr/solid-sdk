@@ -2,8 +2,9 @@
 // @vitest-environment jsdom
 
 import { readFileSync } from "node:fs";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import axe from "axe-core";
+import { Dialog } from "radix-ui";
 import { useEffect, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConsentSheet, type ConsentSheetProps } from "../src/sharing/consent-sheet.js";
@@ -228,6 +229,34 @@ describe("people validation", () => {
     fireEvent.keyDown(input, { key: "Escape" });
     expect(input.getAttribute("aria-expanded")).toBe("false");
   });
+  it.each([0, 1])("dismisses only suggestions on the first Escape with %i contacts", (count) => {
+    const onOpenChange = vi.fn();
+    render(
+      <Dialog.Root defaultOpen onOpenChange={onOpenChange}>
+        <Dialog.Portal>
+          <Dialog.Content onOpenAutoFocus={(event) => event.preventDefault()}>
+            <Dialog.Title>Share a file</Dialog.Title>
+            <Dialog.Description>Choose who can access this file.</Dialog.Description>
+            <Picker people={[contact].slice(0, count)} />
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>,
+    );
+    const input = screen.getByRole("combobox");
+    act(() => input.focus());
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(input.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.getByRole("dialog", { name: "Share a file" })).toBeDefined();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(input.getAttribute("aria-expanded")).toBe("false");
+    expect(input.getAttribute("aria-activedescendant")).toBeNull();
+    expect(document.activeElement).toBe(input);
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
   it("makes sharing read-only offline and explains why", () => {
     render(<Picker state={{ kind: "offline", cached: true }} />);
     expect((screen.getByRole("combobox") as HTMLInputElement).disabled).toBe(true);
@@ -401,6 +430,50 @@ describe("consent", () => {
 });
 
 describe("permission rows", () => {
+  it.each([
+    true,
+    false,
+  ])("focuses the row header after revoking all access (expanded=%s)", async (expanded) => {
+    const onRevoke = vi.fn();
+    function RevocableRow() {
+      const [items, setItems] = useState(permission.items);
+      return (
+        <PermissionRow
+          {...permission}
+          expanded={expanded}
+          items={items}
+          onRevoke={() => {
+            onRevoke();
+            setItems(items.map((item) => ({ ...item, checked: false })));
+          }}
+        />
+      );
+    }
+    render(<RevocableRow />);
+    const header = screen.getByRole("button", { name: /MaraCoach.*details/ });
+    const trigger = screen.getByRole("button", { name: "Revoke all" }) as HTMLButtonElement;
+    act(() => trigger.focus());
+    fireEvent.click(trigger);
+    const action = screen.getByRole("button", { name: "Remove access" });
+    act(() => action.focus());
+    fireEvent.click(action);
+    expect(onRevoke).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(trigger.disabled).toBe(true);
+    await waitFor(() => expect(document.activeElement).toBe(header));
+  });
+  it.each(["Cancel", "Escape"])("returns focus to Revoke after %s", async (dismissal) => {
+    const onRevoke = vi.fn();
+    render(<PermissionRow {...permission} onRevoke={onRevoke} />);
+    const trigger = screen.getByRole("button", { name: "Revoke all" });
+    act(() => trigger.focus());
+    fireEvent.click(trigger);
+    if (dismissal === "Cancel") fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    else fireEvent.keyDown(document.activeElement as HTMLElement, { key: "Escape" });
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(onRevoke).not.toHaveBeenCalled();
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
   it.each([true, false])("blocks a pending revocation offline (cached=%s)", (cached) => {
     const onRevoke = vi.fn();
     const { rerender } = render(<PermissionRow {...permission} onRevoke={onRevoke} />);

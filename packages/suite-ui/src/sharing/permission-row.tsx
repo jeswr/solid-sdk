@@ -3,7 +3,7 @@
 
 import { ChevronDown } from "lucide-react";
 import { Switch } from "radix-ui";
-import { useId } from "react";
+import { useId, useRef } from "react";
 import { SourceBadges } from "./consent-sheet.js";
 import { Button, ConfirmAction } from "./primitives.js";
 import type { DisabledReason } from "./role-select.js";
@@ -46,6 +46,7 @@ export function PermissionRow({
   onClear,
 }: PermissionRowProps) {
   const id = useId();
+  const headerRef = useRef<HTMLButtonElement>(null);
   const labels = [...new Set(items.map((item) => item.label))];
   const blocked = !hasSharingContent(state) || state.kind === "offline";
   return (
@@ -55,6 +56,7 @@ export function PermissionRow({
           {name.slice(0, 1)}
         </span>
         <button
+          ref={headerRef}
           type="button"
           className="su-permission-trigger"
           aria-expanded={expanded}
@@ -82,6 +84,7 @@ export function PermissionRow({
           description={`${name} will no longer be able to see or change ${labels.join(", ") || "your data"}. You can share again later.`}
           action="Remove access"
           onConfirm={onRevoke}
+          closeFocusFallback={headerRef}
           disabled={blocked || items.every((item) => !item.checked || item.disabled)}
         />
       </header>
