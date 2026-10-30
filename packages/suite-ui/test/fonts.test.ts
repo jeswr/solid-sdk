@@ -23,7 +23,9 @@ it("ships every vendored font and OFL licence beside the built font entry", () =
   const fonts = readFileSync(join(root, "dist/fonts.js"), "utf8");
   const sources = [...fonts.matchAll(/(?:src|path):\s*"(\.\/font-assets\/[^"\n]+\.woff2)"/g)];
   expect(sources).toHaveLength(4);
-  for (const [, path] of sources) {
+  for (const source of sources) {
+    const path = source[1];
+    if (!path) throw new Error("Missing vendored font path");
     expect(
       readFileSync(join(root, "dist", path))
         .subarray(0, 4)
