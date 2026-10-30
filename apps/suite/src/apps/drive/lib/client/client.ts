@@ -322,6 +322,15 @@ function sourceUrls(source: SourceSnapshot): string[] {
   return snapshots(source).map((node) => node.url);
 }
 
+/** Preserve complete own ACLs, and take inherited grants from the same binding
+ * that checks them. A fresh effective-policy read must never replace a capture.
+ */
+function capturedAccess(source: SourceSnapshot): AccessState {
+  return source.access.status === "none" && !source.access.demo
+    ? { status: "known", policy: (source.binding as AccessBinding).source }
+    : source.access;
+}
+
 function errorFor(status: number, url: string): DriveError {
   const kind: DriveErrorKind =
     status === 409 || status === 412
@@ -578,6 +587,7 @@ export function createSolidDriveClient(options: {
           undefined,
           undefined,
           {
+            retainOnFailure: true,
             onWritten: () => {
               committedBackup = target;
             },
@@ -663,6 +673,8 @@ export function createSolidDriveClient(options: {
     effects: Omit<CommitEffects, "onCommit"> &
       Pick<CommitChecks, "identityChecks" | "policyGuards"> & {
         readonly onWritten?: (response: Response) => void;
+        /** Keep uncertain private backups; evacuate confirmed access changes. */
+        readonly retainOnFailure?: boolean;
       } = {},
     required?: OwnAccess,
   ): Promise<Response> => {
@@ -708,7 +720,29 @@ export function createSolidDriveClient(options: {
     }
     let response: Response;
     const compensation = new Compensation(async () => {
-      const etag = validator(url, response.headers.get("etag") ?? undefined);
+      const receipt = response.headers.get("etag");
+      if (!receipt || receipt.startsWith("W/")) {
+        // No write receipt authorizes touching the current representation.
+        // Preserve both captured versions without clearing an unknown payload.
+        const retained = await quarantine(
+          url,
+          null,
+          (binding as AccessBinding).destinationPolicy,
+          [
+            ...(previous ? [previous] : []),
+            { body: init.body, type: init.headers["content-type"] },
+          ],
+          !(binding as AccessBinding).source.etag,
+        );
+        throw new DrivePartialFailureError(
+          url,
+          [],
+          [],
+          retained,
+          new DriveError("missing-validator", 409, url),
+        );
+      }
+      const etag = receipt;
       // Cleanup needs our content AND own-ACL receipts: resource DELETE also
       // removes its ACL. Replays restore only the captured audience.
       await (binding as AccessBinding).rollback(async () => {
@@ -796,10 +830,17 @@ export function createSolidDriveClient(options: {
       await recheckScope(scope);
       await verifyAccess?.();
       await verifyProtection();
+      // Access HEADs cannot certify the bytes we just wrote. Keep recovery
+      // armed until this PUT's own receipt survives every post-write await.
+      if (!creating)
+        await checkIdentity(http, url, validator(url, response.headers.get("etag")), errorFor);
       // Transfer callers must record this PUT's validator before their post-write
       // access check can fail and invoke cleanup of the new representation.
       compensation.disarm();
     } catch (error) {
+      if (effects.retainOnFailure && !(error instanceof DriveAccessChangedError)) {
+        compensation.disarm();
+      }
       await compensation.rollback();
       throw error;
     }
@@ -906,6 +947,7 @@ export function createSolidDriveClient(options: {
     scope?: AccessScope,
     effects?: Omit<CommitEffects, "onCommit"> & {
       readonly onWritten?: (response: Response) => void;
+      readonly retainOnFailure?: boolean;
     },
   ): Promise<{ etag?: string }> => {
     requirePolicy(policy, ["protect-ancestors", "owner-only"]);
@@ -967,8 +1009,7 @@ export function createSolidDriveClient(options: {
     // A replacement supersedes the previous listing's declarations before its refresh completes.
     resources.delete(url);
     responseTypes.delete(url);
-    const etag = response.headers.get("etag");
-    return etag ? { etag } : {};
+    return { etag: validator(url, response.headers.get("etag")) };
   };
 
   const rawPut = async (
@@ -1019,10 +1060,10 @@ export function createSolidDriveClient(options: {
     if (url.endsWith("/")) {
       const { items, etag, dataset, headers } = await listing(url);
       validator(url, etag);
-      const binding = bodies ? await bindAccess(access, url, url) : undefined;
+      const own = await policy(headers);
+      const binding = bodies ? await bindAccess(access, url, url, false, own) : undefined;
       const children: SourceSnapshot[] = [];
       for (const child of items) children.push(await snapshot(child.url, bodies));
-      const own = await policy(headers);
       // A cached listing cannot certify children inspected after a root replacement.
       await checkIdentity(http, url, validator(url, versions.current(url, etag)), errorFor);
       versions.track(url);
@@ -1039,10 +1080,10 @@ export function createSolidDriveClient(options: {
       };
     }
     const response = await ensureOk(await http(url, bodies ? undefined : { method: "HEAD" }), url);
-    const binding = bodies ? await bindAccess(access, url, url) : undefined;
     const etag = response.headers.get("etag") ?? undefined;
     validator(url, etag);
     const own = await policy(response.headers);
+    const binding = bodies ? await bindAccess(access, url, url, false, own) : undefined;
     const body = bodies ? await response.blob() : undefined;
     await checkIdentity(http, url, validator(url, etag), errorFor);
     return {
@@ -1450,7 +1491,7 @@ export function createSolidDriveClient(options: {
   /** Archived grants describe the original; use the preflight bytes and validator throughout. */
   const recoveryPolicy = async (
     url: string,
-    own: AccessState,
+    own: OwnAccess,
     scope: AccessScope,
   ): Promise<OwnAccess | undefined> => {
     const archiveUrl = policyArchiveOf(url);
@@ -1474,9 +1515,7 @@ export function createSolidDriveClient(options: {
     if (!captured) return undefined;
     const saved = (JSON.parse(captured.content) as Record<string, ArchivedAcl | null>)[url];
     if (saved === undefined) throw new DriveAccessError("Missing archived policy");
-    if (saved === null)
-      return requireAccess(own.status === "known" ? own : await access.effective(url), url);
-    const acl = own.status === "known" ? own.policy.url : saved.acl;
+    if (saved === null) return own;
     return access.retarget(
       {
         url: saved.acl,
@@ -1485,7 +1524,7 @@ export function createSolidDriveClient(options: {
       },
       saved.resource,
       url,
-      acl,
+      own.url,
     );
   };
 
@@ -1506,10 +1545,7 @@ export function createSolidDriveClient(options: {
         const containers: Record<string, ArchivedAcl> = {};
         for (const node of snapshots(source)) {
           const destination = `${to}${node.url.slice(from.length)}`;
-          const original = requireAccess(
-            node.access.status === "known" ? node.access : await access.effective(node.url),
-            node.url,
-          );
+          const original = requireAccess(capturedAccess(node), node.url);
           archive[destination] = {
             resource: node.url,
             acl: original.url,
@@ -1544,7 +1580,11 @@ export function createSolidDriveClient(options: {
         await verifyAccess?.();
       } else {
         for (const node of snapshots(source)) {
-          const saved = await recoveryPolicy(node.url, node.access, scope);
+          const saved = await recoveryPolicy(
+            node.url,
+            requireAccess(capturedAccess(node), node.url),
+            scope,
+          );
           if (saved) node.targetAccess = saved;
         }
       }
@@ -1566,6 +1606,7 @@ export function createSolidDriveClient(options: {
     if (opts?.ifMatch !== undefined && original.etag !== opts.ifMatch)
       throw new DriveError("conflict", 412, from);
     const own = await access.snapshot(from, original.headers);
+    const binding = await bindAccess(access, from, to, false, own);
     const source: SourceSnapshot = {
       url: from,
       etag: original.etag,
@@ -1573,11 +1614,11 @@ export function createSolidDriveClient(options: {
       data: containerData(original.dataset, from),
       demo: original.headers.get("x-solid-demo-access-control") === "none",
       access: own,
+      binding,
     };
-    const effective = own.status === "none" && !own.demo ? await access.effective(from) : own;
+    const effective = capturedAccess(source);
     requireAccess(effective, from);
     if (effective.status === "known") source.inheritedAccess = effective.policy;
-    const binding = await bindAccess(access, from, to);
     const verifyMerge = async () => {
       await binding.recheck();
       for (const identity of [
@@ -1768,10 +1809,7 @@ export function createSolidDriveClient(options: {
         // A missing Link or unreadable ancestor can never stand in for known absence.
         const effective = new Map<SourceSnapshot, AccessState>();
         for (const node of nodes) {
-          const state =
-            node.access.status === "none" && !node.access.demo
-              ? await access.effective(node.url)
-              : node.access;
+          const state = capturedAccess(node);
           effective.set(node, state);
           if (state.status === "known") node.inheritedAccess = state.policy;
         }
@@ -2240,11 +2278,7 @@ export function createSolidDriveClient(options: {
     ...(options.confirmAccess ? { confirmAccess: options.confirmAccess } : {}),
     async bindAccess(from, to) {
       const binding = await bindAccess(access, from, to);
-      const archived = await recoveryPolicy(
-        from,
-        { status: "known", policy: binding.source },
-        scopeFor(this),
-      );
+      const archived = await recoveryPolicy(from, binding.source, scopeFor(this));
       if (
         accessGains(
           archived ? access.forResource(archived, from) : binding.source,

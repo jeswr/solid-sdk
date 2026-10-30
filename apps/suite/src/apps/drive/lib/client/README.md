@@ -60,6 +60,10 @@ Failure keeps a durable
 receipt for the actual installed policy, including narrower intersections, so Retry
 cannot repair another client's replacement or revocation.
 
+The [round 62 audit](../../../../../test/drive-review-round62-audit.md) maps copied
+policy captures, PUT identity checks and recovery, protection Delete, root writes,
+every audited call site, and the 45-step two-shape regression coverage.
+
 The [round 61 audit](../../../../../test/drive-review-round61-audit.md) maps the
 findings, changed paths, every audited call site, and both destructive-step matrices.
 

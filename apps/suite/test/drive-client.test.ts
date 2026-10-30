@@ -405,14 +405,9 @@ describe("Drive error handling and foreign server responses", () => {
     await expect(
       client.write(file, "", { contentType: "text/plain" }, { kind: "protect-ancestors" }),
     ).rejects.toMatchObject({ kind: "missing-validator" });
-    expect(
-      await client.write(
-        `${DRIVE}new`,
-        "",
-        { contentType: "text/plain" },
-        { kind: "protect-ancestors" },
-      ),
-    ).toEqual({});
+    await expect(
+      client.write(`${DRIVE}new`, "", { contentType: "text/plain" }, { kind: "protect-ancestors" }),
+    ).rejects.toMatchObject({ kind: "partial-failure" });
     await expect(
       client.copy(file, `${DRIVE}copy`, { kind: "preserve-source" }),
     ).rejects.toMatchObject({ kind: "missing-validator" });

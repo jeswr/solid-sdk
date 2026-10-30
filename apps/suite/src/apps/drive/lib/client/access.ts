@@ -439,8 +439,9 @@ export class DriveAccessChangedError extends DriveAccessError {
   }
 }
 
-/** A policy decision is bound to BOTH endpoints, never to a previously discovered ACL URL.
- * Every check starts discovery again, including own ACLs installed since preflight.
+/** A policy decision captures BOTH endpoints and their validators. Copied policy
+ * snapshots must agree with that capture before it can authorize a write.
+ * Every check rediscovers access to verify, never replace, the captured identity.
  * Only an explicitly selected, verified policy installation may change the destination baseline.
  */
 export async function bindAccess(
@@ -448,11 +449,12 @@ export async function bindAccess(
   from: string,
   to: string,
   destinationOnly = false,
+  capturedSource?: AccessState,
 ) {
   const resolve = async (url: string) => {
     const creation = access.creationReceipt(url);
     const state = await access.effective(url, false, true);
-    return {
+    const resolved = {
       resource: requireAccess(state, url),
       own: state.own,
       creation,
@@ -460,8 +462,33 @@ export async function bindAccess(
         ? requireAccess(await access.effective(`${url}.access-binding`, true, true), url)
         : undefined,
     };
+    // Own, effective and default policy reads form one capture. A repeated
+    // endpoint must carry the same validator throughout that capture.
+    const validators = new Map<string, string | null>();
+    for (const identity of [
+      ...ownAccessGuards(resolved.own),
+      ...[resolved.resource, resolved.defaults].flatMap((policy) =>
+        policy?.etag ? [{ url: policy.url, etag: policy.etag }] : [],
+      ),
+    ]) {
+      if (validators.has(identity.url) && validators.get(identity.url) !== identity.etag)
+        throw new DriveAccessChangedError(["The captured ACL changed"]);
+      validators.set(identity.url, identity.etag);
+    }
+    return resolved;
   };
   let source = await resolve(from);
+  if (capturedSource) {
+    if (capturedSource.status === "unknown") throw new DriveAccessError(capturedSource.cause);
+    if (
+      capturedSource.own?.url !== source.own?.url ||
+      capturedSource.own?.policy?.etag !== source.own?.policy?.etag ||
+      (capturedSource.status === "known" &&
+        (capturedSource.policy.url !== source.resource.url ||
+          capturedSource.policy.etag !== source.resource.etag))
+    )
+      throw new DriveAccessChangedError(["The copied ACL differs from its access binding"]);
+  }
   let destination = from === to ? source : await resolve(to);
   let destinationOwn = destination.own;
   const retired = new Set<string>();
@@ -547,7 +574,13 @@ export async function bindAccess(
           if (!previous || !next) continue;
           const wider = accessGains(previous, next);
           const narrower = accessGains(next, previous);
-          if (previous.url !== next.url || wider.length || narrower.length) changed = true;
+          if (
+            previous.url !== next.url ||
+            previous.etag !== next.etag ||
+            wider.length ||
+            narrower.length
+          )
+            changed = true;
           for (const agent of wider) gains.add(agent);
           if (isSource) for (const agent of narrower) gains.add(agent);
           // Narrowing the source can make a previously safe destination wider.

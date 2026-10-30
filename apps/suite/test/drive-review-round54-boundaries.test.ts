@@ -479,7 +479,7 @@ async function scenario(step: Step, events: string[]) {
 
 it.each(
   steps,
-)("round 61 shape a: %s retains a replacement at its final identity check", async (step) => {
+)("round 62 shape a: %s retains a replacement at its final identity check", async (step) => {
   const events: string[] = [];
   const s = await scenario(step, events);
   let checks = 0;
@@ -507,7 +507,7 @@ it.each(
 
 it.each(
   steps,
-)("round 61 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
+)("round 62 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   const events: string[] = [];
   const s = await scenario(step, events);

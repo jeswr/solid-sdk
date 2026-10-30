@@ -103,6 +103,10 @@ it.each([
   const preview = await mount(h(DriveUiProvider, { children: h(PreviewBody, { item }) }));
   expect(preview.host.textContent).toContain("This file's sharing could not be secured");
   await preview.unmount();
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(button(action).disabled).toBe(false);
+  });
   f.intercept(undefined);
   if (action === "Delete") await f.fetch(to, { method: "DELETE" });
   await act(async () => {

@@ -84,10 +84,8 @@ export function NewMenu({
           <FolderUp aria-hidden="true" size={16} /> Folder upload
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href="/docs/new">
-            <FilePlus2 aria-hidden="true" size={16} /> New document
-          </Link>
+        <DropdownMenuItem disabled>
+          <FilePlus2 aria-hidden="true" size={16} /> New document
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

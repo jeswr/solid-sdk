@@ -815,10 +815,11 @@ describe("Drive data-safety regressions", () => {
     });
     await expect(
       client.move(`${FROM}a`, destination, { kind: "confirm-move" }),
-    ).rejects.toMatchObject({
-      kind: "partial-failure",
-      deletedSources: [],
-    });
+    ).rejects.toMatchObject(
+      failure === "missing"
+        ? { kind: "not-found", url: destination }
+        : { kind: "partial-failure", deletedSources: [] },
+    );
     expect(await (await client.read(`${FROM}a`)).text()).toBe("A");
     expect(
       fetch.mock.calls.some(([url, init]) => url === `${FROM}a` && init?.method === "DELETE"),

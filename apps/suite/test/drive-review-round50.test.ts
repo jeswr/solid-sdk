@@ -482,7 +482,7 @@ it("a missing write validator never authorizes unconditional rollback after acce
       { contentType: "text/plain", ifNoneMatch: "*" },
       { kind: "protect-ancestors" },
     ),
-  ).rejects.toMatchObject({ kind: "missing-validator" });
+  ).rejects.toMatchObject({ kind: "partial-failure", cause: { kind: "missing-validator" } });
   expect(changed).toBe(true);
   expect(f.pod.has(`${PRIVATE}secret`)).toBe(true);
   expect(f.calls.some(({ method }) => method === "DELETE")).toBe(false);
