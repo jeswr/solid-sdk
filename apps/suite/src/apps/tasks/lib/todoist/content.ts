@@ -55,7 +55,11 @@ export function splitContent(content: string): { title: string; labels: string[]
         i = end;
         continue;
       }
-      if (/^(?: {4}|\t)/.test(sourceLine)) {
+      let indentation = 0;
+      for (let start = 0; sourceLine[start] === " " || sourceLine[start] === "\t"; start++) {
+        indentation += sourceLine[start] === "\t" ? 4 - (indentation % 4) : 1;
+      }
+      if (indentation >= 4) {
         i = end;
         continue;
       }

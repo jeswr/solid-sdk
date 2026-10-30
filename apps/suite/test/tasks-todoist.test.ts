@@ -209,6 +209,35 @@ describe("Todoist project drafts", () => {
 
 describe("content and labels", () => {
   it.each([
+    " \t",
+    "  \t",
+    "   \t",
+    " \t ",
+    " \t\t",
+  ])("preserves code with mixed space/tab indentation %j", (indent) => {
+    for (const newline of ["\n", "\r\n", "\r"]) {
+      for (const prefix of ["", "> ", "> > "]) {
+        const literal = ["Title", "", `${prefix}${indent}@literal`].join(newline);
+        const result = parseTodoistCsv(
+          csv([task({ CONTENT: `${literal}${newline}${newline}@real` })]),
+          options,
+        ).tasks[0]!;
+        expect(result.title).toBe(literal);
+        expect(result.labels).toEqual(["real"]);
+      }
+    }
+  });
+
+  it.each([0, 1, 2, 3])("imports labels below four columns of indentation: %i", (width) => {
+    const result = parseTodoistCsv(
+      csv([task({ CONTENT: `Title\n\n${" ".repeat(width)}@real` })]),
+      options,
+    ).tasks[0]!;
+    expect(result.title).toBe("Title");
+    expect(result.labels).toEqual(["real"]);
+  });
+
+  it.each([
     '[text](https://example.org "a ) @literal title")',
     "[text](https://example.org 'a ) @literal title')",
     '[text](https://example.org "a ( @literal title")',
