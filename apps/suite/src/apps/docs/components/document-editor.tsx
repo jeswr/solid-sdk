@@ -27,7 +27,7 @@ import { copyDocument } from "../editor/copy";
 import { downloadDocument } from "../editor/export-document";
 import { editorExtensions } from "../editor/extensions";
 import { focusDocument } from "../editor/focus";
-import { imageTransferFile } from "../editor/image-transfer";
+import { imageTransfer, type RichImageTransfer } from "../editor/image-transfer";
 import { convertImport, uploadImportImage } from "../editor/import-document";
 import type { DocumentPersistence } from "../editor/persistence";
 import { printDocument } from "../editor/print-document";
@@ -128,11 +128,15 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
   const [why, setWhy] = useState(false);
   const [outline, setOutline] = useState(true);
   const [slash, setSlash] = useState<SlashPosition | null>(null);
-  const [image, setImage] = useState<{ file: File | null } | null>(null);
+  const [image, setImage] = useState<{
+    file: File | null;
+    transfer?: RichImageTransfer;
+  } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
   const handlers = useRef({
-    image: (_file: File) => {},
+    image: (_file: File, _transfer?: RichImageTransfer): boolean => false,
+    transfer: (_transfer: DataTransfer | null, _position?: number): boolean => false,
     key: (_event: KeyboardEvent): boolean => false,
   });
   const editor = useEditor(
@@ -171,18 +175,15 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
         },
         handlePaste: (_view, event) => {
           userEdited.current = true;
-          const file = imageTransferFile(event.clipboardData);
-          if (!file) return false;
+          if (!handlers.current.transfer(event.clipboardData)) return false;
           event.preventDefault();
-          handlers.current.image(file);
           return true;
         },
-        handleDrop: (_view, event, _slice, moved) => {
+        handleDrop: (view, event, _slice, moved) => {
           if (moved) return false;
-          const file = imageTransferFile(event.dataTransfer);
-          if (!file) return false;
+          const position = view.posAtCoords({ left: event.clientX, top: event.clientY })?.pos;
+          if (!handlers.current.transfer(event.dataTransfer, position)) return false;
           event.preventDefault();
-          handlers.current.image(file);
           return true;
         },
       },
@@ -283,14 +284,31 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
       printed.current = false;
     };
   }, [editor, params, print]);
-  handlers.current.image = (file) => {
+  handlers.current.image = (file, transfer) => {
     if (!runtime.online) {
       toast.error("Reconnect to add images");
-      return;
+      return false;
     }
-    const message = validateImage(file);
-    if (message) toast.error(message);
-    else setImage({ file });
+    const message = (transfer?.images.map((image) => image.file) ?? [file])
+      .map(validateImage)
+      .find(Boolean);
+    if (message) {
+      toast.error(message);
+      return false;
+    }
+    setImage({ file, ...(transfer ? { transfer } : {}) });
+    return true;
+  };
+  handlers.current.transfer = (transfer, position) => {
+    try {
+      const image = imageTransfer(transfer);
+      if (!image) return false;
+      if (position !== undefined) editor?.commands.setTextSelection(position);
+      return handlers.current.image(image.file, image.rich);
+    } catch {
+      toast.error("Couldn't read an embedded image. Copy it again or add it as a file.");
+      return false;
+    }
   };
   handlers.current.key = (event) => {
     const action = editorShortcut(
@@ -414,6 +432,11 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
         actions={
           <>
             <SaveIndicator
+              state={
+                runtime.trashed || !runtime.online || runtime.localState !== "saved"
+                  ? runtime.localState
+                  : runtime.state
+              }
               status={
                 runtime.trashed
                   ? `Moved to trash — ${deviceSaveStatus(runtime.localState)}`
@@ -572,6 +595,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             editor={editor}
             runtime={runtime}
             file={image.file}
+            {...(image.transfer ? { transfer: image.transfer } : {})}
             close={() => setImage(null)}
           />
         )}

@@ -224,8 +224,12 @@
   font-size: 12px;
   white-space: nowrap;
 }
-.docs-save svg {
+.docs-save[data-state="saved"] svg {
   color: var(--success);
+}
+.docs-save[data-state="failed"] svg,
+.docs-save[data-state="retrying"] svg {
+  color: var(--destructive);
 }
 .docs-collab {
   max-width: 200px;

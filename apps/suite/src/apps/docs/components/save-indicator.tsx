@@ -1,9 +1,10 @@
 // AUTHORED-BY Codex
 "use client";
-import { Check } from "lucide-react";
+import { Check, LoaderCircle, TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import type { SaveState } from "../lib/editor/logic";
 /** Visual feedback follows every write; saved announcements are capped at once per 30 seconds. */
-export function SaveIndicator({ status }: { status: string }) {
+export function SaveIndicator({ status, state }: { status: string; state: SaveState }) {
   const [announcement, setAnnouncement] = useState("");
   const lastSaved = useRef(0);
   useEffect(() => {
@@ -17,9 +18,10 @@ export function SaveIndicator({ status }: { status: string }) {
     }
     setAnnouncement(status);
   }, [status]);
+  const Icon = state === "saved" ? Check : state === "saving" ? LoaderCircle : TriangleAlert;
   return (
-    <div className="docs-save" role="status" aria-live="polite" title={status}>
-      <Check size={16} aria-hidden="true" />
+    <div className="docs-save" data-state={state} role="status" aria-live="polite" title={status}>
+      <Icon size={16} aria-hidden="true" />
       <span aria-hidden="true">{status}</span>
       <span className="sr-only">{announcement}</span>
     </div>

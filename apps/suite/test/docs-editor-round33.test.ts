@@ -55,6 +55,7 @@ import { DocumentEditor } from "../src/apps/docs/components/document-editor";
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal("ClipboardEvent", Event);
   vi.stubGlobal(
     "IntersectionObserver",
     class {
@@ -181,6 +182,152 @@ it.each(
       expect(view.body.querySelector("a")?.getAttribute("href")).toBe("https://example.org/guide");
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(mocks.runtime?.change).toHaveBeenCalled();
+  } finally {
+    await view.close();
+  }
+});
+
+it.each(
+  ["paste", "drop"].flatMap((path) => ["data", "file", "blob"].map((scheme) => ({ path, scheme }))),
+)("round51 $path uploads embedded $scheme images while retaining the rich fragment", async ({
+  path,
+  scheme,
+}) => {
+  const fetchImpl = vi.fn<typeof fetch>(async () => new Response(null, { status: 201 }));
+  const view = await mountEditor(undefined, "https://pod.test/docs/plan.ttl", fetchImpl);
+  try {
+    Object.defineProperty(document, "elementFromPoint", {
+      configurable: true,
+      value: () => view.body,
+    });
+    const source =
+      scheme === "data"
+        ? "data:image/png;base64,cGl4ZWxz"
+        : scheme === "file"
+          ? "file:///tmp/chart.png"
+          : "blob:https://source.test/chart";
+    const event = new MouseEvent(path, { bubbles: true, cancelable: true });
+    Object.defineProperty(event, path === "paste" ? "clipboardData" : "dataTransfer", {
+      value: {
+        files: [new File(["pixels"], "chart.png", { type: "image/png" })],
+        types: ["Files", "text/html", "text/plain"],
+        getData: (type: string) =>
+          type === "text/html"
+            ? `<p><strong>Before</strong></p><img src="${source}" alt="Chart"><p><a href="https://example.org/guide">After</a></p>`
+            : type === "text/plain"
+              ? "Before\nAfter"
+              : "",
+      },
+    });
+    await act(async () => view.body.dispatchEvent(event));
+    const dialog = document.querySelector('[aria-label="Image alt text"]');
+    expect(dialog?.textContent).toContain("Insert image");
+    expect(dialog?.querySelector<HTMLInputElement>('input:not([type="checkbox"])')?.value).toBe(
+      "Chart",
+    );
+    await act(async () =>
+      dialog
+        ?.querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    await vi.waitFor(() =>
+      expect(document.querySelector('[aria-label="Image alt text"]')).toBeNull(),
+    );
+    expect(view.body.textContent).toBe("BeforeAfter");
+    expect(view.body.querySelector("strong")?.textContent).toBe("Before");
+    expect(view.body.querySelector("a")?.getAttribute("href")).toBe("https://example.org/guide");
+    const json = vi.mocked(mocks.runtime?.change)?.mock.lastCall?.[1] as JSONContent;
+    expect(json.content?.slice(0, 3).map((node) => node.type)).toEqual([
+      "paragraph",
+      "image",
+      "paragraph",
+    ]);
+    expect(json.content?.[1]?.attrs).toMatchObject({
+      src: expect.stringMatching(/^https:\/\/pod.test\/docs\/plan\/assets\/.*\.png$/),
+      alt: "Chart",
+    });
+    const puts = fetchImpl.mock.calls.filter(([, init]) => init?.method === "PUT");
+    expect(puts).toHaveLength(1);
+    expect(puts[0]?.[1]).toMatchObject({
+      redirect: "error",
+      headers: { "content-type": "image/png", "if-none-match": "*" },
+    });
+  } finally {
+    await view.close();
+  }
+});
+
+it.each([
+  "offline",
+  "unsupported",
+  "unreadable",
+  "missing",
+])("round51 rejected %s embedded images preserve the accompanying text and report why", async (reason) => {
+  const view = await mountEditor();
+  mocks.toast.error.mockClear();
+  try {
+    if (reason === "offline") {
+      Object.assign(mocks.runtime as DocumentPersistence, { online: false });
+      await view.refresh();
+    }
+    const source =
+      reason === "unsupported"
+        ? "data:image/avif;base64,cGl4ZWxz"
+        : reason === "unreadable"
+          ? "data:image/png;base64,!!!"
+          : reason === "missing"
+            ? "file:///missing.png"
+            : "data:image/png;base64,cGl4ZWxz";
+    const event = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", {
+      value: {
+        files: [],
+        types: ["text/html"],
+        getData: (type: string) =>
+          type === "text/html"
+            ? `<p><strong>Keep</strong></p><img src="${source}"><p>this text</p>`
+            : "",
+      },
+    });
+    await act(async () => view.body.dispatchEvent(event));
+    expect(view.body.textContent).toBe("Keepthis text");
+    expect(view.body.querySelector("strong")?.textContent).toBe("Keep");
+    expect(document.querySelector('[aria-label="Image alt text"]')).toBeNull();
+    expect(mocks.toast.error).toHaveBeenCalledWith(
+      reason === "offline"
+        ? "Reconnect to add images"
+        : reason === "unsupported"
+          ? "Choose a PNG, JPEG, GIF, WebP or SVG image"
+          : "Couldn't read an embedded image. Copy it again or add it as a file.",
+    );
+  } finally {
+    await view.close();
+  }
+});
+
+it.each([
+  { state: "saving", localState: "saved", online: true, trashed: false, icon: "loader-circle" },
+  { state: "retrying", localState: "saved", online: true, trashed: false, icon: "triangle-alert" },
+  { state: "failed", localState: "saved", online: true, trashed: false, icon: "triangle-alert" },
+  { state: "saved", localState: "saving", online: true, trashed: false, icon: "loader-circle" },
+  { state: "saved", localState: "retrying", online: false, trashed: false, icon: "triangle-alert" },
+  { state: "saved", localState: "failed", online: true, trashed: true, icon: "triangle-alert" },
+  { state: "saved", localState: "saved", online: true, trashed: false, icon: "check" },
+])("round51 mobile save icon reflects $state/$localState (online: $online, trashed: $trashed)", async ({
+  state,
+  localState,
+  online,
+  trashed,
+  icon,
+}) => {
+  const view = await mountEditor();
+  try {
+    Object.assign(mocks.runtime as DocumentPersistence, { state, localState, online, trashed });
+    await view.refresh();
+    const indicator = view.host.querySelector(".docs-save");
+    expect(indicator?.querySelector(`svg.lucide-${icon}`)).not.toBeNull();
+    expect(indicator?.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
+    if (icon !== "check") expect(indicator?.querySelector("svg.lucide-check")).toBeNull();
   } finally {
     await view.close();
   }

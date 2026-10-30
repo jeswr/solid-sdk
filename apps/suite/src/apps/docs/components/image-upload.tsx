@@ -1,8 +1,9 @@
 // AUTHORED-BY Codex
 "use client";
 import { Button, Input, Popover, PopoverAnchor } from "@jeswr/suite-ui";
-import type { Editor } from "@tiptap/react";
-import { useId, useState } from "react";
+import type { Editor, EditorEvents } from "@tiptap/react";
+import { useEffect, useId, useRef, useState } from "react";
+import type { RichImageTransfer } from "../editor/image-transfer";
 import type { DocumentPersistence } from "../editor/persistence";
 import { insertionAnchor } from "../lib/editor/insertion-anchor";
 import { docContainerUrls } from "../lib/model";
@@ -10,18 +11,51 @@ import { EditorPopoverContent } from "./editor-popover-content";
 export function ImageUpload({
   editor,
   runtime,
-  file,
+  file: initialFile,
+  transfer,
   close,
 }: {
   editor: Editor;
   runtime: DocumentPersistence;
   file: File | null;
+  transfer?: RichImageTransfer;
   close: () => void;
 }) {
   const id = useId();
-  const [alt, setAlt] = useState(file ? "" : String(editor.getAttributes("image").alt ?? ""));
+  const [index, setIndex] = useState(0);
+  const file = transfer?.images[index]?.file ?? initialFile;
+  const [alt, setAlt] = useState(
+    transfer?.images[0]?.alt ?? (file ? "" : String(editor.getAttributes("image").alt ?? "")),
+  );
   const [decorative, setDecorative] = useState(false);
   const [state, setState] = useState<"idle" | "uploading" | "error">("idle");
+  const insertFragment = useRef<(() => void) | undefined>(undefined);
+  useEffect(() => {
+    if (!transfer) return;
+    let bookmark = editor.state.selection.getBookmark();
+    const map = ({ transaction, appendedTransactions }: EditorEvents["transaction"]) => {
+      for (const applied of [transaction, ...appendedTransactions])
+        bookmark = bookmark.map(applied.mapping);
+    };
+    editor.on("transaction", map);
+    insertFragment.current = () => {
+      if (editor.isDestroyed) return;
+      editor.view.dispatch(editor.state.tr.setSelection(bookmark.resolve(editor.state.doc)));
+      // Run the usual paste normalization and URL filters on the retained fragment.
+      editor.view.pasteHTML(transfer.fragment.innerHTML);
+    };
+    return () => {
+      editor.off("transaction", map);
+      insertFragment.current = undefined;
+    };
+  }, [editor, transfer]);
+  const cancel = () => {
+    // Keep the rich text and completed uploads if the user declines the remaining images.
+    for (const image of transfer?.images.slice(index) ?? [])
+      for (const element of image.elements) element.remove();
+    insertFragment.current?.();
+    close();
+  };
   const upload = async () => {
     if (!decorative && !alt.trim()) return;
     if (!file) {
@@ -59,6 +93,23 @@ export function ImageUpload({
       });
       if (!response.ok) throw new Error("Upload failed");
       if (editor.isDestroyed) return;
+      if (transfer) {
+        for (const element of transfer.images[index]?.elements ?? []) {
+          element.setAttribute("src", src);
+          element.setAttribute("alt", decorative ? "" : alt.trim());
+        }
+        const next = transfer.images[index + 1];
+        if (next) {
+          setIndex(index + 1);
+          setAlt(next.alt);
+          setDecorative(false);
+          setState("idle");
+        } else {
+          insertFragment.current?.();
+          close();
+        }
+        return;
+      }
       editor
         .chain()
         .focus()
@@ -78,7 +129,7 @@ export function ImageUpload({
     <Popover
       open
       onOpenChange={(open) => {
-        if (!open && state !== "uploading") close();
+        if (!open && state !== "uploading") cancel();
       }}
     >
       <PopoverAnchor asChild>
@@ -93,6 +144,11 @@ export function ImageUpload({
           }}
         >
           <h2>Alt text</h2>
+          {transfer && transfer.images.length > 1 && (
+            <p>
+              Image {index + 1} of {transfer.images.length}
+            </p>
+          )}
           <label htmlFor={`${id}-alt`}>Describe this image for people who can't see it</label>
           <Input
             id={`${id}-alt`}
@@ -120,7 +176,7 @@ export function ImageUpload({
           <Button type="submit" disabled={state === "uploading" || (!decorative && !alt.trim())}>
             {state === "error" ? "Retry" : file ? "Insert image" : "Save alt text"}
           </Button>
-          <Button variant="ghost" disabled={state === "uploading"} onClick={close}>
+          <Button variant="ghost" disabled={state === "uploading"} onClick={cancel}>
             {state === "error" ? "Remove" : "Cancel"}
           </Button>
         </form>
