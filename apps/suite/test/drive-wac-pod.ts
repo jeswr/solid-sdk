@@ -74,6 +74,9 @@ export async function wacPod() {
     [`${ROOT}.policy`, await aclBody(ROOT, true)],
     [`${PRIVATE}.policy`, await aclBody(PRIVATE)],
   ]);
+  // Discovery and enforcement share the same association, including endpoint changes.
+  const endpoints = new Map<string, string>();
+  const endpointOf = (url: string) => endpoints.get(url) ?? `${url}.policy`;
   const calls: { url: string; method: string }[] = [];
   const exposures: string[] = [];
   let audit = false;
@@ -84,7 +87,7 @@ export async function wacPod() {
     let resource: string | undefined = url;
     let inherited = false;
     while (resource?.startsWith(ROOT)) {
-      const body = policies.get(`${resource}.policy`);
+      const body = policies.get(endpointOf(resource));
       if (body !== undefined) {
         const data = await parseRdf(body, "text/turtle");
         const rules = [...new AclResource(data, DataFactory).authorizations];
@@ -134,10 +137,10 @@ export async function wacPod() {
         });
     } else {
       const raw = await pod.fetch(input, init);
-      if (method === "DELETE" && raw.ok) policies.delete(`${url}.policy`);
+      if (method === "DELETE" && raw.ok) policies.delete(endpointOf(url));
       const headers = new Headers(raw.headers);
       headers.delete("x-solid-demo-access-control");
-      headers.set("link", `<${url}.policy>; rel="acl"`);
+      headers.set("link", `<${endpointOf(url)}>; rel="acl"`);
       if (method === "PUT" && raw.ok && url.endsWith("/"))
         headers.set(
           "etag",
@@ -171,6 +174,7 @@ export async function wacPod() {
     pod,
     fetch,
     policies,
+    endpoints,
     calls,
     exposures,
     anonymous,

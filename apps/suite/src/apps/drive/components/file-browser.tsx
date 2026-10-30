@@ -229,7 +229,20 @@ export function FileBrowser(props: FileBrowserProps) {
   const listingFocus = useDriveListingFocus(ids, container);
 
   const { setDetailsItems, setCurrentFolder, uploadRequest } = ui;
-  useEffect(() => setDetailsItems(selected), [selected, setDetailsItems]);
+  const detailsSelection = useRef({ folder, urls: selection.selected });
+  useEffect(() => {
+    const previous = detailsSelection.current;
+    const urls = selected.map((item) => item.url);
+    detailsSelection.current = { folder, urls };
+    // A refreshed listing is not a new selection. Details may have been opened
+    // explicitly from a focused row, a menu or the preview in the meantime.
+    if (
+      folder !== previous.folder ||
+      urls.length !== previous.urls.length ||
+      urls.some((url, index) => url !== previous.urls[index])
+    )
+      setDetailsItems(selected);
+  }, [folder, selected, setDetailsItems]);
   const { preview, setPreview } = ui;
   useEffect(() => {
     if (!items || refreshing || !preview) return;

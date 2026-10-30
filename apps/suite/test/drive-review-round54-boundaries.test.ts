@@ -94,6 +94,9 @@ const steps = [
   "Restore tree",
   "Delete forever tree",
   "Empty Trash tree",
+  "Replace completion recovery clearing",
+  "Move completion recovery clearing",
+  "Copy completion recovery clearing",
 ] as const;
 type Step = (typeof steps)[number];
 
@@ -103,6 +106,9 @@ async function scenario(variant: Step, events: string[]) {
   const f = await rdfPod();
   const mutations: { url: string; prior: string | undefined }[] = [];
   let afterIdentity: ((url: string, response: Response) => Promise<void>) | undefined;
+  let completionTarget: string | undefined;
+  let completionWritten = false;
+  let completionChanged = false;
   const http: typeof fetch = async (input, init) => {
     const url = String(input);
     const method = init?.method ?? "GET";
@@ -113,7 +119,17 @@ async function scenario(variant: Step, events: string[]) {
     )
       mutations.push({ url, prior: events.at(-1) });
     const response = await f.fetch(input, init);
-    if (method === "HEAD" && headers.has("if-match")) await afterIdentity?.(url, response);
+    if (url === completionTarget && method === "PUT" && headers.has("if-match") && response.ok)
+      completionWritten = true;
+    if (method === "HEAD" && headers.has("if-match")) {
+      if (url === completionTarget && completionWritten && !completionChanged) {
+        completionChanged = true;
+        const endpoint = `${url}foreign.policy`;
+        f.policies.set(endpoint, await aclBody(url, true));
+        f.endpoints.set(url, endpoint);
+        response.headers.set("link", `<${endpoint}>; rel="acl"`);
+      } else if (!completionTarget || completionChanged) await afterIdentity?.(url, response);
+    }
     events.push(method === "HEAD" && headers.has("if-match") ? "identity HEAD" : method);
     return response;
   };
@@ -171,7 +187,29 @@ async function scenario(variant: Step, events: string[]) {
   let targetCheck = 1;
   let identityTarget: string | undefined;
   let run: () => Promise<unknown>;
-  if (step === "post-retirement private backup ACL") {
+  if (step.endsWith("completion recovery clearing")) {
+    target = step.startsWith("Replace") ? source : `${PRIVATE}copy`;
+    completionTarget = target;
+    // Transfers first refuse rollback DELETE on the changed endpoint; the next
+    // captured target check belongs to conditional evacuation after private backup.
+    targetCheck = step.startsWith("Replace") ? 1 : 2;
+    run = () =>
+      step.startsWith("Replace")
+        ? uploadFile(client, PRIVATE, new Blob(["replacement"]), "secret", "replace", selected)
+        : step.startsWith("Move")
+          ? client.move(
+              source,
+              target,
+              { kind: "preserve-source" },
+              { ifMatch: selected.etag as string },
+            )
+          : client.copy(
+              source,
+              target,
+              { kind: "preserve-source" },
+              { ifMatch: selected.etag as string },
+            );
+  } else if (step === "post-retirement private backup ACL") {
     f.intercept(async (url, init) =>
       url === source && init?.method === "DELETE" ? new Response(null, { status: 403 }) : undefined,
     );
@@ -511,7 +549,7 @@ async function scenario(variant: Step, events: string[]) {
 
 it.each(
   steps,
-)("round 64 shape a: %s retains a replacement at its final identity check", async (step) => {
+)("round 65 shape a: %s retains a replacement at its final identity check", async (step) => {
   const events: string[] = [];
   const s = await scenario(step, events);
   let checks = 0;
@@ -539,7 +577,7 @@ it.each(
 
 it.each(
   steps,
-)("round 64 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
+)("round 65 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   const events: string[] = [];
   const s = await scenario(step, events);

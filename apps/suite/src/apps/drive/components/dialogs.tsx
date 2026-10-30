@@ -292,14 +292,19 @@ function MoveDialog({
   const targetValidity = target ? validity(target) : undefined;
   const canMove = targetValidity?.valid === true;
 
+  const focusTarget = (url: string) => {
+    setTarget(url);
+    requestAnimationFrame(() =>
+      tree.current?.querySelector<HTMLElement>(`[data-node="${CSS.escape(url)}"]`)?.focus(),
+    );
+  };
   const toggle = (url: string) => {
+    if (expanded.has(url) && target?.startsWith(url)) focusTarget(url);
+    if (!expanded.has(url)) void load(url);
     setExpanded((current) => {
       const next = new Set(current);
       if (next.has(url)) next.delete(url);
-      else {
-        next.add(url);
-        void load(url);
-      }
+      else next.add(url);
       return next;
     });
   };
@@ -324,10 +329,7 @@ function MoveDialog({
     const go = (url: string | undefined) => {
       if (!url) return;
       event.preventDefault();
-      setTarget(url);
-      requestAnimationFrame(() =>
-        tree.current?.querySelector<HTMLElement>(`[data-node="${CSS.escape(url)}"]`)?.focus(),
-      );
+      focusTarget(url);
     };
     if (event.key === "ArrowDown") go(order[index + 1]);
     else if (event.key === "ArrowUp") go(order[index - 1]);

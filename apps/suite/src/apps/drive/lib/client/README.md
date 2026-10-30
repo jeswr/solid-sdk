@@ -64,6 +64,14 @@ receipts before success. Partial Restore hydrates recovery bytes before discardi
 a duplicate and checks the compared survivors after retirement; a failed check
 retains the captured bytes privately without clearing a recreated resource.
 
+All content identity HEADs use `checkResourceIdentity`, which requires a synchronous
+captured-endpoint assertion. PUT completion reuses the same assertion as its commit
+boundary, before disarming recovery. Move checks destination discovery both before
+source DELETE and after retirement; Copy, source snapshots, metadata merge guards,
+rollback source proofs, partial-Restore survivors and private backup completion
+checks share the invariant. Policy-archive presence checks remain separate. A
+matching content ETag never excuses an observed change in ACL discovery.
+
 A missing Link on a 404 is undiscovered access, not a pinned absent endpoint. Only
 a new conditional-creation receipt with a strong ETag can establish that endpoint;
 a later HEAD cannot replace it. Provisioning, uploads, transfers, recovery backups,
@@ -74,6 +82,10 @@ own policy or absence, so an unknown historical endpoint cannot authorize repair
 Failure keeps a durable
 receipt for the actual installed policy, including narrower intersections, so Retry
 cannot repair another client's replacement or revocation.
+
+The [round 65 audit](../../../../../test/drive-review-round65-audit.md) lists every
+audited call site, completion endpoint assertions and recovery, Details refresh
+ownership, Move-tree focus, and the 51-step matrix for both ordering shapes.
 
 The [round 64 audit](../../../../../test/drive-review-round64-audit.md) lists every
 audited call site, the mandatory deletion endpoint invariant, Unix listing dates,
