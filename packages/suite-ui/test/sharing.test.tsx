@@ -2,15 +2,17 @@
 // @vitest-environment jsdom
 
 import { readFileSync } from "node:fs";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import axe from "axe-core";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConsentSheet, type ConsentSheetProps } from "../src/sharing/consent-sheet.js";
 import { DurationChips } from "../src/sharing/duration-chips.js";
 import {
   PeoplePicker,
   type SharingPerson,
+  type SharingProfile,
+  type UseSharingProfile,
   validatePersonEntry,
 } from "../src/sharing/people-picker.js";
 import { PermissionRow, type PermissionRowProps } from "../src/sharing/permission-row.js";
@@ -25,13 +27,22 @@ const contact = {
   emails: ["bram@example.com"],
 };
 const useProfile = () => ({ displayName: "Bram from profile", loading: false });
-function Picker({ state = { kind: "ready" } }: { state?: SharingState }) {
+function Picker({
+  state = { kind: "ready" },
+  people = [contact],
+  useProfile: profile = useProfile,
+}: {
+  state?: SharingState;
+  people?: readonly SharingPerson[];
+  useProfile?: UseSharingProfile;
+}) {
   const [value, onChange] = useState<SharingPerson[]>([]);
   const [query, onQueryChange] = useState("");
   return (
     <PeoplePicker
-      contacts={{ people: [contact], state }}
-      {...{ value, onChange, query, onQueryChange, useProfile }}
+      contacts={{ people, state }}
+      {...{ value, onChange, query, onQueryChange }}
+      useProfile={profile}
     />
   );
 }
@@ -132,6 +143,51 @@ describe("people validation", () => {
     expect(screen.getByText(`Account ID: ${contact.webId}`)).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Remove Bram Kerst" }));
     expect(screen.queryByRole("list", { name: "Selected people" })).toBeNull();
+  });
+  it.each([
+    undefined,
+    "Old contact name",
+  ])("searches the displayed profile name with contact name %s", (displayName) => {
+    const person = { webId: contact.webId, ...(displayName ? { displayName } : {}) };
+    render(<Picker people={[person]} />);
+    const input = screen.getByRole("combobox");
+    fireEvent.focus(input);
+    expect(screen.getByRole("option").textContent).toContain("Bram from profile");
+    fireEvent.change(input, { target: { value: "bRaM fRoM pRoFiLe" } });
+    expect(screen.getByRole("option").textContent).toContain("Bram from profile");
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(input.getAttribute("aria-activedescendant")).toBe(screen.getByRole("option").id);
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.getByRole("list", { name: "Selected people" }).textContent).toContain(
+      "Bram from profile",
+    );
+  });
+  it("updates search results when a filtered contact's profile resolves or changes", () => {
+    const updates = new Map<string, (profile: SharingProfile) => void>();
+    function useLiveProfile(webId: string) {
+      const [profile, setProfile] = useState<SharingProfile>({ loading: true });
+      useEffect(() => {
+        updates.set(webId, setProfile);
+        return () => {
+          updates.delete(webId);
+        };
+      }, [webId]);
+      return profile;
+    }
+    const people = [{ webId: contact.webId }, { webId: "https://other.example/me" }];
+    const { rerender } = render(<Picker people={people} useProfile={useLiveProfile} />);
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "Amelia" } });
+    expect(screen.queryByRole("option")).toBeNull();
+    act(() => updates.get(contact.webId)?.({ displayName: "Amelia Rivers", loading: false }));
+    expect(screen.getByRole("option").textContent).toContain("Amelia Rivers");
+    fireEvent.change(input, { target: { value: "Ada" } });
+    expect(screen.queryByRole("option")).toBeNull();
+    act(() => updates.get(contact.webId)?.({ displayName: "Ada Rivers", loading: false }));
+    expect(screen.getByRole("option").textContent).toContain("Ada Rivers");
+    rerender(<Picker people={[people[0] as SharingPerson]} useProfile={useLiveProfile} />);
+    expect(screen.getByRole("option").textContent).toContain("Ada Rivers");
+    expect(updates.has("https://other.example/me")).toBe(false);
   });
   it("validates raw entry, duplicate entry, unknown email and dismisses suggestions", () => {
     render(<Picker />);

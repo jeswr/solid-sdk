@@ -3,7 +3,7 @@
 
 import { X } from "lucide-react";
 import { Avatar } from "radix-ui";
-import { useEffect, useId, useState } from "react";
+import { useCallback, useEffect, useId, useState } from "react";
 import { Button } from "./primitives.js";
 import { hasSharingContent, type SharingState, SharingStatus } from "./state.js";
 
@@ -57,7 +57,27 @@ export function validatePersonEntry(
   return { valid: false, message: "Enter an account ID starting with http:// or https://" };
 }
 
-function PersonLabel({
+function personName(person: SharingPerson, profile: SharingProfile | undefined) {
+  return profile?.displayName || person.displayName || new URL(person.webId).hostname;
+}
+
+function ContactProfile({
+  webId,
+  useProfile,
+  onResolve,
+}: {
+  webId: string;
+  useProfile: UseSharingProfile;
+  onResolve: (webId: string, profile: SharingProfile) => void;
+}) {
+  const { displayName = "", avatarUrl = "", loading } = useProfile(webId);
+  useEffect(() => {
+    onResolve(webId, { displayName, avatarUrl, loading });
+  }, [webId, displayName, avatarUrl, loading, onResolve]);
+  return null;
+}
+
+function SelectedPersonLabel({
   person,
   useProfile,
 }: {
@@ -65,17 +85,27 @@ function PersonLabel({
   useProfile: UseSharingProfile;
 }) {
   const profile = useProfile(person.webId);
-  const name = profile.displayName || person.displayName || new URL(person.webId).hostname;
+  return <PersonLabel person={person} profile={profile} />;
+}
+
+function PersonLabel({
+  person,
+  profile,
+}: {
+  person: SharingPerson;
+  profile: SharingProfile | undefined;
+}) {
+  const name = personName(person, profile);
   return (
     <>
       <Avatar.Root className="su-avatar">
-        {profile.avatarUrl && <Avatar.Image src={profile.avatarUrl} alt="" />}
+        {profile?.avatarUrl && <Avatar.Image src={profile.avatarUrl} alt="" />}
         <Avatar.Fallback>{name.slice(0, 1).toUpperCase()}</Avatar.Fallback>
       </Avatar.Root>
       <span className="su-person-label">
         <strong>{name}</strong>
         <span className="su-account-id">Account ID: {person.webId}</span>
-        {profile.loading && <span className="su-muted">Loading profile…</span>}
+        {profile?.loading && <span className="su-muted">Loading profile…</span>}
       </span>
     </>
   );
@@ -103,17 +133,23 @@ export function PeoplePicker({
   const [active, setActive] = useState(-1);
   const [error, setError] = useState("");
   const [announcement, setAnnouncement] = useState("");
+  const [profiles, setProfiles] = useState<Record<string, SharingProfile>>({});
+  const onProfileResolve = useCallback((webId: string, profile: SharingProfile) => {
+    setProfiles((current) => ({ ...current, [webId]: profile }));
+  }, []);
   const offline = contacts.state.kind === "offline";
-  const results = hasSharingContent(contacts.state)
+  const candidates = hasSharingContent(contacts.state)
     ? contacts.people.filter(
         (person) =>
           validAccountId(person.webId) &&
-          !value.some((selected) => selected.webId === person.webId) &&
-          `${person.displayName ?? ""} ${person.webId} ${person.emails?.join(" ") ?? ""}`
-            .toLowerCase()
-            .includes(query.toLowerCase()),
+          !value.some((selected) => selected.webId === person.webId),
       )
     : [];
+  const results = candidates.filter((person) =>
+    `${personName(person, profiles[person.webId])} ${person.displayName ?? ""} ${person.webId} ${person.emails?.join(" ") ?? ""}`
+      .toLowerCase()
+      .includes(query.toLowerCase()),
+  );
   const activePerson = results[active];
   useEffect(() => {
     if (open && active >= 0)
@@ -140,6 +176,15 @@ export function PeoplePicker({
   }
   return (
     <div className="su-stack">
+      {/* Keep profile lookups mounted while contacts are filtered out. */}
+      {candidates.map((person) => (
+        <ContactProfile
+          key={person.webId}
+          webId={person.webId}
+          useProfile={useProfile}
+          onResolve={onProfileResolve}
+        />
+      ))}
       <label className="su-label" htmlFor={`${id}-input`}>
         Add people
       </label>
@@ -147,7 +192,7 @@ export function PeoplePicker({
         <ul className="su-stack" aria-label="Selected people">
           {value.map((person) => (
             <li className="su-person-chip" key={person.webId}>
-              <PersonLabel person={person} useProfile={useProfile} />
+              <SelectedPersonLabel person={person} useProfile={useProfile} />
               <Button
                 className="su-icon-button"
                 disabled={offline}
@@ -246,7 +291,7 @@ export function PeoplePicker({
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => add(person)}
           >
-            <PersonLabel person={person} useProfile={useProfile} />
+            <PersonLabel person={person} profile={profiles[person.webId]} />
           </div>
         ))}
       </div>
