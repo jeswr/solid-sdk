@@ -35,7 +35,12 @@ UI, persistence, dosage advice, or inferred spacing between doses.
 All instants are integer Unix milliseconds at whole-second precision, in
 2000–2099, matching the existing calendar time-zone core. Both window endpoints
 must be in that range. Local dates must also be in 2000–2099. A window may be
-empty, spans at most 366 elapsed days, and may resolve at most 1024 time slots.
+empty and spans at most 366 elapsed days. Each public call permits at most 1024
+work units: one per history record (including the new entry when logging), plus
+one per candidate time slot across all requested periods. Repeated/overlapping
+periods count separately. This conservative budget is checked before any inverse
+time-zone search, and conversions of the same local slot are reused within the
+call. Histories and period collections exceeding it raise `limit-exceeded`.
 Split longer periods into bounded windows and aggregate counts before computing
 percentages. Generation checks every slot on eligible dates in the conservative
 local-date envelope of the window (UTC endpoints expanded by ±14 hours, the

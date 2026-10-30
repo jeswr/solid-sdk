@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as tz from "../src/apps/calendar/lib/tz";
 import {
   adherenceByPeriod,
   type DoseEntry,
@@ -32,6 +33,8 @@ const asNeeded: MedicationSchedule = {
 const due = at("2026-01-01T09:00:00Z");
 const entry: DoseEntry = { scheduledAt: due, at: due, outcome: "taken" };
 const taken: DoseLog = { scheduleId: base.id, scheduledAt: due, at: due, status: "taken" };
+
+afterEach(() => vi.restoreAllMocks());
 
 function fails(action: () => unknown, code: MedicationError["code"]): void {
   expect(action).toThrow(MedicationError);
@@ -596,5 +599,110 @@ describe("medication adherence", () => {
       adherencePercent: null,
       onTimePercent: null,
     });
+  });
+});
+
+describe("medication call-wide conversion work", () => {
+  const oneSlot = { start: due, end: due + 1000 };
+  const history = (count: number): DoseLog[] =>
+    Array.from({ length: count }, (_, index) => ({
+      ...taken,
+      scheduledAt: due + index * 86_400_000,
+      at: due + index * 86_400_000,
+    }));
+
+  it("rejects oversized histories before converting or copying them, including the appended entry", () => {
+    const inverse = vi.spyOn(tz, "wallClockToInstant");
+    const forward = vi.spyOn(tz, "instantToWallClock");
+    const logs = history(1025);
+    fails(() => adherenceByPeriod(base, "UTC", logs, [], due), "limit-exceeded");
+    fails(
+      () =>
+        logDose(base, "UTC", logs.slice(0, 1024), {
+          ...entry,
+          scheduledAt: due + 1024 * 86_400_000,
+        }),
+      "limit-exceeded",
+    );
+    expect(inverse).not.toHaveBeenCalled();
+    expect(forward).not.toHaveBeenCalled();
+    expect(logs).toEqual(history(1025));
+  });
+
+  it("accepts exactly 1024 history records and includes the new entry in that allowance", () => {
+    // Isolate budget accounting from the exhaustive IANA search for these UTC fixtures.
+    const inverse = vi.spyOn(tz, "wallClockToInstant").mockImplementation((wall) => at(`${wall}Z`));
+    const logs = history(1024);
+    expect(adherenceByPeriod(base, "UTC", logs, [], due)).toEqual([]);
+    expect(inverse).toHaveBeenCalledTimes(1024);
+    inverse.mockClear();
+    const last = due + 1023 * 86_400_000;
+    expect(
+      logDose(base, "UTC", logs.slice(0, -1), {
+        scheduledAt: last,
+        at: last,
+        outcome: "taken",
+      }),
+    ).toEqual(logs);
+    expect(inverse).toHaveBeenCalledTimes(1024);
+  });
+
+  it("preflights the combined history and period slots before inverse conversions", () => {
+    const inverse = vi.spyOn(tz, "wallClockToInstant").mockImplementation((wall) => at(`${wall}Z`));
+    const logs = history(1024);
+    fails(() => adherenceByPeriod(base, "UTC", logs, [oneSlot], due), "limit-exceeded");
+    expect(inverse).not.toHaveBeenCalled();
+    const result = adherenceByPeriod(base, "UTC", logs.slice(0, -1), [oneSlot], due);
+    expect(result[0]).toMatchObject({ expected: 1, taken: 1, adherencePercent: 100 });
+    // The period's slot shares the history's validated conversion.
+    expect(inverse).toHaveBeenCalledTimes(1023);
+  });
+
+  it("shares one budget across periods and preflights the entire collection", () => {
+    const inverse = vi.spyOn(tz, "wallClockToInstant");
+    fails(
+      () => adherenceByPeriod(base, "UTC", [], Array(1025).fill(oneSlot), due),
+      "limit-exceeded",
+    );
+    expect(inverse).not.toHaveBeenCalled();
+    const results = adherenceByPeriod(base, "UTC", [], Array(1024).fill(oneSlot), due);
+    expect(results).toHaveLength(1024);
+    expect(results.every((period) => period.expected === 1 && period.missed === 1)).toBe(true);
+    expect(inverse).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses scheduled references for overlapping periods and revalidates on the next call", () => {
+    const inverse = vi.spyOn(tz, "wallClockToInstant");
+    const log = { ...taken };
+    const logs = [log];
+    const results = adherenceByPeriod(base, "UTC", logs, [oneSlot, oneSlot], due);
+    expect(results.map((period) => period.adherencePercent)).toEqual([100, 100]);
+    expect(inverse).toHaveBeenCalledTimes(1);
+    log.status = "late";
+    fails(() => adherenceByPeriod(base, "UTC", logs, [oneSlot], due), "invalid-log");
+  });
+
+  it("also bounds as-needed histories before forward conversions", () => {
+    const forward = vi.spyOn(tz, "instantToWallClock");
+    const logs: DoseLog[] = Array.from({ length: 1025 }, (_, index) => ({
+      scheduleId: asNeeded.id,
+      scheduledAt: null,
+      at: due + index * 1000,
+      status: "taken",
+    }));
+    fails(() => adherenceByPeriod(asNeeded, "UTC", logs, [], due), "limit-exceeded");
+    fails(
+      () =>
+        logDose(asNeeded, "UTC", logs.slice(0, -1), {
+          scheduledAt: null,
+          at: due + 1024 * 1000,
+          outcome: "taken",
+        }),
+      "limit-exceeded",
+    );
+    expect(forward).not.toHaveBeenCalled();
+    expect(adherenceByPeriod(asNeeded, "UTC", logs.slice(0, -1), [oneSlot], due)[0]?.expected).toBe(
+      0,
+    );
   });
 });

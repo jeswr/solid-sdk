@@ -18,12 +18,30 @@ export function wallAt(at: number, timeZone: string): string {
   }
 }
 
-function dueAt(date: string, time: string, timeZone: string): number {
-  try {
-    // No implicit choice for a repeated time; gaps are never normalised.
-    return wallClockToInstant(`${date}T${time}:00`, timeZone);
-  } catch {
-    throw new MedicationError("invalid-zoned-time");
+/** One call's conservative work allowance and reusable inverse conversions. */
+export class DoseConversions {
+  private reserved = 0;
+  private readonly converted = new Map<string, number>();
+
+  constructor(private readonly timeZone: string) {}
+
+  reserve(count: number): void {
+    if (this.reserved + count > 1024) throw new MedicationError("limit-exceeded");
+    this.reserved += count;
+  }
+
+  dueAt(date: string, time: string): number {
+    const wall = `${date}T${time}:00`;
+    const cached = this.converted.get(wall);
+    if (cached !== undefined) return cached;
+    try {
+      // No implicit choice for a repeated time; gaps are never normalised.
+      const at = wallClockToInstant(wall, this.timeZone);
+      this.converted.set(wall, at);
+      return at;
+    } catch {
+      throw new MedicationError("invalid-zoned-time");
+    }
   }
 }
 
@@ -51,13 +69,14 @@ export function isDue(
   bounds: ScheduleBounds,
   at: number,
   timeZone: string,
+  conversions: DoseConversions,
 ): boolean {
   const wall = wallAt(at, timeZone);
   return (
     eligible(schedule, bounds, dateDay(wall.slice(0, 10))) &&
     schedule.times.includes(wall.slice(11, 16)) &&
     wall.endsWith(":00") &&
-    dueAt(wall.slice(0, 10), wall.slice(11, 16), timeZone) === at
+    conversions.dueAt(wall.slice(0, 10), wall.slice(11, 16)) === at
   );
 }
 
@@ -71,10 +90,20 @@ export function generateDueDoses(
   window: DoseWindow,
   timeZone: string,
 ): DueDose[] {
+  return prepareDueDoses(schedule, window, timeZone, new DoseConversions(timeZone))();
+}
+
+/** Reserve all candidate slots before any inverse conversion in the call. */
+export function prepareDueDoses(
+  schedule: MedicationSchedule,
+  window: DoseWindow,
+  timeZone: string,
+  conversions: DoseConversions,
+): () => DueDose[] {
   const bounds = validateSchedule(schedule);
   validateWindow(window);
   wallAt(window.start, timeZone);
-  if (window.start === window.end) return [];
+  if (window.start === window.end) return () => [];
   wallAt(window.end - 1000, timeZone);
   const first = Math.floor((window.start - 14 * 3600_000) / DAY);
   const last = Math.floor((window.end - 1000 + 14 * 3600_000) / DAY);
@@ -83,16 +112,18 @@ export function generateDueDoses(
     if (!eligible(schedule, bounds, day)) continue;
     const date = new Date(day * DAY).toISOString().slice(0, 10);
     for (const time of schedule.times) {
-      if (slots.length === 1024) throw new MedicationError("limit-exceeded");
+      conversions.reserve(1);
       slots.push({ date, time });
     }
   }
-  const doses: DueDose[] = [];
-  for (const { date, time } of slots) {
-    const scheduledAt = dueAt(date, time, timeZone);
-    if (scheduledAt >= window.start && scheduledAt < window.end) {
-      doses.push({ scheduleId: schedule.id, scheduledAt });
+  return () => {
+    const doses: DueDose[] = [];
+    for (const { date, time } of slots) {
+      const scheduledAt = conversions.dueAt(date, time);
+      if (scheduledAt >= window.start && scheduledAt < window.end) {
+        doses.push({ scheduleId: schedule.id, scheduledAt });
+      }
     }
-  }
-  return doses.sort((a, b) => a.scheduledAt - b.scheduledAt);
+    return doses.sort((a, b) => a.scheduledAt - b.scheduledAt);
+  };
 }
