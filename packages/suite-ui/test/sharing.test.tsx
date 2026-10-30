@@ -592,6 +592,34 @@ describe("consent", () => {
     fireEvent.click(screen.getByRole("button", { name: "Deny" }));
     expect(onCancel).toHaveBeenCalledOnce();
   });
+  it.each([true, false])("blocks consent denial offline (cached=%s)", (cached) => {
+    const onCancel = vi.fn();
+    render(<ConsentSheet {...consent} state={{ kind: "offline", cached }} onCancel={onCancel} />);
+    const trigger = screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement;
+    expect(trigger.disabled).toBe(true);
+    fireEvent.click(trigger);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+  it.each([true, false])("blocks a pending consent denial offline (cached=%s)", (cached) => {
+    const onCancel = vi.fn();
+    const { rerender } = render(<ConsentSheet {...consent} onCancel={onCancel} />);
+    const trigger = screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement;
+    fireEvent.click(trigger);
+    rerender(<ConsentSheet {...consent} state={{ kind: "offline", cached }} onCancel={onCancel} />);
+    const action = screen.getByRole("button", { name: "Deny" }) as HTMLButtonElement;
+    expect(trigger.disabled).toBe(true);
+    expect(action.disabled).toBe(true);
+    fireEvent.click(action);
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(screen.getByRole("alertdialog")).toBeDefined();
+
+    rerender(<ConsentSheet {...consent} onCancel={onCancel} />);
+    expect(trigger.disabled).toBe(false);
+    expect(action.disabled).toBe(false);
+    fireEvent.click(action);
+    expect(onCancel).toHaveBeenCalledOnce();
+  });
   it("gives Cancel and Share identical computed style weight", () => {
     const style = document.createElement("style");
     style.textContent = readFileSync("src/styles/sharing.css", "utf8");

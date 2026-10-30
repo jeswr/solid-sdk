@@ -182,6 +182,7 @@ export function ConsentSheet({
           <div className="su-equal-actions" data-consent-actions="">
             <ConfirmAction
               trigger="Cancel"
+              disabled={offline}
               destructive={false}
               title="Deny this request?"
               description={`${name} will not receive access to your data.`}
