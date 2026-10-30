@@ -193,6 +193,45 @@ describe("injected money store", () => {
 });
 
 describe("statement import pipeline", () => {
+  it("keeps CSV, OFX and PDF imports with the same key distinct in a shared shard", async () => {
+    const { store, files } = pod();
+    const csv = await model.importStatement(store, "bank", account, "GBP", {
+      format: "csv",
+      text: csvStatement,
+      options,
+    });
+    const ofx = await model.importStatement(store, "bank", other, "GBP", {
+      format: "ofx",
+      text: sgmlStatement,
+    });
+    const pdf = await model.importStatement(store, "bank", other, "USD", {
+      format: "pdf",
+      file: new Blob(["%PDF synthetic"]),
+      adapter: async () => [{ date: row.postingTime, amount: "900", description: "PDF purchase" }],
+    });
+    const expected = [...csv.transactions, ...ofx.transactions, ...pdf.transactions];
+    expect(new Set(expected.map((value) => value.id)).size).toBe(expected.length);
+    expect((await store.read("transactions/2026-10.ttl")).document.transactions()).toEqual(
+      expected,
+    );
+    for (const result of [csv, ofx, pdf]) {
+      expect(files.has(result.source)).toBe(true);
+      expect(result.transactions.every((value) => value.derivedFrom === result.source)).toBe(true);
+    }
+    // The format-qualified row IDs remain deterministic, including for long statement keys.
+    const fresh = pod();
+    const repeated = await model.importStatement(fresh.store, "bank", account, "GBP", {
+      format: "csv",
+      text: csvStatement,
+      options,
+    });
+    expect(repeated.transactions).toEqual(csv.transactions);
+    await model.importStatement(fresh.store, "x".repeat(128), account, "GBP", {
+      format: "csv",
+      text: csvStatement,
+      options,
+    });
+  });
   it("maps CSV, stores its original first and links every transaction to it", async () => {
     const { store, files, requests } = pod();
     const result = await model.importStatement(store, "csv", account, "GBP", {

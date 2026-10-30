@@ -41,7 +41,7 @@ export async function importStatement(
     if (row.currency !== undefined && row.currency !== currency)
       throw new TypeError("Statement currency mismatch");
     const value: Transaction = {
-      id: store.transactionId(`${key}-${index}`, row.date),
+      id: `${store.transactionId(key, row.date)}-${statement.format}-${index}`,
       account,
       postingTime: row.date,
       amount: row.amount,
