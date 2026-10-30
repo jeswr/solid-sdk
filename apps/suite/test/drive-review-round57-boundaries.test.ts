@@ -254,6 +254,7 @@ it.each([
     });
   };
   const run = commitHttp({
+    verifyHeaders: () => undefined,
     http,
     url: PRIVATE,
     init: { method: "DELETE", headers: { "if-match": '"captured"' } },
@@ -312,6 +313,7 @@ it.each([
 ])("round 57: standalone conditional %s also uses the final HTTP check", async (method) => {
   const methods: string[] = [];
   await commitHttp({
+    verifyHeaders: () => undefined,
     http: async (_input, init) => {
       methods.push(init?.method ?? "GET");
       return new Response(null, { headers: { etag: '"captured"' } });
@@ -392,7 +394,7 @@ it.each([
     client.remove(target, {
       recursive,
       ifMatch: selected.etag as string,
-      commit: { policyGuards: [{ url: policy.policy.url, etag: policy.policy.etag }] },
+      commit: { policyGuards: [policy.policy] },
     }),
   ).rejects.toThrow();
   expect(changed).toBe(true);

@@ -141,12 +141,15 @@ it.each([
     expect(result.failed[0]?.error).toMatchObject({ kind: "private-access-unavailable" });
   } else {
     const { moveWithValidator } = await import("../src/apps/drive/state/undo");
+    const approved = await client.stat(from);
     await expect(
       moveWithValidator(
         { storageUrl: ROOT, fetch: f.fetch },
         from,
         `${PUBLIC}secret`,
-        (await client.stat(from)).etag as string,
+        approved.etag as string,
+        undefined,
+        approved.verifyHeaders,
       ),
     ).rejects.toThrow("can't confirm who can access");
   }

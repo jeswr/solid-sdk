@@ -129,15 +129,19 @@ it.each(
     expect(s.f.pod.has(s.source)).toBe(true);
     expect(s.f.calls).not.toContainEqual({ url: s.source, method: "DELETE" });
   }
-  // The changed endpoint really grants anonymous access; recovery must evacuate confidential data.
-  expect(await (await s.f.anonymous(s.target)).text()).not.toContain(
-    kind === "folder" ? "urn:secret" : s.replacement,
-  );
+  // A concurrent endpoint change refuses clearing as well as DELETE and ACL
+  // repair. Surface it and retain private copies without modifying that resource.
+  const changedAt = s.events.findIndex(({ check }) => check === boundary);
+  expect(
+    s.events
+      .slice(changedAt + 1)
+      .filter(({ url, method }) => url === s.target && (method === "PUT" || method === "DELETE")),
+  ).toEqual([]);
   expect(s.result).toBeInstanceOf(DrivePartialFailureError);
   const retained = (s.result as DrivePartialFailureError).retainedDestinations;
   expect(retained.length).toBeGreaterThan(0);
   let recovered = false;
-  for (const url of retained) {
+  for (const url of retained.filter((url) => url.includes("/.drive-recovery-"))) {
     expect((await s.f.anonymous(url)).status).toBe(403);
     const contents = await (await s.f.pod.fetch(url)).text();
     if (contents.includes(kind === "folder" ? "urn:secret" : s.replacement)) recovered = true;
@@ -264,8 +268,7 @@ it("round 65: private evacuation checks backup discovery on its completion HEAD"
     if (url === source && init?.method === "PUT" && response.ok) {
       if (!written) {
         written = true;
-        f.endpoints.set(source, `${source}foreign.policy`);
-        f.policies.set(`${source}foreign.policy`, await aclBody(source, true));
+        f.policies.set(`${source}.policy`, await aclBody(source, true));
       } else cleared = true;
     }
     if (
@@ -299,7 +302,7 @@ it("round 65: private evacuation checks backup discovery on its completion HEAD"
   while (cause instanceof DrivePartialFailureError) cause = cause.cause;
   expect(cause).toMatchObject({
     cause: "Bound access changed",
-    gains: ["The item's own ACL endpoint changed"],
+    gains: ["The item's ACL endpoint or access discovery changed"],
   });
   expect((result as DrivePartialFailureError).retainedDestinations).toContain(backup);
   expect((await f.anonymous(backup as string)).status).toBe(403);

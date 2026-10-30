@@ -137,7 +137,7 @@ it.each([
   expect(exposed).not.toContain("secret contents");
   const anonymous = await f.anonymous(url);
   expect(anonymous.ok && (await anonymous.text()) === "secret contents").toBe(false);
-  expect(await (await f.pod.fetch(url)).text()).toBe("");
+  expect(await (await f.pod.fetch(url)).text()).toBe(hideLink ? "replacement" : "");
   await expectPrivateRecovery(f, "secret contents");
 });
 

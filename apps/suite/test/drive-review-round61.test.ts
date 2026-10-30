@@ -584,7 +584,7 @@ it.each([
   const error = (await client
     .remove(from, {
       ifMatch: original.etag as string,
-      commit: { survivors: [{ url: to, etag: survivor.etag as string }] },
+      commit: { survivors: [{ ...survivor, url: to, etag: survivor.etag as string }] },
     })
     .catch((cause: unknown) => cause)) as DrivePartialFailureError;
   if (failure === "no owner") {

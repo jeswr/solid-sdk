@@ -9,6 +9,7 @@ import { AclResource, Authorization } from "@solid/object";
 import { DataFactory, Store } from "n3";
 import { readSharing } from "../sharing/sharing";
 import {
+  assertVersion,
   type CommitChecks,
   commitHttp,
   type PolicyIdentity,
@@ -67,6 +68,20 @@ export interface OwnAccess {
   url: string;
   dataset: Store;
   etag: string;
+  readonly verifyHeaders?: NonNullable<CommitChecks["verifyHeaders"]>;
+  /** Protected-resource discovery after verifying our own ACL commit. */
+  readonly verifyResourceHeaders?: NonNullable<CommitChecks["verifyHeaders"]>;
+  /** Only our verified ACL write may explain a WAC-Allow transition. */
+  readonly verifyResourceTransition?: NonNullable<CommitChecks["verifyHeaders"]>;
+}
+
+/** A projection without a verified resource receipt retains the existing capture. */
+export function resourceDiscoveryOptions(
+  policy: Pick<OwnAccess, "verifyResourceHeaders">,
+): Pick<OwnAccess, "verifyResourceHeaders"> {
+  return policy.verifyResourceHeaders
+    ? { verifyResourceHeaders: policy.verifyResourceHeaders }
+    : {};
 }
 
 /** ACL mutations protect the captured representation, including after local hydration. */
@@ -83,7 +98,15 @@ export interface AccessWriteGuard {
 
 /** Captured own-ACL ownership, including absence, for the final HTTP commit boundary. */
 export function ownAccessGuards(own: AccessState["own"]): readonly PolicyIdentity[] {
-  return own ? [{ url: own.url, etag: own.policy?.etag ?? null }] : [];
+  return own
+    ? [
+        {
+          url: own.url,
+          etag: own.policy?.etag ?? null,
+          ...(own.policy?.verifyHeaders ? { verifyHeaders: own.policy.verifyHeaders } : {}),
+        },
+      ]
+    : [];
 }
 
 /** None means a discovered own ACL's 404 (inheritance unresolved), or an explicit demo pod. */
@@ -91,7 +114,13 @@ export type AccessState = (
   | { readonly status: "known"; readonly policy: OwnAccess }
   | { readonly status: "none"; readonly demo: boolean }
   | { readonly status: "unknown"; readonly cause: unknown }
-) & { readonly own?: { readonly url: string; readonly policy: OwnAccess | null } };
+) & {
+  readonly own?: {
+    readonly url: string;
+    readonly policy: OwnAccess | null;
+    readonly verifyResourceHeaders?: NonNullable<CommitChecks["verifyHeaders"]>;
+  };
+};
 
 /** Require a governing policy before preserving or comparing access; demo needs no ACL. */
 export function requireAccess(state: AccessState, resource: string): OwnAccess {
@@ -155,33 +184,70 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
         (allowUnsupported && relations.includes(`${ACP_NS}accessControl`))
       ) {
         if (acl) throw new DriveAccessError("Ambiguous ACL discovery");
-        acl = assertWithinPodScope(storageUrl, new URL(match[1] as string, resource).href);
+        const endpoint = new URL(match[1] as string, resource).href;
+        // A read-only identity capture may describe a shared resource outside
+        // this pod. Only policy reads/writes may resolve a scoped ACL target.
+        acl = allowUnsupported ? endpoint : assertWithinPodScope(storageUrl, endpoint);
         if (!allowUnsupported && /\.acr\/?$/i.test(new URL(acl).pathname))
           throw new DriveAccessError("ACP privacy cannot be verified by this adapter");
       }
     }
     return acl;
   }
+  /** Capture endpoint, access model and mode discovery as one immutable assertion. */
+  function captureEndpoint(
+    resource: string,
+    captured: Headers,
+  ): NonNullable<CommitChecks["verifyHeaders"]> {
+    const endpoint = discover(resource, captured, true);
+    const wacHeaders = new Set([...captured.keys()].filter((name) => /^wac(-|$)/i.test(name)));
+    const mode = (headers: Headers) =>
+      JSON.stringify(
+        [...headers].filter(
+          ([name, value]) =>
+            name === "x-solid-demo-access-control" ||
+            /^(acp|acr)(-|$)/i.test(name) ||
+            wacHeaders.has(name) ||
+            value.includes(ACP_NS),
+        ),
+      );
+    const capturedMode = mode(captured);
+    return (headers) => {
+      if (discover(resource, headers, true) !== endpoint || mode(headers) !== capturedMode)
+        throw new DriveAccessChangedError(["The item's ACL endpoint or access discovery changed"]);
+    };
+  }
   /** A representation validator cannot identify its associated ACL endpoint. */
   function verifyEndpoint(
     resource: string,
     headers: Headers,
-    own: Pick<NonNullable<AccessState["own"]>, "url"> | undefined,
+    own: Pick<NonNullable<AccessState["own"]>, "url" | "verifyResourceHeaders"> | undefined,
   ): undefined {
-    if (discover(resource, headers) !== own?.url)
+    own?.verifyResourceHeaders?.(headers);
+    if (
+      discover(resource, headers) !== own?.url ||
+      (!own && headers.get("x-solid-demo-access-control") !== "none")
+    )
       throw new DriveAccessChangedError(["The item's own ACL endpoint changed"]);
   }
-  const read = async (url: string): Promise<AccessState> => {
+  const read = async (url: string, expected?: OwnAccess): Promise<AccessState> => {
     try {
       const result = await fetchRdf(url, {
         fetch: async (input, init) => {
-          const response = await http(input, { ...init, cache: "no-store" });
+          const headers = new Headers(init?.headers);
+          if (expected) headers.set("if-match", expected.etag);
+          const response = await http(input, { ...init, headers, cache: "no-store" });
           rejectAcp(response.headers);
           return response;
         },
       });
       if (!result.etag || result.etag.startsWith("W/"))
         throw new DriveAccessError("Missing policy validator");
+      if (expected) {
+        if (result.etag !== expected.etag)
+          throw new DriveAccessChangedError(["The item's own ACL changed"]);
+        expected.verifyHeaders?.(result.response.headers);
+      }
       // Some ACP deployments advertise their ACR using the legacy rel="acl".
       // Never PUT a WAC document to an ACP endpoint just because it echoes RDF.
       if (
@@ -209,8 +275,17 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
         ])
           typed.values(`${ACL}${predicate}`);
       }
-      return { status: "known", policy: { url, dataset: result.dataset, etag: result.etag } };
+      return {
+        status: "known",
+        policy: {
+          url,
+          dataset: result.dataset,
+          etag: result.etag,
+          verifyHeaders: captureEndpoint(url, result.response.headers),
+        },
+      };
     } catch (error) {
+      if (error instanceof DriveAccessChangedError) throw error;
       if (error instanceof RdfFetchError && error.status === 404)
         return { status: "none", demo: false };
       return { status: "unknown", cause: error };
@@ -240,14 +315,22 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     if (guard?.restrict)
       dataset = intersectAccess(dataset, effectivePolicy as OwnAccess, guard.identity.url);
     const body = await serialize([...dataset]);
+    const verifyHeaders =
+      expected?.verifyHeaders ?? current?.verifyHeaders ?? captureEndpoint(url, new Headers());
     const response = await commitHttp({
       http,
       url,
+      // An absent ACL has no representation to assert; its creation uses
+      // If-None-Match. Existing ACLs retain their captured discovery assertion.
+      verifyHeaders,
       resourceGuards: guard
         ? [
             {
               ...guard.identity,
-              verifyHeaders: (headers) => verifyEndpoint(guard.identity.url, headers, { url }),
+              verifyHeaders: (headers) => {
+                guard.identity.verifyHeaders?.(headers);
+                verifyEndpoint(guard.identity.url, headers, { url });
+              },
             },
           ]
         : [],
@@ -270,13 +353,15 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       throw new DriveAccessError("Missing policy PUT validator");
     // Persist only this conditional PUT's receipt, before a verification read
     // can fail. A later GET must never invent the installed ACL's identity.
-    await onWritten?.({ url, dataset, etag: receipt });
-    const saved = await read(url);
-    if (
-      saved.status !== "known" ||
-      saved.policy.etag !== receipt ||
-      !sameGraph(dataset, saved.policy.dataset)
-    )
+    const written: OwnAccess = {
+      url,
+      dataset,
+      etag: receipt,
+      verifyHeaders: current ? verifyHeaders : captureEndpoint(url, response.headers),
+    };
+    await onWritten?.(written);
+    const saved = await read(url, written);
+    if (saved.status !== "known" || !sameGraph(dataset, saved.policy.dataset))
       throw new DriveAccessError("Policy verification failed");
     return saved.policy;
   };
@@ -288,7 +373,14 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       const url = discover(resource, headers);
       if (!url) return { status: "unknown", cause: "ACL Link unavailable" };
       const state = await read(url);
-      return { ...state, own: { url, policy: state.status === "known" ? state.policy : null } };
+      return {
+        ...state,
+        own: {
+          url,
+          policy: state.status === "known" ? state.policy : null,
+          verifyResourceHeaders: captureEndpoint(resource, headers),
+        },
+      };
     } catch (cause) {
       return { status: "unknown", cause };
     }
@@ -342,21 +434,12 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
      * whose access model cannot be read; pinning their endpoint never permits
      * installing a policy or adopting a later endpoint.
      */
-    captureEndpoint(
-      resource: string,
-      captured: Headers,
-    ): NonNullable<CommitChecks["verifyHeaders"]> {
-      const endpoint = discover(resource, captured, true);
-      return (headers) => {
-        if (discover(resource, headers, true) !== endpoint)
-          throw new DriveAccessChangedError(["The item's own ACL endpoint changed"]);
-      };
-    },
+    captureEndpoint,
     async checkOwn(
       own: { readonly url: string; readonly policy: OwnAccess | null } | undefined,
     ): Promise<void> {
       if (!own) return;
-      const state = await read(own.url);
+      const state = await read(own.url, own.policy ?? undefined);
       if (state.status === "unknown") throw new DriveAccessError(state.cause);
       if ((state.status === "known" ? state.policy.etag : undefined) !== own.policy?.etag)
         throw new DriveAccessChangedError(["The item's own ACL changed"]);
@@ -379,14 +462,24 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
       to: string,
       guard?: AccessWriteGuard,
       onWritten?: (policy: OwnAccess) => Promise<void>,
-    ): Promise<OwnAccess> {
+    ): Promise<
+      OwnAccess & { readonly verifyResourceTransition: NonNullable<CommitChecks["verifyHeaders"]> }
+    > {
       const response = await http(to, { method: "HEAD", cache: "no-store" });
       if (!response.ok) throw new DriveAccessError(response.status);
+      if (guard) {
+        assertVersion(
+          guard.identity,
+          response.headers.get("etag"),
+          (status) => new DriveAccessError(status),
+        );
+        guard.identity.verifyHeaders?.(response.headers);
+      }
       const url = discover(to, response.headers) ?? guard?.knownAcl;
       if (!url) throw new DriveAccessError("Destination has no ACL support");
       const etag = guard?.identity.etag ?? response.headers.get("etag");
       if (!etag || etag.startsWith("W/")) throw new DriveAccessError("Missing resource validator");
-      return store(
+      const saved = await store(
         url,
         retargetAccess(source, from, to, url).dataset,
         to,
@@ -394,10 +487,20 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
           expectedAcl: source.url === url && source.etag ? source : null,
           ...guard,
           knownAcl: guard?.knownAcl ?? url,
-          identity: { url: to, etag },
+          identity: {
+            url: to,
+            etag,
+            verifyHeaders: guard?.identity.verifyHeaders ?? captureEndpoint(to, response.headers),
+          },
         },
         onWritten,
       );
+      // The conditional ACL PUT may change effective permissions, but cannot
+      // explain a different endpoint or access model. Retirement verifies its
+      // policy receipt and captures the resulting full resource discovery.
+      const transition = new Headers(response.headers);
+      transition.delete("wac-allow");
+      return { ...saved, verifyResourceTransition: captureEndpoint(to, transition) };
     },
     async privateFolder(url: string, webId?: string): Promise<void> {
       try {
@@ -408,7 +511,9 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
         const acl = discover(url, response.headers);
         const etag = response.headers.get("etag");
         if (!acl || !webId || !etag || etag.startsWith("W/")) throw new DriveAccessError();
-        await store(acl, privateAcl(url, webId), url, { identity: { url, etag } });
+        await store(acl, privateAcl(url, webId), url, {
+          identity: { url, etag, verifyHeaders: captureEndpoint(url, response.headers) },
+        });
       } catch (error) {
         throw new DriveAccessError(error);
       }
@@ -501,7 +606,15 @@ export async function bindAccess(
     for (const identity of [
       ...ownAccessGuards(resolved.own),
       ...[resolved.resource, resolved.defaults].flatMap((policy) =>
-        policy?.etag ? [{ url: policy.url, etag: policy.etag }] : [],
+        policy?.etag
+          ? [
+              {
+                url: policy.url,
+                etag: policy.etag,
+                ...(policy.verifyHeaders ? { verifyHeaders: policy.verifyHeaders } : {}),
+              },
+            ]
+          : [],
       ),
     ]) {
       if (validators.has(identity.url) && validators.get(identity.url) !== identity.etag)
@@ -527,11 +640,18 @@ export async function bindAccess(
   const retired = new Set<string>();
   const acceptCreation = (url: string, baseline: typeof source) => {
     const receipt = access.creationReceipt(url);
-    if (baseline.own || !receipt || receipt === baseline.creation) return;
+    if (!receipt || receipt === baseline.creation) return;
     const etag = receipt.get("etag");
     const endpoint = access.discover(url, receipt);
     if (!etag || etag.startsWith("W/") || !endpoint) return;
-    baseline.own = { url: endpoint, policy: null };
+    if (baseline.own && baseline.own.url !== endpoint)
+      throw new DriveAccessChangedError(["The item's own ACL endpoint changed"]);
+    baseline.own = {
+      url: endpoint,
+      policy: baseline.own?.policy ?? null,
+      verifyResourceHeaders: access.captureEndpoint(url, receipt),
+    };
+    baseline.creation = receipt;
     if (url === to) destinationOwn = baseline.own;
   };
   const binding = {
@@ -551,7 +671,15 @@ export async function bindAccess(
         return [
           ...ownAccessGuards(baseline.own),
           ...[baseline.resource, baseline.defaults].flatMap((policy) =>
-            policy?.etag ? [{ url: policy.url, etag: policy.etag }] : [],
+            policy?.etag
+              ? [
+                  {
+                    url: policy.url,
+                    etag: policy.etag,
+                    ...(policy.verifyHeaders ? { verifyHeaders: policy.verifyHeaders } : {}),
+                  },
+                ]
+              : [],
           ),
         ];
       });
@@ -579,7 +707,13 @@ export async function bindAccess(
       return work();
     },
     installed(policy: OwnAccess, inherited = false) {
-      if (!inherited) destinationOwn = { url: policy.url, policy };
+      if (!inherited)
+        destinationOwn = {
+          ...destinationOwn,
+          url: policy.url,
+          policy,
+          ...resourceDiscoveryOptions(policy),
+        };
       const defaults = access.defaults(policy, to);
       destination = {
         creation: access.creationReceipt(to),

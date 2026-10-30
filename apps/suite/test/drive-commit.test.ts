@@ -100,6 +100,7 @@ it.each([
   const recheck = vi.fn(async () => {});
   await expect(
     commitHttp({
+      verifyHeaders: () => undefined,
       http,
       url: PRIVATE,
       init: { method },

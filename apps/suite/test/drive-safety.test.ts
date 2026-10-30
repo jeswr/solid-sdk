@@ -348,7 +348,9 @@ describe("Drive data-safety regressions", () => {
       done: [],
       failed: [{ url: entries[0]?.url, error: { kind: "conflict" } }],
     });
-    expect(await listTrash(client, DRIVE)).toEqual(entries);
+    expect(await listTrash(client, DRIVE)).toEqual(
+      entries.map((entry) => ({ ...entry, verifyHeaders: expect.any(Function) })),
+    );
   });
 
   it.each([
@@ -442,7 +444,10 @@ describe("Drive data-safety regressions", () => {
     expect(result.failed).toEqual([]);
     expect(result.done).toHaveLength(1);
     expect(await (await client.read(`${FROM}a`)).text()).toBe("A");
-    expect(await client.stat(`${FROM}b`)).toEqual(survivor);
+    expect(await client.stat(`${FROM}b`)).toEqual({
+      ...survivor,
+      verifyHeaders: expect.any(Function),
+    });
     expect(await listTrash(client, DRIVE)).toEqual([]);
     expect(pod.has(new URL("..", entry.url).href)).toBe(false);
   });
@@ -751,7 +756,9 @@ describe("Drive data-safety regressions", () => {
     // Keep the durable intent pending and force its first promotion to fail.
     vi.spyOn(client, "write").mockRejectedValueOnce(new DriveError("failed", 500, INDEX));
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    expect(await listTrash(client, DRIVE)).toEqual([entry]);
+    expect(await listTrash(client, DRIVE)).toEqual([
+      { ...entry, verifyHeaders: expect.any(Function) },
+    ]);
     const slot = new URL(".", entry.url).href;
     expect(pod.has(`${slot}partial.ttl`)).toBe(true);
     const remove = client.remove.bind(client);
@@ -786,7 +793,9 @@ describe("Drive data-safety regressions", () => {
     } = await trashItems(client, DRIVE, [await client.stat(`${FROM}partial.ttl`)]);
     if (!entry) throw new Error("Missing entry");
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    expect(await listTrash(client, DRIVE)).toEqual([entry]);
+    expect(await listTrash(client, DRIVE)).toEqual([
+      { ...entry, verifyHeaders: expect.any(Function) },
+    ]);
     expect(await (await client.read(entry.url)).text()).toBe("unique recovery bytes");
     expect((await restoreItems(client, DRIVE, [entry])).done).toHaveLength(1);
     expect(await (await client.read(entry.original)).text()).toBe("unique recovery bytes");
@@ -1080,7 +1089,9 @@ describe("Drive data-safety regressions", () => {
     if (!entry) throw new Error("Missing moved entry");
     // Legacy completed transfers may have no slot-local completion receipt.
     await client.remove(new URL("partial.ttl", entry.url).href);
-    expect(await listTrash(client, DRIVE)).toMatchObject([{ ...entry, status: "partial" }]);
+    expect(await listTrash(client, DRIVE)).toMatchObject([
+      { ...entry, status: "partial", verifyHeaders: expect.any(Function) },
+    ]);
     expect((await restoreItems(client, DRIVE, [entry])).done).toHaveLength(1);
   });
 
@@ -1119,7 +1130,9 @@ describe("Drive data-safety regressions", () => {
       return read(url);
     });
     expect(await listTrash(client, DRIVE)).toMatchObject(
-      change === "partial" ? [{ ...entry, status: "partial" }] : [],
+      change === "partial"
+        ? [{ ...entry, status: "partial", verifyHeaders: expect.any(Function) }]
+        : [],
     );
   });
 
@@ -1295,10 +1308,14 @@ describe("Drive data-safety regressions", () => {
       { kind: "protect-ancestors" },
     );
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    expect(await listTrash(client, DRIVE)).toEqual(trashed.done);
+    expect(await listTrash(client, DRIVE)).toEqual(
+      trashed.done.map((entry) => ({ ...entry, verifyHeaders: expect.any(Function) })),
+    );
     expect(warn).toHaveBeenCalledWith(expect.objectContaining({ kind: "invalid-trash-record" }));
     const result = await purgeExpired(client, DRIVE, { now: NOW });
-    expect(result.done).toEqual(trashed.done);
+    expect(result.done).toEqual(
+      trashed.done.map((entry) => ({ ...entry, verifyHeaders: expect.any(Function) })),
+    );
     expect(result.failed).toHaveLength(1);
   });
 
@@ -1491,7 +1508,9 @@ describe("Drive data-safety regressions", () => {
     expect(result.failed).toEqual([]);
     expect(result.warnings).toMatchObject([{ kind: "trash-index-persistence", cause: { status } }]);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    expect(await listTrash(client, DRIVE)).toEqual(result.done);
+    expect(await listTrash(client, DRIVE)).toEqual(
+      result.done.map((entry) => ({ ...entry, verifyHeaders: expect.any(Function) })),
+    );
     expect(warn).toHaveBeenCalledWith(expect.objectContaining({ kind: "trash-index-persistence" }));
     expect(pod.has(`${FROM}a`)).toBe(false);
   });

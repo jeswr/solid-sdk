@@ -16,6 +16,7 @@ export function ProtectionBanner({ item }: { item: DriveItem }) {
     client: DriveClient;
     item: DriveItem;
     etag: string | undefined;
+    verifyHeaders?: DriveItem["verifyHeaders"];
   }>();
   useEffect(() => {
     if (!item.protectionRequired || item.etag !== undefined) return;
@@ -23,7 +24,9 @@ export function ProtectionBanner({ item }: { item: DriveItem }) {
     // Listings may omit ETags. Hydrate before enabling confirmation, and never
     // replace a validator already carried by the displayed item.
     client.stat(item.url).then(
-      (current) => live && setCapture({ client, item, etag: current.etag }),
+      (current) =>
+        live &&
+        setCapture({ client, item, etag: current.etag, verifyHeaders: current.verifyHeaders }),
       () => live && setCapture({ client, item, etag: undefined }),
     );
     return () => {
@@ -40,7 +43,16 @@ export function ProtectionBanner({ item }: { item: DriveItem }) {
       if (remove) {
         if (!confirmedEtag || confirmedEtag.startsWith("W/"))
           throw new DriveError("missing-validator", 409, item.url);
-        await client.remove(item.url, { ifMatch: confirmedEtag });
+        await client.remove(item.url, {
+          ifMatch: confirmedEtag,
+          ...((item.verifyHeaders ?? current?.verifyHeaders)
+            ? {
+                verifyHeaders: (item.verifyHeaders ?? current?.verifyHeaders) as NonNullable<
+                  DriveItem["verifyHeaders"]
+                >,
+              }
+            : {}),
+        });
       } else await client.read(item.url);
       setResolved(true);
       invalidate(item.url);

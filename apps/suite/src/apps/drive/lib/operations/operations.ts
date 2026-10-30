@@ -20,7 +20,13 @@ import {
   parentOf,
   policyArchiveOf,
 } from "../client/client";
-import { assertVersion, type ResourceIdentity } from "../client/commit";
+import {
+  assertVersion,
+  confirmationOptions,
+  discoveryOptions,
+  type ResourceAssertion,
+  type ResourceIdentity,
+} from "../client/commit";
 import { rethrowPendingDeletion } from "../client/deletion";
 import { containerData, containsGraph, relocate, sameGraph } from "../client/rdf";
 import { DriveOperationInProgressError } from "../client/source-operations";
@@ -127,7 +133,7 @@ export async function uploadFile(
   file: Blob,
   rawName: string,
   policy: "fail" | ConflictChoice = "fail",
-  approvedTarget?: Pick<DriveItem, "url" | "etag">,
+  approvedTarget?: Pick<DriveItem, "url" | "etag" | "verifyHeaders">,
 ): Promise<DriveItem | undefined> {
   const name = normalizeUploadName(rawName);
   const contentType = contentTypeFor(name, file.type);
@@ -153,7 +159,7 @@ export async function uploadFile(
     await client.write(
       url,
       file,
-      { contentType, ifMatch: approvedTarget.etag },
+      { contentType, ...confirmationOptions(approvedTarget) },
       { kind: "protect-ancestors" },
     );
     return done(url);
@@ -217,7 +223,7 @@ export function validateName(name: string): string | undefined {
 
 export async function renameItem(
   client: DriveClient,
-  item: Pick<DriveItem, "url" | "kind" | "name" | "etag">,
+  item: Pick<DriveItem, "url" | "kind" | "name" | "etag" | "verifyHeaders">,
   newName: string,
 ): Promise<string> {
   const parent = parentOf(item.url);
@@ -230,14 +236,14 @@ export async function renameItem(
       {
         kind: "confirm-move",
       },
-      item.etag === undefined ? undefined : { ifMatch: item.etag },
+      confirmationOptions(item),
     )
   ).url;
 }
 
 export async function moveItems(
   client: DriveClient,
-  urls: readonly (string | Pick<DriveItem, "url" | "etag">)[],
+  urls: readonly (string | Pick<DriveItem, "url" | "etag" | "verifyHeaders">)[],
   targetFolder: string,
 ): Promise<BatchResult<{ from: string; to: string; identity: MoveResult }>> {
   const result: BatchResult<{ from: string; to: string; identity: MoveResult }> = {
@@ -258,7 +264,7 @@ export async function moveItems(
         { kind: "confirm-move" },
         typeof selected === "string" || selected.etag === undefined
           ? undefined
-          : { ifMatch: selected.etag },
+          : confirmationOptions(selected),
       );
       result.done.push({ from: url, to: identity.url, identity });
     } catch (error) {
@@ -271,7 +277,7 @@ export async function moveItems(
 /** "Make a copy" of a file next to it: `Copy of {name}`, then `(n)` on collisions. */
 export async function copyItem(
   client: DriveClient,
-  selected: string | Pick<DriveItem, "url" | "etag">,
+  selected: string | Pick<DriveItem, "url" | "etag" | "verifyHeaders">,
 ): Promise<string> {
   const url = typeof selected === "string" ? selected : selected.url;
   const parent = parentOf(url) as string;
@@ -284,7 +290,7 @@ export async function copyItem(
     { kind: "preserve-source" },
     typeof selected === "string" || selected.etag === undefined
       ? undefined
-      : { ifMatch: selected.etag },
+      : confirmationOptions(selected),
   );
   return to;
 }
@@ -341,7 +347,7 @@ async function updateIndexUnlocked(
     url,
     await serializeTrashIndex(index),
     current?.etag
-      ? { contentType: "text/turtle", ifMatch: current.etag }
+      ? { contentType: "text/turtle", ...confirmationOptions(current) }
       : { contentType: "text/turtle", ifNoneMatch: "*" },
     { kind: "owner-only" },
   );
@@ -378,6 +384,8 @@ interface RecoveryComparison {
   readonly same: boolean;
   readonly etag: string | undefined;
   readonly survivorEtag: string | undefined;
+  readonly verifyHeaders?: ResourceIdentity["verifyHeaders"];
+  readonly survivorVerifyHeaders: ResourceIdentity["verifyHeaders"];
 }
 function sameRecoveryFile(
   client: DriveClient,
@@ -406,7 +414,12 @@ async function sameRecoveryFile(
     !target.etag.startsWith("W/") &&
     options.versions?.has(JSON.stringify([to, target.etag]))
   )
-    return { same: true, etag: undefined, survivorEtag: target.etag };
+    return {
+      same: true,
+      etag: undefined,
+      survivorEtag: target.etag,
+      survivorVerifyHeaders: target.verifyHeaders,
+    };
   const [recovery, survivor] = await Promise.all([
     client.readVersion(from),
     client.readVersion(to),
@@ -421,13 +434,19 @@ async function sameRecoveryFile(
       survivorEtag,
       (status, url) => new DriveError("conflict", status, url),
     );
-  if (recovery.body.size !== survivor.body.size) return { same: false, etag, survivorEtag };
+  const discovery = {
+    verifyHeaders: recovery.verifyHeaders,
+    survivorVerifyHeaders: target.verifyHeaders,
+  };
+  if (recovery.body.size !== survivor.body.size)
+    return { same: false, etag, survivorEtag, ...discovery };
   const [a, b] = await Promise.all([recovery.body.arrayBuffer(), survivor.body.arrayBuffer()]);
   const bytes = new Uint8Array(b);
   return {
     same: new Uint8Array(a).every((value, index) => value === bytes[index]),
     etag,
     survivorEtag,
+    ...discovery,
   };
 }
 
@@ -621,7 +640,11 @@ export async function listTrash(
     }
     try {
       const identity = await client.stat(entry.url);
-      const displayed = { ...entry, ...(identity.etag ? { etag: identity.etag } : {}) };
+      const displayed = {
+        ...entry,
+        ...(identity.etag ? { etag: identity.etag } : {}),
+        ...discoveryOptions(identity),
+      };
       entries.push(
         status === "partial"
           ? { ...displayed, status, remaining: await recoveryItems(client, entry.url) }
@@ -764,7 +787,8 @@ async function runTrash(
         entry.url,
         { kind: "preserve-source" },
         {
-          ...(items[index]?.etag !== undefined ? { ifMatch: items[index]?.etag as string } : {}),
+          // Entries and confirmations are captured together before this loop.
+          ...confirmationOptions(items[index] as DriveItem),
           ...(options.webId ? { privateOwner: options.webId } : {}),
           archiveContainers: async (archive) => {
             await updateIndex(client, driveRoot, (index) => {
@@ -777,7 +801,11 @@ async function runTrash(
           },
         },
       );
-      result.done.push({ ...entry, ...(identity.etag ? { etag: identity.etag } : {}) });
+      result.done.push({
+        ...entry,
+        ...(identity.etag ? { etag: identity.etag } : {}),
+        ...discoveryOptions(identity),
+      });
     } catch (error) {
       result.failed.push({ url: entry.original, error });
       if (error instanceof DrivePartialFailureError && error.retainedDestinations.length > 0)
@@ -860,7 +888,11 @@ async function capturePolicyArchive(client: DriveClient, url: string) {
   const archive = policyArchiveOf(url) as string;
   if (!(await exists(client, archive))) return undefined;
   const current = await client.readVersion(archive);
-  return { content: await current.body.text(), etag: current.etag };
+  return {
+    content: await current.body.text(),
+    etag: current.etag,
+    ...discoveryOptions(current),
+  };
 }
 
 async function removePolicyArchive(
@@ -878,7 +910,11 @@ async function removePolicyArchive(
       return { content: await fresh.body.text(), etag: fresh.etag };
     },
     owns: (current) => current === captured.content,
-    remove: (etag) => client.remove(archive, { ifMatch: etag }),
+    remove: (etag) =>
+      client.remove(archive, {
+        ifMatch: etag,
+        ...discoveryOptions(captured),
+      }),
   });
 }
 
@@ -909,7 +945,11 @@ async function removeRecoveryMarker(
       return fresh && { content: fresh.dataset, etag: fresh.etag };
     },
     owns: (data) => sameGraph(expected, data),
-    remove: (etag) => client.remove(url, { ifMatch: etag }),
+    remove: (etag) =>
+      client.remove(url, {
+        ifMatch: etag,
+        ...discoveryOptions(current),
+      }),
   });
 }
 
@@ -926,7 +966,11 @@ async function removeEmptySlot(client: DriveClient, slot: string): Promise<void>
         return fresh && { content: fresh.dataset, etag: fresh.etag };
       },
       owns: (data) => ownsEmptyContainer(slot, new Store(), data),
-      remove: (etag) => client.remove(slot, { ifMatch: etag }),
+      remove: (etag) =>
+        client.remove(slot, {
+          ifMatch: etag,
+          ...discoveryOptions(current),
+        }),
     });
   } catch (error) {
     rethrowPendingDeletion(error);
@@ -946,6 +990,7 @@ async function restoreMissing(
   settled: boolean,
   approvedEtag?: string,
   ancestors: readonly ResourceIdentity[] = [],
+  approvedDiscovery?: ResourceAssertion["verifyHeaders"],
 ): Promise<{ url: string; error: unknown }[]> {
   try {
     if (from.endsWith("/")) {
@@ -960,7 +1005,8 @@ async function restoreMissing(
         to,
         { kind: "preserve-source" },
         {
-          ifMatch: original.etag,
+          ...confirmationOptions(original),
+          ...discoveryOptions({ verifyHeaders: approvedDiscovery }),
           sourceGuards: ancestors,
         },
       );
@@ -974,7 +1020,14 @@ async function restoreMissing(
             `${to}${child.url.slice(from.length)}`,
             settled,
             child.etag,
-            [...ancestors, merged.source ?? { url: from, etag: original.etag }],
+            [
+              ...ancestors,
+              merged.source ?? {
+                url: from,
+                etag: original.etag,
+                ...discoveryOptions(original),
+              },
+            ],
           )),
         );
       // Non-recursive removal succeeds only for an empty recovery container.
@@ -1011,6 +1064,7 @@ async function restoreMissing(
             );
             await client.remove(from, {
               ifMatch: etag,
+              ...discoveryOptions({ verifyHeaders: approvedDiscovery ?? original.verifyHeaders }),
               commit: {
                 disarm: merged.disarm,
                 rechecks: [() => merged.recheck()],
@@ -1034,13 +1088,21 @@ async function restoreMissing(
       const survivorEtag = compared.survivorEtag;
       await client.remove(from, {
         ifMatch: compared.etag,
+        ...discoveryOptions({ verifyHeaders: approvedDiscovery ?? compared.verifyHeaders }),
         commit: {
           rechecks: [
             async () => {
               await access?.recheck();
             },
           ],
-          survivors: [{ url: to, etag: survivorEtag }, ...ancestors],
+          survivors: [
+            {
+              url: to,
+              etag: survivorEtag,
+              ...discoveryOptions({ verifyHeaders: compared.survivorVerifyHeaders }),
+            },
+            ...ancestors,
+          ],
         },
       });
       return [];
@@ -1055,6 +1117,7 @@ async function restoreMissing(
         { kind: "preserve-source" },
         {
           ...(approvedEtag === undefined ? {} : { ifMatch: approvedEtag }),
+          ...discoveryOptions({ verifyHeaders: approvedDiscovery }),
           sourceGuards: ancestors,
         },
       );
@@ -1064,7 +1127,11 @@ async function restoreMissing(
       from,
       to,
       { kind: "preserve-source" },
-      { ...(approvedEtag === undefined ? {} : { ifMatch: approvedEtag }), sourceGuards: ancestors },
+      {
+        ...(approvedEtag === undefined ? {} : { ifMatch: approvedEtag }),
+        ...discoveryOptions({ verifyHeaders: approvedDiscovery }),
+        sourceGuards: ancestors,
+      },
     );
     return [];
   } catch (error) {
@@ -1100,7 +1167,10 @@ async function restoreItemsUnlocked(
       validateOriginal(driveRoot, entry);
       const status = await requireTrashEntry(client, driveRoot, entry);
       if (entry.etag !== undefined) {
-        const current = await client.stat(entry.url, { ifMatch: entry.etag });
+        const current = await client.stat(
+          entry.url,
+          confirmationOptions(entry) as { ifMatch: string },
+        );
         if (current.etag !== entry.etag) throw new DriveError("conflict", 412, entry.url);
       }
       const archive = await capturePolicyArchive(client, entry.url);
@@ -1118,6 +1188,8 @@ async function restoreItemsUnlocked(
           entry.original,
           settled,
           entry.etag,
+          [],
+          entry.verifyHeaders,
         );
         if (remaining.length) throw new TrashRestorePartialError(remaining);
         await removeRecoveryMarker(client, driveRoot, entry);
@@ -1146,7 +1218,7 @@ async function restoreItemsUnlocked(
         entry.url,
         target,
         { kind: "preserve-source" },
-        entry.etag === undefined ? undefined : { ifMatch: entry.etag },
+        confirmationOptions(entry),
       );
       await removeRecoveryMarker(client, driveRoot, entry);
       // The slot may contain another writer's resources; only remove it empty.
@@ -1189,7 +1261,7 @@ async function deleteForeverUnlocked(
       await requireTrashEntry(client, driveRoot, entry);
       const archive = await capturePolicyArchive(client, entry.url);
       client.bindRecoveryPolicy?.(entry.url, archive);
-      await removeTrashItem(client, entry.url, entry.etag);
+      await removeTrashItem(client, entry.url, entry.etag, entry.verifyHeaders);
       await removeRecoveryMarker(client, driveRoot, entry);
       await removePolicyArchive(client, entry.url, archive);
       await removeEmptySlot(client, slotOf(driveRoot, entry));
@@ -1207,10 +1279,16 @@ async function deleteForeverUnlocked(
 }
 
 /** A missing descendant is a stale traversal, not proof the entry itself is gone. */
-async function removeTrashItem(client: DriveClient, url: string, etag?: string): Promise<void> {
+async function removeTrashItem(
+  client: DriveClient,
+  url: string,
+  etag?: string,
+  verifyHeaders?: ResourceAssertion["verifyHeaders"],
+): Promise<void> {
   try {
     const current = await client.stat(url);
     etag ??= current.etag;
+    verifyHeaders ??= current.verifyHeaders;
   } catch (error) {
     if (isMissingItem(error)) {
       await client.recheckDeletions?.();
@@ -1223,6 +1301,7 @@ async function removeTrashItem(client: DriveClient, url: string, etag?: string):
       await client.remove(url, {
         recursive: true,
         ...(etag !== undefined ? { ifMatch: etag } : {}),
+        ...discoveryOptions({ verifyHeaders }),
       });
     } catch (error) {
       const cause = error instanceof DrivePartialFailureError ? error.cause : error;

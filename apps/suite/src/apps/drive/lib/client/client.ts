@@ -29,6 +29,7 @@ import {
   policyOwner,
   privateAcl,
   requireAccess,
+  resourceDiscoveryOptions,
 } from "./access";
 import {
   type ArchivedAcl,
@@ -48,6 +49,7 @@ import {
   type PolicyIdentity,
   type ResourceAssertion,
   type ResourceIdentity,
+  requireResourceAssertion,
 } from "./commit";
 import { containerVersions } from "./container-versions";
 import { DriveDeletePendingError, deletionControl, isDeletionFailure } from "./deletion";
@@ -78,6 +80,7 @@ export interface DriveItem {
   readonly size?: number;
   readonly modified?: Date;
   readonly etag?: string;
+  readonly verifyHeaders?: ResourceAssertion["verifyHeaders"];
   /** A durable own-ACL requirement is still awaiting verification. */
   readonly protectionRequired?: true;
 }
@@ -88,12 +91,14 @@ export interface WriteOptions {
   readonly ifNoneMatch?: "*";
   /** Overwrite only this version. */
   readonly ifMatch?: string;
+  readonly verifyHeaders?: ResourceAssertion["verifyHeaders"];
 }
 
 export interface MoveResult {
   readonly url: string;
   /** Identity of the copied version, captured inside the move. */
   readonly etag?: string;
+  readonly verifyHeaders?: ResourceAssertion["verifyHeaders"];
   readonly children?: readonly string[];
   /** Every copied identity and the final container memberships verified by the move. */
   readonly tree?: readonly MoveResource[];
@@ -102,6 +107,7 @@ export interface MoveResult {
 export interface MoveResource {
   readonly url: string;
   readonly etag: string;
+  readonly verifyHeaders?: ResourceAssertion["verifyHeaders"];
   readonly children?: readonly string[];
 }
 
@@ -115,17 +121,35 @@ export interface DriveClient {
   /** Pin the policy archive captured at Restore preflight, including its absence. */
   bindRecoveryPolicy?(
     url: string,
-    captured: { readonly content: string; readonly etag: string | undefined } | undefined,
+    captured:
+      | {
+          readonly content: string;
+          readonly etag: string | undefined;
+          readonly verifyHeaders?: ResourceAssertion["verifyHeaders"];
+        }
+      | undefined,
   ): void;
   /** Children of a folder (hidden dot-names included; the UI filters them). */
   list(folderUrl: string, options?: { signal?: AbortSignal }): Promise<DriveItem[]>;
   /** Metadata for one item (HEAD), optionally conditional on the expected version. */
-  stat(url: string, options?: { ifMatch: string }): Promise<DriveItem>;
+  stat(
+    url: string,
+    options?: { ifMatch: string; readonly verifyHeaders?: ResourceAssertion["verifyHeaders"] },
+  ): Promise<DriveItem>;
   read(url: string): Promise<Blob>;
   /** Bytes and validator from the same GET, for subsequent conditional deletion. */
-  readVersion(url: string): Promise<{ body: Blob; etag?: string }>;
+  readVersion(url: string): Promise<{
+    body: Blob;
+    etag?: string;
+    readonly verifyHeaders?: ResourceAssertion["verifyHeaders"];
+  }>;
   /** Parsed RDF and its validator; `undefined` when the resource does not exist. */
-  readRdf(url: string): Promise<{ dataset: Store; etag?: string } | undefined>;
+  readRdf(
+    url: string,
+  ): Promise<
+    | { dataset: Store; etag?: string; readonly verifyHeaders?: ResourceAssertion["verifyHeaders"] }
+    | undefined
+  >;
   write(
     url: string,
     body: Blob | string,
@@ -143,7 +167,11 @@ export interface DriveClient {
     from: string,
     to: string,
     policy: PreservePolicy,
-    options?: { readonly ifMatch?: string; readonly sourceGuards?: readonly ResourceIdentity[] },
+    options?: {
+      readonly ifMatch?: string;
+      readonly verifyHeaders?: ResourceAssertion["verifyHeaders"];
+      readonly sourceGuards?: readonly ResourceIdentity[];
+    },
   ): Promise<
     Pick<AccessBinding, "recheck"> & {
       readonly disarm: readonly Compensation[];
@@ -156,7 +184,11 @@ export interface DriveClient {
     from: string,
     to: string,
     policy: PreservePolicy,
-    options?: { readonly ifMatch?: string; readonly sourceGuards?: readonly ResourceIdentity[] },
+    options?: {
+      readonly ifMatch?: string;
+      readonly verifyHeaders?: ResourceAssertion["verifyHeaders"];
+      readonly sourceGuards?: readonly ResourceIdentity[];
+    },
   ): Promise<void>;
   /** Move = copy + verified, conditional delete; returns the copied identity. */
   move(
@@ -166,6 +198,7 @@ export interface DriveClient {
     options?: {
       /** Source version approved by the caller; never refreshed during retries. */
       ifMatch?: string;
+      readonly verifyHeaders?: ResourceAssertion["verifyHeaders"];
       beforeDelete?: () => Promise<void>;
       privateOwner?: string;
       archiveContainers?: (archive: string) => Promise<void>;
@@ -179,6 +212,7 @@ export interface DriveClient {
     options?: {
       recursive?: boolean;
       ifMatch?: string;
+      readonly verifyHeaders?: ResourceAssertion["verifyHeaders"];
       commit?: CommitChecks &
         Pick<CommitEffects, "disarm"> & {
           /** Pre-hydrated survivor identities checked immediately before DELETE. */
@@ -277,7 +311,7 @@ interface CreatedResource {
   etag: string | undefined;
   data?: Store;
   protection?: OwnAccess;
-  ownAcl?: { url: string; policy: OwnAccess | null } | undefined;
+  ownAcl?: AccessState["own"];
 }
 
 /** Payload and MIME data are hydrated before the final HTTP commit boundary. */
@@ -292,7 +326,11 @@ interface AccessCheck {
   compensation?: Compensation;
   until?: string;
 }
-type PolicyArchiveSnapshot = { readonly content: string; readonly etag: string | undefined };
+type PolicyArchiveSnapshot = {
+  readonly content: string;
+  readonly etag: string | undefined;
+  readonly verifyHeaders?: ResourceAssertion["verifyHeaders"];
+};
 type AccessScope = Set<AccessCheck> & { archives?: Map<string, PolicyArchiveSnapshot | null> };
 function scopePolicyGuards(scope: AccessScope): readonly PolicyIdentity[] {
   return [...scope].flatMap((check) => check.binding.identities);
@@ -341,15 +379,17 @@ function capturedAccess(source: SourceSnapshot): AccessState {
 
 function errorFor(status: number, url: string): DriveError {
   const kind: DriveErrorKind =
-    status === 409 || status === 412
-      ? "conflict"
-      : status === 404 || status === 410
-        ? "not-found"
-        : status === 403
-          ? "forbidden"
-          : status === 401
-            ? "unauthenticated"
-            : "failed";
+    status === 428
+      ? "missing-validator"
+      : status === 409 || status === 412
+        ? "conflict"
+        : status === 404 || status === 410
+          ? "not-found"
+          : status === 403
+            ? "forbidden"
+            : status === 401
+              ? "unauthenticated"
+              : "failed";
   return new DriveError(kind, status, url);
 }
 
@@ -418,7 +458,18 @@ export function createSolidDriveClient(options: {
   const finalIdentity = (
     identity: ResourceIdentity,
     verifyHeaders: NonNullable<CommitChecks["verifyHeaders"]>,
-  ) => ({ ...versions.identity(identity), verifyHeaders, http, error: errorFor });
+  ) => {
+    const captured = requireResourceAssertion(identity, errorFor);
+    return {
+      ...versions.identity(captured),
+      verifyHeaders: (headers: Headers): undefined => {
+        captured.verifyHeaders(headers);
+        verifyHeaders(headers);
+      },
+      http,
+      error: errorFor,
+    };
+  };
   // Content identity includes its captured access discovery. Every resource HEAD,
   // including completion/recovery checks, must assert both from the same response.
   const checkResourceIdentity = (
@@ -433,7 +484,12 @@ export function createSolidDriveClient(options: {
   ) => {
     if (headers && !resource.source.demo && !resource.ownAcl) {
       const endpoint = access.discover(resource.url, headers);
-      if (endpoint) resource.ownAcl = { url: endpoint, policy: null };
+      if (endpoint)
+        resource.ownAcl = {
+          url: endpoint,
+          policy: null,
+          verifyResourceHeaders: access.captureEndpoint(resource.url, headers),
+        };
     }
     resource.etag = etag ?? undefined;
     if (resource.url.endsWith("/")) versions.track(resource.url);
@@ -459,7 +515,12 @@ export function createSolidDriveClient(options: {
   const createdOwnAccess = (resource: CreatedResource) =>
     requireOwnReceipt(
       resource.protection
-        ? { url: resource.protection.url, policy: resource.protection }
+        ? {
+            ...resource.ownAcl,
+            url: resource.protection.url,
+            policy: resource.protection,
+            ...resourceDiscoveryOptions(resource.protection),
+          }
         : resource.ownAcl,
       resource.source.demo,
     );
@@ -512,7 +573,7 @@ export function createSolidDriveClient(options: {
 
   const stat = async (
     url: string,
-    opts?: { ifMatch: string },
+    opts?: { ifMatch: string; readonly verifyHeaders?: ResourceAssertion["verifyHeaders"] },
     captureHeaders?: (headers: Headers) => void,
   ): Promise<DriveItem> => {
     // Hydrate before HEAD: callers use this as their final HTTP identity check.
@@ -532,6 +593,8 @@ export function createSolidDriveClient(options: {
     const contentType = isFolder
       ? undefined
       : resolveContentType(nameOf(url), knownType, resources.get(url));
+    if (opts) assertVersion({ url, etag: opts.ifMatch }, etag, errorFor);
+    opts?.verifyHeaders?.(response.headers);
     captureHeaders?.(response.headers);
     return {
       url,
@@ -542,6 +605,7 @@ export function createSolidDriveClient(options: {
       ...(modified ? { modified: new Date(modified) } : {}),
       ...(etag ? { etag } : {}),
       ...protectedState,
+      verifyHeaders: access.captureEndpoint(url, response.headers),
     };
   };
 
@@ -551,7 +615,11 @@ export function createSolidDriveClient(options: {
     rememberType(url, response.headers);
     const body = await response.blob();
     const etag = response.headers.get("etag");
-    return etag ? { body, etag } : { body };
+    return {
+      body,
+      ...(etag ? { etag } : {}),
+      verifyHeaders: access.captureEndpoint(url, response.headers),
+    };
   };
 
   const read: DriveClient["read"] = async (url) => (await readVersion(url)).body;
@@ -561,9 +629,11 @@ export function createSolidDriveClient(options: {
     try {
       const result = await fetchRdf(url, { fetch: http });
       rememberType(url, result.response.headers);
-      return result.etag
-        ? { dataset: result.dataset, etag: result.etag }
-        : { dataset: result.dataset };
+      return {
+        dataset: result.dataset,
+        ...(result.etag ? { etag: result.etag } : {}),
+        verifyHeaders: access.captureEndpoint(url, result.response.headers),
+      };
     } catch (error) {
       if (error instanceof RdfFetchError && (error.status === 404 || error.status === 410))
         return undefined;
@@ -578,7 +648,7 @@ export function createSolidDriveClient(options: {
    */
   const quarantine = async (
     url: string,
-    etag: string | null,
+    clear: ResourceAssertion | null,
     policy: OwnAccess,
     copies: readonly { body: Blob | string; type: string }[],
     demo = false,
@@ -594,11 +664,12 @@ export function createSolidDriveClient(options: {
         demo ? { kind: "inherit-verified" } : { kind: "owner-only", webId },
       );
       const recoveryAccess = await bindAccess(access, folder, folder);
-      const survivors: ResourceIdentity[] = [];
+      const survivors: ResourceAssertion[] = [];
       const backupAccess: AccessBinding[] = [];
       for (const [index, copy] of copies.entries()) {
         const target = `${folder}${index}-${encodeURIComponent(nameOf(url))}`;
-        backupAccess.push(await bindAccess(access, target, target));
+        const binding = await bindAccess(access, target, target);
+        backupAccess.push(binding);
         const saved = await write(
           target,
           copy.body,
@@ -616,11 +687,18 @@ export function createSolidDriveClient(options: {
         // A committed backup remains discoverable even if its receipt is missing.
         retained.push(target);
         committedBackup = undefined;
-        survivors.push({ url: target, etag: validator(target, saved.etag) });
+        survivors.push({
+          url: target,
+          etag: validator(target, saved.etag),
+          verifyHeaders: (headers) => {
+            binding.verifyEndpoint(target, headers);
+          },
+        });
       }
-      if (etag !== null) {
+      if (clear) {
         const required = await ledger.get(url);
         const cleared = await commitHttp({
+          verifyHeaders: clear.verifyHeaders,
           rechecks: [recoveryAccess, ...backupAccess].map((binding) => () => binding.recheck()),
           policyGuards: [recoveryAccess, ...backupAccess].flatMap((binding) => binding.identities),
           finalIdentities: survivors.map((identity) =>
@@ -635,7 +713,7 @@ export function createSolidDriveClient(options: {
           init: {
             method: "PUT",
             headers: {
-              "if-match": etag,
+              "if-match": clear.etag,
               "content-type": url.endsWith("/") ? "text/turtle" : "application/octet-stream",
             },
             body: "",
@@ -807,7 +885,13 @@ export function createSolidDriveClient(options: {
           } catch (cause) {
             const retained = await quarantine(
               url,
-              etag,
+              {
+                url,
+                etag,
+                verifyHeaders: (headers) => {
+                  (binding as AccessBinding).verifyEndpoint(url, headers);
+                },
+              },
               (binding as AccessBinding).destinationPolicy,
               [
                 {
@@ -923,9 +1007,7 @@ export function createSolidDriveClient(options: {
         verifyHeaders: (headers) => access.verifyEndpoint(url, headers, expectedOwn),
         policyGuards: [
           ...ownAccessGuards(expectedOwn),
-          ...(protectedPolicy.etag
-            ? [{ url: protectedPolicy.url, etag: protectedPolicy.etag }]
-            : []),
+          ...(protectedPolicy.etag ? [protectedPolicy] : []),
         ],
         onWritten: (response) => {
           replayed = response;
@@ -938,12 +1020,16 @@ export function createSolidDriveClient(options: {
         try {
           await verifyProtection();
         } catch (cause) {
-          const retained = await quarantine(url, receipt, protectedPolicy, [
+          const retained = await quarantine(
+            url,
             {
-              body: init.body,
-              type: init.headers["content-type"],
+              url,
+              etag: receipt,
+              verifyHeaders: (headers) => access.verifyEndpoint(url, headers, expectedOwn),
             },
-          ]);
+            protectedPolicy,
+            [{ body: init.body, type: init.headers["content-type"] }],
+          );
           throw new DrivePartialFailureError(url, [], [], retained, cause);
         }
       }
@@ -971,7 +1057,11 @@ export function createSolidDriveClient(options: {
       for (const check of effects?.identityChecks ?? []) await check();
       const retained = await quarantine(
         url,
-        validator(url, new Headers(init.headers).get("if-match")),
+        {
+          url,
+          etag: validator(url, new Headers(init.headers).get("if-match")),
+          verifyHeaders: (headers) => access.verifyEndpoint(url, headers, expectedOwn),
+        },
         policy,
         copies,
       );
@@ -998,6 +1088,7 @@ export function createSolidDriveClient(options: {
     let protectedEtag: string | undefined;
     if (policy.kind === "owner-only") {
       const current = await http(url, { method: "HEAD", cache: "no-store" });
+      opts.verifyHeaders?.(current.headers);
       if (current.headers.get("x-solid-demo-access-control") !== "none") {
         if (
           (opts.ifNoneMatch && current.ok) ||
@@ -1011,7 +1102,11 @@ export function createSolidDriveClient(options: {
           protectedEtag = validator(url, opts.ifMatch ?? current.headers.get("etag"));
           const own = await captureOwnAccess(url, current.headers);
           await provision.protect(url, required, url, {
-            identity: { url, etag: protectedEtag },
+            identity: {
+              url,
+              etag: protectedEtag,
+              verifyHeaders: opts.verifyHeaders ?? access.captureEndpoint(url, current.headers),
+            },
             knownAcl: own?.url,
             expectedAcl: own?.policy ?? null,
           });
@@ -1045,7 +1140,13 @@ export function createSolidDriveClient(options: {
       false,
       verifyAccess,
       scope,
-      effects,
+      {
+        ...effects,
+        verifyHeaders: (headers) => {
+          opts.verifyHeaders?.(headers);
+          effects?.verifyHeaders?.(headers);
+        },
+      },
       required,
     );
     // A replacement supersedes the previous listing's declarations before its refresh completes.
@@ -1093,7 +1194,11 @@ export function createSolidDriveClient(options: {
   };
 
   // Read and validate the complete tree before the first destination write or DELETE.
-  const snapshot = async (url: string, bodies: boolean): Promise<SourceSnapshot> => {
+  const snapshot = async (
+    url: string,
+    bodies: boolean,
+    approvedDiscovery?: ResourceAssertion["verifyHeaders"],
+  ): Promise<SourceSnapshot> => {
     if (bodies) await provision.check(url);
     const policy = (headers: Headers): Promise<AccessState> =>
       bodies
@@ -1101,10 +1206,15 @@ export function createSolidDriveClient(options: {
         : Promise.resolve({ status: "unknown", cause: "Not read" });
     if (url.endsWith("/")) {
       const { items, etag, dataset, headers } = await listing(url);
+      approvedDiscovery?.(headers);
       validator(url, etag);
       const own = await policy(headers);
       const binding = bodies ? await bindAccess(access, url, url, false, own) : undefined;
-      const verifyHeaders = access.captureEndpoint(url, headers);
+      const capturedDiscovery = access.captureEndpoint(url, headers);
+      const verifyHeaders: ResourceAssertion["verifyHeaders"] = (headers) => {
+        approvedDiscovery?.(headers);
+        capturedDiscovery(headers);
+      };
       const children: SourceSnapshot[] = [];
       for (const child of items) children.push(await snapshot(child.url, bodies));
       // A cached listing cannot certify children inspected after a root replacement.
@@ -1124,12 +1234,17 @@ export function createSolidDriveClient(options: {
       };
     }
     const response = await ensureOk(await http(url, bodies ? undefined : { method: "HEAD" }), url);
+    approvedDiscovery?.(response.headers);
     const etag = response.headers.get("etag") ?? undefined;
     validator(url, etag);
     const own = await policy(response.headers);
     const binding = bodies ? await bindAccess(access, url, url, false, own) : undefined;
     const body = bodies ? await response.blob() : undefined;
-    const verifyHeaders = access.captureEndpoint(url, response.headers);
+    const capturedDiscovery = access.captureEndpoint(url, response.headers);
+    const verifyHeaders: ResourceAssertion["verifyHeaders"] = (headers) => {
+      approvedDiscovery?.(headers);
+      capturedDiscovery(headers);
+    };
     await checkResourceIdentity(url, etag, verifyHeaders);
     return {
       url,
@@ -1440,7 +1555,10 @@ export function createSolidDriveClient(options: {
           policy,
           privateWebId || resource.protection ? resource.url : resource.source.url,
           {
-            identity,
+            identity: {
+              ...identity,
+              verifyHeaders: (headers) => access.verifyEndpoint(identity.url, headers, own),
+            },
             restrict: true,
             knownAcl: own?.url,
             expectedAcl: own?.policy ?? null,
@@ -1451,7 +1569,12 @@ export function createSolidDriveClient(options: {
     } catch (warning) {
       const urls = await quarantine(
         resource.url,
-        validator(resource.url, resource.etag),
+        {
+          url: resource.url,
+          etag: validator(resource.url, resource.etag),
+          verifyHeaders: (headers) =>
+            access.verifyEndpoint(resource.url, headers, createdOwnAccess(resource)),
+        },
         policy,
         [
           {
@@ -1546,6 +1669,7 @@ export function createSolidDriveClient(options: {
     const identity = {
       url: archiveUrl,
       etag: captured ? validator(archiveUrl, captured.etag) : null,
+      ...(captured?.verifyHeaders ? { verifyHeaders: captured.verifyHeaders } : {}),
     };
     scope.archives ??= new Map();
     scope.archives.set(archiveUrl, captured ?? null);
@@ -1556,7 +1680,15 @@ export function createSolidDriveClient(options: {
           return active ? [identity] : [];
         },
         recheck: async () => {
-          if (active) await checkIdentity(http, identity.url, identity.etag, errorFor);
+          if (active)
+            await checkIdentity(
+              http,
+              identity.url,
+              identity.etag,
+              errorFor,
+              false,
+              identity.verifyHeaders,
+            );
         },
         retire: (removed) => {
           if (removed === archiveUrl) active = false;
@@ -1582,12 +1714,20 @@ export function createSolidDriveClient(options: {
           : {
               content: await response.text(),
               etag: response.headers.get("etag") ?? undefined,
+              verifyHeaders: access.captureEndpoint(archiveUrl, response.headers),
             },
         scope,
       );
     }
     const captured = (scope.archives as Map<string, PolicyArchiveSnapshot | null>).get(archiveUrl);
-    await checkIdentity(http, archiveUrl, captured?.etag ?? null, errorFor);
+    await checkIdentity(
+      http,
+      archiveUrl,
+      captured?.etag ?? null,
+      errorFor,
+      false,
+      captured?.verifyHeaders,
+    );
     if (!captured) return undefined;
     const saved = (JSON.parse(captured.content) as Record<string, ArchivedAcl | null>)[url];
     if (saved === undefined) throw new DriveAccessError("Missing archived policy");
@@ -1675,9 +1815,14 @@ export function createSolidDriveClient(options: {
     opts: Parameters<DriveClient["mergeContainer"]>[3],
   ) => {
     requirePolicy(decision, ["preserve-source"]);
-    for (const identity of opts?.sourceGuards ?? []) versions.track(identity.url);
+    const capturedGuards = (opts?.sourceGuards ?? []).map((identity) =>
+      requireResourceAssertion(identity, errorFor),
+    );
+    for (const identity of capturedGuards) versions.track(identity.url);
     await provision.check(from);
     const original = await listing(from);
+    const originalDiscovery = access.captureEndpoint(from, original.headers);
+    opts?.verifyHeaders?.(original.headers);
     versions.track(from);
     if (opts?.ifMatch !== undefined && original.etag !== opts.ifMatch)
       throw new DriveError("conflict", 412, from);
@@ -1690,7 +1835,10 @@ export function createSolidDriveClient(options: {
       data: containerData(original.dataset, from),
       demo: original.headers.get("x-solid-demo-access-control") === "none",
       access: own,
-      verifyHeaders: access.captureEndpoint(from, original.headers),
+      verifyHeaders: (headers) => {
+        opts?.verifyHeaders?.(headers);
+        originalDiscovery(headers);
+      },
       binding,
     };
     const effective = capturedAccess(source);
@@ -1699,10 +1847,11 @@ export function createSolidDriveClient(options: {
     const verifyMerge = async () => {
       await binding.recheck();
       for (const identity of [
-        ...(opts?.sourceGuards ?? []),
-        { url: from, etag: validator(from, original.etag) },
+        ...capturedGuards,
+        { url: from, etag: validator(from, original.etag), verifyHeaders: source.verifyHeaders },
       ])
         await checkResourceIdentity(identity.url, versions.identity(identity).etag, (headers) => {
+          identity.verifyHeaders(headers);
           binding.verifyEndpoint(identity.url, headers);
           verifyScopeHeaders(scope, identity.url, headers);
         });
@@ -1814,8 +1963,18 @@ export function createSolidDriveClient(options: {
         return {
           recheck,
           disarm: [compensation],
-          source: versions.identity({ url: from, etag: validator(from, original.etag) }),
-          destination: versions.identity({ url: to, etag: validator(to, resource.etag) }),
+          source: versions.identity({
+            url: from,
+            etag: validator(from, original.etag),
+            verifyHeaders: source.verifyHeaders,
+          }),
+          destination: versions.identity({
+            url: to,
+            etag: validator(to, resource.etag),
+            verifyHeaders: (headers: Headers): undefined => {
+              binding.verifyEndpoint(to, headers);
+            },
+          }),
         };
       }
       await write(
@@ -1849,8 +2008,18 @@ export function createSolidDriveClient(options: {
       return {
         recheck,
         disarm: [compensation],
-        source: versions.identity({ url: from, etag: validator(from, original.etag) }),
-        destination: versions.identity({ url: to, etag: validator(to, resource.etag) }),
+        source: versions.identity({
+          url: from,
+          etag: validator(from, original.etag),
+          verifyHeaders: source.verifyHeaders,
+        }),
+        destination: versions.identity({
+          url: to,
+          etag: validator(to, resource.etag),
+          verifyHeaders: (headers: Headers): undefined => {
+            binding.verifyEndpoint(to, headers);
+          },
+        }),
       };
     } catch (error) {
       await compensation.rollback();
@@ -1871,15 +2040,19 @@ export function createSolidDriveClient(options: {
     acceptedAccess?: OwnAccess,
     approvedEtag?: string,
     sourceGuards: readonly ResourceIdentity[] = [],
+    approvedDiscovery?: ResourceAssertion["verifyHeaders"],
   ): Promise<MoveResult> => {
     if (from.endsWith("/") !== to.endsWith("/") || (from.endsWith("/") && to.startsWith(from))) {
       throw new DriveError("conflict", 409, to);
     }
     const ordinaryMove =
       moving && decision.kind === "confirm-move" && !privateOwner && !policyArchiveOf(from);
-    for (const identity of sourceGuards) versions.track(identity.url);
+    const capturedGuards = sourceGuards.map((identity) =>
+      requireResourceAssertion(identity, errorFor),
+    );
+    for (const identity of capturedGuards) versions.track(identity.url);
     await deletion.guard(from);
-    const source = await snapshot(from, true);
+    const source = await snapshot(from, true, approvedDiscovery);
     if (approvedEtag !== undefined && source.etag !== validator(from, approvedEtag))
       throw new DriveError("conflict", 412, from);
     // A late revocation must leave a private recovery copy. Establish its owner
@@ -1918,6 +2091,7 @@ export function createSolidDriveClient(options: {
           if (inherited.length > 0) {
             const current = requireAccess(effective.get(source) as AccessState, from);
             const destination = requireAccess(await access.effective(to, true), to);
+            let approvedDestination = acceptedAccess ?? destination;
             const widened = new Set<string>();
             for (const node of inherited)
               for (const agent of accessGains(
@@ -1936,6 +2110,7 @@ export function createSolidDriveClient(options: {
             ) {
               if (!options.confirmAccess)
                 throw new DriveAccessError("Access change requires confirmation");
+              approvedDestination = destination;
               const choice = await options.confirmAccess({ from, to, gains, canKeep: true });
               if (choice === "cancel") throw new Error("Move cancelled");
               if (choice === "keep") {
@@ -1943,7 +2118,9 @@ export function createSolidDriveClient(options: {
                 keepAccess = true;
               }
             }
-            destinationBinding.installed(destination, true);
+            // Retry verifies the last consent's capture rather than adopting
+            // the policy read after that consent, even with identical grants.
+            destinationBinding.installed(approvedDestination, true);
           }
         }
         const created: CreatedResource[] = [];
@@ -1967,9 +2144,14 @@ export function createSolidDriveClient(options: {
           accessFailure = true;
           await recheckScope(scope);
           accessFailure = false;
-          for (const identity of sourceGuards)
-            await checkResourceIdentity(identity.url, versions.identity(identity).etag, (headers) =>
-              verifyScopeHeaders(scope, identity.url, headers),
+          for (const identity of capturedGuards)
+            await checkResourceIdentity(
+              identity.url,
+              versions.identity(identity).etag,
+              (headers) => {
+                identity.verifyHeaders(headers);
+                verifyScopeHeaders(scope, identity.url, headers);
+              },
             );
         };
         const bindDestination = async (url: string, policy?: OwnAccess) => {
@@ -2055,12 +2237,22 @@ export function createSolidDriveClient(options: {
                   throw new DriveError("conflict", 412, url);
                 destinations.set(node.url, {
                   url,
+                  verifyHeaders: (headers) => {
+                    verifyScopeHeaders(scope, url, headers);
+                  },
                   // The populated destination supplies the later Undo receipt.
                   // Cleanup uses only transitions from our committed mutations.
                   etag: node.children.length ? validator(url, current.etag) : copiedEtag,
                   children: [...expected],
                 });
-              } else destinations.set(node.url, { url, etag: copiedEtag });
+              } else
+                destinations.set(node.url, {
+                  url,
+                  etag: copiedEtag,
+                  verifyHeaders: (headers) => {
+                    verifyScopeHeaders(scope, url, headers);
+                  },
+                });
               for (const child of node.children ?? []) await capture(child);
             };
             await capture(source);
@@ -2084,7 +2276,7 @@ export function createSolidDriveClient(options: {
               },
               verifyDestination,
               (url) => [compensation, ...compensationsFor(scope, url)],
-              sourceGuards.map((identity) =>
+              capturedGuards.map((identity) =>
                 finalIdentity(identity, (headers) =>
                   verifyScopeHeaders(scope, identity.url, headers),
                 ),
@@ -2163,7 +2355,8 @@ export function createSolidDriveClient(options: {
                 scope,
                 destination,
                 approvedEtag ?? source.etag,
-                sourceGuards,
+                capturedGuards,
+                approvedDiscovery,
               );
             }
             throw error;
@@ -2184,6 +2377,12 @@ export function createSolidDriveClient(options: {
         return {
           url: to,
           ...(etag ? { etag } : {}),
+          ...(destinations.get(from)?.verifyHeaders
+            ? {
+                verifyHeaders: destinations.get(from)
+                  ?.verifyHeaders as ResourceAssertion["verifyHeaders"],
+              }
+            : {}),
           ...(source.children
             ? {
                 children: source.children.map((child) => `${to}${child.url.slice(from.length)}`),
@@ -2218,6 +2417,7 @@ export function createSolidDriveClient(options: {
       undefined,
       opts?.ifMatch,
       opts?.sourceGuards,
+      opts?.verifyHeaders,
     );
   };
 
@@ -2243,6 +2443,7 @@ export function createSolidDriveClient(options: {
       undefined,
       opts?.ifMatch,
       opts?.sourceGuards,
+      opts?.verifyHeaders,
     );
   };
 
@@ -2262,7 +2463,12 @@ export function createSolidDriveClient(options: {
       let capturedHeaders!: Headers;
       const observed = await stat(
         url,
-        opts.ifMatch ? { ifMatch: opts.ifMatch } : undefined,
+        opts.ifMatch
+          ? {
+              ifMatch: opts.ifMatch,
+              ...(opts.verifyHeaders ? { verifyHeaders: opts.verifyHeaders } : {}),
+            }
+          : undefined,
         (headers) => {
           capturedHeaders = headers;
         },
@@ -2291,6 +2497,7 @@ export function createSolidDriveClient(options: {
           verifyHeaders: (headers) => {
             capturedSource.verifyHeaders(headers);
             verifyHeaders(headers);
+            opts.verifyHeaders?.(headers);
             opts.commit?.verifyHeaders?.(headers);
           },
         };
@@ -2338,6 +2545,7 @@ export function createSolidDriveClient(options: {
             verifyHeaders: (headers) => {
               verifyHeaders(headers);
               verifyScopeHeaders(scope, url, headers);
+              opts.verifyHeaders?.(headers);
               opts.commit?.verifyHeaders?.(headers);
             },
             policyGuards: [...scopePolicyGuards(scope), ...(opts.commit?.policyGuards ?? [])],
@@ -2482,7 +2690,11 @@ export function createSolidDriveClient(options: {
           throw new DriveAccessError(error);
         try {
           await provision.protect(url, policy, url, {
-            identity: { url, etag: validator(url, response.headers.get("etag")) },
+            identity: {
+              url,
+              etag: validator(url, response.headers.get("etag")),
+              verifyHeaders: access.captureEndpoint(url, response.headers),
+            },
             knownAcl: own?.url,
             expectedAcl: own?.policy ?? null,
           });

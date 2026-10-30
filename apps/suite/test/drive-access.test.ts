@@ -289,7 +289,14 @@ it("Undo of a narrowing move prompts before widening access again; Cancel keeps 
   expect(confirmAccess).not.toHaveBeenCalled();
   const { moveWithValidator } = await import("../src/apps/drive/state/undo");
   await expect(
-    moveWithValidator(options, moved.url, `${PUBLIC}placeholder`, moved.etag as string),
+    moveWithValidator(
+      options,
+      moved.url,
+      `${PUBLIC}placeholder`,
+      moved.etag as string,
+      undefined,
+      moved.verifyHeaders,
+    ),
   ).rejects.toThrow("cancelled");
   expect(confirmAccess).toHaveBeenCalledWith(
     expect.objectContaining({ gains: ["Everyone (public)"] }),
@@ -377,7 +384,14 @@ it("folder Undo refuses unknown ACP during tree verification", async () => {
   });
   const { moveWithValidator } = await import("../src/apps/drive/state/undo");
   await expect(
-    moveWithValidator(options, moved.url, PUBLIC, moved.etag as string, moved.tree),
+    moveWithValidator(
+      options,
+      moved.url,
+      PUBLIC,
+      moved.etag as string,
+      moved.tree,
+      moved.verifyHeaders,
+    ),
   ).rejects.toThrow("Private access");
   expect(confirmAccess).not.toHaveBeenCalled();
   expect(f.pod.has(moved.url)).toBe(true);

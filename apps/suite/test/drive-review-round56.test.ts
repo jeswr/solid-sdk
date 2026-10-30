@@ -61,9 +61,10 @@ it.each([
   expect(changed).toBe(true);
   expect(f.pod.has(to)).toBe(true);
   // Hidden/replaced discovery cannot authorize repairing the captured endpoint.
-  // Preserve inheritance and clear only our bytes after saving private recovery.
+  // Missing discovery refuses clearing too. Preserve the other client's policy
+  // and retain a private backup while surfacing the changed endpoint.
   expect(f.policies.has(`${to}.policy`)).toBe(false);
-  expect(await (await f.pod.fetch(to)).text()).toBe("");
+  expect(await (await f.pod.fetch(to)).text()).toBe("secret contents");
   await expectPrivateRecovery(f, "secret contents");
 });
 

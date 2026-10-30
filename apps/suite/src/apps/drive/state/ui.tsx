@@ -32,6 +32,7 @@ import {
   isMissingItem,
   nameOf,
 } from "../lib/client/client";
+import { unconfirmedIdentityMessage } from "../lib/client/commit";
 import { DriveDeletePendingError } from "../lib/client/deletion";
 import { isOwnStorage } from "../lib/client/ownership";
 import { DriveOperationInProgressError } from "../lib/client/source-operations";
@@ -354,6 +355,8 @@ function failureMessage(error: unknown, fallback: string): string {
     return error.message;
   if (error instanceof DriveError) {
     switch (error.kind) {
+      case "missing-validator":
+        return unconfirmedIdentityMessage;
       case "conflict":
         return error.status === 412
           ? "This item changed. Refresh and try again."
@@ -454,7 +457,7 @@ export function useDriveActions() {
           const url = `${move.to}${item.url.slice(move.from.length)}`;
           // The old validator belongs to the removed source. The listing/live
           // metadata stream will hydrate the destination's own write receipt.
-          const { etag: _etag, ...metadata } = item;
+          const { etag: _etag, verifyHeaders: _discovery, ...metadata } = item;
           return { ...metadata, url, name: nameOf(url) };
         });
         return next.every((item, index) => item === current[index]) ? current : next;
@@ -618,7 +621,8 @@ export function useDriveActions() {
                         to,
                         from,
                         identity.etag,
-                        ...(identity.tree ? ([identity.tree] as const) : ([] as const)),
+                        identity.tree,
+                        identity.verifyHeaders,
                       );
                       restored.push({ from: to, to: from });
                       retargetDetails([{ from: to, to: from }]);
@@ -836,7 +840,11 @@ export function useDriveActions() {
             throw new Error(
               "This item has no confirmed version. Refresh and confirm deletion again.",
             );
-          await client.remove(item.url, { recursive: item.kind === "folder", ifMatch: item.etag });
+          await client.remove(item.url, {
+            recursive: item.kind === "folder",
+            ifMatch: item.etag,
+            ...(item.verifyHeaders ? { verifyHeaders: item.verifyHeaders } : {}),
+          });
           done.push(item);
         } catch (error) {
           reportFailure(error, "Couldn't delete", client, invalidate);

@@ -93,6 +93,7 @@ describe("Drive client against a seeded demo pod", () => {
       size: REPORT_PDF.byteLength,
       modified: new Date(NOW - 2 * 86_400_000),
       etag: expect.stringMatching(/^"demo-/),
+      verifyHeaders: expect.any(Function),
     });
     const folder = await client.stat(`${DRIVE}Archive/`);
     expect(folder).toMatchObject({
@@ -259,6 +260,7 @@ describe("Drive client against a seeded demo pod", () => {
     expect(await client.move(source, target, { kind: "confirm-move" })).toEqual({
       url: target,
       etag: (await client.stat(target)).etag,
+      verifyHeaders: expect.any(Function),
     });
     expect(pod.has(source)).toBe(false);
     expect(await (await client.read(target)).text()).toBe(original);
@@ -274,15 +276,25 @@ describe("Drive client against a seeded demo pod", () => {
     expect(await client.move(`${DRIVE}Work/`, `${DRIVE}Moved/`, { kind: "confirm-move" })).toEqual({
       url: `${DRIVE}Moved/`,
       etag: (await client.stat(`${DRIVE}Moved/`)).etag,
+      verifyHeaders: expect.any(Function),
       children: [`${DRIVE}Moved/Budget%202026.csv`, `${DRIVE}Moved/Report.pdf`],
       tree: [
         {
           url: `${DRIVE}Moved/`,
           etag: expect.any(String),
+          verifyHeaders: expect.any(Function),
           children: [`${DRIVE}Moved/Budget%202026.csv`, `${DRIVE}Moved/Report.pdf`],
         },
-        { url: `${DRIVE}Moved/Budget%202026.csv`, etag: expect.any(String) },
-        { url: `${DRIVE}Moved/Report.pdf`, etag: expect.any(String) },
+        {
+          url: `${DRIVE}Moved/Budget%202026.csv`,
+          etag: expect.any(String),
+          verifyHeaders: expect.any(Function),
+        },
+        {
+          url: `${DRIVE}Moved/Report.pdf`,
+          etag: expect.any(String),
+          verifyHeaders: expect.any(Function),
+        },
       ],
     });
     expect(pod.has(`${DRIVE}Work/`)).toBe(false);
@@ -400,8 +412,18 @@ describe("Drive error handling and foreign server responses", () => {
     });
     const client = stubClient(fetch);
     const file = `${DRIVE}file`;
-    expect(await client.stat(file)).toEqual({ url: file, name: "file", kind: "file" });
-    expect(await client.stat(DRIVE)).toEqual({ url: DRIVE, name: "drive", kind: "folder" });
+    expect(await client.stat(file)).toEqual({
+      url: file,
+      name: "file",
+      kind: "file",
+      verifyHeaders: expect.any(Function),
+    });
+    expect(await client.stat(DRIVE)).toEqual({
+      url: DRIVE,
+      name: "drive",
+      kind: "folder",
+      verifyHeaders: expect.any(Function),
+    });
     await expect(
       client.write(file, "", { contentType: "text/plain" }, { kind: "protect-ancestors" }),
     ).rejects.toMatchObject({ kind: "missing-validator" });

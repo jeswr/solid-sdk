@@ -392,6 +392,7 @@ it("rechecks bound access after persisting a deletion intent and retires a refus
   const etag = (await f.pod.fetch(url, { method: "HEAD" })).headers.get("etag") as string;
   await expect(
     deletion.remove(url, etag, undefined, {
+      verifyHeaders: () => undefined,
       rechecks: [
         async () => {
           f.policies.set(`${url}.policy`, await aclBody(url, true));

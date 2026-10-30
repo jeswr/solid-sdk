@@ -300,6 +300,7 @@ it.each([
   });
   const first = upload(client, "first");
   await reached.promise;
+  const undoIdentity = operation === "undo" ? await client.stat(entry.url) : undefined;
   const second =
     operation === "nested upload"
       ? client.write(
@@ -320,7 +321,9 @@ it.each([
                   { storageUrl: ROOT, fetch: f.fetch, webId: OWNER },
                   entry.url,
                   `${PRIVATE}second`,
-                  (await client.stat(entry.url)).etag as string,
+                  undoIdentity?.etag as string,
+                  undefined,
+                  undoIdentity?.verifyHeaders,
                 );
   const settled = vi.fn();
   void second.then(settled, settled);

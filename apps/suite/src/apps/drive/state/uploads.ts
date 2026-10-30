@@ -10,8 +10,10 @@ import { DriveOperationInProgressError } from "../lib/client/source-operations";
  */
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import { DriveAccessError } from "../lib/client/access";
 import type { DriveClient, DriveItem } from "../lib/client/client";
 import { DriveError, DrivePartialFailureError, parentOf } from "../lib/client/client";
+import { unconfirmedIdentityMessage } from "../lib/client/commit";
 import { type ConflictChoice, childUrl, uploadFile } from "../lib/operations/operations";
 import { normalizeUploadName } from "../lib/upload";
 import type { DroppedFile } from "./dropped-files";
@@ -126,9 +128,14 @@ function savedJobs(prefix: string): SavedJob[] {
 function describe(error: unknown): string {
   if (error instanceof DrivePartialFailureError)
     return `Upload failed. Recovery copies retained at: ${error.retainedDestinations.join(", ")}. Check these locations before retrying.`;
-  if (error instanceof DriveDeletePendingError || error instanceof DriveOperationInProgressError)
+  if (
+    error instanceof DriveDeletePendingError ||
+    error instanceof DriveOperationInProgressError ||
+    error instanceof DriveAccessError
+  )
     return error.message;
   if (error instanceof DriveError) {
+    if (error.kind === "missing-validator") return unconfirmedIdentityMessage;
     if (error.kind === "forbidden") return "You don't have permission to upload here";
     if (error.kind === "unauthenticated") return "Sign in again to upload";
   }

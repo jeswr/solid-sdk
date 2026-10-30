@@ -66,10 +66,14 @@ it.each([202, 302, 408])("a non-terminal DELETE %s is pending until confirmed", 
       }),
   );
   const control = deletionControl(http, (status) => new Error(String(status)));
-  await expect(control.remove(url, '"original"')).rejects.toBeInstanceOf(DriveDeletePendingError);
+  await expect(
+    control.remove(url, '"original"', undefined, { verifyHeaders: () => undefined }),
+  ).rejects.toBeInstanceOf(DriveDeletePendingError);
   expect(await deletionLedger(http).get(url)).toBeDefined();
   expect(http.mock.calls.filter(([, init]) => init?.method === "DELETE")).toHaveLength(1);
-  await expect(control.remove(url, '"original"')).rejects.toMatchObject({ kind: "delete-pending" });
+  await expect(
+    control.remove(url, '"original"', undefined, { verifyHeaders: () => undefined }),
+  ).rejects.toMatchObject({ kind: "delete-pending" });
   expect(http.mock.calls.filter(([, init]) => init?.method === "DELETE")).toHaveLength(1);
 });
 
@@ -100,7 +104,9 @@ it.each([
       ? new Response(null, { headers: { etag: '"original"' } })
       : new Response(null, { status });
   const control = deletionControl(http, (status) => new Error(`Rejected ${status}`));
-  await expect(control.remove(url, '"original"', recovery)).rejects.toMatchObject({
+  await expect(
+    control.remove(url, '"original"', recovery, { verifyHeaders: () => undefined }),
+  ).rejects.toMatchObject({
     kind: "delete-pending",
     cause: { message: `Rejected ${status}` },
   });
@@ -110,5 +116,7 @@ it.each([
     recovery,
   });
   expect(await deletionLedger(http).get(recovery)).toEqual({ sources: [url] });
-  await expect(control.remove(url, '"original"')).rejects.toMatchObject({ kind: "delete-pending" });
+  await expect(
+    control.remove(url, '"original"', undefined, { verifyHeaders: () => undefined }),
+  ).rejects.toMatchObject({ kind: "delete-pending" });
 });

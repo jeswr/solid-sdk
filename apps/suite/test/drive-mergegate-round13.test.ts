@@ -235,10 +235,11 @@ function payloadWrites(text: string, name: string): string[] {
         verify(callee);
         if (callee === "replayOrQuarantine") verify("replayProtected");
       } else if (callee === "commitHttp") {
-        // Quarantine has already saved private copies. It conditionally clears
-        // only our exposed payload without consulting the changed ACL.
+        // Quarantine has already saved private copies. Its immutable clear
+        // assertion checks content and discovery without adopting a changed ACL.
         expect(enclosing.getText(source)).toContain('body: ""');
-        expect(enclosing.getText(source)).toContain('"if-match": etag');
+        expect(enclosing.getText(source)).toContain('"if-match": clear.etag');
+        expect(enclosing.getText(source)).toContain("verifyHeaders: clear.verifyHeaders");
       } else expect(callee, `${name}: ${node.getText(source)}`).toBe("guardedWrite");
       mutations.push(node.initializer.text);
     }

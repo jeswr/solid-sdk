@@ -266,7 +266,14 @@ it.each([
     headers: { "content-type": "text/turtle" },
   });
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });
-  const selected = versioned ? { ...entry, etag: (await client.stat(url)).etag as string } : entry;
+  const identity = await client.stat(url);
+  const selected = versioned
+    ? {
+        ...entry,
+        etag: identity.etag as string,
+        ...(identity.verifyHeaders ? { verifyHeaders: identity.verifyHeaders } : {}),
+      }
+    : entry;
   const result = await restoreItems(client, DRIVE, [selected]);
   expect(result.failed).toHaveLength(1);
   expect(await (await f.pod.fetch(entry.original)).text()).toBe("original");

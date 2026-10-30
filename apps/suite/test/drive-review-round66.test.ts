@@ -129,8 +129,9 @@ async function backupScenario(switchAt?: number, replayFailure = false) {
       if (!written) {
         written = true;
         if (!replayFailure) {
-          f.endpoints.set(source, `${source}foreign.policy`);
-          f.policies.set(`${source}foreign.policy`, await aclBody(source, true));
+          // Widen the captured endpoint's policy to enter quarantine without
+          // changing its discovery; quarantine now pins the original endpoint too.
+          f.policies.set(`${source}.policy`, await aclBody(source, true));
         }
       } else cleared = true;
     }

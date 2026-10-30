@@ -1010,6 +1010,8 @@ it("Undo conditions the reverse move on the captured ETag and reports replaced i
     destination,
     items[0]?.url,
     '"moved-version"',
+    undefined,
+    undefined,
   );
   expect(mocks.toast.error).toHaveBeenCalledWith(expect.stringContaining("A.txt"));
   await view.unmount();
@@ -1037,6 +1039,8 @@ it("Undo restores the exact original URL and reports all failures without stoppi
     `${ROOT}Work/B.txt`,
     items[1]?.url,
     '"version"',
+    undefined,
+    undefined,
   );
   expect(mocks.toast.error).toHaveBeenCalledWith(expect.stringMatching(/A.txt.*C.txt/));
   await view.unmount();
@@ -1109,6 +1113,8 @@ it("captures each moved validator before waiting for later items in the batch", 
     `${ROOT}Work/A.txt`,
     items[0]?.url,
     '"first-version"',
+    undefined,
+    undefined,
   );
   await view.unmount();
 });
@@ -1183,6 +1189,7 @@ it("captures a moved folder's child set immediately for Undo", async () => {
       { url: destination, etag: '"folder-version"', children: [child.url] },
       { url: child.url, etag: '"file-version"' },
     ],
+    undefined,
   );
   await view.unmount();
 });

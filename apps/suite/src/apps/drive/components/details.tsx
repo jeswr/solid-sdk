@@ -18,7 +18,7 @@ import { formatModified, formatSize, friendlyType } from "../lib/view/view";
 import { useAccessLabel } from "../state/access";
 import { useDrive } from "../state/drive-context";
 import { useItemOwner } from "../state/ownership";
-import { useLiveItem } from "../state/resource";
+import { useLiveItems } from "../state/resource";
 import { useDriveUi } from "../state/ui";
 import { ItemIcon } from "./item-icon";
 import { ProtectionBanner } from "./protection-banner";
@@ -54,11 +54,11 @@ export function DetailsPane({
   items?: readonly DriveItem[];
 }) {
   const { detailsItems: selectedItems } = useDriveUi();
-  const detailsItems = items ?? selectedItems;
+  const detailsItems = useLiveItems(items ?? selectedItems);
   const accessId = useId();
   const factsId = useId();
   const [technical, setTechnical] = useState(false);
-  const item = useLiveItem(detailsItems[0]);
+  const item = detailsItems[0];
   const owner = useItemOwner(detailsItems.length === 1 ? item?.url : undefined);
   const access = useAccessLabel(detailsItems.length === 1 ? detailsItems[0]?.url : undefined);
   if (!item) {

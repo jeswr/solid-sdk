@@ -253,14 +253,14 @@ it("gate regression: Move checks approved external ancestors after the final des
     return response;
   };
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: http, webId: OWNER });
-  const ancestorEtag = (await client.stat(PRIVATE)).etag as string;
+  const ancestor = await client.stat(PRIVATE);
   await expect(
     client.move(
       from,
       to,
       { kind: "preserve-source" },
       {
-        sourceGuards: [{ url: PRIVATE, etag: ancestorEtag }],
+        sourceGuards: [{ ...ancestor, etag: ancestor.etag as string }],
       },
     ),
   ).rejects.toThrow();

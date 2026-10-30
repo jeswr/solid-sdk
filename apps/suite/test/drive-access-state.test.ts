@@ -16,7 +16,15 @@ it("distinguishes missing discovery, confirmed missing ACL and the demo declarat
   expect(await access.snapshot(PRIVATE, new Headers())).toMatchObject({ status: "unknown" });
   expect(
     await access.snapshot(PRIVATE, new Headers({ link: `<${PRIVATE}absent.policy>; rel=acl` })),
-  ).toEqual({ status: "none", demo: false, own: { url: `${PRIVATE}absent.policy`, policy: null } });
+  ).toEqual({
+    status: "none",
+    demo: false,
+    own: {
+      url: `${PRIVATE}absent.policy`,
+      policy: null,
+      verifyResourceHeaders: expect.any(Function),
+    },
+  });
   expect(
     await access.snapshot(PRIVATE, new Headers({ "x-solid-demo-access-control": "none" })),
   ).toEqual({ status: "none", demo: true });

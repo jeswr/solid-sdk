@@ -251,10 +251,12 @@ it("a failed final identity HEAD never becomes an ambiguous DELETE or a pending 
     (status, target) => new DriveError("conflict", status, target),
   );
   const etag = (await f.pod.fetch(url, { method: "HEAD" })).headers.get("etag") as string;
-  await expect(deletion.remove(url, etag)).rejects.toBe(cause);
+  await expect(
+    deletion.remove(url, etag, undefined, { verifyHeaders: () => undefined }),
+  ).rejects.toBe(cause);
   expect(http.mock.calls.filter(([, init]) => init?.method === "DELETE")).toEqual([]);
   expect(await deletion.recheck(ROOT)).toEqual([]);
   offline = false;
-  await deletion.remove(url, etag);
+  await deletion.remove(url, etag, undefined, { verifyHeaders: () => undefined });
   expect(f.pod.has(url)).toBe(false);
 });

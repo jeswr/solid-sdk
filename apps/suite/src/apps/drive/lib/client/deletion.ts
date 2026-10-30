@@ -84,12 +84,13 @@ export function deletionControl(http: typeof fetch, error: (status: number, url:
   const remove = async (
     url: string,
     etag: string,
-    recovery?: string,
+    recovery: string | undefined,
     commit: CommitChecks &
       CommitEffects & {
+        readonly verifyHeaders: NonNullable<CommitChecks["verifyHeaders"]>;
         readonly survivors?: readonly ResourceAssertion[];
         readonly afterCommit?: (response: Response) => void;
-      } = {},
+      },
   ) => {
     await guard(url);
     // Persist both sides before the request: reload or response loss cannot turn

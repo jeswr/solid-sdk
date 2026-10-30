@@ -5,6 +5,7 @@ import { DataFactory, Store } from "n3";
 import { afterEach, expect, it, vi } from "vitest";
 import { accessControl, privateAcl } from "../src/apps/drive/lib/client/access";
 import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
+import { confirmationOptions } from "../src/apps/drive/lib/client/commit";
 import { protectionLedger } from "../src/apps/drive/lib/client/protection-ledger";
 import {
   deleteForever,
@@ -104,12 +105,29 @@ const steps = [
 type Step = (typeof steps)[number];
 
 async function scenario(variant: Step, events: string[]) {
+  let sequence = 0;
+  vi.spyOn(crypto, "randomUUID").mockImplementation(
+    () => `00000000-0000-4000-8000-${String(++sequence).padStart(12, "0")}`,
+  );
   const tree = variant.endsWith(" tree");
   const shared = variant.startsWith("shared ");
   const step = (tree ? variant.slice(0, -5) : shared ? variant.slice(7) : variant) as Step;
   const f = await rdfPod();
   if (shared) f.policies.set(`${PRIVATE}.policy`, await aclBody(PRIVATE, true));
-  const mutations: { url: string; prior: string | undefined }[] = [];
+  const mutations: { url: string; method: string; empty: boolean; prior: string | undefined }[] =
+    [];
+  type IdentityCheck = { url: string; check: number };
+  const boundaries: {
+    target: string;
+    method: string;
+    empty: boolean;
+    identity: string | undefined;
+    check: number;
+    identities: IdentityCheck[];
+  }[] = [];
+  let finalChecks: IdentityCheck[] = [];
+  let lastIdentity: string | undefined;
+  const identityCounts = new Map<string, number>();
   let afterIdentity: ((url: string, response: Response) => Promise<void>) | undefined;
   let completionTarget: string | undefined;
   let completionWritten = false;
@@ -121,20 +139,34 @@ async function scenario(variant: Step, events: string[]) {
     if (
       method === "DELETE" ||
       (method === "PUT" && (headers.has("if-match") || url.endsWith(".policy")))
-    )
-      mutations.push({ url, prior: events.at(-1) });
+    ) {
+      mutations.push({ url, method, empty: init?.body === "", prior: events.at(-1) });
+      boundaries.push({
+        target: url,
+        method,
+        empty: init?.body === "",
+        identity: lastIdentity,
+        check: lastIdentity ? (identityCounts.get(lastIdentity) ?? 0) : 0,
+        identities: finalChecks,
+      });
+    }
     const response = await f.fetch(input, init);
     if (url === completionTarget && method === "PUT" && headers.has("if-match") && response.ok)
       completionWritten = true;
     if (method === "HEAD" && headers.has("if-match")) {
+      lastIdentity = url;
       if (url === completionTarget && completionWritten && !completionChanged) {
         completionChanged = true;
         const endpoint = `${url}foreign.policy`;
         f.policies.set(endpoint, await aclBody(url, true));
         f.endpoints.set(url, endpoint);
         response.headers.set("link", `<${endpoint}>; rel="acl"`);
-      } else if (!completionTarget || completionChanged) await afterIdentity?.(url, response);
-    }
+      } else if (!completionTarget || completionChanged) {
+        identityCounts.set(url, (identityCounts.get(url) ?? 0) + 1);
+        finalChecks.push({ url, check: identityCounts.get(url) as number });
+        await afterIdentity?.(url, response);
+      }
+    } else finalChecks = [];
     events.push(method === "HEAD" && headers.has("if-match") ? "identity HEAD" : method);
     return response;
   };
@@ -206,13 +238,13 @@ async function scenario(variant: Step, events: string[]) {
               source,
               target,
               { kind: "preserve-source" },
-              { ifMatch: selected.etag as string },
+              { ...confirmationOptions(selected) },
             )
           : client.copy(
               source,
               target,
               { kind: "preserve-source" },
-              { ifMatch: selected.etag as string },
+              { ...confirmationOptions(selected) },
             );
   } else if (step === "post-retirement private backup ACL") {
     f.intercept(async (url, init) =>
@@ -252,7 +284,7 @@ async function scenario(variant: Step, events: string[]) {
         client.write(
           source,
           "",
-          { contentType: "text/turtle", ifMatch: selected.etag as string },
+          { contentType: "text/turtle", ...confirmationOptions(selected) },
           { kind: "protect-ancestors" },
         );
     let written = false;
@@ -374,7 +406,13 @@ async function scenario(variant: Step, events: string[]) {
       .add(`${ROOT}statement`);
     await f.pod.fetch(source, { method: "PUT", body: await turtle(data) });
     target = `${PRIVATE}survivor/`;
-    await f.pod.fetch(target, { method: "PUT", body: "" });
+    // Distinguish replaying the captured metadata from quarantine's empty PUT;
+    // these are separate conditional steps with independent final assertions.
+    const previous = new Store();
+    new WacFields(target, previous, DataFactory)
+      .iris("https://example.test/previous")
+      .add(`${ROOT}surviving-statement`);
+    await f.pod.fetch(target, { method: "PUT", body: await turtle(previous) });
     const merged = await client.mergeContainer(source, target, { kind: "preserve-source" });
     if (step === "metadata undo recovery clearing")
       f.policies.set(`${target}.policy`, await aclBody(target, true));
@@ -461,7 +499,7 @@ async function scenario(variant: Step, events: string[]) {
         "private upload",
         {
           contentType: "text/plain",
-          ifMatch: selected.etag as string,
+          ...confirmationOptions(selected),
         },
         { kind: "owner-only" },
       );
@@ -547,11 +585,15 @@ async function scenario(variant: Step, events: string[]) {
       client.write(
         source,
         "",
-        { contentType: "text/turtle", ifMatch: selected.etag as string },
+        { contentType: "text/turtle", ...confirmationOptions(selected) },
         { kind: "protect-ancestors" },
       );
-  else run = () => client.remove(source, { recursive: folder, ifMatch: selected.etag as string });
+  else run = () => client.remove(source, { recursive: folder, ...confirmationOptions(selected) });
   mutations.length = 0;
+  boundaries.length = 0;
+  identityCounts.clear();
+  finalChecks = [];
+  lastIdentity = undefined;
   return {
     f,
     run,
@@ -559,6 +601,7 @@ async function scenario(variant: Step, events: string[]) {
     targetCheck,
     identityTarget: identityTarget ?? target,
     mutations,
+    boundaries,
     race: (check: typeof afterIdentity) => {
       afterIdentity = check;
     },
@@ -567,7 +610,7 @@ async function scenario(variant: Step, events: string[]) {
 
 it.each(
   steps,
-)("round 66 shape a: %s retains a replacement at its final identity check", async (step) => {
+)("round 67 shape a: %s retains a replacement at its final identity check", async (step) => {
   const events: string[] = [];
   const s = await scenario(step, events);
   let checks = 0;
@@ -595,7 +638,7 @@ it.each(
 
 it.each(
   steps,
-)("round 66 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
+)("round 67 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   const events: string[] = [];
   const s = await scenario(step, events);
@@ -616,6 +659,83 @@ it.each(
     return Reflect.apply(request, locks, args);
   });
   await s.run().catch(() => undefined);
-  expect(s.mutations.filter(({ url }) => url === s.target).length).toBeGreaterThan(0);
+  const targetMutations = s.mutations.filter(({ url }) => url === s.target);
+  if (["copy rollback without Link", "container rollback without Link"].includes(step))
+    expect(targetMutations).toEqual([]);
+  else expect(targetMutations.length).toBeGreaterThan(0);
   for (const mutation of s.mutations) expect(mutation.prior).toBe("identity HEAD");
+});
+
+it.each(
+  steps,
+)("round 67 final discovery: %s refuses an ACL endpoint change on its conditional HEAD", async (step) => {
+  const baseline = await scenario(step, []);
+  const baselineOutcome = await baseline.run().catch((error: unknown) => error);
+  const boundary = baseline.boundaries.findLast(
+    (boundary) => boundary.target === baseline.target && boundary.check > 0,
+  );
+  if (!boundary) {
+    // Missing creation discovery now refuses before any cleanup or clear can be authorized.
+    expect(
+      [
+        "copy rollback without Link",
+        "container rollback without Link",
+        "Replace completion recovery clearing",
+        "Move completion recovery clearing",
+        "Copy completion recovery clearing",
+      ],
+      JSON.stringify(baselineOutcome, [
+        "name",
+        "message",
+        "stack",
+        "cause",
+        "retainedDestinations",
+      ]),
+    ).toContain(step);
+    expect(baselineOutcome).toBeInstanceOf(Error);
+    expect(
+      baseline.boundaries
+        .filter((boundary) => boundary.target === baseline.target)
+        .every((boundary) => boundary.check === 0),
+    ).toBe(true);
+    return;
+  }
+  // Exercise every policy, parent, source, survivor and target check in this
+  // boundary, including checks that precede the very last target HEAD.
+  expect(boundary.identities.length).toBeGreaterThan(0);
+  for (const identity of boundary.identities) {
+    const s = await scenario(step, []);
+    let checks = 0;
+    let changed = false;
+    let mutationsBefore = 0;
+    s.race(async (url, response) => {
+      if (url !== identity.url || ++checks !== identity.check || !response.ok) return;
+      changed = true;
+      mutationsBefore = s.mutations.filter(
+        (mutation) =>
+          mutation.url === s.target &&
+          mutation.method === boundary.method &&
+          mutation.empty === boundary.empty,
+      ).length;
+      const endpoint = `${url}foreign-final.policy`;
+      s.f.endpoints.set(url, endpoint);
+      s.f.policies.set(endpoint, await aclBody(url, true));
+      response.headers.set("link", `<${endpoint}>; rel="acl"`);
+    });
+    const outcome = await s.run().catch((error: unknown) => error);
+    expect(changed, JSON.stringify({ step, identity })).toBe(true);
+    expect(
+      s.mutations.filter(
+        (mutation) =>
+          mutation.url === s.target &&
+          mutation.method === boundary.method &&
+          mutation.empty === boundary.empty,
+      ),
+      JSON.stringify({ step, identity, outcome, calls: s.f.calls.slice(-12) }),
+    ).toHaveLength(mutationsBefore);
+    expect(s.f.calls).not.toContainEqual({
+      url: `${identity.url}foreign-final.policy`,
+      method: "PUT",
+    });
+  }
 });

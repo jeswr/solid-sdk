@@ -210,8 +210,16 @@ it.each([
   } else if (operation === "move")
     await client.move(`${PRIVATE}secret`, `${nested}secret`, { kind: "confirm-move" });
   else {
-    const etag = required((await client.stat(`${PRIVATE}secret`)).etag);
-    await moveWithValidator(options, `${PRIVATE}secret`, `${nested}secret`, etag);
+    const identity = await client.stat(`${PRIVATE}secret`);
+    const etag = required(identity.etag);
+    await moveWithValidator(
+      options,
+      `${PRIVATE}secret`,
+      `${nested}secret`,
+      etag,
+      undefined,
+      identity.verifyHeaders,
+    );
   }
   await client.write(
     `${nested}another`,

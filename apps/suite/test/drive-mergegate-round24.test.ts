@@ -51,8 +51,12 @@ it("overlapping refused DELETEs retire their own recovery guards in IndexedDB", 
   });
   const control = deletionControl(http, (status, url) => new DriveError("conflict", status, url));
   const results = Promise.allSettled([
-    control.remove(source, '"old"', "https://overlap.test/recovery-a"),
-    control.remove(source, '"old"', "https://overlap.test/recovery-b"),
+    control.remove(source, '"old"', "https://overlap.test/recovery-a", {
+      verifyHeaders: () => undefined,
+    }),
+    control.remove(source, '"old"', "https://overlap.test/recovery-b", {
+      verifyHeaders: () => undefined,
+    }),
   ]);
   await vi.waitFor(() => expect(releases).toHaveLength(2));
   for (const release of releases) release();
@@ -188,7 +192,7 @@ it.each(
   const control = deletionControl(http, (status, url) => new DriveError("conflict", status, url));
   const recoveries = scenario.outcomes.map((_, index) => `${root}recovery-${index}`);
   const attempts = recoveries.map((recovery) =>
-    control.remove(source, '"old"', recovery).then(
+    control.remove(source, '"old"', recovery, { verifyHeaders: () => undefined }).then(
       () => undefined,
       (error: unknown) => error,
     ),
@@ -230,7 +234,8 @@ it.each(
     changed = true;
     expect(await fresh.recheck(root)).toEqual([]);
     expect(await deletionLedger(freshTransport).records()).toEqual([]);
-    for (const recovery of recoveries) await fresh.remove(recovery, '"copy"');
+    for (const recovery of recoveries)
+      await fresh.remove(recovery, '"copy"', undefined, { verifyHeaders: () => undefined });
     expect(copies.size).toBe(0);
     expect(await deletionLedger(freshTransport).records()).toEqual([]);
     expect(

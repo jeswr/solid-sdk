@@ -356,6 +356,7 @@ function MoveDialog({
       <div
         key={url}
         role="treeitem"
+        aria-label={name}
         aria-level={level}
         aria-expanded={isOpen}
         aria-selected={target === url}

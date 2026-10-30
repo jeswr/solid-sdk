@@ -1,8 +1,12 @@
 // AUTHORED-BY Codex
 
+export const unconfirmedIdentityMessage =
+  "This item's version or access discovery could not be confirmed. Refresh and confirm again.";
+
 export interface ResourceIdentity {
   readonly url: string;
   readonly etag: string;
+  readonly verifyHeaders?: (headers: Headers) => undefined;
 }
 
 /** Final content checks must also assert the endpoint captured with that resource. */
@@ -10,10 +14,43 @@ export interface ResourceAssertion extends ResourceIdentity {
   readonly verifyHeaders: (headers: Headers) => undefined;
 }
 
+/** A supplemental proof cannot authorize disposal without its captured discovery. */
+export function requireResourceAssertion<T extends ResourceIdentity>(
+  identity: T,
+  error: (status: number, url: string) => Error,
+): T & ResourceAssertion {
+  if (!identity.verifyHeaders) throw error(428, identity.url);
+  return identity as T & ResourceAssertion;
+}
+
+/** Transport an existing capture without discovering or substituting a new one. */
+export function discoveryOptions(captured: {
+  readonly verifyHeaders?: ResourceIdentity["verifyHeaders"];
+}): { readonly verifyHeaders?: ResourceAssertion["verifyHeaders"] } {
+  return captured.verifyHeaders ? { verifyHeaders: captured.verifyHeaders } : {};
+}
+
+/** Carry the user's captured discovery together with their conditional validator. */
+export function confirmationOptions(captured: {
+  readonly etag?: string;
+  readonly verifyHeaders?: ResourceAssertion["verifyHeaders"];
+}):
+  | { readonly ifMatch: string; readonly verifyHeaders?: ResourceAssertion["verifyHeaders"] }
+  | undefined {
+  return captured.etag === undefined
+    ? undefined
+    : {
+        ifMatch: captured.etag,
+        ...discoveryOptions(captured),
+      };
+}
+
 export interface PolicyIdentity {
   readonly url: string;
   /** null pins the absence of an own ACL. */
   readonly etag: string | null;
+  /** Discovery captured with this policy document, when present. */
+  readonly verifyHeaders?: (headers: Headers) => undefined;
 }
 
 /** A later read verifies a captured identity; it never supplies its replacement. */
@@ -110,6 +147,8 @@ export function commitHttp<T>(
       readonly http: typeof fetch;
       readonly url: string;
       readonly init: RequestInit;
+      /** Every existing target carries discovery captured before the final check. */
+      readonly verifyHeaders: NonNullable<CommitChecks["verifyHeaders"]>;
       readonly error: (status: number, url: string) => Error;
       readonly allowMissing?: boolean;
       readonly finalIdentities?: readonly (HttpIdentity & ResourceAssertion)[];
@@ -123,12 +162,29 @@ export function commitHttp<T>(
   if (!etag && headers.get("if-none-match") !== "*")
     return Promise.reject(options.error(428, options.url));
   const init = { ...options.init, headers };
-  const policies = new Map(
-    (options.policyGuards ?? []).map((identity) => [
-      JSON.stringify([identity.url, identity.etag]),
-      identity,
-    ]),
-  );
+  const policies = new Map<string, PolicyIdentity>();
+  for (const identity of options.policyGuards ?? []) {
+    const key = JSON.stringify([identity.url, identity.etag]);
+    const previous = policies.get(key);
+    // Deduplicate HTTP checks, never captured assertions. A supplemental guard
+    // cannot erase discovery captured earlier for the same content validator.
+    policies.set(
+      key,
+      previous
+        ? {
+            ...identity,
+            ...(previous.verifyHeaders || identity.verifyHeaders
+              ? {
+                  verifyHeaders: (headers: Headers): undefined => {
+                    previous.verifyHeaders?.(headers);
+                    identity.verifyHeaders?.(headers);
+                  },
+                }
+              : {}),
+          }
+        : identity,
+    );
+  }
   return commitIrreversible({
     ...options,
     finalIdentities: [
@@ -145,7 +201,7 @@ export function commitHttp<T>(
               url: options.url,
               etag,
               error: options.error,
-              ...(options.verifyHeaders ? { verifyHeaders: options.verifyHeaders } : {}),
+              verifyHeaders: options.verifyHeaders,
               ...(options.allowMissing ? { allowMissing: true } : {}),
             },
           ]
@@ -181,5 +237,6 @@ export async function checkIdentity(
   if (allowMissing && (response.status === 404 || response.status === 410)) return;
   if (!response.ok) throw error(response.status, url);
   assertVersion({ url, etag }, response.headers.get("etag"), error);
-  verifyHeaders?.(response.headers);
+  if (!verifyHeaders) throw error(428, url);
+  verifyHeaders(response.headers);
 }

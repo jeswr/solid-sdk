@@ -73,7 +73,14 @@ it("folder move then Undo succeeds with descendant advertised ACL auxiliaries", 
   const options = { storageUrl: ROOT, fetch: f.fetch };
   const client = createSolidDriveClient(options);
   const moved = await client.move(PRIVATE, `${PUBLIC}private/`, { kind: "confirm-move" });
-  await moveWithValidator(options, moved.url, PRIVATE, moved.etag as string, moved.tree);
+  await moveWithValidator(
+    options,
+    moved.url,
+    PRIVATE,
+    moved.etag as string,
+    moved.tree,
+    moved.verifyHeaders,
+  );
   expect(await (await client.read(`${PRIVATE}secret`)).text()).toBe("secret contents");
   expect(f.pod.has(moved.url)).toBe(false);
 });

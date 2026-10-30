@@ -108,13 +108,30 @@ export function ancestorGuard(options: {
     etag: "",
     dataset: await parseRdf(required.turtle, "text/turtle", { baseIRI: required.acl }),
   });
-  const checkProtection = async (url: string, policy: OwnAccess, etag: string) => {
+  const checkProtection = async (
+    url: string,
+    policy: OwnAccess,
+    etag: string,
+    verifyResourceHeaders: NonNullable<CommitChecks["verifyHeaders"]>,
+  ) => {
     await access.checkOwn({ url: policy.url, policy });
-    await checkIdentity(http, url, etag, options.error, false, (headers) =>
-      access.verifyEndpoint(url, headers, policy),
-    );
+    const { verifyResourceTransition: _transition, ...original } = policy;
+    let checked: OwnAccess = original;
+    await checkIdentity(http, url, etag, options.error, false, (headers) => {
+      access.verifyEndpoint(url, headers, {
+        url: policy.url,
+        verifyResourceHeaders,
+      });
+      checked = { ...original, verifyResourceHeaders: access.captureEndpoint(url, headers) };
+    });
+    return checked;
   };
-  const retireProtection = async (url: string, policy: OwnAccess, etag: string) => {
+  const retireProtection = async (
+    url: string,
+    policy: OwnAccess,
+    etag: string,
+    verifyResourceHeaders: NonNullable<CommitChecks["verifyHeaders"]>,
+  ) => {
     // Retain the policy actually installed, including any safe intersection
     // with narrower current grants, rather than the broader requested policy.
     const required = {
@@ -124,7 +141,7 @@ export function ancestorGuard(options: {
     };
     await ledger.clear(url);
     try {
-      await checkProtection(url, policy, etag);
+      return await checkProtection(url, policy, etag, verifyResourceHeaders);
     } catch (cause) {
       // A failed retirement check must still block later reads and writes.
       await ledger.set(url, required);
@@ -148,7 +165,7 @@ export function ancestorGuard(options: {
       if (!required.etag) throw new DriveAccessError("Protection receipt unavailable");
       if (!required.ownAcl) throw new DriveAccessError("Own ACL receipt unavailable");
       await install(url, policy, required.from, {
-        identity: { url, etag: required.etag },
+        identity: { url, etag: required.etag, verifyHeaders: access.captureEndpoint(url, headers) },
         restrict: true,
         knownAcl: required.ownAcl.url,
         expectedAcl: null,
@@ -167,7 +184,12 @@ export function ancestorGuard(options: {
         `This ${url.endsWith("/") ? "folder" : "file"} still requires protection. Check that pod CORS exposes Link and ETag, then retry.`,
       );
     }
-    await retireProtection(url, own.policy, headers.get("etag") ?? "");
+    await retireProtection(
+      url,
+      own.policy,
+      headers.get("etag") ?? "",
+      access.captureEndpoint(url, headers),
+    );
   };
   const install = async (url: string, policy: OwnAccess, from: string, guard: AccessWriteGuard) => {
     const saved = await access.install(policy, from, url, guard, async (written) => {
@@ -177,8 +199,7 @@ export function ancestorGuard(options: {
         ownAcl: { url: written.url, etag: written.etag },
       });
     });
-    await retireProtection(url, saved, guard.identity.etag);
-    return saved;
+    return retireProtection(url, saved, guard.identity.etag, saved.verifyResourceTransition);
   };
   const cleanup = async (url: string, response: Response, installed?: OwnAccess) => {
     const etag = response.headers.get("etag");
@@ -190,6 +211,8 @@ export function ancestorGuard(options: {
       } catch {
         return;
       } // Deleting the resource would also delete another writer's ACL.
+      const verifyCaptured =
+        installed?.verifyResourceHeaders ?? access.captureEndpoint(url, response.headers);
       const empty = new Store();
       await discardVersion<Store | string>({
         url,
@@ -207,8 +230,10 @@ export function ancestorGuard(options: {
           typeof content === "string" ? content === "" : ownsEmptyContainer(url, empty, content),
         remove: (validator) =>
           options.deleteVersion(url, validator, {
-            verifyHeaders: (headers) =>
-              access.verifyEndpoint(url, headers, endpoint ? { url: endpoint } : undefined),
+            verifyHeaders: (headers) => {
+              verifyCaptured(headers);
+              return access.verifyEndpoint(url, headers, endpoint ? { url: endpoint } : undefined);
+            },
             policyGuards: ownAccessGuards(
               endpoint ? { url: endpoint, policy: installed ?? null } : undefined,
             ),
@@ -262,7 +287,14 @@ export function ancestorGuard(options: {
         const policy =
           decision.kind === "archived"
             ? await install(url, decision.acl, decision.from, {
-                identity: { url, etag: response.headers.get("etag") ?? "" },
+                identity: {
+                  url,
+                  etag: response.headers.get("etag") ?? "",
+                  verifyHeaders: (headers) => {
+                    binding.verifyEndpoint(url, headers);
+                    return undefined;
+                  },
+                },
                 knownAcl: binding.destinationOwn?.url,
                 expectedAcl: null,
                 policyGuards: binding.identities,

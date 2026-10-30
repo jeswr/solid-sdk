@@ -91,6 +91,13 @@ before clearing, and recovery deletion checks survivor assertions before DELETE.
 Payload overwrites keep their approved If-Match verbatim; atomic parent receipts
 advance ancestor guards rather than a later overwrite decision.
 
+The [round 67 audit](../../../../../test/drive-review-round67-audit.md) maps every
+audited call site, confirmation-to-commit discovery transport, policy/archive and
+survivor assertions, access-mode capture, moved multi-selection hydration, and the
+54-variant matrices for both ordering shapes and final ACL endpoint changes.
+Quarantine clearing carries its original target assertion; changed discovery
+refuses clearing while retaining the reported private backups.
+
 The [round 66 audit](../../../../../test/drive-review-round66-audit.md) maps every
 audited call site, parent/backup/survivor discovery assertions, the immutable
 folder overwrite validator, Details reconciliation and relocation, and the
