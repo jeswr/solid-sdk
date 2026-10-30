@@ -56,10 +56,11 @@
     "api:check": "npm run build && npx --yes @microsoft/api-extractor@7 run"
   },
   "dependencies": {
-    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/ldp-container": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",
-    "@solid/object": "^0.6.0",
     "n3": "^2.0.3"
   },
   "peerDependencies": {

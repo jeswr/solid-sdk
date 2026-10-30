@@ -16,11 +16,13 @@ design + inventory + phasing lives in:
 [`decisions/0001-monorepo-architecture.md`](decisions/0001-monorepo-architecture.md)
 (imported from `prod-solid-server/decisions/0022`, the ADR of record).
 
-**Current state:** 42 SDK packages and 13 applications are present. Forty packages and all
-applications were imported with full history; `@jeswr/synthetic-rdf` and `@jeswr/solid-seed` are
-the maintainer-directed new packages tracked by solid-mortgage beads sm-63 and sm-64. The
-applications comprise the eight `pod-*` apps plus Access Manager, Pod Manager, Issues, App Store,
-and Coeliac. Mirror publishing has NOT run yet. Do not import further packages outside the phased
+**Current state:** 72 workspace packages and 18 applications are present. The original
+forty packages and thirteen applications were imported with full history; later workspace
+additions are inventoried in `suite.json`. Maintainer-directed packages include
+`@jeswr/synthetic-rdf`, `@jeswr/solid-seed`, and the shared security-critical LDP listing
+helper `@jeswr/ldp-container` (bead sst-8xm.7). The latter has no mirror repository configured.
+The browser extension (`apps/extension`, `@jeswr/app-extension`) was imported with full history
+from `jeswr/solid-suite-extension`. Mirror publishing has NOT run yet. Do not import further packages outside the phased
 package plan or explicit maintainer direction.
 
 ## The model in four rules
@@ -54,6 +56,27 @@ package plan or explicit maintainer direction.
    because dist is not committed and workspace `.d.ts` resolution needs built output. roborev
    reviews every commit (`.roborev.toml`: codex / gpt-5.6-sol, min severity low); read verdicts
    and address findings.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
+`pnpm run check:sdk-layers` (also part of `lint:root`) runs `scripts/check-sdk-layers.mjs`
+against the `dependencies`, `peerDependencies`, and `optionalDependencies` of workspace
+package, app (including `apps/*/web`), and tool manifests, enforcing ADR-001 D1 and its
+2026-10-25 amendment. Apps cannot depend directly
+on `@sparq-org/sparq` or the `@jeswr/storage-client/solid` and `/lws` backends;
+`@jeswr/storage-client` may depend only on `@jeswr/storage-capabilities`, `@jeswr/fetch-rdf`,
+`@jeswr/rdf-serialize`, `@jeswr/guarded-fetch`, `@solid/object`, `@rdfjs/wrapper`, and `n3`;
+`@jeswr/pod-auth` cannot depend on `@jeswr/storage-client`. In storage-client and pod-auth
+manifests, and for restricted package keys (including subpaths) in any scanned manifest,
+the guard accepts only `workspace:*`, `workspace:^`, `workspace:~`,
+`workspace:<semver range>`, and plain semver ranges. Aliases, paths, other protocols,
+and tags fail with "unsupported dependency spec for a layered package" without printing
+their specs. Layer rules apply to the dependency key. Unrestricted manifests' unrelated
+dependencies are ignored.
+It reports violating manifest paths, fields, and dependency names. Development
+dependencies and source import restrictions are outside this manifest check's scope.
+Fixture tests run through `pnpm run test:root`; `--root <directory>` selects
+an isolated workspace for testing the script.
 
 <!-- AUTHORED-BY Codex GPT-5 -->
 ## Local agent skills

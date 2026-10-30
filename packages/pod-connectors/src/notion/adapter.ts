@@ -1,0 +1,142 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+/**
+ * Notion → Documents. `POST /v1/search` lists everything the integration can
+ * see: pages become `schema:TextDigitalDocument`, databases become
+ * `schema:Dataset`. Every call needs the `Notion-Version` header.
+ *
+ * Live-mode honesty: Notion's token endpoint requires HTTP Basic auth with
+ * the client secret (no public PKCE) — browser live mode needs the maintainer's
+ * token proxy; Node hosts can supply a local secret. Snapshot semantics (search has
+ * page cursors, not change cursors).
+ */
+import { DataFactory, Store } from "n3";
+import { postJson } from "../core/fixture-fetch.js";
+import { Pagination } from "../core/pagination.js";
+import { arr, optionalDate, optionalText, SkipCounter } from "../core/safe.js";
+import type { ImportContext, ImportOutcome, IntegrationAdapter } from "../core/types.js";
+import { CLASSES, DataCollection, DigitalDocument } from "../core/vocab.js";
+import { NOTION_FIXTURES, type NotionPage, type NotionSearchAnswer } from "./fixtures.js";
+import { vocabMap } from "./vocab-map.js";
+
+const ID = "notion";
+const API = "https://api.notion.com/v1";
+
+export const notionAdapter: IntegrationAdapter = {
+  vocabMap,
+  metadata: {
+    id: ID,
+    name: "Notion",
+    tier: "A",
+    authKind: "oauth-pkce",
+    scopes: [], // Notion grants are per-workspace page selection, not scopes.
+    categories: ["documents"],
+    whatYouGet: "Your pages and databases (titles, links, edit dates) into Documents.",
+    requirements: [
+      "Create a public integration at notion.so/my-integrations.",
+      "Add <app-origin>/oauth-callback.html as a redirect URI.",
+      "Set NEXT_PUBLIC_NOTION_CLIENT_ID.",
+      "Notion's token endpoint requires Basic auth with the client secret: deploy the token-exchange proxy and set NEXT_PUBLIC_NOTION_TOKEN_PROXY.",
+    ],
+  },
+  oauth: {
+    clientId: undefined,
+    authorizationEndpoint: "https://api.notion.com/v1/oauth/authorize",
+    tokenEndpoint: "https://api.notion.com/v1/oauth/token",
+    scopes: [],
+    tokenExchange: "proxy",
+    tokenProxyUrl: undefined,
+    tokenRequest: "basic-json",
+    extraAuthParams: { owner: "user" },
+  },
+  apiHeaders: { "notion-version": "2022-06-28" },
+  fixtures: () => NOTION_FIXTURES,
+
+  async import(ctx: ImportContext): Promise<ImportOutcome> {
+    const skipped = new SkipCounter();
+
+    ctx.progress({ label: "Searching your Notion workspace…", done: 0, total: 2 });
+    const results = [];
+    const pagination = new Pagination(ID);
+    let cursor: string | undefined;
+    do {
+      const search = await postJson<NotionSearchAnswer>(ID, ctx.api, `${API}/search`, {
+        page_size: 100,
+        ...(cursor ? { start_cursor: cursor } : {}),
+      });
+      results.push(...arr(search?.results));
+      cursor = search?.has_more ? pagination.next(search.next_cursor) : undefined;
+    } while (cursor);
+
+    const pagesDoc = ctx.resolve("documents/pages.ttl");
+    const dbDoc = ctx.resolve("documents/databases.ttl");
+    const pages = new Store();
+    const databases = new Store();
+
+    for (const result of results) {
+      // A result with no id has no stable fragment IRI — skip it.
+      const id = result ? optionalText(result.id) : undefined;
+      if (!result || id === undefined) {
+        skipped.skip();
+        continue;
+      }
+      if (result.object === "page") {
+        const page = new DigitalDocument(`${pagesDoc}#page-${id}`, pages, DataFactory).mark(
+          CLASSES.TextDigitalDocument,
+        );
+        page.name = pageTitle(result);
+        page.identifier = id;
+        page.sourceUrl = optionalText(result.url);
+        page.dateCreated = optionalDate(result.created_time);
+        page.dateModified = optionalDate(result.last_edited_time);
+      } else {
+        const db = new DataCollection(`${dbDoc}#db-${id}`, databases, DataFactory).mark();
+        db.name = plain(result.title) ?? "Untitled database";
+        db.identifier = id;
+        db.description = plain(result.description);
+        db.sourceUrl = optionalText(result.url);
+        db.dateCreated = optionalDate(result.created_time);
+        db.dateModified = optionalDate(result.last_edited_time);
+      }
+    }
+
+    ctx.progress({ label: "Saving pages and databases…", done: 1, total: 2 });
+    await ctx.write({
+      slug: "documents/pages.ttl",
+      category: "documents",
+      forClass: CLASSES.TextDigitalDocument,
+      dataset: pages,
+      sourceUrl: `${API}/search`,
+    });
+    await ctx.write({
+      slug: "documents/databases.ttl",
+      category: "documents",
+      forClass: CLASSES.Dataset,
+      dataset: databases,
+      sourceUrl: `${API}/search`,
+    });
+
+    ctx.progress({ label: "Done", done: 2, total: 2 });
+    return { skipped: skipped.value };
+  },
+};
+
+/** A page's title property is whichever property has `type: "title"`. */
+function pageTitle(page: NotionPage): string {
+  for (const prop of Object.values(page.properties ?? {})) {
+    if (prop && prop.type === "title" && prop.title) {
+      const text = plain(prop.title);
+      if (text) return text;
+    }
+  }
+  return "Untitled";
+}
+
+function plain(
+  rich: ({ plain_text?: string | null } | null)[] | null | undefined,
+): string | undefined {
+  const joined = arr(rich)
+    .map((r) => optionalText(r?.plain_text) ?? "")
+    .join("");
+  return joined.length > 0 ? joined : undefined;
+}

@@ -13,10 +13,12 @@
     "workspace": "pnpm + Turborepo suite workspace (packages are libraries; apps are private deployables; internal deps workspace:*)",
     "lint": "Biome",
     "test": "vitest orchestrated and cached by Turborepo",
-    "publish": "per-package read-only mirror repos via scripts/mirror-publish.mjs; npm publish deferred (needs:user)"
+    "publish": "per-package read-only mirror repos via scripts/mirror-publish.mjs; npm publish deferred (needs:user)",
+    "deploy": "GitHub Pages: https://jeswr.github.io/solid-sdk/<slug>/ for the ten Vite apps; Vercel: solid-suite (main only); Pod Manager, Issues and Coeliac: git deployments disabled"
   },
   "packages": [
     "@jeswr/agent-authz-verifier",
+    "@jeswr/agentic-legacy-bridge",
     "@jeswr/app-shell",
     "@jeswr/auth-solid",
     "create-solid-app",
@@ -25,9 +27,11 @@
     "@jeswr/federation-registry",
     "@jeswr/federation-trust",
     "@jeswr/guarded-fetch",
+    "@jeswr/ldp-container",
     "@jeswr/matrix-chat-to-pod",
     "n8n-nodes-solid",
     "@jeswr/openclaw-memory-solid",
+    "@jeswr/personal-agent",
     "@jeswr/rdf-serialize",
     "@jeswr/rxdb-solid",
     "@jeswr/solid-a2a",
@@ -72,7 +76,19 @@
     "@jeswr/pkg-memory",
     "@jeswr/mcp-oauth",
     "@jeswr/agent-session-capture",
-    "@jeswr/suite-vocab"
+    "@jeswr/suite-vocab",
+    "@jeswr/pod-connectors",
+    "@jeswr/agent-model",
+    "@jeswr/agent-channels",
+    "@jeswr/agent-mandate",
+    "@jeswr/agent-executor",
+    "@jeswr/agent-audit",
+    "@jeswr/agent-model-gateway",
+    "@jeswr/agent-credentials",
+    "@jeswr/agent-memory",
+    "@jeswr/agent-registry",
+    "@jeswr/fetch-rdf",
+    "@jeswr/suite-native"
   ],
   "applications": [
     {
@@ -143,6 +159,26 @@
     {
       "slug": "mcp-server",
       "name": "@jeswr/app-mcp-server",
+      "kind": "application"
+    },
+    {
+      "slug": "agent-daemon",
+      "name": "@jeswr/app-agent-daemon",
+      "kind": "application"
+    },
+    {
+      "slug": "mobile",
+      "name": "@jeswr/app-mobile",
+      "kind": "application"
+    },
+    {
+      "slug": "extension",
+      "name": "@jeswr/app-extension",
+      "kind": "application"
+    },
+    {
+      "slug": "pod-migrator",
+      "name": "@jeswr/app-pod-migrator",
       "kind": "application"
     }
   ],

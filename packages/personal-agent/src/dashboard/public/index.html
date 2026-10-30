@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="light" />
+    <title>Agent dashboard</title>
+    <link rel="icon" href="/assets/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/assets/app.css" />
+    <script src="/assets/app.js" type="module"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header">
+      <p class="brand">
+        <img src="/assets/icon.svg" alt="" width="24" height="24" />
+        <span>Agent dashboard</span>
+      </p>
+      <p class="caveat">Local and synthetic: nothing is sent or booked from here.</p>
+    </header>
+    <div class="layout">
+      <nav class="site-nav" aria-label="Sections">
+        <ul>
+          <li><a href="#overview" data-view="overview">Overview</a></li>
+          <li><a href="#connections" data-view="connections">Connections</a></li>
+          <li><a href="#calendars" data-view="calendars">Calendars</a></li>
+          <li><a href="#permissions" data-view="permissions">Permissions</a></li>
+          <li><a href="#triage" data-view="triage">Message triage</a></li>
+          <li><a href="#actions" data-view="actions">Actions</a></li>
+        </ul>
+      </nav>
+      <main id="main" tabindex="-1">
+        <div id="notice" class="notice" role="status" aria-live="polite"></div>
+        <div id="view" aria-busy="true">
+          <p class="loading">Loading…</p>
+        </div>
+      </main>
+    </div>
+    <noscript>
+      <p class="noscript">This dashboard needs JavaScript (served from this machine only).</p>
+    </noscript>
+  </body>
+</html>

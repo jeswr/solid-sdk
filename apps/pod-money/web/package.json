@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@jeswr/app-shell": "workspace:*",
-    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/solid-elements": "workspace:*",
     "@jeswr/solid-session-restore": "workspace:*",
     "@lit/react": "^1.0.8",
@@ -37,7 +37,8 @@
     "n3": "^2.0.3",
     "oauth4webapi": "^3.8.6",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "@jeswr/suite-vocab": "workspace:*"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",

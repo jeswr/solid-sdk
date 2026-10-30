@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * `diet:TriggerClass` — a trigger (gluten, lactose, sulphites, …) as a SKOS
@@ -19,17 +20,9 @@
  */
 
 import type { DatasetCore, Literal, DataFactory as RdfDataFactory } from "@rdfjs/types";
-import {
-  LiteralAs,
-  LiteralFrom,
-  NamedNodeAs,
-  NamedNodeFrom,
-  OptionalAs,
-  OptionalFrom,
-  SetFrom,
-  TermWrapper,
-} from "@rdfjs/wrapper";
+import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { AliasOptionalAs, AliasOptionalFrom, AliasSetFrom, hasType } from "./legacy.js";
 import { storeToTurtle } from "./serialize.js";
 import { setIfDefined, tryRead } from "./util.js";
 import {
@@ -42,6 +35,7 @@ import {
   type TriggerSlug,
   triggerIri,
   triggerSlugFromIri,
+  vocabularyAliases,
 } from "./vocab.js";
 
 const XSD_DECIMAL = "http://www.w3.org/2001/XMLSchema#decimal";
@@ -166,7 +160,12 @@ export class TriggerClass extends TermWrapper {
 
   /** The `rdf:type` set as a live set of IRI strings. */
   get types(): Set<string> {
-    return SetFrom.subjectPredicate(this, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string);
+    return AliasSetFrom.subjectPredicate(
+      this,
+      rdf("type"),
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
   }
 
   /** Stamp as a `diet:TriggerClass` + `skos:Concept`. Idempotent; returns `this`. */
@@ -178,39 +177,39 @@ export class TriggerClass extends TermWrapper {
 
   /** Whether this subject is a `diet:TriggerClass`. */
   get isTriggerClass(): boolean {
-    return this.types.has(DIET_TRIGGER_CLASS);
+    return hasType(this, DIET_TRIGGER_CLASS);
   }
 
   /** `skos:prefLabel`. */
   get label(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, skos("prefLabel"), LiteralAs.string);
+    return AliasOptionalFrom.subjectPredicate(this, skos("prefLabel"), LiteralAs.string);
   }
   set label(value: string | undefined) {
-    OptionalAs.object(this, skos("prefLabel"), value, LiteralFrom.string);
+    AliasOptionalAs.object(this, skos("prefLabel"), value, LiteralFrom.string);
   }
 
   /** `diet:lagWindowMin` — earliest plausible onset, hours. */
   get lagWindowMin(): number | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("lagWindowMin"), LiteralAs.number);
+    return AliasOptionalFrom.subjectPredicate(this, diet("lagWindowMin"), LiteralAs.number);
   }
   set lagWindowMin(value: number | undefined) {
-    OptionalAs.object(this, diet("lagWindowMin"), value, decimalFrom);
+    AliasOptionalAs.object(this, diet("lagWindowMin"), value, decimalFrom);
   }
 
   /** `diet:lagWindowMax` — latest plausible onset, hours. */
   get lagWindowMax(): number | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("lagWindowMax"), LiteralAs.number);
+    return AliasOptionalFrom.subjectPredicate(this, diet("lagWindowMax"), LiteralAs.number);
   }
   set lagWindowMax(value: number | undefined) {
-    OptionalAs.object(this, diet("lagWindowMax"), value, decimalFrom);
+    AliasOptionalAs.object(this, diet("lagWindowMax"), value, decimalFrom);
   }
 
   /** `diet:lagMode` — the modal lag, hours. */
   get lagMode(): number | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("lagMode"), LiteralAs.number);
+    return AliasOptionalFrom.subjectPredicate(this, diet("lagMode"), LiteralAs.number);
   }
   set lagMode(value: number | undefined) {
-    OptionalAs.object(this, diet("lagMode"), value, decimalFrom);
+    AliasOptionalAs.object(this, diet("lagMode"), value, decimalFrom);
   }
 }
 
@@ -234,8 +233,10 @@ function parseTriggerClassImpl(
   slug: TriggerSlug,
   dataset: DatasetCore,
 ): TriggerClassData | undefined {
-  const doc = new TriggerClass(triggerClassSubject(slug), dataset, DataFactory);
-  if (!doc.isTriggerClass) return undefined;
+  const doc = vocabularyAliases(triggerClassSubject(slug))
+    .map((subject) => new TriggerClass(subject, dataset, DataFactory))
+    .find((candidate) => candidate.isTriggerClass);
+  if (!doc) return undefined;
   // (A TriggerClass has NO sh:maxCount 1 scalar field in the vendored SHACL — the lag
   // values are unconstrained and skos:prefLabel is per-language — so no singleton
   // guard applies; the accessors' first-match read is the deterministic choice.)

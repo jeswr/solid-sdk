@@ -17,10 +17,11 @@
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
     "@jeswr/app-shell": "workspace:*",
-    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/solid-odrl": "workspace:*",
     "@jeswr/solid-task-model": "workspace:*",
+    "@jeswr/suite-vocab": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",
     "@solid/object": "^0.6.0",
     "@solid/reactive-authentication": "0.1.5",
