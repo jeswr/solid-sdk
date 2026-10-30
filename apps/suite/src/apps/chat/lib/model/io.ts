@@ -6,6 +6,7 @@ import type { MessageTask } from "@jeswr/solid-chat-interop";
 import type { DatasetCore } from "@rdfjs/types";
 import { Container } from "@solid/object";
 import { DataFactory, Store } from "n3";
+import { aclLink } from "./links";
 import {
   appendMessage,
   editMessage,
@@ -279,11 +280,12 @@ export async function createRoom(
       body: "",
     }),
   );
-  const aclRef = response.headers
-    .get("link")
-    ?.split(",")
-    .map((part) => part.match(/<([^>]+)>\s*;\s*rel="?acl"?(?:\s*;|\s*$)/i))
-    .find((match) => match !== null)?.[1];
+  let aclRef = aclLink(response.headers.get("link"));
+  if (!aclRef) {
+    // Solid advertises auxiliary resources on HEAD/GET; PUT may omit Link.
+    const discovery = checked(await scoped(fetch, base)(room, { method: "HEAD" }));
+    aclRef = aclLink(discovery.headers.get("link"));
+  }
   if (!aclRef) throw new ChatModelError("invalid-input");
   const aclUrl = assertWithinPodScope(base, new URL(aclRef, room).href);
   await saveChat(fetch, base, aclUrl, buildRoomAcl(room, aclUrl, input.creator, input.members), {

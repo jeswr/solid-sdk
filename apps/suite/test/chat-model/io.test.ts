@@ -190,6 +190,86 @@ it("uses absolute or relative advertised ACL URLs and preserves an existing ACL 
   expect(denied.files.get(`${room}.acl`)?.body).toBe("existing");
 });
 
+it.each([
+  '<.acl>; type="text/turtle"; rel="acl"',
+  '<.acl>; rel="acl describedby"',
+  '<metadata>; rel=describedby; title="a, b; \\"c\\"", <.acl>; ReL="describedby ACL"',
+  '<policy,team.acl>; title="team; policy"; rel=acl',
+])("discovers the advertised ACL from valid Link syntax: %s", async (link) => {
+  const p = pod();
+  p.setFault((url, method) =>
+    url === room && method === "PUT"
+      ? new Response(null, { status: 201, headers: { link } })
+      : undefined,
+  );
+  await createRoom(p.fetch, storage, "team", roomInput);
+  const acl = link.includes("policy,team.acl") ? `${room}policy,team.acl` : `${room}.acl`;
+  expect(p.files.has(acl)).toBe(true);
+  expect(p.calls.some(({ method }) => method === "HEAD")).toBe(false);
+});
+
+it.each([
+  undefined,
+  "<metadata>; rel=describedby",
+])("discovers an ACL with HEAD when the room PUT does not advertise it: %s", async (link) => {
+  const p = pod();
+  const acl = `${storage}chat/team-policy.ttl`;
+  p.setFault((url, method) => {
+    if (url === room && method === "PUT")
+      return new Response(null, { status: 201, headers: link === undefined ? {} : { link } });
+    if (url === room && method === "HEAD")
+      return new Response(null, {
+        headers: { link: `<${acl}>; type="text/turtle"; rel="acl describedby"` },
+      });
+    return undefined;
+  });
+  await createRoom(p.fetch, storage, "team", roomInput);
+  expect(p.files.has(acl)).toBe(true);
+  expect(p.files.has(roomIndex(room))).toBe(true);
+  expect(p.calls.filter(({ url }) => url === room).map(({ method }) => method)).toEqual([
+    "PUT",
+    "HEAD",
+  ]);
+  expect(p.calls.every(({ init }) => init.redirect === "manual")).toBe(true);
+});
+
+it("fails closed when HEAD cannot discover a safe ACL and propagates discovery errors", async () => {
+  for (const headers of [
+    {},
+    { link: "<https://evil.example/.acl>; rel=acl" },
+    { link: '<.acl>; rel=acl; anchor="https://other.example/room/"' },
+  ]) {
+    const p = pod();
+    p.setFault((url, method) =>
+      url === room
+        ? new Response(null, {
+            status: method === "PUT" ? 201 : 200,
+            headers: method === "PUT" ? {} : headers,
+          })
+        : undefined,
+    );
+    await expect(createRoom(p.fetch, storage, "team", roomInput)).rejects.toThrow();
+    expect(p.files.has(`${room}.acl`)).toBe(false);
+    expect(p.files.has(roomIndex(room))).toBe(false);
+    expect(p.calls.every(({ url }) => url.startsWith(storage))).toBe(true);
+  }
+  for (const status of [403, 500, 302]) {
+    const p = pod();
+    p.setFault((url, method) =>
+      url === room
+        ? new Response(null, {
+            status: method === "PUT" ? 201 : status,
+            headers: { location: "https://evil.example/room/" },
+          })
+        : undefined,
+    );
+    await expect(createRoom(p.fetch, storage, "team", roomInput)).rejects.toThrow();
+    expect(p.files.has(roomIndex(room))).toBe(false);
+    expect(p.calls.at(-1)?.method).toBe("HEAD");
+    expect(p.calls.at(-1)?.url).toBe(room);
+  }
+});
+
 it("rejects a non-container at an existing parent URL", async () => {
   const p = pod();
   p.files.set(`${storage}chat/`, { body: "", etag: '"old"' });
