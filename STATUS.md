@@ -252,3 +252,57 @@ launched or screenshots taken; the existing dispatcher browser handoff remains.
 Roborev is unavailable (`command -v roborev` found no executable), so no automated
 per-commit verdicts could be read. No open questions or unfinished implementation
 work remain for these two findings.
+
+## Fix round 7 — review at `5d1dda46c301`
+
+Fixed exactly the two review findings:
+
+- `a1c1c7da` — `fix(suite-ui): prioritize incoming controlled dates`: skip locale
+  reinterpretation of the previous draft when accepting a changed controlled value.
+  Locale-only changes still reinterpret the draft.
+- `6bebdd6c` — `fix(suite): use a fixed instant in the timed fixture`: use the fixed
+  ISO instant `2026-10-27T17:00:00.000Z` for the timed picker example so server and
+  initial browser renders receive the same value.
+- Final `docs: record sst-ytg round 7 validation` commit records this verification.
+
+Added five unit regression cases. All five failed before implementation: three
+controlled-parent cases reproduced stale callbacks when locale and an incoming
+all-day date, instant, or cleared value changed together; two fixture cases reproduced
+different initial HTML between UTC and America/New_York/Pacific/Kiritimati. They now
+pass. Controlled-parent tests also check the retained incoming value, displayed input,
+live interpretation, absence of callbacks, and subsequent edits in the new locale.
+The existing locale-only interpretation test still passes.
+
+Added a Playwright case for the actual picker fixture in America/New_York: assert
+the fixed instant localizes to 13:00, the time control agrees, no page/console errors
+occur during hydration, and axe has no serious/critical violations. No browser was
+launched or screenshots taken, as required by the original brief; the dispatcher
+must run the existing browser handoff, including this new case.
+
+Commands used Node `v24.22.1` with:
+
+```sh
+export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"
+```
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/suite-ui run lint && pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/suite-ui run typecheck && pnpm --filter @jeswr/suite-ui run test` | PASS; 4 test files, 135 tests |
+| `pnpm exec turbo run build --filter='@jeswr/app-suite^...' --concurrency=4` | PASS; built all 5 workspace dependencies before the app gate |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS; 110 test files, 5,827 tests, coverage thresholds passed |
+| `pnpm run lint:root` | PASS; all root guards and 74 contrast pairs |
+| `TURBO_SCM_BASE=5d1dda46c301bd8b4fd368fb8a7471e951515df1 pnpm run gate` | PASS; 13 successful tasks, 13 total |
+| `pnpm run gate:full` | FAIL outside fix scope; 281 successful tasks, 347 total before abort at `@jeswr/federation-trust#test`; all 745 root tests passed |
+| `git diff --check` | PASS |
+
+The full gate reproduced the previously recorded snapshot failure at
+`packages/federation-trust/test/characterization.test.ts:196`, "delegation credential
+structure is stable": identical public JWK fields serialize as `kty,crv,x` rather
+than snapshot order `crv,x,kty`. The other 53 federation-trust tests passed. That
+package is unchanged by this round. Build-generated untracked callback/client-ID
+files in the eight pod web apps were removed.
+
+No dependencies changed or dependency-policy checks were needed. Roborev is
+unavailable (`command -v roborev` found no executable), so no automated per-commit
+verdicts could be read. No new open questions or unfinished implementation work
+remain for these two findings.
