@@ -1,0 +1,11 @@
+{
+  "authoredBy": "Codex GPT-6.1-Sol",
+  "styles": {
+    "borderRadius": "6px",
+    "borderStyle": "solid",
+    "borderWidth": "1px",
+    "fontSize": "14px",
+    "fontWeight": "500",
+    "height": 36
+  }
+}

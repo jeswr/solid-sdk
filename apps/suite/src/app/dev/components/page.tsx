@@ -37,6 +37,11 @@ export default function ComponentsPage() {
         <a href="/dev/components/top-bar">TopBar slots</a>
         <a href="/dev/components/sidebar-nav">Sidebar navigation</a>
         <a href="/dev/components/details-pane">Details pane and states</a>
+        <a href="/dev/components/people-picker">PeoplePicker</a>
+        <a href="/dev/components/role-select">RoleSelect</a>
+        <a href="/dev/components/duration-chips">DurationChips</a>
+        <a href="/dev/components/consent-sheet">ConsentSheet</a>
+        <a href="/dev/components/permission-row">PermissionRow</a>
       </nav>
     </main>
   );

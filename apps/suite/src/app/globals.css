@@ -9,6 +9,7 @@
 @import "@jeswr/suite-ui/styles/shell.css";
 @import "@jeswr/suite-ui/styles/components.css";
 @import "@jeswr/suite-ui/styles/collections.css";
+@import "@jeswr/suite-ui/styles/sharing.css";
 @source "../../../../packages/suite-ui/src";
 
 * {
@@ -275,6 +276,12 @@ ul {
   }
 }
 
+.sharing-fixture-grid {
+  display: grid;
+  gap: var(--space-6);
+  max-width: 880px;
+  min-width: 0;
+}
 /* DS-03 fixture framing; component anatomy lives in suite-ui. */
 .navigation-fixture {
   min-height: 100dvh;
