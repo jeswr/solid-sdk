@@ -157,3 +157,75 @@ it("round45 detached continuation styles retain their block type when Word remov
     );
   }
 });
+
+it.each([
+  "bulletList",
+  "orderedList",
+  "taskList",
+])("round46 tables retain %s ancestry and continuation after a Word edit", async (type) => {
+  const table: JSONContent = {
+    type: "table",
+    content: [
+      {
+        type: "tableRow",
+        content: [{ type: "tableCell", content: [p("Cell"), list("bulletList", p("Cell list"))] }],
+      },
+    ],
+  };
+  for (const nested of [false, true]) {
+    const original = normaliseImport({
+      type: "doc",
+      content: [
+        list(
+          type,
+          p("First"),
+          ...(nested
+            ? [list(type, p("Nested"), table, p("Continuation"))]
+            : [table, p("Continuation")]),
+        ),
+        table,
+        p("Final"),
+      ],
+    }).json;
+    const { json } = await editedRoundTrip(original);
+    expect(json, `nested ${nested}`).toEqual({
+      ...original,
+      content: [
+        ...(original.content ?? []).slice(0, -1),
+        normaliseImport({ type: "doc", content: [p("Edited")] }).json.content?.[0],
+      ],
+    });
+  }
+});
+
+it("round46 Word tables without table properties remain outside preceding lists", async () => {
+  const original = normaliseImport({
+    type: "doc",
+    content: [
+      list("bulletList", p("First")),
+      {
+        type: "table",
+        content: [{ type: "tableRow", content: [{ type: "tableCell", content: [p("Cell")] }] }],
+      },
+      p("Final"),
+    ],
+  }).json;
+  const { json } = await editedRoundTrip(original, false, (source) => {
+    const xml = new DOMParser().parseFromString(source, "application/xml");
+    for (const properties of Array.from(
+      xml.getElementsByTagNameNS(
+        "http://schemas.openxmlformats.org/wordprocessingml/2006/main",
+        "tblPr",
+      ),
+    ))
+      properties.remove();
+    return new XMLSerializer().serializeToString(xml);
+  });
+  expect(json).toEqual({
+    ...original,
+    content: [
+      ...(original.content ?? []).slice(0, -1),
+      normaliseImport({ type: "doc", content: [p("Edited")] }).json.content?.[0],
+    ],
+  });
+});

@@ -1,7 +1,14 @@
 // AUTHORED-BY Codex
 import { expect, it, vi } from "vitest";
 import type { IndexeddbPersistence } from "y-indexeddb";
+import type { MirrorMetadata } from "../src/apps/docs/editor/mirror-metadata";
 import { updateMirrorMetadata } from "../src/apps/docs/editor/mirror-metadata";
+import {
+  mergePendingEdits,
+  type PendingEdit,
+  pendingEditMetadata,
+  pendingEdits,
+} from "../src/apps/docs/editor/pending-edits";
 
 /** Serial request scheduler for the IndexedDB custom-store transaction seam. */
 function database(values: Map<string, unknown>, fail = false) {
@@ -100,4 +107,19 @@ it("waits for an opening mirror's database before comparing and updating metadat
   await writing;
   expect(values.get("title")).toBe("Pending title");
   expect(get).not.toHaveBeenCalled();
+});
+
+it("round46 a delayed adopted body write cannot erase its adopter's subsequent rename", () => {
+  const adopted: PendingEdit = {
+    owner: "A",
+    title: "First",
+    baseTitle: "Plan",
+    baseModified: undefined,
+    localTitle: "First",
+  };
+  const own: PendingEdit = { ...adopted, owner: "B", title: "My title", localTitle: "My title" };
+  const current = pendingEditMetadata([own]) as MirrorMetadata;
+  expect(pendingEdits(mergePendingEdits(current, adopted, "B", false) as MirrorMetadata)).toEqual([
+    own,
+  ]);
 });

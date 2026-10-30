@@ -2,10 +2,11 @@
 // AUTHORED-BY Codex
 import { Blob as NodeBlob } from "node:buffer";
 import { createRequire } from "node:module";
+import { SolidUpdateStore } from "@jeswr/y-solid";
 import { generateHTML, type JSONContent } from "@tiptap/react";
 import { yDocToProsemirrorJSON } from "@tiptap/y-tiptap";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { XmlElement, XmlText } from "yjs";
+import { applyUpdate, Doc, encodeStateAsUpdate, XmlElement, XmlText } from "yjs";
 import { baseExtensions } from "../src/apps/docs/editor/extensions";
 import { DocumentPersistence } from "../src/apps/docs/editor/persistence";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
@@ -210,4 +211,105 @@ it("round45 even single-resource compaction applies an unseen full state", async
   expect(await a.provider?.compact()).toBeUndefined();
   expect(a.doc.getXmlFragment("prosemirror").toString()).toContain("Single remote paragraph");
   expect(await a.provider?.sync()).toBe(0);
+});
+
+it.each([
+  true,
+  false,
+])("round46 adopted renames cannot overwrite their owner's newer intent (broadcast %s)", async (broadcast) => {
+  if (broadcast) broadcasts();
+  const { client, original: a, url, offline } = await fixture();
+  offline(true);
+  a.online = false;
+  a.stageTitle("First");
+  await a.flush();
+  const b = client();
+  await b.open(url);
+  expect(b.title).toBe("First");
+  a.stageTitle("Final");
+  await a.flush();
+  await a.destroy();
+  appendParagraph(b, "Body from B");
+  await b.forceSave();
+  expect(b.localState).toBe("saved");
+  await b.destroy();
+  const reopened = client();
+  await reopened.open(url);
+  expect(reopened.title).toBe("Final");
+  expect(reopened.body).toContain("Body from B");
+  offline(false);
+  await reopened.reconnect();
+  expect(reopened.conflict).toBeUndefined();
+  expect((await reopened.store.read(url))?.data.title).toBe("Final");
+});
+
+it("round46 released offline editors snapshot content merged during provider reattachment", async () => {
+  const { client, original, url, offline, session, pod } = await fixture();
+  await original.destroy();
+  offline(true);
+  const a = client();
+  await a.open(url);
+  appendParagraph(a, "Local paragraph");
+  await a.flush();
+  a.release();
+  // Another device cannot see A's browser cache.
+  vi.stubGlobal("indexedDB", new IDBFactory());
+  const remote = new DocumentPersistence({ ...session, fetch: pod.fetch });
+  runtimes.push(remote);
+  await remote.open(url);
+  appendParagraph(remote, "Remote paragraph");
+  await remote.forceSave();
+  expect((await remote.store.read(url))?.data.body).toContain("Remote paragraph");
+  await remote.destroy();
+  offline(false);
+  await a.reconnect();
+  const saved = await a.store.read(url);
+  expect(saved?.data.body).toContain("Local paragraph");
+  expect(saved?.data.body).toContain("Remote paragraph");
+  expect(a.state).toBe("saved");
+});
+
+it("round46 draft promotion snapshots content merged while attaching its provider", async () => {
+  const { pod, session } = await fixture();
+  let injected = false;
+  const runtime = new DocumentPersistence({
+    ...session,
+    fetch: async (input, init) => {
+      const container = runtime.stored?.data.updateLog;
+      if (
+        !injected &&
+        container &&
+        String(input) === container &&
+        (!init?.method || init.method === "GET")
+      ) {
+        injected = true;
+        const remote = new Doc();
+        try {
+          applyUpdate(remote, encodeStateAsUpdate(runtime.doc));
+          const paragraph = new XmlElement("paragraph");
+          const text = new XmlText();
+          text.insert(0, "During promotion");
+          paragraph.insert(0, [text]);
+          remote.getXmlFragment("prosemirror").push([paragraph]);
+          await new SolidUpdateStore({ container, fetch: pod.fetch }).appendUpdate(
+            encodeStateAsUpdate(remote),
+          );
+        } finally {
+          remote.destroy();
+        }
+      }
+      return pod.fetch(input, init);
+    },
+  });
+  runtimes.push(runtime);
+  await runtime.open();
+  runtime.online = false;
+  runtime.title = "New shared draft";
+  appendParagraph(runtime, "Draft body");
+  await runtime.reconnect();
+  expect(injected).toBe(true);
+  const saved = await runtime.store.read(runtime.stored?.url as string);
+  expect(saved?.data.body).toContain("Draft body");
+  expect(saved?.data.body).toContain("During promotion");
+  expect(runtime.state).toBe("saved");
 });

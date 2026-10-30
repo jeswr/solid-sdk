@@ -612,3 +612,51 @@ it("round37 editor Undo opens the restored document instead of a reused original
     await view.close();
   }
 });
+
+it.each([
+  "Escape",
+  "ctrlKey",
+  "metaKey",
+])("round46 focused checkboxes retain document shortcut %s", async (shortcut) => {
+  const view = await mountEditor({
+    type: "doc",
+    content: [
+      {
+        type: "taskList",
+        content: [
+          {
+            type: "taskItem",
+            attrs: { checked: false },
+            content: [{ type: "paragraph", content: [{ type: "text", text: "Task" }] }],
+          },
+        ],
+      },
+    ],
+  });
+  try {
+    vi.mocked((mocks.runtime as DocumentPersistence).change).mockClear();
+    const checkbox = view.body.querySelector<HTMLInputElement>(
+      'input[type="checkbox"]',
+    ) as HTMLInputElement;
+    const event = new KeyboardEvent("keydown", {
+      key: shortcut === "Escape" ? "Escape" : "s",
+      ...(shortcut === "Escape" ? {} : { [shortcut]: true }),
+      bubbles: true,
+      cancelable: true,
+    });
+    await act(async () => {
+      checkbox.focus();
+      checkbox.dispatchEvent(event);
+    });
+    expect(event.defaultPrevented).toBe(true);
+    if (shortcut === "Escape")
+      expect(document.activeElement).toBe(view.host.querySelector('[aria-label="Document title"]'));
+    else {
+      expect(mocks.runtime?.forceSave).toHaveBeenCalledOnce();
+      expect(document.activeElement).toBe(checkbox);
+    }
+    expect(mocks.runtime?.change).not.toHaveBeenCalled();
+  } finally {
+    await view.close();
+  }
+});

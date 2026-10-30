@@ -42,7 +42,16 @@ import { ImportDialog } from "./import-dialog";
 import { ModifiedTime } from "./modified-time";
 import { trashDocumentWithUndo } from "./trash-actions";
 export function DocumentList({ session }: { session: PodSession }) {
-  const renameFocus = useDialogFocus();
+  const listRef = useRef<HTMLDivElement>(null);
+  const refreshRef = useRef<HTMLButtonElement>(null);
+  const dialogRowIndex = useRef(0);
+  const focusFallback = () => {
+    const controls = listRef.current?.querySelectorAll<HTMLButtonElement>(
+      ".docs-row-actions button[aria-label]",
+    );
+    return controls?.[Math.min(dialogRowIndex.current, controls.length - 1)] ?? refreshRef.current;
+  };
+  const renameFocus = useDialogFocus(focusFallback);
   const store = useDocsStore(session);
   useEffect(() => {
     document.title = "Documents · Docs · Solid Suite";
@@ -119,12 +128,17 @@ export function DocumentList({ session }: { session: PodSession }) {
       context={<h1 className="docs-list-title">Documents</h1>}
       search={{ placeholder: "Search documents", action: "/docs", scopeLabel: "Docs" }}
       actions={
-        <IconButton label="Refresh documents" variant="ghost" onClick={() => void reload()}>
+        <IconButton
+          ref={refreshRef}
+          label="Refresh documents"
+          variant="ghost"
+          onClick={() => void reload()}
+        >
           <RefreshCw aria-hidden="true" />
         </IconButton>
       }
     >
-      <div className="docs-list">
+      <div className="docs-list" ref={listRef}>
         <div className="docs-list-heading">
           <div>
             <p className="docs-eyebrow">YOUR WORKSPACE</p>
@@ -258,6 +272,9 @@ export function DocumentList({ session }: { session: PodSession }) {
                           <DropdownMenuItem
                             disabled={entry.readOnly}
                             onSelect={choose(() => {
+                              dialogRowIndex.current = rows.findIndex(
+                                (row) => row.url === entry.url,
+                              );
                               setRenaming({ entry, title: entry.title });
                             })}
                           >
@@ -298,7 +315,12 @@ export function DocumentList({ session }: { session: PodSession }) {
                           <DropdownMenuItem
                             disabled={entry.readOnly}
                             variant="destructive"
-                            onSelect={choose(() => setDeleting(entry))}
+                            onSelect={choose(() => {
+                              dialogRowIndex.current = rows.findIndex(
+                                (row) => row.url === entry.url,
+                              );
+                              setDeleting(entry);
+                            })}
                           >
                             Move to trash
                           </DropdownMenuItem>
@@ -339,8 +361,8 @@ export function DocumentList({ session }: { session: PodSession }) {
                         regenerate: () => ({ body: stored.data.body, format: stored.data.format }),
                       },
                     );
-                  setRenaming((current) => (current === renaming ? null : current));
                   await reload();
+                  setRenaming((current) => (current === renaming ? null : current));
                 });
               }}
             >
@@ -365,16 +387,17 @@ export function DocumentList({ session }: { session: PodSession }) {
         <DeleteDialog
           open={deleting !== null}
           busy={busy}
+          focusFallback={focusFallback}
           onOpenChange={(open) => !open && setDeleting(null)}
           onConfirm={() => {
             if (!deleting) return;
             void act(async () => {
               const complete = await trashDocumentWithUndo(deleting.url, session, reload);
+              await reload();
               if (complete) {
                 if (starred.includes(deleting.url)) toggle(deleting.url);
                 setDeleting(null);
               }
-              await reload();
             });
           }}
         />

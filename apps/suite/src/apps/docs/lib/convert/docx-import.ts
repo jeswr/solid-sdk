@@ -8,7 +8,7 @@ import { baseExtensions } from "../../editor/extensions";
 import { normaliseImageDestination } from "../editor/destination";
 import { readNumbering } from "./docx-numbering";
 import { embeddedDocument } from "./docx-payload";
-import { WORD } from "./docx-xml";
+import { descendants, readXml, WORD, child as xmlChild } from "./docx-xml";
 import { sanitiseImport } from "./sanitise";
 import { DOCX_FORMATTING_WARNING, reportSkipped, type SkippedItem } from "./skipped";
 
@@ -88,8 +88,10 @@ function mapLists(
   document: DocxElement,
   styleMap: string[],
   numbering: ReturnType<typeof readNumbering>,
+  tableIndents: number[],
 ) {
   let paragraphIndex = 0;
+  let tableIndex = 0;
   function container(element: DocxElement) {
     const ancestors: { path: string; key: string; list: string }[] = [];
     for (const child of element.children ?? []) {
@@ -105,30 +107,40 @@ function mapLists(
       const blockStyle = continuationStyle ? continuationStyle[1] : styleName;
       const checked = child.type === "paragraph" ? taskChecked(child, styleName) : undefined;
       const task = checked !== undefined;
-      const indentLevel = Math.round(Number(child.indent?.start) / 720 - 1);
+      const table = child.type === "table";
+      const indentLevel = Math.round(
+        (table ? Number(tableIndents[tableIndex++]) : Number(child.indent?.start)) / 720 - 1,
+      );
       const continuation =
-        child.type === "paragraph" &&
+        (child.type === "paragraph" || table) &&
         !child.numbering &&
         !task &&
         // Semantic block styles are boundaries unless explicitly marked as a
         // list continuation. A standalone Quote has the same half-inch indent.
-        (continuationStyle || (!paragraphPaths.has(styleName ?? "") && child.styleId !== "Code")) &&
+        (table ||
+          continuationStyle ||
+          (!paragraphPaths.has(styleName ?? "") && child.styleId !== "Code")) &&
         indentLevel >= 0 &&
         ancestors.length > 0;
       const mappedStyle = (ancestors: string[]) => {
-        const block =
-          child.styleId === "Code" || child.styleId === "ListContinuationCode"
+        const block = table
+          ? "table:fresh"
+          : child.styleId === "Code" || child.styleId === "ListContinuationCode"
             ? "pre:fresh"
             : (paragraphPaths.get(blockStyle ?? "") ?? "p:fresh");
         const styleId = `SuiteList${styleMap.length}`;
         // Mammoth uses the first matching rule. Every generated list/continuation
         // path must precede presets while retaining the paragraph's block style.
-        styleMap.unshift(`p.${styleId} => ${[...ancestors, block].join(" > ")}`);
+        styleMap.unshift(
+          `${table ? "table" : "p"}.${styleId} => ${[...ancestors, block].join(" > ")}`,
+        );
         child.styleId = styleId;
       };
       if (continuation) {
         ancestors.length = Math.min(indentLevel + 1, ancestors.length);
         mappedStyle(ancestors.map((ancestor) => ancestor.path));
+        // Cell contents start their own ancestry while the outer list survives.
+        if (table) container(child);
         continue;
       }
       if (child.type === "paragraph" && (task || child.numbering)) {
@@ -236,6 +248,11 @@ export async function importDocx(data: ArrayBuffer, options: DocxImportOptions) 
   }
   const inspected = stripUnsupported(await archive.read("word/document.xml", "utf-8"));
   reportSkipped(inspected.skipped, DOCX_FORMATTING_WARNING);
+  const tableIndents = descendants(readXml(inspected.xml), "tbl").map((table) => {
+    const properties = xmlChild(table, "tblPr");
+    const indent = properties && xmlChild(properties, "tblInd");
+    return Number(indent?.attrs.w ?? 0);
+  });
   const numbering = readNumbering(
     inspected.xml,
     archive.exists("word/numbering.xml")
@@ -250,7 +267,8 @@ export async function importDocx(data: ArrayBuffer, options: DocxImportOptions) 
     { arrayBuffer: await archive.toArrayBuffer() },
     {
       styleMap,
-      transformDocument: (document: DocxElement) => mapLists(document, styleMap, numbering),
+      transformDocument: (document: DocxElement) =>
+        mapLists(document, styleMap, numbering, tableIndents),
       includeEmbeddedStyleMap: false,
       externalFileAccess: false,
       ignoreEmptyParagraphs: false,

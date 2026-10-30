@@ -3,7 +3,7 @@
 import { useRef } from "react";
 
 /** Programmatically opened dialogs have no Radix DialogTrigger to restore. */
-export function useDialogFocus() {
+export function useDialogFocus(fallback?: () => HTMLElement | null) {
   const invokingControl = useRef<HTMLElement | null>(null);
   return {
     onOpenAutoFocus() {
@@ -11,7 +11,8 @@ export function useDialogFocus() {
     },
     onCloseAutoFocus(event: Event) {
       event.preventDefault();
-      if (invokingControl.current?.isConnected) invokingControl.current.focus();
+      const target = invokingControl.current?.isConnected ? invokingControl.current : fallback?.();
+      target?.focus();
     },
   };
 }

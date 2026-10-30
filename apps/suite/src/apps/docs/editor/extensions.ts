@@ -14,7 +14,7 @@ import type { Doc } from "yjs";
 import { codeWhitespaceTextblocks, compatibleCodeExtensions } from "../lib/editor/code-mark";
 import { normaliseDestination, normaliseImageDestination } from "../lib/editor/destination";
 import { normaliseHtmlLists } from "../lib/editor/html-lists";
-import { validLink } from "../lib/editor/logic";
+import { editorShortcut, validLink } from "../lib/editor/logic";
 import { normaliseTableSpan } from "../lib/editor/table-spans";
 import { FindDecorations } from "./find-plugin";
 import { protectiveLinkRel } from "./link-rel";
@@ -160,9 +160,24 @@ const AccessibleTaskItem = TaskItem.extend({
         },
         // Controls own their keyboard events. Let native checkbox navigation and
         // activation run without editing the stale ProseMirror text selection.
-        stopEvent: (event) =>
-          (event.target instanceof HTMLInputElement && event.target.type === "checkbox") ||
-          (view.stopEvent?.(event) ?? false),
+        stopEvent: (event) => {
+          if (event.target instanceof HTMLInputElement && event.target.type === "checkbox") {
+            // Document commands use the editor's shared handler; native control
+            // navigation/activation still bypasses text editing keymaps.
+            return !(
+              event instanceof KeyboardEvent &&
+              event.type === "keydown" &&
+              (event.key === "Escape" ||
+                editorShortcut(
+                  event.key,
+                  event.ctrlKey || event.metaKey,
+                  event.shiftKey,
+                  event.altKey,
+                ))
+            );
+          }
+          return view.stopEvent?.(event) ?? false;
+        },
       };
     };
   },

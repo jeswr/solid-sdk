@@ -46,3 +46,39 @@ export function pendingEditMetadata(edits: PendingEdit[]): Record<string, string
 export function hasTitleIntent(edit: PendingEdit) {
   return edit.localTitle !== undefined ? edit.localTitle !== null : edit.title !== edit.baseTitle;
 }
+
+/** Only an intent's author may replace it; adopters persist bodies alongside it. */
+export function mergePendingEdits(
+  current: MirrorMetadata,
+  incoming: PendingEdit,
+  author: string,
+  transfer: boolean,
+) {
+  const edits = pendingEdits(current);
+  const durable = edits.find((edit) => edit.owner === incoming.owner);
+  const edit =
+    incoming.owner === author || (durable && !hasTitleIntent(durable) && !hasTitleIntent(incoming))
+      ? incoming
+      : (durable ??
+        edits.find((pending) => pending.owner === author) ??
+        (transfer
+          ? incoming
+          : {
+              ...incoming,
+              owner: author,
+              localTitle: null,
+            }));
+  const previous = edits[0];
+  const remaining = edits.filter((pending) => pending.owner !== edit.owner);
+  if (
+    previous &&
+    previous.owner !== edit.owner &&
+    previous.title !== edit.title &&
+    hasTitleIntent(previous)
+  )
+    return pendingEditMetadata([...remaining, ...(hasTitleIntent(edit) ? [edit] : [])]);
+  return pendingEditMetadata([
+    edit,
+    ...remaining.filter((pending) => hasTitleIntent(pending) && pending.title !== edit.title),
+  ]);
+}

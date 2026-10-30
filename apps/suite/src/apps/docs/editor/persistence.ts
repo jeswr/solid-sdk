@@ -39,6 +39,7 @@ import { loadPersistedLocalState } from "./local-state";
 import { updateMirrorMetadata } from "./mirror-metadata";
 import {
   hasTitleIntent,
+  mergePendingEdits,
   type PendingEdit,
   pendingEditMetadata,
   pendingEdits,
@@ -83,6 +84,8 @@ export class DocumentPersistence {
   private readonly previousMirrors = new Set<IndexeddbPersistence>();
   private readonly mirrorChannels = new WeakMap<IndexeddbPersistence, BroadcastChannel>();
   private pendingEdit: PendingEdit | undefined;
+  private pendingSource: IndexeddbPersistence | undefined;
+  private readonly observedPending = new WeakMap<IndexeddbPersistence, string>();
   private pendingRecovery: PendingRecovery | undefined;
   private readonly editOwner = crypto.randomUUID();
   private offlineCopy = false;
@@ -235,7 +238,7 @@ export class DocumentPersistence {
       return generation === this.mirrorGeneration && this.local ? action(this.local) : undefined;
     }
   }
-  private async writePending() {
+  private async writePending(transfer = false) {
     const edit = this.pendingEdit;
     const encodedEdit = JSON.stringify(edit);
     if (this.localState === "saved" && this.localEdit === encodedEdit) return;
@@ -249,22 +252,12 @@ export class DocumentPersistence {
           mirror,
           (current) => {
             if (!edit) return {};
-            const edits = pendingEdits(current);
-            const previous = edits[0];
-            const remaining = edits.filter((pending) => pending.owner !== edit.owner);
-            if (
-              previous &&
-              previous.owner !== edit.owner &&
-              previous.title !== edit.title &&
-              hasTitleIntent(previous)
-            )
-              return pendingEditMetadata([...remaining, ...(hasTitleIntent(edit) ? [edit] : [])]);
-            return pendingEditMetadata([
+            return mergePendingEdits(
+              current,
               edit,
-              ...remaining.filter(
-                (pending) => hasTitleIntent(pending) && pending.title !== edit.title,
-              ),
-            ]);
+              this.editOwner,
+              transfer || (this.pendingSource !== undefined && this.pendingSource !== this.local),
+            );
           },
           () => generation === this.mirrorGeneration,
           undefined,
@@ -284,6 +277,7 @@ export class DocumentPersistence {
       version === this.version &&
       updates === this.updates
     ) {
+      this.pendingSource = this.local;
       this.localVersion = version;
       this.localGeneration = generation;
       this.localUpdates = updates;
@@ -347,11 +341,13 @@ export class DocumentPersistence {
     const before = this.updates;
     await this.loadPreviousMirrors();
     const changed = await this.withMirror((mirror) => loadPersistedLocalState(this.doc, mirror));
-    if (adoptPending && this.version === this.savedVersion) await this.readPending(false);
+    const followPending = () =>
+      adoptPending &&
+      (this.version === this.savedVersion || this.pendingEdit?.owner !== this.editOwner);
+    if (followPending()) await this.readPending(false);
     let merged = changed;
     for (const mirror of this.previousMirrors) {
       merged = (await loadPersistedLocalState(this.doc, mirror)) || merged;
-      if (adoptPending && this.version === this.savedVersion) await this.readPending(false, mirror);
     }
     if (merged || this.updates !== before) {
       this.captureDoc();
@@ -467,21 +463,20 @@ export class DocumentPersistence {
     if (assertOpen) this.assertActive();
     if (pending) {
       const edit = this.parseMetadata<PendingEdit>(await mirror?.get("edit"));
-      // A title conflict stays durable after its body is saved. Re-reading that
-      // same intent is not another body edit; actual CRDT merges are tracked by
-      // refreshLocalState independently.
-      if (
-        !assertOpen &&
-        this.conflict &&
-        this.pendingEdit &&
-        edit &&
-        edit.owner === this.pendingEdit.owner &&
-        edit.title === this.pendingEdit.title &&
-        edit.localTitle === this.pendingEdit.localTitle &&
-        edit.baseTitle === this.pendingEdit.baseTitle
-      )
-        return pending;
+      const persistedTitle = await mirror?.get("title");
+      const observed = JSON.stringify([
+        edit?.owner,
+        edit?.title,
+        edit?.baseTitle,
+        edit?.localTitle,
+        persistedTitle,
+      ]);
+      // Acknowledgement mutates our title baseline, not the durable intent we
+      // followed. Re-reading that same intent must not stage it again.
+      if (!assertOpen && mirror && this.observedPending.get(mirror) === observed) return pending;
+      if (mirror) this.observedPending.set(mirror, observed);
       this.pendingEdit = edit;
+      this.pendingSource = mirror;
       // The last pending edit may belong to another tab. Its owner is not
       // necessarily the one that already reserved this incarnation's copy.
       const recoveryKey: unknown = await mirror?.get("activeRecovery");
@@ -492,9 +487,8 @@ export class DocumentPersistence {
             : `recovery:${this.pendingEdit?.owner ?? this.editOwner}`,
         ),
       );
-      const title = this.pendingEdit?.title ?? (await mirror?.get("title"));
+      const title = this.pendingEdit?.title ?? persistedTitle;
       if (typeof title === "string") {
-        this.title = title;
         this.titleState = {
           base: this.pendingEdit?.baseTitle,
           local:
@@ -503,9 +497,10 @@ export class DocumentPersistence {
               : title === this.pendingEdit?.baseTitle
                 ? null
                 : title,
-          remote: this.stored?.data.title ?? "",
+          remote: this.stored?.data.title ?? title,
           sequence: (this.titleState?.sequence ?? 0) + 1,
         };
+        this.title = mergeTitle(this.titleState).title;
       }
       this.version++;
       this.needsFullState = true;
@@ -784,7 +779,7 @@ export class DocumentPersistence {
         this.mirrorGeneration++;
         this.local = this.createMirror(name);
         await this.local.whenSynced;
-        if (pending) await this.writePending();
+        if (pending) await this.writePending(true);
         else pending = await this.readPending();
         await storeState(this.local, true);
         if (previous) {
@@ -970,8 +965,8 @@ export class DocumentPersistence {
       this.provider?.destroy();
       await this.provider?.flush();
       this.needsFullState = true;
-      this.attachProvider(container, false, allowStopped);
-      await this.provider?.whenSynced;
+      const provider = this.attachProvider(container, false, allowStopped);
+      await this.syncContent(provider, () => provider.whenSynced, allowStopped);
       if (this.providerError) throw this.providerError;
     }
     this.trashed = false;
@@ -1066,7 +1061,7 @@ export class DocumentPersistence {
     });
     this.notify();
     if (this.timer) clearTimeout(this.timer);
-    this.timer = setTimeout(() => void this.flush(), 2000);
+    if (!this.stopped) this.timer = setTimeout(() => void this.flush(), 2000);
   }
   async forceSave() {
     if (this.readOnly || (!this.stored && this.version === 0)) return;
@@ -1181,10 +1176,10 @@ export class DocumentPersistence {
           await this.rememberPreviousMirrors();
           // Transfer the acknowledged baseline and pending intent to the promoted
           // mirror without treating the local title as a new pod observation.
-          await this.writePending();
+          await this.writePending(true);
           if (!this.provider?.synced) {
-            this.attachProvider(this.updateContainer(), true, this.stopped);
-            await this.provider?.whenSynced;
+            const provider = this.attachProvider(this.updateContainer(), true, this.stopped);
+            await this.syncContent(provider, () => provider.whenSynced, this.stopped);
           }
           await this.refreshLocalState();
           await this.persistFullState();
@@ -1371,10 +1366,14 @@ export class DocumentPersistence {
     if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => void this.reconnect(), 4000);
   }
-  private async syncContent(provider: SolidPersistence | undefined, sync: () => Promise<unknown>) {
+  private async syncContent(
+    provider: SolidPersistence | undefined,
+    sync: () => Promise<unknown>,
+    allowStopped = false,
+  ) {
     const updates = this.updates;
     await sync();
-    if (!this.stopped && provider === this.provider && this.updates !== updates) {
+    if ((!this.stopped || allowStopped) && provider === this.provider && this.updates !== updates) {
       this.captureDoc();
       this.markDirty();
     }

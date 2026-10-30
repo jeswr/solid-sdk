@@ -12,6 +12,10 @@ const state = vi.hoisted(() => ({
   store: { list: vi.fn(), read: vi.fn(), save: vi.fn() },
   params: new URLSearchParams(),
   router: { push: vi.fn() },
+  trash: vi.fn(),
+}));
+vi.mock("../src/apps/docs/components/trash-actions", () => ({
+  trashDocumentWithUndo: state.trash,
 }));
 vi.mock("next/navigation", () => ({
   useRouter: () => state.router,
@@ -207,5 +211,94 @@ it.each([
     expect(host.querySelector('[role="alert"]')).toBeNull();
   } finally {
     await act(async () => root.unmount());
+  }
+});
+
+it.each([
+  "first",
+  "last",
+  "only",
+])("round46 keyboard trash restores list position after removing the %s row", async (position) => {
+  const first = entry("First");
+  const last = { ...entry("Last"), url: "https://pod.test/docs/last.ttl" };
+  const entries = position === "only" ? [first] : [first, last];
+  const removed = position === "last" ? last : first;
+  state.store.list.mockResolvedValue(entries);
+  state.trash.mockImplementation(async () => {
+    state.store.list.mockResolvedValue(entries.filter((row) => row !== removed));
+    return true;
+  });
+  const { root } = await mount();
+  try {
+    const trigger = button(`Actions for ${removed.title}`);
+    await act(async () => {
+      trigger.focus();
+      trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    const item = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+      (node) => node.textContent === "Move to trash",
+    ) as HTMLElement;
+    await act(async () => {
+      item.focus();
+      item.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    await vi.waitFor(() => expect(document.querySelector('[role="alertdialog"]')).not.toBeNull());
+    const confirm = Array.from(
+      document.querySelectorAll<HTMLElement>('[role="alertdialog"] button'),
+    ).find((node) => node.textContent === "Move to trash") as HTMLElement;
+    await act(async () => {
+      confirm.focus();
+      confirm.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await vi.waitFor(() => expect(document.querySelector('[role="alertdialog"]')).toBeNull());
+    expect(trigger.isConnected).toBe(false);
+    await vi.waitFor(() =>
+      expect(document.activeElement).toBe(
+        position === "only"
+          ? button("Refresh documents")
+          : button(`Actions for ${position === "last" ? "First" : "Last"}`),
+      ),
+    );
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("round46 renaming a row out of the active filter restores focus to the remaining list position", async () => {
+  state.params = new URLSearchParams({ q: "First" });
+  state.store.list.mockResolvedValue([entry("First")]);
+  state.store.read.mockResolvedValue({ data: { body: "<p>Body</p>", format: "text/html" } });
+  state.store.save.mockImplementation(async () => {
+    state.store.list.mockResolvedValue([entry("Renamed")]);
+  });
+  const { root } = await mount();
+  try {
+    const trigger = button("Actions for First");
+    await act(async () => {
+      trigger.focus();
+      trigger.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    const rename = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]')).find(
+      (node) => node.textContent === "Rename",
+    ) as HTMLElement;
+    await act(async () => {
+      rename.focus();
+      rename.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    const input = document.querySelector<HTMLInputElement>("#rename-title") as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        input,
+        "Renamed",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => button("Save title").click());
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeNull());
+    expect(trigger.isConnected).toBe(false);
+    await vi.waitFor(() => expect(document.activeElement).toBe(button("Refresh documents")));
+  } finally {
+    await act(async () => root.unmount());
+    state.params = new URLSearchParams();
   }
 });

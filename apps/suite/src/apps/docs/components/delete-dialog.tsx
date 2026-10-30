@@ -16,13 +16,15 @@ export function DeleteDialog({
   busy,
   onOpenChange,
   onConfirm,
+  focusFallback,
 }: {
   open: boolean;
   busy: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void;
+  focusFallback?: () => HTMLElement | null;
 }) {
-  const focus = useDialogFocus();
+  const focus = useDialogFocus(focusFallback);
   return (
     <AlertDialog open={open} onOpenChange={(next) => !busy && onOpenChange(next)}>
       <AlertDialogContent {...focus}>

@@ -132,7 +132,10 @@ export function normaliseImport(json: JSONContent, skipped: SkippedItem[] = []) 
 
 export function importHtml(source: string, skipped: SkippedItem[] = []) {
   // All six HTML heading levels have the same meaning as Markdown/DOCX levels.
-  const html = sanitiseImport(source, skipped);
+  const fragment = document.createElement("template");
+  fragment.innerHTML = source;
+  normaliseHtmlLists(fragment.content);
+  const html = sanitiseImport(fragment.innerHTML, skipped);
   const dom = new window.DOMParser().parseFromString(html, "text/html");
   normaliseHtmlTableSpans(dom.body, () => reportSkipped(skipped, "Invalid table spans"));
   normaliseHtmlLists(dom.body);

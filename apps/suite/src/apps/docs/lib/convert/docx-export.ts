@@ -243,7 +243,15 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
               }),
             );
           }
-          result.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows }));
+          result.push(
+            new Table({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              ...(depth >= 0
+                ? { indent: { size: 720 * (Math.min(depth, 8) + 1), type: WidthType.DXA } }
+                : {}),
+              rows,
+            }),
+          );
           break;
         }
         default:
