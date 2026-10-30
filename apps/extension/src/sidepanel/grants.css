@@ -1,0 +1,108 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+.grants-manager {
+  min-width: 0;
+  margin-top: var(--space-6);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-4);
+  overflow-wrap: anywhere;
+}
+.grants-manager h2 { font-size: var(--text-lg); line-height: var(--lh-lg); }
+.grants-manager h3 { margin: 0; font-size: var(--text-md); line-height: var(--lh-md); }
+.grants-manager p { margin: var(--space-2) 0; }
+.grants-manager [hidden] { display: none; }
+.grants-manager :is(button, select) {
+  min-width: var(--space-6);
+  min-height: var(--control-h, 36px);
+  max-width: 100%;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  color: var(--foreground);
+  font: inherit;
+  overflow-wrap: anywhere;
+}
+.grants-manager button { cursor: pointer; }
+.grants-manager button:hover { background: var(--surface-2); }
+.grants-manager :is(button, select):disabled { cursor: default; color: var(--foreground-muted); }
+.grants-manager :focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  scroll-margin-block: var(--space-3);
+}
+.grants-manager .grants-destructive { color: var(--destructive); border-color: var(--destructive); }
+.grants-manager .grants-destructive:hover { background: var(--destructive-soft); }
+.grants-error { color: var(--destructive); }
+.grants-status { color: var(--foreground-muted); }
+.grants-status:empty, .grants-error:empty { margin: 0; }
+.grants-list { display: grid; gap: var(--space-3); margin-top: var(--space-3); }
+.permission-row {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.permission-header { padding: var(--space-4); }
+.grants-site-header, .grants-bound-account { display: flex; align-items: center; gap: var(--space-2); }
+.grants-site-identity, .grants-bound-account > span:last-child { min-width: 0; }
+.grants-site-identity p, .grants-expiry, .grants-feature {
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+.grants-site-identity p { margin-bottom: 0; }
+.grants-bound-account { margin-block: var(--space-3); }
+.grants-avatar {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-8);
+  height: var(--space-8);
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--primary-soft);
+  color: var(--primary-soft-foreground);
+  font-weight: var(--weight-lg);
+}
+.grants-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.grants-summary { display: flex; flex-wrap: wrap; gap: var(--space-1\.5); margin-block: var(--space-3); }
+.grants-summary span {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-0\.5) var(--space-2);
+  background: var(--surface-2);
+  font-size: var(--text-xs);
+  line-height: var(--lh-xs);
+  font-weight: var(--weight-xs);
+}
+.grants-row-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.grants-details { border-top: 1px solid var(--border); padding: var(--space-4); }
+.grants-classes { display: grid; gap: var(--space-3); list-style: none; margin: 0 0 var(--space-4); padding: 0; }
+.grants-class { min-width: 0; padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-lg); }
+.grants-class p:last-child { margin-bottom: 0; }
+.grants-manager .grants-consequence { color: var(--foreground-muted); font-size: var(--text-sm); line-height: var(--lh-sm); }
+.grants-manager label { display: grid; min-width: 0; gap: var(--space-1); }
+.grants-manager select { width: 100%; }
+.grants-manager .duration-chips { border: 0; padding: 0; margin: var(--space-4) 0 0; min-width: 0; }
+.grants-manager .duration-chips button { margin: var(--space-2) var(--space-2) 0 0; }
+.grants-dialog {
+  width: var(--dialog-sm);
+  max-width: calc(100% - var(--space-6));
+  max-height: calc(100% - var(--space-6));
+  overflow: auto;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  background: var(--elevation-3-fill);
+  color: var(--foreground);
+  box-shadow: var(--shadow-3);
+}
+.grants-dialog::backdrop { background: var(--overlay); }
+.grants-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4); }
+@media (pointer: coarse) {
+  .grants-manager :is(button, select) { min-width: 44px; min-height: 44px; }
+}
