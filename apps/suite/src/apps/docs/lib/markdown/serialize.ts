@@ -240,7 +240,7 @@ function render(node: DocsNode): string {
       return `${"#".repeat(level)} ${value}`;
     }
     case "horizontalRule":
-      return "---";
+      return "***";
     case "codeBlock": {
       const value = content.map((child) => child.text).join("");
       const runs = value.match(/`+/g) ?? [];

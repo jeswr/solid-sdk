@@ -119,6 +119,43 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
   });
 
   it.each([
+    "> # Title\nOutside",
+    "> ## Title\nOutside\n> Inside",
+    "> Title\n> ===\nOutside",
+    "> Title\n> ---\nOutside",
+    "> ***\nOutside",
+    "> > # Title\nOutside",
+    "- > # Title\n  Outside",
+  ])("rejects non-paragraph quote continuations or preserves the source literally: %s", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("keeps lazy paragraph continuations in quotes after a heading", () => {
+    expect(roundTrip("> # Title\n> Inside\ncontinued")).toEqual(
+      doc(b("blockquote", [b("heading", [t("Title")], { level: 1 }), p(t("Inside\ncontinued"))])),
+    );
+    expect(roundTrip("> Inside\ncontinued")).toEqual(
+      doc(b("blockquote", [p(t("Inside\ncontinued"))])),
+    );
+    expect(roundTrip("> # Title\n\nOutside")).toEqual(
+      doc(b("blockquote", [b("heading", [t("Title")], { level: 1 })]), p(t("Outside"))),
+    );
+  });
+  it.each([
+    "***",
+    "___",
+    "* * *",
+  ])("exports horizontal rules without front-matter ambiguity: %s", (rule) => {
+    const expected = doc(b("horizontalRule"), p(t("text")), b("horizontalRule"));
+    expect(roundTrip(`${rule}\n\ntext\n\n${rule}`)).toEqual(expected);
+    expect(docsToMarkdown(expected)).toBe("***\n\ntext\n\n***");
+  });
+  it("exports a leading rule before a multiline level-2 heading", () => {
+    const expected = doc(b("horizontalRule"), b("heading", [t("First\nSecond")], { level: 2 }));
+    expect(markdownToDocs(docsToMarkdown(expected))).toEqual(expected);
+  });
+
+  it.each([
     "-",
     "+",
     "*",
@@ -254,6 +291,27 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     const indent = fence.startsWith("  ") ? "  " : "";
     expect(roundTrip(`${fence}\n${indent}\tfoo\tbar\n${fence}`)).toEqual(
       doc(b("codeBlock", [t("\tfoo\tbar")])),
+    );
+  });
+  it.each([
+    "```",
+    "~~~",
+  ])("removes up to the opening fence indentation per content line: %s", (fence) => {
+    expect(roundTrip(`   ${fence}\n x\n   ${fence}`)).toEqual(doc(b("codeBlock", [t("x")])));
+    expect(roundTrip(`   ${fence}\nx\n x\n  x\n   x\n    x\n   ${fence}`)).toEqual(
+      doc(b("codeBlock", [t("x\nx\nx\nx\n x")])),
+    );
+    expect(roundTrip(`  ${fence}ts\n x\n \n  ${fence}`)).toEqual(
+      doc(b("codeBlock", [t("x\n")], { language: "ts" })),
+    );
+    expect(roundTrip(`   ${fence}\n x`)).toEqual(doc(b("codeBlock", [t("x")])));
+  });
+  it("removes tilde fence indentation inside quotes and list items", () => {
+    expect(roundTrip(">    ~~~\n>  x\n>    ~~~")).toEqual(
+      doc(b("blockquote", [b("codeBlock", [t("x")])])),
+    );
+    expect(roundTrip("- item\n\n     ~~~\n   x\n     ~~~")).toEqual(
+      doc(b("bulletList", [b("listItem", [p(t("item")), b("codeBlock", [t("x")])])])),
     );
   });
   it.each([

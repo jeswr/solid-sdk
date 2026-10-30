@@ -35,6 +35,8 @@ blocks are preserved, including an empty first task paragraph.
 Repeated identical formatting collapses to one mark; adjacent equivalent text
 nodes merge, and marks have a stable order. Markdown spelling, bullet characters, tight/loose list
 layout, and reference definitions are not retained; exports use canonical inline links and fences.
+Horizontal rules export as `***` to avoid front-matter ambiguity. Fenced code removes up to
+the opening fence's indentation from each content line for both backtick and tilde fences.
 
 Links must be syntactically valid absolute http(s) or mailto URLs without whitespace, control
 characters, angle brackets, or backslashes. Bare GFM URL/email autolinks decode character references
@@ -48,7 +50,8 @@ these are rejected rather than decoded incorrectly. Code content is never entity
 `markdownToDocs(source, { unsupported: "reject" })` is the default. Recognized unsupported
 constructs (including HTML, images, tables, strikethrough, footnotes, front matter, headings 4–6,
 mixed/ordered task lists, nested links, nested emphasis with unresolved same-delimiter text
-(such as `***first* middle *last***`), indented code in quotes whose leading quote whitespace
+(such as `***first* middle *last***`), unprefixed quote continuations after non-paragraph blocks,
+indented code in quotes whose leading quote whitespace
 contains tabs, and fence metadata) throw `MarkdownError`. Quote prefixes change tab stops, so
 this indented code is conservatively rejected; fenced code retains content tabs. With
 `{ unsupported: "literal" }`, **the entire normalized source** becomes unmarked text in a single

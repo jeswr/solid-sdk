@@ -21,9 +21,23 @@ import {
 } from "./shared";
 import { type DocsMark, type DocsNode, MarkdownError, type MarkdownOptions } from "./types";
 
+class MarkdownTokenizer extends Tokenizer {
+  override fences(source: string): Tokens.Code | undefined {
+    const token = super.fences(source);
+    if (token) {
+      // Marked only compensates fully indented backtick-fence content lines.
+      // Use the raw content capture for both fence spellings and partial indentation.
+      const content = (this.rules.block.fences.exec(token.raw) as RegExpExecArray)[3] ?? "";
+      const indent = (/^ */.exec(token.raw) as RegExpExecArray)[0].length;
+      token.text = content.replace(new RegExp(`^ {0,${indent}}`, "gm"), "");
+    }
+    return token;
+  }
+}
+
 class MarkdownLexer extends Lexer {
   constructor() {
-    const tokenizer = new Tokenizer();
+    const tokenizer = new MarkdownTokenizer();
     super({ gfm: true, tokenizer });
     // Marked requires a second character after marker whitespace. An empty first line
     // is also a list item; keep this correction local to this lexer instance.
@@ -43,6 +57,15 @@ class MarkdownLexer extends Lexer {
     lastParagraphClipped?: boolean,
   ): TokensList;
   override blockTokens(source: string, tokens?: Token[], lastParagraphClipped?: boolean): Token[] {
+    // Marked appends unprefixed quote lines even after headings and rules.
+    // Only an existing paragraph can receive a lazy continuation.
+    if (
+      lastParagraphClipped &&
+      tokens?.length &&
+      (tokens[tokens.length - 1] as Token).type !== "paragraph"
+    ) {
+      fail("Block quote continuation after non-paragraph content is unsupported");
+    }
     // Marked disables paragraph parsing inside list items. Keep its paragraph-interruption
     // rules active there too, so a non-1 ordered marker remains continuation text.
     this.state.top = true;
