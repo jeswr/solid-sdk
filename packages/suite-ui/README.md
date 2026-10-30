@@ -50,6 +50,38 @@ full-page screenshots under repo-root `artifacts/screens/DS-02/`. Chromium execu
 visual comparison belong to the dispatcher. Unit axe checks run in jsdom; contrast is
 covered by the token gate and the browser tests.
 
+## DS-05 async surfaces
+
+`EmptyState` supports first-use, no-results, filtered-empty, no-access and
+not-available-offline. Supply a verb-first `primaryAction` and optional
+`secondaryAction`; filtered/offline variants also accept `onClearFilters` / `onRetry`.
+`LoadingSkeleton preset="list|grid|document|detail|table"` reserves density-backed rows
+and cards. Decorative placeholders are hidden from assistive technology; loading and
+empty feedback use status regions, while `ErrorState` uses alert regions.
+
+Pass the façade's category to `ErrorState error={category}` or
+`error={{ category, retryAfterMs }}`. `errorStateCopy` and `errorActionLabels` are the
+01 §9 copy/action map. Supply `actions` keyed by recovery action, with callbacks or
+native-link destinations. Access requests additionally require `accessRequests={true}`.
+Reauth retains a skeleton; the host supplies session/conflict dialogs via callbacks
+and `children`. Retry stays disabled until `retryAfterMs` expires. Report links must
+be supplied with redacted context; this component never reads raw exceptions.
+Collections accept `errorActions`, `accessRequests`, and error-state `retryAfterMs`.
+
+`renderAsync({ loading, error, empty, children })` takes conditional React nodes,
+prioritises first-load → error → empty → content, and accepts a lazy `children` function.
+Both collections and the content/upload feedback adapters use it. For refreshes, pass
+no loading node and keep content; the host owns the TopBar progress indicator.
+
+Use the exported `toast` with `Toaster`: ordinary messages last 5 seconds, actions
+labelled `Undo` last 8 seconds, and errors persist with a dismiss button. Promise
+results follow the same policy. Errors announce alerts; ordinary messages announce
+status. Toast only when the outcome is not already visible in place.
+
+Dev routes: `/dev/components/{empty-state,error-state,loading-skeleton,toasts,render-async}`.
+The DS-05 browser spec writes all viewport/theme captures to `artifacts/screens/DS-05/`;
+Chromium execution and visual review belong to the dispatcher.
+
 ## DS-06 collections and selection
 
 `DataTable`, `FileGrid` and `useSelection` are client components/hooks. Import

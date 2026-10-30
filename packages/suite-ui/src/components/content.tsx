@@ -1,5 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { ReactNode } from "react";
+import { type ErrorCategory, errorStateCopy } from "./async-copy.js";
+import { EmptyState } from "./empty-state.js";
+import { ErrorState } from "./error-state.js";
+import { LoadingSkeleton } from "./loading-skeleton.js";
+import { renderAsync } from "./render-async.js";
 
 /** Defense at the presentation boundary: identifiers belong only in technical details. */
 export function plainText(value: string): string {
@@ -17,19 +22,9 @@ export function safeLink(value: string): string | undefined {
   return undefined;
 }
 
-export const surfaceErrors = {
-  reauth: "Sign in again to continue",
-  forbidden: "You don't have access to this",
-  "not-found": "This item isn't here any more",
-  conflict: "This item has changed. Review the latest version before continuing.",
-  "name-taken": "A file with this name already exists",
-  quota: "Your pod is full",
-  "too-large": "This file is too large for your storage",
-  offline: "Not available offline",
-  unreachable: "Can't reach your storage",
-  unsupported: "Not available on this storage",
-  unknown: "Something went wrong",
-} as const;
+export const surfaceErrors = Object.fromEntries(
+  Object.entries(errorStateCopy).map(([category, copy]) => [category, copy.title]),
+) as Record<ErrorCategory, string>;
 
 export type SurfaceState =
   | { status: "ready" }
@@ -46,37 +41,37 @@ export function SurfaceFeedback({
   empty?: string;
   action?: string;
 }): ReactNode {
-  if (!state || state.status === "ready") return null;
-  if (state.status === "loading")
-    return (
-      <div role="status" className="suite-feedback" aria-label="Loading">
-        <span className="suite-sr-only">Loading…</span>
-        <span className="suite-skeleton" aria-hidden="true" />
-        <span className="suite-skeleton" aria-hidden="true" />
-        <span className="suite-skeleton" aria-hidden="true" />
-      </div>
-    );
-  if (state.status === "error")
-    return (
-      <div role="alert" className="suite-feedback">
-        <p>{surfaceErrors[state.category]}</p>
-        {state.onRetry && (
-          <button type="button" onClick={state.onRetry}>
-            Try again
-          </button>
-        )}
-      </div>
-    );
-  return (
-    <div role="status" className="suite-feedback">
-      <p>{state.query ? `No results for '${plainText(state.query)}'` : empty}</p>
-      {state.onAction && (
-        <button type="button" onClick={state.onAction}>
-          {state.query ? "Clear filters" : action}
-        </button>
-      )}
-    </div>
-  );
+  return renderAsync({
+    loading: state?.status === "loading" && <LoadingSkeleton preset="detail" />,
+    error: state?.status === "error" && (
+      <ErrorState
+        error={state.category}
+        actions={state.onRetry ? { retry: state.onRetry } : undefined}
+        loadingPreset="detail"
+      />
+    ),
+    empty: state?.status === "empty" && (
+      <EmptyState
+        variant={state.query !== undefined ? "filtered-empty" : "first-use"}
+        title={state.query === undefined ? empty : `No results for '${plainText(state.query)}'`}
+        body={
+          state.query === undefined
+            ? "Add an item to get started."
+            : "Try another search or clear your filters."
+        }
+        query={plainText(state.query ?? "")}
+        onClearFilters={state.onAction}
+        primaryAction={
+          state.query === undefined && state.onAction ? (
+            <button type="button" className="suite-async-action" onClick={state.onAction}>
+              {action}
+            </button>
+          ) : undefined
+        }
+      />
+    ),
+    children: null,
+  });
 }
 
 export function formatBytes(bytes: number, locale = "en"): string {

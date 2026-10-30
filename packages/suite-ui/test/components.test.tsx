@@ -230,7 +230,22 @@ describe("async feedback", () => {
           );
         const { container } = render(element);
         await accessible(container);
-        if (state.status !== "loading") {
+        if (state.status === "error") {
+          expect(screen.getByRole("alert").textContent).toContain(surfaceErrorCopy[state.error]);
+          const label =
+            state.error === "reauth"
+              ? "Sign in"
+              : ["offline", "unreachable"].includes(state.error)
+                ? "Retry"
+                : undefined;
+          if (label) {
+            fireEvent.click(screen.getByRole("button", { name: label }));
+            expect(action).toHaveBeenCalledOnce();
+          } else {
+            expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+            expect(action).not.toHaveBeenCalled();
+          }
+        } else if (state.status !== "loading") {
           const buttons = screen.getAllByRole("button");
           fireEvent.click(buttons[buttons.length - 1] as HTMLElement);
           expect(action).toHaveBeenCalled();

@@ -206,6 +206,6 @@ test("empty, filtered and retry actions run their supplied handler", () => {
   rerender(<TypedView state={{ status: "empty", query: "No match", onAction: action }} />);
   fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
   rerender(<TypedView state={{ status: "error", category: "unreachable", onRetry: action }} />);
-  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
   expect(action).toHaveBeenCalledTimes(3);
 });

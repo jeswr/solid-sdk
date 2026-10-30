@@ -2,31 +2,16 @@
 // AUTHORED-BY Codex GPT-6
 import { Upload } from "lucide-react";
 import type { Ref } from "react";
-export type SurfaceError =
-  | "reauth"
-  | "forbidden"
-  | "not-found"
-  | "conflict"
-  | "name-taken"
-  | "quota"
-  | "too-large"
-  | "offline"
-  | "unreachable"
-  | "unsupported"
-  | "unknown";
-export const surfaceErrorCopy: Record<SurfaceError, string> = {
-  reauth: "Sign in to continue",
-  forbidden: "You don't have access to this",
-  "not-found": "This item isn't here any more",
-  conflict: "This item changed somewhere else",
-  "name-taken": "A file with this name already exists",
-  quota: "Your pod is full",
-  "too-large": "This file is too large for your storage",
-  offline: "Not available offline",
-  unreachable: "Can't reach your storage",
-  unsupported: "Not available on this storage",
-  unknown: "Something went wrong",
-};
+import { type ErrorCategory, errorStateCopy } from "./async-copy.js";
+import { EmptyState } from "./empty-state.js";
+import { ErrorState } from "./error-state.js";
+import { LoadingSkeleton } from "./loading-skeleton.js";
+import { renderAsync } from "./render-async.js";
+export type SurfaceError = ErrorCategory;
+export const surfaceErrorCopy = Object.fromEntries(
+  Object.entries(errorStateCopy).map(([category, copy]) => [category, copy.title]),
+) as Record<ErrorCategory, string>;
+
 export type SurfaceState =
   | { status: "ready" }
   | { status: "loading" }
@@ -53,42 +38,36 @@ export function SurfaceFeedback({
 }) {
   if (state.status === "ready") return null;
   if (state.status === "loading")
-    return (
-      <div ref={ref} tabIndex={tabIndex} className="su-feedback" role="status" aria-label="Loading">
-        <span className="su-skeleton su-skeleton-title" />
-        <span className="su-skeleton" />
-        <span className="su-skeleton" />
-        <span className="su-sr-only">Loading…</span>
-      </div>
-    );
-  const error = state.status === "error";
-  const filtered = state.status === "filtered-empty";
+    return <LoadingSkeleton ref={ref} tabIndex={tabIndex} preset="detail" label="Loading" />;
   return (
-    <div ref={ref} tabIndex={tabIndex} className="su-feedback" role={error ? "alert" : "status"}>
-      {!error && !filtered && (
-        <span className="su-empty-tile">
-          <Upload size={24} strokeWidth={1.5} aria-hidden="true" />
-        </span>
-      )}
-      <p className="su-title">
-        {error
-          ? surfaceErrorCopy[state.error]
-          : filtered
-            ? `No results for '${state.query}'`
-            : emptyTitle}
-      </p>
-      {!error && !filtered && <p className="su-muted">{emptyBody}</p>}
-      {onAction && (
-        <button className="su-button" type="button" onClick={onAction}>
-          {error
-            ? state.error === "reauth"
-              ? "Sign in"
-              : "Retry"
-            : filtered
-              ? "Clear filters"
-              : actionLabel}
-        </button>
-      )}
+    <div ref={ref} tabIndex={tabIndex}>
+      {renderAsync({
+        error: state.status === "error" && (
+          <ErrorState
+            error={state.error}
+            actions={onAction ? { retry: onAction, signIn: onAction } : undefined}
+            loadingPreset="detail"
+          />
+        ),
+        empty:
+          state.status === "empty" ? (
+            <EmptyState
+              title={emptyTitle}
+              body={emptyBody}
+              icon={<Upload size={24} strokeWidth={1.5} aria-hidden="true" />}
+              primaryAction={
+                onAction && (
+                  <button type="button" className="suite-async-action" onClick={onAction}>
+                    {actionLabel}
+                  </button>
+                )
+              }
+            />
+          ) : state.status === "filtered-empty" ? (
+            <EmptyState variant="filtered-empty" query={state.query} onClearFilters={onAction} />
+          ) : null,
+        children: null,
+      })}
     </div>
   );
 }
