@@ -28,12 +28,14 @@ function position(anchor: ColourAnchor, numbers: readonly number[]): number {
     case "percent":
       return interpolate(min, max, anchor.value, 100);
     case "percentile": {
-      const rank = ((numbers.length - 1) * anchor.value) / 100;
+      const numerator = (numbers.length - 1) * anchor.value;
+      const rank = numerator / 100;
       const lower = Math.floor(rank);
       return interpolate(
         numbers[lower] as number,
         numbers[Math.ceil(rank)] as number,
-        rank - lower,
+        numerator - lower * 100,
+        100,
       );
     }
   }

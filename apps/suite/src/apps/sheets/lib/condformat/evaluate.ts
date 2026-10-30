@@ -39,6 +39,16 @@ function comparison(rule: CellIsRule, value: CellValue): boolean {
   }
 }
 
+function percentageCount(population: number, percent: number): number {
+  // Preserve the decimal percentage through the ceiling, including scientific notation.
+  const [coefficient, exponent = "0"] = percent.toString().split("e");
+  const [whole, fraction = ""] = (coefficient as string).split(".");
+  const numerator = BigInt(`${whole}${fraction}`) * BigInt(population);
+  // Validated percentages are in (0, 100], so this exponent is nonnegative.
+  const denominator = BigInt(100) * BigInt(10) ** BigInt(fraction.length - Number(exponent));
+  return Number((numerator + denominator - BigInt(1)) / denominator);
+}
+
 function matcher(
   rule: ConditionalFormatRule,
   numbers: readonly number[],
@@ -83,9 +93,7 @@ function matcher(
     case "top":
     case "bottom": {
       if (numbers.length === 0) return () => undefined;
-      const count = rule.percent
-        ? Math.max(1, Math.ceil((numbers.length * rule.count) / 100))
-        : rule.count;
+      const count = rule.percent ? percentageCount(numbers.length, rule.count) : rule.count;
       const index =
         rule.kind === "top"
           ? Math.max(0, numbers.length - count)
@@ -111,17 +119,45 @@ function matcher(
   return (value) => (matches(value) ? rule.style : undefined);
 }
 
-function compensatedAverage(numbers: readonly number[], divisor: number): number {
+function compensatedAverage(numbers: readonly number[]): number {
   let sum = 0;
   let correction = 0;
   for (const value of numbers) {
-    const scaled = value / divisor;
-    const next = sum + scaled;
-    correction += Math.abs(sum) >= Math.abs(scaled) ? sum - next + scaled : scaled - next + sum;
+    const next = sum + value;
+    correction += Math.abs(sum) >= Math.abs(value) ? sum - next + value : value - next + sum;
     sum = next;
   }
   // Divide separately so rounding the total cannot discard the compensation.
   return sum / numbers.length + correction / numbers.length;
+}
+
+function exactAverage(numbers: readonly number[]): number {
+  const view = new DataView(new ArrayBuffer(8));
+  const zero = BigInt(0);
+  const one = BigInt(1);
+  let sum = zero;
+  // Every finite double is an integer multiple of 2^-1074. Accumulate those units
+  // exactly so overflow and cancellation cannot erase a small residual.
+  for (const value of numbers) {
+    view.setFloat64(0, value);
+    const bits = view.getBigUint64(0);
+    const exponent = Number((bits >> BigInt(52)) & BigInt(0x7ff));
+    const fraction = bits & BigInt("0xfffffffffffff");
+    const significand = exponent === 0 ? fraction : fraction + BigInt("0x10000000000000");
+    const units = significand << BigInt(Math.max(0, exponent - 1));
+    sum += value < 0 ? -units : units;
+  }
+  const magnitude = sum < zero ? -sum : sum;
+  const population = BigInt(numbers.length);
+  // Keep 53 significant bits, or single subnormal units, and round ties to even.
+  const shift = Math.max(0, (magnitude / population).toString(2).length - 53);
+  const denominator = population << BigInt(shift);
+  let rounded = magnitude / denominator;
+  const remainder = (magnitude % denominator) * BigInt(2);
+  if (remainder > denominator || (remainder === denominator && rounded % BigInt(2) !== zero)) {
+    rounded += one;
+  }
+  return (sum < zero ? -1 : 1) * Number(rounded) * 2 ** (shift - 1074);
 }
 
 /** Apply every rule to this entire rectangular range, without mutating either input. */
@@ -137,13 +173,11 @@ export function evaluateConditionalFormats(
   const needsCounts = validated.some((rule) => rule.kind === "duplicate" || rule.kind === "unique");
   const numbers: number[] = [];
   const counts = new Map<Key, number>();
-  let scale = 0;
   for (const row of values) {
     for (const value of row) {
       validateCell(value);
       if (needsNumbers && typeof value === "number") {
         numbers.push(value);
-        scale = Math.max(scale, Math.abs(value));
       }
       if (needsCounts) {
         const key = duplicateKey(value);
@@ -152,11 +186,9 @@ export function evaluateConditionalFormats(
     }
   }
   numbers.sort((a, b) => a - b);
-  // Preserve compensation through division; normalize only after overflow.
-  const directAverage = numbers.length === 0 ? 0 : compensatedAverage(numbers, 1);
-  const average = Number.isFinite(directAverage)
-    ? directAverage
-    : compensatedAverage(numbers, scale) * scale;
+  // Keep the compensated fast path and accumulate exactly after overflow.
+  const directAverage = numbers.length === 0 ? 0 : compensatedAverage(numbers);
+  const average = Number.isFinite(directAverage) ? directAverage : exactAverage(numbers);
   const matchers = validated.map((rule) => matcher(rule, numbers, counts, average));
   return values.map((row) =>
     row.map((value) => {

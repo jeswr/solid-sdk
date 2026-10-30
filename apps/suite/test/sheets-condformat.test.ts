@@ -245,6 +245,24 @@ describe("numeric population rules", () => {
   });
 
   it.each([
+    "top",
+    "bottom",
+  ] as const)("selects the exact fractional percentage cutoff for %s rules", (kind) => {
+    for (const [length, count, selected] of [
+      [375, 8.8, 33],
+      [750, 4.4, 33],
+      [375, 8.800000000000002, 34],
+      [375, 8.799999999999999, 33],
+      [100, 1e-7, 1],
+    ] as const) {
+      const cells = Array.from({ length }, (_, index) => index);
+      expect(matches(cells, { kind, count, percent: true, style: bold })).toEqual(
+        cells.map((value) => (kind === "top" ? value >= length - selected : value < selected)),
+      );
+    }
+  });
+
+  it.each([
     ["aboveAverage", [false, false, true]],
     ["belowAverage", [true, false, false]],
   ] as const)("evaluates strict %s across only numeric cells", (kind, expected) => {
@@ -272,6 +290,61 @@ describe("numeric population rules", () => {
     expect(
       matches([Number.MIN_VALUE, Number.MIN_VALUE * 3], { kind: "belowAverage", style: bold }),
     ).toEqual([true, false]);
+  });
+
+  it.each([1, -1])("retains small residuals after overflow and cancellation, sign %s", (sign) => {
+    const largest = Number.MAX_VALUE;
+    const cells = [-largest, -largest, 0, sign * 1e-100, largest, largest];
+    const kind = sign === 1 ? "belowAverage" : "aboveAverage";
+    expect(
+      evaluateConditionalFormats(
+        [cells],
+        [
+          { kind, style: bold, stopIfTrue: true },
+          { kind: "notBlank", style: { italic: true } },
+        ],
+      ),
+    ).toEqual([
+      cells.map((value) => ((sign === 1 ? value <= 0 : value >= 0) ? bold : { italic: true })),
+    ]);
+  });
+
+  it.each([
+    [
+      [0, 0],
+      [false, false],
+      [false, false],
+    ],
+    [
+      [0, Number.MIN_VALUE],
+      [false, false],
+      [false, true],
+    ],
+    [
+      [0, 4 * Number.MIN_VALUE],
+      [true, false],
+      [false, true],
+    ],
+    [
+      [0, 1, 1, 1, 1, 1].map((value) => value * Number.MIN_VALUE),
+      [false, false, false, false, false, false],
+      [false, true, true, true, true, true],
+    ],
+    [
+      [0, 1, 2, 3, 4, 5].map((value) => value * Number.MIN_VALUE),
+      [true, true, false, false, false, false],
+      [false, false, false, true, true, true],
+    ],
+    [
+      [0, 1, 2, 3, 4, 15].map((value) => value * Number.MIN_VALUE),
+      [true, true, false, false, false, false],
+      [false, false, false, true, true, true],
+    ],
+  ] as const)("rounds cancelled subnormal averages for residual cells %j", (residuals, below, above) => {
+    const largest = Number.MAX_VALUE;
+    const cells = [-largest, -largest, ...residuals, largest, largest];
+    expect(matches(cells, { kind: "belowAverage", style: bold }).slice(2, -2)).toEqual(below);
+    expect(matches(cells, { kind: "aboveAverage", style: bold }).slice(2, -2)).toEqual(above);
   });
 
   it.each([
@@ -353,6 +426,20 @@ describe("numeric population rules", () => {
 });
 
 describe("colour scales", () => {
+  it.each([
+    ["percentile", "percent"],
+    ["percent", "percentile"],
+  ] as const)("accepts equivalent %s and %s anchors over two samples", (first, second) => {
+    for (const value of [20, 80]) {
+      expect(
+        evaluateConditionalFormats(
+          [[0, 3]],
+          [scale({ kind: first, value, color: black }, { kind: second, value, color: white })],
+        ),
+      ).toEqual([[{ fill: black }, { fill: white }]]);
+    }
+  });
+
   it.each([
     ["percent", "percentile"],
     ["percentile", "percent"],
