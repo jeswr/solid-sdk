@@ -32,6 +32,13 @@ export interface StoreOptions {
   now?: () => Date;
   uuid?: () => string;
   typeIndex?: boolean;
+  /**
+   * Required for project initialization, even without a Type Index. Establish or
+   * verify owner-only effective ACL/ACP access on the Tasks root and its existing
+   * descendants (including policy overrides), with private inheritance for new
+   * resources. Return true only when confirmed; unreadable/unsupported policy fails closed.
+   */
+  ensurePrivateTasksAccess?: (root: string, owner: string) => Promise<boolean>;
   /** Required for registration; verify/establish effective owner-only ACL/ACP access. */
   ensurePrivateIndexAccess?: PrivateIndexAccess;
 }
@@ -85,7 +92,16 @@ export class TaskStore {
       { forClass: `${NS.WF}Task`, location: stateStore, kind: "instanceContainer" },
     ]);
   }
+  private async protectTasks(): Promise<void> {
+    const verify = this.options.ensurePrivateTasksAccess;
+    if (!verify) throw new TypeError("A Tasks ACL/ACP access verifier is required.");
+    const root = new URL("tasks/", this.options.storage).href;
+    // Only an empty app root may be created before protection is established.
+    await this.io.container(root);
+    if ((await verify(root, this.options.webId)) !== true) throw new ModelError(403, root);
+  }
   async bootstrapInbox(): Promise<StoredProject> {
+    await this.protectTasks();
     await this.retryCleanup("Inbox", true);
     const url = `${this.projects}inbox.ttl`;
     for (let attempt = 0; ; attempt++) {
@@ -121,9 +137,9 @@ export class TaskStore {
   }
   async createProject(title: string, inbox = false): Promise<StoredProject> {
     requireTitle(title);
+    await this.protectTasks();
     // Retry recoverable failures only for this project, never block unrelated titles.
     await this.retryCleanup(title, inbox);
-    await this.io.container(new URL("tasks/", this.options.storage).href);
     await this.io.container(this.projects);
     const used = (await this.io.list(this.projects)).map((url) => {
       const path = url.replace(/\/$/, "");

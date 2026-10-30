@@ -36,7 +36,15 @@ it.each([
   };
   const io = new RdfIO(transport);
   await io.container(storage);
-  const options = { storage, webId: `${storage}profile#me`, fetch: transport, typeIndex: false };
+  const options = {
+    storage,
+    webId: `${storage}profile#me`,
+    fetch: transport,
+    typeIndex: false,
+    // This public file-root fixture tests LDP/validator behavior. Privacy failures
+    // and ordering are exercised by the injected verifier in store.test.ts.
+    ensurePrivateTasksAccess: async () => true,
+  };
   const creator = new TaskStore(options);
   const inbox = await creator.bootstrapInbox();
   const adopted = await new TaskStore(options).bootstrapInbox();

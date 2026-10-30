@@ -29,6 +29,7 @@ function store(pod: Pod, extra = {}) {
     storage,
     webId,
     fetch: pod.fetch,
+    ensurePrivateTasksAccess: pod.ensurePrivateIndexAccess,
     ensurePrivateIndexAccess: pod.ensurePrivateIndexAccess,
     now: () => now,
     uuid: () => "task-1",
@@ -38,6 +39,58 @@ function store(pod: Pod, extra = {}) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("project discovery and first use", () => {
+  it.each([
+    "create",
+    "inbox",
+  ])("requires a privacy verifier before %s initialization", async (mode) => {
+    const pod = new Pod();
+    const tasks = store(pod, { ensurePrivateTasksAccess: undefined, typeIndex: false });
+    await expect(
+      mode === "create" ? tasks.createProject("Private") : tasks.bootstrapInbox(),
+    ).rejects.toThrow("Tasks ACL/ACP access verifier");
+    expect(pod.mutations()).toEqual([]);
+  });
+  it.each([
+    false,
+    true,
+  ])("fails closed on unconfirmed Tasks privacy (existing root: %s)", async (existing) => {
+    const pod = new Pod();
+    const root = `${storage}tasks/`;
+    if (existing) pod.seed(root, `<${root}> a <${NS.LDP}BasicContainer>.`);
+    const verify = vi.fn(async () => false);
+    const tasks = store(pod, { ensurePrivateTasksAccess: verify });
+    await expect(tasks.createProject("Private")).rejects.toMatchObject({ status: 403, url: root });
+    expect(verify).toHaveBeenCalledWith(root, webId);
+    expect(pod.mutations().every((request) => request.url === root)).toBe(true);
+    expect(pod.files.has(projects)).toBe(false);
+  });
+  it("awaits root privacy before writing project data and rechecks before Inbox adoption", async () => {
+    const pod = new Pod();
+    const root = `${storage}tasks/`;
+    let protectedRoot = false;
+    const verify = vi.fn(async (url: string, owner: string) => {
+      expect(url).toBe(root);
+      expect(owner).toBe(webId);
+      expect((await pod.dataset(root)).size).toBe(1);
+      await Promise.resolve();
+      protectedRoot = true;
+      return true;
+    });
+    pod.intercept = (request) => {
+      if (request.method !== "GET" && request.url.startsWith(projects))
+        expect(protectedRoot).toBe(true);
+      return undefined;
+    };
+    const tasks = store(pod, { ensurePrivateTasksAccess: verify, typeIndex: false });
+    await tasks.bootstrapInbox();
+    const writes = pod.mutations().length;
+    verify.mockResolvedValue(false);
+    await expect(tasks.bootstrapInbox()).rejects.toMatchObject({ status: 403, url: root });
+    expect(pod.mutations()).toHaveLength(writes);
+    verify.mockRejectedValue(new Error("Unreadable policy"));
+    await expect(tasks.createProject("Another")).rejects.toThrow("Unreadable policy");
+    expect(pod.mutations()).toHaveLength(writes);
+  });
   it.each([
     "container",
     "registration",
@@ -1035,7 +1088,13 @@ describe("task conditional CRUD", () => {
   });
   it("uses default clock and UUID seams", async () => {
     const pod = new Pod();
-    const tasks = new TaskStore({ storage, webId, fetch: pod.fetch, typeIndex: false });
+    const tasks = new TaskStore({
+      storage,
+      webId,
+      fetch: pod.fetch,
+      typeIndex: false,
+      ensurePrivateTasksAccess: pod.ensurePrivateIndexAccess,
+    });
     const home = await tasks.createProject("Home");
     const task = await tasks.createTask(home, { title: "Generated", state: "open" });
     expect(task.url).toMatch(/[a-f\d-]{36}\.ttl$/);
