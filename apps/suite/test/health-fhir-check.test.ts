@@ -158,6 +158,33 @@ describe("FHIR structural self-check", () => {
     expect(assertFhirBundle(checked)).toEqual(checked);
   });
 
+  it.each([
+    "ABCDEFAB-0000-4000-8000-000000000001",
+    "AbCdEfAb-0000-4000-8000-000000000001",
+    "abcdefab-0000-4000-8000-00000000000A",
+    "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF",
+  ])("independently rejects uppercase UUID logical IDs in every resource kind: %s", (id) => {
+    for (const index of [0, 1, 2, 3]) {
+      const bundle = fixture();
+      change(bundle, `entry.${index}.resource.id`, id);
+      rejects(bundle);
+    }
+  });
+
+  it.each([
+    "abcdefab-0000-4000-8000-000000000001",
+    "00000000-0000-0000-0000-000000000000",
+    "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "Record-ABC.123",
+    "GBCDEFAB-0000-4000-8000-000000000001",
+  ])("independently preserves lowercase UUID and non-UUID logical IDs: %s", (id) => {
+    for (const index of [0, 1, 2, 3]) {
+      const bundle = fixture();
+      change(bundle, `entry.${index}.resource.id`, id);
+      expect(assertFhirBundle(bundle)).toEqual(bundle);
+    }
+  });
+
   it("rejects duplicate IDs within a kind", () => {
     const bundle = fixture();
     change(bundle, "entry.3.resource.id", "a");

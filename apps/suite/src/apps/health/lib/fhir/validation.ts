@@ -80,7 +80,12 @@ export function markdown(value: unknown, prefixLength = 0): value is string {
 }
 
 export function id(value: unknown): value is string {
-  return typeof value === "string" && /^[A-Za-z0-9.-]{1,64}$/.test(value);
+  return (
+    typeof value === "string" &&
+    /^[A-Za-z0-9.-]{1,64}$/.test(value) &&
+    // R4 IDs are case sensitive, but UUID-form IDs must use lowercase hex.
+    (!/^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(value) || value === value.toLowerCase())
+  );
 }
 
 /** Absolute REST Patient URLs can resolve independently of the bundle's UUID fullUrls. */

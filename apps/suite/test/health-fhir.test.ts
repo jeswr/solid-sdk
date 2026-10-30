@@ -437,6 +437,43 @@ describe("health FHIR R4 collection export", () => {
   });
 
   it.each([
+    "ABCDEFAB-0000-4000-8000-000000000001",
+    "AbCdEfAb-0000-4000-8000-000000000001",
+    "abcdefab-0000-4000-8000-00000000000A",
+    "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF",
+  ])("rejects uppercase UUID logical IDs in every record kind before callbacks: %s", (id) => {
+    for (const input of [
+      records({ observations: [{ ...observation, id }] }),
+      records({ medications: [{ ...medication, id }] }),
+      records({ conditions: [{ ...condition, id }] }),
+    ]) {
+      const injected = { clock: vi.fn(options().clock), uuid: vi.fn(options().uuid) };
+      expectCode(() => buildFhirBundle(input, injected), "INVALID_INPUT");
+      expect(injected.clock).not.toHaveBeenCalled();
+      expect(injected.uuid).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each([
+    "abcdefab-0000-4000-8000-000000000001",
+    "00000000-0000-0000-0000-000000000000",
+    "ffffffff-ffff-ffff-ffff-ffffffffffff",
+    "Record-ABC.123",
+    "GBCDEFAB-0000-4000-8000-000000000001",
+  ])("preserves lowercase UUID and non-UUID logical IDs in every record kind: %s", (id) => {
+    const bundle = buildFhirBundle(
+      records({
+        observations: [{ ...observation, id }],
+        medications: [{ ...medication, id }],
+        conditions: [{ ...condition, id }],
+      }),
+      options(),
+    );
+    expect(bundle.entry?.map((entry) => entry.resource.id)).toEqual([id, id, id]);
+    expect(assertFhirBundle(bundle)).toEqual(bundle);
+  });
+
+  it.each([
     {},
     { id: "" },
     { id: "https://example.org/record" },
