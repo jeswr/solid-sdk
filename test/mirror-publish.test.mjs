@@ -44,7 +44,7 @@ describe("agent history imports", () => {
       missingPin.delete(name);
       expect(() => rewriteManifest(manifest, missingPin)).toThrow(/nor pinned/);
     }
-    expect(mirror.dependencies["@jeswr/fetch-rdf"]).toBe("^0.1.0");
+    expect(mirror.dependencies["@jeswr/fetch-rdf"]).toBe(`github:jeswr/fetch-rdf#${FULL_SHA}`);
     expect(mirror.exports).toEqual(manifest.exports);
   });
 });
