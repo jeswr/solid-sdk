@@ -26,6 +26,7 @@ import { editorActions } from "../editor/actions";
 import { copyDocument } from "../editor/copy";
 import { downloadDocument } from "../editor/export-document";
 import { editorExtensions } from "../editor/extensions";
+import { focusDocument } from "../editor/focus";
 import { convertImport, uploadImportImage } from "../editor/import-document";
 import type { DocumentPersistence } from "../editor/persistence";
 import { printDocument } from "../editor/print-document";
@@ -144,10 +145,15 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
       autofocus: runtime.stored ? false : "start",
       editorProps: {
         attributes: {
+          tabindex: "0",
           role: "textbox",
           "aria-label": "Document body",
           "aria-multiline": "true",
           spellcheck: "true",
+        },
+        // ProseMirror skips handleKeyDown when editable is false.
+        handleDOMEvents: {
+          keydown: (view, event) => !view.editable && handlers.current.key(event),
         },
         handleKeyDown: (_view, event) => {
           if (
@@ -293,6 +299,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
       event.shiftKey,
       event.altKey,
     );
+    if (runtime.readOnly && action === "link") return false;
     if (action) {
       event.preventDefault();
       if (action === "save") void runtime.forceSave();
@@ -380,7 +387,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
                 if (event.key === "Enter") {
                   event.preventDefault();
                   commitTitle();
-                  editor?.commands.focus();
+                  if (editor) focusDocument(editor);
                 }
                 if (event.key === "Escape") {
                   event.preventDefault();
@@ -491,7 +498,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
               );
               // setContent is one Yjs transaction and remains undoable through Collaboration.
               editor.commands.setContent(imported.json);
-              return { skipped: imported.skipped, done: () => editor.commands.focus() };
+              return { skipped: imported.skipped, done: () => focusDocument(editor) };
             }}
           />
         )}
@@ -591,8 +598,7 @@ function HydratedEditor({ runtime }: { runtime: DocumentPersistence }) {
             className="docs-shortcuts"
             onCloseAutoFocus={(event) => {
               event.preventDefault();
-              if (editor && !editor.isDestroyed)
-                editor.commands.focus(undefined, { scrollIntoView: false });
+              if (editor) focusDocument(editor, { scrollIntoView: false });
             }}
           >
             <DialogTitle>Keyboard shortcuts</DialogTitle>

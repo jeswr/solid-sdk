@@ -3,6 +3,7 @@
 import { PopoverContent } from "@jeswr/suite-ui";
 import type { Editor } from "@tiptap/react";
 import { type ComponentProps, useRef } from "react";
+import { focusDocument } from "../editor/focus";
 
 type EditorPopoverProps = Omit<ComponentProps<typeof PopoverContent>, "onCloseAutoFocus"> & {
   editor: Editor;
@@ -29,7 +30,7 @@ export function EditorPopoverContent({
       }}
       onCloseAutoFocus={(event) => {
         event.preventDefault();
-        if (!outside.current && !editor.isDestroyed) editor.commands.focus();
+        if (!outside.current) focusDocument(editor);
       }}
     />
   );

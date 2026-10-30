@@ -3,6 +3,7 @@
 import { Button } from "@jeswr/suite-ui";
 import type { Editor } from "@tiptap/react";
 import { useEffect, useState } from "react";
+import { focusDocument } from "../editor/focus";
 import { buildOutline, type OutlineHeading } from "../lib/outline";
 export function OutlinePane({ editor, revision }: { editor: Editor | null; revision: number }) {
   const [active, setActive] = useState("");
@@ -47,7 +48,7 @@ export function OutlinePane({ editor, revision }: { editor: Editor | null; revis
       <h2>Outline</h2>
       <nav aria-label="Document outline">
         {headings.length ? (
-          headings.map((heading) => (
+          headings.map((heading, index) => (
             <Button
               key={heading.anchor}
               variant="ghost"
@@ -55,11 +56,12 @@ export function OutlinePane({ editor, revision }: { editor: Editor | null; revis
               aria-current={active === `docs-${heading.anchor}` ? "location" : undefined}
               onClick={() => {
                 if (!editor) return;
-                const element = document.getElementById(`docs-${heading.anchor}`);
+                // ProseMirror can replace the heading DOM after the effect assigned IDs.
+                const element = editor.view.dom.querySelectorAll("h1,h2,h3")[index];
                 element?.scrollIntoView({ block: "center" });
                 if (element) {
                   editor.commands.setTextSelection(editor.view.posAtDOM(element, 0));
-                  editor.commands.focus(undefined, { scrollIntoView: false });
+                  focusDocument(editor, { scrollIntoView: false });
                 }
               }}
             >

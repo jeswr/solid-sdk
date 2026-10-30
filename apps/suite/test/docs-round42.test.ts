@@ -34,15 +34,16 @@ it.each([
   );
   zip.write(
     "word/styles.xml",
-    `<w:styles ${ns}><w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${style}"/></w:style></w:styles>`,
+    `<w:styles ${ns}><w:style w:type="paragraph" w:styleId="${id}"><w:name w:val="${style}"/></w:style><w:style w:type="paragraph" w:styleId="ListContinuation${id}"><w:name w:val="List Continuation ${style}"/><w:basedOn w:val="${id}"/></w:style></w:styles>`,
   );
   const p = (text: string, props = "") =>
     `<w:p><w:pPr>${props}</w:pPr><w:r><w:t>${text}</w:t></w:r></w:p>`;
   const numbered = `<w:pStyle w:val="${id}"/><w:numPr><w:numId w:val="5"/></w:numPr>`;
-  const continuation = `<w:pStyle w:val="${id}"/><w:ind w:left="720"/>`;
+  const continuation = `<w:pStyle w:val="ListContinuation${id}"/><w:ind w:left="720"/>`;
+  const standalone = `<w:pStyle w:val="${id}"/><w:ind w:left="720"/>`;
   zip.write(
     "word/document.xml",
-    `<w:document ${ns}><w:body>${p("First", numbered)}${p("Second", numbered)}${p("Continued", continuation)}${p("See section 8 above.")}</w:body></w:document>`,
+    `<w:document ${ns}><w:body>${p("First", numbered)}${p("Second", numbered)}${p("Continued", continuation)}${p("Standalone", standalone)}${p("See section 8 above.")}</w:body></w:document>`,
   );
   zip.write(
     "word/numbering.xml",
@@ -72,7 +73,9 @@ it.each([
   expect(list?.content?.[1]?.content?.filter((node) => node.type === block)).toHaveLength(
     style === "Code" ? 1 : 2,
   );
-  expect(result.json.content?.[1]?.content?.[0]?.text).toBe("See section 8 above.");
+  // Even matching styles and indentation cannot prove continuation intent.
+  expect(result.json.content?.[1]?.type).toBe(block);
+  expect(result.json.content?.at(-1)?.content?.[0]?.text).toBe("See section 8 above.");
   expect(importHtml(generateHTML(result.json, extensions)).json).toEqual(result.json);
 });
 

@@ -101,6 +101,8 @@ function mapLists(
         else if (metadata.numbering) child.numbering = metadata.numbering;
       }
       const styleName = child.styleName?.toLowerCase();
+      const continuationStyle = styleName?.match(/^list continuation(?: (.+))?$/);
+      const blockStyle = continuationStyle ? continuationStyle[1] : styleName;
       const checked = child.type === "paragraph" ? taskChecked(child, styleName) : undefined;
       const task = checked !== undefined;
       const indentLevel = Math.round(Number(child.indent?.start) / 720 - 1);
@@ -108,13 +110,16 @@ function mapLists(
         child.type === "paragraph" &&
         !child.numbering &&
         !task &&
+        // Semantic block styles are boundaries unless explicitly marked as a
+        // list continuation. A standalone Quote has the same half-inch indent.
+        (continuationStyle || (!paragraphPaths.has(styleName ?? "") && child.styleId !== "Code")) &&
         indentLevel >= 0 &&
         ancestors.length > 0;
       const mappedStyle = (ancestors: string[]) => {
         const block =
-          child.styleId === "Code"
+          child.styleId === "Code" || child.styleId === "ListContinuationCode"
             ? "pre:fresh"
-            : (paragraphPaths.get(styleName ?? "") ?? "p:fresh");
+            : (paragraphPaths.get(blockStyle ?? "") ?? "p:fresh");
         const styleId = `SuiteList${styleMap.length}`;
         // Mammoth uses the first matching rule. Every generated list/continuation
         // path must precede presets while retaining the paragraph's block style.
@@ -160,6 +165,8 @@ function mapLists(
         ancestors.push({ path: `${list} > ${item}`, key, list });
       } else {
         ancestors.length = 0;
+        // A Word edit may remove the list that introduced this continuation.
+        if (child.type === "paragraph" && continuationStyle) mappedStyle([]);
         container(child);
       }
     }

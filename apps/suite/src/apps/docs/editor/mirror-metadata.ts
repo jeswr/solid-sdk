@@ -2,11 +2,11 @@
 import { type IndexeddbPersistence, storeState } from "y-indexeddb";
 import { applyUpdate, Doc, encodeStateAsUpdate, equalSnapshots, snapshot } from "yjs";
 
-type Metadata = Record<"pending" | "title" | "edit", unknown>;
+export type MirrorMetadata = Record<"pending" | "title" | "edit" | "alternateEdits", unknown>;
 /** Keep the comparison and writes in one cross-tab IndexedDB transaction. */
 export async function updateMirrorMetadata(
   mirror: IndexeddbPersistence,
-  update: (current: Metadata) => Record<string, string | number> | undefined,
+  update: (current: MirrorMetadata) => Record<string, string | number> | undefined,
   active: () => boolean,
   confirmed?: Uint8Array,
   localUpdate?: Uint8Array,
@@ -31,14 +31,16 @@ export async function updateMirrorMetadata(
       probe.destroy();
     }
   };
-  const keys = ["pending", "title", "edit"] as const;
+  const keys = ["pending", "title", "edit", "alternateEdits"] as const;
   const database = mirror.db ?? (await mirror._db);
   // In-memory mirror adapters expose the same get/set contract without a database.
   if (!database) {
-    const [pending, title, edit] = await Promise.all(keys.map((key) => mirror.get(key)));
+    const [pending, title, edit, alternateEdits] = await Promise.all(
+      keys.map((key) => mirror.get(key)),
+    );
     const writes =
       active() && covered(confirmed ? [encodeStateAsUpdate(mirror.doc)] : [])
-        ? update({ pending, title, edit })
+        ? update({ pending, title, edit, alternateEdits })
         : undefined;
     for (const [key, value] of Object.entries(writes ?? {})) {
       if (!active()) return false;
@@ -53,7 +55,12 @@ export async function updateMirrorMetadata(
       "readwrite",
     );
     const store = transaction.objectStore("custom");
-    const current: Metadata = { pending: undefined, title: undefined, edit: undefined };
+    const current: MirrorMetadata = {
+      pending: undefined,
+      title: undefined,
+      edit: undefined,
+      alternateEdits: undefined,
+    };
     let remaining = keys.length + (confirmed ? 1 : 0);
     let updates: Uint8Array[] = [];
     let written = false;

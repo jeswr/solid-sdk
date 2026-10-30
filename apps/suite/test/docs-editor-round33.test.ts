@@ -42,17 +42,26 @@ vi.mock("@/components/interim-shell/suite-frame", () => ({
     children,
     context,
     actions,
+    sidebar,
   }: {
     children: ReactNode;
     context: ReactNode;
     actions: ReactNode;
-  }) => createElement("div", null, context, actions, children),
+    sidebar: ReactNode;
+  }) => createElement("div", null, context, actions, sidebar, children),
 }));
 
 import { DocumentEditor } from "../src/apps/docs/components/document-editor";
 
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
   vi.stubGlobal(
     "ResizeObserver",
     class {
@@ -80,6 +89,7 @@ async function mountEditor(
   initial?: JSONContent,
   storedUrl?: string,
   fetchImpl: typeof fetch = vi.fn(async () => new Response(null, { status: 404 })),
+  readOnly = false,
 ) {
   const session = {
     storageUrl: "https://pod.test/",
@@ -96,7 +106,7 @@ async function mountEditor(
     localState: "saved",
     online: true,
     lastSaved: Date.now(),
-    readOnly: false,
+    readOnly,
     capture: vi.fn(),
     flush: vi.fn(),
     change: vi.fn(),
@@ -133,6 +143,100 @@ async function mountEditor(
     },
   };
 }
+
+it("round45 view-only document bodies are keyboard focusable for outline navigation and Find", async () => {
+  const view = await mountEditor(
+    {
+      type: "doc",
+      content: [
+        { type: "heading", attrs: { level: 1 }, content: [{ type: "text", text: "Plan" }] },
+        { type: "paragraph", content: [{ type: "text", text: "Plain legacy text" }] },
+      ],
+    },
+    "https://pod.test/pod-docs/plan.ttl",
+    undefined,
+    true,
+  );
+  try {
+    expect(view.body.getAttribute("contenteditable")).toBe("false");
+    expect(view.body.tabIndex).toBe(0);
+    await act(async () => view.body.focus());
+    expect(document.activeElement).toBe(view.body);
+    const heading = view.host.querySelector<HTMLButtonElement>(
+      '[aria-label="Document outline"] button',
+    );
+    expect(heading?.textContent).toBe("Plan");
+    await act(async () => {
+      heading?.focus();
+      heading?.click();
+    });
+    await vi.waitFor(() => expect(document.activeElement).toBe(view.body));
+    for (const modifier of ["ctrlKey", "metaKey"]) {
+      const event = new KeyboardEvent("keydown", {
+        key: "f",
+        [modifier]: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      await act(async () => view.body.dispatchEvent(event));
+      expect(event.defaultPrevented).toBe(true);
+      expect(view.host.querySelector('[aria-label="Find and replace"]')).not.toBeNull();
+      await act(async () => {
+        if (modifier === "ctrlKey")
+          document.activeElement?.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+          );
+        else view.host.querySelector<HTMLButtonElement>('[aria-label="Close find"]')?.click();
+      });
+      await vi.waitFor(() => expect(document.activeElement).toBe(view.body));
+    }
+    const title = view.host.querySelector<HTMLInputElement>('[aria-label="Document title"]');
+    await act(async () => {
+      title?.focus();
+      title?.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    });
+    await vi.waitFor(() => expect(document.activeElement).toBe(view.body));
+    for (const [key, shiftKey, label] of [
+      ["c", true, "Word count"],
+      ["/", false, "Keyboard shortcuts"],
+    ] as const) {
+      await act(async () =>
+        view.body.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key,
+            shiftKey,
+            ctrlKey: true,
+            bubbles: true,
+            cancelable: true,
+          }),
+        ),
+      );
+      expect(document.querySelector('[role="dialog"]')?.textContent).toContain(label);
+      await act(async () => {
+        if (label === "Keyboard shortcuts")
+          document
+            .querySelector<HTMLButtonElement>('[role="dialog"] [aria-label="Close"]')
+            ?.click();
+        else
+          document.activeElement?.dispatchEvent(
+            new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+          );
+      });
+      await vi.waitFor(() => expect(document.querySelector('[role="dialog"]'), label).toBeNull());
+      await vi.waitFor(() => expect(document.activeElement, label).toBe(view.body));
+    }
+    expect(view.body.textContent).toBe("PlanPlain legacy text");
+    expect(mocks.runtime?.change).not.toHaveBeenCalled();
+    await act(async () =>
+      view.body.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }),
+      ),
+    );
+    expect(document.querySelector('[aria-label="Link"]')).toBeNull();
+  } finally {
+    await view.close();
+  }
+});
 
 it("round39 leaving a document cancels all pending File menu prints before another document is visible", async () => {
   const view = await mountEditor(

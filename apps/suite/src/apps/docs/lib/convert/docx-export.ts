@@ -81,30 +81,53 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
     })),
   });
   const config = [numberingConfig("bullets", 1, 0)];
+  const continuationStyles = new Map<string, { id: string; name: string; basedOn: string }>();
   async function blocks(
     nodes: JSONContent[],
     depth = -1,
     quote = false,
-    numbering?: { reference: string; instance: number },
-    task?: string,
+    marker: {
+      numbering: { reference: string; instance: number } | undefined;
+      task: string | undefined;
+    } = { numbering: undefined, task: undefined },
   ): Promise<(Paragraph | Table)[]> {
     const result: (Paragraph | Table)[] = [];
+    // Every emitted paragraph carries its container context, including images,
+    // unavailable-image text, rules and blocks reached through a wrapper.
+    const addParagraph = ({ heading, ...options }: IParagraphOptions) => {
+      const level = Math.min(Math.max(0, depth), 8);
+      let style = options.style ?? heading ?? (quote ? "Quote" : undefined);
+      if (depth >= 0 && !marker.numbering && !marker.task) {
+        if (style) {
+          const id = `ListContinuation${style}`;
+          continuationStyles.set(id, {
+            id,
+            name: `List Continuation ${style.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^Heading(\d)$/, "Heading $1")}`,
+            basedOn: style,
+          });
+          style = id;
+        } else style = "ListContinuation";
+      }
+      result.push(
+        new Paragraph({
+          ...(quote ? { style: "Quote", indent: { left: 720 }, border: { left: border(24) } } : {}),
+          ...options,
+          ...(style ? { style } : {}),
+          ...(marker.numbering ? { numbering: { ...marker.numbering, level } } : {}),
+          ...(depth >= 0 ? { indent: { left: 720 * (level + 1) } } : {}),
+          ...(marker.task ? { style: marker.task === "☑ " ? "TaskChecked" : "TaskUnchecked" } : {}),
+          children: [
+            ...(marker.task ? [new TextRun({ text: marker.task, style: "TaskMarker" })] : []),
+            ...(options.children ?? []),
+          ],
+        }),
+      );
+      // Exactly one marker per item, regardless of its first block's type.
+      marker.numbering = undefined;
+      marker.task = undefined;
+    };
     for (const node of nodes) {
       const content = children(node);
-      const level = Math.min(Math.max(0, depth), 8);
-      const paragraph: IParagraphOptions = {
-        ...(quote ? { style: "Quote", indent: { left: 720 }, border: { left: border(24) } } : {}),
-        ...(numbering ? { numbering: { ...numbering, level } } : {}),
-        ...(depth >= 0 && !numbering && !task
-          ? { style: "ListContinuation", indent: { left: 720 * (level + 1) } }
-          : {}),
-        ...(task
-          ? {
-              style: task === "☑ " ? "TaskChecked" : "TaskUnchecked",
-              indent: { left: 720 * (level + 1) },
-            }
-          : {}),
-      };
       switch (node.type) {
         case "paragraph":
         case "heading": {
@@ -115,22 +138,13 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
             right: AlignmentType.RIGHT,
             justify: AlignmentType.JUSTIFIED,
           }[String(node.attrs?.textAlign)];
-          result.push(
-            new Paragraph({
-              ...paragraph,
-              ...(alignment ? { alignment } : {}),
-              ...(node.type === "heading"
-                ? { heading: headings[Number(node.attrs?.level) - 1] ?? HeadingLevel.HEADING_3 }
-                : {}),
-              children: [
-                ...(task ? [new TextRun({ text: task, style: "TaskMarker" })] : []),
-                ...content.flatMap((child) => inline(child, quote)),
-              ],
-            }),
-          );
-          // Only the first paragraph in a list item gets its marker.
-          numbering = undefined;
-          task = undefined;
+          addParagraph({
+            ...(alignment ? { alignment } : {}),
+            ...(node.type === "heading"
+              ? { heading: headings[Number(node.attrs?.level) - 1] ?? HeadingLevel.HEADING_3 }
+              : {}),
+            children: [...content.flatMap((child) => inline(child, quote))],
+          });
           break;
         }
         case "bulletList":
@@ -144,45 +158,39 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
             );
           for (const item of content) {
             result.push(
-              ...(await blocks(
-                children(item),
-                depth + 1,
-                quote,
-                node.type === "taskList" ? undefined : { reference, instance },
-                node.type === "taskList" ? (item.attrs?.checked ? "☑ " : "☐ ") : undefined,
-              )),
+              ...(await blocks(children(item), depth + 1, quote, {
+                numbering: node.type === "taskList" ? undefined : { reference, instance },
+                task: node.type === "taskList" ? (item.attrs?.checked ? "☑ " : "☐ ") : undefined,
+              })),
             );
           }
           break;
         }
         case "blockquote":
-          result.push(...(await blocks(content, depth, true)));
+          result.push(...(await blocks(content, depth, true, marker)));
           break;
         case "codeBlock":
-          result.push(
-            new Paragraph({
-              ...paragraph,
-              style: "Code",
-              keepLines: true,
-              shading: { fill: "F2F2F2" },
-              children: content
-                .map((child) => child.text ?? "")
-                .join("")
-                .split("\n")
-                .flatMap((line, lineIndex) => [
-                  ...(lineIndex ? [new TextRun({ break: 1 })] : []),
-                  ...line
-                    .split("\t")
-                    .flatMap((text, index) => [
-                      ...(index ? [new TextRun({ children: [new Tab()] })] : []),
-                      new TextRun({ text, font: codeFont, size: 20 }),
-                    ]),
-                ]),
-            }),
-          );
+          addParagraph({
+            style: "Code",
+            keepLines: true,
+            shading: { fill: "F2F2F2" },
+            children: content
+              .map((child) => child.text ?? "")
+              .join("")
+              .split("\n")
+              .flatMap((line, lineIndex) => [
+                ...(lineIndex ? [new TextRun({ break: 1 })] : []),
+                ...line
+                  .split("\t")
+                  .flatMap((text, index) => [
+                    ...(index ? [new TextRun({ children: [new Tab()] })] : []),
+                    new TextRun({ text, font: codeFont, size: 20 }),
+                  ]),
+              ]),
+          });
           break;
         case "horizontalRule":
-          result.push(new Paragraph({ style: "HorizontalRule", border: { bottom: border(48) } }));
+          addParagraph({ style: "HorizontalRule", border: { bottom: border(48) } });
           break;
         case "image": {
           const alt = String(node.attrs?.alt ?? "");
@@ -192,20 +200,18 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
             const width = rawWidth.endsWith("%")
               ? (PAGE_WIDTH * Math.min(100, Math.max(1, Number.parseFloat(rawWidth)))) / 100
               : Math.min(PAGE_WIDTH, Math.max(1, Number(rawWidth)));
-            result.push(
-              new Paragraph({
-                children: hyperlink(node.attrs?.link?.href, [
-                  new ImageRun({
-                    data: image.data,
-                    type: image.type,
-                    transformation: { width, height: (width * image.height) / image.width },
-                    altText: { name: alt, title: alt, description: alt },
-                  }),
-                ]),
-              }),
-            );
+            addParagraph({
+              children: hyperlink(node.attrs?.link?.href, [
+                new ImageRun({
+                  data: image.data,
+                  type: image.type,
+                  transformation: { width, height: (width * image.height) / image.width },
+                  altText: { name: alt, title: alt, description: alt },
+                }),
+              ]),
+            });
           } catch {
-            result.push(new Paragraph(`[Image unavailable: ${alt}]`));
+            addParagraph({ children: [new TextRun(`[Image unavailable: ${alt}]`)] });
           }
           break;
         }
@@ -241,11 +247,12 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
           break;
         }
         default:
-          result.push(...(await blocks(content, depth, quote)));
+          result.push(...(await blocks(content, depth, quote, marker)));
       }
     }
     return result;
   }
+  const content = await blocks(children(json));
   const document = new Document({
     numbering: { config },
     styles: {
@@ -256,6 +263,7 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
         { id: "TaskChecked", name: "Task Checked" },
         { id: "TaskUnchecked", name: "Task Unchecked" },
         { id: "HorizontalRule", name: "Horizontal Rule" },
+        ...continuationStyles.values(),
       ],
       characterStyles: [
         { id: "InlineCode", name: "Inline Code", run: { font: codeFont } },
@@ -276,7 +284,7 @@ export async function toDocx(json: JSONContent, readImage: ReadExportImage): Pro
             margin: { top: 1440, bottom: 1440, left: 1440, right: 1440 },
           },
         },
-        children: await blocks(children(json)),
+        children: content,
       },
     ],
   });

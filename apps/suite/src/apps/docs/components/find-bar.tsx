@@ -5,6 +5,7 @@ import type { Editor } from "@tiptap/react";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 import { type Ref, useEffect, useId, useState } from "react";
 import { findKey } from "../editor/find-plugin";
+import { focusDocument } from "../editor/focus";
 import { findText, replaceAll, replaceOne } from "../lib/find";
 export function FindBar({
   editor,
@@ -76,7 +77,7 @@ export function FindBar({
         if (event.key === "Escape") {
           event.stopPropagation();
           close();
-          editor.commands.focus();
+          focusDocument(editor);
         }
       }}
     >
@@ -130,7 +131,7 @@ export function FindBar({
         variant="ghost"
         onClick={() => {
           close();
-          editor.commands.focus();
+          focusDocument(editor);
         }}
       >
         <X aria-hidden="true" />
