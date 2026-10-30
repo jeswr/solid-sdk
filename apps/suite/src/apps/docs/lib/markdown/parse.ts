@@ -1,6 +1,13 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { Lexer, type MarkedToken, type Token, type Tokens, type TokensList } from "marked";
+import {
+  Lexer,
+  type MarkedToken,
+  type Token,
+  Tokenizer,
+  type Tokens,
+  type TokensList,
+} from "marked";
 import {
   block,
   checkString,
@@ -15,6 +22,20 @@ import {
 import { type DocsMark, type DocsNode, MarkdownError, type MarkdownOptions } from "./types";
 
 class MarkdownLexer extends Lexer {
+  constructor() {
+    const tokenizer = new Tokenizer();
+    super({ gfm: true, tokenizer });
+    // Marked requires a second character after marker whitespace. An empty first line
+    // is also a list item; keep this correction local to this lexer instance.
+    tokenizer.rules = {
+      ...tokenizer.rules,
+      block: {
+        ...tokenizer.rules.block,
+        list: /^( {0,3}(?:[*+-]|\d{1,9}[.)]))([ \t][^\n]*)?(?:\n|$)/,
+      },
+    };
+  }
+
   override blockTokens(source: string, tokens?: Token[], lastParagraphClipped?: boolean): Token[];
   override blockTokens(
     source: string,
@@ -154,7 +175,7 @@ function taskItem(item: Tokens.ListItem): { tokens: Token[]; checked?: boolean }
     checked: marker[1] !== " ",
   };
 }
-function list(token: Tokens.List, depth: number): DocsNode {
+function list(token: Tokens.List, depth: number, tabbedQuote: boolean): DocsNode {
   const items = token.items.map(taskItem);
   const task = items.some((item) => item.checked !== undefined);
   if (task && (token.ordered || items.some((item) => item.checked === undefined)))
@@ -162,7 +183,7 @@ function list(token: Tokens.List, depth: number): DocsNode {
   return block(
     task ? "taskList" : token.ordered ? "orderedList" : "bulletList",
     items.map((item) => {
-      const children = blocks(item.tokens, depth + 1);
+      const children = blocks(item.tokens, depth + 1, tabbedQuote);
       if (children[0]?.type !== "paragraph") children.unshift(block("paragraph"));
       return block(
         task ? "taskItem" : "listItem",
@@ -173,7 +194,7 @@ function list(token: Tokens.List, depth: number): DocsNode {
     token.ordered ? { start: token.start } : undefined,
   );
 }
-function blocks(tokens: Token[], depth: number): DocsNode[] {
+function blocks(tokens: Token[], depth: number, tabbedQuote = false): DocsNode[] {
   depthGuard(depth);
   return tokens.flatMap((entry): DocsNode[] => {
     const token = entry as MarkedToken;
@@ -192,11 +213,18 @@ function blocks(tokens: Token[], depth: number): DocsNode[] {
       case "hr":
         return [block("horizontalRule")];
       case "blockquote": {
-        const content = blocks(token.tokens, depth + 1);
+        const content = blocks(
+          token.tokens,
+          depth + 1,
+          tabbedQuote || /^ {0,3}>[\t ]*\t/m.test(token.raw),
+        );
         return [block("blockquote", content.length ? content : [block("paragraph")])];
       }
       case "code": {
         if (token.lang && !/^[\w+-]+$/.test(token.lang)) fail("Code fence metadata is unsupported");
+        // Quote removal changes tab stops, and lists may expand the tabs before this point.
+        if (token.codeBlockStyle === "indented" && tabbedQuote)
+          fail("Indented code in a quote with tab indentation is unsupported");
         // A tab following up to three spaces completes the four-column structural indent.
         // Marked removes those spaces first; use raw source to leave only actual code tabs.
         const value =
@@ -206,7 +234,7 @@ function blocks(tokens: Token[], depth: number): DocsNode[] {
         return [block("codeBlock", text(value), token.lang ? { language: token.lang } : undefined)];
       }
       case "list":
-        return [list(token, depth)];
+        return [list(token, depth, tabbedQuote)];
       default:
         return fail(`Unsupported block Markdown: ${token.type}`);
     }
@@ -231,7 +259,7 @@ export function markdownToDocs(source: string, options: MarkdownOptions = {}): D
   try {
     if (/^---\n[\s\S]*?\n(?:---|\.\.\.)(?:\n|$)/.test(normalized))
       fail("Front matter is unsupported");
-    const content = blocks(new MarkdownLexer({ gfm: true }).lex(normalized), 0);
+    const content = blocks(new MarkdownLexer().lex(normalized), 0);
     return block("doc", content.length ? content : [block("paragraph")]);
   } catch (error) {
     if (error instanceof MarkdownError) {

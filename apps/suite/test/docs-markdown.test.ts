@@ -119,6 +119,38 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
   });
 
   it.each([
+    "-",
+    "+",
+    "*",
+    "1.",
+    "7)",
+  ])("imports a marker-only list line with one trailing space: %s", (marker) => {
+    const ordered = marker.length > 1;
+    const expected = doc(
+      b(
+        ordered ? "orderedList" : "bulletList",
+        [b("listItem", [p(t("item"))])],
+        ordered ? { start: Number.parseInt(marker, 10) } : undefined,
+      ),
+    );
+    expect(roundTrip(`${marker} \n${" ".repeat(marker.length + 1)}item`)).toEqual(expected);
+  });
+  it("retains empty items, quotes, and nested lists after marker-only lines", () => {
+    expect(roundTrip("- \n- next")).toEqual(
+      doc(b("bulletList", [b("listItem", [p()]), b("listItem", [p(t("next"))])])),
+    );
+    expect(roundTrip("> 1. \n>    item")).toEqual(
+      doc(b("blockquote", [b("orderedList", [b("listItem", [p(t("item"))])], { start: 1 })])),
+    );
+    expect(roundTrip("- outer\n\n  - \n    item")).toEqual(
+      doc(
+        b("bulletList", [
+          b("listItem", [p(t("outer")), b("bulletList", [b("listItem", [p(t("item"))])])]),
+        ]),
+      ),
+    );
+  });
+  it.each([
     "2026.",
     "2026)",
     "0.",
@@ -222,6 +254,25 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     const indent = fence.startsWith("  ") ? "  " : "";
     expect(roundTrip(`${fence}\n${indent}\tfoo\tbar\n${fence}`)).toEqual(
       doc(b("codeBlock", [t("\tfoo\tbar")])),
+    );
+  });
+  it.each([
+    ">    \tfoo",
+    ">\t    foo",
+    ">     first\n>    \tsecond",
+    "> >    \tfoo",
+    ">\t>     foo",
+    "> - item\n>\n>       \tfoo",
+  ])("rejects tab-dependent quoted code or preserves the whole source literally: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("preserves quoted code with space indentation and fenced content tabs", () => {
+    expect(roundTrip(">       foo\tbar")).toEqual(
+      doc(b("blockquote", [b("codeBlock", [t("  foo\tbar")])])),
+    );
+    expect(roundTrip("> ```\n> \tfoo\tbar\n> ```")).toEqual(
+      doc(b("blockquote", [b("codeBlock", [t("\tfoo\tbar")])])),
     );
   });
 
