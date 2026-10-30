@@ -28,7 +28,9 @@ DOC-L4 is narrower than the eventual editor import/export integration in 05-docs
 Lists and quotes may nest within a maximum traversal depth of 32. List items start with a
 paragraph, including an empty paragraph before non-paragraph content. Empty input becomes a `doc`
 containing one empty paragraph. Code spans follow CommonMark whitespace normalization. CRLF and
-CR become LF. Repeated identical formatting collapses to one mark; adjacent equivalent text
+CR become LF. Paragraph boundary padding and spaces/tabs around line breaks are removed before
+character references are decoded; code content and encoded spaces remain significant.
+Repeated identical formatting collapses to one mark; adjacent equivalent text
 nodes merge, and marks have a stable order. Markdown spelling, bullet characters, tight/loose list
 layout, and reference definitions are not retained; exports use canonical inline links and fences.
 
@@ -43,7 +45,7 @@ these are rejected rather than decoded incorrectly. Code content is never entity
 
 `markdownToDocs(source, { unsupported: "reject" })` is the default. Recognized unsupported
 constructs (including HTML, images, tables, strikethrough, footnotes, front matter, headings 4–6,
-mixed/ordered task lists, and fence metadata) throw `MarkdownError`. With
+mixed/ordered task lists, nested links, and fence metadata) throw `MarkdownError`. With
 `{ unsupported: "literal" }`, **the entire normalized source** becomes unmarked text in a single
 paragraph when an unsupported construct is encountered. This preserves source without partially
 interpreting a document. Invalid inputs, parser failures, and limits still throw. Syntax the
@@ -57,7 +59,8 @@ require a boolean checked value. All other non-default attributes reject.
 
 Export is checked by reparsing and comparing normalized JSON. If Markdown would change text,
 marks, or structure, it throws rather than return a lossy result. Examples include extra empty
-paragraphs, blank lines within paragraph text, whitespace-only emphasis, some crossing mark
+paragraphs, significant unmarked paragraph boundary whitespace, blank lines within paragraph text,
+whitespace-only emphasis, some crossing mark
 boundaries, and adjacent lists that would merge. Thus a multiline literal fallback may be
 preserved in JSON yet rejected on export if it cannot be expressed as that same paragraph.
 Formatting order and adjacent text splitting are the only text-node equivalences used.

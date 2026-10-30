@@ -185,7 +185,7 @@ function emphasis(body: string, before: string, after: string): string {
     ? "_"
     : "*";
 }
-function inline(content: DocsNode[]): string {
+function inline(content: DocsNode[], before = "", after = ""): string {
   let result = "";
   for (let index = 0; index < content.length; ) {
     const node = content[index] as DocsNode;
@@ -203,16 +203,18 @@ function inline(content: DocsNode[]): string {
     }
     if (chosen) {
       const selected = chosen;
+      const previous = result.slice(-1) || before;
+      const next = content[end]?.text?.[0] ?? after;
       const body = inline(
         content.slice(index, end).map((child) => ({
           ...child,
           marks: (child.marks as DocsMark[]).filter((item) => !same(item, selected)),
         })),
+        previous,
+        next,
       );
       const delimiter =
-        selected.type === "italic"
-          ? emphasis(body, result.slice(-1), content[end]?.text?.[0] ?? "")
-          : close(selected);
+        selected.type === "italic" ? emphasis(body, previous, next) : close(selected);
       result += (selected.type === "link" ? "[" : delimiter) + body + delimiter;
       index = end;
     } else {

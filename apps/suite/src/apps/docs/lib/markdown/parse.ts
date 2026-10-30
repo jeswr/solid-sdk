@@ -14,7 +14,7 @@ import {
 } from "./shared";
 import { type DocsMark, type DocsNode, MarkdownError, type MarkdownOptions } from "./types";
 
-function inline(tokens: Token[], marks: DocsMark[], depth: number): DocsNode[] {
+function inline(tokens: Token[], marks: DocsMark[], depth: number, paragraph = false): DocsNode[] {
   depthGuard(depth);
   let offset = 0;
   const bareLinks = tokens.flatMap((token) => {
@@ -39,14 +39,20 @@ function inline(tokens: Token[], marks: DocsMark[], depth: number): DocsNode[] {
     }
   }
   return mergeText(
-    tokens.flatMap((entry): DocsNode[] => {
+    tokens.flatMap((entry, index): DocsNode[] => {
       const token = entry as MarkedToken;
       switch (token.type) {
         case "escape":
           return text(token.text, marks);
-        case "text":
+        case "text": {
           if (/\[\^[^\]]+\]/.test(token.text)) fail("Footnotes are unsupported");
-          return text(decode(token.text), marks);
+          // Trim source whitespace before decoding: references can encode significant spaces.
+          let value = token.text.replace(/[\t ]*\n[\t ]*/g, "\n");
+          if ((paragraph && index === 0) || tokens[index - 1]?.type === "br")
+            value = value.replace(/^[\t ]+/, "");
+          if (paragraph && index === tokens.length - 1) value = value.replace(/[\t ]+$/, "");
+          return text(decode(value), marks);
+        }
         case "strong":
         case "em": {
           const type = token.type === "strong" ? "bold" : "italic";
@@ -63,6 +69,7 @@ function inline(tokens: Token[], marks: DocsMark[], depth: number): DocsNode[] {
         case "br":
           return [block("hardBreak")];
         case "link": {
+          if (marks.some((mark) => mark.type === "link")) fail("Nested links are unsupported");
           const bare = !/^[[<]/.test(token.raw);
           const destination = token.raw.indexOf("](");
           if (destination >= 0 && /\\&/.test(token.raw.slice(destination))) {
@@ -121,9 +128,9 @@ function blocks(tokens: Token[], depth: number): DocsNode[] {
         if (token.tag.startsWith("^")) fail("Footnotes are unsupported");
         return [];
       case "paragraph":
-        return [block("paragraph", inline(token.tokens, [], depth + 1))];
+        return [block("paragraph", inline(token.tokens, [], depth + 1, true))];
       case "text":
-        return [block("paragraph", inline(token.tokens as Token[], [], depth + 1))];
+        return [block("paragraph", inline(token.tokens as Token[], [], depth + 1, true))];
       case "heading":
         if (token.depth > 3) fail("Docs supports heading levels 1–3");
         return [block("heading", inline(token.tokens, [], depth + 1), { level: token.depth })];

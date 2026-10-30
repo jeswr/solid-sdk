@@ -127,6 +127,42 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     );
     expect(markdownToDocs("> ")).toEqual(doc(b("blockquote", [p()])));
   });
+  it.each([
+    ["  Plan  ", p(t("Plan"))],
+    ["   Plan\t ", p(t("Plan"))],
+    ["  Plan \n  next\t ", p(t("Plan\nnext"))],
+    ["Plan\t\n\tnext", p(t("Plan\nnext"))],
+    ["Plan  \n   next  ", p(t("Plan"), b("hardBreak"), t("next"))],
+    ["Plan\\\n   **next**  ", p(t("Plan"), b("hardBreak"), t("next", [m("bold")]))],
+    ["**Plan \n next**", p(t("Plan\nnext", [m("bold")]))],
+    ["  **Plan**  ", p(t("Plan", [m("bold")]))],
+    ["  ` Plan `  ", p(t("Plan", [m("code")]))],
+    ["\u00a0Plan\u00a0", p(t("\u00a0Plan\u00a0"))],
+    [`${numericReference(32)}Plan${numericReference(32)}`, p(t(" Plan "))],
+    [
+      "[  Plan  ](https://example.org/)",
+      p(t("  Plan  ", [{ type: "link", attrs: { href: "https://example.org/" } }])),
+    ],
+  ])("applies paragraph whitespace rules before decoding text: %s", (source, paragraph) => {
+    expect(markdownToDocs(source as string)).toEqual(doc(paragraph as DocsNode));
+  });
+  it("normalizes paragraph whitespace in lists and quotes without changing code", () => {
+    expect(roundTrip(">   Plan  ")).toEqual(doc(b("blockquote", [p(t("Plan"))])));
+    expect(roundTrip("- Plan\n\n    Next  ")).toEqual(
+      doc(b("bulletList", [b("listItem", [p(t("Plan")), p(t("Next"))])])),
+    );
+    expect(roundTrip("```\n  Plan  \n``` ")).toEqual(doc(b("codeBlock", [t("  Plan  ")])));
+  });
+  it.each([
+    "  Plan  ",
+    " Plan",
+    "Plan ",
+    "Plan\t",
+    "Plan \nnext",
+    "Plan\n next",
+  ])("rejects export when paragraph whitespace would be lost: %s", (value) => {
+    errorCode(() => docsToMarkdown(doc(p(t(value)))), "unrepresentable");
+  });
   it("preserves entity-looking link destinations and titles on export", () => {
     const value = doc(
       p(
@@ -187,6 +223,10 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     ["foo-_(bar)_", "foo\\-_\\(bar\\)_"],
     ["é*b*文", "é*b*文"],
     ["*a `b` c*", "_a `b` c_"],
+    ["pre***fix***", "pre***fix***"],
+    ["***pre***fix", "***pre***fix"],
+    ["pre***fix***post", "pre***fix***post"],
+    ["é***fix***文", "é***fix***文"],
   ])("chooses emphasis delimiters that preserve flanking: %s", (source, output) => {
     expect(docsToMarkdown(roundTrip(source))).toBe(output);
   });
@@ -257,6 +297,10 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     "[bad](https://[)",
     "[bad](https://example.org/&#32;)",
     "[relative](/docs)",
+    "[outer [inner](https://example.org/a)](https://example.org/b)",
+    "[outer **[inner](https://example.org/a)**](https://example.org/b)",
+    "[outer <https://example.org/a>](https://example.org/b)",
+    "[outer [inner][a]][b]\n\n[a]: https://example.org/a\n[b]: https://example.org/b",
   ])("rejects unsupported input or preserves the entire source literally: %s", (source) => {
     errorCode(() => markdownToDocs(source), "unsupported");
     expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
