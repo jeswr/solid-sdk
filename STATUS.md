@@ -295,3 +295,52 @@ review tooling was installed. Open questions: none.
 
 No pushes, PRs, branch switches, remote fetches or other checkout modifications.
 This report is committed last, and the lane finishes with a clean working tree.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+## Codex fix round 4 — 2026-10-30
+
+Applied only the mirror-publish test finding in the review of `e481751dcb0c`.
+The shared assertion for personal-agent and agentic-legacy-bridge now expects
+`@jeswr/fetch-rdf` to be rewritten to `github:jeswr/fetch-rdf#<SHA>`, matching
+their existing `workspace:*` dependencies. Production code and manifests are
+unchanged.
+
+### Commits
+
+- `d032118a` — `test: expect fetch-rdf mirror SHA pins`: updates the shared
+  assertion for both imported packages. Existing missing-pin rejection checks
+  remain in place for every workspace dependency.
+- Final documentation commit — `docs: record mirror pin fix validation`:
+  records this round's gate results in this report.
+
+### Validation
+
+All checks use Node v24.22.1 and pnpm 10.4.1 with lifecycle scripts disabled.
+
+- Before the fix, `pnpm exec vitest run test/mirror-publish.test.mjs` reproduced
+  exactly the two reported failures: 23 tests passed and 2 failed at the stale
+  registry-range assertion.
+- After the fix, `pnpm run test:root` — PASS: all 747 tests across 10 files,
+  including both corrected mirror-publish cases.
+- `pnpm run lint:root` — PASS, including every workspace guard.
+- Focused package gate:
+
+  ```sh
+  pnpm exec turbo run lint build typecheck test --filter=@jeswr/agentic-legacy-bridge --filter=@jeswr/personal-agent --concurrency=4
+  ```
+
+  PASS: all 18 tasks, including dependency-first builds, root lint, and both
+  packages' lint, build, typecheck and test scripts. Agentic-legacy-bridge has
+  663 passing tests across 37 files; personal-agent has 549 passing tests across
+  57 files.
+- `git diff e481751dcb0c --check` — PASS.
+
+### Remaining work and questions
+
+The requested finding is fixed. No dependencies were added, so `check:packages`
+was not applicable. `roborev` is unavailable, so no new automated verdict could
+be obtained; no review tooling was installed. No whole-workspace or full gate
+was run, as prescribed by the original lane brief. Open questions: none.
+
+No pushes, PRs, branch switches, remote fetches, other checkout modifications,
+or generated artifacts committed. This report is committed last.
