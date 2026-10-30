@@ -62,6 +62,18 @@ export function splitContent(content: string): { title: string; labels: string[]
       if (depth < fenceDepth) fence = "";
       containers.length = depth;
       quoteDepths.length = quotes;
+      // Locate a possible thematic-break suffix once, avoiding a scan per list depth.
+      let thematicStart = textEnd;
+      let thematicMarkers = 0;
+      const thematicMarker = sourceLine[textEnd - 1];
+      if (thematicMarker === "-" || thematicMarker === "*") {
+        while (thematicStart > 0) {
+          const char = sourceLine[thematicStart - 1];
+          if (char === thematicMarker) thematicMarkers++;
+          else if (char !== " ") break;
+          thematicStart--;
+        }
+      }
       // Markers inside a fence are literal, so strip only its enclosing containers.
       while (!fence) {
         const quote = /^ {0,3}> ?/.exec(sourceLine.slice(offset));
@@ -72,7 +84,8 @@ export function splitContent(content: string): { title: string; labels: string[]
           continue;
         }
         const item = /^ {0,3}(?:[-+*]|\d{1,9}[.)])(?= |$)/.exec(sourceLine.slice(offset));
-        if (!item) break;
+        // Thematic breaks take precedence over list markers; underscores cannot start items.
+        if (!item || (offset >= thematicStart && thematicMarkers >= 3)) break;
         let padding = 0;
         while (sourceLine[offset + item[0].length + padding] === " ") padding++;
         // Empty items and items starting with indented code use one separator column.

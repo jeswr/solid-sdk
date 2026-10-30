@@ -212,6 +212,47 @@ describe("content and labels", () => {
     "\n",
     "\r\n",
     "\r",
+  ])("preserves fenced code after thematic breaks with %j line endings", (newline) => {
+    for (const rule of [
+      "- - -",
+      "* * *",
+      "_ _ _",
+      "---",
+      "***",
+      "___",
+      " - - - ",
+      "  * * *\t",
+      "   -\t-\t-",
+      "-    -    -",
+    ]) {
+      for (const [opening, continuation] of [
+        ["", ""],
+        ["> ", "> "],
+        ["1. ", "   "],
+        ["> 1. ", ">    "],
+      ]) {
+        const title = [
+          "Title",
+          "",
+          ...(opening ? [`${opening}item`, continuation.trimEnd()] : []),
+          `${continuation}${rule}`,
+          continuation.trimEnd(),
+          `${continuation}  ~~~`,
+          `${continuation}@literal`,
+          `${continuation}  ~~~`,
+        ].join(newline);
+        const result = parseTodoistCsv(csv([task({ CONTENT: `${title}${newline}@home` })]), options)
+          .tasks[0]!;
+        expect(result.title).toBe(title);
+        expect(result.labels).toEqual(["home"]);
+      }
+    }
+  });
+
+  it.each([
+    "\n",
+    "\r\n",
+    "\r",
   ])("preserves fenced code in list containers with %j line endings", (newline) => {
     for (const [opening, continuation] of [
       ["- ", "  "],
