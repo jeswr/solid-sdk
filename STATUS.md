@@ -197,3 +197,58 @@ launched or screenshots taken; the existing dispatcher browser handoff remains.
 Roborev is unavailable (`command -v roborev` found no executable), so no automated
 per-commit verdicts could be read. No new design questions or unfinished
 implementation work remain for these three findings.
+
+## Fix round 6 — review at `fae94b849075`
+
+Fixed exactly the two review findings:
+
+- `c5c2792e` — `fix(suite-ui): stabilize date hydration across timezones`: render
+  timed field/picker text in UTC for SSR and initial hydration, then use the browser
+  timezone after mount. Restored natural-language drafts are interpreted after mount;
+  all-day wall dates and stored values are preserved.
+- `f7c324df` — `fix(suite-ui): retain unrestricted yearly months`: materialize the
+  DTSTART month only when both the yearly month and month-day were implicit. Show
+  imported explicit month-days without BYMONTH as "All months" in the selector and
+  summary, and retain that unrestricted meaning when editing the day.
+- Final `docs: record sst-ytg round 6 validation` commit records this verification.
+
+Added 21 regression cases. Before implementation, eight timed hydration cases and
+three unrestricted-month cases failed on the reviewed code. The 132 package tests
+now pass, including existing interactions and axe checks. Hydration coverage uses
+real server rendering and hydration across UTC to America/New_York/Pacific/Kiritimati
+in en-GB/en-US, asserts no recoverable hydration errors or control replacement,
+checks browser-local output and unchanged all-day dates, and verifies no change
+callback fires during localization. Restored natural-language drafts are also covered.
+Recurrence coverage includes explicit single/multiple/last month-days, editing the
+day without narrowing months, and intentionally choosing a month restriction.
+Existing tests still verify implicit DTSTART defaults and explicit month restrictions.
+
+Conservative UI choice: "All months" is an informational selected option for imported
+unrestricted rules. This round does not introduce a new recurrence-creation mode.
+
+Commands used Node `v24.22.1` with:
+
+```sh
+export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"
+```
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/suite-ui run lint && pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/suite-ui run typecheck && pnpm --filter @jeswr/suite-ui run test` | PASS; 4 test files, 132 tests |
+| `pnpm run lint:root` | PASS; all root guards and 74 contrast pairs |
+| `TURBO_SCM_BASE=fae94b849075deec828309e6c8a42c219335b912 pnpm run gate` | PASS; 13 successful tasks, 13 total; suite-ui 132 tests and app-suite 5,825 tests with coverage thresholds passed |
+| `pnpm run gate:full` | FAIL outside fix scope; 70 successful tasks, 237 total before abort at `//#test:root`; root tests had 742 passes and 3 timing failures |
+| `pnpm run test:root` | PASS on standalone rerun; all 9 files and 745 tests passed |
+| `git diff --check` | PASS |
+
+The full gate failed in unchanged root tests: two cases at
+`test/agent-layers.test.mjs:509` exceeded their 5-second timeout, and
+`test/check-sdk-layers.test.mjs:328` measured 122.66 ms against a 50 ms limit.
+Those tests and their guard implementations are unchanged by this round.
+All 745 root tests passed when rerun without the concurrent full-workspace build.
+
+No dependencies changed or dependency-policy checks were needed. No browser was
+launched or screenshots taken; the existing dispatcher browser handoff remains.
+Roborev is unavailable (`command -v roborev` found no executable), so no automated
+per-commit verdicts could be read. No open questions or unfinished implementation
+work remain for these two findings.
