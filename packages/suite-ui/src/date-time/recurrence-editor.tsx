@@ -106,19 +106,22 @@ export function RecurrenceEditor({
   const signature = JSON.stringify(value);
   const emitted = useRef(signature);
   const [rule, setRule] = useState<RecurrenceRule | null>(value);
+  const [dateError, setDateError] = useState(false);
+  const [untilText, setUntilText] = useState(rule?.until?.slice(0, 10) ?? "");
   useEffect(() => {
     if (emitted.current !== signature) {
       setRule(value);
+      setDateError(false);
+      setUntilText(value?.until?.slice(0, 10) ?? "");
       emitted.current = signature;
     }
   }, [signature, value]);
-  const [dateError, setDateError] = useState(false);
-  const [untilText, setUntilText] = useState(rule?.until?.slice(0, 10) ?? "");
   useEffect(() => setUntilText(rule?.until?.slice(0, 10) ?? ""), [rule?.until]);
   if (!isDate(startDate)) throw new RangeError("startDate must be a valid YYYY-MM-DD date");
   const safeStart = startDate;
   const seed = new Date(`${safeStart}T12:00:00`);
   const weekday = weekdays[(seed.getDay() + 6) % 7] as Weekday;
+  const selectedWeekdays = rule?.byDay ?? [weekday];
   const update = (next: RecurrenceRule | null) => {
     setRule(next);
     if (next) {
@@ -186,13 +189,13 @@ export function RecurrenceEditor({
                   <label key={day} className="suite-date-check">
                     <input
                       type="checkbox"
-                      checked={rule.byDay?.includes(day) ?? false}
+                      checked={selectedWeekdays.includes(day)}
                       aria-invalid={Boolean(invalidWeek)}
                       required={Boolean(invalidWeek)}
                       aria-describedby={invalidWeek ? `${id}-week-error` : undefined}
                       onChange={(event) => {
                         const byDay = weekdays.filter((d) =>
-                          d === day ? event.target.checked : rule.byDay?.includes(d),
+                          d === day ? event.target.checked : selectedWeekdays.includes(d),
                         );
                         update({ ...rule, byDay });
                       }}
@@ -280,7 +283,15 @@ export function RecurrenceEditor({
                 id={`${id}-day`}
                 className="suite-date-control"
                 value={rule.byMonthDay?.[0] ?? seed.getDate()}
-                onChange={(event) => update({ ...rule, byMonthDay: [Number(event.target.value)] })}
+                onChange={(event) =>
+                  update({
+                    ...rule,
+                    byMonthDay: [Number(event.target.value)],
+                    ...(rule.freq === "YEARLY"
+                      ? { byMonth: rule.byMonth ?? [seed.getMonth() + 1] }
+                      : {}),
+                  })
+                }
               >
                 {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => (
                   <option key={day} value={day}>

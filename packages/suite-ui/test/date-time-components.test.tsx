@@ -274,8 +274,103 @@ describe("RecurrenceEditor", () => {
     expect((screen.getByLabelText("Day of month") as HTMLSelectElement).value).toBe("30");
     expect(onChange).not.toHaveBeenCalled();
     change("Day of month", "15");
-    expect(onChange).toHaveBeenCalledExactlyOnceWith({ ...rule, byMonthDay: [15] });
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({
+      ...rule,
+      byMonthDay: [15],
+      ...(freq === "YEARLY" ? { byMonth: [11] } : {}),
+    });
     expect((screen.getByLabelText("Day of month") as HTMLSelectElement).value).toBe("15");
+  });
+  it.each([
+    ["FREQ=YEARLY", "10"],
+    ["FREQ=YEARLY;BYMONTH=2", "2"],
+    ["FREQ=YEARLY;BYMONTH=2,10", "2,10"],
+  ])("preserves the selected months when editing a day in %s", (input, months) => {
+    const onChange = vi.fn();
+    render(
+      <RecurrenceEditor
+        locale="en-GB"
+        startDate="2026-10-26"
+        value={fromRRule(input)}
+        onChange={onChange}
+      />,
+    );
+    expect((screen.getByLabelText("Month") as HTMLSelectElement).value).toBe(months.split(",")[0]);
+    expect(onChange).not.toHaveBeenCalled();
+    change("Day of month", "15");
+    expect(onChange).toHaveBeenCalledOnce();
+    expect(toRRule(onChange.mock.calls[0]?.[0])).toBe(
+      `RRULE:FREQ=YEARLY;INTERVAL=1;BYMONTHDAY=15;BYMONTH=${months}`,
+    );
+  });
+  it.each([
+    ["2026-10-26", "Monday", "MO,WE"],
+    ["2026-11-01", "Sunday", "WE,SU"],
+  ])("shows and retains the implicit %s weekday when adding Wednesday", (startDate, day, days) => {
+    const onChange = vi.fn();
+    render(
+      <RecurrenceEditor
+        locale="en-GB"
+        startDate={startDate}
+        value={fromRRule("FREQ=WEEKLY")}
+        onChange={onChange}
+      />,
+    );
+    const checked = () =>
+      screen.getAllByRole("checkbox").filter((input) => (input as HTMLInputElement).checked);
+    expect(checked()).toEqual([screen.getByRole("checkbox", { name: new RegExp(day) })]);
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Wednesday/ }));
+    expect(checked()).toHaveLength(2);
+    expect(onChange).toHaveBeenCalledOnce();
+    expect(toRRule(onChange.mock.calls[0]?.[0])).toBe(`RRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY=${days}`);
+  });
+  it("validates removing the implicit weekday without restoring it on later edits", () => {
+    const onChange = vi.fn();
+    render(
+      <RecurrenceEditor
+        locale="en-GB"
+        startDate="2026-10-26"
+        value={fromRRule("FREQ=WEEKLY")}
+        onChange={onChange}
+      />,
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: /Monday/ }));
+    expect(screen.getByRole("alert").textContent).toBe("Choose at least one weekday.");
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("checkbox", { name: /Wednesday/ }));
+    expect(screen.queryByRole("alert")).toBe(null);
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({
+      freq: "WEEKLY",
+      interval: 1,
+      byDay: ["Wednesday"],
+    });
+  });
+  it.each([
+    { until: "2027-02-01", interval: 1 },
+    { until: "2027-01-01", interval: 2 },
+  ])("resets an end-date error on external updates to $until, interval $interval", (next) => {
+    const onChange = vi.fn();
+    const rule = fromRRule("FREQ=DAILY;UNTIL=20270101");
+    const editor = (value: RecurrenceRule) => (
+      <RecurrenceEditor locale="en-GB" startDate="2026-10-26" value={value} onChange={onChange} />
+    );
+    const view = render(editor(rule));
+    const input = screen.getByLabelText("End date") as HTMLInputElement;
+    change("End date", "");
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    expect(input.checkValidity()).toBe(false);
+    expect(screen.getByRole("alert").textContent).toBe("Enter an end date.");
+    view.rerender(editor({ ...rule }));
+    expect(input.value).toBe("");
+    expect(input.getAttribute("aria-invalid")).toBe("true");
+    view.rerender(editor({ ...rule, ...next }));
+    expect(input.value).toBe(next.until);
+    expect(input.getAttribute("aria-invalid")).toBe("false");
+    expect(input.getAttribute("aria-describedby")).toBe(null);
+    expect(input.checkValidity()).toBe(true);
+    expect(screen.queryByRole("alert")).toBe(null);
+    expect(onChange).not.toHaveBeenCalled();
   });
   it("builds daily, weekly, monthly ordinal and yearly objects", async () => {
     mount(<Editor />);
