@@ -3,16 +3,36 @@
 import type { ColourAnchor } from "./model";
 import { invalidRule } from "./validation";
 
-/** Multiply before dividing for consistent anchors, falling back on overflow. */
+/** Represent any finite double exactly as integer multiples of 2^-1074. */
+function binaryUnits(value: number): bigint {
+  const view = new DataView(new ArrayBuffer(8));
+  view.setFloat64(0, value);
+  const bits = view.getBigUint64(0);
+  const exponent = Number((bits >> BigInt(52)) & BigInt(0x7ff));
+  const fraction = bits & BigInt("0xfffffffffffff");
+  const significand = exponent === 0 ? fraction : fraction + BigInt("0x10000000000000");
+  const units = significand << BigInt(Math.max(0, exponent - 1));
+  return value < 0 ? -units : units;
+}
+
+/** Preserve the complete affine expression, then round once to a double. */
 export function interpolate(low: number, high: number, numerator: number, denominator = 1): number {
   if (low === high || numerator === 0) return low;
   if (numerator === denominator) return high;
-  const product = (high - low) * numerator;
-  const fraction = numerator / denominator;
-  const value = Number.isFinite(product)
-    ? low + product / denominator
-    : low * (1 - fraction) + high * fraction;
-  return Math.max(Math.min(low, high), Math.min(Math.max(low, high), value));
+  const lower = binaryUnits(low);
+  const divisor = binaryUnits(denominator);
+  const dividend = lower * divisor + (binaryUnits(high) - lower) * binaryUnits(numerator);
+  const zero = BigInt(0);
+  const magnitude = dividend < zero ? -dividend : dividend;
+  // Keep 53 significant bits, or single subnormal units, and round ties to even.
+  const shift = Math.max(0, (magnitude / divisor).toString(2).length - 53);
+  const scaledDivisor = divisor << BigInt(shift);
+  let rounded = magnitude / scaledDivisor;
+  const remainder = (magnitude % scaledDivisor) * BigInt(2);
+  if (remainder > scaledDivisor || (remainder === scaledDivisor && rounded % BigInt(2) !== zero)) {
+    rounded += BigInt(1);
+  }
+  return (dividend < zero ? -1 : 1) * Number(rounded) * 2 ** (shift - 1074);
 }
 
 function position(anchor: ColourAnchor, numbers: readonly number[]): number {

@@ -455,6 +455,43 @@ describe("numeric population rules", () => {
 
 describe("colour scales", () => {
   it.each([
+    ["percent", [1, 1.57, 2], [black, black, white]],
+    ["percentile", [1, 2], [black, white]],
+  ] as const)("accepts equal number and %s anchors after translating endpoints", (kind, cells, fills) => {
+    const numeric = number(1.57, black);
+    const percentage: ColourAnchor = { kind, value: 57, color: white };
+    for (const anchors of [
+      [numeric, percentage],
+      [percentage, numeric],
+    ] as const) {
+      const [first, second] = anchors;
+      expect(evaluateConditionalFormats([cells], [scale(first, second)])).toEqual([
+        fills.map((fill) => ({ fill: fill === black ? first.color : second.color })),
+      ]);
+    }
+  });
+
+  it("still rejects anchors reversed by one representable value", () => {
+    const percentage: ColourAnchor = { kind: "percent", value: 57, color: white };
+    rejects([[1, 2]], [scale(number(1.5700000000000003, black), percentage)], "INVALID_RULE");
+    rejects([[1, 2]], [scale(percentage, number(1.5699999999999998, black))], "INVALID_RULE");
+  });
+
+  it.each([
+    [1, 1 + Number.EPSILON, 1],
+    [1 + Number.EPSILON, 1 + 2 * Number.EPSILON, 1 + 2 * Number.EPSILON],
+    [Number.MIN_VALUE, 2 * Number.MIN_VALUE, 2 * Number.MIN_VALUE],
+    [2 * Number.MIN_VALUE, 3 * Number.MIN_VALUE, 2 * Number.MIN_VALUE],
+  ])("rounds the affine midpoint of %s and %s to even", (low, high, rounded) => {
+    expect(
+      evaluateConditionalFormats(
+        [[low, high]],
+        [scale(number(rounded, black), { kind: "percent", value: 50, color: white })],
+      ),
+    ).toEqual([[{ fill: black }, { fill: high === rounded ? black : white }]]);
+  });
+
+  it.each([
     ["percentile", "percent"],
     ["percent", "percentile"],
   ] as const)("accepts equivalent %s and %s anchors over two samples", (first, second) => {
