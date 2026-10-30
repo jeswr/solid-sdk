@@ -38,6 +38,10 @@ layout, and reference definitions are not retained; exports use canonical inline
 Horizontal rules export as `***` to avoid front-matter ambiguity. Fenced code removes up to
 the opening fence's indentation in columns from each content line for both backtick and tilde
 fences. Tabs crossing that boundary leave spaces for their remaining columns; later tabs stay literal.
+Quoted fences that consume a tab while removing indentation are conservatively rejected because
+quote-prefix removal changes the original tab stops. Tabs after the removed indentation remain supported.
+Literal tabs within list text or link titles are rejected before expanded content can be imported.
+Structural tabs in list indentation and after list markers remain supported for non-code items.
 Code blocks and code spans in list items containing literal tabs are conservatively rejected,
 including tabs in structural whitespace, because list tokenization expands tabs before code parsing.
 This restriction applies per item, including its nested content; tab-free sibling items remain supported.
@@ -57,12 +61,14 @@ mixed/ordered task lists, nested links, nested emphasis with unresolved same-del
 (such as `***first* middle *last***`), adjacent triple/single emphasis sharing a delimiter run
 (such as `***alpha****beta*`), tab-only blank lines retained within an inline block,
 lazy list setext underlines, setext headings with numbered continuation lines or
-continuation lines indented four or more columns, unprefixed quote continuations after
+continuation lines indented four or more columns, thematic breaks swallowed by setext headings,
+unprefixed quote continuations after
 non-paragraph blocks or starting a list block (including after earlier lazy text lines),
-code in tabbed list items,
+content tabs in list items, code in tabbed list items,
 indented code in quotes whose leading quote whitespace contains tabs,
-and fence metadata) throw `MarkdownError`. Quote prefixes change tab stops, so
-this indented code is conservatively rejected; fenced code retains content tabs. With
+quoted fences whose indentation consumes a tab, and fence metadata) throw `MarkdownError`.
+Quote prefixes change tab stops, so affected code indentation is conservatively rejected;
+fenced code retains tabs after its indentation. With
 `{ unsupported: "literal" }`, **the entire normalized source** becomes unmarked text in a single
 paragraph when an unsupported construct is encountered. This preserves source without partially
 interpreting a document. Invalid inputs, parser failures, and limits still throw. Syntax the

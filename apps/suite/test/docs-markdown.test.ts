@@ -324,6 +324,37 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     expect(docsToMarkdown(expected)).toBe(source);
   });
   it.each([
+    "Plan\n***\nNext\n---",
+    "Plan\n___\nNext\n===",
+    "Plan\n ***\nNext\n--",
+    "Plan\n_\t_\t_\nNext\n=",
+    "before\n\nPlan\n***\nNext\n---\n\nafter",
+    "> Plan\n> ***\n> Next\n> ---",
+    "- Plan\n  ___\n  Next\n  ===",
+    "1. Plan\n   ***\n   Next\n   ---",
+    "- [x] item\n\n  Plan\n  ***\n  Next\n  ---",
+  ])("rejects thematic breaks swallowed by setext headings: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("keeps thematic breaks separate from headings when the lexer preserves the boundary", () => {
+    expect(roundTrip("Plan\n***\n\nNext\n---")).toEqual(
+      doc(p(t("Plan")), b("horizontalRule"), b("heading", [t("Next")], { level: 2 })),
+    );
+    expect(roundTrip("Plan\n  * * * \t\nNext\n--")).toEqual(
+      doc(p(t("Plan")), b("horizontalRule"), b("heading", [t("Next")], { level: 2 })),
+    );
+    expect(roundTrip("Plan\n---\nNext\n===")).toEqual(
+      doc(b("heading", [t("Plan")], { level: 2 }), b("heading", [t("Next")], { level: 1 })),
+    );
+    expect(roundTrip("Plan\n**stars**\n===")).toEqual(
+      doc(b("heading", [t("Plan\n"), t("stars", [m("bold")])], { level: 1 })),
+    );
+    expect(roundTrip("Plan\n\\*\\*\\*\n---")).toEqual(
+      doc(b("heading", [t("Plan\n***")], { level: 2 })),
+    );
+  });
+  it.each([
     "Foo *bar\nbaz*\n====",
     "**First**\n_Second_\n---",
     "First\\\nSecond\n===",
@@ -524,6 +555,39 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     errorCode(() => markdownToDocs(source), "unsupported");
     expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
   });
+  it.each([
+    "- foo\tbar",
+    "2. foo\tbar",
+    "- [x] foo\tbar",
+    "- **foo\tbar**",
+    '- [site](https://example.org/ "foo\tbar")',
+    "- item\n  foo\tbar",
+    "- item\n  [x]\tfoo",
+    "- item\n\n  foo\tbar",
+    "- item\n\n  # foo\tbar",
+    "- outer\n  - foo\tbar",
+    "> - foo\tbar",
+    "before\n\n- foo\tbar\n\nafter",
+  ])("rejects content tabs that list tokenization can expand: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("keeps structural list tabs and content tabs outside lists", () => {
+    expect(roundTrip("-\tfoo\n\tbar")).toEqual(
+      doc(b("bulletList", [b("listItem", [p(t("foo\nbar"))])])),
+    );
+    expect(roundTrip("- [x]\tfoo")).toEqual(
+      doc(b("taskList", [b("taskItem", [p(t("foo"))], { checked: true })])),
+    );
+    expect(roundTrip("foo\tbar")).toEqual(doc(p(t("foo\tbar"))));
+    expect(roundTrip('[site](https://example.org/ "foo\tbar")')).toEqual(
+      doc(
+        p(
+          t("site", [{ type: "link", attrs: { href: "https://example.org/", title: "foo\tbar" } }]),
+        ),
+      ),
+    );
+  });
   it("keeps tab-free list code next to a tabbed item", () => {
     expect(roundTrip("-\titem\n- code\n\n  ```\n  foo    bar\n  ```")).toEqual(
       doc(
@@ -545,12 +609,31 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     errorCode(() => markdownToDocs(source), "unsupported");
     expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
   });
+  it.each([
+    ">  ~~~\n> \tcode\n>  ~~~",
+    ">  ```\n> \tcode\n>  ```",
+    ">   ~~~\n>  \tcode\n>   ~~~",
+    ">    ```\n> \tcode\n>    ```",
+    ">  ~~~\n> \t\n>  ~~~",
+    ">  ~~~\n> \tcode",
+    "> >  ~~~\n> > \tcode\n> >  ~~~",
+    "before\n\n>  ~~~\n> \tcode\n>  ~~~\n\nafter",
+  ])("rejects quoted fence dedentation across a content tab: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
   it("preserves quoted code with space indentation and fenced content tabs", () => {
     expect(roundTrip(">       foo\tbar")).toEqual(
       doc(b("blockquote", [b("codeBlock", [t("  foo\tbar")])])),
     );
     expect(roundTrip("> ```\n> \tfoo\tbar\n> ```")).toEqual(
       doc(b("blockquote", [b("codeBlock", [t("\tfoo\tbar")])])),
+    );
+    expect(roundTrip(">  ~~~\n>  \tfoo\tbar\n>  ~~~")).toEqual(
+      doc(b("blockquote", [b("codeBlock", [t("\tfoo\tbar")])])),
+    );
+    expect(roundTrip("> quote\n\n ~~~\n\tcode\n ~~~")).toEqual(
+      doc(b("blockquote", [p(t("quote"))]), b("codeBlock", [t("   code")])),
     );
   });
 

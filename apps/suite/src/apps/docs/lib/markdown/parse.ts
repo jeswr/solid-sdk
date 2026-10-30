@@ -32,6 +32,8 @@ function columns(prefix: string): number {
 }
 
 class MarkdownTokenizer extends Tokenizer {
+  private quoteDepth = 0;
+
   override blockquote(source: string): Tokens.Blockquote | undefined {
     const quote = this.rules.block.blockquote.exec(source);
     if (quote) {
@@ -42,7 +44,23 @@ class MarkdownTokenizer extends Tokenizer {
           fail("List block in an unprefixed quote continuation is unsupported");
       }
     }
-    return super.blockquote(source);
+    this.quoteDepth++;
+    try {
+      return super.blockquote(source);
+    } finally {
+      this.quoteDepth--;
+    }
+  }
+
+  override lheading(source: string): Tokens.Heading | undefined {
+    const token = super.lheading(source);
+    if (
+      token?.text
+        .split("\n")
+        .some((line) => /^ {0,3}(?:(?:\*[ \t]*){3,}|(?:_[ \t]*){3,}|(?:-[ \t]*){3,})$/.test(line))
+    )
+      fail("Setext headings containing thematic breaks are unsupported");
+    return token;
   }
 
   override fences(source: string): Tokens.Code | undefined {
@@ -56,6 +74,9 @@ class MarkdownTokenizer extends Tokenizer {
         let column = 0;
         let offset = 0;
         while (column < indent && offset < padding.length) {
+          // Removed quote prefixes change the tab stops used for fence indentation.
+          if (this.quoteDepth && padding[offset] === "\t")
+            fail("Quoted fence indentation consuming a tab is unsupported");
           column += padding[offset] === "\t" ? 4 - (column % 4) : 1;
           offset++;
         }
@@ -271,6 +292,14 @@ function taskItem(item: Tokens.ListItem): { tokens: Token[]; checked?: boolean }
 function list(token: Tokens.List, depth: number, tabbedQuote: boolean): DocsNode {
   for (const item of token.items) {
     if (item.raw.includes("\t")) {
+      // Only indentation and whitespace after list/task markers may contain tabs.
+      // Marked can expand any later tab, including ordinary text and link titles.
+      const content = item.raw
+        .replace(/^ {0,3}(?:[*+-]|\d{1,9}[.)])[ \t]+(?:\[[ xX]\][ \t]+)?/, "")
+        .replace(/^[ \t]*(?:(?:[*+-]|\d{1,9}[.)])[ \t]+)?/gm, "");
+      if (content.includes("\t")) {
+        fail("Content tabs in list items are unsupported");
+      }
       // Marked expands tabs while dedenting lists, before code handlers can see them.
       // Check original item text and finalized inline tokens; code spans are affected too.
       walkTokens(item.tokens, (child) => {
