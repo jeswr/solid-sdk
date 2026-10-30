@@ -89,3 +89,52 @@ The full-workspace gate failure and missing roborev binary are the remaining
 verification limits. Tracker updates/follow-up filing are left to the dispatcher:
 `skills/beads-tracking/SKILL.md` prohibits running bd from a worktree, and this
 lane is restricted to this checkout; the lane bead is not closed before merge.
+
+## Fix round 3 — 2026-10-30
+
+Review base: `124da270cb225e5ce26e42c279fe328e91061f78`. This round addresses
+only the four supplied findings, their regression tests, and this report.
+
+- `d78cb459 fix(chat): read parent containers before creating` — read and validate
+  existing parents before PUT; create only after 404, and revalidate after a
+  concurrent creation returns 412. Tests enforce CSS-style 403 for existing-parent
+  PUTs by Append-only senders and cover creation/read errors and concurrent races.
+- `76d99933 fix(chat): discover ACLs through Link fields and HEAD` — use a scoped,
+  redirect-refusing HEAD when PUT omits an ACL link. Parse RFC 8288 field grammar,
+  including parameter ordering, relation lists, quoted delimiters/escapes and
+  duplicate rel handling; ignore anchored links and preserve ACL scope checks.
+- `e6fa68f7 fix(chat): retain LongChat tombstone metadata` — fall back to
+  `foaf:maker` and `dct:created` when reading tombstones. Fixture round-trip tests
+  preserve author, publication time and chronological position; valid AS metadata
+  retains precedence.
+- Final `docs(chat): record round-three verification` commit — this report.
+
+Verification used Node `v24.22.1`. Each pnpm invocation below had
+`PATH=/opt/node24/bin:$PWD/node_modules/.bin:$PATH`, except the focused chat test,
+which used `PATH=/opt/node24/bin:$PATH`. Existing workspace dependencies were
+built before tests; no dependency lifecycle scripts ran.
+
+| Command | Result |
+| --- | --- |
+| `pnpm exec turbo run build --filter='@jeswr/app-suite^...'` | PASS, exit 0; 7 tasks. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/chat-model --coverage --coverage.include='src/apps/chat/lib/model/**/*.ts'` | PASS, exit 0; 68 tests; statements 358/358, branches 190/190, functions 66/66, lines 317/317 (100%). |
+| `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` | PASS, exit 0; 124 files / 6,481 tests, with all configured coverage thresholds at 100%. Lint retains 54 unrelated warnings; no changed chat file warnings. |
+| `pnpm run lint:root` | PASS, exit 0. |
+| `TURBO_SCM_BASE=124da270cb225e5ce26e42c279fe328e91061f78 pnpm run gate` | PASS, exit 0; 12/12 tasks. |
+| `pnpm run gate:full` | FAIL, exit 1; 281 successful tasks out of 345 scheduled; stopped at `@jeswr/federation-trust#test`. |
+| `pnpm --filter @jeswr/federation-trust exec vitest run test/characterization.test.ts` | FAIL, exit 1; independently reproduces the same unrelated snapshot failure (19 pass, 1 fail). |
+| `git diff 124da270cb225e5ce26e42c279fe328e91061f78 --check` | PASS. |
+| `roborev status` | Unavailable, exit 127: command not found. |
+
+The full gate reproduces the previously recorded failure at
+`packages/federation-trust/test/characterization.test.ts:196`, “delegation
+credential structure is stable”: embedded public JWK key order is `kty,crv,x`
+instead of snapshot order `crv,x,kty`. The diff from this round's base is empty
+for both `packages/federation-trust` and `packages/solid-vc`; neither was changed.
+The full workspace gate and automated commit review remain verification limits.
+
+All four requested correctness fixes are complete. No dependencies, UI, strategy,
+or sharing-policy changes were introduced; no new open questions. No screenshots
+were needed for this model-only round. Generated callback/client-ID files from
+other app builds were removed before the final commit. No push, PR, branch
+switch, or network git operation was performed.
