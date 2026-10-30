@@ -82,11 +82,21 @@ export class TaskStore {
       }
     const projects: StoredProject[] = [];
     for (const url of urls) {
-      const resource = await this.io.read(url);
+      const resource = await this.readListedResource(url);
+      if (!resource) continue;
       const tracker = new TaskTracker(`${resource.url}#this`, resource.dataset, DataFactory);
       if (tracker.isTracker) projects.push({ ...resource, tracker });
     }
     return projects.sort((a, b) => (a.tracker.position ?? 0) - (b.tracker.position ?? 0));
+  }
+  private async readListedResource(url: string): Promise<Resource | undefined> {
+    try {
+      return await this.io.read(url);
+    } catch (error) {
+      // Registrations and container listings can outlive the resources they name.
+      if (error instanceof ModelError && [404, 410].includes(error.status)) return undefined;
+      throw error;
+    }
   }
   private async register(stateStore: string): Promise<void> {
     if (this.options.typeIndex === false) return;
@@ -282,7 +292,8 @@ export class TaskStore {
     const tasks: StoredTask[] = [];
     for (const url of await this.io.list(stateStore)) {
       if (!url.endsWith(".ttl")) continue;
-      const resource = await this.io.read(url);
+      const resource = await this.readListedResource(url);
+      if (!resource) continue;
       const task = new TaskItem(`${resource.url}#it`, resource.dataset, DataFactory);
       if (task.isTask) tasks.push({ ...resource, task });
     }

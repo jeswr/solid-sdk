@@ -945,8 +945,80 @@ describe("project discovery and first use", () => {
       ),
     ).toBe(false);
   });
+  it.each([404, 410])("skips stale tracker registrations returning %s", async (status) => {
+    const pod = new Pod();
+    const tasks = store(pod);
+    const inbox = await tasks.bootstrapInbox();
+    const deleted = `${storage}issues/deleted.ttl`;
+    const active = `${storage}issues/active.ttl`;
+    const tracker = createTracker(active, "Active", `${storage}issues/state/`, [webId], now);
+    pod.seed(active, await serialize(tracker.dataset));
+    const index = new TypeIndex(new RdfIO(pod.fetch), storage, webId, pod.ensurePrivateIndexAccess);
+    await index.register([
+      { forClass: `${NS.WF}Tracker`, location: `${deleted}#this`, kind: "instance" },
+      { forClass: `${NS.WF}Tracker`, location: `${active}#this`, kind: "instance" },
+    ]);
+    pod.intercept = (request) =>
+      request.url === deleted && status === 410 ? new Response(null, { status }) : undefined;
+    pod.requests.length = 0;
+    for (let attempt = 0; attempt < 2; attempt++)
+      expect((await tasks.listProjects()).map((project) => project.url)).toEqual([
+        inbox.url,
+        active,
+      ]);
+    expect(pod.requests.some((request) => request.url === deleted)).toBe(true);
+    expect(pod.mutations()).toEqual([]);
+    await expect(tasks.readProject(deleted)).rejects.toMatchObject({ status });
+  });
+});
+describe.each(["project", "task"] as const)("%s listing errors", (kind) => {
+  it.each([401, 403, 503])("propagates resource failures returning %s", async (status) => {
+    const pod = new Pod();
+    const container = kind === "project" ? projects : `${projects}home/`;
+    const url = `${container}unavailable.ttl`;
+    await pod.emptyContainer(container);
+    pod.seed(url, "");
+    pod.intercept = (request) => (request.url === url ? new Response(null, { status }) : undefined);
+    const tasks = store(pod, { typeIndex: false });
+    await expect(
+      kind === "project" ? tasks.listProjects() : tasks.listTasks(container),
+    ).rejects.toMatchObject({ status, url });
+  });
+  it("propagates unexpected resource read errors", async () => {
+    const error = new Error("Unexpected read failure");
+    vi.spyOn(RdfIO.prototype, "list").mockResolvedValue([`${projects}broken.ttl`]);
+    vi.spyOn(RdfIO.prototype, "read").mockRejectedValue(error);
+    const tasks = store(new Pod(), { typeIndex: false });
+    await expect(
+      kind === "project" ? tasks.listProjects() : tasks.listTasks(`${projects}home/`),
+    ).rejects.toBe(error);
+  });
 });
 describe("task conditional CRUD", () => {
+  it.each([404, 410])("continues after a concurrent task deletion returning %s", async (status) => {
+    const pod = new Pod();
+    let id = 0;
+    const tasks = store(pod, { typeIndex: false, uuid: () => `task-${++id}` });
+    const otherClient = store(pod, { typeIndex: false });
+    const home = await tasks.createProject("Home");
+    const first = await tasks.createTask(home, { title: "First", state: "open" });
+    const deleted = await tasks.createTask(home, { title: "Deleted", state: "open" });
+    const last = await tasks.createTask(home, { title: "Last", state: "open" });
+    pod.requests.length = 0;
+    pod.intercept = async (request) => {
+      if (request.method !== "GET" || request.url !== deleted.url) return undefined;
+      // The container GET has already advertised this task to the listing client.
+      expect(pod.requests[0]?.url).toBe(home.tracker.stateStore);
+      await otherClient.deleteTask(deleted);
+      return status === 410 ? new Response(null, { status }) : undefined;
+    };
+    expect(
+      (await tasks.listTasks(home.tracker.stateStore as string)).map((task) => task.url),
+    ).toEqual([first.url, last.url]);
+    expect(pod.files.has(deleted.url)).toBe(false);
+    expect(pod.mutations()).toHaveLength(1);
+    expect(pod.mutations()[0]?.headers.get("If-Match")).toBe(deleted.etag);
+  });
   it.each([
     "both triggers",
     "neither trigger",
