@@ -196,43 +196,44 @@ function payloadWrites(text: string, name: string): string[] {
       let enclosing: ts.Node = node;
       while (!ts.isCallExpression(enclosing)) enclosing = enclosing.parent;
       const callee = enclosing.expression.getText(source);
-      if (callee === "replayProtected") {
+      if (callee === "replayProtected" || callee === "replayOrQuarantine") {
         // Round 54 restores access before replaying a captured representation.
         // Verify that this wrapper still forwards the original URL and init to
         // guardedWrite; merely having a helper with this name is insufficient.
-        const find = (statement: ts.Node): ts.VariableDeclaration[] => {
-          if (
-            ts.isVariableDeclaration(statement) &&
-            statement.name.getText(source) === "replayProtected"
-          )
+        const find = (statement: ts.Node, name: string): ts.VariableDeclaration[] => {
+          if (ts.isVariableDeclaration(statement) && statement.name.getText(source) === name)
             return [statement];
           const found: ts.VariableDeclaration[] = [];
           ts.forEachChild(statement, (child) => {
-            found.push(...find(child));
+            found.push(...find(child, name));
           });
           return found;
         };
-        const declaration = source.statements.flatMap((statement) => find(statement))[0];
-        const initializer = declaration?.initializer;
-        expect(initializer && ts.isArrowFunction(initializer)).toBe(true);
-        const body = (initializer as ts.ArrowFunction).body;
-        expect(ts.isBlock(body)).toBe(true);
-        const returns: ts.ReturnStatement[] = [];
-        const findReturns = (node: ts.Node) => {
-          if (ts.isReturnStatement(node)) returns.push(node);
-          else ts.forEachChild(node, findReturns);
+        const verify = (name: string) => {
+          const declaration = source.statements.flatMap((statement) => find(statement, name))[0];
+          const initializer = declaration?.initializer;
+          expect(initializer && ts.isArrowFunction(initializer)).toBe(true);
+          const body = (initializer as ts.ArrowFunction).body;
+          expect(ts.isBlock(body)).toBe(true);
+          const returns: ts.ReturnStatement[] = [];
+          const findReturns = (node: ts.Node) => {
+            if (ts.isReturnStatement(node)) returns.push(node);
+            else ts.forEachChild(node, findReturns);
+          };
+          findReturns(body);
+          const expression = returns[0]?.expression;
+          const returned =
+            expression && ts.isAwaitExpression(expression) ? expression.expression : expression;
+          expect(returned && ts.isCallExpression(returned)).toBe(true);
+          const call = returned as ts.CallExpression;
+          const outer = name === "replayOrQuarantine";
+          expect(call.expression.getText(source)).toBe(outer ? "replayProtected" : "guardedWrite");
+          expect(call.arguments.slice(0, outer ? 3 : 2).map((arg) => arg.getText(source))).toEqual(
+            outer ? ["url", "policy", "init"] : ["url", "init"],
+          );
         };
-        findReturns(body);
-        const expression = returns[0]?.expression;
-        const returned =
-          expression && ts.isAwaitExpression(expression) ? expression.expression : expression;
-        expect(returned && ts.isCallExpression(returned)).toBe(true);
-        const call = returned as ts.CallExpression;
-        expect(call.expression.getText(source)).toBe("guardedWrite");
-        expect(call.arguments.slice(0, 2).map((arg) => arg.getText(source))).toEqual([
-          "url",
-          "init",
-        ]);
+        verify(callee);
+        if (callee === "replayOrQuarantine") verify("replayProtected");
       } else if (callee === "commitHttp") {
         // Quarantine has already saved private copies. It conditionally clears
         // only our exposed payload without consulting the changed ACL.
@@ -251,6 +252,8 @@ it.each([
   'http(url, { method: "PUT" })',
   'replayProtected(url, policy, { method: "POST" }); const replayProtected = async (url, policy, init) => { return http(url, init); }',
   'replayProtected(url, policy, { method: "PATCH" }); const replayProtected = async (url, policy, init) => { return guardedWrite(url, other); }',
+  'replayOrQuarantine(url, policy, { method: "PUT" }); const replayOrQuarantine = async (url, policy, init) => { return replayProtected(url, policy, other); }',
+  'replayOrQuarantine(url, policy, { method: "PUT" }); const replayOrQuarantine = async (url, policy, init) => { return replayProtected(url, policy, init); }; const replayProtected = async (url, policy, init) => { return http(url, init); }',
 ])("payload guard rejects an unguarded mutation: %s", (source) => {
   expect(() => payloadWrites(source, "unsafe.ts")).toThrow();
 });

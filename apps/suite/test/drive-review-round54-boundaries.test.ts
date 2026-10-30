@@ -82,6 +82,9 @@ const steps = [
   "container rollback without Link",
   "folder overwrite rollback with child defaults",
   "partial Restore rollback with child defaults",
+  "inherited replacement rollback",
+  "container provisioning ACL",
+  "metadata undo recovery clearing",
 ] as const;
 type Step = (typeof steps)[number];
 
@@ -111,6 +114,7 @@ async function scenario(step: Step, events: string[]) {
     "partial folder Restore",
     "container rollback",
     "metadata undo",
+    "metadata undo recovery clearing",
     "container merge",
     "partial folder Restore metadata",
     "container rollback without Link",
@@ -279,10 +283,15 @@ async function scenario(step: Step, events: string[]) {
     run = () => client.copy(source, target, { kind: "preserve-source" });
     // The failed payload PUT checks the same target before rollback DELETE.
     if (step !== "copy payload") targetCheck = 2;
+  } else if (step === "container provisioning ACL") {
+    const folder = `${PRIVATE}new/`;
+    target = `${folder}.policy`;
+    identityTarget = folder;
+    run = () => client.createFolder(folder, { kind: "owner-only", webId: OWNER });
   } else if (step === "ACL overwrite") {
     target = `${PRIVATE}.policy`;
     run = () => accessControl(http, ROOT).store(target, privateAcl(PRIVATE, OWNER));
-  } else if (step === "metadata undo") {
+  } else if (step === "metadata undo" || step === "metadata undo recovery clearing") {
     const data = new Store();
     new WacFields(source, data, DataFactory)
       .iris("https://example.test/note")
@@ -291,7 +300,18 @@ async function scenario(step: Step, events: string[]) {
     target = `${PRIVATE}survivor/`;
     await f.pod.fetch(target, { method: "PUT", body: "" });
     const merged = await client.mergeContainer(source, target, { kind: "preserve-source" });
-    f.policies.set(`${target}.policy`, await aclBody(target, true));
+    if (step === "metadata undo recovery clearing")
+      f.policies.set(`${target}.policy`, await aclBody(target, true));
+    else {
+      let failed = false;
+      f.intercept(async (url, init) => {
+        if (!failed && url === `${target}.policy` && !init?.method) {
+          failed = true;
+          return new Response(null, { status: 503 });
+        }
+        return undefined;
+      });
+    }
     run = () => merged.recheck();
   } else if (step === "ancestor cleanup") {
     target = `${PRIVATE}ancestor/`;
@@ -381,6 +401,22 @@ async function scenario(step: Step, events: string[]) {
       return response;
     });
     run = () => uploadFile(client, PRIVATE, new Blob(["upload"]), "secret", "replace", selected);
+  } else if (step === "inherited replacement rollback") {
+    let written = false;
+    let failed = false;
+    f.after(async (url, method, response) => {
+      if (url === source && method === "PUT" && response.ok) written = true;
+      return response;
+    });
+    f.intercept(async (url, init) => {
+      if (written && !failed && url === `${source}.policy` && !init?.method) {
+        failed = true;
+        return new Response(null, { status: 503 });
+      }
+      return undefined;
+    });
+    targetCheck = 2;
+    run = () => uploadFile(client, PRIVATE, new Blob(["upload"]), "secret", "replace", selected);
   } else if (step === "replacement rollback") {
     let uploaded = false;
     f.after(async (url, method, response) => {
@@ -422,7 +458,7 @@ async function scenario(step: Step, events: string[]) {
 
 it.each(
   steps,
-)("round 59 shape a: %s retains a replacement at its final identity check", async (step) => {
+)("round 60 shape a: %s retains a replacement at its final identity check", async (step) => {
   const events: string[] = [];
   const s = await scenario(step, events);
   let checks = 0;
@@ -450,7 +486,7 @@ it.each(
 
 it.each(
   steps,
-)("round 59 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
+)("round 60 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   const events: string[] = [];
   const s = await scenario(step, events);

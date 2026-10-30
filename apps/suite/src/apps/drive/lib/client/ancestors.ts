@@ -109,6 +109,8 @@ export function ancestorGuard(options: {
       await access.install(policy, required.from, url, {
         identity: { url, etag: required.etag },
         restrict: true,
+        knownAcl: own.own?.url,
+        expectedAcl: null,
       });
     } else if (
       own.status !== "known" ||
@@ -211,6 +213,7 @@ export function ancestorGuard(options: {
           decision.kind === "archived"
             ? await install(url, decision.acl, decision.from, {
                 identity: { url, etag: response.headers.get("etag") ?? "" },
+                knownAcl: binding.destinationOwn?.url,
                 expectedAcl: null,
                 policyGuards: binding.identities,
               })
@@ -471,19 +474,14 @@ export function ancestorGuard(options: {
       url: string,
       policy: OwnAccess,
       from: string,
-      protectionGuard: AccessWriteGuard,
+      protectionGuard: AccessWriteGuard & { readonly expectedAcl: OwnAccess | null },
     ): Promise<OwnAccess> {
-      const endpoint =
-        protectionGuard.knownAcl ??
-        access.discover(url, (await http(url, { method: "HEAD", cache: "no-store" })).headers);
+      // Callers hydrate the complete receipt before entering this flight. A
+      // missing receipt cannot authorize discovering a new compensation target.
+      const endpoint = protectionGuard.knownAcl;
       if (!endpoint) throw new DriveAccessError("ACL endpoint unavailable");
-      const own =
-        protectionGuard.expectedAcl !== undefined
-          ? protectionGuard.expectedAcl
-          : await access.read(endpoint);
-      if (own && "status" in own && own.status === "unknown") throw new DriveAccessError(own.cause);
-      const expectedAcl =
-        own && "status" in own ? (own.status === "known" ? own.policy : null) : own;
+      if (protectionGuard.expectedAcl === undefined)
+        throw new DriveAccessError("Own ACL receipt unavailable");
       await guard(url, true);
       let saved = policy;
       await singleFlight(
@@ -496,7 +494,7 @@ export function ancestorGuard(options: {
           saved = await install(url, policy, from, {
             ...protectionGuard,
             knownAcl: endpoint,
-            expectedAcl,
+            expectedAcl: protectionGuard.expectedAcl,
           });
         },
         false,

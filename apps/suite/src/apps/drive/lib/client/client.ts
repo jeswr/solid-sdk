@@ -427,6 +427,11 @@ export function createSolidDriveClient(options: {
     if (!own && !demo) throw new DriveAccessError("Own ACL receipt unavailable");
     return own;
   };
+  const captureOwnAccess = async (url: string, headers: Headers) => {
+    const state = await access.snapshot(url, headers);
+    if (state.status === "unknown") throw new DriveAccessError(state.cause);
+    return requireOwnReceipt(state.own, false);
+  };
   const createdOwnAccess = (resource: CreatedResource) =>
     requireOwnReceipt(
       resource.protection
@@ -694,32 +699,24 @@ export function createSolidDriveClient(options: {
       // removes its ACL. Replays restore only the captured audience.
       await (binding as AccessBinding).rollback(async () => {
         if (previous) {
-          const policy = required ?? (binding as AccessBinding).destinationPolicy;
-          try {
-            await replayProtected(
-              url,
-              policy,
-              {
-                method: "PUT",
-                headers: { "content-type": previous.type, "if-match": etag },
-                body: previous.body,
-              },
-              undefined,
-              (binding as AccessBinding).destinationOwn,
-            );
-          } catch (cause) {
-            if (cause instanceof DrivePartialFailureError) throw cause;
-            // A foreign ACL is never a new compensation baseline. Keep both
-            // versions privately before conditionally clearing only our upload.
-            const retained = await quarantine(url, etag, policy, [
+          const policy = (binding as AccessBinding).destinationPolicy;
+          await replayOrQuarantine(
+            url,
+            policy,
+            {
+              method: "PUT",
+              headers: { "content-type": previous.type, "if-match": etag },
+              body: previous.body,
+            },
+            (binding as AccessBinding).destinationOwn,
+            [
               previous,
               {
                 body: init.body,
                 type: init.headers["content-type"],
               },
-            ]);
-            throw new DrivePartialFailureError(url, [], [], retained, cause);
-          }
+            ],
+          );
         } else {
           try {
             const own = requireOwnReceipt(
@@ -797,66 +794,52 @@ export function createSolidDriveClient(options: {
   /** Replay under protection no wider than either captured or current grants. */
   const replayProtected = async (
     url: string,
-    policy: OwnAccess | undefined,
+    policy: OwnAccess,
     init: PayloadWrite,
     effects?: Pick<CommitChecks, "identityChecks">,
     expectedOwn?: { url: string; policy: OwnAccess | null },
   ) => {
-    const etag = validator(url, new Headers(init.headers).get("if-match"));
-    // An unchanged captured own ACL already protects the replay. Reinstalling
-    // a projection would erase independent defaults and unrelated ACL clauses.
-    // Pin its receipt at the same HTTP boundary as every installed policy.
-    const captured = expectedOwn?.policy;
-    const preserved =
-      policy && captured && sameGraph(policy.dataset, captured.dataset) ? captured : undefined;
-    const protectedPolicy =
-      preserved ??
-      (policy
-        ? await provision.protect(url, policy, url, {
-            identity: { url, etag },
-            restrict: true,
-            knownAcl: expectedOwn?.url,
-            expectedAcl: expectedOwn?.policy ?? null,
-          })
-        : undefined);
+    validator(url, new Headers(init.headers).get("if-match"));
+    // Replays preserve the complete captured own policy or its absence. They
+    // verify that receipt; an unexpected policy is never repaired by an ACL PUT.
+    const protectedPolicy = policy;
     const verifyProtection = async () => {
-      if (protectedPolicy) {
-        const current = requireAccess(await access.effective(url), url);
-        if (
-          current.url !== protectedPolicy.url ||
-          current.etag !== protectedPolicy.etag ||
-          accessGains(protectedPolicy, current).length
-        )
-          throw new DriveAccessError("Rollback protection changed");
-      }
+      const state = await access.effective(url);
+      const current = requireAccess(state, url);
+      // Captured absence is part of the policy. Replaying inherited bytes
+      // must not freeze today's audience into a new own ACL.
+      if (
+        expectedOwn &&
+        (state.own?.url !== expectedOwn.url || state.own.policy?.etag !== expectedOwn.policy?.etag)
+      )
+        throw new DriveAccessChangedError(["The item's own ACL changed"]);
+      if (
+        current.url !== protectedPolicy.url ||
+        current.etag !== protectedPolicy.etag ||
+        accessGains(protectedPolicy, current).length
+      )
+        throw new DriveAccessError("Rollback protection changed");
     };
     let replayed: Response | undefined;
     try {
       return await guardedWrite(url, init, false, verifyProtection, undefined, {
         ...effects,
-        policyGuards: protectedPolicy
-          ? [{ url: protectedPolicy.url, etag: protectedPolicy.etag }]
-          : [],
+        policyGuards: [
+          ...ownAccessGuards(expectedOwn),
+          ...(protectedPolicy.etag
+            ? [{ url: protectedPolicy.url, etag: protectedPolicy.etag }]
+            : []),
+        ],
         onWritten: (response) => {
           replayed = response;
         },
       });
     } catch (error) {
-      // A replay is already confidential. Secure our captured PUT even if Link
-      // disappears; the previously verified own ACL remains the repair endpoint.
-      if (replayed && protectedPolicy) {
+      // A post-replay failure cannot authorize rewriting a concurrent ACL.
+      if (replayed) {
         const receipt = validator(url, replayed.headers.get("etag"));
         try {
-          // A failed post-replay check cannot authorize rewriting the captured
-          // ACL either. Reuse the same complete policy on every replay path.
-          if (preserved) await verifyProtection();
-          else
-            await provision.protect(url, protectedPolicy, url, {
-              identity: { url, etag: receipt },
-              restrict: true,
-              knownAcl: protectedPolicy.url,
-              expectedAcl: protectedPolicy,
-            });
+          await verifyProtection();
         } catch (cause) {
           const retained = await quarantine(url, receipt, protectedPolicy, [
             {
@@ -868,6 +851,34 @@ export function createSolidDriveClient(options: {
         }
       }
       throw error;
+    }
+  };
+
+  /** Failed file and metadata replay share the same conditional evacuation.
+   * Unexpected access never authorizes materializing or reverting its ACL.
+   */
+  const replayOrQuarantine = async (
+    url: string,
+    policy: OwnAccess,
+    init: PayloadWrite,
+    expectedOwn: AccessState["own"],
+    copies: readonly { body: Blob | string; type: string }[],
+    effects?: Pick<CommitChecks, "identityChecks">,
+  ) => {
+    try {
+      return await replayProtected(url, policy, init, effects, expectedOwn);
+    } catch (cause) {
+      if (cause instanceof DrivePartialFailureError) throw cause;
+      // Loss/replacement of the independent source is not permission to clear
+      // the surviving destination. Its captured content must stay recoverable.
+      for (const check of effects?.identityChecks ?? []) await check();
+      const retained = await quarantine(
+        url,
+        validator(url, new Headers(init.headers).get("if-match")),
+        policy,
+        copies,
+      );
+      throw new DrivePartialFailureError(url, [], [], retained, cause);
     }
   };
 
@@ -899,8 +910,11 @@ export function createSolidDriveClient(options: {
         required = { url: `${url}.acl`, etag: "", dataset: privateAcl(url, webId) };
         if (current.ok) {
           protectedEtag = validator(url, opts.ifMatch ?? current.headers.get("etag"));
+          const own = await captureOwnAccess(url, current.headers);
           await provision.protect(url, required, url, {
             identity: { url, etag: protectedEtag },
+            knownAcl: own?.url,
+            expectedAcl: own?.policy ?? null,
           });
         } else {
           if (current.status !== 404) throw errorFor(current.status, url);
@@ -1564,35 +1578,31 @@ export function createSolidDriveClient(options: {
         // Our restored children changed membership. Hydrate the resulting
         // representation before committing the undo; a refusal never rebases it.
         const body = await serialize([...previous]);
-        const restoredPolicy = previous.size ? binding.destinationPolicy : undefined;
+        const restoredPolicy = binding.destinationPolicy;
         const expected = resource.data as Store;
+        const mergedBody = await serialize([...expected]);
         validator(to, resource.etag);
         const current = await listing(to);
         checkContainerVersion(resource, current.etag);
-        await discardVersion({
-          url: to,
-          captured: { content: containerData(current.dataset, to), etag: current.etag },
-          read: async () => {
-            const current = await listing(to);
-            return { content: containerData(current.dataset, to), etag: current.etag };
-          },
-          owns: (data) => sameGraph(expected, data),
-          remove: async (etag) => {
-            await binding.rollback(() =>
-              replayProtected(
-                to,
-                restoredPolicy,
-                {
-                  method: "PUT",
-                  headers: { "content-type": "text/turtle", "if-match": etag },
-                  body,
-                },
-                { identityChecks: [() => verifySnapshotIdentity(source)] },
-                binding.destinationOwn,
-              ),
-            );
-          },
-        });
+        if (!sameGraph(expected, containerData(current.dataset, to)))
+          throw new DriveError("conflict", 409, to);
+        await binding.rollback(() =>
+          replayOrQuarantine(
+            to,
+            restoredPolicy,
+            {
+              method: "PUT",
+              headers: { "content-type": "text/turtle", "if-match": validator(to, current.etag) },
+              body,
+            },
+            binding.destinationOwn,
+            [
+              { body, type: "text/turtle" },
+              { body: mergedBody, type: "text/turtle" },
+            ],
+            { identityChecks: [() => verifySnapshotIdentity(source)] },
+          ),
+        );
         resource.etag = undefined;
       }
     });
@@ -1920,6 +1930,9 @@ export function createSolidDriveClient(options: {
               [],
               scope,
             );
+            // Source retirement includes durable local work. Check surviving
+            // access while partial-transfer recovery is still available.
+            await verifyAccess();
           }
         } catch (error) {
           for (const check of group) scope.delete(check);
@@ -2199,6 +2212,7 @@ export function createSolidDriveClient(options: {
       if (response.headers.get("x-solid-demo-access-control") === "none") return;
       if (!webId) throw new DriveAccessError("Owner WebID unavailable");
       const policy: OwnAccess = { url: `${url}.acl`, etag: "", dataset: privateAcl(url, webId) };
+      const own = response.ok ? await captureOwnAccess(url, response.headers) : undefined;
       try {
         await provision.folder(url, decision);
       } catch (error) {
@@ -2207,6 +2221,8 @@ export function createSolidDriveClient(options: {
         try {
           await provision.protect(url, policy, url, {
             identity: { url, etag: validator(url, response.headers.get("etag")) },
+            knownAcl: own?.url,
+            expectedAcl: own?.policy ?? null,
           });
         } catch (cause) {
           throw new DriveAccessError(cause);

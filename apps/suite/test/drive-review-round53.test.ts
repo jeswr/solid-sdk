@@ -570,13 +570,17 @@ it("round 53: metadata undo retains its captured identity after a refused overwr
   await f.pod.fetch(to, { method: "PUT", body: "" });
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });
   const merged = await client.mergeContainer(from, to, { kind: "preserve-source" });
-  f.policies.set(`${to}.policy`, await aclBody(to, true));
-  f.intercept(async (url, init) =>
-    url === to && init?.method === "HEAD" && new Headers(init.headers).has("if-match")
+  let failed = false;
+  f.intercept(async (url, init) => {
+    if (!failed && url === `${to}.policy` && !init?.method) {
+      failed = true;
+      return new Response(null, { status: 503 });
+    }
+    return url === to && init?.method === "HEAD" && new Headers(init.headers).has("if-match")
       ? new Response(null, { status: 412 })
-      : undefined,
-  );
-  await expect(merged.recheck()).rejects.toMatchObject({ status: 412 });
+      : undefined;
+  });
+  await expect(merged.recheck()).rejects.toMatchObject({ cause: { status: 412 } });
   expect(await (await f.pod.fetch(to)).text()).toContain("statement");
   expect(f.pod.has(from)).toBe(true);
 });

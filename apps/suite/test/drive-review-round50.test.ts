@@ -282,13 +282,11 @@ it.each(races)("access binding: $operation / $side / $signal / $point", async ({
     expect(failed).toBe(false);
     expect(f.pod.has(from)).toBe(false);
   } else if (operation === "upload replacement") {
-    if (signal === "inherited default changed") {
-      expect(await (await f.pod.fetch(from)).text()).toBe("secret contents");
-    } else {
-      expect(await (await f.pod.fetch(from)).text()).toBe("");
-      await expectPrivateRecovery(f, "secret contents");
-      await expectPrivateRecovery(f, "new confidential upload");
-    }
+    // Changed inheritance is a concurrent policy too. Preserve it and retain
+    // both byte versions privately rather than freezing the former grants.
+    expect(await (await f.pod.fetch(from)).text()).toBe("");
+    await expectPrivateRecovery(f, "secret contents");
+    await expectPrivateRecovery(f, "new confidential upload");
     expect(failed).toBe(true);
   } else if (f.pod.has(to)) {
     // An irrelevant ancestor edit may be shielded by a verified own ACL.

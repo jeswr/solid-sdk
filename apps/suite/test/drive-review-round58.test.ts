@@ -347,6 +347,6 @@ it("round 58: owner-only overwrite refuses an undiscoverable ACL endpoint", asyn
       },
       { kind: "owner-only" },
     ),
-  ).rejects.toMatchObject({ cause: "ACL endpoint unavailable" });
+  ).rejects.toMatchObject({ cause: "ACL Link unavailable" });
   expect(await (await f.pod.fetch(from)).text()).toBe("secret contents");
 });

@@ -138,7 +138,7 @@ it("gate regression: metadata undo can remove added RDF while destination access
   expect(f.pod.has(from)).toBe(true);
 });
 
-it("gate regression: metadata undo refuses to replay prior RDF under unreadable access", async () => {
+it("gate regression: metadata undo evacuates both RDF versions privately under unreadable access", async () => {
   const f = await rdfPod();
   const from = `${PRIVATE}recovery/`;
   const to = `${PRIVATE}survivor/`;
@@ -156,8 +156,21 @@ it("gate regression: metadata undo refuses to replay prior RDF under unreadable 
   const merged = await client.mergeContainer(from, to, { kind: "preserve-source" });
   f.policies.set(`${to}.policy`, "invalid RDF");
   f.calls.length = 0;
-  await expect(merged.recheck()).rejects.toThrow();
-  expect(f.calls).not.toContainEqual({ url: to, method: "PUT" });
+  await expect(merged.recheck()).rejects.toMatchObject({ kind: "partial-failure" });
+  expect(await (await f.pod.fetch(to)).text()).not.toContain("confidential");
+  const backups = f.pod
+    .snapshot()
+    .resources.filter(([url]) => url.includes("/.drive-recovery-") && !url.endsWith("/"));
+  const bodies = await Promise.all(
+    backups.map(async ([url]) => {
+      expect((await f.anonymous(url)).status).toBe(403);
+      return (await f.pod.fetch(url)).text();
+    }),
+  );
+  expect(bodies.join("\n")).toContain("prior-confidential");
+  expect(bodies.join("\n")).toContain("restored-confidential");
+  expect(f.policies.get(`${to}.policy`)).toBe("invalid RDF");
+  expect(f.calls).not.toContainEqual({ url: `${to}.policy`, method: "PUT" });
   expect(f.pod.has(from)).toBe(true);
 });
 

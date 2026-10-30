@@ -60,14 +60,11 @@ it.each([
   ).rejects.toThrow();
   expect(changed).toBe(true);
   expect(f.pod.has(to)).toBe(true);
-  if (step === "inherited move") expect((await f.anonymous(to)).status).toBe(403);
-  else {
-    // A concurrent ACL removal is not ours to revert. Clear only our bytes after
-    // verifying private recovery, leaving the other client's policy decision intact.
-    expect(f.policies.has(`${to}.policy`)).toBe(false);
-    expect(await (await f.pod.fetch(to)).text()).toBe("");
-    await expectPrivateRecovery(f, "secret contents");
-  }
+  // Hidden/replaced discovery cannot authorize repairing the captured endpoint.
+  // Preserve inheritance and clear only our bytes after saving private recovery.
+  expect(f.policies.has(`${to}.policy`)).toBe(false);
+  expect(await (await f.pod.fetch(to)).text()).toBe("");
+  await expectPrivateRecovery(f, "secret contents");
 });
 
 it("round 56: replacement compensation preserves an owner-and-Bob ACL installed after upload", async () => {
@@ -267,7 +264,7 @@ it("round 56: replay evacuates its own PUT without overwriting a new sharing pol
   f.after(async (target, method, response) => {
     if (target === url && method === "PUT" && response.ok) {
       puts++;
-      if (puts === 1) f.policies.set(`${PRIVATE}.policy`, await aclBody(PRIVATE, true));
+      if (puts === 1) f.policies.set(`${url}.policy`, foreign);
       if (puts === 2) f.policies.set(`${url}.policy`, foreign);
     }
     return response;
@@ -275,7 +272,7 @@ it("round 56: replay evacuates its own PUT without overwriting a new sharing pol
   await expect(
     uploadFile(client, PRIVATE, new Blob(["upload"]), "secret", "replace", selected),
   ).rejects.toThrow();
-  expect(puts).toBe(3);
+  expect(puts).toBe(2);
   expect(f.policies.get(`${url}.policy`)).toBe(foreign);
   expect(await (await f.pod.fetch(url)).text()).toBe("");
   await expectPrivateRecovery(f, "secret contents");

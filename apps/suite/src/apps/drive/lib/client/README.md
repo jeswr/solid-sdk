@@ -35,6 +35,18 @@ discovery, backup creation, receipt validation, or ledger hydration fails. Backu
 PUT receipts are recorded before verification; uncertain locations are checked
 only for error reporting, without authorizing any later mutation.
 
+Captured absence stays absent during both file and folder metadata replay. If
+access changed, both paths share private evacuation before conditionally clearing
+Drive's PUT. Replay never installs an ACL, and protection requires the endpoint
+and complete own-policy receipt to be hydrated by its caller. ACL installation
+pins the discovered endpoint even when its own
+policy is absent; the existing final resource HEAD verifies that endpoint
+synchronously as well as its ETag. Transfer checks surviving access after source
+DELETE retirement, while partial-transfer recovery remains available.
+
+The [round 60 audit](../../../../../test/drive-review-round60-audit.md) lists every
+audited caller and maps the findings to the 39-step two-shape regression matrix.
+
 Round 59 audited call sites (all go through the same conditional HTTP boundary;
 full finding/test mapping in the [round 59 audit](../../../../../test/drive-review-round59-audit.md)):
 

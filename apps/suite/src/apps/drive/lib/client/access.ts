@@ -218,7 +218,17 @@ export function accessControl(http: typeof globalThis.fetch, storageUrl: string)
     const response = await commitHttp({
       http,
       url,
-      resourceGuards: guard ? [guard.identity] : [],
+      resourceGuards: guard
+        ? [
+            {
+              ...guard.identity,
+              verifyHeaders: (headers) => {
+                if (discover(guard.identity.url, headers) !== url)
+                  throw new DriveAccessChangedError(["The item's own ACL endpoint changed"]);
+              },
+            },
+          ]
+        : [],
       policyGuards: guard?.policyGuards ?? [],
       error: (status) => new DriveAccessError(status),
       init: {
@@ -494,7 +504,11 @@ export async function bindAccess(
         [destination, currentDestination, false],
       ] as const) {
         if (!current) continue;
-        if (before.own?.policy?.etag !== current.own?.policy?.etag) changed = true;
+        if (
+          before.own?.url !== current.own?.url ||
+          before.own?.policy?.etag !== current.own?.policy?.etag
+        )
+          changed = true;
         for (const key of ["resource", "defaults"] as const) {
           const previous = before[key];
           const next = current[key];

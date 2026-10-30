@@ -24,6 +24,8 @@ interface HttpIdentity extends PolicyIdentity {
   readonly allowMissing?: boolean;
   readonly http: typeof fetch;
   readonly error: (status: number, url: string) => Error;
+  /** Synchronous assertion only; no hydration or I/O after the final HEAD. */
+  readonly verifyHeaders?: (headers: Headers) => undefined;
 }
 
 export interface CommitChecks {
@@ -82,6 +84,7 @@ export async function commitIrreversible<T>(
       identity.etag,
       identity.error,
       identity.allowMissing,
+      identity.verifyHeaders,
     );
   const result = await options.step();
   for (const compensation of options.disarm ?? []) compensation.disarm();
@@ -104,7 +107,7 @@ export function commitHttp<T>(
       readonly allowMissing?: boolean;
       readonly finalIdentities?: readonly HttpIdentity[];
       /** ACL writes also bind their protected representation after checking the ACL. */
-      readonly resourceGuards?: readonly ResourceIdentity[];
+      readonly resourceGuards?: readonly (ResourceIdentity & Pick<HttpIdentity, "verifyHeaders">)[];
       readonly response: (response: Response) => Promise<T>;
     },
 ): Promise<T> {
@@ -156,6 +159,7 @@ export async function checkIdentity(
   etag: string | null,
   error: (status: number, url: string) => Error,
   allowMissing = false,
+  verifyHeaders?: HttpIdentity["verifyHeaders"],
 ): Promise<void> {
   const response = await http(url, {
     method: "HEAD",
@@ -169,4 +173,5 @@ export async function checkIdentity(
   if (allowMissing && (response.status === 404 || response.status === 410)) return;
   if (!response.ok) throw error(response.status, url);
   assertVersion({ url, etag }, response.headers.get("etag"), error);
+  verifyHeaders?.(response.headers);
 }

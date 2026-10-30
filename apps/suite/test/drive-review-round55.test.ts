@@ -134,8 +134,8 @@ it.each([
   expect(replaced).toBe(true);
   expect(f.calls).not.toContainEqual({ url: `${url}.policy`, method: "PUT" });
   expect(await (await f.pod.fetch(url)).text()).toBe("replacement secret");
-  // The failed protection receipt belongs to our upload, never to this replacement.
-  await expect(client.read(url)).rejects.toMatchObject({ kind: "private-access-unavailable" });
+  // No requirement for the old upload may attach to a foreign replacement.
+  expect(await (await client.read(url)).text()).toBe("replacement secret");
   expect((await f.anonymous(url)).status).toBe(403);
 });
 it.each([
