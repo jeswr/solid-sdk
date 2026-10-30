@@ -1,5 +1,7 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 import { describe, expect, it } from "vitest";
+import { grant, policy, stranger } from "../test/helpers.js";
 import {
   assertNotWider,
   effectivePolicy,
@@ -8,10 +10,9 @@ import {
   policiesEqual,
   scopePolicy,
   unionPolicies,
-} from "../../src/engine/policy.js";
-import { type TranslationContext, translatePolicy } from "../../src/engine/translation.js";
-import type { AccessDocument, EffectivePolicy, Subject } from "../../src/engine/types.js";
-import { grant, policy, stranger } from "./helpers.js";
+} from "./policy.js";
+import { type TranslationContext, translatePolicy } from "./translation.js";
+import type { AccessDocument, EffectivePolicy, Subject } from "./types.js";
 
 const sourceOwner = "https://source.example/owner#me";
 const targetOwner = "https://target.example/owner#me";
@@ -257,11 +258,8 @@ describe("access proof", () => {
                   throw new Error("Unexpected randomized subject");
               }
             };
-            const permits = (
-              p: EffectivePolicy,
-              mode: import("../../src/engine/types.js").Mode,
-            ) => {
-              const applies = (rule: import("../../src/engine/types.js").Grant) =>
+            const permits = (p: EffectivePolicy, mode: import("./types.js").Mode) => {
+              const applies = (rule: import("./types.js").Grant) =>
                 rule.modes.has(mode) &&
                 rule.who.some((clause) => clause.every(matches)) &&
                 !rule.except.some(matches);

@@ -21,9 +21,9 @@
     "@jeswr/app-shell": "workspace:*",
     "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/pod-access": "workspace:*",
     "@jeswr/solid-auth-core": "workspace:*",
     "@jeswr/storage-capabilities": "workspace:*",
-    "@rdfjs/wrapper": "0.34.0",
     "@solid/object": "0.6.0",
     "n3": "2.0.3",
     "react": "19.2.7",
@@ -47,6 +47,7 @@
     "vitest": "4.1.10",
     "@vitest/coverage-v8": "4.1.10",
     "@playwright/test": "1.60.0",
-    "@solid/community-server": "7.2.0"
+    "@solid/community-server": "7.2.0",
+    "@rdfjs/wrapper": "0.34.0"
   }
 }

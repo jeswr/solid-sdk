@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { expect, test } from "vitest";
-import * as entry0 from "./index.js";
-import * as entry1 from "./testing.js";
+import { emptyPolicy, readAcp, readWac, translatePolicy, writeAcp, writeWac } from "./index.js";
+import * as testing from "./testing.js";
 
-test("scaffold entry points load without exposing an implementation", () => {
-  for (const entry of [entry0, entry1]) {
-    expect(Object.keys(entry)).toEqual([]);
+test("exposes the translation core and keeps the testing entry point reserved", () => {
+  expect(emptyPolicy()).toEqual({ grants: [], denials: [] });
+  for (const operation of [readAcp, readWac, translatePolicy, writeAcp, writeWac]) {
+    expect(operation).toBeTypeOf("function");
   }
+  expect(Object.keys(testing)).toEqual([]);
 });
