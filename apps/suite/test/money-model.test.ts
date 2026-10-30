@@ -262,6 +262,61 @@ describe("typed money RDF", () => {
     expect(roundtrip.balances()[0]?.asOf).toBe("2026-10-24T12:00:00Z");
     expect(roundtrip.transactions()[1]?.postingTime).toBe("2026-10-24T12:00:00Z");
   });
+  it.each([
+    ["double", "1e-7", "0.0000001"],
+    ["double", "-2.5E-7", "-0.00000025"],
+    ["double", "+1.234567890123456789E+21", "1234567890123456789000"],
+    ["float", "1.0000000000000000001e0", "1.0000000000000000001"],
+    ["double", "5e-324", `0.${"0".repeat(323)}5`],
+    ["double", "1.7976931348623157e308", `17976931348623157${"0".repeat(292)}`],
+    ["double", "-0e0", "-0"],
+    ["float", ".5", "0.5"],
+    ["decimal", "+00012.50", "12.50"],
+    ["decimal", "2.", "2"],
+    ["integer", "+09007199254740993", "9007199254740993"],
+  ])("reads %s literal %s as an exact decimal for transactions and balances", async (type, lexical, expected) => {
+    for (const predicate of [model.V.amount, `${NS.FINANCE}amount`]) {
+      const document = await model.parseMoney(
+        `
+        <#t> a <${model.V.transactionClass}>; <${model.V.account}> <${account}>;
+          <${model.V.postingTime}> "2026-10-24"; <${model.V.amountNode}> <#amount> .
+        <#b> a <${model.V.balanceClass}>; <${model.V.balanceAccount}> <${account}>;
+          <${model.V.amountNode}> <#amount> .
+        <#amount> <${predicate}> "${lexical}"^^<${NS.XSD}${type}>;
+          <${model.V.currency}> "GBP" .
+        `,
+        base,
+      );
+      expect(document.transactions()[0]?.amount).toBe(expected);
+      expect(document.balances()[0]?.amount).toBe(expected);
+      // Reading normalises snapshots without rewriting the original RDF literals.
+      expect(
+        [...document.dataset.match(null, DataFactory.namedNode(predicate), null)][0]?.object.value,
+      ).toBe(lexical);
+      const roundtrip = await model.parseMoney(await model.serialiseMoney(document), base);
+      expect(roundtrip.transactions()[0]?.amount).toBe(expected);
+      expect(roundtrip.balances()[0]?.amount).toBe(expected);
+    }
+  });
+  it.each([
+    ["double", "NaN"],
+    ["double", "INF"],
+    ["float", "-INF"],
+    ["double", "1e"],
+    ["double", "1e999999999999999999999"],
+    ["double", "1,000"],
+    ["decimal", "1e-7"],
+    ["integer", "1.5"],
+    ["string", "1e-7"],
+  ])("rejects invalid or unsupported %s amount %s", async (type, lexical) => {
+    const document = await model.parseMoney(
+      `<#b> a <${model.V.balanceClass}>; <${model.V.balanceAccount}> <${account}>;
+        <${model.V.amountNode}> [ <${NS.FINANCE}amount> "${lexical}"^^<${NS.XSD}${type}>;
+        <${model.V.currency}> "GBP" ] .`,
+      base,
+    );
+    expect(() => document.balances()).toThrow("Invalid money amount");
+  });
   it("rejects incomplete/malformed RDF instead of silently inventing monetary data", async () => {
     const document = new model.MoneyDocument();
     document.node(account).types.add(model.V.accountClass);
@@ -270,6 +325,13 @@ describe("typed money RDF", () => {
     model.putBalance(document, balance);
     document.node(balance.id).asOf = "bad";
     expect(() => document.balances()).toThrow();
+    const linkedAmount = await model.parseMoney(
+      `<#b> a <${model.V.balanceClass}>; <${model.V.balanceAccount}> <${account}>;
+        <${model.V.amountNode}> [ <${model.V.amount}> <#not-a-literal>;
+        <${model.V.currency}> "GBP" ] .`,
+      base,
+    );
+    expect(() => linkedAmount.balances()).toThrow("Invalid money amount");
     await expect(model.parseMoney("broken turtle", base)).rejects.toThrow();
   });
   it("creates two opposing Transfer legs linked to both accounts and rejects invalid pairs", () => {

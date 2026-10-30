@@ -47,6 +47,36 @@ export const V = {
   creditAccount: `${NS.FINANCE}creditAccount`,
 } as const;
 
+const decimalLexical = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
+const floatingLexical = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+const numericLexicals = new Map([
+  [`${NS.XSD}integer`, /^[+-]?\d+$/],
+  [`${NS.XSD}decimal`, decimalLexical],
+  [`${NS.XSD}double`, floatingLexical],
+  [`${NS.XSD}float`, floatingLexical],
+]);
+
+/** Expand RDF numeric lexical forms without rounding the significand through Number. */
+function rdfAmount(term: TermWrapper): string {
+  if (term.termType !== "Literal") throw new TypeError("Invalid money amount");
+  const text = LiteralAs.string(term);
+  const pattern = numericLexicals.get(term.datatype.value);
+  if (pattern === undefined) return text;
+  if (!pattern.test(text)) throw new TypeError("Invalid money amount");
+  const [mantissa, exponent = "0"] = text.replace(/^[+-]/, "").split(/[eE]/) as [string, string?];
+  const [whole, fraction = ""] = mantissa.split(".") as [string, string?];
+  const digits = whole + fraction;
+  const point = whole.length + Number(exponent);
+  if (!Number.isSafeInteger(point)) throw new TypeError("Invalid money amount");
+  const decimal =
+    point <= 0
+      ? `0.${"0".repeat(-point)}${digits}`
+      : point >= digits.length
+        ? digits + "0".repeat(point - digits.length)
+        : `${digits.slice(0, point)}.${digits.slice(point)}`;
+  return `${text.startsWith("-") ? "-" : ""}${decimal.replace(/^0+(?=\d)/, "")}`;
+}
+
 /** Canonicalise vocabulary only, preserving resource IDs, literals and graph names. */
 export function migrateMoney(dataset: DatasetCore): DatasetCore {
   for (const quad of [...dataset]) {
@@ -171,7 +201,7 @@ export class MoneyNode extends TermWrapper {
     OptionalAs.object(this, V.currency, value, LiteralFrom.string);
   }
   get amount(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, V.amount, LiteralAs.string);
+    return OptionalFrom.subjectPredicate(this, V.amount, rdfAmount);
   }
   set amount(value: string | undefined) {
     OptionalAs.object(this, V.amount, value, (text, factory) =>
@@ -216,8 +246,7 @@ export class MoneyDocument {
     // Pod Money's previous fin:amount/fin:currency remain readable.
     const value = {
       amount: required(
-        amount.amount ??
-          OptionalFrom.subjectPredicate(amount, `${NS.FINANCE}amount`, LiteralAs.string),
+        amount.amount ?? OptionalFrom.subjectPredicate(amount, `${NS.FINANCE}amount`, rdfAmount),
       ),
       currency: required(
         amount.currency ??
