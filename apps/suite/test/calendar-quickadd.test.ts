@@ -69,7 +69,13 @@ describe("calendar quick-add drafts", () => {
     "Read every second chapter",
     "Read every third chapter",
     "Read every twenty-first chapter",
+    "Read every two chapters",
+    "Read every twenty-one chapters",
+    "Read every twenty two chapters",
+    "Read every one hundred and two chapters",
+    "Compare every two and three chapters",
     'Discuss "every second week"',
+    'Discuss "every two weeks"',
     "All hands meeting",
   ])("preserves ordinary title words in %s", (title) => {
     expect(parseEventQuickAdd(`${title} tomorrow 1pm`, context)).toEqual({
@@ -190,6 +196,23 @@ describe("calendar quick-add drafts", () => {
     expect(
       parseEventQuickAdd("Email sam@example.org https://example.org/2026 today", context).title,
     ).toBe("Email sam@example.org https://example.org/2026");
+  });
+
+  it.each([
+    "Email 123@example.org",
+    "Email 1pm@example.org",
+    "Email 2026-10-24@example.org",
+    "Email +123@example.org",
+    "Email 123.456+notes@example.org",
+    "Send to 123@example.org",
+    "123@example.org",
+  ])("preserves digit-leading email tokens in %s", (title) => {
+    expect(parseEventQuickAdd(`${title} tomorrow 1pm`, context)).toEqual({
+      title,
+      start: "2026-10-24T12:00:00.000Z",
+      allDay: false,
+      timeZone: "Europe/London",
+    });
   });
 });
 
@@ -353,6 +376,10 @@ describe("fail-closed errors preserve all input", () => {
     ["Read every", "missing-date"],
     ["Read every other", "missing-date"],
     ["Read every second", "missing-date"],
+    ["Read every two", "missing-date"],
+    ["Read every two and", "missing-date"],
+    ["Read every twenty two", "missing-date"],
+    ["Email 123@example.org", "missing-date"],
     ["Meet Sam at Cafe Rio", "missing-date"],
     ["Meet Sam 1pm", "missing-date"],
     ["tomorrow 1pm", "missing-title"],
@@ -407,6 +434,7 @@ describe("fail-closed errors preserve all input", () => {
     ["Meet Sam tomorrow around 1pm", "unsupported-phrase"],
     ["Meet Sam tonight", "unsupported-phrase"],
     ["Meet Sam 03/04/2026", "unsupported-phrase"],
+    ["Email 123@ tomorrow 1pm", "unsupported-phrase"],
     ["Meet Sam tomorrow 1pm PST", "unsupported-phrase"],
     ["Meet Sam tomorrow 1pm +0200", "unsupported-phrase"],
     ["Meet Sam tomorrow 1pm then a surprise", "unsupported-phrase"],
@@ -479,6 +507,48 @@ describe("fail-closed errors preserve all input", () => {
         start: input.indexOf("every"),
         end: input.indexOf(ordinal) + ordinal.length,
         text: `every ${ordinal}`,
+      },
+    ]);
+  });
+
+  it.each([
+    ["zero", "days"],
+    ["one", "week"],
+    ["two", "weeks"],
+    ["three", "weekdays"],
+    ["four", "months"],
+    ["five", "years"],
+    ["six", "Monday"],
+    ["seven", "days"],
+    ["eight", "weeks"],
+    ["nine", "months"],
+    ["ten", "years"],
+    ["eleven", "weeks"],
+    ["twelve", "weeks"],
+    ["thirteen", "weeks"],
+    ["fourteen", "weeks"],
+    ["fifteen", "weeks"],
+    ["sixteen", "weeks"],
+    ["seventeen", "weeks"],
+    ["eighteen", "weeks"],
+    ["nineteen", "weeks"],
+    ["twenty", "weeks"],
+    ["twenty-one", "days"],
+    ["twenty two", "weeks"],
+    ["one hundred", "days"],
+    ["one hundred and two", "days"],
+    ["two thousand", "days"],
+    ["TWO", "WEEKS"],
+  ])("rejects worded recurrence interval every %s %s", (amount, period) => {
+    const input = `Standup every ${amount} ${period} tomorrow 09:30`;
+    const error = failure(input, "unsupported-phrase");
+    const firstWord = amount.split(" ")[0] as string;
+    expect(error.issues).toEqual([
+      {
+        code: "unsupported-phrase",
+        start: input.indexOf("every"),
+        end: input.indexOf(firstWord) + firstWord.length,
+        text: `every ${firstWord}`,
       },
     ]);
   });

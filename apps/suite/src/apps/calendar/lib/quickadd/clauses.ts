@@ -27,9 +27,13 @@ const cue =
 const weekdays = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 const recurrenceModifier =
   /^(?:other|(?:(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)-)?(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth)|tenth|eleventh|twelfth|(?:thir|four|fif|six|seven|eigh|nine)teenth|twentieth|thirtieth|fortieth|fiftieth|sixtieth|seventieth|eightieth|ninetieth|hundredth|thousandth)$/i;
+const recurrenceNumberWord =
+  /^(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|(?:thir|four|fif|six|seven|eigh|nine)teen|(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)(?:-(?:one|two|three|four|five|six|seven|eight|nine))?|hundred|thousand|million|billion|trillion)$/i;
 
 function startsScheduling(tokens: Token[], index: number): boolean {
   const token = tokens[index] as Token;
+  // Email local parts can resemble dates or clocks; keep the whole token literal.
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(token.text)) return false;
   if (!cue.test(token.text)) return false;
   // These words also occur in ordinary titles. Only treat them as scheduling
   // prefixes when followed by a temporal construct (including unsupported ones).
@@ -39,13 +43,19 @@ function startsScheduling(tokens: Token[], index: number): boolean {
     )
   ) {
     let nextIndex = index + 1;
-    // Look through an interval modifier only when it leads to a temporal
-    // construct; ordinary titles such as "Read every second chapter" stay literal.
-    if (
-      token.text.toLowerCase() === "every" &&
-      recurrenceModifier.test(tokens[nextIndex]?.text ?? "")
-    ) {
-      nextIndex++;
+    // Look through interval modifiers only when they lead to a temporal
+    // construct; ordinary titles such as "Read every two chapters" stay literal.
+    if (token.text.toLowerCase() === "every") {
+      if (recurrenceModifier.test(tokens[nextIndex]?.text ?? "")) nextIndex++;
+      while (recurrenceNumberWord.test(tokens[nextIndex]?.text ?? "")) {
+        nextIndex++;
+        if (
+          /^and$/i.test(tokens[nextIndex]?.text ?? "") &&
+          recurrenceNumberWord.test(tokens[nextIndex + 1]?.text ?? "")
+        ) {
+          nextIndex++;
+        }
+      }
     }
     const next = tokens[nextIndex];
     return (
