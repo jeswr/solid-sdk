@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory } from "n3";
 import { expect, it, vi } from "vitest";
@@ -11,6 +12,7 @@ import { moveWithValidator } from "../src/apps/drive/state/undo";
 import {
   ACL,
   aclBody,
+  aclClauses,
   DRIVE,
   OWNER,
   PRIVATE,
@@ -81,7 +83,8 @@ it("archives every container's own ACL in the index and restores folder grants a
   expect((await restoreItems(client, DRIVE, [folder])).failed).toEqual([]);
   const restored = await accessControl(f.fetch, ROOT).read(`${nested}.policy`);
   expect(restored.status).toBe("known");
-  if (restored.status === "known") expect(sameGraph(restored.policy.dataset, original)).toBe(true);
+  if (restored.status === "known")
+    expect(aclClauses(restored.policy.dataset)).toEqual(aclClauses(original));
   await client.write(
     `${nested}another`,
     "secret contents",
@@ -133,7 +136,12 @@ it.each([
   f.audit([PRIVATE, nested]);
   // A new client proves metadata is durable, rather than cached in the deleting tab.
   const onPrivateFolder = vi.fn();
-  const fresh = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, onPrivateFolder });
+  const fresh = createSolidDriveClient({
+    storageUrl: ROOT,
+    fetch: f.fetch,
+    webId: OWNER,
+    onPrivateFolder,
+  });
   expect((await restoreItems(fresh, DRIVE, [file])).failed).toEqual([]);
   await fresh.write(
     `${nested}another`,
@@ -145,11 +153,8 @@ it.each([
   expect(f.policies.has(`${PRIVATE}.policy`)).toBe(true);
   expect(f.policies.has(`${nested}.policy`)).toBe(true);
   expect(
-    sameGraph(
-      await parseRdf(required(f.policies.get(`${nested}.policy`)), "text/turtle"),
-      original,
-    ),
-  ).toBe(true);
+    aclClauses(await parseRdf(required(f.policies.get(`${nested}.policy`)), "text/turtle")),
+  ).toEqual(aclClauses(original));
   expect(onPrivateFolder).not.toHaveBeenCalled();
 });
 
@@ -211,8 +216,16 @@ it.each([
   } else if (operation === "move")
     await client.move(`${PRIVATE}secret`, `${nested}secret`, { kind: "confirm-move" });
   else {
-    const etag = required((await client.stat(`${PRIVATE}secret`)).etag);
-    await moveWithValidator(options, `${PRIVATE}secret`, `${nested}secret`, etag);
+    const identity = await client.stat(`${PRIVATE}secret`);
+    const etag = required(identity.etag);
+    await moveWithValidator(
+      options,
+      `${PRIVATE}secret`,
+      `${nested}secret`,
+      etag,
+      undefined,
+      identity.verifyHeaders,
+    );
   }
   await client.write(
     `${nested}another`,

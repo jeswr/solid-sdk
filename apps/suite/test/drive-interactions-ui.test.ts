@@ -453,13 +453,13 @@ it.each([
   expect(pod.has(`${entries[0]?.url}b`)).toBe(true);
   expect(await (await client.read(`${ROOT}Folder/b`)).text()).toBe("B");
   await pod.fetch(`${ROOT}Folder/b`, { method: "DELETE" });
-  await act(async () => actions.removeForever(entries));
+  await act(async () => actions.removeForever(await operations.listTrash(client, ROOT)));
   expect(await operations.listTrash(client, ROOT)).toEqual([]);
   expect(pod.has(entries[0]?.url as string)).toBe(false);
   await view.unmount();
 });
 
-it("Empty trash keeps partial recovery visible after two descendant deletion races", async () => {
+it("Empty trash keeps partial recovery when a descendant race changes the approved root", async () => {
   const pod = createDemoPod({
     root: drive.session.storageUrl,
     seed: ["a", "b", "c"].map((name) => ({
@@ -507,7 +507,9 @@ it("Empty trash keeps partial recovery visible after two descendant deletion rac
   if (!confirm) throw new Error("Missing confirmation");
   await click(confirm);
   recovery = undefined;
-  expect(vanished).toBe(2);
+  // A changed approved root stops the retry before another descendant is read.
+  expect(vanished).toBe(1);
+  expect(await (await client.read(`${entry.url}b`)).text()).toBe("b");
   expect(await (await client.read(`${entry.url}c`)).text()).toBe("c");
   expect(await operations.listTrash(client, ROOT)).toHaveLength(1);
   expect(view.host.textContent).toContain("Folder");
@@ -606,7 +608,7 @@ it("a reopened Move dialog ignores the older folder-tree listing", async () => {
   await view.unmount();
 });
 
-it("Undo uses the move response validator even if a replacement is present before a later HEAD", async () => {
+it("round 61: Move reports a destination replacement before offering Undo", async () => {
   const destination = `${ROOT}Work/A.txt`;
   const original = items[0] as DriveItem;
   const pod = createDemoPod({
@@ -646,16 +648,16 @@ it("Undo uses the move response validator even if a replacement is present befor
   await act(async () => {
     await actions.move([items[0] as DriveItem], `${ROOT}Work/`);
   });
-  const options = mocks.toast.success.mock.calls.at(-1)?.[1] as {
-    action: { onClick: () => Promise<void> };
-  };
-  await act(async () => options.action.onClick());
-  expect(mocks.undoMove).toHaveBeenCalledWith(
-    expect.objectContaining({ onProtectionChange: drive.invalidate }),
-    destination,
-    items[0]?.url,
-    copiedEtag,
-  );
+  expect(copiedEtag).toBeTruthy();
+  expect(mocks.toast.success).not.toHaveBeenCalled();
+  expect(mocks.toast.error).toHaveBeenCalled();
+  expect(mocks.undoMove).not.toHaveBeenCalled();
+  let recovered = false;
+  for (const [url] of pod.snapshot().resources) {
+    if (url.includes("/.drive-recovery-") && (await (await pod.fetch(url)).text()) === "original")
+      recovered = true;
+  }
+  expect(recovered).toBe(true);
   expect(stat).not.toHaveBeenCalled();
   expect(pod.has(original.url)).toBe(false);
   expect(await (await otherTab.read(destination)).text()).toBe("unrelated");
@@ -1008,6 +1010,8 @@ it("Undo conditions the reverse move on the captured ETag and reports replaced i
     destination,
     items[0]?.url,
     '"moved-version"',
+    undefined,
+    undefined,
   );
   expect(mocks.toast.error).toHaveBeenCalledWith(expect.stringContaining("A.txt"));
   await view.unmount();
@@ -1035,6 +1039,8 @@ it("Undo restores the exact original URL and reports all failures without stoppi
     `${ROOT}Work/B.txt`,
     items[1]?.url,
     '"version"',
+    undefined,
+    undefined,
   );
   expect(mocks.toast.error).toHaveBeenCalledWith(expect.stringMatching(/A.txt.*C.txt/));
   await view.unmount();
@@ -1107,6 +1113,8 @@ it("captures each moved validator before waiting for later items in the batch", 
     `${ROOT}Work/A.txt`,
     items[0]?.url,
     '"first-version"',
+    undefined,
+    undefined,
   );
   await view.unmount();
 });
@@ -1181,6 +1189,7 @@ it("captures a moved folder's child set immediately for Undo", async () => {
       { url: destination, etag: '"folder-version"', children: [child.url] },
       { url: child.url, etag: '"file-version"' },
     ],
+    undefined,
   );
   await view.unmount();
 });
@@ -1425,5 +1434,31 @@ it.each([
   if (!confirm) throw new Error("Missing delete confirmation");
   await click(confirm);
   expect(pod.has(`${ROOT}A.txt`)).toBe(false);
+  await view.unmount();
+});
+
+it.each([
+  "rename",
+  "new-folder",
+] as const)("round 55: %s validation is announced while submit keeps focus", async (kind) => {
+  const view = await mount(tree(items, true));
+  await act(async () =>
+    ui.openDialog(
+      kind === "rename" ? { kind, item: items[0] as DriveItem } : { kind, parent: ROOT },
+    ),
+  );
+  const input = document.querySelector('input[autocomplete="off"]') as HTMLInputElement;
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  await act(async () => {
+    setter?.call(input, "");
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const submit = document.querySelector('button[type="submit"]') as HTMLButtonElement;
+  await act(async () => submit.focus());
+  await click(submit);
+  const error = document.getElementById(input.getAttribute("aria-describedby") as string);
+  expect(error?.textContent).toBe("Enter a name");
+  expect(error?.getAttribute("role")).toBe("alert");
+  expect(document.activeElement).toBe(submit);
   await view.unmount();
 });

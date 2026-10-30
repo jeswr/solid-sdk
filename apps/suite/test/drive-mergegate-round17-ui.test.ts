@@ -343,6 +343,9 @@ it.each([
   expect(env.drive.uploads.tasks[0]?.error).toBeUndefined();
   expect(document.querySelector(".drv-dock")?.textContent).toContain("1 upload complete");
   expect(document.querySelector(".drv-dock-error")).toBeNull();
-  expect(writes).toEqual([{ url, match: null, none: "*" }]);
+  expect(writes).toEqual([
+    { url, match: null, none: "*" },
+    { url, match: `"${createHash("sha256").update("").digest("hex")}"`, none: null },
+  ]);
   expect(document.querySelector('[role="dialog"]')).toBeNull();
 });

@@ -67,7 +67,7 @@ it("compares modes, subjects and origins conservatively without conflating condi
       restricted,
       policy([{ agent: [OWNER], mode: read, origin: ["https://third.test"] }]),
     ),
-  ).toEqual([`${OWNER} from https://third.test`]);
+  ).toEqual([`${OWNER} from https://third.test`, "Application https://third.test"]);
   expect(accessGains(restricted, policy([{ agent: [OWNER], mode: read }]))).toEqual([OWNER]);
   expect(accessGains(policy([]), policy([{ agent: [OWNER] }]))).toEqual([]);
 });
@@ -259,6 +259,8 @@ it("folder own accessTo without defaults still prompts for widening inherited ch
   const client = createSolidDriveClient({
     storageUrl: ROOT,
     fetch: f.fetch,
+    // The folder's read-only own policy cannot identify its recovery controller.
+    webId: OWNER,
     confirmAccess: async () => "keep",
   });
   await client.createFolder(`${PRIVATE}nested/`, { kind: "inherit-verified" });
@@ -287,7 +289,14 @@ it("Undo of a narrowing move prompts before widening access again; Cancel keeps 
   expect(confirmAccess).not.toHaveBeenCalled();
   const { moveWithValidator } = await import("../src/apps/drive/state/undo");
   await expect(
-    moveWithValidator(options, moved.url, `${PUBLIC}placeholder`, moved.etag as string),
+    moveWithValidator(
+      options,
+      moved.url,
+      `${PUBLIC}placeholder`,
+      moved.etag as string,
+      undefined,
+      moved.verifyHeaders,
+    ),
   ).rejects.toThrow("cancelled");
   expect(confirmAccess).toHaveBeenCalledWith(
     expect.objectContaining({ gains: ["Everyone (public)"] }),
@@ -335,7 +344,12 @@ it.each([
 ])("%s preserves private children when their folder has public own accessTo but no defaults", async (mode) => {
   const f = await wacPod();
   const confirmAccess = vi.fn(async () => "keep" as const);
-  const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, confirmAccess });
+  const client = createSolidDriveClient({
+    storageUrl: ROOT,
+    fetch: f.fetch,
+    confirmAccess,
+    webId: OWNER,
+  });
   const from = `${PRIVATE}nested/`,
     to = `${PUBLIC}nested/`;
   await client.createFolder(from, { kind: "inherit-verified" });
@@ -370,7 +384,14 @@ it("folder Undo refuses unknown ACP during tree verification", async () => {
   });
   const { moveWithValidator } = await import("../src/apps/drive/state/undo");
   await expect(
-    moveWithValidator(options, moved.url, PUBLIC, moved.etag as string, moved.tree),
+    moveWithValidator(
+      options,
+      moved.url,
+      PUBLIC,
+      moved.etag as string,
+      moved.tree,
+      moved.verifyHeaders,
+    ),
   ).rejects.toThrow("Private access");
   expect(confirmAccess).not.toHaveBeenCalled();
   expect(f.pod.has(moved.url)).toBe(true);

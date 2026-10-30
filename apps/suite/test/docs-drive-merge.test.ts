@@ -35,7 +35,7 @@ it.each([
   const items = await client.list(PRIVATE);
   let indexWrites = 0;
   f.intercept(async (url, init) => {
-    if (url === INDEX && init?.method === "PUT" && ++indexWrites === 2 && denied)
+    if (url === INDEX && init?.method === "PUT" && init.body && ++indexWrites === 2 && denied)
       return new Response(null, { status: 503 });
     return undefined;
   });
@@ -89,6 +89,24 @@ async function fixture() {
   expect(trashed.done).toHaveLength(2);
   return { ...pod, client, entries: trashed.done };
 }
+
+it("a fresh client without an owner WebID retains both Docs sources when restore planning is refused", async () => {
+  const f = await fixture();
+  const fresh = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });
+  const result = await restoreItems(fresh, DRIVE, f.entries.slice(0, 1));
+  expect(result.done).toEqual([]);
+  expect(result.failed).toHaveLength(2);
+  for (const failure of result.failed)
+    expect(failure.error).toMatchObject({
+      kind: "private-access-unavailable",
+      cause: "Owner WebID unavailable",
+    });
+  for (const entry of f.entries) {
+    expect(f.pod.has(entry.url)).toBe(true);
+    expect(f.pod.has(entry.original)).toBe(false);
+  }
+  expect(f.exposures).toEqual([]);
+});
 
 it("keeps a lone snapshot recoverable when rename planning cannot read its bytes", async () => {
   const f = await wacPod();

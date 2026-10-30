@@ -153,7 +153,7 @@ it.each([
   if (!deferred) throw new Error("No deferred deletion");
   f.intercept(undefined);
   await f.fetch(target, deferred);
-  expect((await deleteForever(client, DRIVE, [entry])).failed).toEqual([]);
+  expect((await deleteForever(client, DRIVE, await listTrash(client, DRIVE))).failed).toEqual([]);
   expect(await listTrash(client, DRIVE)).toEqual([]);
 });
 

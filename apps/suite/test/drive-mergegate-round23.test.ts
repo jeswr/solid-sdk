@@ -56,7 +56,9 @@ it.each(
   const protection = { acl: `${source}.acl`, from: source, turtle: "required ACL" };
   await protectionLedger(http).set(source, protection);
   await expect(
-    deletionControl(http, errorFor).remove(source, '"old"', recovery),
+    deletionControl(http, errorFor).remove(source, '"old"', recovery, {
+      verifyHeaders: () => undefined,
+    }),
   ).rejects.toMatchObject({
     status,
   });
@@ -91,7 +93,9 @@ it.each([
     return new Response(null, { status, ...(etag ? { headers: { etag } } : {}) });
   });
   const control = deletionControl(http, errorFor);
-  await expect(control.remove(source, '"old"', recovery)).rejects.toMatchObject({
+  await expect(
+    control.remove(source, '"old"', recovery, { verifyHeaders: () => undefined }),
+  ).rejects.toMatchObject({
     kind: "delete-pending",
   });
   retry = true;
@@ -113,7 +117,9 @@ it.each([
           headers: { etag: new Headers(init?.headers).has("if-match") ? '"old"' : '"new"' },
         });
   await expect(
-    deletionControl(http, errorFor).remove(source, '"old"', recovery),
+    deletionControl(http, errorFor).remove(source, '"old"', recovery, {
+      verifyHeaders: () => undefined,
+    }),
   ).rejects.toMatchObject({
     kind: "conflict",
     status: 412,

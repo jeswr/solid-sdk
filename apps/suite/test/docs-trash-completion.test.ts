@@ -6,7 +6,11 @@ import { Doc } from "yjs";
 import { buildDocument, docContainerUrls, serializeTurtle } from "../src/apps/docs/lib/model";
 import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
 import { deletionLedger } from "../src/apps/drive/lib/client/protection-ledger";
-import { restoreItems, trashItems } from "../src/apps/drive/lib/operations/operations";
+import {
+  deleteForever,
+  restoreItems,
+  trashItems,
+} from "../src/apps/drive/lib/operations/operations";
 import { trashEntries, trashIndexFrom } from "../src/apps/drive/lib/operations/trash-index";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { DEMO_ROOT } from "../src/lib/demo-pod/seed";
@@ -125,6 +129,57 @@ it("Drive folder trash completes nested DELETE 205 responses without waiting for
   expect(await deletionLedger(http).get(source)).toBeUndefined();
   expect(await deletionLedger(http).get(entry.url)).toBeUndefined();
 }, 2_000);
+
+it.each([
+  true,
+  false,
+])("Docs loss-ack reconciliation retains Drive's pending guard when confirmation reads fail (recheck API: %s)", async (canRecheck) => {
+  const { pod, client, http } = await fixture();
+  const trashed = await trashItems(client, DRIVE, [await client.stat(DOC)]);
+  expect(trashed.failed).toEqual([]);
+  const entry = trashed.done[0];
+  if (!entry) throw new Error("Missing snapshot record");
+  const forward = http.getMockImplementation();
+  if (!forward) throw new Error("Missing transport");
+  http.mockImplementation(async (input, init) => {
+    const response = await forward(input, init);
+    if (String(input) === entry.url && init?.method === "DELETE")
+      throw new TypeError("DELETE acknowledgement lost");
+    return response;
+  });
+  const { recheckDeletions: _recheck, ...withoutRecheck } = client;
+  const result = await deleteForever(canRecheck ? client : withoutRecheck, DRIVE, [entry]);
+  expect(result.done).toEqual([]);
+  expect(result.failed).toMatchObject([{ url: entry.url, error: { kind: "delete-pending" } }]);
+  expect(pod.has(entry.url)).toBe(false);
+  expect(await deletionLedger(http).get(entry.url)).toBeDefined();
+  const current = await client.readRdf(`${DRIVE}.trash/index.ttl`);
+  if (!current) throw new Error("Missing trash index");
+  expect(trashEntries(trashIndexFrom(current.dataset))).toMatchObject([{ url: entry.url }]);
+});
+
+it("a rewritten Docs restore refuses a source replaced after its validator was captured", async () => {
+  const { pod, client, http } = await fixture();
+  const captured = await client.stat(DOC);
+  const target = `${ROOT}docs/plan%20(restored).ttl`;
+  await pod.fetch(DOC, { method: "PUT", body: "another document incarnation" });
+  http.mockClear();
+  await expect(
+    client.write(
+      target,
+      "relocated snapshot",
+      {
+        contentType: "text/turtle",
+        ifNoneMatch: "*",
+        restoreFrom: { url: DOC, etag: captured.etag as string },
+      },
+      { kind: "protect-ancestors" },
+    ),
+  ).rejects.toMatchObject({ kind: "conflict", status: 412, url: DOC });
+  expect(http.mock.calls.filter(([, init]) => init?.method === "PUT")).toEqual([]);
+  expect(pod.has(target)).toBe(false);
+  expect(await (await client.read(DOC)).text()).toBe("another document incarnation");
+});
 
 it.each([
   "snapshot",

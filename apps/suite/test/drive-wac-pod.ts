@@ -42,6 +42,25 @@ export async function turtle(data: Store) {
   );
 }
 
+/** Compare complete clauses independently of an authorization's local subject label. */
+export function aclClauses(data: Store) {
+  return [...new AclResource(data, DataFactory).authorizations]
+    .map((authorization) => {
+      const rule = new WacFields(authorization as Term, data, DataFactory);
+      return [
+        "accessTo",
+        "default",
+        "defaultForNew",
+        "agent",
+        "agentClass",
+        "agentGroup",
+        "origin",
+        "mode",
+      ].map((predicate) => [predicate, [...rule.iris(`${ACL}${predicate}`)].sort()]);
+    })
+    .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+}
+
 /** Real WAC own/default resolution over a transport with LDP and ETags. */
 export async function wacPod() {
   const pod = createDemoPod({
@@ -55,6 +74,9 @@ export async function wacPod() {
     [`${ROOT}.policy`, await aclBody(ROOT, true)],
     [`${PRIVATE}.policy`, await aclBody(PRIVATE)],
   ]);
+  // Discovery and enforcement share the same association, including endpoint changes.
+  const endpoints = new Map<string, string>();
+  const endpointOf = (url: string) => endpoints.get(url) ?? `${url}.policy`;
   const calls: { url: string; method: string }[] = [];
   const exposures: string[] = [];
   let audit = false;
@@ -65,7 +87,7 @@ export async function wacPod() {
     let resource: string | undefined = url;
     let inherited = false;
     while (resource?.startsWith(ROOT)) {
-      const body = policies.get(`${resource}.policy`);
+      const body = policies.get(endpointOf(resource));
       if (body !== undefined) {
         const data = await parseRdf(body, "text/turtle");
         const rules = [...new AclResource(data, DataFactory).authorizations];
@@ -104,7 +126,10 @@ export async function wacPod() {
         response = new Response(null, { status: 412 });
       else if (method === "PUT") {
         policies.set(url, String(init?.body));
-        response = new Response(null, { status: 201 });
+        response = new Response(null, {
+          status: 201,
+          headers: { etag: JSON.stringify(policies.get(url)) },
+        });
       } else
         response = new Response(method === "HEAD" ? null : (current ?? null), {
           status: current === undefined ? 404 : 200,
@@ -112,10 +137,10 @@ export async function wacPod() {
         });
     } else {
       const raw = await pod.fetch(input, init);
-      if (method === "DELETE" && raw.ok) policies.delete(`${url}.policy`);
+      if (method === "DELETE" && raw.ok) policies.delete(endpointOf(url));
       const headers = new Headers(raw.headers);
       headers.delete("x-solid-demo-access-control");
-      headers.set("link", `<${url}.policy>; rel="acl"`);
+      headers.set("link", `<${endpointOf(url)}>; rel="acl"`);
       if (method === "PUT" && raw.ok && url.endsWith("/"))
         headers.set(
           "etag",
@@ -149,6 +174,7 @@ export async function wacPod() {
     pod,
     fetch,
     policies,
+    endpoints,
     calls,
     exposures,
     anonymous,

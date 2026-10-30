@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { afterEach, expect, it, vi } from "vitest";
-import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
+import { createSolidDriveClient, DriveError } from "../src/apps/drive/lib/client/client";
 import { restoreItems, trashItems } from "../src/apps/drive/lib/operations/operations";
 import { moveWithValidator } from "../src/apps/drive/state/undo";
 import { exclusiveLocks } from "./drive-locks";
@@ -104,13 +105,22 @@ it("a second client waits until the recreated ancestor ACL has been verified", a
   await reached.promise;
   const other = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });
   const second = upload(other, "second");
-  const done = Promise.all([first, second]);
+  const done = Promise.allSettled([first, second]);
   try {
     await turn();
     expect(f.pod.has(`${PRIVATE}second`)).toBe(false);
   } finally {
     release.resolve();
     await done;
+  }
+  // Separate clients cannot advance each other's captured parent validators.
+  // The extra placeholder/payload boundary may observe the other child creation;
+  // a definite conflict needs a fresh operation, never an in-flight validator refresh.
+  for (const [index, result] of (await done).entries()) {
+    if (result.status === "fulfilled") continue;
+    expect(result.reason).toBeInstanceOf(DriveError);
+    expect(result.reason).toMatchObject({ status: 412, url: PRIVATE });
+    await upload(index === 0 ? client : other, index === 0 ? "first" : "second");
   }
   expect(f.pod.has(`${PRIVATE}first`)).toBe(true);
   expect(f.pod.has(`${PRIVATE}second`)).toBe(true);
@@ -197,9 +207,20 @@ it.each([
     release.resolve();
     await done;
   }
-  expect((await done).map((result) => result.status)).toEqual(
-    phase === "503" ? ["rejected", "rejected"] : ["fulfilled", "fulfilled"],
-  );
+  if (phase === "503")
+    expect((await done).map((result) => result.status)).toEqual(["rejected", "rejected"]);
+  else {
+    // The tabs share provisioning locks, but cannot advance each other's
+    // captured parent receipts. A child creation can therefore refuse the
+    // other tab's next write; retry only as a fresh operation after settlement.
+    for (const [index, result] of (await done).entries()) {
+      if (result.status === "fulfilled") continue;
+      expect(result.reason).toMatchObject({ kind: "conflict", status: 412, url: PRIVATE });
+      await upload(index === 0 ? client : await otherTab(f), index === 0 ? "first" : "second");
+    }
+    expect(f.pod.has(`${PRIVATE}first`)).toBe(true);
+    expect(f.pod.has(`${PRIVATE}second`)).toBe(true);
+  }
   expect(f.pod.has(PRIVATE)).toBe(phase !== "503");
   expect(f.exposures).toEqual([]);
 });
@@ -300,6 +321,7 @@ it.each([
   });
   const first = upload(client, "first");
   await reached.promise;
+  const undoIdentity = operation === "undo" ? await client.stat(entry.url) : undefined;
   const second =
     operation === "nested upload"
       ? client.write(
@@ -320,7 +342,9 @@ it.each([
                   { storageUrl: ROOT, fetch: f.fetch, webId: OWNER },
                   entry.url,
                   `${PRIVATE}second`,
-                  (await client.stat(entry.url)).etag as string,
+                  undoIdentity?.etag as string,
+                  undefined,
+                  undoIdentity?.verifyHeaders,
                 );
   const settled = vi.fn();
   void second.then(settled, settled);

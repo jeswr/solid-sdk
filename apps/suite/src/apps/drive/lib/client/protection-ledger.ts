@@ -1,10 +1,15 @@
 // AUTHORED-BY Codex
 import { DriveAccessError } from "./access";
+import type { PolicyIdentity } from "./commit";
 
 export interface ProtectionRequirement {
   readonly acl: string;
   readonly from: string;
   readonly turtle: string;
+  /** A repair of an existing representation may never change a replacement's ACL. */
+  readonly etag?: string;
+  /** Captured own ACL or absence; Retry cannot adopt a replacement or revive a revocation. */
+  readonly ownAcl?: PolicyIdentity;
 }
 
 // Non-browser transports have no durable store. Keep their independent pods isolated.

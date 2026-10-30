@@ -12,7 +12,7 @@ const { IDBFactory } = createRequire(
 
 afterEach(() => vi.unstubAllGlobals());
 
-it("a file placeholder without its PUT validator retains only the verified, empty recovery copy", async () => {
+it("a file placeholder without its PUT validator retains empty recovery without adopting a later identity", async () => {
   const f = await wacPod();
   const to = `${PUBLIC}copy.txt`;
   f.after(async (url, method, response) => {
@@ -27,7 +27,10 @@ it("a file placeholder without its PUT validator retains only the verified, empt
     retainedDestinations: [to],
   });
   expect(await (await f.pod.fetch(to)).text()).toBe("");
-  expect((await f.anonymous(to)).status).toBe(403);
+  // No captured identity can authorize an ACL PUT on this endpoint. Its
+  // durable requirement blocks payload writes; no confidential bytes were sent.
+  expect(f.calls).not.toContainEqual({ url: `${to}.policy`, method: "PUT" });
+  expect(await protectionLedger(f.fetch).get(to)).toBeDefined();
 });
 
 it.each([
@@ -201,7 +204,15 @@ it.each([
   expect(await fresh.stat(to)).toMatchObject({ protectionRequired: true });
   f.intercept(undefined);
   f.after(undefined);
-  await fresh.read(to);
-  expect(await protectionLedger(f.fetch).get(to)).toBeUndefined();
-  expect((await f.anonymous(to)).status).toBe(403);
+  if (mode === "hidden Link") {
+    // Restored discovery cannot invent the endpoint omitted by creation's receipt.
+    f.calls.length = 0;
+    await expect(fresh.read(to)).rejects.toThrow(/sharing could not be secured/);
+    expect(await protectionLedger(f.fetch).get(to)).toBeDefined();
+    expect(f.calls.filter(({ method }) => method === "PUT")).toEqual([]);
+  } else {
+    await fresh.read(to);
+    expect(await protectionLedger(f.fetch).get(to)).toBeUndefined();
+    expect((await f.anonymous(to)).status).toBe(403);
+  }
 });

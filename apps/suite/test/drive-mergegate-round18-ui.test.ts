@@ -46,6 +46,21 @@ async function replaceAll() {
   await click(button("Replace"));
 }
 
+function expectCreatedFiles(
+  writes: readonly { url: string; match: string | null; none: string | null }[],
+  names: readonly string[],
+) {
+  const emptyEtag = `"${createHash("sha256").update("").digest("hex")}"`;
+  expect(writes).toHaveLength(names.length * 2);
+  for (const name of names) {
+    const url = `${PUBLIC}${name}`;
+    expect(writes.filter((write) => write.url === url)).toEqual([
+      { url, match: null, none: "*" },
+      { url, match: emptyEtag, none: null },
+    ]);
+  }
+}
+
 async function setup(hiddenLink = false) {
   const f = await wacPod();
   // HTTP permits a strong ETag derived solely from the representation bytes.
@@ -184,7 +199,7 @@ it.each([
   expect(env.writes).toEqual([]);
 });
 
-it("Upload at a vacant replacement URL writes only after renewed confirmation, with If-None-Match", async () => {
+it("Upload at a vacant replacement URL conditionally creates a placeholder after renewed confirmation, then uses its receipt", async () => {
   const env = await setup();
   await failedReplacement(env);
   await click(button("Retry report.txt"));
@@ -192,7 +207,7 @@ it("Upload at a vacant replacement URL writes only after renewed confirmation, w
   expect(env.writes).toEqual([]);
   await click(button("Upload"));
   await env.settled(["done"]);
-  expect(env.writes).toEqual([{ url: `${PUBLIC}report.txt`, match: null, none: "*" }]);
+  expectCreatedFiles(env.writes, ["report.txt"]);
   expect(await (await env.f.anonymous(`${PUBLIC}report.txt`)).text()).toBe("secret contents");
 });
 
@@ -250,8 +265,7 @@ it.each([
   await click(checkbox);
   await click(button("Upload"));
   await env.settled(names.map(() => "done"));
-  expect(env.writes).toHaveLength(names.length);
-  expect(env.writes.every((write) => write.match === null && write.none === "*")).toBe(true);
+  expectCreatedFiles(env.writes, names);
   expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
 
@@ -288,7 +302,8 @@ it.each([
   await click(checkbox);
   await click(button(existingFirst ? "Replace" : "Upload"));
   await env.settled(["done", "conflict"]);
-  expect(env.writes).toHaveLength(1);
+  if (existingFirst) expect(env.writes).toHaveLength(1);
+  else expectCreatedFiles(env.writes, [names[0] as string]);
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
     existingFirst ? "Upload as a new file?" : "already exists",
   );
@@ -322,7 +337,7 @@ it.each([
   if (timing === "later") await click(button("Retry c.txt"));
   else await act(async () => pending.resolve());
   await env.settled(["done", "done", "done"]);
-  expect(env.writes).toHaveLength(3);
+  expectCreatedFiles(env.writes, names);
   expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
 

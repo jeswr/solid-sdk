@@ -149,17 +149,15 @@ it.each([
     await expect(
       client.write(PRIVATE, "", { contentType: "text/turtle" }, { kind: "protect-ancestors" }),
     ).rejects.toThrow();
-  } else if (operation === "existing folder") {
-    await expect(client.createFolder(PRIVATE, { kind: "inherit-verified" })).rejects.toMatchObject({
-      kind: "conflict",
-      status: 412,
-    });
-    expect(await protectionLedger(f.fetch).get(PRIVATE)).toBeUndefined();
-    expect((await f.anonymous(PRIVATE)).status).toBe(403);
   } else {
-    await client.write(PRIVATE, "", { contentType: "text/turtle" }, { kind: "protect-ancestors" });
-    expect(await protectionLedger(f.fetch).get(PRIVATE)).toBeUndefined();
-    expect((await f.anonymous(PRIVATE)).status).toBe(403);
+    // Missing creation receipts cannot be repaired by adopting a later HEAD.
+    await expect(
+      operation === "existing folder"
+        ? client.createFolder(PRIVATE, { kind: "inherit-verified" })
+        : client.write(PRIVATE, "", { contentType: "text/turtle" }, { kind: "protect-ancestors" }),
+    ).rejects.toMatchObject({ kind: "private-access-unavailable" });
+    expect(await protectionLedger(f.fetch).get(PRIVATE)).toBeDefined();
+    expect(f.pod.has(`${PRIVATE}first`)).toBe(false);
   }
   expect(f.exposures).toEqual([]);
 });
@@ -185,37 +183,91 @@ it("checks protection requirements on the storage root before writing descendant
   expect(f.exposures).toEqual([]);
 });
 
+function payloadWrites(text: string, name: string): string[] {
+  const source = ts.createSourceFile(name, text, ts.ScriptTarget.Latest, true);
+  const mutations: string[] = [];
+  const visit = (node: ts.Node) => {
+    if (
+      ts.isPropertyAssignment(node) &&
+      node.name.getText(source) === "method" &&
+      ts.isStringLiteral(node.initializer) &&
+      ["PUT", "POST", "PATCH"].includes(node.initializer.text)
+    ) {
+      let enclosing: ts.Node = node;
+      while (!ts.isCallExpression(enclosing)) enclosing = enclosing.parent;
+      const callee = enclosing.expression.getText(source);
+      if (callee === "replayProtected" || callee === "replayOrQuarantine") {
+        // Round 54 restores access before replaying a captured representation.
+        // Verify that this wrapper still forwards the original URL and init to
+        // guardedWrite; merely having a helper with this name is insufficient.
+        const find = (statement: ts.Node, name: string): ts.VariableDeclaration[] => {
+          if (ts.isVariableDeclaration(statement) && statement.name.getText(source) === name)
+            return [statement];
+          const found: ts.VariableDeclaration[] = [];
+          ts.forEachChild(statement, (child) => {
+            found.push(...find(child, name));
+          });
+          return found;
+        };
+        const verify = (name: string) => {
+          const declaration = source.statements.flatMap((statement) => find(statement, name))[0];
+          const initializer = declaration?.initializer;
+          expect(initializer && ts.isArrowFunction(initializer)).toBe(true);
+          const body = (initializer as ts.ArrowFunction).body;
+          expect(ts.isBlock(body)).toBe(true);
+          const returns: ts.ReturnStatement[] = [];
+          const findReturns = (node: ts.Node) => {
+            if (ts.isReturnStatement(node)) returns.push(node);
+            else ts.forEachChild(node, findReturns);
+          };
+          findReturns(body);
+          const expression = returns[0]?.expression;
+          const returned =
+            expression && ts.isAwaitExpression(expression) ? expression.expression : expression;
+          expect(returned && ts.isCallExpression(returned)).toBe(true);
+          const call = returned as ts.CallExpression;
+          const outer = name === "replayOrQuarantine";
+          expect(call.expression.getText(source)).toBe(outer ? "replayProtected" : "guardedWrite");
+          expect(call.arguments.slice(0, outer ? 3 : 2).map((arg) => arg.getText(source))).toEqual(
+            outer ? ["url", "policy", "init"] : ["url", "init"],
+          );
+        };
+        verify(callee);
+        if (callee === "replayOrQuarantine") verify("replayProtected");
+      } else if (callee === "commitHttp") {
+        // Quarantine has already saved private copies. Its immutable clear
+        // assertion checks content and discovery without adopting a changed ACL.
+        expect(enclosing.getText(source)).toContain('body: ""');
+        expect(enclosing.getText(source)).toContain('"if-match": clear.etag');
+        expect(enclosing.getText(source)).toContain("verifyHeaders: clear.verifyHeaders");
+      } else expect(callee, `${name}: ${node.getText(source)}`).toBe("guardedWrite");
+      mutations.push(node.initializer.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return mutations;
+}
+
+it.each([
+  'http(url, { method: "PUT" })',
+  'replayProtected(url, policy, { method: "POST" }); const replayProtected = async (url, policy, init) => { return http(url, init); }',
+  'replayProtected(url, policy, { method: "PATCH" }); const replayProtected = async (url, policy, init) => { return guardedWrite(url, other); }',
+  'replayOrQuarantine(url, policy, { method: "PUT" }); const replayOrQuarantine = async (url, policy, init) => { return replayProtected(url, policy, other); }',
+  'replayOrQuarantine(url, policy, { method: "PUT" }); const replayOrQuarantine = async (url, policy, init) => { return replayProtected(url, policy, init); }; const replayProtected = async (url, policy, init) => { return http(url, init); }',
+])("payload guard rejects an unguarded mutation: %s", (source) => {
+  expect(() => payloadWrites(source, "unsafe.ts")).toThrow();
+});
+
 it("every Drive payload PUT/POST/PATCH is sent through guardedWrite", () => {
   const directory = new URL("../src/apps/drive/lib/client/", import.meta.url);
   const mutations: string[] = [];
   for (const name of readdirSync(directory)) {
     // ACL writes have their own conditional store-and-verify protocol in access.ts.
     if (!name.endsWith(".ts") || name === "access.ts") continue;
-    const source = ts.createSourceFile(
-      name,
-      readFileSync(new URL(name, directory), "utf8"),
-      ts.ScriptTarget.Latest,
-      true,
-    );
-    const visit = (node: ts.Node) => {
-      if (
-        ts.isPropertyAssignment(node) &&
-        node.name.getText(source) === "method" &&
-        ts.isStringLiteral(node.initializer) &&
-        ["PUT", "POST", "PATCH"].includes(node.initializer.text)
-      ) {
-        let enclosing: ts.Node = node;
-        while (!ts.isCallExpression(enclosing)) enclosing = enclosing.parent;
-        expect(enclosing.expression.getText(source), `${name}: ${node.getText(source)}`).toBe(
-          "guardedWrite",
-        );
-        mutations.push(node.initializer.text);
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(source);
+    mutations.push(...payloadWrites(readFileSync(new URL(name, directory), "utf8"), name));
   }
-  expect(mutations).toEqual(["PUT", "PUT", "PUT", "PUT"]);
+  expect(mutations).toEqual(["PUT", "PUT", "PUT", "PUT", "PUT"]);
 });
 async function trashedFolder() {
   const f = await wacPod();
@@ -311,7 +363,7 @@ it.each([
     ).toEqual([]);
     expect((await f.anonymous(`${PRIVATE}retry`)).status).toBe(403);
   } else {
-    await expect(retry).rejects.toThrow(/folder still requires protection/);
+    await expect(retry).rejects.toThrow(/policy changed during this operation/);
     expect(await protectionLedger(f.fetch).get(PRIVATE)).toBeDefined();
     expect(f.pod.has(`${PRIVATE}retry`)).toBe(false);
   }
@@ -407,7 +459,13 @@ it.each([
   expect(f.exposures).toEqual([]);
   f.intercept(undefined);
   f.after(undefined);
-  if (mode === "ACL and cleanup failure") await f.fetch(PRIVATE, { method: "DELETE" });
+  if (mode === "hidden headers")
+    await expect(upload(reloaded, "still blocked")).rejects.toMatchObject({
+      kind: "private-access-unavailable",
+      cause: "Protection receipt unavailable",
+    });
+  // A fresh, explicit recreation obtains its own receipt instead of adopting HEAD.
+  await f.fetch(PRIVATE, { method: "DELETE" });
   await upload(reloaded, "repaired");
   expect((await f.anonymous(`${PRIVATE}repaired`)).status).toBe(403);
   expect(f.exposures).toEqual([]);

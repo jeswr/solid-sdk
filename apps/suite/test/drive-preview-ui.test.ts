@@ -14,7 +14,13 @@ const { client, ui } = vi.hoisted(() => ({
   },
   ui: vi.fn(),
 }));
-const changes = { subscribe: () => () => {} };
+const listeners = new Set<() => void>();
+const changes = {
+  subscribe: (_url: string, listener: () => void) => {
+    listeners.add(listener);
+    return () => listeners.delete(listener);
+  },
+};
 vi.mock("../src/apps/drive/state/drive-context", () => ({
   useDrive: () => ({
     client,
@@ -281,13 +287,13 @@ it("rejects HTML advertised as PDF before creating a blob URL", async () => {
   expect(create).not.toHaveBeenCalled();
   await view.unmount();
 });
-it("forces validated PDF bytes to application/pdf and sandboxes its iframe", async () => {
+it("round 55: valid PDF uses the native viewer without Chromium's sandbox navigation block", async () => {
   client.read.mockResolvedValue(new Blob(["%PDF-1.7\nbytes"], { type: "text/html" }));
   const view = await mount(h(PreviewBody, { item }));
   const createdBlob = create.mock.calls[0]?.[0];
   expect(createdBlob).toBeInstanceOf(Blob);
   expect((createdBlob as Blob).type).toBe("application/pdf");
-  expect(view.host.querySelector("iframe")?.getAttribute("sandbox")).toBe("");
+  expect(view.host.querySelector("iframe")?.getAttribute("sandbox")).toBeNull();
   await view.unmount();
   expect(revoke).toHaveBeenCalledWith("blob:preview");
 });
@@ -386,4 +392,38 @@ it("keeps desktop preview Details inside the modal and exposes its keyboard cont
   expect(document.activeElement === trigger).toBe(true);
   expect(view.host.querySelector(".ish-details")).toBeNull();
   await view.unmount();
+});
+
+it("round 56: unrelated uploads preserve a video player and its playback position", async () => {
+  const videoItem = {
+    ...item,
+    name: "video.mp4",
+    url: "https://pod.example/drive/video.mp4",
+    contentType: "video/mp4",
+    etag: '"video-v1"',
+  };
+  client.stat.mockResolvedValue(videoItem);
+  client.read.mockResolvedValue(new Blob(["video"], { type: "video/mp4" }));
+  ui.mockReturnValue({ preview: { items: [videoItem], index: 0 }, setPreview: vi.fn() });
+  const view = await mount(h(PreviewDialog));
+  const video = document.querySelector("video") as HTMLVideoElement;
+  expect(video).not.toBeNull();
+  video.currentTime = 42;
+  const metadata = deferred<DriveItem>();
+  client.stat.mockReturnValueOnce(metadata.promise);
+  await act(async () => {
+    for (const listener of listeners) listener();
+  });
+  expect(document.querySelector("video")).toBe(video);
+  await act(async () => metadata.resolve(videoItem));
+  expect(document.querySelector("video")).toBe(video);
+  expect(video.currentTime).toBe(42);
+  expect(client.read).toHaveBeenCalledTimes(1);
+  client.stat.mockResolvedValue({ ...videoItem, etag: '"video-v2"' });
+  await act(async () => {
+    for (const listener of listeners) listener();
+  });
+  expect(client.read).toHaveBeenCalledTimes(2);
+  await view.unmount();
+  client.stat.mockRejectedValue(new Error("Metadata unavailable"));
 });

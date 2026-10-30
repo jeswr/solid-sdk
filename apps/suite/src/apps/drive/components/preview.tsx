@@ -100,7 +100,10 @@ function useLoadedFile(
 ): Loaded {
   const kind = filePreviewKind(item);
   const recordOpen = useRecordSharedOpen();
-  const version = useResourceVersion(item.url);
+  // Strong metadata validators decide whether folder invalidation changed bytes.
+  const version = useResourceVersion(
+    item.etag && metadataStatus !== undefined ? undefined : item.url,
+  );
   const [state, setState] = useState<Loaded>({ status: "loading" });
   // The body is keyed by URL + activation. Metadata refreshes can reload bytes,
   // but only the first successful load in this opening writes the preference.
@@ -311,7 +314,9 @@ export function PreviewBody({
       // biome-ignore lint/performance/noImgElement: blob URLs bypass the Next image loader
       return <img className="drv-preview-image" src={loaded.url} alt={item.name} />;
     case "pdf":
-      return <iframe className="drv-preview-frame" src={loaded.url} title={item.name} sandbox="" />;
+      // Chromium blocks its native PDF viewer in sandboxed frames. The loader
+      // verifies the PDF signature and forces application/pdf before creating this URL.
+      return <iframe className="drv-preview-frame" src={loaded.url} title={item.name} />;
     case "audio":
       // biome-ignore lint/a11y/useMediaCaption: user files have no caption track
       return <audio controls src={loaded.url} />;

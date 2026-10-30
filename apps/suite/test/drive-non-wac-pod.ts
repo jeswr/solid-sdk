@@ -43,7 +43,14 @@ export function nonWacPod(model: "ACP" | "unreadable ACL", root: string, source:
       resources.delete(url);
       const parent = parentOf(url);
       if (parent) revisions.set(parent, (revisions.get(parent) ?? 0) + 1);
-      return new Response(null, { status: 204 });
+      return new Response(null, {
+        status: 204,
+        headers: {
+          "x-solid-drive-parent-validators": JSON.stringify(
+            parent ? { [parent]: `"revision-${revisions.get(parent)}"` } : {},
+          ),
+        },
+      });
     }
     const data = new Store();
     if (url.endsWith("/"))

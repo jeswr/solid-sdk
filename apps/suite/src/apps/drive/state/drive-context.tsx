@@ -133,11 +133,18 @@ export function DriveProvider({ session, children }: { session: PodSession; chil
       if (!folder) return;
       for (const listener of listeners.current.get(folder) ?? []) listener();
     };
-    if (url.endsWith("/"))
-      for (const folder of listeners.current.keys()) if (folder.startsWith(url)) notify(folder);
-    notify(parentOf(url));
+    // ACL endpoints are discovered URLs and may have opaque names. A file event
+    // can change inherited access anywhere below its parent, so fan out there too.
+    const affectedRoot = url.endsWith("/") ? url : parentOf(url);
+    for (const folder of listeners.current.keys())
+      if (affectedRoot && folder.startsWith(affectedRoot)) notify(folder);
+    if (url.endsWith("/")) notify(parentOf(url));
     for (const [root, subscribers] of subtreeListeners.current) {
-      if (url === root || url.startsWith(root.endsWith("/") ? root : `${root}/`)) {
+      if (
+        url === root ||
+        url.startsWith(root.endsWith("/") ? root : `${root}/`) ||
+        (affectedRoot && root.startsWith(affectedRoot))
+      ) {
         for (const listener of subscribers) listener();
       }
     }

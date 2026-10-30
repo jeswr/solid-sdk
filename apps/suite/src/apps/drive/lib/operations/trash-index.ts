@@ -21,6 +21,7 @@ import {
   TermWrapper,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";
+import type { ResourceAssertion } from "../client/commit";
 
 const PROV = "http://www.w3.org/ns/prov#";
 const DCT = "http://purl.org/dc/terms/";
@@ -32,6 +33,9 @@ const ENTITY = `${PROV}Entity`;
 export interface TrashEntry {
   /** Where the item lives now (inside `.trash/<uuid>/`). */
   readonly url: string;
+  /** Recovery identity presented to the user, hydrated with the listing. */
+  readonly etag?: string;
+  readonly verifyHeaders?: ResourceAssertion["verifyHeaders"];
   /** Where it was before it was trashed. */
   readonly original: string;
   readonly trashedAt: Date;

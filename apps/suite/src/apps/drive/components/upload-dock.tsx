@@ -15,7 +15,9 @@ export function UploadDock() {
   const { tasks } = uploads;
   const active = tasks.filter((task) => task.status === "queued" || task.status === "uploading");
   const done = tasks.filter((task) => task.status === "done");
+  const failed = tasks.filter((task) => task.status === "failed");
   const reported = useRef(new Set<string>());
+  const reportedFailures = useRef(new Set<string>());
   const toggle = useRef<HTMLButtonElement>(null);
   const dock = useRef<HTMLElement>(null);
   const restoreFocus = useRef<(() => void) | undefined>(undefined);
@@ -49,11 +51,25 @@ export function UploadDock() {
     );
   }, [active.length, done]);
 
+  useEffect(() => {
+    const current = new Set(failed.map((task) => task.id));
+    for (const id of reportedFailures.current)
+      if (!current.has(id)) reportedFailures.current.delete(id);
+    for (const task of failed) {
+      if (reportedFailures.current.has(task.id)) continue;
+      reportedFailures.current.add(task.id);
+      toast.error(`Couldn't upload ${task.name}: ${task.error ?? "Upload failed"}`);
+    }
+  }, [failed]);
+
   if (tasks.length === 0) return null;
-  const title =
+  const progress =
     active.length > 0
       ? `Uploading ${active.length} ${active.length === 1 ? "item" : "items"}`
       : `${done.length} ${done.length === 1 ? "upload" : "uploads"} complete`;
+  const title = failed.length
+    ? `${progress}, ${failed.length} ${failed.length === 1 ? "upload" : "uploads"} failed`
+    : progress;
   return (
     <section ref={dock} className="drv-dock" aria-label="Uploads">
       <header>

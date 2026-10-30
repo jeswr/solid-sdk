@@ -17,6 +17,7 @@ import {
   trashItems,
   uploadFile,
 } from "../src/apps/drive/lib/operations/operations";
+import { expectPrivateRecovery } from "./drive-private-recovery";
 import { rdfPod } from "./drive-rdf-pod";
 import {
   aclBody,
@@ -281,7 +282,11 @@ it.each(races)("access binding: $operation / $side / $signal / $point", async ({
     expect(failed).toBe(false);
     expect(f.pod.has(from)).toBe(false);
   } else if (operation === "upload replacement") {
-    expect(await (await f.pod.fetch(from)).text()).toBe("secret contents");
+    // Changed inheritance is a concurrent policy too. Preserve it and retain
+    // both byte versions privately rather than freezing the former grants.
+    expect(await (await f.pod.fetch(from)).text()).toBe("");
+    await expectPrivateRecovery(f, "secret contents");
+    await expectPrivateRecovery(f, "new confidential upload");
     expect(failed).toBe(true);
   } else if (f.pod.has(to)) {
     // An irrelevant ancestor edit may be shielded by a verified own ACL.
@@ -339,7 +344,14 @@ it.each([
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });
   let changed = false;
   f.after(async (url, method, response) => {
-    if (!changed && url === to && method === "PUT" && response.ok) {
+    if (
+      !changed &&
+      url === to &&
+      method === "PUT" &&
+      response.ok &&
+      (operation === "folder metadata" ||
+        (await (await f.pod.fetch(to)).text()) === "secret contents")
+    ) {
       changed = true;
       if (operation === "foreign replacement")
         await f.pod.fetch(to, { method: "PUT", body: "foreign bytes" });
@@ -372,7 +384,11 @@ it.each([
     expect(await (await f.pod.fetch(to)).text()).toBe("foreign bytes");
   else if (operation === "folder metadata")
     expect(await (await f.pod.fetch(to)).text()).not.toContain("confidential");
-  else expect(f.pod.has(to)).toBe(false);
+  else if (operation === "new upload") {
+    expect(await (await f.pod.fetch(to)).text()).toBe("");
+    await expectPrivateRecovery(f, "secret contents");
+    expect(f.policies.get(`${to}.policy`)).toBe(await aclBody(to, true));
+  } else expect(f.pod.has(to)).toBe(false);
 });
 
 it("rechecks bound access after persisting a deletion intent and retires a refused intent", async () => {
@@ -383,6 +399,7 @@ it("rechecks bound access after persisting a deletion intent and retires a refus
   const etag = (await f.pod.fetch(url, { method: "HEAD" })).headers.get("etag") as string;
   await expect(
     deletion.remove(url, etag, undefined, {
+      verifyHeaders: () => undefined,
       rechecks: [
         async () => {
           f.policies.set(`${url}.policy`, await aclBody(url, true));
@@ -458,7 +475,13 @@ it("a missing write validator never authorizes unconditional rollback after acce
   const to = `${PRIVATE}no-validator`;
   let changed = false;
   f.after(async (url, method, response) => {
-    if (!changed && url === to && method === "PUT" && response.ok) {
+    if (
+      !changed &&
+      url === to &&
+      method === "PUT" &&
+      response.ok &&
+      (await (await f.pod.fetch(to)).text()) === "secret contents"
+    ) {
       changed = true;
       f.policies.set(`${to}.policy`, await aclBody(to, true));
       response.headers.delete("etag");
@@ -473,7 +496,7 @@ it("a missing write validator never authorizes unconditional rollback after acce
       { contentType: "text/plain", ifNoneMatch: "*" },
       { kind: "protect-ancestors" },
     ),
-  ).rejects.toMatchObject({ kind: "missing-validator" });
+  ).rejects.toMatchObject({ kind: "partial-failure", cause: { kind: "missing-validator" } });
   expect(changed).toBe(true);
   expect(f.pod.has(`${PRIVATE}secret`)).toBe(true);
   expect(f.calls.some(({ method }) => method === "DELETE")).toBe(false);

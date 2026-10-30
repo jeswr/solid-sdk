@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createSolidDriveClient, parentOf } from "../src/apps/drive/lib/client/client";
 import { listTrash, restoreItems, trashItems } from "../src/apps/drive/lib/operations/operations";
 import { nonWacPod } from "./drive-non-wac-pod";
+import { expectPrivateRecovery } from "./drive-private-recovery";
 import { rdfPod } from "./drive-rdf-pod";
 import { aclBody, DRIVE, OWNER, PRIVATE, ROOT, turtle, WacFields } from "./drive-wac-pod";
 
@@ -42,10 +43,13 @@ it.each([
   expect(
     (await trashItems(client, DRIVE, [await client.stat(PRIVATE)], { webId: OWNER })).failed,
   ).toHaveLength(1);
-  const [entry] = await listTrash(client, DRIVE);
-  if (!entry) throw new Error("Missing partial recovery");
+  const [selected] = await listTrash(client, DRIVE);
+  if (!selected) throw new Error("Missing partial recovery");
   f.intercept(undefined);
-  await f.pod.fetch(entry.url, { method: "PUT", body: await recoveryData(entry.url) });
+  await f.pod.fetch(selected.url, { method: "PUT", body: await recoveryData(selected.url) });
+  // Present the arranged recovery graph before confirming Restore.
+  const [entry] = await listTrash(client, DRIVE);
+  if (!entry) throw new Error("Missing arranged recovery");
   let committed = false;
   let widened = false;
   if (phase === "during deletion bookkeeping") {
@@ -213,28 +217,23 @@ it.each([
   const [entry] = await listTrash(client, DRIVE);
   if (!entry) throw new Error("Missing partial recovery");
   f.intercept(undefined);
-  let committing = false;
-  const remove = client.remove;
-  vi.spyOn(client, "remove").mockImplementation(function (this: typeof client, url, options) {
-    if (url === entry.url) committing = true;
-    return remove.call(this, url, options);
-  });
+  f.intercept(async (url, init) =>
+    mode === "ignored precondition" &&
+    url === PRIVATE &&
+    init?.method === "HEAD" &&
+    new Headers(init.headers).has("if-match")
+      ? new Response(null, { headers: { etag: '"foreign"' } })
+      : undefined,
+  );
   const readRdf = client.readRdf;
   vi.spyOn(client, "readRdf").mockImplementation(async (url) => {
     const result = await readRdf(url);
-    if (result && committing && url === PRIVATE && mode !== "ignored precondition")
+    if (result && url === PRIVATE && mode !== "ignored precondition")
       return {
         dataset: result.dataset,
         ...(mode === "weak validator" ? { etag: 'W/"weak"' } : {}),
       };
     return result;
-  });
-  const stat = client.stat;
-  vi.spyOn(client, "stat").mockImplementation(async (url, options) => {
-    const result = await stat(url, options);
-    return committing && url === PRIVATE && options && mode === "ignored precondition"
-      ? { ...result, etag: '"foreign"' }
-      : result;
   });
   expect((await restoreItems(client, DRIVE, [entry])).failed).toHaveLength(1);
   expect(f.pod.has(entry.url)).toBe(true);
@@ -313,7 +312,8 @@ it("copy rollback retains its payload if the source disappears during access rec
   });
   await expect(client.copy(source, to, { kind: "preserve-source" })).rejects.toThrow();
   expect(f.pod.has(source)).toBe(false);
-  expect(await (await f.pod.fetch(to)).text()).toBe("secret contents");
+  expect(await (await f.pod.fetch(to)).text()).toBe("");
+  await expectPrivateRecovery(f, "secret contents");
 });
 
 it("merge rollback checks recovery identity after access rechecks before overwriting recovered RDF", async () => {

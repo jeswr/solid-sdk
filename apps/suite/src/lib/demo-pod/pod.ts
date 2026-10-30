@@ -352,6 +352,15 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
     return respond(404);
   };
 
+  // The demo server can expose an atomic receipt that standard LDP lacks.
+  // Capture before notifications or response hooks can mutate another resource.
+  const parentValidators = (url: string): Record<string, string> => {
+    const parents: Record<string, string> = {};
+    for (let parent = parentOf(url); parent; parent = parentOf(parent))
+      if (containers.has(parent)) parents[parent] = containerEtag(parent);
+    return { "x-solid-drive-parent-validators": JSON.stringify(parents) };
+  };
+
   const write = async (url: string, init: RequestInit, headers: Headers): Promise<Response> => {
     // All asynchronous body work precedes the precondition and mutation. No
     // await is allowed in the critical section below (including notifications).
@@ -363,19 +372,21 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
     }
     const at = now();
     if (isContainerUrl(url)) {
-      if (containers.has(url)) return respond(205);
+      if (containers.has(url)) return respond(205, parentValidators(url));
       if (resources.has(url.slice(0, -1))) return respond(409);
       ensureContainer(url, at);
+      const receipt = parentValidators(url);
       notify(url);
-      return respond(201, { location: url, etag: containerEtag(url) });
+      return respond(201, { location: url, etag: containerEtag(url), ...receipt });
     }
     if (containers.has(`${url}/`)) return respond(409);
     const existed = resources.has(url);
     const contentType = headers.get("content-type") ?? "application/octet-stream";
     putResource(url, body, contentType, at);
+    const receipt = parentValidators(url);
     notify(url);
     const etag = (resources.get(url) as DemoResource).etag;
-    return respond(existed ? 205 : 201, { location: url, etag });
+    return respond(existed ? 205 : 201, { location: url, etag, ...receipt });
   };
 
   const post = async (url: string, init: RequestInit, headers: Headers): Promise<Response> => {
@@ -403,15 +414,17 @@ export function createDemoPod(options: DemoPodOptions): DemoPod {
     if (url === root) return respond(405);
     if (resources.delete(url)) {
       touch(parentOf(url) as string, now());
+      const receipt = parentValidators(url);
       notify(url);
-      return respond(205);
+      return respond(205, receipt);
     }
     if (containers.has(url)) {
       if (children(url).length > 0) return respond(409);
       containers.delete(url);
       touch(parentOf(url) as string, now());
+      const receipt = parentValidators(url);
       notify(url);
-      return respond(205);
+      return respond(205, receipt);
     }
     return respond(404);
   };

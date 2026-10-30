@@ -177,6 +177,20 @@ function reconcileSelection(
     : { selected, focus, anchor };
 }
 
+/** Reconcile metadata without discarding fields hydrated outside preference listings. */
+function reconcileItem(item: DriveItem, row: DriveItem): DriveItem {
+  const merged = row.etag !== undefined && row.etag !== item.etag ? row : { ...item, ...row };
+  return item.name === merged.name &&
+    item.kind === merged.kind &&
+    item.contentType === merged.contentType &&
+    item.size === merged.size &&
+    item.etag === merged.etag &&
+    item.protectionRequired === merged.protectionRequired &&
+    item.modified?.getTime() === merged.modified?.getTime()
+    ? item
+    : merged;
+}
+
 export function FileBrowser(props: FileBrowserProps) {
   const { title, items, error, onRetry, folder, columns, empty, fixedOrder, refreshing } = props;
   const { prefs, updatePrefs, uploads, driveRoot, session } = useDrive();
@@ -229,7 +243,34 @@ export function FileBrowser(props: FileBrowserProps) {
   const listingFocus = useDriveListingFocus(ids, container);
 
   const { setDetailsItems, setCurrentFolder, uploadRequest } = ui;
-  useEffect(() => setDetailsItems(selected), [selected, setDetailsItems]);
+  const selectionRequest = useRef(0);
+  const detailsSelection = useRef({ folder, request: selectionRequest.current });
+  useEffect(() => {
+    const previous = detailsSelection.current;
+    detailsSelection.current = { folder, request: selectionRequest.current };
+    // Only a user selection or navigation takes ownership from explicit Details.
+    // Listing reconciliation below updates the existing targets independently.
+    if (folder !== previous.folder || selectionRequest.current !== previous.request)
+      setDetailsItems(selected);
+  }, [folder, selected, setDetailsItems]);
+  const previousItems = useRef<readonly BrowserItem[]>([]);
+  useEffect(() => {
+    if (!items || refreshing) return;
+    const before = new Set(previousItems.current.map((item) => item.url));
+    previousItems.current = items;
+    const byUrl = new Map(items.map((item) => [item.url, item]));
+    setDetailsItems((current) => {
+      const next = current.flatMap((item) => {
+        const row = byUrl.get(item.url);
+        // Prune vanished listing targets; explicit targets outside this listing
+        // (including a completed Move) retain their own live metadata stream.
+        return row ? [reconcileItem(item, row)] : before.has(item.url) ? [] : [item];
+      });
+      return next.length === current.length && next.every((item, index) => item === current[index])
+        ? current
+        : next;
+    });
+  }, [items, refreshing, setDetailsItems]);
   const { preview, setPreview } = ui;
   useEffect(() => {
     if (!items || refreshing || !preview) return;
@@ -239,15 +280,7 @@ export function FileBrowser(props: FileBrowserProps) {
     const next = preview.items.map((item) => {
       const row = byUrl.get(item.url);
       if (!row) return item;
-      const merged = row.etag !== undefined && row.etag !== item.etag ? row : { ...item, ...row };
-      return item.name === merged.name &&
-        item.kind === merged.kind &&
-        item.contentType === merged.contentType &&
-        item.size === merged.size &&
-        item.etag === merged.etag &&
-        item.modified?.getTime() === merged.modified?.getTime()
-        ? item
-        : merged;
+      return reconcileItem(item, row);
     });
     if (next.some((item, index) => item !== preview.items[index]))
       setPreview({ ...preview, items: next });
@@ -270,10 +303,12 @@ export function FileBrowser(props: FileBrowserProps) {
   }, [uploadRequest, folder, session.storageUrl]);
 
   const dispatch = useCallback(
-    (action: Parameters<typeof selectionReducer>[1]) =>
+    (action: Parameters<typeof selectionReducer>[1]) => {
+      selectionRequest.current += 1;
       setSelection((current) =>
         selectionReducer(reconcileSelection(current, ids, previousIds.current), action, ids),
-      ),
+      );
+    },
     [ids],
   );
 

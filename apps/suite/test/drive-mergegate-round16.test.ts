@@ -100,7 +100,9 @@ it.each([
   });
   const deleting = client.remove(to, { ifMatch: target.etag as string });
   if (mode === "deleted") {
-    await expect(deleting).rejects.toMatchObject({ kind: "delete-pending" });
+    // Private retention superseded the unresolved cleanup's old validator;
+    // that old conditional DELETE can no longer remove this representation.
+    await deleting;
     f.intercept(undefined);
     await f.fetch(to, { method: "DELETE" });
     await client.remove(to);

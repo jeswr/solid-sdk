@@ -171,7 +171,11 @@ export async function writeRestoreSnapshot(
       { kind: "protect-ancestors" },
     );
   } catch (error) {
-    if (error instanceof DriveAccessError) throw error;
+    if (
+      error instanceof DriveAccessError ||
+      (error instanceof DriveError && error.kind === "missing-validator")
+    )
+      throw error;
     let current: Awaited<ReturnType<DriveClient["readVersion"]>>;
     try {
       current = await client.readVersion(url);

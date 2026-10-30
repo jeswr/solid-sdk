@@ -11,7 +11,7 @@ export interface DiscardSnapshot<T> {
   readonly etag: string | undefined;
 }
 
-/** A newer validator is usable only after its content passes the same ownership proof. */
+/** Ownership proves which content may be discarded, never permission to adopt a replacement. */
 export async function discardVersion<T>(options: {
   url: string;
   captured: DiscardSnapshot<T>;
@@ -19,20 +19,17 @@ export async function discardVersion<T>(options: {
   owns: (content: T) => boolean;
   remove: (etag: string) => Promise<void>;
 }): Promise<void> {
-  let current = options.captured;
-  for (let attempt = 0; ; attempt += 1) {
-    if (!options.owns(current.content)) throw new DriveError("conflict", 409, options.url);
-    if (!current.etag || current.etag.startsWith("W/"))
-      throw new DriveError("missing-validator", 409, options.url);
-    try {
-      await options.remove(current.etag);
-      return;
-    } catch (error) {
-      if (!(error instanceof DriveError && error.status === 412) || attempt === 2) throw error;
-      const fresh = await options.read();
-      if (!fresh) return;
-      current = fresh;
-    }
+  const current = options.captured;
+  if (!options.owns(current.content)) throw new DriveError("conflict", 409, options.url);
+  if (!current.etag || current.etag.startsWith("W/"))
+    throw new DriveError("missing-validator", 409, options.url);
+  try {
+    await options.remove(current.etag);
+  } catch (error) {
+    if (!(error instanceof DriveError && error.status === 412)) throw error;
+    // A missing copy is already cleaned up. A replacement, even byte-identical,
+    // needs a new decision; the original validator stays pinned through refusal.
+    if (await options.read()) throw error;
   }
 }
 

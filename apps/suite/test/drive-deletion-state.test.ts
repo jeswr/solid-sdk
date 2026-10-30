@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
 import { DriveDeletePendingError, deletionControl } from "../src/apps/drive/lib/client/deletion";
 import { deletionLedger } from "../src/apps/drive/lib/client/protection-ledger";
-import { DRIVE, PRIVATE, ROOT, wacPod } from "./drive-wac-pod";
+import { DRIVE, OWNER, PRIVATE, ROOT, wacPod } from "./drive-wac-pod";
 
 const { IDBFactory } = createRequire(
   new URL("../../../packages/solid-offline/package.json", import.meta.url),
@@ -25,7 +25,7 @@ it("pending source and recovery requirements survive module reload and transport
     }
     return undefined;
   });
-  const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch });
+  const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });
   await expect(client.move(source, recovery, { kind: "preserve-source" })).rejects.toMatchObject({
     kind: "partial-failure",
   });
@@ -40,7 +40,7 @@ it("pending source and recovery requirements survive module reload and transport
     "../src/apps/drive/lib/client/protection-ledger"
   );
   const transport: typeof fetch = (input, init) => f.fetch(input, init);
-  const fresh = create({ storageUrl: ROOT, fetch: transport });
+  const fresh = create({ storageUrl: ROOT, fetch: transport, webId: OWNER });
   expect(await freshLedger(transport).get(recovery)).toEqual({ sources: [source] });
   await expect(fresh.remove(recovery)).rejects.toMatchObject({ kind: "delete-pending" });
   await expect(
@@ -66,10 +66,14 @@ it.each([202, 302, 408])("a non-terminal DELETE %s is pending until confirmed", 
       }),
   );
   const control = deletionControl(http, (status) => new Error(String(status)));
-  await expect(control.remove(url, '"original"')).rejects.toBeInstanceOf(DriveDeletePendingError);
+  await expect(
+    control.remove(url, '"original"', undefined, { verifyHeaders: () => undefined }),
+  ).rejects.toBeInstanceOf(DriveDeletePendingError);
   expect(await deletionLedger(http).get(url)).toBeDefined();
   expect(http.mock.calls.filter(([, init]) => init?.method === "DELETE")).toHaveLength(1);
-  await expect(control.remove(url, '"original"')).rejects.toMatchObject({ kind: "delete-pending" });
+  await expect(
+    control.remove(url, '"original"', undefined, { verifyHeaders: () => undefined }),
+  ).rejects.toMatchObject({ kind: "delete-pending" });
   expect(http.mock.calls.filter(([, init]) => init?.method === "DELETE")).toHaveLength(1);
 });
 
@@ -100,7 +104,9 @@ it.each([
       ? new Response(null, { headers: { etag: '"original"' } })
       : new Response(null, { status });
   const control = deletionControl(http, (status) => new Error(`Rejected ${status}`));
-  await expect(control.remove(url, '"original"', recovery)).rejects.toMatchObject({
+  await expect(
+    control.remove(url, '"original"', recovery, { verifyHeaders: () => undefined }),
+  ).rejects.toMatchObject({
     kind: "delete-pending",
     cause: { message: `Rejected ${status}` },
   });
@@ -110,5 +116,7 @@ it.each([
     recovery,
   });
   expect(await deletionLedger(http).get(recovery)).toEqual({ sources: [url] });
-  await expect(control.remove(url, '"original"')).rejects.toMatchObject({ kind: "delete-pending" });
+  await expect(
+    control.remove(url, '"original"', undefined, { verifyHeaders: () => undefined }),
+  ).rejects.toMatchObject({ kind: "delete-pending" });
 });

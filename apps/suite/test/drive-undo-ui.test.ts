@@ -1,11 +1,18 @@
 // AUTHORED-BY Codex
 import { expect, it, vi } from "vitest";
+import { accessControl } from "../src/apps/drive/lib/client/access";
 import { moveWithValidator } from "../src/apps/drive/state/undo";
 
 const ROOT = "https://pod.example/";
 const SOURCE = `${ROOT}drive/B.txt`;
 const TARGET = `${ROOT}drive/A.txt`;
 type Resource = { etag: string; body: string };
+function demoDiscovery(url: string, fetch: typeof globalThis.fetch) {
+  return accessControl(fetch, ROOT).captureEndpoint(
+    url,
+    new Headers({ "x-solid-demo-access-control": "none" }),
+  );
+}
 function transport(
   options: {
     sourceEtag?: string;
@@ -57,7 +64,14 @@ function transport(
 }
 it("Undo sends If-Match on the reverse move's read and delete", async () => {
   const { files, fetch } = transport();
-  await moveWithValidator({ storageUrl: ROOT, fetch }, SOURCE, TARGET, '"moved"');
+  await moveWithValidator(
+    { storageUrl: ROOT, fetch },
+    SOURCE,
+    TARGET,
+    '"moved"',
+    undefined,
+    demoDiscovery(SOURCE, fetch),
+  );
   expect(files.has(SOURCE)).toBe(false);
   expect(files.get(TARGET)?.body).toBe("original");
   for (const [url, init] of fetch.mock.calls.filter(([url]) => String(url) === SOURCE)) {
@@ -68,7 +82,14 @@ it("Undo sends If-Match on the reverse move's read and delete", async () => {
 it("Undo never reads or moves a replacement occupying the old destination", async () => {
   const { files, fetch } = transport({ sourceEtag: '"unrelated"' });
   await expect(
-    moveWithValidator({ storageUrl: ROOT, fetch }, SOURCE, TARGET, '"moved"'),
+    moveWithValidator(
+      { storageUrl: ROOT, fetch },
+      SOURCE,
+      TARGET,
+      '"moved"',
+      undefined,
+      demoDiscovery(SOURCE, fetch),
+    ),
   ).rejects.toMatchObject({ status: 412 });
   expect(files.get(SOURCE)?.etag).toBe('"unrelated"');
   expect(files.has(TARGET)).toBe(false);
@@ -82,7 +103,14 @@ it("Undo protects replacement source and destination resources during failed-mov
     },
   });
   await expect(
-    moveWithValidator({ storageUrl: ROOT, fetch }, SOURCE, TARGET, '"moved"'),
+    moveWithValidator(
+      { storageUrl: ROOT, fetch },
+      SOURCE,
+      TARGET,
+      '"moved"',
+      undefined,
+      demoDiscovery(SOURCE, fetch),
+    ),
   ).rejects.toThrow();
   expect(files.get(SOURCE)?.body).toBe("other source");
   expect(files.get(TARGET)?.body).toBe("other target");
@@ -95,7 +123,14 @@ it("Undo retains its recovery copy when the source changes during DELETE", async
     beforeDelete: (resources) => resources.set(SOURCE, { etag: '"replacement"', body: "other" }),
   });
   await expect(
-    moveWithValidator({ storageUrl: ROOT, fetch }, SOURCE, TARGET, '"moved"'),
+    moveWithValidator(
+      { storageUrl: ROOT, fetch },
+      SOURCE,
+      TARGET,
+      '"moved"',
+      undefined,
+      demoDiscovery(SOURCE, fetch),
+    ),
   ).rejects.toMatchObject({
     kind: "partial-failure",
     cause: { kind: "conflict", status: 412 },
@@ -109,7 +144,14 @@ it("Undo keeps the source and recovery copy when the destination PUT omits its v
     beforeDelete: (resources) => resources.set(SOURCE, { etag: '"replacement"', body: "other" }),
   });
   await expect(
-    moveWithValidator({ storageUrl: ROOT, fetch }, SOURCE, TARGET, '"moved"'),
+    moveWithValidator(
+      { storageUrl: ROOT, fetch },
+      SOURCE,
+      TARGET,
+      '"moved"',
+      undefined,
+      demoDiscovery(SOURCE, fetch),
+    ),
   ).rejects.toThrow();
   expect(files.get(SOURCE)?.body).toBe("original");
   expect(files.get(TARGET)?.body).toBe("original");
@@ -140,7 +182,7 @@ it("Undo of a folder refuses an unrelated replacement after A to B then B elsewh
     { kind: "protect-ancestors" },
   );
   await expect(
-    moveWithValidator(options, from, to, moved.etag as string, moved.tree),
+    moveWithValidator(options, from, to, moved.etag as string, moved.tree, moved.verifyHeaders),
   ).rejects.toThrow("cannot be safely undone");
   expect(await (await client.read(`${from}unrelated`)).text()).toBe("unrelated");
   expect(await (await client.read(`${ROOT}drive/C/original`)).text()).toBe("original");
@@ -162,7 +204,14 @@ it("Undo rejects replacement bytes even when a transport ignores GET preconditio
     .fn<typeof globalThis.fetch>()
     .mockResolvedValue(new Response("unrelated", { headers: { etag: '"replacement"' } }));
   await expect(
-    moveWithValidator({ storageUrl: ROOT, fetch }, SOURCE, TARGET, '"moved"'),
+    moveWithValidator(
+      { storageUrl: ROOT, fetch },
+      SOURCE,
+      TARGET,
+      '"moved"',
+      undefined,
+      demoDiscovery(SOURCE, fetch),
+    ),
   ).rejects.toMatchObject({ status: 412 });
   expect(fetch).toHaveBeenCalledTimes(1);
 });
@@ -187,7 +236,14 @@ it("reproduces A to B, B elsewhere, unrelated upload at B against the real demo 
   );
   expect(moved.etag).toBeDefined();
   await expect(
-    moveWithValidator(options, SOURCE, TARGET, moved.etag as string),
+    moveWithValidator(
+      options,
+      SOURCE,
+      TARGET,
+      moved.etag as string,
+      undefined,
+      moved.verifyHeaders,
+    ),
   ).rejects.toMatchObject({ status: 412 });
   expect(await (await client.read(SOURCE)).text()).toBe("unrelated");
   expect(await (await client.read(`${ROOT}drive/C.txt`)).text()).toBe("original");
@@ -208,7 +264,7 @@ it("Undo restores an unchanged folder through the client's conditional recursive
     to = `${ROOT}drive/A/`;
   const moved = await client.move(`${ROOT}drive/C/`, from, { kind: "confirm-move" });
   fetch.mockClear();
-  await moveWithValidator(options, from, to, moved.etag as string, moved.tree);
+  await moveWithValidator(options, from, to, moved.etag as string, moved.tree, moved.verifyHeaders);
   expect(await (await client.read(`${to}child/note`)).text()).toBe("original");
   expect(pod.has(from)).toBe(false);
   const deletes = fetch.mock.calls.filter(([, init]) => init?.method === "DELETE");
@@ -231,10 +287,26 @@ it("Undo refuses a changed folder child set even when the server reuses its ETag
     return response;
   });
   await expect(
-    moveWithValidator({ storageUrl: ROOT, fetch }, from, to, '"reused"', [
-      { url: from, etag: '"reused"', children: [`${from}original`] },
-      { url: `${from}original`, etag: '"original"' },
-    ]),
+    moveWithValidator(
+      { storageUrl: ROOT, fetch },
+      from,
+      to,
+      '"reused"',
+      [
+        {
+          url: from,
+          etag: '"reused"',
+          children: [`${from}original`],
+          verifyHeaders: demoDiscovery(from, fetch),
+        },
+        {
+          url: `${from}original`,
+          etag: '"original"',
+          verifyHeaders: demoDiscovery(`${from}original`, fetch),
+        },
+      ],
+      demoDiscovery(from, fetch),
+    ),
   ).rejects.toThrow("cannot be safely undone");
   expect(pod.has(to)).toBe(false);
   expect(

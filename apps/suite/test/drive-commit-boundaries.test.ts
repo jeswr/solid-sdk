@@ -36,9 +36,20 @@ it("merge rollback retains recovered RDF when its recovery graph disappears befo
   f.policies.set(`${to}.policy`, await aclBody(to, true));
   await expect(merged.recheck()).rejects.toMatchObject({ kind: "private-access-unavailable" });
   expect(f.calls).not.toContainEqual({ url: to, method: "DELETE" });
-  const survivor = await client.readRdf(to);
-  if (!survivor) throw new Error("Missing merged survivor");
-  expect([...new WacFields(to, survivor.dataset, DataFactory).iris(predicate)]).toEqual([object]);
+  // The concurrently widened ACL stays intact; recovery is private and reads
+  // of the unresolved original endpoint remain blocked.
+  await expect(client.readRdf(to)).rejects.toThrow();
+  const { parseRdf } = await import("@jeswr/fetch-rdf");
+  let recovered = false;
+  for (const [url] of f.pod.snapshot().resources) {
+    if (!url.includes("/.drive-recovery-")) continue;
+    const data = await parseRdf(await (await f.pod.fetch(url)).text(), "text/turtle");
+    if (new WacFields(to, data, DataFactory).iris(predicate).has(object)) {
+      recovered = true;
+      expect((await f.anonymous(url)).status).toBe(403);
+    }
+  }
+  expect(recovered).toBe(true);
   const recovery = await client.readRdf(PRIVATE);
   if (!recovery) throw new Error("Missing recovery container");
   expect(new WacFields(PRIVATE, recovery.dataset, DataFactory).iris(predicate).size).toBe(0);
@@ -86,12 +97,19 @@ it.each([
   const compensation = new Compensation(undo);
   compensation.arm();
   const disarm = vi.spyOn(compensation, "disarm");
+  let snapshotChecks = 0;
+  let finalChecks = 0;
   const http: typeof fetch = async (input, init) => {
     const url = String(input);
     if (url === PRIVATE && init?.method === "HEAD" && new Headers(init.headers).has("if-match")) {
-      // Removing a child is not the commit that makes the root's undo unsafe.
-      expect(pod.has(`${PRIVATE}secret`)).toBe(false);
       expect(disarm).not.toHaveBeenCalled();
+      // Round 54 also pins the populated root before descendant deletion.
+      if (pod.has(`${PRIVATE}secret`)) {
+        snapshotChecks += 1;
+        return pod.fetch(input, init);
+      }
+      // Removing a child is not the commit that makes the root's undo unsafe.
+      finalChecks += 1;
       if (outcome === "fails identity") return new Response(null, { status: 412 });
     }
     return pod.fetch(input, init);
@@ -100,6 +118,8 @@ it.each([
   const remove = client.remove(PRIVATE, { recursive: true, commit: { disarm: [compensation] } });
   if (outcome === "commits") await remove;
   else await expect(remove).rejects.toMatchObject({ cause: { status: 412, url: PRIVATE } });
+  expect(snapshotChecks).toBeGreaterThan(0);
+  expect(finalChecks).toBe(1);
   expect(disarm).toHaveBeenCalledTimes(outcome === "commits" ? 1 : 0);
   await compensation.rollback();
   expect(undo).toHaveBeenCalledTimes(outcome === "commits" ? 0 : 1);

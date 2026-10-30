@@ -91,8 +91,8 @@ describe("Docs log compaction before trash", () => {
     });
     await f.compact();
     expect(peak).toBe(64);
-    // Drive also discovers and rechecks access around the compacted copy's PUT.
-    expect(f.http).toHaveBeenCalledTimes(3 * 65 + 10);
+    // Drive also checks the compacted copy's content and discovery after its PUT.
+    expect(f.http).toHaveBeenCalledTimes(3 * 65 + 11);
     expect(f.deletes()).toHaveLength(65);
     expect(f.copies()).toHaveLength(1);
     expect(f.copies()[0]?.[1].body).toEqual(mergeUpdates(updates));
@@ -194,7 +194,8 @@ describe("Docs log compaction before trash", () => {
       return response;
     });
     await expect(f.compact()).rejects.toBeDefined();
-    expect(f.deletes()).toEqual([]);
+    // Drive may clean up its unchecked copy; original updates must survive.
+    expect(f.deletes().filter(([url]) => f.originals.includes(String(url)))).toEqual([]);
     expect(f.originals.every((url) => f.pod.has(url))).toBe(true);
   });
 

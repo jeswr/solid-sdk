@@ -1,23 +1,33 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { fetchRdf, parseRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { serialize } from "@jeswr/rdf-serialize";
 import { Store } from "n3";
 import { trashEntries, trashIndexFrom } from "../operations/trash-index";
 import {
+  type AccessWriteGuard,
   type accessControl,
   accessGains,
   bindAccess,
+  DriveAccessChangedError,
   DriveAccessError,
   type OwnAccess,
+  ownAccessGuards,
   privateAcl,
   requireAccess,
 } from "./access";
 import { discardVersion, ownsEmptyContainer } from "./cleanup";
-import { type CommitEffects, Compensation, commitIrreversible } from "./commit";
+import {
+  type CommitChecks,
+  type CommitEffects,
+  Compensation,
+  checkIdentity,
+  commitIrreversible,
+} from "./commit";
 import { rethrowPendingDeletion } from "./deletion";
 import { type ProtectionRequirement, protectionLedger } from "./protection-ledger";
-import { relocate, sameGraph } from "./rdf";
+import { sameGraph } from "./rdf";
 
 // Shared by all clients in this tab, including the fresh client used by undo.
 const provisioning = new Map<string, Promise<void>>();
@@ -76,7 +86,11 @@ export function ancestorGuard(options: {
   putFolder: (url: string) => Promise<Response>;
   error: (status: number, url: string) => Error;
   owner: () => string | undefined;
-  deleteVersion: (url: string, etag: string) => Promise<void>;
+  deleteVersion: (
+    url: string,
+    etag: string,
+    checks: CommitChecks & { readonly verifyHeaders: NonNullable<CommitChecks["verifyHeaders"]> },
+  ) => Promise<void>;
   onPrivateFolder?: (url: string) => void;
   onProtectionChange?: (url: string) => void;
 }) {
@@ -88,25 +102,81 @@ export function ancestorGuard(options: {
   ): Promise<ProtectionRequirement> => ({
     acl: policy.url,
     from,
-    turtle: await serialize([...policy.dataset]),
+    turtle: await serialize([...access.materialize(policy, from).dataset]),
   });
   const policyFor = async (required: ProtectionRequirement): Promise<OwnAccess> => ({
     url: required.acl,
     etag: "",
     dataset: await parseRdf(required.turtle, "text/turtle", { baseIRI: required.acl }),
   });
+  const checkProtection = async (
+    url: string,
+    policy: OwnAccess,
+    etag: string,
+    verifyResourceHeaders: NonNullable<CommitChecks["verifyHeaders"]>,
+  ) => {
+    await access.checkOwn({ url: policy.url, policy });
+    const { verifyResourceTransition: _transition, ...original } = policy;
+    let checked: OwnAccess = original;
+    await checkIdentity(http, url, etag, options.error, false, (headers) => {
+      access.verifyEndpoint(url, headers, {
+        url: policy.url,
+        verifyResourceHeaders,
+      });
+      checked = { ...original, verifyResourceHeaders: access.captureEndpoint(url, headers) };
+    });
+    return checked;
+  };
+  const retireProtection = async (
+    url: string,
+    policy: OwnAccess,
+    etag: string,
+    verifyResourceHeaders: NonNullable<CommitChecks["verifyHeaders"]>,
+  ) => {
+    // Retain the policy actually installed, including any safe intersection
+    // with narrower current grants, rather than the broader requested policy.
+    const required = {
+      ...(await requirementFor(policy, url)),
+      etag,
+      ownAcl: { url: policy.url, etag: policy.etag },
+    };
+    await ledger.clear(url);
+    try {
+      return await checkProtection(url, policy, etag, verifyResourceHeaders);
+    } catch (cause) {
+      // A failed retirement check must still block later reads and writes.
+      await ledger.set(url, required);
+      throw cause;
+    }
+  };
   const verify = async (url: string, headers: Headers, required: ProtectionRequirement) => {
+    if (required.etag && headers.get("etag") !== required.etag)
+      throw new DriveAccessError("Required resource changed");
     const policy = await policyFor(required);
     const own = await access.snapshot(url, headers);
+    if (
+      required.ownAcl &&
+      (own.own?.url !== required.ownAcl.url ||
+        (own.own.policy?.etag ?? null) !== required.ownAcl.etag)
+    )
+      throw new DriveAccessChangedError(["The item's own ACL changed"]);
     if (own.status === "none" && !own.demo) {
-      await access.install(policy, required.from, url);
-    } else if (
+      // A requirement written before a refused creation owns no representation.
+      // Its later appearance must not authorize applying the intended ACL.
+      if (!required.etag) throw new DriveAccessError("Protection receipt unavailable");
+      if (!required.ownAcl) throw new DriveAccessError("Own ACL receipt unavailable");
+      await install(url, policy, required.from, {
+        identity: { url, etag: required.etag, verifyHeaders: access.captureEndpoint(url, headers) },
+        restrict: true,
+        knownAcl: required.ownAcl.url,
+        expectedAcl: null,
+      });
+      return;
+    }
+    if (
       own.status !== "known" ||
       !sameGraph(
-        relocate(policy.dataset, [
-          [policy.url, own.policy.url],
-          [required.from, url],
-        ]),
+        access.retarget(policy, required.from, url, own.policy.url).dataset,
         own.policy.dataset,
       )
     ) {
@@ -115,17 +185,35 @@ export function ancestorGuard(options: {
         `This ${url.endsWith("/") ? "folder" : "file"} still requires protection. Check that pod CORS exposes Link and ETag, then retry.`,
       );
     }
-    await ledger.clear(url);
+    await retireProtection(
+      url,
+      own.policy,
+      headers.get("etag") ?? "",
+      access.captureEndpoint(url, headers),
+    );
   };
-  const install = async (url: string, policy: OwnAccess, from: string) => {
-    const saved = await access.install(policy, from, url);
-    await ledger.clear(url);
-    return saved;
+  const install = async (url: string, policy: OwnAccess, from: string, guard: AccessWriteGuard) => {
+    const saved = await access.install(policy, from, url, guard, async (written) => {
+      await ledger.set(url, {
+        ...(await requirementFor(written, url)),
+        etag: guard.identity.etag,
+        ownAcl: { url: written.url, etag: written.etag },
+      });
+    });
+    return retireProtection(url, saved, guard.identity.etag, saved.verifyResourceTransition);
   };
-  const cleanup = async (url: string, response: Response) => {
+  const cleanup = async (url: string, response: Response, installed?: OwnAccess) => {
     const etag = response.headers.get("etag");
     // Unknown/foreign control documents are not ours to remove with the resource.
     if (etag && (await access.snapshot(url, response.headers)).status !== "unknown") {
+      const endpoint = access.discover(url, response.headers);
+      try {
+        await access.checkOwn(endpoint ? { url: endpoint, policy: installed ?? null } : undefined);
+      } catch {
+        return;
+      } // Deleting the resource would also delete another writer's ACL.
+      const verifyCaptured =
+        installed?.verifyResourceHeaders ?? access.captureEndpoint(url, response.headers);
       const empty = new Store();
       await discardVersion<Store | string>({
         url,
@@ -141,7 +229,16 @@ export function ancestorGuard(options: {
         },
         owns: (content) =>
           typeof content === "string" ? content === "" : ownsEmptyContainer(url, empty, content),
-        remove: (validator) => options.deleteVersion(url, validator),
+        remove: (validator) =>
+          options.deleteVersion(url, validator, {
+            verifyHeaders: (headers) => {
+              verifyCaptured(headers);
+              return access.verifyEndpoint(url, headers, endpoint ? { url: endpoint } : undefined);
+            },
+            policyGuards: ownAccessGuards(
+              endpoint ? { url: endpoint, policy: installed ?? null } : undefined,
+            ),
+          }),
       }).catch(rethrowPendingDeletion);
     }
   };
@@ -156,8 +253,18 @@ export function ancestorGuard(options: {
     effects: CommitEffects = {},
   ): Promise<{ response: Response; policy?: OwnAccess }> => {
     const binding = await bindAccess(access, url, url, true);
+    // An orphan ACL is not inherited creation access, even when a 404 exposes
+    // its Link. Never adopt it as permission to populate a newly minted item.
+    if (binding.destinationOwn?.policy)
+      throw new DriveAccessError(
+        "Own ACL already exists",
+        "An access policy already exists for this new item. Choose another name or review its sharing before retrying.",
+      );
     let response: Response;
-    const compensation = new Compensation(() => binding.rollback(() => cleanup(url, response)));
+    let installed: OwnAccess | undefined;
+    const compensation = new Compensation(() =>
+      binding.rollback(() => cleanup(url, response, installed)),
+    );
     try {
       if (decision.kind === "archived")
         await ledger.set(url, await requirementFor(decision.acl, decision.from));
@@ -172,15 +279,39 @@ export function ancestorGuard(options: {
         ],
         step: put,
       });
+      access.recordCreation(url, response.headers);
       onCreated?.(response);
       try {
+        if (decision.kind === "archived") {
+          const endpoint = access.discover(url, response.headers);
+          await ledger.set(url, {
+            ...(await requirementFor(decision.acl, decision.from)),
+            etag: response.headers.get("etag") ?? "",
+            ...(endpoint ? { ownAcl: { url: endpoint, etag: null } } : {}),
+          });
+        }
         await verifyAccess?.();
         await binding.recheck();
         const policy =
           decision.kind === "archived"
-            ? await install(url, decision.acl, decision.from)
+            ? await install(url, decision.acl, decision.from, {
+                identity: {
+                  url,
+                  etag: response.headers.get("etag") ?? "",
+                  verifyHeaders: (headers) => {
+                    binding.verifyEndpoint(url, headers);
+                    return undefined;
+                  },
+                },
+                knownAcl: binding.destinationOwn?.url,
+                expectedAcl: null,
+                policyGuards: binding.identities,
+              })
             : undefined;
-        if (policy) binding.installed(policy);
+        if (policy) {
+          installed = policy;
+          binding.installed(policy);
+        }
         await binding.recheck();
         compensation.disarm();
         return { response, ...(policy ? { policy } : {}) };
@@ -300,7 +431,7 @@ export function ancestorGuard(options: {
             if (
               own.status !== "known" ||
               !sameGraph(
-                relocate(plan.policy.dataset, [[plan.policy.url, own.policy.url]]),
+                access.retarget(plan.policy, container, container, own.policy.url).dataset,
                 own.policy.dataset,
               )
             )
@@ -440,16 +571,37 @@ export function ancestorGuard(options: {
         verifyAccess,
         effects,
       ),
-    async protect(url: string, policy: OwnAccess, from = url): Promise<void> {
+    async protect(
+      url: string,
+      policy: OwnAccess,
+      from: string,
+      protectionGuard: AccessWriteGuard & { readonly expectedAcl: OwnAccess | null },
+    ): Promise<OwnAccess> {
+      // Callers hydrate the complete receipt before entering this flight. A
+      // missing receipt cannot authorize discovering a new compensation target.
+      const endpoint = protectionGuard.knownAcl;
+      if (!endpoint) throw new DriveAccessError("ACL endpoint unavailable");
+      if (protectionGuard.expectedAcl === undefined)
+        throw new DriveAccessError("Own ACL receipt unavailable");
       await guard(url, true);
+      let saved = policy;
       await singleFlight(
         url,
         async () => {
-          await ledger.set(url, await requirementFor(policy, from));
-          await install(url, policy, from);
+          await ledger.set(url, {
+            ...(await requirementFor(policy, from)),
+            etag: protectionGuard.identity.etag,
+            ownAcl: { url: endpoint, etag: protectionGuard.expectedAcl?.etag ?? null },
+          });
+          saved = await install(url, policy, from, {
+            ...protectionGuard,
+            knownAcl: endpoint,
+            expectedAcl: protectionGuard.expectedAcl,
+          });
         },
         false,
       );
+      return saved;
     },
   };
 }

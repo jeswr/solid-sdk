@@ -80,7 +80,7 @@ describe("Drive data-safety regressions", () => {
     "retained",
     "already removed",
     "changed destination",
-  ])("round43 cleanup revalidates a destination receipt after a conditional conflict (%s)", async (state) => {
+  ])("round43 cleanup retains a refused destination receipt unless it is already absent (%s)", async (state) => {
     const { pod, client } = setup();
     const trashed = await trashItems(client, DRIVE, [await client.stat(`${FROM}a`)]);
     const entry = trashed.done[0];
@@ -120,18 +120,19 @@ describe("Drive data-safety regressions", () => {
     const result = await restoreItems(client, DRIVE, [entry]);
     expect(conflicted).toBe(true);
     expect(await (await client.read(entry.original)).text()).toBe("A");
+    if (state !== "already removed")
+      expect(result.failed[0]?.error).toMatchObject({ kind: "conflict", status: 412 });
     if (state === "changed destination") {
-      expect(result.failed[0]?.error).toMatchObject({ kind: "conflict", status: 409 });
       const current = await client.readRdf(receiptUrl);
       if (!current) throw new Error("Lost changed receipt");
       expect(trashIndexFrom(current.dataset).record(entry.url).restoredLocation).toBe(
         `${FROM}other`,
       );
-    } else {
+    } else if (state === "already removed") {
       expect(result.failed).toEqual([]);
       expect(pod.has(receiptUrl)).toBe(false);
       expect(await listTrash(client, DRIVE)).toEqual([]);
-    }
+    } else expect(pod.has(receiptUrl)).toBe(true);
   });
 
   it.each([
@@ -276,13 +277,14 @@ describe("Drive data-safety regressions", () => {
     expect(items.every(({ url }) => pod.has(url))).toBe(true);
   });
 
-  it("retains copies without starting another identity check after a destination check fails", async () => {
+  it("retains copies without deleting a source after a destination check fails", async () => {
     const checking = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
     const { pod, fetch, client } = setup(async (url, init) => {
       if (
         init?.method === "HEAD" &&
         url === `${TO}a` &&
+        pod.has(`${TO}b`) &&
         new Headers(init.headers).has("if-match")
       ) {
         checking.resolve();
@@ -301,12 +303,6 @@ describe("Drive data-safety regressions", () => {
     await expect(moving).rejects.toMatchObject({ kind: "partial-failure" });
     expect([`${FROM}a`, `${FROM}b`, `${TO}a`, `${TO}b`].every((url) => pod.has(url))).toBe(true);
     expect(fetch.mock.calls.filter(([, init]) => init?.method === "DELETE")).toEqual([]);
-    expect(
-      fetch.mock.calls.filter(
-        ([url, init]) =>
-          url === `${TO}b` && init?.method === "HEAD" && new Headers(init.headers).has("if-match"),
-      ),
-    ).toEqual([]);
   });
 
   it.each([
@@ -375,13 +371,13 @@ describe("Drive data-safety regressions", () => {
     ]);
   });
 
-  it("partial restore rechecks the comparison GET's survivor version immediately before recovery deletion", async () => {
+  it("partial restore refuses a comparison GET that replaces the survivor's initial HEAD identity", async () => {
     let restoring = false;
     let comparedEtag: string | null = null;
     const { pod, client, fetch } = setupPartial(async (url, init) => {
       if (!restoring || url !== `${FROM}b`) return undefined;
       if (!init?.method || init.method === "GET") {
-        // A new identical version after the earlier stat must use this GET's ETag.
+        // Even an identical version after the initial stat needs a new decision.
         await pod.fetch(url, { method: "PUT", body: "B" });
         const response = await pod.fetch(url, init);
         comparedEtag = response.headers.get("etag");
@@ -404,26 +400,17 @@ describe("Drive data-safety regressions", () => {
     fetch.mockClear();
     const result = await restoreItems(client, DRIVE, entries);
     restoring = false;
-    expect(result.failed).toEqual([]);
-    expect(result.done).toHaveLength(1);
+    expect(result.failed).toHaveLength(1);
+    expect(result.done).toEqual([]);
     expect(comparedEtag).not.toBe(before.etag);
     const deletion = fetch.mock.calls.findIndex(
       ([url, init]) => url === `${entry.url}b` && init?.method === "DELETE",
     );
-    const preceding = fetch.mock.calls
-      .slice(0, deletion)
-      .findLast(
-        ([url, init]) =>
-          url === `${FROM}b` &&
-          init?.method === "HEAD" &&
-          new Headers(init.headers).has("if-match"),
-      );
-    expect(preceding?.[0]).toBe(`${FROM}b`);
-    expect(preceding?.[1]?.method).toBe("HEAD");
-    expect(new Headers(preceding?.[1]?.headers).get("if-match")).toBe(comparedEtag);
+    expect(deletion).toBe(-1);
     expect(await (await client.read(`${FROM}b`)).text()).toBe("B");
-    expect(await listTrash(client, DRIVE)).toEqual([]);
-    expect(pod.has(entry.url)).toBe(false);
+    expect(await listTrash(client, DRIVE)).toMatchObject([{ url: entry.url, status: "partial" }]);
+    expect(pod.has(entry.url)).toBe(true);
+    expect(await (await client.read(`${entry.url}b`)).text()).toBe("B");
   });
 
   it("partial restore compares bytes when different URLs issue equal ETags", async () => {
@@ -518,7 +505,7 @@ describe("Drive data-safety regressions", () => {
   it.each([
     false,
     true,
-  ])("permanent deletion retries a vanished descendant and retains unfinished records (second race: %s)", async (twice) => {
+  ])("permanent deletion never refreshes the confirmed root after a descendant vanishes (second race: %s)", async (twice) => {
     let recovery: string | undefined;
     let vanished = 0;
     const { pod, client } = setupPartial(async (url, init) => {
@@ -549,19 +536,17 @@ describe("Drive data-safety regressions", () => {
     const result = await deleteForever(client, DRIVE, entries);
     recovery = undefined;
     expect(remove.mock.calls.filter(([url]) => url === entry.url)).toHaveLength(2);
-    if (twice) {
-      expect(result.done).toEqual([]);
-      expect(result.failed).toHaveLength(1);
-      expect(await (await client.read(`${entry.url}c`)).text()).toBe("C");
-      expect(await listTrash(client, DRIVE)).toHaveLength(1);
-    } else {
-      expect(result).toEqual({ done: entries, failed: [] });
-      expect(pod.has(entry.url)).toBe(false);
-      expect(await listTrash(client, DRIVE)).toEqual([]);
-    }
+    expect(result.done).toEqual([]);
+    expect(result.failed).toHaveLength(1);
+    expect(await (await client.read(`${entry.url}c`)).text()).toBe("C");
+    const refreshed = await listTrash(client, DRIVE);
+    expect(refreshed).toHaveLength(1);
+    expect((await deleteForever(client, DRIVE, refreshed)).failed).toEqual([]);
+    expect(pod.has(entry.url)).toBe(false);
+    expect(await listTrash(client, DRIVE)).toEqual([]);
   });
 
-  it("permanent deletion retries a descendant 404 wrapped by partial deletion", async () => {
+  it("permanent deletion renews parent confirmation when a descendant 404 has no receipt", async () => {
     let recovery: string | undefined;
     const { pod, client } = setup(async (url, init) => {
       if (recovery && url === `${recovery}b` && init?.method === "DELETE") {
@@ -576,8 +561,11 @@ describe("Drive data-safety regressions", () => {
     if (!entry) throw new Error("Missing entry");
     recovery = entry.url;
     const remove = vi.spyOn(client, "remove");
-    expect(await deleteForever(client, DRIVE, entries)).toEqual({ done: entries, failed: [] });
+    expect((await deleteForever(client, DRIVE, entries)).failed).toHaveLength(1);
     expect(remove.mock.calls.filter(([url]) => url === entry.url)).toHaveLength(1);
+    expect(pod.has(entry.url)).toBe(true);
+    const refreshed = await listTrash(client, DRIVE);
+    expect(await deleteForever(client, DRIVE, refreshed)).toEqual({ done: refreshed, failed: [] });
     expect(pod.has(entry.url)).toBe(false);
     expect(await listTrash(client, DRIVE)).toEqual([]);
   });
@@ -590,7 +578,9 @@ describe("Drive data-safety regressions", () => {
       done: [],
       failed: [{ url: entries[0]?.url, error: { kind: "conflict" } }],
     });
-    expect(await listTrash(client, DRIVE)).toEqual(entries);
+    expect(await listTrash(client, DRIVE)).toEqual(
+      entries.map((entry) => ({ ...entry, verifyHeaders: expect.any(Function) })),
+    );
   });
 
   it.each([
@@ -684,7 +674,10 @@ describe("Drive data-safety regressions", () => {
     expect(result.failed).toEqual([]);
     expect(result.done).toHaveLength(1);
     expect(await (await client.read(`${FROM}a`)).text()).toBe("A");
-    expect(await client.stat(`${FROM}b`)).toEqual(survivor);
+    expect(await client.stat(`${FROM}b`)).toEqual({
+      ...survivor,
+      verifyHeaders: expect.any(Function),
+    });
     expect(await listTrash(client, DRIVE)).toEqual([]);
     expect(pod.has(new URL("..", entry.url).href)).toBe(false);
   });
@@ -993,7 +986,9 @@ describe("Drive data-safety regressions", () => {
     // Keep the durable intent pending and force its first promotion to fail.
     vi.spyOn(client, "write").mockRejectedValueOnce(new DriveError("failed", 500, INDEX));
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    expect(await listTrash(client, DRIVE)).toEqual([entry]);
+    expect(await listTrash(client, DRIVE)).toEqual([
+      { ...entry, verifyHeaders: expect.any(Function) },
+    ]);
     const slot = new URL(".", entry.url).href;
     expect(pod.has(`${slot}partial.ttl`)).toBe(true);
     const remove = client.remove.bind(client);
@@ -1028,7 +1023,9 @@ describe("Drive data-safety regressions", () => {
     } = await trashItems(client, DRIVE, [await client.stat(`${FROM}partial.ttl`)]);
     if (!entry) throw new Error("Missing entry");
     vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    expect(await listTrash(client, DRIVE)).toEqual([entry]);
+    expect(await listTrash(client, DRIVE)).toEqual([
+      { ...entry, verifyHeaders: expect.any(Function) },
+    ]);
     expect(await (await client.read(entry.url)).text()).toBe("unique recovery bytes");
     expect((await restoreItems(client, DRIVE, [entry])).done).toHaveLength(1);
     expect(await (await client.read(entry.original)).text()).toBe("unique recovery bytes");
@@ -1057,10 +1054,11 @@ describe("Drive data-safety regressions", () => {
     });
     await expect(
       client.move(`${FROM}a`, destination, { kind: "confirm-move" }),
-    ).rejects.toMatchObject({
-      kind: "partial-failure",
-      deletedSources: [],
-    });
+    ).rejects.toMatchObject(
+      failure === "missing"
+        ? { kind: "not-found", url: destination }
+        : { kind: "partial-failure", deletedSources: [] },
+    );
     expect(await (await client.read(`${FROM}a`)).text()).toBe("A");
     expect(
       fetch.mock.calls.some(([url, init]) => url === `${FROM}a` && init?.method === "DELETE"),
@@ -1321,7 +1319,9 @@ describe("Drive data-safety regressions", () => {
     if (!entry) throw new Error("Missing moved entry");
     // Legacy completed transfers may have no slot-local completion receipt.
     await client.remove(new URL("partial.ttl", entry.url).href);
-    expect(await listTrash(client, DRIVE)).toMatchObject([{ ...entry, status: "partial" }]);
+    expect(await listTrash(client, DRIVE)).toMatchObject([
+      { ...entry, status: "partial", verifyHeaders: expect.any(Function) },
+    ]);
     expect((await restoreItems(client, DRIVE, [entry])).done).toHaveLength(1);
   });
 
@@ -1360,7 +1360,9 @@ describe("Drive data-safety regressions", () => {
       return read(url);
     });
     expect(await listTrash(client, DRIVE)).toMatchObject(
-      change === "partial" ? [{ ...entry, status: "partial" }] : [],
+      change === "partial"
+        ? [{ ...entry, status: "partial", verifyHeaders: expect.any(Function) }]
+        : [],
     );
   });
 
@@ -1419,7 +1421,7 @@ describe("Drive data-safety regressions", () => {
     expect(pod.has(TO)).toBe(false);
   });
 
-  it("copies folders even when the destination omits its creation ETag", async () => {
+  it("retains copied folders and reports a missing destination creation ETag", async () => {
     const { pod, client } = setup(async (url, init) => {
       if (url === TO && init?.method === "PUT") {
         const response = await pod.fetch(url, init);
@@ -1428,8 +1430,12 @@ describe("Drive data-safety regressions", () => {
       }
       return undefined;
     });
-    await client.copy(FROM, TO, { kind: "preserve-source" });
+    await expect(client.copy(FROM, TO, { kind: "preserve-source" })).rejects.toMatchObject({
+      kind: "partial-failure",
+      cause: { kind: "missing-validator" },
+    });
     expect(pod.has(`${TO}a`)).toBe(true);
+    expect(pod.has(`${FROM}a`)).toBe(true);
   });
 
   it("rolls back only its own destinations, leaving an unrelated new child untouched", async () => {
@@ -1442,7 +1448,7 @@ describe("Drive data-safety regressions", () => {
     });
     await expect(client.copy(FROM, TO, { kind: "preserve-source" })).rejects.toMatchObject({
       kind: "partial-failure",
-      retainedDestinations: [TO],
+      retainedDestinations: expect.arrayContaining([TO]),
       deletedSources: [],
     });
     expect(pod.has(`${TO}a`)).toBe(false);
@@ -1532,10 +1538,14 @@ describe("Drive data-safety regressions", () => {
       { kind: "protect-ancestors" },
     );
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    expect(await listTrash(client, DRIVE)).toEqual(trashed.done);
+    expect(await listTrash(client, DRIVE)).toEqual(
+      trashed.done.map((entry) => ({ ...entry, verifyHeaders: expect.any(Function) })),
+    );
     expect(warn).toHaveBeenCalledWith(expect.objectContaining({ kind: "invalid-trash-record" }));
     const result = await purgeExpired(client, DRIVE, { now: NOW });
-    expect(result.done).toEqual(trashed.done);
+    expect(result.done).toEqual(
+      trashed.done.map((entry) => ({ ...entry, verifyHeaders: expect.any(Function) })),
+    );
     expect(result.failed).toHaveLength(1);
   });
 
@@ -1735,7 +1745,9 @@ describe("Drive data-safety regressions", () => {
     expect(result.failed).toEqual([]);
     expect(result.warnings).toMatchObject([{ kind: "trash-index-persistence", cause: { status } }]);
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    expect(await listTrash(client, DRIVE)).toEqual(result.done);
+    expect(await listTrash(client, DRIVE)).toEqual(
+      result.done.map((entry) => ({ ...entry, verifyHeaders: expect.any(Function) })),
+    );
     expect(warn).toHaveBeenCalledWith(expect.objectContaining({ kind: "trash-index-persistence" }));
     expect(pod.has(`${FROM}a`)).toBe(false);
   });

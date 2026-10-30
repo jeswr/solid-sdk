@@ -66,7 +66,9 @@ describe("Docs uses Drive trash records", () => {
     expect(result.failed).toHaveLength(1);
     expect((await pod.fetch(trashed.done[0]?.url as string)).ok).toBe(true);
     expect((await pod.fetch(`${ROOT}docs/plan%20(restored).ttl`)).status).toBe(404);
-    expect(await listTrash(client, DRIVE)).toEqual(trashed.done);
+    expect(await listTrash(client, DRIVE)).toEqual(
+      trashed.done.map((entry) => ({ ...entry, verifyHeaders: expect.any(Function) })),
+    );
   });
 
   it("relocates revision links and preserves an undated snapshot's complete body", async () => {
@@ -381,8 +383,10 @@ describe("Docs uses Drive trash records", () => {
     await pod.fetch(`${TREE}updates/001798000000000-00000000-0000-4000-8000-000000000001`, {
       method: "DELETE",
     });
-    // Retry the caller's original record after resolving the conflicting resource.
-    expect((await restoreDocument(trashed.done.slice(1), session)).failed).toEqual([]);
+    // The partial restore changed the recovery folder. A stale confirmation
+    // must fail; a refreshed record authorizes retrying the remaining recovery.
+    expect((await restoreDocument(trashed.done.slice(1), session)).failed).toHaveLength(1);
+    expect((await restoreDocument(await listTrash(client, DRIVE), session)).failed).toEqual([]);
     expect(
       await (
         await pod.fetch(`${TREE}updates/001798000000000-00000000-0000-4000-8000-000000000001`)
@@ -396,7 +400,9 @@ describe("Docs uses Drive trash records", () => {
     const result = await deleteDocument(DOC, session);
     expect(result).toMatchObject({ done: [{ original: DOC }, { original: TREE }], failed: [] });
     const entries = await listTrash(client, DRIVE);
-    expect(entries).toEqual(result.done);
+    expect(entries).toEqual(
+      result.done.map((entry) => ({ ...entry, verifyHeaders: expect.any(Function) })),
+    );
     expect(entries).toHaveLength(2);
     expect((await pod.fetch(DOC)).status).toBe(404);
     expect((await pod.fetch(`${TREE}assets/chart.png`)).status).toBe(404);
@@ -428,7 +434,9 @@ describe("Docs uses Drive trash records", () => {
     const result = await deleteDocument(DOC, session);
     expect(result.done).toHaveLength(1);
     expect(result.failed).toEqual([]);
-    expect(await listTrash(client, DRIVE)).toEqual(result.done);
+    expect(await listTrash(client, DRIVE)).toEqual(
+      result.done.map((entry) => ({ ...entry, verifyHeaders: expect.any(Function) })),
+    );
   });
   it.each([
     "docs/sub/plan.ttl",
@@ -517,6 +525,7 @@ describe("Docs uses Drive trash records", () => {
     expect(reconciled).toEqual(
       result.done.map((entry) => ({
         ...entry,
+        verifyHeaders: expect.any(Function),
         status: "partial",
         remaining:
           entry.original === DOC

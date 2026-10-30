@@ -1,9 +1,10 @@
 // AUTHORED-BY Codex
 import { createRequire } from "node:module";
 import { clearTimeout as clearDeadline, setTimeout as deadline } from "node:timers";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, type MockInstance, vi } from "vitest";
+import * as operations from "../src/apps/drive/lib/operations/operations";
 import { exclusiveLocks } from "./drive-locks";
-import { act, click, h, mount } from "./drive-ui-dom";
+import { act, click, deferred, h, mount } from "./drive-ui-dom";
 
 vi.mock("@/lib/refs", async () => import("../src/lib/refs"));
 vi.mock(
@@ -38,6 +39,8 @@ const { IDBFactory } = createRequire(
 const DRIVE = `${DEMO_ROOT}drive/`;
 let drive: ReturnType<typeof useDrive>;
 let actions: ReturnType<typeof useDriveActions>;
+let demoView: Awaited<ReturnType<typeof mount>> | undefined;
+let trashLoads: MockInstance<typeof listTrash>;
 function Probe() {
   drive = useDrive();
   actions = useDriveActions();
@@ -57,13 +60,24 @@ beforeEach(() => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   vi.stubGlobal("BroadcastChannel", undefined);
   Object.defineProperty(navigator, "locks", { configurable: true, value: exclusiveLocks(1_000) });
+  trashLoads = vi.spyOn(operations, "listTrash");
 });
-afterEach(async () => {
+async function cleanupDemo() {
+  // Stop subscriptions before draining whole reconciliations. A single fetch
+  // settling does not mean its multi-request listTrash operation has finished.
+  await demoView?.unmount();
+  demoView = undefined;
+  await Promise.allSettled(
+    trashLoads.mock.results
+      .filter((result) => result.type === "return")
+      .map((result) => result.value),
+  );
   await resetDemoPod();
   vi.restoreAllMocks();
   vi.clearAllMocks();
   localStorage.clear();
-});
+}
+afterEach(cleanupDemo);
 
 async function setup() {
   const pod = await bounded(getDemoPod());
@@ -83,12 +97,42 @@ async function setup() {
       children: h(DriveUiProvider, null, h(Probe), h(TrashView), h(DriveDialogs)),
     }),
   );
+  demoView = view;
   await vi.waitFor(async () => {
     await act(async () => {});
     expect(drive.driveRoot).toBe(DRIVE);
   });
   return { pod, view, transport };
 }
+
+it("demo cleanup settles an in-flight Trash reload before resetting its session", async () => {
+  const { pod, view, transport } = await setup();
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(view.host.textContent).toContain("Trash is empty");
+  });
+  const started = deferred<void>();
+  const gate = deferred<void>();
+  transport.mockImplementation(async (input, init) => {
+    if (String(input) === `${DRIVE}.trash/index.ttl` && (init?.method ?? "GET") === "GET") {
+      started.resolve();
+      await gate.promise;
+    }
+    return pod.fetch(input, init);
+  });
+  await act(async () => drive.invalidate(`${DRIVE}.trash/`));
+  await started.promise;
+  const result = trashLoads.mock.results.at(-1);
+  if (result?.type !== "return") throw new Error("Missing Trash reload");
+  const reloaded = result.value.then(
+    (entries) => ({ entries }),
+    (error: unknown) => ({ error }),
+  );
+  const cleaning = cleanupDemo();
+  gate.resolve();
+  await cleaning;
+  expect(await reloaded).toEqual({ entries: [] });
+});
 
 it("restores the demo pod's notes.md through the Trash row within the toast deadline", async () => {
   // Only arrangement skips simulated network delay, so the unfixed browser

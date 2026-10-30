@@ -271,7 +271,11 @@ describe("Drive writes against the demo pod", () => {
         {
           from: NOTES,
           to: `${target}notes.md`,
-          identity: { url: `${target}notes.md`, etag: expect.any(String) },
+          identity: {
+            url: `${target}notes.md`,
+            etag: expect.any(String),
+            verifyHeaders: expect.any(Function),
+          },
         },
       ]);
       expect(pod.has(NOTES)).toBe(false);
@@ -287,15 +291,25 @@ describe("Drive writes against the demo pod", () => {
           identity: {
             url: `${DRIVE}Archive/Photos/`,
             etag: expect.any(String),
+            verifyHeaders: expect.any(Function),
             children: [`${DRIVE}Archive/Photos/hills.png`, `${DRIVE}Archive/Photos/sunset.png`],
             tree: [
               {
                 url: `${DRIVE}Archive/Photos/`,
                 etag: expect.any(String),
+                verifyHeaders: expect.any(Function),
                 children: [`${DRIVE}Archive/Photos/hills.png`, `${DRIVE}Archive/Photos/sunset.png`],
               },
-              { url: `${DRIVE}Archive/Photos/hills.png`, etag: expect.any(String) },
-              { url: `${DRIVE}Archive/Photos/sunset.png`, etag: expect.any(String) },
+              {
+                url: `${DRIVE}Archive/Photos/hills.png`,
+                etag: expect.any(String),
+                verifyHeaders: expect.any(Function),
+              },
+              {
+                url: `${DRIVE}Archive/Photos/sunset.png`,
+                etag: expect.any(String),
+                verifyHeaders: expect.any(Function),
+              },
             ],
           },
         },
@@ -365,6 +379,8 @@ describe("app-managed trash against the demo pod", () => {
     expect(pod.has(first.url)).toBe(true);
     expect(first).toEqual({
       url: first.url,
+      verifyHeaders: expect.any(Function),
+      etag: expect.any(String),
       original: NOTES,
       trashedAt: new Date(NOW - DAY),
       trashedBy: DEMO_WEBID,
@@ -395,7 +411,9 @@ describe("app-managed trash against the demo pod", () => {
     expect(Number(object(first.url, "http://www.w3.org/ns/posix/stat#size")[0]?.value)).toBe(
       original.size,
     );
-    expect(await listTrash(client, DRIVE)).toEqual([second, first]);
+    expect(await listTrash(client, DRIVE)).toEqual(
+      [second, first].map((entry) => ({ ...entry, verifyHeaders: expect.any(Function) })),
+    );
     const text = await (await client.read(INDEX)).text();
     const etag = (await client.stat(INDEX)).etag as string;
     await client.write(
@@ -404,7 +422,9 @@ describe("app-managed trash against the demo pod", () => {
       { contentType: "text/turtle", ifMatch: etag },
       { kind: "protect-ancestors" },
     );
-    expect(await listTrash(client, DRIVE)).toEqual([second, first]);
+    expect(await listTrash(client, DRIVE)).toEqual(
+      [second, first].map((entry) => ({ ...entry, verifyHeaders: expect.any(Function) })),
+    );
     expectConditionalWrites(fetch);
   });
 
@@ -420,13 +440,17 @@ describe("app-managed trash against the demo pod", () => {
       const entry = result.done[0] as TrashEntry;
       expect(entry).toEqual({
         url: entry.url,
+        verifyHeaders: expect.any(Function),
+        etag: expect.any(String),
         original: `${DRIVE}Work/`,
         name: "Work",
         trashedAt: new Date(NOW),
       });
       expect(entry.url.endsWith("/Work/")).toBe(true);
       expect(pod.has(`${entry.url}Report.pdf`)).toBe(true);
-      expect(await listTrash(client, DRIVE)).toEqual([entry]);
+      expect(await listTrash(client, DRIVE)).toEqual([
+        { ...entry, verifyHeaders: expect.any(Function) },
+      ]);
       expectConditionalWrites(fetch);
     } finally {
       vi.useRealTimers();
@@ -478,8 +502,18 @@ describe("app-managed trash against the demo pod", () => {
           : pod.fetch(input, init),
     });
     expect((await restoreItems(interrupted, DRIVE, [entry])).failed).toHaveLength(1);
-    const retry = await restoreItems(client, DRIVE, await listTrash(client, DRIVE));
-    expect(retry).toEqual({ done: [{ entry, url: target, renamed: collision }], failed: [] });
+    const refreshed = await listTrash(client, DRIVE);
+    expect(refreshed).toHaveLength(1);
+    expect(refreshed[0]).toEqual({
+      ...entry,
+      etag: expect.any(String),
+      verifyHeaders: expect.any(Function),
+    });
+    const retry = await restoreItems(client, DRIVE, refreshed);
+    expect(retry).toEqual({
+      done: [{ entry: refreshed[0], url: target, renamed: collision }],
+      failed: [],
+    });
     expect(await (await pod.fetch(kind === "file" ? target : `${target}child.txt`)).text()).toBe(
       before,
     );
@@ -536,7 +570,7 @@ describe("app-managed trash against the demo pod", () => {
     const old = await trashOne(client, `${DRIVE}data.ttl`, NOW - 31 * DAY);
     const boundary = await trashOne(client, `${DRIVE}Photos/hills.png`, NOW - 30 * DAY);
     expect(await purgeExpired(client, DRIVE, { now: new Date(NOW), limit: 1 })).toEqual({
-      done: [old],
+      done: [{ ...old, verifyHeaders: expect.any(Function) }],
       failed: [],
     });
     expect(pod.has(oldest.url)).toBe(true);
@@ -544,10 +578,13 @@ describe("app-managed trash against the demo pod", () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
     try {
-      expect(await purgeExpired(client, DRIVE)).toEqual({ done: [oldest], failed: [] });
+      expect(await purgeExpired(client, DRIVE)).toEqual({
+        done: [{ ...oldest, verifyHeaders: expect.any(Function) }],
+        failed: [],
+      });
       expect(await purgeExpired(client, DRIVE)).toEqual({ done: [], failed: [] });
       expect(await purgeExpired(client, DRIVE, { now: new Date(NOW), days: 29, limit: 2 })).toEqual(
-        { done: [boundary], failed: [] },
+        { done: [{ ...boundary, verifyHeaders: expect.any(Function) }], failed: [] },
       );
     } finally {
       vi.useRealTimers();
@@ -621,7 +658,7 @@ describe("app-managed trash against the demo pod", () => {
   it.each([
     false,
     true,
-  ])("retries one real concurrent index update and preserves it (second conflict: %s)", async (twice) => {
+  ])("preserves a concurrent index update without adopting its validator (repeated conflict: %s)", async (twice) => {
     const { pod } = await setup();
     const concurrent: TrashEntry = {
       url: `${DRIVE}.trash/00000000-0000-0000-0000-000000000001/file`,
@@ -654,17 +691,19 @@ describe("app-managed trash against the demo pod", () => {
     });
     const client = createSolidDriveClient({ storageUrl: DEMO_ROOT, fetch });
     const operation = trashItems(client, DRIVE, [await item(client)], { now: new Date(NOW) });
-    if (twice)
-      await expect(operation).resolves.toMatchObject({
-        done: [],
-        failed: [{ url: NOTES, error: { kind: "conflict", status: 412, url: INDEX } }],
-        warnings: [{ kind: "trash-index-persistence" }],
-      });
-    else {
-      const result = await operation;
-      expect(await listTrash(client, DRIVE)).toEqual([result.done[0], concurrent]);
-    }
-    expect(writes).toBe(twice ? 2 : 3);
+    await expect(operation).resolves.toMatchObject({
+      done: [],
+      failed: [{ url: NOTES, error: { kind: "conflict", status: 412, url: INDEX } }],
+      warnings: [{ kind: "trash-index-persistence" }],
+    });
+    expect(await listTrash(client, DRIVE)).toEqual([
+      {
+        ...concurrent,
+        etag: (await client.stat(concurrent.url)).etag,
+        verifyHeaders: expect.any(Function),
+      },
+    ]);
+    expect(writes).toBe(1);
     expectConditionalWrites(fetch);
   });
 

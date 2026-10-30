@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex
 import { expect, it, vi } from "vitest";
 import { createSolidDriveClient } from "../src/apps/drive/lib/client/client";
-import { aclBody, PUBLIC, ROOT, wacPod } from "./drive-wac-pod";
+import { aclBody, aclClauses, PUBLIC, ROOT, wacPod } from "./drive-wac-pod";
 
 it("same-folder rename with a hidden ACL Link refuses before writes and retains private bytes", async () => {
   const f = await wacPod();
@@ -63,14 +63,10 @@ it("same-folder rename preserves a discovered own ACL and rewrites accessTo befo
   expect(f.policies.get(`${to}.policy`)).toContain(`<${to}>`);
   expect(f.policies.get(`${to}.policy`)).not.toContain(`<${from}>`);
   const { parseRdf } = await import("@jeswr/fetch-rdf");
-  const { relocate, sameGraph } = await import("../src/apps/drive/lib/client/rdf");
-  const expected = relocate(await parseRdf(original, "text/turtle"), [
-    [`${from}.policy`, `${to}.policy`],
-    [from, to],
-  ]);
+  const expected = await parseRdf(await aclBody(to), "text/turtle");
   expect(
-    sameGraph(expected, await parseRdf(f.policies.get(`${to}.policy`) as string, "text/turtle")),
-  ).toBe(true);
+    aclClauses(await parseRdf(f.policies.get(`${to}.policy`) as string, "text/turtle")),
+  ).toEqual(aclClauses(expected));
   expect(f.exposures).toEqual([]);
 });
 
@@ -145,12 +141,15 @@ it.each([
     expect(result.failed[0]?.error).toMatchObject({ kind: "private-access-unavailable" });
   } else {
     const { moveWithValidator } = await import("../src/apps/drive/state/undo");
+    const approved = await client.stat(from);
     await expect(
       moveWithValidator(
         { storageUrl: ROOT, fetch: f.fetch },
         from,
         `${PUBLIC}secret`,
-        (await client.stat(from)).etag as string,
+        approved.etag as string,
+        undefined,
+        approved.verifyHeaders,
       ),
     ).rejects.toThrow("can't confirm who can access");
   }
