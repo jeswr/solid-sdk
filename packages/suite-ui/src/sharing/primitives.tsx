@@ -75,7 +75,13 @@ export function ConfirmAction({
               <Button>{cancel}</Button>
             </AlertDialog.Cancel>
             <AlertDialog.Action asChild>
-              <Button className="su-destructive" onClick={onConfirm}>
+              <Button
+                className="su-destructive"
+                disabled={disabled}
+                onClick={() => {
+                  if (!disabled) onConfirm();
+                }}
+              >
                 {action}
               </Button>
             </AlertDialog.Action>

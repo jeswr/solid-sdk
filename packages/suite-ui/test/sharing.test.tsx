@@ -325,6 +325,24 @@ describe("consent", () => {
 });
 
 describe("permission rows", () => {
+  it.each([true, false])("blocks a pending revocation offline (cached=%s)", (cached) => {
+    const onRevoke = vi.fn();
+    const { rerender } = render(<PermissionRow {...permission} onRevoke={onRevoke} />);
+    fireEvent.click(screen.getByRole("button", { name: "Revoke all" }));
+    rerender(
+      <PermissionRow {...permission} state={{ kind: "offline", cached }} onRevoke={onRevoke} />,
+    );
+    const action = screen.getByRole("button", { name: "Remove access" }) as HTMLButtonElement;
+    expect(action.disabled).toBe(true);
+    fireEvent.click(action);
+    expect(onRevoke).not.toHaveBeenCalled();
+    expect(screen.getByRole("alertdialog")).toBeDefined();
+
+    rerender(<PermissionRow {...permission} onRevoke={onRevoke} />);
+    expect(action.disabled).toBe(false);
+    fireEvent.click(action);
+    expect(onRevoke).toHaveBeenCalledOnce();
+  });
   it("emits expansion, toggles and confirmed revoke, with fallback consequence and undo", () => {
     const onItemChange = vi.fn();
     const onRevoke = vi.fn();
