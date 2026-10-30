@@ -3,7 +3,7 @@
   "extends": ["//"],
   "tasks": {
     "build": {
-      "env": ["APP_ORIGIN", "VERCEL"],
+      "env": ["APP_ORIGIN", "CLIENT_BASE_PATH", "VERCEL"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"]
     }
   }

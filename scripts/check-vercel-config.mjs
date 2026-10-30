@@ -1,10 +1,75 @@
 #!/usr/bin/env node
 // AUTHORED-BY Codex GPT-5.6 (Sol)
+// AUTHORED-BY Codex GPT-6.1 (Sol)
+// AUTHORED-BY Codex GPT-6
 
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, globSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+
+// Top-level properties from https://openapi.vercel.sh/vercel.json (2026-10-28).
+// Keep this local so the guard stays deterministic and works without network access.
+const vercelProperties = new Set([
+  "$schema",
+  "alias",
+  "build",
+  "buildCommand",
+  "builds",
+  "bulkRedirectsPath",
+  "bunVersion",
+  "ci",
+  "cleanUrls",
+  "crons",
+  "daemons",
+  "devCommand",
+  "env",
+  "experimentalAtproto",
+  "experimentalBYOC",
+  "experimentalEnvironmentVariables",
+  "experimentalServiceGroups",
+  "experimentalServices",
+  "experimentalServicesV2",
+  "fluid",
+  "framework",
+  "functionFailoverRegions",
+  "functions",
+  "git",
+  "github",
+  "headers",
+  "ignoreCommand",
+  "images",
+  "installCommand",
+  "manualProvisioning",
+  "name",
+  "outputDirectory",
+  "passiveRegions",
+  "proxy",
+  "redirects",
+  "regions",
+  "relatedProjects",
+  "rewrites",
+  "routes",
+  "schedules",
+  "scope",
+  "services",
+  "skipMiddlewareRequestBody",
+  "trailingSlash",
+  "version",
+  "wildcard",
+]);
+
+function checkTopLevelProperties(config, path, failures) {
+  if (Array.isArray(config)) {
+    failures.push(`${path}: expected a configuration object`);
+    return;
+  }
+  for (const key of Object.keys(config)) {
+    if (!vercelProperties.has(key)) {
+      failures.push(`${path}: unknown top-level property ${key}`);
+    }
+  }
+}
 
 function readJson(root, path, failures) {
   let source;
@@ -29,6 +94,40 @@ function isDirectory(path) {
     return statSync(path).isDirectory();
   } catch {
     return false;
+  }
+}
+
+function matchesGitDeployment(value, suite) {
+  return suite
+    ? value !== null &&
+        typeof value === "object" &&
+        !Array.isArray(value) &&
+        Object.keys(value).length === 2 &&
+        value["**"] === false &&
+        value.main === true
+    : value === false;
+}
+
+function gitDeploymentPolicy(suite) {
+  return suite ? '{ "**": false, "main": true } (main only)' : "false";
+}
+
+function checkGitDeployment(root, app, failures) {
+  const path = `${app.rootDirectory}/vercel.json`;
+  const config = readJson(root, path, failures);
+  if (!config) return;
+  checkTopLevelProperties(config, path, failures);
+  // Vercel enables unspecified branches. ** also covers branch names containing /.
+  const suite = app.rootDirectory === "apps/suite" && app.project === "solid-suite";
+  const policy = gitDeploymentPolicy(suite);
+  if (!matchesGitDeployment(app.gitDeploymentEnabled, suite)) {
+    failures.push(`${app.project}: gitDeploymentEnabled must be ${policy}`);
+  }
+  if (!matchesGitDeployment(config.git?.deploymentEnabled, suite)) {
+    failures.push(`${path}: git.deploymentEnabled must be ${policy}`);
+  }
+  if (suite && config.ignoreCommand !== app.vercelIgnore) {
+    failures.push(`${path}: ignoreCommand must match vercelIgnore`);
   }
 }
 
@@ -79,6 +178,8 @@ function checkViteConfig(root, directory, failures) {
 }
 
 function checkBuildEnv(root, app, failures) {
+  // Next.js routes can derive their origin from the request instead of a build env.
+  if (app.originEnv === undefined) return;
   // Turbo infers NEXT_PUBLIC_* for Next.js, including cache-key inputs.
   if (app.framework === "next" && app.originEnv.startsWith("NEXT_PUBLIC_")) return;
   const path = `${app.rootDirectory}/turbo.json`;
@@ -109,21 +210,46 @@ function checkIgnoreCommand(root, app, failures) {
   }
 }
 
-function hasNextClientIdRoute(root, directory) {
+// Drop comments so a mention in a comment can't satisfy a source check (keeps "https://").
+function stripComments(source) {
+  return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+}
+
+function nextClientIdRouteSource(root, directory) {
   for (const base of ["src/app", "app"]) {
     for (const extension of ["ts", "js", "mjs"]) {
       const path = join(root, directory, base, "clientid.jsonld", `route.${extension}`);
       if (!existsSync(path)) continue;
-      const source = readFileSync(path, "utf8");
+      const source = stripComments(readFileSync(path, "utf8"));
       if (
         /export\s+(?:(?:async\s+)?function\s+GET\s*\(|const\s+GET\s*=)/.test(source) &&
         ["client_id", "redirect_uris", "application/ld+json"].every((value) =>
           source.includes(value),
         )
       ) {
-        return true;
+        return source;
       }
     }
+  }
+  return null;
+}
+
+// Without an origin env, the route must build client_id from the request URL at request time.
+function isRequestDerivedRoute(source) {
+  return (
+    /new\s+URL\(\s*(["'`])\/clientid\.jsonld\1\s*,\s*(?:request|req)\.url\s*,?\s*\)/.test(source) &&
+    !/\bdynamic\s*=\s*["'`]force-static["'`]/.test(source)
+  );
+}
+
+function hasViteClientIdConfig(root, directory, originEnv) {
+  const reads = new RegExp(`\\benv(?:\\.${originEnv}\\b|\\[\\s*["'\`]${originEnv}["'\`]\\s*\\])`);
+  for (const extension of ["ts", "js", "mjs"]) {
+    const path = join(root, directory, `vite.config.${extension}`);
+    if (!existsSync(path)) continue;
+    const source = stripComments(readFileSync(path, "utf8"));
+    // The emitting plugin may live in an imported helper, so check its config inputs.
+    if (/["'`][^"'`\n]*clientid\.jsonld["'`]/.test(source) && reads.test(source)) return true;
   }
   return false;
 }
@@ -134,15 +260,28 @@ function checkClientIdBuild(root, app, manifest, failures) {
   const hasGenerator = [build, manifest.scripts?.prebuild].some(
     (script) => typeof script === "string" && script.includes("gen-clientid"),
   );
+  const routeSource =
+    app.framework === "next" && hasBuild && /\bnext\s+build\b/.test(build)
+      ? nextClientIdRouteSource(root, app.rootDirectory)
+      : null;
   const hasNextRoute =
-    app.framework === "next" &&
+    routeSource !== null && (app.originEnv !== undefined || isRequestDerivedRoute(routeSource));
+  // An explicit --config could select a different file from the one checked here.
+  const hasViteConfig =
+    app.framework === "vite" &&
     hasBuild &&
-    /\bnext\s+build\b/.test(build) &&
-    hasNextClientIdRoute(root, app.rootDirectory);
-  if (!hasBuild || (!hasGenerator && !hasNextRoute)) {
+    /\bvite\s+build\b/.test(build) &&
+    !/\bvite\s+build\b[^&|;]*\s(?:--config|-c)(?:[\s=]|$)/.test(build) &&
+    hasViteClientIdConfig(root, app.rootDirectory, app.originEnv);
+  const generatesClientId = app.originEnv !== undefined && (hasGenerator || hasViteConfig);
+  if (!hasBuild || (!generatesClientId && !hasNextRoute)) {
     failures.push(
       `${app.rootDirectory}/package.json: build/prebuild must generate clientid.jsonld via gen-clientid${
-        app.framework === "next" ? " or next build with a clientid.jsonld GET route" : ""
+        app.framework === "next"
+          ? ` or next build with a clientid.jsonld GET route${
+              app.originEnv === undefined ? " deriving client_id from the request URL" : ""
+            }`
+          : ` or vite build with a Vite config referencing clientid.jsonld and ${app.originEnv}`
       }`,
     );
   }
@@ -156,6 +295,8 @@ function checkVercelConfig(root) {
     failures.push(`${path}: expected a non-empty array of deployments`);
   }
   if (Array.isArray(apps)) {
+    const directories = new Set();
+    const projects = new Set();
     for (const [index, app] of apps.entries()) {
       if (
         !app ||
@@ -163,8 +304,10 @@ function checkVercelConfig(root) {
           (key) => typeof app[key] !== "string" || !app[key].trim(),
         ) ||
         !["vite", "next"].includes(app.framework) ||
-        (app.clientIdDocument !== false &&
-          !["APP_ORIGIN", "NEXT_PUBLIC_APP_ORIGIN"].includes(app.originEnv))
+        // originEnv may be omitted by a Next.js request-derived client ID route or an opt-out.
+        (app.originEnv === undefined
+          ? app.framework !== "next" && app.clientIdDocument !== false
+          : !["APP_ORIGIN", "NEXT_PUBLIC_APP_ORIGIN"].includes(app.originEnv))
       ) {
         failures.push(`${path}[${index}]: invalid deployment entry`);
         continue;
@@ -174,6 +317,11 @@ function checkVercelConfig(root) {
         continue;
       }
       const directory = app.rootDirectory;
+      if (directories.has(directory) || projects.has(app.project)) {
+        failures.push(`${path}[${index}]: duplicate deployment root or project`);
+      }
+      directories.add(directory);
+      projects.add(app.project);
       if (!isDirectory(join(root, directory))) {
         failures.push(`${app.project}: rootDirectory ${directory} is missing or not a directory`);
         continue;
@@ -187,11 +335,48 @@ function checkVercelConfig(root) {
         failures.push(`${directory}/package.json: deployed package must be private`);
       }
       checkIgnoreCommand(root, app, failures);
+      checkGitDeployment(root, app, failures);
       if (app.framework === "vite") checkViteConfig(root, directory, failures);
       // Client ID documents are required unless the deployment explicitly opts out.
       if (app.clientIdDocument !== false) {
         checkBuildEnv(root, app, failures);
         checkClientIdBuild(root, app, manifest, failures);
+      }
+    }
+    // Discover deployable apps even when neither inventory nor config exists yet.
+    const configs = new Set(
+      globSync(["apps/*/vercel.json", "apps/*/web/vercel.json"], {
+        cwd: root,
+      }),
+    );
+    for (const path of globSync(["apps/*/package.json", "apps/*/web/package.json"], {
+      cwd: root,
+    })) {
+      const directory = path.slice(0, -"/package.json".length);
+      if (directories.has(directory)) continue;
+      const manifest = readJson(root, path, failures);
+      if (!manifest) continue;
+      const hasBuild =
+        typeof manifest.scripts?.build === "string" && manifest.scripts.build.trim() !== "";
+      const hasFramework = [
+        "dependencies",
+        "devDependencies",
+        "peerDependencies",
+        "optionalDependencies",
+      ].some((field) =>
+        ["next", "vite"].some((name) => Object.hasOwn(manifest[field] ?? {}, name)),
+      );
+      if (hasBuild || hasFramework) configs.add(`${directory}/vercel.json`);
+    }
+    // Retain checks for config-only apps as well as newly discovered manifests.
+    for (const config of configs) {
+      if (!directories.has(config.slice(0, -"/vercel.json".length))) {
+        const value = readJson(root, config, failures);
+        if (value) checkTopLevelProperties(value, config, failures);
+        const suite = config === "apps/suite/vercel.json";
+        if (value && !matchesGitDeployment(value.git?.deploymentEnabled, suite)) {
+          failures.push(`${config}: git.deploymentEnabled must be ${gitDeploymentPolicy(suite)}`);
+        }
       }
     }
   }

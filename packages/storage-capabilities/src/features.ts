@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY GPT-6.1-Sol
 import type {
   CapabilityEntry,
   Feature,
@@ -7,7 +8,7 @@ import type {
   ServiceEntry,
   StorageDescription,
 } from "./types.js";
-import { LWS, NOTIFY, SSD } from "./vocab.js";
+import { ACQ, DCT, LWS, NOTIFY, SSD } from "./vocab.js";
 
 const SSD_NS = "https://jeswr.org/ns/solid-sd#";
 const Y_PROTOCOL_V1 = `${SSD_NS}y-protocol-v1`;
@@ -36,8 +37,7 @@ const CHANNEL_ORDER = ["websocket", "sse", "webhook", "legacy-ws"] as const;
 type Channel = (typeof CHANNEL_ORDER)[number];
 
 /** Local name of an IRI or compact term: the part after the last `#`, `/` or `:`. */
-function localName(iri: unknown): string {
-  if (typeof iri !== "string") return "";
+function localName(iri: string): string {
   return iri.slice(Math.max(iri.lastIndexOf("#"), iri.lastIndexOf("/"), iri.lastIndexOf(":")) + 1);
 }
 
@@ -96,8 +96,12 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
   const lws = d.protocol === "lws";
   /** A description document was read (not only headers). */
   const described = d.descriptionUrl !== null && source !== "probe";
-  /** Non-notification entries are trusted: same-origin description (foreign ones are notify-only). */
-  const authoritative = described && !(d.evidence ?? []).includes("cross-origin-description");
+  /** Root entries need a verified root; also distrust legacy cached foreign descriptions. */
+  const authoritative =
+    described &&
+    !(d.evidence ?? []).some((evidence) =>
+      ["cross-origin-description", "assumed-origin-root"].includes(evidence),
+    );
   const typed = (entry: { type?: readonly string[] }, ...iris: string[]) =>
     Array.isArray(entry.type) && entry.type.some((type) => iris.includes(type));
   // ADR-008 §8: endpoints must share the storage's origin. Only Solid notification
@@ -108,18 +112,23 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
   const service = (...iris: string[]) =>
     services.find((entry) => typed(entry, ...iris) && local(entry));
   const capabilitiesNamed = (name: string) =>
-    capabilities.filter(
-      (entry) => Array.isArray(entry.type) && entry.type.some((type) => localName(type) === name),
-    );
-  const capability = (name: string) => capabilitiesNamed(name)[0];
+    capabilities.filter((entry) => typed(entry, `${SSD_NS}${name}`));
   const cite = (type: string, endpoint?: string) =>
     `${source}:${localName(type)}${endpoint === undefined ? "" : `:${endpoint}`}`;
   const absent = (type: string) => `${source}:absent:${localName(type)}`;
   /** For rows whose only negative evidence is "the description does not list it". */
   const missing = <T>(type: string, detail: T): Feature<T> =>
-    authoritative
-      ? feature("unavailable", absent(type), detail)
-      : feature("unknown", "none", detail);
+    feature("unknown", authoritative ? absent(type) : "none", detail);
+  // SSD-CLI-5/20: at least one implemented profile is enough. No new public option is
+  // needed: these are the query, sync and access profiles implemented by the suite.
+  const profiledService = (profile: string, ...iris: string[]) =>
+    services.find(
+      (entry) =>
+        typed(entry, ...iris) &&
+        local(entry) &&
+        Array.isArray(entry.conformsTo) &&
+        entry.conformsTo.includes(profile),
+    );
 
   // liveUpdates
   const channels = new Map<Channel, { endpoint: string; evidence: string }>();
@@ -132,9 +141,16 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
   for (const entry of services) {
     if (typed(entry, SSD.SolidNotificationService)) {
       notificationServices++;
-      // ADR-008 did:service entries carry the channel as ssd:channelType; legacy-ws is only ever
-      // set by the resolver's own Updates-Via mapping, never read from description content.
-      const kinds = [...entry.type, ...strings(entry.extra ?? {}, "channelType")];
+      // Parsers normalise notify:channelType, with sparq's ssd:channelType retained as a
+      // read-only fallback. Legacy-ws comes only from the resolver's Updates-Via mapping.
+      const extra = entry.extra ?? {};
+      const normative = extra[NOTIFY.channelType] ?? extra.channelType;
+      const kinds =
+        normative === undefined
+          ? [...entry.type, ...strings(extra, "channelType")]
+          : Array.isArray(normative)
+            ? normative
+            : [normative];
       if (!described && entry.type.includes(SSD.LegacyUpdatesVia)) {
         offer("legacy-ws", entry, SSD.LegacyUpdatesVia);
       }
@@ -163,26 +179,12 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
   const best = offered[0] === undefined ? undefined : channels.get(offered[0]);
   const liveUpdates = best
     ? feature("available", best.evidence, { channels: offered, endpoint: best.endpoint })
-    : notificationServices > 0 || described
-      ? feature(
-          "unavailable",
-          notificationServices > 0
-            ? `${source}:unsupported-channels`
-            : absent(SSD.SolidNotificationService),
-          { channels: [] },
-        )
-      : feature("unknown", "none", { channels: [] });
+    : notificationServices > 0
+      ? feature("unavailable", `${source}:unsupported-channels`, { channels: [] })
+      : missing(SSD.SolidNotificationService, { channels: [] });
 
   // realtimeCollab
-  const crdt = authoritative
-    ? services.find(
-        (entry) =>
-          typed(entry, SSD.CrdtSyncService) &&
-          local(entry) &&
-          Array.isArray(entry.conformsTo) &&
-          entry.conformsTo.includes(Y_PROTOCOL_V1),
-      )
-    : undefined;
+  const crdt = authoritative ? profiledService(Y_PROTOCOL_V1, SSD.CrdtSyncService) : undefined;
   const realtimeCollab = crdt
     ? feature("available", cite(SSD.CrdtSyncService, crdt.endpoint), {
         endpoint: crdt.endpoint,
@@ -192,12 +194,12 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
     : missing(SSD.CrdtSyncService, { protocols: [] as string[] });
 
   // serverSearch
-  const sparql = authoritative ? service(SSD.SparqlQueryService) : undefined;
+  const sparql = authoritative ? profiledService(ACQ.profile, SSD.SparqlQueryService) : undefined;
   const serverSearch = sparql
     ? feature("available", cite(SSD.SparqlQueryService, sparql.endpoint), {
         endpoint: sparql.endpoint,
       })
-    : feature("unavailable", absent(SSD.SparqlQueryService), {});
+    : missing(SSD.SparqlQueryService, {});
 
   // typeIndex
   const typeIndexService = authoritative ? service(LWS.TypeIndexService) : undefined;
@@ -220,14 +222,15 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
 
   // accessRequests / accessGrants
   const access = (lwsType: string, ssdType: string) => {
-    const entry = authoritative ? service(lwsType, ssdType) : undefined;
+    // LWS types are normative on both protocols. Retain the old SSD aliases as reads.
+    const entry = authoritative ? profiledService(LWS.AccessProfile, lwsType, ssdType) : undefined;
     return entry
       ? feature(
           "available",
           cite(entry.type.includes(lwsType) ? lwsType : ssdType, entry.endpoint),
           {
             endpoint: entry.endpoint,
-            profiles: [...(entry.conformsTo ?? [])],
+            profiles: [...(entry.conformsTo as readonly string[])],
           },
         )
       : missing(lws ? lwsType : ssdType, { profiles: [] as string[] });
@@ -352,39 +355,58 @@ export function deriveFeatures(d: StorageDescription, probe?: ProbeResult): Feat
     });
   }
 
-  // resumableUploads / recursiveDelete / pagination
-  const capabilityRow = (name: string) => {
-    const entry = authoritative ? capability(name) : undefined;
-    return entry
-      ? feature("available", `${source}:${name}`, undefined)
-      : missing(`${SSD_NS}${name}`, undefined);
-  };
-  const resumableUploads = capabilityRow("ResumableUploads");
-  const recursiveDelete = capabilityRow("RecursiveDelete");
+  // Resumable uploads require an implemented upload profile, just as services do.
+  const resumable = authoritative
+    ? capabilitiesNamed("ResumableUploads").find((entry) => {
+        const profiles = entry.extra?.[DCT.conformsTo] ?? entry.extra?.conformsTo;
+        return (Array.isArray(profiles) ? profiles : [profiles]).includes(
+          "https://tus.io/protocols/resumable-upload",
+        );
+      })
+    : undefined;
+  const resumableUploads = resumable
+    ? feature("available", cite(SSD.ResumableUploads), undefined)
+    : missing(SSD.ResumableUploads, undefined);
+  // SSD D14: RecursiveDelete is a deprecated capability, with no known behaviour.
+  // Only the service advertises POST {container}; it never changes resource DELETE.
+  const recursive = authoritative ? service(SSD.RecursiveDeleteService) : undefined;
+  const recursiveDelete = recursive
+    ? feature("available", cite(SSD.RecursiveDeleteService, recursive.endpoint), undefined)
+    : missing(SSD.RecursiveDeleteService, undefined);
+  const paging = authoritative ? capabilitiesNamed("Pagination")[0] : undefined;
   const pagination = lws
     ? feature("available", `${source}:lws-paging`, undefined)
-    : feature("unavailable", `${source}:solid-no-paging`, undefined);
+    : paging
+      ? feature("available", cite(SSD.Pagination), undefined)
+      : missing(SSD.Pagination, undefined);
 
   // rdfConneg
   let rdfConneg: Features["rdfConneg"];
   if (lws) {
     const formats = new Set<string>();
     for (const entry of authoritative ? capabilities : []) {
+      if (!Array.isArray(entry.type) || !entry.type.includes(SSD.ContentNegotiation)) continue;
+      const extra = entry.extra ?? {};
+      const sources = values(extra, "source");
+      const targets = values(extra, "target");
+      const source = sources[0];
+      // SSD-CAP-CONNEG-1 and SSD-DM-12: reject the entire malformed declaration.
       if (
-        !Array.isArray(entry.type) ||
-        !entry.type.some((type) => localName(type) === "ContentNegotiation")
+        sources.length !== 1 ||
+        typeof source !== "string" ||
+        !MEDIA_TYPE.test(source) ||
+        !RDF_MEDIA_TYPES.has(source.toLowerCase()) ||
+        targets.length === 0 ||
+        !targets.every((type): type is string => typeof type === "string" && MEDIA_TYPE.test(type))
       )
         continue;
-      const extra = entry.extra ?? {};
-      const sources = strings(extra, "source").map((type) => type.toLowerCase());
-      if (!sources.some((type) => RDF_MEDIA_TYPES.has(type))) continue;
-      for (const type of [...sources, ...strings(extra, "target")]) {
+      for (const type of [source, ...targets]) {
         formats.add(type.toLowerCase());
       }
     }
     rdfConneg = formats.size
       ? feature("available", `${source}:ContentNegotiation`, { formats: [...formats] })
-      : feature("unavailable", `${source}:opaque-bodies`, { formats: [] });
+      : missing(SSD.ContentNegotiation, { formats: [] });
   } else {
     rdfConneg = feature("available", `${source}:solid-conneg`, { formats: [...SOLID_RDF_FORMATS] });
   }
@@ -440,9 +462,9 @@ function indexNodes(
 }
 
 /**
- * Read a PatchSupport `format` member: either a JSON map `{ "<source type>": "<patch type>" | [...] }`
- * (LWS example) or RDF-derived `{ source, patchType }` nodes (ADR-008), single or repeated, possibly
- * as `{ "@id" }` references into `nodes`. Linear in the input: each node's types are normalised once.
+ * Read flat PatchSupport source/patchType entries, one per source media type. Read-only
+ * sparq fallbacks: nested ssd:format nodes, LWS format maps and mediaType/patchType entries.
+ * Linear in the input: each shared format node's types are normalised once.
  */
 function patchFormats(
   extra: Readonly<Record<string, unknown>>,
@@ -464,13 +486,30 @@ function patchFormats(
     for (const type of types) known.add(type);
     formats.set(key, known);
   };
+  const sources = values(extra, "source");
+  const patches = values(extra, "patchType");
+  // A malformed flat entry must not be rescued by a legacy field (SSD-CAP-PATCH-1/2).
+  if (
+    ["source", "ssd:source", SSD.source, `${LWS_NS}source`].some((key) => Object.hasOwn(extra, key))
+  ) {
+    if (sources.length === 1) add(sources[0], normalise(patches));
+    return formats;
+  }
+  // Compatibility only: sparq's current LWS mediaType member has no JSON-LD meaning.
+  for (const source of values(extra, "mediaType")) {
+    if (record(source)) {
+      for (const [sourceType, patchTypes] of Object.entries(source)) {
+        add(sourceType, normalise(Array.isArray(patchTypes) ? patchTypes : [patchTypes]));
+      }
+    } else add(source, normalise(patches));
+  }
   for (const value of values(extra, "format")) {
     if (!record(value)) continue;
     const id = value["@id"];
     const format = (typeof id === "string" && nodes.get(id)) || value;
     if (processed.has(format)) continue;
     processed.add(format);
-    const sourceTypes = values(format, "source");
+    const sourceTypes = [...values(format, "source"), ...values(format, "mediaType")];
     if (sourceTypes.length > 0) {
       const types = normalise(values(format, "patchType"));
       for (const sourceType of new Set(sourceTypes)) add(sourceType, types);

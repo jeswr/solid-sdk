@@ -25,7 +25,7 @@ function opening(node: ts.Node) {
       : undefined;
 }
 /** Parse JSX, including expression-valued sizes and aliased imports, without regex gaps. */
-function iconButtonIssues(source: string): string[] {
+function iconButtonIssues(source: string, includeNativeControls = false): string[] {
   const file = ts.createSourceFile(
     "fixture.tsx",
     source,
@@ -34,27 +34,62 @@ function iconButtonIssues(source: string): string[] {
     ts.ScriptKind.TSX,
   );
   const buttonNames = new Set(["Button"]);
+  const iconButtonNames = new Set(["IconButton"]);
   for (const statement of file.statements) {
     if (!ts.isImportDeclaration(statement)) continue;
     const bindings = statement.importClause?.namedBindings;
     if (bindings && ts.isNamedImports(bindings))
       for (const item of bindings.elements) {
         if ((item.propertyName ?? item.name).text === "Button") buttonNames.add(item.name.text);
+        if ((item.propertyName ?? item.name).text === "IconButton")
+          iconButtonNames.add(item.name.text);
       }
   }
   const issues: string[] = [];
+  function hasVisibleText(node: ts.Node): boolean {
+    if (ts.isJsxText(node)) return Boolean(node.text.trim());
+    if (ts.isJsxExpression(node)) return Boolean(node.expression);
+    const element = opening(node);
+    if (!element || !ts.isJsxElement(node)) return false;
+    const tag = element.tagName.getText(file);
+    const hidden = element.attributes.properties
+      .filter(ts.isJsxAttribute)
+      .some((attr) => attr.name.getText(file) === "aria-hidden" && attrValue(attr) === "true");
+    if (hidden || tag === "svg" || /^[A-Z]/.test(tag)) return false;
+    return node.children.some(hasVisibleText);
+  }
   function visit(node: ts.Node, ancestors: ts.JsxElement[]) {
     const element = opening(node);
-    if (
-      element &&
-      (buttonNames.has(element.tagName.getText(file)) ||
-        element.tagName.getText(file).endsWith(".Button"))
-    ) {
+    if (element) {
+      const tag = element.tagName.getText(file);
       const attrs = element.attributes.properties.filter(ts.isJsxAttribute);
       const size = attrs.find((attr) => attr.name.getText(file) === "size");
-      if (size && attrValue(size)?.startsWith("icon")) {
+      const className = attrs.find((attr) => attr.name.getText(file) === "className");
+      const slot = attrs.find((attr) => attr.name.getText(file) === "data-slot");
+      const native =
+        includeNativeControls &&
+        (["button", "a"].includes(tag) || tag.endsWith(".Close")) &&
+        !attrs.some((attr) => attr.name.getText(file) === "asChild") &&
+        ((slot &&
+          /^(?:app-launcher-trigger|navigation-icon-button|customise-rail-drag|top-bar-.*-toggle|details-pane-close|shell-sheet-close)$/.test(
+            attrValue(slot) ?? "",
+          )) ||
+          /\bsuite-(?:rail-button|icon-button|shell-icon-button|drag)\b/.test(
+            className ? (attrValue(className) ?? "") : "",
+          ) ||
+          (ts.isJsxElement(node) && !node.children.some(hasVisibleText)));
+      const iconButton = iconButtonNames.has(tag) || tag.endsWith(".IconButton");
+      if (
+        iconButton ||
+        native ||
+        ((buttonNames.has(tag) || tag.endsWith(".Button")) &&
+          size &&
+          attrValue(size)?.startsWith("icon"))
+      ) {
         const name = attrs.find((attr) =>
-          ["aria-label", "aria-labelledby"].includes(attr.name.getText(file)),
+          (iconButton ? ["label"] : ["aria-label", "aria-labelledby"]).includes(
+            attr.name.getText(file),
+          ),
         );
         const hasName =
           name &&
@@ -67,9 +102,10 @@ function iconButtonIssues(source: string): string[] {
               ) &&
               name.initializer.expression.getText(file) !== "undefined"));
         if (!hasName) issues.push("Icon Button requires an accessible name");
-        const tooltip = ancestors.find((parent) =>
-          /(?:^|\.)Tooltip$/.test(parent.openingElement.tagName.getText(file)),
-        );
+        if (iconButton) return;
+        const tooltip = [...ancestors]
+          .reverse()
+          .find((parent) => /(?:^|\.)Tooltip$/.test(parent.openingElement.tagName.getText(file)));
         const trigger = ancestors.some((parent) =>
           /(?:^|\.)TooltipTrigger$/.test(parent.openingElement.tagName.getText(file)),
         );
@@ -111,6 +147,39 @@ describe("icon-only button lint", () => {
         '<Tooltip><TooltipTrigger asChild><Button size="icon" aria-label="More" /></TooltipTrigger><TooltipContent>More</TooltipContent></Tooltip>',
       ),
     ).toEqual([]));
+  it.each([
+    '<button aria-label="Close apps" title="Close apps"><X /></button>',
+    '<a href="/drive" aria-label="Drive" title="Drive"><AppGlyph /></a>',
+    '<Dialog.Close aria-label="Close details" title="Close"><X /></Dialog.Close>',
+    '<button className="suite-drag" aria-label="Drag Home" title="Drag Home" aria-hidden="true" tabIndex={-1}><GripVertical /></button>',
+    '<button data-slot="app-launcher-trigger" aria-label="Apps" title="Apps"><Grid />{trigger === "button" && <span>Apps</span>}</button>',
+    '<Tooltip><TooltipTrigger asChild><button aria-label="Back"><ArrowLeft /></button></TooltipTrigger></Tooltip>',
+  ])("rejects title-only navigation/shell controls: %s", (source) =>
+    expect(iconButtonIssues(source, true)).toContain(
+      "Icon Button requires a Tooltip trigger and content",
+    ));
+  it.each([
+    '<IconButton label="Close apps"><X /></IconButton>',
+    'import { IconButton as I } from "../components/ui/icon-button.js"; const x = <I label="Close apps"><X /></I>',
+    '<Tooltip><TooltipTrigger asChild><a href="/drive" aria-label="Drive"><AppGlyph /></a></TooltipTrigger><TooltipContent>Drive</TooltipContent></Tooltip>',
+    "<button><Plus /><span>Create</span></button>",
+    '<a href="/drive"><AppGlyph />{app.name}</a>',
+  ])("accepts tooltips or visible text: %s", (source) =>
+    expect(iconButtonIssues(source, true)).toEqual([]));
+  it("rejects an IconButton without a nonempty label", () => {
+    expect(iconButtonIssues('<IconButton label=""><X /></IconButton>', true)).toContain(
+      "Icon Button requires an accessible name",
+    );
+  });
+  it.each(["navigation", "shell"])("guards native icon-only controls in %s", (directory) => {
+    const files = sources(fileURLToPath(new URL(`../src/${directory}`, import.meta.url)));
+    expect(files.length).toBeGreaterThan(0);
+    expect(
+      files.flatMap((file) =>
+        iconButtonIssues(readFileSync(file, "utf8"), true).map((issue) => `${file}: ${issue}`),
+      ),
+    ).toEqual([]);
+  });
   it("enforces the rule throughout suite-ui and apps/suite", () => {
     const files = [
       ...sources(fileURLToPath(new URL("../src", import.meta.url))),
