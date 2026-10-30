@@ -73,6 +73,12 @@ export function text(value: unknown, prefixLength = 0): value is string {
   return value.trim().length > 0;
 }
 
+/** R4 markdown permits only tab, line feed and carriage return below U+0020. */
+export function markdown(value: unknown, prefixLength = 0): value is string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: enforce FHIR markdown's character restriction
+  return text(value, prefixLength) && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/u.test(value);
+}
+
 export function id(value: unknown): value is string {
   return typeof value === "string" && /^[A-Za-z0-9.-]{1,64}$/.test(value);
 }

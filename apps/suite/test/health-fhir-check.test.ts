@@ -144,6 +144,20 @@ describe("FHIR structural self-check", () => {
     rejects(bundle);
   });
 
+  it.each([
+    "urn:uuid:ABCDEFAB-0000-4000-8000-000000000001",
+    "urn:uuid:AbCdEfAb-0000-4000-8000-000000000001",
+    "urn:uuid:abcdefab-0000-4000-8000-000000000001",
+  ])("returns lowercase UUID URNs without mutating caller input: %s", (fullUrl) => {
+    const bundle = fixture();
+    change(bundle, "entry.0.fullUrl", fullUrl);
+    const original = JSON.stringify(bundle);
+    const checked = assertFhirBundle(bundle);
+    expect(checked.entry?.[0]?.fullUrl).toBe(fullUrl.toLowerCase());
+    expect(JSON.stringify(bundle)).toBe(original);
+    expect(assertFhirBundle(checked)).toEqual(checked);
+  });
+
   it("rejects duplicate IDs within a kind", () => {
     const bundle = fixture();
     change(bundle, "entry.3.resource.id", "a");
@@ -207,6 +221,36 @@ describe("FHIR structural self-check", () => {
     const bundle = fixture();
     change(bundle, `entry.2.resource.${path}`, value);
     rejects(bundle);
+  });
+
+  it.each(
+    Array.from({ length: 32 }, (_, code) => code).filter((code) => ![9, 10, 13].includes(code)),
+  )("independently rejects markdown control character %i in Observation notes", (code) => {
+    for (const index of [2, 3]) {
+      const bundle = fixture();
+      change(
+        bundle,
+        `entry.${index}.resource.note.0.text`,
+        `Fictional${String.fromCharCode(code)}example.org device`,
+      );
+      rejects(bundle);
+    }
+  });
+
+  it.each([
+    "\t",
+    "\n",
+    "\r",
+    " ",
+    "\u007f",
+    "\u0085",
+    "é",
+    "📊",
+  ])("independently preserves permitted markdown note characters %j", (character) => {
+    const bundle = fixture();
+    for (const index of [2, 3])
+      change(bundle, `entry.${index}.resource.note.0.text`, `Fictional${character}device`);
+    expect(assertFhirBundle(bundle)).toEqual(bundle);
   });
 
   it.each([

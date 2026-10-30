@@ -451,6 +451,48 @@ describe("health FHIR R4 collection export", () => {
     expectCode(() => build({ ...records(), observations: [value] }), "INVALID_INPUT");
   });
 
+  it.each(
+    Array.from({ length: 32 }, (_, code) => code).filter((code) => ![9, 10, 13].includes(code)),
+  )("rejects markdown control character %i in observation sources before callbacks", (code) => {
+    const source = `Fictional${String.fromCharCode(code)}example.org device`;
+    for (const reading of [
+      observation,
+      {
+        ...observation,
+        metric: "bloodPressure",
+        unit: "mm[Hg]",
+        value: { systolic: 120, diastolic: 80 },
+      } as const,
+    ]) {
+      const injected = { clock: vi.fn(options().clock), uuid: vi.fn(options().uuid) };
+      expectCode(
+        () => buildFhirBundle(records({ observations: [{ ...reading, source }] }), injected),
+        "INVALID_INPUT",
+      );
+      expect(injected.clock).not.toHaveBeenCalled();
+      expect(injected.uuid).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each([
+    "\t",
+    "\n",
+    "\r",
+    " ",
+    "\u007f",
+    "\u0085",
+    "é",
+    "📊",
+  ])("preserves permitted markdown source characters %j", (character) => {
+    const source = `Fictional${character}example.org device`;
+    const bundle = buildFhirBundle(
+      records({ observations: [{ ...observation, source }] }),
+      options(),
+    );
+    expect(bundle.entry?.[0]?.resource).toHaveProperty("note", [{ text: `Source: ${source}` }]);
+    expect(assertFhirBundle(JSON.parse(JSON.stringify(bundle)))).toEqual(bundle);
+  });
+
   it("accepts the FHIR logical-ID length boundary and non-clinically interpreted values", () => {
     for (const value of [0, -1, Number.MAX_SAFE_INTEGER]) {
       const bundle = buildFhirBundle(

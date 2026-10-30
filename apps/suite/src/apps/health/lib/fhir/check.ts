@@ -13,6 +13,7 @@ import {
   array,
   date,
   id,
+  markdown,
   numeric,
   patientReference,
   periodOrdered,
@@ -54,11 +55,11 @@ function quantity(input: unknown, unit: string): Quantity {
   return { value: value.value, unit, system: UCUM_SYSTEM, code: unit };
 }
 
-function annotation(input: unknown): [{ text: string }] {
+function annotation(input: unknown, validateText = text): [{ text: string }] {
   const value = array(input, "INVALID_BUNDLE");
   valid(value.length === 1);
   const item = fields(value[0], ["text"]);
-  valid(text(item.text));
+  valid(validateText(item.text));
   return [{ text: item.text }];
 }
 
@@ -105,7 +106,7 @@ function observation(input: Record<string, unknown>, resourceId: string): Observ
     category: [categoryCode],
     code,
     effectiveDateTime: value.effectiveDateTime,
-    note: annotation(value.note),
+    note: annotation(value.note, markdown),
   };
   if (mapping.code === "85354-9") {
     valid(!Object.hasOwn(value, "valueQuantity"));
@@ -228,7 +229,7 @@ export function assertFhirBundle(input: unknown): FhirBundle {
         onsetDateTime: condition.onsetDateTime,
       };
     }
-    bundle.entry.push({ fullUrl: entry.fullUrl, resource: materialized });
+    bundle.entry.push({ fullUrl, resource: materialized });
   }
   return bundle;
 }

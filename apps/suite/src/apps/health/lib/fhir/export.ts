@@ -16,6 +16,7 @@ import {
   checkCount,
   date,
   id,
+  markdown,
   numeric,
   patientReference,
   periodOrdered,
@@ -32,7 +33,7 @@ function subject(patientUrl: string | undefined): Subject {
 function observation(input: unknown, patientUrl: string | undefined): ObservationResource {
   const value = record(input, ["id", "metric", "value", "unit", "effective", "source"]);
   requireValid(
-    id(value.id) && date(value.effective, false) && text(value.source, "Source: ".length),
+    id(value.id) && date(value.effective, false) && markdown(value.source, "Source: ".length),
     "INVALID_INPUT",
     "Invalid observation fields",
   );
