@@ -134,5 +134,7 @@ describe("Dropbox delta reconciliation", () => {
       scans.mockRestore();
       paths.mockRestore();
     }
-  });
+    // The traversal and path-read budgets above carry the asymptotic bound; the timeout only leaves headroom
+    // for slow CI runners.
+  }, 60_000);
 });

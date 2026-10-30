@@ -1,7 +1,13 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 # Mail model (MAI-00)
 
-Pure RDF models ported from `apps/pod-mail/src/model`; no React or SDK facade imports.
+Typed RDF models ported from `apps/pod-mail/src/model`; no React or SDK facade imports.
+`@jeswr/pod-connectors/mail` owns the shared framework-free MAI-01 path slugs, reserved
+system-folder titles, standard mail IRIs, linear HTML-to-text scanner and MIME address
+conversion. `paths.ts` resolves those relative slugs with `new URL` while preserving its
+existing URL/identifier validation; `vocab.ts` preserves the app's names as re-exports.
+Typed wrappers, MailStore I/O, operations, importer orchestration and Type Index handling
+remain local. The standalone app still uses its older layout without an account segment.
 `Message`, `Thread`, `Folder`, `Attachment` and `TypeIndexDataset` are live typed wrappers.
 Use `parseMailbox` and `serialiseToTurtle` for complete-document round trips.
 
@@ -27,6 +33,9 @@ References/In-Reply-To, handles Gmail labels/status, and yields one message plus
 bytes and attachment binaries. RFC 822 source is preserved after mboxrd unquoting. Each message
 retains decoded HTML as inert `bodyHtml` (`schema:articleBody`); `body` prefers plain text and
 otherwise contains a readable HTML-to-text fallback. HTML must be sanitised before rendering.
+HTML-derived bodies that exceed the shared scanner's visible-text or input-scan limit append
+`HTML_TEXT_TRUNCATION_NOTICE` on its own paragraph; `parseEmail` and `importMbox` expose
+`bodyTruncated: true` on those per-message results. Full HTML and raw source remain available.
 Generated identifiers use reversible tilde escaping, avoiding encoded path delimiters while
 retaining original Message-IDs and folder titles as metadata. System folders use reserved
 `folders/system:<id>.ttl` documents (for example `system:inbox`); custom label keys retain their
@@ -46,3 +55,18 @@ roll back or automatically retry. The caller reports the failure and can reload/
 `register` updates a caller-supplied existing Type Index; SDK-APP-10 owns bootstrap/discovery.
 
 Gmail export label headers follow [Google's Takeout documentation](https://support.google.com/accounts/answer/3024190?hl=en).
+
+Compatibility boundaries: this app still permits dot message/thread IDs, arbitrary explicit
+system keys and unvalidated attachment account/ID/index values; connector entry points keep
+their existing stricter account/document checks. Generic folder documents retain their exact
+case; only system folders use reserved lowercase keys. All mail uses `http://schema.org/`.
+MIME address groups share the existing whole-address `mailto:` encoding; Message-ID,
+References and invalid-date policies remain local because they differ from the connector.
+`htmlText.ts` re-exports the shared `htmlToText` compatibility API, `htmlToTextResult` and
+`HTML_TEXT_TRUNCATION_NOTICE`. The scanner folds only ASCII keywords, preserving Unicode
+offsets. It scans at most `MAX_HTML_INPUT_CHARS = 8,388,608` UTF-16 code units and caps
+normalized visible text at `MAX_HTML_CHARS = 1,048,576` UTF-16 code units, preserving surrogate
+pairs. Leading comments and skipped blocks do not consume the visible-text allowance;
+exceeding either bound sets `truncated`. Compared with the old regex fallback, it drops unfinished markup and
+unclosed script/style/head bodies and decodes uppercase named entities. Valid mail fixtures
+retain their output; the cap and malformed-input behavior prevent hostile rescans.

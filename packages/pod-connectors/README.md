@@ -56,6 +56,8 @@ Entry points:
 - `./oauth`: browser PKCE helpers and popup flow (only `authorize` touches `window`).
 - `./node`: Node CLI, client-credentials Pod fetch, loopback source PKCE and state store.
 - `./testing`: recorded fixture fetch, memory Pod and import helpers; fail-closed fixture recorder.
+- `./mail`: shared browser-safe mail primitives and the existing MailWriter (details below).
+- `./mail/*`: individual primitive, MIME parser and typed-wrapper modules.
 - `./adapters/<id>`: each source's existing adapter (OAuth or export-file).
 - `./core/*`, `./pod/*`, `./<id>/*`, `./registry`, `./types`, `./file-adapters`:
   compatibility modules used by Pod Manager's thin re-export shims.
@@ -74,6 +76,50 @@ reads the current ETag and sends `If-Match`, refusing resources without a strong
 whose `PodWriter` has no `writeBinary` make the call fail with `IntegrationSyncError`.
 
 ## Mail (Gmail and the shared MailWriter)
+
+`@jeswr/pod-connectors/mail` is the source of truth for the framework-free MAI-01
+layout (`pathId`, `SYSTEM_FOLDERS`, account/message/eml/thread/folder/attachment slugs),
+standard mail IRIs (`constants.ts`), the capped linear `htmlToText`/`htmlToTextResult` scanner,
+and MIME address-group flattening (`mailtos`). The suite
+Mail model consumes these primitives while retaining its URL validation, typed RDF
+wrappers, store, operations, importer and Type Index handling. The older standalone
+pod-mail app consumes only identical IRIs; its account-free, percent-encoded paths stay local.
+The public `./mail` entry loads neither `core/` nor `node/`; writer collision checks load
+the existing provenance wrapper lazily when needed. `./mail/constants`, `./mail/paths`,
+`./mail/html-text` and `./mail/addresses` can also be imported independently.
+
+`documentSlug` and `systemFolderSlug` are relative to an account root;
+`accountRoot`, `messageSlug`, `emlSlug`, `threadSlug`, `folderSlug`, `attachmentPath` and
+`attachmentSlug` are relative to the storage or connector root. The raw layout helpers
+`documentSlug`, `systemFolderSlug` and `attachmentPath` leave validation to their caller.
+The connector helpers keep rejecting blank/dot account or document keys; the suite keeps
+its looser legacy document/attachment validation and explicit system-key spelling.
+`folderSlug` maps exact system titles such as `Inbox` to `system:inbox`; a generic
+`documentSlug("folders", "Inbox")` remains a custom document.
+
+Only address conversion is shared from MIME handling: the entire address is encoded in
+`mailto:` (including `@`), exactly as both existing mail importers did. The suite's permissive
+Message-ID/References handling and invalid-date errors stay local; connectors retain strict
+single-token IDs, a 64 KiB References limit and omission of invalid dates. The linear HTML
+scanner replaces the suite's regex fallback: it drops unfinished tags/comments
+and unclosed script/style/head bodies, and decodes uppercase named entities. These edge
+cases differ from the old regex fallback; normal mail output and all stored IRIs stay compatible.
+HTML is still inert data and must be sanitised before rendering.
+
+`htmlToTextResult(html)` returns `{ text, truncated }`; `htmlToText(html)` returns only
+the text for compatibility. Tag and keyword matching folds ASCII letters only, preserving
+Unicode offsets and contents. The scanner visits at most `MAX_HTML_INPUT_CHARS = 8,388,608`
+UTF-16 code units of input (an 8 Mi-code-unit window, not a byte limit), then normalizes
+whitespace and caps visible text at `MAX_HTML_CHARS = 1,048,576` UTF-16 code units without
+splitting surrogate pairs. Work and intermediate storage remain linear in the bounded
+input window. Comments, skipped blocks and collapsed whitespace do not consume the visible
+text allowance. Exceeding either bound sets `truncated`; an input exactly at a bound is
+complete if no text is omitted. Malformed markup keeps the omission behavior above.
+When storing an HTML-derived body, MailWriter and Suite append the exported
+`HTML_TEXT_TRUNCATION_NOTICE` on its own paragraph if truncated:
+`[Message text truncated. The full HTML and the original message are kept with this email.]`
+Full HTML and RFC 822 bytes are retained. Suite's `parseEmail`/`importMbox` per-message results
+also expose `bodyTruncated: true`. Plain MIME text still takes precedence and receives no notice.
 
 `./adapters/gmail` imports a mailbox through the Gmail API: a full sync lists every message
 (`format=raw`), later runs replay `users.history.list` from the persisted `historyId` (an expired
