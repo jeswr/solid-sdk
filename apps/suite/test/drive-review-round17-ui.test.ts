@@ -165,11 +165,18 @@ it.each([
   await focus(search);
   await act(async () => {
     pending.resolve();
-    await mutation.mock.results[0]?.value;
+    const result = await mutation.mock.results[0]?.value;
     listing.resolve();
+    expect(result?.failed).toEqual([]);
   });
   // The real in-memory operation runs every access and delete check; allow CI load.
-  await vi.waitFor(() => expect(removed.isConnected).toBe(false), { timeout: 10_000 });
+  await vi.waitFor(
+    async () => {
+      await act(async () => {});
+      expect(removed.isConnected).toBe(false);
+    },
+    { timeout: 10_000 },
+  );
   expect(document.activeElement).toBe(search);
 });
 

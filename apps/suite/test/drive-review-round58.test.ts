@@ -19,6 +19,7 @@ import {
   EVERYONE,
   OWNER,
   PRIVATE,
+  PUBLIC,
   ROOT,
   turtle,
   WacFields,
@@ -333,8 +334,10 @@ it("round 58: owner-only overwrite refuses an undiscoverable ACL endpoint", asyn
   const from = `${PRIVATE}secret`;
   const client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });
   const selected = await client.stat(from);
+  let namespaceHydrated = false;
   f.after(async (url, method, response) => {
-    if (url === from && method === "HEAD") response.headers.delete("link");
+    if (url === PUBLIC && method === "GET") namespaceHydrated = true;
+    if (namespaceHydrated && url === from && method === "HEAD") response.headers.delete("link");
     return response;
   });
   await expect(

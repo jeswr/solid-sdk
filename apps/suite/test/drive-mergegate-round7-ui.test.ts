@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex
 import { beforeEach, expect, it, vi } from "vitest";
+import { DRIVE_ROOT_CLASS } from "../src/apps/drive/lib/constants";
 import { encodeRef } from "../src/lib/refs";
 import type { PodSession } from "../src/lib/session/pod-session";
 import { act, click, h, key, mount } from "./drive-ui-dom";
@@ -7,7 +8,11 @@ import { OWNER, PUBLIC, ROOT, wacPod } from "./drive-wac-pod";
 
 const route = vi.hoisted(() => ({ ref: "", params: new URLSearchParams() }));
 vi.mock("@/apps/docs/lib/model/type-index", () => ({
-  discoverProfileRegistrations: vi.fn(async () => []),
+  // Metadata/view fixtures have a registered root. Hidden read discovery must
+  // not force an unrelated root-creation mutation during these read-only tests.
+  discoverProfileRegistrations: vi.fn(async () => [
+    { forClass: DRIVE_ROOT_CLASS, container: `${ROOT}drive/` },
+  ]),
   ensureTypeRegistrations: vi.fn(),
 }));
 vi.mock("@/lib/refs", async () => import("../src/lib/refs"));

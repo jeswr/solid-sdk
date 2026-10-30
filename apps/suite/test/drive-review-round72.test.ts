@@ -28,27 +28,37 @@ it("round 72 fixture: creating the absent custom sibling ACL revokes owner Read 
   expect((await f.fetch(endpoint)).status).toBe(403);
 });
 
-it.each([
-  "Upload",
-  "Keep both",
-  "write",
-  "owner-only write",
-  "unconditional write",
-  "prepareTrash",
-  "mergeContainer",
-  "Copy",
-  "Rename",
-  "folder",
-  "nested write",
-  "tree Copy",
-  "tree Move",
-])("round 72: %s discovers absent custom sibling ACLs before any content mutation", async (step) => {
+it.each(
+  [
+    "Upload",
+    "Keep both",
+    "write",
+    "owner-only write",
+    "unconditional write",
+    "prepareTrash",
+    "mergeContainer",
+    "Copy",
+    "Rename",
+    "folder",
+    "nested write",
+    "tree Copy",
+    "tree Move",
+  ].flatMap((step) => [false, true].map((hiddenLink) => ({ step, hiddenLink }))),
+)("round 72/73: $step discovers absent custom sibling ACLs before any content mutation (hidden Link: $hiddenLink)", async ({
+  step,
+  hiddenLink,
+}) => {
   const f = await customAclPod();
   const secret = `${PRIVATE}secret`;
   const targetFolder = step.startsWith("tree") ? `${PRIVATE}target/` : PRIVATE;
   const folderTarget = ["folder", "prepareTrash", "mergeContainer"].includes(step);
   const endpoint = `${targetFolder}secret-policy.ttl${folderTarget ? "/" : ""}`;
   f.endpoints.set(secret, endpoint);
+  if (hiddenLink)
+    f.after(async (url, method, response) => {
+      if (url === secret && method === "HEAD") response.headers.delete("link");
+      return response;
+    });
   const source = `${PRIVATE}notes.ttl`;
   await f.pod.fetch(source, { method: "PUT", body: "" });
   if (step === "mergeContainer") await f.pod.fetch(`${PRIVATE}merge/`, { method: "PUT", body: "" });
@@ -90,7 +100,9 @@ it.each([
         : { kind: "protect-ancestors" },
     );
   };
-  await expect(run()).rejects.toThrow("access-control resource");
+  await expect(run()).rejects.toThrow(
+    hiddenLink ? "Drive could not discover" : "access-control resource",
+  );
   expect(f.calls.filter(({ method }) => ["PUT", "PATCH", "DELETE"].includes(method))).toEqual([]);
   expect((await f.fetch(secret)).status).toBe(200);
   expect((await f.fetch(endpoint)).status).toBe(404);

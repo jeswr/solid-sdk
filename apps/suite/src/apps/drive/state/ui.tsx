@@ -46,6 +46,7 @@ import {
   restoreItems,
   TrashMovingError,
   TrashRestorePartialError,
+  TrashTraversalChangedError,
   trashFolderOf,
   trashItems,
 } from "../lib/operations/operations";
@@ -351,7 +352,8 @@ function failureMessage(error: unknown, fallback: string): string {
     error instanceof DriveOperationInProgressError ||
     error instanceof DriveAccessError ||
     error instanceof TrashMovingError ||
-    error instanceof TrashRestorePartialError
+    error instanceof TrashRestorePartialError ||
+    error instanceof TrashTraversalChangedError
   )
     return error.message;
   if (error instanceof DriveError) {

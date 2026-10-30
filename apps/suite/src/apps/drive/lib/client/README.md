@@ -210,3 +210,14 @@ so an unmounted Drive cannot retain Move/Undo source reservations indefinitely.
 Bootstrap and resume reuse that namespace helper too; root creation, root or
 description marker PATCH, and Type Index overwrite apply the same content-target
 assertion. A describedby target never authorizes treating an ACL as app metadata.
+
+The [round 73 audit](../../../../../test/drive-review-round73-audit.md) records the
+complete discovery and retry audit. Every successful namespace HEAD and containment
+GET must expose WAC/ACP discovery; a hidden child Link stops the entire mutation
+before a placeholder can become that child's absent custom ACL. Renewed destination
+consent retains the original source snapshot, policies and descendant identities.
+Recursive permanent deletion stops on a stale traversal and requires refreshed
+confirmation instead of restarting with newer descendant validators. Delete forever,
+Empty Trash and startup purge share that refusal. The 75-scenario boundary matrices
+cover both ordering shapes and changed final discovery, including renewed-consent
+file and folder moves, with IndexedDB, Web Lock and timer tracing.

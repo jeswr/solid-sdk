@@ -446,6 +446,14 @@ export async function discoverContentTargets(
   targets: readonly string[],
 ): Promise<void> {
   for (const target of targets) access.assertContentDestination(target);
+  const requireDiscovery = (url: string, headers: Headers): string => {
+    if (
+      !access.discover(url, headers, true) &&
+      headers.get("x-solid-demo-access-control") !== "none"
+    )
+      throw new DriveAccessError("Missing access-control discovery (expose Link through CORS)");
+    return headers.get("link") ?? "";
+  };
   const visit = async (
     folder: string,
     verifyHeaders: ResourceAssertion["verifyHeaders"],
@@ -454,12 +462,10 @@ export async function discoverContentTargets(
       fetch: (input, init) => http(input, { ...init, cache: "no-store" }),
     });
     verifyHeaders(current.response.headers);
-    access.discover(folder, current.response.headers, true);
+    const links = requireDiscovery(folder, current.response.headers);
     // A partial containment page cannot prove that a candidate is ordinary
     // content. Do not silently omit resources beyond the first page.
-    for (const link of (current.response.headers.get("link") ?? "").matchAll(
-      /<([^>]*)>\s*((?:;\s*[^,]*)*)/g,
-    )) {
+    for (const link of links.matchAll(/<([^>]*)>\s*((?:;\s*[^,]*)*)/g)) {
       const rel = /;\s*rel\s*=\s*(?:"([^"]*)"|([^;\s]+))/i.exec(link[2] as string);
       if ((rel?.[1] ?? rel?.[2] ?? "").split(/\s+/).includes("next"))
         throw new DriveAccessError("Incomplete containment discovery");
@@ -470,7 +476,7 @@ export async function discoverContentTargets(
     for (const item of members) {
       const response = await http(item.id, { method: "HEAD", cache: "no-store" });
       if (!response.ok) throw errorFor(response.status, item.id);
-      access.discover(item.id, response.headers, true);
+      requireDiscovery(item.id, response.headers);
       if (item.id.endsWith("/"))
         folders.push({
           url: item.id,
@@ -482,6 +488,7 @@ export async function discoverContentTargets(
   try {
     const root = await http(storageUrl, { method: "HEAD", cache: "no-store" });
     if (!root.ok) throw errorFor(root.status, storageUrl);
+    requireDiscovery(storageUrl, root.headers);
     if (root.headers.get("x-solid-demo-access-control") !== "none")
       await visit(storageUrl, access.captureEndpoint(storageUrl, root.headers));
   } catch (cause) {
@@ -2141,6 +2148,7 @@ export function createSolidDriveClient(options: {
     approvedEtag?: string,
     sourceGuards: readonly ResourceIdentity[] = [],
     approvedDiscovery?: ResourceAssertion["verifyHeaders"],
+    approvedSource?: SourceSnapshot,
   ): Promise<MoveResult> => {
     access.assertContentDestination(to);
     if (moving) access.assertContentDestination(from);
@@ -2154,7 +2162,14 @@ export function createSolidDriveClient(options: {
     );
     for (const identity of capturedGuards) versions.track(identity.url);
     await deletion.guard(from);
-    const source = await snapshot(from, true, approvedDiscovery);
+    // Renewed destination consent never renews the source content or policies.
+    // Reuse the entire original capture, including descendants and bindings.
+    const source = approvedSource ?? (await snapshot(from, true, approvedDiscovery));
+    if (approvedSource)
+      for (const node of snapshots(source)) {
+        await (node.binding as AccessBinding).recheck();
+        await verifySnapshotIdentity(node);
+      }
     if (approvedEtag !== undefined && source.etag !== validator(from, approvedEtag))
       throw new DriveError("conflict", 412, from);
     // A late revocation must leave a private recovery copy. Establish its owner
@@ -2463,6 +2478,7 @@ export function createSolidDriveClient(options: {
                 approvedEtag ?? source.etag,
                 capturedGuards,
                 approvedDiscovery,
+                source,
               );
             }
             throw error;

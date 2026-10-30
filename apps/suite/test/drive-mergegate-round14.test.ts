@@ -274,7 +274,11 @@ it.each([
   try {
     expect(await protectionLedger(f.fetch).get(PRIVATE)).toBeDefined();
     await new Promise<void>((resolve) => setImmediate(resolve));
-    expect(settled).not.toHaveBeenCalled();
+    if (mode === "hidden Link") {
+      // Round 73: incomplete namespace discovery refuses before entering the
+      // provisioning flight. Other uploads still wait for that flight to settle.
+      await expect(uploading).rejects.toThrow("Drive could not discover");
+    } else expect(settled).not.toHaveBeenCalled();
     expect(f.pod.has(`${PRIVATE}concurrent`)).toBe(false);
   } finally {
     release.resolve();

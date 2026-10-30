@@ -124,6 +124,8 @@ const steps = [
   "custom-name Upload payload",
   "custom-name copy payload",
   "custom-name rename",
+  "renewed-consent move",
+  "renewed-consent move tree",
 ] as const;
 type Step = (typeof steps)[number];
 
@@ -133,13 +135,15 @@ async function scenario(variant: Step, events: string[], captureModes = false) {
     () => `00000000-0000-4000-8000-${String(++sequence).padStart(12, "0")}`,
   );
   const tree = variant.endsWith(" tree");
+  const renewed = variant.startsWith("renewed-consent ");
+  const base = renewed ? variant.slice("renewed-consent ".length) : variant;
   const shared = variant.startsWith("shared ");
   const denyAll = variant.startsWith("deny-all ");
   const safeName = variant.startsWith("safe-name ");
   const customName = variant.startsWith("custom-name ");
   const step = (
     tree
-      ? variant.slice(0, -5)
+      ? base.slice(0, -5)
       : shared
         ? variant.slice(7)
         : denyAll
@@ -148,7 +152,7 @@ async function scenario(variant: Step, events: string[], captureModes = false) {
             ? variant.slice(10)
             : customName
               ? variant.slice(12)
-              : variant
+              : base
   ) as Step;
   const f = await rdfPod();
   if (shared) f.policies.set(`${PRIVATE}.policy`, await aclBody(PRIVATE, true));
@@ -171,6 +175,8 @@ async function scenario(variant: Step, events: string[], captureModes = false) {
   let completionTarget: string | undefined;
   let completionWritten = false;
   let completionChanged = false;
+  const consentDestination = `${DRIVE}consent/`;
+  let consentWidened = false;
   const http: typeof fetch = async (input, init) => {
     const url = String(input);
     const method = init?.method ?? "GET";
@@ -191,6 +197,18 @@ async function scenario(variant: Step, events: string[], captureModes = false) {
       });
     }
     const response = await f.fetch(input, init);
+    if (
+      renewed &&
+      !consentWidened &&
+      url.startsWith(consentDestination) &&
+      !url.endsWith(".policy") &&
+      method === "PUT" &&
+      headers.has("if-match") &&
+      response.ok
+    ) {
+      consentWidened = true;
+      f.policies.set(`${consentDestination}.policy`, await aclBody(consentDestination, true));
+    }
     if (captureModes) response.headers.set("wac-allow", 'user="read write control",public=""');
     if (url === completionTarget && method === "PUT" && headers.has("if-match") && response.ok)
       completionWritten = true;
@@ -215,8 +233,12 @@ async function scenario(variant: Step, events: string[], captureModes = false) {
     storageUrl: ROOT,
     fetch: http,
     webId: OWNER,
-    ...(denyAll ? { confirmAccess: async () => "keep" as const } : {}),
+    ...(denyAll || renewed ? { confirmAccess: async () => "keep" as const } : {}),
   });
+  if (renewed) {
+    await f.pod.fetch(consentDestination, { method: "PUT", body: "" });
+    f.policies.set(`${consentDestination}.policy`, await aclBody(consentDestination));
+  }
   const folder =
     tree ||
     [
@@ -692,7 +714,8 @@ async function scenario(variant: Step, events: string[], captureModes = false) {
     });
     targetCheck = 2;
     run = () => uploadFile(client, PRIVATE, new Blob(["upload"]), "secret", "replace", selected);
-  } else if (step === "move") run = () => moveItems(client, [selected], `${PRIVATE}target/`);
+  } else if (step === "move")
+    run = () => moveItems(client, [selected], renewed ? consentDestination : `${PRIVATE}target/`);
   else if (step === "rename")
     run = () =>
       renameItem(
@@ -759,7 +782,7 @@ it.each([
 
 it.each(
   steps,
-)("round 72 shape a: %s retains a replacement at its final identity check", async (step) => {
+)("round 73 shape a: %s retains a replacement at its final identity check", async (step) => {
   const events: string[] = [];
   const s = await scenario(step, events);
   let checks = 0;
@@ -789,7 +812,7 @@ it.each(
 
 it.each(
   steps,
-)("round 72 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
+)("round 73 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   const events: string[] = [];
   const s = await scenario(step, events);
@@ -809,6 +832,11 @@ it.each(
     events.push("Web Lock");
     return Reflect.apply(request, locks, args);
   });
+  const timeout = globalThis.setTimeout;
+  vi.spyOn(globalThis, "setTimeout").mockImplementation((callback, delay, ...args) => {
+    events.push("timer");
+    return timeout(callback, delay, ...args);
+  });
   await s.run().catch(() => undefined);
   const targetMutations = s.mutations.filter(({ url }) => url === s.target);
   if (["copy rollback without Link", "container rollback without Link"].includes(step))
@@ -819,7 +847,7 @@ it.each(
 
 it.each(
   steps.flatMap((step) => ["endpoint", "modes"].map((change) => ({ step, change }))),
-)("round 72 final discovery: $step refuses changed captured $change on its conditional HEAD", async ({
+)("round 73 final discovery: $step refuses changed captured $change on its conditional HEAD", async ({
   step,
   change,
 }) => {
