@@ -269,3 +269,57 @@ branches were switched, no remote operations were run, and no other checkouts
 were touched. `roborev` remains unavailable, so automated per-commit review could
 not run; no review tool was installed. Tracker operations remain with the
 dispatcher. There are no new open questions or semantic choices for this round.
+
+## Fix round 5 — affine anchor and RGB rounding precision
+
+Both findings against `7627ed8e3c0508584bfe375b0cef7c34039be950` are addressed:
+
+- `e02b8e35` (`fix(sheets): round scale anchors once`) represents finite inputs
+  as exact binary integers, preserves the complete affine interpolation expression,
+  and rounds only the resolved anchor. A numeric anchor at 1.57 now agrees with
+  the 57% anchor over endpoints 1 and 2. Regression cases cover both anchor orders,
+  percentiles, genuinely reversed adjacent anchors, and normal/subnormal ties.
+- `5a0a20f2` (`fix(sheets): preserve ratios through RGB rounding`) carries exact
+  cell-position differences and spans through channel interpolation, rounding once
+  to the final integer channel with halves upward. The value 15 over endpoints
+  0 and 22, coloured from `#000000` to `#0B0B0B`, now receives `#080808`.
+  Regression cases cover multiple channels, descending colours, adjacent cell
+  values, nonzero starting channels and both halves of three-colour scales.
+  The API documentation describes the corrected arithmetic.
+
+Thirteen new regression cases bring conditional-formatting tests to 180, with
+100% statements, branches, functions and lines for every directory source file.
+Four anchor cases and three RGB cases failed before their corresponding fixes.
+No rule shapes, dependencies, manifests or unrelated implementation files changed.
+
+All commands below used `PATH=/opt/node24/bin:$PATH` (Node v24.22.1, pnpm 10.4.1).
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/sheets-condformat.test.ts --coverage.enabled=false` | Expected regression failures before each fix: four anchor cases, then three RGB cases. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/sheets-condformat.test.ts --coverage --coverage.include='src/apps/sheets/lib/condformat/**/*.ts'` | PASS: 180 tests; 100% statements, branches, functions and lines. |
+| `pnpm exec turbo run build --filter='@jeswr/app-suite^...'` | PASS: seven dependency builds. |
+| `pnpm --filter @jeswr/app-suite run lint` | PASS: 604 files; the same 54 existing warnings outside this lane. |
+| `pnpm --filter @jeswr/app-suite run build` | PASS: production compilation, type validation and static generation. |
+| `pnpm --filter @jeswr/app-suite run typecheck` | PASS. |
+| `pnpm --filter @jeswr/app-suite run test` | PASS: 153 files / 7,687 tests; 100% statements, branches, functions and lines. |
+| `pnpm run lint:root` | PASS, including all workspace guards. |
+| `TURBO_SCM_BASE=7627ed8e3c0508584bfe375b0cef7c34039be950 pnpm run gate` | PASS: 12/12 tasks, seven cached; 1m45.246s. |
+| `pnpm run gate:full` | FAIL outside this lane: three existing agent-layer cases timed out at 5,000ms in `test/agent-layers.test.mjs`. 47 tasks succeeded (seven cached), 212 total when Turbo stopped; 2m9.365s. Root tests: 876 passed, three failed. |
+| `git diff --check` | PASS. |
+
+The full-workspace failures exercise disallowed path characters for
+`module.require(TARGET);`, `import type Value = require(TARGET);`, and
+`type Value = import(TARGET).Value;`, in the same root-test timeout group recorded
+in earlier rounds. Both `test/agent-layers.test.mjs` and
+`scripts/check-agent-layers.mjs` are unchanged relative to this round's starting
+commit. Their implementation and timeout settings remain outside this fix round.
+Full-workspace verification is incomplete; both requested fixes are complete.
+
+The final documentation commit records this fix round's validation. No dependency
+additions, package-policy checks, UI changes, screenshots or generated source
+artifacts were required. No branches were switched, no remote operations were
+run, and no other checkouts were touched. `roborev` remains unavailable, so
+automated per-commit review could not run; no review tool was installed. Tracker
+operations remain with the dispatcher. There are no unfinished implementation
+items or open questions for this round.
