@@ -2,7 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 import type { CellIsRule, CellRange, CellStyle, CellValue, ConditionalFormatRule } from "./model";
 import { colourScale } from "./scale";
-import { checkLimits, compare, validateCell, validateRule } from "./validation";
+import { arrayItem, checkLimits, compare, validateCell, validateRule } from "./validation";
 
 type Key = number | string | boolean;
 type Matcher = (value: CellValue) => CellStyle | undefined;
@@ -154,15 +154,19 @@ export function evaluateConditionalFormats(
   rules: readonly ConditionalFormatRule[],
 ): CellStyle[][] {
   checkLimits(values, rules);
-  const validated = Array.from(rules, validateRule);
+  const validated = Array.from({ length: rules.length }, (_, index) =>
+    validateRule(arrayItem(rules, index)),
+  );
   const needsNumbers = validated.some((rule) =>
     ["top", "bottom", "aboveAverage", "belowAverage", "colorScale"].includes(rule.kind),
   );
   const needsCounts = validated.some((rule) => rule.kind === "duplicate" || rule.kind === "unique");
   const numbers: number[] = [];
   const counts = new Map<Key, number>();
-  for (const row of values) {
-    for (const value of row) {
+  for (let rowIndex = 0; rowIndex < values.length; rowIndex++) {
+    const row = arrayItem(values, rowIndex, "INVALID_RANGE");
+    for (let column = 0; column < row.length; column++) {
+      const value = arrayItem(row, column, "INVALID_RANGE");
       validateCell(value);
       if (needsNumbers && typeof value === "number") {
         numbers.push(value);

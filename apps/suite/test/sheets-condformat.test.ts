@@ -931,6 +931,54 @@ describe("typed rule validation", () => {
 
 describe("range validation and early size limits", () => {
   it.each([
+    "cell",
+    "first row",
+    "later row",
+    "rule",
+    "anchor",
+  ] as const)("rejects %s array accessors without invoking them", (location) => {
+    for (const behavior of ["changing", "throwing", "setter-only"] as const) {
+      const values: CellValue[][] = [[1], [2]];
+      const anchors: [ColourAnchor, ColourAnchor] = [min, max];
+      const rules: ConditionalFormatRule[] = [basic, { kind: "colorScale", anchors }];
+      const container =
+        location === "cell"
+          ? (values[0] as CellValue[])
+          : location === "rule"
+            ? rules
+            : location === "anchor"
+              ? anchors
+              : values;
+      const index = location === "later row" ? 1 : 0;
+      const initial = container[index];
+      let accesses = 0;
+      Object.defineProperty(
+        container,
+        index,
+        behavior === "setter-only"
+          ? {
+              set() {
+                accesses++;
+              },
+            }
+          : {
+              get() {
+                accesses++;
+                if (behavior === "throwing") throw new Error("must not invoke");
+                return accesses === 1 ? initial : undefined;
+              },
+            },
+      );
+      rejects(
+        values,
+        rules,
+        location === "rule" || location === "anchor" ? "INVALID_RULE" : "INVALID_RANGE",
+      );
+      expect(accesses).toBe(0);
+    }
+  });
+
+  it.each([
     null,
     undefined,
     {},

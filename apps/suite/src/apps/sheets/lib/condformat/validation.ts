@@ -22,18 +22,31 @@ function invalidRange(): never {
   );
 }
 
+export function arrayItem<T>(
+  values: readonly T[],
+  index: number,
+  code: ConditionalFormatErrorCode = "INVALID_RULE",
+): T {
+  const descriptor = Object.getOwnPropertyDescriptor(values, index);
+  if (!descriptor || !("value" in descriptor)) {
+    throw new ConditionalFormatError(code, "Expected an array data element");
+  }
+  return descriptor.value as T;
+}
+
 /** Check both limits before traversing rules, rows, values, or allocating result storage. */
 export function checkLimits(values: CellRange, rules: readonly ConditionalFormatRule[]): void {
   if (!Array.isArray(rules) || rules.length > MAX_RULES) invalidRule();
   if (!Array.isArray(values)) invalidRange();
   if (values.length > MAX_RANGE_CELLS) tooLarge();
   if (values.length === 0) return;
-  const first = values[0];
+  const first = arrayItem(values, 0, "INVALID_RANGE");
   if (!Array.isArray(first)) invalidRange();
   if (values.length * first.length > MAX_RANGE_CELLS) tooLarge();
   if (first.length === 0) invalidRange();
   // Only row metadata is visited before the cell count and rectangular shape are known.
-  for (const row of values) {
+  for (let index = 0; index < values.length; index++) {
+    const row = arrayItem(values, index, "INVALID_RANGE");
     if (!Array.isArray(row)) invalidRange();
     if (row.length > MAX_RANGE_CELLS) tooLarge();
     if (row.length !== first.length) invalidRange();
@@ -204,9 +217,10 @@ export function validateRule(value: ConditionalFormatRule): ConditionalFormatRul
         (initial.anchors.length !== 2 && initial.anchors.length !== 3)
       )
         invalidRule();
-      const anchors = Array.from(initial.anchors, anchor) as
-        | [ColourAnchor, ColourAnchor]
-        | [ColourAnchor, ColourAnchor, ColourAnchor];
+      const source = initial.anchors;
+      const anchors = Array.from({ length: source.length }, (_, index) =>
+        anchor(arrayItem(source, index)),
+      ) as [ColourAnchor, ColourAnchor] | [ColourAnchor, ColourAnchor, ColourAnchor];
       // Numeric anchor order is invalid independently of whether the range contains numbers.
       for (let index = 1; index < anchors.length; index++) {
         const before = anchors[index - 1] as ColourAnchor;
