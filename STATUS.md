@@ -334,3 +334,63 @@ no per-commit automated verdict could be obtained; the diff was manually reviewe
 No dependencies, UI, manifests, lockfiles or unrelated source changed. No screenshots
 or `check:packages` run apply. No Git fetch, merge, push, branch switch, PR or tracker
 mutation was performed. There are no open questions.
+
+## UUID logical-ID review fix, round 4 — 2026-10-30 UTC
+
+Review head: `4150afe849903c46c6ba620000d2494098834593`.
+
+- `1bb23b41` — `fix(health): reject uppercase UUID logical IDs`.
+  Reject uppercase or mixed-case UUID-form logical IDs in the shared validator,
+  with `INVALID_INPUT` on export and `INVALID_BUNDLE` on independent self-check.
+  Preserve lowercase UUIDs and other valid, case-sensitive IDs. Add 18 regressions
+  covering every resource kind, lowercase and non-UUID controls, and rejection
+  before injected export callbacks run.
+- Final documentation commit — `docs(health): record UUID ID validation`.
+
+All pnpm commands used the Node 24 / pnpm 10.4.1 environment prefix:
+`env PATH=/opt/node24/bin:$PATH npm_config_manage_package_manager_versions=false COREPACK_HOME=/tmp/sst-6jil-corepack`.
+Dependency lifecycle scripts stayed disabled.
+
+1. `pnpm --filter @jeswr/app-suite exec vitest run test/health-fhir.test.ts test/health-fhir-check.test.ts --coverage.enabled=false`
+   — Expected FAIL before the fix: eight failed, 411 passed. Both export and
+   independent self-check reproduced the finding.
+2. `pnpm --filter @jeswr/app-suite exec vitest run test/health-fhir.test.ts test/health-fhir-check.test.ts test/health-fhir-proxies.test.ts --coverage --coverage.include='src/apps/health/lib/fhir/**/*.ts'`
+   — PASS, 446 tests; 100% statements, branches, functions and lines in every
+   FHIR file, also confirmed in the complete app coverage report.
+3. `pnpm exec biome check apps/suite/src/apps/health/lib/fhir/validation.ts apps/suite/test/health-fhir.test.ts apps/suite/test/health-fhir-check.test.ts`
+   — PASS, no diagnostics.
+4. `pnpm exec turbo run build --filter='@jeswr/app-suite^...' --concurrency=4`
+   — PASS, all seven dependency builds.
+5. The package gate — PASS, exit 0:
+
+   ```sh
+   pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test
+   ```
+
+   Production build and strict typecheck passed. All 7,953 tests in 155 files
+   passed with 100% per-file coverage. Lint reported 54 existing warnings,
+   no errors, and no FHIR diagnostics.
+6. `pnpm run lint:root` — PASS, exit 0, including all repository guards.
+7. `TURBO_SCM_BASE=4150afe849903c46c6ba620000d2494098834593 pnpm run gate`
+   — PASS, exit 0; all 12 tasks passed, including all 7,953 app tests.
+8. `pnpm run gate:full` — FAIL, exit 1; 310 successful tasks out of 363 scheduled.
+   All 879 root tests passed. The unchanged federation-trust package failed its
+   existing inline snapshot at `packages/federation-trust/test/characterization.test.ts:196`:
+   `delegation credential structure is stable` expects serialized JWK field order
+   `crv, x, kty`, while the runtime produces `kty, crv, x`. Its other 53 tests passed.
+   This is the same unrelated full-gate limitation recorded in round 2.
+   `git diff --exit-code 4150afe849903c46c6ba620000d2494098834593 -- packages/federation-trust test`
+   — PASS; neither the failing package nor root tests changed in this round.
+9. `git diff --check` — PASS before the final documentation commit.
+
+Logs are local artifacts at `/tmp/sst-6jil-fix4-{red,fhir,dependencies,app-gate,root-lint,affected-gate,full-gate}.log`.
+Coverage summaries are at `/tmp/sst-6jil-fix4-{fhir,app}-coverage-summary.json`.
+Generated untracked `public/{callback.html,clientid.jsonld}` files from the full
+gate's seven pod web builds were removed after validation.
+
+The requested fix and tests are complete. Full-workspace validation is limited by
+the unrelated snapshot failure above. `roborev` is unavailable, so no per-commit
+automated verdict could be obtained; the diff was manually reviewed.
+No dependencies, UI, manifests, lockfiles or unrelated source changed. No screenshots
+or `check:packages` run apply. No Git fetch, merge, push, branch switch, PR or tracker
+mutation was performed. There are no open questions.
