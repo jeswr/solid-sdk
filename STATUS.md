@@ -3,6 +3,57 @@
 
 # sst-qk8g — DOC-L4 lane report
 
+## Fix round 9 — 2026-10-30
+
+Resumed on `lane/sst-qk8g` at `f8beffcca89c5428761ee226a0e66d993df350d6`.
+Fixed exactly the two reviewed findings without adding dependencies.
+
+- `3e1df623` — `fix(docs): honor Markdown indentation columns`: remove fenced-code
+  indentation by columns for both fence spellings, expanding only tabs that cross the removal
+  boundary and retaining subsequent content tabs. Check original list-item indentation before
+  accepting setext underlines; lazy underlines use the existing typed `unsupported` error and
+  whole-source literal fallback. This is the conservative option explicitly permitted by the review.
+- This final report commit — `docs: record Markdown fix round 9 verification`.
+
+Added 19 regression tests covering both fence spellings, one to three indentation columns,
+mixed spaces/tabs, tabs after the removal boundary, typed errors and literal fallback for lazy
+list underlines, ordered/task/nested/quoted lists, and valid indented headings. Updated the
+library README. The initial regression run reproduced both findings before implementation.
+
+Verification (all pnpm commands used `export PATH=/opt/node24/bin:$PATH`, selecting Node 24.22.1):
+
+- `pnpm --filter @jeswr/app-suite exec vitest run test/docs-markdown.test.ts --coverage.include='src/apps/docs/lib/markdown/**/*.ts'`
+  — **PASS**, 315 tests; Markdown coverage **100%** statements (387/387), branches (420/420),
+  functions (71/71), and lines (336/336). No coverage exclusions or threshold changes.
+- `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test`
+  — **PASS**, including dependency declarations and the production build;
+  30 test files, **1,713 tests passed**, all configured app coverage metrics **100%**.
+  Existing money-library lint warnings remain warnings.
+- `pnpm run lint:root` — **PASS**.
+- `TURBO_SCM_BASE=f8beffcca89c5428761ee226a0e66d993df350d6 pnpm run gate`
+  — **PASS**, **6/6 tasks**, including app lint/build/typecheck/tests.
+- `pnpm run gate:full` — **FAIL**, **52 successful / 220 total tasks**. The unchanged
+  `test/agent-layers.test.mjs:509` case “rejects disallowed path characters globally: import
+  TARGET;” exceeded its 5,000 ms timeout during concurrent workspace builds.
+- `pnpm run test:root` — **PASS**, all **745 tests** in 9 files, run alone after that timeout.
+- `pnpm run gate:full` (retry) — **FAIL**, **87 successful / 269 total tasks**. The unchanged
+  `test/check-sdk-layers.test.mjs:328` case “validates pathological specs in under 50 ms each”
+  measured approximately 75 ms against its 50 ms bound. Both timing-sensitive cases passed
+  in the standalone root run; these failures suggest build-load contention. No unrelated
+  tests or configuration were changed. The prior federation-trust snapshot failure was not reached.
+- `git diff --check` — **PASS** before the final report commit.
+
+Logs: `/tmp/sst-qk8g-fix9-before.log`, `/tmp/sst-qk8g-fix9-focused.log`,
+`/tmp/sst-qk8g-fix9-app-gate.log`, `/tmp/sst-qk8g-fix9-lint-root.log`,
+`/tmp/sst-qk8g-fix9-gate.log`, `/tmp/sst-qk8g-fix9-gate-full.log`,
+`/tmp/sst-qk8g-fix9-test-root.log`, `/tmp/sst-qk8g-fix9-gate-full-retry.log`.
+No dependency checks or screenshots apply to this pure-library fix. No generated assets
+were committed. No fetch, merge, branch switch, push, PR, or other checkout changes were performed.
+The `roborev` CLI remains unavailable, so no automated per-commit verdict is claimed.
+
+Both requested fixes are complete. No new scope ambiguity or open questions.
+The full-workspace timing failures and unavailable review CLI remain verification limitations.
+
 ## Fix round 8 — 2026-10-30
 
 Resumed on `lane/sst-qk8g` at `8dd2fff4f06955dc32b5b8ee0affbc34b95d9403`.
