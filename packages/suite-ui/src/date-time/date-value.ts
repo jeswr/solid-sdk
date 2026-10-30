@@ -41,7 +41,7 @@ export function parseDateTime(text: string, locale: string, reference: Date): Da
   // GB numeric dates are day-first. Named-month phrases use casual to avoid
   // chrono 2.x treating "December 25" as December of the year 2025 in GB mode.
   const results = (
-    locale.toLowerCase() === "en-gb" && /\b\d{1,2}[/.]\d{1,2}/.test(input) ? en.GB : en.casual
+    locale.toLowerCase() === "en-gb" && /\b\d{1,2}[/.-]\d{1,2}/.test(input) ? en.GB : en.casual
   ).parse(input, reference, { forwardDate: !/\b(last|yesterday|ago)\b/i.test(input) });
   const result = results[0];
   if (

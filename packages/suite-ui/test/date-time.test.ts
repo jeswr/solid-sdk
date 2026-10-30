@@ -39,6 +39,20 @@ for (const locale of ["en-GB", "en-US"])
       });
     });
   });
+describe.each(["en-GB", "en-US"])("numeric date separators in %s", (locale) => {
+  it.each(["/", ".", "-"])("respects date order with %s", (separator) => {
+    const date = locale === "en-GB" ? "2026-11-10" : "2026-10-11";
+    const input = `10${separator}11${separator}2026`;
+    expect(parseDateTime(input, locale, reference)).toEqual({
+      status: "valid",
+      value: { kind: "date", date },
+    });
+    expect(parseDateTime(`${input} 5pm`, locale, reference)).toEqual({
+      status: "valid",
+      value: { kind: "dateTime", dateTime: `${date}T17:00:00.000Z` },
+    });
+  });
+});
 it.each([
   "nonsense",
   "tomorrow and rubbish",
