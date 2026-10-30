@@ -771,6 +771,55 @@ describe("project discovery and first use", () => {
   });
 });
 describe("task conditional CRUD", () => {
+  it.each([
+    "both triggers",
+    "neither trigger",
+    "invalid time",
+  ])("repairs a persisted reminder with %s through updateTask", async (kind) => {
+    const pod = new Pod();
+    const tasks = store(pod, { typeIndex: false });
+    const url = `${storage}repair.ttl`;
+    const fields =
+      kind === "both triggers"
+        ? `<${NS.SCHEDULING}triggerOffset> "-PT1H"; <${NS.SCHEDULING}triggerTime> "2026-10-25T12:00:00Z";`
+        : kind === "invalid time"
+          ? `<${NS.SCHEDULING}triggerTime> "not-a-date";`
+          : "";
+    for (const id of ["<#alarm>", "_:alarm"]) {
+      for (const clear of [true, false]) {
+        pod.seed(
+          url,
+          `<#it> a <${NS.WF}Task>; <${NS.DCT}title> "Repair";
+          <${NS.WF}dateDue> "2026-10-25T12:00:00Z"^^<${NS.XSD}dateTime>;
+          <${NS.SCHEDULING}hasReminder> ${id}.
+          ${id} a <${NS.SCHEDULING}Reminder>; ${fields}
+          <${NS.DCT}description> "Keep this annotation".`,
+        );
+        const item = await tasks.readTask(url);
+        const previous = [
+          ...node(item.task.id, item.dataset).nodes(`${NS.SCHEDULING}hasReminder`),
+        ][0] as Node;
+        const replacement = {
+          id: id === "<#alarm>" ? `${url}#alarm` : undefined,
+          offset: "-PT30M",
+        };
+        const updated = await tasks.updateTask(item, (task) => {
+          task.reminders = clear ? [] : [replacement];
+        });
+        const expected = clear ? [] : [{ offset: "-PT30M" }];
+        expect(updated.task.reminders).toMatchObject(expected);
+        expect((await tasks.readTask(url)).task.reminders).toMatchObject(expected);
+        if (!clear && id === "<#alarm>") {
+          const repaired = [
+            ...node(updated.task.id, updated.dataset).nodes(`${NS.SCHEDULING}hasReminder`),
+          ][0];
+          expect(repaired?.value).toBe(previous.value);
+          expect(repaired?.text(`${NS.DCT}description`)).toBe("Keep this annotation");
+        }
+        expect(pod.mutations().at(-1)?.headers.get("If-Match")).toBe(item.etag);
+      }
+    }
+  });
   it("uses final response identities for redirected tasks, projects and container listings", async () => {
     const pod = new Pod();
     const tasks = store(pod, { typeIndex: false });

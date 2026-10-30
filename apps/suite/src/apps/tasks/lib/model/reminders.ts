@@ -47,17 +47,18 @@ function reminderId(taskId: string, reminder: Reminder): string {
 export function readReminders(task: Node): Reminder[] {
   return aliases(`${SCHED}hasReminder`)
     .flatMap((p) => [...task.nodes(p)])
-    .map((value) => {
-      const offset = value.text(`${SCHED}triggerOffset`);
-      const time = value.date(`${SCHED}triggerTime`);
-      if ((offset !== undefined) === (time !== undefined))
-        throw new TypeError("A reminder requires exactly one trigger.");
-      const reminder = offset === undefined ? { time: time as Date } : { offset };
-      return {
-        ...reminder,
-        id: value.termType === "NamedNode" ? value.value : reminderId(task.value, reminder),
-      };
-    });
+    .map((value) => readReminder(task, value));
+}
+function readReminder(task: Node, value: Node): Reminder {
+  const offset = value.text(`${SCHED}triggerOffset`);
+  const time = value.date(`${SCHED}triggerTime`);
+  if ((offset !== undefined) === (time !== undefined))
+    throw new TypeError("A reminder requires exactly one trigger.");
+  const reminder = offset === undefined ? { time: time as Date } : { offset };
+  return {
+    ...reminder,
+    id: value.termType === "NamedNode" ? value.value : reminderId(task.value, reminder),
+  };
 }
 export function writeReminders(
   task: Node,
@@ -66,8 +67,18 @@ export function writeReminders(
 ): void {
   validateReminders(reminders, due);
   const old = aliases(`${SCHED}hasReminder`).flatMap((p) => [...task.nodes(p)]);
-  // Pair synthetic blank-node IDs with their original nodes before triggers change.
-  const ids = readReminders(task).map((reminder) => reminder.id);
+  // Named identities survive invalid triggers. Only derive blank-node identities
+  // when possible, and never parse old triggers just to remove them.
+  const ids = reminders.length
+    ? old.map((value) => {
+        if (value.termType === "NamedNode") return value.value;
+        try {
+          return readReminder(task, value).id;
+        } catch {
+          return undefined;
+        }
+      })
+    : [];
   const desired = reminders.map((reminder) => {
     if (reminder.id) {
       requireHttp(reminder.id);

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   DataFactory,
   documentUrl,
+  type Node,
   NS,
   node,
   parse,
@@ -620,4 +621,26 @@ it("copies a shared reminder on edit and keeps shared nodes intact on removal", 
   task.nodes(`${NS.SCHEDULING}hasReminder`).add(node(`${taskUrl}#alarm`, dataset));
   writeReminders(task, [], now);
   expect(readReminders(other)[0]?.offset).toBe("-PT1H");
+});
+
+it.each([
+  { offset: "-PT1H" },
+  { time: now },
+])("retains a valid blank reminder's identity among malformed reminders: %o", async (trigger) => {
+  const dataset = await parse(
+    taskUrl,
+    `<#it> <${NS.SCHEDULING}hasReminder> _:broken, _:valid.
+    _:broken a <${NS.SCHEDULING}Reminder>.
+    _:valid <${NS.DCT}description> "Keep this annotation".`,
+  );
+  const task = node(`${taskUrl}#it`, dataset);
+  const valid = [...task.nodes(`${NS.SCHEDULING}hasReminder`)][1] as Node;
+  valid.setText(`${NS.SCHEDULING}triggerOffset`, trigger.offset);
+  valid.setDate(`${NS.SCHEDULING}triggerTime`, trigger.time);
+  const id = computeFireTimes(task.value, now, [trigger])[0]?.id;
+  writeReminders(task, [{ id, offset: "PT0S" }], now);
+  const changed = [...task.nodes(`${NS.SCHEDULING}hasReminder`)][0];
+  expect(changed?.value).toBe(valid.value);
+  expect(changed?.text(`${NS.DCT}description`)).toBe("Keep this annotation");
+  expect(readReminders(task)).toEqual([{ id: `${task.value}/reminder-PT0S`, offset: "PT0S" }]);
 });
