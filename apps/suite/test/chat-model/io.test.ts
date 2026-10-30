@@ -114,6 +114,8 @@ it("creates a room's container, advertised ACL, and descriptor without public or
   expect(readRoom(room, result.dataset)?.members).toEqual([alice, bob]);
   expect(p.calls.map((call) => call.url)).toEqual([
     `${storage}chat/`,
+    `${storage}chat/`,
+    `${storage}chat/rooms/`,
     `${storage}chat/rooms/`,
     room,
     `${room}.acl`,
@@ -245,7 +247,17 @@ it("validates existing dated parents and never overwrites conflicting creations 
   const p = pod();
   for (const url of [`${room}2026/`, `${room}2026/10/`])
     p.files.set(url, { body: `<${url}> a <${NS.LDP}Container>.`, etag: '"old"' });
+  // CSS authorizes an existing-resource PUT as Write before checking preconditions.
+  p.setFault((url, method) =>
+    method === "PUT" && p.files.has(url) ? new Response(null, { status: 403 }) : undefined,
+  );
   await sendMessage(p.fetch, room, input);
+  expect(p.calls.map(({ method, url }) => [method, url])).toEqual([
+    ["GET", dayUrl(room, at)],
+    ["GET", `${room}2026/`],
+    ["GET", `${room}2026/10/`],
+    ["PUT", dayUrl(room, at)],
+  ]);
   p.setFault((url, method) =>
     url === dayUrl(room, at) && method === "PATCH"
       ? new Response(null, { status: 412, headers: { etag: '"current"' } })
@@ -270,6 +282,45 @@ it("validates existing dated parents and never overwrites conflicting creations 
     "missing-etag",
   );
   expect(noTag.calls).toHaveLength(1);
+});
+
+it("revalidates a parent created concurrently after a 404 and preserves it on 412", async () => {
+  for (const container of [true, false]) {
+    const p = pod();
+    const year = `${room}2026/`;
+    const body = container ? `<${year}> a <${NS.LDP}BasicContainer>.` : "";
+    p.setFault((url, method) => {
+      if (url === year && method === "PUT") {
+        p.files.set(year, { body, etag: '"concurrent"' });
+        return new Response(null, { status: 412 });
+      }
+      return undefined;
+    });
+    if (container) await sendMessage(p.fetch, room, input);
+    else await expect(sendMessage(p.fetch, room, input)).rejects.toThrow(ChatModelError);
+    expect(p.calls.filter(({ url }) => url === year).map(({ method }) => method)).toEqual([
+      "GET",
+      "PUT",
+      "GET",
+    ]);
+    expect(p.files.get(year)).toEqual({ body, etag: '"concurrent"' });
+    expect(p.files.has(dayUrl(room, at))).toBe(container);
+  }
+});
+
+it("propagates parent read and create errors without writing a day", async () => {
+  for (const method of ["GET", "PUT"]) {
+    const p = pod();
+    const year = `${room}2026/`;
+    p.setFault((url, verb) =>
+      url === year && verb === method ? new Response(null, { status: 403 }) : undefined,
+    );
+    await expect(sendMessage(p.fetch, room, input)).rejects.toMatchObject({ status: 403 });
+    expect(p.calls.filter(({ url }) => url === year).map(({ method }) => method)).toEqual(
+      method === "GET" ? ["GET"] : ["GET", "PUT"],
+    );
+    expect(p.files.has(dayUrl(room, at))).toBe(false);
+  }
 });
 
 it("conditionally saves own edits, task overlays and tombstones in their original day", async () => {

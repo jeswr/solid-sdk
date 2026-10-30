@@ -98,20 +98,28 @@ async function ensureContainer(
   base: string,
   url: string,
 ): Promise<void> {
-  const response = await scoped(fetch, base)(url, {
-    method: "PUT",
-    headers: {
-      "content-type": "text/turtle",
-      "if-none-match": "*",
-      link: `<${NS.LDP}BasicContainer>; rel="type"`,
-    },
-    body: "",
-  });
-  if (response.status !== 412) {
-    checked(response);
-    return;
+  let existing: ChatDocument;
+  try {
+    existing = await loadChat(fetch, base, url);
+  } catch (error) {
+    if (!(error instanceof RdfFetchError && error.status === 404)) throw error;
+    // PUT on an existing container requires Write even with If-None-Match.
+    const response = await scoped(fetch, base)(url, {
+      method: "PUT",
+      headers: {
+        "content-type": "text/turtle",
+        "if-none-match": "*",
+        link: `<${NS.LDP}BasicContainer>; rel="type"`,
+      },
+      body: "",
+    });
+    if (response.status !== 412) {
+      checked(response);
+      return;
+    }
+    // A concurrent creator won; validate its resource before using it.
+    existing = await loadChat(fetch, base, url);
   }
-  const existing = await loadChat(fetch, base, url);
   if (
     !new Container(url, existing.dataset, DataFactory).type.has(`${NS.LDP}Container`) &&
     !new Container(url, existing.dataset, DataFactory).type.has(`${NS.LDP}BasicContainer`)
