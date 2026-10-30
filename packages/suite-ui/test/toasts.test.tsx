@@ -3,6 +3,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import axe from "axe-core";
+import type { MouseEvent } from "react";
 import { toast as sonnerToast } from "sonner";
 import { afterEach, beforeAll, expect, test, vi } from "vitest";
 import { Toaster, toast, toastDurations } from "../src/components/ui/sonner.js";
@@ -101,9 +102,10 @@ test.each([
   toast("Moved", { id, action: { label: "Undo", onClick: vi.fn() } });
   toast.info("Action changed", { id, action });
   toast.success("Confirmed", { id });
+  const expectedAction = action ? { ...action, onClick: expect.any(Function) } : action;
   expect(toast.getToasts().filter((entry) => entry.id === id)).toEqual([
-    expect.objectContaining({ action, duration: 5000 }),
-    expect.objectContaining({ action, duration: 5000 }),
+    expect.objectContaining({ action: expectedAction, duration: 5000 }),
+    expect.objectContaining({ action: expectedAction, duration: 5000 }),
   ]);
 });
 test.each(["id", "all"] as const)("dismiss(%s) clears Undo and explicit duration state", (kind) => {
@@ -119,6 +121,84 @@ test.each(["id", "all"] as const)("dismiss(%s) clears Undo and explicit duration
     duration: 5000,
     action: undefined,
   });
+});
+test.each([
+  { kind: "default", button: "action" },
+  { kind: "default", button: "cancel" },
+  { kind: "promise-loading", button: "action" },
+  { kind: "promise-loading", button: "cancel" },
+  { kind: "promise", button: "action" },
+  { kind: "promise", button: "cancel" },
+] as const)("$kind clears state after clicking $button before reusing the ID", async ({
+  kind,
+  button,
+}) => {
+  vi.useFakeTimers();
+  render(<Toaster />);
+  const callback = vi.fn();
+  const data = {
+    action: { label: "Undo", onClick: button === "action" ? callback : vi.fn() },
+    ...(button === "cancel"
+      ? { cancel: { label: "Cancel", onClick: callback }, duration: 12000 }
+      : {}),
+  };
+  await act(async () => {
+    if (kind === "default") toast("Moved", data);
+    else {
+      await toast
+        .promise(Promise.resolve("Moved"), {
+          ...data,
+          ...(kind === "promise-loading" ? { loading: "Moving" } : {}),
+          success: "Moved",
+        })
+        .unwrap();
+    }
+  });
+  const entry = toast.getToasts().at(-1);
+  if (!entry) throw new Error("Expected a toast");
+  await act(() => vi.advanceTimersByTimeAsync(0));
+  fireEvent.click(screen.getByRole("button", { name: button === "action" ? "Undo" : "Cancel" }));
+  expect(callback).toHaveBeenCalledOnce();
+  expect(callback).toHaveBeenCalledWith(expect.objectContaining({ type: "click" }));
+  await act(() => vi.advanceTimersByTimeAsync(300));
+  expect(screen.queryByText("Moved")).toBeNull();
+  act(() => {
+    toast.success("Fresh toast", { id: entry.id });
+  });
+  expect(toast.getToasts().find((toast) => toast.id === entry.id)).toMatchObject({
+    duration: 5000,
+    action: undefined,
+  });
+  await act(() => vi.advanceTimersByTimeAsync(0));
+  expect(screen.getByText("Fresh toast")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  await act(() => vi.advanceTimersByTimeAsync(5300));
+  expect(screen.queryByText("Fresh toast")).toBeNull();
+});
+test("preventDefault in an action keeps its Undo state and callback", async () => {
+  vi.useFakeTimers();
+  render(<Toaster />);
+  const undo = vi.fn((event: MouseEvent<HTMLButtonElement>) => event.preventDefault());
+  let id: string | number = "";
+  act(() => {
+    id = toast("Moved", { action: { label: "Undo", onClick: undo } });
+  });
+  await act(() => vi.advanceTimersByTimeAsync(0));
+  fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+  expect(undo).toHaveBeenCalledOnce();
+  await act(() => vi.advanceTimersByTimeAsync(300));
+  expect(screen.getByText("Moved")).toBeTruthy();
+  act(() => {
+    toast.success("Confirmed", { id });
+  });
+  expect(toast.getToasts().find((entry) => entry.id === id)).toMatchObject({
+    duration: 8000,
+    action: { label: "Undo", onClick: expect.any(Function) },
+  });
+  await act(() => vi.advanceTimersByTimeAsync(5200));
+  expect(screen.getByText("Confirmed")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+  expect(undo).toHaveBeenCalledTimes(2);
 });
 test.each([
   { source: "shared", loading: true },
@@ -138,7 +218,10 @@ test.each([
     })
     .unwrap();
   const entry = toast.getToasts().at(-1);
-  expect(entry).toMatchObject({ action, duration: 8000 });
+  expect(entry).toMatchObject({
+    action: { ...action, onClick: expect.any(Function) },
+    duration: 8000,
+  });
   if (!entry) throw new Error("Expected a promise result toast");
   toast.success("Confirmed", { id: entry.id });
   expect(toast.getToasts().at(-1)).toMatchObject({ duration: 8000 });

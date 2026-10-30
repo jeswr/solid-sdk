@@ -13,12 +13,32 @@ type ToastId = string | number;
 type ToastState = { hasUndo: boolean; explicitDuration: number | undefined };
 type PolicyOptions = Pick<
   ExternalToast,
-  "id" | "action" | "duration" | "onAutoClose" | "onDismiss"
+  "id" | "action" | "cancel" | "duration" | "onAutoClose" | "onDismiss"
 >;
 const toastStates = new Map<ToastId, ToastState>();
 let nextPromiseId = 0;
 
-function options(data: PolicyOptions = {}, error = false) {
+function buttons(data: PolicyOptions, getId: () => ToastId | undefined) {
+  const wrapped: Pick<ExternalToast, "action" | "cancel"> = {};
+  for (const key of ["action", "cancel"] as const) {
+    if (!(key in data)) continue;
+    const button = data[key];
+    wrapped[key] =
+      button && typeof button === "object" && "label" in button
+        ? {
+            ...button,
+            onClick: (event) => {
+              button.onClick?.(event);
+              // Sonner removes button-dismissed toasts without lifecycle callbacks.
+              const id = getId();
+              if (!event.defaultPrevented && id !== undefined) toastStates.delete(id);
+            },
+          }
+        : button;
+  }
+  return wrapped;
+}
+function options(data: PolicyOptions = {}, error = false, getId = () => data.id) {
   const previous = data.id === undefined ? undefined : toastStates.get(data.id);
   const action = data.action;
   const state: ToastState = {
@@ -59,6 +79,7 @@ function options(data: PolicyOptions = {}, error = false) {
       ...(error ? { closeButton: true, dismissible: true } : {}),
       // Sonner retains dismissed entries; a fresh record must not inherit their actions.
       ...(!previous && !("action" in data) ? { action: undefined } : {}),
+      ...buttons(data, getId),
       ...lifecycle,
     },
   };
@@ -68,8 +89,9 @@ function publish(
   data: ExternalToast = {},
   error = false,
 ) {
-  const prepared = options(data, error);
-  const id = create({ ...data, ...prepared.options });
+  let id: ToastId;
+  const prepared = options(data, error, () => id);
+  id = create({ ...data, ...prepared.options });
   toastStates.set(id, prepared.state);
   return id;
 }
@@ -130,7 +152,7 @@ export const toast: typeof sonnerToast = Object.assign(notify, sonnerToast, {
         // Without a loading toast, shared actions and lifecycle handlers are first
         // installed when the promise settles rather than inherited from a prior toast.
         ...(data.loading === undefined
-          ? { ...initial.lifecycle, ...("action" in data ? { action: data.action } : {}) }
+          ? { ...initial.lifecycle, ...buttons(data, () => resultId) }
           : {}),
         ...extended,
         ...prepared.options,
