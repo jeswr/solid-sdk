@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { vi } from "vitest";
-export function mockPod() {
+export function mockPod({ putEtags = true }: { putEtags?: boolean } = {}) {
   const files = new Map<string, { body: string | Blob; type: string; etag: string | null }>();
   let revision = 0;
   const failures = new Map<string, number>();
@@ -36,7 +36,7 @@ export function mockPod() {
       type: headers.get("content-type") as string,
       etag,
     });
-    return new Response(null, { status: 201, headers: { etag } });
+    return new Response(null, { status: 201, headers: putEtags ? { etag } : {} });
   });
   return { fetch, files, failures };
 }

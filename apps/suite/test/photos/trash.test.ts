@@ -298,14 +298,122 @@ it("persists purging after partial deletion, forbids restore, and permits purge 
   expect(pod.files.has(url)).toBe(false);
 });
 
-it("requires the claim write's ETag before any restore or purge side effects", async () => {
+it("rejects an unpersisted claim before any restore or purge side effects", async () => {
   const pod = mockPod();
   const io = photoStorage(pod.fetch, storage);
   await io.write(url, buildTrash(url, photo, record), { create: true });
   vi.spyOn(io, "write").mockResolvedValue({ etag: null });
-  await expect(restorePhoto(io, url)).rejects.toThrow("ETag");
-  await expect(purgePhoto(io, url)).rejects.toThrow("ETag");
+  await expect(restorePhoto(io, url)).rejects.toMatchObject({ status: 412 });
+  await expect(purgePhoto(io, url)).rejects.toMatchObject({ status: 412 });
   expect(pod.files.has(originalUrl)).toBe(false);
+  expect(pod.fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+});
+
+const recoveryOperations = [
+  ["restore", restorePhoto],
+  ["purge", purgePhoto],
+] as const;
+
+it.each(
+  recoveryOperations,
+)("recovers %s and cleanup retries when PUT omits ETags but GET supplies them", async (name, operation) => {
+  const pod = mockPod({ putEtags: false });
+  const io = photoStorage(pod.fetch, storage);
+  const located = { ...photo, exif: { location: { lat: 51.5, long: -0.12 } } };
+  await io.write(url, buildTrash(url, located, record), { create: true });
+  for (const binary of [photo.contentUrl, photo.thumbnailUrl])
+    pod.files.set(binary, { body: new Blob(), type: "image/jpeg", etag: '"binary"' });
+  pod.failures.set(`DELETE ${url}`, 503);
+  await expect(operation(io, url)).rejects.toMatchObject({ status: 503 });
+  const claimed = pod.files.get(url);
+  expect(claimed).toBeDefined();
+  expect(parseTrash(url, (await io.read(url)).dataset).record.state).toBe(
+    name === "restore" ? "restoring" : "purging",
+  );
+  const deletions = pod.fetch.mock.calls.filter(
+    ([input, init]) => String(input) === url && init?.method === "DELETE",
+  );
+  expect(new Headers(deletions[0]?.[1]?.headers).get("if-match")).toBe(claimed?.etag);
+  const live = pod.files.get(originalUrl);
+  pod.failures.delete(`DELETE ${url}`);
+  await operation(photoStorage(pod.fetch, storage), url);
+  expect(pod.files.has(url)).toBe(false);
+  expect(pod.files.has(originalUrl)).toBe(name === "restore");
+  expect(pod.files.get(originalUrl)).toBe(live);
+  if (name === "restore") expect((await io.loadPhoto(originalUrl)).photo).toEqual(located);
+  expect(pod.files.has(photo.contentUrl)).toBe(name === "restore");
+  expect(pod.files.has(photo.thumbnailUrl)).toBe(name === "restore");
+});
+
+it.each(
+  recoveryOperations,
+)("fences %s when the claim changes before its validator can be read back", async (name, operation) => {
+  for (const change of ["state", "receipt", "photo"] as const) {
+    const pod = mockPod({ putEtags: false });
+    const io = photoStorage(pod.fetch, storage);
+    await io.write(url, buildTrash(url, photo, record), { create: true });
+    for (const binary of [photo.contentUrl, photo.thumbnailUrl])
+      pod.files.set(binary, { body: new Blob(), type: "image/jpeg", etag: '"binary"' });
+    const write = io.write;
+    vi.spyOn(io, "write").mockImplementationOnce(async (...args) => {
+      const result = await write(...args);
+      const changed = new Store([...args[1]]);
+      const doc = new TrashDoc(`${url}#trash`, changed, DataFactory);
+      if (change === "state") doc.state = name === "restore" ? "purging" : "restoring";
+      if (change === "receipt") doc.restoreActivity = `${url}#another-restore`;
+      if (change === "photo")
+        new PhotographDoc(`${originalUrl}#it`, changed, DataFactory).name = "Another photo";
+      await photoStorage(pod.fetch, storage).write(url, changed, {
+        etag: pod.files.get(url)?.etag as string,
+      });
+      return result;
+    });
+    await expect(operation(io, url)).rejects.toMatchObject({ status: 412 });
+    expect(pod.files.has(originalUrl)).toBe(false);
+    expect(pod.files.has(url)).toBe(true);
+    expect(pod.files.has(photo.contentUrl)).toBe(true);
+    expect(pod.files.has(photo.thumbnailUrl)).toBe(true);
+    expect(pod.fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+  }
+});
+
+it.each(
+  recoveryOperations,
+)("requires a strong read-back ETag before %s side effects", async (_, operation) => {
+  for (const etag of [null, 'W/"weak"']) {
+    const pod = mockPod({ putEtags: false });
+    const io = photoStorage(pod.fetch, storage);
+    await io.write(url, buildTrash(url, photo, record), { create: true });
+    const write = io.write;
+    vi.spyOn(io, "write").mockImplementationOnce(async (...args) => {
+      const result = await write(...args);
+      const file = pod.files.get(url);
+      if (!file) throw new Error("fixture");
+      file.etag = etag;
+      return result;
+    });
+    await expect(operation(io, url)).rejects.toThrow("ETag");
+    expect(pod.files.has(originalUrl)).toBe(false);
+    expect(pod.files.has(url)).toBe(true);
+    expect(pod.fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
+  }
+});
+
+it.each(
+  recoveryOperations,
+)("retains trash if the %s claim read-back fails", async (_, operation) => {
+  const pod = mockPod({ putEtags: false });
+  const io = photoStorage(pod.fetch, storage);
+  await io.write(url, buildTrash(url, photo, record), { create: true });
+  const write = io.write;
+  vi.spyOn(io, "write").mockImplementationOnce(async (...args) => {
+    const result = await write(...args);
+    pod.failures.set(`GET ${url}`, 503);
+    return result;
+  });
+  await expect(operation(io, url)).rejects.toMatchObject({ status: 503 });
+  expect(pod.files.has(originalUrl)).toBe(false);
+  expect(pod.files.has(url)).toBe(true);
   expect(pod.fetch.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(false);
 });
 

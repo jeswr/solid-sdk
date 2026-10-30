@@ -11,6 +11,7 @@ import {
   SetFrom,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
+import { isomorphic } from "rdf-isomorphic";
 import { PhotoIoError, type PhotoStorage } from "./io.js";
 import { buildPhoto, type Photo, parsePhoto, RestoreReceipt } from "./photograph.js";
 import { documentUrl, httpIri, identifier, isoDate } from "./validation.js";
@@ -103,7 +104,7 @@ export function parseTrash(
   };
 }
 function requireEtag(etag: string | null): string {
-  if (!etag) throw new TypeError("Trash operations require an ETag");
+  if (!etag || etag.startsWith("W/")) throw new TypeError("Trash operations require a strong ETag");
   return etag;
 }
 
@@ -172,7 +173,13 @@ async function claim(
   state: NonNullable<TrashRecord["state"]>,
 ): Promise<string> {
   new TrashDoc(`${documentUrl(url)}#trash`, dataset, DataFactory).state = state;
-  return requireEtag((await io.write(url, dataset, { etag })).etag);
+  const result = await io.write(url, dataset, { etag });
+  if (result.etag) return requireEtag(result.etag);
+  // CSS may omit PUT validators. Only use a read's validator for the same claim,
+  // including its receipt and photo data, across blank-node relabeling.
+  const current = await io.read(url);
+  if (!isomorphic([...dataset], [...current.dataset])) throw new PhotoIoError(url, 412);
+  return requireEtag(current.etag);
 }
 
 async function requireMissing(io: PhotoStorage, record: TrashRecord): Promise<void> {
