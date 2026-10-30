@@ -1,6 +1,11 @@
 // AUTHORED-BY Codex
 
-import { type CommitChecks, type CommitEffects, commitHttp, type ResourceIdentity } from "./commit";
+import {
+  type CommitChecks,
+  type CommitEffects,
+  commitHttp,
+  type ResourceAssertion,
+} from "./commit";
 import { type DeletionRequest, deletionLedger, protectionLedger } from "./protection-ledger";
 
 export type DeleteOutcome = "done" | "not-performed" | "unknown";
@@ -82,7 +87,7 @@ export function deletionControl(http: typeof fetch, error: (status: number, url:
     recovery?: string,
     commit: CommitChecks &
       CommitEffects & {
-        readonly survivors?: readonly ResourceIdentity[];
+        readonly survivors?: readonly ResourceAssertion[];
         readonly afterCommit?: (response: Response) => void;
       } = {},
   ) => {

@@ -83,6 +83,19 @@ Failure keeps a durable
 receipt for the actual installed policy, including narrower intersections, so Retry
 cannot repair another client's replacement or revocation.
 
+Supplemental final resource HEADs carry mandatory `ResourceAssertion` values:
+content validator and captured endpoint assertion travel together. Parent
+preparation captures discovery; scoped and original snapshot assertions prevent
+a fresher read from replacing that baseline. Quarantine checks backup assertions
+before clearing, and recovery deletion checks survivor assertions before DELETE.
+Payload overwrites keep their approved If-Match verbatim; atomic parent receipts
+advance ancestor guards rather than a later overwrite decision.
+
+The [round 66 audit](../../../../../test/drive-review-round66-audit.md) maps every
+audited call site, parent/backup/survivor discovery assertions, the immutable
+folder overwrite validator, Details reconciliation and relocation, and the
+54-step matrix for both ordering shapes.
+
 The [round 65 audit](../../../../../test/drive-review-round65-audit.md) lists every
 audited call site, completion endpoint assertions and recovery, Details refresh
 ownership, Move-tree focus, and the 51-step matrix for both ordering shapes.

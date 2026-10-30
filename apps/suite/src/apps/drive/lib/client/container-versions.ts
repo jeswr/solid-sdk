@@ -1,11 +1,14 @@
 // AUTHORED-BY Codex
-import type { ResourceIdentity } from "./commit";
+import type { ResourceAssertion, ResourceIdentity } from "./commit";
 
 /** Only a mutation response can advance an approved parent validator. Standard
  * LDP supplies no atomic parent receipt: keep the approved tag in that case and
  * let the next conditional check refuse, retaining recovery for a new decision.
  */
-export function containerVersions(http: typeof fetch) {
+export function containerVersions(
+  http: typeof fetch,
+  captureEndpoint: (url: string, headers: Headers) => ResourceAssertion["verifyHeaders"],
+) {
   const transitions = new Map<string, Map<string, string>>();
   const track = (url: string) => {
     if (!url.endsWith("/")) return;
@@ -13,19 +16,20 @@ export function containerVersions(http: typeof fetch) {
   };
   const current = (url: string, etag: string | undefined): string | undefined =>
     etag ? (transitions.get(url)?.get(etag) ?? etag) : undefined;
-  const identity = (original: ResourceIdentity): ResourceIdentity => ({
-    url: original.url,
+  const identity = <T extends ResourceIdentity>(original: T): T => ({
+    ...original,
     get etag() {
       return current(original.url, original.etag) as string;
     },
   });
-  const prepare = async (target: string): Promise<ResourceIdentity[]> => {
-    const parents: ResourceIdentity[] = [];
+  const prepare = async (target: string): Promise<ResourceAssertion[]> => {
+    const parents: ResourceAssertion[] = [];
     for (const url of transitions.keys()) {
       if (url === target || !target.startsWith(url)) continue;
       const response = await http(url, { method: "HEAD", cache: "no-store" });
       const etag = response.headers.get("etag");
-      if (response.ok && etag && !etag.startsWith("W/")) parents.push({ url, etag });
+      if (response.ok && etag && !etag.startsWith("W/"))
+        parents.push({ url, etag, verifyHeaders: captureEndpoint(url, response.headers) });
     }
     return parents;
   };

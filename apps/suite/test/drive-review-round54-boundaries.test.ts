@@ -97,13 +97,18 @@ const steps = [
   "Replace completion recovery clearing",
   "Move completion recovery clearing",
   "Copy completion recovery clearing",
+  "shared partial file Restore",
+  "shared partial folder Restore",
+  "verification and replay failure clearing",
 ] as const;
 type Step = (typeof steps)[number];
 
 async function scenario(variant: Step, events: string[]) {
   const tree = variant.endsWith(" tree");
-  const step = (tree ? variant.slice(0, -5) : variant) as Step;
+  const shared = variant.startsWith("shared ");
+  const step = (tree ? variant.slice(0, -5) : shared ? variant.slice(7) : variant) as Step;
   const f = await rdfPod();
+  if (shared) f.policies.set(`${PRIVATE}.policy`, await aclBody(PRIVATE, true));
   const mutations: { url: string; prior: string | undefined }[] = [];
   let afterIdentity: ((url: string, response: Response) => Promise<void>) | undefined;
   let completionTarget: string | undefined;
@@ -508,6 +513,19 @@ async function scenario(variant: Step, events: string[]) {
     });
     targetCheck = 2;
     run = () => uploadFile(client, PRIVATE, new Blob(["upload"]), "secret", "replace", selected);
+  } else if (step === "verification and replay failure clearing") {
+    let written = false;
+    f.after(async (url, method, response) => {
+      if (url === source && method === "PUT" && response.ok) written = true;
+      return response;
+    });
+    f.intercept(async (url, init) =>
+      written && url === `${source}.policy` && !init?.method
+        ? new Response(null, { status: 503 })
+        : undefined,
+    );
+    targetCheck = 2;
+    run = () => uploadFile(client, PRIVATE, new Blob(["upload"]), "secret", "replace", selected);
   } else if (step === "replacement rollback") {
     let uploaded = false;
     f.after(async (url, method, response) => {
@@ -549,7 +567,7 @@ async function scenario(variant: Step, events: string[]) {
 
 it.each(
   steps,
-)("round 65 shape a: %s retains a replacement at its final identity check", async (step) => {
+)("round 66 shape a: %s retains a replacement at its final identity check", async (step) => {
   const events: string[] = [];
   const s = await scenario(step, events);
   let checks = 0;
@@ -577,7 +595,7 @@ it.each(
 
 it.each(
   steps,
-)("round 65 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
+)("round 66 shape b: %s performs no local async work after the final HTTP identity check", async (step) => {
   vi.stubGlobal("indexedDB", new IDBFactory());
   const events: string[] = [];
   const s = await scenario(step, events);

@@ -12,7 +12,9 @@ import { toast } from "@jeswr/suite-ui";
 import { useRouter } from "next/navigation";
 import {
   createContext,
+  type Dispatch,
   type ReactNode,
+  type SetStateAction,
   useCallback,
   useContext,
   useLayoutEffect,
@@ -77,9 +79,9 @@ interface DriveUiValue {
   readonly setPreview: (preview: PreviewState | undefined) => void;
   readonly detailsOpen: boolean;
   readonly setDetailsOpen: (open: boolean | ((open: boolean) => boolean)) => void;
-  /** The items the details pane describes (the current selection). */
+  /** Current Details targets, chosen by selection or explicitly opened. */
   readonly detailsItems: readonly DriveItem[];
-  readonly setDetailsItems: (items: readonly DriveItem[]) => void;
+  readonly setDetailsItems: Dispatch<SetStateAction<readonly DriveItem[]>>;
   /** Ask the current folder view to open the file picker (`folder` = directory picker). */
   readonly requestUpload: (folder?: boolean) => void;
   readonly uploadRequest: { id: number; folder: boolean } | undefined;
@@ -403,6 +405,7 @@ async function refreshAfter<T>(
   invalidate: (url: string) => void,
   urls: Iterable<string>,
   operation: (client: DriveClient) => Promise<T>,
+  onSuccess?: (result: T) => void,
 ): Promise<T> {
   const touched = new Set(urls);
   const tracked: DriveClient = {
@@ -428,14 +431,37 @@ async function refreshAfter<T>(
     },
   };
   try {
-    return await operation(tracked);
+    const result = await operation(tracked);
+    onSuccess?.(result);
+    return result;
   } finally {
     for (const url of touched) invalidate(url);
   }
 }
 
 export function useDriveActions() {
-  const { openDialog } = useDriveUi();
+  const { openDialog, setDetailsItems } = useDriveUi();
+  const retargetDetails = useCallback(
+    (moves: readonly { from: string; to: string }[]) => {
+      setDetailsItems((current) => {
+        const next = current.map((item) => {
+          const move = moves.find(
+            ({ from, to }) =>
+              from !== to &&
+              (item.url === from || (from.endsWith("/") && item.url.startsWith(from))),
+          );
+          if (!move) return item;
+          const url = `${move.to}${item.url.slice(move.from.length)}`;
+          // The old validator belongs to the removed source. The listing/live
+          // metadata stream will hydrate the destination's own write receipt.
+          const { etag: _etag, ...metadata } = item;
+          return { ...metadata, url, name: nameOf(url) };
+        });
+        return next.every((item, index) => item === current[index]) ? current : next;
+      });
+    },
+    [setDetailsItems],
+  );
   const { client, driveRoot, session, updatePrefs, prefs, invalidate } = useDrive();
   const router = useRouter();
 
@@ -533,6 +559,7 @@ export function useDriveActions() {
           ...items.map((item) => childUrl(target, nameOf(item.url), item.kind === "folder")),
         ],
         (tracked) => moveItems(tracked, items, target),
+        (result) => retargetDetails(result.done),
       );
       toast.dismiss(pending);
       // A star follows the item; leaving it on the old URL would star a replacement.
@@ -594,6 +621,7 @@ export function useDriveActions() {
                         ...(identity.tree ? ([identity.tree] as const) : ([] as const)),
                       );
                       restored.push({ from: to, to: from });
+                      retargetDetails([{ from: to, to: from }]);
                     } catch (error) {
                       if (error instanceof DriveAccessError) accessError = error;
                       if (recoveryLocations(error).length)
@@ -622,15 +650,19 @@ export function useDriveActions() {
       });
       return result;
     },
-    [client, driveRoot, invalidate, session, updatePrefs],
+    [client, driveRoot, invalidate, session, updatePrefs, retargetDetails],
   );
 
   const rename = useCallback(
     async (item: DriveItem, name: string) => {
       if (!isOwnStorage(item.url, session.storageUrl)) return;
       try {
-        const url = await refreshAfter(client, invalidate, [item.url], (tracked) =>
-          renameItem(tracked, item, name),
+        const url = await refreshAfter(
+          client,
+          invalidate,
+          [item.url],
+          (tracked) => renameItem(tracked, item, name),
+          (url) => retargetDetails([{ from: item.url, to: url }]),
         );
         if (url !== item.url) {
           updatePrefs((current) => ({
@@ -645,7 +677,7 @@ export function useDriveActions() {
         return undefined;
       }
     },
-    [client, invalidate, updatePrefs, session.storageUrl],
+    [client, invalidate, updatePrefs, session.storageUrl, retargetDetails],
   );
 
   const makeCopy = useCallback(
@@ -690,6 +722,8 @@ export function useDriveActions() {
           invalidate,
           entries.flatMap((entry) => [entry.url, entry.original]),
           (tracked) => restoreItems(tracked, driveRoot, entries),
+          (result) =>
+            retargetDetails(result.done.map(({ entry, url }) => ({ from: entry.url, to: url }))),
         );
         for (const warning of result.warnings ?? [])
           toast.error(errorMessage(warning, warning.message));
@@ -707,7 +741,7 @@ export function useDriveActions() {
         return undefined;
       }
     },
-    [client, driveRoot, invalidate],
+    [client, driveRoot, invalidate, retargetDetails],
   );
 
   const trash = useCallback(

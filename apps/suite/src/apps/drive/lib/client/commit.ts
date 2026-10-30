@@ -5,6 +5,11 @@ export interface ResourceIdentity {
   readonly etag: string;
 }
 
+/** Final content checks must also assert the endpoint captured with that resource. */
+export interface ResourceAssertion extends ResourceIdentity {
+  readonly verifyHeaders: (headers: Headers) => undefined;
+}
+
 export interface PolicyIdentity {
   readonly url: string;
   /** null pins the absence of an own ACL. */
@@ -107,9 +112,9 @@ export function commitHttp<T>(
       readonly init: RequestInit;
       readonly error: (status: number, url: string) => Error;
       readonly allowMissing?: boolean;
-      readonly finalIdentities?: readonly HttpIdentity[];
+      readonly finalIdentities?: readonly (HttpIdentity & ResourceAssertion)[];
       /** ACL writes also bind their protected representation after checking the ACL. */
-      readonly resourceGuards?: readonly (ResourceIdentity & Pick<HttpIdentity, "verifyHeaders">)[];
+      readonly resourceGuards?: readonly ResourceAssertion[];
       readonly response: (response: Response) => Promise<T>;
     },
 ): Promise<T> {

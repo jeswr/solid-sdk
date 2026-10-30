@@ -3,6 +3,8 @@ import { expect, it, vi } from "vitest";
 import { containerVersions } from "../src/apps/drive/lib/client/container-versions";
 
 const root = "https://versions.test/tree/";
+const verifyHeaders = () => undefined;
+const captureEndpoint = () => verifyHeaders;
 const child = `${root}child`;
 const receipt = (value: unknown) =>
   new Response(null, { headers: { "x-solid-drive-parent-validators": JSON.stringify(value) } });
@@ -10,17 +12,18 @@ const receipt = (value: unknown) =>
 it("round 56: only atomic mutation receipts advance connected parent validators", async () => {
   let etag = '"original"';
   const http = vi.fn<typeof fetch>(async () => new Response(null, { headers: { etag } }));
-  const versions = containerVersions(http);
+  const versions = containerVersions(http, captureEndpoint);
   versions.track(root);
   versions.track(root);
   versions.track(child);
   versions.track("https://versions.test/unrelated/");
-  const identity = versions.identity({ url: root, etag });
+  const identity = versions.identity({ url: root, etag, verifyHeaders });
+  expect(identity.verifyHeaders).toBe(verifyHeaders);
   expect(await versions.prepare(root)).toEqual([]);
   expect(versions.current(root, undefined)).toBeUndefined();
   expect(versions.current("https://untracked.test/", etag)).toBe(etag);
   const first = await versions.prepare(child);
-  expect(first).toEqual([{ url: root, etag }]);
+  expect(first).toEqual([{ url: root, etag, verifyHeaders }]);
   expect(http).toHaveBeenCalledOnce();
   etag = '"after-first-child"';
   versions.committed(first, receipt({ [root]: etag }));
@@ -40,7 +43,7 @@ it("round 56: only atomic mutation receipts advance connected parent validators"
   versions.committed(foreign, receipt({ [root]: '"foreign-after-local-edit"' }));
   expect(identity.etag).toBe('"original"');
   expect(versions.current(root, etag)).toBe('"foreign-after-local-edit"');
-  expect(await containerVersions(http).prepare(child)).toEqual([]);
+  expect(await containerVersions(http, captureEndpoint).prepare(child)).toEqual([]);
 });
 
 it.each([
@@ -56,7 +59,7 @@ it.each([
 ])("round 56: an absent or invalid receipt never adopts a post-mutation HEAD (%j)", async (value) => {
   let etag = '"approved"';
   const http = vi.fn<typeof fetch>(async () => new Response(null, { headers: { etag } }));
-  const versions = containerVersions(http);
+  const versions = containerVersions(http, captureEndpoint);
   versions.track(root);
   const parents = await versions.prepare(child);
   etag = '"replacement"';
@@ -84,7 +87,7 @@ it.each([
       headers: failure === "missing" ? {} : { etag: 'W/"weak"' },
     });
   };
-  const versions = containerVersions(http);
+  const versions = containerVersions(http, captureEndpoint);
   versions.track(root);
   if (failure === "offline") await expect(versions.prepare(child)).rejects.toThrow("Offline");
   else expect(await versions.prepare(child)).toEqual([]);

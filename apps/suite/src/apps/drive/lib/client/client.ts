@@ -46,6 +46,7 @@ import {
   checkIdentity,
   commitHttp,
   type PolicyIdentity,
+  type ResourceAssertion,
   type ResourceIdentity,
 } from "./commit";
 import { containerVersions } from "./container-versions";
@@ -411,7 +412,13 @@ export function createSolidDriveClient(options: {
   // Scoped to this authenticated client; listings retain their declared metadata for HEAD users.
   const resources = new Map<string, Resource>();
   const responseTypes = new Map<string, string>();
-  const versions = containerVersions(http);
+  const versions = containerVersions(http, access.captureEndpoint);
+  // Supplemental identities follow the same invariant as the mutation target:
+  // captured version AND synchronous endpoint assertion, with all I/O pre-hydrated.
+  const finalIdentity = (
+    identity: ResourceIdentity,
+    verifyHeaders: NonNullable<CommitChecks["verifyHeaders"]>,
+  ) => ({ ...versions.identity(identity), verifyHeaders, http, error: errorFor });
   // Content identity includes its captured access discovery. Every resource HEAD,
   // including completion/recovery checks, must assert both from the same response.
   const checkResourceIdentity = (
@@ -616,7 +623,12 @@ export function createSolidDriveClient(options: {
         const cleared = await commitHttp({
           rechecks: [recoveryAccess, ...backupAccess].map((binding) => () => binding.recheck()),
           policyGuards: [recoveryAccess, ...backupAccess].flatMap((binding) => binding.identities),
-          finalIdentities: survivors.map((identity) => ({ ...identity, http, error: errorFor })),
+          finalIdentities: survivors.map((identity) =>
+            finalIdentity(identity, (headers) => {
+              for (const binding of [recoveryAccess, ...backupAccess])
+                binding.verifyEndpoint(identity.url, headers);
+            }),
+          ),
           http,
           url,
           error: errorFor,
@@ -715,8 +727,8 @@ export function createSolidDriveClient(options: {
         throw new DriveAccessError("Owner-only protection changed");
     };
     const headers = new Headers(init.headers);
-    const captured = headers.get("if-match");
-    if (captured) headers.set("if-match", versions.current(url, captured) as string);
+    // The payload's approved validator is immutable. Parent receipts can advance
+    // ancestor guards during a tree operation, never a separate overwrite decision.
     let previous: { body: Blob; type: string } | undefined;
     if (binding && headers.get("if-none-match") !== "*") {
       const current = await http(url);
@@ -835,7 +847,13 @@ export function createSolidDriveClient(options: {
         ...(binding?.identities ?? []),
         ...(effects.policyGuards ?? []),
       ],
-      finalIdentities: parents.map((identity) => ({ ...identity, http, error: errorFor })),
+      finalIdentities: parents.map((identity) =>
+        finalIdentity(identity, (headers) => {
+          identity.verifyHeaders(headers);
+          binding?.verifyEndpoint(identity.url, headers);
+          verifyScopeHeaders(scope, identity.url, headers);
+        }),
+      ),
       http,
       url,
       init: { ...init, headers },
@@ -1142,13 +1160,19 @@ export function createSolidDriveClient(options: {
     commit: CommitChecks &
       CommitEffects & {
         readonly verifyHeaders: NonNullable<CommitChecks["verifyHeaders"]>;
-        readonly survivors?: readonly ResourceIdentity[];
+        readonly survivors?: readonly ResourceAssertion[];
       },
+    scope: AccessScope = new Set(),
   ) => {
     const parents = await versions.prepare(url);
     await deletion.remove(url, validator(url, etag), recovery, {
       ...commit,
-      survivors: [...(commit.survivors ?? []).map(versions.identity), ...parents],
+      survivors: [...(commit.survivors ?? []), ...parents].map((identity) =>
+        finalIdentity(identity, (headers) => {
+          identity.verifyHeaders(headers);
+          verifyScopeHeaders(scope, identity.url, headers);
+        }),
+      ),
       afterCommit: (response) => versions.committed(parents, response),
     });
     resources.delete(url);
@@ -1163,8 +1187,8 @@ export function createSolidDriveClient(options: {
     retired: (url: string) => void,
     identityCheck: (source: SourceSnapshot) => Promise<void>,
     disarm: (url: string) => readonly Compensation[],
-    survivors: readonly ResourceIdentity[] = [],
-    ancestors: readonly ResourceIdentity[] = [],
+    survivors: readonly ResourceAssertion[] = [],
+    ancestors: readonly ResourceAssertion[] = [],
     scope: AccessScope = new Set(),
     policyGuards: readonly PolicyIdentity[] = [],
   ) => {
@@ -1180,7 +1204,14 @@ export function createSolidDriveClient(options: {
           identityCheck,
           disarm,
           survivors,
-          [...ancestors, { url: source.url, etag: validator(source.url, source.etag) }],
+          [
+            ...ancestors,
+            {
+              url: source.url,
+              etag: validator(source.url, source.etag),
+              verifyHeaders: source.verifyHeaders,
+            },
+          ],
           scope,
           policyGuards,
         );
@@ -1223,6 +1254,7 @@ export function createSolidDriveClient(options: {
           retired(source.url);
         },
       },
+      scope,
     );
   };
 
@@ -2052,7 +2084,11 @@ export function createSolidDriveClient(options: {
               },
               verifyDestination,
               (url) => [compensation, ...compensationsFor(scope, url)],
-              sourceGuards,
+              sourceGuards.map((identity) =>
+                finalIdentity(identity, (headers) =>
+                  verifyScopeHeaders(scope, identity.url, headers),
+                ),
+              ),
               [],
               scope,
             );
@@ -2219,7 +2255,9 @@ export function createSolidDriveClient(options: {
     await deletion.guard(url);
     const deleted: string[] = [];
     let recovery: SourceSnapshot | undefined;
-    const survivors = opts.commit?.survivors ?? [];
+    const survivors = (opts.commit?.survivors ?? []).map((identity) =>
+      finalIdentity(identity, (headers) => verifyScopeHeaders(scope, identity.url, headers)),
+    );
     try {
       let capturedHeaders!: Headers;
       const observed = await stat(
@@ -2273,7 +2311,7 @@ export function createSolidDriveClient(options: {
                   ...compensationsFor(scope, nodeUrl),
                   ...(nodeUrl === url ? (opts.commit?.disarm ?? []) : []),
                 ],
-                opts.commit?.survivors ?? [],
+                survivors,
                 [],
                 scope,
                 opts.commit?.policyGuards ?? [],
@@ -2292,35 +2330,43 @@ export function createSolidDriveClient(options: {
           throw error;
         }
       } else {
-        await deleteVersion(url, capturedEtag, undefined, {
-          verifyHeaders: (headers) => {
-            verifyHeaders(headers);
-            verifyScopeHeaders(scope, url, headers);
-            opts.commit?.verifyHeaders?.(headers);
+        await deleteVersion(
+          url,
+          capturedEtag,
+          undefined,
+          {
+            verifyHeaders: (headers) => {
+              verifyHeaders(headers);
+              verifyScopeHeaders(scope, url, headers);
+              opts.commit?.verifyHeaders?.(headers);
+            },
+            policyGuards: [...scopePolicyGuards(scope), ...(opts.commit?.policyGuards ?? [])],
+            rechecks: [verify],
+            identityChecks: [
+              identityCheck,
+              // Validate a compared recovery representation before its surviving
+              // endpoints. The helper still repeats the target HEAD last.
+              ...(opts.commit?.survivors?.length
+                ? [() => checkResourceIdentity(url, capturedEtag, verifyHeaders)]
+                : []),
+            ],
+            survivors,
+            disarm: [...compensationsFor(scope, url), ...(opts.commit?.disarm ?? [])],
+            onCommit: () => {
+              deleted.push(url);
+              retireScope(scope, url);
+            },
           },
-          policyGuards: [...scopePolicyGuards(scope), ...(opts.commit?.policyGuards ?? [])],
-          rechecks: [verify],
-          identityChecks: [
-            identityCheck,
-            // Validate a compared recovery representation before its surviving
-            // endpoints. The helper still repeats the target HEAD last.
-            ...(opts.commit?.survivors?.length
-              ? [() => checkResourceIdentity(url, capturedEtag, verifyHeaders)]
-              : []),
-          ],
-          survivors: opts.commit?.survivors ?? [],
-          disarm: [...compensationsFor(scope, url), ...(opts.commit?.disarm ?? [])],
-          onCommit: () => {
-            deleted.push(url);
-            retireScope(scope, url);
-          },
-        });
+          scope,
+        );
       }
       if (recovery) {
         await verify();
         for (const identity of survivors)
-          await checkResourceIdentity(identity.url, versions.identity(identity).etag, (headers) =>
-            verifyScopeHeaders(scope, identity.url, headers),
+          await checkResourceIdentity(
+            identity.url,
+            versions.identity(identity).etag,
+            identity.verifyHeaders,
           );
       }
     } catch (error) {
