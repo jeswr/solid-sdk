@@ -427,6 +427,73 @@ describe("RFC 3676 flowed text", () => {
     }
   });
 
+  it.each([
+    [
+      "Intro\n--  \n\nKeep this reply.",
+      "Intro\n--  \nKeep this reply.",
+      "Intro\n-- \nKeep this reply.",
+    ],
+    ["Intro\n--  ", "Intro\n--  ", "Intro\n-- "],
+    ["Intro\r\n--  \r\n", "Intro\n--  \n", "Intro\n-- \n"],
+    [
+      "Intro\n- \n-\n\nKeep this reply.",
+      "Intro\n- -\n\nKeep this reply.",
+      "Intro\n--\n\nKeep this reply.",
+    ],
+    [
+      "Intro\n- \n-  \n\nKeep this reply.",
+      "Intro\n- -  \nKeep this reply.",
+      "Intro\n-- \nKeep this reply.",
+    ],
+  ])("does not invent a signature while decoding %j", (source, expected, delSpExpected) => {
+    for (const delSp of [false, true]) {
+      const text = delSp ? delSpExpected : expected;
+      expect(splitQuotedText(source, { flowed: true, delSp })).toEqual({
+        segments: [{ kind: "body", text, depth: 0 }],
+        visibleText: text,
+        hasQuotedHistory: false,
+      });
+    }
+  });
+
+  it("keeps a decoded signature lookalike as body at a quote boundary", () => {
+    for (const delSp of [false, true]) {
+      const marker = delSp ? "-- " : "--  ";
+      expect(
+        splitQuotedText("Intro\n--  \n> old\nKeep this reply.", { flowed: true, delSp }),
+      ).toEqual({
+        segments: [
+          { kind: "body", text: `Intro\n${marker}\n`, depth: 0 },
+          { kind: "quote", text: "> old\n", depth: 1 },
+          { kind: "body", text: "Keep this reply.", depth: 0 },
+        ],
+        visibleText: `Intro\n${marker}\nKeep this reply.`,
+        hasQuotedHistory: true,
+      });
+    }
+  });
+
+  it("selects the last physical signature instead of a later decoded lookalike", () => {
+    for (const delSp of [false, true]) {
+      const marker = delSp ? "-- " : "--  ";
+      expect(
+        splitQuotedText("Intro\n-- \nMira\n> old\n--  \n\nKeep this reply.", {
+          flowed: true,
+          delSp,
+        }),
+      ).toEqual({
+        segments: [
+          { kind: "body", text: "Intro\n", depth: 0 },
+          { kind: "signature", text: "-- \nMira\n", depth: 0 },
+          { kind: "quote", text: "> old\n", depth: 1 },
+          { kind: "body", text: `${marker}\nKeep this reply.`, depth: 0 },
+        ],
+        visibleText: `Intro\n${marker}\nKeep this reply.`,
+        hasQuotedHistory: true,
+      });
+    }
+  });
+
   it("detects attributions after unflowing their physical lines", () => {
     expect(splitQuotedText("On Monday, Mira \nwrote:\n> old", { flowed: true }).segments).toEqual([
       { kind: "attribution", text: "On Monday, Mira wrote:\n", depth: 0 },

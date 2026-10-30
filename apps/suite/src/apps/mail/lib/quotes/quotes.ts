@@ -50,6 +50,8 @@ interface Line {
   depth: number;
   /** RFC 3676 counts only contiguous leading markers when unflowing. */
   rfcDepth: number;
+  /** Physical separator identity, before joining or DelSp can create lookalikes. */
+  signature: boolean;
   eol: string;
 }
 
@@ -77,7 +79,15 @@ function physicalLine(value: string, eol: string, flowed: boolean): Line {
     // Re-quote using the first line's spelling; depth was measured before unstuffing.
     if (depth > 0) prefix += " ";
   }
-  return { value: flowed ? prefix + content : value, content, prefix, depth, rfcDepth, eol };
+  return {
+    value: flowed ? prefix + content : value,
+    content,
+    prefix,
+    depth,
+    rfcDepth,
+    signature: isSignature(content),
+    eol,
+  };
 }
 
 /** RFC 3676 §§4.1–4.5; only join equal-depth lines, never a signature separator. */
@@ -102,12 +112,9 @@ function normaliseLines(body: string, flowed: boolean, delSp: boolean): Line[] {
       depth = line.depth;
     }
     const next = physical[i + 1];
-    const isFlowed = line.content.endsWith(" ") && !isSignature(line.content);
+    const isFlowed = line.content.endsWith(" ") && !line.signature;
     const join =
-      isFlowed &&
-      next !== undefined &&
-      line.rfcDepth === next.rfcDepth &&
-      !isSignature(next.content);
+      isFlowed && next !== undefined && line.rfcDepth === next.rfcDepth && !next.signature;
     // DelSp applies even when EOF, quote depth or a signature ends the paragraph.
     pieces.push(isFlowed && delSp ? line.content.slice(0, -1) : line.content);
     if (!join) {
@@ -118,6 +125,8 @@ function normaliseLines(body: string, flowed: boolean, delSp: boolean): Line[] {
         prefix,
         depth,
         rfcDepth: line.rfcDepth,
+        // Eligible separators never join with either neighbouring line.
+        signature: line.signature,
         eol: line.eol,
       });
       pieces = [];
@@ -191,7 +200,7 @@ export function splitQuotedText(body: string, options: QuoteOptions = {}): Quote
   for (const [i, line] of lines.entries()) {
     if (line.depth === 0) {
       if (FORWARDED.has(line.value)) forwarded = true;
-      if (!forwarded && isSignature(line.value)) signature = i;
+      if (!forwarded && line.signature) signature = i;
     }
   }
 
