@@ -6,7 +6,11 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import userEvent from "@testing-library/user-event";
 import axe from "axe-core";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import type { CollectionErrorKind, CollectionState } from "../src/collections/collection-state.js";
+import type {
+  CollectionErrorKind,
+  CollectionState,
+  CollectionSurfaceProps,
+} from "../src/collections/collection-state.js";
 import { type DataColumn, DataTable } from "../src/collections/data-table.js";
 import { FileGrid } from "../src/collections/file-grid.js";
 import { useSelection } from "../src/collections/use-selection.js";
@@ -78,12 +82,11 @@ afterEach(() => {
 function Fixture({
   kind,
   data = items,
-  state,
+  ...surface
 }: {
   kind: "table" | "grid";
   data?: Item[];
-  state?: CollectionState;
-}) {
+} & CollectionSurfaceProps) {
   const selection = useSelection();
   const props = {
     items: data,
@@ -93,7 +96,7 @@ function Fixture({
     selection,
     onOpen,
     onDetails,
-    ...(state ? { state } : {}),
+    ...surface,
   };
   return (
     <main>
@@ -233,6 +236,108 @@ for (const kind of ["table", "grid"] as const) {
         ).toEqual([]);
         unmount();
       }
+    });
+    it.each<CollectionErrorKind>([
+      "forbidden",
+      "not-found",
+      "conflict",
+      "name-taken",
+      "quota",
+      "too-large",
+      "unreachable",
+      "unsupported",
+      "unknown",
+    ])("preserves the legacy Retry callback for %s", (error) => {
+      const onRetry = vi.fn();
+      render(<Fixture kind={kind} state={{ status: "error", kind: error }} onRetry={onRetry} />);
+      const alert = within(screen.getByRole("alert"));
+      expect(alert.getAllByRole("button")).toHaveLength(1);
+      fireEvent.click(alert.getByRole("button", { name: "Retry" }));
+      expect(onRetry).toHaveBeenCalledOnce();
+    });
+    it("omits fallback recovery without a callback", () => {
+      render(<Fixture kind={kind} state={{ status: "error", kind: "unknown" }} />);
+      expect(within(screen.getByRole("alert")).queryByRole("button")).toBeNull();
+    });
+    it("prefers category-specific recovery to the legacy callback", () => {
+      const onRetry = vi.fn();
+      const reload = vi.fn();
+      render(
+        <Fixture
+          kind={kind}
+          state={{ status: "error", kind: "unknown" }}
+          onRetry={onRetry}
+          errorActions={{ reload }}
+        />,
+      );
+      const alert = within(screen.getByRole("alert"));
+      expect(alert.getAllByRole("button")).toHaveLength(1);
+      fireEvent.click(alert.getByRole("button", { name: "Reload" }));
+      expect(reload).toHaveBeenCalledOnce();
+      expect(onRetry).not.toHaveBeenCalled();
+    });
+    it.each([
+      false,
+      true,
+    ])("respects access-request capability %s before falling back", (accessRequests) => {
+      const onRetry = vi.fn();
+      const requestAccess = vi.fn();
+      render(
+        <Fixture
+          kind={kind}
+          state={{ status: "error", kind: "forbidden" }}
+          onRetry={onRetry}
+          errorActions={{ requestAccess, reload: vi.fn<() => void>() }}
+          accessRequests={accessRequests}
+        />,
+      );
+      const alert = within(screen.getByRole("alert"));
+      expect(alert.getAllByRole("button")).toHaveLength(1);
+      fireEvent.click(
+        alert.getByRole("button", { name: accessRequests ? "Request access" : "Retry" }),
+      );
+      expect(requestAccess).toHaveBeenCalledTimes(accessRequests ? 1 : 0);
+      expect(onRetry).toHaveBeenCalledTimes(accessRequests ? 0 : 1);
+    });
+    it("keeps custom recovery in place of the legacy fallback", () => {
+      const onRetry = vi.fn();
+      const recover = vi.fn();
+      render(
+        <Fixture
+          kind={kind}
+          state={{
+            status: "error",
+            kind: "unknown",
+            actions: (
+              <button type="button" onClick={recover}>
+                Recover
+              </button>
+            ),
+          }}
+          onRetry={onRetry}
+        />,
+      );
+      const alert = within(screen.getByRole("alert"));
+      expect(alert.getAllByRole("button")).toHaveLength(1);
+      fireEvent.click(alert.getByRole("button", { name: "Recover" }));
+      expect(recover).toHaveBeenCalledOnce();
+      expect(onRetry).not.toHaveBeenCalled();
+    });
+    it("keeps the typed retry delay without an immediate fallback", () => {
+      const onRetry = vi.fn();
+      render(
+        <Fixture
+          kind={kind}
+          state={{ status: "error", kind: "unreachable", retryAfterMs: 60000 }}
+          onRetry={onRetry}
+        />,
+      );
+      const alert = within(screen.getByRole("alert"));
+      expect(alert.getAllByRole("button")).toHaveLength(1);
+      const retry = alert.getByRole("button", { name: "Retry" });
+      expect(retry.hasAttribute("disabled")).toBe(true);
+      fireEvent.click(retry);
+      expect(onRetry).not.toHaveBeenCalled();
     });
     it("keeps cached and refreshing content available", () => {
       const { rerender } = render(

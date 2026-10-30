@@ -2,7 +2,7 @@
 "use client";
 
 import { type ReactNode, useMemo } from "react";
-import type { ErrorCategory } from "../components/async-copy.js";
+import { type ErrorCategory, errorStateCopy } from "../components/async-copy.js";
 import { EmptyState } from "../components/empty-state.js";
 import { type ErrorRecovery, ErrorState } from "../components/error-state.js";
 import { LoadingSkeleton } from "../components/loading-skeleton.js";
@@ -41,6 +41,11 @@ export function CollectionPlaceholder({
         : undefined,
     [state],
   );
+  const hasErrorRecovery =
+    state?.status === "error" &&
+    errorStateCopy[state.kind].actions.some(
+      (name) => errorActions?.[name] && (name !== "requestAccess" || accessRequests),
+    );
   return renderAsync({
     loading: state?.status === "loading" && <LoadingSkeleton preset={kind} label="Loading files" />,
     error: state?.status === "error" && error && (
@@ -50,7 +55,15 @@ export function CollectionPlaceholder({
         accessRequests={accessRequests}
         loadingPreset={kind}
       >
-        {state.actions}
+        {state.actions ??
+          (onRetry &&
+            state.kind !== "reauth" &&
+            state.kind !== "unreachable" &&
+            !hasErrorRecovery && (
+              <button type="button" className="suite-async-action" onClick={onRetry}>
+                Retry
+              </button>
+            ))}
       </ErrorState>
     ),
     empty:
