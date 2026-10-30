@@ -2285,6 +2285,9 @@ importers:
       lucide-react:
         specifier: 1.24.0
         version: 1.24.0(react@19.2.7)
+      marked:
+        specifier: 17.0.6
+        version: 17.0.6
       music-metadata:
         specifier: 12.3.2
         version: 12.3.2

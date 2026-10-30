@@ -1,0 +1,1251 @@
+// AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { Lexer } from "marked";
+import { describe, expect, it, vi } from "vitest";
+import {
+  type DocsMark,
+  type DocsNode,
+  docsToMarkdown,
+  MarkdownError,
+  markdownToDocs,
+} from "../src/apps/docs/lib/markdown";
+
+const t = (value: string, marks: DocsMark[] = []): DocsNode => ({
+  type: "text",
+  text: value,
+  ...(marks.length ? { marks } : {}),
+});
+const b = (type: string, content: DocsNode[] = [], attrs?: Record<string, unknown>): DocsNode => ({
+  type,
+  ...(attrs ? { attrs } : {}),
+  ...(content.length ? { content } : {}),
+});
+const p = (...content: DocsNode[]) => b("paragraph", content);
+const doc = (...content: DocsNode[]) => b("doc", content);
+const numericReference = (value: number) => `&${"#"}${value};`;
+const m = (type: string): DocsMark => ({ type });
+function errorCode(action: () => unknown, code: string): void {
+  try {
+    action();
+  } catch (error) {
+    expect(error).toBeInstanceOf(MarkdownError);
+    expect(error).toMatchObject({ name: "MarkdownError", code });
+    return;
+  }
+  throw new Error(`Expected ${code}`);
+}
+function roundTrip(source: string): DocsNode {
+  const parsed = markdownToDocs(source);
+  expect(markdownToDocs(docsToMarkdown(parsed))).toEqual(parsed);
+  return parsed;
+}
+
+describe("DOC-L4 Markdown and Docs JSON", () => {
+  it("maps headings, paragraphs, marks, quotes, rules, and code to TipTap names", () => {
+    expect(
+      roundTrip(
+        "# Plan\n\n## Steps\n\n### Notes\n\nHello **Mira** and _Rowan_, ***friends***.\n\n> A quote\n\n---\n\n`x`\n\n```ts\nlet x = 1;\n```",
+      ),
+    ).toEqual(
+      doc(
+        b("heading", [t("Plan")], { level: 1 }),
+        b("heading", [t("Steps")], { level: 2 }),
+        b("heading", [t("Notes")], { level: 3 }),
+        p(
+          t("Hello "),
+          t("Mira", [m("bold")]),
+          t(" and "),
+          t("Rowan", [m("italic")]),
+          t(", "),
+          t("friends", [m("bold"), m("italic")]),
+          t("."),
+        ),
+        b("blockquote", [p(t("A quote"))]),
+        b("horizontalRule"),
+        p(t("x", [m("code")])),
+        b("codeBlock", [t("let x = 1;")], { language: "ts" }),
+      ),
+    );
+  });
+  it.each([
+    "Heading\n=======\n\nSubheading\n----------",
+    "    indented code\n    second line\n",
+    "~~~\nplain code\n~~~",
+    "```\n```",
+    "```\nline\n\n```",
+    "````\n``` inside\n````",
+    "before `` a`b `` after",
+    "`   `",
+    "`` `edge` ``",
+    "`` edge ` ``",
+    "` edge `",
+    "before **bold _and italic_ bold** after",
+    "**bold** **also bold**",
+    "_italic **bold** italic_",
+    "**`code`**",
+    "**outer __inner__ end**",
+    "*outer _inner_ end*",
+    ">",
+    "> >",
+    "- [X]",
+    "- [ ] [x] literal checkbox",
+    '[Site](https://example.org/ "Quote \\" and slash \\\\ and &amp;")',
+    "\\*literal\\* &amp; &lt; &gt; &quot; &apos; &#65; &#x1F680;",
+    "# Escaped \\# and emoji 🌿",
+    "#",
+    "first\nsecond",
+    "first  \nsecond\\\nthird",
+    '[Site](https://example.org/a_(b) "A title")',
+    "[**Mira** _Rowan_ `code`](https://example.org/)",
+    "<https://example.org/> and <mira@example.org>",
+    "[Mail](mailto:mira@example.org)",
+    "[A \\&amp;](https://example.org/)",
+    "[A \\&amp;][ref]\n\n[ref]: https://example.org/",
+    "[Secure](HTTPS://example.org/)",
+    '[Reference][ref]\n\n[ref]: https://example.org/ "Synthetic"',
+    "[Unused]: https://example.org/\n\nText",
+    "www.example.org and https://example.org/ and mira@example.org",
+    "- one\n- two\n  - nested\n    3. third\n    4. fourth",
+    "7) seven\n8) eight",
+    "0. zero\n1. one",
+    "-\n- item",
+    "- first paragraph\n\n  second paragraph\n\n- next",
+    "- [x] complete\n- [ ] pending\n  - [X] nested",
+    "- [ ] \n- [x] done",
+    "> quote\n>\n> another\n>\n> > nested",
+    "- > quote\n\n  ```\n  code\n  ```",
+  ])("round trips supported syntax: %s", (source) => {
+    roundTrip(source);
+  });
+
+  it.each([
+    "> # Title\nOutside",
+    "> ## Title\nOutside\n> Inside",
+    "> Title\n> ===\nOutside",
+    "> Title\n> ---\nOutside",
+    "> ***\nOutside",
+    "> > # Title\nOutside",
+    "- > # Title\n  Outside",
+  ])("rejects non-paragraph quote continuations or preserves the source literally: %s", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("keeps lazy paragraph continuations in quotes after a heading", () => {
+    expect(roundTrip("> # Title\n> Inside\ncontinued")).toEqual(
+      doc(b("blockquote", [b("heading", [t("Title")], { level: 1 }), p(t("Inside\ncontinued"))])),
+    );
+    expect(roundTrip("> Inside\ncontinued")).toEqual(
+      doc(b("blockquote", [p(t("Inside\ncontinued"))])),
+    );
+    expect(roundTrip("> # Title\n\nOutside")).toEqual(
+      doc(b("blockquote", [b("heading", [t("Title")], { level: 1 })]), p(t("Outside"))),
+    );
+  });
+  it.each([
+    "> quote\n2. next",
+    "> quote\n0) next",
+    "> quote\n2026. next\n2027. later",
+    "> quote\n   2) next",
+    "> quote\n2.\tnext",
+    "> quote\n2.",
+    "> quote\n2. \n   next",
+    "> # Title\n> quote\n2. next\n> after",
+    "> > quote\n2. next",
+    "> > quote\n> 2. next",
+    "- > quote\n  2. next",
+    "> quote\ncontinued\n2. next",
+    "> quote\nfirst\nsecond\n0) next",
+    "> quote\ncontinued\n   2026. next",
+    "> quote\ncontinued\n2.\tnext",
+    "> quote\ncontinued\n2.",
+    "> quote\ncontinued\n2. \n   next",
+    "> # Title\n> quote\ncontinued\n2. next\n> after",
+    "> > quote\ncontinued\n2. next",
+    "> > quote\n> continued\n> 2. next",
+    "- > quote\n  continued\n  2. next",
+    "- [x] item\n\n  > quote\n  continued\n  2. next",
+  ])("rejects ordered blocks entering an unprefixed quote continuation: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it.each([
+    "2.next",
+    "2\\. next",
+    "1000000000. next",
+    "    2. next",
+  ])("keeps ordinary numbered text as a lazy quote continuation: %j", (line) => {
+    const value = line.trimStart().replace("\\.", ".");
+    expect(roundTrip(`> quote\n${line}`)).toEqual(doc(b("blockquote", [p(t(`quote\n${value}`))])));
+  });
+  it("keeps prefixed ordered text and separate ordered lists around quotes", () => {
+    expect(roundTrip("> quote\n> 2. next")).toEqual(doc(b("blockquote", [p(t("quote\n2. next"))])));
+    expect(roundTrip("> quote\n>\n> 2. next")).toEqual(
+      doc(
+        b("blockquote", [
+          p(t("quote")),
+          b("orderedList", [b("listItem", [p(t("next"))])], { start: 2 }),
+        ]),
+      ),
+    );
+    expect(roundTrip("> quote\n\n2. next")).toEqual(
+      doc(
+        b("blockquote", [p(t("quote"))]),
+        b("orderedList", [b("listItem", [p(t("next"))])], { start: 2 }),
+      ),
+    );
+    expect(roundTrip("> quote\ncontinued\n> 2. next")).toEqual(
+      doc(b("blockquote", [p(t("quote\ncontinued\n2. next"))])),
+    );
+    expect(roundTrip("> quote\ncontinued\n> - next")).toEqual(
+      doc(
+        b("blockquote", [
+          p(t("quote\ncontinued")),
+          b("bulletList", [b("listItem", [p(t("next"))])]),
+        ]),
+      ),
+    );
+    expect(roundTrip("> quote\ncontinued\n\n2. next")).toEqual(
+      doc(
+        b("blockquote", [p(t("quote\ncontinued"))]),
+        b("orderedList", [b("listItem", [p(t("next"))])], { start: 2 }),
+      ),
+    );
+  });
+  it.each([
+    "***",
+    "___",
+    "* * *",
+  ])("exports horizontal rules without front-matter ambiguity: %s", (rule) => {
+    const expected = doc(b("horizontalRule"), p(t("text")), b("horizontalRule"));
+    expect(roundTrip(`${rule}\n\ntext\n\n${rule}`)).toEqual(expected);
+    expect(docsToMarkdown(expected)).toBe("***\n\ntext\n\n***");
+  });
+  it("exports a leading rule before a multiline level-2 heading", () => {
+    const expected = doc(b("horizontalRule"), b("heading", [t("First\nSecond")], { level: 2 }));
+    expect(markdownToDocs(docsToMarkdown(expected))).toEqual(expected);
+  });
+
+  it.each([
+    "-",
+    "+",
+    "*",
+    "1.",
+    "7)",
+  ])("imports a marker-only list line with one trailing space: %s", (marker) => {
+    const ordered = marker.length > 1;
+    const expected = doc(
+      b(
+        ordered ? "orderedList" : "bulletList",
+        [b("listItem", [p(t("item"))])],
+        ordered ? { start: Number.parseInt(marker, 10) } : undefined,
+      ),
+    );
+    expect(roundTrip(`${marker} \n${" ".repeat(marker.length + 1)}item`)).toEqual(expected);
+  });
+  it("retains empty items, quotes, and nested lists after marker-only lines", () => {
+    expect(roundTrip("- \n- next")).toEqual(
+      doc(b("bulletList", [b("listItem", [p()]), b("listItem", [p(t("next"))])])),
+    );
+    expect(roundTrip("> 1. \n>    item")).toEqual(
+      doc(b("blockquote", [b("orderedList", [b("listItem", [p(t("item"))])], { start: 1 })])),
+    );
+    expect(roundTrip("- outer\n\n  - \n    item")).toEqual(
+      doc(
+        b("bulletList", [
+          b("listItem", [p(t("outer")), b("bulletList", [b("listItem", [p(t("item"))])])]),
+        ]),
+      ),
+    );
+  });
+  it.each([
+    "2026.",
+    "2026)",
+    "0.",
+    "2.",
+  ])("keeps a numbered continuation in one list-item paragraph: %s", (marker) => {
+    const expected = doc(
+      b("bulletList", [b("listItem", [p(t(`Notes\n${marker} Annual review`))])]),
+    );
+    expect(markdownToDocs(`- Notes\n  ${marker} Annual review`)).toEqual(expected);
+    expect(markdownToDocs(docsToMarkdown(expected))).toEqual(expected);
+  });
+  it("preserves formatting and reference links in numbered continuations", () => {
+    expect(
+      roundTrip("- Notes\n  2026. **Annual** [review][ref]\n\n[ref]: https://example.org/"),
+    ).toEqual(
+      doc(
+        b("bulletList", [
+          b("listItem", [
+            p(
+              t("Notes\n2026. "),
+              t("Annual", [m("bold")]),
+              t(" "),
+              t("review", [{ type: "link", attrs: { href: "https://example.org/" } }]),
+            ),
+          ]),
+        ]),
+      ),
+    );
+  });
+  it.each([
+    ["- Notes\n  1. Annual review", 1],
+    ["- Notes\n\n  2026. Annual review", 2026],
+  ])("preserves valid ordered sublists: %s", (source, start) => {
+    expect(roundTrip(source as string)).toEqual(
+      doc(
+        b("bulletList", [
+          b("listItem", [
+            p(t("Notes")),
+            b("orderedList", [b("listItem", [p(t("Annual review"))])], { start }),
+          ]),
+        ]),
+      ),
+    );
+  });
+  it("keeps numbered continuations inside task items and nested quotes", () => {
+    expect(roundTrip("> - [x] Notes\n>   2026. Annual review\n>   2027. Next review")).toEqual(
+      doc(
+        b("blockquote", [
+          b("taskList", [
+            b("taskItem", [p(t("Notes\n2026. Annual review\n2027. Next review"))], {
+              checked: true,
+            }),
+          ]),
+        ]),
+      ),
+    );
+  });
+
+  it.each([1, 2])("exports multiline level-%i headings with setext syntax", (level) => {
+    const underline = level === 1 ? "===" : "---";
+    const source = `First\nSecond\n${underline}`;
+    const expected = doc(b("heading", [t("First\nSecond")], { level }));
+    expect(roundTrip(source)).toEqual(expected);
+    expect(docsToMarkdown(expected)).toBe(source);
+  });
+  it.each([
+    "# \u00a0Title\u00a0",
+    "## \u2003Title",
+    "### Title\u202f",
+    "# Title\u00a0 ##",
+    "#\u00a0Title",
+    "\u00a0Title\u00a0\n===",
+    "Title\u2003\n---",
+    "First\nLast\u202f\n===",
+    "> # \u00a0Title\u00a0",
+    "- \u00a0Title\u00a0\n  ===",
+    "- [x] item\n\n  ## Title\u00a0",
+    "- # Title\u00a0",
+    "- outer\n  - > # Title\u00a0",
+    "before\n\n# Title\u00a0\n\nafter",
+  ])("rejects headings whose significant whitespace Marked trims: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("keeps ASCII heading padding and significant whitespace within heading text", () => {
+    expect(roundTrip("# \tTitle \t")).toEqual(doc(b("heading", [t("Title")], { level: 1 })));
+    expect(roundTrip("## Title ### \t")).toEqual(doc(b("heading", [t("Title")], { level: 2 })));
+    expect(roundTrip("   Title \t\n===")).toEqual(doc(b("heading", [t("Title")], { level: 1 })));
+    expect(roundTrip("# First\u00a0Last")).toEqual(
+      doc(b("heading", [t("First\u00a0Last")], { level: 1 })),
+    );
+    expect(roundTrip("First\u2003Last\n---")).toEqual(
+      doc(b("heading", [t("First\u2003Last")], { level: 2 })),
+    );
+    expect(markdownToDocs(`# ${numericReference(160)}Title${numericReference(160)}`)).toEqual(
+      doc(b("heading", [t("\u00a0Title\u00a0")], { level: 1 })),
+    );
+    expect(roundTrip("- # Title\n\n\u00a0outside")).toEqual(
+      doc(
+        b("bulletList", [b("listItem", [p(), b("heading", [t("Title")], { level: 1 })])]),
+        p(t("\u00a0outside")),
+      ),
+    );
+  });
+  it.each([
+    "Plan\n***\nNext\n---",
+    "Plan\n___\nNext\n===",
+    "Plan\n ***\nNext\n--",
+    "Plan\n_\t_\t_\nNext\n=",
+    "before\n\nPlan\n***\nNext\n---\n\nafter",
+    "> Plan\n> ***\n> Next\n> ---",
+    "- Plan\n  ___\n  Next\n  ===",
+    "1. Plan\n   ***\n   Next\n   ---",
+    "- [x] item\n\n  Plan\n  ***\n  Next\n  ---",
+  ])("rejects thematic breaks swallowed by setext headings: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("keeps thematic breaks separate from headings when the lexer preserves the boundary", () => {
+    expect(roundTrip("Plan\n***\n\nNext\n---")).toEqual(
+      doc(p(t("Plan")), b("horizontalRule"), b("heading", [t("Next")], { level: 2 })),
+    );
+    expect(roundTrip("Plan\n  * * * \t\nNext\n--")).toEqual(
+      doc(p(t("Plan")), b("horizontalRule"), b("heading", [t("Next")], { level: 2 })),
+    );
+    expect(roundTrip("Plan\n---\nNext\n===")).toEqual(
+      doc(b("heading", [t("Plan")], { level: 2 }), b("heading", [t("Next")], { level: 1 })),
+    );
+    expect(roundTrip("Plan\n**stars**\n===")).toEqual(
+      doc(b("heading", [t("Plan\n"), t("stars", [m("bold")])], { level: 1 })),
+    );
+    expect(roundTrip("Plan\n\\*\\*\\*\n---")).toEqual(
+      doc(b("heading", [t("Plan\n***")], { level: 2 })),
+    );
+  });
+  it.each([
+    "Foo *bar\nbaz*\n====",
+    "**First**\n_Second_\n---",
+    "First\\\nSecond\n===",
+    "before\n\nFirst\nSecond\n===\n\nafter",
+    "> First\n> Second\n> ---",
+    "- First\n  Second\n  ===",
+    "- [x] item\n\n  First\n  Second\n  ---",
+  ])("round trips multiline headings with inline marks and surrounding blocks: %s", (source) => {
+    roundTrip(source);
+  });
+  it.each([
+    "Plan\n2026. Annual review\n---",
+    "Plan\n2026. Annual review\n===",
+    "Plan\n2) Annual review\n--",
+    "Plan\n0. Annual review\n=",
+    "Plan\n   2026. Annual review\n   --- \t",
+    "Plan\n2026. **Annual** review\ncontinued\n---",
+    "Plan\n2026. Annual review\n2027. Next review\n===",
+    "before\n\nPlan\n2026. Annual review\n---\n\nafter",
+    "> Plan\n> 2026. Annual review\n> ---",
+    "- Plan\n  2026. Annual review\n  ---",
+    "1. Plan\n   2. Annual review\n   ===",
+    "- [x] Plan\n  2026. Annual review\n  ---",
+  ])("rejects numbered setext continuations or preserves the source literally: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("keeps ordinary numbered continuations and separate ordered lists", () => {
+    expect(roundTrip("Plan\n2026. Annual review")).toEqual(doc(p(t("Plan\n2026. Annual review"))));
+    expect(roundTrip("Plan\n\n2026. Annual review\n\n---")).toEqual(
+      doc(
+        p(t("Plan")),
+        b("orderedList", [b("listItem", [p(t("Annual review"))])], { start: 2026 }),
+        b("horizontalRule"),
+      ),
+    );
+    expect(roundTrip("Plan\n1. Annual review\n---")).toEqual(
+      doc(
+        p(t("Plan")),
+        b("orderedList", [b("listItem", [p(t("Annual review"))])], { start: 1 }),
+        b("horizontalRule"),
+      ),
+    );
+    expect(roundTrip("Plan\n2026. Annual review\n\n---")).toEqual(
+      doc(p(t("Plan\n2026. Annual review")), b("horizontalRule")),
+    );
+  });
+  it.each([
+    "Title\n    subtitle\n---",
+    "Title\n    subtitle\n===",
+    "Title\n\tsubtitle\n=",
+    "Title\n \tsubtitle\n--",
+    "Title\n        subtitle\n-",
+    "Title\n    subtitle\n   --- \t",
+    "Title\n    subtitle\n=== \t",
+    "Title\n    **subtitle**\ncontinued\n---",
+    "before\n\nTitle\n    subtitle\n---\n\nafter",
+    "> Title\n>     subtitle\n> ---",
+    "- Title\n      subtitle\n  ---",
+    "1. Title\n       subtitle\n   ===",
+    "- [x] item\n\n  Title\n      subtitle\n  ---",
+  ])("rejects indented setext continuations or preserves the source literally: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("keeps supported headings and paragraph boundaries around indented continuations", () => {
+    expect(roundTrip("Title\n   subtitle\n---")).toEqual(
+      doc(b("heading", [t("Title\nsubtitle")], { level: 2 })),
+    );
+    expect(roundTrip("Title\n    subtitle")).toEqual(doc(p(t("Title\nsubtitle"))));
+    expect(roundTrip("===\n    subtitle")).toEqual(doc(p(t("===\nsubtitle"))));
+    expect(roundTrip("Title\n    subtitle\n\n---")).toEqual(
+      doc(p(t("Title\nsubtitle")), b("horizontalRule")),
+    );
+    expect(roundTrip("Title\n    subtitle\n***")).toEqual(
+      doc(p(t("Title\nsubtitle")), b("horizontalRule")),
+    );
+    expect(roundTrip("Title\n    subtitle\n    ---")).toEqual(doc(p(t("Title\nsubtitle\n---"))));
+    expect(roundTrip("Title\n    subtitle\n- item")).toEqual(
+      doc(p(t("Title\nsubtitle")), b("bulletList", [b("listItem", [p(t("item"))])])),
+    );
+    expect(roundTrip("Title\n    subtitle\n# Next")).toEqual(
+      doc(p(t("Title\nsubtitle")), b("heading", [t("Next")], { level: 1 })),
+    );
+    expect(roundTrip("    Title\n    subtitle\n---")).toEqual(
+      doc(b("codeBlock", [t("Title\nsubtitle")]), b("horizontalRule")),
+    );
+  });
+  it.each([
+    "- Foo\n===",
+    "- Foo\n ===",
+    "1. Foo\n  ===",
+    "-   Foo\n  ===",
+    "-\tFoo\n   ===",
+    "- Foo\n--",
+    "- [x] Foo\n===",
+    "- - Foo\n  ===",
+    "> - Foo\n> ===",
+    "before\n\n- Foo\n  Bar\n===\n\nafter",
+  ])("rejects lazy list underlines or preserves the whole source literally: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it.each([
+    "- Foo\n  ===",
+    "1. Foo\n   ===",
+    "-    Foo\n     ===",
+    "-\tFoo\n\t===",
+    "- Foo\n  --",
+    "-    \n  Foo\n  ===",
+  ])("keeps properly indented setext list headings: %j", (source) => {
+    const list = roundTrip(source).content?.[0];
+    expect(list?.content?.[0]?.content?.[1]?.type).toBe("heading");
+  });
+  it("keeps the one-space list padding rule before indented code", () => {
+    expect(roundTrip("-     code\n  ===")).toEqual(
+      doc(b("bulletList", [b("listItem", [p(), b("codeBlock", [t("code")]), p(t("==="))])])),
+    );
+  });
+  it("rejects multiline level-3 headings that CommonMark cannot represent", () => {
+    errorCode(
+      () => docsToMarkdown(doc(b("heading", [t("First\nSecond")], { level: 3 }))),
+      "unrepresentable",
+    );
+  });
+
+  it.each([
+    "\t",
+    " \t",
+    "  \t",
+    "   \t",
+    "    ",
+  ])("removes four columns of structural code indentation: %j", (indent) => {
+    expect(roundTrip(`${indent}foo\tbar\t\tbaz`)).toEqual(
+      doc(b("codeBlock", [t("foo\tbar\t\tbaz")])),
+    );
+  });
+  it("preserves code indentation after the first four columns on every line", () => {
+    expect(roundTrip("  \tfoo\n \t \tbar\n   \t\tbaz\n    \tend")).toEqual(
+      doc(b("codeBlock", [t("foo\n \tbar\n\tbaz\n\tend")])),
+    );
+  });
+  it.each(["```", "  ```", "~~~"])("preserves content tabs in fenced code: %s", (fence) => {
+    const indent = fence.startsWith("  ") ? "  " : "";
+    expect(roundTrip(`${fence}\n${indent}\tfoo\tbar\n${fence}`)).toEqual(
+      doc(b("codeBlock", [t("\tfoo\tbar")])),
+    );
+  });
+  it.each(["```", "~~~"])("removes fence indentation in tab columns: %s", (fence) => {
+    for (const indent of [1, 2, 3]) {
+      const opening = `${" ".repeat(indent)}${fence}`;
+      expect(roundTrip(`${opening}\n\tfoo\tbar\n${opening}`)).toEqual(
+        doc(b("codeBlock", [t(`${" ".repeat(4 - indent)}foo\tbar`)])),
+      );
+    }
+    expect(roundTrip(`   ${fence}\n \tfoo\n  \t\tbar\n   \tbaz\n\t\n   ${fence}`)).toEqual(
+      doc(b("codeBlock", [t(" foo\n \tbar\n\tbaz\n ")])),
+    );
+  });
+  it.each([
+    "```",
+    "~~~",
+  ])("removes up to the opening fence indentation per content line: %s", (fence) => {
+    expect(roundTrip(`   ${fence}\n x\n   ${fence}`)).toEqual(doc(b("codeBlock", [t("x")])));
+    expect(roundTrip(`   ${fence}\nx\n x\n  x\n   x\n    x\n   ${fence}`)).toEqual(
+      doc(b("codeBlock", [t("x\nx\nx\nx\n x")])),
+    );
+    expect(roundTrip(`  ${fence}ts\n x\n \n  ${fence}`)).toEqual(
+      doc(b("codeBlock", [t("x\n")], { language: "ts" })),
+    );
+    expect(roundTrip(`   ${fence}\n x`)).toEqual(doc(b("codeBlock", [t("x")])));
+  });
+  it("removes tilde fence indentation inside quotes and list items", () => {
+    expect(roundTrip(">    ~~~\n>  x\n>    ~~~")).toEqual(
+      doc(b("blockquote", [b("codeBlock", [t("x")])])),
+    );
+    expect(roundTrip("- item\n\n     ~~~\n   x\n     ~~~")).toEqual(
+      doc(b("bulletList", [b("listItem", [p(t("item")), b("codeBlock", [t("x")])])])),
+    );
+  });
+  it.each([
+    "- item\n\n  ```\n  foo\tbar\n  ```",
+    "2. item\n\n   ~~~\n   foo\tbar\n   ~~~",
+    "- [x] item\n\n  ```\n  foo\tbar\n  ```",
+    "- item\n\n  ```\n  \tfoo\n  ```",
+    "- item\n\n  ```\n  foo\t\n  ```",
+    "- item\n\n  ```\n  foo\tbar",
+    "- item\n\n      foo\tbar",
+    "-     foo\tbar",
+    "- item\n\n      \tfoo",
+    "- outer\n  - inner\n\n    ```\n    foo\tbar\n    ```",
+    "> - item\n>\n>   ```\n>   foo\tbar\n>   ```",
+    "- > ```\n  > foo\tbar\n  > ```",
+    "- `foo\tbar`",
+    "- item\n  `foo\tbar`",
+    "-\t`code`",
+  ])("rejects code in tabbed list items or preserves the source literally: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it.each([
+    "- foo\tbar",
+    "2. foo\tbar",
+    "- [x] foo\tbar",
+    "- **foo\tbar**",
+    '- [site](https://example.org/ "foo\tbar")',
+    "- item\n  foo\tbar",
+    "- Notes\n  2026.\tAnnual review",
+    "- Notes\n  2)\tAnnual review",
+    "- [x] Notes\n  2.\tAnnual review",
+    "- item\n  [x]\tfoo",
+    "- item\n\n  foo\tbar",
+    "- item\n\n  # foo\tbar",
+    "- outer\n  - foo\tbar",
+    "> - foo\tbar",
+    "before\n\n- foo\tbar\n\nafter",
+  ])("rejects content tabs that list tokenization can expand: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("keeps structural list tabs and content tabs outside lists", () => {
+    expect(roundTrip("-\tfoo\n\tbar")).toEqual(
+      doc(b("bulletList", [b("listItem", [p(t("foo\nbar"))])])),
+    );
+    expect(roundTrip("- [x]\tfoo")).toEqual(
+      doc(b("taskList", [b("taskItem", [p(t("foo"))], { checked: true })])),
+    );
+    expect(roundTrip("foo\tbar")).toEqual(doc(p(t("foo\tbar"))));
+    expect(roundTrip('[site](https://example.org/ "foo\tbar")')).toEqual(
+      doc(
+        p(
+          t("site", [{ type: "link", attrs: { href: "https://example.org/", title: "foo\tbar" } }]),
+        ),
+      ),
+    );
+  });
+  it("keeps tab-free list code next to a tabbed item", () => {
+    expect(roundTrip("-\titem\n- code\n\n  ```\n  foo    bar\n  ```")).toEqual(
+      doc(
+        b("bulletList", [
+          b("listItem", [p(t("item"))]),
+          b("listItem", [p(t("code")), b("codeBlock", [t("foo    bar")])]),
+        ]),
+      ),
+    );
+  });
+  it.each([
+    ">    \tfoo",
+    ">\t    foo",
+    ">     first\n>    \tsecond",
+    "> >    \tfoo",
+    ">\t>     foo",
+    "> - item\n>\n>       \tfoo",
+  ])("rejects tab-dependent quoted code or preserves the whole source literally: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it.each([
+    ">  ~~~\n> \tcode\n>  ~~~",
+    ">  ```\n> \tcode\n>  ```",
+    ">   ~~~\n>  \tcode\n>   ~~~",
+    ">    ```\n> \tcode\n>    ```",
+    ">  ~~~\n> \t\n>  ~~~",
+    ">  ~~~\n> \tcode",
+    "> >  ~~~\n> > \tcode\n> >  ~~~",
+    "before\n\n>  ~~~\n> \tcode\n>  ~~~\n\nafter",
+  ])("rejects quoted fence dedentation across a content tab: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it.each([
+    ">\t~~~\n>   code\n>\t~~~",
+    ">\t```\n>   code\n>\t```",
+    ">\t~~~\n>   code",
+    "> ~~~\n>\tcode\n> ~~~",
+    "> ~~~\n> code\n>\t~~~",
+    "> >\t~~~\n> >   code\n> >\t~~~",
+    ">\t> ~~~\n>\t> code\n>\t> ~~~",
+    "- >\t~~~\n  >   code\n  >\t~~~",
+    "before\n\n>\t~~~\n>   code\n>\t~~~\n\nafter",
+  ])("rejects quoted fences after a quote marker consumes a tab: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("keeps tabbed quote paragraphs and separate fences", () => {
+    expect(roundTrip(">\ttext")).toEqual(doc(b("blockquote", [p(t("text"))])));
+    expect(roundTrip(">\ttext\n\n~~~\ncode\n~~~")).toEqual(
+      doc(b("blockquote", [p(t("text"))]), b("codeBlock", [t("code")])),
+    );
+  });
+  it("preserves quoted code with space indentation and fenced content tabs", () => {
+    expect(roundTrip(">       foo\tbar")).toEqual(
+      doc(b("blockquote", [b("codeBlock", [t("  foo\tbar")])])),
+    );
+    expect(roundTrip("> ```\n> \tfoo\tbar\n> ```")).toEqual(
+      doc(b("blockquote", [b("codeBlock", [t("\tfoo\tbar")])])),
+    );
+    expect(roundTrip(">  ~~~\n>  \tfoo\tbar\n>  ~~~")).toEqual(
+      doc(b("blockquote", [b("codeBlock", [t("\tfoo\tbar")])])),
+    );
+    expect(roundTrip("> quote\n\n ~~~\n\tcode\n ~~~")).toEqual(
+      doc(b("blockquote", [p(t("quote"))]), b("codeBlock", [t("   code")])),
+    );
+  });
+
+  it("retains task state independently of checkbox-like item text", () => {
+    expect(markdownToDocs("- [ ] [x] literal checkbox")).toEqual(
+      doc(b("taskList", [b("taskItem", [p(t("[x] literal checkbox"))], { checked: false })])),
+    );
+    expect(markdownToDocs("**outer __inner__ end**")).toEqual(
+      doc(p(t("outer inner end", [m("bold")]))),
+    );
+    expect(markdownToDocs("> ")).toEqual(doc(b("blockquote", [p()])));
+  });
+  it.each(["x", "X", " "])("removes only the first paragraph task marker [%s]", (marker) => {
+    expect(roundTrip(`- [${marker}] outer\n\n  [ ] inner\n\n  [x] last`)).toEqual(
+      doc(
+        b("taskList", [
+          b("taskItem", [p(t("outer")), p(t("[ ] inner")), p(t("[x] last"))], {
+            checked: marker !== " ",
+          }),
+        ]),
+      ),
+    );
+  });
+  it("keeps later literal task markers in quotes and nested lists", () => {
+    expect(roundTrip("- [x] outer\n\n  > [ ] quoted\n\n  - [ ] nested\n\n    [x] literal")).toEqual(
+      doc(
+        b("taskList", [
+          b(
+            "taskItem",
+            [
+              p(t("outer")),
+              b("blockquote", [p(t("[ ] quoted"))]),
+              b("taskList", [
+                b("taskItem", [p(t("nested")), p(t("[x] literal"))], { checked: false }),
+              ]),
+            ],
+            { checked: true },
+          ),
+        ]),
+      ),
+    );
+  });
+  it.each(["x", "X", " "])("imports wrapped task descriptions with marker [%s]", (marker) => {
+    expect(roundTrip(`- [${marker}]\n  completed`)).toEqual(
+      doc(b("taskList", [b("taskItem", [p(t("completed"))], { checked: marker !== " " })])),
+    );
+  });
+  it("keeps wrapped and same-line tasks in one checklist", () => {
+    expect(roundTrip("- [x]\n  completed\n- [ ] pending")).toEqual(
+      doc(
+        b("taskList", [
+          b("taskItem", [p(t("completed"))], { checked: true }),
+          b("taskItem", [p(t("pending"))], { checked: false }),
+        ]),
+      ),
+    );
+  });
+  it("preserves formatting, reference links, and later blocks after wrapped task markers", () => {
+    expect(
+      roundTrip(
+        "- [x]\n  **completed** [site][ref]\n\n  second paragraph\n\n  - nested\n\n[ref]: https://example.org/\n[x]: https://example.org/marker",
+      ),
+    ).toEqual(
+      doc(
+        b("taskList", [
+          b(
+            "taskItem",
+            [
+              p(
+                t("completed", [m("bold")]),
+                t(" "),
+                t("site", [{ type: "link", attrs: { href: "https://example.org/" } }]),
+              ),
+              p(t("second paragraph")),
+              b("bulletList", [b("listItem", [p(t("nested"))])]),
+            ],
+            { checked: true },
+          ),
+        ]),
+      ),
+    );
+  });
+  it.each([
+    "- [x]  \n  completed",
+    "- [x]\t\n  completed",
+  ])("consumes task-marker whitespace without adding a hard break: %s", (source) => {
+    expect(roundTrip(source)).toEqual(
+      doc(b("taskList", [b("taskItem", [p(t("completed"))], { checked: true })])),
+    );
+  });
+  it("preserves blocks after an empty task paragraph", () => {
+    expect(roundTrip("- [x]\n\n  completed")).toEqual(
+      doc(b("taskList", [b("taskItem", [p(), p(t("completed"))], { checked: true })])),
+    );
+  });
+  it.each(["x", " "])("preserves an empty task paragraph before a quote: [%s]", (marker) => {
+    const expected = doc(
+      b("taskList", [
+        b("taskItem", [p(), b("blockquote", [p(t("detail"))])], { checked: marker === "x" }),
+      ]),
+    );
+    expect(roundTrip(`- [${marker}]\n\n  > detail`)).toEqual(expected);
+    expect(docsToMarkdown(expected)).toMatch(/^-[ ]\[[x ]\][ ]\n[ ]*\n[ ]{2}> detail$/);
+  });
+  it.each([
+    "- [x]\n\n  ### detail",
+    "- [ ]\n\n  ```\n  code\n  ```",
+    "- [x]\n\n  - nested",
+    "- [ ]\n\n  3. ordered",
+    "- [x]\n\n  ---",
+    "- [x]\n\n  > detail\n\n  another paragraph\n\n- [ ] next",
+    "> - [ ]\n>\n>   > detail",
+  ])("round trips nested blocks after an empty task paragraph: %s", (source) => {
+    const parsed = roundTrip(source);
+    const list = parsed.content?.[0];
+    const task = list?.type === "blockquote" ? list.content?.[0]?.content?.[0] : list?.content?.[0];
+    expect(task?.content?.[0]).toEqual(p());
+  });
+  it.each([
+    "- [x]tail",
+    "- \\[x] completed",
+    "- `[x]` completed",
+    "- [y] completed",
+  ])("keeps non-task markers in bullet items: %s", (source) => {
+    expect(roundTrip(source).content?.[0]?.type).toBe("bulletList");
+  });
+  it.each([
+    "- [x]\n  completed\n- ordinary",
+    "1. [x]\n   completed",
+  ])("rejects mixed or ordered lists with wrapped tasks: %s", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it.each([
+    "***alpha****beta*",
+    "*alpha****beta***",
+    "before ***alpha****beta* after",
+    "# ***alpha****beta*",
+    "[***alpha****beta*](https://example.org/)",
+    "> ***alpha****beta*",
+    "- ***alpha****beta*",
+    "before\n\n***alpha****beta*\n\nafter",
+  ])("rejects adjacent emphasis that loses literal delimiters: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("keeps supported emphasis beside equal or different delimiter runs", () => {
+    expect(roundTrip("***alpha******beta***")).toEqual(
+      doc(p(t("alphabeta", [m("bold"), m("italic")]))),
+    );
+    expect(roundTrip("**alpha***beta*")).toEqual(
+      doc(p(t("alpha", [m("bold")]), t("beta", [m("italic")]))),
+    );
+    expect(roundTrip("***alpha***_beta_")).toEqual(
+      doc(p(t("alpha", [m("bold"), m("italic")]), t("beta", [m("italic")]))),
+    );
+    expect(roundTrip("`***alpha****beta*`")).toEqual(doc(p(t("***alpha****beta*", [m("code")]))));
+    expect(roundTrip("\\*\\*\\*alpha\\*\\*\\*\\*beta\\*")).toEqual(doc(p(t("***alpha****beta*"))));
+  });
+  it.each([
+    "***first* middle *last***",
+    "___first_ middle _last___",
+    "before ***first* middle *last*** after",
+    "[***first* middle *last***](https://example.org/)",
+  ])("rejects nested emphasis that Marked mis-tokenizes: %s", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("imports equivalent nested emphasis with the exact text and marks", () => {
+    expect(roundTrip("**_first_ middle _last_**")).toEqual(
+      doc(
+        p(
+          t("first", [m("bold"), m("italic")]),
+          t(" middle ", [m("bold")]),
+          t("last", [m("bold"), m("italic")]),
+        ),
+      ),
+    );
+    expect(roundTrip("***first** middle **last***")).toEqual(
+      doc(
+        p(
+          t("first", [m("bold"), m("italic")]),
+          t(" middle ", [m("italic")]),
+          t("last", [m("bold"), m("italic")]),
+        ),
+      ),
+    );
+    expect(roundTrip("***first \\* middle `*last*`***")).toEqual(
+      doc(
+        p(
+          t("first * middle ", [m("bold"), m("italic")]),
+          t("*last*", [m("bold"), m("italic"), m("code")]),
+        ),
+      ),
+    );
+  });
+  it.each([
+    "hello\n\t\nworld",
+    "hello\n \t \nworld",
+    "hello\n\t\t\nworld",
+    "**hello\n\t\nworld**",
+    "hello\n\t\nworld\n---",
+    "> hello\n> \t\n> world",
+    "before\n\nhello\n\t\nworld\n\nafter",
+  ])("rejects tab-only blank lines before inline normalization: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("keeps supported blank separators and tab content in fenced code", () => {
+    expect(roundTrip("hello\n \nworld")).toEqual(doc(p(t("hello")), p(t("world"))));
+    expect(roundTrip("```\nhello\n\t\nworld\n```")).toEqual(
+      doc(b("codeBlock", [t("hello\n\t\nworld")])),
+    );
+  });
+  it.each([
+    ["  Plan  ", p(t("Plan"))],
+    ["   Plan\t ", p(t("Plan"))],
+    ["  Plan \n  next\t ", p(t("Plan\nnext"))],
+    ["Plan\t\n\tnext", p(t("Plan\nnext"))],
+    ["Plan  \n   next  ", p(t("Plan"), b("hardBreak"), t("next"))],
+    ["Plan\\\n   **next**  ", p(t("Plan"), b("hardBreak"), t("next", [m("bold")]))],
+    ["**Plan \n next**", p(t("Plan\nnext", [m("bold")]))],
+    ["  **Plan**  ", p(t("Plan", [m("bold")]))],
+    ["  ` Plan `  ", p(t("Plan", [m("code")]))],
+    ["\u00a0Plan\u00a0", p(t("\u00a0Plan\u00a0"))],
+    [`${numericReference(32)}Plan${numericReference(32)}`, p(t(" Plan "))],
+    [
+      "[  Plan  ](https://example.org/)",
+      p(t("  Plan  ", [{ type: "link", attrs: { href: "https://example.org/" } }])),
+    ],
+  ])("applies paragraph whitespace rules before decoding text: %s", (source, paragraph) => {
+    expect(markdownToDocs(source as string)).toEqual(doc(paragraph as DocsNode));
+  });
+  it("normalizes paragraph whitespace in lists and quotes without changing code", () => {
+    expect(roundTrip(">   Plan  ")).toEqual(doc(b("blockquote", [p(t("Plan"))])));
+    expect(roundTrip("- Plan\n\n    Next  ")).toEqual(
+      doc(b("bulletList", [b("listItem", [p(t("Plan")), p(t("Next"))])])),
+    );
+    expect(roundTrip("```\n  Plan  \n``` ")).toEqual(doc(b("codeBlock", [t("  Plan  ")])));
+  });
+  it.each([
+    "  Plan  ",
+    " Plan",
+    "Plan ",
+    "Plan\t",
+    "Plan \nnext",
+    "Plan\n next",
+  ])("rejects export when paragraph whitespace would be lost: %s", (value) => {
+    errorCode(() => docsToMarkdown(doc(p(t(value)))), "unrepresentable");
+  });
+  it("preserves entity-looking link destinations and titles on export", () => {
+    const value = doc(
+      p(
+        t("site", [
+          {
+            type: "link",
+            attrs: { href: "https://example.org/&copy;", title: 'A "quote", a \\ and &amp;' },
+          },
+        ]),
+      ),
+    );
+    expect(markdownToDocs(docsToMarkdown(value))).toEqual(value);
+  });
+  it("keeps character references literal inside angle autolinks", () => {
+    const href = "https://example.org/&amp;&#65;&copy;";
+    expect(roundTrip(`<${href}>`)).toEqual(doc(p(t(href, [{ type: "link", attrs: { href } }]))));
+  });
+  it.each([
+    ["https://example.org/?a=1&amp;b=2", "https://example.org/?a=1&b=2"],
+    ["https://example.org/a_b_c", "https://example.org/a_b_c"],
+    ["https://example.org/a*b", "https://example.org/a*b"],
+    ["www.example.org", "http://www.example.org"],
+    ["mira@example.org", "mailto:mira@example.org"],
+  ])("imports bare autolinks with decoded text and destination: %s", (source, href) => {
+    const label = source.startsWith("https:") ? href : source;
+    expect(roundTrip(source)).toEqual(doc(p(t(label, [{ type: "link", attrs: { href } }]))));
+    expect(roundTrip(`**before** ${source} _after_`)).toEqual(
+      doc(
+        p(
+          t("before", [m("bold")]),
+          t(" "),
+          t(label, [{ type: "link", attrs: { href } }]),
+          t(" "),
+          t("after", [m("italic")]),
+        ),
+      ),
+    );
+  });
+  it.each([
+    "https://example.org/*foo*",
+    "https://example.org/**foo**",
+    "https://example.org/_foo_",
+    "https://example.org/*foo*/tail",
+    "https://example.org/first https://example.org/*foo*",
+  ])("rejects bare URLs that hide CommonMark emphasis: %s", (source) => {
+    errorCode(() => markdownToDocs(source), "unrepresentable");
+    errorCode(() => markdownToDocs(source, { unsupported: "literal" }), "unrepresentable");
+  });
+  it.each([
+    ["a*b*c", "a*b*c"],
+    ["a*b*", "a*b*"],
+    ["*b*c", "*b*c"],
+    ["*word*", "_word_"],
+    ["(*word*)", "\\(_word_\\)"],
+    ["*!*", "_\\!_"],
+    ["*🌿*", "_🌿_"],
+    ["*“word”*", "_“word”_"],
+    ["foo-_(bar)_", "foo\\-_\\(bar\\)_"],
+    ["é*b*文", "é*b*文"],
+    ["*a `b` c*", "_a `b` c_"],
+    ["pre***fix***", "pre***fix***"],
+    ["***pre***fix", "***pre***fix"],
+    ["pre***fix***post", "pre***fix***post"],
+    ["é***fix***文", "é***fix***文"],
+  ])("chooses emphasis delimiters that preserve flanking: %s", (source, output) => {
+    expect(docsToMarkdown(roundTrip(source))).toBe(output);
+  });
+  it.each([
+    ["65", "A"],
+    ["0000065", "A"],
+    ["x41", "A"],
+    ["X000041", "A"],
+    ["00000065", null],
+    ["x0000041", null],
+    ["12345678", null],
+    ["x1234567", null],
+    ["", null],
+    ["x", null],
+    ["-65", null],
+  ])("decodes only numeric references matching CommonMark digit limits: %s", (reference, decoded) => {
+    const source = `&${"#"}${reference};`;
+    const value = decoded ?? source;
+    expect(roundTrip(source)).toEqual(doc(p(t(value))));
+    const href = `https://example.org/?value=${value}`;
+    expect(roundTrip(`[site](https://example.org/?value=${source})`)).toEqual(
+      doc(p(t("site", [{ type: "link", attrs: { href } }]))),
+    );
+    expect(roundTrip(`https://example.org/?value=${source}&end=1`)).toEqual(
+      doc(p(t(`${href}&end=1`, [{ type: "link", attrs: { href: `${href}&end=1` } }]))),
+    );
+  });
+  it("normalizes CRLF, lone CR, empty input and Markdown spelling", () => {
+    expect(markdownToDocs("\r\n\r")).toEqual(doc(p()));
+    expect(roundTrip("A\r\n\r\nB")).toEqual(doc(p(t("A")), p(t("B"))));
+    expect(docsToMarkdown(doc())).toBe("");
+    expect(docsToMarkdown(doc(p()))).toBe("");
+    expect(docsToMarkdown(markdownToDocs("__Mira__"))).toBe("**Mira**");
+    expect(docsToMarkdown(markdownToDocs("- [x] done"))).toContain("- [x]");
+  });
+
+  it.each([
+    "#### Unsupported heading",
+    "##### Fifth",
+    "###### Sixth",
+    "![image](https://example.org/image.png)",
+    "<b>HTML</b>",
+    "<div>Block HTML</div>",
+    "~~strikethrough~~",
+    "| A | B |\n|---|---|\n| 1 | 2 |",
+    "---\ntitle: Fictional plan\n---\n\n# Plan",
+    "---\ntitle: Fictional plan\n...\nBody",
+    "A footnote[^1]\n\n[^1]: Details",
+    "[^note]: footnote",
+    "- [x] task\n- plain",
+    "- # Title\n- [x] task\u00a0",
+    "1. [x] ordered task",
+    "```ts extra metadata\ncode\n```",
+    "```a&amp;b\ncode\n```",
+    "&copy;",
+    "&constructor;",
+    "&toString;",
+    "[ref]: https://example.org/?x=\\&amp;\n\n[ref]",
+    "Orphan footnote[^1]",
+    numericReference(128),
+    "[x](<https://example.org/?x=\\&amp;>)",
+    "&AMP;",
+    "&#0;",
+    "&#xD800;",
+    "&#1114112;",
+    numericReference(127),
+    "[bad](javascript:alert(1))",
+    "[bad](data:text/plain,hello)",
+    "[bad](https://[)",
+    "[bad](https://example.org/&#32;)",
+    "[relative](/docs)",
+    "[outer [inner](https://example.org/a)](https://example.org/b)",
+    "[outer **[inner](https://example.org/a)**](https://example.org/b)",
+    "[outer <https://example.org/a>](https://example.org/b)",
+    "[outer [inner][a]][b]\n\n[a]: https://example.org/a\n[b]: https://example.org/b",
+  ])("rejects unsupported input or preserves the entire source literally: %s", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+
+  it("never treats escaped unsupported syntax or code as markup", () => {
+    roundTrip("\\!\\[image\\]\\(example.org/image.png\\) \\<b\\>");
+    errorCode(
+      () => markdownToDocs("\\!\\[image\\]\\(https://example.org/image.png\\)"),
+      "unsupported",
+    );
+    roundTrip("`![image](https://example.org/) &copy; [^note]`");
+    roundTrip("```html\n<div> &copy;\n```");
+    const literal = markdownToDocs("~~literal~~", { unsupported: "literal" });
+    expect(markdownToDocs(docsToMarkdown(literal))).toEqual(literal);
+  });
+  it("validates source, options and resource limits with typed errors", () => {
+    errorCode(() => markdownToDocs(1 as never), "invalid-input");
+    errorCode(() => markdownToDocs("\0"), "invalid-input");
+    errorCode(() => markdownToDocs("x".repeat(1_000_001)), "limit");
+    for (const options of [null, 1, [], { unsupported: "drop" }, { other: true }]) {
+      errorCode(() => markdownToDocs("text", options as never), "invalid-input");
+    }
+    errorCode(() => markdownToDocs(`${"> ".repeat(34)}deep`, { unsupported: "literal" }), "limit");
+    const spy = vi.spyOn(Lexer.prototype, "lex").mockImplementationOnce(() => {
+      throw new Error("Synthetic lexer failure");
+    });
+    errorCode(() => markdownToDocs("text"), "invalid-input");
+    spy.mockRestore();
+  });
+
+  it("normalizes JSON defaults and adjacent equivalent text without mutation", () => {
+    const input = doc(
+      p(t("a", [m("italic"), m("bold")]), t("b", [m("bold"), m("italic")])),
+      b("orderedList", [b("listItem", [p(t("item"))])]),
+      b("codeBlock", [], { language: null }),
+      p(t("site", [{ type: "link", attrs: { href: "https://example.org/", title: null } }])),
+    );
+    const before = JSON.stringify(input);
+    const result = markdownToDocs(docsToMarkdown(input));
+    expect(result).toEqual(
+      doc(
+        p(t("ab", [m("bold"), m("italic")])),
+        b("orderedList", [b("listItem", [p(t("item"))])], { start: 1 }),
+        b("codeBlock"),
+        p(t("site", [{ type: "link", attrs: { href: "https://example.org/" } }])),
+      ),
+    );
+    expect(JSON.stringify(input)).toBe(before);
+  });
+  it("escapes text that would otherwise introduce blocks, links, entities or marks", () => {
+    for (const value of [
+      "# heading",
+      "---",
+      "- item",
+      "1. item",
+      "[x](https://example.org)",
+      "<script>",
+      "&copy;",
+      "&constructor;",
+      "&toString;",
+      "Orphan footnote[^1]",
+      numericReference(128),
+      "[x](<https://example.org/?x=\\&amp;>)",
+      "**bold**",
+      "a\\b",
+      "![]()",
+      "|table|",
+      "_word_",
+      "~strike~",
+    ]) {
+      const input = doc(p(t(value)));
+      expect(markdownToDocs(docsToMarkdown(input))).toEqual(input);
+    }
+    const input = doc(p(t("A ` B ` C", [m("code")]), t("!")));
+    expect(markdownToDocs(docsToMarkdown(input))).toEqual(input);
+  });
+
+  it.each([
+    null,
+    [],
+    1,
+    { type: "doc", extra: true },
+    {},
+    { type: "doc", attrs: null },
+    { type: "doc", content: "text" },
+    { type: "doc", marks: [] },
+    { type: "doc", text: "text" },
+    doc(p({ type: "text", text: 1 } as never)),
+    doc(p(t(""))),
+    doc(p({ type: "text", text: "text", content: [] })),
+    doc(p({ type: "text", text: "text", marks: "bad" } as never)),
+    doc(p(t("x", [null as never]))),
+    doc(p(t("x", [{ type: "bold", other: 1 } as never]))),
+    doc(p(t("x", [{ type: "bold", attrs: { other: 1 } }]))),
+    doc(p(t("x", [m("underline")]))),
+    doc(p(t("x", [m("bold"), m("bold")]))),
+    doc(p(t("x", [{ type: "link", attrs: { href: "https://example.org", target: "_blank" } }]))),
+    doc(p(t("x", [{ type: "link", attrs: { href: 1 } }]))),
+    doc(p(t("x", [{ type: "link", attrs: { href: "javascript:alert(1)" } }]))),
+    doc(p(t("x", [{ type: "link", attrs: { href: "https://[" } }]))),
+    doc(p(t("x", [{ type: "link", attrs: { href: "https://example.org", title: 1 } }]))),
+    doc(p(t("x", [{ type: "link", attrs: { href: "https://example.org/\u0001" } }]))),
+    doc(p(t("x", [{ type: "link", attrs: { href: "https://example.org/\\x" } }]))),
+    doc(p(t("\r"))),
+    doc(p(t("\0"))),
+    doc(p(t("x".repeat(1_000_001)))),
+    doc(b("image", [], { src: "https://example.org/a.png" })),
+    doc(b("unknown")),
+    doc(b("constructor")),
+    doc(b("__proto__")),
+    doc(b("heading", [], { level: 4 })),
+    doc(b("heading")),
+    doc(p(b("paragraph"))),
+    doc(t("x")),
+    doc(b("doc")),
+    doc(b("blockquote")),
+    doc(b("listItem", [b("heading", [], { level: 1 })])),
+    doc(b("bulletList")),
+    doc(b("bulletList", [p(t("x"))])),
+    doc(b("taskList", [b("listItem", [p()])])),
+    doc(b("taskList", [b("taskItem", [p()])])),
+    doc(b("taskList", [b("taskItem", [p()], { checked: "true" })])),
+    doc(b("orderedList", [b("listItem", [p()])], { start: -1 })),
+    doc(b("orderedList", [b("listItem", [p()])], { start: 1.5 })),
+    doc(b("orderedList", [b("listItem", [p()])], { start: 1_000_000_000 })),
+    doc(b("orderedList", [b("listItem", [p()])], { start: "1" })),
+    doc(b("codeBlock", [b("hardBreak")])),
+    doc(b("codeBlock", [t("x", [m("bold")])])),
+    doc(b("codeBlock", [], { language: 1 })),
+    doc(b("codeBlock", [], { language: "bad info" })),
+    doc(b("horizontalRule", [p()])),
+    doc(p(b("hardBreak", [p()]))),
+    doc(p(t("x")), b("paragraph", [], { textAlign: "center" })),
+    p(t("not a document root")),
+  ])("rejects malformed or unsupported JSON %#", (value) => {
+    expect(() => docsToMarkdown(value)).toThrow(MarkdownError);
+  });
+  it("rejects cycles and excessive JSON depth", () => {
+    const cycle = doc();
+    cycle.content = [cycle];
+    errorCode(() => docsToMarkdown(cycle), "limit");
+  });
+  it.each([
+    doc(p(), p(t("text"))),
+    doc(
+      b("taskList", [b("taskItem", [p(t("a"))], { checked: true })]),
+      b("bulletList", [b("listItem", [p(t("b"))])]),
+    ),
+    doc(p(t(" ", [m("bold")]))),
+    doc(p(t("a\n\nb"))),
+    doc(p(t("a\nb", [m("code")]))),
+    doc(p(t("a ", [m("bold")]), t("b"))),
+    doc(p(t(" ", [m("italic")]))),
+    doc(p(t("a ", [m("italic")]), t("b"))),
+    doc(
+      b("orderedList", [b("listItem", [p(t("a"))]), b("listItem", [p(t("b"))])], {
+        start: 999_999_999,
+      }),
+    ),
+  ])("fails closed when Markdown cannot preserve the JSON %#", (value) => {
+    errorCode(() => docsToMarkdown(value), "unrepresentable");
+  });
+});
