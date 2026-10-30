@@ -21,6 +21,12 @@ import {
 } from "./shared";
 import { type DocsMark, type DocsNode, MarkdownError, type MarkdownOptions } from "./types";
 
+function columns(prefix: string): number {
+  let column = 0;
+  for (const character of prefix) column += character === "\t" ? 4 - (column % 4) : 1;
+  return column;
+}
+
 class MarkdownTokenizer extends Tokenizer {
   override fences(source: string): Tokens.Code | undefined {
     const token = super.fences(source);
@@ -29,7 +35,38 @@ class MarkdownTokenizer extends Tokenizer {
       // Use the raw content capture for both fence spellings and partial indentation.
       const content = (this.rules.block.fences.exec(token.raw) as RegExpExecArray)[3] ?? "";
       const indent = (/^ */.exec(token.raw) as RegExpExecArray)[0].length;
-      token.text = content.replace(new RegExp(`^ {0,${indent}}`, "gm"), "");
+      token.text = content.replace(/^[ \t]*/gm, (padding) => {
+        let column = 0;
+        let offset = 0;
+        while (column < indent && offset < padding.length) {
+          column += padding[offset] === "\t" ? 4 - (column % 4) : 1;
+          offset++;
+        }
+        // Expand only a tab crossing the boundary; later tabs stay literal code.
+        return " ".repeat(Math.max(0, column - indent)) + padding.slice(offset);
+      });
+    }
+    return token;
+  }
+
+  override list(source: string): Tokens.List | undefined {
+    const token = super.list(source);
+    if (token) {
+      for (const item of token.items) {
+        const opening = /^( {0,3}(?:[*+-]|\d{1,9}[.)]))([ \t]*)([^\n]*)/.exec(
+          item.raw,
+        ) as RegExpExecArray;
+        const markerWidth = (opening[1] as string).length;
+        const padding = columns((opening[1] as string) + opening[2]) - markerWidth;
+        const indent = markerWidth + (!opening[3] || padding > 4 ? 1 : padding);
+        for (const line of item.raw.split("\n").slice(1)) {
+          const underline = /^([ \t]*)(?:=+|-+)[ \t]*$/.exec(line);
+          // Marked discards list indentation before recognizing setext headings.
+          // Reject underlines that only entered the item as lazy paragraph text.
+          if (underline && columns(underline[1] as string) < indent)
+            fail("Lazy list setext underlines are unsupported");
+        }
+      }
     }
     return token;
   }

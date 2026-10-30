@@ -264,6 +264,37 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
   ])("round trips multiline headings with inline marks and surrounding blocks: %s", (source) => {
     roundTrip(source);
   });
+  it.each([
+    "- Foo\n===",
+    "- Foo\n ===",
+    "1. Foo\n  ===",
+    "-   Foo\n  ===",
+    "-\tFoo\n   ===",
+    "- Foo\n--",
+    "- [x] Foo\n===",
+    "- - Foo\n  ===",
+    "> - Foo\n> ===",
+    "before\n\n- Foo\n  Bar\n===\n\nafter",
+  ])("rejects lazy list underlines or preserves the whole source literally: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it.each([
+    "- Foo\n  ===",
+    "1. Foo\n   ===",
+    "-    Foo\n     ===",
+    "-\tFoo\n\t===",
+    "- Foo\n  --",
+    "-    \n  Foo\n  ===",
+  ])("keeps properly indented setext list headings: %j", (source) => {
+    const list = roundTrip(source).content?.[0];
+    expect(list?.content?.[0]?.content?.[1]?.type).toBe("heading");
+  });
+  it("keeps the one-space list padding rule before indented code", () => {
+    expect(roundTrip("-     code\n  ===")).toEqual(
+      doc(b("bulletList", [b("listItem", [p(), b("codeBlock", [t("code")]), p(t("==="))])])),
+    );
+  });
   it("rejects multiline level-3 headings that CommonMark cannot represent", () => {
     errorCode(
       () => docsToMarkdown(doc(b("heading", [t("First\nSecond")], { level: 3 }))),
@@ -291,6 +322,17 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     const indent = fence.startsWith("  ") ? "  " : "";
     expect(roundTrip(`${fence}\n${indent}\tfoo\tbar\n${fence}`)).toEqual(
       doc(b("codeBlock", [t("\tfoo\tbar")])),
+    );
+  });
+  it.each(["```", "~~~"])("removes fence indentation in tab columns: %s", (fence) => {
+    for (const indent of [1, 2, 3]) {
+      const opening = `${" ".repeat(indent)}${fence}`;
+      expect(roundTrip(`${opening}\n\tfoo\tbar\n${opening}`)).toEqual(
+        doc(b("codeBlock", [t(`${" ".repeat(4 - indent)}foo\tbar`)])),
+      );
+    }
+    expect(roundTrip(`   ${fence}\n \tfoo\n  \t\tbar\n   \tbaz\n\t\n   ${fence}`)).toEqual(
+      doc(b("codeBlock", [t(" foo\n \tbar\n\tbaz\n ")])),
     );
   });
   it.each([
