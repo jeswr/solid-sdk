@@ -323,3 +323,52 @@ run, and no other checkouts were touched. `roborev` remains unavailable, so
 automated per-commit review could not run; no review tool was installed. Tracker
 operations remain with the dispatcher. There are no unfinished implementation
 items or open questions for this round.
+
+## Fix round 6 — exact percentile rank products and remainders
+
+Commit `66631935` (`fix(sheets): preserve exact percentile ranks`) addresses the
+single finding against `6f4e3cf9c602026b38178f254a98a2e7859156e2`:
+
+- Preserve the percentile rank product, sample indices and fractional remainder
+  using exact binary integers, passing the exact ratio into affine interpolation.
+  Only the final resolved anchor is rounded. The 0.1 percentile over 0, 1, 2, 3
+  now agrees with a numeric anchor at 0.003.
+- Add six regression cases covering both orders of equal anchors, nonzero rank
+  remainders, negative samples, sample boundaries hidden by rank rounding,
+  subnormal percentages, and rejection of genuinely reversed adjacent anchors.
+  All six cases failed before the fix. The directory now has 186 passing tests
+  and retains 100% statements, branches, functions and lines.
+
+No rule shapes, dependencies, manifests or unrelated implementation files changed.
+The final documentation commit records this round's validation.
+
+All commands below used `PATH=/opt/node24/bin:$PATH` (Node v24.22.1, pnpm 10.4.1).
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/sheets-condformat.test.ts --coverage.enabled=false` | Expected regression failure before implementation: six failed, 180 passed. |
+| `pnpm --filter @jeswr/app-suite exec vitest run test/sheets-condformat.test.ts --coverage --coverage.include='src/apps/sheets/lib/condformat/**/*.ts'` | PASS: 186 tests; 100% statements, branches, functions and lines. |
+| `pnpm exec turbo run build --filter='@jeswr/app-suite^...'` | PASS: seven dependency builds. |
+| `pnpm --filter @jeswr/app-suite run lint` | PASS: 604 files; the same 54 existing warnings outside this lane. An initial formatting error in the new tests was corrected before this pass. |
+| `pnpm --filter @jeswr/app-suite run build` | PASS: production compilation, type validation and static generation. |
+| `pnpm --filter @jeswr/app-suite run typecheck` | PASS. |
+| `pnpm --filter @jeswr/app-suite run test` | PASS: 153 files / 7,693 tests; 100% statements, branches, functions and lines. |
+| `pnpm run lint:root` | PASS, including all workspace guards. |
+| `TURBO_SCM_BASE=6f4e3cf9c602026b38178f254a98a2e7859156e2 pnpm run gate` | PASS: 12/12 tasks, seven cached; 57.828s. |
+| `pnpm run gate:full` | FAIL outside this lane: the existing delegation credential inline snapshot at `packages/federation-trust/test/characterization.test.ts:196`. 291 tasks succeeded (nine cached), 352 total when Turbo stopped; 3m21.618s. All 879 root tests passed. |
+| `git diff --check` | PASS. |
+
+The full-workspace failure is the same public-JWK JSON property order mismatch
+recorded in fix rounds 1 and 2: the snapshot expects `crv,x,kty`, while this
+runtime emits `kty,crv,x`. `packages/federation-trust` has no changes relative to
+this round's starting commit. Its implementation and snapshot remain outside this
+fix round. Full-workspace verification is incomplete; the requested percentile
+fix is complete. Fourteen untracked callback/client-ID files generated under
+seven pod apps' `web/public/` directories were removed after the gate.
+
+No dependency additions, package-policy checks, UI changes or screenshots were
+required. No branches were switched, no remote operations were run, and no other
+checkouts were touched. `roborev` remains unavailable, so automated per-commit
+review could not run; no review tool was installed. Tracker operations remain
+with the dispatcher. There are no unfinished implementation items, semantic
+choices or open questions for this round.
