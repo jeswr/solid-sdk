@@ -1,0 +1,16 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# AUTHORED-BY Codex GPT-6
+# SolidOS LongChat wire-shape fixture (not a live-server capture).
+@prefix sioc: <http://rdfs.org/sioc/ns#>.
+@prefix foaf: <http://xmlns.com/foaf/0.1/>.
+@prefix dct: <http://purl.org/dc/terms/>.
+@prefix as: <https://www.w3.org/ns/activitystreams#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix wf: <http://www.w3.org/2005/01/wf/flow#>.
+<#m1> a sioc:Note, as:Note; sioc:content "Meet at noon";
+  foaf:maker <https://alice.example/profile#me>;
+  dct:created "2026-10-26T11:00:00Z"^^xsd:dateTime.
+<#m2> a sioc:Note, wf:Task, wf:Open; sioc:content "Bring lunch";
+  foaf:maker <https://bob.example/profile#me>;
+  dct:created "2026-10-26T11:01:00Z"^^xsd:dateTime;
+  as:inReplyTo <#m1>; dct:title "Lunch"; wf:assignee <https://alice.example/profile#me>.
