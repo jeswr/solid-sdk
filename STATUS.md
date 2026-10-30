@@ -122,3 +122,31 @@ Validation:
 - `git diff --check` — PASS. The gates produced no untracked files requiring cleanup.
 
 Both requested fixes are complete. No new open questions, UI work, screenshots or dependency-policy checks apply. The full-workspace timing failure remains recorded above. `roborev` is still unavailable, so no automated commit review verdict is claimed. Work stayed on `lane/sst-kw9b` in this checkout, with no pushes, PRs, branch switches or remote fetches/merges.
+
+## Fix round 5 — sst-kw9b
+
+Review head and affected-gate base: `9888fbf5f23524ca5f2f676532f139f32d06e67f`. Fixed only the two supplied RDF mutation findings and added regression tests.
+
+Commits:
+
+- `4063a0a8 fix: reject direct edits to money transfer legs` — reject existing `fin:Transfer` subjects in `putTransaction` before any mutation. Initial paired creation remains accepted. Regressions load both transfer legs, attempt changes through the exported helper, compare the complete unchanged dataset, then conditionally write and reload the original balanced pair. Both combined Transaction/Transfer typing and standalone Transfer typing are covered.
+- `e8a03f37 fix: clear stale legacy money values on update` — remove recognized `fin:amount` and `fin:currency` predicates when their canonical fields are set or cleared. Regressions update exclusively owned legacy amounts for transactions and balances, preserve unrelated labels, round-trip the canonical replacement, and verify that clearing fields cannot revive stale values, including blank-node amounts with mixed legacy/canonical data.
+- `docs: record money round five validation` — final report commit after the checks below.
+
+Commands ran from this checkout with `export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"` (Node `v24.22.1`, pnpm `10.4.1`). No dependencies were added or installed; lifecycle scripts remained disabled.
+
+Validation:
+
+- `pnpm exec turbo run build --filter '@jeswr/app-suite^...' --concurrency=4` — PASS, five prerequisite packages.
+- `pnpm --filter @jeswr/app-suite exec vitest run test/money-model-io.test.ts --coverage.enabled=false -t 'rejects direct updates to loaded transfer legs'` — expected FAIL before the transfer fix, both regressions demonstrating that direct updates were accepted.
+- `pnpm --filter @jeswr/app-suite exec vitest run test/money-model.test.ts --coverage.enabled=false -t 'stale values|reviving fallback data'` — expected FAIL before the legacy cleanup fix, all four regressions finding retained legacy predicates.
+- `pnpm exec biome check --write apps/suite/test/money-model-io.test.ts` and `pnpm exec biome check --write apps/suite/src/apps/money/lib/model/rdf.ts apps/suite/test/money-model.test.ts` — PASS. The first command formatted the new transfer test before its final commit.
+- `pnpm --filter @jeswr/app-suite exec vitest run test/money-model.test.ts test/money-model-io.test.ts --coverage.include='src/apps/money/lib/model/**/*.ts'` — PASS, all 74 tests; 100% statements (401/401), branches (202/202), functions (103/103), lines (360/360). Coverage thresholds and exclusions are unchanged.
+- `pnpm --filter @jeswr/app-suite run lint && pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test` — PASS, all 123 files and 6,487 tests; 100% app coverage in all four metrics. Lint exits zero with the same 54 existing warnings in unrelated files.
+- `pnpm run lint:root` — PASS, including workspace/layer guards and all 74 contrast checks.
+- `TURBO_SCM_BASE=9888fbf5f23524ca5f2f676532f139f32d06e67f pnpm run gate` — PASS, 10/10 tasks (five cached), including the app build, typecheck and tests.
+- `pnpm run gate:full` — FAIL outside this lane after 63 successful tasks of 228 total (seven cached). `test/check-sdk-layers.test.mjs:328`, “validates pathological specs in under 50 ms each,” measured 63.819908999999825 ms against its 50 ms bound; the other 744 root tests passed. This timing test also failed in earlier fix rounds. No unrelated code or timing threshold was changed.
+- `pnpm run test:root` — PASS in isolation after the full gate stopped: all nine files and 745 tests, including the timing check. This does not change the failed full-gate result above.
+- `git diff --check` — PASS. The gates produced no untracked files requiring cleanup.
+
+Both requested fixes are complete. No new open questions, UI work, screenshots or dependency-policy checks apply. The full-workspace timing failure remains recorded above. `roborev` is still unavailable, so no automated commit review verdict is claimed. Work stayed on `lane/sst-kw9b` in this checkout, with no pushes, PRs, branch switches or remote fetches/merges.
