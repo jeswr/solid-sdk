@@ -38,6 +38,9 @@ layout, and reference definitions are not retained; exports use canonical inline
 Horizontal rules export as `***` to avoid front-matter ambiguity. Fenced code removes up to
 the opening fence's indentation in columns from each content line for both backtick and tilde
 fences. Tabs crossing that boundary leave spaces for their remaining columns; later tabs stay literal.
+Code blocks and code spans in list items containing literal tabs are conservatively rejected,
+including tabs in structural whitespace, because list tokenization expands tabs before code parsing.
+This restriction applies per item, including its nested content; tab-free sibling items remain supported.
 
 Links must be syntactically valid absolute http(s) or mailto URLs without whitespace, control
 characters, angle brackets, or backslashes. Bare GFM URL/email autolinks decode character references
@@ -52,7 +55,8 @@ these are rejected rather than decoded incorrectly. Code content is never entity
 constructs (including HTML, images, tables, strikethrough, footnotes, front matter, headings 4–6,
 mixed/ordered task lists, nested links, nested emphasis with unresolved same-delimiter text
 (such as `***first* middle *last***`), lazy list setext underlines, unprefixed quote continuations
-after non-paragraph blocks, indented code in quotes whose leading quote whitespace contains tabs,
+after non-paragraph blocks or starting a list block, code in tabbed list items,
+indented code in quotes whose leading quote whitespace contains tabs,
 and fence metadata) throw `MarkdownError`. Quote prefixes change tab stops, so
 this indented code is conservatively rejected; fenced code retains content tabs. With
 `{ unsupported: "literal" }`, **the entire normalized source** becomes unmarked text in a single

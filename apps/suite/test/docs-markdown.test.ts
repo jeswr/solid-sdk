@@ -142,6 +142,48 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     );
   });
   it.each([
+    "> quote\n2. next",
+    "> quote\n0) next",
+    "> quote\n2026. next\n2027. later",
+    "> quote\n   2) next",
+    "> quote\n2.\tnext",
+    "> quote\n2.",
+    "> quote\n2. \n   next",
+    "> # Title\n> quote\n2. next\n> after",
+    "> > quote\n2. next",
+    "> > quote\n> 2. next",
+    "- > quote\n  2. next",
+  ])("rejects ordered blocks entering an unprefixed quote continuation: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it.each([
+    "2.next",
+    "2\\. next",
+    "1000000000. next",
+    "    2. next",
+  ])("keeps ordinary numbered text as a lazy quote continuation: %j", (line) => {
+    const value = line.trimStart().replace("\\.", ".");
+    expect(roundTrip(`> quote\n${line}`)).toEqual(doc(b("blockquote", [p(t(`quote\n${value}`))])));
+  });
+  it("keeps prefixed ordered text and separate ordered lists around quotes", () => {
+    expect(roundTrip("> quote\n> 2. next")).toEqual(doc(b("blockquote", [p(t("quote\n2. next"))])));
+    expect(roundTrip("> quote\n>\n> 2. next")).toEqual(
+      doc(
+        b("blockquote", [
+          p(t("quote")),
+          b("orderedList", [b("listItem", [p(t("next"))])], { start: 2 }),
+        ]),
+      ),
+    );
+    expect(roundTrip("> quote\n\n2. next")).toEqual(
+      doc(
+        b("blockquote", [p(t("quote"))]),
+        b("orderedList", [b("listItem", [p(t("next"))])], { start: 2 }),
+      ),
+    );
+  });
+  it.each([
     "***",
     "___",
     "* * *",
@@ -354,6 +396,36 @@ describe("DOC-L4 Markdown and Docs JSON", () => {
     );
     expect(roundTrip("- item\n\n     ~~~\n   x\n     ~~~")).toEqual(
       doc(b("bulletList", [b("listItem", [p(t("item")), b("codeBlock", [t("x")])])])),
+    );
+  });
+  it.each([
+    "- item\n\n  ```\n  foo\tbar\n  ```",
+    "2. item\n\n   ~~~\n   foo\tbar\n   ~~~",
+    "- [x] item\n\n  ```\n  foo\tbar\n  ```",
+    "- item\n\n  ```\n  \tfoo\n  ```",
+    "- item\n\n  ```\n  foo\t\n  ```",
+    "- item\n\n  ```\n  foo\tbar",
+    "- item\n\n      foo\tbar",
+    "-     foo\tbar",
+    "- item\n\n      \tfoo",
+    "- outer\n  - inner\n\n    ```\n    foo\tbar\n    ```",
+    "> - item\n>\n>   ```\n>   foo\tbar\n>   ```",
+    "- > ```\n  > foo\tbar\n  > ```",
+    "- `foo\tbar`",
+    "- item\n  `foo\tbar`",
+    "-\t`code`",
+  ])("rejects code in tabbed list items or preserves the source literally: %j", (source) => {
+    errorCode(() => markdownToDocs(source), "unsupported");
+    expect(markdownToDocs(source, { unsupported: "literal" })).toEqual(doc(p(t(source))));
+  });
+  it("keeps tab-free list code next to a tabbed item", () => {
+    expect(roundTrip("-\titem\n- code\n\n  ```\n  foo    bar\n  ```")).toEqual(
+      doc(
+        b("bulletList", [
+          b("listItem", [p(t("item"))]),
+          b("listItem", [p(t("code")), b("codeBlock", [t("foo    bar")])]),
+        ]),
+      ),
     );
   });
   it.each([

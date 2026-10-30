@@ -7,6 +7,7 @@ import {
   Tokenizer,
   type Tokens,
   type TokensList,
+  walkTokens,
 } from "marked";
 import {
   block,
@@ -20,6 +21,8 @@ import {
   text,
 } from "./shared";
 import { type DocsMark, type DocsNode, MarkdownError, type MarkdownOptions } from "./types";
+
+const listOpening = /^( {0,3}(?:[*+-]|\d{1,9}[.)]))([ \t][^\n]*)?(?:\n|$)/;
 
 function columns(prefix: string): number {
   let column = 0;
@@ -82,7 +85,7 @@ class MarkdownLexer extends Lexer {
       ...tokenizer.rules,
       block: {
         ...tokenizer.rules.block,
-        list: /^( {0,3}(?:[*+-]|\d{1,9}[.)]))([ \t][^\n]*)?(?:\n|$)/,
+        list: listOpening,
       },
     };
   }
@@ -95,13 +98,14 @@ class MarkdownLexer extends Lexer {
   ): TokensList;
   override blockTokens(source: string, tokens?: Token[], lastParagraphClipped?: boolean): Token[] {
     // Marked appends unprefixed quote lines even after headings and rules.
-    // Only an existing paragraph can receive a lazy continuation.
+    // Only an existing paragraph can receive a lazy continuation, and an incoming
+    // list block cannot be continuation text even when its ordered marker is not 1.
     if (
       lastParagraphClipped &&
       tokens?.length &&
-      (tokens[tokens.length - 1] as Token).type !== "paragraph"
+      ((tokens[tokens.length - 1] as Token).type !== "paragraph" || listOpening.test(source))
     ) {
-      fail("Block quote continuation after non-paragraph content is unsupported");
+      fail("Non-paragraph block quote continuation is unsupported");
     }
     // Marked disables paragraph parsing inside list items. Keep its paragraph-interruption
     // rules active there too, so a non-1 ordered marker remains continuation text.
@@ -236,6 +240,16 @@ function taskItem(item: Tokens.ListItem): { tokens: Token[]; checked?: boolean }
   };
 }
 function list(token: Tokens.List, depth: number, tabbedQuote: boolean): DocsNode {
+  for (const item of token.items) {
+    if (item.raw.includes("\t")) {
+      // Marked expands tabs while dedenting lists, before code handlers can see them.
+      // Check original item text and finalized inline tokens; code spans are affected too.
+      walkTokens(item.tokens, (child) => {
+        if (child.type === "code" || child.type === "codespan")
+          fail("Code in a tabbed list item is unsupported");
+      });
+    }
+  }
   const items = token.items.map(taskItem);
   const task = items.some((item) => item.checked !== undefined);
   if (task && (token.ordered || items.some((item) => item.checked === undefined)))
