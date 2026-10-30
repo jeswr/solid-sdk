@@ -144,3 +144,55 @@ the affected-workspace and app gates passed.
 Automated per-commit review remains unavailable: no `roborev` executable or
 post-commit hook is installed. Dispatcher review is still required. No dependency
 policy checks or screenshots apply to this pure-library fix. Open questions: none.
+
+## Fix round 3 — preserve physical signature identity
+
+Base: `40e6099d535d66d2587b2be84619b1423b322db1`.
+
+- `a0682adc` — `fix(mail): preserve flowed signature identity`.
+  Classify signature separators on physical lines after quote/stuffing removal,
+  before joining or DelSp deletion, and carry that identity into segmentation.
+  Decoded `-- ` / `--` lookalikes cannot hide reply text or replace the last real
+  separator. Seven regression cases cover the reported input, EOF, CRLF, quote
+  boundaries, joined lookalikes and last-separator selection in both DelSp modes.
+- This report commit — `docs(mail): record signature fix validation`.
+
+Commands used Node **24.22.1** and pnpm **10.4.1**, with
+`PATH=/opt/node24/bin:$PATH COREPACK_HOME=/tmp/sst-7ehi-corepack` on each pnpm
+invocation. Dependency lifecycle scripts remained disabled.
+
+- Before the fix, all seven added regression cases failed; the existing 78 passed.
+- `pnpm exec biome check --write apps/suite/src/apps/mail/lib/quotes/quotes.ts apps/suite/test/mail-quotes.test.ts`
+  — PASS.
+- `pnpm --filter @jeswr/app-suite exec vitest run test/mail-quotes.test.ts --coverage.include='src/apps/mail/lib/quotes/**/*.ts'`
+  — PASS: 85 tests, including 1,000 deterministic property-test runs; the quotes
+  directory retains 100% statements, branches, functions and lines.
+- `pnpm exec turbo run build --filter='@jeswr/app-suite^...' --concurrency=4`
+  — PASS: all seven dependency builds.
+- `pnpm --filter @jeswr/app-suite run lint`, followed by
+  `pnpm --filter @jeswr/app-suite run build && pnpm --filter @jeswr/app-suite run typecheck && pnpm --filter @jeswr/app-suite run test`
+  — PASS: lint (54 existing warnings outside this change), production build,
+  typecheck, 153 test files / 7,592 tests; all configured library coverage metrics
+  remain 100%.
+- `pnpm run lint:root` — PASS, including all workspace/layer/token/contrast guards.
+- `TURBO_SCM_BASE=40e6099d535d66d2587b2be84619b1423b322db1 pnpm run gate`
+  — PASS: 12/12 tasks, seven cached, in 2m37s; all 7,592 app tests passed.
+- `pnpm run gate:full` — FAIL: 59 successful / 234 scheduled tasks, seven cached,
+  in 3m9s. Three unchanged `test/agent-layers.test.mjs:509` cases exceeded their
+  5,000 ms timeout: `(require as Loader)(TARGET);`, `module["require"](TARGET);`
+  and `require.resolve(TARGET);`. Root results: 876 passed / three timed out.
+  Remaining workspace tasks were cancelled. No unrelated tests were changed.
+- `pnpm exec turbo run test:root --filter=// --concurrency=1`
+  — PASS on isolated retry: all 879 root tests / 12 files, in 1m51s, without
+  source changes or timeout overrides.
+- `git diff --exit-code 40e6099d535d66d2587b2be84619b1423b322db1 HEAD -- test/agent-layers.test.mjs`
+  — PASS: the failing guardrail test file is unchanged from this round's base.
+- `git diff --check` — PASS.
+
+The requested fix, app gate and affected-workspace gate are complete. The full
+workspace gate remains unsuccessful because of the root-test timeouts above;
+the isolated root retry passed. Automated per-commit review remains unavailable
+(no `roborev` executable or post-commit hook); dispatcher review is still required.
+No dependencies, manifests, lockfiles or UI changed; dependency policy checks and
+screenshots do not apply. No fetch, merge, push, PR, branch switch or other-checkout
+mutation was performed. Open questions: none.
