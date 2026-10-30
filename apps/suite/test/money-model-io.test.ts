@@ -1,6 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { NS } from "@jeswr/suite-vocab";
-import { DataFactory } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import * as model from "../src/apps/money/lib/model";
 import { csvStatement, sgmlStatement, xmlStatement } from "./fixtures/money-statements";
@@ -8,7 +7,7 @@ import { csvStatement, sgmlStatement, xmlStatement } from "./fixtures/money-stat
 import { account, balance, base, money, options, other, range, row } from "./money-model-fixtures";
 
 function pod() {
-  const files = new Map<string, { text: string; etag: string | null }>();
+  const files = new Map<string, { text: string; etag: string | null; contentType?: string }>();
   const requests: { url: string; init: RequestInit }[] = [];
   let sequence = 0;
   const fetch = vi.fn<typeof globalThis.fetch>(async (input, init = {}) => {
@@ -24,13 +23,13 @@ function pod() {
         return new Response(null, { status: 412 });
       const text = init.body instanceof Blob ? await init.body.text() : String(init.body);
       const etag = `"${++sequence}"`;
-      files.set(url, { text, etag });
+      files.set(url, { text, etag, contentType: headers.get("content-type") ?? "text/turtle" });
       return new Response(null, { status: 201, headers: { etag } });
     }
     if (!current) return new Response(null, { status: 404 });
     return new Response(current.text, {
       headers: {
-        "content-type": "text/turtle",
+        "content-type": current.contentType ?? "text/turtle",
         ...(current.etag === null ? {} : { etag: current.etag }),
       },
     });
@@ -39,6 +38,39 @@ function pod() {
 }
 
 describe("injected money store", () => {
+  it.each([
+    {
+      contentType: "application/trig",
+      text: `<${base}note> <${NS.SCHEMA}description> "Default" . <${base}graph> { <${base}note> <${NS.SCHEMA}description> "Named" . }`,
+    },
+    {
+      contentType: "application/trig",
+      text: `_:graph { <${base}note> <${NS.SCHEMA}description> "Blank graph" . }`,
+    },
+    {
+      contentType: "application/ld+json",
+      text: JSON.stringify({
+        "@id": `${base}graph`,
+        "@graph": [{ "@id": `${base}note`, [`${NS.SCHEMA}description`]: [{ "@value": "Named" }] }],
+      }),
+    },
+  ])("rejects writing named graphs read from $contentType before any PUT", async (file) => {
+    const { store, files, requests } = pod();
+    const path = "transactions/2026-10.ttl";
+    const original = { ...file, etag: '"original"' };
+    files.set(store.resolve(path), original);
+    const loaded = await store.read(path);
+    const before = [...loaded.document.dataset];
+    expect(before.some((quad) => quad.graph.termType !== "DefaultGraph")).toBe(true);
+    await expect(model.serialiseMoney(loaded.document)).rejects.toThrow("named graphs");
+    await expect(store.write(path, loaded.document, loaded.condition)).rejects.toThrow(
+      "named graphs",
+    );
+    await expect(store.saveTransactions([row])).rejects.toThrow("named graphs");
+    expect([...loaded.document.dataset]).toEqual(before);
+    expect(files.get(store.resolve(path))).toEqual(original);
+    expect(requests.filter((request) => request.init.method === "PUT")).toEqual([]);
+  });
   it("creates, conditionally edits and deletes a shard while preserving unrelated RDF", async () => {
     const { store, requests } = pod();
     expect(await store.saveTransactions([])).toEqual([]);
@@ -49,10 +81,12 @@ describe("injected money store", () => {
     expect(
       (await store.transactions(account, range, money)).map((value) => value.runningBalance),
     ).toEqual(["80", "67.5"]);
+    const amount = (await store.read(path)).document.node(row.id).amountNode;
+    expect(amount?.termType).toBe("BlankNode");
     await store.deleteTransaction("tx", row.postingTime);
     const loaded = await store.read(path);
     expect(loaded.document.transactions()).toHaveLength(1);
-    expect(loaded.document.dataset.match(DataFactory.namedNode(`${row.id}-amount`)).size).toBe(0);
+    expect(loaded.document.dataset.match(amount).size).toBe(0);
     await store.deleteTransaction("missing", row.postingTime);
     expect(
       requests

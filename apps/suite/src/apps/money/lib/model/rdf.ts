@@ -353,8 +353,12 @@ export function putCategories(document: MoneyDocument, values: readonly Category
 export async function parseMoney(source: string, url: string): Promise<MoneyDocument> {
   return new MoneyDocument(await parseRdf(source, "text/turtle", { baseIRI: iri(url) }));
 }
-export function serialiseMoney(document: MoneyDocument): Promise<string> {
+export async function serialiseMoney(document: MoneyDocument): Promise<string> {
+  for (const quad of document.dataset)
+    if (quad.graph.termType !== "DefaultGraph")
+      throw new TypeError("Money Turtle documents cannot contain named graphs");
   return serialize([...migrateMoney(document.dataset)], {
+    format: "text/turtle",
     prefixes: {
       fin: NS.FINANCE,
       pm: NS.POD_MONEY,
