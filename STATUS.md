@@ -115,3 +115,40 @@ BYDAY in RRULE) pending a persistence mapping; account locale is supplied by the
 English parser acceptance covers en-GB/en-US and wall-time editing uses the host timezone.
 Broader account timezone conversion and RDF persistence remain caller/data-layer work.
 The dispatcher still needs to run and inspect browser screenshots, keyboard and axe results.
+
+## Fix round 4 — review at `57733c027907`
+
+Fixed exactly the four review findings, with no dependency or application changes:
+
+- `18ac9e19` — `fix(suite-ui): respect locale for hyphenated dates`: route hyphenated
+  numeric dates through the en-GB parser; cover `/`, `.`, and `-` for both locales,
+  with and without a time.
+- `563ee47a` — `fix(suite-ui): guard date and recurrence edits`: show omitted monthly
+  and yearly day selectors using DTSTART, emit explicit days only on edit, close and
+  guard disabled pickers, and synchronize rejected number drafts with native form
+  validity. Conservatively retain the existing digits-only number syntax.
+- Final `docs: record sst-ytg fix validation` commit records this round's verification.
+
+Added 12 regression cases. Before implementation, seven cases failed on the reviewed
+code, reproducing all four findings. After implementation, all 103 package tests pass,
+including existing interaction and axe checks. No browser was launched or screenshots
+taken in this round; the existing dispatcher handoff remains unchanged.
+
+Commands used Node `v24.22.1` with this shell setup:
+
+```sh
+export PATH="/opt/node24/bin:$PWD/node_modules/.bin:$PATH"
+```
+
+| Exact command | Result |
+| --- | --- |
+| `pnpm --filter @jeswr/suite-ui run lint && pnpm --filter @jeswr/suite-ui run build && pnpm --filter @jeswr/suite-ui run typecheck && pnpm --filter @jeswr/suite-ui run test` | PASS; 3 test files, 103 tests |
+| `pnpm run lint:root` | PASS; all root guards and 74 contrast pairs |
+| `TURBO_SCM_BASE=57733c027907001a70a102ce02a84b1c94b2ec86 pnpm run gate` | First run: existing axe test timed out during concurrent production build, causing six subsequent axe failures. Retry: all suite-ui tasks and app lint/build/typecheck passed; app tests had 5,824 passes and one unrelated vCard performance failure (4,000.65 ms against a 4,000 ms limit at `apps/suite/test/vcard.test.ts:185`). No timing assertions or unrelated source were changed. |
+| `pnpm run gate:full` | FAIL outside fix scope; 83 successful tasks before abort at `//#test:root`. Root tests: 737 passed, 8 failed. Seven existing `test/agent-layers.test.mjs:509` cases exceeded 5-second timeouts; `test/check-sdk-layers.test.mjs:328` measured 97.97 ms against a 50 ms limit. Both guards and their tests are unchanged by this round. |
+| `git diff --check` | PASS |
+
+Roborev remains unavailable (`command -v roborev` found no executable), so no automated
+per-commit verdict could be read. No new dependencies or dependency-policy checks were
+needed. No new design questions or unfinished implementation work remain for these four
+findings.
