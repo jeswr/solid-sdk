@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * `@jeswr/solid-a2a` — the NL→RDF intent translator + SHACL-bodied AGORA Protocol
@@ -36,7 +37,7 @@
  * `rdf-validate-shacl`. Never a bespoke parser; never a hand-built triple.
  *
  * Vocabulary: standard terms where one fits (schema.org Action, ACL/WAC modes, LDP,
- * SHACL); a MINIMAL minted `a2a:` extension (`https://w3id.org/jeswr/a2a#`, never
+ * SHACL); a MINIMAL minted `a2a:` extension (`https://jeswr.org/ns/a2a#`, never
  * `@solid/`) only for the intent-glue terms standards lack.
  *
  * Composes with M1 (`@jeswr/solid-agent-card`): a Protocol Document's hash/URL is

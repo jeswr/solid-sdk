@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Exhaustive unit tests for the G9 decision-record emitter
@@ -22,6 +23,7 @@ import type { EvaluationResult, OdrlPolicy, RequestContext } from "../src/types.
 import {
   ACTION_IRI,
   LEFT_OPERAND_IRI,
+  legacyOdrlIri,
   ODRL_ACTION,
   ODRL_ASSIGNEE,
   ODRL_CONSTRAINT,
@@ -116,25 +118,25 @@ describe("decisionRecord — permit path", () => {
     const quads = decisionRecord({ id: REC, policy, request, result, evaluatedAt: AT });
     const t = triples(quads);
 
-    expect(t).toContain(`${REC} ${RDF_TYPE} ${ODRLD_DECISION_RECORD_CLASS}`);
-    expect(t).toContain(`${REC} ${ODRLD_EVALUATED_POLICY} ${POLICY_ID}`);
-    expect(t).toContain(`${REC} ${ODRLD_REQUEST_AGENT} ${AGENT}`);
-    expect(t).toContain(`${REC} ${ODRLD_REQUEST_ACTION} ${ACTION_IRI.read}`);
-    expect(t).toContain(`${REC} ${ODRLD_REQUEST_TARGET} ${TARGET}`);
-    expect(t).toContain(`${REC} ${ODRLD_REQUEST_PURPOSE} ${PURPOSE}`);
-    expect(literal(quads, REC, ODRLD_DECISION)).toBe("permit");
-    expect(literal(quads, REC, ODRLD_REASON)).toBe(result.reason);
+    expect(t).toContain(`${REC} ${RDF_TYPE} ${legacyOdrlIri(ODRLD_DECISION_RECORD_CLASS)}`);
+    expect(t).toContain(`${REC} ${legacyOdrlIri(ODRLD_EVALUATED_POLICY)} ${POLICY_ID}`);
+    expect(t).toContain(`${REC} ${legacyOdrlIri(ODRLD_REQUEST_AGENT)} ${AGENT}`);
+    expect(t).toContain(`${REC} ${legacyOdrlIri(ODRLD_REQUEST_ACTION)} ${ACTION_IRI.read}`);
+    expect(t).toContain(`${REC} ${legacyOdrlIri(ODRLD_REQUEST_TARGET)} ${TARGET}`);
+    expect(t).toContain(`${REC} ${legacyOdrlIri(ODRLD_REQUEST_PURPOSE)} ${PURPOSE}`);
+    expect(literal(quads, REC, legacyOdrlIri(ODRLD_DECISION))).toBe("permit");
+    expect(literal(quads, REC, legacyOdrlIri(ODRLD_REASON))).toBe(result.reason);
     expect(literal(quads, REC, PROV_ENDED_AT_TIME)).toBe(AT.toISOString());
     // No conflict flag on a clean permit.
-    expect(quads.some((q) => q.predicate.value === ODRLD_CONFLICT)).toBe(false);
+    expect(quads.some((q) => q.predicate.value === legacyOdrlIri(ODRLD_CONFLICT))).toBe(false);
 
     // Exactly one deciding-rule node, a Permission, carrying the deciding constraint.
-    const ruleNodes = children(quads, REC, ODRLD_DECIDING_RULE);
+    const ruleNodes = children(quads, REC, legacyOdrlIri(ODRLD_DECIDING_RULE));
     expect(ruleNodes).toHaveLength(1);
     const rule = ruleNodes[0];
     const rt = triples(quads.filter((q) => q.subject.value === rule));
     expect(rt).toContain(`${rule} ${RDF_TYPE} ${ODRL_PERMISSION_CLASS}`);
-    expect(rt).toContain(`${rule} ${ODRLD_RULE_KIND} permission`);
+    expect(rt).toContain(`${rule} ${legacyOdrlIri(ODRLD_RULE_KIND)} permission`);
     expect(rt).toContain(`${rule} ${ODRL_ACTION} ${ACTION_IRI.read}`);
     expect(rt).toContain(`${rule} ${ODRL_TARGET} ${TARGET}`);
     expect(rt).toContain(`${rule} ${ODRL_ASSIGNEE} ${AGENT}`);
@@ -188,7 +190,7 @@ describe("decisionRecord — multi-valued request purpose", () => {
     const result = evaluate(policy, request);
     expect(result.decision).toBe("permit");
     const quads = decisionRecord({ id: REC, policy, request, result, evaluatedAt: AT });
-    const purposes = children(quads, REC, ODRLD_REQUEST_PURPOSE);
+    const purposes = children(quads, REC, legacyOdrlIri(ODRLD_REQUEST_PURPOSE));
     expect(purposes).toContain(PurposeX);
     expect(purposes).toContain(PurposeY);
     expect(purposes).toHaveLength(2);
@@ -199,7 +201,7 @@ describe("decisionRecord — multi-valued request purpose", () => {
     const doc = decisionRecordJsonLd({ id: REC, policy, request, result, evaluatedAt: AT });
     const dataset = await parseRdf(JSON.stringify(doc), "application/ld+json");
     const purposes = [...dataset]
-      .filter((q) => q.predicate.value === ODRLD_REQUEST_PURPOSE)
+      .filter((q) => q.predicate.value === legacyOdrlIri(ODRLD_REQUEST_PURPOSE))
       .map((q) => q.object.value);
     expect(purposes).toContain(PurposeX);
     expect(purposes).toContain(PurposeY);
@@ -231,13 +233,13 @@ describe("decisionRecord — deny path (matched prohibition with a deciding cons
     expect(result.decision).toBe("deny");
 
     const quads = decisionRecord({ id: REC, policy, request, result, evaluatedAt: AT });
-    expect(literal(quads, REC, ODRLD_DECISION)).toBe("deny");
-    const ruleNodes = children(quads, REC, ODRLD_DECIDING_RULE);
+    expect(literal(quads, REC, legacyOdrlIri(ODRLD_DECISION))).toBe("deny");
+    const ruleNodes = children(quads, REC, legacyOdrlIri(ODRLD_DECIDING_RULE));
     expect(ruleNodes).toHaveLength(1);
     const rule = ruleNodes[0];
     const rt = triples(quads.filter((q) => q.subject.value === rule));
     expect(rt).toContain(`${rule} ${RDF_TYPE} ${ODRL_PROHIBITION_CLASS}`);
-    expect(rt).toContain(`${rule} ${ODRLD_RULE_KIND} prohibition`);
+    expect(rt).toContain(`${rule} ${legacyOdrlIri(ODRLD_RULE_KIND)} prohibition`);
 
     const cNodes = children(quads, rule, ODRL_CONSTRAINT);
     expect(cNodes).toHaveLength(1);
@@ -301,7 +303,7 @@ describe("decisionRecord — two SATISFIED anonymous shape-identical siblings (n
     expect(result.matchedPermissions).toHaveLength(2);
 
     const quads = decisionRecord({ id: REC, policy, request, result, evaluatedAt: AT });
-    const ruleNodes = children(quads, REC, ODRLD_DECIDING_RULE);
+    const ruleNodes = children(quads, REC, legacyOdrlIri(ODRLD_DECIDING_RULE));
     expect(ruleNodes).toHaveLength(2);
 
     // Each node carries exactly ONE constraint (no union), and across both nodes the
@@ -320,7 +322,7 @@ describe("decisionRecord — two SATISFIED anonymous shape-identical siblings (n
     const dataset = await parseRdf(JSON.stringify(doc), "application/ld+json");
     const q = [...dataset];
     const ruleNodes = q
-      .filter((x) => x.predicate.value === ODRLD_DECIDING_RULE)
+      .filter((x) => x.predicate.value === legacyOdrlIri(ODRLD_DECIDING_RULE))
       .map((x) => x.object.value);
     expect(ruleNodes).toHaveLength(2);
     const perNode = ruleNodes.map((n) => leftsOf(q, n)).sort();
@@ -342,17 +344,17 @@ describe("decisionRecord — conflict path", () => {
     expect(result.decision).toBe("deny");
 
     const quads = decisionRecord({ id: REC, policy, request, result, evaluatedAt: AT });
-    expect(literal(quads, REC, ODRLD_CONFLICT)).toBe("true");
-    const conflictQuad = quads.find((q) => q.predicate.value === ODRLD_CONFLICT);
+    expect(literal(quads, REC, legacyOdrlIri(ODRLD_CONFLICT))).toBe("true");
+    const conflictQuad = quads.find((q) => q.predicate.value === legacyOdrlIri(ODRLD_CONFLICT));
     expect(conflictQuad?.object.value).toBe("true");
     expect(
       (conflictQuad?.object as { datatype?: { value: string } } | undefined)?.datatype?.value,
     ).toBe("http://www.w3.org/2001/XMLSchema#boolean");
 
     // Both a Permission and a Prohibition deciding-rule node are present.
-    const ruleNodes = children(quads, REC, ODRLD_DECIDING_RULE);
+    const ruleNodes = children(quads, REC, legacyOdrlIri(ODRLD_DECIDING_RULE));
     expect(ruleNodes).toHaveLength(2);
-    const kinds = ruleNodes.map((n) => literal(quads, n, ODRLD_RULE_KIND)).sort();
+    const kinds = ruleNodes.map((n) => literal(quads, n, legacyOdrlIri(ODRLD_RULE_KIND))).sort();
     expect(kinds).toEqual(["permission", "prohibition"]);
   });
 });
@@ -379,14 +381,14 @@ describe("decisionRecord — duties (fulfilled + unfulfilled)", () => {
     expect(result.duties[0].fulfilled).toBe(false);
 
     const quads = decisionRecord({ id: REC, policy, request, result, evaluatedAt: AT });
-    const dutyNodes = children(quads, REC, ODRLD_ACTIVE_DUTY);
+    const dutyNodes = children(quads, REC, legacyOdrlIri(ODRLD_ACTIVE_DUTY));
     expect(dutyNodes).toHaveLength(1);
     const duty = dutyNodes[0];
     const dt = triples(quads.filter((q) => q.subject.value === duty));
     expect(dt).toContain(`${duty} ${RDF_TYPE} ${ODRL_DUTY_CLASS}`);
     expect(dt).toContain(`${duty} ${ODRL_ACTION} ${ACTION_IRI.attribute}`);
     expect(dt).toContain(`${duty} ${ODRL_TARGET} ${AGENT}`);
-    expect(literal(quads, duty, ODRLD_FULFILLED)).toBe("false");
+    expect(literal(quads, duty, legacyOdrlIri(ODRLD_FULFILLED))).toBe("false");
   });
 
   it("records a FULFILLED active duty (fulfilled=true) when the context discharges it", () => {
@@ -400,9 +402,9 @@ describe("decisionRecord — duties (fulfilled + unfulfilled)", () => {
     expect(result.duties[0].fulfilled).toBe(true);
 
     const quads = decisionRecord({ id: REC, policy, request, result, evaluatedAt: AT });
-    const dutyNodes = children(quads, REC, ODRLD_ACTIVE_DUTY);
+    const dutyNodes = children(quads, REC, legacyOdrlIri(ODRLD_ACTIVE_DUTY));
     expect(dutyNodes).toHaveLength(1);
-    expect(literal(quads, dutyNodes[0], ODRLD_FULFILLED)).toBe("true");
+    expect(literal(quads, dutyNodes[0], legacyOdrlIri(ODRLD_FULFILLED))).toBe("true");
   });
 
   it("puts the per-evaluation fulfilled flag on a RECORD-SCOPED node, not the stable duty IRI", () => {
@@ -445,23 +447,38 @@ describe("decisionRecord — duties (fulfilled + unfulfilled)", () => {
     });
 
     for (const quads of [r1, r2]) {
-      const dutyNode = children(quads, REC, ODRLD_ACTIVE_DUTY)[0];
+      const dutyNode = children(quads, REC, legacyOdrlIri(ODRLD_ACTIVE_DUTY))[0];
       // The node is a blank node (record-scoped), NOT the stable duty IRI.
       const link = quads.find(
-        (q) => q.predicate.value === ODRLD_ACTIVE_DUTY && q.object.value === dutyNode,
+        (q) =>
+          q.predicate.value === legacyOdrlIri(ODRLD_ACTIVE_DUTY) && q.object.value === dutyNode,
       );
       expect(link?.object.termType).toBe("BlankNode");
       // It links to the stable duty IRI via odrld:onDuty.
-      expect(literal(quads, dutyNode, ODRLD_ON_DUTY)).toBe(DutyId);
+      expect(literal(quads, dutyNode, legacyOdrlIri(ODRLD_ON_DUTY))).toBe(DutyId);
       // The stable duty IRI itself carries NO per-evaluation fulfilled triple.
       expect(
-        quads.some((q) => q.subject.value === DutyId && q.predicate.value === ODRLD_FULFILLED),
+        quads.some(
+          (q) => q.subject.value === DutyId && q.predicate.value === legacyOdrlIri(ODRLD_FULFILLED),
+        ),
       ).toBe(false);
     }
     // r1 records fulfilled=false, r2 fulfilled=true — on DISTINCT record-scoped nodes,
     // so a merged audit graph never asserts both on the duty IRI.
-    expect(literal(r1, children(r1, REC, ODRLD_ACTIVE_DUTY)[0], ODRLD_FULFILLED)).toBe("false");
-    expect(literal(r2, children(r2, REC, ODRLD_ACTIVE_DUTY)[0], ODRLD_FULFILLED)).toBe("true");
+    expect(
+      literal(
+        r1,
+        children(r1, REC, legacyOdrlIri(ODRLD_ACTIVE_DUTY))[0],
+        legacyOdrlIri(ODRLD_FULFILLED),
+      ),
+    ).toBe("false");
+    expect(
+      literal(
+        r2,
+        children(r2, REC, legacyOdrlIri(ODRLD_ACTIVE_DUTY))[0],
+        legacyOdrlIri(ODRLD_FULFILLED),
+      ),
+    ).toBe("true");
   });
 });
 
@@ -469,10 +486,10 @@ describe("decisionRecord — notApplicable path", () => {
   it("records decision=notApplicable with no deciding rules and no duties", () => {
     const input = baseInput();
     const quads = decisionRecord(input);
-    expect(literal(quads, REC, ODRLD_DECISION)).toBe("notApplicable");
-    expect(children(quads, REC, ODRLD_DECIDING_RULE)).toHaveLength(0);
-    expect(children(quads, REC, ODRLD_ACTIVE_DUTY)).toHaveLength(0);
-    expect(quads.some((q) => q.predicate.value === ODRLD_CONFLICT)).toBe(false);
+    expect(literal(quads, REC, legacyOdrlIri(ODRLD_DECISION))).toBe("notApplicable");
+    expect(children(quads, REC, legacyOdrlIri(ODRLD_DECIDING_RULE))).toHaveLength(0);
+    expect(children(quads, REC, legacyOdrlIri(ODRLD_ACTIVE_DUTY))).toHaveLength(0);
+    expect(quads.some((q) => q.predicate.value === legacyOdrlIri(ODRLD_CONFLICT))).toBe(false);
   });
 });
 
@@ -502,7 +519,7 @@ describe("decisionRecord — inherited-assignee constraint location", () => {
     expect(result.matchedPermissions[0].assignee).toBe(AGENT);
 
     const quads = decisionRecord({ id: REC, policy, request, result, evaluatedAt: AT });
-    const rule = children(quads, REC, ODRLD_DECIDING_RULE)[0];
+    const rule = children(quads, REC, legacyOdrlIri(ODRLD_DECIDING_RULE))[0];
     // The constraint was located despite the rule inheriting its assignee.
     const cNodes = children(quads, rule, ODRL_CONSTRAINT);
     expect(cNodes).toHaveLength(1);
@@ -622,7 +639,7 @@ describe("decisionRecord — identified vs anonymous rules (id is part of identi
     expect(result.matchedPermissions).toHaveLength(2);
 
     const quads = decisionRecord({ id: REC, policy, request, result, evaluatedAt: AT });
-    const ruleNodes = children(quads, REC, ODRLD_DECIDING_RULE);
+    const ruleNodes = children(quads, REC, legacyOdrlIri(ODRLD_DECIDING_RULE));
     expect(ruleNodes).toHaveLength(2);
 
     // The identified rule's node IS the rule IRI (stable link), not a blank node.
@@ -630,7 +647,8 @@ describe("decisionRecord — identified vs anonymous rules (id is part of identi
     const anonNode = ruleNodes.find((n) => n !== RuleA);
     expect(anonNode).toBeDefined();
     const anonQuad = quads.find(
-      (q) => q.predicate.value === ODRLD_DECIDING_RULE && q.object.value === anonNode,
+      (q) =>
+        q.predicate.value === legacyOdrlIri(ODRLD_DECIDING_RULE) && q.object.value === anonNode,
     );
     expect(anonQuad?.object.termType).toBe("BlankNode");
 
@@ -646,7 +664,7 @@ describe("decisionRecord — identified vs anonymous rules (id is part of identi
     const q = [...dataset];
     // The identified rule IRI appears as a decidingRule object.
     const decidesA = q.some(
-      (x) => x.predicate.value === ODRLD_DECIDING_RULE && x.object.value === RuleA,
+      (x) => x.predicate.value === legacyOdrlIri(ODRLD_DECIDING_RULE) && x.object.value === RuleA,
     );
     expect(decidesA).toBe(true);
     // Its only constraint leftOperand is purpose (count is not attributed to it).
@@ -686,7 +704,7 @@ describe("decisionRecord — dateTime-sensitive constraint is never OMITTED on a
   const request: RequestContext = { agent: AGENT, action: "read", target: TARGET };
 
   function dateTimeConstraintPresent(quads: readonly Quad[]): boolean {
-    const rule = children(quads, REC, ODRLD_DECIDING_RULE)[0];
+    const rule = children(quads, REC, legacyOdrlIri(ODRLD_DECIDING_RULE))[0];
     return children(quads, rule, ODRL_CONSTRAINT).some((c) =>
       quads.some(
         (q) =>
@@ -711,7 +729,7 @@ describe("decisionRecord — dateTime-sensitive constraint is never OMITTED on a
     const quads = decisionRecord({ id: REC, policy, request, result, evaluatedAt: Outside });
     // The real deciding constraint must NOT be omitted.
     expect(dateTimeConstraintPresent(quads)).toBe(true);
-    expect(children(quads, REC, ODRLD_DECIDING_RULE)).toHaveLength(1);
+    expect(children(quads, REC, legacyOdrlIri(ODRLD_DECIDING_RULE))).toHaveLength(1);
   });
 });
 
@@ -809,7 +827,7 @@ describe("recordEvaluation — closed-loop, exact-clock record", () => {
     // The record's evaluatedAt is exactly the captured clock.
     expect(literal(quads, REC, PROV_ENDED_AT_TIME)).toBe(Now.toISOString());
     // The single deciding-rule node names A's constraint (lteq T1), not B's (gt T1).
-    const rule = children(quads, REC, ODRLD_DECIDING_RULE)[0];
+    const rule = children(quads, REC, legacyOdrlIri(ODRLD_DECIDING_RULE))[0];
     const cNode = children(quads, rule, ODRL_CONSTRAINT)[0];
     expect(literal(quads, cNode, ODRL_OPERATOR)).toBe(OPERATOR_IRI.lteq);
     expect(literal(quads, cNode, ODRL_RIGHT_OPERAND)).toBe(T1);
@@ -846,10 +864,10 @@ describe("decisionRecordJsonLd — round-trip + parity", () => {
     const dataset = await parseRdf(JSON.stringify(doc), "application/ld+json");
     const jt = [...dataset].map((q) => `${q.subject.value} ${q.predicate.value} ${q.object.value}`);
 
-    expect(jt).toContain(`${REC} ${RDF_TYPE} ${ODRLD_DECISION_RECORD_CLASS}`);
-    expect(jt).toContain(`${REC} ${ODRLD_EVALUATED_POLICY} ${POLICY_ID}`);
-    expect(jt).toContain(`${REC} ${ODRLD_REQUEST_ACTION} ${ACTION_IRI.read}`);
-    expect(jt).toContain(`${REC} ${ODRLD_REQUEST_PURPOSE} ${PURPOSE}`);
+    expect(jt).toContain(`${REC} ${RDF_TYPE} ${legacyOdrlIri(ODRLD_DECISION_RECORD_CLASS)}`);
+    expect(jt).toContain(`${REC} ${legacyOdrlIri(ODRLD_EVALUATED_POLICY)} ${POLICY_ID}`);
+    expect(jt).toContain(`${REC} ${legacyOdrlIri(ODRLD_REQUEST_ACTION)} ${ACTION_IRI.read}`);
+    expect(jt).toContain(`${REC} ${legacyOdrlIri(ODRLD_REQUEST_PURPOSE)} ${PURPOSE}`);
 
     // Same triple COUNT as the RDF path.
     const rdfQuads = decisionRecord(input);
@@ -891,7 +909,7 @@ describe("decisionRecord — IRI-injection safety (RDF + JSON-LD parity)", () =>
       expect(q.object.value).not.toBe("https://victim.example/o");
     }
     // The escaped value is byte-identical between raw escapeIri and the emitted term.
-    const polQuad = quads.find((q) => q.predicate.value === ODRLD_EVALUATED_POLICY);
+    const polQuad = quads.find((q) => q.predicate.value === legacyOdrlIri(ODRLD_EVALUATED_POLICY));
     expect(polQuad?.object.value).toBe(escapeIri(hostilePolicyId));
   });
 
@@ -904,10 +922,10 @@ describe("decisionRecord — IRI-injection safety (RDF + JSON-LD parity)", () =>
     for (const q of dataset) {
       expect(q.subject.value).not.toBe("https://victim.example/s");
       expect(q.object.value).not.toBe("https://victim.example/o");
-      if (q.predicate.value === ODRLD_EVALUATED_POLICY) {
+      if (q.predicate.value === legacyOdrlIri(ODRLD_EVALUATED_POLICY)) {
         expect(q.object.value).toBe(escapeIri(hostilePolicyId));
       }
-      if (q.predicate.value === ODRLD_REQUEST_TARGET) {
+      if (q.predicate.value === legacyOdrlIri(ODRLD_REQUEST_TARGET)) {
         expect(q.object.value).toBe(escapeIri(hostileTarget));
       }
     }

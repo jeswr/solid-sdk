@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6
 //
 // launch.test.ts — exhaustive tests for the launch-URL seam, with the load-bearing
 // NO-TOKEN invariant front and centre: only the public WebID is ever placed in a
@@ -6,6 +7,13 @@
 import { describe, expect, it } from "vitest";
 import type { AppEntry } from "./catalog";
 import { launchUrl } from "./launch";
+
+it("preserves the Pages app path when adding autologin", () => {
+  const deployedUrl = "https://jeswr.github.io/solid-sdk/pod-drive/";
+  const url = new URL(launchUrl({ ...autologinApp, deployedUrl }, WEBID) as string);
+  expect(url.pathname).toBe("/solid-sdk/pod-drive/");
+  expect(url.hash).toBe(`#autologin/${encodeURIComponent(WEBID)}`);
+});
 
 const WEBID = "https://alice.solid-test.jeswr.org/profile/card#me";
 

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Public-surface sanity: the index re-exports the documented API, and the vocab
@@ -44,10 +45,10 @@ describe("public API surface", () => {
   });
 
   it("homes the agent-authz extension under the @jeswr w3id namespace (never @solid)", () => {
-    expect(SVC).toBe("https://w3id.org/jeswr/solid-vc#");
+    expect(SVC).toBe("https://jeswr.org/ns/solid-vc#");
     expect(api.SVC_AGENT_AUTHORIZATION).toBe(`${SVC}AgentAuthorizationCredential`);
     expect(SVC.includes("solid.org")).toBe(false);
-    expect(api.SVC_AGENT_AUTHORIZATION.startsWith("https://w3id.org/jeswr/")).toBe(true);
+    expect(api.SVC_AGENT_AUTHORIZATION.startsWith("https://jeswr.org/ns/")).toBe(true);
   });
 
   it("the bundled registry knows both rdfc cryptosuites", () => {

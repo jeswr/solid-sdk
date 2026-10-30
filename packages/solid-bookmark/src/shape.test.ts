@@ -1,16 +1,18 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+import { parseRdf } from "@jeswr/fetch-rdf";
 import env from "@zazuko/env-node";
-import { Parser } from "n3";
 import SHACLValidator from "rdf-validate-shacl";
 import { describe, expect, it } from "vitest";
 import { bookmarkSubject, serializeBookmark } from "./bookmark.js";
 import { bookmarkOntologyTtl, bookmarkShapeTtl } from "./shape.js";
+import { BOOK, LEGACY_BOOK_NS, LEGACY_CORE_NS } from "./vocab.js";
 
 const RES = "http://localhost:3000/alice/bookmarks/x";
 const SUBJ = bookmarkSubject(RES);
 
 // rdf-validate-shacl needs a clownface-capable factory (@zazuko/env). Quads are
-// fed straight from an n3 Parser into an env dataset — the exact pattern the
+// parsed through the suite parse seam into an env dataset — the same pattern the
 // task-model shape test uses, so verdicts match across the suite.
 function toDataset(quads: Iterable<Parameters<ReturnType<typeof env.dataset>["add"]>[0]>) {
   const ds = env.dataset();
@@ -18,27 +20,41 @@ function toDataset(quads: Iterable<Parameters<ReturnType<typeof env.dataset>["ad
   return ds;
 }
 
-const shapes = toDataset(new Parser().parse(bookmarkShapeTtl()));
+const shapes = toDataset(await parseRdf(bookmarkShapeTtl(), "text/turtle", {}));
 
-function validateTtl(ttl: string) {
-  const data = toDataset(new Parser({ baseIRI: RES }).parse(ttl));
+async function validateTtl(ttl: string) {
+  const data = toDataset(await parseRdf(ttl, "text/turtle", { baseIRI: RES }));
   return new SHACLValidator(shapes, { factory: env }).validate(data);
 }
 
 describe("the shipped .ttl artifacts parse", () => {
-  it("bookmark.shacl.ttl is well-formed Turtle", () => {
-    expect(new Parser().parse(bookmarkShapeTtl()).length).toBeGreaterThan(0);
+  it("ships canonical suite namespaces and the canonical ontology IRI", async () => {
+    expect(bookmarkOntologyTtl()).not.toContain(LEGACY_BOOK_NS);
+    expect(bookmarkOntologyTtl()).not.toContain(LEGACY_CORE_NS);
+    const ontology = [...(await parseRdf(bookmarkOntologyTtl(), "text/turtle", {}))];
+    expect(
+      ontology.some(
+        (q) =>
+          q.subject.value === "https://jeswr.org/ns/bookmark" &&
+          q.predicate.value === "http://www.w3.org/1999/02/22-rdf-syntax-ns#type" &&
+          q.object.value === "http://www.w3.org/2002/07/owl#Ontology",
+      ),
+    ).toBe(true);
   });
 
-  it("bookmark.ttl (ontology) is well-formed Turtle and declares book:Bookmark", () => {
-    const quads = new Parser().parse(bookmarkOntologyTtl());
+  it("bookmark.shacl.ttl is well-formed Turtle", async () => {
+    expect((await parseRdf(bookmarkShapeTtl(), "text/turtle", {})).size).toBeGreaterThan(0);
+  });
+
+  it("bookmark.ttl (ontology) is well-formed Turtle and declares book:Bookmark", async () => {
+    const quads = [...(await parseRdf(bookmarkOntologyTtl(), "text/turtle", {}))];
     expect(quads.length).toBeGreaterThan(0);
     expect(
       quads.some(
         (q) =>
-          q.subject.value === "https://w3id.org/jeswr/bookmark#Bookmark" &&
+          q.subject.value === "https://jeswr.org/ns/bookmark#Bookmark" &&
           q.predicate.value === "http://www.w3.org/2000/01/rdf-schema#subClassOf" &&
-          q.object.value === "https://w3id.org/jeswr/core#InformationResource",
+          q.object.value === "https://jeswr.org/ns/core#InformationResource",
       ),
     ).toBe(true);
   });
@@ -68,7 +84,7 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
     // Hand-craft a typed bookmark with no schema:url — the writer would drop a
     // bad url, so validate raw Turtle to exercise minCount directly.
     const ttl = `
-      @prefix book: <https://w3id.org/jeswr/bookmark#> .
+      @prefix book: <https://jeswr.org/ns/bookmark#> .
       @prefix dct:  <http://purl.org/dc/terms/> .
       <${SUBJ}> a book:Bookmark ; dct:title "No url" .
     `;
@@ -79,7 +95,7 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
 
   it("a non-http(s) url is rejected by sh:pattern (e.g. a hostile javascript: scheme)", async () => {
     const ttl = `
-      @prefix book:   <https://w3id.org/jeswr/bookmark#> .
+      @prefix book:   <https://jeswr.org/ns/bookmark#> .
       @prefix schema: <http://schema.org/> .
       <${SUBJ}> a book:Bookmark ; schema:url <javascript:alert(1)> .
     `;
@@ -90,7 +106,7 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
 
   it("a url written as a literal (not an IRI) is rejected by sh:nodeKind", async () => {
     const ttl = `
-      @prefix book:   <https://w3id.org/jeswr/bookmark#> .
+      @prefix book:   <https://jeswr.org/ns/bookmark#> .
       @prefix schema: <http://schema.org/> .
       <${SUBJ}> a book:Bookmark ; schema:url "https://example.org/x" .
     `;
@@ -101,7 +117,7 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
 
   it("two schema:url values are non-conforming (maxCount 1)", async () => {
     const ttl = `
-      @prefix book:   <https://w3id.org/jeswr/bookmark#> .
+      @prefix book:   <https://jeswr.org/ns/bookmark#> .
       @prefix schema: <http://schema.org/> .
       <${SUBJ}> a book:Bookmark ;
         schema:url <https://example.org/a> , <https://example.org/b> .
@@ -113,7 +129,7 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
 
   it("a non-boolean book:archived is rejected by sh:datatype", async () => {
     const ttl = `
-      @prefix book:   <https://w3id.org/jeswr/bookmark#> .
+      @prefix book:   <https://jeswr.org/ns/bookmark#> .
       @prefix schema: <http://schema.org/> .
       <${SUBJ}> a book:Bookmark ;
         schema:url <https://example.org/x> ;
@@ -121,12 +137,83 @@ describe("SHACL shape (bookmark.shacl.ttl)", () => {
     `;
     const report = await validateTtl(ttl);
     expect(report.conforms).toBe(false);
-    expect(report.results.some((r) => String(r.path?.value).endsWith("archived"))).toBe(true);
+    expect(report.results.some((r) => r.value?.value === "yes")).toBe(true);
+  });
+
+  it("rejects a legacy bookmark with no URL and a malformed archived flag", async () => {
+    const report = await validateTtl(`<${SUBJ}> a <${LEGACY_BOOK_NS}Bookmark> ;
+      <${LEGACY_BOOK_NS}archived> "not a boolean" .`);
+    expect(report.conforms).toBe(false);
+    expect(report.results.some((r) => r.path?.value === "http://schema.org/url")).toBe(true);
+    expect(report.results.some((r) => r.value?.value === "not a boolean")).toBe(true);
+  });
+
+  describe.each([BOOK, LEGACY_BOOK_NS])("class namespace %s", (classNs) => {
+    it.each([BOOK, LEGACY_BOOK_NS])("accepts valid fields in %s", async (fieldNs) => {
+      const report = await validateTtl(`<${SUBJ}> a <${classNs}Bookmark> ;
+        <http://schema.org/url> <https://example.org/x> ;
+        <${fieldNs}notes> "notes" ; <${fieldNs}archived> true .`);
+      expect(report.conforms).toBe(true);
+    });
+
+    describe.each([BOOK, LEGACY_BOOK_NS])("field namespace %s", (fieldNs) => {
+      it.each([
+        ["notes", "42"],
+        ["archived", '"not a boolean"'],
+      ])("rejects malformed %s values even alongside valid canonical fields", async (field, bad) => {
+        const report = await validateTtl(`<${SUBJ}> a <${classNs}Bookmark> ;
+          <http://schema.org/url> <https://example.org/x> ;
+          <${BOOK}notes> "notes" ; <${BOOK}archived> true ; <${fieldNs}${field}> ${bad} .`);
+        expect(report.conforms).toBe(false);
+        expect(
+          report.results.some((r) =>
+            r.sourceConstraintComponent?.value.endsWith("DatatypeConstraintComponent"),
+          ),
+        ).toBe(true);
+      });
+
+      it.each([
+        ["notes", '"one", "two"'],
+        ["archived", "true, false"],
+      ])("rejects multiple %s values on one alias", async (field, values) => {
+        const report = await validateTtl(`<${SUBJ}> a <${classNs}Bookmark> ;
+          <http://schema.org/url> <https://example.org/x> ; <${fieldNs}${field}> ${values} .`);
+        expect(report.conforms).toBe(false);
+        expect(
+          report.results.some((r) =>
+            r.sourceConstraintComponent?.value.endsWith("MaxCountConstraintComponent"),
+          ),
+        ).toBe(true);
+      });
+    });
+
+    it.each([
+      ["notes", '"canonical"', '"legacy"'],
+      ["archived", "true", "false"],
+    ])("rejects conflicting %s values across aliases", async (field, canonical, legacy) => {
+      const report = await validateTtl(`<${SUBJ}> a <${classNs}Bookmark> ;
+        <http://schema.org/url> <https://example.org/x> ;
+        <${BOOK}${field}> ${canonical} ; <${LEGACY_BOOK_NS}${field}> ${legacy} .`);
+      expect(report.conforms).toBe(false);
+      expect(
+        report.results.some((r) =>
+          r.sourceConstraintComponent?.value.endsWith("MaxCountConstraintComponent"),
+        ),
+      ).toBe(true);
+    });
+
+    it("accepts identical values across aliases as one value", async () => {
+      const report = await validateTtl(`<${SUBJ}> a <${classNs}Bookmark> ;
+        <http://schema.org/url> <https://example.org/x> ;
+        <${BOOK}notes> "same" ; <${LEGACY_BOOK_NS}notes> "same" ;
+        <${BOOK}archived> true ; <${LEGACY_BOOK_NS}archived> true .`);
+      expect(report.conforms).toBe(true);
+    });
   });
 
   it("an IRI-valued tag is rejected (schema:keywords must be a string literal)", async () => {
     const ttl = `
-      @prefix book:   <https://w3id.org/jeswr/bookmark#> .
+      @prefix book:   <https://jeswr.org/ns/bookmark#> .
       @prefix schema: <http://schema.org/> .
       <${SUBJ}> a book:Bookmark ;
         schema:url <https://example.org/x> ;
