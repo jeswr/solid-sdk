@@ -54,6 +54,8 @@ export class SolidPersistence {
   private readonly knownUrls = new Set<string>();
   private updatesSinceCompaction = 0;
   private readonly pending: Uint8Array[] = [];
+  private uncheckpointedLiveState = false;
+  private durablePending = false;
   private timer?: ReturnType<typeof setTimeout>;
   private reconciliationTimer?: ReturnType<typeof setTimeout>;
   private pollingReconciliationTimer?: ReturnType<typeof setInterval>;
@@ -90,7 +92,7 @@ export class SolidPersistence {
     this.updateHandler = (update, origin) => {
       if (this.destroyed || origin === this || (this.transport && origin === this.transport))
         return;
-      if (this.transport?.sendUpdate(update)) return;
+      if (this.sendUpdate(update)) return;
       this.pending.push(update.slice());
       this.scheduleWrite();
     };
@@ -104,6 +106,14 @@ export class SolidPersistence {
     const next = this.operationTail.then(operation, operation);
     this.operationTail = next.catch(() => {});
     return next;
+  }
+
+  private sendUpdate(update: Uint8Array): boolean {
+    if (!this.transport?.sendUpdate(update)) return false;
+    // Socket acceptance is not a durability acknowledgement. Keep a bounded
+    // dirty flag; an explicit flush checkpoints the entire document to storage.
+    this.uncheckpointedLiveState = true;
+    return true;
   }
 
   async connect(): Promise<void> {
@@ -303,7 +313,7 @@ export class SolidPersistence {
         this.doc.transact(() => {
           applyUpdate(this.doc, diff, this);
         }, this);
-        this.transport?.sendUpdate(diff);
+        this.sendUpdate(diff);
         applied = valid.length;
       } catch (cause) {
         // A decode-validated update failed to integrate into the scratch — not
@@ -339,22 +349,30 @@ export class SolidPersistence {
     }, this.debounceMs);
   }
 
-  private drainWrites(): void {
+  private drainWrites(durable = false): void {
     if (!this.active || this.destroyed || !this.pending.length) return;
+    // A previously queued drain may consume this batch first. The durability
+    // request belongs to the batch, not just to this promise continuation.
+    this.durablePending ||= durable;
     this.writeTail = this.writeTail
       .catch(() => {})
       .then(async () => {
         if (!this.active || this.destroyed || !this.pending.length) return;
         const batch = this.pending.splice(0);
+        const persist = this.durablePending;
+        this.durablePending = false;
         try {
           const update = mergeUpdates(batch);
-          if (this.transport?.sendUpdate(update)) return;
+          if (!persist && this.sendUpdate(update)) return;
           const { url } = await this.store.appendUpdate(update);
           this.knownUrls.add(url);
           this.updatesSinceCompaction++;
           this.autoCompact();
         } catch (cause) {
-          if (!this.destroyed) this.pending.unshift(...batch);
+          if (!this.destroyed) {
+            this.pending.unshift(...batch);
+            this.durablePending ||= persist;
+          }
           this.report(cause);
           throw cause;
         }
@@ -422,7 +440,7 @@ export class SolidPersistence {
 
   async persistFullState(): Promise<{ url: string } | undefined> {
     if (this.destroyed || !this.active) throw new Error("[y-solid] provider is disconnected");
-    if (this.transport?.sendUpdate(encodeStateAsUpdate(this.doc))) return undefined;
+    if (this.sendUpdate(encodeStateAsUpdate(this.doc))) return undefined;
     const result = await this.store.appendUpdate(encodeStateAsUpdate(this.doc));
     this.knownUrls.add(result.url);
     this.updatesSinceCompaction++;
@@ -435,9 +453,15 @@ export class SolidPersistence {
       clearTimeout(this.timer);
       this.timer = undefined;
     }
+    if (this.active && !this.destroyed && this.uncheckpointedLiveState) {
+      this.pending.push(encodeStateAsUpdate(this.doc));
+      // Failed checkpoints remain in pending. Edits sent while this write is
+      // in flight set the flag again and are covered by the next flush.
+      this.uncheckpointedLiveState = false;
+    }
     // A failed batch stays pending and a later explicit flush retries it.
     // Preserve an in-flight failure when there is no new batch to enqueue.
-    this.drainWrites();
+    this.drainWrites(true);
     await this.writeTail;
   }
 
@@ -535,11 +559,16 @@ export class SolidPersistence {
         if (!this.active || this.destroyed) return;
         // The wire protocol has no per-update durability acknowledgement. Keep
         // all local state on loss, including edits sent just before the close.
-        if (checkpoint) this.pending.push(encodeStateAsUpdate(this.doc));
+        if (checkpoint) {
+          this.pending.push(encodeStateAsUpdate(this.doc));
+          this.uncheckpointedLiveState = false;
+        }
         this.scheduleWrite();
         this.emit("status", "connecting");
       },
       ready: () => {
+        // The handshake also sends preexisting state without a durability ack.
+        this.uncheckpointedLiveState = true;
         this.scheduleWrite();
         if (this.synced) this.emit("status", "connected");
       },

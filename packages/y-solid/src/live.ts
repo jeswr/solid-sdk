@@ -314,6 +314,10 @@ export class LiveTransport {
             if (step2 && !this.connected) {
               await this.callbacks.settled();
               if (!this.current(generation)) return;
+              // Removals retain clock metadata at the relay and other peers.
+              // Advance our clock before announcing the same state again.
+              this.awareness.setLocalState(this.awareness.getLocalState());
+              if (!this.current(generation)) return;
               this.connected = true;
               // State may have changed during the handshake. A full step 2 includes
               // pending dependencies and deletions as well as ordinary local edits.
@@ -345,6 +349,17 @@ export class LiveTransport {
       socket.addEventListener("error", close);
       socket.addEventListener("close", close);
       this.cleanup = () => {
+        if (socket.readyState !== 3) {
+          // Node ws can emit an asynchronous error when close() cancels a
+          // connecting socket. Keep an inert listener until its close event.
+          const ignoreError = () => {};
+          const closed = () => {
+            socket.removeEventListener("error", ignoreError);
+            socket.removeEventListener("close", closed);
+          };
+          socket.addEventListener("error", ignoreError);
+          socket.addEventListener("close", closed);
+        }
         socket.removeEventListener("open", open);
         socket.removeEventListener("message", message);
         socket.removeEventListener("error", close);
@@ -455,7 +470,14 @@ export class LiveTransport {
       /* Already closed. */
     }
     this.socket = undefined;
+    const removed = [...this.remoteClients].filter((client) =>
+      this.awareness.getStates().has(client),
+    );
     removeAwarenessStates(this.awareness, [...this.remoteClients], this);
+    // These states disappeared because this connection ended, not because the
+    // peer advanced its clock. Accept unchanged peers from the next snapshot.
+    // Keep actual remote tombstones so older states cannot resurrect them.
+    for (const client of removed) this.awareness.meta.delete(client);
     this.remoteClients.clear();
   }
 

@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { EventEmitter } from "node:events";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import * as encoding from "lib0/encoding";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Awareness } from "y-protocols/awareness";
 import * as sync from "y-protocols/sync";
 import * as Y from "yjs";
+import type { SyncSocket } from "./live.js";
 import { type YSolidOptions, YSolidProvider } from "./provider.js";
 import { SolidUpdateStore } from "./store.js";
 import { ENDPOINT, FakeSyncServer, message, SSD, TEMPLATE } from "./testSyncServer.js";
@@ -66,11 +68,12 @@ for (const protocol of ["solid", "lws"] as const)
         expect(Y.encodeStateVector(a.doc)).toEqual(Y.encodeStateVector(b.doc));
       });
       expect(performance.now() - started).toBeLessThan(500);
-      await a.flush();
-      await b.flush();
       expect(await a.compact()).toBeUndefined();
       expect(await a.persistFullState()).toBeUndefined();
       expect(create).not.toHaveBeenCalled();
+      await a.flush();
+      await b.flush();
+      expect(create).toHaveBeenCalledTimes(2);
       await server.writes;
       const reader = provider({ storage, mode: "log" });
       await reader.whenSynced;
@@ -161,7 +164,58 @@ for (const protocol of ["solid", "lws"] as const)
       a.doc.getMap("data").set("after-reconnect", true);
       await eventually(() => expect(b.doc.getMap("data").get("after-reconnect")).toBe(true));
       await a.flush();
-      expect(create).toHaveBeenCalledTimes(count);
+      expect(create).toHaveBeenCalledTimes(count + 1);
+    });
+
+    it.each([
+      "flush",
+      "disconnect",
+    ] as const)("checkpoints live edits on %s before a delayed socket close", async (method) => {
+      const { provider, server, storage } = await setup(protocol);
+      const a = provider();
+      await a.whenSynced;
+      const socket = server.sockets[0];
+      if (!socket) throw new Error("missing socket");
+      // The socket accepts sends but the interrupted relay never receives them
+      // and its close event has not reached the provider yet.
+      vi.spyOn(socket, "send").mockImplementation(() => {});
+      a.doc.getText("text").insert(0, "durable");
+      expect(a.mode).toBe("live");
+      await a[method]();
+      a.destroy();
+      expect(server.doc.getText("text").toString()).toBe("");
+      const reader = provider({ storage, mode: "log" });
+      await reader.whenSynced;
+      expect(reader.doc.getText("text").toString()).toBe("durable");
+    });
+
+    it.each([
+      "loss",
+      "disconnect",
+    ] as const)("restores both peers' awareness promptly after one provider's %s", async (kind) => {
+      const { provider, server } = await setup(protocol);
+      const a = provider();
+      const b = provider();
+      a.awareness.setLocalState({ user: "A" });
+      b.awareness.setLocalState({ user: "B" });
+      await Promise.all([a.whenSynced, b.whenSynced]);
+      await eventually(() => {
+        expect(a.awareness.getStates().get(b.doc.clientID)).toEqual({ user: "B" });
+        expect(b.awareness.getStates().get(a.doc.clientID)).toEqual({ user: "A" });
+      });
+      const peerClock = b.awareness.meta.get(b.doc.clientID)?.clock;
+      if (kind === "loss") server.sockets[0]?.close();
+      else await a.disconnect();
+      expect(a.awareness.getStates().has(b.doc.clientID)).toBe(false);
+      await eventually(() => expect(b.awareness.getStates().has(a.doc.clientID)).toBe(false));
+      if (kind === "disconnect") await a.connect();
+      await eventually(() => {
+        expect(a.mode).toBe("live");
+        expect(a.awareness.getStates().get(b.doc.clientID)).toEqual({ user: "B" });
+        expect(b.awareness.getStates().get(a.doc.clientID)).toEqual({ user: "A" });
+      });
+      // B did not reconnect or send a heartbeat to restore its presence at A.
+      expect(b.awareness.meta.get(b.doc.clientID)?.clock).toBe(peerClock);
     });
   });
 
@@ -381,8 +435,114 @@ it("reconnects even when fallback writes fail, sending the retained edits to the
   await expect(a.flush()).rejects.toThrow("pod writes unavailable");
   server.online = true;
   await eventually(() => expect(a.mode).toBe("live"));
-  await a.flush();
   await eventually(() => expect(server.doc.getText("t").toString()).toBe("retained"));
+  // Live recovery does not acknowledge durable storage for an explicit flush.
+  await expect(a.flush()).rejects.toThrow("pod writes unavailable");
+  create.mockImplementation(server.storage.create);
+  await a.flush();
+});
+
+it("retains a failed live checkpoint and edits sent during an in-flight flush", async () => {
+  const { provider, server, create, storage } = await setup();
+  const a = provider();
+  await a.whenSynced;
+  const socket = server.sockets[0];
+  if (!socket) throw new Error("missing socket");
+  vi.spyOn(socket, "send").mockImplementation(() => {});
+  a.doc.getMap("m").set("first", true);
+  create.mockRejectedValueOnce(new Error("checkpoint failed"));
+  await expect(a.flush()).rejects.toThrow("checkpoint failed");
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  create.mockImplementationOnce(async (...args) => {
+    await gate;
+    return server.storage.create(...args);
+  });
+  const flushing = a.flush();
+  await eventually(() => expect(create).toHaveBeenCalledTimes(2));
+  a.doc.getMap("m").set("during", true);
+  release();
+  await flushing;
+  await a.flush();
+  expect(create).toHaveBeenCalledTimes(3);
+  await a.flush();
+  expect(create).toHaveBeenCalledTimes(3);
+  a.destroy();
+  const reader = provider({ storage, mode: "log" });
+  await reader.whenSynced;
+  expect(reader.doc.getMap("m").toJSON()).toEqual({ first: true, during: true });
+});
+
+it("keeps an earlier background drain from sending an explicit checkpoint only to the relay", async () => {
+  const { provider, create } = await setup();
+  vi.useFakeTimers();
+  const a = provider();
+  // This batch waits for hydration and the handshake before its debounce starts.
+  a.doc.getText("text").insert(0, "queued");
+  await a.whenSynced;
+  expect(a.mode).toBe("live");
+  // Queue the background drain without running its promise continuation yet.
+  vi.advanceTimersByTime(300);
+  await a.flush();
+  expect(create).toHaveBeenCalledOnce();
+});
+
+it.each([
+  "disconnect",
+  "destroy",
+] as const)("handles asynchronous Node socket errors when %s cancels connection setup", async (method) => {
+  const { provider } = await setup();
+  const events = new EventEmitter();
+  const unhandled: unknown[] = [];
+  let readyState = 0;
+  let finish!: () => void;
+  const closed = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const socket: SyncSocket = {
+    get readyState() {
+      return readyState;
+    },
+    binaryType: "",
+    send: vi.fn(),
+    close: () => {
+      if (readyState !== 0) return;
+      readyState = 2;
+      // Node ws emits error asynchronously when close() cancels its handshake.
+      // EventEmitter throws for an error with no listener; capture that throw
+      // here so the regression fails without terminating the test process.
+      queueMicrotask(() => {
+        try {
+          events.emit("error", new Error("connection cancelled"));
+        } catch (cause) {
+          unhandled.push(cause);
+        }
+        readyState = 3;
+        events.emit("close", {});
+        finish();
+      });
+    },
+    addEventListener: (type, listener) => {
+      events.on(type, listener);
+    },
+    removeEventListener: (type, listener) => {
+      events.off(type, listener);
+    },
+  };
+  const socketFactory = vi.fn(() => socket);
+  const a = provider({ socketFactory });
+  const error = vi.fn();
+  a.on("error", error);
+  await eventually(() => expect(socketFactory).toHaveBeenCalledOnce());
+  await a[method]();
+  await closed;
+  await a.whenSynced;
+  expect(unhandled).toEqual([]);
+  expect(error).not.toHaveBeenCalled();
+  expect(events.eventNames()).toEqual([]);
+  expect(a.synced).toBe(false);
 });
 
 it("hydrates existing log state and a prepopulated document before live sync", async () => {
