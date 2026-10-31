@@ -36,6 +36,7 @@ export function memoryStore<T extends {} = {}>(): KvStore<T> {
 /** Translate engine context keys to the canonical (issuer, WebID, actual client_id) credential key. */
 export function sessionStorage(raw: KvStore, namespace: string, options: PodAuthOptions) {
   const store = protectStore(scopedStore(raw, namespace + ":sessions"));
+  const transient = new Map<string, RefreshSessionRecord>();
   const catalog = async () => ((await store.getItem("accounts")) ?? []) as Account[];
   const active = async (): Promise<ActiveAccount | null> => {
     const value = (await store.getItem("active")) as ActiveAccount | null;
@@ -77,7 +78,8 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
         record.identity.issuer !== account.issuer ||
         record.authorizationServer.issuer !== account.issuer ||
         record.client.client_id !== account.clientId ||
-        (typeof options.clientId === "string" && account.clientId !== options.clientId)
+        (typeof options.clientId === "string" &&
+          account.clientId !== new URL(options.clientId).href)
       )
         return false;
       // Ensure the loaded pair matches before any credential is sent to the token endpoint.
@@ -99,6 +101,8 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
   };
   const sessions: KvStore<RefreshSessionRecord> = {
     getItem: async (key) => {
+      const memory = transient.get(key);
+      if (memory !== undefined) return memory;
       const account = (await catalog()).find((a) => a.key === key);
       if (account === undefined) return null;
       const record = (await store.getItem(account.credential)) as RefreshSessionRecord | null;
@@ -113,7 +117,10 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
       await withLock(namespace + ":catalog", async () => {
         const webId = record.identity?.webId;
         // Issuer-only identities cannot supply the WebID-scoped restore guarantee.
-        if (webId === undefined) return;
+        if (webId === undefined) {
+          transient.set(key, record);
+          return;
+        }
         const issuer = record.authorizationServer.issuer;
         secureUrl(webId, options.allowInsecureLoopback === true, "WebID");
         secureUrl(issuer, options.allowInsecureLoopback === true, "issuer");
@@ -127,8 +134,10 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
         // Catalog first: a failed credential write is discoverable for later cleanup, never usable.
         await store.setItem("accounts", accounts);
         await store.setItem(credential, record);
+        transient.delete(key);
       }),
     removeItem: async (key) => {
+      transient.delete(key);
       const account = (await catalog()).find((a) => a.key === key);
       if (account !== undefined) await store.removeItem(account.credential);
     },
@@ -155,6 +164,7 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
     forgetPointer: async () => await store.removeItem("active"),
     keys: async () => (await catalog()).map((a) => a.key),
     clear: async () => {
+      transient.clear();
       for (const account of await catalog()) await store.removeItem(account.credential);
       await store.removeItem("accounts");
       await store.removeItem("active");

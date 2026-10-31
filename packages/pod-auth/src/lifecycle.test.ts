@@ -91,6 +91,61 @@ test("two fresh instances serialize rotating refresh grants", async () => {
   expect(f.op.stats.reuse).toBe(0);
 });
 
+test("issuer-only sessions refresh after access-token expiry without persisting credentials", async () => {
+  const f = fixture({ webId: null });
+  const auth = f.load();
+  await expect(auth.login({ issuer: f.op.issuer })).resolves.toMatchObject({ webId: null });
+  const now = Date.now();
+  const clock = vi.spyOn(Date, "now");
+  for (let refresh = 1; refresh <= 2; refresh++) {
+    clock.mockReturnValue(now + refresh * 301_000);
+    expect((await auth.fetch(f.op.root + "private")).status).toBe(200);
+    expect(f.op.stats.refreshes).toBe(refresh);
+    expect(f.op.stats.authorizations).toBe(1);
+    expect(f.record()).toBeUndefined();
+    expect(await auth.remembered()).toEqual([]);
+  }
+  expect(f.op.stats.reuse).toBe(0);
+  expect(await f.load().restore()).toBeNull();
+  expect(f.options.ui.getCode).toHaveBeenCalledOnce();
+  await auth.logout();
+  expect(f.op.stats.revocations).toBe(1);
+  expect(await auth.identity()).toBeNull();
+  await auth.login({ issuer: f.op.issuer });
+  expect(f.op.stats.authorizations).toBe(2);
+  expect(f.op.stats.refreshes).toBe(2);
+});
+
+test("a normalized client URL supports login, persistence and refresh after reload", async () => {
+  const f = fixture();
+  f.options.clientId = "https://app.example";
+  const normalized = new URL(f.options.clientId).href;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    return request.url === normalized
+      ? Response.json({
+          client_id: normalized,
+          redirect_uris: [f.op.redirectUri],
+          token_endpoint_auth_method: "none",
+          id_token_signed_response_alg: "ES256",
+        })
+      : await f.op.fetch(request);
+  });
+  await f.load().login();
+  const [key, before] = f.record();
+  expect(JSON.parse(JSON.parse(key)[1])).toEqual([f.op.issuer, f.op.webId, normalized]);
+  expect(before.client.client_id).toBe(normalized);
+  const reloaded = f.load();
+  await expect(reloaded.restore()).resolves.toMatchObject({
+    webId: f.op.webId,
+    clientId: normalized,
+  });
+  expect(f.op.stats.refreshes).toBe(1);
+  expect(f.op.stats.authorizations).toBe(1);
+  expect(f.record()[1].refreshToken).not.toBe(before.refreshToken);
+  expect((await reloaded.fetch(f.op.root + "private")).status).toBe(200);
+});
+
 test.each([
   true,
   false,

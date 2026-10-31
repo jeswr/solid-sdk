@@ -203,11 +203,65 @@ test("static client configurations reject foreign credentials; dynamic client ID
   expect((await dynamic.sessions.getItem("account"))?.client.client_id).toBe("dynamic-client");
 });
 
-test("no WebID means memory-only and malformed remembered pointers are not exposed", async () => {
-  const { persistence: p, state } = setup();
-  const { identity: _identity, ...withoutIdentity } = record;
-  await p.sessions.setItem("missing-webid", withoutIdentity);
+test.each([
+  "https://app.example",
+  "https://APP.example:443",
+  "https://app.example/a/../",
+])("client ID %s uses the provider's serialized URL for credential validation", async (configured) => {
+  const raw = memoryStore();
+  const config = { ...options, clientId: configured };
+  const p = sessionStorage(raw, namespace, config);
+  const normalized = { ...record, client: { client_id: new URL(configured).href } };
+  await p.sessions.setItem("account", normalized);
+  expect(await p.sessions.getItem("account")).toEqual(normalized);
+  const reloaded = sessionStorage(raw, namespace, config);
+  expect(await reloaded.sessions.getItem("account")).toEqual(normalized);
+  await expect(
+    p.sessions.setItem("foreign", { ...record, client: { client_id: "https://other.example/" } }),
+  ).rejects.toThrow("Invalid persisted");
+});
+
+test.each([
+  true,
+  false,
+])("records without a WebID stay in private memory; identity=%s", async (hasIdentity) => {
+  const { persistence: p, state, raw } = setup();
+  const write = vi.spyOn(raw, "setItem");
+  const transient = {
+    ...record,
+    identity: hasIdentity ? { ...record.identity!, webId: undefined } : undefined,
+  };
+  await p.sessions.setItem("issuer-only", transient);
+  expect(await p.sessions.getItem("issuer-only")).toEqual(transient);
   expect(await p.keys()).toEqual([]);
+  expect(await p.active()).toBeNull();
+  expect(await state.getItem("accounts")).toBeNull();
+  expect(write).not.toHaveBeenCalled();
+  const reloaded = sessionStorage(raw, namespace, options);
+  expect(await reloaded.sessions.getItem("issuer-only")).toBeNull();
+
+  const rotated = { ...transient, refreshToken: "rotated-refresh" };
+  await p.sessions.setItem("issuer-only", rotated);
+  await p.sessions.setItem("other-context", transient);
+  expect(await p.sessions.getItem("issuer-only")).toEqual(rotated);
+  expect(await p.sessions.getItem("other-context")).toEqual(transient);
+  await p.sessions.removeItem("issuer-only");
+  expect(await p.sessions.getItem("issuer-only")).toBeNull();
+  expect(await p.sessions.getItem("other-context")).toEqual(transient);
+  await p.clear();
+  expect(await p.sessions.getItem("other-context")).toBeNull();
+  expect(write).not.toHaveBeenCalled();
+});
+
+test("a WebID-scoped credential supersedes an in-memory record at the same context", async () => {
+  const { persistence: p } = setup();
+  await p.sessions.setItem("account", { ...record, identity: undefined });
+  await p.sessions.setItem("account", record);
+  expect(await p.sessions.getItem("account")).toEqual(record);
+});
+
+test("malformed remembered pointers are not exposed", async () => {
+  const { persistence: p, state } = setup();
   const pointer = { webId, issuer, requestUrl: issuer, selected: {}, context: "context" };
   for (const value of [
     { ...pointer, webId: 42 },
