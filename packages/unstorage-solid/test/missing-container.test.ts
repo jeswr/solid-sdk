@@ -50,12 +50,15 @@ it.each([200, 401, 403, 500])("does not infer absence from discovery status %s",
 });
 
 it.each([
-  404, 410,
-])("does not confuse an absent description (%s) with an absent mount", async (status) => {
+  [404, false],
+  [404, true],
+  [410, false],
+  [410, true],
+] as const)("does not confuse an absent description (%s, same URL: %s) with an absent mount", async (status, sameUrl) => {
   const { base } = fixture(status);
-  const description = new URL("/.well-known/storage", base).href;
-  const fetch: typeof globalThis.fetch = async (input) =>
-    String(input) === base
+  const description = sameUrl ? base : new URL("/.well-known/storage", base).href;
+  const fetch: typeof globalThis.fetch = async (input, init) =>
+    String(input) === base && init?.method === "HEAD"
       ? new Response(null, {
           headers: {
             link: `<${description}>; rel="https://www.w3.org/ns/lws#storage"`,
@@ -69,4 +72,22 @@ it.each([
   const driver = solidDriver({ base, fetch });
   await expect(driver.getKeys("", {})).rejects.toMatchObject({ code: "description-unreachable" });
   await expect(driver.clear?.("", {})).rejects.toMatchObject({ code: "description-unreachable" });
+});
+
+it.each([
+  404, 410,
+])("does not infer mount absence from an OPTIONS probe returning %s", async (status) => {
+  const { base } = fixture(status);
+  const fetch: typeof globalThis.fetch = async (_input, init) => {
+    if (init?.method === "HEAD")
+      return new Response(null, {
+        headers: {
+          link: '<http://www.w3.org/ns/pim/space#Storage>; rel="type"',
+          "updates-via": "wss://notifications.example/updates",
+        },
+      });
+    if (init?.method === "OPTIONS") return new Response(null, { status });
+    return new Response("", { headers: { "content-type": "text/turtle" } });
+  };
+  await expect(listContainer(base, base, fetch)).resolves.toEqual([]);
 });

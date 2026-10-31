@@ -182,6 +182,27 @@ describe("LWS PUT and POST fixture replay", () => {
     await storage.create(NOTES, null, { contentType: "text/plain" });
     await storage.create(NOTES, "", { contentType: "text/plain", kind: "container" });
   });
+  test.each([
+    "資料",
+    "📁",
+    "café",
+    "a:b%100",
+    "first draft",
+    " padded",
+    "padded ",
+    "%E8%B3%87",
+  ])("POST encodes the decoded name hint %s once and retains the server's identifier", async (name) => {
+    const { storage, calls } = backend({
+      [`POST ${NOTES}`]: reply(201, { location: "../opaque-id", etag: tag }),
+    });
+    expect(await storage.create(NOTES, "body", { name, contentType: "text/plain" })).toEqual({
+      url: `${ROOT}opaque-id`,
+      etag: tag,
+      created: true,
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.headers.get("slug")).toBe(encodeURIComponent(name));
+  });
   test("a slashless container Location can be reused as a create parent", async () => {
     const parentUrl = `${ROOT}opaque-container`;
     const childUrl = `${ROOT}opaque-child`;
@@ -248,6 +269,29 @@ describe("LWS PUT and POST fixture replay", () => {
 });
 
 describe("validation and transport fail closed", () => {
+  test.each([
+    "",
+    3,
+    "a\tb",
+    "a\u0001b",
+    "a\u007fb",
+    "a\rb",
+    "a\nb",
+    "a\0b",
+  ])("invalid decoded name hint %j fails before fetch", async (name) => {
+    const { storage, fetch } = backend();
+    await expect(
+      storage.create(NOTES, "body", { name, contentType: "text/plain" } as CreateOptions),
+    ).rejects.toBeInstanceOf(TypeError);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  test("a malformed Unicode name hint fails before fetch", async () => {
+    const { storage, fetch } = backend();
+    await expect(
+      storage.create(NOTES, "body", { name: "\ud800", contentType: "text/plain" }),
+    ).rejects.toBeInstanceOf(URIError);
+    expect(fetch).not.toHaveBeenCalled();
+  });
   test.each([
     undefined,
     "",

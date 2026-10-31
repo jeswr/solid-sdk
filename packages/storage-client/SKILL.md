@@ -245,7 +245,8 @@ Solid read side (ADR-003 §6):
   values; media types must be syntactically valid. Root content cannot be PUT; other resource
   kinds are validated by the server, never inferred from an identifier's trailing slash.
   RDF serialisation uses the shared serializer; JSON-LD writing remains unsupported.
-- `create` always POSTs: optional `name` is the Slug hint, never an exact child name. Emit Container
+- `create` always POSTs: optional decoded `name` is percent-encoded as the Slug hint, never an exact child name.
+  Name hints reject empty values and control characters before any request; spaces are encoded. Emit Container
   or DataResource Link type plus each validated `opts.links` entry. Initial up/linkset metadata is
   refused. Create parents and move destinations may be slashless opaque identifiers; the server
   validates their kind. Null bodies become empty bodies; containers default to application/lws+json, resources

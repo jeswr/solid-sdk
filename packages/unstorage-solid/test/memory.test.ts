@@ -157,6 +157,22 @@ describe.each(["solid", "lws"] as const)("KV through StorageClient (%s)", (proto
   });
 });
 
+it("passes decoded creation names to injected LWS memory clients", async () => {
+  const backend = createMemoryStorage({ protocol: "lws", root: BASE });
+  const fetch = vi.fn<typeof globalThis.fetch>();
+  const driver = solidDriver({ base: BASE, storage: backend, fetch });
+  const create = vi.spyOn(backend, "create");
+  await driver.setItem?.("資料:📁:café%3A100%25", "value", {});
+  expect(create.mock.calls.map(([, , opts]) => opts?.name)).toEqual([
+    "café:100%",
+    "資料",
+    "📁",
+    "café:100%",
+  ]);
+  expect(await driver.getItem?.("資料:📁:café%3A100%25", {})).toBe("value");
+  expect(fetch).not.toHaveBeenCalled();
+});
+
 it("refuses server-chosen identifiers for the fixed key layout", async () => {
   const storage = createMemoryStorage({ protocol: "lws", root: BASE });
   vi.spyOn(storage, "create").mockResolvedValueOnce({

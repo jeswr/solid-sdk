@@ -18,8 +18,12 @@ export async function storageFromFetch(
   const discovery = createSameOriginRedirectRefusingFetch(new URL(base).origin, fetchImpl);
   const data = createScopedFetch(base, fetchImpl);
   let discovering = true;
+  let initialRequest = true;
   let discoveryAbsence: StorageError | undefined;
   const transport: typeof fetch = async (input, init) => {
+    const initialMountHead =
+      discovering && initialRequest && init?.method === "HEAD" && String(input) === base;
+    initialRequest = false;
     const merged = new Headers(headers);
     new Headers(init?.headers).forEach((value, key) => {
       // SDK resource reads default to */*; keep the driver's configured representation.
@@ -31,7 +35,7 @@ export async function storageFromFetch(
       merged.set(key, value);
     });
     const response = await (discovering ? discovery : data)(input, { ...init, headers: merged });
-    if (discovering && String(input) === base && [404, 410].includes(response.status)) {
+    if (initialMountHead && [404, 410].includes(response.status)) {
       // Discovery otherwise discards the status and reports missing capability links.
       discoveryAbsence = toStorageError(init?.method ?? "GET", base, response);
       void response.body?.cancel().catch(() => undefined);
@@ -44,17 +48,7 @@ export async function storageFromFetch(
     throw discoveryAbsence ?? error;
   });
   discovering = false;
-  if (storage.protocol !== "lws") return storage;
-  return {
-    ...storage,
-    // Network LWS names become Slug headers; send the key's encoded path segment.
-    // Solid and injected clients retain their decoded-name contract.
-    create: (container, body, opts) =>
-      storage.create(container, body, {
-        ...opts,
-        name: opts?.name === undefined ? undefined : encodeURIComponent(opts.name),
-      }),
-  };
+  return storage;
 }
 
 export function isMissing(error: unknown): boolean {
