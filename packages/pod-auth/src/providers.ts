@@ -167,7 +167,10 @@ export function createProviders(
     clientProvider,
     { ...sessionOptions, session: solidProvider.session },
   );
-  const lwsContexts = new Map<string, { provider: LwsTokenProvider; validate(): Promise<void> }>();
+  const lwsContexts = new Map<
+    string,
+    { provider: LwsTokenProvider; validate(signal: AbortSignal): Promise<void> }
+  >();
   const lwsRequests = new WeakMap<Request, LwsTokenProvider>();
   const lwsFor = async (request: Request) => {
     // Capture the selected Solid session before any awaits; another upgrade may select a new one.
@@ -178,9 +181,9 @@ export function createProviders(
     let binding = lwsContexts.get(key);
     if (binding === undefined) {
       let oidc: OidcIdTokenSource | undefined;
-      const getOidc = async () => {
+      const getOidc = async (signal: AbortSignal) => {
         if (oidc === undefined) {
-          const as = await asProvider.getAuthorizationServer(target);
+          const as = await asProvider.getAuthorizationServer(new Request(target.url, { signal }));
           oidc = new OidcIdTokenSource(as, options.redirectUri, codeProvider, clientProvider, {
             ...sessionOptions,
             session: solidProvider.session,
@@ -189,8 +192,8 @@ export function createProviders(
         }
         return oidc;
       };
-      const validate = async () => {
-        const claims = await (await getOidc()).identity();
+      const validate = async (signal: AbortSignal) => {
+        const claims = await (await getOidc(signal)).identity();
         if (claims === undefined) throw new Error("Authentication did not establish an identity");
         await hooks.session(target, claims, "lws");
         sessionRequest = target;
@@ -199,9 +202,9 @@ export function createProviders(
         id: key,
         fence,
         getCredential: async (request: CredentialRequest) => {
-          const credential = await (await getOidc()).getCredential(request);
+          const credential = await (await getOidc(request.signal)).getCredential(request);
           // Validate the identity of this exact credential context before it leaves the source.
-          await validate();
+          await validate(request.signal);
           return credential;
         },
       };
@@ -218,7 +221,7 @@ export function createProviders(
       const { provider, validate } = await lwsFor(request);
       const upgraded = await provider.upgrade(request, challenge);
       // Cached tokens also use their original credential context, never the latest sessionRequest.
-      await validate();
+      await validate(request.signal);
       lwsRequests.set(upgraded, provider);
       return upgraded;
     },

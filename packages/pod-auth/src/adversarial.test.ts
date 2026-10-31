@@ -164,6 +164,56 @@ test("LWS refuses missing credential identity before exchange", async () => {
   expect(await auth.identity()).toBeNull();
 });
 
+test.each([
+  "https://pod.example/.well-known/lws-configuration",
+  "https://op.example/.well-known/openid-configuration",
+])("LWS retries with a fresh signal after cancellation during discovery at %s", async (cancelAt) => {
+  const { op, options } = setup();
+  const controller = new AbortController();
+  let cancelled = false;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.url === cancelAt && !cancelled) {
+      cancelled = true;
+      controller.abort();
+    }
+    request.signal.throwIfAborted();
+    return op.fetch(request);
+  });
+  const auth = createPodAuth(options);
+  await expect(auth.fetch(op.root + "lws", { signal: controller.signal })).rejects.toMatchObject({
+    name: "AbortError",
+  });
+  expect(cancelled).toBe(true);
+  expect(op.stats.tokens).toBe(0);
+  expect(op.stats.exchanges).toBe(0);
+  expect(op.stats.accepted).toBe(0);
+  expect(await auth.identity()).toBeNull();
+
+  expect((await auth.fetch(op.root + "lws")).status).toBe(200);
+  expect((await auth.fetch(op.root + "lws")).status).toBe(200);
+  expect((await auth.identity())?.issuer).toBe(op.issuer);
+  expect(op.stats.tokens).toBe(1);
+  expect(op.stats.exchanges).toBe(1);
+});
+
+test("LWS issuer discovery reuses the selected URL after a Solid write body is consumed", async () => {
+  const { op, options } = setup();
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    const copy = request.clone();
+    if (request.method === "PUT") await request.text();
+    return op.fetch(copy);
+  });
+  const auth = createPodAuth(options);
+  expect((await auth.fetch(op.root + "private", { method: "PUT", body: "content" })).status).toBe(
+    200,
+  );
+  expect((await auth.fetch(op.root + "lws")).status).toBe(200);
+  expect(op.stats.tokens).toBe(1);
+  expect(op.stats.exchanges).toBe(1);
+});
+
 function twoAccounts(onExchange?: (request: Request) => Promise<Response>) {
   const alice = createMockOp();
   const bob = createMockOp({
