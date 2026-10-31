@@ -136,12 +136,7 @@ export function detectBridgeCapability(input: InboundSignals): BridgeCapability 
     capable,
     channels: orderChannels(channels),
     ...(podCopyUrl !== undefined ? { podCopyUrl } : {}),
-    ...(emailMarker ||
-    footerMarker ||
-    advertised.includes("email-mime") ||
-    advertised.includes("footer-url-only")
-      ? { carriage }
-      : {}),
+    ...(carriage !== undefined ? { carriage } : {}),
   };
 }
 
@@ -157,9 +152,14 @@ function hasFooterUrl(text: string, footer: string): boolean {
   // The first footer URL is the agent card; the spec URL alone claims no capability.
   const card = footer.match(/https?:\/\/[^\s<>"']+/)?.[0];
   if (card === undefined) return false;
+  const normalizedCard = normalizeFooterUrl(card);
   return (text.slice(0, 512 * 1024).match(/https?:\/\/[^\s<>"']+/g) ?? []).some(
-    (url) => url.replace(/[),.;!?]+$/, "").replace(/\/$/, "") === card.replace(/\/$/, ""),
+    (url) => normalizeFooterUrl(url) === normalizedCard,
   );
+}
+
+function normalizeFooterUrl(url: string): string {
+  return url.replace(/[),.;!?]+$/, "").replace(/\/$/, "");
 }
 
 /** True if a parsed JSON-LD object declares the `AgenticReply` type. */

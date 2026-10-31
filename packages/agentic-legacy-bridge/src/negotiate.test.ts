@@ -41,6 +41,10 @@ describe("detectBridgeCapability", () => {
   });
 
   it.each([
+    ["rdf,a2a", "rdf"],
+    ["a2a,rdf", "rdf"],
+    ["rdf", "rdf"],
+    ["a2a", "a2a"],
     ["footer-url-only,email-mime,a2a,rdf", "rdf"],
     ["footer-url-only,email-mime,a2a", "a2a"],
     ["footer-url-only,email-mime", "email-mime"],
@@ -84,6 +88,32 @@ describe("detectBridgeCapability", () => {
     expect(
       detectBridgeCapability({ textBody: " ".repeat(512 * 1024) + AGENT_FOOTER }).capable,
     ).toBe(false);
+  });
+
+  it.each([
+    ["(", ")"],
+    ["(", "/)."],
+    ["", "."],
+    ["", ","],
+    ["", ";"],
+    ["", "!"],
+    ["", "?"],
+  ])("round-trips a configured footer URL surrounded by '%s' and '%s'", (prefix, suffix) => {
+    const card = "https://configured.example/agent";
+    const footer = `Agent: ${prefix}${card}${suffix}`;
+    for (const textBody of [footer, `See ${card}.`, `See (${card}/).`])
+      expect(detectBridgeCapability({ footer, textBody })).toEqual({
+        capable: true,
+        channels: ["email"],
+        carriage: "footer-url-only",
+      });
+    for (const textBody of [
+      `${card}/other`,
+      `${card}.evil.example`,
+      `${card}?redirect=evil`,
+      `${card}#fake`,
+    ])
+      expect(detectBridgeCapability({ footer, textBody }).capable).toBe(false);
   });
 
   it("ignores invalid carriers and gives the first case-insensitive header precedence", () => {
