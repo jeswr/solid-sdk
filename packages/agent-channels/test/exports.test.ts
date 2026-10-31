@@ -93,7 +93,7 @@ it.each(entries)("resolves the declared %s surface", (subpath, target) => {
   const entry = new URL(`../${target.default}`, import.meta.url);
   const specifier = manifest.name + (subpath === "." ? "" : subpath.slice(1));
   expect(import.meta.resolve(specifier)).toBe(entry.href);
-  if (![".", "./testing", "./direct", "./direct/send"].includes(subpath))
+  if (![".", "./testing", "./direct", "./direct/send", "./github"].includes(subpath))
     expect(Object.getOwnPropertyNames(modules[subpath])).toEqual([]);
 });
 
@@ -103,4 +103,7 @@ it("keeps send factories out of root and reader exports", () => {
   expect(entry17).not.toHaveProperty("createDirectSend");
   expect(entry32).toHaveProperty("createDirectSend");
   expect(entry1).toHaveProperty("createInMemoryDirectBinding");
+  expect(entry11).toHaveProperty("createGithubReader");
+  expect(entry11).not.toHaveProperty("send");
+  expect(manifest.exports).not.toHaveProperty("./github/send");
 });
