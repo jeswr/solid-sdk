@@ -9,11 +9,12 @@ import {
   entryGraph,
   headGraph,
   node,
+  PROV,
   parseTurtle,
   turtle,
 } from "../src/rdf.js";
 import { loadTrace, readHead } from "../src/reader.js";
-import { seal } from "../src/records.js";
+import { ENTRY_KINDS, seal } from "../src/records.js";
 import { createMemoryAuditPod } from "../src/testing.js";
 import type { AuditFetch } from "../src/transport.js";
 import { boundedText, documentUrl, readDocument, request, storageRoot } from "../src/transport.js";
@@ -33,6 +34,45 @@ function ledger(count = 1) {
   for (let i = 0; i < count; i++) l.append(record, AT);
   return l;
 }
+it.each([
+  ...ENTRY_KINDS,
+  "ledger-checkpoint",
+] as const)("keeps PROV entity and activity roles disjoint for %s", (type) => {
+  const l = new MemoryLedger();
+  const entry = l.append(
+    type === "ledger-checkpoint"
+      ? { type, lastPrunedSeq: 1, lastPrunedHash: `sha-256:${"a".repeat(64)}` }
+      : { ...record, type, proposal: "urn:proposal:1", mandate: "urn:mandate:1" },
+    AT,
+  );
+  const url = `${BASE}1.ttl`;
+  const graph = entryGraph(url, entry);
+  const activity = node(graph, url);
+  const entity = node(graph, `${url}#entry`);
+  const rdfType = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+  expect(activity.values(rdfType).map((n) => n.value)).toContain(`${PROV}Activity`);
+  expect(activity.values(rdfType).map((n) => n.value)).not.toContain(`${PROV}Entity`);
+  expect(entity.values(rdfType).map((n) => n.value)).toEqual([`${PROV}Entity`]);
+  expect(activity.values(`${PROV}wasAttributedTo`)).toEqual([]);
+  expect(entity.values(`${PROV}wasAttributedTo`).map((n) => n.value)).toEqual(
+    type === "ledger-checkpoint" ? [] : [record.owner],
+  );
+  expect(activity.values(`${PROV}generated`).map((n) => n.value)).toContain(entity.value);
+  const headUrl = `${BASE}chain.ttl`;
+  const head = node(headGraph(headUrl, entry.seq, entry.hash), headUrl);
+  expect(head.values(rdfType).map((n) => n.value)).toContain(`${PROV}Collection`);
+  const members = head.values(`${PROV}hadMember`).map((n) => n.value);
+  expect(members).toEqual([entity.value]);
+  // Include Entity types inferred by the domains/ranges of PROV relations.
+  const entities = [
+    entity.value,
+    head.value,
+    ...members,
+    ...activity.values(`${PROV}generated`).map((n) => n.value),
+    ...activity.values(`${PROV}used`).map((n) => n.value),
+  ];
+  expect(entities).not.toContain(activity.value);
+});
 it("produces byte-identical PROV Turtle and a golden head", async () => {
   const pod = createMemoryAuditPod();
   const l = ledger(2);

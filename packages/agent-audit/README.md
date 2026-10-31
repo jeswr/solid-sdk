@@ -68,13 +68,16 @@ agent-mandate's `issueApproval`. The full message stays in the private inbox;
 audit accepts its digest only. An uncertain/unsent transmission or absent receipt
 is an incomplete walk and cannot produce a clean audit.
 
-Each immutable `agent/audit/<seq>.ttl` is a `prov:Activity` with `prov:used`
+Each immutable `agent/audit/<seq>.ttl` contains a `prov:Activity` at its resource
+URL and a generated `prov:Entity` at `#entry`. The activity carries `prov:used`
 authority references, `prov:wasAssociatedWith` the executor, the exact canonical
-JSON record, sequence, time, `agent:ledgerHash` and `agent:prevHash`. Decision
+JSON record, sequence, time, `agent:ledgerHash` and `agent:prevHash`; the entity
+carries `prov:wasAttributedTo` the owner. Decision
 activities also reify request, evaluation time, principal, assignee, policy,
 verdict, digest and reason. Typed wrapper accessors construct graphs; n3.Writer
-serializes deterministic Turtle. `chain.ttl` publishes the head only after the
-entry succeeds. Entry creation uses `If-None-Match: *`; head updates require an
+serializes deterministic Turtle. `chain.ttl` is a `prov:Collection` whose head
+member is the entry entity; it publishes the head only after the entry succeeds.
+Entry creation uses `If-None-Match: *`; head updates require an
 ETag. A partial write can be retried, but a different existing entry, stale head,
 absent ETag or competing history fails closed. Provision the container and its
 owner-selected ACL separately; this package never broadens access.

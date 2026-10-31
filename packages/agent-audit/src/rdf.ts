@@ -62,7 +62,10 @@ export async function verifiedApprovalCreatedAt(document: string, id: string): P
 export function entryGraph(url: string, e: LedgerEntry): Store {
   const store = new Store();
   const n = node(store, url);
+  const entity = node(store, new URL("#entry", url).href);
   n.setIri(RDF_TYPE, `${PROV}Activity`);
+  entity.setIri(RDF_TYPE, `${PROV}Entity`);
+  n.setIri(`${PROV}generated`, entity.value);
   n.setText(`${AGENT}seq`, String(e.seq), "http://www.w3.org/2001/XMLSchema#integer");
   n.setText(`${PROV}startedAtTime`, e.at, "http://www.w3.org/2001/XMLSchema#dateTime");
   n.setText(`${AGENT}ledgerHash`, e.hash);
@@ -75,7 +78,7 @@ export function entryGraph(url: string, e: LedgerEntry): Store {
   if (e.record.type !== "ledger-checkpoint") {
     const r = e.record;
     n.setIri(`${PROV}wasAssociatedWith`, r.agent);
-    n.setIri(`${PROV}wasAttributedTo`, r.owner);
+    entity.setIri(`${PROV}wasAttributedTo`, r.owner);
     n.setIri(`${PROV}generated`, r.id);
     for (const id of [
       r.proposal,
@@ -94,9 +97,10 @@ export function headGraph(url: string, seq: number, hash: string): Store {
   const store = new Store();
   const n = node(store, url);
   n.setIri(RDF_TYPE, `${AGENT}AuditChain`);
+  n.setIri(RDF_TYPE, `${PROV}Collection`);
   n.setText(`${AGENT}seq`, String(seq), "http://www.w3.org/2001/XMLSchema#integer");
   n.setText(`${AGENT}ledgerHash`, hash);
-  n.setIri(`${PROV}hadMember`, new URL(`${seq}.ttl`, url).href);
+  n.setIri(`${PROV}hadMember`, new URL(`${seq}.ttl#entry`, url).href);
   return store;
 }
 export function turtle(store: Store): Promise<string> {
