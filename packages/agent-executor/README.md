@@ -26,7 +26,10 @@ lookup and before handing over send credentials, closing asynchronous revocation
 - `ApprovalStore.findVerified(context)` must use `agent-mandate.verifyApproval` (or an
   equivalent verified adapter) against the supplied owner WebID, proposal, terms digest
   and clock. It must never return parsed-but-unverified approvals. The executor also
-  checks proposal/digest/expiry/decision and gives a verified denial precedence.
+  checks proposal/digest/expiry/decision on every authorization path and gives a verified
+  denial precedence over autonomous permission as well as positive approvals. A positive
+  approval is required only when policy demands it. An unavailable approval store queues
+  the action as `awaiting-approval(approval-unavailable)` until denials can be checked.
 - `ControlStore.listVerified(ownerWebId)` must return only owner-proof-verified controls.
   Future, expired and wrong-owner records are ignored. An active Halt wins timestamp
   ties; a later verified Resume clears it only when the local HALT file is absent.

@@ -263,16 +263,64 @@ describe("DESIGN §4.1 ordered enforcement", () => {
     expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "sent" });
     expect(h.records.get(e.proposal.id)?.underApproval).toBe("urn:approval:1");
   });
-  it("step 5: a verified deny takes precedence", async () => {
+  it.each([
+    "autonomous",
+    "confirm-required",
+  ])("step 5: a verified deny overrides %s", async (policy) => {
     const h = harness();
     const e = await h.enqueue();
-    h.needsApproval();
+    if (policy === "confirm-required") h.needsApproval();
     h.confirm(e);
     h.confirm(e, "deny");
     expect(await h.executor.transmit(e.proposal.id)).toMatchObject({
       status: "refused",
       reason: "approval-denied",
     });
+    expect(h.binding.send.transmit).not.toHaveBeenCalled();
+    expect(h.options.tokens.send).not.toHaveBeenCalled();
+    expect(h.records.size).toBe(0);
+  });
+  it.each([
+    ["wrong-proposal", { approves: "urn:other-proposal" }],
+    ["wrong-terms", { termsDigest: "stale" }],
+    ["expired", { expires: NOW }],
+    ["invalid-decision", { decision: "other" }],
+  ])("step 5: %s denial cannot block autonomous permission", async (_change, patch) => {
+    const h = harness();
+    const e = await h.enqueue();
+    h.confirm(e, "deny");
+    Object.assign(h.approvals[0] as object, patch);
+    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "sent" });
+    expect(h.records.get(e.proposal.id)?.underApproval).toBeUndefined();
+  });
+  it.each([
+    "autonomous",
+    "confirm-required",
+  ])("step 5: %s waits when verified denials cannot be read", async (policy) => {
+    const h = harness();
+    const e = await h.enqueue();
+    if (policy === "confirm-required") h.needsApproval();
+    vi.spyOn(h.approvalStore, "findVerified").mockRejectedValueOnce(new Error("unavailable"));
+    expect(await h.executor.transmit(e.proposal.id)).toEqual({
+      status: "awaiting-approval",
+      reason: "approval-unavailable",
+    });
+    expect(h.binding.send.transmit).not.toHaveBeenCalled();
+    expect(h.options.tokens.send).not.toHaveBeenCalled();
+    expect(h.records.size).toBe(0);
+    if (policy === "confirm-required") h.confirm(e);
+    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "sent" });
+  });
+  it("step 9: a new denial blocks queued autonomous work on re-evaluation", async () => {
+    const h = harness();
+    const a = await h.enqueue();
+    const b = await h.enqueue("urn:proposal:2");
+    h.confirm(a, "deny");
+    expect(await h.executor.onControlOrMandateChange()).toEqual({
+      [a.proposal.id]: { status: "refused", reason: "approval-denied" },
+      [b.proposal.id]: { status: "ready", reason: "re-evaluated" },
+    });
+    expect(h.binding.send.transmit).not.toHaveBeenCalled();
   });
   it("step 8: writes system outcome and conversation receipt with no body in audit", async () => {
     const h = harness();

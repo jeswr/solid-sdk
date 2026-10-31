@@ -214,27 +214,28 @@ export function createExecutor(options: ExecutorOptions) {
       return disposition(id, { status: "refused", reason: "mandate-invalid" });
     if (decision.decision === "prohibited")
       return disposition(id, { status: "prohibited", reason: "prohibition" });
+    let approvals: Awaited<ReturnType<typeof o.approvals.findVerified>>;
+    try {
+      approvals = await o.approvals.findVerified({
+        proposal: id,
+        termsDigest: intent.termsDigest,
+        ownerWebId: o.ownerWebId,
+        now,
+      });
+    } catch {
+      // An unreadable denial store cannot establish permission, even for autonomous actions.
+      return disposition(id, { status: "awaiting-approval", reason: "approval-unavailable" });
+    }
+    const current = approvals.filter(
+      (a) =>
+        a.approves === id &&
+        a.termsDigest === intent.termsDigest &&
+        Date.parse(a.expires) > o.clock.now().getTime(),
+    );
+    if (current.some((a) => a.decision === "deny"))
+      return disposition(id, { status: "refused", reason: "approval-denied" });
     let approval: string | undefined;
     if (decision.decision === "confirm-required") {
-      let approvals = [] as Awaited<ReturnType<typeof o.approvals.findVerified>>;
-      try {
-        approvals = await o.approvals.findVerified({
-          proposal: id,
-          termsDigest: intent.termsDigest,
-          ownerWebId: o.ownerWebId,
-          now,
-        });
-      } catch {
-        /* no verified approval */
-      }
-      const current = approvals.filter(
-        (a) =>
-          a.approves === id &&
-          a.termsDigest === intent.termsDigest &&
-          Date.parse(a.expires) > o.clock.now().getTime(),
-      );
-      if (current.some((a) => a.decision === "deny"))
-        return disposition(id, { status: "refused", reason: "approval-denied" });
       approval = current.find((a) => a.decision === "approve")?.id;
       if (!approval)
         return disposition(id, { status: "awaiting-approval", reason: "approval-required" });

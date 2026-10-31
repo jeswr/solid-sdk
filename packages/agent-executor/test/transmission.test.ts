@@ -286,14 +286,18 @@ describe("asynchronous send boundary", () => {
     expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ reason: "halted" });
     expect(h.binding.send.transmit).not.toHaveBeenCalled();
   });
-  it("revocation during lookup is checked before entering transmit", async () => {
+  it.each([
+    "revoke",
+    "deny",
+  ])("%s during lookup is checked before entering transmit", async (change) => {
     const h = harness();
     const e = await h.enqueue();
     h.prior(e);
     Object.assign(h.binding.send, {
       finalAbsence: true,
       lookup: async () => {
-        h.state.mandate = undefined;
+        if (change === "revoke") h.state.mandate = undefined;
+        else h.confirm(e, "deny");
         return { outcome: "absent" as const };
       },
     });
@@ -303,6 +307,7 @@ describe("asynchronous send boundary", () => {
   it.each([
     "halt",
     "revoke",
+    "deny",
     "change",
     "wrong-scope",
     "empty-token",
@@ -313,6 +318,7 @@ describe("asynchronous send boundary", () => {
     vi.mocked(h.options.tokens.send).mockImplementation(async () => {
       if (change === "halt") h.statements.push(control("Halt", 0));
       if (change === "revoke") h.state.mandate = undefined;
+      if (change === "deny") h.confirm(e, "deny");
       if (change === "change") {
         e.proposal.intent.amount.value = 99;
         seal(e);
@@ -343,13 +349,19 @@ describe("asynchronous send boundary", () => {
     await h.executor.drain();
     expect(h.options.tokens.send).not.toHaveBeenCalled();
   });
-  it("halt after durable claim prevents even entering binding transmit", async () => {
+  it.each([
+    "halt",
+    "deny",
+  ])("%s after durable claim prevents even entering binding transmit", async (change) => {
     const h = harness();
     const e = await h.enqueue();
     const append = h.audit.append;
     vi.spyOn(h.audit, "append").mockImplementation(async (record) => {
       await append(record);
-      if (record.outcome === "attempting") h.state.haltFile = true;
+      if (record.outcome === "attempting") {
+        if (change === "halt") h.state.haltFile = true;
+        else h.confirm(e, "deny");
+      }
     });
     expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "not-sent" });
     expect(h.binding.send.transmit).not.toHaveBeenCalled();
