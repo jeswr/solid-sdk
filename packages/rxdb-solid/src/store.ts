@@ -399,9 +399,11 @@ export class SolidDocStore {
    */
   async listDocUrls(): Promise<string[]> {
     const urls: string[] = [];
+    let receivedEntry = false;
     try {
       const storage = await this.storage();
       for await (const entry of storage.listAll(this.container)) {
+        receivedEntry = true;
         const absolute = entry.url;
         if (entry.kind === "container" || isContainerUrl(absolute)) continue;
         try {
@@ -421,13 +423,12 @@ export class SolidDocStore {
       }
     } catch (error) {
       if (
-        urls.length > 0 ||
-        (!isMissing(error) &&
-          !(
-            error instanceof StorageError &&
-            error.code === "method-not-allowed" &&
-            error.status === null
-          ))
+        receivedEntry ||
+        !(error instanceof StorageError) ||
+        !(
+          (isMissing(error) && error.url === this.container) ||
+          (error.code === "method-not-allowed" && error.status === null)
+        )
       )
         throw storageCause(error);
     }
