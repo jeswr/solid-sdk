@@ -11,22 +11,43 @@ HTTP, group fetching, planning, decisions, conditional writes, and execution rem
 Private at version 0.1.0. Requires Node.js >=24 and the root pnpm workspace tooling.
 The broader sharing client in SDK core `ADR-003-storage-client.md` §9 remains unimplemented.
 
+Readers can return resource, member, and combined rules. `translatePolicy` and `assertNotWider`
+require every grant and denial to be normalized to resource scope; they throw otherwise.
+Use `scopePolicy` to select and normalize each scope, then translate and prove the two separately.
+`policiesEqual` likewise requires normalized policies and returns false for invalid scopes.
+
 ```ts
 import {
-  readWac, translatePolicy, writeAcp,
+  assertNotWider, readWac, scopePolicy, translatePolicy, unionPolicies, writeAcp,
 } from "@jeswr/pod-access";
 
 // Parse RDF with @jeswr/fetch-rdf using the access document URL as baseIRI.
 const source = readWac(dataset, sourceResource, sourceAclUrl, "css");
-const { policy, report } = translatePolicy(source, "acp", {
+const context = {
   resourceUrl: sourceResource,
   sourceOwner,
   targetOwner,
   targetImplementation: "css",
   groups: new Map(),
+} as const;
+const sourceResourcePolicy = scopePolicy(source, "resource");
+const sourceMemberPolicy = scopePolicy(source, "members");
+const resource = translatePolicy(sourceResourcePolicy, "acp", context);
+const members = translatePolicy(sourceMemberPolicy, "acp", {
+  ...context,
+  scopeId: "members:",
 });
-// Review report decisions and prove the complete effective target policy before any write.
+// Review resource.report and members.report; prove each translated component in its own scope.
+assertNotWider(sourceResourcePolicy, resource.policy, context);
+assertNotWider(sourceMemberPolicy, members.policy, context);
+// Translation returns resource-normalized rules. Restore member scope before serialization.
+const policy = unionPolicies(resource.policy, {
+  grants: members.policy.grants.map((rule) => ({ ...rule, appliesTo: "members" })),
+  denials: members.policy.denials.map((rule) => ({ ...rule, appliesTo: "members" })),
+});
 const turtle = await writeAcp(policy, targetResource, targetAcrUrl, "css");
+// Before persistence, also prove the complete effective target resource and member policies,
+// including owner access, retained target rules, and ancestor controls, against their source scopes.
 ```
 
 The root entry point exports:
@@ -34,7 +55,8 @@ The root entry point exports:
 - `readWac` / `writeWac`, `readAcp` / `writeAcp`, `AcpDialect`, and `PolicyTooComplex`.
 - `translatePolicy`, `TranslationContext`, `reportItem`, and `optionDescriptions`. Report IDs,
   explanations, options, and default decisions retain Pod Migrator's behavior. Translation scopes
-  output to the resource; callers compose member policies explicitly.
+  output to the resource and requires normalized input; callers select scopes and restore member
+  scope explicitly.
 - `emptyPolicy`, `scopePolicy`, `unionPolicies`, `ownerPolicy`, `effectivePolicy`,
   `effectiveMembers`, `assertNotWider`, `policiesEqual`, `ProofContext`, and `subjectKey`.
 - The extracted policy/report types and shared RDF helpers (`ACL`, `ACP`, `RDF`, `FOAF`,

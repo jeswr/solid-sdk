@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-import { emptyPolicy, subjectKey } from "./policy.js";
+import { assertResourceScope, emptyPolicy, subjectKey } from "./policy.js";
 import type {
   AccessSystem,
   EffectivePolicy,
@@ -62,13 +62,17 @@ export function reportItem(
     recommended: options[0] as OptionId,
   };
 }
-/** Pure translation; decisions select only narrowing alternatives. */
+/**
+ * Translate a resource-normalized policy; decisions select only narrowing alternatives.
+ * Select resource and member inputs separately with scopePolicy and restore member scope on output.
+ */
 export function translatePolicy(
   source: EffectivePolicy,
   target: AccessSystem,
   context: TranslationContext,
   resolutions?: Resolutions,
 ): { policy: EffectivePolicy; report: ReportItem[] } {
+  assertResourceScope(source);
   const policy = emptyPolicy();
   const report: ReportItem[] = [];
   const unestablished = (subject: Subject) =>

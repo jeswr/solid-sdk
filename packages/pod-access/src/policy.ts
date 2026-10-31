@@ -25,6 +25,12 @@ export function scopePolicy(
       .map((rule) => ({ ...rule, appliesTo: "resource" as const }));
   return { grants: select(policy.grants), denials: select(policy.denials) };
 }
+/** Require a selected, resource-normalized scope before translation or proof. @internal */
+export function assertResourceScope(policy: EffectivePolicy): void {
+  for (const rule of [...policy.grants, ...policy.denials])
+    if (rule.appliesTo !== "resource")
+      throw new TypeError("Policy must be normalized with scopePolicy before translation or proof");
+}
 /** Combine rules without discarding denials or evaluating their conditions. */
 export function unionPolicies(...policies: EffectivePolicy[]): EffectivePolicy {
   return { grants: policies.flatMap((p) => p.grants), denials: policies.flatMap((p) => p.denials) };
@@ -127,12 +133,17 @@ function or(values: Tri[]): Tri {
 function not(value: Tri): Tri {
   return value === undefined ? undefined : !value;
 }
-/** A bounded exhaustive symbolic implication check. Unknown/group conditions stay symbolic. */
+/**
+ * Prove implication between resource-normalized policies for the same selected scope.
+ * Call scopePolicy separately for resource and member proofs. Unknown/group conditions stay symbolic.
+ */
 export function assertNotWider(
   source: EffectivePolicy,
   target: EffectivePolicy,
   context: ProofContext = {},
 ): void {
+  assertResourceScope(source);
+  assertResourceScope(target);
   const variables = new Map<string, Subject>();
   const assignment = new Map<string, boolean>();
   function subjectValue(subject: Subject, side: "source" | "target"): Tri {
@@ -209,7 +220,7 @@ export function assertNotWider(
     if (counterexample()) throw new TypeError(`Planned policy widens ${mode} access`);
   }
 }
-/** Check implications in both directions; return false when either proof fails. */
+/** Check normalized policies in both directions; return false for invalid scopes or failed proofs. */
 export function policiesEqual(
   a: EffectivePolicy,
   b: EffectivePolicy,

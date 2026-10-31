@@ -4,7 +4,7 @@ import { parseRdf } from "@jeswr/fetch-rdf";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
 import { grant, policy, stranger } from "../test/helpers.js";
-import { emptyPolicy, ownerPolicy, policiesEqual, unionPolicies } from "./policy.js";
+import { emptyPolicy, ownerPolicy, policiesEqual, scopePolicy, unionPolicies } from "./policy.js";
 import { ACL, ACP, modeIri, RDF, RdfNode, readModes, safeIri, serialize } from "./rdf.js";
 import { PolicyTooComplex, readAcp, writeAcp } from "./systems/acp.js";
 import { readWac, writeWac } from "./systems/wac.js";
@@ -62,7 +62,8 @@ describe("RDF and WAC", () => {
       "https://app.example",
     );
     const read = readWac(dataset, resource, url);
-    expect(policiesEqual(source, read)).toBe(true);
+    for (const scope of ["resource", "members"] as const)
+      expect(policiesEqual(scopePolicy(source, scope), scopePolicy(read, scope))).toBe(true);
     expect(read.grants[0]?.appliesTo).toBe("both");
     expect(readWac(dataset, "https://unrelated.example/", url)).toEqual(emptyPolicy());
     const member = await writeWac(
@@ -159,7 +160,8 @@ describe("ACP expressions and writers", () => {
       const turtle = await writeAcp(source, resource, url, dialect);
       const dataset = await parsed(turtle);
       const actual = readAcp(dataset, resource, url, dialect);
-      expect(policiesEqual(source, actual)).toBe(true);
+      for (const scope of ["resource", "members"] as const)
+        expect(policiesEqual(scopePolicy(source, scope), scopePolicy(actual, scope))).toBe(true);
       expect(turtle.includes("acr-policy")).toBe(dialect === "ess");
     }
     await expect(
