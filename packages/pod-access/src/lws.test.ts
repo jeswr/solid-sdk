@@ -275,6 +275,63 @@ describe("LWS access services", () => {
   });
 });
 
+describe("type values", () => {
+  describe.each(["", LWS])("namespace %j", (namespace) => {
+    test.each([
+      [true, false],
+      [false, true],
+      [true, true],
+    ])("lists and revokes with singleton envelope=%s and policy=%s", async (singletonEnvelope, singletonPolicy) => {
+      const { client, storage, memory, target, requests, seed, doc, policy } = await setup();
+      const type = (name: string, singleton: boolean) =>
+        singleton ? `${namespace}${name}` : [`${namespace}${name}`];
+      const access = [{ ...policy(), type: type("AccessPolicy", singletonPolicy) }];
+      const id = await seed({ ...doc(access), type: type("AccessGrant", singletonEnvelope) });
+      const requestId = await seed(
+        { ...doc(access), type: type("AccessRequest", singletonEnvelope) },
+        requests,
+      );
+      expect(await client.grants(target)).toEqual([{ id, agent: BOB, modes: ["read"] }]);
+      expect(await client.requests()).toEqual([
+        { id: requestId, target, agent: BOB, modes: ["read"] },
+      ]);
+      expect(await client.effective(target)).toEqual({ me: ["read"], public: [] });
+      const { etag } = await memory.read(id);
+      await client.revoke(target, id);
+      expect(storage.delete).toHaveBeenCalledExactlyOnceWith(id, { ifMatch: etag });
+      expect(await client.grants(target)).toEqual([]);
+      expect(await client.requests()).toEqual([
+        { id: requestId, target, agent: BOB, modes: ["read"] },
+      ]);
+    });
+  });
+
+  test.each([
+    [undefined, "invalid-response"],
+    [null, "invalid-response"],
+    [1, "invalid-response"],
+    [true, "invalid-response"],
+    [{}, "invalid-response"],
+    [[], "invalid-response"],
+    ["", "unsupported"],
+    ["Unknown", "unsupported"],
+  ])("rejects malformed or unsupported types %j with %s", async (value, code) => {
+    for (const field of ["envelope", "policy"]) {
+      const { client, storage, target, requests, seed, doc, policy } = await setup();
+      const access = field === "policy" ? [{ ...policy(), type: value }] : [policy()];
+      await seed({ ...doc(access), ...(field === "envelope" && { type: value }) });
+      await seed(
+        { ...doc(access, "AccessRequest"), ...(field === "envelope" && { type: value }) },
+        requests,
+      );
+      await expect(client.grants(target)).rejects.toMatchObject({ code });
+      await expect(client.requests()).rejects.toMatchObject({ code });
+      await expect(client.revoke(target, BOB)).rejects.toMatchObject({ code });
+      expect(storage.delete).not.toHaveBeenCalled();
+    }
+  });
+});
+
 describe("effective permissions", () => {
   test("uses only active caller/public grants, excludes purpose conditions, expiry and other callers", async () => {
     vi.spyOn(Date, "now").mockReturnValue(EXPIRES.getTime());

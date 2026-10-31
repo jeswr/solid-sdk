@@ -59,7 +59,7 @@ function array(value: unknown, url: string): unknown[] {
 }
 
 function type(value: unknown, expected: string, url: string) {
-  const values = array(value, url);
+  const values = array(typeof value === "string" ? [value] : value, url);
   if (values.some((v) => v !== expected && v !== `${LWS}${expected}`)) fail("unsupported", url);
 }
 
