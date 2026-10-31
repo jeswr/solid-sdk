@@ -75,7 +75,15 @@ test("stored keys allow a fresh session to revoke without redeeming a refresh to
   };
   await f.load().provider.upgrade(new Request(`${rs.url}/alice/logout`));
   const before = op.stats.refresh;
-  await f.load().provider.session.forget(keys);
+  const generation = await f.fence.generation();
+  await f.load().provider.session.forget(async () => {
+    assert.equal(
+      f.fence.signalFor(generation).aborted,
+      true,
+      "catalog is read after supersession, under the fence",
+    );
+    return keys;
+  });
   assert.equal(op.stats.refresh, before);
   assert.equal(await f.sessions.getItem(keys[0]), null);
   f.fence.close();

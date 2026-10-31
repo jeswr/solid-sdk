@@ -324,10 +324,13 @@ export class OidcSession {
    * wrote (plus explicit `storedKeys` supplied by a catalog after reload). Records that remain are unusable anyway because they carry an older fence generation, but
    * their refresh tokens are not revoked. Revocation failures are reported after local state is cleared.
    */
-  async forget(storedKeys: readonly string[] = []): Promise<void> {
-    for (const key of storedKeys) this.#keys.add(key);
+  async forget(
+    storedKeys: readonly string[] | (() => Promise<readonly string[]>) = [],
+  ): Promise<void> {
     const failures: unknown[] = [];
     await this.#fence.supersede(async () => {
+      const keys = typeof storedKeys === "function" ? await storedKeys() : storedKeys;
+      for (const key of keys) this.#keys.add(key);
       if (this.#options.revokeOnForget !== false) {
         for (const record of await this.#records()) {
           await this.#revoke(record).catch((e) => failures.push(e));
