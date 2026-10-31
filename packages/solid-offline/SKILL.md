@@ -1,19 +1,23 @@
 ---
 name: solid-offline
-description: Use when implementing or changing the solid-offline service-worker cache, proactive warmer, WebSocketChannel2023 invalidation, app-shell precache, WebID-scoped storage, logout purge, status surface, or React offline hooks.
+description: Use when implementing or changing the solid-offline service-worker cache, proactive warmer, StorageClient reads, pod-notifications invalidation, app-shell precache, WebID-scoped storage, logout purge, status surface, or React offline hooks.
 ---
 <!-- AUTHORED-BY Codex GPT-5 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
-# Work with `solid-offline`
+# Work with `@jeswr/solid-offline`
 
 Preserve the central invariant: cached pod data is never authoritative. Serve cached bytes quickly, mark offline hits stale, and revalidate online entries against the pod.
 
 ## Page-client workflow
 
 ```ts
-import { createOfflineClient } from "solid-offline";
+import { createOfflineClient } from "@jeswr/solid-offline";
+import { createPodClient } from "@jeswr/storage-client";
 
+const { storage } = await createPodClient({ storage: storageRoot, fetch: session.fetch });
 const offline = createOfflineClient({
+  storage,
   webId,
   fetch: session.fetch,
   warm: { seeds: "auto" },
@@ -27,11 +31,11 @@ await offline.register();
 await offline.logout();
 ```
 
-Import `solid-offline/worker` from an origin-served service-worker entry. Import React-only helpers from `solid-offline/react`; React is an optional peer and must not leak into the core entry point.
+Import `@jeswr/solid-offline/worker` from an origin-served service-worker entry. Import React-only helpers from `@jeswr/solid-offline/react`; React is an optional peer and must not leak into the core entry point.
 
 ## Security and correctness rules
 
-- Keep the service worker credential-free. Authenticated warming happens in the page through the caller-supplied fetch.
+- Keep the service worker credential-free. Authenticated warming happens in the page through the injected StorageClient. The optional page fetch is used by pod-notifications.
 - Scope Cache API and IndexedDB state by WebID. Anonymous and authenticated identities must never share a cache namespace.
 - Purge both stores on logout. A failure in one purge path must not prevent attempting the other.
 - Never cache auth, token, OIDC, notification-subscription, WebSocket-upgrade, opaque, `private`, or `no-store` responses.
@@ -48,6 +52,17 @@ Import `solid-offline/worker` from an origin-served service-worker entry. Import
 
 Use `offline.status` or `createStatusSurface()` as a stable `subscribe`/`getSnapshot` store. `useOfflineStatus` and `useOfflineResource` should remain thin `useSyncExternalStore` adapters; caching policy stays in the service worker.
 
-Test decision logic with fake fetch, Cache API, WebSocket, and real fake IndexedDB seams. A change to worker lifecycle wiring also needs browser-level verification because unit tests do not exercise real service-worker install/activate/fetch events.
+Test decision logic with fake storage clients/transports, Cache API, subscriptions, and real fake IndexedDB seams. A change to worker lifecycle wiring also needs browser-level verification because unit tests do not exercise real service-worker install/activate/fetch events.
 
 Run the package and full workspace gates. For an intentional public API change, rebuild and update the API report before the final gate.
+
+## Storage and subscription plumbing (T-062)
+
+- `WarmDeps.storage` is a StorageClient; use `head`/`read`/`listAll`, never parse container listings locally.
+- Keep backend-reported container kinds (LWS identifiers may be slashless) and listing size hints.
+- All derived/explicit seeds must pass `isWithinStorage`; an external WebID needs explicit seeds or an already-fetched profile.
+- `notificationsClient` optionally injects the shared pod-notifications client. Forward normalized changes, including Move and membership parents. Wire `resync` to the ETag sweep.
+- Strip both clients and fetch before structured cloning worker config; pass only the storage root. Keep the worker credential-free.
+- Preserve HTTP Cache-Control/Vary/type evidence at the worker transport boundary. Without original policy, evict changed bytes conservatively. Never synthesize cacheability from ReadResult alone.
+- A sweep HEAD-confirms equal validators; changed or missing validators trigger reads. HEAD never replaces cached GET bytes. One failed observation must not stop the sweep.
+- The duplicated notification discovery, socket, frame-parser and backoff exports are removed. Backoff belongs to pod-notifications; `maxChannels` caps distinct topics and `pollIntervalMs` controls its polling fallback.
