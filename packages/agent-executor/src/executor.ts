@@ -291,11 +291,7 @@ export function createExecutor(options: ExecutorOptions) {
     }
     if (pending.has(id)) return { status: "uncertain", reason: "in-flight" };
     let unresolved = previous?.status === "attempting" || previous?.status === "uncertain";
-    if (
-      previous &&
-      unresolved &&
-      !(binding.id === "a2a" && binding.send.idempotentResend === true)
-    ) {
+    if (previous && unresolved) {
       let found: unknown;
       try {
         if (binding.send.lookup) found = await bounded(binding.send.lookup(entry.wire), timeout);
@@ -310,15 +306,16 @@ export function createExecutor(options: ExecutorOptions) {
           providerRef: (found as { providerRef: string }).providerRef,
           updatedAt: o.clock.now().toISOString(),
         });
-      if (outcome !== "absent" || binding.send.finalAbsence !== true)
+      if (outcome === "absent" && binding.send.finalAbsence === true) {
+        // Persist authoritative absence even when the attempt bound prevents a new request.
+        await finish({ ...previous, status: "not-sent", updatedAt: o.clock.now().toISOString() });
+        unresolved = false;
+      } else if (!(binding.id === "a2a" && binding.send.idempotentResend === true))
         return finish({
           ...previous,
           status: "uncertain",
           updatedAt: o.clock.now().toISOString(),
         });
-      // Persist authoritative absence even when the attempt bound prevents a new request.
-      await finish({ ...previous, status: "not-sent", updatedAt: o.clock.now().toISOString() });
-      unresolved = false;
     }
     if ((previous?.attempts ?? 0) >= MAX_TRANSMISSION_ATTEMPTS)
       return disposition(id, { status: "refused", reason: "attempt-limit" });

@@ -82,6 +82,8 @@ permits a retry only if the binding guarantees the old operation did not execute
 cannot later complete. Identical unresolved resend is allowed exclusively for binding
 id `a2a` with `idempotentResend: true` and receiver deduplication. All paths are bounded
 at **three provider attempts**. Rejected A2A resends retain the earlier uncertainty.
+Positive lookup can still reconcile delivery after all three attempts, including for A2A;
+the cap prevents further transmissions.
 
 Timeouts do not cancel the original call. Pending requests remain guarded across
 executor instances sharing a store, and late outcomes are persisted. Positive delivery

@@ -97,6 +97,29 @@ describe("step 7: durable idempotency and pilot recovery", () => {
     expect(h.binding.send.transmit).not.toHaveBeenCalled();
   });
   it.each([
+    1,
+    MAX_TRANSMISSION_ATTEMPTS,
+  ])("A2A positive lookup reconciles after %s attempts", async (attempts) => {
+    const h = harness("a2a");
+    const e = await h.enqueue();
+    h.prior(e, "uncertain", attempts);
+    Object.assign(h.binding.send, {
+      idempotentResend: true,
+      lookup: vi.fn(async () => ({ outcome: "found" as const, providerRef: "peer:found" })),
+    });
+    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "sent" });
+    expect(h.records.get(e.proposal.id)).toMatchObject({
+      status: "sent",
+      attempts,
+      providerRef: "peer:found",
+    });
+    expect([...h.receipts.values()][0]?.body).toMatchObject({ outcome: "completed", final: true });
+    expect(h.binding.send.lookup).toHaveBeenCalledWith(e.wire);
+    expect(h.binding.send.transmit).not.toHaveBeenCalled();
+    expect(h.options.tokens.send).not.toHaveBeenCalled();
+    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "duplicate" });
+  });
+  it.each([
     false,
     true,
   ])("same-millisecond non-sends retry with newest-first ledger, compacted=%s", async (compacted) => {
@@ -189,6 +212,47 @@ describe("step 7: durable idempotency and pilot recovery", () => {
     Object.assign(h.binding.send, { idempotentResend: true });
     expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ reason: "attempt-limit" });
     expect(h.records.get(e.proposal.id)?.status).toBe("uncertain");
+  });
+  it.each([
+    "absent",
+    "unknown",
+    "throw",
+    "malformed",
+  ])("A2A lookup %s cannot exceed the retry cap or release uncertainty", async (outcome) => {
+    const h = harness("a2a");
+    const e = await h.enqueue();
+    h.prior(e, "uncertain", MAX_TRANSMISSION_ATTEMPTS);
+    Object.assign(h.binding.send, {
+      idempotentResend: true,
+      lookup: vi.fn(async () => {
+        if (outcome === "throw") throw new Error("offline");
+        return outcome === "absent"
+          ? { outcome: "absent" as const }
+          : outcome === "malformed"
+            ? { outcome: "found" as const, providerRef: "bad ref" }
+            : { outcome: "unknown" as const, detail: "lag" };
+      }),
+    });
+    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ reason: "attempt-limit" });
+    expect(h.binding.send.lookup).toHaveBeenCalledOnce();
+    expect(h.records.get(e.proposal.id)).toMatchObject({
+      status: "uncertain",
+      attempts: MAX_TRANSMISSION_ATTEMPTS,
+    });
+    expect(h.binding.send.transmit).not.toHaveBeenCalled();
+  });
+  it("A2A lookup miss still permits an identical resend below the cap", async () => {
+    const h = harness("a2a");
+    const e = await h.enqueue();
+    h.prior(e);
+    Object.assign(h.binding.send, {
+      idempotentResend: true,
+      lookup: vi.fn(async () => ({ outcome: "absent" as const })),
+    });
+    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "sent" });
+    expect(h.binding.send.lookup).toHaveBeenCalledWith(e.wire);
+    expect(h.binding.send.transmit).toHaveBeenCalledOnce();
+    expect(h.records.get(e.proposal.id)?.attempts).toBe(2);
   });
   it("sequence exhaustion fails before a new provider call", async () => {
     const h = harness();
