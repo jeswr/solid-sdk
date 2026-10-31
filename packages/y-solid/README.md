@@ -2,7 +2,8 @@
 
 # @jeswr/y-solid
 
-Persist a Yjs document as an immutable update log on Solid or Linked Web Storage (LWS).
+Synchronize a Yjs document through a live relay, with immutable-log persistence on Solid or
+Linked Web Storage (LWS) when live collaboration is unavailable.
 
 > Experimental — AI-agent-generated. Authentication is supplied by your StorageClient.
 
@@ -11,7 +12,7 @@ import { createPodClient } from "@jeswr/storage-client";
 import { YSolidProvider } from "@jeswr/y-solid";
 import * as Y from "yjs";
 
-const { storage } = await createPodClient({
+const { storage, description } = await createPodClient({
   fetch: authenticatedFetch,
   storage: "https://alice.example/",
 });
@@ -20,7 +21,9 @@ const provider = new YSolidProvider({
   doc,
   storage,
   container: documentLogContainer, // Use the URL returned by storage.create().
-  mode: "log",
+  mode: "auto",
+  fetch: authenticatedFetch, // pod-auth fetch for the advertised relay's ticket endpoint.
+  description, // Supplies roomTemplate, including relays hosted on another origin.
   notifications, // Optional NotificationsClient from @jeswr/pod-notifications.
 });
 
@@ -39,11 +42,39 @@ container URL returned by storage: identifiers need not end in `/` or reflect co
 `storage: StorageClient` instead of `fetch`. Advanced consumers can pass a configured `store`
 to `SolidPersistence`. Existing scope-helper exports remain available.
 
-`YSolidProvider` wraps `SolidPersistence` with the ADR-006 options and reports `mode: 'log'`.
-`mode: 'auto'` (the default) selects log mode in this release. Explicit `mode: 'live'` throws;
-live transport and awareness are outside T-060.
+`YSolidProvider` wraps `SolidPersistence` with the ADR-006 options. `mode: 'auto'` (the default)
+selects live transport only when `storage.features.realtimeCollab` is available and advertises
+`https://jeswr.org/ns/solid-sd#y-protocol-v1`. Otherwise it uses log mode. Explicit `mode: 'log'`
+always uses the log; explicit `mode: 'live'` requires that advertised profile.
 
-- `whenSynced` resolves after initial hydration, and rejects if loading cannot complete safely.
+Live transport requires an explicit authenticated `fetch`; it never falls back to global fetch.
+Pass the `description` returned by `createPodClient` to use the matching CrdtSyncService's
+`extra.roomTemplate` (also accepted under its expanded RDF property IRI). `{room}` expands to
+`encodeURIComponent(provider.store.container)`. Each connection POSTs JSON `{ room: container }`
+to the advertised ticket endpoint and opens the returned WebSocket URL directly. Ticket
+`expires` must be a future epoch time in milliseconds or an ISO date string. Ticket URLs must
+match the expanded room's origin, path and fixed query parameters; without a template they
+must stay on the ticket endpoint's host. HTTPS ticket endpoints require WSS sockets.
+
+The transport uses y-websocket binary messages: sync (0), awareness (1), auth (2), and awareness
+queries (3). The relay owns persistence into the same update-log container. While `mode` reports
+`'live'`, document edits go only to the socket, and provider compaction is disabled. On socket loss,
+`mode` becomes `'log'`: a full-state checkpoint preserves potentially unacknowledged edits, and
+subsequent edits use the normal debounced log writes. Ticket/socket failures emit sanitized errors
+and also fall back to the log. Reconnection obtains a fresh ticket, reconciles the log and exchanges
+Yjs sync steps before returning to live mode. Temporary fallback-write failures keep edits queued
+for the relay. `mode` reports the current transport, including this fallback.
+
+`provider.awareness` exposes y-protocols `Awareness` for cursors and presence. Supply an existing
+instance through `awareness` or let the provider create one (lazily in log mode). It must belong
+to the same Y.Doc. Remote presence is removed on socket loss; local presence is reannounced after
+reconnection. Destroy releases provider-owned awareness, while supplied instances remain usable.
+Log mode does not broadcast awareness. `socketFactory` can inject a binary WebSocket implementation;
+by default the runtime's WebSocket is used. `reconnectDelayMs` defaults to 1,000 and
+`connectTimeoutMs` bounds ticket acquisition plus the handshake at 10,000 ms.
+
+- `whenSynced` resolves after initial hydration and the first live handshake or log fallback,
+  and rejects if loading cannot complete safely.
 - `sync()` reconciles unread members; call it manually when no NotificationsClient is supplied.
 - `flush()` persists pending edits immediately. It rejects on failure; the batch stays queued
   for a later flush or edit to retry. Local edits normally merge after a 300 ms debounce.
@@ -51,8 +82,9 @@ live transport and awareness are outside T-060.
   Empty and single-member logs are left alone. `compaction` defaults to
   `{ afterUpdates: 200, minIntervalMs: 60_000 }`; the next write or reconciliation checks the
   threshold and minimum interval. Manual compaction bypasses that policy.
-- `persistFullState()` persists a document built before the provider was constructed.
-- `disconnect()` flushes and closes notifications. Local edits made while disconnected stay
+- `persistFullState()` persists a document built before the provider was constructed. In live mode
+  it sends state to the relay and returns `undefined`; log mode returns the created resource URL.
+- `disconnect()` flushes, closes notifications and sockets, and cancels reconnect attempts. Local edits made while disconnected stay
   queued; `connect()` reconciles and resumes persistence.
 - `destroy()` stops subscriptions and future application/persistence, releases listeners and
   discards pending edits. Await `flush()` first when those edits must be stored. The caller owns

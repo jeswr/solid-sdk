@@ -1,7 +1,7 @@
 {
   "name": "@jeswr/y-solid",
   "version": "0.1.0",
-  "description": "Yjs log persistence over StorageClient for Solid and LWS, with header ordering, safe compaction and optional notifications.",
+  "description": "Ticketed Yjs live sync and awareness with StorageClient log fallback for Solid and LWS.",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Wright",

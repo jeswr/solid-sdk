@@ -8,8 +8,27 @@ description: Use when maintaining @jeswr/y-solid, its StorageClient log, YSolidP
 
 Use only the public StorageClient API in production; backend subpaths are test seams.
 Construction takes storage, not fetch. Keep SolidUpdateStore/SolidPersistence and scope
-helper exports compatible by name. YSolidProvider supplies auto/log mode; explicit live
-mode fails until the separate transport task lands.
+helper exports compatible by name. YSolidProvider selects live only for available
+features.realtimeCollab advertising the y-protocol-v1 profile; explicit log bypasses it.
+Explicit live requires that profile, and live selection requires an injected pod-auth fetch.
+Use the public description's matching CrdtSyncService for raw or expanded-IRI roomTemplate.
+Expand the canonical store.container as encodeURIComponent, POST {room} for a fresh ticket on
+every connection, refuse redirects, bound ticket reads/timeouts, validate future expiry and
+room URL binding, require WSS for HTTPS, and keep ticket-bearing errors out of events.
+
+Exchange y-websocket sync (0), awareness (1), auth (2), and awareness-query (3) frames.
+Validate incoming updates on scratch docs before applying clean diffs, with the transport as
+origin to suppress echoes. The relay owns pod persistence while live; disable SDK compaction
+and send local updates over the socket. On loss checkpoint the whole document because the
+wire protocol has no per-update durability acknowledgement, then use normal log writes.
+Reconcile fallback log state and resync through Yjs step 1/2 on fresh-ticket reconnects;
+failed fallback appends must not block live recovery or discard pending updates.
+Fence ticket/frame/handshake responses across disconnect/destroy, cancel pending ticket bodies,
+release listeners and retries, remove remote awareness on loss, and reannounce local awareness
+on reconnect. Own only awareness created by the provider; supplied awareness must use the same
+doc and survive provider destruction. Keep log-only awareness lazy to avoid idle timers.
+Test with the in-process protocol-compatible relay, including its authoritative log persistence,
+two-provider convergence under 500 ms, awareness, lost in-flight edits and fresh log readers.
 
 Encode JYU1/JYS1 headers as 4 ASCII magic bytes, 8 unsigned big-endian timestamp bytes,
 and 4 big-endian random bytes. Resource names are unique conditional-create hints only;
