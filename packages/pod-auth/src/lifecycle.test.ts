@@ -224,6 +224,41 @@ test("logout cancels pending UI and prevents a late login from publishing state"
   expect(f.record()).toBeUndefined();
 });
 
+test.each([
+  false,
+  true,
+])("logout fences login preflight before provider startup; existing=%s", async (existing) => {
+  const f = fixture();
+  const auth = f.load();
+  if (existing) await auth.login();
+  const { SessionFence } = await import("@jeswr/reactive-authentication");
+  const generation = SessionFence.prototype.generation;
+  const ready = Promise.withResolvers<void>(),
+    release = Promise.withResolvers<void>();
+  vi.spyOn(SessionFence.prototype, "generation").mockImplementationOnce(async function (
+    this: SessionFence,
+  ) {
+    const value = await generation.call(this);
+    ready.resolve();
+    await release.promise;
+    return value;
+  });
+  const loginEvent = vi.fn();
+  auth.on("login", loginEvent);
+  const login = Promise.allSettled([auth.login()]);
+  await ready.promise;
+  await auth.logout();
+  release.resolve();
+  expect((await login)[0]).toMatchObject({ status: "rejected" });
+  expect(f.op.stats.authorizations).toBe(existing ? 1 : 0);
+  expect(loginEvent).not.toHaveBeenCalled();
+  expect(await auth.identity()).toBeNull();
+  expect(await auth.remembered()).toEqual([]);
+  expect(f.record()).toBeUndefined();
+  await auth.login();
+  expect((await auth.identity())?.webId).toBe(f.op.webId);
+});
+
 test("logout during refresh fences late results and leaves no restored identity or pointer", async () => {
   const f = fixture();
   await f.load().login();

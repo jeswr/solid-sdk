@@ -196,8 +196,10 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
         return pending.key === key
           ? pending.promise
           : Promise.reject(new Error("Another login is in progress"));
+      const started = epoch;
       const promise = (async () => {
         const existing = await readIdentity();
+        if (started !== epoch) throw new Error("Session changed during authentication");
         if (existing !== null) {
           if (
             (selected.webId !== undefined && selected.webId !== existing.webId) ||
