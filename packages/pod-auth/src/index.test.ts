@@ -108,6 +108,32 @@ test("issuer hint skips WebID picker and validates token WebID issuer binding", 
 });
 
 test.each([
+  ["automatic", "https://id.example/alice#me"],
+  ["automatic", null],
+  ["static", "https://id.example/alice#me"],
+  ["static", null],
+] as const)("issuer-only login supports later storage contexts with %s boundaries and WebID %s", async (boundaryKind, webId) => {
+  const root = "https://pod.example/alice/";
+  const { op, auth, options } = fixture(
+    { webId },
+    {
+      boundary:
+        boundaryKind === "automatic"
+          ? undefined
+          : { roots: [root, root + "nested/"], automatic: false },
+    },
+  );
+  expect((await auth.login({ issuer: op.issuer })).webId).toBe(webId);
+  for (const path of ["private", "nested/private", "private", "nested/private"]) {
+    expect(await (await auth.fetch(root + path)).text()).toBe("protected Solid");
+    expect((await auth.identity())?.issuer).toBe(op.issuer);
+  }
+  expect(options.ui.getWebId).not.toHaveBeenCalled();
+  expect(op.stats.tokens).toBe(2);
+  expect(op.stats.accepted).toBe(4);
+});
+
+test.each([
   "https://op.example",
   "https://op.example/",
 ])("origin-only issuer hint %s accepts slashless validated claims and an existing session", async (issuer) => {

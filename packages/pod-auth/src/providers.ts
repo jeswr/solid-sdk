@@ -12,7 +12,6 @@ import {
   createBrowserCaches,
   DPoPTokenProvider,
   DynamicRegistrationClientProvider,
-  HintIssuerProvider,
   type HttpOptions,
   LwsTokenProvider,
   nonReactiveFetch,
@@ -131,13 +130,10 @@ export function createProviders(
       );
       const context: ContextKey = async (request) => await contextFor(request, selected);
       const issuerProvider = new CachingIssuerProvider(
-        new HintIssuerProvider(
-          selected.webId === undefined && selected.issuer !== undefined
-            ? { issuer: new URL(selected.issuer) }
-            : {},
-          webIdProvider,
-          async () => true,
-        ),
+        // Explicit issuer selections must remain reusable when another storage context misses cache.
+        selected.webId === undefined && selected.issuer !== undefined
+          ? { getIssuer: async () => new URL(selected.issuer!) }
+          : webIdProvider,
         metadata("issuer") ?? browser?.issuer,
         context,
       );
