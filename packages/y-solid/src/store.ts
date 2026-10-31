@@ -17,6 +17,8 @@ export interface StoredUpdate {
   readonly random: number;
 }
 
+type ObservedUpdate = Pick<StoredUpdate, "url" | "etag">;
+
 export interface SolidUpdateStoreOptions {
   container: string;
   storage: StorageClient;
@@ -47,7 +49,7 @@ export class SolidUpdateStore {
   private readonly maxUpdateBytes: number;
   private readonly maxListingBytes: number;
   private readonly maxLoadRounds: number;
-  private readonly observed = new Map<string, StoredUpdate>();
+  private readonly observed = new Map<string, ObservedUpdate>();
 
   constructor(options: SolidUpdateStoreOptions) {
     this.storage = options.storage;
@@ -103,6 +105,7 @@ export class SolidUpdateStore {
   /** Names are opaque hints. This method lists URLs; loadUpdates orders their headers. */
   async listUpdateUrls(): Promise<string[]> {
     const urls = new Set<string>();
+    const observations = [...this.observed];
     let size = 0;
     try {
       for await (const entry of this.storage.listAll(this.container, { revalidate: true })) {
@@ -118,7 +121,11 @@ export class SolidUpdateStore {
       }
     } catch (cause) {
       if (!missing(cause) || size > 0) throw cause;
-      return [];
+    }
+    // Only a complete listing can retire observations. Preserve reads made while
+    // this listing was in flight, which may include newly appended resources.
+    for (const [url, observation] of observations) {
+      if (!urls.has(url) && this.observed.get(url) === observation) this.observed.delete(url);
     }
     return [...urls].sort();
   }
@@ -157,10 +164,15 @@ export class SolidUpdateStore {
       const record = { url: target, etag: result.etag, ...decodeRecord(bytes, target) };
       // The legacy compact(merged, urls) form must never acquire a newer ETag
       // than its first read. New callers pass StoredUpdate records explicitly.
-      if (!this.observed.has(target)) this.observed.set(target, record);
+      if (!this.observed.has(target)) {
+        this.observed.set(target, { url: target, etag: result.etag });
+      }
       return record;
     } catch (cause) {
-      if (missing(cause)) return null;
+      if (missing(cause)) {
+        this.observed.delete(this.target(url));
+        return null;
+      }
       throw cause;
     }
   }
@@ -195,16 +207,17 @@ export class SolidUpdateStore {
       await this.deleteObserved(record);
     } catch (cause) {
       if (!missing(cause)) throw cause;
+      this.observed.delete(this.target(url));
     }
   }
 
-  private async deleteObserved(record: StoredUpdate): Promise<void> {
+  private async deleteObserved(record: ObservedUpdate): Promise<void> {
     try {
       await this.storage.delete(record.url, { ifMatch: record.etag as string });
-      this.observed.delete(record.url);
     } catch (cause) {
       if (!missing(cause)) throw cause;
     }
+    this.observed.delete(record.url);
   }
 
   /** Only retire the exact versions folded by the caller, after a confirmed snapshot create. */
@@ -213,19 +226,22 @@ export class SolidUpdateStore {
     obsolete: readonly (string | StoredUpdate)[],
   ): Promise<{ url: string }> {
     // Validate every target before creating anything. Capture validators before the create.
-    const records: StoredUpdate[] = [];
+    const records: ObservedUpdate[] = [];
     for (const item of obsolete) {
       let url: string;
       try {
         url = await this.member(typeof item === "string" ? item : item.url);
       } catch (cause) {
         // Another compactor may already have retired the version we folded.
-        if (missing(cause)) continue;
+        if (missing(cause)) {
+          this.observed.delete(this.target(typeof item === "string" ? item : item.url));
+          continue;
+        }
         throw cause;
       }
       const record = typeof item === "string" ? this.observed.get(url) : item;
       if (!record) throw new Error("[y-solid] compaction requires the records that were read");
-      records.push({ ...record, url });
+      records.push({ url, etag: record.etag });
     }
     const created = await this.create(merged, "snapshot");
     for (const record of records) {

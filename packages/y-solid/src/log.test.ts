@@ -38,6 +38,11 @@ async function entries(storage: StorageClient, container: string) {
   return result;
 }
 
+// Inspect retained data directly: public reads alone cannot detect payload retention.
+function observations(store: SolidUpdateStore): ReadonlyMap<string, unknown> {
+  return Reflect.get(store, "observed") as ReadonlyMap<string, unknown>;
+}
+
 describe.each(["solid", "lws"] as const)("%s log mode", (protocol) => {
   it("writes exact 16-byte network-order headers and unique create name hints", async () => {
     const { storage, container } = await setup(protocol);
@@ -320,6 +325,127 @@ describe.each(["solid", "lws"] as const)("%s log mode", (protocol) => {
       { numRuns: 40 },
     );
   }, 60_000);
+});
+
+describe.each(["solid", "lws"] as const)("%s observation retention", (protocol) => {
+  it("retains only URLs and first-read ETags, without decoded payloads", async () => {
+    const { storage, store } = await setup(protocol);
+    const { url } = await store.appendUpdate(new Uint8Array(1024));
+    const record = await store.readStoredUpdate(url);
+    expect(record?.update).toHaveLength(1024);
+    await storage.write(url, new Uint8Array([1]), { ...CONTENT, ifMatch: record?.etag as string });
+    expect(await store.readUpdate(url)).toEqual(new Uint8Array([1]));
+    expect(observations(store)).toEqual(new Map([[url, { url, etag: record?.etag }]]));
+  });
+
+  it("prunes historical observations across another client's repeated compactions", async () => {
+    const { storage, container, store: writer } = await setup(protocol);
+    const reader = new SolidUpdateStore({ storage, container });
+    const known = new Set<string>();
+    for (let round = 0; round < 3; round++) {
+      await writer.appendUpdate(state(`round-${round}`).update);
+      for (const record of await reader.loadUpdates(known)) known.add(record.url);
+      const loaded = await writer.loadUpdates();
+      const snapshot = await writer.compact(Y.mergeUpdates(loaded.map((r) => r.update)), loaded);
+      const fresh = await reader.loadUpdates(known);
+      expect(fresh.map((r) => r.url)).toEqual([snapshot.url]);
+      expect(observations(reader)).toEqual(
+        new Map([[snapshot.url, { url: snapshot.url, etag: fresh[0]?.etag }]]),
+      );
+      known.add(snapshot.url);
+    }
+  });
+
+  it.each([
+    "readUpdate",
+    "deleteUpdate",
+    "compact",
+  ] as const)("forgets a resource retired by another client when %s confirms it is missing", async (operation) => {
+    const { storage, store } = await setup(protocol);
+    const { url } = await store.appendUpdate(state("retired").update);
+    const record = await store.readStoredUpdate(url);
+    await storage.delete(url, { ifMatch: record?.etag as string });
+    if (operation === "compact") await store.compact(record?.update as Uint8Array, [url]);
+    else await store[operation](url);
+    expect(observations(store).size).toBe(0);
+  });
+
+  it.each([
+    "read",
+    "delete",
+  ] as const)("forgets observations after a 410 on %s", async (operation) => {
+    const { storage, container } = await setup(protocol);
+    const request = vi.fn(storage[operation]);
+    const store = new SolidUpdateStore({
+      storage: { ...storage, [operation]: request },
+      container,
+    });
+    const { url } = await store.appendUpdate(state("gone").update);
+    await store.readUpdate(url);
+    request.mockRejectedValueOnce(
+      new StorageError("not-found", { url, method: operation, status: 410 }),
+    );
+    if (operation === "read") expect(await store.readUpdate(url)).toBeNull();
+    else await store.deleteUpdate(url);
+    expect(observations(store).size).toBe(0);
+  });
+
+  it.each([
+    null,
+    404,
+    410,
+  ])("prunes all observations after an empty or missing listing (%s)", async (status) => {
+    const { storage, container } = await setup(protocol);
+    const listAll = vi.fn(storage.listAll);
+    const store = new SolidUpdateStore({ storage: { ...storage, listAll }, container });
+    const { url } = await store.appendUpdate(state("retired").update);
+    const record = await store.readStoredUpdate(url);
+    await storage.delete(url, { ifMatch: record?.etag as string });
+    if (status !== null) {
+      listAll.mockImplementation(async function* () {
+        yield* storage.listAll(container);
+        throw new StorageError("not-found", { url: container, method: "GET", status });
+      });
+    }
+    expect(await store.listUpdateUrls()).toEqual([]);
+    expect(observations(store).size).toBe(0);
+  });
+
+  it("keeps observations when a partial listing fails", async () => {
+    const { storage, container } = await setup(protocol);
+    const listAll = vi.fn(storage.listAll);
+    const store = new SolidUpdateStore({ storage: { ...storage, listAll }, container });
+    await store.appendUpdate(state("first").update);
+    await store.appendUpdate(state("second").update);
+    await store.loadUpdates();
+    const before = new Map(observations(store));
+    listAll.mockImplementation(async function* () {
+      for await (const entry of storage.listAll(container)) {
+        yield entry;
+        throw new StorageError("not-found", { url: container, method: "GET", status: 404 });
+      }
+    });
+    await expect(store.listUpdateUrls()).rejects.toMatchObject({ code: "not-found" });
+    expect(observations(store)).toEqual(before);
+  });
+
+  it("keeps observations first read during an in-flight listing", async () => {
+    const { storage, container, store: writer } = await setup(protocol);
+    const listAll = vi.fn(storage.listAll);
+    const reader = new SolidUpdateStore({ storage: { ...storage, listAll }, container });
+    const update = state("concurrent").update;
+    let appended = "";
+    listAll.mockImplementation(async function* () {
+      yield* storage.listAll(container);
+      const { url } = await writer.appendUpdate(update);
+      appended = url;
+      await reader.readUpdate(url);
+    });
+    expect(await reader.listUpdateUrls()).toEqual([]);
+    expect(observations(reader).has(appended)).toBe(true);
+    await expect(reader.compact(update, [appended])).resolves.toHaveProperty("url");
+    expect(observations(reader).size).toBe(0);
+  });
 });
 
 it("rejects truncated versioned headers", () => {
