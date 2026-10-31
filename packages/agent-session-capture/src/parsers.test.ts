@@ -18,6 +18,10 @@ const codexRow = (payload: unknown, extra = {}) => ({
   payload,
   ...extra,
 });
+const codexMeta = (id: unknown, extra = {}) => ({
+  type: "session_meta",
+  payload: { id, cwd: "/fixture-project", ...extra },
+});
 
 describe("real-shaped redacted JSONL", () => {
   it.each([
@@ -175,6 +179,70 @@ describe("real-shaped redacted JSONL", () => {
         ]),
       ),
     ).toThrow("Mixed");
+  });
+
+  it.each([
+    false,
+    true,
+  ])("keeps the first Codex thread identity and validates inherited metadata (nested=%s)", (nested) => {
+    const entries = [
+      codexMeta("child", { cwd: "/child-project", forked_from_id: "parent" }),
+      codexMeta("parent", { forked_from_id: nested ? "ancestor" : null }),
+      ...(nested ? [codexMeta("ancestor", { cwd: "/ancestor-project" })] : []),
+      codexRow({
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "Inherited request" }],
+      }),
+      { type: "turn_context", payload: { cwd: "/current-project" } },
+      codexRow({
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "Fork answer" }],
+      }),
+    ];
+    const parsed = parseCodexTranscript(jsonl(entries), "fallback-path");
+    expect(parsed.conversation.conversationId).toBe(digest(["codex", "child"]));
+    expect(parsed.projectDirectories).toEqual([
+      "/child-project",
+      "/fixture-project",
+      ...(nested ? ["/ancestor-project"] : []),
+      "/current-project",
+    ]);
+    expect(parsed.conversation.messages.map((message) => message.text)).toEqual([
+      "Inherited request",
+      "Fork answer",
+    ]);
+    expect(parseCodexTranscript(jsonl([...entries, ...entries]), "other-path")).toEqual(parsed);
+    expect(parseCodexTranscript(jsonl([entries[0]])).conversation.conversationId).toBe(
+      parsed.conversation.conversationId,
+    );
+  });
+
+  it.each([
+    [codexMeta(undefined), codexMeta("later")],
+    [codexMeta(1)],
+    [codexMeta("")],
+    [codexMeta("child", { forked_from_id: 1 })],
+    [codexMeta("child", { forked_from_id: "" })],
+    [codexMeta("child", { forked_from_id: "child" })],
+    [codexMeta("child", { forked_from_id: "parent" }), codexMeta("unrelated")],
+    [
+      codexMeta("child", { forked_from_id: "parent" }),
+      codexMeta("parent", { forked_from_id: "child" }),
+    ],
+    [
+      codexMeta("child", { forked_from_id: "parent" }),
+      codexMeta("child", { forked_from_id: "unrelated" }),
+    ],
+    [
+      codexMeta("child", { forked_from_id: "parent" }),
+      codexMeta("ancestor"),
+      codexMeta("parent", { forked_from_id: "ancestor" }),
+    ],
+    [codexMeta("child", { forked_from_id: "parent" }), codexMeta("parent"), codexMeta("unrelated")],
+  ])("rejects invalid or unrelated Codex fork metadata %#", (...entries) => {
+    expect(() => parseCodexTranscript(jsonl(entries))).toThrow();
   });
 
   it("drops invalid/missing timestamps, roles, content, and unsafe tool names", () => {

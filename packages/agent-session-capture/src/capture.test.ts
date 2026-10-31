@@ -297,6 +297,67 @@ describe("capture with real ChatWriter and client credentials", () => {
     );
   });
 
+  it.each([
+    "none",
+    "initial",
+    "replay",
+  ])("captures Codex fork notifications and checks inherited project opt-outs: %s", async (optOut) => {
+    const parentProject = join(home, "parent-project");
+    await mkdir(parentProject);
+    const inherited = (await fixture("codex"))
+      .replaceAll("codex-fixture-session", "parent-session")
+      .replaceAll("/fixture-project", parentProject);
+    await rollout(
+      `${JSON.stringify({
+        type: "session_meta",
+        payload: { id: "codex-fixture-session", forked_from_id: "parent-session", cwd },
+      })}\n${inherited}\n${JSON.stringify({
+        type: "response_item",
+        timestamp: "2026-10-25T12:00:05.000Z",
+        payload: {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: "Fork answer" }],
+        },
+      })}`,
+    );
+    const args = [
+      "codex",
+      JSON.stringify({ type: "agent-turn-complete", "thread-id": "codex-fixture-session", cwd }),
+    ];
+    const marker = join(parentProject, ".solid-capture-ignore");
+    if (optOut === "initial") await writeFile(marker, "");
+    await runCapture(args, {
+      ...options,
+      fetch: async () => {
+        throw new Error("offline");
+      },
+    });
+    expect(await queued()).toHaveLength(optOut === "initial" ? 0 : 1);
+    if (optOut === "replay") await writeFile(marker, "");
+    await runCapture(args, options);
+    expect(await queued()).toEqual([]);
+    if (optOut === "none") {
+      const result = await storedConversation("codex");
+      expect(result.conversationId).toBe(digest(["codex", "codex-fixture-session"]));
+      expect(result.messages.map((message) => message.text)).toEqual([
+        "Inspect this project. [REDACTED TOKEN]",
+        "exec_command",
+        "apply_patch",
+        "The project looks good.",
+        "Fork answer",
+      ]);
+      const before = new Map(transport.resources);
+      transport.requests.length = 0;
+      await runCapture(args, options);
+      expect(transport.requests).toEqual([]);
+      expect(transport.resources).toEqual(before);
+    } else {
+      expect(transport.requests).toEqual([]);
+      expect(transport.resources.size).toBe(0);
+    }
+  });
+
   it("skips completed Codex scans and uploads only newly eligible or appended messages", async () => {
     const path = await rollout(await fixture("codex"));
     await runCapture(["codex", "--since", "2026-10-25T12:00:01.000Z"], options);

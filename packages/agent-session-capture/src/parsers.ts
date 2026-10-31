@@ -44,18 +44,47 @@ function time(value: unknown): string | undefined {
   return new Date(value).toISOString();
 }
 
+function codexSessionId(entries: Record<string, unknown>[], source: string): string {
+  const parents = new Map<string, string | undefined>();
+  let canonical = source;
+  let expected: string | undefined;
+  for (const entry of entries) {
+    if (entry.type !== "session_meta") continue;
+    const metadata = record(entry.payload);
+    const id = metadata.id;
+    const parent = metadata.forked_from_id ?? undefined;
+    if (
+      typeof id !== "string" ||
+      !id ||
+      (parent !== undefined && (typeof parent !== "string" || !parent))
+    )
+      throw new Error("Invalid Codex session metadata");
+    if (parents.has(id)) {
+      if (parents.get(id) !== parent) throw new Error("Mixed transcript sessions");
+      continue;
+    }
+    // A fork writes its own metadata first, then the parent's rollout verbatim.
+    // Accept only the declared ancestry in that order, including nested forks.
+    if (parents.size === 0) canonical = id;
+    else if (id !== expected) throw new Error("Mixed transcript sessions");
+    parents.set(id, parent);
+    if (parent !== undefined && parents.has(parent)) throw new Error("Mixed transcript sessions");
+    expected = parent;
+  }
+  return canonical;
+}
+
 function session(provider: "claude" | "codex", entries: Record<string, unknown>[], source: string) {
   const projects = new Set<string>();
   const ids = new Set<string>();
   for (const entry of entries) {
     const metadata = provider === "claude" ? entry : record(entry.payload);
     if (typeof metadata.cwd === "string") projects.add(metadata.cwd);
-    const id =
-      provider === "claude" ? entry.sessionId : entry.type === "session_meta" && metadata.id;
-    if (typeof id === "string" && id) ids.add(id);
+    const id = entry.sessionId;
+    if (provider === "claude" && typeof id === "string" && id) ids.add(id);
   }
   if (ids.size > 1) throw new Error("Mixed transcript sessions");
-  const id = [...ids][0] ?? source;
+  const id = provider === "codex" ? codexSessionId(entries, source) : ([...ids][0] ?? source);
   return {
     projectDirectories: [...projects],
     conversation: {
