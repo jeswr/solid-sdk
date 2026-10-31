@@ -31,7 +31,13 @@ it.each(entries)("resolves the %s public API", (subpath, target) => {
   expect(import.meta.resolve(specifier)).toBe(entry.href);
   expect(Object.keys(modules[subpath] as object).sort()).toEqual(
     subpath === "."
-      ? ["MAX_TRANSMISSION_ATTEMPTS", "createExecutor", "proposalTermsDigest"]
+      ? [
+          "MAX_TRANSMISSION_ATTEMPTS",
+          "createExecutor",
+          "createFileTransmissionStore",
+          "createHaltFileCheck",
+          "proposalTermsDigest",
+        ]
       : ["createMemoryStores"],
   );
 });
