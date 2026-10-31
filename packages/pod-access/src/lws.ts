@@ -135,7 +135,8 @@ export function createLwsAccess({ storage, storageId, identity }: AccessClientOp
   function constraints(value: unknown, url: string): Pick<Grant, "purpose" | "expires"> {
     const result: Pick<Grant, "purpose" | "expires"> = {};
     if (value === undefined) return result;
-    for (const item of array(value, url)) {
+    if (!Array.isArray(value)) fail("invalid-response", url);
+    for (const item of value) {
       const c = object(item, ["leftOperand", "operator", "rightOperand"], url);
       if (c.leftOperand === "purpose" && c.operator === "eq" && result.purpose === undefined) {
         iri(c.rightOperand);

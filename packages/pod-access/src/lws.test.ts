@@ -259,6 +259,20 @@ describe("LWS access services", () => {
       { target, agent: BOB, modes: ["read"], id: result.url },
     ]);
   });
+  test("empty constraint arrays list as unconstrained grants and requests and allow revocation", async () => {
+    const { client, storage, target, requests, seed, doc, policy } = await setup();
+    const access = [{ ...policy(), constraint: [] }];
+    const id = await seed(doc(access));
+    const requestId = await seed(doc(access, "AccessRequest"), requests);
+    expect(await client.grants(target)).toEqual([{ id, agent: BOB, modes: ["read"] }]);
+    expect(await client.requests()).toEqual([
+      { id: requestId, target, agent: BOB, modes: ["read"] },
+    ]);
+    expect(await client.effective(target)).toEqual({ me: ["read"], public: [] });
+    await client.revoke(target, id);
+    expect(storage.delete).toHaveBeenCalledWith(id, { ifMatch: expect.any(String) });
+    expect(await client.grants(target)).toEqual([]);
+  });
 });
 
 describe("effective permissions", () => {
@@ -556,6 +570,23 @@ describe("untrusted service responses", () => {
     ],
     ["empty target", (s) => s.doc([s.policy(BOB, [])]), "invalid-response"],
     ["foreign target", (s) => s.doc([s.policy(BOB, ["https://foreign.example/a"])]), "scope"],
+    ["null constraints", (s) => s.doc([{ ...s.policy(), constraint: null }]), "invalid-response"],
+    [
+      "non-array constraints",
+      (s) => s.doc([{ ...s.policy(), constraint: {} }]),
+      "invalid-response",
+    ],
+    [
+      "malformed constraint after a valid constraint",
+      (s) =>
+        s.doc([
+          {
+            ...s.policy(),
+            constraint: [{ leftOperand: "purpose", operator: "eq", rightOperand: PURPOSE }, null],
+          },
+        ]),
+      "invalid-response",
+    ],
     [
       "unknown constraint",
       (s) =>
