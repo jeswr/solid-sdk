@@ -578,13 +578,10 @@ export class SolidPersistence {
         if (this.synced) this.emit("status", "connected");
       },
       prepare: async () => {
-        // A temporarily failing pod append must not prevent the relay from
-        // accepting the retained batch on the next successful live connection.
-        await this.flush().catch(() => {});
+        // Keep durable writes queued independently: a stalled pod append must
+        // not delay the ticket request or the live handshake's full-state sync.
+        void this.flush().catch(() => {});
         await this.sync().catch((cause) => this.report(cause));
-      },
-      settled: async () => {
-        await this.writeTail.catch(() => {});
       },
       error: (error: Error) => this.report(error),
     };

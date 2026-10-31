@@ -169,6 +169,80 @@ for (const protocol of ["solid", "lws"] as const)
     });
 
     it.each([
+      "success",
+      "failure",
+    ] as const)("recovers live sync while a fallback append is pending, then handles its %s", async (outcome) => {
+      const { provider, server, create, storage } = await setup(protocol);
+      const a = provider({ debounceMs: 60_000 });
+      const b = provider({ debounceMs: 60_000 });
+      await Promise.all([a.whenSynced, b.whenSynced]);
+      await server.writes;
+      let releaseRelay!: () => void;
+      const relayGate = new Promise<void>((resolve) => {
+        releaseRelay = resolve;
+      });
+      cleanups.push(releaseRelay);
+      const append = server.store.appendUpdate.bind(server.store);
+      vi.spyOn(server.store, "appendUpdate").mockImplementation(async (update) => {
+        await relayGate;
+        return append(update);
+      });
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      cleanups.push(release);
+      const failure = new Error("delayed fallback append failed");
+      create.mockImplementation(async (...args) => {
+        await gate;
+        if (outcome === "failure") throw failure;
+        return server.storage.create(...args);
+      });
+      const requests = server.requests.length;
+      a.doc.getMap("m").set("before-loss", true);
+      server.sockets[0]?.close();
+      expect(a.mode).toBe("log");
+      a.doc.getMap("m").set("fallback", true);
+      const settled = vi.fn();
+      const flushing = a.flush().then(settled, (cause) => {
+        settled();
+        return cause;
+      });
+      await eventually(() => expect(create).toHaveBeenCalledOnce());
+      a.doc.getMap("m").set("during-append", true);
+      await eventually(() => {
+        expect(server.requests.length).toBeGreaterThan(requests);
+        expect(a.mode).toBe("live");
+        expect(b.doc.getMap("m").toJSON()).toEqual(a.doc.getMap("m").toJSON());
+      });
+      a.doc.getMap("m").set("after-reconnect", true);
+      b.doc.getMap("m").set("peer", true);
+      await eventually(() => {
+        expect(a.doc.getMap("m").get("peer")).toBe(true);
+        expect(b.doc.getMap("m").get("after-reconnect")).toBe(true);
+      });
+      expect(settled).not.toHaveBeenCalled();
+      expect(create).toHaveBeenCalledOnce();
+      release();
+      expect(await flushing).toBe(outcome === "failure" ? failure : undefined);
+      create.mockImplementation(server.storage.create);
+      await a.flush();
+      // Relay persistence is still blocked, so only the client's durable flush
+      // can supply the lost, fallback, and subsequent live edits to this reader.
+      const reader = provider({ storage, mode: "log" });
+      await reader.whenSynced;
+      expect(reader.doc.getMap("m").toJSON()).toEqual({
+        "before-loss": true,
+        fallback: true,
+        "during-append": true,
+        "after-reconnect": true,
+        peer: true,
+      });
+      releaseRelay();
+      await server.writes;
+    });
+
+    it.each([
       "flush",
       "disconnect",
     ] as const)("checkpoints live edits on %s before a delayed socket close", async (method) => {

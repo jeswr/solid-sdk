@@ -163,7 +163,6 @@ export class LiveTransport {
       lost(checkpoint: boolean): void;
       ready(): void;
       prepare(): Promise<void>;
-      settled(): Promise<void>;
       error(error: Error): void;
     },
   ) {
@@ -308,11 +307,10 @@ export class LiveTransport {
       };
       const message = ({ data }: { data: unknown }) => {
         messageTail = messageTail
-          .then(async () => {
+          .then(() => {
             if (!this.current(generation)) return;
             const step2 = this.receive(data, socket);
             if (step2 && !this.connected) {
-              await this.callbacks.settled();
               if (!this.current(generation)) return;
               // Removals retain clock metadata at the relay and other peers.
               // Advance our clock before announcing the same state again.
