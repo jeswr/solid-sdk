@@ -37,7 +37,7 @@ test('populated grant rows reflow and meet browser axe checks in both themes', a
       await details.click();
       await expect(details).toHaveAttribute('aria-expanded', 'true');
       await expect(row.getByRole('list', { name: 'Data access' })).toContainText('Documents');
-      await expect(row.getByLabel('Account', { exact: true })).toBeVisible();
+      await expect(row.getByRole('combobox', { name: 'Account', exact: true })).toBeVisible();
       await checkPermissionAccessibility(
         panel,
         '#grants',

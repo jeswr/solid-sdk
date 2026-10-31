@@ -52,11 +52,37 @@ export async function checkPermissionAccessibility(
     body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
     contentType: 'image/png',
   });
+  // axe compares each text line's whole element stack, including page content under an opaque
+  // modal dialog, so dialog text over uneven content reads as "elmPartiallyObscuring". Hide what
+  // the dialog covers (layout unchanged) so axe measures the colours a user actually sees.
+  const modal = (await page.locator('dialog:modal').count()) > 0;
+  if (modal) {
+    await page.evaluate(() => {
+      for (let node: Element | null = document.querySelector('dialog:modal'); node; ) {
+        node.setAttribute('data-axe-modal-path', '');
+        node = node.parentElement;
+      }
+      const style = document.createElement('style');
+      style.id = 'axe-modal-isolation';
+      style.textContent =
+        '[data-axe-modal-path]:not(dialog) > :not([data-axe-modal-path]) { visibility: hidden !important; }';
+      document.head.append(style);
+    });
+  }
   const result = await new AxeBuilder({ page })
     .include(scope)
     .options({ rules: { 'color-contrast': { enabled: true } } })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa'])
-    .analyze();
+    .analyze()
+    .finally(async () => {
+      if (!modal) return;
+      await page.evaluate(() => {
+        document.getElementById('axe-modal-isolation')?.remove();
+        for (const node of document.querySelectorAll('[data-axe-modal-path]')) {
+          node.removeAttribute('data-axe-modal-path');
+        }
+      });
+    });
   expect(result.violations, `axe violations in ${artifact}`).toEqual([]);
   // A passing scan must actually measure contrast, rather than silently omit the rule.
   expect(
