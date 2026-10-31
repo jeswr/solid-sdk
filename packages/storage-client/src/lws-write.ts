@@ -162,11 +162,6 @@ export function lwsWrites(
     if (/[?#]/.test(dest)) throw new StorageError("bad-request", { method, url: dest });
     return dest;
   }
-  function container(method: string, url: string): string {
-    const dest = target(method, url);
-    if (!dest.endsWith("/")) throw new StorageError("bad-request", { method, url: dest });
-    return dest;
-  }
   function notRoot(method: string, url: string) {
     if (url === root) throw new StorageError("method-not-allowed", { method, url });
   }
@@ -266,7 +261,7 @@ export function lwsWrites(
       });
     },
     async create(url, body, opts = {}) {
-      const parent = container("POST", url);
+      const parent = target("POST", url);
       const kind = opts.kind ?? "resource";
       if (kind !== "resource" && kind !== "container") throw new TypeError("Invalid kind");
       const type = opts.contentType ?? (kind === "container" ? "application/lws+json" : undefined);
@@ -454,7 +449,7 @@ export function lwsWrites(
     },
     async move(url, destination, opts = {}) {
       const source = target("MOVE", url);
-      const dest = container("MOVE", destination);
+      const dest = target("MOVE", destination);
       conditional(opts.ifMatch);
       notRoot("MOVE", source);
       const feature = client().features.move;

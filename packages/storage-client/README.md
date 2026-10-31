@@ -33,6 +33,7 @@ await storage.patch(url, { kind: 'json', ops: [{ op: 'replace', path: '/a', valu
 LWS writes require `ifMatch`; `'*'` on `write`/`writeRdf` sends `If-Match: *` and never
 creates a missing resource. Use `create` for POST creation: `name` is a Slug hint, and the
 returned URL comes from the server's Location, independently of the parent path.
+Create parents and move destinations may use opaque identifiers without a trailing slash.
 
 **LWS RDF patch is read-modify-write by default.** It checks the caller's ETag on the initial
 read, applies inserts/deletes, and PUTs with that read's ETag. A 412 triggers one fresh read

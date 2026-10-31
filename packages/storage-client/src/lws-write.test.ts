@@ -169,6 +169,29 @@ describe("LWS PUT and POST fixture replay", () => {
     await storage.create(NOTES, null, { contentType: "text/plain" });
     await storage.create(NOTES, "", { contentType: "text/plain", kind: "container" });
   });
+  test("a slashless container Location can be reused as a create parent", async () => {
+    const parentUrl = `${ROOT}opaque-container`;
+    const childUrl = `${ROOT}opaque-child`;
+    const { storage, calls } = backend({
+      [`POST ${NOTES}`]: reply(201, { location: parentUrl, etag: tag }),
+      [`POST ${parentUrl}`]: reply(201, { location: childUrl, etag: '"child"' }),
+    });
+    const parent = await storage.create(NOTES, null, { kind: "container" });
+    expect(await storage.create(parent.url, "child", { contentType: "text/plain" })).toEqual({
+      url: childUrl,
+      etag: '"child"',
+      created: true,
+    });
+    expect(calls.map(({ method, url }) => `${method} ${url}`)).toEqual([
+      `POST ${NOTES}`,
+      `POST ${parentUrl}`,
+    ]);
+  });
+  test("the server validates a slashless create parent's kind", async () => {
+    const { storage, calls } = backend({ [`POST ${URL}`]: reply(405) });
+    await rejects(storage.create(URL, "", { contentType: "text/plain" }), "method-not-allowed");
+    expect(calls.map(({ method, url }) => `${method} ${url}`)).toEqual([`POST ${URL}`]);
+  });
   test.each([
     undefined,
     "",
@@ -293,11 +316,9 @@ describe("validation and transport fail closed", () => {
     );
     expect(fetch).not.toHaveBeenCalled();
   });
-  test("root refuses content PUT; container arguments require slash", async () => {
+  test("root refuses content PUT", async () => {
     const { storage, fetch } = backend();
     await rejects(storage.write(ROOT, "", options), "method-not-allowed");
-    await rejects(storage.create(URL, ""), "bad-request");
-    await rejects(storage.move(URL, URL, { ifMatch: tag }), "bad-request");
     expect(fetch).not.toHaveBeenCalled();
   });
   test.each(["?", "#", "?x=1"])("mutation URLs refuse query/fragment %s", async (suffix) => {
@@ -307,6 +328,7 @@ describe("validation and transport fail closed", () => {
       storage.create(NOTES + suffix, null),
       storage.patch(URL + suffix, raw, { ifMatch: tag }),
       storage.move(URL + suffix, NOTES, { ifMatch: tag }),
+      storage.move(URL, NOTES + suffix, { ifMatch: tag }),
       storage.delete(URL + suffix, { ifMatch: tag }),
       storage.setMetadata(URL + suffix, [], { ifMatch: mtag }),
     ])
@@ -720,6 +742,28 @@ describe("linkset metadata JSON Patch generation", () => {
 });
 
 describe("MoveResource linkset mutation", () => {
+  test("move accepts a slashless destination without changing its identifier", async () => {
+    const destination = `${ROOT}opaque-container`;
+    const { storage, calls } = backend({}, move);
+    expect(await storage.move(URL, destination, { ifMatch: tag })).toEqual({
+      url: URL,
+      etag: tag,
+      created: false,
+    });
+    const patch = calls.find(({ method }) => method === "PATCH");
+    expect(JSON.parse(patch?.body as string)).toEqual([
+      { op: "test", path: "/linkset/0/anchor", value: URL },
+      { op: "replace", path: "/linkset/0/up/0/href", value: destination },
+    ]);
+    expect(patch?.headers.get("if-match")).toBe(mtag);
+  });
+  test("the server validates a slashless move destination's kind", async () => {
+    const { storage, calls } = backend({ [`PATCH ${META}`]: reply(422) }, move);
+    await rejects(storage.move(URL, `${ROOT}opaque-resource`, { ifMatch: tag }), "bad-request");
+    expect(mutationCalls(calls).map(({ method, url }) => `${method} ${url}`)).toEqual([
+      `PATCH ${META}`,
+    ]);
+  });
   test("move sends test+replace with linkset ETag and ignores name hint", async () => {
     const { storage, calls } = backend({}, move);
     expect(await storage.move(URL, ROOT, { ifMatch: tag, name: "ignored" })).toEqual({
@@ -873,7 +917,11 @@ describe("MoveResource linkset mutation", () => {
       backend({}, move).storage.move(ROOT, NOTES, { ifMatch: tag }),
       "method-not-allowed",
     );
-    await rejects(backend({}, move).storage.move(NOTES, NOTES, { ifMatch: tag }), "conflict");
+    for (const source of [NOTES, URL]) {
+      const self = backend({}, move);
+      await rejects(self.storage.move(source, source, { ifMatch: tag }), "conflict");
+      expect(self.calls).toHaveLength(0);
+    }
     await rejects(
       backend({}, move).storage.move(URL, ROOT, { ifMatch: '"stale"' }),
       "precondition-failed",

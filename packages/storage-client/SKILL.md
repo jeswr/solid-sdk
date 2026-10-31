@@ -148,7 +148,8 @@ Solid read side (ADR-003 §6):
   RDF serialisation uses the shared serializer; JSON-LD writing remains unsupported.
 - `create` always POSTs: optional `name` is the Slug hint, never an exact child name. Emit Container
   or DataResource Link type plus each validated `opts.links` entry. Initial up/linkset metadata is
-  refused. Null bodies become empty bodies; containers default to application/lws+json, resources
+  refused. Create parents and move destinations may be slashless opaque identifiers; the server
+  validates their kind. Null bodies become empty bodies; containers default to application/lws+json, resources
   require contentType. Location is mandatory, scoped and query/fragment-free, but need not follow
   the parent's URL path (LWS logical containment). It cannot name the parent or root. Untrusted
   Location and Content-Location values are never retained in errors or causes.
