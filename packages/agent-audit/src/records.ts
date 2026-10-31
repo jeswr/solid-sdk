@@ -72,6 +72,8 @@ export type AuditRecord = z.infer<typeof recordSchema>;
 export type AuditTerms = z.infer<typeof termsSchema>;
 export type LedgerRecord = z.infer<typeof ledgerRecordSchema>;
 export const GENESIS = "sha-256:genesis";
+/** Maximum published sequence the pod reader and mirror can process. */
+export const MAX_AUDIT_SEQ = 200000;
 export const entrySchema = z.strictObject({
   seq: count.min(1),
   at: instantSchema,

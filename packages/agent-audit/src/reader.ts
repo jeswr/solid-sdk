@@ -23,6 +23,7 @@ import {
   entrySchema,
   instantSchema,
   type LedgerEntry,
+  MAX_AUDIT_SEQ,
 } from "./records.js";
 import {
   type AuditFetch,
@@ -46,7 +47,7 @@ export async function readHead(io: AuditFetch, base: string): Promise<AuditHead 
   const n = node(graph, url);
   const seqText = n.text(`${AGENT}seq`);
   const seq = Number(seqText);
-  if (!/^[1-9]\d*$/.test(seqText) || !Number.isSafeInteger(seq) || seq > 200000)
+  if (!/^[1-9]\d*$/.test(seqText) || !Number.isSafeInteger(seq) || seq > MAX_AUDIT_SEQ)
     throw new Error("Audit range exceeds bound");
   const hash = digestSchema.parse(n.text(`${AGENT}ledgerHash`));
   assertSameGraph(graph, headGraph(url, seq, hash));

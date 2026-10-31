@@ -13,6 +13,7 @@ import {
   turtle,
 } from "../src/rdf.js";
 import { loadTrace, readHead } from "../src/reader.js";
+import { seal } from "../src/records.js";
 import { createMemoryAuditPod } from "../src/testing.js";
 import type { AuditFetch } from "../src/transport.js";
 import { boundedText, documentUrl, readDocument, request, storageRoot } from "../src/transport.js";
@@ -129,6 +130,45 @@ it("refuses head divergence, a missing prefix and malformed local entries", asyn
   );
   expect(verifyLedger([required(entries[1]), cp]).ok).toBe(true);
   await expect(m.sync([required(entries[1]), cp])).rejects.toThrow("contiguous");
+});
+it("rejects a batch beyond the reader's limit before any writes and accepts the boundary", async () => {
+  const pod = createMemoryAuditPod();
+  const previousHash = `sha-256:${"a".repeat(64)}`;
+  const checkpoint = seal(199999, AT, previousHash, {
+    type: "ledger-checkpoint",
+    lastPrunedSeq: 199998,
+    lastPrunedHash: previousHash,
+  });
+  const last = seal(200000, AT, checkpoint.hash, record);
+  const overflow = seal(200001, AT, last.hash, record);
+  const entries = [checkpoint, last, overflow];
+  const headUrl = `${BASE}chain.ttl`;
+  pod.put(headUrl, await turtle(headGraph(headUrl, checkpoint.seq, checkpoint.hash)));
+  const before = structuredClone(pod.resources);
+  const mirror = new PodMirror(pod.fetch, ROOT);
+  await expect(mirror.sync(entries)).rejects.toThrow("Audit range exceeds bound");
+  expect(pod.resources).toEqual(before);
+  expect(pod.calls.some(({ init }) => init.method === "PUT")).toBe(false);
+  await mirror.sync([checkpoint, last]);
+  expect(await readHead(pod.fetch, BASE)).toMatchObject({ seq: last.seq, hash: last.hash });
+  expect(pod.resources.has(`${BASE}200000.ttl`)).toBe(true);
+  expect(pod.resources.has(`${BASE}200001.ttl`)).toBe(false);
+  const atLimit = structuredClone(pod.resources);
+  pod.calls.length = 0;
+  await expect(mirror.sync(entries)).rejects.toThrow("Audit range exceeds bound");
+  expect(pod.resources).toEqual(atLimit);
+  expect(pod.calls.some(({ init }) => init.method === "PUT")).toBe(false);
+  const empty = createMemoryAuditPod();
+  await expect(new PodMirror(empty.fetch, ROOT).sync(entries)).rejects.toThrow(
+    "Audit range exceeds bound",
+  );
+  expect(empty.resources.size).toBe(0);
+  expect(empty.calls.some(({ init }) => init.method === "PUT")).toBe(false);
+});
+it("leaves an empty mirror unchanged when there are no entries", async () => {
+  const pod = createMemoryAuditPod();
+  await new PodMirror(pod.fetch, ROOT).sync([]);
+  expect(pod.resources.size).toBe(0);
 });
 it("projects complete and incomplete decision records without inventing a verdict", () => {
   const l = new MemoryLedger();

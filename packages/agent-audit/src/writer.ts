@@ -6,7 +6,7 @@ import { createHmac } from "crypto";
 import { type EvidenceLedger, verifyLedger } from "./ledger.js";
 import { assertSameGraph, entryGraph, headGraph, parseTurtle, turtle } from "./rdf.js";
 import { readHead } from "./reader.js";
-import { checkedRecord, type LedgerEntry, type LedgerRecord } from "./records.js";
+import { checkedRecord, type LedgerEntry, type LedgerRecord, MAX_AUDIT_SEQ } from "./records.js";
 import { type AuditFetch, auditBase, readDocument, request } from "./transport.js";
 
 /** Keep this random per-owner salt in the private runtime store, never in pod records. */
@@ -33,6 +33,8 @@ export class PodMirror {
   }
   private async write(entries: readonly LedgerEntry[]): Promise<void> {
     if (!verifyLedger(entries).ok) throw new Error("Ledger integrity failure");
+    if (entries.some((entry) => entry.seq > MAX_AUDIT_SEQ))
+      throw new Error("Audit range exceeds bound");
     const headUrl = new URL("chain.ttl", this.base).href;
     let head = await readHead(this.io, this.base);
     if (head && entries.length > 0 && (entries.at(-1) as LedgerEntry).seq < head.seq)
