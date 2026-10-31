@@ -24,7 +24,8 @@
   "files": [
     "dist",
     "README.md",
-    "SKILL.md"
+    "SKILL.md",
+    "bin"
   ],
   "scripts": {
     "build": "pnpm -w exec tsc -p packages/agent-audit/tsconfig.json",
@@ -35,7 +36,9 @@
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.10",
     "@rdfjs/types": "^2.0.1",
-    "@types/n3": "^1.26.1"
+    "@types/n3": "^1.26.1",
+    "@solid/community-server": "7.2.0",
+    "componentsjs": "5.5.1"
   },
   "dependencies": {
     "@jeswr/agent-model": "workspace:*",
@@ -46,5 +49,8 @@
     "@rdfjs/wrapper": "^0.34.0",
     "n3": "^2.1.0",
     "zod": "^4.4.3"
+  },
+  "bin": {
+    "audit": "./bin/audit.mjs"
   }
 }

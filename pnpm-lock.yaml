@@ -2401,6 +2401,12 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      componentsjs:
+        specifier: 5.5.1
+        version: 5.5.1
+      '@solid/community-server':
+        specifier: 7.2.0
+        version: 7.2.0(jiti@2.7.0)
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1

@@ -15,8 +15,12 @@ export const ENTRY_KINDS = [
   "model-call",
   "tamper-suspected",
 ] as const;
-const iri = z.string().max(2048).refine(isIri);
-const label = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/);
+const iri = z
+  .string()
+  .max(2048)
+  .refine(isIri)
+  .refine((value) => !/^[a-z][a-z0-9+.-]*:\/\/[^/]*@/i.test(value));
+const label = z.string().regex(/^[a-zA-Z0-9_.-]{1,128}$/);
 export const digestSchema = z.string().regex(/^sha-256:[a-f0-9]{64}$/);
 export const recipientHashSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 export const instantSchema = z.iso.datetime({ precision: 3 });

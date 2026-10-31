@@ -1,6 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Ported from personal-agent/src/pilot/store/ledger.ts. Single writer per path.
-// biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import {
   appendFileSync,
   closeSync,
@@ -11,6 +10,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 } from "fs";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { basename, dirname, join } from "path";

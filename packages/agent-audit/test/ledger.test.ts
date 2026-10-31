@@ -9,6 +9,7 @@ import { afterEach, expect, it } from "vitest";
 import { FileLedger } from "../src/file-ledger.js";
 import { MemoryLedger, verifyLedger } from "../src/ledger.js";
 import { checkedRecord, ENTRY_KINDS, GENESIS, type LedgerEntry, seal } from "../src/records.js";
+import { required } from "./fixture.js";
 
 export const AT = "2026-10-26T12:00:00.000Z";
 export const record = {
@@ -30,10 +31,21 @@ it("accepts every specified kind, snapshots input/output and uses the pilot hash
   const ledger = new MemoryLedger();
   expect(verifyLedger([]).ok).toBe(true);
   for (const type of ENTRY_KINDS) ledger.append({ ...record, type }, AT);
+  ledger.append(
+    {
+      ...record,
+      type: "model-call",
+      model: "gpt-5.4",
+      provider: "openai",
+      context: "reader",
+      tokens: 1,
+    },
+    AT,
+  );
   const e = ledger.append({ ...record }, AT);
   e.record.type = "control";
   const entries = ledger.entries() as LedgerEntry[];
-  entries[0]!.hash = "bad";
+  required(entries[0]).hash = "bad";
   expect(verifyLedger(ledger.entries()).ok).toBe(true);
   expect(ledger.entries()[0]).toEqual(seal(1, AT, GENESIS, record));
 });
@@ -41,13 +53,17 @@ it("detects modification, reordering, middle truncation, missing prefix and brok
   const l = new MemoryLedger();
   for (let i = 0; i < 4; i++) l.append(record, AT);
   const e = l.entries();
-  expect(verifyLedger([{ ...e[0]!, at: "2026-10-27T12:00:00.000Z" }]).problem).toBe(
+  expect(verifyLedger([{ ...required(e[0]), at: "2026-10-27T12:00:00.000Z" }]).problem).toBe(
     "hash mismatch",
   );
-  expect(verifyLedger([e[0]!, e[2]!, e[1]!]).problem).toBe("sequence gap");
-  expect(verifyLedger([e[0]!, e[2]!, e[3]!]).ok).toBe(false);
+  expect(verifyLedger([required(e[0]), required(e[2]), required(e[1])]).problem).toBe(
+    "sequence gap",
+  );
+  expect(verifyLedger([required(e[0]), required(e[2]), required(e[3])]).ok).toBe(false);
   expect(verifyLedger(e.slice(1)).problem).toContain("missing prefix");
-  expect(verifyLedger([{ ...e[0]!, prev: e[1]!.hash }]).problem).toBe("broken link");
+  expect(verifyLedger([{ ...required(e[0]), prev: required(e[1]).hash }]).problem).toBe(
+    "broken link",
+  );
   expect(verifyLedger([null] as unknown as LedgerEntry[]).problem).toBe("malformed entry");
   expect(verifyLedger(e.slice(0, -1))).toMatchObject({
     ok: true,
