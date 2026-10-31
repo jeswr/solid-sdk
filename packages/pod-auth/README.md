@@ -59,7 +59,8 @@ interactive authorization. The same non-extractable ES256 private key and export
 persisted beside the refresh token under `(issuer, WebID, actual client_id)`, within the app namespace.
 An unloadable, extractable, mismatched or non-ES256 key discards the credential before redemption.
 Access and ID tokens stay in memory. Rotation is persisted before an identity or restore event is exposed.
-Web Locks serialize refreshes across tabs; Node falls back to a no-op lock when Web Locks are unavailable.
+Web Locks serialize refreshes across tabs; Node falls back to keyed FIFO locks within the current realm
+when Web Locks are unavailable. The fallback does not coordinate separate workers or processes.
 Browsers without Web Locks fail closed.
 
 A definitive `invalid_grant` deletes the dead credential, then permits one `prompt=none` authorization

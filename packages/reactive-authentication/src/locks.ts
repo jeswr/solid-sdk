@@ -1,10 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { abortable } from "./oauth/abortable.js";
+
+const nodeLocks = new Map<string, Promise<void>>();
+
 /**
- * Runs `callback` while holding a Web Lock.
+ * Runs `callback` while holding a Web Lock, or a keyed local lock in Node without Web Locks.
  *
  * Web Locks coordinate every tab and worker of an origin's storage partition, which is what makes
  * rotating refresh tokens safe to share through persistent storage. They do not coordinate separate
- * browsers, devices or server processes.
+ * browsers, devices or server processes. The Node fallback serializes shared and exclusive requests
+ * in FIFO order within this realm, preserving fence ordering without cross-worker coordination.
  */
 export async function withLock<T>(
   name: string,
@@ -15,7 +20,20 @@ export async function withLock<T>(
   if (locks === undefined) {
     if (typeof process !== "undefined" && process.versions?.node !== undefined) {
       options.signal?.throwIfAborted();
-      return await callback();
+      const previous = nodeLocks.get(name) ?? Promise.resolve();
+      const { promise: current, resolve: release } = Promise.withResolvers<void>();
+      nodeLocks.set(name, current);
+      try {
+        await (options.signal === undefined ? previous : abortable(previous, options.signal));
+        options.signal?.throwIfAborted();
+        return await callback();
+      } finally {
+        // An aborted waiter must not release its successors before the holder finishes.
+        void previous.then(() => {
+          release();
+          if (nodeLocks.get(name) === current) nodeLocks.delete(name);
+        });
+      }
     }
     throw new Error("The Web Locks API is required in browsers and workers");
   }

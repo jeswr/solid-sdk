@@ -11,7 +11,7 @@ description: Work on @jeswr/pod-auth, the suite client authentication and sessio
 React hooks and Node/CID signing belong to later tasks; their subpaths remain reserved.
 
 Persist only refresh records with matching non-extractable ES256 keys, scoped by issuer/WebID/clientId.
-Remembered pointers contain public metadata only. Restore refreshes under a Web Lock (Node no-op fallback)
+Remembered pointers contain public metadata only. Restore refreshes under a Web Lock (keyed FIFO Node fallback)
 and permits prompt=none only after invalid_grant, with no interactive fallback. Preserve credentials on
 transient failures; discard invalid keys; propagate storage errors. Rotation must be durable before use.
 Logout must revoke when advertised, purge across reloads, fence late results and emit even on failure.
