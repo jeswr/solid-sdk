@@ -473,6 +473,52 @@ describe("capture with real ChatWriter and client credentials", () => {
     expect(await readdir(queue()).catch(() => [])).toEqual([]);
   });
 
+  describe.each(["claude", "codex"] as const)("%s transcript project metadata", (command) => {
+    it.each([
+      { project: undefined },
+      { project: null },
+      { project: 42 },
+      { project: {} },
+      { project: [] },
+      { project: "" },
+      { project: "relative-project" },
+    ])("fails closed for cwd $project even with valid invocation and hook directories", async ({
+      project,
+    }) => {
+      const text = (await fixture(command))
+        .trim()
+        .split("\n")
+        .map((line) => {
+          const row = JSON.parse(line);
+          const metadata = command === "claude" ? row : row.payload;
+          if (Object.hasOwn(metadata, "cwd")) metadata.cwd = project;
+          return JSON.stringify(row);
+        })
+        .join("\n");
+      let args = ["claude"];
+      if (command === "claude") await writeFile(transcript, text);
+      else {
+        await rollout(text);
+        args = [
+          "codex",
+          JSON.stringify({
+            type: "agent-turn-complete",
+            "thread-id": "codex-fixture-session",
+            cwd: home,
+          }),
+        ];
+      }
+      expect(
+        await runCapture(args, {
+          ...options,
+          stdin: input({ transcript_path: transcript, cwd: home }),
+        }),
+      ).toBe(0);
+      expect(transport.requests).toHaveLength(0);
+      expect(await readdir(queue())).toEqual([]);
+    });
+  });
+
   it.each([
     [],
     ["bad"],

@@ -144,8 +144,12 @@ async function capture(args: string[], options: CaptureOptions, signal: AbortSig
         parsed.conversation.conversationId !== digest(["codex", notify["thread-id"]])
       )
         continue;
+      if (
+        parsed.projectDirectories.length === 0 ||
+        (await isIgnored(parsed.projectDirectories, signal))
+      )
+        continue;
       parsed.projectDirectories = [...new Set([...projects, ...parsed.projectDirectories])];
-      if (await isIgnored(parsed.projectDirectories, signal)) continue;
       parsed.conversation.messages = parsed.conversation.messages.filter(
         (m) => Date.parse(m.createdAt) > since,
       );
