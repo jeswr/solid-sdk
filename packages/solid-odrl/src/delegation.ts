@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 //
 // The AGENT-DELEGATION PROFILE chain evaluator (docs/delegation-profile.md) — the
@@ -40,6 +41,7 @@ import type {
   RequestContext,
 } from "./types.js";
 import {
+  legacyOdrlIri,
   ODRLD_DELEGATED_UNDER,
   PROV_ACTED_ON_BEHALF_OF,
   PROV_WAS_ATTRIBUTED_TO,
@@ -497,6 +499,7 @@ function dedupeDuties(duties: readonly ActiveDuty[]): ActiveDuty[] {
  * hand-concatenated triples); serialise with `policyToTurtle`'s `serialize`.
  */
 export function delegationProvenance(chain: readonly OdrlPolicy[]): Quad[] {
+  // Canonical emission is deferred to phase 2: pinned verifiers would reject it.
   const b = new GraphBuilder();
   for (const [i, policy] of chain.entries()) {
     if (policy.id === undefined || policy.id === "") {
@@ -510,7 +513,7 @@ export function delegationProvenance(chain: readonly OdrlPolicy[]): Quad[] {
       // biome-ignore lint/style/noNonNullAssertion: i > 0 within chain bounds
       const parent = chain[i - 1]!;
       if (parent.id !== undefined && parent.id !== "") {
-        b.addIri(subject, ODRLD_DELEGATED_UNDER, parent.id);
+        b.addIri(subject, legacyOdrlIri(ODRLD_DELEGATED_UNDER), parent.id);
         b.addIri(subject, PROV_WAS_DERIVED_FROM, parent.id);
       }
       if (policy.assignee !== undefined && policy.assigner !== undefined) {

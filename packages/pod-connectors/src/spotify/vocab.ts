@@ -1,10 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { NS } from "@jeswr/suite-vocab";
 import { LiteralFrom, NamedNodeAs, NamedNodeFrom, OptionalAs, SetFrom } from "@rdfjs/wrapper";
 import { PodThing } from "../core/vocab.js";
 
-/** Exact federation terms; isolated here until CON-13's constants migration. */
-export const MEDIA = "https://jeswr.org/ns/sectors/media#";
-export const CORE = "https://jeswr.org/ns/core#";
+/** Exact federation namespace bases from the suite vocabulary. */
+export const MEDIA = NS.MEDIA;
+export const CORE = NS.CORE;
 export const TIME = "http://www.w3.org/2006/time#";
 export const SCHEMA = "https://schema.org/";
 

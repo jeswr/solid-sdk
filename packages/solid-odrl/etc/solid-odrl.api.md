@@ -226,67 +226,67 @@ export interface OdrlConstraint {
 }
 
 // @public
-export const ODRLD: "https://w3id.org/jeswr/odrl-delegation#";
+export const ODRLD: "https://jeswr.org/ns/odrl-delegation#";
 
 // @public
-export const ODRLD_ACTIVE_DUTY: "https://w3id.org/jeswr/odrl-delegation#activeDuty";
+export const ODRLD_ACTIVE_DUTY: "https://jeswr.org/ns/odrl-delegation#activeDuty";
 
 // @public
-export const ODRLD_CONFLICT: "https://w3id.org/jeswr/odrl-delegation#conflict";
+export const ODRLD_CONFLICT: "https://jeswr.org/ns/odrl-delegation#conflict";
 
 // @public
-export const ODRLD_DECIDING_RULE: "https://w3id.org/jeswr/odrl-delegation#decidingRule";
+export const ODRLD_DECIDING_RULE: "https://jeswr.org/ns/odrl-delegation#decidingRule";
 
 // @public
-export const ODRLD_DECISION: "https://w3id.org/jeswr/odrl-delegation#decision";
+export const ODRLD_DECISION: "https://jeswr.org/ns/odrl-delegation#decision";
 
 // @public
-export const ODRLD_DECISION_RECORD_CLASS: "https://w3id.org/jeswr/odrl-delegation#DecisionRecord";
+export const ODRLD_DECISION_RECORD_CLASS: "https://jeswr.org/ns/odrl-delegation#DecisionRecord";
 
 // @public
-export const ODRLD_DELEGATED_UNDER: "https://w3id.org/jeswr/odrl-delegation#delegatedUnder";
+export const ODRLD_DELEGATED_UNDER: "https://jeswr.org/ns/odrl-delegation#delegatedUnder";
 
 // @public
-export const ODRLD_DELEGATION_DEPTH: "https://w3id.org/jeswr/odrl-delegation#delegationDepth";
+export const ODRLD_DELEGATION_DEPTH: "https://jeswr.org/ns/odrl-delegation#delegationDepth";
 
 // @public
-export const ODRLD_EVALUATED_POLICY: "https://w3id.org/jeswr/odrl-delegation#evaluatedPolicy";
+export const ODRLD_EVALUATED_POLICY: "https://jeswr.org/ns/odrl-delegation#evaluatedPolicy";
 
 // @public
-export const ODRLD_FULFILLED: "https://w3id.org/jeswr/odrl-delegation#fulfilled";
+export const ODRLD_FULFILLED: "https://jeswr.org/ns/odrl-delegation#fulfilled";
 
 // @public
 export const ODRLD_INLINE_CONTEXT_EXTENSION: Readonly<Record<string, unknown>>;
 
 // @public
-export const ODRLD_ON_DUTY: "https://w3id.org/jeswr/odrl-delegation#onDuty";
+export const ODRLD_ON_DUTY: "https://jeswr.org/ns/odrl-delegation#onDuty";
 
 // @public
 export const ODRLD_PROFILE_IRI: "https://w3id.org/jeswr/odrl-delegation";
 
 // @public
-export const ODRLD_REASON: "https://w3id.org/jeswr/odrl-delegation#reason";
+export const ODRLD_REASON: "https://jeswr.org/ns/odrl-delegation#reason";
 
 // @public
-export const ODRLD_REQUEST_ACTION: "https://w3id.org/jeswr/odrl-delegation#requestAction";
+export const ODRLD_REQUEST_ACTION: "https://jeswr.org/ns/odrl-delegation#requestAction";
 
 // @public
-export const ODRLD_REQUEST_AGENT: "https://w3id.org/jeswr/odrl-delegation#requestAgent";
+export const ODRLD_REQUEST_AGENT: "https://jeswr.org/ns/odrl-delegation#requestAgent";
 
 // @public
-export const ODRLD_REQUEST_PURPOSE: "https://w3id.org/jeswr/odrl-delegation#requestPurpose";
+export const ODRLD_REQUEST_PURPOSE: "https://jeswr.org/ns/odrl-delegation#requestPurpose";
 
 // @public
-export const ODRLD_REQUEST_TARGET: "https://w3id.org/jeswr/odrl-delegation#requestTarget";
+export const ODRLD_REQUEST_TARGET: "https://jeswr.org/ns/odrl-delegation#requestTarget";
 
 // @public
-export const ODRLD_REVOCATION_CLASS: "https://w3id.org/jeswr/odrl-delegation#Revocation";
+export const ODRLD_REVOCATION_CLASS: "https://jeswr.org/ns/odrl-delegation#Revocation";
 
 // @public
-export const ODRLD_REVOKED_POLICY: "https://w3id.org/jeswr/odrl-delegation#revokedPolicy";
+export const ODRLD_REVOKED_POLICY: "https://jeswr.org/ns/odrl-delegation#revokedPolicy";
 
 // @public
-export const ODRLD_RULE_KIND: "https://w3id.org/jeswr/odrl-delegation#ruleKind";
+export const ODRLD_RULE_KIND: "https://jeswr.org/ns/odrl-delegation#ruleKind";
 
 // @public
 export interface OdrlDuty {

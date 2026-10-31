@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Claude Fable 5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Solid Access Manager
 
@@ -72,13 +73,14 @@ authenticated-fetch seam, so every view is unit-testable with a stubbed fetch.
 From the monorepo root (Node 24), build for hosting with:
 
 ```sh
-APP_ORIGIN=https://solid-access-manager.vercel.app pnpm turbo run build --filter=@jeswr/app-access-manager
+APP_ORIGIN=https://jeswr.github.io node scripts/build-pages.mjs access-manager
 ```
 
-Use `apps/access-manager/dist` as Vercel's output directory relative to the
-monorepo root. `APP_ORIGIN` sets the generated client document's URLs and the
-browser's client identity together; an explicit `VITE_CLIENT_ID` still overrides
-the browser identity. Turbo forwards and hashes both variables.
+The app is hosted at https://jeswr.github.io/solid-sdk/access-manager/ by the
+[workspace Pages workflow](../../.github/workflows/pages.yml). Vercel git deployments
+are disabled. `APP_ORIGIN` and `CLIENT_BASE_PATH` set the generated client document's
+URLs and browser identity together; an explicit `VITE_CLIENT_ID` still overrides the
+browser identity. Turbo forwards and hashes these variables.
 
 ## Demo mode (`?demo`) + the GitHub Pages build
 
@@ -99,9 +101,10 @@ provably inert — the refusal surfaces in the saving indicator. Tests in
 `test/demo/` cover the gate, the read-only pod, each view's fixtures, and the
 no-write guarantee.
 
-`npm run build:pages` produces the GitHub Pages bundle in `dist-pages/` with
-`base=/solid-access-manager/` (for `https://jeswr.github.io/solid-access-manager/`);
-the plain `npm run build` (Vercel) is unchanged.
+The workspace Pages build above includes both the real app and these demo views.
+The older `npm run build:pages` remains a standalone demo build for
+`/solid-access-manager/`; use the workspace command for the production app and
+its hosted client identity.
 
 ## RDF discipline
 

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { NS } from "@jeswr/suite-vocab";
 import type { DataFactory as Factory, Term } from "@rdfjs/types";
 import {
   LiteralAs,
@@ -13,8 +14,8 @@ import { CalendarEvent, CLASSES, PodThing } from "../core/vocab.js";
 import { createVocabMap } from "../core/vocab-map.js";
 import type { CalendarRecurrence } from "./recurrence.js";
 
-/** Scheduling ontology bridge, kept adapter-local until CON-13's constants switch. */
-export const SCHED = FEDERATION.CalendarEvent.slice(0, -"CalendarEvent".length);
+/** Scheduling ontology base from the suite vocabulary. */
+export const SCHED = NS.SCHEDULING;
 const SCHEMA = "https://schema.org/";
 const XSD = "http://www.w3.org/2001/XMLSchema#";
 const DAYS: Record<string, string> = {

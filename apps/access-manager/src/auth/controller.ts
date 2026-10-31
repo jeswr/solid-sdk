@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable 5
 //
 // Wire the suite auth stack (the @jeswr/solid-elements /auth adapter over
@@ -9,6 +10,8 @@
 import "@solid/reactive-authentication/registerElements"; // registers <authorization-code-flow>
 import type { LoginController } from "@jeswr/solid-elements";
 import { createReactiveAuthController } from "@jeswr/solid-elements/auth";
+
+import { appUrl } from "./app-url.js";
 
 /** Unique-per-app keys on a shared origin (the /auth subexport contract). */
 const DB_NAME = "solid-access-manager:sessions";
@@ -28,7 +31,7 @@ export function buildController(): LoginController {
     authFlow: authFlow as unknown as {
       getCode: (uri: URL, signal: AbortSignal) => Promise<string>;
     },
-    callbackUri: new URL("/callback.html", location.href).toString(),
+    callbackUri: appUrl("callback.html"),
     ...(clientId ? { clientId } : {}), // absent → dynamic registration (dev fallback)
     dbName: DB_NAME,
     rememberedAccountsKey: REMEMBERED_KEY,
