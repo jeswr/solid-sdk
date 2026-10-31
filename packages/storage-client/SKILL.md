@@ -1,12 +1,109 @@
 ---
 name: storage-client
-description: Work on @jeswr/storage-client, the protocol-neutral storage clients for solid and lws package in the Solid SDK workspace.
+description: Use or maintain @jeswr/storage-client, including createPodClient, conditional storage mutations, Solid and LWS semantics, and offline HTTP fixture recording/replay.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
 <!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/storage-client
+
+## App usage
+
+Apps import `createPodClient` from `@jeswr/storage-client`. Inject the authenticated, guarded
+fetch supplied by the auth layer; discovery and storage operations use that same transport.
+Pass a storage root or a resource inside it. The factory resolves a `StorageDescription`,
+derives features through `capabilities()` (including cached Solid probes), and picks the
+backend from `description.protocol`. It returns `{ storage, description, features }`;
+`storage.features` is the same features object. Discovery errors propagate without guessing
+a backend. Apps should use this root API; direct `./solid` and `./lws` imports are for backend
+work and tests (the SDK layer guard disallows app manifest edges to those subpaths).
+
+```ts
+import { createPodClient } from '@jeswr/storage-client';
+
+const { storage, features } = await createPodClient({
+  fetch: authenticatedFetch,
+  storage: storageRoot,
+  signal,
+});
+const created = await storage.create(storage.root, 'first draft', {
+  name: 'note.txt', contentType: 'text/plain',
+});
+const current = await storage.head(created.url);
+if (current.etag === null) throw new Error('A validator is required to edit this resource');
+await storage.write(created.url, 'second draft', {
+  contentType: 'text/plain', ifMatch: current.etag,
+});
+```
+
+`capabilities` in the factory options is an optional `DescriptionCache`, shared with other
+capability consumers; the default is the capabilities package's shared in-memory cache.
+`clock` supplies discovery/cache time. `signal` covers client creation; pass operation signals
+separately for subsequent reads/writes. `backend` explicitly forces an implementation for
+diagnostics/tests; description and features still report discovery evidence, so it is not a
+way to advertise capabilities the server lacks. All storage operation URLs remain absolute
+and scoped to `description.root`; an LWS storage id never authorises a foreign fetch.
+
+### Conditional mutations and returned URLs
+
+- `write`, `writeRdf`, `patch`, `move`, `delete`, and `setMetadata` require a nonempty `ifMatch`.
+  Keep ETags verbatim. Re-read after a 412 (`StorageError.code === 'precondition-failed'`);
+  `./helpers` provides `retryOnConflict` for callers that can safely reapply their change.
+- Only `write` and `writeRdf` accept `'*'`: Solid sends no precondition; LWS sends
+  `If-Match: *` and still returns 404 when the resource is absent. Prefer the observed ETag
+  for edits. `create` needs no `ifMatch` because it creates a new resource.
+- `setMetadata` takes the metadata document's ETag from `storage.metadata(url)`, rather than
+  the content ETag. A write result may have `etag: null` if a committed mutation omitted it
+  and its follow-up HEAD failed; read again before the next conditional mutation.
+- With `create(container, body, { name })`, Solid PUTs an exact encoded child name with `If-None-Match: *`;
+  a taken name gives `conflict`. LWS POSTs with `Slug` as a hint, and the server decides the
+  identifier. Without a name, both use POST. Always use the returned `url`, including after
+  moves; never construct a resource URL from a hint. LWS move ignores `name`.
+
+**LWS RDF patch is read-modify-write by default:** read the RDF and check the caller's initial
+ETag, apply inserts/deletes locally, then PUT with that read's ETag. On 412 the backend re-reads
+and reapplies once against the newer state; a second 412 propagates. This can merge a patch
+into newer content, so callers needing strict rejection of all intervening edits should use
+an explicit conditional `writeRdf` instead. Advertised SPARQL Update is used only for the actual
+resource media type and default-graph patches; named-graph patches retain RMW. Variables and
+nonempty `where` are unsupported. LWS stores RDF bodies as opaque content.
+
+### Offline fixtures (`./testing`, Node only)
+
+`createRecordingFetch({ fetch, directory })` returns the original transport unless `RECORD=1`
+at construction. When enabled it buffers bodies, forwards the effective Request, and writes
+one version-1 JSON pair per request as `000001.json`, `000002.json`, etc., in invocation order.
+Use a fresh scenario directory for each recorder; files are created exclusively, never
+silently overwritten. Conformance runners can target
+`packages/storage-client/testing/fixtures/<target>/<scenario>/`. Package tests use temporary
+directories and synthetic CSS/sparq exchanges; no live server is needed.
+
+Headers are normalised; Authorization, DPoP, Set-Cookie, Cookie and Proxy-Authorization are
+omitted case-insensitively from both persisted sides. Live requests/responses retain those
+headers. Bodies use base64 to preserve arbitrary bytes; null means no body, distinct from
+empty bytes. This is header redaction only: use public/synthetic body and URL data for fixtures,
+and inspect captures before committing them.
+
+```ts
+import {
+  createRecordingFetch, createReplayFetch, loadFixtures,
+} from '@jeswr/storage-client/testing';
+
+const recordedFetch = createRecordingFetch({ fetch: authenticatedFetch, directory });
+// In RECORD=1 mode, inject recordedFetch into the conformance client's factory.
+// In offline tests, inject the replay instead:
+const replay = createReplayFetch(await loadFixtures(directory));
+const client = await createPodClient({ fetch: replay, storage: storageRoot, capabilities: freshCache });
+// Run the recorded scenario using client.storage, then prove all pairs were consumed:
+replay.assertDone();
+```
+
+Replay checks method, URL, public headers and exact request bytes in order, ignoring credential
+headers. Extra requests, mismatches, corrupt fixtures and unused entries fail; no network
+fallback exists. Mismatches do not consume entries and never echo request/header/body data.
+Responses preserve recorded URLs, redirect flags, status and bytes. Match discovery/cache state
+and generated names to the recording; use deterministic name hints in reproducible tests.
 
 T-020 implements the ADR-003 §1 types (`src/types.ts`, re-exported as types from the root), the
 §2 error model (`StorageError`, pure `toStorageError(method, url, response, bodyText?, now?)`,
@@ -16,8 +113,8 @@ and `./memory` (`createMemoryStorage({ protocol, root, pageSize, moveResource, s
 T-021 adds the Solid backend's read side; T-022 adds its mutations. `./solid` exports
 `createSolidBackend({ fetch, root, features?, etagFollowUp? })` and the pure async
 `buildN3Patch({ inserts, deletes, where? })`. T-023 adds `./lws` →
-`createLwsBackend({ fetch, root, storage?, features? })`. `./testing` is still reserved (T-025);
-T-024 adds conditional LWS mutations in `src/lws-write.ts`.
+`createLwsBackend({ fetch, root, storage?, features? })`. T-024 adds conditional LWS mutations
+in `src/lws-write.ts`. T-025 adds `createPodClient` and the Node-only recorder/replayer in `./testing`.
 
 Solid read side (ADR-003 §6):
 - Every URL must be absolute: its standalone parse (`new URL(url)`, without a base) must pass
