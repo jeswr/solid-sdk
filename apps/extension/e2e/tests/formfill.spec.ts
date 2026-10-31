@@ -68,6 +68,105 @@ test('cancel leaves every field untouched', async ({ context, extensionId }) => 
   for (const input of await page.locator('input').all()) await expect(input).toHaveValue('');
 });
 
+for (const navigation of ['history', 'hash'] as const) {
+  test(`${navigation} changes keep the document and allow its reviewed fill`, async ({
+    context,
+    extensionId,
+  }) => {
+    await performLogin(context, extensionId);
+    const page = await context.newPage();
+    await page.goto(site);
+    await page.locator('form').evaluate((form) => form.setAttribute('data-original-document', ''));
+    const previewPromise = context.waitForEvent('page');
+    await page.locator('[data-solid-formfill]').click();
+    const preview = await previewPromise;
+    await expect(preview.locator('dd')).toContainText(['Alex Wilder', 'test@example.com']);
+    await preview.getByLabel('Contact details', { exact: true }).check();
+    await preview.getByLabel('Address', { exact: true }).check();
+
+    const destination =
+      navigation === 'history' ? 'http://localhost:8080/checkout?step=2' : `${site}#address`;
+    await page.evaluate(
+      ({ navigation, destination }) => {
+        if (navigation === 'history') history.pushState({ step: 2 }, '', destination);
+        else location.hash = new URL(destination).hash;
+      },
+      { navigation, destination },
+    );
+    await page.waitForURL(destination);
+    await expect(page.locator('form[data-original-document]')).toHaveCount(1);
+    await Promise.all([
+      preview.waitForEvent('close'),
+      preview.getByRole('button', { name: 'Fill', exact: true }).click(),
+    ]);
+    await expect(page.getByLabel('Full name', { exact: true })).toHaveValue('Alex Wilder');
+    await expect(page.getByLabel('Street address')).toHaveValue('42 Sample Street');
+    expect(page.url()).toBe(destination);
+  });
+}
+
+for (const navigation of ['navigation', 'reload'] as const) {
+  test(`same-origin ${navigation} gives the replacement document no values from the old review`, async ({
+    context,
+    extensionId,
+  }) => {
+    await performLogin(context, extensionId);
+    const page = await context.newPage();
+    await page.goto(site);
+    await page.locator('form').evaluate((form) => form.setAttribute('data-original-document', ''));
+    const previewPromise = context.waitForEvent('page');
+    await page.locator('[data-solid-formfill]').click();
+    const preview = await previewPromise;
+    await expect(preview.locator('dd')).toContainText(['Alex Wilder', 'test@example.com']);
+    const requestId = new URL(preview.url()).searchParams.get('requestId')!;
+    await preview.getByLabel('Contact details', { exact: true }).check();
+    await preview.getByLabel('Address', { exact: true }).check();
+
+    const response =
+      navigation === 'reload' ? await page.reload() : await page.goto(`${site}?replacement=1`);
+    expect(response?.status()).toBe(200);
+    await expect(page.locator('form[data-original-document]')).toHaveCount(0);
+    await expect(page.locator('[data-solid-formfill]')).toBeVisible();
+    await page.evaluate(() => {
+      document.documentElement.dataset.formFillEvents = '0';
+      for (const type of ['input', 'change'])
+        document.addEventListener(type, () => {
+          const root = document.documentElement;
+          root.dataset.formFillEvents = String(Number(root.dataset.formFillEvents) + 1);
+        });
+    });
+
+    // Use an actual trusted extension document to observe completion of the old request.
+    // The preview can close itself before the worker has finished releasing its response.
+    const observer = await context.newPage();
+    await observer.goto(`chrome-extension://${extensionId}/formfill/preview.html`);
+    await expect(observer.locator('#error')).toHaveText('This fill request is unavailable.');
+    await Promise.all([
+      preview.waitForEvent('close'),
+      preview.getByRole('button', { name: 'Fill', exact: true }).click(),
+    ]);
+    await expect
+      .poll(() =>
+        observer.evaluate(
+          (requestId) => chrome.runtime.sendMessage({ type: 'SOLID_FORMFILL_PREVIEW', requestId }),
+          requestId,
+        ),
+      )
+      .toBeNull();
+    for (const field of await page.locator('input, select').all())
+      await expect(field).toHaveValue('');
+    await expect(page.locator('html')).toHaveAttribute('data-form-fill-events', '0');
+
+    // The replacement controller is live, but must start a separate review to receive values.
+    const freshPromise = context.waitForEvent('page');
+    await page.locator('[data-solid-formfill]').click();
+    const fresh = await freshPromise;
+    await expect(fresh.getByLabel('Contact details', { exact: true })).not.toBeChecked();
+    expect(new URL(fresh.url()).searchParams.get('requestId')).not.toBe(requestId);
+    await fresh.getByRole('button', { name: 'Cancel' }).click();
+  });
+}
+
 test('cross-origin iframe refuses icons and a worker-routed trigger', async ({
   context,
   extensionId,
