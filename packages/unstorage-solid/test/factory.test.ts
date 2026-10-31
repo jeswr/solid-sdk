@@ -46,6 +46,80 @@ describe("legacy fetch construction through the public factory", () => {
     }
   });
 
+  describe.each(["solid", "lws"] as const)("%s content negotiation", (protocol) => {
+    it.each([
+      ["lowercase", { accept: "application/ld+json" }, undefined, "application/ld+json"],
+      ["mixed-case", { AcCePt: "application/ld+json" }, undefined, "application/ld+json"],
+      [
+        "transaction",
+        { accept: "application/ld+json" },
+        { ACCEPT: "application/json" },
+        "application/json",
+      ],
+      ["transaction-only", undefined, { Accept: "application/json" }, "application/json"],
+      ["default", undefined, undefined, "*/*"],
+    ] as const)("preserves %s resource Accept without changing SDK negotiation", async (name, headers, txHeaders, expected) => {
+      const base = `https://unstorage-accept-${protocol}-${name}.example/kv/`;
+      const description = new URL("/.well-known/storage", base).href;
+      const seen: { url: string; method: string; headers: Headers }[] = [];
+      const fetch: typeof globalThis.fetch = async (input, init) => {
+        const url = String(input);
+        const method = init?.method ?? "GET";
+        const requestHeaders = new Headers(init?.headers);
+        seen.push({ url, method, headers: requestHeaders });
+        if (url === base && method === "HEAD")
+          return new Response(null, {
+            headers: {
+              link:
+                protocol === "solid"
+                  ? `${STORAGE_LINK}, <${description}>; rel="http://www.w3.org/ns/solid/terms#storageDescription"`
+                  : `<${description}>; rel="https://www.w3.org/ns/lws#storage"`,
+            },
+          });
+        if (url === description && method === "GET")
+          return protocol === "solid"
+            ? new Response("", { headers: { "content-type": "text/turtle" } })
+            : Response.json({
+                "@context": ["https://www.w3.org/ns/cid/v1", "https://www.w3.org/ns/lws/v1"],
+                id: description,
+                type: "Storage",
+                service: [{ type: "StorageRoot", serviceEndpoint: base }],
+              });
+        if (url === base && method === "OPTIONS") return new Response(null, { status: 204 });
+        if (url === `${base}a` && method === "GET")
+          return new Response(requestHeaders.get("accept") === "*/*" ? "default" : "negotiated");
+        if (url === base && method === "GET")
+          return protocol === "solid"
+            ? new Response("", { headers: { "content-type": "text/turtle" } })
+            : Response.json(
+                { type: "Container", items: [] },
+                {
+                  headers: { "content-type": "application/lws+json" },
+                },
+              );
+        throw new Error(`Unexpected ${method} ${url}`);
+      };
+      const driver = solidDriver({ base, fetch, headers });
+      expect(await driver.getItem?.("a", { headers: txHeaders })).toBe(
+        expected === "*/*" ? "default" : "negotiated",
+      );
+      expect(seen.find(({ url }) => url === `${base}a`)?.headers.get("accept")).toBe(expected);
+      // Explicit transaction headers keep their existing precedence over driver/SDK headers.
+      expect(seen.find(({ url }) => url === description)?.headers.get("accept")).toBe(
+        new Headers(txHeaders).get("accept") ??
+          (protocol === "solid"
+            ? "application/ld+json, text/turtle;q=0.9"
+            : "application/lws+cid, application/cid;q=0.9, application/ld+json;q=0.8"),
+      );
+      expect(await driver.getItemRaw?.("a", {})).toEqual(new TextEncoder().encode("negotiated"));
+      expect(seen.at(-1)?.headers.get("accept")).toBe("application/octet-stream");
+      expect(await driver.getKeys("", {})).toEqual([]);
+      expect(seen.at(-1)?.headers.get("accept")).toBe(
+        protocol === "solid" ? "text/turtle" : "application/lws+json, application/ld+json;q=0.5",
+      );
+    });
+  });
+
   describe.each(["setItem", "setItemRaw"] as const)("%s preconditions", (method) => {
     it.each([
       ["cold", false],

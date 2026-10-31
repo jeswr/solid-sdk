@@ -16,6 +16,9 @@ export async function storageFromFetch(
   const transport: typeof fetch = async (input, init) => {
     const merged = new Headers(headers);
     new Headers(init?.headers).forEach((value, key) => {
+      // SDK resource reads default to */*; keep the driver's configured representation.
+      // Discovery and listings still need the SDK's specific protocol media types.
+      if (!discovering && key === "accept" && value === "*/*" && merged.has(key)) return;
       merged.set(key, value);
     });
     new Headers(txHeaders).forEach((value, key) => {
