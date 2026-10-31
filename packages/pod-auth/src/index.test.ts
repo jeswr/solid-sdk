@@ -273,6 +273,29 @@ test("selected account must match authenticated claims and issuer profile trust"
   expect(await untrusted.auth.identity()).toBeNull();
 });
 
+test.each([
+  "login",
+  "private",
+  "lws",
+])("the UI-selected WebID must match claims before credential use through %s", async (operation) => {
+  const { auth, op, options } = fixture();
+  options.ui.getWebId = async () => "https://id.example/bob";
+  const login = vi.fn();
+  auth.on("login", login);
+  await expect(
+    operation === "login" ? auth.login() : auth.fetch(op.root + operation),
+  ).rejects.toThrow("selected account");
+  expect(await auth.identity()).toBeNull();
+  expect(login).not.toHaveBeenCalled();
+  expect(op.stats.accepted).toBe(0);
+  expect(op.stats.exchanges).toBe(0);
+  expect(
+    op.requests.some(
+      (request) => request.url.startsWith(op.root) && request.headers.has("authorization"),
+    ),
+  ).toBe(false);
+});
+
 test("automatic boundary verifies a storage before prompting and eligible restricts even static roots", async () => {
   const f = fixture({}, { boundary: {} });
   expect((await f.auth.fetch(f.op.root + "private")).status).toBe(200);

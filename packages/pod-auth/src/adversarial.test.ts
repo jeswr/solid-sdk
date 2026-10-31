@@ -3,6 +3,7 @@ import { createHash, generateKeyPairSync, randomUUID, sign } from "node:crypto";
 import {
   DPoPTokenProvider,
   OidcIdTokenSource,
+  OidcSession,
   SolidUmaTokenProvider,
 } from "@jeswr/reactive-authentication";
 import { afterEach, expect, test, vi } from "vitest";
@@ -242,6 +243,289 @@ function twoAccounts(onExchange?: (request: Request) => Promise<Response>) {
   };
   return { alice, bob, options };
 }
+
+function installUma() {
+  const transport = globalThis.fetch;
+  const exchanges: Request[] = [];
+  let accepted = 0;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.url === "https://pod.example/.well-known/uma2-configuration")
+      return Response.json({
+        issuer: "https://pod.example/",
+        token_endpoint: "https://pod.example/uma-token",
+        uma_profiles_supported: ["http://openid.net/specs/openid-connect-core-1_0.html#IDToken"],
+      });
+    if (request.url === "https://pod.example/uma-token") {
+      exchanges.push(request);
+      const form = new URLSearchParams(await request.clone().text());
+      expect(form.get("grant_type")).toBe("urn:ietf:params:oauth:grant-type:uma-ticket");
+      expect(form.has("claim_token")).toBe(true);
+      expect(request.headers.has("dpop")).toBe(true);
+      return Response.json({ access_token: "uma-access", token_type: "Bearer", expires_in: 300 });
+    }
+    if (request.url.endsWith("/uma")) {
+      if (request.headers.get("authorization") === "Bearer uma-access") {
+        accepted++;
+        return new Response("protected UMA");
+      }
+      return new Response(null, {
+        status: 401,
+        headers: {
+          "www-authenticate": 'UMA as_uri="https://pod.example/", ticket="test"',
+        },
+      });
+    }
+    return transport(request);
+  });
+  return { exchanges, accepted: () => accepted };
+}
+
+test("UMA validates the UI-selected account before disclosing its ID token", async () => {
+  const { op, options } = setup();
+  const uma = installUma();
+  options.ui.getWebId = async () => "https://id.example/bob";
+  const auth = createPodAuth(options);
+  await expect(auth.fetch(op.root + "uma")).rejects.toThrow("selected account");
+  expect(op.stats.tokens).toBe(1);
+  expect(uma.exchanges).toHaveLength(0);
+  expect(uma.accepted()).toBe(0);
+  expect(await auth.identity()).toBeNull();
+});
+
+test("UMA validates its own shared-session context when another account logs in first", async () => {
+  const { alice, bob, options } = twoAccounts();
+  const uma = installUma();
+  const ready = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const getCode = options.ui.getCode;
+  options.ui.getCode = async (url, signal) => {
+    if (url.href.startsWith(bob.issuer)) {
+      ready.resolve();
+      await release.promise;
+    }
+    return getCode(url, signal);
+  };
+  const auth = createPodAuth(options);
+  const pending = Promise.allSettled([auth.fetch(bob.root + "uma")]);
+  await ready.promise;
+  try {
+    expect((await auth.fetch(alice.root + "nested/private")).status).toBe(200);
+    expect((await auth.identity())?.issuer).toBe(alice.issuer);
+  } finally {
+    release.resolve();
+  }
+  expect((await pending)[0]).toMatchObject({
+    status: "rejected",
+    reason: { message: expect.stringContaining("selected account") },
+  });
+  expect(uma.exchanges).toHaveLength(0);
+  expect(uma.accepted()).toBe(0);
+  expect(await auth.identity()).toBeNull();
+});
+
+test("an explicit login cannot replace UMA's UI selection during issuer discovery", async () => {
+  const alice = createMockOp();
+  const bob = createMockOp({
+    subject: "https://id.example/bob",
+    webId: "https://id.example/bob#me",
+  });
+  let active = alice;
+  const ready = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let paused = false;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    const response = await active.fetch(request);
+    if (request.url === alice.issuer + ".well-known/openid-configuration" && !paused) {
+      paused = true;
+      ready.resolve();
+      await release.promise;
+    }
+    return response;
+  });
+  const uma = installUma();
+  const auth = createPodAuth({
+    clientId: alice.clientId,
+    redirectUri: alice.redirectUri,
+    boundary: { roots: [alice.root], automatic: false },
+    ui: {
+      getWebId: async () => active.webId!,
+      getCode: (url, signal) => active.getCode(url, signal),
+    },
+  });
+  const pending = Promise.allSettled([auth.fetch(alice.root + "uma")]);
+  await ready.promise;
+  try {
+    active = bob;
+    expect((await auth.login({ webId: bob.webId })).webId).toBe(bob.webId);
+  } finally {
+    release.resolve();
+  }
+  expect((await pending)[0]).toMatchObject({
+    status: "rejected",
+    reason: { message: expect.stringContaining("selected account") },
+  });
+  expect(uma.exchanges).toHaveLength(0);
+  expect(uma.accepted()).toBe(0);
+  expect(await auth.identity()).toBeNull();
+});
+
+test("a new login cannot relabel an in-flight Solid credential with cached claims", async () => {
+  const alice = createMockOp();
+  const bob = createMockOp({
+    subject: "https://id.example/bob",
+    webId: "https://id.example/bob#me",
+  });
+  let active = alice;
+  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
+    active.fetch(input, init),
+  );
+  const firstReady = Promise.withResolvers<void>();
+  const secondReady = Promise.withResolvers<void>();
+  const bobReady = Promise.withResolvers<void>();
+  const releaseFirst = Promise.withResolvers<void>();
+  const releaseSecond = Promise.withResolvers<void>();
+  const releaseBob = Promise.withResolvers<void>();
+  const identity = DPoPTokenProvider.prototype.identity;
+  vi.spyOn(DPoPTokenProvider.prototype, "identity").mockImplementation(async function (
+    this: DPoPTokenProvider,
+    request,
+  ) {
+    if (request.url === alice.root + "first") {
+      firstReady.resolve();
+      await releaseFirst.promise;
+    }
+    if (request.url === alice.root) {
+      bobReady.resolve();
+      await releaseBob.promise;
+    }
+    return identity.call(this, request);
+  });
+  const upgrade = DPoPTokenProvider.prototype.upgrade;
+  vi.spyOn(DPoPTokenProvider.prototype, "upgrade").mockImplementation(async function (
+    this: DPoPTokenProvider,
+    request,
+    challenge,
+  ) {
+    if (request.url === alice.root + "private") {
+      secondReady.resolve();
+      await releaseSecond.promise;
+    }
+    return upgrade.call(this, request, challenge);
+  });
+  const auth = createPodAuth({
+    clientId: alice.clientId,
+    redirectUri: alice.redirectUri,
+    boundary: { roots: [alice.root], automatic: false },
+    ui: {
+      getWebId: async () => active.webId!,
+      getCode: (url, signal) => active.getCode(url, signal),
+    },
+  });
+  // Hold Alice's claims before publication, leaving a cached session with no current identity yet.
+  const first = Promise.allSettled([auth.fetch(alice.root + "first")]);
+  await firstReady.promise;
+  const second = Promise.allSettled([auth.fetch(alice.root + "private")]);
+  await secondReady.promise;
+  active = bob;
+  const login = Promise.allSettled([auth.login({ webId: bob.webId })]);
+  await bobReady.promise;
+  try {
+    releaseSecond.resolve();
+    expect((await second)[0]).toMatchObject({
+      status: "rejected",
+      reason: { message: expect.stringContaining("selection changed") },
+    });
+    expect(bob.stats.accepted).toBe(0);
+  } finally {
+    releaseFirst.resolve();
+    releaseSecond.resolve();
+    releaseBob.resolve();
+    await Promise.all([first, login]);
+  }
+});
+
+test("UMA checks every session read and reuses a validated session and RPT", async () => {
+  const { op, options } = setup();
+  const uma = installUma();
+  const auth = createPodAuth(options);
+  await auth.login({ webId: op.webId, issuer: op.issuer });
+  expect((await auth.fetch(op.root + "uma")).status).toBe(200);
+  expect((await auth.fetch(op.root + "uma")).status).toBe(200);
+  expect(uma.exchanges).toHaveLength(1);
+  expect(uma.accepted()).toBe(2);
+  expect(op.stats.tokens).toBe(1);
+  expect((await auth.identity())?.webId).toBe(op.webId);
+});
+
+test("UMA permits an issuer-only identity with no WebID and forgets the shared session", async () => {
+  const op = createMockOp({ webId: null });
+  vi.stubGlobal("fetch", op.fetch);
+  const uma = installUma();
+  const providers = createProviders(
+    {
+      clientId: op.clientId,
+      redirectUri: op.redirectUri,
+      boundary: { roots: [op.root], automatic: false },
+      ui: { getWebId: async () => op.webId!, getCode: op.getCode },
+    },
+    { challenge: vi.fn(), session: vi.fn(async () => {}) },
+  );
+  await providers.login({ issuer: op.issuer });
+  expect((await providers.manager.fetch(op.root + "uma")).status).toBe(200);
+  expect(uma.exchanges).toHaveLength(1);
+  await providers.manager.logout();
+});
+
+test.each([
+  "entry",
+  "identity",
+])("UMA refuses missing session %s before exchange", async (missing) => {
+  const { op, options } = setup();
+  const uma = installUma();
+  const get = OidcSession.prototype.get;
+  vi.spyOn(OidcSession.prototype, "get").mockImplementation(async function (
+    this: OidcSession,
+    ...args
+  ) {
+    const entry = await get.apply(this, args);
+    return missing === "entry" ? undefined : { ...entry!, identity: undefined };
+  });
+  const auth = createPodAuth(options);
+  await expect(auth.fetch(op.root + "uma")).rejects.toThrow("did not establish an identity");
+  expect(uma.exchanges).toHaveLength(0);
+  expect(uma.accepted()).toBe(0);
+  expect(await auth.identity()).toBeNull();
+});
+
+test.each([
+  'UMA as_uri="https://untrusted.example/", ticket="test"',
+  'Bearer as_uri="https://untrusted.example/", realm="https://pod.example/alice/"',
+  'Bearer resource_metadata="https://untrusted.example/metadata"',
+  "Unknown",
+])("untrusted or unsupported challenge %s does not open account or authorization UI", async (challenge) => {
+  const { op, options } = setup();
+  const transport = globalThis.fetch;
+  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    return request.url.startsWith(op.root)
+      ? new Response(null, {
+          status: 401,
+          headers: { "www-authenticate": challenge },
+        })
+      : transport(request);
+  });
+  options.ui.getWebId = vi.fn(options.ui.getWebId);
+  options.ui.getCode = vi.fn(options.ui.getCode);
+  const auth = createPodAuth(options);
+  if (challenge === "Unknown" || challenge.includes("resource_metadata"))
+    expect((await auth.fetch(op.root + "uma")).status).toBe(401);
+  else await expect(auth.fetch(op.root + "uma")).rejects.toThrow(/not trusted|origin/);
+  expect(options.ui.getWebId).not.toHaveBeenCalled();
+  expect(options.ui.getCode).not.toHaveBeenCalled();
+  expect(await auth.identity()).toBeNull();
+});
 
 test("LWS checks the credential account before exchange when another context logs in first", async () => {
   const { alice, bob, options } = twoAccounts();

@@ -25,7 +25,6 @@ export { AmbiguousIssuerError };
 export function createPodAuth(options: PodAuthOptions): PodAuth {
   validateOptions(options);
   let current: Identity | null = null;
-  let expected: LoginHint = {};
   let pending: { key: string; promise: Promise<Identity> } | undefined;
   const listeners = new Map<AuthEventType, Set<(event: AuthEvent) => void>>();
   const snapshot = () =>
@@ -44,7 +43,12 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       }
     }
   };
-  const session = async (_request: Request, claims: Claims, protocol: Identity["protocol"]) => {
+  const session = async (
+    _request: Request,
+    claims: Claims,
+    protocol: Identity["protocol"],
+    expected: LoginHint,
+  ) => {
     if (
       (expected.webId !== undefined && expected.webId !== claims.webId) ||
       (expected.issuer !== undefined && !sameIssuer(expected.issuer, claims.issuer)) ||
@@ -102,7 +106,6 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
           );
         return Promise.resolve(snapshot()!);
       }
-      expected = selected;
       const promise = providers
         .login(selected)
         .then(() => snapshot()!)

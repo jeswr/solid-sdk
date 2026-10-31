@@ -40,7 +40,12 @@ export function createProviders(
   options: PodAuthOptions,
   hooks: {
     challenge(url: string): void;
-    session(request: Request, claims: Claims, protocol: "solid-oidc" | "lws"): Promise<void>;
+    session(
+      request: Request,
+      claims: Claims,
+      protocol: "solid-oidc" | "lws",
+      selected: LoginHint,
+    ): Promise<void>;
   },
 ) {
   const transport = nonReactiveFetch();
@@ -72,48 +77,83 @@ export function createProviders(
       : scopedStore<T>(options.storage.caches, namespace + ":" + name);
   let hint: LoginHint = {};
   let sessionRequest: Request | undefined;
-  const getWebId = async () =>
-    secureUrl(hint.webId ?? (await options.ui.getWebId()), insecure, "WebID");
-  const webIdProvider = new WebIdIssuerProvider(getWebId, http, async (issuers) => {
-    let selected: string;
-    if (hint.issuer !== undefined) selected = hint.issuer;
-    else if (issuers.length === 1) selected = issuers[0]!.href;
-    else if (options.ui.chooseIssuer)
-      selected = await options.ui.chooseIssuer(issuers.map((i) => i.href));
-    else throw new AmbiguousIssuerError();
-    const result = secureUrl(selected, insecure, "issuer");
-    if (!issuers.some((i) => i.href === result.href))
-      throw new Error("Selected issuer is not listed by the WebID");
-    return result;
-  });
-  // An unsuccessful attempt must not pin later login hints to its cached issuer.
-  const issuerContext: ContextKey = async (request, challenge) =>
+  const selections = new Map<string, Promise<LoginHint>>();
+  const requestSelections = new WeakMap<Request, Promise<LoginHint>>();
+  const selectionFor = (request: Request, selected = hint) => {
+    let selection = requestSelections.get(request);
+    if (selection === undefined) {
+      selection = (async () => {
+        const key = JSON.stringify([await boundary.contextKey(request), selected]);
+        let pending = selections.get(key);
+        if (pending === undefined) {
+          pending = (async () =>
+            selected.webId !== undefined || selected.issuer !== undefined
+              ? selected
+              : { webId: secureUrl(await options.ui.getWebId(), insecure, "WebID").href })();
+          selections.set(key, pending);
+          pending.catch(() => selections.delete(key));
+        }
+        return await pending;
+      })();
+      // Issuer discovery and the session lookup must retain one selection across later login hints.
+      requestSelections.set(request, selection);
+    }
+    return selection;
+  };
+  const contextFor = async (request: Request, selected: LoginHint) =>
     JSON.stringify([
-      await boundary.contextKey(request, challenge),
-      hint.webId ?? null,
-      hint.issuer ?? null,
+      await boundary.contextKey(request),
+      selected.webId ?? null,
+      selected.issuer ?? null,
     ]);
-  const issuerProvider = new CachingIssuerProvider(
-    {
-      getIssuer: async (request, challenge) => {
-        const hinted = new HintIssuerProvider(
-          hint.webId === undefined && hint.issuer !== undefined
-            ? { issuer: new URL(hint.issuer) }
+  const sessionContext: ContextKey = async (request) =>
+    await contextFor(request, await selectionFor(request));
+  const authorizationServers = new Map<string, CachingAuthorizationServerProvider>();
+  const asFor = (selected: LoginHint) => {
+    const key = JSON.stringify(selected);
+    let provider = authorizationServers.get(key);
+    if (provider === undefined) {
+      const webIdProvider = new WebIdIssuerProvider(
+        async () => secureUrl(selected.webId!, insecure, "WebID"),
+        http,
+        async (issuers) => {
+          let issuer: string;
+          if (selected.issuer !== undefined) issuer = selected.issuer;
+          else if (issuers.length === 1) issuer = issuers[0]!.href;
+          else if (options.ui.chooseIssuer)
+            issuer = await options.ui.chooseIssuer(issuers.map((i) => i.href));
+          else throw new AmbiguousIssuerError();
+          const result = secureUrl(issuer, insecure, "issuer");
+          if (!issuers.some((i) => i.href === result.href))
+            throw new Error("Selected issuer is not listed by the WebID");
+          return result;
+        },
+      );
+      const context: ContextKey = async (request) => await contextFor(request, selected);
+      const issuerProvider = new CachingIssuerProvider(
+        new HintIssuerProvider(
+          selected.webId === undefined && selected.issuer !== undefined
+            ? { issuer: new URL(selected.issuer) }
             : {},
           webIdProvider,
           async () => true,
-        );
-        return hinted.getIssuer(request, challenge);
-      },
-    },
-    metadata("issuer") ?? browser?.issuer,
-    issuerContext,
-  );
-  const asProvider = new CachingAuthorizationServerProvider(
-    new XASProvider(issuerProvider, http),
-    metadata("as") ?? browser?.authorizationServer,
-    issuerContext,
-  );
+        ),
+        metadata("issuer") ?? browser?.issuer,
+        context,
+      );
+      provider = new CachingAuthorizationServerProvider(
+        new XASProvider(issuerProvider, http),
+        metadata("as") ?? browser?.authorizationServer,
+        context,
+      );
+      authorizationServers.set(key, provider);
+    }
+    return provider;
+  };
+  const asProvider = {
+    getAuthorizationServer: async (request: Request) =>
+      await asFor(await selectionFor(request)).getAuthorizationServer(request),
+  };
   // Client registrations can contain secrets and always stay in memory.
   const clientProvider = new CachingClientProvider(
     typeof options.clientId === "string"
@@ -137,7 +177,7 @@ export function createProviders(
     namespace,
     fence,
     http,
-    context: boundary.contextKey,
+    context: sessionContext,
     scopes: ["openid", "webid"],
     serverQuirks: true,
     verifyWebId: true,
@@ -160,12 +200,36 @@ export function createProviders(
     undefined,
     sessionOptions,
   );
+  // Interpose on the shared session read, so the exact ID token selected by UMA is checked before exchange.
+  const umaSession = new Proxy(solidProvider.session, {
+    get(target, property) {
+      if (property === "get")
+        return async (...args: Parameters<typeof target.get>) => {
+          const entry = await target.get(...args);
+          if (entry?.identity === undefined)
+            throw new Error("Authentication did not establish an identity");
+          const [url, webId, issuer] = JSON.parse(args[1]) as [
+            string,
+            string | null,
+            string | null,
+          ];
+          await hooks.session(new Request(url), entry.identity, "solid-oidc", {
+            ...(webId === null ? {} : { webId }),
+            ...(issuer === null ? {} : { issuer }),
+          });
+          return entry;
+        };
+      // OidcSession's accessors and methods need the original receiver for their private fields.
+      const value: unknown = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
   const umaProvider = new SolidUmaTokenProvider(
     options.redirectUri,
     codeProvider,
     asProvider,
     clientProvider,
-    { ...sessionOptions, session: solidProvider.session },
+    { ...sessionOptions, session: umaSession },
   );
   const lwsContexts = new Map<
     string,
@@ -175,34 +239,47 @@ export function createProviders(
   const lwsFor = async (request: Request) => {
     // Capture the selected Solid session before any awaits; another upgrade may select a new one.
     const target = sessionRequest ?? request;
-    const selected = hint;
-    const context = await boundary.contextKey(target);
-    const key = JSON.stringify([namespace, context, selected.webId, selected.issuer]);
+    const selectedHint = hint;
+    const key = JSON.stringify([namespace, await boundary.contextKey(target), selectedHint]);
     let binding = lwsContexts.get(key);
     if (binding === undefined) {
-      let oidc: OidcIdTokenSource | undefined;
+      let credentialContext: { oidc: OidcIdTokenSource; selected: LoginHint } | undefined;
       const getOidc = async (signal: AbortSignal) => {
-        if (oidc === undefined) {
-          const as = await asProvider.getAuthorizationServer(new Request(target.url, { signal }));
-          oidc = new OidcIdTokenSource(as, options.redirectUri, codeProvider, clientProvider, {
-            ...sessionOptions,
-            session: solidProvider.session,
-            context,
-          });
+        if (credentialContext === undefined) {
+          // Defer the picker until LWS has verified its challenge and authorization server.
+          const selected = await selectionFor(target, selectedHint);
+          const context = await contextFor(target, selected);
+          const as = await asFor(selected).getAuthorizationServer(
+            new Request(target.url, { signal }),
+          );
+          const oidc = new OidcIdTokenSource(
+            as,
+            options.redirectUri,
+            codeProvider,
+            clientProvider,
+            {
+              ...sessionOptions,
+              session: solidProvider.session,
+              context,
+            },
+          );
+          credentialContext = { oidc, selected };
         }
-        return oidc;
+        return credentialContext;
       };
       const validate = async (signal: AbortSignal) => {
-        const claims = await (await getOidc(signal)).identity();
+        const { oidc, selected } = await getOidc(signal);
+        const claims = await oidc.identity();
         if (claims === undefined) throw new Error("Authentication did not establish an identity");
-        await hooks.session(target, claims, "lws");
+        await hooks.session(target, claims, "lws", selected);
         sessionRequest = target;
       };
       const source: CredentialSource = {
         id: key,
         fence,
         getCredential: async (request: CredentialRequest) => {
-          const credential = await (await getOidc(request.signal)).getCredential(request);
+          const { oidc } = await getOidc(request.signal);
+          const credential = await oidc.getCredential(request);
           // Validate the identity of this exact credential context before it leaves the source.
           await validate(request.signal);
           return credential;
@@ -253,10 +330,15 @@ export function createProviders(
       return true;
     },
     upgrade: async (request, challenge) => {
+      // UMA performs its trust check before resolving the selected account or requesting credentials.
+      const attemptHint = hint;
+      const selected = solid ? await selectionFor(request) : undefined;
       const upgraded = await provider.upgrade(request, challenge);
+      if (solid && hint !== attemptHint)
+        throw new Error("Login selection changed during authentication");
       const claims = await solidProvider.identity(request);
       if (claims === undefined) throw new Error("Authentication did not establish an identity");
-      await hooks.session(request, claims, protocol);
+      await hooks.session(request, claims, protocol, selected ?? (await selectionFor(request)));
       sessionRequest = request;
       return upgraded;
     },
@@ -286,12 +368,14 @@ export function createProviders(
     solidProvider,
     login: async (value: LoginHint) => {
       hint = value;
+      selections.clear();
       // A synthetic upgrade obtains a session without sending credentials to a login hint's URL.
       const request = new Request(boundary.roots()[0] ?? options.redirectUri);
+      const selected = await selectionFor(request);
       await solidProvider.upgrade(request);
       const claims = await solidProvider.identity(request);
       if (claims === undefined) throw new Error("Login did not establish an identity");
-      await hooks.session(request, claims, "solid-oidc");
+      await hooks.session(request, claims, "solid-oidc", selected);
       sessionRequest = request;
     },
   };
