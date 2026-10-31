@@ -37,7 +37,10 @@ interface Checkpoint {
   since: string | null;
   before: string | null;
   page: number;
-  offset: number;
+  pending: string[] | null;
+  fullPage: boolean;
+  scan: string;
+  previousScan: string | null;
 }
 
 function accountId(account: AccountRef): string {
@@ -99,27 +102,64 @@ function notification(raw: string) {
 }
 
 function checkpoint(cursor: string | undefined, account: string): Checkpoint {
-  if (cursor === undefined) return { account, since: null, before: null, page: 1, offset: 0 };
+  const initial: Checkpoint = {
+    account,
+    since: null,
+    before: null,
+    page: 1,
+    pending: null,
+    fullPage: false,
+    scan: "",
+    previousScan: null,
+  };
+  if (cursor === undefined) return initial;
   if (typeof cursor !== "string") throw new TypeError("invalid GitHub cursor");
   const value = record(json(cursor, CURSOR_LIMITS));
   if (
-    Object.keys(value).length !== 5 ||
     value.account !== account ||
     !(value.since === null || timestamp(value.since)) ||
     !(value.before === null || timestamp(value.before)) ||
     typeof value.page !== "number" ||
     !Number.isSafeInteger(value.page) ||
     value.page < 1 ||
-    typeof value.offset !== "number" ||
-    !Number.isSafeInteger(value.offset) ||
-    value.offset < 0 ||
-    value.offset >= PAGE_SIZE ||
-    (value.before === null && (value.page !== 1 || value.offset !== 0)) ||
     (typeof value.before === "string" &&
       typeof value.since === "string" &&
       value.since > value.before)
   )
     throw new TypeError("invalid GitHub cursor");
+  // Old positional cursors cannot identify pending threads. Replay their whole window.
+  if (Object.keys(value).length === 5 && "offset" in value) {
+    if (
+      typeof value.offset !== "number" ||
+      !Number.isSafeInteger(value.offset) ||
+      value.offset < 0 ||
+      value.offset >= PAGE_SIZE ||
+      (value.before === null && (value.page !== 1 || value.offset !== 0))
+    )
+      throw new TypeError("invalid GitHub cursor");
+    return { ...initial, since: value.since, before: value.before } as Checkpoint;
+  }
+  const fingerprint = (hash: unknown) =>
+    typeof hash === "string" && /^sha-256:[0-9a-f]{64}$/.test(hash);
+  if (
+    Object.keys(value).length !== 8 ||
+    typeof value.fullPage !== "boolean" ||
+    !(value.scan === "" || fingerprint(value.scan)) ||
+    !(value.previousScan === null || fingerprint(value.previousScan)) ||
+    (value.pending !== null &&
+      (!Array.isArray(value.pending) ||
+        value.pending.length === 0 ||
+        value.pending.length > PAGE_SIZE ||
+        (!value.fullPage && value.pending.length === PAGE_SIZE))) ||
+    (value.pending === null && value.fullPage) ||
+    (value.before === null &&
+      (value.page !== 1 ||
+        value.pending !== null ||
+        value.scan !== "" ||
+        value.previousScan !== null))
+  )
+    throw new TypeError("invalid GitHub cursor");
+  if (Array.isArray(value.pending)) value.pending.forEach(threadId);
   return value as unknown as Checkpoint;
 }
 
@@ -201,31 +241,32 @@ export function createGithubReader(options: GithubReaderOptions): ChannelBinding
           state.before = new Date(now()).toISOString().replace(/\.\d{3}Z$/, "Z");
         if (!timestamp(state.before) || (state.since !== null && state.since > state.before))
           throw new TypeError("invalid GitHub polling window");
-        const query = new URLSearchParams({
-          all: "true",
-          per_page: String(PAGE_SIZE),
-          page: String(state.page),
-          before: state.before,
-        });
-        // Overlap one second at a completed checkpoint; stable ids deduplicate boundary replays.
-        if (state.since !== null)
-          query.set(
-            "since",
-            new Date(Date.parse(state.since) - 1000).toISOString().replace(".000Z", "Z"),
-          );
-        const response = json(await gh(`/notifications?${query}`));
-        if (
-          !Array.isArray(response) ||
-          response.length > PAGE_SIZE ||
-          state.offset > response.length
-        )
-          throw new ChannelParseError("invalid GitHub notification page");
-        // Validate all ids before constructing any endpoint. Never follow provider-supplied URLs.
-        const ids = response.map((entry) => threadId(record(entry).id));
+        if (state.pending === null) {
+          const query = new URLSearchParams({
+            all: "true",
+            per_page: String(PAGE_SIZE),
+            page: String(state.page),
+            before: state.before,
+          });
+          // Overlap one second at a completed checkpoint; stable ids deduplicate boundary replays.
+          if (state.since !== null)
+            query.set(
+              "since",
+              new Date(Date.parse(state.since) - 1000).toISOString().replace(".000Z", "Z"),
+            );
+          const response = json(await gh(`/notifications?${query}`));
+          if (!Array.isArray(response) || response.length > PAGE_SIZE)
+            throw new ChannelParseError("invalid GitHub notification page");
+          // Snapshot pending ids before applying caller bounds; pages can shrink between pulls.
+          // Validate every id before constructing endpoints. Never follow provider-supplied URLs.
+          state.pending = response.map((entry) => threadId(record(entry).id));
+          state.fullPage = response.length === PAGE_SIZE;
+          state.scan = digestBytes(JSON.stringify([state.scan, state.pending]));
+        }
         const items: InboundRawMessage[] = [];
         let bytes = 0;
-        while (state.offset < ids.length && items.length < maxItems) {
-          const expectedId = ids[state.offset];
+        while (state.pending.length > 0 && items.length < maxItems) {
+          const expectedId = state.pending[0];
           const raw = await gh(`/notifications/threads/${expectedId}`);
           const detail = notification(raw);
           if (detail.id !== expectedId) throw new ChannelParseError("GitHub thread id mismatch");
@@ -236,15 +277,28 @@ export function createGithubReader(options: GithubReaderOptions): ChannelBinding
           }
           bytes += size;
           items.push({ id: `github:${detail.id}:${detail.updated}`, raw });
-          state.offset++;
+          state.pending.shift();
         }
-        if (state.offset === ids.length) {
-          if (ids.length < PAGE_SIZE) {
+        if (state.pending.length === 0) {
+          state.pending = null;
+          if (state.fullPage) state.page++;
+          else if (
+            (state.page === 1 && state.previousScan === null) ||
+            state.scan === state.previousScan
+          ) {
             state.since = state.before;
             state.before = null;
             state.page = 1;
-          } else state.page++;
-          state.offset = 0;
+            state.scan = "";
+            state.previousScan = null;
+          } else {
+            // Offset pagination can skip records shifted out of earlier pages. Re-scan the
+            // fixed window until two complete id scans agree before committing its watermark.
+            state.page = 1;
+            state.previousScan = state.scan;
+            state.scan = "";
+          }
+          state.fullPage = false;
         }
         return { items, next: JSON.stringify(state) };
       },

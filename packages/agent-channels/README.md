@@ -78,11 +78,16 @@ for (const item of page.items) {
 
 One list call reads at most one 50-item provider page and fetches thread details
 until either caller bound is reached. Cursors bind to the configured account,
-retain the polling window and page offset, and overlap one second between completed
-windows; consumers must deduplicate stable message IDs. A nonempty result may have
-another page, and an empty result may complete a window. Continue from `page.next`
-on subsequent scheduled pulls. Notification pagination is not a provider snapshot;
-concurrent thread updates can move records between pages. No read/done mutations
+retain pending thread IDs from the fetched page and the polling window. Completed
+windows overlap one second; consumers must deduplicate stable message IDs. A
+nonempty result may have another page, and an empty result may complete a window.
+Continue from `page.next` on subsequent scheduled pulls. Pending IDs are drained
+without re-fetching the list.
+Concurrent updates can shift records between provider pages, so multi-page windows
+are replayed until two complete ID scans agree before advancing the completed
+watermark. Scans use bounded fingerprints rather than retaining the entire window;
+continued provider changes can require additional pulls and replays. Legacy offset
+cursors conservatively replay their window from page one. No read/done mutations
 are made (`all=true` includes already-read notifications).
 
 Parsing uses the exact thread response bytes for provenance, enforces the shared
