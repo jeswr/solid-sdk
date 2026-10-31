@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Runs `callback` while holding a Web Lock.
  *
@@ -12,7 +13,11 @@ export async function withLock<T>(
 ): Promise<T> {
   const locks = globalThis.navigator?.locks;
   if (locks === undefined) {
-    throw new Error("The Web Locks API is required (browsers, workers, Node.js >= 24.5)");
+    if (typeof process !== "undefined" && process.versions?.node !== undefined) {
+      options.signal?.throwIfAborted();
+      return await callback();
+    }
+    throw new Error("The Web Locks API is required in browsers and workers");
   }
 
   const lockOptions: LockOptions = { mode: options.mode ?? "exclusive" };

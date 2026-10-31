@@ -122,6 +122,15 @@ export interface OidcSessionOptions {
 
   /** Revoke refresh tokens known to this instance on {@link OidcSession.forget} when supported. @defaultValue true */
   readonly revokeOnForget?: boolean;
+
+  /** Keep durable refresh credentials on transient failures; clear on invalid_grant or successful consumption. */
+  readonly preserveRefreshOnFailure?: boolean;
+
+  /** During noninteractive restore only, try one prompt=none grant after invalid_grant. Never falls back to interaction. */
+  readonly silentAfterRefreshFailure?: boolean;
+
+  /** Override the session lock when a store maps several engine contexts to one credential. */
+  readonly sessionLock?: (key: string) => Promise<string>;
 }
 
 /** Treat tokens as expired this long before their stated expiry. */
@@ -217,13 +226,17 @@ export class OidcSession {
     const key = await this.#key(as.issuer, context);
     const store = this.#options.sessionStore;
 
+    const lockName = await this.#lockName(key);
     return await withLock(
-      this.#lockName(key),
+      lockName,
       async () => {
         combined.throwIfAborted();
         await fence.assertCurrent(generation);
         combined.throwIfAborted();
 
+        // A store may resolve an account alias while this operation waits for its initial lock.
+        if (lockName !== (await this.#lockName(key)))
+          return await this.get(as, context, combined, usable, interactive, generation);
         const cached = await this.#cache.getItem(key);
         if (cached !== null && cached.generation === generation && usable(cached, false))
           return cached;
@@ -234,13 +247,21 @@ export class OidcSession {
         const record = candidate?.generation === generation ? candidate : null;
 
         await this.#cache.removeItem(key);
-        if (durable !== null && (record !== null || durable.generation !== generation)) {
+        if (
+          durable !== null &&
+          ((record !== null && this.#options.preserveRefreshOnFailure !== true) ||
+            durable.generation !== generation)
+        ) {
           // About to consume it, or left over from before a logout.
           await store!.removeItem(key);
         }
 
+        let invalidGrant = false;
         if (record !== null) {
           const refreshed = await this.#refresh(record, combined);
+          invalidGrant = refreshed === undefined;
+          if (durable !== null && this.#options.preserveRefreshOnFailure === true)
+            await store!.removeItem(key);
           if (refreshed !== undefined) {
             const committed = await this.#commit(key, refreshed, generation, combined);
             // A refresh response need not include what the caller needs (e.g. a new ID token).
@@ -248,7 +269,15 @@ export class OidcSession {
           }
         }
 
-        if (!interactive) return undefined;
+        if (!interactive) {
+          if (!invalidGrant || this.#options.silentAfterRefreshFailure !== true) return undefined;
+          return await this.#commit(
+            key,
+            await this.#authorize(as, combined, true),
+            generation,
+            combined,
+          );
+        }
         return await this.#commit(key, await this.#authorize(as, combined), generation, combined);
       },
       { signal: combined },
@@ -269,7 +298,7 @@ export class OidcSession {
   /** Marks the access token as rejected if it is still the cached one; the next {@link get} renews it. */
   async invalidate(issuer: string, context: string, accessToken: string): Promise<void> {
     const key = await this.#key(issuer, context);
-    await withLock(this.#lockName(key), async () => {
+    await withLock(await this.#lockName(key), async () => {
       const cached = await this.#cache.getItem(key);
       if (cached?.tokenResult.access_token === accessToken) {
         await this.#cache.setItem(key, { ...cached, expiresAt: 0 });
@@ -292,10 +321,11 @@ export class OidcSession {
    * revokes refresh tokens known to this instance when the server supports RFC 7009, and clears the stores.
    *
    * Stores with `clear()` are emptied completely; stores without it only lose the keys this instance
-   * wrote. Records that remain are unusable anyway because they carry an older fence generation, but
+   * wrote (plus explicit `storedKeys` supplied by a catalog after reload). Records that remain are unusable anyway because they carry an older fence generation, but
    * their refresh tokens are not revoked. Revocation failures are reported after local state is cleared.
    */
-  async forget(): Promise<void> {
+  async forget(storedKeys: readonly string[] = []): Promise<void> {
+    for (const key of storedKeys) this.#keys.add(key);
     const failures: unknown[] = [];
     await this.#fence.supersede(async () => {
       if (this.#options.revokeOnForget !== false) {
@@ -314,7 +344,11 @@ export class OidcSession {
       throw new AggregateError(failures, "Local session cleared, but token revocation failed");
   }
 
-  async #authorize(as: oauth.AuthorizationServer, signal: AbortSignal): Promise<Fresh> {
+  async #authorize(
+    as: oauth.AuthorizationServer,
+    signal: AbortSignal,
+    silentOnly = false,
+  ): Promise<Fresh> {
     const client = await this.#clientProvider.getClient(as, this.#callbackUri, signal);
     // Without DPoP the key is never used; it is still generated (locally, ES256, independent of server DPoP
     // metadata) because the stored record type requires one — keeping DPoPTokenCacheEntry unchanged.
@@ -331,8 +365,8 @@ export class OidcSession {
       signal,
       ...(this.#options.dpop === false ? {} : { dpop: oauth.DPoP(client, dpopKey) }),
       ...optional("http", this.#options.http),
-      ...optional("silentFirst", this.#options.silentFirst),
-      ...optional("prompt", this.#options.prompt),
+      ...optional("silentFirst", silentOnly ? false : this.#options.silentFirst),
+      ...optional("prompt", silentOnly ? "none" : this.#options.prompt),
       ...optional("requireS256", this.#options.requireS256),
       ...optional("tokenParameters", this.#options.tokenParameters),
       ...optional("parameters", this.#options.authorizationParameters),
@@ -541,8 +575,10 @@ export class OidcSession {
     ]);
   }
 
-  #lockName(key: string) {
-    return `reactive-authentication:${key}`;
+  async #lockName(key: string): Promise<string> {
+    return this.#options.sessionLock === undefined
+      ? `reactive-authentication:${key}`
+      : await this.#options.sessionLock(key);
   }
 }
 
