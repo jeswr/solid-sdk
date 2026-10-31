@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { Quad } from "@jeswr/fetch-rdf";
+import type { Quad, Term } from "@jeswr/fetch-rdf";
 import type { Features } from "@jeswr/storage-capabilities";
 import { DataFactory, Parser, Store } from "n3";
 import { describe, expect, test, vi } from "vitest";
@@ -483,6 +483,97 @@ describe("LWS JSON, raw and RDF patches", () => {
     const store = new Store(new Parser().parse(calls[1]?.body as string));
     expect(store.has(old)).toBe(false);
     expect(store.has(added)).toBe(true);
+  });
+  test.each([
+    { type: "text/turtle", retry: false },
+    { type: "text/turtle", retry: true },
+    { type: "application/trig", retry: false },
+    { type: "application/trig", retry: true },
+  ])("RMW keeps insertion blank nodes distinct in $type (retry: $retry)", async ({
+    type,
+    retry,
+  }) => {
+    const graphs = type === "application/trig";
+    const first = blankNode("insert0");
+    const second = blankNode("insert1");
+    const graph = blankNode("insert2");
+    const inserts = [
+      quad(first, nn("urn:new"), literal("first")),
+      quad(first, nn("urn:ref"), second),
+      quad(second, nn("urn:ref"), first),
+      ...(graphs
+        ? [
+            quad(first, nn("urn:graph-ref"), graph),
+            quad(second, nn("urn:new"), literal("graph"), graph),
+          ]
+        : []),
+    ];
+    let reads = 0;
+    let minted = 0;
+    let writes = 0;
+    const { storage, calls } = backend({
+      [`GET ${URL}`]: () => {
+        // On retry the resource occupies the labels allocated to the first PUT's insertions.
+        minted = reads ? (graphs ? 3 : 2) : 0;
+        return {
+          status: 200,
+          headers: { "content-type": type, etag: reads++ ? '"concurrent"' : tag },
+          body:
+            '[] <urn:stored> "subject". <urn:anchor> <urn:stored-ref> [].' +
+            (graphs ? '[] { <urn:stored> <urn:p> "graph". }' : ""),
+        };
+      },
+      [`PUT ${URL}`]: () => reply(retry && writes++ === 0 ? 412 : 204, { etag: '"final"' }),
+    });
+    // Simulate independent RDF factories issuing identifiers already used by the patch.
+    const factory = vi
+      .spyOn(DataFactory, "blankNode")
+      .mockImplementation((value) => blankNode(value || `insert${minted++}`));
+    try {
+      await storage.patch(URL, rdf(inserts), { ifMatch: tag });
+    } finally {
+      factory.mockRestore();
+    }
+    const puts = calls.filter(({ method }) => method === "PUT");
+    expect(puts).toHaveLength(retry ? 2 : 1);
+    expect(puts.map(({ headers }) => headers.get("if-match"))).toEqual(
+      retry ? [tag, '"concurrent"'] : [tag],
+    );
+    for (const put of puts) {
+      const actual = new Store(new Parser({ format: type }).parse(put.body as string));
+      expect(actual.size).toBe((graphs ? 3 : 2) + inserts.length);
+      const stored = actual.getQuads(null, nn("urn:stored"), literal("subject"), null)[0]?.subject;
+      const storedObject = actual.getQuads(nn("urn:anchor"), nn("urn:stored-ref"), null, null)[0]
+        ?.object;
+      const inserted = actual.getQuads(null, nn("urn:new"), literal("first"), null)[0]?.subject;
+      const linked = actual.getQuads(inserted, nn("urn:ref"), null, null)[0]?.object;
+      const originals: (Term | undefined)[] = [stored, storedObject];
+      const insertedNodes: (Term | undefined)[] = [inserted, linked];
+      expect(inserted?.equals(linked)).toBe(false);
+      expect(actual.countQuads(linked, nn("urn:ref"), inserted, null)).toBe(1);
+      if (graphs) {
+        const storedGraph = actual.getQuads(
+          nn("urn:stored"),
+          nn("urn:p"),
+          literal("graph"),
+          null,
+        )[0]?.graph;
+        const insertedGraph = actual.getQuads(linked, nn("urn:new"), literal("graph"), null)[0]
+          ?.graph;
+        originals.push(storedGraph);
+        insertedNodes.push(insertedGraph);
+        expect(actual.countQuads(inserted, nn("urn:graph-ref"), insertedGraph, null)).toBe(1);
+      }
+      for (const node of insertedNodes) {
+        expect(node?.termType).toBe("BlankNode");
+        for (const original of originals) {
+          expect(original?.termType).toBe("BlankNode");
+          expect(node?.equals(original)).toBe(false);
+        }
+      }
+    }
+    expect(inserts[0]?.subject.value).toBe("insert0");
+    expect(inserts[1]?.object.value).toBe("insert1");
   });
   test.each([
     "text/turtle",

@@ -1,7 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Conditional LWS mutations (ADR-003 §7, T-024).
+import type { Quad, Term } from "@jeswr/fetch-rdf";
 import { escapeIri } from "@jeswr/rdf-serialize";
-import { Store } from "n3";
+import { DataFactory, Store } from "n3";
 import { StorageError, storageErrorFrom } from "./errors.js";
 import { discard, mediaTypeOf, readResultFrom, scoped, send } from "./http.js";
 import { paginate, throwIfAborted } from "./internal.js";
@@ -91,6 +92,39 @@ function requiredEtag(method: string, url: string, value: string | null): string
   return value;
 }
 const pointer = (key: string) => key.replaceAll("~", "~0").replaceAll("/", "~1");
+
+/** Insertion blank nodes are local to the patch, never identities in the fetched dataset. */
+function freshenInserts(inserts: readonly Quad[], store: Store): Quad[] {
+  const taken = new Set(
+    [...store]
+      .flatMap((q) => [q.subject, q.object, q.graph])
+      .filter((term) => term.termType === "BlankNode")
+      .map((term) => term.value),
+  );
+  const labels = new Map<string, Term>();
+  let next = 0;
+  const freshen = (term: Term): Term => {
+    if (term.termType !== "BlankNode") return term;
+    let fresh = labels.get(term.value);
+    if (fresh === undefined) {
+      let label: string;
+      do {
+        label = `insert${next++}`;
+      } while (taken.has(label));
+      fresh = DataFactory.blankNode(label);
+      labels.set(term.value, fresh);
+    }
+    return fresh;
+  };
+  return inserts.map((q) =>
+    DataFactory.quad(
+      freshen(q.subject) as Quad["subject"],
+      q.predicate,
+      freshen(q.object) as Quad["object"],
+      freshen(q.graph) as Quad["graph"],
+    ),
+  );
+}
 
 /** Generate sequential JSON Patch operations without changing the fetched raw document. */
 function metadataPatch(
@@ -399,7 +433,7 @@ export function lwsWrites(
         if (!WRITABLE_RDF.has(type)) throw unsupported("PATCH", dest, "rdfConneg");
         const store = new Store([...dataset]);
         try {
-          applyQuadPatch(store, inserts, deletes, TRIPLE_FORMATS.has(type));
+          applyQuadPatch(store, freshenInserts(inserts, store), deletes, TRIPLE_FORMATS.has(type));
         } catch (cause) {
           throw new StorageError(
             (cause as RdfPatchError).kind === "conflict" ? "conflict" : "bad-request",
