@@ -138,7 +138,7 @@ export function createProviders(
     fence,
     http,
     context: boundary.contextKey,
-    scopes: ["openid", "webid", "offline_access"],
+    scopes: ["openid", "webid"],
     serverQuirks: true,
     verifyWebId: true,
     ...(options.storage === undefined

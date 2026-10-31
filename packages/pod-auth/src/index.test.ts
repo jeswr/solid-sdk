@@ -139,6 +139,59 @@ test("issuer hints preserve the distinction between tenant paths with and withou
   await expect(auth.login({ issuer: op.issuer + "/" })).rejects.toThrow("Account changes");
 });
 
+test.each([
+  false,
+  true,
+  undefined,
+])("offline_access is negotiated from provider support (%s)", async (supported) => {
+  const op = createMockOp();
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.url === op.issuer + ".well-known/openid-configuration") {
+      const metadata = await (await op.fetch(request)).json();
+      delete metadata.scopes_supported;
+      return Response.json({
+        ...metadata,
+        ...(supported === undefined
+          ? {}
+          : { scopes_supported: ["openid", "webid", ...(supported ? ["offline_access"] : [])] }),
+      });
+    }
+    const url = new URL(request.url);
+    if (
+      supported === false &&
+      url.pathname === "/authorize" &&
+      url.searchParams.get("scope")?.split(" ").includes("offline_access")
+    ) {
+      const callback = new URL(url.searchParams.get("redirect_uri")!);
+      callback.searchParams.set("state", url.searchParams.get("state")!);
+      callback.searchParams.set("iss", op.issuer);
+      callback.searchParams.set("error", "invalid_scope");
+      return new Response(null, { status: 302, headers: { location: callback.href } });
+    }
+    return op.fetch(request);
+  });
+  const auth = createPodAuth({
+    clientId: op.clientId,
+    redirectUri: op.redirectUri,
+    ui: {
+      getWebId: async () => op.webId!,
+      // Route the injected UI transport through the same strict scope check.
+      getCode: async (url, signal) => {
+        const response = await globalThis.fetch(url, { signal, redirect: "manual" });
+        return response.headers.get("location")!;
+      },
+    },
+  });
+  await auth.login();
+  const authorization = op.requests.find((r) => new URL(r.url).pathname === "/authorize")!;
+  const scopes = new URL(authorization.url).searchParams.get("scope")!.split(" ");
+  expect(scopes).toEqual(
+    supported === false ? ["openid", "webid"] : ["openid", "webid", "offline_access"],
+  );
+  expect((await auth.identity())?.webId).toBe(op.webId);
+});
+
 test("WebID and issuer hint must agree before authorization", async () => {
   const { op, auth } = fixture();
   await expect(auth.login({ webId: op.webId, issuer: "https://evil.example/" })).rejects.toThrow(
