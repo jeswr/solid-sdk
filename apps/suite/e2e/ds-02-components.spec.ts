@@ -69,8 +69,10 @@ for (const density of ["comfortable", "compact"] as const)
   });
 
 test("calendar: day names include the visible day number", async ({ page }) => {
-  await page.clock.setFixedTime(new Date(2026, 9, 25, 12));
-  await page.goto("/dev/components/calendar");
+  // The fixture's today must stay fixed even when the browser clock differs.
+  await page.clock.setFixedTime(new Date(2030, 0, 1, 12));
+  const response = await page.goto("/dev/components/calendar");
+  expect(await response?.text()).toContain('aria-label="Today, Sunday, 25 October 2026, selected"');
   for (const density of ["comfortable", "compact"]) {
     const calendar = page.getByRole("region", { name: `${density} fixtures`, exact: true });
     const days = calendar.locator("button[data-day]");

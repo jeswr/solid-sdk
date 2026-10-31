@@ -55,6 +55,7 @@ function CalendarFixture() {
       selected={date}
       onSelect={setDate}
       defaultMonth={new Date(2026, 9, 1)}
+      today={new Date(2026, 9, 25)}
       disabled={{ before: new Date(2026, 9, 5) }}
       labels={{
         labelDayButton: (day, modifiers) => {
