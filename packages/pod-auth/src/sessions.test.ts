@@ -74,6 +74,60 @@ test("catalog aliases point to one credential tuple, support scoped removal, and
   expect(await state.getItem("accounts")).toBeNull();
 });
 
+test("superseded credential tuples remain available only for cleanup across reloads", async () => {
+  const { persistence: p, state, raw } = setup();
+  const replacement = {
+    ...record,
+    refreshToken: "replacement-refresh",
+    identity: { ...record.identity!, webId: "https://id.example/bob#me" },
+  };
+  await p.sessions.setItem("account", record);
+  await p.sessions.setItem("account", replacement);
+  const reloaded = sessionStorage(raw, namespace, options);
+  expect(await reloaded.sessions.getItem("account")).toEqual(replacement);
+  expect(await reloaded.keys()).toHaveLength(2);
+  expect(
+    await Promise.all((await reloaded.keys()).map((key) => reloaded.sessions.getItem(key))),
+  ).toEqual(expect.arrayContaining([record, replacement]));
+  const pointer = { webId, issuer, selected: {}, requestUrl: issuer, context: "context" };
+  expect(await reloaded.present(pointer)).toBe(false);
+  expect(await reloaded.present({ ...pointer, webId: replacement.identity.webId })).toBe(true);
+
+  // Returning to an earlier tuple reuses its catalog reference without accumulating aliases.
+  await reloaded.sessions.setItem("account", record);
+  await reloaded.sessions.setItem("account", replacement);
+  expect(await reloaded.keys()).toHaveLength(2);
+  await reloaded.clear();
+  for (const value of [record, replacement])
+    expect(
+      await state.getItem(JSON.stringify([issuer, value.identity!.webId, clientId])),
+    ).toBeNull();
+});
+
+test("a failed replacement credential write retains the previous tuple for cleanup", async () => {
+  const { persistence: p, raw } = setup();
+  await p.sessions.setItem("account", record);
+  const replacement = {
+    ...record,
+    identity: { ...record.identity!, webId: "https://id.example/bob#me" },
+  };
+  const credential = JSON.stringify([issuer, replacement.identity.webId, clientId]);
+  const write = raw.setItem;
+  vi.spyOn(raw, "setItem").mockImplementation(async (key, value) => {
+    if (JSON.parse(key)[1] === credential) throw new Error("write denied");
+    await write(key, value);
+  });
+  await expect(p.sessions.setItem("account", replacement)).rejects.toThrow(
+    "Session storage failed",
+  );
+  const reloaded = sessionStorage(raw, namespace, options);
+  expect(await reloaded.sessions.getItem("account")).toBeNull();
+  const retained = await Promise.all(
+    (await reloaded.keys()).map((key) => reloaded.sessions.getItem(key)),
+  );
+  expect(retained).toContainEqual(record);
+});
+
 test.each([
   ["missing pair", (r: RefreshSessionRecord) => ({ ...r, dpopKey: undefined })],
   [

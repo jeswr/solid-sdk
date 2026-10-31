@@ -11,6 +11,7 @@ interface Account {
   webId: string;
   issuer: string;
   clientId: string;
+  superseded?: true;
 }
 export interface ActiveAccount {
   webId: string;
@@ -129,10 +130,17 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
         const account = { key, credential, webId, issuer, clientId };
         if (!(await valid(record, account)))
           throw new Error("Invalid persisted session credential");
-        const accounts = (await catalog()).filter((a) => a.key !== key);
-        accounts.push(account);
+        const accounts = new Map((await catalog()).map((a) => [a.key, a]));
+        const previous = accounts.get(key);
+        if (previous !== undefined && previous.credential !== credential) {
+          // Engine keys use oidc:<hash>; keep a separate alias solely for logout cleanup.
+          const cleanupKey = "superseded:" + previous.credential;
+          accounts.set(cleanupKey, { ...previous, key: cleanupKey, superseded: true });
+        }
+        accounts.delete("superseded:" + credential);
+        accounts.set(key, account);
         // Catalog first: a failed credential write is discoverable for later cleanup, never usable.
-        await store.setItem("accounts", accounts);
+        await store.setItem("accounts", [...accounts.values()]);
         await store.setItem(credential, record);
         transient.delete(key);
       }),
@@ -150,6 +158,7 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
     present: async (account: ActiveAccount) => {
       for (const entry of await catalog()) {
         if (
+          entry.superseded !== true &&
           entry.webId === account.webId &&
           entry.issuer === account.issuer &&
           (await sessions.getItem(entry.key)) !== null

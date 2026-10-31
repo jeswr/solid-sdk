@@ -3,6 +3,7 @@
 import type { RefreshSessionRecord } from "@jeswr/reactive-authentication";
 import { afterEach, expect, test, vi } from "vitest";
 import { createPodAuth, type PodAuthOptions } from "./index.js";
+import { sessionStorage } from "./sessions.js";
 import { createMemoryStore, createMockOp } from "./testing.js";
 
 afterEach(() => {
@@ -256,6 +257,38 @@ test("logout purges and emits even when RFC7009 revocation fails", async () => {
   expect(await auth.identity()).toBeNull();
   expect(f.record()).toBeUndefined();
   expect(logout).toHaveBeenCalledOnce();
+});
+
+test.each([
+  false,
+  true,
+])("logout revokes and purges superseded credential tuples; reload=%s", async (reload) => {
+  const f = fixture();
+  const first = f.load();
+  await first.login();
+  const before = f.record()[1];
+  const other = fixture({ webId: "https://id.example/bob#me" });
+  await other.load().login();
+  const replacement = other.record()[1];
+  const namespace = JSON.stringify(["pod-auth", f.options.clientId, f.options.redirectUri]);
+  const persistence = sessionStorage(f.sessions, namespace, f.options);
+  const [key] = await persistence.keys();
+  await persistence.sessions.setItem(key!, replacement);
+  vi.stubGlobal("fetch", f.op.fetch);
+
+  const auth = reload ? f.load() : first;
+  await auth.logout();
+  const revocations = await Promise.all(
+    f.op.requests
+      .filter((r) => r.url.endsWith("/revoke"))
+      .map(async (r) => new URLSearchParams(await r.text()).get("token")),
+  );
+  expect(revocations).toHaveLength(2);
+  expect(new Set(revocations)).toEqual(new Set([before.refreshToken, replacement.refreshToken]));
+  expect(f.op.stats.refreshes).toBe(0);
+  expect([...f.values.keys()].map((key) => JSON.parse(key)[1])).toEqual(["generation"]);
+  expect(await auth.remembered()).toEqual([]);
+  expect(await auth.identity()).toBeNull();
 });
 
 test("logout cancels pending UI and prevents a late login from publishing state", async () => {
