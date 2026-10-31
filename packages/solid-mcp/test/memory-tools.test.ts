@@ -350,6 +350,64 @@ describe("memory recall", () => {
     );
   });
 
+  it("returns the same denial before matching queries, subjects or assertion objects", async () => {
+    const pod = podFixture();
+    const run = registry(pod);
+    const allowed = await seed(pod);
+    const medicalSubject = "https://example.org/people/private-patient";
+    const relative = "https://example.org/people/private-relative";
+    const denied = [
+      json(
+        await run("memory_remember", {
+          text: "PRIVATE medical detail",
+          about: medicalSubject,
+          fact: {
+            template: "condition",
+            value: { id: "urn:example:private-condition", name: "PRIVATE diagnosis" },
+          },
+          quote: "PRIVATE quote",
+        }),
+      ),
+      json(
+        await run("memory_remember", {
+          text: "PRIVATE relationship detail",
+          fact: {
+            template: "relationship",
+            value: { id: "urn:example:private-role", person: relative, roleName: "sibling" },
+          },
+          quote: "PRIVATE relative",
+        }),
+      ),
+    ];
+    const baseline = await run("memory_recall", recall);
+    expect(baseline.isError).toBe(true);
+    expect(text(baseline)).toBe("purpose denied: MedicalHealth, SocialNetwork");
+    for (const filter of [
+      { query: "PRIVATE medical detail" },
+      { query: "PRIVATE diagnosis" },
+      { query: "PRIVATE relationship detail" },
+      { query: "no matching data" },
+      { about: medicalSubject },
+      { about: relative },
+      { about: "https://example.org/people/absent" },
+      { query: "Fictional email", about: OWNER, limit: 1 },
+      { query: "no matching data", about: relative, limit: 1 },
+    ])
+      expect(await run("memory_recall", { ...recall, ...filter })).toEqual(baseline);
+    expect(text(baseline)).not.toContain("PRIVATE");
+    for (const saved of denied) expect(text(baseline)).not.toContain(saved.id);
+    expect(
+      json(
+        await run("memory_recall", {
+          ...recall,
+          categories: [`${PD}EmailAddress`],
+          query: "Fictional email",
+          about: OWNER,
+        }),
+      ).facts.map((fact) => fact.id),
+    ).toEqual([allowed.id]);
+  });
+
   it("supports read-only recall with an existing policy and returns an empty fresh collection", async () => {
     const pod = podFixture();
     await new NanopubStore(pod).writeDefaultPolicy();

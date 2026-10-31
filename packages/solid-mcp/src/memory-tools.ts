@@ -335,16 +335,14 @@ export function createMemoryTools(
               client.clientId,
             );
             const value = await store.list();
-            const selected = classifyNanopublications(value).filter(
+            const candidates = classifyNanopublications(value).filter(
               (np) =>
                 ((np.belief === "definitely" && np.validity === "Current") ||
                   include?.some((belief) => belief === np.belief)) &&
-                (!requested || np.categories.some((category) => requested.includes(category))) &&
-                (!about || matchesAbout(assertion(value, np), about)) &&
-                (query === undefined ||
-                  matchesQuery(assertion(value, np), textOf(value, np), query)),
+                (!requested || np.categories.some((category) => requested.includes(category))),
             );
-            const denied = selected.filter((np) => !permits(np));
+            // Denied contents must never determine matches or denial diagnostics.
+            const denied = candidates.filter((np) => !permits(np));
             if (denied.length) {
               const known = new Set<string>(Object.values(categories));
               const deniedCategories = [
@@ -365,6 +363,12 @@ export function createMemoryTools(
                 isError: true,
               };
             }
+            const selected = candidates.filter(
+              (np) =>
+                (!about || matchesAbout(assertion(value, np), about)) &&
+                (query === undefined ||
+                  matchesQuery(assertion(value, np), textOf(value, np), query)),
+            );
             selected.sort(
               (a, b) => b.generatedAt.localeCompare(a.generatedAt) || a.id.localeCompare(b.id),
             );
