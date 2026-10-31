@@ -1,7 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
+import { createLegacyWebSocketChannel } from "./channels/legacy-ws.js";
+import { createLwsSseChannel } from "./channels/lws-sse.js";
 import { createLwsWebSocketChannel } from "./channels/lws-websocket.js";
 import { createPollChannel } from "./channels/poll.js";
+import { createStreamingHttpChannel } from "./channels/streaming-http.js";
 import { createWebSocket2023Channel } from "./channels/websocket2023.js";
 import { systemTimers } from "./runtime.js";
 import { SubscriptionController } from "./subscription.js";
@@ -9,7 +12,7 @@ import type { NotificationPlan, NotificationsClient, NotificationsDependencies }
 
 /**
  * Create the ADR-005 client. plan() reports advertised transport preference without I/O.
- * WebSockets use discovery and one-shot channels; other transports retain polling for T-042.
+ * Push channels use discovery; webhook relay retains polling until T-043.
  */
 export function createNotifications(deps: NotificationsDependencies): NotificationsClient {
   const client: NotificationsClient = {
@@ -53,6 +56,14 @@ export function createNotifications(deps: NotificationsDependencies): Notificati
         const create =
           deps.storage.protocol === "lws" ? createLwsWebSocketChannel : createWebSocket2023Channel;
         return create({ ...deps, topics: all, signal: options.signal });
+      }
+      if (client.plan().channel === "sse") {
+        const create =
+          deps.storage.protocol === "lws" ? createLwsSseChannel : createStreamingHttpChannel;
+        return create({ ...deps, topics: all, signal: options.signal });
+      }
+      if (client.plan().channel === "legacy-ws") {
+        return createLegacyWebSocketChannel({ ...deps, topics: all, signal: options.signal });
       }
       if (intervalMs === 0) {
         const subscription = new SubscriptionController(all);
