@@ -7,7 +7,7 @@ import { once } from "events";
 import * as fs from "fs/promises";
 // biome-ignore lint/style/useNodejsImportProtocol: agent module specifiers exclude node: schemes
 import { tmpdir } from "os";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import type { ExecutorFileSystem } from "../src/files.js";
 import { createExecutor, createFileTransmissionStore, createHaltFileCheck } from "../src/index.js";
 import { createMemoryStores } from "../src/testing.js";
@@ -125,6 +125,41 @@ it("actual process death between durable attempting and transmit stays uncertain
     child.kill("SIGKILL");
   }
 }, 20000);
+it("durable write sequence survives restart, ledger reordering and clock rollback", async () => {
+  const { directory, store } = await fixture();
+  const h = harness();
+  const e = await h.enqueue();
+  vi.mocked(h.binding.send.transmit).mockImplementationOnce(async () => {
+    h.state.at = "2026-10-31T11:00:00.000Z";
+    return { outcome: "rejected", detail: "not accepted" };
+  });
+  expect(
+    await createExecutor({ ...h.options, transmissions: store }).transmit(e.proposal.id),
+  ).toMatchObject({ status: "not-sent" });
+  expect(await store.get(e.proposal.id)).toMatchObject({
+    status: "not-sent",
+    attempts: 1,
+    sequence: 2,
+  });
+  vi.spyOn(h.audit, "listCommitted").mockImplementation(async () =>
+    structuredClone([...h.ledger].reverse()),
+  );
+  const restarted = await createFileTransmissionStore({
+    io: fs,
+    directory,
+    exclusive: store.exclusive,
+  });
+  expect(
+    await createExecutor({ ...h.options, transmissions: restarted }).transmit(e.proposal.id),
+  ).toMatchObject({ status: "sent" });
+  expect(await restarted.get(e.proposal.id)).toMatchObject({
+    status: "sent",
+    attempts: 2,
+    sequence: 4,
+  });
+  expect(h.ledger.map((record) => record.sequence)).toEqual([1, 2, 3, 4]);
+  expect(h.binding.send.transmit).toHaveBeenCalledTimes(2);
+});
 
 it.each([
   "json",

@@ -1,7 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { AGENT, type Limit } from "@jeswr/agent-mandate";
 import { describe, expect, it } from "vitest";
-import { checkLimits, committedRecords, periodStart } from "../src/accounting.js";
+import {
+  checkLimits,
+  committedRecords,
+  periodStart,
+  transmissionRecords,
+} from "../src/accounting.js";
 import type { AccountingMandate, TransmissionRecord } from "../src/types.js";
 import { harness, NOW, seal } from "./helpers.js";
 
@@ -257,6 +262,10 @@ it.each([
   { attempts: 0 },
   { attempts: 4 },
   { attempts: 1.5 },
+  { sequence: -1 },
+  { sequence: 0.5 },
+  { sequence: Number.POSITIVE_INFINITY },
+  { sequence: Number.MAX_SAFE_INTEGER + 1 },
   { startedAt: "invalid" },
   { updatedAt: "invalid" },
   { committedAt: "invalid" },
@@ -280,6 +289,72 @@ it("the highest attempt count survives stale ledger ordering", async () => {
   const newer = { ...record, attempts: 1, updatedAt: "2026-10-31T13:00:00Z" };
   expect(committedRecords([record, newer])[0]?.attempts).toBe(3);
   expect(committedRecords([newer, record])[0]?.attempts).toBe(3);
+});
+it("positive delivery retains the attempt budget recorded by later failures", async () => {
+  const h = harness();
+  const e = await h.enqueue();
+  const sent = h.prior(e, "sent");
+  const failure = { ...sent, status: "not-sent", attempts: 3 } as const;
+  for (const records of [
+    [sent, failure],
+    [failure, sent],
+  ])
+    expect(transmissionRecords(records)).toEqual([{ ...sent, attempts: 3 }]);
+});
+it("settlements supersede equal-timestamp claims in every legacy ledger order", async () => {
+  const h = harness();
+  const e = await h.enqueue();
+  const claim = h.prior(e, "attempting");
+  const uncertain = { ...claim, status: "uncertain" } as const;
+  const settled = { ...claim, status: "not-sent" } as const;
+  for (const records of [
+    [claim, uncertain, settled],
+    [settled, uncertain, claim],
+    [uncertain, claim, settled],
+    [uncertain, settled, claim],
+    [claim, settled, uncertain],
+    [settled, claim, uncertain],
+  ]) {
+    expect(transmissionRecords(records)).toEqual([settled]);
+    expect(committedRecords(records)).toEqual([]);
+  }
+});
+it("a new attempt supersedes an earlier non-send despite clock rollback", async () => {
+  const h = harness();
+  const e = await h.enqueue();
+  const old = { ...h.prior(e, "not-sent"), sequence: 9 };
+  const claim = {
+    ...old,
+    status: "attempting",
+    attempts: 2,
+    sequence: 10,
+    updatedAt: "2026-10-31T11:00:00Z",
+  } as const;
+  for (const records of [
+    [old, claim],
+    [claim, old],
+  ])
+    expect(committedRecords(records)).toEqual([claim]);
+});
+it("durable sequence orders matching states independently of timestamps and ledger order", async () => {
+  const h = harness();
+  const e = await h.enqueue();
+  const old = { ...h.prior(e), sequence: 1 };
+  const current = {
+    ...old,
+    sequence: 2,
+    updatedAt: "2026-10-31T11:00:00Z",
+    underMandate: "urn:current",
+  };
+  for (const records of [
+    [old, current],
+    [current, old],
+    [current, current],
+  ])
+    expect(transmissionRecords(records)).toEqual([current]);
+  expect(transmissionRecords([{ ...old, sequence: 0 }, h.prior(e)])).toEqual([
+    { ...old, sequence: 0 },
+  ]);
 });
 it.each([undefined, 1, ""])("corrupt accounting identity %j fails closed", async (value) => {
   const h = harness();

@@ -96,6 +96,29 @@ describe("step 7: durable idempotency and pilot recovery", () => {
     expect(h.records.get(e.proposal.id)?.providerRef).toBe("lookup:1");
     expect(h.binding.send.transmit).not.toHaveBeenCalled();
   });
+  it.each([
+    false,
+    true,
+  ])("same-millisecond non-sends retry with newest-first ledger, compacted=%s", async (compacted) => {
+    const h = harness();
+    const e = await h.enqueue();
+    vi.mocked(h.binding.send.transmit).mockResolvedValue({
+      outcome: "rejected",
+      detail: "not accepted",
+    });
+    vi.spyOn(h.audit, "listCommitted").mockImplementation(async () =>
+      structuredClone([...h.ledger].reverse()),
+    );
+    for (let attempts = 1; attempts <= MAX_TRANSMISSION_ATTEMPTS; attempts++) {
+      if (compacted) h.records.clear();
+      expect(await createExecutor(h.options).transmit(e.proposal.id)).toMatchObject({
+        status: "not-sent",
+      });
+      expect(h.records.get(e.proposal.id)?.attempts).toBe(attempts);
+    }
+    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ reason: "attempt-limit" });
+    expect(h.binding.send.transmit).toHaveBeenCalledTimes(MAX_TRANSMISSION_ATTEMPTS);
+  });
   it("finalAbsence permits a fresh authorized request, bounded at MAX 3", async () => {
     const h = harness();
     const e = await h.enqueue();
@@ -166,6 +189,15 @@ describe("step 7: durable idempotency and pilot recovery", () => {
     Object.assign(h.binding.send, { idempotentResend: true });
     expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ reason: "attempt-limit" });
     expect(h.records.get(e.proposal.id)?.status).toBe("uncertain");
+  });
+  it("sequence exhaustion fails before a new provider call", async () => {
+    const h = harness();
+    const e = await h.enqueue();
+    h.records.set(e.proposal.id, { ...h.prior(e, "not-sent"), sequence: Number.MAX_SAFE_INTEGER });
+    await expect(h.executor.transmit(e.proposal.id)).rejects.toThrow(
+      "Transmission sequence exhausted",
+    );
+    expect(h.binding.send.transmit).not.toHaveBeenCalled();
   });
   it("an unresolved resend refused by current policy retains the commitment", async () => {
     const h = harness("a2a");

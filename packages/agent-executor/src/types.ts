@@ -123,6 +123,8 @@ export interface TransmissionRecord {
   readonly termsDigest: string;
   readonly status: TransmissionStatus;
   readonly attempts: number;
+  /** Monotonic per-proposal durable write sequence. Missing on legacy records (zero). */
+  readonly sequence?: number;
   readonly startedAt: string;
   readonly committedAt: string;
   readonly updatedAt: string;

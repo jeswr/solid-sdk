@@ -4,6 +4,16 @@ import { canonicalJson } from "@jeswr/agent-model";
 import { MAX_TRANSMISSION_ATTEMPTS } from "./transmission.js";
 import type { AccountingMandate, OutboxEntry, TransmissionRecord } from "./types.js";
 
+function recordOrder(record: TransmissionRecord): number[] {
+  return [
+    Number(record.status === "sent"),
+    record.attempts,
+    { attempting: 0, uncertain: 1, "not-sent": 2, sent: 3 }[record.status],
+    record.sequence ?? 0,
+    Date.parse(record.updatedAt),
+  ];
+}
+
 /** Union by proposal id: the outbox and ledger often describe the SAME committed effect. */
 export function transmissionRecords(records: readonly TransmissionRecord[]): TransmissionRecord[] {
   const unique = new Map<string, TransmissionRecord>();
@@ -12,6 +22,8 @@ export function transmissionRecords(records: readonly TransmissionRecord[]): Tra
       !Number.isInteger(record.attempts) ||
       record.attempts < 1 ||
       record.attempts > MAX_TRANSMISSION_ATTEMPTS ||
+      (record.sequence !== undefined &&
+        (!Number.isSafeInteger(record.sequence) || record.sequence < 0)) ||
       !Number.isFinite(Date.parse(record.startedAt)) ||
       !Number.isFinite(Date.parse(record.updatedAt)) ||
       !Number.isFinite(Date.parse(record.committedAt)) ||
@@ -49,12 +61,15 @@ export function transmissionRecords(records: readonly TransmissionRecord[]): Tra
       });
     if (old && identity(old) !== identity(record))
       throw new Error("Conflicting accounting records");
-    // Sent is positive evidence; a stale not-sent record must not erase an obligation.
-    if (
-      !old ||
-      record.status === "sent" ||
-      (old.status !== "sent" && Date.parse(record.updatedAt) >= Date.parse(old.updatedAt))
-    )
+    // Delivery wins globally. New attempts supersede earlier non-sends; within an attempt,
+    // settlement wins over its claim. Durable sequence orders writes even if the clock stalls.
+    const oldOrder = old && recordOrder(old);
+    const order = oldOrder
+      ? (recordOrder(record)
+          .map((value, index) => value - (oldOrder[index] as number))
+          .find((difference) => difference !== 0) ?? 0)
+      : 1;
+    if (!old || order > 0)
       unique.set(record.proposal, {
         ...record,
         attempts: Math.max(old?.attempts ?? 0, record.attempts),

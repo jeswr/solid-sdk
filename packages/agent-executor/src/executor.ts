@@ -96,8 +96,17 @@ export function createExecutor(options: ExecutorOptions) {
     return disposition(id, { status: "refused", reason: "wire-mismatch" });
   }
 
+  async function persist(record: TransmissionRecord): Promise<TransmissionRecord> {
+    const current = await o.transmissions.get(record.proposal);
+    const sequence = Math.max(record.sequence ?? 0, current?.sequence ?? 0) + 1;
+    if (!Number.isSafeInteger(sequence)) throw new Error("Transmission sequence exhausted");
+    const next = { ...record, sequence };
+    await o.transmissions.put(next); // The adapter MUST fsync before returning.
+    return next;
+  }
+
   async function finish(record: TransmissionRecord): Promise<Disposition> {
-    await o.transmissions.put(record);
+    record = await persist(record);
     await o.audit.append({
       type: "transmission",
       proposal: record.proposal,
@@ -316,7 +325,7 @@ export function createExecutor(options: ExecutorOptions) {
     // Provider lookup / approval / disk I/O can suspend: re-check controls immediately before claiming.
     const failure = await authorityFailure();
     if (failure) return disposition(id, failure);
-    const record: TransmissionRecord = {
+    const record = await persist({
       proposal: id,
       binding: binding.id,
       account: entry.account.id,
@@ -324,6 +333,7 @@ export function createExecutor(options: ExecutorOptions) {
       termsDigest: intent.termsDigest,
       status: "attempting",
       attempts: (previous?.attempts ?? 0) + 1,
+      sequence: previous?.sequence ?? 0,
       startedAt: previous?.startedAt ?? now.toISOString(),
       committedAt: unresolved && previous ? previous.committedAt : now.toISOString(),
       updatedAt: o.clock.now().toISOString(),
@@ -332,8 +342,7 @@ export function createExecutor(options: ExecutorOptions) {
       conversation: intent.conversation,
       recipientHash: intent.recipientHash,
       amount: intent.amount,
-    };
-    await o.transmissions.put(record); // The adapter MUST fsync before returning.
+    });
     await o.audit.append({
       type: "decision",
       proposal: id,

@@ -71,6 +71,10 @@ filesystem. Supply a private daemon directory and the store-wide lock. Files are
 0600, new directories 0700. Corrupt/unreadable storage never becomes empty history.
 It stores transmission metadata and committed amounts, with no bodies or credentials.
 The separate `./testing` export provides explicit in-memory, non-durable seams only.
+Records carry a monotonic per-proposal write `sequence`, persisted with every claim and
+settlement. Reconciliation preserves positive delivery, then orders by attempt number,
+settlement precedence and sequence; timestamps are only a legacy fallback. Missing legacy
+sequences count as zero. Trusted operator updates must also advance the sequence.
 
 After a crash, `attempting` is unresolved. Only positive exact-wire `lookup()` evidence
 can reconcile it as sent; a search miss cannot authorize a retry. `finalAbsence: true`
