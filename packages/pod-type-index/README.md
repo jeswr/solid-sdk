@@ -38,7 +38,9 @@ Solid PUT with `If-None-Match: *`. Edits require a strong observed ETag and `wri
 no wildcard overwrite is used. Conflicts re-read/reconcile at most twice. An interrupted bootstrap
 may leave an unlinked index; repeating registration reuses it. No-op changes avoid writes.
 Unregister removes only the exact class/location registration, keeps other entries and annotations,
-and refuses ambiguous multi-class or multi-location entries. It does not delete documents/links.
+and refuses ambiguous multi-class or multi-location entries. If legacy profile and preferences
+private pointers identify distinct indexes, unregister rejects with `conflict` before writing.
+It does not delete documents/links.
 
 All document and result URLs must be HTTP(S), credential-free, and inside the selected storage.
 Foreign profile documents are unsupported by this storage-scoped API. Reads drop unsafe linked

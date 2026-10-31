@@ -174,6 +174,13 @@ export function solidIndex(storage: StorageClient, webId: string) {
         let preferencesUrl: string | undefined;
         // Read old private links on profiles for compatibility; new links live in preferences.
         let url = single(links(owner, predicate, true));
+        if (remove && visibility === "private" && url) {
+          const linkedPreferences = single(links(owner, PREFS, true));
+          const preferences = linkedPreferences ? await read(linkedPreferences) : undefined;
+          // Refuse to remove from only one of two distinct private destinations.
+          if (preferences)
+            single([...new Set([url, ...links(resource(preferences, profile), PRIVATE, true)])]);
+        }
         if (!url && visibility === "private") {
           preferencesUrl = single(links(owner, PREFS, true));
           if (!preferencesUrl && remove) return;

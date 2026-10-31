@@ -326,6 +326,79 @@ describe("Solid discovery and bootstrap adversarial cases", () => {
 
 describe("exact unregistration", () => {
   it.each([
+    "missing",
+    "empty",
+    "matching",
+  ])("unregisters a legacy private index with %s preferences", async (state) => {
+    const { storage, index } = await setup(
+      `<${WEBID}> solid:privateTypeIndex <${IDX}>; pim:preferencesFile <${PREF}>.`,
+    );
+    await put(storage, IDX, reg());
+    if (state !== "missing")
+      await put(
+        storage,
+        PREF,
+        state === "matching" ? `<${WEBID}> solid:privateTypeIndex <${IDX}#alias>.` : "",
+      );
+    const write = vi.spyOn(storage, "writeRdf");
+    await index.unregister(CLASS, LOCATION);
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(write.mock.calls[0]?.[0]).toBe(IDX);
+    expect(await index.find(CLASS)).toEqual([]);
+  });
+
+  it.each([
+    false,
+    true,
+  ])("rejects distinct legacy/preferences private indexes before writing (legacy match: %s)", async (legacyMatch) => {
+    const otherIndex = `${ROOT}settings/other-private.ttl`;
+    const { storage, index } = await setup(
+      `<${WEBID}> solid:privateTypeIndex <${IDX}>; pim:preferencesFile <${PREF}>.`,
+    );
+    await put(storage, IDX, legacyMatch ? reg() : "");
+    await put(storage, PREF, `<${WEBID}> solid:privateTypeIndex <${otherIndex}>.`);
+    await put(storage, otherIndex, reg());
+    expect(await index.find(CLASS)).toEqual([LOCATION.container]);
+    const write = vi.spyOn(storage, "writeRdf");
+    const create = vi.spyOn(storage, "create");
+    await expect(index.unregister(CLASS, LOCATION)).rejects.toMatchObject({ code: "conflict" });
+    expect(write).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(await index.find(CLASS)).toEqual([LOCATION.container]);
+  });
+
+  it.each([
+    '"bad"',
+    "<https://foreign.example/private-index>",
+  ])("rejects unsafe preferences index pointers despite a legacy pointer (%s)", async (pointer) => {
+    const { storage, index } = await setup(
+      `<${WEBID}> solid:privateTypeIndex <${IDX}>; pim:preferencesFile <${PREF}>.`,
+    );
+    await put(storage, IDX, reg());
+    await put(storage, PREF, `<${WEBID}> solid:privateTypeIndex ${pointer}.`);
+    const read = vi.spyOn(storage, "readRdf");
+    const write = vi.spyOn(storage, "writeRdf");
+    await expect(index.unregister(CLASS, LOCATION)).rejects.toMatchObject({ code: "scope" });
+    expect(read.mock.calls.map(([url]) => url)).toEqual([CARD, PREF]);
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it("propagates unreadable preferences before editing a legacy private index", async () => {
+    const { storage, index } = await setup(
+      `<${WEBID}> solid:privateTypeIndex <${IDX}>; pim:preferencesFile <${PREF}>.`,
+    );
+    await put(storage, IDX, reg());
+    const original = storage.readRdf;
+    vi.spyOn(storage, "readRdf").mockImplementation(async (url, opts) => {
+      if (url === PREF) throw fail("forbidden", 403);
+      return original(url, opts);
+    });
+    const write = vi.spyOn(storage, "writeRdf");
+    await expect(index.unregister(CLASS, LOCATION)).rejects.toMatchObject({ code: "forbidden" });
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it.each([
     "bare",
     "missing-prefs",
     "prefs-no-index",
