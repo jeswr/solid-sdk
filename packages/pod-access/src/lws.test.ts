@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { StorageError } from "@jeswr/storage-client";
+import { type AuthFetch, StorageError } from "@jeswr/storage-client";
+import { createLwsBackend } from "@jeswr/storage-client/lws";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { type AccessRequest, createAccessClient, type Grant, type RevocationKey } from "./index.js";
@@ -62,6 +63,67 @@ async function setup(identity: (() => string | null) | undefined = () => BOB) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("LWS access services", () => {
+  test("creates, lists and revokes through advertised slashless network service endpoints", async () => {
+    const { storage: memory, target } = await setup();
+    const grants = `${ROOT}grants`;
+    const requests = `${ROOT}requests`;
+    memory.features.accessGrants.detail.endpoint = grants;
+    memory.features.accessRequests.detail.endpoint = requests;
+    const records = new Map<string, { endpoint: string; body: string }>();
+    const fetch = vi.fn<AuthFetch>(async (input, init) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      const headers = new Headers(init?.headers);
+      if (method === "POST" && [grants, requests].includes(url)) {
+        expect(headers.get("content-type")).toBe(MEDIA);
+        const id = `${ROOT}record-${records.size}`;
+        records.set(id, { endpoint: url, body: init?.body as string });
+        return new Response(null, { status: 201, headers: { location: id, etag: '"record"' } });
+      }
+      if (method === "GET" && [grants, requests].includes(url))
+        return new Response(
+          JSON.stringify({
+            type: "Container",
+            items: [...records].filter(([, r]) => r.endpoint === url).map(([id]) => ({ id })),
+          }),
+          { headers: { "content-type": MEDIA } },
+        );
+      const record = records.get(url);
+      if (method === "GET" && record)
+        return new Response(record.body, { headers: { "content-type": MEDIA, etag: '"record"' } });
+      if (method === "DELETE" && record) {
+        expect(headers.get("if-match")).toBe('"record"');
+        records.delete(url);
+        return new Response(null, { status: 204 });
+      }
+      throw new Error("Unexpected fixture request");
+    });
+    const storage = createLwsBackend({ root: ROOT, storage: ID, features: memory.features, fetch });
+    const client = createAccessClient({ storage, storageId: ID, identity: () => BOB });
+    const request = { target, agent: BOB, modes: ["read"] as const };
+    const submitted = await client.request(request);
+    expect(await client.requests()).toEqual([{ ...request, id: submitted.url }]);
+    const shared = await client.share(target, { agent: BOB, modes: ["read"] }, {});
+    expect(await client.grants(target)).toEqual([shared]);
+    await client.revoke(target, shared.id as string);
+    expect(await client.grants(target)).toEqual([]);
+    expect(await client.requests()).toEqual([{ ...request, id: submitted.url }]);
+    expect(fetch.mock.calls.map(([url, init]) => [init?.method, String(url)])).toEqual([
+      ["POST", requests],
+      ["GET", requests],
+      ["GET", submitted.url],
+      ["POST", grants],
+      ["GET", grants],
+      ["GET", shared.id],
+      ["GET", grants],
+      ["GET", shared.id],
+      ["DELETE", shared.id],
+      ["GET", grants],
+      ["GET", requests],
+      ["GET", submitted.url],
+    ]);
+  });
+
   test("request → grant → paginated list → conditional revoke on memory storage", async () => {
     const { client, storage, memory, target, requests, grants } = await setup();
     expect(client.model()).toBe("odrl-grants");
