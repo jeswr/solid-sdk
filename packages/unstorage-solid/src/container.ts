@@ -15,10 +15,13 @@ export async function listContainer(
   client: StorageClient | typeof fetch,
 ): Promise<ContainerMember[] | null> {
   assertWithinBase(base, containerUrl);
+  let storage: StorageClient | undefined;
+  let receivedEntry = false;
   try {
-    const storage = typeof client === "function" ? await storageFromFetch(base, client) : client;
+    storage = typeof client === "function" ? await storageFromFetch(base, client) : client;
     const members: ContainerMember[] = [];
     for await (const entry of storage.listAll(containerUrl)) {
+      receivedEntry = true;
       try {
         assertWithinBase(base, entry.url);
         const url = new URL(entry.url);
@@ -39,7 +42,14 @@ export async function listContainer(
     }
     return members;
   } catch (error) {
-    if (isMissing(error)) return null;
+    // A missing cursor fails the listing, even when earlier pages had no usable members.
+    if (
+      !receivedEntry &&
+      isMissing(error) &&
+      error instanceof StorageError &&
+      (storage === undefined || error.url === containerUrl)
+    )
+      return null;
     if (
       error instanceof StorageError &&
       error.code === "method-not-allowed" &&
