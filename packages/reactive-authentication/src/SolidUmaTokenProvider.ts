@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import type { KeyValueStore } from "@key-value-kit/core";
 import { createMemoryStore } from "@key-value-kit/storage/memory";
 import * as DPoP from "dpop";
@@ -71,6 +72,8 @@ export type UmaRpt = {
 };
 
 export interface SolidUmaTokenProviderOptions extends OidcSessionOptions {
+  /** Reuse the Solid provider's session. Its fence must also be supplied in `fence`. */
+  readonly session?: OidcSession;
   /**
    * Which UMA authorization servers may receive the ID token. Checked before any identity or credential
    * operation. Default: the authorization server must be on the requested resource's origin.
@@ -115,6 +118,8 @@ export class SolidUmaTokenProvider implements TokenProvider {
     clientProvider: ClientProvider,
     options: SolidUmaTokenProviderOptions = {},
   ) {
+    if (options.session !== undefined && options.session.fence !== options.fence)
+      throw new TypeError("UMA provider and shared session must use the same SessionFence");
     const supplied =
       options.cache !== undefined ||
       options.sessionStore !== undefined ||
@@ -131,10 +136,12 @@ export class SolidUmaTokenProvider implements TokenProvider {
     this.#openIdProvider = openIdProvider;
     this.#callbackUri = callbackUri;
     this.#options = options;
-    this.#session = new OidcSession(callbackUri, codeProvider, clientProvider, {
-      ...options,
-      fence,
-    });
+    this.#session =
+      options.session ??
+      new OidcSession(callbackUri, codeProvider, clientProvider, {
+        ...options,
+        fence,
+      });
     this.#rpts = new FencedCache("uma", {
       fence,
       ...(options.namespace === undefined ? {} : { namespace: options.namespace }),
@@ -210,9 +217,10 @@ export class SolidUmaTokenProvider implements TokenProvider {
     // RPTs are per UMA server and resource context, and per session configuration (OP, redirect URI,
     // account, scopes), so providers sharing an RPT store never receive another account's RPT.
     const o = this.#options;
+    const context = await this.#context(request, challenge);
     const key = await this.#rpts.key([
       as.href,
-      await this.#context(request, challenge),
+      context,
       op.issuer,
       this.#callbackUri,
       o.account ?? "default",
@@ -228,7 +236,13 @@ export class SolidUmaTokenProvider implements TokenProvider {
       await this.#rpts.remove(key);
       return await this.#rpts.write(
         key,
-        await this.#obtain(op, asUri, permissionTicket, ticket),
+        await this.#obtain(
+          op,
+          asUri,
+          permissionTicket,
+          ticket,
+          o.session === undefined ? "" : context,
+        ),
         ticket,
       );
     });
@@ -286,6 +300,7 @@ export class SolidUmaTokenProvider implements TokenProvider {
     asUri: string,
     permissionTicket: string,
     ticket: FenceTicket,
+    context: string,
   ): Promise<UmaRpt> {
     const uma = await this.#discover(asUri, ticket.signal);
     await this.#rpts.assertCurrent(ticket);
@@ -293,7 +308,7 @@ export class SolidUmaTokenProvider implements TokenProvider {
     // The ID token identifies the user to any trusted authorization server; RPTs are then per AS and context.
     const entry = (await this.#session.get(
       op,
-      "",
+      context,
       ticket.signal,
       idTokenUsable,
       true,

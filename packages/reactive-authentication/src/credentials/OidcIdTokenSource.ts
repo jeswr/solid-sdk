@@ -39,12 +39,18 @@ export class OidcIdTokenSource implements CredentialSource {
       /** The fence shared by the session manager and its LWS token provider. */
       fence: SessionFence;
       requireAudience?: boolean;
+      /** Reuse a Solid session in this credential context; its fence must match `fence`. */
+      session?: OidcSession;
+      context?: string;
     },
   ) {
     if (!options?.fence)
       throw new TypeError(
         "OidcIdTokenSource requires an explicit SessionFence shared with its LWS provider",
       );
+    if (options.session !== undefined && options.session.fence !== options.fence)
+      throw new TypeError("OIDC source and shared session must use the same SessionFence");
+    this.#context = options.context ?? "";
     this.#issuer = openIdProvider;
     this.#requireAudience = options.requireAudience ?? false;
     // Every non-secret dimension that selects a different credential, so access-token caches keyed by
@@ -56,12 +62,17 @@ export class OidcIdTokenSource implements CredentialSource {
       options.namespace ?? "default",
       options.account ?? "default",
       [...(options.scopes ?? ["openid"])].sort(),
+      this.#context,
     ]);
-    this.#session = new OidcSession(callbackUri, codeProvider, clientProvider, {
-      scopes: ["openid"],
-      ...options,
-    });
+    this.#session =
+      options.session ??
+      new OidcSession(callbackUri, codeProvider, clientProvider, {
+        scopes: ["openid"],
+        ...options,
+      });
   }
+
+  readonly #context: string;
 
   get id(): string {
     return this.#id;
@@ -76,7 +87,7 @@ export class OidcIdTokenSource implements CredentialSource {
     // session serves every realm; access tokens are then realm-bound by the exchange.
     const entry = (await this.#session.get(
       this.#issuer,
-      "",
+      this.#context,
       request.signal,
       idTokenUsable,
       true,
@@ -109,7 +120,7 @@ export class OidcIdTokenSource implements CredentialSource {
   }
 
   async identity(): Promise<Identity | undefined> {
-    return await this.#session.identity(this.#issuer.issuer, "");
+    return await this.#session.identity(this.#issuer.issuer, this.#context);
   }
 
   async forget(): Promise<void> {
