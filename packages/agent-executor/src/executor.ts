@@ -64,6 +64,13 @@ export function createExecutor(options: ExecutorOptions) {
   let backgroundError: unknown;
   let backgroundFailed = false;
 
+  function checkBackgroundFailure() {
+    if (backgroundFailed)
+      throw new Error("Audit or persistence failed during late settlement", {
+        cause: backgroundError,
+      });
+  }
+
   function temporalFailure(deadlines: AuthorityDeadlines): Disposition | undefined {
     const now = o.clock.now().getTime();
     if (!(deadlines.proposal >= now)) return { status: "refused", reason: "expired" };
@@ -162,6 +169,24 @@ export function createExecutor(options: ExecutorOptions) {
     return result;
   }
 
+  async function duplicate(record: TransmissionRecord): Promise<TransmitResult> {
+    await finish(record);
+    return {
+      status: "duplicate",
+      ...(record.providerRef ? { providerRef: record.providerRef } : {}),
+    };
+  }
+
+  async function recoverSent(id: string): Promise<TransmitResult | undefined> {
+    return o.transmissions.exclusive(async () => {
+      checkBackgroundFailure();
+      const records = [...(await o.transmissions.list()), ...(await o.audit.listCommitted())];
+      const record = transmissionRecords(records).find((r) => r.proposal === id);
+      // Settlement uses only durable delivery evidence; it grants no authority for a send.
+      return record?.status === "sent" ? duplicate(record) : undefined;
+    });
+  }
+
   async function prepare(
     id: string,
     execute: boolean,
@@ -172,10 +197,7 @@ export function createExecutor(options: ExecutorOptions) {
   > {
     const revision = state.revision;
     // DESIGN §4.1: no proposal, mandate, approval or credential work before the halt check.
-    if (backgroundFailed)
-      throw new Error("Audit or persistence failed during late settlement", {
-        cause: backgroundError,
-      });
+    checkBackgroundFailure();
     const control = await controls();
     if (control.halted) return disposition(id, { status: "refused", reason: "halted" });
     const loaded = await o.proposals.get(id);
@@ -294,13 +316,7 @@ export function createExecutor(options: ExecutorOptions) {
         previous.termsDigest !== intent.termsDigest)
     )
       return tamper(id);
-    if (previous?.status === "sent") {
-      await finish(previous);
-      return {
-        status: "duplicate",
-        ...(previous.providerRef ? { providerRef: previous.providerRef } : {}),
-      };
-    }
+    if (previous?.status === "sent") return duplicate(previous);
     const mandateId = mandate.id;
     async function authorityFailure(): Promise<Disposition | undefined> {
       const latest = await controls();
@@ -506,7 +522,9 @@ export function createExecutor(options: ExecutorOptions) {
   async function runOutboxOnce(execute = true): Promise<Readonly<Record<string, TransmitResult>>> {
     const results: Record<string, TransmitResult> = {};
     for (const id of await o.proposals.queued()) {
-      if (execute) results[id] = await transmit(id);
+      const recovered = await recoverSent(id);
+      if (recovered) results[id] = recovered;
+      else if (execute) results[id] = await transmit(id);
       else {
         const result = await o.transmissions.exclusive(() => prepare(id, false));
         results[id] =

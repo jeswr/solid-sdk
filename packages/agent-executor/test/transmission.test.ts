@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createExecutor, MAX_TRANSMISSION_ATTEMPTS } from "../src/index.js";
 import { providerResult } from "../src/transmission.js";
 import type { SendResult } from "../src/types.js";
-import { control, deferred, harness, seal } from "./helpers.js";
+import { control, deferred, harness, seal, UNTIL } from "./helpers.js";
 
 afterEach(() => vi.useRealTimers());
 describe("step 7: durable idempotency and pilot recovery", () => {
@@ -681,6 +681,109 @@ it.each([
     expect(h.binding.send.transmit).toHaveBeenCalledTimes(1);
     expect(h.options.tokens.send).toHaveBeenCalledTimes(1);
   }
+});
+it.each([
+  "expired",
+  "halted",
+  "mandate-unavailable",
+  "changed-proposal",
+])("outbox repairs sent receipts when authorization is %s", async (authority) => {
+  for (const compacted of [false, true]) {
+    for (const replacement of [false, true]) {
+      const h = harness();
+      const e = await h.enqueue();
+      const conversation = e.proposal.intent.conversation;
+      vi.spyOn(h.proposals, "emitReceipt").mockRejectedValueOnce(new Error("receipt unavailable"));
+      await expect(h.executor.runOutboxOnce()).rejects.toThrow("receipt unavailable");
+      expect(h.receipts.size).toBe(0);
+      expect(await h.proposals.queued()).toEqual([e.proposal.id]);
+      if (compacted) h.records.clear();
+      else h.ledger.length = 0;
+      if (authority === "expired") h.state.at = new Date(Date.parse(UNTIL) + 1).toISOString();
+      if (authority === "halted") h.state.haltFile = true;
+      if (authority === "mandate-unavailable") h.state.mandate = undefined;
+      if (authority === "changed-proposal")
+        e.proposal.intent.conversation = "urn:other-conversation";
+      const proposal = vi.spyOn(h.proposals, "get");
+      const approvals = vi.spyOn(h.approvalStore, "findVerified");
+      vi.mocked(h.options.mandates.load).mockClear();
+      vi.mocked(h.binding.send.transmit).mockClear();
+      vi.mocked(h.options.tokens.send).mockClear();
+      const executor = replacement ? createExecutor(h.options) : h.executor;
+      // Control-driven evaluation also repairs settlements without authorizing another send.
+      expect(await executor.runOutboxOnce(!replacement)).toEqual({
+        [e.proposal.id]: { status: "duplicate", providerRef: "test:1" },
+      });
+      expect([...h.receipts.values()]).toEqual([
+        expect.objectContaining({
+          conversation,
+          body: expect.objectContaining({ outcome: "completed", final: true }),
+        }),
+      ]);
+      expect(h.records.get(e.proposal.id)).toMatchObject({ status: "sent", attempts: 1 });
+      expect(await h.proposals.queued()).toEqual([]);
+      expect(proposal).not.toHaveBeenCalled();
+      expect(approvals).not.toHaveBeenCalled();
+      expect(h.options.mandates.load).not.toHaveBeenCalled();
+      expect(h.options.tokens.send).not.toHaveBeenCalled();
+      expect(h.binding.send.transmit).not.toHaveBeenCalled();
+    }
+  }
+});
+it.each([
+  "attempting",
+  "uncertain",
+  "not-sent",
+] as const)("expired %s history does not establish a completed send", async (status) => {
+  const h = harness();
+  const e = await h.enqueue();
+  const prior = h.prior(e, status);
+  h.state.at = new Date(Date.parse(UNTIL) + 1).toISOString();
+  expect(await h.executor.runOutboxOnce()).toEqual({
+    [e.proposal.id]: { status: "refused", reason: "expired" },
+  });
+  expect(h.records.get(e.proposal.id)).toEqual(prior);
+  expect(h.receipts.size).toBe(0);
+  expect(h.binding.send.transmit).not.toHaveBeenCalled();
+  expect(h.options.tokens.send).not.toHaveBeenCalled();
+});
+it("outbox repairs a legacy sent receipt without a provider reference", async () => {
+  const h = harness();
+  const e = await h.enqueue();
+  h.prior(e, "sent");
+  h.state.at = new Date(Date.parse(UNTIL) + 1).toISOString();
+  expect(await h.executor.runOutboxOnce()).toEqual({ [e.proposal.id]: { status: "duplicate" } });
+  expect([...h.receipts.values()][0]?.body).toMatchObject({ outcome: "completed", final: true });
+  expect(h.binding.send.transmit).not.toHaveBeenCalled();
+});
+it.each([
+  "lock",
+  "history",
+  "ledger",
+  "put",
+  "audit",
+  "receipt",
+  "disposition",
+])("outbox recovery propagates %s failures and can repair them on the next pass", async (failure) => {
+  const h = harness();
+  const e = await h.enqueue();
+  h.prior(e, "sent");
+  h.state.at = new Date(Date.parse(UNTIL) + 1).toISOString();
+  const error = new Error("recovery unavailable");
+  if (failure === "lock") vi.spyOn(h.transmissions, "exclusive").mockRejectedValueOnce(error);
+  if (failure === "history") vi.spyOn(h.transmissions, "list").mockRejectedValueOnce(error);
+  if (failure === "ledger") vi.spyOn(h.audit, "listCommitted").mockRejectedValueOnce(error);
+  if (failure === "put") vi.spyOn(h.transmissions, "put").mockRejectedValueOnce(error);
+  if (failure === "audit") vi.spyOn(h.audit, "append").mockRejectedValueOnce(error);
+  if (failure === "receipt") vi.spyOn(h.proposals, "emitReceipt").mockRejectedValueOnce(error);
+  if (failure === "disposition")
+    vi.spyOn(h.proposals, "writeDisposition").mockRejectedValueOnce(error);
+  await expect(h.executor.runOutboxOnce()).rejects.toBe(error);
+  expect(await h.proposals.queued()).toEqual([e.proposal.id]);
+  expect(await h.executor.runOutboxOnce()).toEqual({ [e.proposal.id]: { status: "duplicate" } });
+  expect(h.receipts.size).toBe(1);
+  expect(h.binding.send.transmit).not.toHaveBeenCalled();
+  expect(h.options.tokens.send).not.toHaveBeenCalled();
 });
 it("receipt conversation cannot be swapped by changing a proposal during send", async () => {
   const h = harness();
