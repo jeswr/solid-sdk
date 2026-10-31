@@ -435,15 +435,16 @@ export function createProviders(
       authorizationServers.clear();
       if (failures.length > 0) throw new AggregateError(failures, "Logout cleanup failed");
     },
-    login: async (value: LoginHint) => {
+    login: async (value: LoginHint, signal: AbortSignal) => {
       restoredContext = undefined;
       hint = value;
       selections.clear();
       // A synthetic upgrade obtains a session without sending credentials to a login hint's URL.
       const generation = await fence.generation();
       const request = new Request(boundary.roots()[0] ?? options.redirectUri, {
-        signal: fence.signalFor(generation),
+        signal: AbortSignal.any([signal, fence.signalFor(generation)]),
       });
+      request.signal.throwIfAborted();
       const selected = await selectionFor(request);
       await solidProvider.upgrade(request);
       const claims = await solidProvider.identity(request);

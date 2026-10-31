@@ -501,7 +501,7 @@ test("UMA permits an issuer-only identity with no WebID and forgets the shared s
     },
     { challenge: vi.fn(), session: vi.fn(async () => {}) },
   );
-  await providers.login({ issuer: op.issuer });
+  await providers.login({ issuer: op.issuer }, providers.fence.signal);
   expect((await providers.manager.fetch(op.root + "uma")).status).toBe(200);
   expect(uma.exchanges).toHaveLength(1);
   await providers.manager.logout();

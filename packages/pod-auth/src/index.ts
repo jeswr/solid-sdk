@@ -208,7 +208,8 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
             throw new Error("Account changes require logout");
           return existing;
         }
-        await providers.login(selected);
+        // Keep preflight cancellation even if provider startup observes a newer generation.
+        await providers.login(selected, providers.fence.signal);
         return snapshot()!;
       })().finally(() => {
         pending = undefined;
