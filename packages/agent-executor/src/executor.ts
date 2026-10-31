@@ -193,25 +193,18 @@ export function createExecutor(options: ExecutorOptions) {
       status: record.status as "sent" | "not-sent" | "uncertain",
       reason: record.status,
     };
-    // Keep incomplete settlements queued until the idempotent receipt write succeeds.
-    await o.proposals.emitReceipt({
+    // Keep incomplete settlements queued until the idempotent local event write succeeds.
+    await o.proposals.emitTransmission({
+      type: "transmission-settled",
       proposal: record.proposal,
       conversation: record.conversation,
-      kind: "receipt",
-      body: {
-        ref: record.proposal,
-        activity: derivedUrn("transmission", record.proposal),
-        outcome:
-          record.status === "sent"
-            ? "completed"
-            : record.status === "not-sent"
-              ? "not-executed"
-              : "uncertain",
-        // A definitive non-send settles this attempt; explicit retries can still complete it.
-        final:
-          record.status === "sent" ||
-          (record.status === "not-sent" && record.attempts >= MAX_TRANSMISSION_ATTEMPTS),
-      },
+      activity: derivedUrn("transmission", record.proposal),
+      status: result.status,
+      // Finality concerns delivery only; a successful send never proves agreement performance.
+      final:
+        record.status === "sent" ||
+        (record.status === "not-sent" && record.attempts >= MAX_TRANSMISSION_ATTEMPTS),
+      at: record.updatedAt,
     });
     await o.proposals.writeDisposition(record.proposal, result);
     return result;
@@ -537,7 +530,7 @@ export function createExecutor(options: ExecutorOptions) {
         if (executorFailure) throw executorFailure.error;
         return result;
       } finally {
-        // The provider call has settled, even if a lock, durable write, audit or receipt failed.
+        // The provider call has settled, even if a lock, durable write, audit or event failed.
         pending.delete(id);
       }
     }

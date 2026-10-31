@@ -1,6 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { Approval, Mandate, MandateVerifier, PolicyEngine } from "@jeswr/agent-mandate";
-import type { ActionProposal, AnyMessage, ControlStatement, ReceiptBody } from "@jeswr/agent-model";
+import type {
+  ActionProposal,
+  AnyMessage,
+  ControlStatement,
+  TransmissionSettlement,
+} from "@jeswr/agent-model";
+
+export type { TransmissionSettlement } from "@jeswr/agent-model";
 
 // Send-only projection with action validation: channel root imports are forbidden by layer lint.
 export interface Wire {
@@ -81,19 +88,13 @@ export type Disposition =
   | { readonly status: "prohibited"; readonly reason: "prohibition" }
   | { readonly status: "awaiting-approval" | "confirm-required" | "ready"; readonly reason: string }
   | { readonly status: "sent" | "not-sent" | "uncertain"; readonly reason: string };
-export interface Receipt {
-  readonly proposal: string;
-  readonly conversation: string;
-  readonly kind: "receipt";
-  readonly body: ReceiptBody;
-}
 /** Actor statuses confer no authority. This adapter writes only executor-owned outbox resources. */
 export interface ProposalStore {
   get(id: string): Promise<OutboxEntry | undefined>;
   queued(): Promise<readonly string[]>;
   writeDisposition(id: string, result: Disposition): Promise<void>;
-  /** Idempotent upsert keyed by proposal + outcome; does not bypass the transmission gate. */
-  emitReceipt(receipt: Receipt): Promise<void>;
+  /** Idempotent local event upsert keyed by proposal + status; never a protocol receipt. */
+  emitTransmission(settlement: TransmissionSettlement): Promise<void>;
 }
 export interface ApprovalContext {
   readonly proposal: string;

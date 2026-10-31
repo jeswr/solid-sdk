@@ -11,15 +11,15 @@ import type {
   Disposition,
   OutboxEntry,
   ProposalStore,
-  Receipt,
   TransmissionRecord,
+  TransmissionSettlement,
   TransmissionStore,
 } from "./types.js";
 
 export function createMemoryStores(at = "2026-10-31T12:00:00.000Z") {
   const entries = new Map<string, OutboxEntry>();
   const dispositions = new Map<string, Disposition>();
-  const receipts = new Map<string, Receipt>();
+  const settlements = new Map<string, TransmissionSettlement>();
   const records = new Map<string, TransmissionRecord>();
   const approvals: Approval[] = [];
   const statements: ControlStatement[] = [];
@@ -41,7 +41,7 @@ export function createMemoryStores(at = "2026-10-31T12:00:00.000Z") {
   };
   const proposals: ProposalStore = {
     get: async (id) => entries.get(id),
-    // Refusals remain visible for fresh control/mandate evaluation; transmission receipts own deduplication.
+    // Refusals remain visible for fresh control/mandate evaluation; settlements own deduplication.
     queued: async () =>
       [...entries.keys()].filter(
         (id) => !["sent", "not-sent"].includes(dispositions.get(id)?.status ?? ""),
@@ -49,8 +49,8 @@ export function createMemoryStores(at = "2026-10-31T12:00:00.000Z") {
     writeDisposition: async (id, result) => {
       dispositions.set(id, structuredClone(result));
     },
-    emitReceipt: async (receipt) => {
-      receipts.set(`${receipt.proposal}:${receipt.body.outcome}`, structuredClone(receipt));
+    emitTransmission: async (settlement) => {
+      settlements.set(`${settlement.proposal}:${settlement.status}`, structuredClone(settlement));
     },
   };
   const approvalStore: ApprovalStore = { findVerified: async () => structuredClone(approvals) };
@@ -69,7 +69,7 @@ export function createMemoryStores(at = "2026-10-31T12:00:00.000Z") {
   return {
     entries,
     dispositions,
-    receipts,
+    settlements,
     records,
     approvals,
     statements,

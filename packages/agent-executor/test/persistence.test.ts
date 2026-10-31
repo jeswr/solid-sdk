@@ -63,8 +63,8 @@ describe("pre-dispatch persistence failures", () => {
           attempts: unresolved ? 2 : 1,
           amount: { value: 12, currency: "GBP" },
         });
-        expect([...h.receipts.values()][0]?.body).toMatchObject({
-          outcome: unresolved ? "uncertain" : "not-executed",
+        expect([...h.settlements.values()][0]).toMatchObject({
+          status: unresolved ? "uncertain" : "not-sent",
           final: false,
         });
         // The same executor can retry a proven non-send without provider lookup/finalAbsence.

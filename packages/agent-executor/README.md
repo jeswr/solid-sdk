@@ -11,7 +11,7 @@ channel **send halves**. It imports no model SDK or channel ingest implementatio
 
 `transmit(proposalId)` runs the nine-step gate: local/verified halt, exact rendered-wire
 integrity, expiry, current verified mandate and policy, exact verified approval when
-required, committed limits, durable idempotency, provider outcome and conversation receipt.
+required, committed limits, durable idempotency, provider outcome and conversation event.
 Actor-writable proposal state never grants permission or controls idempotency. Dry-run
 is the default; both the executor and binding must explicitly enable effects.
 Dry runs record a `ready(dry-run)` evaluation and leave the proposal queued. They do not
@@ -42,10 +42,14 @@ lookup and before handing over send credentials, closing asynchronous revocation
   ties; a later verified Resume clears it only when the local HALT file is absent.
   Unreadable controls or HALT state fail closed. `createHaltFileCheck(io, path)` checks
   the real file on every pass, including dangling symlinks; only ENOENT means absent.
-- `ProposalStore` writes executor-owned outbox dispositions and idempotently upserts
-  conversation receipt messages. `queued()` must enumerate all pending and unresolved
+- `ProposalStore` writes executor-owned outbox dispositions and idempotently upserts local
+  `TransmissionSettlement` conversation events through `emitTransmission()`, keyed by
+  proposal + status. Apply these events with `agent-model.transition`; they record delivery
+  in `state.transmissions` without changing agreement performance outcomes or phase.
+  Protocol `receipt` messages remain reserved for performance referencing the active agreement.
+  `queued()` must enumerate all pending and unresolved
   items, including those waiting for approval or control/mandate re-evaluation.
-  Send/receipt/audit persistence errors propagate; an audit failure never authorizes a send.
+  Send/event/audit persistence errors propagate; an audit failure never authorizes a send.
 - `proposalTermsDigest(entry)` defines approval identity. Build the wire first, set
   `wireDigest`, then set `proposal.intent.termsDigest` using this helper before approval.
   It covers the complete intent except the digest itself, proposal id, preview, expiry,
@@ -91,9 +95,10 @@ id `a2a` with `idempotentResend: true` and receiver deduplication. All paths are
 at **three provider attempts**. Rejected A2A resends retain the earlier uncertainty.
 Positive lookup can still reconcile delivery after all three attempts, including for A2A;
 the cap prevents further transmissions.
-Rejected sends emit non-final `not-executed` receipts while explicit retries remain
-available. At the three-attempt bound, a definitive non-send emits final `not-executed`;
-successful sends emit final `completed`, and unresolved sends remain non-final `uncertain`.
+Rejected sends emit non-final `not-sent` transmission settlements while explicit retries remain
+available. At the three-attempt bound, a definitive non-send emits final `not-sent`;
+successful sends emit final `sent`, and unresolved sends remain non-final `uncertain`.
+This finality concerns delivery only: sending does not establish completed agreement performance.
 
 Timeouts do not cancel the original call. Pending requests remain guarded across
 executor instances sharing a store, and late outcomes are persisted. Positive delivery

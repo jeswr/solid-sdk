@@ -74,7 +74,7 @@ it("atomic local store fsyncs before the effect and survives a fresh instance", 
 });
 it.each([
   "dispatch",
-  "receipt",
+  "settlement",
 ])("actual process death before %s recovers without resending", async (stage) => {
   const { directory, store } = await fixture();
   const h = harness();
@@ -101,7 +101,7 @@ it.each([
           await memory.proposals.writeDisposition(id, result);
           await fs.writeFile(process.argv[1] + '/dispositions.json', JSON.stringify([...memory.dispositions]));
         },
-        emitReceipt: async () => { process.stdout.write('durable\\n'); await new Promise(() => {}); },
+        emitTransmission: async () => { process.stdout.write('durable\\n'); await new Promise(() => {}); },
       }, approvals: memory.approvalStore, controls: memory.controls, clock: memory.clock,
       mandates: { load: async () => mandate }, transmissions: store,
       policy: { id: 'synthetic', evaluate: (policy) => ({ effect: policy.id === mandate.autonomous.id ? 'permit' : 'not-applicable' }) },
@@ -150,12 +150,12 @@ it.each([
       const dispositions = JSON.parse(await fs.readFile(`${directory}/dispositions.json`, "utf8"));
       for (const [id, result] of dispositions) h.dispositions.set(id, result);
       expect(await h.proposals.queued()).toEqual([e.proposal.id]);
-      expect(h.receipts.size).toBe(0);
+      expect(h.settlements.size).toBe(0);
       expect(await executor.runOutboxOnce()).toEqual({
         [e.proposal.id]: { status: "duplicate", providerRef: "test:before-crash" },
       });
-      expect([...h.receipts.values()][0]?.body).toMatchObject({
-        outcome: "completed",
+      expect([...h.settlements.values()][0]).toMatchObject({
+        status: "sent",
         final: true,
       });
       expect(await executor.runOutboxOnce()).toEqual({});

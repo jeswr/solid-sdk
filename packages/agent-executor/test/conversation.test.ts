@@ -1,0 +1,104 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { DEFAULT_LIMITS, derivedUrn, openConversation, transition } from "@jeswr/agent-model";
+import { expect, it, vi } from "vitest";
+import { MAX_TRANSMISSION_ATTEMPTS } from "../src/index.js";
+import { harness, NOW } from "./helpers.js";
+
+it.each([
+  ["sent", 1, true],
+  ["not-sent", 1, false],
+  ["not-sent", MAX_TRANSMISSION_ATTEMPTS, true],
+  ["uncertain", 1, false],
+] as const)("applies %s transmission settlement after %s attempts without settling performance", async (status, attempts, final) => {
+  const h = harness();
+  const entry = await h.enqueue();
+  if (attempts > 1) h.prior(entry, "not-sent", attempts - 1);
+  if (status === "not-sent")
+    vi.mocked(h.binding.send.transmit).mockResolvedValue({ outcome: "rejected", detail: "no" });
+  if (status === "uncertain")
+    vi.mocked(h.binding.send.transmit).mockRejectedValue(new Error("offline"));
+
+  const envelope = entry.renderable.message;
+  const offer = transition(
+    openConversation({
+      id: envelope.conversation,
+      role: "initiator",
+      peer: { actor: "urn:peer" },
+      at: NOW,
+    }),
+    {
+      type: "message",
+      direction: "out",
+      message: {
+        ...envelope,
+        id: "urn:offer",
+        kind: "propose",
+        body: { operation: { id: "urn:op", version: "1" }, terms: {}, termsDigest: "d", round: 1 },
+      },
+      at: NOW,
+    },
+    DEFAULT_LIMITS,
+  );
+  if (!offer.ok) throw new Error(offer.detail);
+  const accepted = transition(
+    offer.state,
+    {
+      type: "message",
+      direction: "in",
+      message: {
+        ...envelope,
+        id: "urn:accept",
+        kind: "accept",
+        body: { proposal: "urn:offer", termsDigest: "d", agreement: "urn:agreement" },
+      },
+      at: NOW,
+    },
+    DEFAULT_LIMITS,
+  );
+  if (!accepted.ok) throw new Error(accepted.detail);
+  const state = { ...accepted.state, requiredOutcomes: ["self"] as const };
+  const before = structuredClone(state);
+  expect(await h.executor.transmit(entry.proposal.id)).toMatchObject({ status });
+  const [settlement] = [...h.settlements.values()];
+  expect(settlement).toEqual({
+    type: "transmission-settled",
+    conversation: state.id,
+    proposal: entry.proposal.id,
+    activity: derivedUrn("transmission", entry.proposal.id),
+    status,
+    final,
+    at: NOW,
+  });
+  if (!settlement) throw new Error("Missing transmission settlement");
+  const applied = transition(state, settlement, DEFAULT_LIMITS);
+  expect(applied).toEqual({
+    ok: true,
+    state: { ...state, transmissions: { [entry.proposal.id]: settlement } },
+  });
+  expect(state).toEqual(before);
+  if (!applied.ok) throw new Error(applied.detail);
+
+  // Only a performance receipt referencing the agreement can complete the agreement.
+  expect(
+    transition(
+      applied.state,
+      {
+        type: "message",
+        direction: "out",
+        message: {
+          ...envelope,
+          id: "urn:performance-receipt",
+          kind: "receipt",
+          body: {
+            ref: "urn:agreement",
+            activity: "urn:performance",
+            outcome: "completed",
+            final: true,
+          },
+        },
+        at: NOW,
+      },
+      DEFAULT_LIMITS,
+    ),
+  ).toMatchObject({ ok: true, state: { phase: "completed", outcomes: { self: "completed" } } });
+});

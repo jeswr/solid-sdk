@@ -44,6 +44,18 @@ export type Phase =
 
 export type Side = "self" | "peer";
 
+/** Local executor evidence about delivery, never a peer's agreement performance receipt. */
+export interface TransmissionSettlement {
+  readonly type: "transmission-settled";
+  readonly conversation: Iri;
+  readonly proposal: Iri;
+  readonly activity: Iri;
+  readonly status: "sent" | "not-sent" | "uncertain";
+  /** Final delivery disposition for this proposal; does not conclude agreement performance. */
+  readonly final: boolean;
+  readonly at: string;
+}
+
 export interface ConversationState {
   readonly id: Iri;
   readonly role: "initiator" | "responder";
@@ -63,6 +75,7 @@ export interface ConversationState {
   readonly invocation?: Iri;
   readonly requiredOutcomes: readonly Side[];
   readonly outcomes: { readonly self?: OutcomeConclusion; readonly peer?: OutcomeConclusion };
+  readonly transmissions?: Readonly<Record<Iri, TransmissionSettlement>>;
   readonly openedAt: string;
   readonly updatedAt: string;
   readonly closedReason?: string;
@@ -75,6 +88,7 @@ export interface ConversationState {
 }
 
 export type ConversationEvent =
+  | TransmissionSettlement
   | {
       readonly type: "message";
       readonly direction: "in" | "out";
@@ -132,6 +146,19 @@ export function transition(
   event: ConversationEvent,
   limits: Pick<PilotLimits, "maxMessagesPerConversation" | "maxProposalRounds">,
 ): TransitionResult {
+  if (event.type === "transmission-settled") {
+    if (event.conversation !== state.id) {
+      return fail("protocol-violation", "transmission settlement belongs to another conversation");
+    }
+    return {
+      ok: true,
+      state: {
+        ...state,
+        transmissions: { ...state.transmissions, [event.proposal]: event },
+        updatedAt: event.at,
+      },
+    };
+  }
   if (event.type === "expire") {
     if (isTerminal(state.phase)) return { ok: true, state };
     return {

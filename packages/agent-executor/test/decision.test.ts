@@ -322,16 +322,18 @@ describe("DESIGN §4.1 ordered enforcement", () => {
     });
     expect(h.binding.send.transmit).not.toHaveBeenCalled();
   });
-  it("step 8: writes system outcome and conversation receipt with no body in audit", async () => {
+  it("step 8: writes system outcome and conversation settlement with no body in audit", async () => {
     const h = harness();
     const e = await h.enqueue();
     e.proposal.state = "sent";
     expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "sent" });
     expect(h.records.get(e.proposal.id)).toMatchObject({ status: "sent", attempts: 1 });
-    expect([...h.receipts.values()][0]).toMatchObject({
-      kind: "receipt",
+    expect([...h.settlements.values()][0]).toMatchObject({
+      type: "transmission-settled",
       conversation: e.proposal.intent.conversation,
-      body: { ref: e.proposal.id, outcome: "completed", final: true },
+      proposal: e.proposal.id,
+      status: "sent",
+      final: true,
     });
     expect(JSON.stringify(h.auditRecords)).not.toContain(e.proposal.renderedPreview);
     expect(JSON.stringify(h.auditRecords)).not.toContain("synthetic-send-only");
@@ -350,7 +352,7 @@ describe("DESIGN §4.1 ordered enforcement", () => {
     expect(h.binding.send.transmit).not.toHaveBeenCalled();
     expect(h.records.size).toBe(0);
     expect(h.ledger).toEqual([]);
-    expect(h.receipts.size).toBe(0);
+    expect(h.settlements.size).toBe(0);
     expect(await h.proposals.queued()).toEqual([e.proposal.id]);
     expect(await h.executor.runOutboxOnce()).toEqual({
       [e.proposal.id]: { status: "sent", reason: "sent" },
