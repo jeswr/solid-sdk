@@ -200,6 +200,76 @@ test.each([
   expect((await f.load().restore())?.webId).toBe(f.op.webId);
 });
 
+test.each([
+  "network",
+  "untrusted",
+  "logout",
+])("refresh rotation is durable before profile revalidation fails with %s", async (failure) => {
+  const f = fixture();
+  let idToken: string;
+  let revalidating = false;
+  const ready = Promise.withResolvers<void>(),
+    release = Promise.withResolvers<void>();
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (revalidating && request.url === new URL(f.op.webId!).href.split("#")[0]) {
+      ready.resolve();
+      await release.promise;
+      if (failure === "network") throw new Error("Profile unavailable");
+      if (failure === "untrusted")
+        return new Response("", { headers: { "content-type": "text/turtle" } });
+    }
+    const response = await f.op.fetch(request);
+    if (request.url.endsWith("/token")) {
+      const body = await response.json();
+      if (body.id_token !== undefined) idToken = body.id_token;
+      else {
+        revalidating = true;
+        body.id_token = idToken;
+      }
+      return Response.json(body);
+    }
+    return response;
+  });
+  await f.load().login();
+  const before = f.record()[1];
+  const auth = f.load();
+  const restored = vi.fn(),
+    expired = vi.fn();
+  auth.on("restore", restored);
+  auth.on("expired", expired);
+  const restoring = auth.restore();
+  await ready.promise;
+  try {
+    const rotated = f.record()[1];
+    expect(rotated.refreshToken).not.toBe(before.refreshToken);
+    expect(rotated.identity).toEqual(before.identity);
+    expect(rotated).not.toHaveProperty("tokenResult");
+    expect(await auth.identity()).toBeNull();
+    expect(restored).not.toHaveBeenCalled();
+    if (failure === "logout") await auth.logout();
+  } finally {
+    release.resolve();
+    await restoring;
+  }
+  expect(await restoring).toBeNull();
+  expect(await auth.identity()).toBeNull();
+  expect(restored).not.toHaveBeenCalled();
+  expect(expired).not.toHaveBeenCalled();
+  if (failure === "logout") {
+    expect(f.record()).toBeUndefined();
+    expect(await auth.remembered()).toEqual([]);
+    expect(f.op.stats.revocations).toBe(1);
+  } else {
+    expect(await auth.remembered()).toEqual([{ webId: f.op.webId, issuer: f.op.issuer }]);
+    vi.stubGlobal("fetch", f.op.fetch);
+    await expect(f.load().restore()).resolves.toMatchObject({ webId: f.op.webId });
+    expect(f.op.stats.refreshes).toBe(2);
+  }
+  expect(f.op.stats.reuse).toBe(0);
+  expect(f.op.stats.authorizations).toBe(1);
+});
+
 test("no pointer or no credential never opens authorization UI", async () => {
   const f = fixture();
   const auth = f.load();

@@ -258,7 +258,7 @@ export class OidcSession {
 
         let invalidGrant = false;
         if (record !== null) {
-          const refreshed = await this.#refresh(record, combined);
+          const refreshed = await this.#refresh(key, record, combined);
           invalidGrant = refreshed === undefined;
           if (durable !== null && this.#options.preserveRefreshOnFailure === true)
             await store!.removeItem(key);
@@ -389,7 +389,11 @@ export class OidcSession {
   }
 
   /** Refresh grant; `undefined` when the grant is no longer valid. */
-  async #refresh(record: RefreshSessionRecord, signal: AbortSignal): Promise<Fresh | undefined> {
+  async #refresh(
+    key: string,
+    record: RefreshSessionRecord,
+    signal: AbortSignal,
+  ): Promise<Fresh | undefined> {
     const { authorizationServer: as, client, dpopKey } = record;
     const bound = this.#options.dpop === false ? {} : { DPoP: oauth.DPoP(client, dpopKey) };
     const additional =
@@ -411,6 +415,26 @@ export class OidcSession {
     } catch (e) {
       if (e instanceof oauth.ResponseBodyError && e.error === "invalid_grant") return undefined;
       throw e;
+    }
+
+    const store = this.#options.sessionStore;
+    if (this.#options.preserveRefreshOnFailure === true && store !== undefined) {
+      // Rotation already consumed the old token. Keep its replacement before fallible profile
+      // revalidation, retaining only the previously verified identity until #fresh succeeds.
+      await this.#fence.commit(
+        record.generation,
+        async () => {
+          signal.throwIfAborted();
+          this.#keys.add(key);
+          await store.removeItem(key);
+          await store.setItem(key, {
+            ...record,
+            created: Date.now(),
+            refreshToken: processed.refresh_token ?? record.refreshToken,
+          });
+        },
+        signal,
+      );
     }
 
     // Keep the refresh token when the server did not rotate it.

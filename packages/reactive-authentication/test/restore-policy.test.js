@@ -89,6 +89,39 @@ test("stored keys allow a fresh session to revoke without redeeming a refresh to
   f.fence.close();
 });
 
+for (const persist of [true, false]) {
+  test(`refresh preservation supports non-rotating tokens; persistent=${persist}`, async () => {
+    const issuer = await startOpenIdProvider({ rotate: false });
+    const f = setup();
+    if (!persist) delete f.provider.sessionStore;
+    let before, after;
+    const set = f.sessions.setItem;
+    f.sessions.setItem = async (key, value) => {
+      before ??= value.refreshToken;
+      after = value.refreshToken;
+      await set(key, value);
+    };
+    const page = solidClient(issuer, rs, { provider: f.provider, fence: f.fence });
+    const request = new Request(`${rs.url}/alice/non-rotating`);
+    try {
+      const upgraded = await page.provider.upgrade(request);
+      await page.provider.invalidate(upgraded);
+      await page.provider.upgrade(request);
+      assert.equal(issuer.stats.refresh, 1);
+      assert.equal(issuer.stats.reuse, 0);
+      assert.equal(page.code.calls, 1);
+      assert.equal(after, before);
+      await page.provider.invalidate(await page.provider.upgrade(request));
+      await page.provider.upgrade(request);
+      assert.equal(issuer.stats.refresh, 2);
+      assert.equal(page.code.calls, 1);
+    } finally {
+      f.fence.close();
+      await issuer.close();
+    }
+  });
+}
+
 test("an account lock is re-resolved after another context commits its alias", async () => {
   const f = setup();
   let calls = 0;
