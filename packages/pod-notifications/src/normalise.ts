@@ -64,7 +64,9 @@ export function createChangeNormalizer(
   const seen = new Map<string, number>();
   const now = options.now ?? Date.now;
   const scoped = (url: string) => {
-    if (!/^https?:\/\//i.test(url) || /[\u0000-\u0020\\]/u.test(url) || !URL.canParse(url)) return false;
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: Reject controls before URL parsing strips them.
+    if (!/^https?:\/\//i.test(url) || /[\u0000-\u0020\\]/u.test(url) || !URL.canParse(url))
+      return false;
     const parsed = new URL(url);
     return !parsed.username && !parsed.password && options.isWithinStorage(url);
   };

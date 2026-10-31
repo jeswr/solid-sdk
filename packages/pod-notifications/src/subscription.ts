@@ -13,6 +13,14 @@ const transitions: Record<SubscriptionState, readonly SubscriptionState[]> = {
   closed: [],
 };
 
+function notify(callback: () => void): void {
+  try {
+    callback();
+  } catch {
+    // A consumer must not interrupt other observers, reconciliation or resource cleanup.
+  }
+}
+
 /** Internal controller shared by channels; closed is terminal and cleanup is idempotent. */
 export class SubscriptionController implements Subscription {
   readonly topics: readonly string[];
@@ -43,17 +51,17 @@ export class SubscriptionController implements Subscription {
   transition(state: SubscriptionState, reason?: string): void {
     if (!transitions[this.state].includes(state)) return;
     this.state = state;
-    for (const handler of this.listeners.state) handler(state, reason);
+    for (const handler of this.listeners.state) notify(() => handler(state, reason));
   }
 
   change(event: ChangeEvent): void {
     if (this.state === "closed") return;
-    for (const handler of this.listeners.change) handler(event);
+    for (const handler of this.listeners.change) notify(() => handler(event));
   }
 
   resync(since: Date): void {
     if (this.state === "closed") return;
-    for (const handler of this.listeners.resync) handler(since);
+    for (const handler of this.listeners.resync) notify(() => handler(since));
   }
 
   close(): Promise<void> {

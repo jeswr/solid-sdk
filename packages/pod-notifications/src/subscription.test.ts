@@ -97,3 +97,22 @@ test("iterator return detaches its consumer without closing the subscription", a
   expect(sub.state).toBe("connecting");
   await sub.close();
 });
+
+test("throwing observers cannot interrupt other observers or close cleanup", async () => {
+  const sub = new SubscriptionController([]);
+  const fail = () => {
+    throw new Error("consumer");
+  };
+  sub.on("state", fail);
+  sub.on("change", fail);
+  sub.on("resync", fail);
+  const change = vi.fn();
+  sub.on("change", change);
+  sub.cleanup = vi.fn();
+  sub.transition("degraded");
+  sub.resync(new Date(0));
+  sub.change(event);
+  expect(change).toHaveBeenCalledWith(event);
+  await sub.close();
+  expect(sub.cleanup).toHaveBeenCalledTimes(1);
+});
