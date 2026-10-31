@@ -3,9 +3,9 @@
 import { escapeIri } from "@jeswr/rdf-serialize";
 import { Store } from "n3";
 import { StorageError, storageErrorFrom } from "./errors.js";
-import { discard, mediaTypeOf, scoped, send } from "./http.js";
+import { discard, mediaTypeOf, readResultFrom, scoped, send } from "./http.js";
 import { throwIfAborted } from "./internal.js";
-import type { LwsBackendOptions } from "./lws-backend.js";
+import { jsonBody, type LwsBackendOptions, linksetOf } from "./lws-backend.js";
 import {
   applyQuadPatch,
   type RdfPatchError,
@@ -15,9 +15,23 @@ import {
   WRITABLE_RDF,
 } from "./rdf.js";
 import { patchFormulas } from "./solid-patch.js";
-import type { Body, JsonPatchOp, ReadResult, StorageClient, WriteResult } from "./types.js";
+import type {
+  Body,
+  JsonPatchOp,
+  Metadata,
+  MetadataOp,
+  ReadResult,
+  StorageClient,
+  WriteResult,
+} from "./types.js";
 
-type Writes = Pick<StorageClient, "write" | "writeRdf" | "create" | "patch">;
+type Writes = Pick<
+  StorageClient,
+  "write" | "writeRdf" | "create" | "patch" | "delete" | "move" | "setMetadata"
+>;
+type Context = { anchor: string } & Record<string, unknown>;
+type Linkset = { linkset: Context[] };
+type Target = { href: string };
 const LWS = "https://www.w3.org/ns/lws#";
 const JSON_PATCH = "application/json-patch+json";
 const SPARQL = "application/sparql-update";
@@ -75,11 +89,72 @@ function requiredEtag(method: string, url: string, value: string | null): string
   }
   return value;
 }
+const pointer = (key: string) => key.replaceAll("~", "~0").replaceAll("/", "~1");
+
+/** Generate sequential JSON Patch operations without changing the fetched raw document. */
+function metadataPatch(
+  meta: Metadata,
+  ops: readonly (MetadataOp & { anchor: string })[],
+): JsonPatchOp[] {
+  const raw = structuredClone(meta.raw) as Linkset;
+  const patch: JsonPatchOp[] = [];
+  for (const op of ops) {
+    const anchor = op.anchor;
+    const indices = raw.linkset.flatMap((entry, i) =>
+      new URL(entry.anchor, meta.url).href === anchor ? [i] : [],
+    );
+    const rel = /^[a-z][a-z0-9.-]*$/i.test(op.rel) ? op.rel.toLowerCase() : op.rel;
+    if (op.op === "remove") {
+      for (const i of indices) {
+        const context = raw.linkset[i] as Context;
+        if (!Object.hasOwn(context, rel)) continue;
+        const targets = context[rel] as Target[];
+        // Descending indices preserve sequential JSON Patch semantics, including duplicates.
+        for (let j = targets.length - 1; j >= 0; j--) {
+          if (new URL((targets[j] as Target).href, meta.url).href !== op.href) continue;
+          targets.splice(j, 1);
+          patch.push({ op: "remove", path: `/linkset/${i}/${pointer(rel)}/${j}` });
+        }
+      }
+      continue;
+    }
+    if (
+      indices.some((i) => {
+        const context = raw.linkset[i] as Context;
+        return (
+          Object.hasOwn(context, rel) &&
+          (context[rel] as Target[]).some(
+            (target) => new URL(target.href, meta.url).href === op.href,
+          )
+        );
+      })
+    )
+      continue;
+    let i = indices[0];
+    if (i === undefined) {
+      i = raw.linkset.length;
+      raw.linkset.push({ anchor });
+      patch.push({ op: "add", path: "/linkset/-", value: { anchor } });
+    }
+    const context = raw.linkset[i] as Context;
+    const path = `/linkset/${i}/${pointer(rel)}`;
+    if (!Object.hasOwn(context, rel)) {
+      Object.defineProperty(context, rel, { value: [], enumerable: true, writable: true });
+      patch.push({ op: "add", path, value: [] });
+    }
+    const targets = context[rel] as Target[];
+    targets.push({ href: op.href });
+    patch.push({ op: "add", path: `${path}/-`, value: { href: op.href } });
+  }
+  return patch;
+}
+
 /** Attach writes to the read backend; every response retains its storage-binding checks. */
 export function lwsWrites(
   options: LwsBackendOptions,
   client: () => StorageClient,
   inspect: (method: string, url: string, response: Response) => ReadResult["links"],
+  metadata: (url: string, signal?: AbortSignal, described?: ReadResult) => Promise<Metadata>,
 ): Writes {
   const { root, fetch } = options;
   function target(method: string, url: string): string {
@@ -91,6 +166,9 @@ export function lwsWrites(
     const dest = target(method, url);
     if (!dest.endsWith("/")) throw new StorageError("bad-request", { method, url: dest });
     return dest;
+  }
+  function notRoot(method: string, url: string) {
+    if (url === root) throw new StorageError("method-not-allowed", { method, url });
   }
   async function request(
     method: string,
@@ -135,6 +213,15 @@ export function lwsWrites(
       created: response.status === 201,
     };
   }
+  async function remove(url: string, ifMatch: string, signal?: AbortSignal, depth = false) {
+    const response = await request(
+      "DELETE",
+      url,
+      { "If-Match": ifMatch, ...(depth ? { Depth: "infinity" } : {}) },
+      signal,
+    );
+    discard(response.body);
+  }
   async function patchJson(
     url: string,
     ops: readonly JsonPatchOp[],
@@ -154,8 +241,7 @@ export function lwsWrites(
       const dest = target("PUT", url);
       conditional(opts?.ifMatch, true);
       contentType(opts?.contentType);
-      if (dest.endsWith("/"))
-        throw new StorageError("method-not-allowed", { method: "PUT", url: dest });
+      if (dest === root) throw new StorageError("method-not-allowed", { method: "PUT", url: dest });
       return result(
         dest,
         await request(
@@ -341,6 +427,137 @@ export function lwsWrites(
           )
             throw cause;
         }
+      }
+    },
+    async setMetadata(url, ops, opts) {
+      const source = target("PATCH", url);
+      conditional(opts?.ifMatch);
+      const normalised = ops.map((op) => {
+        if (op.op !== "add" && op.op !== "remove")
+          throw new TypeError("Invalid metadata operation");
+        relation(op.rel);
+        iri(op.href);
+        if (["linkset", "type", "up"].includes(op.rel.toLowerCase()))
+          throw unsupported("PATCH", source, "patch");
+        return {
+          ...op,
+          anchor: scoped(root, "PATCH", op.anchor ?? source),
+          href: new URL(op.href).href,
+        };
+      });
+      const meta = await metadata(source);
+      const dest = target("PATCH", meta.url);
+      checkEtag("PATCH", dest, meta.etag, opts.ifMatch);
+      const patch = metadataPatch(meta, normalised);
+      if (patch.length === 0) return { etag: meta.etag };
+      return { etag: (await result(dest, await patchJson(dest, patch, opts.ifMatch))).etag };
+    },
+    async move(url, destination, opts = {}) {
+      const source = target("MOVE", url);
+      const dest = container("MOVE", destination);
+      conditional(opts.ifMatch);
+      notRoot("MOVE", source);
+      const feature = client().features.move;
+      if (feature.state !== "available") throw unsupported("MOVE", source, "move");
+      if (dest === source) throw new StorageError("conflict", { method: "MOVE", url: source });
+      const described = await client().head(source, { signal: opts.signal });
+      checkEtag("MOVE", source, described.etag, opts.ifMatch);
+      if (described.kind === "container" && !feature.detail.containers)
+        throw unsupported("MOVE", source, "move");
+      const meta = await metadata(source, opts.signal, described);
+      const metaUrl = target("PATCH", meta.url);
+      const tag = requiredEtag("GET", metaUrl, meta.etag);
+      const contexts = (meta.raw as Linkset).linkset;
+      const matches = contexts.flatMap((context, i) =>
+        new URL(context.anchor, metaUrl).href === source && Object.hasOwn(context, "up")
+          ? [{ context, i }]
+          : [],
+      );
+      if (matches.length !== 1)
+        throw invalid("GET", metaUrl, "Expected one resource context with up");
+      const { context, i } = matches[0] as { context: Context; i: number };
+      const up = context.up as Target[];
+      if (up.length !== 1) throw invalid("GET", metaUrl, "Expected one parent target");
+      const patch: JsonPatchOp[] = [
+        { op: "test", path: `/linkset/${i}/anchor`, value: context.anchor },
+        { op: "replace", path: `/linkset/${i}/up/0/href`, value: dest },
+      ];
+      const response = await patchJson(metaUrl, patch, tag, opts.signal);
+      const contentLocation = response.headers.get("content-location");
+      let moved = source;
+      if (contentLocation !== null || feature.detail.preservesIdentifier === false) {
+        let delivered: string;
+        try {
+          if (!contentLocation) throw new TypeError("Missing Content-Location");
+          delivered = target("PATCH", new URL(contentLocation, metaUrl).href);
+        } catch {
+          discard(response.body);
+          throw invalid("PATCH", metaUrl, "Invalid moved linkset Content-Location");
+        }
+        const result = readResultFrom(
+          response,
+          delivered,
+          {
+            status: 200,
+            kind: "resource",
+            parent: null,
+            metadataUrl: null,
+            allow: null,
+            links: new Map(),
+            withBody: true,
+          },
+          opts.signal,
+        );
+        const raw = await jsonBody(
+          result,
+          ["application/linkset+json", "application/json"],
+          opts.signal,
+        );
+        linksetOf(raw, delivered);
+        try {
+          const movedContext = (raw as Linkset).linkset[i];
+          if (movedContext === undefined) throw new TypeError("Missing moved context");
+          moved = target("MOVE", new URL(movedContext.anchor, delivered).href);
+          if (moved === root) throw new TypeError("Cannot move to root");
+        } catch {
+          throw invalid("PATCH", metaUrl, "Invalid moved resource anchor");
+        }
+      } else discard(response.body);
+      // The PATCH ETag belongs to the linkset, never to the resource's content.
+      return { url: moved, etag: await etag(moved, null, opts.signal), created: moved !== source };
+    },
+    async delete(url, opts = {}) {
+      const source = target("DELETE", url);
+      conditional(opts.ifMatch);
+      notRoot("DELETE", source);
+      if (opts.recursive !== undefined && typeof opts.recursive !== "boolean")
+        throw new TypeError("Invalid recursive option");
+      if (!opts.recursive || client().features.recursiveDelete.state === "available") {
+        return remove(source, opts.ifMatch, opts.signal, opts.recursive === true);
+      }
+      const first = await client().head(source, { signal: opts.signal });
+      checkEtag("DELETE", source, first.etag, opts.ifMatch);
+      const nodes = [first];
+      const seen = new Set([source]);
+      // Follow logical containment, never path prefixes; preflight the whole tree before deleting.
+      for (const node of nodes) {
+        if (node.kind !== "container") continue;
+        for await (const entry of client().listAll(node.url, { signal: opts.signal })) {
+          const childUrl = target("DELETE", entry.url);
+          if (childUrl === root || seen.has(childUrl) || nodes.length >= 10000)
+            throw invalid("GET", node.url, "Invalid recursive containment tree");
+          seen.add(childUrl);
+          const child = await client().head(childUrl, { signal: opts.signal });
+          if (child.parent !== node.url)
+            throw invalid("HEAD", childUrl, "Member has a different parent");
+          requiredEtag("HEAD", childUrl, child.etag);
+          nodes.push(child);
+        }
+      }
+      for (const node of nodes.reverse()) {
+        const current =
+          node.kind === "container" ? await client().head(node.url, { signal: opts.signal }) : node;
+        await remove(node.url, requiredEtag("HEAD", node.url, current.etag), opts.signal);
       }
     },
   };

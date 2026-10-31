@@ -74,7 +74,7 @@ function resolve(value: string, base: string): string | null {
 }
 
 /** Bounded JSON collection, with transport errors kept as network errors. */
-async function jsonBody(
+export async function jsonBody(
   result: Pick<ReadResult, "url" | "contentType" | "body">,
   accepted: string[],
   signal?: AbortSignal,
@@ -118,7 +118,7 @@ async function jsonBody(
 }
 
 /** RFC 9264 §4.2: anchors and targets resolve against the delivering linkset URL. */
-function linksetOf(raw: unknown, url: string): Map<string, Map<string, MetadataLink[]>> {
+export function linksetOf(raw: unknown, url: string): Map<string, Map<string, MetadataLink[]>> {
   if (!object(raw) || !Array.isArray(raw.linkset)) throw invalid(url, "Expected linkset array");
   const links = new Map<string, Map<string, MetadataLink[]>>();
   let targetCount = 0;
@@ -158,16 +158,6 @@ function linksetOf(raw: unknown, url: string): Map<string, Map<string, MetadataL
     links.set(anchor, rels);
   }
   return links;
-}
-
-function writesPending(method: string, url: string): Promise<never> {
-  return Promise.reject(
-    new StorageError("unsupported", {
-      method,
-      url,
-      message: `${method} on the LWS backend is not available yet (T-024)`,
-    }),
-  );
 }
 
 /** Create a scoped LWS StorageClient with conditional mutations. */
@@ -244,6 +234,18 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
     };
   }
   const { get, head, read, readRdf } = createReadOperations(options.fetch, root, shapeOf);
+  async function metadata(url: string, signal?: AbortSignal, described?: ReadResult) {
+    described ??= await head(url, { signal });
+    if (described.metadataUrl === null)
+      throw new StorageError("unsupported", {
+        method: "GET",
+        url: described.url,
+        message: `${described.url} advertises no linkset metadata`,
+      });
+    const result = await get(described.metadataUrl, { Accept: "application/linkset+json" }, signal);
+    const raw = await jsonBody(result, ["application/linkset+json", "application/json"], signal);
+    return { url: result.url, etag: result.etag, raw, links: linksetOf(raw, result.url) };
+  }
 
   const client: StorageClient = {
     protocol: "lws",
@@ -333,30 +335,12 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
         opts.signal,
       );
     },
-    async metadata(url) {
-      const described = await head(url);
-      if (described.metadataUrl === null)
-        throw new StorageError("unsupported", {
-          method: "GET",
-          url: described.url,
-          message: `${described.url} advertises no linkset metadata`,
-        });
-      const result = await get(
-        described.metadataUrl,
-        { Accept: "application/linkset+json" },
-        undefined,
-      );
-      const raw = await jsonBody(result, ["application/linkset+json", "application/json"]);
-      return { url: result.url, etag: result.etag, raw, links: linksetOf(raw, result.url) };
-    },
+    metadata,
     async parentOf(url) {
       const target = scoped(root, "HEAD", url);
       return isRoot(target) ? null : (await head(target)).parent;
     },
-    move: (url) => writesPending("MOVE", url),
-    delete: (url) => writesPending("DELETE", url),
-    setMetadata: (url) => writesPending("PATCH", url),
-    ...lwsWrites({ ...options, root }, () => client, inspect),
+    ...lwsWrites({ ...options, root }, () => client, inspect, metadata),
   };
   return client;
 }

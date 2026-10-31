@@ -6,12 +6,14 @@ import { describe, expect, test, vi } from "vitest";
 import { StorageError } from "./errors.js";
 import {
   lwsWriteExchanges,
+  LWS_WRITE_METADATA as META,
   LWS_CONTAINER as NOTES,
   LWS_ROOT as ROOT,
   LWS_WRITE_RESOURCE as URL,
 } from "./fixtures/lws.js";
+import { applyJsonPatch } from "./helpers.js";
 import { createLwsBackend } from "./lws.js";
-import type { CreateOptions, Patch, WriteOptions } from "./types.js";
+import type { CreateOptions, MetadataOp, Patch, WriteOptions } from "./types.js";
 
 const { namedNode: nn, literal, quad, variable, blankNode } = DataFactory;
 const old = quad(nn("urn:s"), nn("urn:p"), literal("old"));
@@ -62,17 +64,17 @@ function backend(
   return { storage: createLwsBackend({ root: ROOT, fetch, features }), fetch, calls };
 }
 const reply = (status = 204, headers: Record<string, string> = {}): Reply => ({ status, headers });
-function _json(value: unknown, headers: Record<string, string> = {}): Reply {
+function json(value: unknown, headers: Record<string, string> = {}): Reply {
   return {
     status: 200,
     headers: { "content-type": "application/linkset+json", etag: mtag, ...headers },
     body: JSON.stringify(value),
   };
 }
-const _linkset = (context: Record<string, unknown> = {}) => ({
+const linkset = (context: Record<string, unknown> = {}) => ({
   linkset: [{ anchor: URL, up: [{ href: NOTES }], ...context }],
 });
-const _move = (features: Features) => {
+const move = (features: Features) => {
   features.move.state = "available";
   features.move.detail = { native: true, containers: true, preservesIdentifier: true };
 };
@@ -259,6 +261,9 @@ describe("validation and transport fail closed", () => {
     for (const promise of [
       storage.patch(URL, raw, { ifMatch: "*" }),
       storage.patch(URL, raw, undefined as never),
+      storage.move(URL, ROOT),
+      storage.delete(URL),
+      storage.setMetadata(URL, [], undefined as never),
     ])
       await expect(promise).rejects.toBeInstanceOf(TypeError);
     expect(fetch).not.toHaveBeenCalled();
@@ -288,11 +293,11 @@ describe("validation and transport fail closed", () => {
     );
     expect(fetch).not.toHaveBeenCalled();
   });
-  test("containers refuse content PUT; container arguments require slash", async () => {
+  test("root refuses content PUT; container arguments require slash", async () => {
     const { storage, fetch } = backend();
-    await rejects(storage.write(NOTES, "", options), "method-not-allowed");
+    await rejects(storage.write(ROOT, "", options), "method-not-allowed");
     await rejects(storage.create(URL, ""), "bad-request");
-
+    await rejects(storage.move(URL, URL, { ifMatch: tag }), "bad-request");
     expect(fetch).not.toHaveBeenCalled();
   });
   test.each(["?", "#", "?x=1"])("mutation URLs refuse query/fragment %s", async (suffix) => {
@@ -301,6 +306,9 @@ describe("validation and transport fail closed", () => {
       storage.write(URL + suffix, "", options),
       storage.create(NOTES + suffix, null),
       storage.patch(URL + suffix, raw, { ifMatch: tag }),
+      storage.move(URL + suffix, NOTES, { ifMatch: tag }),
+      storage.delete(URL + suffix, { ifMatch: tag }),
+      storage.setMetadata(URL + suffix, [], { ifMatch: mtag }),
     ])
       await rejects(promise, "bad-request");
     expect(fetch).not.toHaveBeenCalled();
@@ -313,6 +321,9 @@ describe("validation and transport fail closed", () => {
       storage.writeRdf(foreign, [], { ifMatch: tag }),
       storage.create(foreign, null),
       storage.patch(foreign, raw, { ifMatch: tag }),
+      storage.move(URL, foreign, { ifMatch: tag }),
+      storage.delete(foreign, { ifMatch: tag }),
+      storage.setMetadata(foreign, [], { ifMatch: tag }),
     ]) {
       const error = await rejects(promise, "scope");
       expect(error.message).not.toContain("secret");
@@ -570,6 +581,469 @@ describe("LWS JSON, raw and RDF patches", () => {
   });
 });
 
+describe("linkset metadata JSON Patch generation", () => {
+  test("add relation and remove target have stable bytes; server fields stay intact", async () => {
+    const { storage, calls } = backend();
+    expect(
+      await storage.setMetadata(
+        URL,
+        [
+          { op: "add", rel: "related", href: "urn:new" },
+          { op: "add", rel: "license", href: "urn:license" },
+          { op: "remove", rel: "related", href: "urn:old" },
+        ],
+        { ifMatch: mtag },
+      ),
+    ).toEqual({ etag: '"updated-metadata"' });
+    const call = calls.at(-1);
+    expect(call?.body).toBe(
+      '[{"op":"add","path":"/linkset/0/related/-","value":{"href":"urn:new"}},{"op":"add","path":"/linkset/0/license","value":[]},{"op":"add","path":"/linkset/0/license/-","value":{"href":"urn:license"}},{"op":"remove","path":"/linkset/0/related/0"}]',
+    );
+    expect(call?.headers.get("if-match")).toBe(mtag);
+    const before = JSON.parse(lwsWriteExchanges[`GET ${META}`]?.body ?? "");
+    const after = applyJsonPatch(before, JSON.parse(call?.body as string)) as typeof before;
+    expect(after.linkset[0].up).toEqual(before.linkset[0].up);
+    expect(after.linkset[0].related).toEqual([{ href: "urn:new" }]);
+    expect(after.linkset[0].license).toEqual([{ href: "urn:license" }]);
+  });
+  test("relative anchors/hrefs resolve; duplicates remove descending and no-op changes avoid PATCH", async () => {
+    const raw = linkset({
+      anchor: "write.ttl",
+      related: [{ href: "../same", title: "keep" }, { href: "../same" }, { href: "urn:other" }],
+    });
+    const { storage, calls } = backend({ [`GET ${META}`]: json(raw) });
+    await storage.setMetadata(URL, [{ op: "remove", rel: "related", href: `${ROOT}same` }], {
+      ifMatch: mtag,
+    });
+    expect(calls.at(-1)?.body).toBe(
+      '[{"op":"remove","path":"/linkset/0/related/1"},{"op":"remove","path":"/linkset/0/related/0"}]',
+    );
+    const noop = backend();
+    expect(
+      await noop.storage.setMetadata(
+        URL,
+        [
+          { op: "add", rel: "related", href: "urn:old" },
+          { op: "remove", rel: "absent", href: "urn:none" },
+          { op: "remove", rel: "related", href: "urn:none" },
+          { op: "remove", anchor: `${ROOT}absent`, rel: "related", href: "urn:none" },
+        ],
+        { ifMatch: mtag },
+      ),
+    ).toEqual({ etag: mtag });
+    expect(mutationCalls(noop.calls)).toHaveLength(0);
+    await noop.storage.setMetadata(URL, [], { ifMatch: mtag });
+  });
+  test("new anchors and IRI relation keys use escaped pointers, preserving hostile keys as data", async () => {
+    const { storage, calls } = backend();
+    await storage.setMetadata(
+      URL,
+      [
+        { op: "add", anchor: `${URL}#part`, rel: "https://vocab.example/a~b", href: "urn:x" },
+        { op: "add", rel: "constructor", href: "urn:y" },
+        { op: "add", rel: "Related", href: "urn:new" },
+      ],
+      { ifMatch: mtag },
+    );
+    const ops = JSON.parse(calls.at(-1)?.body as string);
+    expect(ops).toEqual([
+      { op: "add", path: "/linkset/-", value: { anchor: `${URL}#part` } },
+      { op: "add", path: "/linkset/1/https:~1~1vocab.example~1a~0b", value: [] },
+      { op: "add", path: "/linkset/1/https:~1~1vocab.example~1a~0b/-", value: { href: "urn:x" } },
+      { op: "add", path: "/linkset/0/constructor", value: [] },
+      { op: "add", path: "/linkset/0/constructor/-", value: { href: "urn:y" } },
+      { op: "add", path: "/linkset/0/related/-", value: { href: "urn:new" } },
+    ]);
+  });
+  test.each([
+    "type",
+    "up",
+    "linkset",
+    "UP",
+  ])("server-managed relation %s refuses before read even with MoveResource", async (rel) => {
+    const { storage, fetch } = backend({}, move);
+    await rejects(
+      storage.setMetadata(URL, [{ op: "add", rel, href: ROOT }], { ifMatch: mtag }),
+      "unsupported",
+    );
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  test.each([
+    { op: "replace", rel: "related", href: "urn:x" },
+    { op: "add", rel: "", href: "urn:x" },
+    { op: "add", rel: "related", href: "not-absolute" },
+    { op: "add", rel: "related", href: 3 },
+    { op: "add", rel: "anchor", href: "urn:x" },
+  ])("invalid metadata operation %j rejects before read", async (op) => {
+    const { storage, fetch } = backend();
+    await expect(
+      storage.setMetadata(URL, [op as MetadataOp], { ifMatch: mtag }),
+    ).rejects.toBeInstanceOf(TypeError);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+  test("foreign anchors, stale metadata ETags, unsupported metadata and 405 are explicit", async () => {
+    await rejects(
+      backend().storage.setMetadata(
+        URL,
+        [{ op: "add", anchor: "https://evil.example/", rel: "related", href: "urn:x" }],
+        { ifMatch: mtag },
+      ),
+      "scope",
+    );
+    const stale = backend();
+    await rejects(
+      stale.storage.setMetadata(URL, [{ op: "add", rel: "related", href: "urn:x" }], {
+        ifMatch: tag,
+      }),
+      "precondition-failed",
+    );
+    expect(mutationCalls(stale.calls)).toHaveLength(0);
+    await rejects(
+      backend({ [`HEAD ${URL}`]: reply(200) }).storage.setMetadata(URL, [], { ifMatch: mtag }),
+      "unsupported",
+    );
+    await rejects(
+      backend({ [`PATCH ${META}`]: reply(405) }).storage.setMetadata(
+        URL,
+        [{ op: "add", rel: "related", href: "urn:x" }],
+        { ifMatch: mtag },
+      ),
+      "method-not-allowed",
+    );
+    const noEtag = backend({ [`PATCH ${META}`]: reply() });
+    expect(
+      await noEtag.storage.setMetadata(URL, [{ op: "add", rel: "related", href: "urn:x" }], {
+        ifMatch: mtag,
+      }),
+    ).toEqual({ etag: '"observed-metadata"' });
+  });
+});
+
+describe("MoveResource linkset mutation", () => {
+  test("move sends test+replace with linkset ETag and ignores name hint", async () => {
+    const { storage, calls } = backend({}, move);
+    expect(await storage.move(URL, ROOT, { ifMatch: tag, name: "ignored" })).toEqual({
+      url: URL,
+      etag: tag,
+      created: false,
+    });
+    expect(calls.map(({ method, url }) => `${method} ${url}`)).toEqual([
+      `HEAD ${URL}`,
+      `GET ${META}`,
+      `PATCH ${META}`,
+      `HEAD ${URL}`,
+    ]);
+    const patch = calls[2];
+    expect(patch?.body).toBe(
+      `[{"op":"test","path":"/linkset/0/anchor","value":"${URL}"},{"op":"replace","path":"/linkset/0/up/0/href","value":"${ROOT}"}]`,
+    );
+    expect(patch?.headers.get("if-match")).toBe(mtag);
+    expect(patch?.headers.get("content-type")).toBe("application/json-patch+json");
+  });
+  test("relative raw anchor is tested verbatim at its actual context index", async () => {
+    const { storage, calls } = backend(
+      {
+        [`GET ${META}`]: json({
+          linkset: [{ anchor: "urn:foreign" }, { anchor: "write.ttl", up: [{ href: "./" }] }],
+        }),
+      },
+      move,
+    );
+    // LWS read contract requires HTTP(S) anchors even when they are only data.
+    await rejects(storage.move(URL, ROOT, { ifMatch: tag }), "invalid-response");
+    expect(mutationCalls(calls)).toHaveLength(0);
+    const valid = backend(
+      {
+        [`GET ${META}`]: json({
+          linkset: [
+            { anchor: "https://elsewhere.example/" },
+            { anchor: "write.ttl", up: [{ href: "./" }] },
+          ],
+        }),
+      },
+      move,
+    );
+    await valid.storage.move(URL, ROOT, { ifMatch: tag });
+    expect(valid.calls[2]?.body).toBe(
+      `[{"op":"test","path":"/linkset/1/anchor","value":"write.ttl"},{"op":"replace","path":"/linkset/1/up/0/href","value":"${ROOT}"}]`,
+    );
+  });
+  test("identifier-changing move resolves anchor against new linkset Content-Location, then HEADs resource", async () => {
+    const moved = `${ROOT}opaque/new-id`;
+    const { storage, calls } = backend(
+      {
+        [`PATCH ${META}`]: json(
+          { linkset: [{ anchor: "new-id", up: [{ href: ROOT }] }] },
+          { "content-location": "../opaque/new-id.meta", etag: '"linkset-only"' },
+        ),
+        [`HEAD ${moved}`]: reply(200, { etag: '"new-content"' }),
+      },
+      (features) => {
+        move(features);
+        features.move.detail.preservesIdentifier = false;
+      },
+    );
+    expect(await storage.move(URL, ROOT, { ifMatch: tag })).toEqual({
+      url: moved,
+      etag: '"new-content"',
+      created: true,
+    });
+    expect(calls.at(-1)?.url).toBe(moved);
+    expect(calls.some(({ url }) => url === `${moved}.meta`)).toBe(false);
+  });
+  test("Content-Location is honored when preservation is unknown; HEAD failure after move yields null", async () => {
+    const { storage } = backend(
+      {
+        [`PATCH ${META}`]: json(linkset({ anchor: `${ROOT}moved` }), {
+          "content-location": `${ROOT}moved.meta`,
+        }),
+        [`HEAD ${ROOT}moved`]: reply(503),
+      },
+      (features) => {
+        move(features);
+        features.move.detail.preservesIdentifier = null;
+      },
+    );
+    expect(await storage.move(URL, ROOT, { ifMatch: tag })).toEqual({
+      url: `${ROOT}moved`,
+      etag: null,
+      created: true,
+    });
+  });
+  test.each([
+    undefined,
+    "",
+    "https://user:secret@evil.example/meta",
+    "new.meta?",
+    "http://[",
+  ])("invalid move Content-Location %s never gets fetched", async (location) => {
+    const { storage, calls } = backend(
+      {
+        [`PATCH ${META}`]: json(
+          linkset(),
+          location === undefined ? {} : { "content-location": location },
+        ),
+      },
+      (features) => {
+        move(features);
+        features.move.detail.preservesIdentifier = false;
+      },
+    );
+    const error = await rejects(storage.move(URL, ROOT, { ifMatch: tag }), "invalid-response");
+    expect(error.cause).toBeUndefined();
+    expect(error.message).not.toContain("secret");
+    expect(calls).toHaveLength(3);
+  });
+  test.each([
+    { contexts: [] },
+    { contexts: [{ anchor: ROOT }] },
+    { contexts: [{ anchor: "https://user:secret@evil.example/x" }] },
+    { contexts: [{ anchor: `${ROOT}moved?` }] },
+  ])("invalid returned anchors reject: %j", async ({ contexts }) => {
+    const { storage } = backend(
+      { [`PATCH ${META}`]: json({ linkset: contexts }, { "content-location": `${ROOT}new.meta` }) },
+      move,
+    );
+    const error = await rejects(storage.move(URL, ROOT, { ifMatch: tag }), "invalid-response");
+    expect(error.cause).toBeUndefined();
+    expect(error.message).not.toContain("secret");
+  });
+  test.each([
+    { linkset: [] },
+    linkset({ up: [] }),
+    linkset({ up: [{ href: ROOT }, { href: NOTES }] }),
+    {
+      linkset: [
+        { anchor: URL },
+        { anchor: URL, up: [{ href: ROOT }] },
+        { anchor: URL, up: [{ href: ROOT }] },
+      ],
+    },
+    linkset({ anchor: `${ROOT}different` }),
+  ])("ambiguous/missing resource parent refuses before patch: %j", async (raw) => {
+    const { storage, calls } = backend({ [`GET ${META}`]: json(raw) }, move);
+    await rejects(storage.move(URL, ROOT, { ifMatch: tag }), "invalid-response");
+    expect(mutationCalls(calls)).toHaveLength(0);
+  });
+  test("feature, root, self, stale source, missing linkset ETag, and container restrictions", async () => {
+    const unavailable = backend();
+    await rejects(unavailable.storage.move(URL, ROOT, { ifMatch: tag }), "unsupported");
+    expect(unavailable.fetch).not.toHaveBeenCalled();
+    await rejects(
+      backend({}, move).storage.move(ROOT, NOTES, { ifMatch: tag }),
+      "method-not-allowed",
+    );
+    await rejects(backend({}, move).storage.move(NOTES, NOTES, { ifMatch: tag }), "conflict");
+    await rejects(
+      backend({}, move).storage.move(URL, ROOT, { ifMatch: '"stale"' }),
+      "precondition-failed",
+    );
+    await rejects(
+      backend({ [`GET ${META}`]: json(linkset(), { etag: "*" }) }, move).storage.move(URL, ROOT, {
+        ifMatch: tag,
+      }),
+      "invalid-response",
+    );
+    const container = backend(
+      {
+        [`HEAD ${NOTES}`]: reply(200, {
+          etag: tag,
+          link: '<https://www.w3.org/ns/lws#Container>; rel="type"',
+        }),
+      },
+      (features) => {
+        move(features);
+        features.move.detail.containers = false;
+      },
+    );
+    await rejects(container.storage.move(NOTES, ROOT, { ifMatch: tag }), "unsupported");
+    const allowed = backend(
+      {
+        [`HEAD ${NOTES}`]: reply(200, {
+          etag: tag,
+          link: `<https://www.w3.org/ns/lws#Container>; rel="type", <${META}>; rel="linkset"`,
+        }),
+        [`GET ${META}`]: json(linkset({ anchor: NOTES })),
+      },
+      move,
+    );
+    expect((await allowed.storage.move(NOTES, ROOT, { ifMatch: tag })).url).toBe(NOTES);
+  });
+  test("move abort propagates between metadata requests", async () => {
+    const controller = new AbortController();
+    const { storage, calls } = backend(
+      {
+        [`GET ${META}`]: () => {
+          controller.abort();
+          return json(linkset());
+        },
+      },
+      move,
+    );
+    await rejects(storage.move(URL, ROOT, { ifMatch: tag, signal: controller.signal }), "network");
+    expect(mutationCalls(calls)).toHaveLength(0);
+  });
+});
+
+const CHILD = `${ROOT}logical-child`;
+const NEST = `${ROOT}elsewhere/`;
+const LEAF = `${ROOT}leaf`;
+function headReply(kind = "resource", parent = NOTES, etag = tag): Reply {
+  return reply(200, {
+    etag,
+    link: `<${parent}>; rel="up", <https://www.w3.org/ns/lws#${kind === "container" ? "Container" : "DataResource"}>; rel="type"`,
+  });
+}
+function listReply(ids: string[]): Reply {
+  return {
+    status: 200,
+    headers: { "content-type": "application/lws+json" },
+    body: JSON.stringify({ type: "Container", items: ids.map((id) => ({ id })) }),
+  };
+}
+function treeBackend(extra: Record<string, Exchange> = {}) {
+  return backend({
+    [`HEAD ${NOTES}`]: headReply("container", ROOT),
+    [`GET ${NOTES}`]: listReply([CHILD, NEST]),
+    [`HEAD ${CHILD}`]: headReply(),
+    [`HEAD ${NEST}`]: headReply("container"),
+    [`GET ${NEST}`]: listReply([LEAF]),
+    [`HEAD ${LEAF}`]: headReply("resource", NEST),
+    [`DELETE ${LEAF}`]: reply(),
+    [`DELETE ${CHILD}`]: reply(),
+    [`DELETE ${NEST}`]: reply(),
+    [`DELETE ${NOTES}`]: reply(),
+    ...extra,
+  });
+}
+
+describe("LWS conditional delete", () => {
+  test("nonrecursive fixture DELETE sends If-Match without Depth", async () => {
+    const { storage, calls } = backend();
+    await storage.delete(URL, { ifMatch: tag });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.headers.get("if-match")).toBe(tag);
+    expect(calls[0]?.headers.has("depth")).toBe(false);
+  });
+  test("available recursiveDelete sends Depth infinity without a traversal", async () => {
+    const { storage, calls } = backend({}, (features) => {
+      features.recursiveDelete.state = "available";
+    });
+    await storage.delete(URL, { ifMatch: tag, recursive: true });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.headers.get("depth")).toBe("infinity");
+  });
+  test("fallback preflights logical containment and deletes children before containers with refreshed ETags", async () => {
+    let parentHeads = 0;
+    const { storage, calls } = treeBackend({
+      [`HEAD ${NOTES}`]: () =>
+        headReply("container", ROOT, parentHeads++ ? '"after-children"' : tag),
+    });
+    await storage.delete(NOTES, { ifMatch: tag, recursive: true });
+    const deletes = calls.filter(({ method }) => method === "DELETE");
+    expect(deletes.map(({ url }) => url)).toEqual([LEAF, NEST, CHILD, NOTES]);
+    expect(deletes.at(-1)?.headers.get("if-match")).toBe('"after-children"');
+    for (const call of deletes) {
+      expect(call.headers.has("if-match")).toBe(true);
+      expect(call.headers.has("depth")).toBe(false);
+    }
+    const firstDelete = calls.findIndex(({ method }) => method === "DELETE");
+    expect(calls.findIndex(({ url, method }) => url === LEAF && method === "HEAD")).toBeLessThan(
+      firstDelete,
+    );
+  });
+  test("recursive resource delete needs no listing", async () => {
+    const { storage, calls } = backend();
+    await storage.delete(URL, { ifMatch: tag, recursive: true });
+    expect(calls.map(({ method }) => method)).toEqual(["HEAD", "DELETE"]);
+  });
+  test("stale top ETag and unavailable child ETags prevent every delete", async () => {
+    const stale = treeBackend();
+    await rejects(
+      stale.storage.delete(NOTES, { ifMatch: '"stale"', recursive: true }),
+      "precondition-failed",
+    );
+    expect(mutationCalls(stale.calls)).toHaveLength(0);
+    const missing = treeBackend({
+      [`HEAD ${CHILD}`]: reply(200, { link: `<${NOTES}>; rel="up"` }),
+    });
+    await rejects(
+      missing.storage.delete(NOTES, { ifMatch: tag, recursive: true }),
+      "invalid-response",
+    );
+    expect(mutationCalls(missing.calls)).toHaveLength(0);
+  });
+  test.each([ROOT, NOTES])("root or containment cycle %s refuses before deleting", async (id) => {
+    const { storage, calls } = treeBackend({ [`GET ${NOTES}`]: listReply([id]) });
+    await rejects(storage.delete(NOTES, { ifMatch: tag, recursive: true }), "invalid-response");
+    expect(mutationCalls(calls)).toHaveLength(0);
+  });
+  test("foreign-parent membership fails closed", async () => {
+    const { storage, calls } = treeBackend({ [`HEAD ${CHILD}`]: headReply("resource", ROOT) });
+    await rejects(storage.delete(NOTES, { ifMatch: tag, recursive: true }), "invalid-response");
+    expect(mutationCalls(calls)).toHaveLength(0);
+  });
+  test("root deletion and invalid recursive option refuse without requests; 409 and 412 propagate", async () => {
+    const { storage, fetch } = backend();
+    await rejects(storage.delete(ROOT, { ifMatch: tag }), "method-not-allowed");
+    await expect(
+      storage.delete(URL, { ifMatch: tag, recursive: "yes" as never }),
+    ).rejects.toBeInstanceOf(TypeError);
+    expect(fetch).not.toHaveBeenCalled();
+    await rejects(
+      backend({ [`DELETE ${URL}`]: reply(409) }).storage.delete(URL, { ifMatch: tag }),
+      "conflict",
+    );
+    await rejects(
+      treeBackend({ [`DELETE ${LEAF}`]: reply(412) }).storage.delete(NOTES, {
+        ifMatch: tag,
+        recursive: true,
+      }),
+      "precondition-failed",
+    );
+  });
+});
+
 // Malformed RDF positions are rejected using rebuilt RDF/JS fields, before any HTTP request.
 test.each([
   "subject",
@@ -589,13 +1063,49 @@ test.each([
   expect(fetch).not.toHaveBeenCalled();
 });
 
-test("remaining LWS mutations stay unsupported pending the next implementation step", async () => {
-  const { storage, fetch } = backend();
-  for (const promise of [
-    storage.move(URL, ROOT),
-    storage.delete(URL),
-    storage.setMetadata(URL, [], { ifMatch: mtag }),
-  ])
-    await rejects(promise, "unsupported");
-  expect(fetch).not.toHaveBeenCalled();
+test("recursive traversal refuses more than 10000 nodes before any delete", async () => {
+  const ids = Array.from({ length: 10000 }, (_, i) => `${ROOT}child-${i}`);
+  const { storage, calls } = treeBackend({
+    [`GET ${NOTES}`]: listReply(ids),
+    ...Object.fromEntries(ids.map((id) => [`HEAD ${id}`, headReply()])),
+  });
+  await rejects(storage.delete(NOTES, { ifMatch: tag, recursive: true }), "invalid-response");
+  expect(mutationCalls(calls)).toHaveLength(0);
+}, 15000);
+
+test("metadata changes span repeated anchor contexts without dropping attributes", async () => {
+  const raw = {
+    linkset: [
+      { anchor: URL, related: [{ href: "urn:old", title: "first" }] },
+      {
+        anchor: URL,
+        related: [
+          { href: "urn:old", title: "second" },
+          { href: "urn:keep", title: "retained" },
+        ],
+      },
+      { anchor: URL, other: [] },
+    ],
+  };
+  const { storage, calls } = backend({ [`GET ${META}`]: json(raw) });
+  await storage.setMetadata(
+    URL,
+    [
+      { op: "add", rel: "related", href: "urn:keep" },
+      { op: "remove", rel: "related", href: "urn:old" },
+    ],
+    { ifMatch: mtag },
+  );
+  expect(calls.at(-1)?.body).toBe(
+    '[{"op":"remove","path":"/linkset/0/related/0"},{"op":"remove","path":"/linkset/1/related/0"}]',
+  );
+  const after = applyJsonPatch(raw, JSON.parse(calls.at(-1)?.body as string)) as typeof raw;
+  expect(after.linkset[1]?.related).toEqual([{ href: "urn:keep", title: "retained" }]);
+  expect(raw.linkset[0]?.related).toHaveLength(1);
+});
+
+test("PUT never infers a container kind from a non-root identifier's trailing slash", async () => {
+  const { storage, calls } = backend({ [`PUT ${NOTES}`]: reply(204, { etag: tag }) });
+  expect((await storage.write(NOTES, "content", options)).etag).toBe(tag);
+  expect(calls[0]?.method).toBe("PUT");
 });

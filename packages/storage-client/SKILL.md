@@ -17,7 +17,7 @@ T-021 adds the Solid backend's read side; T-022 adds its mutations. `./solid` ex
 `createSolidBackend({ fetch, root, features?, etagFollowUp? })` and the pure async
 `buildN3Patch({ inserts, deletes, where? })`. T-023 adds `./lws` →
 `createLwsBackend({ fetch, root, storage?, features? })`. `./testing` is still reserved (T-025);
-LWS mutations reject with `unsupported` until T-024.
+T-024 adds conditional LWS mutations in `src/lws-write.ts`.
 
 Solid read side (ADR-003 §6):
 - Every URL must be absolute: its standalone parse (`new URL(url)`, without a base) must pass
@@ -131,9 +131,62 @@ Solid read side (ADR-003 §6):
   hreflang/title* are skipped (preserved in raw). raw is parsed JSON, url is the fetched linkset URL,
   etag is its ETag. Maps and own-property params preserve hostile property names as data.
 - `parentOf` scopes first; root → null without a request, otherwise one HEAD returning parent.
-  write/writeRdf/create/patch/move/delete/setMetadata reject `unsupported` without fetching (T-024).
   Fixtures in src/fixtures/lws.ts are synthetic, shaped exactly after the cited sparq lines; the
   1,500-member listing overrides sparq's default page_size=100 to 500 for three pages.
+
+## LWS write side
+
+- Every mutation target, destination, Location, Content-Location and follow-up HEAD stays scoped
+  to the root, with the same canonicalisation, credential redaction, manual redirects, bounded
+  Link parsing and response storage-id validation as reads. Mutation URLs reject queries and
+  fragments, including empty delimiters. PUT/PATCH/DELETE accept only 200/204/205; POST requires
+  201. In particular, PUT never creates: 404 remains not-found, 201 is invalid-response.
+- `write`/`writeRdf` require a nonempty `ifMatch`; `'*'` sends `If-Match: *`. All other mutations
+  require a non-wildcard ETag. Headers reject whitespace padding, CR/LF/NUL and non-ByteString
+  values; media types must be syntactically valid. Root content cannot be PUT; other resource
+  kinds are validated by the server, never inferred from an identifier's trailing slash.
+  RDF serialisation uses the shared serializer; JSON-LD writing remains unsupported.
+- `create` always POSTs: optional `name` is the Slug hint, never an exact child name. Emit Container
+  or DataResource Link type plus each validated `opts.links` entry. Initial up/linkset metadata is
+  refused. Null bodies become empty bodies; containers default to application/lws+json, resources
+  require contentType. Location is mandatory, scoped and query/fragment-free, but need not follow
+  the parent's URL path (LWS logical containment). It cannot name the parent or root. Untrusted
+  Location and Content-Location values are never retained in errors or causes.
+- Ordinary mutation results use their response ETag or a follow-up HEAD, else null if HEAD fails:
+  the mutation already committed. Streaming bodies are forwarded with duplex half and never
+  replayed automatically; failures, including HTTP errors, are nonretryable for streams.
+- JSON patch sends application/json-patch+json plus If-Match. Raw patches validate mediaType and
+  string body. RDF patch rebuilds caller quads before asynchronous reads, refuses invalid term
+  positions, variables and any nonempty where clause. When any SPARQL format is advertised, HEAD
+  discovers the actual resource media type: only that format's advertisement enables SPARQL
+  DELETE DATA/INSERT DATA, using the shared safe formula serializer.
+- **Otherwise RDF patch is RMW:** readRdf, check the initial ETag against the caller's ifMatch,
+  applyQuadPatch in n3 Store, serialize in the original writable RDF format, then PUT with the
+  read ETag. On 412 reread and reapply exactly once; the initial caller ETag check is not repeated
+  against the newer state. A second 412 propagates. Missing retry ETags fail closed; absent
+  deletions conflict, blank-node deletions and named graphs in triple-only formats are refused.
+- `setMetadata` uses the linkset ETag (not the content ETag), checked before PATCH. Generate
+  sequential JSON Patch against a cloned raw document, retaining other anchors, relations and
+  attributes. Add new anchors/rel arrays when needed, append absent targets, remove all matching
+  target occurrences descending within each repeated anchor context, and escape JSON Pointer
+  keys. Empty/no-op changes avoid PATCH. Explicit anchors must be scoped; hrefs and extension
+  rels must be absolute IRIs; registered rel tokens lower-case. type/up/linkset are always
+  unsupported here, including when MoveResource is available; anchor is reserved structure.
+- `move` requires features.move available, a matching source ETag, and a usable linkset ETag.
+  Container moves also require detail.containers. Refuse root/self moves. Ignore name. Require
+  one resource context with one up target, then send test of the raw anchor and replace of
+  `/linkset/i/up/0/href`, with the linkset's If-Match. When Content-Location is present (or
+  preservesIdentifier is false), require scoped Content-Location and parse the bounded returned
+  linkset; the same context index's scoped anchor identifies the moved resource. A move with
+  preservesIdentifier false requires Content-Location. HEAD the resulting resource for its ETag;
+  the PATCH ETag belongs to the linkset. created is true only when the identifier changes.
+- Nonrecursive delete sends If-Match and refuses the root. Recursive delete sends Depth infinity
+  when features.recursiveDelete is available, per T-024. Otherwise HEAD-check the top ETag,
+  preflight listAll + HEAD through logical containment (not URI prefixes), require each child's
+  up to match its listed parent and every child to have an ETag. Cycles, duplicates, root members,
+  and trees above 10,000 nodes fail before deletion. Delete in reverse traversal order, refreshing
+  container ETags after child deletion; every DELETE is conditional. Concurrent additions can
+  still produce 409 and partial deletion. Errors propagate without a destructive retry.
 
 Solid write side (ADR-003 §6, T-022; implementation isolated in `src/solid-write.ts`):
 - Every target, container, destination, Location and describedby URL passes `scoped(root, method,
