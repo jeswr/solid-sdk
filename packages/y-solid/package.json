@@ -1,7 +1,7 @@
 {
   "name": "@jeswr/y-solid",
   "version": "0.1.0",
-  "description": "A Yjs persistence provider that stores and loads a Yjs CRDT document in a Solid pod — bind any Y.Doc (TipTap / BlockNote / Monaco-collab / Excalidraw / …) to a pod LDP container via an injectable authenticated fetch. Append-only binary update-log persistence, fail-closed scope guard, live cross-client sync as a documented seam.",
+  "description": "Yjs log persistence over StorageClient for Solid and LWS, with header ordering, safe compaction and optional notifications.",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Wright",
@@ -48,9 +48,9 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@jeswr/fetch-rdf": "workspace:*",
     "@jeswr/guarded-fetch": "workspace:*",
-    "@jeswr/ldp-container": "workspace:*"
+    "@jeswr/storage-client": "workspace:*",
+    "@jeswr/pod-notifications": "workspace:*"
   },
   "peerDependencies": {
     "@rdfjs/types": "^2.0.1",
@@ -63,9 +63,11 @@
     "@types/node": "^20",
     "typescript": "^5",
     "vitest": "^4.1.8",
-    "yjs": "^13.6.0"
+    "yjs": "^13.6.0",
+    "fast-check": "^4.3.0"
   },
   "engines": {
     "node": ">=20"
-  }
+  },
+  "$comment": "AUTHORED-BY Codex GPT-6.1-Sol"
 }

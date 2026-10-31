@@ -1,3 +1,8 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+
+import type { StorageClient } from "@jeswr/storage-client";
+import { createSolidBackend } from "@jeswr/storage-client/solid";
+
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 //
 // Test-only fake pod (NOT exported from the package). A Map-backed `fetch` that
@@ -17,6 +22,7 @@ interface Entry {
 }
 
 export interface FakePod {
+  readonly storage: StorageClient;
   /** The raw backing store (url → entry) for assertions. */
   readonly store: Map<string, Entry>;
   /** The fake authenticated fetch to inject into the store/provider. */
@@ -95,6 +101,8 @@ export function makePod(container: string): FakePod {
     if (method === "DELETE") {
       calls.deleteCount++;
       if (!store.has(url)) return new Response(null, { status: 404 });
+      if (headers.get("if-match") !== store.get(url)?.etag)
+        return new Response(null, { status: 412 });
       store.delete(url);
       return new Response(null, { status: 204 });
     }
@@ -103,5 +111,10 @@ export function makePod(container: string): FakePod {
     return new Response(null, { status: 405 });
   };
 
-  return { store, fetchImpl, calls };
+  return {
+    store,
+    fetchImpl,
+    calls,
+    storage: createSolidBackend({ fetch: fetchImpl, root: container }),
+  };
 }

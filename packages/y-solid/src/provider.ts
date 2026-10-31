@@ -1,178 +1,176 @@
-// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
-/**
- * `SolidPersistence` — a Yjs persistence provider that binds a `Y.Doc` to a Solid
- * pod via the append-only binary update-log {@link ./store.js | SolidUpdateStore}.
- *
- * Lifecycle (mirrors the y-* provider convention — `y-indexeddb`, `y-leveldb`):
- *   1. **Construct** — bind a `Y.Doc` to a pod container (via an injectable authed
- *      `fetch`). The constructor kicks off the initial load.
- *   2. **Load** — list the container's update resources, read each binary update,
- *      and `Y.applyUpdate` them into the doc with THIS provider as the update
- *      ORIGIN, so the merge does not re-trigger persistence (no echo). On
- *      completion {@link whenSynced} resolves, {@link synced} flips to `true`, and
- *      a `"synced"` event fires.
- *   3. **Persist** — after the load, every LOCAL `doc.on("update")` (origin !==
- *      this provider) is appended to the log as a fresh `application/octet-stream`
- *      resource. Writes are serialised through a tail queue so updates land in
- *      order and an error surfaces on a `"error"` event without unbinding.
- *   4. **{@link destroy}** — unsubscribe from the doc and stop persisting.
- *
- * **Auth seam.** The provider imports NO concrete auth library; the consumer
- * injects an already-authenticated `fetch`. **Yjs is a peerDependency** — this
- * module imports it (the provider genuinely needs `applyUpdate`/`mergeUpdates`/
- * `encodeStateAsUpdate`), but it is NOT bundled.
- *
- * **Live cross-client sync is a DOCUMENTED SEAM, not built here (P1).** This
- * provider persists + loads; it does not push remote updates to other connected
- * clients in real time. To add live sync, wire a notifications channel
- * (Solid `WebSocketChannel2023` — see `@jeswr` `solid-notifications`) or a poll
- * loop that calls {@link sync} on a container-change notification: `sync()` reads
- * any update resources appended since the last load and applies the new ones.
- * See the README "Live sync" section. (Tracked as a follow-up.)
- */
-
+// AUTHORED-BY Codex GPT-6.1-Sol
+import type { NotificationsClient, Subscription } from "@jeswr/pod-notifications";
+import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import { applyUpdate, Doc, encodeStateAsUpdate, encodeStateVector, mergeUpdates } from "yjs";
-import { SolidUpdateStore, type SolidUpdateStoreOptions } from "./store.js";
+import { SolidUpdateStore } from "./store.js";
 
-/** Normalise an unknown throw value to an `Error`. */
 function toError(cause: unknown): Error {
   return cause instanceof Error ? cause : new Error(String(cause));
 }
 
-/** Events emitted by {@link SolidPersistence}. */
 export interface SolidPersistenceEvents {
-  /** Fires once when the initial load completes (the doc is hydrated). */
   synced: () => void;
-  /** Fires when a background persist (or a `sync()` read) fails. */
   error: (error: Error) => void;
+  status: (status: "connecting" | "connected" | "disconnected") => void;
+  conflict: (error: StorageError) => void;
 }
-
 type Listener = (...args: never[]) => void;
 
-/** Options for {@link SolidPersistence}. */
 export interface SolidPersistenceOptions {
-  /** The Yjs document to bind. */
   doc: Doc;
-  /**
-   * Either a ready {@link SolidUpdateStore}, OR the `{ container, fetch }` to
-   * construct one. Supplying a store lets advanced callers share / pre-configure
-   * it; the convenience form covers the common case.
-   */
   store?: SolidUpdateStore;
-  /** Container URL (when not supplying a `store`). */
   container?: string;
-  /** Authenticated fetch (when not supplying a `store`). */
-  fetch?: typeof globalThis.fetch;
+  storage?: StorageClient;
+  notifications?: NotificationsClient;
+  /** Defaults to 300 ms. flush() bypasses the debounce. */
+  debounceMs?: number;
+  compaction?: { afterUpdates: number; minIntervalMs: number };
 }
 
-/**
- * A Yjs persistence provider backed by a Solid pod update-log.
- *
- * @example
- * ```ts
- * import * as Y from "yjs";
- * import { SolidPersistence } from "@jeswr/y-solid";
- *
- * const doc = new Y.Doc();
- * const provider = new SolidPersistence({
- *   doc,
- *   container: "https://alice.pod/notes/my-doc/",
- *   fetch: session.fetch, // an authenticated fetch
- * });
- * await provider.whenSynced; // doc is now hydrated from the pod
- * doc.getText("body").insert(0, "hello"); // persisted automatically
- * ```
- */
+/** Yjs persistence and notification-driven reconciliation over an immutable storage log. */
 export class SolidPersistence {
-  /** The bound document. */
   readonly doc: Doc;
-  /** The backing pod update-log store. */
   readonly store: SolidUpdateStore;
-  /** `true` once the initial load has completed. */
-  synced = false;
-  /** Resolves once the initial load has completed (rejects if it fails). */
+  readonly mode = "log" as const;
   readonly whenSynced: Promise<void>;
-  /** `true` after {@link destroy} — the provider stops persisting. */
+  synced = false;
   destroyed = false;
-
+  private active = false;
+  private generation = 0;
+  private connection?: Promise<void>;
+  private subscription?: Subscription;
+  private subscriptionAbort?: AbortController;
+  private readonly notifications?: NotificationsClient;
+  private readonly debounceMs: number;
+  private readonly compaction: { afterUpdates: number; minIntervalMs: number };
+  private lastCompaction = 0;
+  private compacting?: Promise<{ url: string } | undefined>;
   private readonly listeners = new Map<keyof SolidPersistenceEvents, Set<Listener>>();
-  private readonly updateHandler: (update: Uint8Array, origin: unknown) => void;
-  /** Serialises background persists so updates land in order. */
-  private writeTail: Promise<void> = Promise.resolve();
-  /** URLs of update resources already known locally (loaded or written by us). */
   private readonly knownUrls = new Set<string>();
+  private updatesSinceCompaction = 0;
+  private readonly pending: Uint8Array[] = [];
+  private timer?: ReturnType<typeof setTimeout>;
+  private writeTail: Promise<void> = Promise.resolve();
+  private operationTail: Promise<unknown> = Promise.resolve();
+  private readonly updateHandler: (update: Uint8Array, origin: unknown) => void;
 
   constructor(options: SolidPersistenceOptions) {
     this.doc = options.doc;
-    this.store = options.store ?? this.makeStore(options);
-
-    // Persist every LOCAL update. Updates whose origin IS this provider are our
-    // own loads/syncs being applied — skip them so we never re-persist (no echo).
-    this.updateHandler = (update: Uint8Array, origin: unknown): void => {
-      if (this.destroyed) return;
-      if (origin === this) return;
-      this.enqueuePersist(update);
-    };
-    this.doc.on("update", this.updateHandler);
-
-    this.whenSynced = this.load();
-  }
-
-  private makeStore(options: SolidPersistenceOptions): SolidUpdateStore {
-    if (!options.container || !options.fetch) {
+    if (!options.store && (!options.container || !options.storage)) {
       throw new Error(
-        "[y-solid] SolidPersistence requires either `store`, or both `container` and `fetch`.",
+        "[y-solid] SolidPersistence requires either `store`, or `container` and `storage`.",
       );
     }
-    const storeOptions: SolidUpdateStoreOptions = {
-      container: options.container,
-      fetch: options.fetch,
+    this.store =
+      options.store ??
+      new SolidUpdateStore({
+        container: options.container as string,
+        storage: options.storage as StorageClient,
+      });
+    this.notifications = options.notifications;
+    this.debounceMs = options.debounceMs ?? 300;
+    this.compaction = options.compaction ?? { afterUpdates: 200, minIntervalMs: 60_000 };
+    if (
+      !Number.isFinite(this.debounceMs) ||
+      this.debounceMs < 0 ||
+      !Number.isInteger(this.compaction.afterUpdates) ||
+      this.compaction.afterUpdates < 1 ||
+      !Number.isFinite(this.compaction.minIntervalMs) ||
+      this.compaction.minIntervalMs < 0
+    ) {
+      throw new TypeError("[y-solid] invalid debounce or compaction options");
+    }
+    this.updateHandler = (update, origin) => {
+      if (this.destroyed || origin === this) return;
+      this.pending.push(update.slice());
+      this.scheduleWrite();
     };
-    return new SolidUpdateStore(storeOptions);
+    this.doc.on("update", this.updateHandler);
+    this.whenSynced = this.connect();
+    // Keep the public rejection available without an unhandled background rejection.
+    void this.whenSynced.catch(() => {});
   }
 
-  /**
-   * Read the pod's update log and apply every update to the doc as ONE
-   * transaction with this provider as the origin (so the merge does not
-   * re-persist). Marks {@link synced} and fires `"synced"`.
-   */
-  private async load(): Promise<void> {
-    const stored = await this.store.loadUpdates();
-    for (const { url } of stored) this.knownUrls.add(url);
-    // Apply each update RESILIENTLY: the bytes come from a pod that may be
-    // hostile or buggy, so one corrupt/forged update must be skipped + reported,
-    // never abort the whole load.
-    this.applyStored(stored.map((s) => s.update));
-    this.synced = true;
-    this.emit("synced");
+  private serial<T>(operation: () => Promise<T>): Promise<T> {
+    const next = this.operationTail.then(operation, operation);
+    this.operationTail = next.catch(() => {});
+    return next;
   }
 
-  /**
-   * Apply a batch of (untrusted) binary updates to the live doc, echo-free.
-   *
-   * **Validate-on-scratch-first (load-bearing for data integrity).** Yjs
-   * transactions have NO rollback: a malformed update that throws AFTER partially
-   * integrating structs would leave a doc silently corrupted, and the untrusted
-   * bytes are NEVER allowed to touch the LIVE doc directly. Two phases:
-   *
-   *   1. **Decode-validate** each untrusted update on a throwaway `Y.Doc` — a
-   *      malformed/forged update throws HERE (corrupting only the discarded
-   *      throwaway) and is skipped + reported on `"error"`.
-   *   2. **Seed-scratch-then-diff.** Seed a scratch doc from the CURRENT live
-   *      state, replay the decode-validated updates onto the scratch, then take a
-   *      Yjs-generated DIFF of the scratch against the live state vector and apply
-   *      THAT diff to the live doc in one echo-free transaction. A Yjs-generated
-   *      diff is well-formed by construction, so it cannot throw mid-integration —
-   *      the live doc is thus only ever mutated by clean, complete Yjs bytes, and
-   *      is NEVER left partially mutated by untrusted input.
-   *
-   * If any scratch step throws (not expected — decode already succeeded), we FAIL
-   * CLOSED: the diff is computed and applied only after the scratch work fully
-   * succeeds, so on any throw the live doc is untouched and the batch is reported
-   * on `"error"` with `applied === 0`.
-   *
-   * @returns the count folded into the live doc (0 if the batch failed closed).
-   */
+  async connect(): Promise<void> {
+    if (this.destroyed) throw new Error("[y-solid] provider is destroyed");
+    if (this.connection) return this.connection;
+    if (this.active && this.synced) return;
+    this.active = true;
+    const generation = ++this.generation;
+    this.emit("status", "connecting");
+    const connecting = (async () => {
+      try {
+        if (this.notifications) {
+          const abort = new AbortController();
+          this.subscriptionAbort = abort;
+          const subscription = await this.notifications.subscribe([this.store.container], {
+            depth: "members",
+            signal: abort.signal,
+          });
+          if (!this.current(generation)) {
+            await subscription.close();
+            return;
+          }
+          this.subscription = subscription;
+          const reconcile = () => {
+            if (!this.current(generation)) return;
+            void this.serial(() => this.ingest(generation))
+              .then(() => this.autoCompact())
+              .catch((cause) => this.report(cause));
+          };
+          subscription.on("change", (change) => {
+            // Hints trigger an authoritative listing, never a fetch of an event URL.
+            if (this.store.storage.isWithinStorage(change.object)) reconcile();
+          });
+          subscription.on("resync", reconcile);
+        }
+        await this.serial(() => this.ingest(generation));
+        if (!this.current(generation)) return;
+        this.synced = true;
+        this.emit("synced");
+        this.emit("status", "connected");
+        this.scheduleWrite();
+        this.autoCompact();
+      } catch (cause) {
+        if (this.current(generation)) {
+          this.active = false;
+          this.synced = false;
+          this.subscriptionAbort?.abort();
+          await this.subscription?.close();
+          this.subscription = undefined;
+          this.report(cause);
+          this.emit("status", "disconnected");
+        }
+        throw cause;
+      }
+    })();
+    this.connection = connecting;
+    try {
+      await connecting;
+    } finally {
+      if (this.connection === connecting) this.connection = undefined;
+    }
+  }
+
+  private current(generation: number): boolean {
+    return this.active && !this.destroyed && generation === this.generation;
+  }
+
+  private async ingest(generation: number): Promise<number> {
+    if (!this.current(generation)) return 0;
+    const stored = await this.store.loadUpdates(this.knownUrls);
+    if (!this.current(generation)) return 0;
+    const count = this.applyStored(stored.map((s) => s.update));
+    for (const record of stored) this.knownUrls.add(record.url);
+    this.updatesSinceCompaction += stored.filter((s) => s.kind === "update").length;
+    return count;
+  }
   private applyStored(updates: readonly Uint8Array[]): number {
     if (updates.length === 0) return 0;
     const errors: Error[] = [];
@@ -224,102 +222,149 @@ export class SolidPersistence {
     return applied;
   }
 
-  /**
-   * Pull updates appended to the pod SINCE the last load/sync and apply the new
-   * ones — the manual hook a notifications channel or a poll loop calls to get
-   * remote changes (the live-sync seam). Returns the number of new updates
-   * applied. A no-op (returns 0) before the initial load completes or after
-   * {@link destroy}.
-   */
   async sync(): Promise<number> {
-    if (this.destroyed || !this.synced) return 0;
-    const urls = await this.store.listUpdateUrls();
-    const fresh: Uint8Array[] = [];
-    for (const url of urls) {
-      if (this.knownUrls.has(url)) continue;
-      const update = await this.store.readUpdate(url);
-      this.knownUrls.add(url);
-      if (update) fresh.push(update);
-    }
-    // Resilient per-update application (a hostile pod could serve a corrupt
-    // update between loads). Returns the count actually applied (skipped-corrupt
-    // updates are consumed — their URLs are marked known above — but not counted).
-    return this.applyStored(fresh);
+    if (!this.active || !this.synced || this.destroyed) return 0;
+    const generation = this.generation;
+    const count = await this.serial(() => this.ingest(generation));
+    this.autoCompact();
+    return count;
   }
 
-  /** Enqueue a persist of `update`, serialised behind any in-flight write. */
-  private enqueuePersist(update: Uint8Array): void {
+  private scheduleWrite(): void {
+    if (!this.active || !this.synced || this.destroyed || this.timer || !this.pending.length)
+      return;
+    this.timer = setTimeout(() => {
+      this.timer = undefined;
+      this.drainWrites();
+    }, this.debounceMs);
+  }
+
+  private drainWrites(): void {
+    if (!this.active || this.destroyed || !this.pending.length) return;
     this.writeTail = this.writeTail
+      .catch(() => {})
       .then(async () => {
-        if (this.destroyed) return;
-        const { url } = await this.store.appendUpdate(update);
-        this.knownUrls.add(url);
-      })
-      .catch((cause: unknown) => {
-        const error = cause instanceof Error ? cause : new Error(String(cause));
-        this.emit("error", error);
+        if (!this.active || this.destroyed || !this.pending.length) return;
+        const batch = this.pending.splice(0);
+        try {
+          const { url } = await this.store.appendUpdate(mergeUpdates(batch));
+          this.knownUrls.add(url);
+          this.updatesSinceCompaction++;
+          this.autoCompact();
+        } catch (cause) {
+          this.pending.unshift(...batch);
+          this.report(cause);
+          throw cause;
+        }
       });
+    // Retain the rejected tail for flush(), but handle background failures.
+    void this.writeTail.catch(() => {});
   }
 
-  /**
-   * **Compact** the pod log: fold the entire current log into one merged update,
-   * write it as a single fresh resource, then delete the folded resources
-   * (write-before-delete — see {@link SolidUpdateStore.compact}). Bounds the log
-   * size. Awaits any pending persists first so nothing in flight is dropped.
-   *
-   * Returns the merged resource's URL. A no-op (returns `undefined`) if the log
-   * is empty or has a single member. Safe to call periodically.
-   */
+  private autoCompact(): void {
+    if (
+      !this.active ||
+      !this.synced ||
+      this.destroyed ||
+      this.compacting ||
+      this.updatesSinceCompaction < this.compaction.afterUpdates ||
+      Date.now() - this.lastCompaction < this.compaction.minIntervalMs
+    )
+      return;
+    void this.compact().catch((cause) => this.report(cause));
+  }
+
   async compact(): Promise<{ url: string } | undefined> {
-    if (this.destroyed) return undefined;
-    // Drain pending persists so the snapshot we read includes everything queued.
-    await this.flush();
-    const stored = await this.store.loadUpdates();
-    if (stored.length <= 1) {
-      // Nothing to compact (0 or 1 resource). Refresh knownUrls and return.
-      for (const { url } of stored) this.knownUrls.add(url);
-      return undefined;
+    if (this.destroyed || !this.active) return undefined;
+    if (this.compacting) return this.compacting;
+    const generation = this.generation;
+    const compacting = (async () => {
+      await this.flush();
+      return this.serial(async () => {
+        const stored = await this.store.loadUpdates();
+        if (!this.current(generation) || stored.length <= 1) return undefined;
+        // Refuse to retire any record if even one payload cannot be decoded safely.
+        for (const { update } of stored) {
+          const probe = new Doc();
+          try {
+            applyUpdate(probe, update);
+          } finally {
+            probe.destroy();
+          }
+        }
+        if (this.applyStored(stored.map((s) => s.update)) !== stored.length) {
+          throw new Error("[y-solid] compaction could not integrate every record");
+        }
+        const snapshot = encodeStateAsUpdate(this.doc);
+        const count = this.updatesSinceCompaction;
+        const created = await this.store.compact(snapshot, stored);
+        for (const { url } of stored) this.knownUrls.delete(url);
+        this.knownUrls.add(created.url);
+        this.updatesSinceCompaction = Math.max(0, this.updatesSinceCompaction - count);
+        this.lastCompaction = Date.now();
+        return created;
+      });
+    })();
+    this.compacting = compacting;
+    try {
+      return await compacting;
+    } finally {
+      if (this.compacting === compacting) this.compacting = undefined;
     }
-    const merged = mergeUpdates(stored.map((s) => s.update));
-    const obsolete = stored.map((s) => s.url);
-    const created = await this.store.compact(merged, obsolete);
-    // The folded URLs are gone; only the merged one remains known.
-    for (const url of obsolete) this.knownUrls.delete(url);
-    this.knownUrls.add(created.url);
-    return created;
   }
 
-  /**
-   * Encode the doc's CURRENT full state and persist it as one update resource
-   * (does NOT delete the existing log). Useful to snapshot a doc that was built
-   * outside this provider before any incremental updates fired.
-   */
   async persistFullState(): Promise<{ url: string }> {
-    const full = encodeStateAsUpdate(this.doc);
-    const result = await this.store.appendUpdate(full);
+    if (this.destroyed || !this.active) throw new Error("[y-solid] provider is disconnected");
+    const result = await this.store.appendUpdate(encodeStateAsUpdate(this.doc));
     this.knownUrls.add(result.url);
+    this.updatesSinceCompaction++;
+    this.autoCompact();
     return result;
   }
 
-  /** Await all currently-queued background persists. */
   async flush(): Promise<void> {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = undefined;
+    }
+    // A failed batch stays pending and a later explicit flush retries it.
+    this.writeTail = this.writeTail.catch(() => {});
+    this.drainWrites();
     await this.writeTail;
   }
 
-  /**
-   * Stop persisting: unsubscribe from the doc and mark destroyed. Pending writes
-   * already enqueued still drain (await {@link flush} first if you need them
-   * persisted before tearing down). Does NOT destroy the `Y.Doc` itself — the
-   * caller owns the doc's lifecycle.
-   */
+  async disconnect(): Promise<void> {
+    if (this.destroyed) return;
+    await this.flush();
+    this.stop();
+    await this.subscription?.close();
+    this.subscription = undefined;
+    this.emit("status", "disconnected");
+  }
+
+  private stop(): void {
+    this.active = false;
+    this.synced = false;
+    this.generation++;
+    this.connection = undefined;
+    this.subscriptionAbort?.abort();
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = undefined;
+    }
+  }
+
   destroy(): void {
     if (this.destroyed) return;
+    this.stop();
     this.destroyed = true;
     this.doc.off("update", this.updateHandler);
+    void this.subscription?.close().catch(() => {});
+    this.subscription = undefined;
+    this.pending.length = 0;
     this.listeners.clear();
   }
 
-  /** Subscribe to a provider event. Returns an unsubscribe function. */
   on<K extends keyof SolidPersistenceEvents>(
     event: K,
     listener: SolidPersistenceEvents[K],
@@ -330,25 +375,41 @@ export class SolidPersistence {
       this.listeners.set(event, set);
     }
     set.add(listener as Listener);
-    return () => {
-      this.listeners.get(event)?.delete(listener as Listener);
-    };
+    return () => this.off(event, listener);
   }
 
-  /** Unsubscribe a previously-registered listener. */
   off<K extends keyof SolidPersistenceEvents>(event: K, listener: SolidPersistenceEvents[K]): void {
     this.listeners.get(event)?.delete(listener as Listener);
+  }
+
+  private report(cause: unknown): void {
+    if (this.destroyed) return;
+    if (cause instanceof StorageError && cause.code === "precondition-failed") {
+      this.emit("conflict", cause);
+    }
+    this.emit("error", toError(cause));
   }
 
   private emit<K extends keyof SolidPersistenceEvents>(
     event: K,
     ...args: Parameters<SolidPersistenceEvents[K]>
   ): void {
-    const set = this.listeners.get(event);
-    if (!set) return;
-    // Copy so a listener unsubscribing during dispatch does not skip a sibling.
-    for (const listener of [...set]) {
+    for (const listener of [...(this.listeners.get(event) ?? [])]) {
       (listener as (...a: Parameters<SolidPersistenceEvents[K]>) => void)(...args);
     }
+  }
+}
+
+export interface YSolidOptions extends SolidPersistenceOptions {
+  storage: StorageClient;
+  container: string;
+  mode?: "auto" | "log" | "live";
+}
+
+/** T-060 supplies log mode; the live transport is a separate task. */
+export class YSolidProvider extends SolidPersistence {
+  constructor(options: YSolidOptions) {
+    if (options.mode === "live") throw new Error("[y-solid] live mode is not available");
+    super(options);
   }
 }

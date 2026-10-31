@@ -1,8 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
+import { createSolidBackend } from "@jeswr/storage-client/solid";
 import { describe, expect, it } from "vitest";
 import { SolidUpdateStore, UPDATE_CONTENT_TYPE } from "./store.js";
 import { makePod } from "./testPod.js";
@@ -11,7 +13,7 @@ const CONTAINER = "https://alice.pod/notes/my-doc/";
 
 function makeStore() {
   const pod = makePod(CONTAINER);
-  const store = new SolidUpdateStore({ container: CONTAINER, fetch: pod.fetchImpl });
+  const store = new SolidUpdateStore({ container: CONTAINER, storage: pod.storage });
   return { pod, store };
 }
 
@@ -19,7 +21,7 @@ describe("browser-safety", () => {
   it("the store does not import any node: module (usable in a browser Solid client)", () => {
     const src = readFileSync(fileURLToPath(new URL("./store.ts", import.meta.url)), "utf8");
     expect(src).not.toMatch(/from\s+["']node:/);
-    expect(src).toContain("crypto.randomUUID()");
+    expect(src).not.toContain("fetch(");
   });
 });
 
@@ -28,10 +30,10 @@ describe("SolidUpdateStore construction", () => {
     const pod = makePod(CONTAINER);
     const s = new SolidUpdateStore({
       container: "https://alice.pod/notes/my-doc",
-      fetch: pod.fetchImpl,
+      storage: pod.storage,
     });
     expect(s.container).toBe(CONTAINER);
-    expect(() => new SolidUpdateStore({ container: "file:///x/", fetch: pod.fetchImpl })).toThrow(
+    expect(() => new SolidUpdateStore({ container: "file:///x/", storage: pod.storage })).toThrow(
       /http\(s\)/,
     );
   });
@@ -203,10 +205,11 @@ describe("compact — write-before-delete", () => {
     expect(await store.listUpdateUrls()).toHaveLength(2);
 
     const merged = new Uint8Array([1, 2, 99]);
+    await store.loadUpdates();
     const { url } = await store.compact(merged, [a.url, b.url]);
 
     // The merged resource exists with the merged bytes...
-    expect(Array.from(pod.store.get(url)?.body ?? [])).toEqual([1, 2, 99]);
+    expect(Array.from((await store.readUpdate(url)) ?? [])).toEqual([1, 2, 99]);
     // ...and the originals are gone.
     expect(pod.store.has(a.url)).toBe(false);
     expect(pod.store.has(b.url)).toBe(false);
@@ -232,11 +235,18 @@ describe("redirect refusal — credentialed requests never follow a 3xx", () => 
     // A server that 3xx-redirects everything toward a foreign origin.
     const redirectFetch: typeof globalThis.fetch = async () =>
       new Response(null, { status: 302, headers: { location: "https://evil.example/" } });
-    const store = new SolidUpdateStore({ container: CONTAINER, fetch: redirectFetch });
-    await expect(store.listUpdateUrls()).rejects.toThrow(/redirected/);
-    await expect(store.appendUpdate(new Uint8Array([1]))).rejects.toThrow(/redirected/);
-    await expect(store.readUpdate(InScope)).rejects.toThrow(/redirected/);
-    await expect(store.deleteUpdate(InScope)).rejects.toThrow(/redirected/);
+    const store = new SolidUpdateStore({
+      container: CONTAINER,
+      storage: createSolidBackend({ root: CONTAINER, fetch: redirectFetch }),
+    });
+    await expect(store.listUpdateUrls()).rejects.toThrow(/redirect|invalid-response|unexpected/);
+    await expect(store.appendUpdate(new Uint8Array([1]))).rejects.toThrow(
+      /redirect|invalid-response|unexpected/,
+    );
+    await expect(store.readUpdate(InScope)).rejects.toThrow(/redirect|invalid-response|unexpected/);
+    await expect(store.deleteUpdate(InScope)).rejects.toThrow(
+      /redirect|invalid-response|unexpected/,
+    );
   });
 
   it("refuses a browser-style opaqueredirect (filtered response, status 0)", async () => {
@@ -247,9 +257,12 @@ describe("redirect refusal — credentialed requests never follow a 3xx", () => 
       headers: new Headers(),
     } as unknown as Response;
     const opaqueFetch: typeof globalThis.fetch = async () => opaque;
-    const store = new SolidUpdateStore({ container: CONTAINER, fetch: opaqueFetch });
-    await expect(store.readUpdate(InScope)).rejects.toThrow(/redirected/);
-    await expect(store.listUpdateUrls()).rejects.toThrow(/redirected/);
+    const store = new SolidUpdateStore({
+      container: CONTAINER,
+      storage: createSolidBackend({ root: CONTAINER, fetch: opaqueFetch }),
+    });
+    await expect(store.readUpdate(InScope)).rejects.toThrow(/redirect|invalid-response|unexpected/);
+    await expect(store.listUpdateUrls()).rejects.toThrow(/redirect|invalid-response|unexpected/);
   });
 
   it("passes redirect:'manual' on every request (so the fetch never follows)", async () => {
@@ -262,13 +275,16 @@ describe("redirect refusal — credentialed requests never follow a 3xx", () => 
           `@prefix ldp: <http://www.w3.org/ns/ldp#> .\n<${CONTAINER}> a ldp:Container .`,
           {
             status: 200,
-            headers: { "content-type": "text/turtle" },
+            headers: { "content-type": "text/turtle", etag: '"test"' },
           },
         );
       }
       return new Response(null, { status: 201 });
     };
-    const store = new SolidUpdateStore({ container: CONTAINER, fetch: spyFetch });
+    const store = new SolidUpdateStore({
+      container: CONTAINER,
+      storage: createSolidBackend({ root: CONTAINER, fetch: spyFetch }),
+    });
     await store.listUpdateUrls();
     await store.appendUpdate(new Uint8Array([1]));
     await store.deleteUpdate(`${CONTAINER}x`);
@@ -281,7 +297,7 @@ describe("size caps — hostile/unbounded bodies are refused", () => {
     const pod = makePod(CONTAINER);
     const store = new SolidUpdateStore({
       container: CONTAINER,
-      fetch: pod.fetchImpl,
+      storage: pod.storage,
       maxUpdateBytes: 8,
     });
     const { url } = await store.appendUpdate(new Uint8Array(32));
@@ -305,7 +321,7 @@ describe("size caps — hostile/unbounded bodies are refused", () => {
     };
     const store = new SolidUpdateStore({
       container: CONTAINER,
-      fetch: streamFetch,
+      storage: createSolidBackend({ root: CONTAINER, fetch: streamFetch }),
       maxUpdateBytes: 8,
     });
     await expect(store.readUpdate(`${CONTAINER}u`)).rejects.toThrow(/max size/);
@@ -315,10 +331,10 @@ describe("size caps — hostile/unbounded bodies are refused", () => {
     const pod = makePod(CONTAINER);
     const store = new SolidUpdateStore({
       container: CONTAINER,
-      fetch: pod.fetchImpl,
+      storage: pod.storage,
       maxListingBytes: 8,
     });
-    // Even the empty-container listing Turtle is > 8 bytes.
+    await store.appendUpdate(new Uint8Array([1]));
     await expect(store.listUpdateUrls()).rejects.toThrow(/max size/);
   });
 
@@ -326,7 +342,7 @@ describe("size caps — hostile/unbounded bodies are refused", () => {
     const pod = makePod(CONTAINER);
     const store = new SolidUpdateStore({
       container: CONTAINER,
-      fetch: pod.fetchImpl,
+      storage: pod.storage,
       maxUpdateBytes: 0,
       maxListingBytes: Number.NaN,
     });
@@ -347,11 +363,14 @@ describe("hostile container listing — fail closed per entry", () => {
   <${CONTAINER}x/../z>, <${CONTAINER}?self>, <${CONTAINER}#self>,
   <${CONTAINER}sub/>, <${CONTAINER}a%2Fb>, <${CONTAINER}a%5cb> .`,
         {
-          headers: { "content-type": "text/turtle" },
+          headers: { "content-type": "text/turtle", etag: '"test"' },
         },
       );
     };
-    const store = new SolidUpdateStore({ container: CONTAINER, fetch });
+    const store = new SolidUpdateStore({
+      container: CONTAINER,
+      storage: createSolidBackend({ root: CONTAINER, fetch }),
+    });
     expect(await store.listUpdateUrls()).toEqual([`${CONTAINER}a`, `${CONTAINER}z`]);
   });
 
@@ -372,7 +391,10 @@ describe("hostile container listing — fail closed per entry", () => {
       }
       return new Response(null, { status: 404 });
     };
-    const store = new SolidUpdateStore({ container: CONTAINER, fetch: hostileFetch });
+    const store = new SolidUpdateStore({
+      container: CONTAINER,
+      storage: createSolidBackend({ root: CONTAINER, fetch: hostileFetch }),
+    });
     const listed = await store.listUpdateUrls();
     // Only the in-scope, non-container, http(s), same-origin member survives.
     expect(listed).toEqual([`${CONTAINER}good`]);
@@ -383,7 +405,10 @@ describe("missing container", () => {
   it("listUpdateUrls returns [] when the container 404s", async () => {
     // A fetch that 404s everything (no container present at all).
     const fetch404: typeof globalThis.fetch = async () => new Response(null, { status: 404 });
-    const store = new SolidUpdateStore({ container: CONTAINER, fetch: fetch404 });
+    const store = new SolidUpdateStore({
+      container: CONTAINER,
+      storage: createSolidBackend({ root: CONTAINER, fetch: fetch404 }),
+    });
     expect(await store.listUpdateUrls()).toEqual([]);
     expect(await store.loadUpdates()).toEqual([]);
   });
