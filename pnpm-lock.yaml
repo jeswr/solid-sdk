@@ -3520,6 +3520,12 @@ importers:
       '@jeswr/agent-model':
         specifier: workspace:*
         version: link:../agent-model
+      '@jeswr/fetch-rdf':
+        specifier: workspace:*
+        version: link:../fetch-rdf
+      '@jeswr/ldp-container':
+        specifier: workspace:*
+        version: link:../ldp-container
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize
@@ -3539,9 +3545,6 @@ importers:
       '@biomejs/biome':
         specifier: ^2.0.0
         version: 2.5.3
-      '@jeswr/fetch-rdf':
-        specifier: workspace:*
-        version: link:../fetch-rdf
       '@microsoft/api-extractor':
         specifier: ^7.58.9
         version: 7.58.9(@types/node@22.20.1)
