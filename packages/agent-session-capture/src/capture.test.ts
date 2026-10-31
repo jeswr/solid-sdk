@@ -194,6 +194,59 @@ describe("capture with real ChatWriter and client credentials", () => {
     expect(transport.requests).toEqual([]);
   });
 
+  it("preserves repeated inherited Codex messages across replay, trimming and appends", async () => {
+    const metadata = [
+      {
+        type: "session_meta",
+        payload: { id: "codex-fixture-session", forked_from_id: "parent", cwd },
+      },
+      { type: "session_meta", payload: { id: "parent", cwd } },
+    ];
+    const turn = (turnId: string) => ({ type: "turn_context", payload: { turn_id: turnId, cwd } });
+    const repeated = {
+      type: "response_item",
+      timestamp: "2026-10-25T12:00:00.000Z",
+      payload: {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "Continue" }],
+      },
+    };
+    const jsonl = (rows: unknown[]) => rows.map((value) => JSON.stringify(value)).join("\n");
+    const retained = [turn("second"), repeated, repeated];
+    const path = await rollout(jsonl([...metadata, turn("first"), repeated, ...retained]));
+    await runCapture(["codex"], {
+      ...options,
+      fetch: async () => {
+        throw new Error("offline");
+      },
+    });
+    expect(await queued()).toHaveLength(1);
+    await runCapture(["codex"], options);
+    expect(await queued()).toEqual([]);
+    const first = await storedConversation("codex");
+    expect(first.messages.map((message) => message.text)).toEqual(Array(3).fill("Continue"));
+    expect(new Set(first.messages.map((message) => message.id)).size).toBe(3);
+    const resources = new Map(transport.resources);
+    transport.requests.length = 0;
+    await runCapture(["codex"], options);
+    expect(transport.requests).toEqual([]);
+    await writeFile(path, jsonl([...metadata, ...retained]));
+    await runCapture(["codex"], options);
+    expect(transport.requests).toEqual([]);
+    expect(transport.resources).toEqual(resources);
+    await writeFile(path, jsonl([...metadata, ...retained, repeated, turn("third"), repeated]));
+    await runCapture(["codex"], options);
+    const result = await storedConversation("codex");
+    expect(result.messages.map((message) => message.text)).toEqual(Array(5).fill("Continue"));
+    expect(result.messages.slice(0, 3)).toEqual(first.messages);
+    expect(
+      transport.requests.filter(
+        (request) => request.method === "PUT" && /\/m-.*\.ttl$/.test(request.url),
+      ),
+    ).toHaveLength(2);
+  });
+
   it("queues and uploads native Codex tool names without their arguments or results", async () => {
     const calls = ["web_search_call", "image_generation_call"].map((type) =>
       JSON.stringify({

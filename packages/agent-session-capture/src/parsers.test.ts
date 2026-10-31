@@ -70,7 +70,7 @@ describe("real-shaped redacted JSONL", () => {
       const message = { role: "assistant", content: texts.map((text) => ({ type: "text", text })) };
       return provider === "claude"
         ? claudeRow(message, { uuid: id })
-        : codexRow({ ...message, type: "message" });
+        : codexRow({ ...message, type: "message", id });
     };
     const texts = Array.from({ length: 20 }, (_, index) => `Block ${index}`);
     const first = row("first-row", texts);
@@ -89,7 +89,7 @@ describe("real-shaped redacted JSONL", () => {
     expect(new Set(parsed.map((message) => message.createdAt))).toEqual(new Set([stamp]));
   });
 
-  it("distinguishes native Codex messages by serialized fields and deduplicates repeated rows", () => {
+  it("distinguishes native Codex messages by serialized fields and deduplicates replayed rollouts", () => {
     const payload = {
       type: "message",
       role: "assistant",
@@ -99,13 +99,81 @@ describe("real-shaped redacted JSONL", () => {
     const later = codexRow(payload, { timestamp: "2026-10-25T12:00:01.000Z" });
     const user = codexRow({ ...payload, role: "user" });
     const final = codexRow({ ...payload, phase: "final_answer" });
-    const entries = [first, later, user, final];
+    const entries = [codexMeta("session"), first, later, user, final];
     const parsed = parseCodexTranscript(jsonl([...entries, ...entries])).conversation.messages;
     expect(parsed.map((message) => message.text)).toEqual(Array(4).fill("Repeated text"));
     expect(new Set(parsed.map((message) => message.id)).size).toBe(4);
     expect(parseCodexTranscript(jsonl([later, user, final])).conversation.messages).toEqual(
       parsed.slice(1),
     );
+  });
+
+  it("retains identical ID-less Codex occurrences with stable retry, append and trim identities", () => {
+    const repeated = codexRow({
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: "Repeated text" }],
+    });
+    const earlier = codexRow({
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: "Earlier request" }],
+    });
+    const entries = [codexMeta("session"), earlier, repeated, repeated];
+    const parsed = parseCodexTranscript(jsonl(entries));
+    expect(parsed.conversation.messages.map((message) => message.text)).toEqual([
+      "Earlier request",
+      "Repeated text",
+      "Repeated text",
+    ]);
+    expect(new Set(parsed.conversation.messages.map((message) => message.id)).size).toBe(3);
+    expect(parseCodexTranscript(jsonl(entries))).toEqual(parsed);
+    expect(parseCodexTranscript(jsonl([...entries, ...entries]))).toEqual(parsed);
+    expect(
+      parseCodexTranscript(jsonl(entries.filter((entry) => entry !== earlier))).conversation
+        .messages,
+    ).toEqual(parsed.conversation.messages.slice(1));
+    const appended = parseCodexTranscript(jsonl([...entries, repeated])).conversation.messages;
+    expect(appended.slice(0, 3)).toEqual(parsed.conversation.messages);
+    expect(new Set(appended.map((message) => message.id)).size).toBe(4);
+  });
+
+  it.each([
+    "turn_context",
+    "task_started",
+    "turn_started",
+  ])("uses %s turn IDs to preserve identical inherited rows after trimming earlier turns", (type) => {
+    const turn = (turnId: unknown) =>
+      type === "turn_context"
+        ? { type, payload: { turn_id: turnId } }
+        : { type: "event_msg", payload: { type, turn_id: turnId } };
+    const payload = {
+      type: "message",
+      role: "user",
+      content: [{ type: "input_text", text: "Continue" }],
+    };
+    const repeated = codexRow(payload);
+    const metadata = [codexMeta("child", { forked_from_id: "parent" }), codexMeta("parent")];
+    const firstTurn = [turn("first-turn"), repeated];
+    const retained = [turn("second-turn"), repeated, turn("second-turn"), repeated];
+    const entries = [...metadata, ...firstTurn, ...retained];
+    const parsed = parseCodexTranscript(jsonl(entries));
+    expect(parsed.conversation.messages.map((message) => message.text)).toEqual(
+      Array(3).fill("Continue"),
+    );
+    expect(new Set(parsed.conversation.messages.map((message) => message.id)).size).toBe(3);
+    expect(parseCodexTranscript(jsonl([...entries, ...entries]))).toEqual(parsed);
+    expect(parseCodexTranscript(jsonl([...metadata, ...retained])).conversation.messages).toEqual(
+      parsed.conversation.messages.slice(1),
+    );
+    expect(
+      parseCodexTranscript(jsonl([...entries, turn(null), turn(3), turn(""), repeated])),
+    ).toEqual(parseCodexTranscript(jsonl([...entries, repeated])));
+    const explicit = codexRow({ ...payload, id: "explicit-message" });
+    expect(
+      parseCodexTranscript(jsonl([turn("first"), explicit, turn("second"), explicit])).conversation
+        .messages,
+    ).toHaveLength(1);
   });
 
   it("keeps stable IDs when a transcript grows and accepts fallback IDs and normalized zones", () => {

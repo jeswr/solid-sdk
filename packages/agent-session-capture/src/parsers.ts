@@ -145,14 +145,38 @@ export function parseCodexTranscript(jsonl: string, source = "codex"): CapturedS
   const entries = rows(jsonl);
   const result = session("codex", entries, source);
   const seen = new Set<string>();
+  const occurrences = new Map<string, number>();
+  let turnId: string | undefined;
   entries.forEach((entry) => {
-    if (entry.type !== "response_item") return;
+    if (entry.type === "session_meta") {
+      // Replayed rollout segments restart their local occurrence counts.
+      occurrences.clear();
+      turnId = undefined;
+      return;
+    }
     const payload = record(entry.payload);
+    if (
+      entry.type === "turn_context" ||
+      (entry.type === "event_msg" &&
+        ["task_started", "turn_started"].includes(String(payload.type)))
+    ) {
+      if (typeof payload.turn_id === "string" && payload.turn_id) turnId = payload.turn_id;
+      return;
+    }
+    if (entry.type !== "response_item") return;
     const createdAt = time(entry.timestamp);
     if (!createdAt) return;
-    // Native messages omit IDs. Hash serialized fields so trimming cannot reuse an
-    // acknowledged identity; identical rollout records still deduplicate in append.
-    const key = payload.id ?? payload.call_id ?? digest([createdAt, payload]);
+    let key = payload.id ?? payload.call_id ?? undefined;
+    if (key === undefined) {
+      // Fork rewriting can give identical native rows the same millisecond timestamp.
+      // Count each occurrence, scoped by turn when available, rather than dropping it.
+      // Per-fingerprint counts survive removal of unrelated rows and earlier turns.
+      const fingerprint = digest([createdAt, payload]);
+      const scope = turnId ? digest([turnId, fingerprint]) : fingerprint;
+      const occurrence = occurrences.get(scope) ?? 0;
+      occurrences.set(scope, occurrence + 1);
+      key = occurrence === 0 ? scope : digest([scope, occurrence]);
+    }
     if (payload.type === "message" && (payload.role === "user" || payload.role === "assistant")) {
       const role = payload.role;
       if (!Array.isArray(payload.content)) return;
