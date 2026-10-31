@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { StorageError } from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { afterEach, expect, test, vi } from "vitest";
 import { createNotifications } from "./index.js";
@@ -213,6 +214,140 @@ test("offline resumes missed membership changes without advancing a partial base
   await timers.advanceBy(0);
   expect(changes.mock.calls.map(([e]) => e.type)).toEqual(["Update", "Create"]);
   expect(changes.mock.calls[1]?.[0].object).toBe(child.url);
+  await sub.close();
+});
+
+test.each([
+  { protocol: "solid", status: 404 },
+  { protocol: "solid", status: 410 },
+  { protocol: "lws", status: 404 },
+  { protocol: "lws", status: 410 },
+] as const)("$protocol hot resource absence ($status) permits resync without repeated deletions", async ({
+  protocol,
+  status,
+}) => {
+  const net = network();
+  const { storage, client, timers } = fixture(protocol);
+  const hot = await storage.create(root, "hot", { contentType: "text/plain", name: "hot" });
+  const sub = await client.subscribe([root], { hot: [hot.url], pollIntervalMs: 10 });
+  const changes = vi.fn();
+  const resync = vi.fn();
+  sub.on("change", changes);
+  sub.on("resync", resync);
+  await timers.advanceBy(0);
+  net.set(false);
+  await storage.delete(hot.url, { ifMatch: hot.etag as string });
+  const realHead = storage.head.bind(storage);
+  vi.spyOn(storage, "head").mockImplementation((url, opts) => {
+    if (url === hot.url) {
+      return Promise.reject(new StorageError("not-found", { method: "HEAD", url, status }));
+    }
+    return realHead(url, opts);
+  });
+  net.set(true);
+  await timers.advanceBy(0);
+  expect(resync).toHaveBeenCalledExactlyOnceWith(new Date(0));
+  expect(changes.mock.calls.map(([event]) => [event.type, event.object])).toEqual([
+    ["Update", root],
+    ["Delete", hot.url],
+  ]);
+  await timers.advanceBy(30);
+  expect(changes).toHaveBeenCalledTimes(2);
+  net.set(false);
+  net.set(true);
+  await timers.advanceBy(0);
+  expect(resync).toHaveBeenCalledTimes(2);
+  expect(resync).toHaveBeenLastCalledWith(new Date(30));
+  await sub.close();
+});
+
+test("initially absent hot resources and reappearances establish quiet baselines", async () => {
+  const net = network(false);
+  const { storage, client, timers } = fixture();
+  const hot = `${root}hot`;
+  const sub = await client.subscribe([hot], { pollIntervalMs: 10 });
+  const changes = vi.fn();
+  const resync = vi.fn();
+  sub.on("change", changes);
+  sub.on("resync", resync);
+  net.set(true);
+  await timers.advanceBy(0);
+  expect(resync).toHaveBeenCalledTimes(1);
+  const created = await storage.create(root, "first", { contentType: "text/plain", name: "hot" });
+  await timers.advanceBy(10);
+  expect(changes).not.toHaveBeenCalled();
+  await storage.delete(hot, { ifMatch: created.etag as string });
+  await timers.advanceBy(10);
+  const recreated = await storage.create(root, "second", {
+    contentType: "text/plain",
+    name: "hot",
+  });
+  await timers.advanceBy(10);
+  expect(changes).not.toHaveBeenCalled();
+  const written = await storage.write(hot, "third", {
+    contentType: "text/plain",
+    ifMatch: recreated.etag as string,
+  });
+  await timers.advanceBy(10);
+  expect(changes).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ type: "Update", object: hot, state: written.etag }),
+  );
+  await sub.close();
+});
+
+test("an absent hot resource cannot hide transient failures or missing listing pages", async () => {
+  const net = network();
+  const { storage, client, timers } = fixture("lws");
+  const sub = await client.subscribe([`${root}missing`, root], { pollIntervalMs: 10 });
+  const resync = vi.fn();
+  const changes = vi.fn();
+  sub.on("resync", resync);
+  sub.on("change", changes);
+  await timers.advanceBy(0);
+  net.set(false);
+  const created = await storage.create(root, "new", { contentType: "text/plain", name: "new" });
+  vi.spyOn(storage, "listAll").mockImplementationOnce(async function* () {
+    yield { url: `${root}partial`, kind: "resource" } as never;
+    throw new StorageError("not-found", { method: "GET", url: `${root}?page=2`, status: 404 });
+  });
+  net.set(true);
+  await timers.advanceBy(0);
+  expect(resync).not.toHaveBeenCalled();
+  expect(changes).not.toHaveBeenCalled();
+  vi.spyOn(storage, "head").mockRejectedValueOnce(
+    new StorageError("network", { method: "HEAD", url: `${root}missing` }),
+  );
+  await timers.advanceBy(10);
+  expect(resync).not.toHaveBeenCalled();
+  expect(changes.mock.calls.map(([event]) => [event.type, event.object])).toEqual([
+    ["Update", root],
+    ["Create", created.url],
+  ]);
+  await timers.advanceBy(10);
+  expect(resync).toHaveBeenCalledExactlyOnceWith(new Date(0));
+  await sub.close();
+});
+
+test("an aborted late not-found HEAD cannot reconcile a subscription", async () => {
+  const net = network(false);
+  const { storage, client, timers } = fixture();
+  const sub = await client.subscribe([`${root}missing`], { pollIntervalMs: 10 });
+  const deferred = Promise.withResolvers<Awaited<ReturnType<typeof storage.head>>>();
+  vi.spyOn(storage, "head").mockReturnValueOnce(deferred.promise);
+  const resync = vi.fn();
+  sub.on("resync", resync);
+  net.set(true);
+  const tick = timers.advanceBy(0);
+  net.set(false);
+  deferred.reject(
+    new StorageError("not-found", { method: "HEAD", url: `${root}missing`, status: 404 }),
+  );
+  await tick;
+  expect(resync).not.toHaveBeenCalled();
+  expect(timers.pending).toBe(0);
+  net.set(true);
+  await timers.advanceBy(0);
+  expect(resync).toHaveBeenCalledTimes(1);
   await sub.close();
 });
 

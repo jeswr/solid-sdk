@@ -1,5 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { Entry, StorageClient } from "@jeswr/storage-client";
+import {
+  type Entry,
+  type ReadResult,
+  type StorageClient,
+  StorageError,
+} from "@jeswr/storage-client";
 import { isOnline, platform } from "../runtime.js";
 import { SubscriptionController } from "../subscription.js";
 import type { ChangeEvent, Timers } from "../types.js";
@@ -27,7 +32,8 @@ interface Snapshot {
 export function createPollChannel(options: PollChannelOptions): SubscriptionController {
   const subscription = new SubscriptionController(options.topics);
   subscription.channel = "poll";
-  const snapshots = new Map<string, Snapshot>();
+  // null records observed absence; failed requests preserve the last successful observation.
+  const snapshots = new Map<string, Snapshot | null>();
   let timer: unknown;
   let active: AbortController | undefined;
   let stopped = false;
@@ -75,10 +81,20 @@ export function createPollChannel(options: PollChannelOptions): SubscriptionCont
       for (const topic of options.topics) {
         if (request.signal.aborted) break;
         try {
-          const head = await options.storage.head(topic, {
-            signal: request.signal,
-            revalidate: true,
-          });
+          let head: ReadResult;
+          try {
+            head = await options.storage.head(topic, {
+              signal: request.signal,
+              revalidate: true,
+            });
+          } catch (error) {
+            request.signal.throwIfAborted();
+            if (error instanceof StorageError && error.code === "not-found") {
+              snapshots.set(topic, null);
+              continue;
+            }
+            throw error;
+          }
           request.signal.throwIfAborted();
           const members = new Map<string, Entry>();
           if (head.kind === "container") {

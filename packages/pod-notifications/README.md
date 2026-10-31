@@ -51,6 +51,8 @@ between zero and 2,147,483,647 ms.
 event starts immediate reconciliation; successful reconciliation emits `resync` with the offline
 start time. Without browser connectivity globals, polling proceeds normally. Network/list
 failures retry at the next interval; forbidden responses close with reason `forbidden`.
+A HEAD reporting `not-found` (404/410) records absence and permits resync. Container listings
+still emit membership deletions; a reappearing target establishes a fresh quiet baseline.
 `close()` and signal abort release timers/listeners, abort requests and settle iterator waiters.
 Observers can unsubscribe; observer exceptions are isolated so they cannot interrupt cleanup
 or other consumers. Iterators observe changes from their creation, independently; iterator
