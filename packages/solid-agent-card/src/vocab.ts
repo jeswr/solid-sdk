@@ -4,9 +4,8 @@
 // agentic-Solid roadmap). This is the single source of the string IRIs / paths
 // the typed wrappers, the builder, the discoverer and the validator all key on.
 //
-// Vocabularies used (all EXTERNAL standards — no bespoke `@jeswr/…` agent vocab
-// is minted here; M1 deliberately reuses standard predicates so the pointer is
-// readable by industry (A2A) and RDF (ANP/Solid) tooling alike):
+// M1 uses external standards; the DESIGN §8 bindings extension reuses the
+// shared @jeswr/agent-model vocabulary (no terms are minted in this package):
 //   - schema.org  (`schema:agent` person→agent link, agent metadata)
 //   - Solid Interop / SAI (`interop:hasAuthorizationAgent` — "the agent that
 //     represents you", discovered from the WebID profile)
@@ -16,6 +15,12 @@
 
 /** schema.org namespace. */
 export const SCHEMA = "https://schema.org/" as const;
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+/** A2A channel-capability extension URI (DESIGN §8). */
+export const BINDINGS_EXTENSION_URI = "https://jeswr.org/ns/agent#bindings" as const;
+/** ANP link to a channel capability, defined by @jeswr/agent-model. */
+export const SUPPORTS_BINDING = "https://jeswr.org/ns/agent#supportsBinding" as const;
 /** schema.org (http) — the legacy/alternate base some profiles use. */
 export const SCHEMA_HTTP = "http://schema.org/" as const;
 /** Solid Interoperability (SAI) namespace. */

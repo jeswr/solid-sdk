@@ -1,0 +1,62 @@
+{
+  "protocolVersion": "0.3.0",
+  "name": "Alice's Agent",
+  "url": "https://alice.example/agent",
+  "preferredTransport": "JSONRPC",
+  "capabilities": {
+    "extensions": [
+      {
+        "uri": "https://jeswr.org/ns/agent#bindings",
+        "required": false,
+        "params": {
+          "bindings": [
+            {
+              "type": "channel-capability",
+              "id": "https://alice.example/agent/descriptors/gmail.ttl#gmail",
+              "channel": "email",
+              "binding": "gmail",
+              "carriage": "email-mime/0.1",
+              "structuredPayload": true,
+              "endToEndEncrypted": false,
+              "deliveryReceipts": false,
+              "historyWindow": "P30D",
+              "maxMessageBytes": 25000000,
+              "sendSupported": true,
+              "costPerMessage": 0,
+              "rateLimit": {
+                "perRecipient": 3,
+                "perDay": 50
+              },
+              "credentialState": "connected",
+              "lastIngest": "2026-10-31T00:00:00Z"
+            },
+            {
+              "type": "channel-capability",
+              "id": "https://alice.example/agent/descriptors/matrix.ttl#matrix",
+              "channel": "chat",
+              "binding": "matrix",
+              "carriage": "matrix-json/0.1",
+              "structuredPayload": true,
+              "endToEndEncrypted": true,
+              "deliveryReceipts": true,
+              "historyWindow": "P30D",
+              "maxMessageBytes": 25000000,
+              "sendSupported": true,
+              "costPerMessage": 0,
+              "rateLimit": {
+                "perRecipient": 3,
+                "perDay": 50
+              },
+              "credentialState": "setup-required",
+              "lastIngest": "2026-10-31T00:00:00Z"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "x-solid": {
+    "owner": "https://alice.example/profile/card#me",
+    "agentDescription": "https://alice.example/agent#ad"
+  }
+}

@@ -1,0 +1,45 @@
+@prefix ad: <https://w3id.org/agent-description#>.
+@prefix interop: <http://www.w3.org/ns/solid/interop#>.
+@prefix schema: <https://schema.org/>.
+@prefix foaf: <http://xmlns.com/foaf/0.1/>.
+@prefix dcterms: <http://purl.org/dc/terms/>.
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>.
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.
+
+<https://alice.example/agent> a ad:AgentDescription;
+    ad:name "Alice's Agent";
+    ad:url <https://alice.example/agent>;
+    ad:owner <https://alice.example/profile/card#me>;
+    <https://jeswr.org/ns/agent#supportsBinding> <https://alice.example/agent/descriptors/gmail.ttl#gmail>, <https://alice.example/agent/descriptors/matrix.ttl#matrix>.
+<https://alice.example/agent/descriptors/gmail.ttl#gmail> a <https://jeswr.org/ns/agent#ChannelCapability>;
+    <https://jeswr.org/ns/agent#channel> "email";
+    <https://jeswr.org/ns/agent#binding> "gmail";
+    <https://jeswr.org/ns/agent#carriage> "email-mime/0.1";
+    <https://jeswr.org/ns/agent#structuredPayload> true;
+    <https://jeswr.org/ns/agent#endToEndEncrypted> false;
+    <https://jeswr.org/ns/agent#deliveryReceipts> false;
+    <https://jeswr.org/ns/agent#historyWindow> "P30D"^^<http://www.w3.org/2001/XMLSchema#duration>;
+    <https://jeswr.org/ns/agent#maxMessageBytes> 25000000;
+    <https://jeswr.org/ns/agent#sendSupported> true;
+    <https://jeswr.org/ns/agent#costPerMessage> "0"^^<http://www.w3.org/2001/XMLSchema#decimal>;
+    <https://jeswr.org/ns/agent#rateLimit> <urn:agent:node:362997e044d166579da1c6b0e5c5fe51>;
+    <https://jeswr.org/ns/agent#credentialState> "connected";
+    <https://jeswr.org/ns/agent#lastIngest> "2026-10-31T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>.
+<urn:agent:node:362997e044d166579da1c6b0e5c5fe51> <https://jeswr.org/ns/agent#perRecipient> 3;
+    <https://jeswr.org/ns/agent#perDay> 50.
+<https://alice.example/agent/descriptors/matrix.ttl#matrix> a <https://jeswr.org/ns/agent#ChannelCapability>;
+    <https://jeswr.org/ns/agent#channel> "chat";
+    <https://jeswr.org/ns/agent#binding> "matrix";
+    <https://jeswr.org/ns/agent#carriage> "matrix-json/0.1";
+    <https://jeswr.org/ns/agent#structuredPayload> true;
+    <https://jeswr.org/ns/agent#endToEndEncrypted> true;
+    <https://jeswr.org/ns/agent#deliveryReceipts> true;
+    <https://jeswr.org/ns/agent#historyWindow> "P30D"^^<http://www.w3.org/2001/XMLSchema#duration>;
+    <https://jeswr.org/ns/agent#maxMessageBytes> 25000000;
+    <https://jeswr.org/ns/agent#sendSupported> true;
+    <https://jeswr.org/ns/agent#costPerMessage> "0"^^<http://www.w3.org/2001/XMLSchema#decimal>;
+    <https://jeswr.org/ns/agent#rateLimit> <urn:agent:node:69cfe33ed704edc4f2371971f10da907>;
+    <https://jeswr.org/ns/agent#credentialState> "setup-required";
+    <https://jeswr.org/ns/agent#lastIngest> "2026-10-31T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>.
+<urn:agent:node:69cfe33ed704edc4f2371971f10da907> <https://jeswr.org/ns/agent#perRecipient> 3;
+    <https://jeswr.org/ns/agent#perDay> 50.

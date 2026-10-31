@@ -66,6 +66,8 @@ function toPkgRelativeSource(source) {
  * rdf-serialize's `n3`) stay external.
  */
 const EXTERNAL = [
+  // AUTHORED-BY Codex GPT-6.1-Sol — declarations also refer to the shared model.
+  "@jeswr/agent-model",
   "n3",
   "@solid/object",
   "@rdfjs/wrapper",

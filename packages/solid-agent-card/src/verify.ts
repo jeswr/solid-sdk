@@ -9,6 +9,8 @@
 // well-known serving pattern where the URL ≠ the agent IRI it describes —
 // otherwise to the URL it was served from.
 
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { type ChannelCapability, fromRdf } from "@jeswr/agent-model";
 import { fetchRdf, parseRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
 import { classifyFetchError, describeError } from "./internal/errors.js";
@@ -203,6 +205,7 @@ function projectDescriptor(
 
   const skills = projectSkills(node, issues);
   const securitySchemes = projectSchemes(node, issues);
+  const bindings = projectBindings(node, issues);
 
   return {
     id,
@@ -216,7 +219,31 @@ function projectDescriptor(
     ...(skills.length > 0 && { skills }),
     ...(securitySchemes.length > 0 && { securitySchemes }),
     ...(protocolSources.length > 0 && { protocolSources }),
+    ...(bindings.length > 0 && { bindings }),
   };
+}
+
+/** Validate linked capability records locally; never dereference advertised bindings. */
+function projectBindings(
+  node: AgentDescriptionNode,
+  issues: VerificationIssue[],
+): ChannelCapability[] {
+  const bindings: ChannelCapability[] = [];
+  for (const term of node.bindings) {
+    try {
+      if (term.termType !== "NamedNode") throw new TypeError("Expected a capability IRI.");
+      const record = fromRdf(node.dataset, term.value);
+      if (record.type !== "channel-capability") throw new TypeError("Expected a capability.");
+      bindings.push(record);
+    } catch {
+      issues.push({
+        code: "invalid-binding",
+        message: "agent:supportsBinding must link to a valid channel capability in this document.",
+        subject: node.value,
+      });
+    }
+  }
+  return bindings;
 }
 
 /** Project + validate the linked skills, recording issues (incl. duplicate ids). */

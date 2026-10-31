@@ -3517,6 +3517,9 @@ importers:
 
   packages/solid-agent-card:
     dependencies:
+      '@jeswr/agent-model':
+        specifier: workspace:*
+        version: link:../agent-model
       '@jeswr/rdf-serialize':
         specifier: workspace:*
         version: link:../rdf-serialize

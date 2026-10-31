@@ -7,7 +7,12 @@
 // with Turtle + JSON-LD serialisers). Projecting both from one source means the
 // two encodings cannot drift.
 
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { toRdf } from "@jeswr/agent-model";
+import { toJsonLd } from "@jeswr/agent-model/rdf/serialise";
 import { escapeIri, safeHttpIri } from "@jeswr/rdf-serialize";
+import type { Quad } from "n3";
+import { validateBindings } from "./internal/bindings.js";
 import { serialize } from "./serialize.js";
 import type {
   AgentCard,
@@ -16,7 +21,12 @@ import type {
   AgentDescriptor,
   AgentDescriptorDocuments,
 } from "./types.js";
-import { A2A_PROTOCOL_VERSION, ANP_INLINE_CONTEXT } from "./vocab.js";
+import {
+  A2A_PROTOCOL_VERSION,
+  ANP_INLINE_CONTEXT,
+  BINDINGS_EXTENSION_URI,
+  SUPPORTS_BINDING,
+} from "./vocab.js";
 import { AgentBuilder } from "./wrappers.js";
 
 /**
@@ -51,9 +61,10 @@ export function describeAgent(descriptor: AgentDescriptor): AgentDescriptorDocum
     );
   }
 
+  const validated = { ...descriptor, bindings: validateBindings(descriptor.bindings ?? []) };
   return {
-    agentCard: buildAgentCard(descriptor),
-    agentDescription: buildAgentDescription(descriptor),
+    agentCard: buildAgentCard(validated),
+    agentDescription: buildAgentDescription(validated),
   };
 }
 
@@ -94,6 +105,19 @@ function buildAgentCard(descriptor: AgentDescriptor): AgentCard {
     ...(descriptor.description !== undefined && { description: descriptor.description }),
     url,
     preferredTransport: "JSONRPC",
+    ...(descriptor.bindings?.length
+      ? {
+          capabilities: {
+            extensions: [
+              {
+                uri: BINDINGS_EXTENSION_URI,
+                required: false,
+                params: { bindings: descriptor.bindings },
+              },
+            ],
+          },
+        }
+      : {}),
     ...(descriptor.skills && descriptor.skills.length > 0
       ? {
           skills: descriptor.skills.map((s) => ({
@@ -158,6 +182,10 @@ function buildAgentDescription(descriptor: AgentDescriptor): AgentDescriptionDoc
   writeScalarFields(node, descriptor);
   writeSkills(node, descriptor.skills);
   writeSecuritySchemes(node, descriptor.securitySchemes);
+  for (const binding of descriptor.bindings ?? []) {
+    node.addBinding(binding.id);
+    builder.addDataset(toRdf(binding));
+  }
 
   const quads = builder.quads();
   return {
@@ -239,6 +267,11 @@ function buildJsonLd(descriptor: AgentDescriptor): Record<string, unknown> {
   };
   if (descriptor.description !== undefined) {
     doc.description = descriptor.description;
+  }
+  if (descriptor.bindings?.length) {
+    doc[SUPPORTS_BINDING] = descriptor.bindings.map((binding) => ({ "@id": binding.id }));
+    const quads = descriptor.bindings.flatMap((binding) => [...toRdf(binding)]) as Quad[];
+    doc["@included"] = toJsonLd(quads, {})["@graph"];
   }
   if (descriptor.owner !== undefined) {
     const owner = safeHttpIri(descriptor.owner);

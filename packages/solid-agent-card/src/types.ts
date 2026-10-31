@@ -5,6 +5,8 @@
 // through @rdfjs/wrapper typed accessors (never these objects directly) — these
 // are the SDK's ergonomic surface.
 
+// AUTHORED-BY Codex GPT-6.1-Sol
+import type { ChannelCapability } from "@jeswr/agent-model";
 import type { SecuritySchemeType } from "./vocab.js";
 
 /**
@@ -73,6 +75,8 @@ export interface AgentDescriptor {
    * carries the links; M2 (`@jeswr/agora-rdf`) defines their bodies.
    */
   readonly protocolSources?: readonly string[];
+  /** Channel capability records advertised to peers; descriptive, never authority to send. */
+  readonly bindings?: readonly ChannelCapability[];
 }
 
 /** The two co-located descriptor encodings {@link describeAgent} produces. */
@@ -100,6 +104,14 @@ export interface AgentCard {
   readonly description?: string;
   readonly url: string;
   readonly preferredTransport?: string;
+  /** Optional A2A extension; peers may ignore it without affecting the core card. */
+  readonly capabilities?: {
+    readonly extensions: readonly {
+      readonly uri: string;
+      readonly required: false;
+      readonly params: { readonly bindings: readonly ChannelCapability[] };
+    }[];
+  };
   readonly skills?: readonly {
     readonly id: string;
     readonly name: string;
@@ -204,6 +216,7 @@ export type VerificationIssueCode =
   | "duplicate-skill-id"
   | "invalid-security-scheme"
   | "invalid-protocol-source"
+  | "invalid-binding"
   | "owner-mismatch"
   | "fetch-failed"
   | "parse-failed";
