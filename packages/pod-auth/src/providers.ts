@@ -390,8 +390,10 @@ export function createProviders(
     contextFor,
     fence,
     restore: async (account: import("./sessions.js").ActiveAccount) => {
-      restoredContext = { selected: account.selected, context: account.context };
-      hint = account.selected;
+      const selected = { ...account.selected, issuer: account.issuer };
+      // Pin discovery to the remembered issuer while retaining the original credential key.
+      restoredContext = { selected, context: account.context };
+      hint = selected;
       selections.clear();
       const generation = await fence.generation();
       const request = new Request(account.requestUrl, { signal: fence.signalFor(generation) });
@@ -401,7 +403,7 @@ export function createProviders(
         await solidProvider.forget();
         throw new Error("Restored identity does not match the remembered account");
       }
-      await hooks.session(request, claims, "solid-oidc", account.selected);
+      await hooks.session(request, claims, "solid-oidc", selected);
       sessionRequest = request;
       return claims;
     },

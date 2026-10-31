@@ -334,6 +334,49 @@ test("an implicit session restores its verified storage context after automatic 
   expect(f.op.stats.refreshes).toBe(1);
 });
 
+test.each([
+  false,
+  true,
+])("restore pins a chosen issuer after metadata loss and preserves credential context; implicit=%s", async (implicit) => {
+  const f = fixture({ issuers: ["https://other.example/", "https://op.example/"] });
+  const chooseIssuer = vi.fn(async () => f.op.issuer);
+  f.options.ui.chooseIssuer = chooseIssuer;
+  if (implicit) f.options.boundary = {};
+  const first = f.load();
+  if (implicit) {
+    expect((await first.fetch(`${f.op.root}private`)).status).toBe(200);
+  } else await first.login({ webId: f.op.webId });
+  expect(chooseIssuer).toHaveBeenCalledOnce();
+  const [credentialKey] = f.record();
+  const pointer = () =>
+    [...f.values.entries()].find(([key]) => JSON.parse(key)[1] === "active")?.[1];
+  const before = pointer();
+  expect(before).toHaveProperty("selected.webId", f.op.webId);
+  expect(before).not.toHaveProperty("selected.issuer");
+  f.options.storage!.caches = createMemoryStore();
+  // Restoration must work without a chooser and must never invoke an available chooser.
+  if (implicit) delete f.options.ui.chooseIssuer;
+  else chooseIssuer.mockRejectedValueOnce(new Error("Issuer chooser must not open during restore"));
+  const restored = f.load();
+  await expect(restored.restore()).resolves.toMatchObject({
+    webId: f.op.webId,
+    issuer: f.op.issuer,
+  });
+  expect(f.record()[0]).toBe(credentialKey);
+  expect(pointer()).toMatchObject({
+    context: (before as { context: string }).context,
+    selected: { issuer: f.op.issuer },
+  });
+  expect(f.op.stats.refreshes).toBe(1);
+  expect(f.op.stats.authorizations).toBe(1);
+  expect(chooseIssuer).toHaveBeenCalledOnce();
+  expect(f.options.ui.getWebId).toHaveBeenCalledTimes(implicit ? 1 : 0);
+  expect((await restored.fetch(`${f.op.root}private`)).status).toBe(200);
+  await expect(f.load().restore()).resolves.toMatchObject({ webId: f.op.webId });
+  expect(f.op.stats.refreshes).toBe(2);
+  expect(f.op.stats.reuse).toBe(0);
+});
+
 test("a remembered pointer read completing after logout cannot start restoration", async () => {
   const f = fixture();
   const ready = Promise.withResolvers<void>(),
