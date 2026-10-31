@@ -25,6 +25,11 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { runAuditCli } from "../src/cli.js";
+import { FileLedger } from "../src/file-ledger.js";
+import { MemoryLedger } from "../src/ledger.js";
+import { loadTrace } from "../src/reader.js";
+import type { AuditFetch } from "../src/transport.js";
+import { AuditWriter, PodMirror } from "../src/writer.js";
 import { AT, fixture, required } from "./fixture.js";
 
 let child: ChildProcess;
@@ -78,6 +83,58 @@ afterAll(async () => {
   }
   if (directory) await rm(directory, { recursive: true, force: true });
 });
+
+it("mirrors batches and rotating writer appends through CSS head updates without PUT ETags", async () => {
+  const record = {
+    type: "ingest",
+    id: "urn:event:css",
+    agent: new URL("profile/agent#me", root).href,
+    owner: new URL("profile/card#me", root).href,
+  } as const;
+  const commits: { status: number; etag: string | null; headers: Headers }[] = [];
+  const io: AuditFetch = async (input, init) => {
+    const response = await localIo(input, init);
+    if (String(input).endsWith("chain.ttl") && init?.method === "PUT")
+      commits.push({
+        status: response.status,
+        etag: response.headers.get("etag"),
+        headers: new Headers(init.headers),
+      });
+    expect(init?.credentials).toBe("omit");
+    expect(new Headers(init?.headers).has("authorization")).toBe(false);
+    return response;
+  };
+  const batchRoot = new URL("batch/", root).href;
+  const batch = new MemoryLedger();
+  for (let i = 0; i < 3; i++) batch.append(record, AT);
+  await new PodMirror(io, batchRoot).sync(batch.entries());
+  expect((await loadTrace(io, batchRoot)).entries).toEqual(batch.entries());
+
+  const writerRoot = new URL("writer/", root).href;
+  const ledger = new FileLedger(join(directory, "events.jsonl"), {
+    segmentMaxEntries: 2,
+    maxSegments: 1,
+  });
+  const writer = new AuditWriter(ledger, new PodMirror(io, writerRoot));
+  for (let i = 0; i < 5; i++) await writer.append(record, AT);
+  const trace = await loadTrace(io, writerRoot);
+  expect(trace.chain.ok).toBe(true);
+  expect(trace.entries.map((entry) => entry.record.type)).toEqual([
+    "ingest",
+    "ingest",
+    "ingest",
+    "ingest",
+    "ledger-checkpoint",
+    "ingest",
+  ]);
+  expect(trace.entries.slice(-ledger.entries().length)).toEqual(ledger.entries());
+  expect(commits).toHaveLength(9);
+  expect(commits.every((commit) => commit.etag === null)).toBe(true);
+  expect(commits.filter((commit) => commit.status === 201)).toHaveLength(2);
+  const updates = commits.filter((commit) => commit.status === 205);
+  expect(updates).toHaveLength(7);
+  expect(updates.every((commit) => commit.headers.has("if-match"))).toBe(true);
+}, 60000);
 
 it("audits a real in-memory CSS pod anonymously: intact, forged, out-of-scope, revoked and missing PROV", async () => {
   const f = await fixture(root);

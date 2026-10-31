@@ -69,8 +69,16 @@ export class PodMirror {
         },
         body: await turtle(headGraph(headUrl, entry.seq, entry.hash)),
       });
-      if (![200, 201, 204].includes(result.status)) throw new Error("Audit head commit failed");
+      if (![200, 201, 204, 205].includes(result.status))
+        throw new Error("Audit head commit failed");
       head = { seq: entry.seq, hash: entry.hash, etag: result.headers.get("etag") };
+      if (!head.etag) {
+        // PUT may omit validators; only reuse a GET ETag for the exact committed head.
+        head = await readHead(this.io, this.base);
+        if (!head || head.seq !== entry.seq || head.hash !== entry.hash)
+          throw new Error("Audit head changed after commit");
+        if (!head.etag) throw new Error("Audit head lacks an ETag");
+      }
     }
   }
 }

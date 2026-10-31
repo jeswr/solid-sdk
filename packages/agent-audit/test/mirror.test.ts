@@ -73,6 +73,109 @@ it("serializes concurrent appends and retains local evidence after mirror failur
   expect((await Promise.all(promises)).map((e) => e.seq)).toEqual([2, 3]);
   expect((await loadTrace(pod.fetch, ROOT)).entries).toEqual(l.entries());
 });
+it("accepts 205 responses when updating the head", async () => {
+  const pod = createMemoryAuditPod();
+  const io: AuditFetch = async (input, init) => {
+    const response = await pod.fetch(input, init);
+    return String(input).endsWith("chain.ttl") && response.status === 204
+      ? new Response(null, { status: 205, headers: response.headers })
+      : response;
+  };
+  const l = new MemoryLedger();
+  const writer = new AuditWriter(l, new PodMirror(io, ROOT));
+  await writer.append(record, AT);
+  await writer.append(record, AT);
+  expect((await loadTrace(pod.fetch, ROOT)).entries).toEqual(l.entries());
+});
+it("refreshes ETags omitted by head PUTs before committing the next entry in a batch", async () => {
+  const pod = createMemoryAuditPod();
+  const io: AuditFetch = async (input, init) => {
+    const response = await pod.fetch(input, init);
+    if (String(input).endsWith("chain.ttl") && init?.method === "PUT")
+      response.headers.delete("etag");
+    return response;
+  };
+  const l = ledger(3);
+  const mirror = new PodMirror(io, ROOT);
+  await mirror.sync(l.entries());
+  const headCalls = pod.calls.filter(({ url }) => url === `${BASE}chain.ttl`);
+  expect(headCalls.map(({ init }) => init.method ?? "GET")).toEqual([
+    "GET",
+    "PUT",
+    "GET",
+    "PUT",
+    "GET",
+    "PUT",
+    "GET",
+  ]);
+  const commits = headCalls.filter(({ init }) => init.method === "PUT");
+  expect(new Headers(required(commits[0]).init.headers).get("if-none-match")).toBe("*");
+  for (const [i, commit] of commits.slice(1).entries())
+    expect(new Headers(commit.init.headers).get("if-match")).toBe(`"${(i + 1) * 2}"`);
+  expect((await loadTrace(pod.fetch, ROOT)).entries).toEqual(l.entries());
+  const before = structuredClone(pod.resources);
+  await mirror.sync(l.entries());
+  expect(pod.resources).toEqual(before);
+});
+it.each([
+  "missing",
+  "sequence",
+  "hash",
+  "etag",
+] as const)("rejects an invalid head re-read after a PUT (%s)", async (fault) => {
+  const pod = createMemoryAuditPod();
+  const entries = ledger(2).entries();
+  const headUrl = `${BASE}chain.ttl`;
+  const io: AuditFetch = async (input, init) => {
+    const response = await pod.fetch(input, init);
+    if (String(input) === headUrl && init?.method === "PUT") {
+      response.headers.delete("etag");
+      if (fault === "missing") pod.resources.delete(headUrl);
+      if (fault === "sequence" || fault === "hash")
+        pod.put(
+          headUrl,
+          await turtle(
+            headGraph(
+              headUrl,
+              fault === "sequence" ? 2 : 1,
+              fault === "hash" ? `sha-256:${"a".repeat(64)}` : required(entries[0]).hash,
+            ),
+          ),
+        );
+    }
+    if (fault === "etag") response.headers.delete("etag");
+    return response;
+  };
+  await expect(new PodMirror(io, ROOT).sync(entries)).rejects.toThrow(
+    fault === "etag" ? "ETag" : "head changed after commit",
+  );
+  expect(pod.resources.has(`${BASE}2.ttl`)).toBe(false);
+  expect(pod.calls.filter(({ init }) => init.method === "PUT")).toHaveLength(2);
+});
+it("retains conditional updates if a competing write follows the ETag refresh", async () => {
+  const pod = createMemoryAuditPod();
+  const entries = ledger(2).entries();
+  const headUrl = `${BASE}chain.ttl`;
+  let refreshed = false;
+  const io: AuditFetch = async (input, init) => {
+    if (String(input) === `${BASE}2.ttl` && init?.method === "PUT") {
+      const head = required(pod.resources.get(headUrl));
+      pod.put(headUrl, head.body);
+    }
+    const response = await pod.fetch(input, init);
+    if (String(input) === headUrl) {
+      if (init?.method === "PUT") response.headers.delete("etag");
+      else if (response.status === 200) refreshed = true;
+    }
+    return response;
+  };
+  const mirror = new PodMirror(io, ROOT);
+  await expect(mirror.sync(entries)).rejects.toThrow("head commit");
+  expect(refreshed).toBe(true);
+  expect(await readHead(pod.fetch, BASE)).toMatchObject({ seq: 1 });
+  await new PodMirror(pod.fetch, ROOT).sync(entries);
+  expect((await loadTrace(pod.fetch, ROOT)).entries).toEqual(entries);
+});
 it("recovers an immutable entry left by a failed head commit", async () => {
   const pod = createMemoryAuditPod();
   let fail = true;
