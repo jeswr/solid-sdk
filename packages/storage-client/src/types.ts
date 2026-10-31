@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 // ADR-003 §1, verbatim except where marked "Extension".
 
 import type { DatasetCore, Quad } from "@jeswr/fetch-rdf";
@@ -54,6 +55,8 @@ export interface ReadResult {
   etag: string | null;
   contentType: string | null;
   lastModified: Date | null;
+  /** Memento-Datetime on an immutable version, when supplied by the server. */
+  mementoDatetime?: Date | null;
   /** null on 304 / HEAD. */
   body: ReadableStream<Uint8Array> | null;
   bytes(): Promise<Uint8Array>;

@@ -52,10 +52,19 @@ export function scoped(root: string, method: string, url: string): string {
 }
 
 /** Scope and validate a listing container before requests or pagination can check aborts. */
-export function listingContainer(root: string, url: string, protocol: "solid" | "lws"): string {
+export function listingContainer(
+  root: string,
+  url: string,
+  protocol: "solid" | "lws",
+  versionQuery = false,
+): string {
   const container = scoped(root, "GET", url);
   // Empty query/fragment delimiters survive in href even though URL.search/hash report "".
-  if (/[?#]/.test(container) || (protocol === "lws" && !container.endsWith("/"))) {
+  if (
+    (!versionQuery && /[?#]/.test(container)) ||
+    container.includes("#") ||
+    (protocol === "lws" && !new URL(container).pathname.endsWith("/"))
+  ) {
     const ending = protocol === "lws" ? " ending with '/'" : "";
     throw new StorageError("bad-request", {
       method: "GET",
@@ -278,6 +287,7 @@ export function readResultFrom(
     etag: response.headers.get("etag"),
     contentType,
     lastModified: dateOf(response.headers.get("last-modified")),
+    mementoDatetime: dateOf(response.headers.get("memento-datetime")),
     body,
     bytes,
     text: async () => new TextDecoder().decode(await bytes()),
