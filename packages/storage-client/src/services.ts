@@ -39,10 +39,11 @@ export function versionHistoryQuery(features: Features, root: string, url: strin
   if (features.versioning.state !== "available" || !template?.includes("?")) return false;
   const parts = template.split("{resource}");
   if (parts.length !== 2 || template.indexOf("{resource}") < template.indexOf("?")) return false;
-  const [prefix, suffix] = parts as [string, string];
-  if (!url.startsWith(prefix) || !url.endsWith(suffix)) return false;
   try {
-    const encoded = url.slice(prefix.length, url.length - suffix.length);
+    const [prefix, suffix] = scoped(root, "GET", template).split("{resource}") as [string, string];
+    const target = scoped(root, "GET", url);
+    if (!target.startsWith(prefix) || !target.endsWith(suffix)) return false;
+    const encoded = target.slice(prefix.length, target.length - suffix.length);
     const resource = decodeURIComponent(encoded);
     return (
       scoped(root, "GET", resource) === resource &&
@@ -64,7 +65,14 @@ export function serviceEtag(result: ReadResult): string {
 
 export function isTrashEndpoint(storage: StorageClient, url: string): boolean {
   const feature = storage.features.trash;
-  return feature.state === "available" && feature.detail.endpoint === url;
+  if (feature.state !== "available" || !feature.detail.endpoint) return false;
+  try {
+    return (
+      serviceUrl(storage, "POST", feature.detail.endpoint) === serviceUrl(storage, "POST", url)
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** A TrashService container accepts command POSTs through the public create operation. */

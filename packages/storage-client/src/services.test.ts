@@ -3,7 +3,7 @@ import { deriveFeatures, type Features } from "@jeswr/storage-capabilities";
 import { describe, expect, test, vi } from "vitest";
 import { createLwsBackend } from "./lws.js";
 import { createMemoryStorage } from "./memory.js";
-import { serviceEtag, trashCommand, versionHistoryQuery } from "./services.js";
+import { isTrashEndpoint, serviceEtag, trashCommand, versionHistoryQuery } from "./services.js";
 import { createSolidBackend } from "./solid.js";
 import { createTrashClient, type TrashEntry } from "./trash.js";
 import type { ReadResult } from "./types.js";
@@ -250,10 +250,17 @@ for (const protocol of ["solid", "lws"] as const) {
         feature: "versioning",
       });
     });
-    test("trash sends only the JSON command, no Slug or content copy", async () => {
-      const { storage, fetcher } = network(protocol, [
-        new Response(null, { status: 201, headers: { Location: COPY } }),
-      ]);
+    test.each([
+      TRASH,
+      "https://POD.example:443/alice/.trash/",
+    ])("trash sends only the JSON command to canonical endpoint %s", async (endpoint) => {
+      const f = features(protocol);
+      f.trash.detail.endpoint = endpoint;
+      const { storage, fetcher } = network(
+        protocol,
+        [new Response(null, { status: 201, headers: { Location: COPY } })],
+        f,
+      );
       expect(await createTrashClient(storage).trash(LIVE)).toEqual({
         url: COPY,
         etag: null,
@@ -267,15 +274,30 @@ for (const protocol of ["solid", "lws"] as const) {
       });
     });
     test.each([
-      200, 201,
-    ])("restore accepts %s and the protocol's returned Location", async (status) => {
+      { status: 200, endpoint: TRASH },
+      { status: 201, endpoint: TRASH },
+      { status: 200, endpoint: "https://POD.example:443/alice/.trash/" },
+      { status: 201, endpoint: "https://POD.example:443/alice/.trash/" },
+    ])("restore accepts $status from $endpoint", async ({ status, endpoint }) => {
       const restored = protocol === "solid" ? LIVE : `${ROOT}new-id`;
-      const { storage } = network(protocol, [
-        listing(protocol, [COPY]),
-        ...metadataResponses(protocol),
-        new Response(null, { status, headers: { Location: restored } }),
-      ]);
+      const f = features(protocol);
+      f.trash.detail.endpoint = endpoint;
+      const { storage, fetcher } = network(
+        protocol,
+        [
+          listing(protocol, [COPY]),
+          ...metadataResponses(protocol),
+          new Response(null, { status, headers: { Location: restored } }),
+        ],
+        f,
+      );
       expect((await createTrashClient(storage).restore(COPY)).url).toBe(restored);
+      expect(fetcher).toHaveBeenLastCalledWith(TRASH, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ restore: COPY }),
+        redirect: "manual",
+      });
     });
     test("purge HEADs and conditionally DELETEs only a listed trash entry", async () => {
       const { storage, fetcher } = network(protocol, [
@@ -368,6 +390,27 @@ for (const protocol of ["solid", "lws"] as const) {
       );
       const call = fetcher.mock.calls.at(-1) as unknown as [string, RequestInit];
       expect(await new Response(call[1].body).text()).toBe("old bytes");
+    });
+    test.each([
+      "https://POD.example:443/alice/.versions/?resource={resource}",
+      "https://POD.example:443/alice/.versions/?before=é&resource={resource}&after=é",
+    ])("version listing matches canonical template literals in %s", async (template) => {
+      const f = features(protocol);
+      f.versioning.detail.endpoint = template;
+      const history = new URL(template.replace("{resource}", encodeURIComponent(LIVE))).href;
+      const { storage, fetcher } = network(
+        protocol,
+        [
+          new Response(null),
+          listing(protocol, [VERSION], history),
+          new Response(null, { headers: { "Memento-Datetime": AT, ETag: '"v1"' } }),
+        ],
+        f,
+      );
+      expect(await createVersionsClient(storage).versions(LIVE)).toEqual([
+        { url: VERSION, at: new Date(AT), etag: '"v1"' },
+      ]);
+      expect(fetcher).toHaveBeenCalledWith(history, expect.objectContaining({ method: "GET" }));
     });
     test("foreign and credentialed inputs fail before requests and redact credentials", async () => {
       const { storage, fetcher } = network(protocol, []);
@@ -498,6 +541,24 @@ test("service validators reject wildcard, weak, list, empty and malformed ETags"
   expect(serviceEtag({ url: LIVE, etag: '""' } as ReadResult)).toBe('""');
 });
 
+test("trash endpoint matching uses scoped canonical identities and fails closed", () => {
+  const { storage } = network("solid", []);
+  expect(isTrashEndpoint(storage, "https://POD.example:443/alice/.trash/")).toBe(true);
+  for (const endpoint of [
+    undefined,
+    "invalid",
+    "https://pod.example:8443/alice/.trash/",
+    "https://foreign.example/alice/.trash/",
+    `${TRASH}?`,
+  ]) {
+    storage.features.trash.detail.endpoint = endpoint;
+    expect(isTrashEndpoint(storage, TRASH)).toBe(false);
+  }
+  storage.features.trash.detail.endpoint = TRASH;
+  expect(isTrashEndpoint(storage, `${ROOT}other/`)).toBe(false);
+  expect(isTrashEndpoint(storage, "invalid")).toBe(false);
+});
+
 test("initial query listing is limited to the exact advertised template and scoped resource", () => {
   const f = features("solid");
   expect(versionHistoryQuery(f, ROOT, `${HISTORY}?resource=${encodeURIComponent(LIVE)}`)).toBe(
@@ -516,10 +577,30 @@ test("initial query listing is limited to the exact advertised template and scop
     HISTORY,
     `${HISTORY}{resource}?x`,
     `${HISTORY}?x={resource}{resource}`,
+    "invalid?resource={resource}",
+    "https://foreign.example/.versions/?resource={resource}",
   ]) {
     f.versioning.detail.endpoint = template;
     expect(versionHistoryQuery(f, ROOT, HISTORY)).toBe(false);
   }
+});
+
+test("canonical version template matching preserves exact literal queries and resource encoding", () => {
+  const f = features("solid");
+  f.versioning.detail.endpoint =
+    "https://POD.example:443/alice/.versions/?before=é&resource={resource}&after=é";
+  const history = `${HISTORY}?before=%C3%A9&resource=${encodeURIComponent(LIVE)}&after=%C3%A9`;
+  expect(versionHistoryQuery(f, ROOT, history)).toBe(true);
+  expect(versionHistoryQuery(f, ROOT, history.replace("pod.example", "POD.example:443"))).toBe(
+    true,
+  );
+  for (const url of [
+    `${history}&extra=x`,
+    history.replace("after=%C3%A9", "after=other"),
+    history.replace("pod.example", "pod.example:8443"),
+    history.replace(encodeURIComponent(LIVE), encodeURIComponent(LIVE).toLowerCase()),
+  ])
+    expect(versionHistoryQuery(f, ROOT, url)).toBe(false);
 });
 
 for (const protocol of ["solid", "lws"] as const) {
