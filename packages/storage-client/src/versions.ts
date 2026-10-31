@@ -1,7 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { StorageError } from "./errors.js";
 import { discard, scoped } from "./http.js";
-import { invalidService, serviceEndpoint, serviceEtag, serviceUrl } from "./services.js";
+import {
+  encodeResource,
+  invalidService,
+  serviceEndpoint,
+  serviceEtag,
+  serviceUrl,
+} from "./services.js";
 import type { StorageClient, WriteResult } from "./types.js";
 
 /** An immutable Memento and its representation validator. */
@@ -33,7 +39,7 @@ export function createVersionsClient(storage: StorageClient): VersionsClient {
     const container = scoped(
       storage.root,
       "GET",
-      linked?.[0]?.target ?? template.replace("{resource}", encodeURIComponent(resource)),
+      linked?.[0]?.target ?? template.replace("{resource}", encodeResource(resource)),
     );
     return { resource, container };
   }

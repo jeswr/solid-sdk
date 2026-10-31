@@ -25,6 +25,14 @@ export function serviceUrl(storage: StorageClient, method: string, url: string):
   return result;
 }
 
+/** RFC 6570 simple expansion permits only unreserved characters unescaped. */
+export function encodeResource(url: string): string {
+  return encodeURIComponent(url).replace(
+    /[!'()*]/g,
+    (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+}
+
 /** Only the advertised version template may introduce a query on an initial listing. */
 export function versionHistoryQuery(features: Features, root: string, url: string): boolean {
   const template = features.versioning.detail.endpoint;
@@ -39,7 +47,7 @@ export function versionHistoryQuery(features: Features, root: string, url: strin
     return (
       scoped(root, "GET", resource) === resource &&
       !/[?#]/.test(resource) &&
-      encodeURIComponent(resource) === encoded
+      encodeResource(resource) === encoded
     );
   } catch {
     return false;

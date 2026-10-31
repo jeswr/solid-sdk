@@ -726,3 +726,59 @@ for (const protocol of ["solid", "lws"] as const) {
     });
   });
 }
+
+test("LWS restore always allocates a new identifier even when random names repeat", async () => {
+  const random = vi.spyOn(crypto, "getRandomValues").mockReturnValue(new Uint8Array(16));
+  try {
+    const storage = createMemoryStorage({ protocol: "lws", root: ROOT, trash: true });
+    const trash = createTrashClient(storage);
+    const item = await storage.create(ROOT, "one", { contentType: "text/plain" });
+    const copy = await trash.trash(item.url);
+    const restored = await trash.restore(copy.url);
+    expect(restored.url).not.toBe(item.url);
+    expect(await (await storage.read(restored.url)).text()).toBe("one");
+  } finally {
+    random.mockRestore();
+  }
+});
+
+test("repeated random names cannot mix version histories of different resources", async () => {
+  const random = vi.spyOn(crypto, "getRandomValues").mockReturnValue(new Uint8Array(16));
+  try {
+    const storage = createMemoryStorage({ root: ROOT, versioning: true });
+    const a = await storage.create(ROOT, "a", { name: "a", contentType: "text/plain" });
+    const b = await storage.create(ROOT, "b", { name: "b", contentType: "text/plain" });
+    const client = createVersionsClient(storage);
+    const [av] = await client.versions(a.url);
+    const [bv] = await client.versions(b.url);
+    expect((av as VersionEntry).url).not.toBe((bv as VersionEntry).url);
+    expect(await (await storage.read((av as VersionEntry).url)).text()).toBe("a");
+    expect(await (await storage.read((bv as VersionEntry).url)).text()).toBe("b");
+    await expect(client.restoreVersion(a.url, (bv as VersionEntry).url)).rejects.toMatchObject({
+      code: "not-found",
+    });
+  } finally {
+    random.mockRestore();
+  }
+});
+
+for (const protocol of ["solid", "lws"] as const) {
+  test(`${protocol}: simple template expansion percent-encodes all reserved characters`, async () => {
+    const resource = `${ROOT}a!b'c(d)e*f`;
+    const history = `${HISTORY}?resource=https%3A%2F%2Fpod.example%2Falice%2Fa%21b%27c%28d%29e%2Af`;
+    const { storage, fetcher } = network(protocol, [
+      new Response(null),
+      listing(protocol, [VERSION], history),
+      new Response(null, { headers: { "Memento-Datetime": AT } }),
+    ]);
+    expect(await createVersionsClient(storage).versions(resource)).toHaveLength(1);
+    expect(fetcher).toHaveBeenCalledWith(history, expect.objectContaining({ method: "GET" }));
+    const memory = createMemoryStorage({ root: ROOT, protocol, versioning: true });
+    const item = await memory.create(ROOT, "version", {
+      name: "a!b'c(d)e*f",
+      contentType: "text/plain",
+    });
+    expect(item.url).toBe(resource);
+    expect((await memory.list(history)).items).toHaveLength(1);
+  });
+}

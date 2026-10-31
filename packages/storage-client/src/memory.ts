@@ -31,7 +31,7 @@ import {
   TRIPLE_FORMATS,
   WRITABLE_RDF,
 } from "./rdf.js";
-import { isTrashEndpoint, serviceUrl, trashCommand } from "./services.js";
+import { encodeResource, isTrashEndpoint, serviceUrl, trashCommand } from "./services.js";
 import type {
   CreateOptions,
   Entry,
@@ -223,10 +223,10 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
     if (!options.versioning || node.kind !== "resource" || node.original !== undefined) return;
     let history = histories.get(node.url);
     if (history === undefined) {
-      history = `${root}.versions/${slug()}/`;
+      history = freeUrl(`${root}.versions/`, slug(), "container");
       serviceContainer(history, `${root}.versions/`);
       histories.set(node.url, history);
-      const alias = `${root}.versions/?resource=${encodeURIComponent(node.url)}`;
+      const alias = `${root}.versions/?resource=${encodeResource(node.url)}`;
       historyAliases.set(alias, history);
     }
     const url = freeUrl(history, slug(), "resource");
@@ -491,12 +491,15 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
     return encodeURIComponent(name);
   }
 
-  function freeUrl(parent: string, base: string, kind: ResourceKind): string {
+  function freeUrl(parent: string, base: string, kind: ResourceKind, excluded?: string): string {
     const suffix = kind === "container" ? "/" : "";
     let candidate = `${parent}${base}${suffix}`;
     for (
       let n = 1;
-      nodes.has(candidate) || nodes.has(candidate.replace(/\/$/, "")) || nodes.has(`${candidate}/`);
+      candidate === excluded ||
+      nodes.has(candidate) ||
+      nodes.has(candidate.replace(/\/$/, "")) ||
+      nodes.has(`${candidate}/`);
       n++
     ) {
       candidate = `${parent}${base}-${n}${suffix}`;
@@ -781,7 +784,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
         const original = node.original;
         const parent = pathParent(original, root) as string;
         container("POST", parent);
-        const dest = lws ? freeUrl(parent, slug(), node.kind) : original;
+        const dest = lws ? freeUrl(parent, slug(), node.kind, original) : original;
         if (nodes.has(dest) || nodes.has(`${dest}/`) || nodes.has(dest.replace(/\/$/, "")))
           throw fail("conflict", "POST", source, 409);
         relocate(node, source, dest, parent);
