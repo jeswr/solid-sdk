@@ -96,6 +96,8 @@ export function createProviders(
       })();
       // Issuer discovery and the session lookup must retain one selection across later login hints.
       requestSelections.set(request, selection);
+      // LWS bindings retain the original request; allow its picker to reopen after a failure.
+      selection.catch(() => requestSelections.delete(request));
     }
     return selection;
   };

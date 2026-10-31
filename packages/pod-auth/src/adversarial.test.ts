@@ -166,6 +166,35 @@ test("LWS refuses missing credential identity before exchange", async () => {
 });
 
 test.each([
+  "cancellation",
+  "invalid WebID",
+])("LWS retries account selection after picker %s", async (failure) => {
+  const { op, options } = setup();
+  const getWebId = vi.fn(options.ui.getWebId);
+  if (failure === "cancellation") getWebId.mockRejectedValueOnce(new Error("picker cancelled"));
+  else getWebId.mockResolvedValueOnce("invalid WebID");
+  options.ui.getWebId = getWebId;
+  const auth = createPodAuth(options);
+
+  await expect(auth.fetch(op.root + "lws")).rejects.toThrow(
+    failure === "cancellation" ? "picker cancelled" : "absolute URL",
+  );
+  expect(getWebId).toHaveBeenCalledTimes(1);
+  expect(op.stats.tokens).toBe(0);
+  expect(op.stats.exchanges).toBe(0);
+  expect(op.stats.accepted).toBe(0);
+  expect(await auth.identity()).toBeNull();
+
+  expect(await (await auth.fetch(op.root + "lws")).text()).toBe("protected LWS");
+  expect(await (await auth.fetch(op.root + "lws")).text()).toBe("protected LWS");
+  expect(getWebId).toHaveBeenCalledTimes(2);
+  expect((await auth.identity())?.webId).toBe(op.webId);
+  expect(op.stats.tokens).toBe(1);
+  expect(op.stats.exchanges).toBe(1);
+  expect(op.stats.accepted).toBe(2);
+});
+
+test.each([
   "https://pod.example/.well-known/lws-configuration",
   "https://op.example/.well-known/openid-configuration",
 ])("LWS retries with a fresh signal after cancellation during discovery at %s", async (cancelAt) => {
