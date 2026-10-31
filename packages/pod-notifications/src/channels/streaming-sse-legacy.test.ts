@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import * as storageModule from "@jeswr/storage-client";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { afterEach, expect, test, vi } from "vitest";
 import { createNotifications } from "../index.js";
@@ -23,6 +24,7 @@ function fixture(kind: "stream" | "lws" | "legacy" = "stream") {
   const cancels = vi.fn();
   const description = `${root}description`;
   let service = `${root}subscribe`;
+  let websocketService: string | undefined;
   let socketUrl = "wss://pod.example/legacy";
   let channel: unknown;
   let status = 201;
@@ -76,6 +78,15 @@ function fixture(kind: "stream" | "lws" | "legacy" = "stream") {
           type: "Storage",
           service: [
             { type: "StorageRoot", serviceEndpoint: root },
+            ...(websocketService
+              ? [
+                  {
+                    type: "NotificationService",
+                    serviceEndpoint: websocketService,
+                    subscriptionType: ["https://jeswr.org/ns/solid-sd#WebSocketSubscription"],
+                  },
+                ]
+              : []),
             {
               type: "NotificationService",
               serviceEndpoint: service,
@@ -87,7 +98,8 @@ function fixture(kind: "stream" | "lws" | "legacy" = "stream") {
       );
     if (url === description)
       return new Response(
-        `<${root}> <http://www.w3.org/ns/solid/notifications#subscription> <${service}>. <${service}> <http://www.w3.org/ns/solid/notifications#channelType> <http://www.w3.org/ns/solid/notifications#StreamingHTTPChannel2023>.`,
+        `${websocketService ? `<${root}> <http://www.w3.org/ns/solid/notifications#subscription> <${websocketService}>. <${websocketService}> <http://www.w3.org/ns/solid/notifications#channelType> <http://www.w3.org/ns/solid/notifications#WebSocketChannel2023>.` : ""}
+        <${root}> <http://www.w3.org/ns/solid/notifications#subscription> <${service}>. <${service}> <http://www.w3.org/ns/solid/notifications#channelType> <http://www.w3.org/ns/solid/notifications#StreamingHTTPChannel2023>.`,
         { headers: { "content-type": "text/turtle" } },
       );
     throw new Error("Unexpected fixture request");
@@ -134,6 +146,9 @@ function fixture(kind: "stream" | "lws" | "legacy" = "stream") {
     service: (value: string) => {
       service = value;
     },
+    websocketService: (value: string) => {
+      websocketService = value;
+    },
     socketUrl: (value: string) => {
       socketUrl = value;
     },
@@ -149,6 +164,82 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   vi.useRealTimers();
+});
+
+test.each([
+  "stream",
+  "lws",
+] as const)("%s SSE adapter selects its own endpoint when WebSocket is preferred", async (kind) => {
+  const f = fixture(kind);
+  f.websocketService(`${f.root}websocket-subscribe`);
+  const adapter = kind === "stream" ? createStreamingHttpChannel : createLwsSseChannel;
+  const sub = adapter({ ...f.deps, topics: [f.root] });
+  const changes = vi.fn();
+  sub.on("change", changes);
+  await f.timers.advanceBy(0);
+  expect(f.posts()).toHaveLength(1);
+  expect(f.posts()[0]?.[0]).toBe(`${f.root}subscribe`);
+  const frame = JSON.stringify({ type: "Update", object: f.root });
+  if (kind === "stream") f.streams[0]?.enqueue(encode(`${frame}\n`));
+  else {
+    f.sources[0]?.open();
+    f.sources[0]?.message(frame, "event-1", "notification");
+  }
+  await flush();
+  expect(sub.state).toBe("live");
+  expect(sub.channel).toBe("sse");
+  expect(changes).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ object: f.root, via: "sse" }),
+  );
+  expect(f.sockets).toHaveLength(0);
+  await sub.close();
+});
+
+test.each([
+  "stream",
+  "lws",
+] as const)("%s SSE service selection ignores ineligible entries and fails closed without a match", async (kind) => {
+  const f = fixture(kind);
+  const real = storageModule.createPodClient;
+  let matching = true;
+  vi.spyOn(storageModule, "createPodClient").mockImplementation(async (options) => {
+    const pod = await real(options);
+    const service = pod.description.services.find(
+      (entry) => entry.endpoint === `${f.root}subscribe`,
+    );
+    if (!service) throw new Error("Fixture is missing the SSE service");
+    pod.description.services = [
+      {
+        ...service,
+        endpoint: `${f.root}wrong-service`,
+        type: ["https://example.org/OtherService"],
+      },
+      {
+        ...service,
+        endpoint: `${f.root}unsupported-channel`,
+        extra: {
+          "http://www.w3.org/ns/solid/notifications#channelType": [],
+          "https://example.org/subscriptionType": "https://jeswr.org/ns/solid-sd#SseSubscription",
+        },
+      },
+      ...(kind === "lws" ? [{ ...service, endpoint: "https://foreign.example/subscribe" }] : []),
+      ...(matching ? [service] : []),
+    ];
+    return pod;
+  });
+  const adapter = kind === "stream" ? createStreamingHttpChannel : createLwsSseChannel;
+  const sub = adapter({ ...f.deps, topics: [f.root] });
+  await f.timers.advanceBy(0);
+  expect(f.posts().map(([url]) => url)).toEqual([`${f.root}subscribe`]);
+  await sub.close();
+  matching = false;
+  const missing = adapter({ ...f.deps, topics: [f.root] });
+  await f.timers.advanceBy(0);
+  expect(missing.state).toBe("degraded");
+  expect(f.posts()).toHaveLength(1);
+  expect(f.timers.pending).toBe(1);
+  await missing.close();
+  expect(f.timers.pending).toBe(0);
 });
 
 test("StreamingHTTP subscribes per topic/hot, parses split UTF-8 records, skips malformed lines and cancels readers", async () => {
@@ -204,6 +295,7 @@ test("StreamingHTTP final unterminated record is delivered and EOF rediscovers a
   expect(changes).toHaveBeenCalledTimes(1);
   expect(sub.state).toBe("degraded");
   f.service(`${f.root}replacement`);
+  f.websocketService(`${f.root}new-websocket-subscribe`);
   await f.timers.advanceBy(1_000);
   expect(f.posts()[1]?.[0]).toBe(`${f.root}replacement`);
   expect(resync).toHaveBeenCalledExactlyOnceWith(new Date(123));
@@ -231,7 +323,10 @@ test.each([
   await sub.close();
 });
 
-test("LWS SSE batches topics, filters envelopes and scopes, preserves native Last-Event-ID replay after a drop", async () => {
+test.each([
+  "message",
+  "notification",
+] as const)("LWS SSE handles %s events, filters envelopes and scopes, preserves native Last-Event-ID replay after a drop", async (eventType) => {
   const f = fixture("lws");
   const sub = await f.client.subscribe([f.root, f.root], { hot: [`${f.root}hot`] });
   const changes = vi.fn();
@@ -256,8 +351,8 @@ test("LWS SSE batches topics, filters envelopes and scopes, preserves native Las
       { id: "two", type: "Delete", object: `${f.root}b` },
     ],
   };
-  source.message(JSON.stringify({ ...frame, storage: f.root }), "0");
-  source.message(JSON.stringify(frame), "event-1");
+  source.message(JSON.stringify({ ...frame, storage: f.root }), "0", eventType);
+  source.message(JSON.stringify(frame), "event-1", eventType);
   expect(changes.mock.calls.map(([e]) => [e.type, e.via])).toEqual([
     ["Create", "sse"],
     ["Delete", "sse"],
@@ -266,7 +361,11 @@ test("LWS SSE batches topics, filters envelopes and scopes, preserves native Las
   expect(source.reconnect()).toEqual({ "Last-Event-ID": "event-1" });
   expect(sub.state).toBe("degraded");
   expect(f.timers.pending).toBe(0);
-  source.message(JSON.stringify({ type: "Update", object: f.root }), "ignored-before-open");
+  source.message(
+    JSON.stringify({ type: "Update", object: f.root }),
+    "ignored-before-open",
+    eventType,
+  );
   source.reconnect();
   source.open();
   source.open();
@@ -275,13 +374,16 @@ test("LWS SSE batches topics, filters envelopes and scopes, preserves native Las
   expect(f.posts()).toHaveLength(1);
   expect(f.deletes()).toHaveLength(0);
   expect(resync).toHaveBeenCalledExactlyOnceWith(new Date(123));
-  source.message(JSON.stringify(frame), "event-1"); // Replay is deduped.
+  source.message(JSON.stringify(frame), "event-1", eventType); // Replay is deduped.
   expect(changes).toHaveBeenCalledTimes(2);
-  source.message("malformed", ""); // Empty id resets the native replay cursor.
+  source.message("malformed", "", eventType); // Empty id resets the native replay cursor.
   expect(source.reconnect()).toEqual({});
   source.open();
+  f.websocketService(`${f.root}new-websocket-subscribe`);
+  f.service(`${f.root}replacement`);
   source.close(); // Terminal close mints a fresh subscription.
   await f.timers.advanceBy(1_000);
+  expect(f.posts()[1]?.[0]).toBe(`${f.root}replacement`);
   expect(f.sources).toHaveLength(2);
   expect(source.listenerCount).toBe(0);
   expect(f.deletes()).toHaveLength(1);
@@ -289,6 +391,8 @@ test("LWS SSE batches topics, filters envelopes and scopes, preserves native Las
   await sub.close();
   expect(f.deletes()).toHaveLength(2);
   expect(f.sources[1]?.listenerCount).toBe(0);
+  source.message(JSON.stringify({ type: "Update", object: f.root }), "late", eventType);
+  expect(changes).toHaveBeenCalledTimes(2);
 });
 
 test("NSS Updates-Via opens solid-0.1, sends sub per unique topic, accepts only exact scoped pub frames", async () => {

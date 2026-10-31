@@ -61,7 +61,7 @@ export function createPushChannel(
   const timers = options.timers ?? systemTimers;
   const now = options.now ?? Date.now;
   const random = options.random ?? Math.random;
-  const socketFactory =
+  const socketFactory: (url: string, protocols?: string[]) => WebSocketLike =
     options.socketFactory ?? ((url: string, protocols?: string[]) => new WebSocket(url, protocols));
   const eventSourceFactory: (url: string) => EventSourceLike =
     options.eventSourceFactory ?? ((url: string) => new EventSource(url));
@@ -169,10 +169,43 @@ export function createPushChannel(
         !live.detail.channels.includes(transport)
       )
         throw new Error("No notification subscription service");
+      // The feature endpoint belongs to the preferred channel, which may be WebSocket.
+      // SSE adapters must resolve their own service again on every discovery.
+      const serviceEndpoint =
+        transport === "sse"
+          ? pod.description.services.find((service) => {
+              if (protocol === "solid") {
+                const channels = [
+                  service.extra["http://www.w3.org/ns/solid/notifications#channelType"],
+                ].flat();
+                return (
+                  service.type.includes("https://jeswr.org/ns/solid-sd#SolidNotificationService") &&
+                  (channels.includes(
+                    "http://www.w3.org/ns/solid/notifications#StreamingHTTPChannel2023",
+                  ) ||
+                    channels.includes("https://jeswr.org/ns/solid-sd#StreamingHttpChannel"))
+                );
+              }
+              return (
+                service.type.includes("https://www.w3.org/ns/lws#NotificationService") &&
+                new URL(service.endpoint).origin === new URL(storage.root).origin &&
+                [
+                  "subscriptionType",
+                  "ssd:subscriptionType",
+                  "https://jeswr.org/ns/solid-sd#subscriptionType",
+                  "https://www.w3.org/ns/lws#subscriptionType",
+                ].some((key) =>
+                  [service.extra[key]]
+                    .flat()
+                    .includes("https://jeswr.org/ns/solid-sd#SseSubscription"),
+                )
+              );
+            })?.endpoint
+          : live.detail.endpoint;
       const endpoint =
         transport === "legacy-ws"
-          ? validate(live.detail.endpoint, storage.root, true)
-          : validate(live.detail.endpoint);
+          ? validate(serviceEndpoint, storage.root, true)
+          : validate(serviceEndpoint);
       if (storageId !== pod.description.id) {
         storageId = pod.description.id;
         normalise = createChangeNormalizer({
@@ -339,12 +372,14 @@ export function createPushChannel(
         };
         socket.addEventListener("open", onOpen);
         socket.addEventListener("message", onMessage);
+        if (transport === "sse") socket.addEventListener("notification", onMessage);
         socket.addEventListener("error", onError);
         socket.addEventListener("close", onFailure);
         sockets.set(socket, () => {
           clearHeartbeat();
           socket.removeEventListener("open", onOpen);
           socket.removeEventListener("message", onMessage);
+          if (transport === "sse") socket.removeEventListener("notification", onMessage);
           socket.removeEventListener("error", onError);
           socket.removeEventListener("close", onFailure);
           try {

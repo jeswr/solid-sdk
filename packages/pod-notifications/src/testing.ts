@@ -86,9 +86,9 @@ export class FakeEventSource {
     this.readyState = 1;
     this.dispatch("open", {});
   }
-  message(data: unknown, lastEventId = ""): void {
+  message(data: unknown, lastEventId = "", type: "message" | "notification" = "message"): void {
     this.lastEventId = lastEventId;
-    this.dispatch("message", { data, lastEventId });
+    this.dispatch(type, { data, lastEventId });
   }
   /** Model a native recoverable drop and expose the next request's replay header. */
   reconnect(): Record<string, string> {

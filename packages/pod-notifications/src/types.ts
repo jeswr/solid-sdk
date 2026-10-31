@@ -64,6 +64,7 @@ export interface Timers {
 export interface TransportEvents {
   open: unknown;
   message: { data: unknown; lastEventId?: string };
+  notification: { data: unknown; lastEventId?: string };
   error: unknown;
   close: unknown;
 }
