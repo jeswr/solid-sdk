@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import type { KeyValueStore } from "@key-value-kit/core";
 import { createMemoryStore } from "@key-value-kit/storage/memory";
 import * as oauth from "oauth4webapi";
@@ -183,6 +184,17 @@ export class OidcSession {
   /** The session's fence, for operations that begin before issuer or context discovery. */
   get fence(): SessionFence {
     return this.#fence;
+  }
+
+  /** Non-secret session configuration used to isolate downstream credential exchange caches. */
+  get configurationId(): string {
+    const o = this.#options;
+    return JSON.stringify([
+      o.namespace ?? "default",
+      o.account ?? "default",
+      this.#callbackUri,
+      (o.scopes ?? ["openid", "webid"]).join(" "),
+    ]);
   }
 
   /**

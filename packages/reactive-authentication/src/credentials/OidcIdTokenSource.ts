@@ -53,23 +53,20 @@ export class OidcIdTokenSource implements CredentialSource {
     this.#context = options.context ?? "";
     this.#issuer = openIdProvider;
     this.#requireAudience = options.requireAudience ?? false;
-    // Every non-secret dimension that selects a different credential, so access-token caches keyed by
-    // this ID never cross accounts or configurations.
-    this.#id = JSON.stringify([
-      "oidc",
-      openIdProvider.issuer,
-      callbackUri,
-      options.namespace ?? "default",
-      options.account ?? "default",
-      [...(options.scopes ?? ["openid"])].sort(),
-      this.#context,
-    ]);
     this.#session =
       options.session ??
       new OidcSession(callbackUri, codeProvider, clientProvider, {
         scopes: ["openid"],
         ...options,
       });
+    // Every non-secret dimension that selects a different credential, so access-token caches keyed by
+    // this ID never cross accounts or configurations.
+    this.#id = JSON.stringify([
+      "oidc",
+      openIdProvider.issuer,
+      this.#session.configurationId,
+      this.#context,
+    ]);
   }
 
   readonly #context: string;

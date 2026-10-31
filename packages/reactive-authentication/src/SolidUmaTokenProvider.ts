@@ -109,7 +109,6 @@ export class SolidUmaTokenProvider implements TokenProvider {
   // Outstanding requests must outlive the bounded URL history used for request copies.
   #requests = new WeakMap<Request, string>();
   readonly #contexts = new Map<string, string>();
-  readonly #callbackUri: string;
 
   constructor(
     callbackUri: string,
@@ -134,7 +133,6 @@ export class SolidUmaTokenProvider implements TokenProvider {
     const fence =
       options.fence ?? new SessionFence(`local-${crypto.randomUUID()}`, { broadcast: false });
     this.#openIdProvider = openIdProvider;
-    this.#callbackUri = callbackUri;
     this.#options = options;
     this.#session =
       options.session ??
@@ -218,14 +216,7 @@ export class SolidUmaTokenProvider implements TokenProvider {
     // account, scopes), so providers sharing an RPT store never receive another account's RPT.
     const o = this.#options;
     const context = await this.#context(request, challenge);
-    const key = await this.#rpts.key([
-      as.href,
-      context,
-      op.issuer,
-      this.#callbackUri,
-      o.account ?? "default",
-      (o.scopes ?? ["openid", "webid"]).join(" "),
-    ]);
+    const key = await this.#rpts.key([as.href, context, op.issuer, this.#session.configurationId]);
     const rpt = await this.#rpts.locked(key, ticket, async () => {
       const cached = await this.#rpts.read(key, ticket);
       if (
