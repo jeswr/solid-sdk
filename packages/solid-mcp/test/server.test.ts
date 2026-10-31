@@ -87,6 +87,9 @@ describe.each([
       expect(names).toEqual([
         ...(mode === "legacy config + aliases" ? ["chat_get", "chat_list", "chat_save"] : []),
         "fetch",
+        "memory_forget",
+        "memory_recall",
+        "memory_remember",
         "pod_list",
         "pod_read",
         "pod_write",

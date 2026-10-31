@@ -60,8 +60,10 @@
   "homepage": "https://github.com/jeswr/solid-mcp#readme",
   "dependencies": {
     "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/pkg-memory": "workspace:*",
     "@jeswr/rdf-serialize": "workspace:*",
     "@jeswr/solid-chat-interop": "workspace:*",
+    "@jeswr/solid-memory": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@rdfjs/types": "^2.0.1",
     "@rdfjs/wrapper": "^0.34.0",
@@ -91,7 +93,7 @@
     "access": "public"
   },
   "mirrorPublish": {
-    "inlined": ["@jeswr/mcp-oauth"]
+    "inlined": ["@jeswr/mcp-oauth", "@jeswr/pkg-memory"]
   },
   "securityCritical": true,
   "sideEffects": false

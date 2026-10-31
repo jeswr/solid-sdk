@@ -21,6 +21,7 @@ export {
   writesEnabled,
 } from "./auth.js";
 export { type FetchResult, fetchDocument } from "./fetch.js";
+export type { MemoryClientInfo } from "./memory-tools.js";
 export {
   listContainer,
   type PodChild,

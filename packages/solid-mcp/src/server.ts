@@ -19,20 +19,25 @@ import { isContainerUrl } from "@jeswr/guarded-fetch";
 import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { normalizePodRoot, requirePodScopedUrl, type SolidMcpConfig } from "./auth.js";
 import { registerChatTools } from "./chat-tools.js";
+import type { MemoryClientInfo } from "./memory-tools.js";
 import { podOutputError } from "./output.js";
 import { listContainer, RDF_MEDIA_TYPES, readRdf, readResource } from "./pod.js";
 import { createFetchPodPort, type PodPort } from "./pod-port.js";
 import { createPodToolRegistry, registerPodTools } from "./tools.js";
 
 /** Server construction over a portable pod, or the existing fetch configuration. */
-export type SolidMcpServerConfig =
+export type SolidMcpServerConfig = (
   | SolidMcpConfig
   | {
       /** All pod data access goes through this injected capability. */
       pod: PodPort;
       /** Defaults to true; explicitly set false to permit write tools. */
       readOnly?: boolean;
-    };
+    }
+) & {
+  /** Trusted MCP client identity and optional model metadata for memory provenance. */
+  clientInfo?: MemoryClientInfo;
+};
 
 /**
  * Build an {@link McpServer} for the pod described by `config`. The config is
@@ -127,7 +132,10 @@ export function createSolidMcpServer(config: SolidMcpServerConfig): McpServer {
     },
   );
 
-  registerPodTools(server, createPodToolRegistry(pod, config.readOnly !== false));
+  registerPodTools(
+    server,
+    createPodToolRegistry(pod, config.readOnly !== false, config.clientInfo),
+  );
   // Chat ACL discovery requires the original authenticated fetch capability.
   if (!("pod" in config)) registerChatTools(server, { ...config, podRoot }, pod);
   return server;
