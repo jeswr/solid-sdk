@@ -329,6 +329,46 @@ describe("capabilities and effective access", () => {
 
 describe("conditional writes and discovery", () => {
   test.each([
+    "acl",
+    `${ACP}accessControl`,
+  ])("discovers ACP through rel=%s and conditionally edits its advertised ACR", async (rel) => {
+    const { client, target, head, accessUrl, storage } = await setup(
+      "acp",
+      `<> acp:resource <https://pod.example/note.txt>; acp:accessControl <#control>.
+        <#control> acp:apply <#policy>. <#policy> acp:allow acl:Read; acp:allOf <#matcher>.
+        <#matcher> acp:agent <${BOB}>.`,
+    );
+    head.mockResolvedValue({
+      ...(await head(target)),
+      links: new Map([[rel, [{ target: accessUrl, params: {} }]]]),
+    });
+    const etag = (await storage.readRdf(accessUrl)).etag;
+    expect(await client.grants(target)).toEqual([
+      { agent: BOB, modes: ["read"], id: `${accessUrl}#policy` },
+    ]);
+    const grant = await client.share(target, { agent: ALICE, modes: ["append"] }, {});
+    expect(storage.writeRdf).toHaveBeenLastCalledWith(accessUrl, expect.anything(), {
+      ifMatch: etag,
+    });
+    expect(await client.grants(target)).toContainEqual(grant);
+    await client.revoke(target, `${accessUrl}#policy`);
+    expect(await client.grants(target)).toEqual([grant]);
+    expect(storage.writeRdf).toHaveBeenCalledTimes(2);
+  });
+  test("refuses ACP links advertising competing access documents across relations", async () => {
+    const { client, target, head, accessUrl, storage } = await setup("acp");
+    head.mockResolvedValue({
+      ...(await head(target)),
+      links: new Map([
+        ["acl", [{ target: accessUrl, params: {} }]],
+        [`${ACP}accessControl`, [{ target: `${ROOT}other.acr`, params: {} }]],
+      ]),
+    });
+    await expect(client.grants(target)).rejects.toMatchObject({ code: "invalid-response" });
+    expect(storage.readRdf).not.toHaveBeenCalled();
+    expect(storage.writeRdf).not.toHaveBeenCalled();
+  });
+  test.each([
     "share",
     "revoke",
   ] as const)("refuses %s when WAC-Allow denies Control", async (operation) => {
@@ -363,14 +403,16 @@ describe("conditional writes and discovery", () => {
     });
     expect(storage.writeRdf).not.toHaveBeenCalled();
   });
-  test.each([undefined, []])("refuses absent access links %s", async (links) => {
-    const { client, target, head, storage } = await setup();
-    head.mockResolvedValue({
-      ...(await head(target)),
-      links: links ? new Map([["acl", links]]) : new Map(),
+  describe.each(["wac", "acp"] as const)("%s access links", (model) => {
+    test.each([undefined, []])("refuses absent access links %s", async (links) => {
+      const { client, target, head, storage } = await setup(model);
+      head.mockResolvedValue({
+        ...(await head(target)),
+        links: links ? new Map([["acl", links]]) : new Map(),
+      });
+      await expect(client.grants(target)).rejects.toMatchObject({ code: "unsupported" });
+      expect(storage.readRdf).not.toHaveBeenCalled();
     });
-    await expect(client.grants(target)).rejects.toMatchObject({ code: "unsupported" });
-    expect(storage.readRdf).not.toHaveBeenCalled();
   });
   test("refuses ambiguous access links", async () => {
     const { client, target, head, accessUrl } = await setup();

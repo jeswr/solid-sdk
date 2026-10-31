@@ -26,8 +26,8 @@ to T-051; `./testing` remains reserved.
 
 ## Discovery and conditional edits
 
-The client discovers the associated access document from HEAD: `rel="acl"` for WAC or
-`rel="http://www.w3.org/ns/solid/acp#accessControl"` for ACP. It requires exactly one scoped
+The client discovers the associated access document from HEAD: `rel="acl"` for WAC and ACP.
+ACP also accepts `rel="http://www.w3.org/ns/solid/acp#accessControl"`. It requires exactly one scoped
 link and an existing readable RDF document. It does not guess a suffix, walk parent ACLs,
 or create missing access documents: installing an own ACL can replace inherited protection.
 See the [WAC discovery rules](https://solidproject.org/TR/wac#acl-link-relation) and

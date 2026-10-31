@@ -42,9 +42,9 @@ export function createAccessClient({ storage }: AccessClientOptions): AccessClie
     if (mutate && head.allow !== null && !head.allow.control) {
       throw new StorageError("forbidden", { url: head.url, method: "PUT", status: 403 });
     }
-    const rel = selected === "wac" ? "acl" : `${ACP}accessControl`;
-    const links = head.links.get(rel);
-    if (links === undefined || links.length === 0) return unsupported();
+    const rels = selected === "wac" ? ["acl"] : ["acl", `${ACP}accessControl`];
+    const links = rels.flatMap((rel) => head.links.get(rel) ?? []);
+    if (links.length === 0) return unsupported();
     if (links.length !== 1) fail("invalid-response", head.url);
     const accessUrl = (links[0] as { target: string }).target;
     // StorageClient enforces scope before transport. Do not echo an untrusted link in errors.
