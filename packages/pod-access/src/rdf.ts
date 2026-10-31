@@ -137,20 +137,19 @@ export function addWac(
 
 export function revokeWac(dataset: Dataset, target: string, key: string, url: string): boolean {
   let changed = false;
-  for (const rule of wacRules(dataset, target, url)) {
-    let selected = false;
-    if (rule.termType === "NamedNode" && rule.value === key) {
+  const rules = wacRules(dataset, target, url);
+  const byId = rules.some((rule) => rule.termType === "NamedNode" && rule.value === key);
+  for (const rule of rules) {
+    if (byId) {
+      if (rule.termType !== "NamedNode" || rule.value !== key) continue;
       rule.targets.delete(target);
       rule.defaults.delete(target);
-      selected = true;
     } else if (rule.agent.has(key) || rule.groups.has(key)) {
       if ([...rule.targets, ...rule.defaults].some((value) => value !== target))
         fail("unsupported", url);
       rule.agent.delete(key);
       rule.groups.delete(key);
-      selected = true;
-    }
-    if (!selected) continue;
+    } else continue;
     changed = true;
     if (
       (rule.targets.size === 0 && rule.defaults.size === 0) ||
@@ -269,8 +268,10 @@ export function addAcp(
 
 export function revokeAcp(root: AccessControlResource, key: string, url: string): boolean {
   let changed = false;
-  for (const { control, grant } of acpEntries(root, url)) {
-    if (grant.id !== key && grant.agent !== key) continue;
+  const entries = acpEntries(root, url);
+  const byId = entries.some(({ grant }) => grant.id === key);
+  for (const { control, grant } of entries) {
+    if (byId ? grant.id !== key : grant.agent !== key) continue;
     if (control.apply.size !== 1) fail("unsupported", url);
     // Unlink locally. Definitions may be referenced by other ACRs or policies.
     root.accessControl.delete(control);

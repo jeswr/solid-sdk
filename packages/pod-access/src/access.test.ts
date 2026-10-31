@@ -115,6 +115,13 @@ describe.each(["wac", "acp"] as const)("%s sharing", (model) => {
     expect(storage.writeRdf).not.toHaveBeenCalled();
     expect(await client.grants(target)).toHaveLength(1);
   });
+  test("prioritizes a grant id over the same IRI used as another grant's agent", async () => {
+    const { client, target } = await setup(model);
+    const first = await client.share(target, { agent: BOB, modes: ["read"] }, {});
+    const second = await client.share(target, { agent: first.id as string, modes: ["read"] }, {});
+    await client.revoke(target, first.id as string);
+    expect(await client.grants(target)).toEqual([second]);
+  });
 
   test("requires a container to inherit", async () => {
     const { client, target, storage } = await setup(model);
