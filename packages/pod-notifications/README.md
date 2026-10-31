@@ -2,7 +2,7 @@
 
 # @jeswr/pod-notifications
 
-> **Experimental — AI-agent-generated.** Core subscriptions, polling and WebSockets (T-040/T-041).
+> **Experimental — AI-agent-generated.** Subscriptions, polling, WebSockets, StreamingHTTP, LWS SSE and NSS (T-040–T-042).
 
 One storage-scoped change API for Solid and LWS. Private at version 0.1.0; Node.js >=24.
 Design of record: SDK core `ADR-005-live-updates.md` and ADR-001 D4.
@@ -28,12 +28,12 @@ await subscription.close();
 
 `plan()` selects the first advertised usable channel: WebSocket, SSE, LWS webhook with a
 configured relay, legacy WebSocket, then polling. It reads `storage.features.liveUpdates`
-without I/O; unavailable/unknown features cannot select push. Advertised WebSockets now use
-the push adapters. SSE, webhook relay and legacy WebSocket implementations remain reserved
-for T-042/T-043; those preferences still use polling in this cut. `channel` reports the
-actual transport (`websocket`, `poll`, or `null` when polling is disabled).
+without I/O; unavailable/unknown features cannot select push. Advertised WebSocket, SSE and
+legacy WebSocket channels use push adapters. Webhook relay remains reserved for T-043 and
+still uses polling. `channel` reports the actual transport (`websocket`, `sse`, `legacy-ws`,
+`poll`, or `null` when polling is disabled).
 
-WebSocket channels rediscover through the storage-client public `createPodClient` API with
+Push channels rediscover through the storage-client public `createPodClient` API with
 a fresh metadata cache on each attempt. Solid sends an authenticated `application/ld+json`
 POST per topic, using the notifications context and the advertised WebSocketChannel2023 IRI.
 LWS sends one `application/lws+json` WebSocketSubscription with all deduplicated topics and
@@ -44,7 +44,8 @@ awaits outstanding deletions. A late subscribe response after cancellation is al
 
 HTTP endpoints must use HTTPS and sockets must use WSS. `receiveFrom` and LWS subscription
 URLs must have the same host (including port) as the storage or discovered subscription
-service. Credentials, fragments, controls and backslashes are rejected; redirects are refused.
+service. NSS socket hosts must equal the storage host. Credentials, fragments, controls and
+backslashes are rejected. Discovery, subscription and streaming-fetch requests refuse redirects.
 Set `allowInsecureLoopback: true` only for local development: HTTP/WS then require both storage
 and destination to be literal loopback (`localhost`, `127.0.0.0/8`, or `[::1]`). Socket URLs
 may carry short-lived tokens and are never logged.
@@ -59,8 +60,32 @@ consumer can reconcile missed changes; the initial uninterrupted connection does
 With several sockets, the resync timestamp is the earliest last-frame time, preserved through
 partial reconnects so a busy topic cannot hide a silent sibling's missed changes.
 If one Solid topic fails, the subscription reconnects all topics together. Polling does not
-run alongside WebSockets. Browser offline events abort requests and suspend sockets/retries;
-online schedules immediate rediscovery. Any discovery/subscribe 403 closes with `forbidden`.
+run alongside push. Browser offline events abort requests and suspend transports/retries;
+online schedules immediate rediscovery. Any discovery/subscribe/streaming-fetch 403 closes
+with `forbidden`.
+
+Solid StreamingHTTP sends one `StreamingHTTPChannel2023` POST per topic and opens each
+validated HTTPS `receiveFrom` with the injected authenticated fetch. Its incremental UTF-8
+reader accepts newline-delimited JSON-LD (LF/CRLF), including split code points and records,
+and a final record without a newline. Blank/malformed JSON lines are ignored. Invalid UTF-8,
+records over 1,048,576 UTF-16 code units, stream errors and EOF trigger fresh discovery and
+subscription with the same bounded backoff and resync behavior. Close/offline cancels readers;
+stale chunks cannot emit changes. The subscription is live once every stream opens.
+
+LWS SSE sends one `SseSubscription` POST for all topics, retaining its subscription URL for
+best-effort DELETE. It opens `receiveFrom` with `eventSourceFactory` (browser `EventSource`
+by default; inject an implementation on Node). Factories must implement native EventSource
+semantics: readyState 0/1/2 and automatic retry with the browser-owned `Last-Event-ID` buffer.
+On a recoverable error (readyState 0), the client retains the same source so replay ids,
+including empty-id resets, survive. State becomes degraded until `open`, then emits resync.
+Native EventSource owns that retry delay; terminal source errors/close use fresh discovery
+and the SDK backoff. Replay activities pass through the normalizer's five-second dedupe.
+
+NSS discovers the storage's `Updates-Via` header on each connection attempt, opens the
+validated socket with `solid-0.1`, and sends `sub <absolute-topic>` for each unique topic/hot
+resource. Only exact `pub <subscribed-topic>` frames become `Update` hints (`via: legacy-ws`);
+protocol banners, malformed frames and unsolicited/foreign resources are ignored. NSS shares
+the WebSocket heartbeat, reconnect, offline and resync lifecycle.
 
 Polling starts on the next timer turn with a quiet HEAD/listAll baseline, then repeats every
 30 seconds by default. Changed non-null ETags produce `Update`; complete membership diffs
@@ -75,7 +100,7 @@ server's recursive container semantics. `depth` is best effort and does not intr
 traversal. Add individual resources through `hot` to observe Solid content edits. Topics and
 hot resources must be within the storage and are deduplicated. A zero poll interval disables
 the polling fallback (`degraded`, reason `polling-disabled`, channel `null`) while still allowing
-advertised WebSockets. Intervals must be integers between zero and 2,147,483,647 ms.
+advertised push channels. Intervals must be integers between zero and 2,147,483,647 ms.
 
 `navigator.onLine === false` suspends polling and aborts in-flight work. The browser's `online`
 event starts immediate reconciliation; successful reconciliation emits `resync` with the offline
@@ -104,7 +129,10 @@ counts, socket sent frames and SSE event ids. Inject factories, `timers`, `now`,
 through `createNotifications`. `./channels/poll` exposes the low-level `createPollChannel`
 adapter; `./channels/websocket2023` and `./channels/lws-websocket` expose
 `createWebSocket2023Channel` and `createLwsWebSocketChannel` with `WebSocketChannelOptions`.
-Event-source factories remain reserved for the later SSE task. The solid-offline notification
+`./channels/streaming-http`, `./channels/lws-sse` and `./channels/legacy-ws` expose
+`createStreamingHttpChannel`, `createLwsSseChannel` and `createLegacyWebSocketChannel` with
+`PushChannelOptions`. `FakeEventSource.reconnect()` models a recoverable drop and returns the
+native replay headers while retaining the source. The solid-offline notification
 implementation remains intact until T-062.
 
 ```sh

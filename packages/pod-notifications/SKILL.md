@@ -9,9 +9,10 @@ description: Work on @jeswr/pod-notifications, storage-scoped change normalisati
 T-040 implements the ADR-005 contracts, `createNotifications`, internal `createChangeNormalizer`,
 subscription lifecycle/async iteration, `./channels/poll`, and `./testing` fakes. T-041 adds
 `./channels/websocket2023` and `./channels/lws-websocket`: Solid subscribes per topic, LWS
-batches all topics. `plan()` reports advertised preference; WebSockets run push, while
-SSE/webhook/legacy preferences still run polling until T-042/T-043. The subscription's
-`channel` is the actual transport. Keep that distinction explicit in the README.
+batches all topics. T-042 adds `./channels/streaming-http`, `./channels/lws-sse` and
+`./channels/legacy-ws`. `plan()` reports advertised preference; WebSocket/SSE/legacy run push,
+while webhook relay still uses polling until T-043. The subscription's `channel` is the
+actual transport. Keep that distinction explicit in the README.
 
 Use only the storage-client public API (`features`, `head`, `listAll`, `isWithinStorage`,
 `createPodClient`). WebSocket discovery uses a fresh isolated cache per attempt, shared only
@@ -22,7 +23,7 @@ Polling containers cover direct membership; LWS push retains recursive server se
 Hot resources observe individual edits. Offline pauses
 and aborts work; online immediately reconciles. Forbidden closes; transient failures retry.
 Close must release timers/listeners and settle pending iterators even when observers fail.
-`SubscriptionController` and `runtime.ts` are internal seams for the later push tasks; maintain
+`SubscriptionController`, `runtime.ts` and `channels/push.ts` are internal shared seams; maintain
 terminal closed state and idempotent cleanup. Do not run polling and push for the same topic.
 
 WebSocket close/error/90-second inactivity reconnects every topic together, with fresh discovery
@@ -37,6 +38,20 @@ control-free, receive/delete hosts equal storage or subscription service (includ
 `allowInsecureLoopback` defaults false; HTTP/WS requires literal loopback at both ends.
 Never print token-bearing channel URLs. Leave solid-offline's implementation intact for T-062.
 
+StreamingHTTP uses one POST and fetch stream per Solid topic. Keep the UTF-8 decoder state
+across chunks, parse complete LF/CRLF JSON lines, flush a final unterminated record and bound
+records to 1,048,576 UTF-16 code units. Skip blank/malformed JSON; decoding errors, oversize,
+EOF and read errors reconnect with fresh discovery and resync. Register reader cancellation
+before emitting live; observer-driven close and stale reads cannot leak changes or retries.
+LWS SSE batches topics into one SseSubscription and uses native EventSource reconnection:
+retain the source on readyState=0 errors so Last-Event-ID survives, degrade until open, then
+resync. Factories must implement native auto-retry and id-buffer semantics. On terminal
+errors/close, rediscover and re-subscribe with SDK backoff. Close/offline detaches and closes
+sources and DELETEs LWS subscriptions. Native EventSource owns recoverable retry timing.
+NSS rediscovers Updates-Via, restricts socket hosts to storage, uses solid-0.1 and sends one
+sub frame per deduplicated topic. Only exact pub frames for subscribed topics produce Update;
+validate topic syntax before constructing frames. Never interpret protocol banners as changes.
+
 Normalisation takes a canonical storage id separately from the URL scope predicate (LWS id
 and root may differ). Do not fetch JSON-LD contexts. Scope-filter objects before dedupe and
 scope-filter optional target/origin URLs. Never log raw frames or untrusted URL credentials.
@@ -44,7 +59,9 @@ Dedupe is per normalizer, by accepted id, expiring at exactly five seconds.
 
 `./testing` provides fake timers, sockets and event sources without network or Node-only
 imports. Advance fake timers asynchronously to await complete channel cycles. Keep transport
-factories and clocks injectable; WebSockets consume socket/random hooks and SSE will use event sources.
+factories and clocks injectable; WebSockets consume socket/random hooks; LWS SSE consumes
+event sources. FakeEventSource.reconnect() models native Last-Event-ID replay without
+replacing the instance.
 
 Before implementation, read SDK core ADR-001 D4 and `ADR-005-live-updates.md` in
 `solid-suite-planning/specs/sdk-core/`, alongside this repository's `AGENTS.md`.
