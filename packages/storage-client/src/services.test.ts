@@ -675,3 +675,54 @@ test("memory version namespace rejects fabricated snapshots and subcontainers", 
     storage.write(`${HISTORY}new/foo`, "bad", { contentType: "text/plain", ifMatch: "*" }),
   ).rejects.toMatchObject({ code: "method-not-allowed" });
 });
+
+test("three Solid PUTs produce three versions and restoring produces a fourth", async () => {
+  const storage = createMemoryStorage({ root: ROOT, versioning: true });
+  let etag = "*";
+  for (const text of ["one", "two", "three"]) {
+    etag = (await storage.write(LIVE, text, { contentType: "text/plain", ifMatch: etag }))
+      .etag as string;
+  }
+  const client = createVersionsClient(storage);
+  const versions = await client.versions(LIVE);
+  expect(versions).toHaveLength(3);
+  await client.restoreVersion(LIVE, (versions[0] as VersionEntry).url);
+  expect(await client.versions(LIVE)).toHaveLength(4);
+});
+
+for (const protocol of ["solid", "lws"] as const) {
+  test(`${protocol}: committed patches snapshot exact content; failed patches and reads do not`, async () => {
+    const storage = createMemoryStorage({ protocol, root: ROOT, versioning: true });
+    const item = await storage.create(ROOT, '{"count":1}', { contentType: "application/json" });
+    const patch = {
+      kind: "json" as const,
+      ops: [{ op: "replace" as const, path: "/count", value: 2 }],
+    };
+    await storage.patch(item.url, patch, { ifMatch: item.etag as string });
+    await expect(
+      storage.patch(item.url, patch, { ifMatch: item.etag as string }),
+    ).rejects.toMatchObject({ code: "precondition-failed" });
+    const client = createVersionsClient(storage);
+    const versions = await client.versions(item.url);
+    expect(versions).toHaveLength(2);
+    const texts = await Promise.all(
+      versions.map(async (version) => (await storage.read(version.url)).text()),
+    );
+    expect(texts.sort()).toEqual(['{"count":1}', '{"count":2}']);
+    expect(await client.versions(item.url)).toHaveLength(2);
+  });
+  test(`${protocol}: abort and transport failure preserve service error semantics`, async () => {
+    const { storage, fetcher } = network(protocol, []);
+    const controller = new AbortController();
+    controller.abort();
+    await expect(
+      storage.create(TRASH, JSON.stringify({ resource: LIVE }), { signal: controller.signal }),
+    ).rejects.toMatchObject({ code: "network", retryable: false });
+    expect(fetcher).not.toHaveBeenCalled();
+    fetcher.mockRejectedValueOnce(new TypeError("offline"));
+    await expect(createTrashClient(storage).trash(LIVE)).rejects.toMatchObject({
+      code: "network",
+      retryable: true,
+    });
+  });
+}
