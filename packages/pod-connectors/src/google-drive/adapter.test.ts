@@ -117,6 +117,35 @@ async function imported() {
 }
 
 describe("Drive full sync", () => {
+  it("recognizes legacy copy-state predicates without redownloading and rewrites canonical metadata", async () => {
+    const { pod, run, metadata } = setup();
+    const initial = await run(full([BINARY]), { media: CONTENT }).result;
+    const url = metaUrl(BINARY.id);
+    const legacy = (pod.get(url) ?? "").replaceAll(
+      "https://jeswr.org/ns/pod-drive#",
+      "https://w3id.org/jeswr/pod-drive#",
+    );
+    expect(legacy).toContain("https://w3id.org/jeswr/pod-drive#md5Checksum");
+    expect((await pod.fetch(url, { method: "PUT", body: legacy })).ok).toBe(true);
+    const next = run(
+      [
+        changes({
+          changes: [{ fileId: BINARY.id, file: { ...BINARY, name: "Renamed synthetic photo" } }],
+          newStartPageToken: "canonical-cursor",
+        }),
+      ],
+      { state: initial.state },
+    );
+    // No media responses are configured: an unnecessary download would fail this import.
+    expect((await next.result).cursor).toBe("canonical-cursor");
+    expect(next.api).toHaveBeenCalledTimes(1);
+    expect(metadata(BINARY.id).name).toBe("Renamed synthetic photo");
+    expect(metadata(BINARY.id).checksum).toBe(BINARY.md5Checksum);
+    expect(pod.bytes(contentUrl(BINARY))).toEqual(new TextEncoder().encode("data"));
+    expect(pod.get(url)).not.toContain("https://w3id.org/jeswr/");
+    expect(pod.get(url)).toContain("https://jeswr.org/ns/pod-drive#md5Checksum");
+  });
+
   it("maps metadata, hierarchy, binaries and exports, registering the drive root once", async () => {
     const { pod, run, metadata } = setup();
     const { api, result } = run(full(), { media: CONTENT });

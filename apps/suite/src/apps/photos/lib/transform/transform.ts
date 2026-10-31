@@ -1,5 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { record, requireTransform } from "./error";
+
+/** Largest supported source axis in pixels. A half pixel must remain wider than
+ * the normalized-coordinate precision lost when reflecting crop bounds. */
+export const MAX_SOURCE_DIMENSION = 2 ** 50;
 
 export type ExifOrientation = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 /** Normalized source-to-display affine matrix: x'=a*x+c*y+e; y'=b*x+d*y+f.
@@ -28,6 +33,9 @@ export interface ImageSize {
 export interface PhotoEditRecord {
   readonly orientation: ExifOrientation;
   readonly crop: CropRect;
+  /** Normalized extents on the original source axes, retained when display bounds
+   * cannot reproduce them exactly. Preserve this field when saving the record. */
+  readonly sourceExtent?: ImageSize;
 }
 export type PhotoEdit =
   | { readonly type: "rotate"; readonly degrees: number }
@@ -106,14 +114,35 @@ function cropRect(value: unknown): CropRect {
   return { left, top, right, bottom } as CropRect;
 }
 function editRecord(value: unknown): PhotoEditRecord {
-  const input = record(value, ["orientation", "crop"], "invalid-record");
-  return { orientation: orientation(input.orientation), crop: cropRect(input.crop) };
+  const hasExtent =
+    typeof value === "object" && value !== null && Object.hasOwn(value, "sourceExtent");
+  const input = record(
+    value,
+    hasExtent ? ["orientation", "crop", "sourceExtent"] : ["orientation", "crop"],
+    "invalid-record",
+  );
+  const state = orientation(input.orientation);
+  const crop = cropRect(input.crop);
+  if (!hasExtent) return { orientation: state, crop };
+  const extent = record(input.sourceExtent, ["width", "height"], "invalid-record");
+  requireTransform(
+    ["width", "height"].every((axis) => {
+      const n = extent[axis];
+      return typeof n === "number" && Number.isFinite(n) && n > 0 && n <= 1;
+    }),
+    "invalid-record",
+  );
+  return {
+    orientation: state,
+    crop,
+    sourceExtent: { width: extent.width as number, height: extent.height as number },
+  };
 }
 function imageSize(value: unknown): ImageSize {
   const input = record(value, ["width", "height"], "invalid-size");
   requireTransform(
     [input.width, input.height].every(
-      (n) => typeof n === "number" && Number.isSafeInteger(n) && n > 0,
+      (n) => typeof n === "number" && Number.isSafeInteger(n) && n > 0 && n <= MAX_SOURCE_DIMENSION,
     ),
     "invalid-size",
   );
@@ -133,6 +162,7 @@ export function createEditRecord(exifOrientation: unknown = 1): PhotoEditRecord 
  * crops to collapse into one record. Inputs are never mutated; unsupported edits throw. */
 export function composeEdits(value: unknown, edits: unknown): PhotoEditRecord {
   let result = editRecord(value);
+  let extent = result.sourceExtent ?? sourceExtent(result.orientation, result.crop);
   requireTransform(Array.isArray(edits), "invalid-edit");
   for (const edit of edits) {
     requireTransform(typeof edit === "object" && edit !== null, "invalid-edit");
@@ -150,6 +180,8 @@ export function composeEdits(value: unknown, edits: unknown): PhotoEditRecord {
         right: left + rect.right * width,
         bottom: top + rect.bottom * height,
       });
+      const selected = sourceExtent(state, rect);
+      extent = { width: extent.width * selected.width, height: extent.height * selected.height };
     } else if (type === "rotate") {
       const { degrees } = record(edit, ["type", "degrees"], "invalid-edit");
       requireTransform(
@@ -174,20 +206,40 @@ export function composeEdits(value: unknown, edits: unknown): PhotoEditRecord {
       }
     }
     result = { orientation: state, crop: cropRect(crop) };
+    const derived = sourceExtent(state, crop);
+    if (derived.width !== extent.width || derived.height !== extent.height) {
+      result = { ...result, sourceExtent: extent };
+    }
   }
   return result;
 }
 
-/** Natural output dimensions; round continuous crop extents once, after all edits.
+function sourceExtent(state: ExifOrientation, crop: CropRect): ImageSize {
+  const width = crop.right - crop.left;
+  const height = crop.bottom - crop.top;
+  return state >= 5 ? { width: height, height: width } : { width, height };
+}
+
+function roundCropExtent(pixels: number, fraction: number): number {
+  const extent = pixels * fraction;
+  const lower = Math.floor(extent);
+  // Limit arithmetic tolerance to a billionth of a pixel, even for huge sources.
+  const tolerance = Math.min(pixels * Number.EPSILON, 1e-9);
+  return extent - lower >= 0.5 - tolerance ? Math.ceil(extent) : lower;
+}
+
+/** Natural output dimensions; round source-axis crop extents once, then orient.
+ * Half-pixel ties round up; arithmetic tolerance is capped at a billionth of a pixel.
  * Subpixel results rounding to zero are rejected, never clamped or upscaled. */
 export function computeOutputSize(source: unknown, value: unknown): ImageSize {
   const size = imageSize(source);
-  const { orientation: state, crop } = editRecord(value);
-  const swapsAxes = state >= 5;
-  return imageSize({
-    width: Math.round((swapsAxes ? size.height : size.width) * (crop.right - crop.left)),
-    height: Math.round((swapsAxes ? size.width : size.height) * (crop.bottom - crop.top)),
+  const edit = editRecord(value);
+  const extent = edit.sourceExtent ?? sourceExtent(edit.orientation, edit.crop);
+  const output = imageSize({
+    width: roundCropExtent(size.width, extent.width),
+    height: roundCropExtent(size.height, extent.height),
   });
+  return edit.orientation >= 5 ? { width: output.height, height: output.width } : output;
 }
 
 export const ASPECT_RATIOS = Object.freeze({

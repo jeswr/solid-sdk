@@ -128,3 +128,25 @@ describe("clientIdDocument — redirect_uris", () => {
     ]);
   });
 });
+
+// AUTHORED-BY Codex GPT-6
+describe("GitHub Pages client identity", () => {
+  it("includes the app base in every identity and redirect URL", () => {
+    const doc = clientIdDocument("https://jeswr.github.io", "/solid-sdk/pod-photos/");
+    expect(doc.client_id).toBe("https://jeswr.github.io/solid-sdk/pod-photos/clientid.jsonld");
+    expect(doc.client_uri).toBe("https://jeswr.github.io/solid-sdk/pod-photos/");
+    expect(doc.redirect_uris).toEqual([
+      "https://jeswr.github.io/solid-sdk/pod-photos/callback.html",
+      "https://jeswr.github.io/solid-sdk/pod-photos/",
+    ]);
+  });
+  it.each([
+    "https://other.example/",
+    "//other.example/",
+    "/missing-slash",
+    "/query?x/",
+    "/hash#x/",
+  ])("rejects an invalid client base: %s", (path) => {
+    expect(() => clientIdDocument("https://jeswr.github.io", path)).toThrow("CLIENT_BASE_PATH");
+  });
+});

@@ -183,6 +183,10 @@ test("saved preferences with both regions open give one sheet below 1024px", asy
   await expect(page.getByRole("dialog", { name: "Details" })).toBeVisible();
   await expect(sidebar).toHaveAttribute("aria-expanded", "false");
   await expect(details).toHaveAttribute("aria-expanded", "true");
+  // DS-14: the auto-focused sheet close control exposes a tooltip above the sheet.
+  await expect(page.getByRole("tooltip")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("tooltip")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(details).toHaveAttribute("aria-expanded", "false");
