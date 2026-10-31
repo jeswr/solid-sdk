@@ -182,13 +182,14 @@ export function createExecutor(options: ExecutorOptions) {
     };
   }
 
-  async function recoverSent(id: string): Promise<TransmitResult | undefined> {
+  async function recoverSettlement(id: string): Promise<TransmitResult | undefined> {
     return o.transmissions.exclusive(async () => {
       checkBackgroundFailure();
       const records = [...(await o.transmissions.list()), ...(await o.audit.listCommitted())];
       const record = transmissionRecords(records).find((r) => r.proposal === id);
-      // Settlement uses only durable delivery evidence; it grants no authority for a send.
-      return record?.status === "sent" ? duplicate(record) : undefined;
+      // Repair durable settlements independently of authority or an explicitly requested retry.
+      if (record?.status === "sent") return duplicate(record);
+      return record?.status === "not-sent" ? finish(record) : undefined;
     });
   }
 
@@ -533,7 +534,7 @@ export function createExecutor(options: ExecutorOptions) {
   async function runOutboxOnce(execute = true): Promise<Readonly<Record<string, TransmitResult>>> {
     const results: Record<string, TransmitResult> = {};
     for (const id of await o.proposals.queued()) {
-      const recovered = await recoverSent(id);
+      const recovered = await recoverSettlement(id);
       if (recovered) results[id] = recovered;
       else if (execute) results[id] = await transmit(id);
       else {

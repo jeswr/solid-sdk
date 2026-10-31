@@ -779,7 +779,6 @@ it.each([
 it.each([
   "attempting",
   "uncertain",
-  "not-sent",
 ] as const)("expired %s history does not establish a completed send", async (status) => {
   const h = harness();
   const e = await h.enqueue();
@@ -792,6 +791,76 @@ it.each([
   expect(h.receipts.size).toBe(0);
   expect(h.binding.send.transmit).not.toHaveBeenCalled();
   expect(h.options.tokens.send).not.toHaveBeenCalled();
+});
+it.each([
+  "before-receipt",
+  "after-receipt",
+  "disposition",
+])("outbox repairs rejected sends after %s failure without retrying", async (failure) => {
+  for (const compacted of [false, true]) {
+    for (const replacement of [false, true]) {
+      const h = harness();
+      const e = await h.enqueue();
+      const error = new Error("settlement unavailable");
+      vi.mocked(h.binding.send.transmit).mockResolvedValueOnce({
+        outcome: "rejected",
+        detail: "not accepted",
+      });
+      if (failure === "disposition") {
+        const write = h.proposals.writeDisposition;
+        vi.spyOn(h.proposals, "writeDisposition").mockImplementation(async (id, result) => {
+          if (result.status === "not-sent") throw error;
+          await write(id, result);
+        });
+      } else {
+        const emit = h.proposals.emitReceipt;
+        vi.spyOn(h.proposals, "emitReceipt").mockImplementationOnce(async (receipt) => {
+          if (failure === "after-receipt") await emit(receipt);
+          throw error;
+        });
+      }
+      await expect(h.executor.runOutboxOnce()).rejects.toBe(error);
+      expect(h.records.get(e.proposal.id)).toMatchObject({ status: "not-sent", attempts: 1 });
+      expect(await h.proposals.queued()).toEqual([e.proposal.id]);
+      expect(h.receipts.size).toBe(failure === "before-receipt" ? 0 : 1);
+      if (failure === "disposition") vi.mocked(h.proposals.writeDisposition).mockRestore();
+      if (compacted) h.records.clear();
+      else h.ledger.length = 0;
+      // Settlement needs neither still-valid authority nor the original proposal contents.
+      h.state.at = new Date(Date.parse(UNTIL) + 1).toISOString();
+      h.state.haltFile = true;
+      h.state.mandate = undefined;
+      e.proposal.intent.conversation = "urn:changed-conversation";
+      const proposal = vi.spyOn(h.proposals, "get");
+      const executor = replacement ? createExecutor(h.options) : h.executor;
+      expect(await executor.runOutboxOnce(!replacement)).toEqual({
+        [e.proposal.id]: { status: "not-sent", reason: "not-sent" },
+      });
+      expect([...h.receipts.values()]).toEqual([
+        expect.objectContaining({
+          conversation: "urn:conversation:1",
+          body: expect.objectContaining({ outcome: "not-executed", final: true }),
+        }),
+      ]);
+      expect(h.records.get(e.proposal.id)).toMatchObject({ status: "not-sent", attempts: 1 });
+      expect(proposal).not.toHaveBeenCalled();
+      expect(await executor.runOutboxOnce()).toEqual({});
+      expect(h.binding.send.transmit).toHaveBeenCalledTimes(1);
+      expect(h.options.tokens.send).not.toHaveBeenCalled();
+    }
+  }
+});
+it("an explicit retry remains possible after repairing a rejected send receipt", async () => {
+  const h = harness();
+  const e = await h.enqueue();
+  h.prior(e, "not-sent");
+  expect(await h.executor.runOutboxOnce()).toEqual({
+    [e.proposal.id]: { status: "not-sent", reason: "not-sent" },
+  });
+  expect(h.binding.send.transmit).not.toHaveBeenCalled();
+  expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "sent" });
+  expect(h.binding.send.transmit).toHaveBeenCalledOnce();
+  expect(h.records.get(e.proposal.id)).toMatchObject({ status: "sent", attempts: 2 });
 });
 it("outbox repairs a legacy sent receipt without a provider reference", async () => {
   const h = harness();
