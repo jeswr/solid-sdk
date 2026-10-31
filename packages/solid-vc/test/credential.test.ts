@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // The VC 2.0 data model: build → RDF/JSON-LD, and the agent-authorization build +
@@ -33,7 +34,7 @@ describe("credentialToRdf", () => {
   it("lowers a credential to its claim quads with issuer + types + validity", () => {
     const cred: Credential = {
       id: "urn:uuid:test-1",
-      type: ["AgentAuthorizationCredential"],
+      type: [SVC_AGENT_AUTHORIZATION],
       issuer: "https://alice.example/profile#me",
       validFrom: "2026-01-01T00:00:00.000Z",
       validUntil: "2027-01-01T00:00:00.000Z",
@@ -115,7 +116,7 @@ describe("credential RDF round-trip via @jeswr/fetch-rdf", () => {
   it("Turtle serialise → parse recovers the metadata", async () => {
     const cred: Credential = {
       id: "urn:uuid:rt-1",
-      type: ["AgentAuthorizationCredential"],
+      type: [SVC_AGENT_AUTHORIZATION],
       issuer: "https://alice.example/profile#me",
       validFrom: "2026-01-01T00:00:00.000Z",
       credentialSubject: {
@@ -163,7 +164,7 @@ describe("buildAgentAuthorizationCredential + agentAuthorizationFromRdf", () => 
       ? cred.credentialSubject[0]
       : cred.credentialSubject;
     expect(subject?.id).toBe("https://alice.example/profile#me");
-    expect(cred.type).toContain("AgentAuthorizationCredential");
+    expect(cred.type).toEqual(["AgentAuthorizationCredential"]);
   });
 
   it("round-trips the agent / action / target / policy through RDF", async () => {

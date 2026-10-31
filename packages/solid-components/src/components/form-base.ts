@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Shared scaffolding for the per-class EDITABLE form components (jeswr-task-form /
@@ -106,6 +107,11 @@ export abstract class AbstractFormElement extends LitElement {
   /** The model's SHACL shape graph as inline Turtle. */
   protected abstract shapeTurtle(): string;
 
+  /** Optional local migration of the display graph before binding canonical shapes. */
+  protected valuesTransform(): ((graph: Store) => void) | undefined {
+    return undefined;
+  }
+
   /**
    * Apply the form's edited values to the LOADED existing graph through the model's
    * TYPED accessors. `formGraph` is shacl-form's `toRDF()` output (only the shaped
@@ -189,6 +195,7 @@ export abstract class AbstractFormElement extends LitElement {
         .fetch=${this.fetch}
         .publicFetch=${this.publicFetch}
         .resolveOptions=${this.resolveOptions}
+        .prepareValues=${this.valuesTransform()}
         .mergeSave=${this.mergeSaveCallback()}
         @jeswr-save=${(e: CustomEvent<SaveEventDetail>) => this.#onSave(e)}
         @jeswr-save-error=${() => this.#onChildState()}
@@ -246,7 +253,7 @@ interface QuadScanStore {
  * that is NOT necessarily the resource's conventional subject (it commonly MINTS a
  * fresh IRI, observed under the real upstream), so we must locate the form's typed
  * subject rather than assume `${url}#it`. Returns the first NamedNode subject typed
- * with `typeIri` in the form graph, preferring `conventional` if IT is the typed one,
+ * with any `typeIri` in the form graph, preferring `conventional` if IT is the typed one,
  * else `conventional` as a last resort (an empty form graph). A direct quad scan
  * (existence query — no triple built), via a `namedNode` factory so the n3 term
  * construction lives at the call site (each form imports n3's DataFactory once).
@@ -256,26 +263,32 @@ interface QuadScanStore {
  * on `${url}#it`/`#this`, not on shacl-form's minted IRI). See each per-class form.
  *
  * @param formGraph    - shacl-form's toRDF() output.
- * @param typeIri      - the model class IRI (wf:Task / vcard:Individual / book:Bookmark).
+ * @param typeIri      - the model class IRI or its canonical and legacy aliases.
  * @param conventional - the model's conventional subject for `src` (`#it` / `#this`).
  * @param namedNode    - the n3 DataFactory.namedNode (passed in by the subclass).
  */
 export function findEditedSubject(
   formGraph: QuadScanStore,
-  typeIri: string,
+  typeIri: string | readonly string[],
   conventional: string,
   namedNode: (value: string) => unknown,
 ): string {
   const rdfType = namedNode(RDF_TYPE);
-  const typeNode = namedNode(typeIri);
+  const typeNodes = (typeof typeIri === "string" ? [typeIri] : typeIri).map(namedNode);
   // Prefer the conventional subject IF the form graph typed it (a form that kept the
   // resource subject) — its values land directly without a re-key.
-  if (formGraph.getQuads(namedNode(conventional), rdfType, typeNode, null).length > 0) {
+  if (
+    typeNodes.some(
+      (typeNode) => formGraph.getQuads(namedNode(conventional), rdfType, typeNode, null).length > 0,
+    )
+  ) {
     return conventional;
   }
   // Else the first typed subject in the form graph (shacl-form's bound/minted node).
-  for (const q of formGraph.getQuads(null, rdfType, typeNode, null)) {
-    if (q.subject.termType === "NamedNode") return q.subject.value;
+  for (const typeNode of typeNodes) {
+    for (const q of formGraph.getQuads(null, rdfType, typeNode, null)) {
+      if (q.subject.termType === "NamedNode") return q.subject.value;
+    }
   }
   return conventional;
 }

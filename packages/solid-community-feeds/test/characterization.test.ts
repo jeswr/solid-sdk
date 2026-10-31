@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * Golden-master / characterization tests.
@@ -212,7 +213,7 @@ describe("GOLDEN: ActivityStreams projection", () => {
           "type": "Person",
         },
         "content": "hello world",
-        "https://w3id.org/jeswr/community#source": "matrix",
+        "https://jeswr.org/ns/community#source": "matrix",
         "id": "https://matrix.to/#/!r/$e",
         "published": "2026-06-16T00:00:00.000Z",
         "type": "Note",
@@ -229,7 +230,7 @@ describe("GOLDEN: ActivityStreams projection", () => {
     expect(threadToAs2(thread)).toMatchInlineSnapshot(`
       {
         "@context": "https://www.w3.org/ns/activitystreams",
-        "https://w3id.org/jeswr/community#source": "discourse",
+        "https://jeswr.org/ns/community#source": "discourse",
         "id": "https://forum.solidproject.org/t/solid-info-app/9856",
         "items": [
           {
@@ -240,7 +241,7 @@ describe("GOLDEN: ActivityStreams projection", () => {
               "type": "Person",
             },
             "content": "<p>Latest reply here.</p><p>Second paragraph.</p>",
-            "https://w3id.org/jeswr/community#source": "discourse",
+            "https://jeswr.org/ns/community#source": "discourse",
             "id": "https://forum.solidproject.org/t/solid-info-app/9856/9",
             "mediaType": "text/html",
             "published": "2026-06-16T14:39:56.373Z",
@@ -258,7 +259,7 @@ describe("GOLDEN: ActivityStreams projection", () => {
               "type": "Person",
             },
             "content": "<p>Hello &amp; welcome to the <b>Solid Info App</b> thread.</p>",
-            "https://w3id.org/jeswr/community#source": "discourse",
+            "https://jeswr.org/ns/community#source": "discourse",
             "id": "https://forum.solidproject.org/t/solid-info-app/9856/1",
             "mediaType": "text/html",
             "published": "2025-08-22T16:05:47.566Z",

@@ -1,9 +1,12 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * A typed fake fetch built from recorded fixture routes. Powers demo mode in
  * the UI and the adapter contract tests — **no live network ever**: an
  * unmatched request throws instead of hitting the wire.
  */
+
+import { type RunBudget, readJson } from "./budget.js";
 import { IntegrationSyncError, RateLimitedError } from "./errors.js";
 import { matchingFixtureRoute } from "./fixture-route.js";
 import type { FixtureRoute } from "./types.js";
@@ -53,12 +56,17 @@ export function fixtureFetch(adapterId: string, routes: readonly FixtureRoute[])
   return impl as typeof fetch;
 }
 
-/** `GET`/parse JSON with adapter-grade error mapping (429 → RateLimitedError). */
+/**
+ * `GET`/parse JSON with adapter-grade error mapping (429 → RateLimitedError); the body is
+ * read through the `MAX_JSON_BYTES` cap and charged to the optional per-run budget.
+ */
 export async function getJson<T>(
   adapterId: string,
   api: typeof fetch,
   url: string,
   init?: RequestInit,
+  budget?: RunBudget,
+  maxBytes?: number,
 ): Promise<T> {
   const res = await api(url, init);
   if (res.status === 429) {
@@ -75,7 +83,7 @@ export async function getJson<T>(
       status: res.status,
     });
   }
-  return (await res.json()) as T;
+  return (await readJson(res, adapterId, url, maxBytes, budget)) as T;
 }
 
 /** `POST` JSON and parse the JSON answer, with the same error mapping. */
