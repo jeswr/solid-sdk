@@ -4,7 +4,7 @@ import { createExecutor } from "../src/index.js";
 import { control, harness, NOW, seal } from "./helpers.js";
 
 describe("temporal authority", () => {
-  for (const authority of ["proposal", "mandate", "approval"] as const) {
+  for (const authority of ["proposal", "mandate", "approval", "control"] as const) {
     it.each([
       "policy",
       "ledger",
@@ -29,6 +29,8 @@ describe("temporal authority", () => {
         h.confirm(e);
         Object.assign(h.approvals[0] as object, { expires: deadline });
       }
+      if (authority === "control")
+        h.statements.push(control("Halt", 0), control("Resume", 1, { expires: deadline }));
       let checkingCredentials = false;
       const expire = () => {
         h.state.at = new Date(
@@ -116,6 +118,79 @@ describe("temporal authority", () => {
       if (stage === "policy" || stage === "ledger") expect(h.records.size).toBe(0);
     });
   }
+
+  it.each([
+    "resume-expired",
+    "halt-active",
+    "revoke-active",
+    "halt-expired",
+  ])("control validity uses the clock after loading: %s", async (change) => {
+    const h = harness();
+    const e = await h.enqueue();
+    const deadline = new Date(Date.parse(NOW) + 1000).toISOString();
+    if (change === "resume-expired")
+      h.statements.push(control("Halt", 0), control("Resume", 1, { expires: deadline }));
+    if (change === "halt-active") h.statements.push(control("Halt", 0, { createdAt: deadline }));
+    if (change === "revoke-active")
+      h.statements.push(
+        control("RevokeMandate", 0, {
+          createdAt: deadline,
+          target: h.state.mandate?.id,
+        }),
+      );
+    if (change === "halt-expired") h.statements.push(control("Halt", 0, { expires: deadline }));
+    const list = h.controls.listVerified;
+    vi.spyOn(h.controls, "listVerified").mockImplementationOnce(async (owner) => {
+      const result = await list(owner);
+      h.state.at = deadline;
+      return result;
+    });
+    const proposal = vi.spyOn(h.proposals, "get");
+    expect(await h.executor.transmit(e.proposal.id)).toMatchObject(
+      change === "halt-expired"
+        ? { status: "sent" }
+        : { status: "refused", reason: change === "revoke-active" ? "mandate-invalid" : "halted" },
+    );
+    if (change === "resume-expired" || change === "halt-active") {
+      expect(proposal).not.toHaveBeenCalled();
+      expect(h.options.mandates.load).not.toHaveBeenCalled();
+    }
+    expect(h.binding.send.transmit).toHaveBeenCalledTimes(change === "halt-expired" ? 1 : 0);
+    expect(h.options.tokens.send).toHaveBeenCalledTimes(change === "halt-expired" ? 1 : 0);
+  });
+
+  it("Resume expiry after the dispatch recheck prevents calling the binding", async () => {
+    const h = harness();
+    const e = await h.enqueue();
+    const deadline = new Date(Date.parse(NOW) + 1000).toISOString();
+    h.statements.push(control("Halt", 0), control("Resume", 1, { expires: deadline }));
+    const exclusive = h.transmissions.exclusive;
+    let scheduled = false;
+    Object.assign(h.transmissions, {
+      async exclusive<T>(work: () => Promise<T>): Promise<T> {
+        const result = await exclusive(work);
+        if (
+          !scheduled &&
+          result &&
+          typeof result === "object" &&
+          "status" in result &&
+          result.status === "ready"
+        ) {
+          scheduled = true;
+          queueMicrotask(() =>
+            queueMicrotask(() => {
+              h.state.at = deadline;
+            }),
+          );
+        }
+        return result;
+      },
+    });
+    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "not-sent" });
+    expect(scheduled).toBe(true);
+    expect(h.binding.send.transmit).not.toHaveBeenCalled();
+    expect(h.options.tokens.send).not.toHaveBeenCalled();
+  });
 });
 
 describe("final credential authority", () => {

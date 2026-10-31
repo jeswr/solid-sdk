@@ -45,6 +45,7 @@ interface AuthorityDeadlines {
   proposal: number;
   mandate: number;
   approval?: number;
+  controls: number;
 }
 interface ReadyEvaluation {
   status: "ready";
@@ -77,15 +78,17 @@ export function createExecutor(options: ExecutorOptions) {
     if (!(deadlines.mandate > now)) return { status: "refused", reason: "mandate-invalid" };
     if (deadlines.approval !== undefined && !(deadlines.approval > now))
       return { status: "awaiting-approval", reason: "approval-required" };
+    if (!(deadlines.controls > now)) return { status: "refused", reason: "halted" };
     return undefined;
   }
 
   async function controls(): Promise<{ halted: boolean; statements: readonly ControlStatement[] }> {
     try {
       if (await o.controls.haltFileExists()) return { halted: true, statements: [] };
+      const verified = await o.controls.listVerified(o.ownerWebId);
       const now = o.clock.now().getTime();
       if (!Number.isFinite(now)) return { halted: true, statements: [] };
-      const statements = (await o.controls.listVerified(o.ownerWebId)).filter(
+      const statements = verified.filter(
         (c) =>
           c.attributedTo === o.ownerWebId &&
           Date.parse(c.createdAt) <= now &&
@@ -308,6 +311,7 @@ export function createExecutor(options: ExecutorOptions) {
       proposal: Date.parse(entry.proposal.validUntil),
       mandate: Date.parse(mandate.validUntil),
       ...(approval ? { approval: Date.parse(approval.expires) } : {}),
+      controls: Infinity,
     };
     // Limits and claims share a store-wide lock. Ledger failure never means zero usage.
     const records = [...(await o.transmissions.list()), ...(await o.audit.listCommitted())];
@@ -330,6 +334,8 @@ export function createExecutor(options: ExecutorOptions) {
       if (latest.statements.some((c) => c.kind === "RevokeMandate" && c.target === mandateId))
         return { status: "refused", reason: "mandate-invalid" };
       if (revision !== state.revision) return { status: "refused", reason: "authority-changed" };
+      // Bound this snapshot conservatively: expiry may expose an older Halt after the await.
+      deadlines.controls = Math.min(...latest.statements.map((c) => Date.parse(c.expires)));
       return temporalFailure(deadlines);
     }
     if (!execute || o.dryRun !== false) {
