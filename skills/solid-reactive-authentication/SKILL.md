@@ -1,7 +1,18 @@
 ---
 name: solid-reactive-authentication
-description: Use when maintaining code that directly integrates the external @solid/reactive-authentication package, its authorization-code-flow element, global fetch patch, or legacy token-provider lifecycle. Prefer @jeswr/solid-auth-core for new suite applications.
+description: Use when maintaining code that directly integrates the external @solid/reactive-authentication package, its authorization-code-flow element, global fetch patch, or legacy token-provider lifecycle. Use @jeswr/pod-auth and its package skill for new suite applications.
 ---
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+> **Superseded for new suite code by [pod-auth](../../packages/pod-auth/SKILL.md).**
+> This skill and its bundled references document the published external
+> `@solid/reactive-authentication` 0.1.x integration and the legacy auth packages.
+> They are historical maintenance material. The imported `@jeswr/reactive-authentication`
+> protocol engine has a [separate package skill](../../packages/reactive-authentication/SKILL.md).
+> For current suite applications, use `createPodAuth`, its bounded `auth.fetch`, and
+> `PodAuthProvider` / `usePodAuth`; preserve global fetch. Do not copy the global-patching
+> setup or infer current APIs from the historical examples below.
 
 ## Quick reference
 
@@ -9,7 +20,7 @@ description: Use when maintaining code that directly integrates the external @so
 
 **Maintain reactive-authentication integrations**
 
-`@solid/reactive-authentication` is external to this workspace. New suite code should use `@jeswr/solid-auth-core`, which centralizes the provider, pristine-fetch pin, session restore, proactive auth, and React glue.
+`@solid/reactive-authentication` is external to this workspace. New suite code uses [`@jeswr/pod-auth`](../../packages/pod-auth/SKILL.md), which owns session policy, credential boundaries, restore and React glue.
 
 For existing direct consumers, treat `ReactiveFetchManager` as an app-lifetime singleton. Register its global patch once; logout clears provider session state rather than stacking another manager or wrapper on the next login.
 
@@ -37,9 +48,9 @@ Orchestration: `.claude/agents/solid-app-orchestration.md`.
 
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
-The source version notes below describe the published legacy integration. New suite code
-uses [solid-auth-core](../../packages/solid-auth-core/SKILL.md); use its package skill
-for the current API, and these details when maintaining existing direct consumers.
+The source version notes below describe the published legacy integration. Current APIs live in
+[pod-auth](../../packages/pod-auth/SKILL.md); use these historical details only when
+maintaining existing direct consumers.
 
 # @solid/reactive-authentication — auth via a patched fetch
 

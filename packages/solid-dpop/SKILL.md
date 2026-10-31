@@ -1,10 +1,16 @@
 ---
 name: solid-dpop
-description: Use when generating RFC 9449 DPoP proofs with @jeswr/solid-dpop, creating client-credentials sessions, driving authorization-code plus PKCE login, making ath-bound resource requests, refreshing tokens, or persisting CLI sessions and their bound keypair.
+description: Maintain legacy @jeswr/solid-dpop integrations. Deprecated; use @jeswr/pod-auth and its package skill for new suite authentication.
 ---
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # Work with `@jeswr/solid-dpop`
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+> **Deprecated — use `@jeswr/pod-auth`.** Read [the pod-auth skill](../pod-auth/SKILL.md) for
+> migration, the current API and security policy. The guidance below maintains existing consumers;
+> it does not describe pod-auth or authorize deleting legacy exports.
 
 Use this package's JOSE-backed primitives; do not reimplement proof signing, thumbprints, PKCE, nonce handling, or token binding.
 

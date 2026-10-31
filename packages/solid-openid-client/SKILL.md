@@ -1,12 +1,18 @@
 ---
 name: solid-openid-client
-description: Use when building server-side Node, CLI, bot, or agent Solid-OIDC flows with @jeswr/solid-openid-client, including issuer discovery, Client Identifier Documents, authorization-code plus PKCE callbacks, DPoP-bound refresh, and authenticated pod fetches.
+description: Maintain legacy @jeswr/solid-openid-client integrations. Deprecated; use @jeswr/pod-auth and its package skill for new suite authentication.
 ---
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # Work with `@jeswr/solid-openid-client`
 
-Use this package for Node/server applications whose OAuth flow is owned by `openid-client` v6. Browser suite applications should normally use `@jeswr/solid-auth-core`; Auth.js applications should use `@jeswr/auth-solid`.
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+
+> **Deprecated — use `@jeswr/pod-auth`.** Read [the pod-auth skill](../pod-auth/SKILL.md) for
+> migration, the current API and security policy. The guidance below maintains existing consumers;
+> it does not describe pod-auth or authorize deleting legacy exports.
+
+Use this package for Node/server applications whose OAuth flow is owned by `openid-client` v6. New browser suite applications use `@jeswr/pod-auth`; Auth.js applications should use `@jeswr/auth-solid`.
 
 ```ts
 import { createSolidOidcClient } from "@jeswr/solid-openid-client";
