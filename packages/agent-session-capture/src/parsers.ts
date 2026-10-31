@@ -116,12 +116,14 @@ export function parseCodexTranscript(jsonl: string, source = "codex"): CapturedS
   const entries = rows(jsonl);
   const result = session("codex", entries, source);
   const seen = new Set<string>();
-  entries.forEach((entry, line) => {
+  entries.forEach((entry) => {
     if (entry.type !== "response_item") return;
     const payload = record(entry.payload);
     const createdAt = time(entry.timestamp);
     if (!createdAt) return;
-    const key = payload.id ?? payload.call_id ?? line;
+    // Native messages omit IDs. Hash serialized fields so trimming cannot reuse an
+    // acknowledged identity; identical rollout records still deduplicate in append.
+    const key = payload.id ?? payload.call_id ?? digest([createdAt, payload]);
     if (payload.type === "message" && (payload.role === "user" || payload.role === "assistant")) {
       const role = payload.role;
       if (!Array.isArray(payload.content)) return;

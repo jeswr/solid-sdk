@@ -140,7 +140,7 @@ describe("capture with real ChatWriter and client credentials", () => {
       const message = { role: "assistant", content: texts.map((text) => ({ type: "text", text })) };
       return provider === "claude"
         ? { type: "assistant", timestamp: stamp, uuid: id, message }
-        : { type: "response_item", timestamp: stamp, payload: { ...message, type: "message", id } };
+        : { type: "response_item", timestamp: stamp, payload: { ...message, type: "message" } };
     };
     const texts = Array.from({ length: 20 }, (_, index) => `Block ${index}`);
     const retained = row("retained", texts);

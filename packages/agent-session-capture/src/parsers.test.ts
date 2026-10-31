@@ -66,7 +66,7 @@ describe("real-shaped redacted JSONL", () => {
       const message = { role: "assistant", content: texts.map((text) => ({ type: "text", text })) };
       return provider === "claude"
         ? claudeRow(message, { uuid: id })
-        : codexRow({ ...message, type: "message", id });
+        : codexRow({ ...message, type: "message" });
     };
     const texts = Array.from({ length: 20 }, (_, index) => `Block ${index}`);
     const first = row("first-row", texts);
@@ -83,6 +83,25 @@ describe("real-shaped redacted JSONL", () => {
       ),
     ).toEqual(parsed);
     expect(new Set(parsed.map((message) => message.createdAt))).toEqual(new Set([stamp]));
+  });
+
+  it("distinguishes native Codex messages by serialized fields and deduplicates repeated rows", () => {
+    const payload = {
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: "Repeated text" }],
+    };
+    const first = codexRow(payload);
+    const later = codexRow(payload, { timestamp: "2026-10-25T12:00:01.000Z" });
+    const user = codexRow({ ...payload, role: "user" });
+    const final = codexRow({ ...payload, phase: "final_answer" });
+    const entries = [first, later, user, final];
+    const parsed = parseCodexTranscript(jsonl([...entries, ...entries])).conversation.messages;
+    expect(parsed.map((message) => message.text)).toEqual(Array(4).fill("Repeated text"));
+    expect(new Set(parsed.map((message) => message.id)).size).toBe(4);
+    expect(parseCodexTranscript(jsonl([later, user, final])).conversation.messages).toEqual(
+      parsed.slice(1),
+    );
   });
 
   it("keeps stable IDs when a transcript grows and accepts fallback IDs and normalized zones", () => {
