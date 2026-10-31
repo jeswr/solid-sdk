@@ -77,9 +77,12 @@ function append(
 ) {
   if (typeof text !== "string" || text.length === 0) return;
   if (role === "tool" && !/^[A-Za-z][A-Za-z0-9_.:-]{0,127}$/.test(text)) return;
-  const messageId = digest(id);
-  if (seen.has(messageId)) return;
-  seen.add(messageId);
+  const key = digest(id);
+  if (seen.has(key)) return;
+  seen.add(key);
+  // ChatWriter sorts timestamp ties by ID. Prefix the retained block sequence,
+  // keeping the queue's 64-hex format and a 224-bit opaque source-identity suffix.
+  const messageId = `${messages.length.toString(16).padStart(8, "0")}${key.slice(8)}`;
   messages.push({ id: messageId, role, text: redactSecrets(text), createdAt });
 }
 

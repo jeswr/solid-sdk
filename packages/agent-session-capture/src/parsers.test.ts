@@ -57,6 +57,36 @@ describe("real-shaped redacted JSONL", () => {
     expect(JSON.stringify(parsed)).not.toMatch(/sk-|ghp_/);
   });
 
+  it.each([
+    "claude",
+    "codex",
+  ] as const)("preserves %s block and row order on timestamp ties, including duplicates and appends", (provider) => {
+    const parser = provider === "claude" ? parseClaudeTranscript : parseCodexTranscript;
+    const row = (id: string, texts: string[]) => {
+      const message = { role: "assistant", content: texts.map((text) => ({ type: "text", text })) };
+      return provider === "claude"
+        ? claudeRow(message, { uuid: id })
+        : codexRow({ ...message, type: "message", id });
+    };
+    const texts = Array.from({ length: 20 }, (_, index) => `Block ${index}`);
+    const first = row("first-row", texts);
+    const entries = [first, first, row("second-row", ["Next row"])];
+    const parsed = parser(jsonl(entries)).conversation.messages;
+    expect(parsed.map((message) => message.text)).toEqual([...texts, "Next row"]);
+    // ChatWriter orders timestamp ties by ID; listings need not follow write order.
+    expect(
+      [...parsed].reverse().sort((a, b) => (a.id as string).localeCompare(b.id as string)),
+    ).toEqual(parsed);
+    expect(parser(jsonl([first])).conversation.messages).toEqual(parsed.slice(0, texts.length));
+    expect(
+      parser(jsonl([...entries, row("appended-row", ["Appended"])])).conversation.messages.slice(
+        0,
+        parsed.length,
+      ),
+    ).toEqual(parsed);
+    expect(new Set(parsed.map((message) => message.createdAt))).toEqual(new Set([stamp]));
+  });
+
   it("keeps stable IDs when a transcript grows and accepts fallback IDs and normalized zones", () => {
     const first = claudeRow(
       { id: "message-1", role: "assistant", content: "Hi" },
@@ -69,7 +99,8 @@ describe("real-shaped redacted JSONL", () => {
       parseClaudeTranscript(jsonl([first]), "source").conversation.messages[0],
     );
     expect(parsed.conversation.messages[0]?.createdAt).toBe(stamp);
-    expect(parsed.conversation.messages[1]?.id).toBe(digest([1, 0]));
+    expect(parsed.conversation.messages[1]?.id).toMatch(/^[a-f0-9]{64}$/);
+    expect(parsed.conversation.messages[1]?.id).not.toBe(parsed.conversation.messages[0]?.id);
     const shell = parseCodexTranscript(
       jsonl([
         codexRow({ type: "local_shell_call", id: "shell-id", action: { command: "DROP_COMMAND" } }),

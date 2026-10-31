@@ -111,18 +111,17 @@ describe("capture with real ChatWriter and client credentials", () => {
       async list(container) {
         return [...transport.resources.keys()]
           .filter((url) => url.startsWith(container) && !url.slice(container.length).includes("/"))
+          .reverse()
           .map((url) => ({ url, isContainer: url.endsWith("/") }));
       },
     });
     const result = await writer.get("claude", digest(["claude", "claude-fixture-session"]));
-    expect(result.messages.map((m) => m.text).sort()).toEqual(
-      [
-        "Please inspect. [REDACTED TOKEN]",
-        "I will inspect it.",
-        "Read",
-        "The project looks good.",
-      ].sort(),
-    );
+    expect(result.messages.map((m) => m.text)).toEqual([
+      "Please inspect. [REDACTED TOKEN]",
+      "I will inspect it.",
+      "Read",
+      "The project looks good.",
+    ]);
   });
 
   it("reads hook stdin bytes and reuses the private MCP-12 JSON config", async () => {
