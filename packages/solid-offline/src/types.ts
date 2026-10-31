@@ -58,9 +58,9 @@ export interface NotificationsClientConfig {
   containers?: string[];
   /** Hot resources to subscribe to individually (e.g. the currently-open doc). */
   resources?: string[];
-  /** Maximum distinct subscribed topics. Default: 32. */
+  /** Maximum distinct subscribed topics. Default: 50. */
   maxChannels?: number;
-  /** Polling fallback interval (ms); zero disables polling. */
+  /** Polling fallback interval (ms). Default: 60 seconds; zero disables polling. */
   pollIntervalMs?: number;
 }
 

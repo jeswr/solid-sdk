@@ -188,7 +188,7 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     const nCfg = notificationsConfig();
     const topics = [...new Set([...(nCfg.containers ?? containers), ...(nCfg.resources ?? [])])]
       .filter((url) => config.storage?.isWithinStorage(url))
-      .slice(0, nCfg.maxChannels ?? 32);
+      .slice(0, nCfg.maxChannels ?? 50);
     if (!topics.length) return;
     startingNotifications = true;
     const abort = new AbortController();
@@ -198,7 +198,7 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
         config.notificationsClient ??
         createNotifications({ storage: config.storage, fetch: pageFetch ?? fetch });
       const subscription = await client.subscribe(topics, {
-        pollIntervalMs: nCfg.pollIntervalMs,
+        pollIntervalMs: nCfg.pollIntervalMs ?? 60_000,
         signal: abort.signal,
       });
       if (closed || abort.signal.aborted) {

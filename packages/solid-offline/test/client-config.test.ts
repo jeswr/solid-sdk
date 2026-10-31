@@ -261,6 +261,24 @@ describe('pod-notifications integration', () => {
     client.close();
   });
 
+  it('preserves the existing 50-topic cap and 60-second polling default', async () => {
+    stubBrowser();
+    const { storage, notificationsClient, subscription } = notificationHarness();
+    const resources = Array.from({ length: 55 }, (_, index) => `${storage.root}doc-${index}`);
+    const client = createOfflineClient({
+      storage,
+      notificationsClient,
+      notifications: { resources },
+    });
+    await client.register();
+    await vi.waitFor(() => expect(subscription.on).toHaveBeenCalledTimes(2));
+    expect(notificationsClient.subscribe).toHaveBeenCalledWith(resources.slice(0, 50), {
+      pollIntervalMs: 60_000,
+      signal: expect.any(AbortSignal),
+    });
+    client.close();
+  });
+
   it('derives opaque LWS container topics from a manual warm without a second crawl', async () => {
     stubBrowser();
     const storage = createMemoryStorage({
