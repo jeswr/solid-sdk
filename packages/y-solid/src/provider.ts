@@ -50,6 +50,8 @@ export class SolidPersistence {
   private updatesSinceCompaction = 0;
   private readonly pending: Uint8Array[] = [];
   private timer?: ReturnType<typeof setTimeout>;
+  private reconciliationTimer?: ReturnType<typeof setTimeout>;
+  private pollingReconciliationTimer?: ReturnType<typeof setInterval>;
   private writeTail: Promise<void> = Promise.resolve();
   private operationTail: Promise<unknown> = Promise.resolve();
   private readonly updateHandler: (update: Uint8Array, origin: unknown) => void;
@@ -118,19 +120,61 @@ export class SolidPersistence {
             return;
           }
           this.subscription = subscription;
+          const pending = new Set<ChangeEvent | undefined>();
+          let reconciling = false;
+          const scheduleReconciliation = (delayMs: number) => {
+            if (!this.current(generation)) return;
+            this.clearReconciliationTimer();
+            this.reconciliationTimer = setTimeout(() => {
+              this.reconciliationTimer = undefined;
+              reconcile();
+            }, delayMs);
+          };
           const reconcile = (change?: ChangeEvent) => {
             if (!this.current(generation)) return;
-            void this.serial(() =>
-              change ? this.ingestChange(change, generation) : this.ingest(generation),
-            )
-              .then(() => this.autoCompact())
-              .catch((cause) => this.report(cause));
+            pending.add(change);
+            if (reconciling) return;
+            this.clearReconciliationTimer();
+            reconciling = true;
+            let failed = false;
+            void this.serial(async () => {
+              for (const hint of pending) {
+                if (!this.current(generation)) return;
+                pending.delete(hint);
+                try {
+                  if (hint) await this.ingestChange(hint, generation);
+                  else await this.ingest(generation);
+                } catch (cause) {
+                  // Keep failed hints, including Creates not yet visible in listings.
+                  pending.add(hint);
+                  throw cause;
+                }
+              }
+            })
+              .then(() => {
+                if (this.current(generation)) this.autoCompact();
+              })
+              .catch((cause) => {
+                failed = true;
+                if (this.current(generation)) this.report(cause);
+              })
+              .finally(() => {
+                reconciling = false;
+                if (!this.current(generation)) return;
+                if (failed) scheduleReconciliation(1_000);
+                else if (pending.size) reconcile();
+              });
           };
           subscription.on("change", (change) => {
             // Create hints are read only after checking logical container membership.
             if (this.store.storage.isWithinStorage(change.object)) reconcile(change);
           });
           subscription.on("resync", () => reconcile());
+          // Poll subscriptions expose no baseline-completion signal. Periodic
+          // authoritative reads cover writes swallowed by a delayed quiet baseline.
+          if (subscription.channel === "poll") {
+            this.pollingReconciliationTimer = setInterval(() => reconcile(), 30_000);
+          }
         }
         await this.serial(() => this.ingest(generation));
         if (!this.current(generation)) return;
@@ -143,6 +187,7 @@ export class SolidPersistence {
         if (this.current(generation)) {
           this.active = false;
           this.synced = false;
+          this.clearReconciliationTimers();
           this.subscriptionAbort?.abort();
           await this.subscription?.close();
           this.subscription = undefined;
@@ -162,6 +207,19 @@ export class SolidPersistence {
 
   private current(generation: number): boolean {
     return this.active && !this.destroyed && generation === this.generation;
+  }
+
+  private clearReconciliationTimer(): void {
+    if (this.reconciliationTimer !== undefined) clearTimeout(this.reconciliationTimer);
+    this.reconciliationTimer = undefined;
+  }
+
+  private clearReconciliationTimers(): void {
+    this.clearReconciliationTimer();
+    if (this.pollingReconciliationTimer !== undefined) {
+      clearInterval(this.pollingReconciliationTimer);
+    }
+    this.pollingReconciliationTimer = undefined;
   }
 
   private async ingest(generation: number): Promise<number> {
@@ -384,6 +442,7 @@ export class SolidPersistence {
     this.connection = undefined;
     this.operationTail = Promise.resolve();
     this.compacting = undefined;
+    this.clearReconciliationTimers();
     this.subscriptionAbort?.abort();
     if (this.timer) {
       clearTimeout(this.timer);

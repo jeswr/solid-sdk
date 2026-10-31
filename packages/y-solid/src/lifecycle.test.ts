@@ -44,6 +44,113 @@ afterEach(() => {
 });
 
 describe.each(["solid", "lws"] as const)("%s notifications", (protocol) => {
+  it("reconciles a remote append swallowed by the initial polling baseline", async () => {
+    vi.useFakeTimers();
+    const { storage, container } = await setup(protocol);
+    const timers = new FakeTimers();
+    const notifications = createNotifications({ fetch: noFetch, storage, timers, now: timers.now });
+    const doc = new Y.Doc();
+    const reader = new YSolidProvider({ doc, storage, container, notifications });
+    try {
+      await reader.whenSynced;
+      await vi.advanceTimersByTimeAsync(30_000);
+      // The subscription exists, but its silent baseline has not run yet.
+      await new SolidUpdateStore({ storage, container }).appendUpdate(textUpdate("between"));
+      await timers.advanceBy(0);
+      await timers.advanceBy(30_000); // Unchanged membership produces no hint.
+      expect(doc.getText("text").toString()).toBe("");
+      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.waitFor(() => expect(doc.getText("text").toString()).toBe("between"));
+      await reader.flush();
+      expect(await count(storage, container)).toBe(1);
+    } finally {
+      reader.destroy();
+    }
+    expect(timers.pending).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("retries failed notification reads after recovery without another change or manual sync", async () => {
+    vi.useFakeTimers();
+    const { storage, container } = await setup(protocol);
+    const timers = new FakeTimers();
+    const notifications = createNotifications({ fetch: noFetch, storage, timers, now: timers.now });
+    const read = vi.fn(storage.read);
+    const doc = new Y.Doc();
+    const reader = new YSolidProvider({
+      doc,
+      storage: { ...storage, read },
+      container,
+      notifications,
+    });
+    const error = vi.fn();
+    reader.on("error", error);
+    try {
+      await reader.whenSynced;
+      await timers.advanceBy(0);
+      await new SolidUpdateStore({ storage, container }).appendUpdate(textUpdate("recovered"));
+      read.mockRejectedValue(new Error("temporarily offline"));
+      await timers.advanceBy(30_000);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(error).toHaveBeenCalled();
+      expect(doc.getText("text").toString()).toBe("");
+      const attempts = read.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(read.mock.calls.length).toBeGreaterThan(attempts);
+      read.mockImplementation(storage.read);
+      await timers.advanceBy(30_000); // The poller has already recorded the new membership.
+      await vi.advanceTimersByTimeAsync(1_000);
+      await vi.waitFor(() => expect(doc.getText("text").toString()).toBe("recovered"));
+      await reader.flush();
+      expect(await count(storage, container)).toBe(1);
+      read.mockClear();
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(read).not.toHaveBeenCalled();
+    } finally {
+      reader.destroy();
+    }
+    expect(timers.pending).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each([
+    "disconnect",
+    "destroy",
+  ] as const)("cancels pending reconciliation retries on %s", async (method) => {
+    vi.useFakeTimers();
+    const { storage, container } = await setup(protocol);
+    const timers = new FakeTimers();
+    const notifications = createNotifications({ fetch: noFetch, storage, timers, now: timers.now });
+    const read = vi.fn(storage.read);
+    const reader = new YSolidProvider({
+      doc: new Y.Doc(),
+      storage: { ...storage, read },
+      container,
+      notifications,
+    });
+    const error = vi.fn();
+    reader.on("error", error);
+    try {
+      await reader.whenSynced;
+      await timers.advanceBy(0);
+      await new SolidUpdateStore({ storage, container }).appendUpdate(textUpdate("remote"));
+      read.mockRejectedValue(new Error("offline"));
+      await timers.advanceBy(30_000);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(error).toHaveBeenCalled();
+      await reader[method]();
+      const attempts = read.mock.calls.length;
+      expect(timers.pending).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+      await timers.advanceBy(60_000);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(read).toHaveBeenCalledTimes(attempts);
+      expect(reader.synced).toBe(false);
+    } finally {
+      reader.destroy();
+    }
+  });
+
   it("ingests Create hints through the real notifications polling client without echoing", async () => {
     const { storage, container } = await setup(protocol);
     const timers = new FakeTimers();
@@ -273,6 +380,48 @@ it("rejects explicit live mode and invalid persistence policies", async () => {
   );
 });
 
+it("retains a resync arriving during an in-flight reconciliation", async () => {
+  const { storage, container } = await setup();
+  const handlers = new Map<string, (arg: never) => void>();
+  const subscription = await createNotifications({ fetch: noFetch, storage }).subscribe(
+    [container],
+    { pollIntervalMs: 0 },
+  );
+  subscription.on = ((event: string, handler: (arg: never) => void) => {
+    handlers.set(event, handler);
+    return () => handlers.delete(event);
+  }) as Subscription["on"];
+  const notifications: NotificationsClient = {
+    subscribe: async () => subscription,
+    plan: () => ({ channel: "none", reason: "test hints" }),
+  };
+  const store = new SolidUpdateStore({ storage, container });
+  const doc = new Y.Doc();
+  const provider = new SolidPersistence({ doc, store, notifications });
+  const started = deferred<void>();
+  const release = deferred<void>();
+  try {
+    await provider.whenSynced;
+    vi.spyOn(store, "loadUpdates").mockImplementationOnce(async () => {
+      started.resolve();
+      await release.promise;
+      return []; // This listing completed before the next invalidation.
+    });
+    handlers.get("resync")?.(new Date() as never);
+    await started.promise;
+    await store.appendUpdate(textUpdate("during"));
+    const applied = deferred<void>();
+    doc.on("update", () => applied.resolve());
+    handlers.get("resync")?.(new Date() as never);
+    release.resolve();
+    await applied.promise;
+    expect(doc.getText("text").toString()).toBe("during");
+  } finally {
+    release.resolve();
+    provider.destroy();
+  }
+});
+
 it("surfaces conditional deletion conflicts on automatic compaction", async () => {
   const { storage, container } = await setup();
   const del: StorageClient["delete"] = async (url) => {
@@ -361,6 +510,7 @@ it("preserves edits made while disconnected until reconnection", async () => {
 });
 
 it("reads a scoped Create before listing visibility and ignores another document's member", async () => {
+  vi.useFakeTimers();
   const { storage, container } = await setup();
   const handlers = new Map<string, (arg: never) => void>();
   const subscription = await createNotifications({ fetch: noFetch, storage }).subscribe(
@@ -393,14 +543,20 @@ it("reads a scoped Create before listing visibility and ignores another document
   );
   const applied = deferred<void>();
   doc.on("update", () => applied.resolve());
+  const error = deferred<Error>();
+  provider.on("error", (e) => error.resolve(e));
+  read.mockRejectedValueOnce(new Error("offline before listing visibility"));
   handlers.get("change")?.({
     type: "Create",
     objectKind: "resource",
     object: created.url,
   } as never);
+  expect((await error.promise).message).toBe("offline before listing visibility");
+  expect(doc.getText("text").toString()).toBe("");
+  await vi.advanceTimersByTimeAsync(1_000);
   await applied.promise;
   expect(doc.getText("text").toString()).toBe("early");
-  expect(read).toHaveBeenCalledTimes(1);
+  expect(read).toHaveBeenCalledTimes(2);
   const { url: otherContainer } = await storage.create(ROOT, null, {
     kind: "container",
     name: "other",
@@ -410,7 +566,7 @@ it("reads a scoped Create before listing visibility and ignores another document
   );
   handlers.get("change")?.({ type: "Create", objectKind: "resource", object: other.url } as never);
   await provider.sync(); // Wait behind the event ingestion operation.
-  expect(read).toHaveBeenCalledTimes(1);
+  expect(read).toHaveBeenCalledTimes(2);
   expect(doc.getText("text").toString()).toBe("early");
   provider.destroy();
 });
