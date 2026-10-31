@@ -20,6 +20,10 @@ export {
   type SolidMcpConfig,
   writesEnabled,
 } from "./auth.js";
+// Shared by session capture; keep config, DPoP and WAC behavior identical to stdio.
+export { createChatPodPort } from "./chat-tools.js";
+export { type CliConfig, loadCliConfig } from "./cli-config.js";
+export { createCliFetch } from "./client-credentials.js";
 export {
   listContainer,
   type PodChild,

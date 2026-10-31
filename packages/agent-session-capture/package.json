@@ -31,8 +31,13 @@
     "lint": "biome check .",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@jeswr/solid-chat-interop": "workspace:*",
+    "@jeswr/solid-mcp": "workspace:*"
+  },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
+    "@types/node": "^26.1.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9",
     "@vitest/coverage-v8": "^4.1.10"

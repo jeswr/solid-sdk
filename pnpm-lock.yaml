@@ -2510,10 +2510,20 @@ importers:
   packages/agent-registry: {}
 
   packages/agent-session-capture:
+    dependencies:
+      '@jeswr/solid-chat-interop':
+        specifier: workspace:*
+        version: link:../solid-chat-interop
+      '@jeswr/solid-mcp':
+        specifier: workspace:*
+        version: link:../solid-mcp
     devDependencies:
       '@biomejs/biome':
         specifier: ^2.5.1
         version: 2.5.3
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
       '@vitest/coverage-v8':
         specifier: ^4.1.10
         version: 4.1.10(vitest@4.1.10)
