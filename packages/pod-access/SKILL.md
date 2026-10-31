@@ -6,7 +6,8 @@ description: Work on @jeswr/pod-access, the pod sharing and permissions across a
 
 # @jeswr/pod-access
 
-T-050 implements Solid WAC/ACP sharing via `createAccessClient({ storage })`. Design of record:
+T-050/T-051 implement Solid WAC/ACP and LWS ODRL sharing via `createAccessClient`.
+Design of record:
 SDK core ADR-001 D4 and `ADR-003-storage-client.md` §9 in `solid-suite-planning/specs/sdk-core/`.
 Read this repository's `AGENTS.md` and the package README before edits.
 
@@ -28,11 +29,36 @@ definitions; multi-policy control revocation is unsupported. RevocationKey accep
 agent/group IRIs, `{ public: true }` and `{ authenticated: true }`. Explicit selectors also
 revoke blank-node rules, which have no stable grant id. Validate and snapshot selector keys
 before storage operations; shared WAC targets still fail closed.
-Purpose/expiry and ACP groups/reserved agent IRIs passed as WebIDs are unsupported.
+On Solid, purpose/expiry and ACP groups/reserved agent IRIs passed as WebIDs are unsupported.
 
-`effective()` uses only HEAD's caller `allow` booleans, without adding implied modes. It returns
+On Solid, `effective()` uses only HEAD's caller `allow` booleans, without adding implied modes. It returns
 null when absent; `public: []` means unknown because StorageClient exposes no anonymous modes.
-LWS access grants/requests and testing fakes are deferred to T-051.
+On LWS, `effective()` instead summarizes active grants for the injected caller identifier plus
+public grants, excluding purpose constraints. It returns null for absent/anonymous or changed
+identity. Testing fakes remain reserved.
+
+LWS uses available AccessGrantService/AccessRequestService feature endpoints advertising
+`lws:AccessProfile`. Request services work independently of grant discovery; grant operations
+also require `odrl-grants`. Require an explicit canonical `storageId` (description.id), which
+can differ from storage.root, and an `identity: () => string | null` callback for effective().
+Use only storage.create/read/listAll/delete. Every service, target, member and Location must
+pass storage.isWithinStorage. Never guess endpoints or reach into backends.
+
+Build with @jeswr/solid-odrl policyToJsonLd and project its permissions into the LWS
+AccessGrant/AccessRequest envelope with the fixed LWS context and application/lws+json.
+Read maps to read; write maps only to modify; append maps to create; explicit delete maps to
+delete. The builder's add-only append is deliberately converted to LWS create. Control,
+inheritance, authenticated and group selectors are unsupported. Solid rejects delete mode.
+Purpose maps to eq and expiry to inclusive dateTime lteq. Never drop an unknown restriction:
+reject context overrides, unknown fields, unsupported matchers/operators and malformed records.
+No remote JSON-LD context loading. Read only timezone-qualified dateTimes representable by Date.
+
+AccessRequest extends Grant with target and optional inbox; server resource URLs become ids.
+Listing can project multiple entries from one envelope. Revoke resolves ids/selectors through
+the grant listing and conditionally deletes each record with its own safe ETag. Validate all
+selected records before any deletion; refuse envelopes spanning other resources, or co-agents
+for agent/public selector revocation. Preserve public/modify/create/delete distinctions and
+snapshot mutable inputs before the first await. No retry or automatic request approval.
 
 This package is security critical. Keep coverage thresholds at 100% and add behavioral and
 adversarial tests with implementation changes. Tests use the public memory storage backend
