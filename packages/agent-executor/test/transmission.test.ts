@@ -377,6 +377,75 @@ describe("asynchronous send boundary", () => {
     );
     expect(h.binding.send.transmit).toHaveBeenCalledTimes(1);
   });
+  it.each([
+    "lock",
+    "read",
+    "put",
+    "audit",
+    "disposition",
+    "receipt",
+  ])("a settled rejection releases pending state after %s failure", async (failure) => {
+    for (const replacement of [false, true]) {
+      const h = harness();
+      const e = await h.enqueue();
+      const error = new Error(`${failure} unavailable`);
+      const lookup = vi.fn(async () => ({ outcome: "absent" as const }));
+      Object.assign(h.binding.send, { finalAbsence: true, lookup });
+      vi.mocked(h.binding.send.transmit).mockImplementationOnce(async () => {
+        if (failure === "lock") vi.spyOn(h.transmissions, "exclusive").mockRejectedValueOnce(error);
+        if (failure === "read") vi.spyOn(h.transmissions, "get").mockRejectedValueOnce(error);
+        if (failure === "put") vi.spyOn(h.transmissions, "put").mockRejectedValueOnce(error);
+        if (failure === "audit") vi.spyOn(h.audit, "append").mockRejectedValueOnce(error);
+        if (failure === "disposition")
+          vi.spyOn(h.proposals, "writeDisposition").mockRejectedValueOnce(error);
+        if (failure === "receipt")
+          vi.spyOn(h.proposals, "emitReceipt").mockRejectedValueOnce(error);
+        h.state.at = new Date(h.clock.now().getTime() + 1).toISOString();
+        return { outcome: "rejected", detail: "not accepted" };
+      });
+      await expect(h.executor.transmit(e.proposal.id)).rejects.toBe(error);
+      const unresolved = ["lock", "read", "put"].includes(failure);
+      expect(h.records.get(e.proposal.id)).toMatchObject({
+        status: unresolved ? "attempting" : "not-sent",
+        attempts: 1,
+        wireDigest: e.wireDigest,
+      });
+      const retry = replacement ? createExecutor(h.options) : h.executor;
+      expect(await retry.transmit(e.proposal.id)).toMatchObject({ status: "sent" });
+      expect(lookup).toHaveBeenCalledTimes(unresolved ? 1 : 0);
+      expect(h.records.get(e.proposal.id)).toMatchObject({ status: "sent", attempts: 2 });
+      expect(h.binding.send.transmit).toHaveBeenCalledTimes(2);
+    }
+  });
+  it.each([
+    "audit",
+    "disposition",
+    "receipt",
+  ])("late rejection releases shared pending state despite %s failure", async (failure) => {
+    vi.useFakeTimers();
+    const h = harness();
+    const e = await h.enqueue();
+    const pending = deferred<SendResult>();
+    vi.mocked(h.binding.send.transmit).mockReturnValueOnce(pending.promise);
+    const ex = createExecutor({ ...h.options, timeoutMs: 10 });
+    const sending = ex.transmit(e.proposal.id);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(await sending).toMatchObject({ status: "uncertain" });
+    const error = new Error(`${failure} unavailable`);
+    if (failure === "audit") vi.spyOn(h.audit, "append").mockRejectedValueOnce(error);
+    if (failure === "disposition")
+      vi.spyOn(h.proposals, "writeDisposition").mockRejectedValueOnce(error);
+    if (failure === "receipt") vi.spyOn(h.proposals, "emitReceipt").mockRejectedValueOnce(error);
+    h.state.at = new Date(h.clock.now().getTime() + 1).toISOString();
+    pending.resolve({ outcome: "rejected", detail: "late refusal" });
+    await expect(ex.drain()).rejects.toBe(error);
+    expect(h.records.get(e.proposal.id)).toMatchObject({ status: "not-sent", attempts: 1 });
+    await expect(ex.transmit(e.proposal.id)).rejects.toThrow("late settlement");
+    expect(await createExecutor(h.options).transmit(e.proposal.id)).toMatchObject({
+      status: "sent",
+    });
+    expect(h.binding.send.transmit).toHaveBeenCalledTimes(2);
+  });
   it("outcome receipt retains the original conversation if the proposal disappears", async () => {
     const h = harness();
     const e = await h.enqueue();

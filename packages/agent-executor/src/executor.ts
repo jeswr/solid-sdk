@@ -370,30 +370,30 @@ export function createExecutor(options: ExecutorOptions) {
       });
     });
     async function settle(value: unknown): Promise<Disposition> {
-      return o.transmissions.exclusive(async () => {
-        const current = await o.transmissions.get(id);
-        if (current?.status === "sent") {
-          pending.delete(id);
-          return finish(current);
-        }
-        const outcome = providerResult(value, false);
-        const status =
-          outcome === "accepted"
-            ? "sent"
-            : outcome === "rejected" && !resend
-              ? "not-sent"
-              : "uncertain";
-        const result = await finish({
-          ...record,
-          status,
-          updatedAt: o.clock.now().toISOString(),
-          ...(outcome === "accepted"
-            ? { providerRef: (value as SendResult & { providerRef: string }).providerRef }
-            : {}),
+      try {
+        return await o.transmissions.exclusive(async () => {
+          const current = await o.transmissions.get(id);
+          if (current?.status === "sent") return finish(current);
+          const outcome = providerResult(value, false);
+          const status =
+            outcome === "accepted"
+              ? "sent"
+              : outcome === "rejected" && !resend
+                ? "not-sent"
+                : "uncertain";
+          return finish({
+            ...record,
+            status,
+            updatedAt: o.clock.now().toISOString(),
+            ...(outcome === "accepted"
+              ? { providerRef: (value as SendResult & { providerRef: string }).providerRef }
+              : {}),
+          });
         });
+      } finally {
+        // The provider call has settled, even if a lock, durable write, audit or receipt failed.
         pending.delete(id);
-        return result;
-      });
+      }
     }
     let value: unknown;
     try {
