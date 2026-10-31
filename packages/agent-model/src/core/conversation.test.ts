@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { expect, it } from "vitest";
 import {
+  type ConversationEvent,
   type ConversationState,
   openConversation,
   type TransmissionSettlement,
@@ -63,6 +64,55 @@ it("records multiple proposals without requiring an agreement", () => {
   expect(result).toEqual({
     ok: true,
     state: { ...open(), transmissions: { [event.proposal]: event, [next.proposal]: next } },
+  });
+});
+
+it.each([
+  "message",
+  "expire",
+] as const)("preserves activity after a newer %s when recovering and replaying a settlement", (type) => {
+  const laterAt = "2026-10-31T12:01:00.000Z";
+  const activity: ConversationEvent =
+    type === "expire"
+      ? { type, at: laterAt }
+      : {
+          type,
+          direction: "in",
+          at: laterAt,
+          message: {
+            profile: "urn:profile",
+            configuration: "urn:configuration",
+            id: "urn:message",
+            conversation: event.conversation,
+            kind: "describe",
+            from: {},
+            createdAt: laterAt,
+            expiresAt: "2026-10-31T13:00:00.000Z",
+            body: {},
+          },
+        };
+  const latest = transition(open(), activity, DEFAULT_LIMITS);
+  if (!latest.ok) throw new Error(latest.detail);
+  const before = structuredClone(latest.state);
+  const recovered = transition(latest.state, event, DEFAULT_LIMITS);
+  expect(recovered).toEqual({
+    ok: true,
+    state: { ...latest.state, transmissions: { [event.proposal]: event } },
+  });
+  expect(latest.state).toEqual(before);
+  if (!recovered.ok) throw new Error(recovered.detail);
+  expect(transition(recovered.state, event, DEFAULT_LIMITS)).toEqual(recovered);
+});
+
+it.each([
+  ["2026-10-31T12:01:00.000Z", "2026-10-31T12:01:00.000Z"],
+  ["2026-10-31T08:01:00.000-04:00", "2026-10-31T08:01:00.000-04:00"],
+  ["2026-10-31T13:00:00.000+02:00", at],
+])("uses the later instant for settlement activity at %s", (settledAt, updatedAt) => {
+  const settlement = { ...event, at: settledAt };
+  expect(transition(open(), settlement, DEFAULT_LIMITS)).toEqual({
+    ok: true,
+    state: { ...open(), updatedAt, transmissions: { [event.proposal]: settlement } },
   });
 });
 

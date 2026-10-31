@@ -155,7 +155,8 @@ export function transition(
       state: {
         ...state,
         transmissions: { ...state.transmissions, [event.proposal]: event },
-        updatedAt: event.at,
+        // Recovery can deliver a settlement after newer conversation activity.
+        updatedAt: Date.parse(event.at) > Date.parse(state.updatedAt) ? event.at : state.updatedAt,
       },
     };
   }
