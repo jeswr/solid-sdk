@@ -153,6 +153,7 @@ describe.each(["solid", "lws"] as const)("%s log mode", (protocol) => {
     const result = await compactor.compact(Y.mergeUpdates(loaded.map((r) => r.update)), loaded);
     expect(order).toEqual(["create", "delete", "delete"]);
     expect(del.mock.calls).toEqual(loaded.map((r) => [r.url, { ifMatch: r.etag }]));
+    expect(result.deletedUrls).toEqual(loaded.map((r) => r.url));
     expect(decodeRecord(await (await storage.read(result.url)).bytes(), result.url).kind).toBe(
       "snapshot",
     );
@@ -206,8 +207,102 @@ describe.each(["solid", "lws"] as const)("%s log mode", (protocol) => {
     const { storage, container, store } = await setup(protocol);
     await store.appendUpdate(state("keep").update);
     const loaded = (await store.loadUpdates()).map((r) => ({ ...r, etag }));
-    await store.compact(loaded[0]?.update as Uint8Array, loaded);
+    const result = await store.compact(loaded[0]?.update as Uint8Array, loaded);
+    expect(result.deletedUrls).toEqual([]);
     expect(await entries(storage, container)).toHaveLength(2);
+  });
+
+  it.each([404, 410])("reports folded records already absent at deletion (%s)", async (status) => {
+    const { storage, container, store: writer } = await setup(protocol);
+    await writer.appendUpdate(state("gone").update);
+    const loaded = await writer.loadUpdates();
+    const store = new SolidUpdateStore({
+      container,
+      storage: {
+        ...storage,
+        delete: async (url, options) => {
+          await storage.delete(url, options);
+          throw new StorageError("not-found", { url, method: "DELETE", status });
+        },
+      },
+    });
+    const result = await store.compact(loaded[0]?.update as Uint8Array, loaded);
+    expect(result.deletedUrls).toEqual(loaded.map((r) => r.url));
+    expect((await entries(storage, container)).map((e) => e.url)).toEqual([result.url]);
+  });
+
+  it.each([
+    null,
+    'W/"weak"',
+    "*",
+  ])("does not recount retained records after automatic compaction (%s)", async (etag) => {
+    const { storage, container, store: writer } = await setup(protocol);
+    const retained = new Set<string>();
+    for (const key of ["a", "b"]) {
+      retained.add((await writer.appendUpdate(state(key).update)).url);
+    }
+    await writer.appendUpdate(state("deletable").update);
+    const read = vi.fn(async (...args: Parameters<StorageClient["read"]>) => {
+      const result = await storage.read(...args);
+      return { ...result, etag: retained.has(args[0]) ? etag : result.etag };
+    });
+    const store = new SolidUpdateStore({ storage: { ...storage, read }, container });
+    const compact = vi.spyOn(store, "compact");
+    const doc = new Y.Doc();
+    const provider = new SolidPersistence({
+      doc,
+      store,
+      compaction: { afterUpdates: 2, minIntervalMs: 0 },
+    });
+    try {
+      await provider.whenSynced;
+      const snapshot = await provider.compact();
+      expect(snapshot).toBeDefined();
+      expect(compact).toHaveBeenCalledOnce();
+      expect((await entries(storage, container)).map((e) => e.url).sort()).toEqual(
+        [...retained, snapshot?.url].sort(),
+      );
+      read.mockClear();
+      for (let round = 0; round < 3; round++) {
+        expect(await provider.sync()).toBe(0);
+      }
+      expect(read).not.toHaveBeenCalled();
+      expect(compact).toHaveBeenCalledOnce();
+      expect(await entries(storage, container)).toHaveLength(3);
+      expect(doc.getMap("m").toJSON()).toEqual({ a: "a", b: "b", deletable: "deletable" });
+    } finally {
+      provider.destroy();
+    }
+  });
+
+  it("keeps retained records first encountered during compaction known", async () => {
+    const { storage, container, store: writer } = await setup(protocol);
+    const store = new SolidUpdateStore({
+      container,
+      storage: {
+        ...storage,
+        read: async (...args) => ({ ...(await storage.read(...args)), etag: null }),
+      },
+    });
+    const compact = vi.spyOn(store, "compact");
+    const doc = new Y.Doc();
+    const provider = new SolidPersistence({
+      doc,
+      store,
+      compaction: { afterUpdates: 2, minIntervalMs: 0 },
+    });
+    try {
+      await provider.whenSynced;
+      await writer.appendUpdate(state("unseen-a").update);
+      await writer.appendUpdate(state("unseen-b").update);
+      expect(await provider.compact()).toBeDefined();
+      expect(await provider.sync()).toBe(0);
+      expect(compact).toHaveBeenCalledOnce();
+      expect(await entries(storage, container)).toHaveLength(3);
+      expect(doc.getMap("m").toJSON()).toEqual({ "unseen-a": "unseen-a", "unseen-b": "unseen-b" });
+    } finally {
+      provider.destroy();
+    }
   });
 
   it("fails closed before synced after bounded disappearing-member rounds", async () => {
@@ -365,8 +460,10 @@ describe.each(["solid", "lws"] as const)("%s observation retention", (protocol) 
     const { url } = await store.appendUpdate(state("retired").update);
     const record = await store.readStoredUpdate(url);
     await storage.delete(url, { ifMatch: record?.etag as string });
-    if (operation === "compact") await store.compact(record?.update as Uint8Array, [url]);
-    else await store[operation](url);
+    if (operation === "compact") {
+      const result = await store.compact(record?.update as Uint8Array, [url]);
+      expect(result.deletedUrls).toEqual([url]);
+    } else await store[operation](url);
     expect(observations(store).size).toBe(0);
   });
 

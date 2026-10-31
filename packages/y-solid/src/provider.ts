@@ -390,7 +390,8 @@ export class SolidPersistence {
         const count = this.updatesSinceCompaction;
         const created = await this.store.compact(snapshot, stored);
         if (!this.current(generation)) return created;
-        for (const { url } of stored) this.knownUrls.delete(url);
+        for (const { url } of stored) this.knownUrls.add(url);
+        for (const url of created.deletedUrls) this.knownUrls.delete(url);
         this.knownUrls.add(created.url);
         this.updatesSinceCompaction = Math.max(0, this.updatesSinceCompaction - count);
         this.lastCompaction = Date.now();

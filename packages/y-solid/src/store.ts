@@ -220,13 +220,17 @@ export class SolidUpdateStore {
     this.observed.delete(record.url);
   }
 
-  /** Only retire the exact versions folded by the caller, after a confirmed snapshot create. */
+  /**
+   * Only retire the exact versions folded by the caller, after a confirmed snapshot create.
+   * Return folded URLs confirmed deleted or already absent alongside the snapshot URL.
+   */
   async compact(
     merged: Uint8Array,
     obsolete: readonly (string | StoredUpdate)[],
-  ): Promise<{ url: string }> {
+  ): Promise<{ url: string; deletedUrls: string[] }> {
     // Validate every target before creating anything. Capture validators before the create.
     const records: ObservedUpdate[] = [];
+    const deletedUrls: string[] = [];
     for (const item of obsolete) {
       let url: string;
       try {
@@ -234,7 +238,9 @@ export class SolidUpdateStore {
       } catch (cause) {
         // Another compactor may already have retired the version we folded.
         if (missing(cause)) {
-          this.observed.delete(this.target(typeof item === "string" ? item : item.url));
+          const missingUrl = this.target(typeof item === "string" ? item : item.url);
+          this.observed.delete(missingUrl);
+          deletedUrls.push(missingUrl);
           continue;
         }
         throw cause;
@@ -246,8 +252,11 @@ export class SolidUpdateStore {
     const created = await this.create(merged, "snapshot");
     for (const record of records) {
       // No validator means retain the original. Never guess '*' or a later HEAD's ETag.
-      if (record.url !== created.url && validator(record.etag)) await this.deleteObserved(record);
+      if (record.url !== created.url && validator(record.etag)) {
+        await this.deleteObserved(record);
+        deletedUrls.push(record.url);
+      }
     }
-    return created;
+    return { ...created, deletedUrls };
   }
 }
