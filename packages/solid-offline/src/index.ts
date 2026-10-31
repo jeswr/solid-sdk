@@ -1,25 +1,9 @@
-/**
- * `solid-offline` — framework-agnostic page client (P0–P2).
- *
- * `createOfflineClient(config)` returns a handle whose `register()`:
- *   1. registers the service worker (`navigator.serviceWorker.register`),
- *   2. opens a `BroadcastChannel` for `{url, event:'updated'}` invalidation events,
- *   3. sets up page↔SW `postMessage` and hands the SW its config,
- *   4. (P2) starts the PAGE-DRIVEN warmer if `warm` is configured.
- *
- * PAGE-DRIVEN WARMER (P2, decision 1): the warmer runs in the page and issues its
- * fetches through the page's own (DPoP-decorated) `fetch`, so the SW merely
- * intercepts + caches them. The SW is NEVER authenticated. Notifications (P3) are
- * still config-only.
- *
- * NO React. (The `solid-offline/react` entry is P5.)
- */
-
+// AUTHORED-BY Codex GPT-6.1-Sol
+/** @jeswr/solid-offline — credential-free worker + authenticated page-side storage. */
+import { createNotifications, type Subscription } from '@jeswr/pod-notifications';
 import { type PurgeResult, purgeForWebId } from './logout.js';
-import { createNotificationsClient, type NotificationsClient } from './notifications.js';
 import { createStatusSurface, type OfflineStatusSurface } from './status.js';
 import type {
-  NotificationFrame,
   NotificationsClientConfig,
   OfflineClient,
   OfflineClientConfig,
@@ -61,21 +45,6 @@ export type { InvalidateDeps, InvalidateOutcome, SweepResult } from './invalidat
 export { handleNotification, resyncSweep } from './invalidation.js';
 export type { CacheStorageLike, PurgeDeps, PurgeResult } from './logout.js';
 export { purgeForWebId } from './logout.js';
-export type {
-  NotificationsClient,
-  NotificationsConfig,
-  NotificationsDeps,
-  SocketFactory,
-  SocketLike,
-} from './notifications.js';
-export {
-  backoffDelay,
-  createNotificationsClient,
-  discoverSubscriptionUrl,
-  parseFrame,
-  storageDescriptionFromLink,
-  subscribe,
-} from './notifications.js';
 // P5 — WebID cache scoping (§7), logout-purge, and the status surface.
 export {
   ANONYMOUS_SCOPE,
@@ -160,7 +129,9 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
   let channel: BroadcastChannel | undefined;
   let registration: ServiceWorkerRegistration | undefined;
   let warmer: WarmController | undefined;
-  let notifications: NotificationsClient | undefined;
+  let notifications: Subscription | undefined;
+  let startingNotifications = false;
+  let notificationsAbort: AbortController | undefined;
   let status: OfflineStatusSurface | undefined;
   // The `controllerchange` listener `register()` adds. Kept so `close()` can
   // remove it — otherwise a delayed controllerchange after logout/account-switch
@@ -202,61 +173,66 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     target?.postMessage(message);
   }
 
-  /**
-   * Start the page-side notifications client (P3, decision 5: the socket lives in
-   * the PAGE). Discovers + subscribes per-container (capped by the warm budget),
-   * opens sockets, and forwards each change frame to the SW for invalidation.
-   * Reconnect/backoff/poll/resync are all driven from here via `postToWorker`.
-   */
-  function startNotifications(containers: string[]): NotificationsClient | undefined {
-    if (closed) return undefined; // closed during a delayed warm .then() — don't start
-    if (notifications) return notifications;
-    if (!config.notifications) return undefined;
-    if (typeof WebSocket === 'undefined') return undefined; // non-browser context
+  /** Shared pod-notifications owns discovery, transports, polling and reconnect. */
+  async function startNotifications(containers: string[]): Promise<void> {
+    if (
+      closed ||
+      notifications ||
+      startingNotifications ||
+      !config.notifications ||
+      !config.storage
+    )
+      return;
     const pageFetch = resolvePageFetch();
-    if (!pageFetch) return undefined;
+    if (!pageFetch && !config.notificationsClient) return;
     const nCfg = notificationsConfig();
-    const topics = nCfg.containers ?? containers;
-    if (topics.length === 0 && !nCfg.resources?.length) return undefined;
-    notifications = createNotificationsClient(
-      {
-        fetch: pageFetch,
-        socketFactory: (url) =>
-          new WebSocket(url) as unknown as import('./notifications.js').SocketLike,
-        postToWorker: (frame: NotificationFrame) => postToWorker({ type: 'notification', frame }),
-        requestResync: () => postToWorker({ type: 'resync' }),
-        requestPoll: () => postToWorker({ type: 'poll' }),
-        isOnline: () => (typeof navigator === 'undefined' ? true : navigator.onLine),
-      },
-      {
-        containers: topics,
-        ...(nCfg.resources ? { resources: nCfg.resources } : {}),
-        ...(nCfg.maxChannels !== undefined ? { maxChannels: nCfg.maxChannels } : {}),
-        ...(nCfg.backoffBaseMs !== undefined ? { backoffBaseMs: nCfg.backoffBaseMs } : {}),
-        ...(nCfg.backoffMaxMs !== undefined ? { backoffMaxMs: nCfg.backoffMaxMs } : {}),
-        ...(nCfg.pollIntervalMs !== undefined ? { pollIntervalMs: nCfg.pollIntervalMs } : {}),
-      },
-    );
-    void notifications.start();
-    return notifications;
+    const topics = [...new Set([...(nCfg.containers ?? containers), ...(nCfg.resources ?? [])])]
+      .filter((url) => config.storage?.isWithinStorage(url))
+      .slice(0, nCfg.maxChannels ?? 32);
+    if (!topics.length) return;
+    startingNotifications = true;
+    const abort = new AbortController();
+    notificationsAbort = abort;
+    try {
+      const client =
+        config.notificationsClient ??
+        createNotifications({ storage: config.storage, fetch: pageFetch ?? fetch });
+      const subscription = await client.subscribe(topics, {
+        pollIntervalMs: nCfg.pollIntervalMs,
+        signal: abort.signal,
+      });
+      if (closed || abort.signal.aborted) {
+        await subscription.close();
+        return;
+      }
+      notifications = subscription;
+      subscription.on('change', (change) => {
+        if (!closed && !abort.signal.aborted) {
+          const { type, object, target, origin, state } = change;
+          postToWorker({ type: 'notification', frame: { type, object, target, origin, state } });
+        }
+      });
+      subscription.on('resync', () => {
+        if (!closed && !abort.signal.aborted) postToWorker({ type: 'resync' });
+      });
+    } catch {
+      // Registration and reads remain usable if notifications are unavailable.
+    } finally {
+      if (notificationsAbort === abort) startingNotifications = false;
+    }
   }
 
-  /**
-   * Start the page-driven warmer (P2). Uses the page's own fetch (config.fetch
-   * if supplied — typically the app's DPoP-decorated fetch — else the global
-   * `fetch`), so the SW intercepts + caches; the SW is never authenticated.
-   */
+  /** Warm through the authenticated page-side storage client. */
   function startWarmer(): WarmController | undefined {
     if (closed) return undefined; // closed during/after register() — don't start a crawl
     if (warmer) return warmer;
     if (config.warm === false || config.warm === undefined) return undefined;
+    if (!config.storage) return undefined;
     if (!config.webId) return undefined; // no identity → nothing to warm
-    const pageFetch = resolvePageFetch();
-    if (!pageFetch) return undefined;
     const warmCfg = config.warm === true ? {} : config.warm;
     warmer = createWarmController({
       webId: config.webId,
-      deps: { fetch: pageFetch },
+      deps: { storage: config.storage },
       budget: resolveBudget(warmCfg.budget),
       warmOnLogin: warmCfg.warmOnLogin,
       rewarmOnReconnect: warmCfg.rewarmOnReconnect,
@@ -299,10 +275,19 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     // the page's fetch anyway (decision 1: it authenticates nothing) — only the
     // page-side warmer/notifications do. We drop `fetch` (and any other function
     // value, defensively) so the config is always cloneable.
-    const { fetch: _pageFetch, ...cloneableConfig } = config;
+    const {
+      fetch: _pageFetch,
+      storage: _storage,
+      notificationsClient: _notificationsClient,
+      ...cloneableConfig
+    } = config;
     const message: PageToWorkerMessage = {
       type: 'config',
-      config: { ...cloneableConfig, channelName: resolved.channelName },
+      config: {
+        ...cloneableConfig,
+        storageRoot: config.storage?.root ?? config.storageRoot,
+        channelName: resolved.channelName,
+      },
     };
     target.postMessage(message);
   }
@@ -364,7 +349,7 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
         // + the client still subscribe the explicit `resources`). This is the fix
         // for a resources-only config, which previously never started when
         // auto-warm was off/unavailable.
-        startNotifications(nCfg.containers ?? []);
+        void startNotifications(nCfg.containers ?? []);
       } else {
         // #13: do NOT force a fresh full crawl here. `startWarmer()` already
         // scheduled the post-login idle warm; REUSE its result via `result()` so
@@ -382,7 +367,7 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
           void w
             .result()
             .then((result) => {
-              startNotifications(containersFromWarm(result));
+              void startNotifications(containersFromWarm(result));
             })
             .catch(() => {
               // The scheduled warm failed/was stopped before producing topics.
@@ -401,7 +386,7 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     const seen = new Set<string>();
     for (const visit of result.visits) {
       try {
-        if (new URL(visit.url).pathname.endsWith('/')) seen.add(visit.url);
+        if (visit.container) seen.add(visit.url);
       } catch {
         /* skip unparseable */
       }
@@ -420,7 +405,7 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     // so the only signal to derive topics is this manual `warm()`).
     if (config.notifications && !notifications) {
       if (!hasExplicitNotificationTopics(notificationsConfig())) {
-        startNotifications(containersFromWarm(result));
+        void startNotifications(containersFromWarm(result));
       }
     }
     return result;
@@ -451,8 +436,8 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
    * `indexedDB` globals are same-origin) — no SW round-trip needed.
    */
   async function logout(): Promise<PurgeResult> {
-    const result = await purgeForWebId(config.webId);
     close();
+    const result = await purgeForWebId(config.webId);
     return result;
   }
 
@@ -466,7 +451,10 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     channel = undefined;
     warmer?.stop();
     warmer = undefined;
-    notifications?.stop();
+    notificationsAbort?.abort();
+    notificationsAbort = undefined;
+    startingNotifications = false;
+    void notifications?.close().catch(() => undefined);
     notifications = undefined;
     status?.close();
     status = undefined;

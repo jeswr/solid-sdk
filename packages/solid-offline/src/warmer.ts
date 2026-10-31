@@ -1,39 +1,15 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
 /**
- * Proactive cache warmer (P2, §3 + decisions 1 & 6).
- *
- * ────────────────────────────────────────────────────────────────────────────
- * PAGE-DRIVEN — the SW is NEVER authenticated (decision 1):
- *   The warmer runs in the PAGE. It issues every fetch through the page's normal
- *   (already-DPoP-decorated) global `fetch`, so the service worker (P1) merely
- *   intercepts and caches the responses. We never put a key or token in the SW,
- *   and we never ask the SW to authenticate. The warmer's only job is to *cause*
- *   the right authenticated reads to flow through the SW.
- * ────────────────────────────────────────────────────────────────────────────
- *
- * Strategy: a bounded BFS from seeds (WebID profile → pim:storage root →
- * Type Index public+private → ACLs → inbox) over `ldp:contains`, Type-Index-first
- * (decision 6). ACL-aware: a 403 on a child is caught, negative-cached, and its
- * subtree pruned — never surfaced as an error. Budget-bounded (decision 6):
- * `maxResources`, `maxBytes`, `maxDepth`, `concurrency`. Large binaries are
- * listed/metadata-warmed only (bytes fetched lazily on demand).
- *
- * The engine is written against a small injected dependency set (a `fetch`, a
- * negative-cache sink, a clock) so the full traversal is unit-testable with
- * mocks — no browser, no SW lifecycle. Browser-only triggers (idle scheduling,
- * reconnect listeners) live at the bottom and are excluded from coverage.
+ * Bounded page-side cache warming through StorageClient. The client supplied by
+ * the app carries authentication; the worker only intercepts/caches its reads.
+ * Traverse with listAll so backend pagination and opaque LWS identifiers work.
+ * Profile/type-index seed parsing remains local, with all targets scope-filtered.
  */
 
-import {
-  aclUrlFor,
-  containerChildren,
-  deriveSeeds,
-  isContainer,
-  type Seed,
-  type SeedKind,
-  typeIndexTargets,
-  userCanRead,
-} from './warmer-rdf.js';
+import { type ReadResult, type StorageClient, StorageError } from '@jeswr/storage-client';
+import { policyResponse } from './storage.js';
+import { deriveSeeds, type Seed, type SeedKind, typeIndexTargets } from './warmer-rdf.js';
 
 /** Fully-resolved warmer budget (decision 6 defaults). */
 export interface ResolvedWarmBudget {
@@ -69,11 +45,9 @@ const BINARY_TYPE_PREFIXES = [
 const LARGE_RESOURCE_BYTES = 5_000_000;
 
 export interface WarmDeps {
-  /**
-   * The PAGE's fetch (already DPoP-decorated). The warmer ALWAYS uses this so the
-   * SW intercepts + caches; the warmer itself never authenticates.
-   */
-  fetch: typeof fetch;
+  /** Authenticated page-side client; all reads stay inside its storage boundary. */
+  storage: StorageClient;
+  signal?: AbortSignal;
   /**
    * Record a negative-cache entry for a pruned/forbidden URL. In production this
    * is a no-op when the SW already negative-cached the 403/404 it observed; the
@@ -88,6 +62,8 @@ export interface WarmDeps {
 }
 
 export interface WarmVisit {
+  /** Backend-reported kind; LWS containers need not end in a slash. */
+  container?: boolean;
   url: string;
   kind: SeedKind | 'child';
   depth: number;
@@ -116,6 +92,8 @@ interface FrontierItem {
   url: string;
   kind: SeedKind | 'child';
   depth: number;
+  size?: number | null;
+  contentType?: string | null;
 }
 
 /** Internal mutable crawl state. */
@@ -191,10 +169,13 @@ export async function warm(
 
   // 1. Get the profile (seed root). Fetch it through the page fetch so it's cached too.
   let profile = profileTurtle;
-  if (profile === undefined) {
+  if (profile === undefined && !deps.signal?.aborted) {
     try {
-      const res = await deps.fetch(rdfRequest(webId));
-      if (res.ok) {
+      const res = await deps.storage.read(webId.split('#')[0] ?? webId, {
+        accept: 'text/turtle',
+        signal: deps.signal,
+      });
+      if (res.status === 200) {
         profile = await res.text();
         recordVisit(state, deps, {
           url: webId,
@@ -233,13 +214,14 @@ export async function warm(
     if (depth > budget.maxDepth) break;
     const next: FrontierItem[] = [];
     await drain(current, budget.concurrency, async (item) => {
+      if (deps.signal?.aborted || !deps.storage.isWithinStorage(item.url)) return;
       if (budgetExceeded(state, budget)) {
         state.budgetHit = true;
         return;
       }
       const discovered = await visit(item, state, deps, budget);
       for (const d of discovered) {
-        if (d.depth <= budget.maxDepth) enqueue(state, next, d.url, d.kind, d.depth);
+        if (d.depth <= budget.maxDepth) enqueue(state, next, d.url, d.kind, d.depth, d);
       }
     });
     current = next;
@@ -271,10 +253,11 @@ function enqueue(
   url: string,
   kind: SeedKind | 'child',
   depth: number,
+  metadata?: Pick<FrontierItem, 'size' | 'contentType'>,
 ): void {
   if (state.enqueued.has(url) || state.negative.has(url)) return;
   state.enqueued.add(url);
-  frontier.push({ url, kind, depth });
+  frontier.push({ url, kind, depth, ...metadata });
 }
 
 /**
@@ -297,6 +280,13 @@ async function visit(
 ): Promise<FrontierItem[]> {
   const discovered: FrontierItem[] = [];
 
+  const listedSkip = sizeSkipReason(item.contentType ?? null, item.size?.toString() ?? null);
+  if (listedSkip) {
+    state.visited += 1;
+    recordVisit(state, deps, { ...item, status: 200, bytes: item.size ?? 0, skipped: listedSkip });
+    return discovered;
+  }
+
   // #9: HEAD-probe first. A binary / declared-large resource is recorded
   // metadata-only and short-circuits here, so the byte-pulling GET is never issued.
   if (await probeHeadForSkip(item, state, deps)) return discovered;
@@ -305,63 +295,49 @@ async function visit(
   // flows through the SW + caches bytes), so concurrent workers can't overshoot.
   if (!reserveSlot(state, budget)) return discovered;
 
-  const res = await fetchOrRecordError(item, state, deps);
-  if (!res) return discovered;
-
-  state.visited += 1;
-
-  // ACL pruning: a genuine 403/404 (the authoritative signal, unlike the HEAD
-  // probe) is negative-cached and the subtree pruned — never surfaced as an error.
-  if (res.status === 403 || res.status === 404) {
-    return pruneForbidden(item, res.status, state, deps, discovered);
-  }
-  if (!res.ok) {
-    recordVisit(state, deps, errorVisit(item, res.status));
+  let res: ReadResult;
+  try {
+    res = await deps.storage.read(item.url, {
+      accept: deps.storage.protocol === 'solid' ? 'text/turtle' : '*/*',
+      signal: deps.signal,
+    });
+  } catch (error) {
+    state.visited += 1;
+    if (error instanceof StorageError && (error.status === 403 || error.status === 404)) {
+      return pruneForbidden(item, error.status, state, deps, discovered);
+    }
+    recordVisit(
+      state,
+      deps,
+      errorVisit(item, error instanceof StorageError ? (error.status ?? 0) : 0),
+    );
     return discovered;
   }
-
-  // GET succeeded. A binary / declared-large response (the HEAD probe missed it, or
-  // there was no usable HEAD) is metadata-only; otherwise pull bytes + enumerate.
+  state.visited += 1;
   return warmGetResponse(item, res, state, deps, budget, discovered);
 }
 
-/**
- * HEAD-probe the resource and, if it is a binary / declared-large file, record it
- * metadata-only (NO byte-pulling GET) and report it as handled (caller returns).
- * Returns `false` (continue to the GET) for RDF/small resources, an unreadable
- * HEAD, or a HEAD error — and crucially for a HEAD 403/404, which is INCONCLUSIVE
- * (a server may only honour credentials on the GET path), so the real GET is the
- * authoritative ACL signal (`pruneForbidden` runs there).
- */
 async function probeHeadForSkip(
   item: FrontierItem,
   state: CrawlState,
   deps: WarmDeps,
 ): Promise<boolean> {
-  let head: Response | undefined;
   try {
-    head = await deps.fetch(headRequest(item.url));
+    const head = await deps.storage.head(item.url, { signal: deps.signal });
+    const length = policyResponse(head)?.headers.get('content-length') ?? null;
+    const skipped = sizeSkipReason(head.contentType, length);
+    if (!skipped) return false;
+    state.visited += 1;
+    recordVisit(state, deps, {
+      ...item,
+      status: head.status,
+      bytes: bodyBytes(null, length),
+      skipped,
+    });
+    return true;
   } catch {
-    return false; // HEAD unsupported / errored → fall back to the GET path.
+    return false; // A failed HEAD is inconclusive; the read owns ACL pruning.
   }
-  if (!head.ok) return false;
-
-  const skipped = sizeSkipReason(
-    head.headers.get('content-type'),
-    head.headers.get('content-length'),
-  );
-  if (!skipped) return false;
-
-  state.visited += 1;
-  recordVisit(state, deps, {
-    url: item.url,
-    kind: item.kind,
-    depth: item.depth,
-    status: head.status,
-    bytes: bodyBytes(null, head.headers.get('content-length')),
-    skipped,
-  });
-  return true;
 }
 
 /**
@@ -379,20 +355,6 @@ function reserveSlot(state: CrawlState, budget: ResolvedWarmBudget): boolean {
   return true;
 }
 
-/** GET the resource; on a network error record a `fetch-error` visit + return undefined. */
-async function fetchOrRecordError(
-  item: FrontierItem,
-  state: CrawlState,
-  deps: WarmDeps,
-): Promise<Response | undefined> {
-  try {
-    return await deps.fetch(rdfRequest(item.url));
-  } catch {
-    recordVisit(state, deps, errorVisit(item, 0));
-    return undefined;
-  }
-}
-
 /**
  * Process a successful (2xx) GET: metadata-only for a binary / declared-large file,
  * else pull the bytes (within the byte budget) and enumerate children. Returns the
@@ -400,7 +362,7 @@ async function fetchOrRecordError(
  */
 async function warmGetResponse(
   item: FrontierItem,
-  res: Response,
+  res: ReadResult,
   state: CrawlState,
   deps: WarmDeps,
   budget: ResolvedWarmBudget,
@@ -408,10 +370,10 @@ async function warmGetResponse(
 ): Promise<FrontierItem[]> {
   // ACL-aware descent: no read on the listing ⇒ don't enumerate its subtree.
   // Absent header ⇒ proceed (a child 403 prunes later).
-  const canRead = userCanRead(res.headers.get('wac-allow'));
-  const contentType = res.headers.get('content-type');
-  const contentLength = res.headers.get('content-length');
-  const container = isContainerListing(item, contentType);
+  const canRead = res.allow?.read !== false;
+  const contentType = res.contentType;
+  const contentLength = policyResponse(res)?.headers.get('content-length') ?? null;
+  const container = res.kind === 'container';
 
   // Binary / declared-large: record metadata only, never pull the bytes.
   const skipReason = sizeSkipReason(contentType, contentLength);
@@ -444,21 +406,31 @@ async function warmGetResponse(
       bytes,
       skipped: 'large-resource',
     });
-    if (container && canRead) enumerateContainer(item, decodeBody(buf), discovered);
+    if (container && canRead) await enumerateContainer(item, deps, discovered, budget);
     return discovered;
   }
 
   state.warmed += 1;
   state.bytes += bytes;
-  if (canRead) enumerateChildren(item, decodeBody(buf), container, discovered);
+  if (canRead) {
+    if (item.kind === 'typeIndex')
+      for (const url of typeIndexTargets(item.url, decodeBody(buf)))
+        discovered.push({ url, kind: 'child', depth: item.depth + 1 });
+    if (container && item.depth < budget.maxDepth)
+      await enumerateContainer(item, deps, discovered, budget);
+  }
   recordVisit(state, deps, {
     url: item.url,
     kind: item.kind,
     depth: item.depth,
     status: res.status,
     bytes,
+    container,
   });
-  enqueueAcl(item, res.headers.get('link'), state, discovered);
+  for (const acl of res.links.get('acl') ?? []) {
+    if (deps.storage.isWithinStorage(acl.target))
+      discovered.push({ url: acl.target, kind: 'acl', depth: item.depth + 1 });
+  }
   return discovered;
 }
 
@@ -470,46 +442,6 @@ function sizeSkipReason(
   if (isBinaryType(contentType)) return 'large-binary';
   if (bodyBytes(null, contentLength) > LARGE_RESOURCE_BYTES) return 'large-resource';
   return undefined;
-}
-
-/** Whether to treat a fetched resource's body as a container listing to enumerate. */
-function isContainerListing(item: FrontierItem, contentType: string | null): boolean {
-  return (
-    isContainer(item.url) ||
-    Boolean(
-      contentType?.toLowerCase().includes('text/turtle') && wantsContainerEnumeration(item.kind),
-    )
-  );
-}
-
-/** Enumerate the children of a warmed resource body (type-index targets + container members). */
-function enumerateChildren(
-  item: FrontierItem,
-  body: string,
-  container: boolean,
-  discovered: FrontierItem[],
-): void {
-  if (item.kind === 'typeIndex') {
-    for (const t of typeIndexTargets(item.url, body)) {
-      discovered.push({ url: t, kind: 'child', depth: item.depth + 1 });
-    }
-  }
-  if (container || wantsContainerEnumeration(item.kind)) {
-    enumerateContainer(item, body, discovered);
-  }
-}
-
-/** Enqueue the ACL document for a warmed resource (read its WAC; cheap, RDF). */
-function enqueueAcl(
-  item: FrontierItem,
-  linkHeader: string | null,
-  state: CrawlState,
-  discovered: FrontierItem[],
-): void {
-  const acl = aclUrlFor(item.url, linkHeader);
-  if (acl && !state.enqueued.has(acl) && !state.negative.has(acl)) {
-    discovered.push({ url: acl, kind: 'acl', depth: item.depth + 1 });
-  }
 }
 
 /** Decode a fetched body buffer to text (empty string when the buffer is null). */
@@ -551,21 +483,29 @@ function pruneForbidden(
   return discovered; // prune: do not enumerate children of a forbidden/missing node
 }
 
-/** Build a HEAD probe request (metadata only — no byte body to cache). */
-function headRequest(url: string): Request {
-  return new Request(url, { method: 'HEAD', headers: { accept: 'text/turtle' } });
-}
-
-/** Enumerate ldp:contains members of a container listing into the frontier. */
-function enumerateContainer(item: FrontierItem, body: string, discovered: FrontierItem[]): void {
-  for (const child of containerChildren(item.url, body)) {
-    discovered.push({ url: child, kind: 'child', depth: item.depth + 1 });
+/** Enumerate via the backend, including every LWS page and opaque container URL. */
+async function enumerateContainer(
+  item: FrontierItem,
+  deps: WarmDeps,
+  discovered: FrontierItem[],
+  budget: ResolvedWarmBudget,
+): Promise<void> {
+  try {
+    for await (const child of deps.storage.listAll(item.url, { signal: deps.signal })) {
+      if (discovered.length >= budget.maxResources) break;
+      if (!deps.storage.isWithinStorage(child.url)) continue;
+      discovered.push({
+        url: child.url,
+        kind: 'child',
+        depth: item.depth + 1,
+        size: child.size,
+        contentType: child.contentType,
+      });
+    }
+  } catch {
+    // Failed/forbidden listings never introduce a partial subtree.
+    discovered.length = 0;
   }
-}
-
-/** Seed kinds whose body we always treat as a container listing to enumerate. */
-function wantsContainerEnumeration(kind: SeedKind | 'child'): boolean {
-  return kind === 'storage' || kind === 'inbox' || kind === 'child';
 }
 
 function budgetExceeded(state: CrawlState, budget: ResolvedWarmBudget): boolean {
@@ -584,9 +524,9 @@ function budgetExceeded(state: CrawlState, budget: ResolvedWarmBudget): boolean 
   return false;
 }
 
-async function safeArrayBuffer(res: Response): Promise<ArrayBuffer | null> {
+async function safeArrayBuffer(res: ReadResult): Promise<ArrayBuffer | null> {
   try {
-    return await res.arrayBuffer();
+    return (await res.bytes()).slice().buffer as ArrayBuffer;
   } catch {
     return null;
   }
@@ -594,14 +534,6 @@ async function safeArrayBuffer(res: Response): Promise<ArrayBuffer | null> {
 
 function byteLen(s: string): number {
   return new TextEncoder().encode(s).byteLength;
-}
-
-/** Build a GET asking for Turtle (matches the SW's canonical RDF variant). */
-function rdfRequest(url: string): Request {
-  return new Request(url, {
-    method: 'GET',
-    headers: { accept: 'text/turtle' },
-  });
 }
 
 function recordVisit(state: CrawlState, deps: WarmDeps, visit: WarmVisit): void {
@@ -737,6 +669,7 @@ export interface WarmControllerOptions {
 
 export function createWarmController(opts: WarmControllerOptions): WarmController {
   const budget = opts.budget ?? DEFAULT_WARM_BUDGET;
+  const abort = new AbortController();
   let cancelIdle: (() => void) | undefined;
   let onlineHandler: (() => void) | undefined;
   let running: Promise<WarmResult> | undefined;
@@ -752,7 +685,7 @@ export function createWarmController(opts: WarmControllerOptions): WarmControlle
   function run(): Promise<WarmResult> {
     // Coalesce concurrent runs (e.g. login + reconnect racing).
     if (running) return running;
-    running = warm(opts.webId, opts.deps, budget, opts.profileTurtle, {
+    running = warm(opts.webId, { ...opts.deps, signal: abort.signal }, budget, opts.profileTurtle, {
       ...(opts.seeds ? { seeds: opts.seeds } : {}),
     }).finally(() => {
       running = undefined;
@@ -807,6 +740,7 @@ export function createWarmController(opts: WarmControllerOptions): WarmControlle
     run,
     result,
     stop(): void {
+      abort.abort();
       cancelIdle?.();
       if (onlineHandler && typeof globalThis.removeEventListener === 'function') {
         globalThis.removeEventListener('online', onlineHandler);

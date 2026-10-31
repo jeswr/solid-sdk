@@ -1,3 +1,6 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+import type { NotificationsClient, Subscription } from '@jeswr/pod-notifications';
+import { createMemoryStorage } from '@jeswr/storage-client/memory';
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
 /**
  * Page-client config + lifecycle hardening (roborev, PM integration round 4):
@@ -84,7 +87,7 @@ describe('createOfflineClient config posting + lifecycle', () => {
     await client.register();
 
     expect(active.postMessage).toHaveBeenCalled();
-    const posted = active.postMessage.mock.calls[0]![0];
+    const posted = active.postMessage.mock.calls[0]?.[0];
     expect(posted.type).toBe('config');
     // The posted config carries no function (fetch removed).
     expect(posted.config.fetch).toBeUndefined();
@@ -167,3 +170,153 @@ describe('createOfflineClient config posting + lifecycle', () => {
     expect(installing.postMessage).not.toHaveBeenCalled();
   });
 });
+
+describe('pod-notifications integration', () => {
+  it('forwards normalized changes and resync, and strips page clients from worker config', async () => {
+    const { active } = stubBrowser();
+    const { storage, notificationsClient, subscription, emit } = notificationHarness();
+    const client = createOfflineClient({
+      storage,
+      notificationsClient,
+      notifications: { resources: [`${storage.root}doc`] },
+    });
+    await client.register();
+    await vi.waitFor(() => expect(subscription.on).toHaveBeenCalledTimes(2));
+    const posted = active.postMessage.mock.calls[0]?.[0];
+    expect(posted.config.storageRoot).toBe(storage.root);
+    expect(posted.config.storage).toBeUndefined();
+    expect(posted.config.notificationsClient).toBeUndefined();
+    expect(() => structuredClone(posted)).not.toThrow();
+    emit('change', {
+      type: 'Move',
+      object: `${storage.root}doc`,
+      target: storage.root,
+      origin: storage.root,
+      state: 'v2',
+    });
+    emit('resync', new Date());
+    expect(active.postMessage).toHaveBeenCalledWith({
+      type: 'notification',
+      frame: {
+        type: 'Move',
+        object: `${storage.root}doc`,
+        target: storage.root,
+        origin: storage.root,
+        state: 'v2',
+      },
+    });
+    expect(active.postMessage).toHaveBeenCalledWith({ type: 'resync' });
+    client.close();
+    const count = active.postMessage.mock.calls.length;
+    emit('resync', new Date());
+    expect(active.postMessage).toHaveBeenCalledTimes(count);
+    expect(subscription.close).toHaveBeenCalledOnce();
+  });
+
+  it('closes a subscription that resolves after logout/close, without attaching observers', async () => {
+    stubBrowser();
+    const { storage, notificationsClient, subscription } = notificationHarness();
+    let resolve!: (value: Subscription) => void;
+    notificationsClient.subscribe = vi.fn(
+      () =>
+        new Promise<Subscription>((done) => {
+          resolve = done;
+        }),
+    );
+    const client = createOfflineClient({
+      storage,
+      notificationsClient,
+      notifications: { resources: [`${storage.root}doc`] },
+    });
+    await client.register();
+    const signal = vi.mocked(notificationsClient.subscribe).mock.calls[0]?.[1]?.signal;
+    client.close();
+    expect(signal?.aborted).toBe(true);
+    resolve(subscription);
+    await vi.waitFor(() => expect(subscription.close).toHaveBeenCalledOnce());
+    expect(subscription.on).not.toHaveBeenCalled();
+  });
+
+  it('subscribes once to deduplicated, scoped topics under the configured cap', async () => {
+    stubBrowser();
+    const { storage, notificationsClient, subscription } = notificationHarness();
+    const client = createOfflineClient({
+      storage,
+      notificationsClient,
+      notifications: {
+        containers: [storage.root, storage.root, 'https://foreign.example/'],
+        resources: [`${storage.root}doc`, `${storage.root}second`],
+        maxChannels: 2,
+        pollIntervalMs: 75,
+      },
+    });
+    await client.register();
+    await client.register();
+    await vi.waitFor(() => expect(subscription.on).toHaveBeenCalledTimes(2));
+    expect(notificationsClient.subscribe).toHaveBeenCalledOnce();
+    expect(notificationsClient.subscribe).toHaveBeenCalledWith(
+      [storage.root, `${storage.root}doc`],
+      { pollIntervalMs: 75, signal: expect.any(AbortSignal) },
+    );
+    client.close();
+  });
+
+  it('derives opaque LWS container topics from a manual warm without a second crawl', async () => {
+    stubBrowser();
+    const storage = createMemoryStorage({
+      protocol: 'lws',
+      root: 'https://alice.example/',
+      pageSize: 1,
+    });
+    const { notificationsClient, subscription } = notificationHarness();
+    const read = vi.spyOn(storage, 'read');
+    const client = createOfflineClient({
+      webId: 'https://foreign.example/card#me',
+      storage,
+      notificationsClient,
+      warm: { warmOnLogin: false, seeds: [storage.root] },
+      notifications: true,
+    });
+    await client.register();
+    expect(read).not.toHaveBeenCalled();
+    await client.warm();
+    await vi.waitFor(() => expect(subscription.on).toHaveBeenCalledTimes(2));
+    expect(notificationsClient.subscribe).toHaveBeenCalledWith([storage.root], expect.anything());
+    expect(read.mock.calls.filter(([url]) => url === storage.root)).toHaveLength(1);
+    client.close();
+  });
+
+  it('uses the shared polling client even when no browser push transport exists', async () => {
+    stubBrowser();
+    const storage = createMemoryStorage({ protocol: 'lws', root: 'https://alice.example/' });
+    const client = createOfflineClient({
+      storage,
+      notifications: { containers: [storage.root], pollIntervalMs: 10 },
+    });
+    const head = vi.spyOn(storage, 'head');
+    await client.register();
+    await vi.waitFor(() => expect(head).toHaveBeenCalled());
+    client.close();
+  });
+});
+
+function notificationHarness() {
+  const handlers = new Map<string, (value: unknown) => void>();
+  const subscription = {
+    on: vi.fn((name: string, handler: (value: unknown) => void) => {
+      handlers.set(name, handler);
+      return () => handlers.delete(name);
+    }),
+    close: vi.fn(async () => {}),
+  } as unknown as Subscription & { on: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
+  const notificationsClient: NotificationsClient = {
+    subscribe: vi.fn(async () => subscription),
+    plan: () => ({ channel: 'poll', reason: 'test' }),
+  };
+  return {
+    storage: createMemoryStorage({ protocol: 'lws', root: 'https://alice.example/' }),
+    notificationsClient,
+    subscription,
+    emit: (name: string, value: unknown) => handlers.get(name)?.(value),
+  };
+}

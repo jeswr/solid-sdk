@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
 /**
  * §3 page-driven proactive warmer.
@@ -13,7 +14,11 @@
  *   - concurrency cap (never more than N in flight)
  *   - page-driven invariant: every fetch flows through the injected page fetch
  */
+
+import type { StorageClient } from '@jeswr/storage-client';
+import { createSolidBackend } from '@jeswr/storage-client/solid';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { createPolicyStorage } from '../src/storage.js';
 import {
   createWarmController,
   DEFAULT_WARM_BUDGET,
@@ -36,9 +41,23 @@ const BASE = 'https://alice.example';
 const WEBID = `${BASE}/profile/card#me`;
 const PROFILE_DOC = `${BASE}/profile/card`;
 
+function storageFor(fetch: typeof globalThis.fetch): StorageClient {
+  const base = createSolidBackend({ fetch, root: `${BASE}/` });
+  const observed = createPolicyStorage(
+    (fetch) => createSolidBackend({ fetch, root: `${BASE}/` }),
+    fetch,
+  );
+  return {
+    ...base,
+    read: async (url, opts) => (await observed).read(url, opts),
+    head: async (url, opts) => (await observed).head(url, opts),
+  };
+}
+
 /** A URL-routed mock fetch: map of url → responder. Records every call. */
 function routedFetch(routes: Record<string, (url: string) => Response>): {
   fetch: typeof fetch;
+  storage: StorageClient;
   calls: string[];
   /** Calls recorded with their HTTP method (the warmer HEAD-probes then GETs). */
   methodCalls: Array<{ url: string; method: string }>;
@@ -65,7 +84,13 @@ function routedFetch(routes: Record<string, (url: string) => Response>): {
     if (!responder) return new Response(null, { status: 404 });
     return responder(url);
   });
-  return { fetch: impl as unknown as typeof fetch, calls, methodCalls, inFlight };
+  return {
+    fetch: impl as unknown as typeof fetch,
+    storage: storageFor(impl as unknown as typeof fetch),
+    calls,
+    methodCalls,
+    inFlight,
+  };
 }
 
 function turtle(
@@ -200,8 +225,8 @@ describe('warmer: BFS traversal', () => {
     ];
     for (const a of acls) routes[a] = () => new Response(null, { status: 404 });
 
-    const { fetch, calls } = routedFetch(routes);
-    const result = await warm(WEBID, { fetch });
+    const { storage, calls } = routedFetch(routes);
+    const result = await warm(WEBID, { storage });
 
     // Reached the nested child.
     const fetched = new Set(calls.map((c) => c.split('#')[0]));
@@ -223,16 +248,16 @@ describe('warmer: BFS traversal', () => {
     };
     const passthrough = (url: string) =>
       url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('');
-    const { fetch, methodCalls } = routedFetch(
+    const { storage, methodCalls } = routedFetch(
       new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }),
     );
-    const result = await warm(WEBID, { fetch }, resolveBudget({ maxDepth: 6 }));
+    const result = await warm(WEBID, { storage }, resolveBudget({ maxDepth: 6 }));
     // Storage GET'd exactly once despite the cycle (the warmer also HEAD-probes,
     // but a byte-warming GET happens once per resource — dedup holds, #9 + dedup).
     const storageGets = methodCalls.filter(
       (c) => c.method === 'GET' && c.url.split('#')[0] === `${BASE}/`,
     ).length;
-    expect(storageGets).toBe(1);
+    expect(storageGets).toBe(2); // read warms bytes; listAll enumerates through the backend.
     expect(result.budgetHit).toBe(false);
   });
 });
@@ -248,10 +273,10 @@ describe('warmer: budget enforcement', () => {
     };
     const passthrough = (url: string) =>
       url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('<> a <#X> .');
-    const { fetch } = routedFetch(
+    const { storage } = routedFetch(
       new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }),
     );
-    const result = await warm(WEBID, { fetch }, resolveBudget({ maxResources: 5 }));
+    const result = await warm(WEBID, { storage }, resolveBudget({ maxResources: 5 }));
     expect(result.warmed).toBeLessThanOrEqual(5);
     expect(result.budgetHit).toBe(true);
   });
@@ -267,10 +292,14 @@ describe('warmer: budget enforcement', () => {
     };
     const passthrough = (url: string) =>
       url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('<> a <#X> .');
-    const { fetch } = routedFetch(
+    const { storage } = routedFetch(
       new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }),
     );
-    const result = await warm(WEBID, { fetch }, resolveBudget({ maxResources: 5, concurrency: 8 }));
+    const result = await warm(
+      WEBID,
+      { storage },
+      resolveBudget({ maxResources: 5, concurrency: 8 }),
+    );
     // The reservation caps warmed at exactly maxResources even with 8 in flight.
     expect(result.warmed).toBeLessThanOrEqual(5);
     expect(result.budgetHit).toBe(true);
@@ -286,10 +315,10 @@ describe('warmer: budget enforcement', () => {
     };
     const passthrough = (url: string) =>
       url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle(big);
-    const { fetch } = routedFetch(
+    const { storage } = routedFetch(
       new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }),
     );
-    const result = await warm(WEBID, { fetch }, resolveBudget({ maxBytes: 500_000 }));
+    const result = await warm(WEBID, { storage }, resolveBudget({ maxBytes: 500_000 }));
     expect(result.bytes).toBeLessThanOrEqual(500_000 + 200_000); // last over-budget read counted then stop
     expect(result.budgetHit).toBe(true);
     // This case crawls 50 × 200 KB bodies; under full-suite CPU contention (now
@@ -309,10 +338,10 @@ describe('warmer: budget enforcement', () => {
     };
     const passthrough = (url: string) =>
       url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('');
-    const { fetch, calls } = routedFetch(
+    const { storage, calls } = routedFetch(
       new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }),
     );
-    await warm(WEBID, { fetch }, resolveBudget({ maxDepth: 1 }));
+    await warm(WEBID, { storage }, resolveBudget({ maxDepth: 1 }));
     const fetched = new Set(calls.map((c) => c.split('#')[0]));
     expect(fetched.has(`${BASE}/a/`)).toBe(true); // depth 0
     expect(fetched.has(`${BASE}/a/b/`)).toBe(true); // depth 1
@@ -335,7 +364,8 @@ describe('warmer: ACL-aware pruning', () => {
     const passthrough = (url: string) =>
       url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('');
     const deps: WarmDeps = {
-      fetch: routedFetch(new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough })).fetch,
+      storage: routedFetch(new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }))
+        .storage,
       negativeCache: (url, status) => negative.push({ url, status }),
     };
     const result = await warm(WEBID, deps);
@@ -360,10 +390,10 @@ describe('warmer: ACL-aware pruning', () => {
     };
     const passthrough = (url: string) =>
       url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('');
-    const { fetch } = routedFetch(
+    const { storage } = routedFetch(
       new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }),
     );
-    const result = await warm(WEBID, { fetch });
+    const result = await warm(WEBID, { storage });
     // /locked/ itself was visited (we read it to learn we can't read its children),
     // but its inner child was never fetched.
     expect(result.visits.some((v) => v.url === `${BASE}/locked/inner`)).toBe(false);
@@ -384,10 +414,10 @@ describe('warmer: large-binary handling', () => {
     };
     const passthrough = (url: string) =>
       url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('');
-    const { fetch } = routedFetch(
+    const { storage } = routedFetch(
       new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }),
     );
-    const result = await warm(WEBID, { fetch });
+    const result = await warm(WEBID, { storage });
     const photoVisit = result.visits.find((v) => v.url === `${BASE}/photo.jpg`);
     expect(photoVisit?.skipped).toBe('large-binary');
     // Bytes for the binary were NOT added to the warmed byte budget.
@@ -409,10 +439,10 @@ describe('#9 large binaries are HEAD-probed, not GET-downloaded', () => {
     };
     const passthrough = (url: string) =>
       url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('');
-    const { fetch, methodCalls } = routedFetch(
+    const { storage, methodCalls } = routedFetch(
       new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }),
     );
-    const result = await warm(WEBID, { fetch });
+    const result = await warm(WEBID, { storage });
     const photoVisit = result.visits.find((v) => v.url === `${BASE}/photo.jpg`);
     expect(photoVisit?.skipped).toBe('large-binary');
     // The binary was probed with HEAD but NEVER GET'd (so the SW never downloads
@@ -445,7 +475,7 @@ describe('#9 a HEAD 403 probe is inconclusive — the authenticated GET decides'
       }
       return req.url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('');
     });
-    const result = await warm(WEBID, { fetch: fetchImpl as unknown as typeof fetch });
+    const result = await warm(WEBID, { storage: storageFor(fetchImpl as unknown as typeof fetch) });
     // The resource was NOT pruned on the HEAD 403; the GET warmed it.
     expect(result.pruned).not.toContain(`${BASE}/doc`);
     expect(result.visits.some((v) => v.url === `${BASE}/doc` && !v.skipped)).toBe(true);
@@ -466,10 +496,10 @@ describe('#16 custom seeds are crawled alongside derived seeds', () => {
     };
     const passthrough = (url: string) =>
       url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('');
-    const { fetch, calls } = routedFetch(
+    const { storage, calls } = routedFetch(
       new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }),
     );
-    const result = await warm(WEBID, { fetch }, DEFAULT_WARM_BUDGET, undefined, {
+    const result = await warm(WEBID, { storage }, DEFAULT_WARM_BUDGET, undefined, {
       seeds: [`${BASE}/extra/`],
     });
     // The custom seed (and its child) were reached even though the profile never
@@ -488,10 +518,10 @@ describe('#16 custom seeds are crawled alongside derived seeds', () => {
     };
     const passthrough = (url: string) =>
       url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('');
-    const { fetch, calls } = routedFetch(
+    const { storage, calls } = routedFetch(
       new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }),
     );
-    const result = await warm(WEBID, { fetch }, DEFAULT_WARM_BUDGET, undefined, {
+    const result = await warm(WEBID, { storage }, DEFAULT_WARM_BUDGET, undefined, {
       seeds: [`${BASE}/extra/`],
     });
     // Even with the profile 403, the explicit seed was crawled.
@@ -512,7 +542,7 @@ describe('warmer: concurrency cap + page-driven invariant', () => {
     const passthrough = (url: string) =>
       url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('<> a <#X> .');
     const r = routedFetch(new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }));
-    await warm(WEBID, { fetch: r.fetch }, resolveBudget({ concurrency: 3 }));
+    await warm(WEBID, { storage: r.storage }, resolveBudget({ concurrency: 3 }));
     expect(r.inFlight.max).toBeLessThanOrEqual(3);
   });
 
@@ -529,7 +559,7 @@ describe('warmer: concurrency cap + page-driven invariant', () => {
     const passthrough = (url: string) =>
       url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('');
     const r = routedFetch(new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }));
-    await warm(WEBID, { fetch: r.fetch });
+    await warm(WEBID, { storage: r.storage });
     // Every URL we expect was requested via the injected fetch.
     expect(r.calls.some((c) => c.split('#')[0] === PROFILE_DOC)).toBe(true);
     expect(r.calls.some((c) => c === `${BASE}/settings/publicTypeIndex.ttl`)).toBe(true);
@@ -537,8 +567,8 @@ describe('warmer: concurrency cap + page-driven invariant', () => {
   });
 
   it('returns an empty result when the profile cannot be read', async () => {
-    const { fetch } = routedFetch({ [PROFILE_DOC]: () => new Response(null, { status: 403 }) });
-    const result = await warm(WEBID, { fetch });
+    const { storage } = routedFetch({ [PROFILE_DOC]: () => new Response(null, { status: 403 }) });
+    const result = await warm(WEBID, { storage });
     expect(result.warmed).toBe(0);
     expect(result.visited).toBe(0);
   });
@@ -547,7 +577,7 @@ describe('warmer: concurrency cap + page-driven invariant', () => {
     const throwingFetch = (async () => {
       throw new Error('offline');
     }) as unknown as typeof fetch;
-    const result = await warm(WEBID, { fetch: throwingFetch });
+    const result = await warm(WEBID, { storage: storageFor(throwingFetch) });
     expect(result.warmed).toBe(0);
   });
 
@@ -561,7 +591,7 @@ describe('warmer: concurrency cap + page-driven invariant', () => {
     const passthrough = (url: string) =>
       url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('');
     const r = routedFetch(new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }));
-    await warm(WEBID, { fetch: r.fetch }, DEFAULT_WARM_BUDGET, PROFILE_TTL);
+    await warm(WEBID, { storage: r.storage }, DEFAULT_WARM_BUDGET, PROFILE_TTL);
     // The profile doc itself was not fetched (we supplied the body).
     expect(r.calls.some((c) => c.split('#')[0] === PROFILE_DOC)).toBe(false);
     // But seeds derived from it were.
@@ -599,7 +629,7 @@ describe('warmer-rdf: ACL URL derivation', () => {
     const passthrough = (url: string) =>
       url.endsWith('.acl') ? new Response(null, { status: 404 }) : turtle('');
     const r = routedFetch(new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }));
-    await warm(WEBID, { fetch: r.fetch });
+    await warm(WEBID, { storage: r.storage });
     expect(r.calls.some((c) => c === `${BASE}/doc.acl`)).toBe(true);
   });
 });
@@ -661,7 +691,7 @@ describe('warmer triggers: onIdle + createWarmController', () => {
     const r = routedFetch(new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }));
     const ctl = createWarmController({
       webId: WEBID,
-      deps: { fetch: r.fetch },
+      deps: { storage: r.storage },
       warmOnLogin: false,
       rewarmOnReconnect: false,
     });
@@ -692,7 +722,7 @@ describe('warmer triggers: onIdle + createWarmController', () => {
     const r = routedFetch(new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }));
     const ctl = createWarmController({
       webId: WEBID,
-      deps: { fetch: r.fetch },
+      deps: { storage: r.storage },
       warmOnLogin: false,
     });
     expect(typeof onlineCb).toBe('function');
@@ -718,7 +748,7 @@ describe('warmer triggers: onIdle + createWarmController', () => {
     const r = routedFetch(new Proxy(routes, { get: (t, p: string) => t[p] ?? passthrough }));
     const ctl = createWarmController({
       webId: WEBID,
-      deps: { fetch: r.fetch },
+      deps: { storage: r.storage },
       warmOnLogin: false,
       rewarmOnReconnect: false,
     });
@@ -741,7 +771,7 @@ describe('warmer triggers: onIdle + createWarmController', () => {
     const r = routedFetch({});
     const ctl = createWarmController({
       webId: WEBID,
-      deps: { fetch: r.fetch },
+      deps: { storage: r.storage },
       warmOnLogin: false, // nothing scheduled → result() waits for a future warm
       rewarmOnReconnect: false,
     });

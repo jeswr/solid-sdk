@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /// <reference lib="webworker" />
 /**
  * `solid-offline/worker` — the service-worker script (P0 install/intercept
@@ -13,6 +14,7 @@
  * coverage — it cannot be exercised without a real SW lifecycle.
  */
 
+import { createPodClient } from '@jeswr/storage-client';
 import {
   assetConfigCandidates,
   cleanupOldShellCaches,
@@ -28,11 +30,11 @@ import {
   type ShellDeps,
   sameShellConfig,
   shellBucketComplete,
-  shellCacheName,
 } from './app-shell.js';
 import { handleNotification, type InvalidateDeps, resyncSweep } from './invalidation.js';
 import { MetadataStore } from './metadata-store.js';
 import { cacheNameForWebId, isScopeChange } from './scope.js';
+import { createPolicyStorage } from './storage.js';
 import { type Broadcaster, type ByteCache, handleFetch, type SwrDeps } from './swr.js';
 import type { AppShellConfig, PageToWorkerMessage } from './types.js';
 
@@ -57,6 +59,8 @@ const DEFAULT_CHANNEL_NAME = 'solid-offline';
 let metaPromise: Promise<MetadataStore> | undefined;
 let channel: BroadcastChannel | undefined;
 let configuredWebId: string | undefined;
+let storageRoot: string | undefined;
+let invalidationGeneration = 0;
 /** Tracks whether `configuredWebId` has ever been set by a config message. */
 let webIdConfigured = false;
 /** Resolved BroadcastChannel name (#15): the page sends the channel it uses. */
@@ -269,6 +273,8 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
   if (data.type === 'config') {
     // #15: adopt the page's resolved channel name (custom channels must work).
     setChannelName(data.config.channelName);
+    storageRoot = data.config.storageRoot;
+    invalidationGeneration += 1;
     // P4: if the page sent an app-shell config, adopt it. `adoptShellConfig` is a
     // no-op when it equals the current one, and (roborev) REPLACES + re-precaches
     // when a new deploy ships a changed version/manifest — so a long-lived active
@@ -295,7 +301,7 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
   } else if (data.type === 'ping') {
     event.source?.postMessage({ type: 'pong' });
   } else if (data.type === 'notification') {
-    // P3: the page forwarded a change frame from its WebSocket. Run the
+    // P3: the page forwarded a change frame from its notification transport. Run the
     // (unauthenticated) invalidation pipeline; keep it alive past the handler.
     const frame = data.frame;
     keepAlive(event, async () => {
@@ -329,7 +335,7 @@ function keepAlive(event: ExtendableMessageEvent, task: () => Promise<void>): vo
  * scoped metadata store + the SW fetch + the broadcast channel + the clock. The
  * SWR path adds `isOnline` on top (see `respond`).
  */
-async function baseDeps(): Promise<InvalidateDeps> {
+async function baseDeps(): Promise<Omit<SwrDeps, 'isOnline'>> {
   const cache = await self.caches.open(cacheName());
   const meta = await getMeta();
   return {
@@ -342,8 +348,42 @@ async function baseDeps(): Promise<InvalidateDeps> {
 }
 
 /** Build the invalidation deps (the SW's OWN, unauthenticated fetch — see invalidation.ts). */
-function invalidateDeps(): Promise<InvalidateDeps> {
-  return baseDeps();
+async function invalidateDeps(): Promise<InvalidateDeps> {
+  const root = storageRoot;
+  const generation = invalidationGeneration;
+  function checkScope(): void {
+    if (generation !== invalidationGeneration)
+      throw new Error('Offline invalidation scope changed');
+  }
+  if (!root) throw new Error('Offline invalidation requires a storage root');
+  const { fetch: transport, ...deps } = await baseDeps();
+  checkScope();
+  const storage = await createPolicyStorage(
+    async (fetch) => (await createPodClient({ storage: root, fetch })).storage,
+    transport,
+  );
+  checkScope();
+  return {
+    ...deps,
+    storage: {
+      ...storage,
+      read: async (url, opts) => {
+        checkScope();
+        const result = await storage.read(url, opts);
+        if (generation !== invalidationGeneration) {
+          await result.body?.cancel();
+          checkScope();
+        }
+        return result;
+      },
+      head: async (url, opts) => {
+        checkScope();
+        const result = await storage.head(url, opts);
+        checkScope();
+        return result;
+      },
+    },
+  };
 }
 
 self.addEventListener('fetch', (event: FetchEvent) => {

@@ -1,3 +1,8 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+
+import type { ChangeType, NotificationsClient } from '@jeswr/pod-notifications';
+import type { StorageClient } from '@jeswr/storage-client';
+
 /**
  * Public + internal types for solid-offline (P0/P1).
  *
@@ -45,21 +50,17 @@ export interface WarmConfig {
 
 /**
  * Notification client config (P3). The list of containers/resources to subscribe
- * to + the channel cap + backoff/poll knobs. When `notifications: true`, topics
+ * and the topic cap and polling cadence. When `notifications: true`, topics
  * are derived from the warmer (the warmed containers); pass this to override.
  */
 export interface NotificationsClientConfig {
-  /** Containers to subscribe to (one one-shot channel each). Auto-derived if omitted. */
+  /** Containers to subscribe to; auto-derived from the warmer if omitted. */
   containers?: string[];
   /** Hot resources to subscribe to individually (e.g. the currently-open doc). */
   resources?: string[];
-  /** Max channels (capped by the warm budget; channels are pricier than cache entries). */
+  /** Maximum distinct subscribed topics. Default: 32. */
   maxChannels?: number;
-  /** Reconnect backoff base (ms). */
-  backoffBaseMs?: number;
-  /** Reconnect backoff cap (ms). */
-  backoffMaxMs?: number;
-  /** Disconnected slow-poll interval (ms). */
+  /** Polling fallback interval (ms); zero disables polling. */
   pollIntervalMs?: number;
 }
 
@@ -92,25 +93,28 @@ export interface AppShellConfig {
 
 /** Page-client config. `webId`, `warm`, `notifications` per spec "Package shape". */
 export interface OfflineClientConfig {
+  /** Page-side storage client, created with the authenticated page fetch. */
+  storage?: StorageClient;
+  /** Optional shared notification client; otherwise created from storage + fetch. */
+  notificationsClient?: NotificationsClient;
+  /** Serialized storage root used by the credential-free worker for invalidation. */
+  storageRoot?: string;
   /** The logged-in user's WebID. Scopes the cache (DB name) per identity. */
   webId?: string;
   /**
    * Warmer config (P2). `false` disables warming; `true` / a {@link WarmConfig}
-   * enables the page-driven warmer with defaults. Requires `webId`.
+   * enables the page-driven warmer with defaults. Requires `webId` and `storage`.
    */
   warm?: WarmConfig | boolean;
-  /**
-   * The page's fetch the warmer should use (P2). Pass your DPoP-decorated /
-   * authenticated fetch here so the warmed reads are authenticated; the SW still
-   * never authenticates (decision 1). Defaults to the global `fetch`.
+  /** Authenticated transport for notification discovery/subscription; defaults to global fetch.
+   * Warming uses the transport already injected into `storage`.
    */
   fetch?: typeof fetch;
   /**
    * Notification-driven invalidation (P3). `false`/omitted disables; `true`
    * enables with auto-derived topics (the warmed containers); a
    * {@link NotificationsClientConfig} customizes containers/hot resources/caps.
-   * The WebSocket lives in the PAGE (decision 5); requires a `fetch` (the page's
-   * authenticated fetch) for the subscribe POSTs.
+   * Subscriptions live in the page; transport selection and reconnect are owned by pod-notifications.
    */
   notifications?: boolean | NotificationsClientConfig;
   /**
@@ -215,11 +219,10 @@ export interface UpdatedEvent {
  *   - `Add`/`Remove` — a member (`object`) was added to / removed from a container
  *     (`target`); the *container listing* is what must be re-fetched.
  */
-export type NotificationActivityType = 'Create' | 'Update' | 'Delete' | 'Add' | 'Remove';
+export type NotificationActivityType = ChangeType;
 
 /**
- * A parsed Solid notification frame as delivered over WebSocketChannel2023 (the
- * page parses the raw JSON; this is the normalized shape it forwards to the SW).
+ * A normalized pod-notifications change forwarded from the page to the worker.
  * `object`/`target` are flattened to plain URL strings (the wire form allows
  * either a bare IRI or `{ id }`). `state` is the changed resource's ETag.
  */
@@ -229,6 +232,8 @@ export interface NotificationFrame {
   object: string;
   /** The container (Add/Remove only). */
   target?: string;
+  /** Previous container for Move/Delete changes. */
+  origin?: string;
   /** The changed resource's ETag (Create/Update/Delete). The short-circuit key. */
   state?: string;
 }
@@ -237,7 +242,7 @@ export interface NotificationFrame {
 export type PageToWorkerMessage =
   | { type: 'config'; config: OfflineClientConfig }
   | { type: 'ping' }
-  /** A change notification received on the page's WebSocket, forwarded for invalidation (P3). */
+  /** A change notification received on the page's notification transport, forwarded for invalidation (P3). */
   | { type: 'notification'; frame: NotificationFrame }
   /** Run the reconnect ETag-resync sweep over the whole warmed set (P3). */
   | { type: 'resync' }

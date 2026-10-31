@@ -1,32 +1,9 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
-/**
- * Notification-driven invalidation pipeline (P3, §5).
- *
- * ────────────────────────────────────────────────────────────────────────────
- * WHERE THIS RUNS — the SW side (decision 1 & 5):
- *   The WebSocket lives in the PAGE (`notifications.ts`); the page `postMessage`s
- *   each change frame here, into the (unauthenticated) service worker. This
- *   module owns the *invalidation* half: look the resource up in the P1 metadata
- *   store, decide whether anything changed, revalidate (or re-fetch a container
- *   listing) and broadcast `{url, event:'updated'}` to every tab. It NEVER signs
- *   or authenticates — for a private resource its conditional GET will simply
- *   404/401 and the page's own warm/read re-populates the cache; the SW only
- *   ever issues unauthenticated conditional GETs (consistent with P1/P2).
- * ────────────────────────────────────────────────────────────────────────────
- *
- * THE ETAG SHORT-CIRCUIT (the join with the server, §5):
- *   The server's change frame carries the resource's new ETag in `state`
- *   (prod-solid-server `src/notifications/notification.ts`). If that equals the
- *   ETag we already hold, the change is one WE caused (our own write, already
- *   reflected in the cache) — so it is a free no-op: no fetch, no broadcast.
- *   This is what makes a self-caused change cost nothing.
- *
- * The pipeline is written against the same small injected interfaces as `swr.ts`
- * (a Cache-API-like store, a `fetch`, a clock, a BroadcastChannel-like notifier)
- * plus the P1 {@link MetadataStore}, so the whole decision tree is unit-testable
- * with mocks — no real ServiceWorker, no real WebSocket, no real network.
- */
+/** StorageClient-driven invalidation. The worker remains credential-free. */
 
+import type { StorageClient } from '@jeswr/storage-client';
+import { StorageError } from '@jeswr/storage-client';
 import {
   deleteVariantBytes,
   IGNORE_VARY,
@@ -36,6 +13,7 @@ import {
 } from './cache-coherence.js';
 import { classifyResponse, computeVaryKey, keyRequest, type RequestLike } from './cache-policy.js';
 import type { MetadataStore } from './metadata-store.js';
+import { policyResponse } from './storage.js';
 import type { Broadcaster, ByteCache } from './swr.js';
 import type { CacheMetadata, NotificationFrame } from './types.js';
 
@@ -43,8 +21,8 @@ import type { CacheMetadata, NotificationFrame } from './types.js';
 export interface InvalidateDeps {
   cache: ByteCache;
   meta: MetadataStore;
-  /** Unauthenticated conditional GET (the SW's own fetch). See module note. */
-  fetch: typeof fetch;
+  /** The worker's credential-free client (or an injected page/test client). */
+  storage: StorageClient;
   broadcast: Broadcaster;
   now(): number;
 }
@@ -78,14 +56,30 @@ export async function handleNotification(
   deps: InvalidateDeps,
 ): Promise<InvalidateOutcome> {
   try {
+    if (
+      !deps.storage.isWithinStorage(frame.object) ||
+      (frame.target && !deps.storage.isWithinStorage(frame.target)) ||
+      (frame.origin && !deps.storage.isWithinStorage(frame.origin))
+    )
+      return { kind: 'skipped' };
     if (frame.type === 'Add' || frame.type === 'Remove') {
       return await refreshListing(frame, deps);
     }
-    if (frame.type === 'Delete') {
-      return await invalidateResource(frame.object, frame.state, deps, { deleted: true });
+    const outcome = await invalidateResource(frame.object, frame.state, deps, {
+      deleted: frame.type === 'Delete',
+    });
+    const parents =
+      frame.type === 'Move'
+        ? [frame.origin, frame.target]
+        : frame.type === 'Create'
+          ? [frame.target]
+          : frame.type === 'Delete'
+            ? [frame.origin ?? frame.target]
+            : [];
+    for (const target of new Set(parents)) {
+      if (target) await refreshListing({ type: 'Add', object: frame.object, target }, deps);
     }
-    // Create / Update.
-    return await invalidateResource(frame.object, frame.state, deps, { deleted: false });
+    return outcome;
   } catch (error) {
     return { kind: 'error', error };
   }
@@ -184,10 +178,31 @@ async function revalidateResource(
   const req = rdfRequest(url);
   const rl: RequestLike = { url: req.url, method: req.method, headers: req.headers };
 
-  const condHeaders = new Headers(req.headers);
-  if (etag) condHeaders.set('If-None-Match', etag);
-  const condRequest = new Request(url, { method: 'GET', headers: condHeaders });
-  const fresh = await deps.fetch(condRequest);
+  let fresh: Response;
+  try {
+    const result = await deps.storage.read(url, {
+      accept: deps.storage.protocol === 'lws' ? '*/*' : 'text/turtle',
+      ...(etag ? { ifNoneMatch: etag } : {}),
+    });
+    if (result.status === 304) fresh = new Response(null, { status: 304 });
+    else {
+      const observed = policyResponse(result);
+      // Without the original HTTP policy, invalidate rather than manufacturing
+      // a cacheable response from the reduced StorageClient result.
+      if (!observed) {
+        await result.body?.cancel();
+        return purge(url, records, deps);
+      }
+      fresh = new Response(result.body, { status: result.status, headers: observed.headers });
+      if (observed.type === 'opaque' || observed.type === 'opaqueredirect')
+        return purge(url, records, deps);
+    }
+  } catch (error) {
+    if (error instanceof StorageError && (error.status === 403 || error.status === 404))
+      return purge(url, records, deps);
+    if (error instanceof StorageError && error.status !== null) return { kind: 'skipped' };
+    throw error;
+  }
 
   if (fresh.status === 304) {
     // Unchanged after all (the notification ETag differed from ours but the
@@ -240,7 +255,7 @@ async function refreshListing(
   frame: NotificationFrame,
   deps: InvalidateDeps,
 ): Promise<InvalidateOutcome> {
-  const container = frame.target ?? frame.object;
+  const container = frame.target ?? frame.origin ?? frame.object;
   const records = await deps.meta.getByUrl(container);
   if (records.length === 0) {
     // We never cached this container listing → nothing to refresh.
@@ -249,7 +264,25 @@ async function refreshListing(
 
   const req = rdfRequest(container);
   const rl: RequestLike = { url: req.url, method: req.method, headers: req.headers };
-  const fresh = await deps.fetch(req);
+  let fresh: Response;
+  try {
+    const result = await deps.storage.read(container, {
+      accept: deps.storage.protocol === 'lws' ? '*/*' : 'text/turtle',
+    });
+    const observed = policyResponse(result);
+    if (!observed) {
+      await result.body?.cancel();
+      return purge(container, records, deps);
+    }
+    if (observed.type === 'opaque' || observed.type === 'opaqueredirect')
+      return purge(container, records, deps);
+    fresh = new Response(result.body, { status: result.status, headers: observed.headers });
+  } catch (error) {
+    if (error instanceof StorageError && (error.status === 403 || error.status === 404))
+      return purge(container, records, deps);
+    if (error instanceof StorageError && error.status !== null) return { kind: 'skipped' };
+    throw error;
+  }
 
   if (fresh.status >= 200 && fresh.status < 300) {
     const decision = classifyResponse(rl, resLike(fresh));
@@ -287,24 +320,17 @@ async function refreshListing(
   return { kind: 'skipped' };
 }
 
-/**
- * The reconnect ETag-resync sweep (§5). After the socket reconnects (we missed
- * frames while down) revalidate the ENTIRE warmed set with conditional GETs —
- * mostly cheap 304s. This REPLACES P2's "re-issue the full BFS" re-warm: it does
- * no discovery/traversal, just a flat conditional revalidation of what we hold.
- *
- * Also used as the body of the disconnected slow-poll (one pass at a time).
- */
+/** Reconcile the warmed set using fresh HEADs, reading only changed/unversioned entries. */
 export interface SweepResult {
   /** Entries examined. */
   checked: number;
-  /** Entries the server confirmed unchanged (304). */
+  /** Entries confirmed by HEAD ETag equality or a conditional read (304). */
   confirmed: number;
   /** Entries whose bytes were replaced (200). */
   replaced: number;
   /** Entries purged (403/404). */
   purged: number;
-  /** Entries with no ETag to revalidate against (skipped). */
+  /** Entries that could not be reconciled (scope, transport or server failure). */
   skipped: number;
 }
 
@@ -324,12 +350,30 @@ export async function resyncSweep(deps: InvalidateDeps): Promise<SweepResult> {
     // read of them is the page's job (read-on-demand re-checks visibility).
     if (records.every((r) => r.status === 403 || r.status === 404)) continue;
     const etag = records.find((r) => r.etag)?.etag;
-    if (!etag) {
+    if (!deps.storage.isWithinStorage(url)) {
       result.skipped += 1;
       continue;
     }
     result.checked += 1;
-    const outcome = await revalidateResource(url, records, undefined, deps);
+    let outcome: InvalidateOutcome;
+    try {
+      const head = await deps.storage.head(url, { revalidate: true });
+      if (etag && head.etag !== null && head.etag === etag) {
+        for (const record of records) {
+          record.fetchedAt = deps.now();
+          await deps.meta.put(record);
+        }
+        result.confirmed += 1;
+        continue;
+      } else outcome = await revalidateResource(url, records, undefined, deps);
+    } catch (error) {
+      if (error instanceof StorageError && (error.status === 403 || error.status === 404))
+        outcome = await purge(url, records, deps);
+      else {
+        result.skipped += 1;
+        continue;
+      }
+    }
     if (outcome.kind === '304-confirmed') result.confirmed += 1;
     else if (outcome.kind === 'updated') result.replaced += 1;
     else if (outcome.kind === 'deleted') result.purged += 1;
