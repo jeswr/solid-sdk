@@ -385,6 +385,15 @@ describe("strict offline replay", () => {
     replay.assertDone();
   });
 
+  test("snapshots Request inputs when called, before queued replay starts", async () => {
+    const replay = createReplayFetch([fixture()]);
+    const input = new Request(URL);
+    const pending = replay(input);
+    input.headers.set("x-later-edit", "must not affect the pending fetch");
+    expect(await (await pending).text()).toBe("response");
+    replay.assertDone();
+  });
+
   test("abort does not consume an entry", async () => {
     const replay = createReplayFetch([fixture()]);
     await expect(replay(URL, { signal: AbortSignal.abort() })).rejects.toMatchObject({

@@ -224,9 +224,9 @@ export function createReplayFetch(fixtures: readonly HttpFixture[]): ReplayFetch
   const entries = fixtures.map(fixtureOf);
   let position = 0;
   let queue = Promise.resolve();
-  const replay: AuthFetch = (input, init) => {
+  const replay: AuthFetch = async (input, init) => {
+    const request = requestOf(input, init);
     const result = queue.then(async () => {
-      const request = requestOf(input, init);
       request.signal.throwIfAborted();
       const entry = entries[position];
       if (!entry) throw new Error("HTTP fixture replay exhausted");
