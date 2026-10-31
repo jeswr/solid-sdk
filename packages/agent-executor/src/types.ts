@@ -26,7 +26,7 @@ export interface SendGrant {
   readonly access: "send";
   readonly accessToken: string;
 }
-/** Deliberately has no read capability. Compatible with the channels TokenProvider. */
+/** Deliberately has no read capability. Compatible with the channels send token projection. */
 export interface TokenProvider {
   send(account: AccountRef): Promise<SendGrant>;
 }
