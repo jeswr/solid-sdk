@@ -86,8 +86,12 @@ export class SolidUpdateStore {
 
   private async create(update: Uint8Array, kind: StoredUpdate["kind"]): Promise<{ url: string }> {
     const { bytes, name } = encodeRecord(update, kind);
-    if (kind === "snapshot" && bytes.byteLength > this.maxUpdateBytes) {
-      throw new Error("[y-solid] snapshot exceeds max size; originals retained");
+    if (bytes.byteLength > this.maxUpdateBytes) {
+      throw new Error(
+        kind === "snapshot"
+          ? "[y-solid] snapshot exceeds max size; originals retained"
+          : "[y-solid] update exceeds max size",
+      );
     }
     const result = await this.storage.create(this.container, bytes, {
       contentType: UPDATE_CONTENT_TYPE,

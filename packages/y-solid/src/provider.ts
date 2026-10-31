@@ -90,8 +90,13 @@ export class SolidPersistence {
       throw new TypeError("[y-solid] invalid debounce or compaction options");
     }
     this.updateHandler = (update, origin) => {
-      if (this.destroyed || origin === this || (this.transport && origin === this.transport))
+      if (this.destroyed || origin === this) return;
+      if (this.transport && origin === this.transport) {
+        // Received state also lacks a durability acknowledgement. Checkpoint it
+        // on the next explicit flush, while continuing to suppress socket echoes.
+        this.uncheckpointedLiveState = true;
         return;
+      }
       if (this.sendUpdate(update)) return;
       this.pending.push(update.slice());
       this.scheduleWrite();

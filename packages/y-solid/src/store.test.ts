@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import { createSolidBackend } from "@jeswr/storage-client/solid";
 import { describe, expect, it } from "vitest";
+import { LOG_HEADER_BYTES } from "./record.js";
 import { SolidUpdateStore, UPDATE_CONTENT_TYPE } from "./store.js";
 import { makePod } from "./testPod.js";
 
@@ -292,6 +293,21 @@ describe("redirect refusal — credentialed requests never follow a 3xx", () => 
 });
 
 describe("size caps — hostile/unbounded bodies are refused", () => {
+  it("rejects oversized appends before writing and round-trips a record exactly at the cap", async () => {
+    const pod = makePod(CONTAINER);
+    const store = new SolidUpdateStore({
+      container: CONTAINER,
+      storage: pod.storage,
+      maxUpdateBytes: LOG_HEADER_BYTES + 8,
+    });
+    await expect(store.appendUpdate(new Uint8Array(9))).rejects.toThrow(/max size/);
+    expect(pod.calls.putCount).toBe(0);
+    const update = new Uint8Array(8).fill(42);
+    const { url } = await store.appendUpdate(update);
+    expect(pod.store.get(url)?.body.byteLength).toBe(LOG_HEADER_BYTES + 8);
+    expect(await store.loadUpdates()).toMatchObject([{ url, update }]);
+  });
+
   it("refuses an update whose declared content-length exceeds maxUpdateBytes", async () => {
     const pod = makePod(CONTAINER);
     const store = new SolidUpdateStore({
@@ -299,7 +315,9 @@ describe("size caps — hostile/unbounded bodies are refused", () => {
       storage: pod.storage,
       maxUpdateBytes: 8,
     });
-    const { url } = await store.appendUpdate(new Uint8Array(32));
+    // Seed through a writer with a higher cap so the reader still checks hostile bytes.
+    const writer = new SolidUpdateStore({ container: CONTAINER, storage: pod.storage });
+    const { url } = await writer.appendUpdate(new Uint8Array(32));
     await expect(store.readUpdate(url)).rejects.toThrow(/max size/);
   });
 

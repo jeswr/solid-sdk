@@ -8,6 +8,7 @@ import * as sync from "y-protocols/sync";
 import * as Y from "yjs";
 import type { SyncSocket } from "./live.js";
 import { type YSolidOptions, YSolidProvider } from "./provider.js";
+import { LOG_HEADER_BYTES } from "./record.js";
 import { SolidUpdateStore } from "./store.js";
 import { ENDPOINT, FakeSyncServer, message, SSD, TEMPLATE } from "./testSyncServer.js";
 
@@ -216,6 +217,97 @@ for (const protocol of ["solid", "lws"] as const)
       });
       // B did not reconnect or send a heartbeat to restore its presence at A.
       expect(b.awareness.meta.get(b.doc.clientID)?.clock).toBe(peerClock);
+    });
+
+    it.each([
+      "flush",
+      "disconnect",
+      "loss",
+    ] as const)("rejects oversized checkpoints on %s and retains them for retry", async (method) => {
+      const { provider, server, create, container } = await setup(protocol);
+      const seed = new Y.Doc();
+      cleanups.push(() => seed.destroy());
+      seed.getText("text").insert(0, "seed");
+      const initial = Y.encodeStateAsUpdate(seed);
+      const maxUpdateBytes = LOG_HEADER_BYTES + initial.byteLength;
+      const store = new SolidUpdateStore({
+        storage: { ...server.storage, create },
+        container,
+        maxUpdateBytes,
+      });
+      await store.appendUpdate(initial);
+      create.mockClear();
+      const append = vi.spyOn(store, "appendUpdate");
+      const a = provider({ store, debounceMs: 60_000, reconnectDelayMs: 60_000 });
+      await a.whenSynced;
+      const socket = server.sockets[0];
+      if (!socket) throw new Error("missing socket");
+      vi.spyOn(socket, "send").mockImplementation(() => {});
+      a.doc.getText("text").insert(4, "x".repeat(maxUpdateBytes));
+      const checkpoint = Y.encodeStateAsUpdate(a.doc);
+      expect(checkpoint.byteLength + LOG_HEADER_BYTES).toBeGreaterThan(maxUpdateBytes);
+      if (method === "loss") server.drop();
+      await expect(a[method === "loss" ? "flush" : method]()).rejects.toThrow(/max size/);
+      expect(create).not.toHaveBeenCalled();
+      expect(append).toHaveBeenCalledOnce();
+      expect(append.mock.calls[0]?.[0]).toEqual(checkpoint);
+      // Disconnect stops the provider even when its checkpoint fails. Reconnect
+      // to the unavailable relay, keeping the retained batch in log mode.
+      if (method === "disconnect") {
+        server.online = false;
+        await a.connect();
+      }
+      await expect(a.flush()).rejects.toThrow(/max size/);
+      expect(append).toHaveBeenCalledTimes(2);
+      expect(append.mock.calls[1]?.[0]).toEqual(checkpoint);
+      expect(create).not.toHaveBeenCalled();
+      const reader = provider({
+        mode: "log",
+        store: new SolidUpdateStore({ storage: server.storage, container, maxUpdateBytes }),
+      });
+      await reader.whenSynced;
+      expect(reader.doc.getText("text").toString()).toBe("seed");
+    });
+
+    it.each([
+      "flush",
+      "disconnect",
+    ] as const)("checkpoints received live edits on %s while relay persistence is pending", async (method) => {
+      const { provider, server, create, storage } = await setup(protocol);
+      const a = provider();
+      await a.whenSynced;
+      await a.flush();
+      await server.writes;
+      expect(create).toHaveBeenCalledOnce();
+      const socket = server.sockets[0];
+      if (!socket) throw new Error("missing socket");
+      const sent = socket.sent.length;
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      cleanups.push(release);
+      const append = server.store.appendUpdate.bind(server.store);
+      vi.spyOn(server.store, "appendUpdate").mockImplementationOnce(async (update) => {
+        await gate;
+        return append(update);
+      });
+      server.doc.getMap("m").set("remote", true);
+      const persisted = vi.fn();
+      void server.writes.then(persisted);
+      await eventually(() => expect(a.doc.getMap("m").get("remote")).toBe(true));
+      // Receiving the update neither echoes it nor writes behind the relay.
+      expect(socket.sent).toHaveLength(sent);
+      expect(create).toHaveBeenCalledOnce();
+      await a[method]();
+      expect(create).toHaveBeenCalledTimes(2);
+      expect(persisted).not.toHaveBeenCalled();
+      const reader = provider({ storage, mode: "log" });
+      await reader.whenSynced;
+      expect(reader.doc.getMap("m").get("remote")).toBe(true);
+      expect(Y.encodeStateVector(reader.doc)).toEqual(Y.encodeStateVector(a.doc));
+      release();
+      await server.writes;
     });
   });
 
