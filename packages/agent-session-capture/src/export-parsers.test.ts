@@ -34,6 +34,45 @@ describe("bounded export parsers", () => {
     expect(JSON.stringify(parsed)).not.toContain("DROP_");
     expect(parseChatgptExport(JSON.stringify({ conversations: JSON.parse(text) }))).toEqual(parsed);
   });
+  it.each([
+    "python",
+    "browser",
+    "functions.search",
+  ])("drops ChatGPT assistant text directed to %s", (recipient) => {
+    for (const contentType of ["text", "multimodal_text"])
+      expect(
+        parseChatgptExport(
+          chat(
+            message({
+              author: { role: "assistant" },
+              recipient,
+              content: { content_type: contentType, parts: ["DROP_TOOL_ARGUMENTS"] },
+            }),
+          ),
+        ),
+      ).toEqual([]);
+  });
+  it.each([undefined, "all"])("retains ChatGPT turns with recipient %s", (recipient) => {
+    for (const role of ["user", "assistant"])
+      expect(
+        parseChatgptExport(chat(message({ author: { role }, recipient })))[0]?.messages.map(
+          (turn) => [turn.role, turn.text],
+        ),
+      ).toEqual([[role, "Hello"]]);
+  });
+  it("filters tool-directed ChatGPT messages before extracting their content", () => {
+    expect(
+      parseChatgptExport(
+        chat(
+          message({
+            author: { role: "assistant" },
+            recipient: "python",
+            content: { content_type: "text", parts: Array(10001).fill("DROP_TOOL_ARGUMENTS") },
+          }),
+        ),
+      ),
+    ).toEqual([]);
+  });
   it("parses Claude.ai text blocks and legacy text without attachments, tools or thinking", async () => {
     const parsed = parseClaudeExport(await fixture("claude"));
     expect(parsed[0]?.messages.map((m) => m.text)).toEqual([

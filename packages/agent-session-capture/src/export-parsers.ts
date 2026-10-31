@@ -76,6 +76,7 @@ function parse(text: string, provider: "chatgpt" | "claude"): ChatConversation[]
       let text: string;
       let stamp: string | undefined;
       if (provider === "chatgpt") {
+        if (message.recipient !== undefined && message.recipient !== "all") continue;
         const content = record(message.content);
         if (
           content.content_type !== undefined &&

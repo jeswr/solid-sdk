@@ -8,6 +8,7 @@
         "message": {
           "id": "answer",
           "author": { "role": "assistant" },
+          "recipient": "all",
           "create_time": 1792929601,
           "content": { "content_type": "text", "parts": ["A fixture answer."] }
         }
@@ -32,6 +33,13 @@
       },
       "tool": {
         "message": { "author": { "role": "tool" }, "content": { "parts": ["DROP_TOOL_OUTPUT"] } }
+      },
+      "tool-call": {
+        "message": {
+          "author": { "role": "assistant" },
+          "recipient": "python",
+          "content": { "content_type": "text", "parts": ["DROP_TOOL_ARGUMENTS"] }
+        }
       },
       "thinking": {
         "message": {
