@@ -64,7 +64,9 @@ function predicates(node: TermWrapper, allowed: readonly string[], url: string) 
 function modes(values: Iterable<string>, url: string): AccessMode[] {
   const result: AccessMode[] = [];
   for (const value of values) {
-    const mode = (Object.keys(MODES) as AccessMode[]).find((key) => MODES[key] === value);
+    const mode = (Object.keys(MODES) as AccessMode[]).find(
+      (key) => MODES[key as keyof typeof MODES] === value,
+    );
     if (mode === undefined) fail("unsupported", url);
     result.push(mode);
   }
@@ -128,7 +130,7 @@ export function addWac(
   rule.type.add(`${ACL}Authorization`);
   rule.accessTo = target;
   if (inherit) rule.default = target;
-  for (const mode of grant.modes) rule.mode.add(MODES[mode]);
+  for (const mode of grant.modes) rule.mode.add(MODES[mode as keyof typeof MODES]);
   if (typeof grant.agent === "string") rule.agent.add(grant.agent);
   else if ("public" in grant.agent) rule.accessibleToAny = true;
   else if ("authenticated" in grant.agent) rule.accessibleToAuthenticated = true;
@@ -274,7 +276,7 @@ export function addAcp(
   if (inherit) root.memberAccessControl.add(control);
   control.apply.add(policy);
   policy.allOf.add(matcher);
-  for (const mode of grant.modes) policy.allow.add(MODES[mode]);
+  for (const mode of grant.modes) policy.allow.add(MODES[mode as keyof typeof MODES]);
   matcher.agent.add(
     typeof grant.agent === "string"
       ? grant.agent

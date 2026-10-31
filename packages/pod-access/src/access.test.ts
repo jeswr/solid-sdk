@@ -590,6 +590,7 @@ describe("grant validation", () => {
   test.each([
     [],
     ["admin"],
+    ["delete"],
     ["__proto__"],
     null,
   ])("refuses malformed modes %s before IO", async (modes) => {

@@ -3234,6 +3234,9 @@ importers:
 
   packages/pod-access:
     dependencies:
+      '@jeswr/solid-odrl':
+        specifier: workspace:*
+        version: link:../solid-odrl
       '@jeswr/storage-client':
         specifier: workspace:*
         version: link:../storage-client

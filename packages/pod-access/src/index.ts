@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { StorageError } from "@jeswr/storage-client";
 import { Store } from "n3";
+import { createLwsAccess } from "./lws.js";
 import type { Dataset } from "./rdf.js";
 import {
   ACP,
@@ -26,12 +27,15 @@ export type {
   AccessClient,
   AccessClientOptions,
   AccessMode,
+  AccessRequest,
   Grant,
   RevocationKey,
 } from "./types.js";
 
-/** Solid sharing over advertised access documents, with conditional writes and no retries. */
-export function createAccessClient({ storage }: AccessClientOptions): AccessClient {
+/** Sharing over advertised Solid access documents or LWS access services. */
+export function createAccessClient(options: AccessClientOptions): AccessClient {
+  const { storage } = options;
+  const lws = createLwsAccess(options);
   const model: AccessClient["model"] = () =>
     storage.features.accessControl.state === "available"
       ? storage.features.accessControl.detail.model
@@ -130,14 +134,22 @@ export function createAccessClient({ storage }: AccessClientOptions): AccessClie
 
   return {
     model,
+    requests: lws.requests,
+    request: lws.request,
     async effective(url) {
-      if (storage.protocol !== "solid") unsupported();
+      if (storage.protocol === "lws") return lws.effective(url);
       const { allow } = await storage.head(url);
       return allow === null
         ? null
-        : { me: (Object.keys(MODES) as AccessMode[]).filter((mode) => allow[mode]), public: [] };
+        : {
+            me: (Object.keys(MODES) as AccessMode[]).filter(
+              (mode) => allow[mode as keyof typeof allow],
+            ),
+            public: [],
+          };
     },
     async grants(url) {
+      if (storage.protocol === "lws") return lws.grants(url);
       const doc = await document(url, false);
       return parse(doc.url, () =>
         doc.model === "wac"
@@ -146,6 +158,7 @@ export function createAccessClient({ storage }: AccessClientOptions): AccessClie
       );
     },
     async share(url, grant, opts) {
+      if (storage.protocol === "lws") return lws.share(url, grant, opts);
       const value = validate(grant);
       const inherit = opts.inherit === true;
       if (model() === "acp" && typeof value.agent !== "string" && "group" in value.agent)
@@ -170,6 +183,7 @@ export function createAccessClient({ storage }: AccessClientOptions): AccessClie
       return { ...value, id };
     },
     async revoke(url, key) {
+      if (storage.protocol === "lws") return lws.revoke(url, key);
       const value = validateRevokeKey(key);
       const doc = await document(url, true);
       const changed = parse(doc.url, () =>
