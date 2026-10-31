@@ -41,6 +41,17 @@ const stateByStore = new WeakMap<
   { pending: Set<string>; revision: number }
 >();
 
+interface AuthorityDeadlines {
+  proposal: number;
+  mandate: number;
+  approval?: number;
+}
+interface ReadyEvaluation {
+  status: "ready";
+  reason: string;
+  deadlines: AuthorityDeadlines;
+}
+
 /** This instance holds send scopes; no model or Actor capability enters the effect path. */
 export function createExecutor(options: ExecutorOptions) {
   const o = options;
@@ -52,6 +63,15 @@ export function createExecutor(options: ExecutorOptions) {
   const background = new Set<Promise<unknown>>();
   let backgroundError: unknown;
   let backgroundFailed = false;
+
+  function temporalFailure(deadlines: AuthorityDeadlines): Disposition | undefined {
+    const now = o.clock.now().getTime();
+    if (!(deadlines.proposal >= now)) return { status: "refused", reason: "expired" };
+    if (!(deadlines.mandate > now)) return { status: "refused", reason: "mandate-invalid" };
+    if (deadlines.approval !== undefined && !(deadlines.approval > now))
+      return { status: "awaiting-approval", reason: "approval-required" };
+    return undefined;
+  }
 
   async function controls(): Promise<{ halted: boolean; statements: readonly ControlStatement[] }> {
     try {
@@ -147,6 +167,7 @@ export function createExecutor(options: ExecutorOptions) {
     execute: boolean,
   ): Promise<
     | TransmitResult
+    | ReadyEvaluation
     | { entry: OutboxEntry; binding: SendBinding; record: TransmissionRecord; resend: boolean }
   > {
     const revision = state.revision;
@@ -249,12 +270,17 @@ export function createExecutor(options: ExecutorOptions) {
     );
     if (current.some((a) => a.decision === "deny"))
       return disposition(id, { status: "refused", reason: "approval-denied" });
-    let approval: string | undefined;
+    let approval: (typeof current)[number] | undefined;
     if (decision.decision === "confirm-required") {
-      approval = current.find((a) => a.decision === "approve")?.id;
-      if (!approval)
+      approval = current.find((a) => a.decision === "approve");
+      if (!approval?.id)
         return disposition(id, { status: "awaiting-approval", reason: "approval-required" });
     }
+    const deadlines: AuthorityDeadlines = {
+      proposal: Date.parse(entry.proposal.validUntil),
+      mandate: Date.parse(mandate.validUntil),
+      ...(approval ? { approval: Date.parse(approval.expires) } : {}),
+    };
     // Limits and claims share a store-wide lock. Ledger failure never means zero usage.
     const records = [...(await o.transmissions.list()), ...(await o.audit.listCommitted())];
     const limit = checkLimits(mandate, entry, records, now);
@@ -282,16 +308,17 @@ export function createExecutor(options: ExecutorOptions) {
       if (latest.statements.some((c) => c.kind === "RevokeMandate" && c.target === mandateId))
         return { status: "refused", reason: "mandate-invalid" };
       if (revision !== state.revision) return { status: "refused", reason: "authority-changed" };
-      return undefined;
+      return temporalFailure(deadlines);
     }
     if (!execute || o.dryRun !== false) {
-      const ready = await disposition(id, {
-        status: "ready",
+      const ready = {
+        status: "ready" as const,
         reason: execute ? "dry-run" : "re-evaluated",
-      });
+      };
+      await disposition(id, ready);
       // Decision persistence can suspend too; ready is never sufficient authority by itself.
       const failure = await authorityFailure();
-      return failure ? disposition(id, failure) : ready;
+      return failure ? disposition(id, failure) : { ...ready, deadlines };
     }
     if (pending.has(id)) return { status: "uncertain", reason: "in-flight" };
     let unresolved = previous?.status === "attempting" || previous?.status === "uncertain";
@@ -339,7 +366,7 @@ export function createExecutor(options: ExecutorOptions) {
       committedAt: unresolved && previous ? previous.committedAt : now.toISOString(),
       updatedAt: o.clock.now().toISOString(),
       underMandate: mandate.id,
-      ...(approval ? { underApproval: approval } : {}),
+      ...(approval ? { underApproval: approval.id } : {}),
       conversation: intent.conversation,
       recipientHash: intent.recipientHash,
       amount: intent.amount,
@@ -351,7 +378,7 @@ export function createExecutor(options: ExecutorOptions) {
       outcome: "permit",
       wireDigest: record.wireDigest,
       underMandate: mandate.id,
-      ...(approval ? { underApproval: approval } : {}),
+      ...(approval ? { underApproval: approval.id } : {}),
     });
     await o.audit.append({
       type: "transmission",
@@ -361,7 +388,7 @@ export function createExecutor(options: ExecutorOptions) {
       transmission: record,
       wireDigest: record.wireDigest,
       underMandate: mandate.id,
-      ...(approval ? { underApproval: approval } : {}),
+      ...(approval ? { underApproval: approval.id } : {}),
     });
     pending.add(id);
     return { entry, binding, record, resend: unresolved };
@@ -370,7 +397,10 @@ export function createExecutor(options: ExecutorOptions) {
   async function transmit(id: string): Promise<TransmitResult> {
     const revision = state.revision;
     const prepared = await o.transmissions.exclusive(() => prepare(id, true));
-    if (!("record" in prepared)) return prepared;
+    if (!("record" in prepared))
+      return "deadlines" in prepared
+        ? { status: prepared.status, reason: prepared.reason }
+        : prepared;
     const { entry, binding, record, resend } = prepared;
     let executorFailure: { error: unknown } | undefined;
     let credentialsReleased = false;
@@ -384,23 +414,21 @@ export function createExecutor(options: ExecutorOptions) {
         if (account.id !== entry.account.id || (await controls()).halted)
           throw new Error("Send gate closed");
         const grant = await o.tokens.send({ id: account.id });
-        if (
-          grant.access !== "send" ||
-          typeof grant.accessToken !== "string" ||
-          !grant.accessToken ||
-          !(await recheck()) ||
-          revision !== state.revision
-        )
+        if (grant.access !== "send" || typeof grant.accessToken !== "string" || !grant.accessToken)
+          throw new Error("Send grant unavailable");
+        const authority = await recheck();
+        // No asynchronous work may separate this clock check from releasing the grant.
+        if (!authority || temporalFailure(authority) || revision !== state.revision)
           throw new Error("Send grant unavailable");
         checkExecutorFailure();
         credentialsReleased = true;
         return grant;
       },
     };
-    async function recheck(): Promise<boolean> {
+    async function recheck(): Promise<AuthorityDeadlines | undefined> {
       try {
         const result = await o.transmissions.exclusive(() => prepare(id, false));
-        return "status" in result && result.status === "ready" && revision === state.revision;
+        return "deadlines" in result && revision === state.revision ? result.deadlines : undefined;
       } catch (error) {
         executorFailure = { error };
         throw error;
@@ -439,13 +467,13 @@ export function createExecutor(options: ExecutorOptions) {
       }
     }
     // Executor I/O before dispatch is not a provider operation or an ambiguous provider failure.
-    let ready: boolean;
+    let ready: AuthorityDeadlines | undefined;
     try {
       ready = await recheck();
     } catch {
       return settle(undefined);
     }
-    if (!ready || revision !== state.revision)
+    if (!ready || temporalFailure(ready) || revision !== state.revision)
       return settle({ outcome: "rejected", detail: "gate-closed" });
     async function dispatch() {
       return binding.send.transmit(entry.wire, {
@@ -477,10 +505,16 @@ export function createExecutor(options: ExecutorOptions) {
   }
   async function runOutboxOnce(execute = true): Promise<Readonly<Record<string, TransmitResult>>> {
     const results: Record<string, TransmitResult> = {};
-    for (const id of await o.proposals.queued())
-      results[id] = execute
-        ? await transmit(id)
-        : ((await o.transmissions.exclusive(() => prepare(id, false))) as TransmitResult);
+    for (const id of await o.proposals.queued()) {
+      if (execute) results[id] = await transmit(id);
+      else {
+        const result = await o.transmissions.exclusive(() => prepare(id, false));
+        results[id] =
+          "deadlines" in result
+            ? { status: result.status, reason: result.reason }
+            : (result as TransmitResult);
+      }
+    }
     return results;
   }
   return {

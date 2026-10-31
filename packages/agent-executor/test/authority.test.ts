@@ -1,7 +1,122 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it, vi } from "vitest";
 import { createExecutor } from "../src/index.js";
-import { control, harness } from "./helpers.js";
+import { control, harness, NOW, seal } from "./helpers.js";
+
+describe("temporal authority", () => {
+  for (const authority of ["proposal", "mandate", "approval"] as const) {
+    it.each([
+      "policy",
+      "ledger",
+      "claim",
+      "token",
+      "audit",
+      "disposition",
+      "controls",
+      "handoff",
+    ])(`${authority} expiry during %s prevents credential release`, async (stage) => {
+      const h = harness();
+      const e = await h.enqueue();
+      const deadline = new Date(Date.parse(NOW) + 1000).toISOString();
+      if (authority === "proposal") {
+        e.proposal.validUntil = deadline;
+        seal(e);
+      }
+      if (authority === "mandate")
+        Object.assign(h.state.mandate as object, { validUntil: deadline });
+      if (authority === "approval") {
+        h.needsApproval();
+        h.confirm(e);
+        Object.assign(h.approvals[0] as object, { expires: deadline });
+      }
+      let checkingCredentials = false;
+      const expire = () => {
+        h.state.at = new Date(
+          Date.parse(deadline) + (authority === "proposal" ? 1 : 0),
+        ).toISOString();
+      };
+      if (stage === "policy") {
+        const evaluate = h.options.policy.evaluate;
+        Object.assign(h.options, {
+          policy: {
+            ...h.options.policy,
+            evaluate: vi.fn(evaluate).mockImplementationOnce(async (...args) => {
+              const result = await evaluate(...args);
+              expire();
+              return result;
+            }),
+          },
+        });
+      }
+      if (stage === "ledger") {
+        const list = h.audit.listCommitted;
+        vi.spyOn(h.audit, "listCommitted").mockImplementationOnce(async () => {
+          const result = await list();
+          expire();
+          return result;
+        });
+      }
+      if (stage === "claim") {
+        const put = h.transmissions.put;
+        vi.spyOn(h.transmissions, "put").mockImplementationOnce(async (record) => {
+          await put(record);
+          expire();
+        });
+      }
+      if (stage === "token") {
+        vi.mocked(h.options.tokens.send).mockImplementationOnce(async () => {
+          expire();
+          return { access: "send", accessToken: "synthetic" };
+        });
+      }
+      if (stage === "audit") {
+        const append = h.audit.append;
+        vi.spyOn(h.audit, "append").mockImplementation(async (record) => {
+          await append(record);
+          if (checkingCredentials && record.outcome === "re-evaluated") expire();
+        });
+      }
+      if (stage === "disposition") {
+        const write = h.proposals.writeDisposition;
+        vi.spyOn(h.proposals, "writeDisposition").mockImplementation(async (id, result) => {
+          await write(id, result);
+          if (checkingCredentials && result.status === "ready") expire();
+        });
+      }
+      if (stage === "controls") {
+        const list = h.controls.listVerified;
+        let checks = 0;
+        vi.spyOn(h.controls, "listVerified").mockImplementation(async (owner) => {
+          const result = await list(owner);
+          // The last asynchronous control read of the credential recheck.
+          if (checkingCredentials && ++checks === 3) expire();
+          return result;
+        });
+      }
+      if (stage === "handoff") {
+        const exclusive = h.transmissions.exclusive;
+        Object.assign(h.transmissions, {
+          async exclusive<T>(work: () => Promise<T>): Promise<T> {
+            const result = await exclusive(work);
+            if (checkingCredentials) queueMicrotask(() => queueMicrotask(expire));
+            return result;
+          },
+        });
+      }
+      const provider = vi.fn();
+      vi.mocked(h.binding.send.transmit).mockImplementation(async (_wire, io) => {
+        checkingCredentials = true;
+        await io.tokens.send(io.account);
+        provider();
+        return { outcome: "accepted", providerRef: "must-not-send" };
+      });
+      const result = await h.executor.transmit(e.proposal.id);
+      expect(result.status).not.toBe("sent");
+      expect(provider).not.toHaveBeenCalled();
+      if (stage === "policy" || stage === "ledger") expect(h.records.size).toBe(0);
+    });
+  }
+});
 
 describe("final credential authority", () => {
   for (const stage of [
