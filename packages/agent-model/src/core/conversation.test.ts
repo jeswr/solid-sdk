@@ -57,13 +57,77 @@ it.each([
 });
 
 it("records multiple proposals without requiring an agreement", () => {
-  const first = transition(open(), event, DEFAULT_LIMITS);
+  const settlement = { ...event, sequence: 4 };
+  const first = transition(open(), settlement, DEFAULT_LIMITS);
   if (!first.ok) throw new Error(first.detail);
-  const next = { ...event, proposal: "urn:other-proposal", activity: "urn:other-transmission" };
+  const next = {
+    ...event,
+    proposal: "urn:other-proposal",
+    activity: "urn:other-transmission",
+    sequence: 1,
+  };
   const result = transition(first.state, next, DEFAULT_LIMITS);
   expect(result).toEqual({
     ok: true,
-    state: { ...open(), transmissions: { [event.proposal]: event, [next.proposal]: next } },
+    state: { ...open(), transmissions: { [event.proposal]: settlement, [next.proposal]: next } },
+  });
+});
+
+it.each([
+  [0, 1, 2],
+  [0, 2, 1],
+  [1, 0, 2],
+  [1, 2, 0],
+  [2, 0, 1],
+  [2, 1, 0],
+])("preserves the latest settlement when replaying order %s, %s, %s", (...order) => {
+  const settlements = [
+    { ...event, status: "not-sent", sequence: 2 },
+    { ...event, status: "uncertain", sequence: 4 },
+    { ...event, status: "not-sent", final: true, sequence: 7 },
+  ] as const;
+  let state = open();
+  for (const index of order) {
+    const settlement = settlements[index];
+    if (!settlement) throw new Error("Missing settlement");
+    const result = transition(state, settlement, DEFAULT_LIMITS);
+    if (!result.ok) throw new Error(result.detail);
+    state = result.state;
+  }
+  expect(state).toEqual({
+    ...open(),
+    transmissions: { [event.proposal]: settlements[2] },
+  });
+});
+
+it.each([undefined, 0, 3])("ignores stale sequence %s even with a later timestamp", (sequence) => {
+  const latest = { ...event, status: "sent" as const, final: true, sequence: 4 };
+  const state = { ...open(), transmissions: { [event.proposal]: latest } };
+  const before = structuredClone(state);
+  const result = transition(
+    state,
+    { ...event, sequence, at: "2026-10-31T12:01:00.000Z" },
+    DEFAULT_LIMITS,
+  );
+  expect(result).toEqual({ ok: true, state: before });
+  if (!result.ok) throw new Error(result.detail);
+  expect(result.state).toBe(state);
+  expect(state).toEqual(before);
+});
+
+it.each([undefined, 0, 3])("supersedes sequence %s despite clock rollback", (sequence) => {
+  const previous = { ...event, sequence };
+  const state = { ...open(), transmissions: { [event.proposal]: previous } };
+  const latest = {
+    ...event,
+    status: "not-sent" as const,
+    final: true,
+    sequence: 4,
+    at: "2026-10-31T11:59:00.000Z",
+  };
+  expect(transition(state, latest, DEFAULT_LIMITS)).toEqual({
+    ok: true,
+    state: { ...open(), transmissions: { [event.proposal]: latest } },
   });
 });
 

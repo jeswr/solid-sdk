@@ -53,6 +53,8 @@ export interface TransmissionSettlement {
   readonly status: "sent" | "not-sent" | "uncertain";
   /** Final delivery disposition for this proposal; does not conclude agreement performance. */
   readonly final: boolean;
+  /** Durable per-proposal write sequence. Missing on legacy events (zero). */
+  readonly sequence?: number;
   readonly at: string;
 }
 
@@ -150,6 +152,8 @@ export function transition(
     if (event.conversation !== state.id) {
       return fail("protocol-violation", "transmission settlement belongs to another conversation");
     }
+    const previous = state.transmissions?.[event.proposal];
+    if ((event.sequence ?? 0) < (previous?.sequence ?? 0)) return { ok: true, state };
     return {
       ok: true,
       state: {

@@ -204,6 +204,7 @@ export function createExecutor(options: ExecutorOptions) {
       final:
         record.status === "sent" ||
         (record.status === "not-sent" && record.attempts >= MAX_TRANSMISSION_ATTEMPTS),
+      sequence: record.sequence,
       at: record.updatedAt,
     });
     await o.proposals.writeDisposition(record.proposal, result);

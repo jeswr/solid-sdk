@@ -878,13 +878,14 @@ it.each([
   expect(await executor.runOutboxOnce()).toEqual({
     [e.proposal.id]: { status: "not-sent", reason: "not-sent" },
   });
-  expect([...h.settlements.values()]).toEqual([rejected]);
+  const repaired = { ...rejected, sequence: 3 };
+  expect([...h.settlements.values()]).toEqual([repaired]);
   expect(h.binding.send.transmit).toHaveBeenCalledOnce();
   expect(await executor.transmit(e.proposal.id)).toMatchObject({ status: "sent" });
   expect(h.binding.send.transmit).toHaveBeenCalledTimes(2);
   expect(h.records.get(e.proposal.id)).toMatchObject({ status: "sent", attempts: 2 });
   expect([...h.settlements.values()]).toEqual([
-    rejected,
+    repaired,
     expect.objectContaining({
       proposal: rejected?.proposal,
       activity: rejected?.activity,

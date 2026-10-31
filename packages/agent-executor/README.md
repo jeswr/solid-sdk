@@ -46,6 +46,8 @@ lookup and before handing over send credentials, closing asynchronous revocation
   `TransmissionSettlement` conversation events through `emitTransmission()`, keyed by
   proposal + status. Apply these events with `agent-model.transition`; they record delivery
   in `state.transmissions` without changing agreement performance outcomes or phase.
+  Events carry the durable per-proposal `sequence`; replay ignores older sequences even
+  when status upserts reorder events or timestamps coincide. Legacy events count as sequence zero.
   Protocol `receipt` messages remain reserved for performance referencing the active agreement.
   `queued()` must enumerate all pending and unresolved
   items, including those waiting for approval or control/mandate re-evaluation.
