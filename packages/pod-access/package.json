@@ -15,6 +15,10 @@
     "./testing": {
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
+    },
+    "./notify": {
+      "types": "./dist/notify.d.ts",
+      "default": "./dist/notify.js"
     }
   },
   "files": [
@@ -32,8 +36,12 @@
     "test": "vitest run"
   },
   "license": "MIT",
+  "dependencies": {
+    "solid-agent-notify": "workspace:*"
+  },
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
+    "@types/node": "^25.9.2",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
   }
