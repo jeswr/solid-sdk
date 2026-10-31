@@ -467,6 +467,8 @@ describe("grant validation", () => {
     "relative",
     "https://synthetic:credential@agent.example/",
     "https://agent.example/a b",
+    "https://agent.example/a\u0000b",
+    "https://agent.example/a\u007fb",
     "https://agent.example/<injection>",
     { group: "relative" },
   ])("refuses malformed agent %s before IO", async (agent) => {

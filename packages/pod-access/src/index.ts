@@ -93,7 +93,8 @@ export function createAccessClient({ storage }: AccessClientOptions): AccessClie
   function validIri(value: string) {
     try {
       const parsed = new URL(value);
-      if (parsed.username || parsed.password || /[\s<>"{}|^`\\]/u.test(value)) throw new Error();
+      if (parsed.username || parsed.password || /[\s\p{Cc}<>"{}|^`\\]/u.test(value))
+        throw new Error();
     } catch {
       throw new TypeError("Grant agents must be absolute IRIs without credentials");
     }
