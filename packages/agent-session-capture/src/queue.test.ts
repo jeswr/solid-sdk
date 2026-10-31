@@ -16,7 +16,12 @@ let entry: QueueEntry;
 const target = { podRoot: "https://pod.example/", webId: "https://pod.example/profile/card#me" };
 const stamp = "2026-10-25T12:00:00Z";
 const signal = () => new AbortController().signal;
-const files = () => fs.readdir(directory);
+const files = async () => (await fs.readdir(directory)).filter((name) => name.endsWith(".json"));
+const progress = () =>
+  join(
+    directory,
+    `.progress-${digest([target, entry.conversation.provider, entry.conversation.conversationId])}`,
+  );
 async function store(value: unknown, mode = 0o600) {
   const path = join(directory, `${digest(value)}.json`);
   await fs.writeFile(path, JSON.stringify(value), { mode });
@@ -63,6 +68,8 @@ describe("offline queue", () => {
       messages: [{ ...entry.conversation.messages[0], text: "[REDACTED TOKEN]" }],
     });
     expect(await files()).toEqual([]);
+    expect((await fs.stat(progress())).mode & 0o7777).toBe(0o600);
+    expect(await fs.readFile(progress(), "utf8")).not.toMatch(/sk-fixture|REDACTED/);
   });
 
   it("retains failed or aborted uploads and cleans failed writes", async () => {
@@ -89,7 +96,103 @@ describe("offline queue", () => {
     await expect(replay(directory, target, vi.fn(), AbortSignal.abort())).rejects.toThrow();
     await expect(enqueue(directory, entry, AbortSignal.abort())).rejects.toThrow();
     await expect(enqueue(join(directory, "missing"), entry, signal())).rejects.toThrow();
-    expect((await files()).every((name) => name.endsWith(".json"))).toBe(true);
+    expect((await fs.readdir(directory)).every((name) => name.endsWith(".json"))).toBe(true);
+  });
+
+  it.each([
+    "failure",
+    "deadline",
+  ])("resumes acknowledged messages after %s, including overlapping and completed snapshots", async (reason) => {
+    entry.conversation.messages.push(
+      { id: "b".repeat(64), role: "assistant", text: "Answer", createdAt: stamp },
+      { id: "c".repeat(64), role: "tool", text: "Read", createdAt: stamp },
+    );
+    await enqueue(directory, entry, signal());
+    const controller = new AbortController();
+    const first = vi.fn(async () => {
+      if (first.mock.calls.length === 2) {
+        if (reason === "deadline") controller.abort();
+        throw new Error("interrupted");
+      }
+    });
+    await replay(directory, target, first, controller.signal);
+    expect(first).toHaveBeenCalledTimes(2);
+    expect(await files()).toHaveLength(1);
+    expect(JSON.parse(await fs.readFile(progress(), "utf8")).messageIds).toEqual([
+      entry.conversation.messages[0]?.id,
+    ]);
+    // Requeueing and overlapping snapshots cannot reset acknowledged progress.
+    await enqueue(directory, entry, signal());
+    const next = vi.fn().mockResolvedValue({});
+    await replay(directory, target, next, signal());
+    expect(next.mock.calls.map(([chat]) => chat.messages[0].id)).toEqual([
+      "b".repeat(64),
+      "c".repeat(64),
+    ]);
+    expect(await files()).toEqual([]);
+    expect(await enqueue(directory, entry, signal())).toBeUndefined();
+    // A stale pending snapshot is also safe after a crash before deletion.
+    await store(entry);
+    await replay(directory, target, next, signal());
+    expect(next).toHaveBeenCalledTimes(2);
+    expect(await files()).toEqual([]);
+    entry.conversation.messages.push({
+      id: "d".repeat(64),
+      role: "assistant",
+      text: "Appended",
+      createdAt: stamp,
+    });
+    await enqueue(directory, entry, signal());
+    await replay(directory, target, next, signal());
+    expect(next).toHaveBeenLastCalledWith({
+      ...entry.conversation,
+      messages: [entry.conversation.messages[3]],
+    });
+    expect(next).toHaveBeenCalledTimes(3);
+  });
+
+  it.each([
+    null,
+    { version: 2 },
+    { key: "another-account" },
+    { messageIds: null },
+    { messageIds: [5] },
+    { messageIds: ["unsafe/path"] },
+  ])("fails closed on malformed acknowledgement data %#", async (override) => {
+    await enqueue(directory, entry, signal());
+    await replay(directory, target, vi.fn().mockResolvedValue({}), signal());
+    const original = JSON.parse(await fs.readFile(progress(), "utf8"));
+    await fs.writeFile(
+      progress(),
+      JSON.stringify(override === null ? null : { ...original, ...override }),
+    );
+    await store(entry);
+    await expect(enqueue(directory, entry, signal())).rejects.toThrow("Invalid capture progress");
+    const save = vi.fn();
+    await replay(directory, target, save, signal());
+    expect(save).not.toHaveBeenCalled();
+    expect(await files()).toHaveLength(1);
+  });
+
+  it.each(["symlink", "permissions", "json"])("refuses unsafe %s progress files", async (kind) => {
+    await enqueue(directory, entry, signal());
+    await replay(directory, target, vi.fn().mockResolvedValue({}), signal());
+    const original = await fs.readFile(progress(), "utf8");
+    await fs.rm(progress());
+    if (kind === "symlink") {
+      const external = join(home, "external-progress");
+      await fs.writeFile(external, original, { mode: 0o600 });
+      await fs.symlink(external, progress());
+    } else {
+      await fs.writeFile(progress(), kind === "json" ? "not-json" : original, { mode: 0o644 });
+      if (kind === "json") await fs.chmod(progress(), 0o600);
+    }
+    await store(entry);
+    await expect(enqueue(directory, entry, signal())).rejects.toThrow();
+    const save = vi.fn();
+    await replay(directory, target, save, signal());
+    expect(save).not.toHaveBeenCalled();
+    expect(await files()).toHaveLength(1);
   });
 
   it("rejects oversize snapshots before writing", async () => {
@@ -169,7 +272,7 @@ describe("offline queue", () => {
     await store(entry);
     const save = vi.fn().mockResolvedValue({});
     await replay(directory, target, save, signal());
-    expect(save).toHaveBeenCalledOnce();
+    expect(save).toHaveBeenCalledTimes(3);
     expect(await files()).toHaveLength(1);
   });
 

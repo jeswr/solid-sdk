@@ -115,10 +115,15 @@ Codex retries queued snapshots before scanning rollouts, including when no
 new rollout exists. Claude queues its current transcript before network I/O so
 PreCompact can safely replace the source, then retries older snapshots. New snapshots
 are queued and uploaded one at a time, so a long scan cannot prevent upload progress.
-Successful snapshots are removed; failed or partial
-uploads, corrupt entries and unsafe files remain local. Delete unwanted snapshots
-manually, or remove the queue to clear all pending captures. Config and opt-out
-checks still apply before replay.
+Each message is saved independently. Atomic private `.progress-*` checkpoints retain
+only opaque message IDs, scoped to the pod root, owner and conversation. Retries skip
+acknowledged messages even when a transcript grows or the timestamp filter changes;
+completed Codex rollouts require no further upload requests. A save interrupted before
+its checkpoint is recorded may be retried with the same create-only ID.
+Successful snapshots are removed; checkpoints remain. Failed or partial uploads,
+corrupt entries and unsafe files remain local. Delete unwanted snapshots manually,
+or remove the queue to clear all pending captures and completion checkpoints. Config
+and opt-out checks still apply before replay.
 
 ## Library and tests
 

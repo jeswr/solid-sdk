@@ -184,6 +184,117 @@ describe("capture with real ChatWriter and client credentials", () => {
     );
   });
 
+  it("skips completed Codex scans and uploads only newly eligible or appended messages", async () => {
+    const path = await rollout(await fixture("codex"));
+    await runCapture(["codex", "--since", "2026-10-25T12:00:01.000Z"], options);
+    const uploaded = [...transport.resources.keys()].filter((url) => /\/m-.*\.ttl$/.test(url));
+    expect(uploaded).toHaveLength(2);
+    transport.requests.length = 0;
+    await runCapture(["codex", "--since", "2026-10-25T12:00:01.000Z"], options);
+    expect(transport.requests).toEqual([]);
+    await runCapture(["codex"], options);
+    expect(
+      transport.requests.filter((request) => uploaded.some((url) => request.url.startsWith(url))),
+    ).toEqual([]);
+    expect([...transport.resources.keys()].filter((url) => /\/m-.*\.ttl$/.test(url))).toHaveLength(
+      4,
+    );
+    transport.requests.length = 0;
+    await writeFile(
+      path,
+      `${await readFile(path, "utf8")}\n${JSON.stringify({
+        type: "response_item",
+        timestamp: "2026-10-25T12:00:05Z",
+        payload: {
+          type: "message",
+          id: "appended",
+          role: "assistant",
+          content: [{ type: "output_text", text: "New answer" }],
+        },
+      })}`,
+    );
+    await runCapture(["codex"], options);
+    expect(
+      transport.requests.filter(
+        (request) => request.method === "PUT" && /\/m-.*\.ttl$/.test(request.url),
+      ),
+    ).toHaveLength(1);
+    transport.requests.length = 0;
+    await runCapture(["codex"], options);
+    expect(transport.requests).toEqual([]);
+    expect(await queued()).toEqual([]);
+  });
+
+  it("advances to later Codex rollouts across deadlines without revisiting completed ones", async () => {
+    const text = await fixture("codex");
+    const ids = ["scan-1", "scan-2", "scan-3"];
+    for (const id of ids) {
+      await rollout(text.replaceAll("codex-fixture-session", id), `rollout-${id}.jsonl`);
+    }
+    vi.useFakeTimers();
+    for (let index = 0; index < ids.length; index++) {
+      let stalled: (() => void) | undefined;
+      const requestStalled = new Promise<void>((resolve) => {
+        stalled = resolve;
+      });
+      const current = digest(["codex", ids[index]]);
+      const limitedTransport: NonNullable<CaptureOptions["fetch"]> = async (input, init) => {
+        const request = new Request(input, init);
+        const conversation = /\/codex\/([a-f0-9]{64})\//.exec(request.url)?.[1];
+        if (conversation !== undefined && conversation !== current) {
+          stalled?.();
+          return new Promise((_resolve, reject) =>
+            request.signal.addEventListener("abort", () => reject(new Error("deadline")), {
+              once: true,
+            }),
+          );
+        }
+        return transport.fetch(request);
+      };
+      const running = runCapture(["codex"], {
+        ...options,
+        fetch: limitedTransport,
+        budgetMs: 100,
+      });
+      if (index < ids.length - 1) {
+        await requestStalled;
+        await vi.advanceTimersByTimeAsync(100);
+      }
+      expect(await running).toBe(0);
+      expect(
+        [...transport.resources.keys()].filter((url) => /\/m-.*\.ttl$/.test(url)),
+      ).toHaveLength((index + 1) * 4);
+    }
+    expect(await queued()).toEqual([]);
+    transport.requests.length = 0;
+    await runCapture(["codex"], options);
+    expect(transport.requests).toEqual([]);
+  });
+
+  it.each([
+    "podRoot",
+    "webId",
+  ] as const)("keeps completion checkpoints scoped to %s", async (field) => {
+    await rollout(await fixture("codex"));
+    await runCapture(["codex"], options);
+    transport.requests.length = 0;
+    await runCapture(["codex"], {
+      ...options,
+      env: {
+        ...env,
+        [field === "podRoot" ? "SOLID_MCP_POD_ROOT" : "SOLID_MCP_WEBID"]:
+          field === "podRoot"
+            ? "https://pod.example/bob/"
+            : "https://pod.example/bob/profile/card#me",
+      },
+    });
+    expect(
+      transport.requests.filter(
+        (request) => request.method === "PUT" && /\/m-.*\.ttl$/.test(request.url),
+      ),
+    ).toHaveLength(4);
+  });
+
   it("queues redacted snapshots offline and recovers later even without a transcript", async () => {
     await writeFile(
       transcript,
@@ -229,7 +340,12 @@ describe("capture with real ChatWriter and client credentials", () => {
     expect([...transport.resources.keys()].filter((url) => /\/m-.*\.ttl$/.test(url))).toHaveLength(
       1,
     );
+    const completed = [...transport.resources.keys()].find((url) =>
+      /\/m-.*\.ttl$/.test(url),
+    ) as string;
+    transport.requests.length = 0;
     await runCapture(["claude", "--transcript", transcript], options);
+    expect(transport.requests.filter((request) => request.url.startsWith(completed))).toEqual([]);
     expect(await queued()).toEqual([]);
     expect([...transport.resources.keys()].filter((url) => /\/m-.*\.ttl$/.test(url))).toHaveLength(
       4,

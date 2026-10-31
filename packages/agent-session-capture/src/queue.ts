@@ -17,13 +17,11 @@ export interface QueueEntry extends CapturedSession {
   target: { podRoot: string; webId: string };
 }
 
-/** Persist a complete redacted snapshot before attempting network I/O. */
-export async function enqueue(directory: string, entry: QueueEntry, signal: AbortSignal) {
+async function persist(directory: string, name: string, value: unknown, signal: AbortSignal) {
   signal.throwIfAborted();
-  const text = JSON.stringify(entry);
+  const text = JSON.stringify(value);
   if (Buffer.byteLength(text) > MAX_BYTES) throw new Error("Capture queue entry exceeds limit");
   const temp = join(directory, `.tmp-${randomUUID()}`);
-  const name = `${digest(entry)}.json`;
   try {
     await writeFile(temp, text, { flag: "wx", mode: 0o600, signal });
     signal.throwIfAborted();
@@ -32,6 +30,36 @@ export async function enqueue(directory: string, entry: QueueEntry, signal: Abor
   } finally {
     await unlink(temp).catch(() => {});
   }
+}
+
+function progressKey(entry: Pick<QueueEntry, "target" | "conversation">) {
+  return digest([entry.target, entry.conversation.provider, entry.conversation.conversationId]);
+}
+
+async function acknowledged(directory: string, key: string, signal: AbortSignal) {
+  let text: string;
+  try {
+    text = await readRegular(join(directory, `.progress-${key}`), signal, true);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return new Set<string>();
+    throw error;
+  }
+  const progress = record(JSON.parse(text));
+  if (
+    progress.version !== 1 ||
+    progress.key !== key ||
+    !Array.isArray(progress.messageIds) ||
+    !progress.messageIds.every((id) => typeof id === "string" && /^[a-f0-9]{64}$/.test(id))
+  )
+    throw new Error("Invalid capture progress");
+  return new Set<string>(progress.messageIds);
+}
+
+/** Persist a complete redacted snapshot before network I/O, unless all messages were saved. */
+export async function enqueue(directory: string, entry: QueueEntry, signal: AbortSignal) {
+  const saved = await acknowledged(directory, progressKey(entry), signal);
+  if (entry.conversation.messages.every((message) => saved.has(message.id as string))) return;
+  return persist(directory, `${digest(entry)}.json`, entry, signal);
 }
 
 function conversation(value: unknown): ChatConversation {
@@ -91,8 +119,23 @@ export async function replay(
         continue;
       if (!(await isIgnored(entry.projectDirectories, signal))) {
         const chat = conversation(entry.conversation);
-        signal.throwIfAborted();
-        await save(chat);
+        const key = progressKey({ target, conversation: chat });
+        const saved = await acknowledged(directory, key, signal);
+        for (const message of chat.messages) {
+          const id = message.id as string;
+          if (saved.has(id)) continue;
+          signal.throwIfAborted();
+          // A resolved one-message save acknowledges the ACL checks and create-only write.
+          // Keep receipts across snapshot versions so appends and repeated scans resume too.
+          await save({ ...chat, messages: [message] });
+          saved.add(id);
+          await persist(
+            directory,
+            `.progress-${key}`,
+            { version: 1, key, messageIds: [...saved] },
+            signal,
+          );
+        }
       }
       signal.throwIfAborted();
       await unlink(path);

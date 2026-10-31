@@ -151,7 +151,7 @@ async function capture(args: string[], options: CaptureOptions, signal: AbortSig
       );
       if (parsed.conversation.messages.length === 0) continue;
       const name = await enqueue(directory, { ...parsed, version: 1, target }, signal);
-      await replay(directory, target, save, signal, name);
+      if (name !== undefined) await replay(directory, target, save, signal, name);
     } catch {
       // Missing/unsafe/malformed sessions never break hooks or prevent other captures.
     }
