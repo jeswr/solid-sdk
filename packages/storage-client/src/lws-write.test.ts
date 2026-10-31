@@ -983,6 +983,7 @@ describe("MoveResource linkset mutation", () => {
     );
     expect(patch?.headers.get("if-match")).toBe(mtag);
     expect(patch?.headers.get("content-type")).toBe("application/json-patch+json");
+    expect(patch?.headers.get("accept")).toBe("application/linkset+json");
   });
   test("relative raw anchor is tested verbatim at its actual context index", async () => {
     const { storage, calls } = backend(
@@ -1011,6 +1012,41 @@ describe("MoveResource linkset mutation", () => {
     expect(valid.calls[2]?.body).toBe(
       `[{"op":"test","path":"/linkset/1/anchor","value":"write.ttl"},{"op":"replace","path":"/linkset/1/up/0/href","value":"${ROOT}"}]`,
     );
+  });
+  test("move negotiates JSON when the server defaults to a text linkset", async () => {
+    const moved = `${ROOT}moved`;
+    const headers = { "content-location": `${moved}.meta` };
+    const { storage, calls } = backend(
+      {
+        [`PATCH ${META}`]: (call) =>
+          call.headers.get("accept") === "application/linkset+json"
+            ? json(
+                linkset({ anchor: moved, up: [{ href: ROOT }], linkset: [{ href: "moved.meta" }] }),
+                headers,
+              )
+            : {
+                status: 200,
+                headers: { ...headers, "content-type": "application/linkset" },
+                body: `<${ROOT}>; rel="up"; anchor="${moved}", <${moved}.meta>; rel="linkset"; anchor="${moved}"`,
+              },
+        [`HEAD ${moved}`]: reply(200, { etag: '"moved-content"' }),
+      },
+      (features) => {
+        move(features);
+        features.move.detail.preservesIdentifier = false;
+      },
+    );
+    expect(await storage.move(URL, ROOT, { ifMatch: tag })).toEqual({
+      url: moved,
+      etag: '"moved-content"',
+      created: true,
+    });
+    expect(calls.map(({ method, url }) => `${method} ${url}`)).toEqual([
+      `HEAD ${URL}`,
+      `GET ${META}`,
+      `PATCH ${META}`,
+      `HEAD ${moved}`,
+    ]);
   });
   test("identifier-changing move resolves anchor against new linkset Content-Location, then HEADs resource", async () => {
     const moved = `${ROOT}opaque/new-id`;

@@ -514,7 +514,13 @@ export function lwsWrites(
         { op: "test", path: `/linkset/${i}/anchor`, value: context.anchor },
         { op: "replace", path: `/linkset/${i}/up/0/href`, value: dest },
       ];
-      const response = await patchJson(metaUrl, patch, tag, opts.signal);
+      const response = await request(
+        "PATCH",
+        metaUrl,
+        { "Content-Type": JSON_PATCH, "If-Match": tag, Accept: "application/linkset+json" },
+        opts.signal,
+        JSON.stringify(patch),
+      );
       const contentLocation = response.headers.get("content-location");
       let moved = source;
       if (contentLocation !== null || feature.detail.preservesIdentifier === false) {
