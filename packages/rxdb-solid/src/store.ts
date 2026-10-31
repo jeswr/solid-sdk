@@ -325,7 +325,11 @@ export class SolidDocStore {
         error instanceof StorageError &&
         (error.status === 412 ||
           error.status === 428 ||
-          (opts?.ifNoneMatch === "*" && error.code === "conflict"))
+          // A generic conflict can mean a missing parent, not a concurrent create.
+          // Confirm the target exists before asking RxDB to reconcile master state.
+          (opts?.ifNoneMatch === "*" &&
+            error.code === "conflict" &&
+            (await this.getDoc(resourceName)) !== null))
       ) {
         return { ok: false, precondition: "failed" };
       }
