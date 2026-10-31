@@ -111,11 +111,11 @@ export async function fixture(root = "https://pod.example/") {
       transmission: "urn:transmission:1",
     },
   ];
-  async function mirror() {
+  async function mirror(times: readonly string[] = []) {
     for (const key of pod.resources.keys())
       if (key.startsWith(new URL("agent/audit/", root).href)) pod.resources.delete(key);
     const ledger = new MemoryLedger();
-    for (const r of records) ledger.append(r, AT);
+    for (const [i, r] of records.entries()) ledger.append(r, times[i] ?? AT);
     await new PodMirror(pod.fetch, root).sync(ledger.entries());
     return ledger;
   }

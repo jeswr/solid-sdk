@@ -217,32 +217,38 @@ export async function auditArtifact(options: AuditOptions): Promise<AuditReport>
       const terms = p.terms;
       // isAnyOf is existential: verify each recipient separately to prevent a mixed set
       // containing one allowed recipient from laundering an unauthorized recipient.
-      const evaluateRecipients = (recipientSet: string | readonly string[]) =>
-        evaluateIntent(mandate, {
-          agent: p.agent,
-          action: terms.action,
-          target: terms.target,
-          at: now.toISOString(),
-          attributes: {
-            [`${AGENT}binding`]: terms.binding,
-            [`${AGENT}recipientSet`]: recipientSet,
-            ...(terms.purpose ? { purpose: terms.purpose } : {}),
-          },
-        });
-      const wholeSet = await evaluateRecipients(terms.recipientHashes);
-      const decisions = await Promise.all(terms.recipientHashes.map(evaluateRecipients));
-      // Set-wide prohibitions (e.g. isAllOf) must also win. Scope still requires
-      // each recipient to pass; scalar permissions need not match an entire set.
-      if (wholeSet.decision === "prohibited") decisions.push(wholeSet);
+      const evaluateAt = async (at: string) => {
+        const evaluateRecipients = (recipientSet: string | readonly string[]) =>
+          evaluateIntent(mandate, {
+            agent: p.agent,
+            action: terms.action,
+            target: terms.target,
+            at,
+            attributes: {
+              [`${AGENT}binding`]: terms.binding,
+              [`${AGENT}recipientSet`]: recipientSet,
+              ...(terms.purpose ? { purpose: terms.purpose } : {}),
+            },
+          });
+        const wholeSet = await evaluateRecipients(terms.recipientHashes);
+        const decisions = await Promise.all(terms.recipientHashes.map(evaluateRecipients));
+        // Set-wide prohibitions (e.g. isAllOf) must also win. Scope still requires
+        // each recipient to pass; scalar permissions need not match an entire set.
+        if (wholeSet.decision === "prohibited") decisions.push(wholeSet);
+        return decisions;
+      };
+      const decisions = await evaluateAt(now.toISOString());
       if (
         decisions.some(
           (decision) => decision.decision !== "permit" && decision.reason !== "owner-approval",
         )
       )
         breaches.push("out-of-scope");
+      // Compare the recorded verdict at its own instant, independently of send authorization.
+      const recordedDecisions = await evaluateAt(d.at);
       const combined =
-        decisions.find((decision) => decision.decision === "prohibited") ??
-        decisions.find((decision) => decision.decision !== "permit");
+        recordedDecisions.find((decision) => decision.decision === "prohibited") ??
+        recordedDecisions.find((decision) => decision.decision !== "permit");
       if (d.record.decision !== (combined?.decision ?? "permit"))
         breaches.push("decision-divergence");
       if (mandate.limits.length > 0) breaches.push("accounting-unverified");

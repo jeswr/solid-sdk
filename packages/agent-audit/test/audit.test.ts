@@ -195,6 +195,57 @@ it("combines autonomous and approval-required recipients into one recorded verdi
   await f.mirror();
   expect((await audit()).breaches).toEqual(["decision-divergence"]);
 });
+it.each([
+  { name: "autonomous expiry", operator: "lt", decision: "permit", limitApproval: false },
+  {
+    name: "autonomous activation",
+    operator: "gteq",
+    decision: "confirm-required",
+    limitApproval: false,
+  },
+  { name: "scope expiry", operator: "lt", decision: "permit", limitApproval: true },
+] as const)("checks decision and transmission times separately for $name", async ({
+  operator,
+  decision,
+  limitApproval,
+}) => {
+  const cutoff = "2026-10-26T12:01:00.000Z";
+  const later = "2026-10-26T12:02:00.000Z";
+  const times = [AT, AT, AT, later, later];
+  const permissions = f.mandate.withApproval.permissions?.map((permission) => ({
+    ...permission,
+    constraints: [
+      ...(permission.constraints ?? []),
+      { leftOperand: "dateTime", operator, rightOperand: cutoff },
+    ],
+  }));
+  f.pod.put(
+    f.mandateId,
+    await mandateToTurtle(
+      await issueMandate(
+        {
+          ...f.mandate,
+          autonomous: { ...f.mandate.autonomous, permissions },
+          withApproval: limitApproval
+            ? { ...f.mandate.withApproval, permissions }
+            : f.mandate.withApproval,
+        },
+        f.ed,
+        { statusListCredential: f.statusId, statusListIndex: "1" },
+      ),
+    ),
+    "application/trig",
+  );
+  required(f.records[1]).decision = decision;
+  await f.mirror(times);
+  const expected = limitApproval ? ["out-of-scope"] : [];
+  expect((await audit()).breaches).toEqual(expected);
+  expect((await audit({ at: later })).breaches).toEqual(expected);
+  expect((await audit({ at: AT })).ok).toBe(true);
+  required(f.records[1]).decision = decision === "permit" ? "confirm-required" : "permit";
+  await f.mirror(times);
+  expect((await audit()).breaches).toEqual([...expected, "decision-divergence"]);
+});
 it("binds proposal, decision, transmission and signed approval terms", async () => {
   required(f.records[0]).termsDigest = digestOf("bad");
   await f.mirror();
