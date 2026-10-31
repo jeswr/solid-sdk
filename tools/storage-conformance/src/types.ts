@@ -14,6 +14,8 @@ export interface RunningTarget {
   storage: StorageClient;
   /** Independent expectations; compare state and detail, ignoring explanatory evidence. */
   claims: Partial<Features>;
+  /** Smallest fixture size this target is configured to paginate, when known. */
+  paginationWitnessSize?: number;
   /** Memory has no HTTP server; derive from its synthetic description instead. */
   resolveFeatures?(): Promise<Features>;
   stop(): Promise<void>;

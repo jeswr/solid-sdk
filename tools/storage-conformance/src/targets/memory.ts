@@ -6,13 +6,16 @@ import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import type { ConformanceTarget } from "../types.js";
 
 /** Reference target with actual in-memory storage semantics, including LWS pagination. */
-export function memoryTarget(protocol: "solid" | "lws"): ConformanceTarget {
+export function memoryTarget(
+  protocol: "solid" | "lws",
+  { pageSize = 100 }: { pageSize?: number } = {},
+): ConformanceTarget {
   return {
     name: `memory-${protocol}`,
     async start() {
       const root = `https://memory-${protocol}.example/`;
       const webId = "https://identity.example/alice#me";
-      const storage = createMemoryStorage({ protocol, root, pageSize: 100 });
+      const storage = createMemoryStorage({ protocol, root, pageSize });
       const description: StorageDescription = {
         protocol,
         id: root,
@@ -47,6 +50,7 @@ export function memoryTarget(protocol: "solid" | "lws"): ConformanceTarget {
         webId,
         storage,
         fetch: noTransport,
+        paginationWitnessSize: protocol === "lws" ? pageSize + 1 : undefined,
         claims: {
           protocol,
           rdfConneg: {

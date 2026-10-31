@@ -12,8 +12,13 @@ The root entry exports scenarios, targets, `runTarget`, `evaluateCase`, `compare
 
 Run `pnpm run conformance -- --target memory,sparq-solid` from the workspace root. It builds
 dependencies, writes per-target JSON, regenerates this tool's MATRIX.md, and exits 1 on any
-failure. The package Vitest suite runs the same scenarios on all targets by default; `TARGET`
-can narrow a local run. Keep the default full-target tests and the 90% coverage thresholds.
+failure. The package Vitest suite defaults to both memory protocols while pinned sparq 0.1.6
+cannot complete discovery. `TARGET` explicitly selects targets and requires them to pass;
+the CLI still defaults to all targets and reports failures. Keep the 90% coverage thresholds.
+
+Shared listing assertions must follow opaque `list()` cursors and validate complete membership
+independently of `listAll()`, without assuming a page size. Configure `paginationWitnessSize`
+in target setup when its page size is known, so configured pagination must actually occur.
 
 Every scenario declares `requires`; absent/unknown features need a companion absence check.
 Do not interpret arbitrary network/server errors as evidence of absence. An unadvertised

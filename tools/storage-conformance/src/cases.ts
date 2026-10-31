@@ -95,13 +95,24 @@ function listCase(count: number): ConformanceCase {
       const expected = new Set<string>();
       for (let i = 0; i < count; i++)
         expected.add((await text(target.storage, parent, `item-${i}.txt`)).url);
-      const page = await target.storage.list(parent);
-      assert.equal(page.items.length <= count, true);
-      assert.equal(new Set(page.items.map((item) => item.url)).size, page.items.length);
-      assert(page.items.every((item) => expected.has(item.url) && item.kind === "resource"));
-      if (target.storage.protocol === "lws" && count > 100)
-        assert(page.next, "LWS must actually paginate");
-      else assert.equal(page.next, null);
+      let page = await target.storage.list(parent);
+      if (target.paginationWitnessSize !== undefined && count >= target.paginationWitnessSize)
+        assert(page.next, "Configured pagination witness must have a next page");
+      const listed = new Set<string>();
+      const cursors = new Set<string>();
+      for (;;) {
+        for (const item of page.items) {
+          assert(expected.has(item.url) && item.kind === "resource");
+          assert(!listed.has(item.url), "Listing must not repeat members");
+          listed.add(item.url);
+        }
+        if (page.next === null) break;
+        assert(!cursors.has(page.next.url), "Listing must not repeat cursors");
+        assert(cursors.size < 10_000, "Listing exceeded the page limit");
+        cursors.add(page.next.url);
+        page = await target.storage.list(parent, { cursor: page.next });
+      }
+      assert.deepEqual(listed, expected);
       const all = await entries(target.storage, parent);
       assert.equal(all.length, count);
       assert.deepEqual(new Set(all.map((item) => item.url)), expected);

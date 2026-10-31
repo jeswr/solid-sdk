@@ -6,7 +6,9 @@
 
 ADR-009 / T-080: shared SC-LIST, SC-RW, SC-RDF, SC-DEL and SC-ERR scenarios run unchanged
 against reference memory storage (Solid and LWS) and the published sparq Solid WASM pod.
-The package's Vitest suite runs all three targets by default, including in `gate:full`.
+The package's Vitest suite runs both memory protocols by default, including in `gate:full`.
+Set `TARGET=sparq-solid` to require the sparq target to pass once its discovery is compatible.
+The CLI still selects all three targets by default and reports sparq's startup failure.
 
 From the workspace root:
 
@@ -44,6 +46,11 @@ unadvertised server implementation cannot hide behind `unsupported`. Available f
 and pass; returning or throwing a skip is a failure. Independent target claims compare protocol,
 feature state and detail against discovery/derivation; evidence strings are explanatory only.
 Memory derives from its synthetic description because it has no discovery HTTP endpoint.
+
+Listing scenarios traverse opaque `list()` cursors and check complete, duplicate-free membership
+independently of `listAll()`. They impose no fixed page size. Targets can set
+`paginationWitnessSize` to require a page break for fixtures at least that large; memory LWS
+sets it from its configured `pageSize` (100 by default).
 
 Baseline read/write/RDF/delete tests have no optional prerequisite. Local RDF parsing of an
 opaque LWS body does not require server content negotiation, and recursive client traversal does
