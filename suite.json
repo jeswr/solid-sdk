@@ -89,7 +89,8 @@
     "@jeswr/agent-registry",
     "@jeswr/fetch-rdf",
     "@jeswr/reactive-authentication",
-    "@jeswr/suite-native"
+    "@jeswr/suite-native",
+    "@jeswr/pod-type-index"
   ],
   "applications": [
     {
