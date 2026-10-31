@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -259,14 +260,17 @@ describe("redirect refusal on credentialed requests (SSRF / credential-exfil gua
           { status: 200, headers: { "content-type": "text/turtle" } },
         );
       }
-      return new Response("{}", { status: 200, headers: { "content-type": DOC_CONTENT_TYPE } });
+      return new Response("{}", {
+        status: 200,
+        headers: { "content-type": DOC_CONTENT_TYPE, etag: '"v1"' },
+      });
     };
     const store = new SolidDocStore({ container: CONTAINER, fetch: fetchImpl });
     await store.getDoc(keyToResourceName("a"));
     await store.putDoc(keyToResourceName("a"), "{}", DOC_CONTENT_TYPE);
     await store.deleteDoc(keyToResourceName("a"));
     await store.listDocUrls();
-    expect(seen).toHaveLength(4);
+    expect(seen).toHaveLength(5);
     expect(seen.every((i) => i?.redirect === "manual")).toBe(true);
   });
 

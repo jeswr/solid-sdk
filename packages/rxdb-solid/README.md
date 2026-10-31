@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # @jeswr/rxdb-solid
@@ -7,7 +8,7 @@ An RxDB replication plugin that synchronizes one pod resource per document with 
 It supports incremental pull, conditional push, tombstone deletes, RxDB conflict handlers, and an
 optional RDF serialization seam.
 
-> Experimental. Inject an authenticated fetch; this package performs no login or token handling.
+> Experimental. Inject a StorageClient or authenticated fetch; this package performs no login or token handling.
 
 ## Install
 
@@ -15,22 +16,36 @@ optional RDF serialization seam.
 npm install github:jeswr/rxdb-solid#main "rxdb@^16" @rdfjs/types
 ```
 
-`rxdb` is a peer dependency. Requires Node.js 20 or newer, or a modern browser.
+`rxdb` is a peer dependency. Requires Node.js 24 or newer, or a modern browser.
 
 ## Minimal usage
 
 ```ts
 import { replicateSolid } from "@jeswr/rxdb-solid";
+import { createPodClient } from "@jeswr/storage-client";
+
+const { storage } = await createPodClient({ storage: "https://alice.example/app/items/", fetch: authenticatedFetch });
 
 const replication = replicateSolid({
   collection: items,
   container: "https://alice.example/app/items/",
-  fetch: authenticatedFetch,
+  storage,
 });
 
 await replication.awaitInitialReplication();
 await items.insert({ id: "a", title: "Hello, Solid!" });
 ```
+
+`SolidDocStore` and `replicateSolid` accept an existing `StorageClient`. The legacy `fetch`
+option discovers a client lazily through `createPodClient`; discovery errors propagate.
+Reads, paginated listings and conditional mutations use the public storage interface.
+Key encoding, metadata counters, checkpoints, tombstones and RxDB conflict handling are unchanged.
+GC reads an ETag before deleting and refuses deletion when no validator is available.
+
+The persisted layout requires stable child names. Both memory protocols support this layout;
+an LWS server that replaces a name hint with another identifier is refused. Such a failed create
+may leave an unindexed resource; the adapter never deletes an unfamiliar returned identifier.
+Supporting opaque identifiers needs a separate persistent key index and is outside this migration.
 
 The return value is an RxDB `RxReplicationState`; subscribe to its streams or call `reSync()` and
 `cancel()` using the normal RxDB replication API.
