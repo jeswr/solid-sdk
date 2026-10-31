@@ -3,7 +3,7 @@
 
 # @jeswr/unstorage-solid
 
-An unstorage driver that maps key-value operations to LDP resources in a Solid pod.
+An unstorage driver that maps key-value operations to a pod through `StorageClient`.
 
 Values remain opaque text, JSON, or binary data; only container listings are parsed as RDF.
 
@@ -15,18 +15,20 @@ Values remain opaque text, JSON, or binary data; only container listings are par
 npm install github:jeswr/unstorage-solid#main unstorage
 ```
 
-`unstorage` is a peer dependency. Requires Node.js 20 or newer, or a modern browser.
+`unstorage` is a peer dependency. Requires Node.js 24 or newer, or a modern browser.
 
 ## Minimal usage
 
 ```ts
 import solidDriver from "@jeswr/unstorage-solid";
+import { createPodClient } from "@jeswr/storage-client";
 import { createStorage } from "unstorage";
 
+const { storage: pod } = await createPodClient({ storage: "https://alice.example/kv/", fetch: authenticatedFetch });
 const storage = createStorage({
   driver: solidDriver({
     base: "https://alice.example/kv/",
-    fetch: authenticatedFetch,
+    storage: pod,
   }),
 });
 
@@ -45,15 +47,32 @@ percent signs (`%25`) remain supported.
 ## Key API
 
 - Default export: `solidDriver(options)`, ready for `createStorage` or a Nitro mount.
-- Options: `base`, `fetch`, headers, default content type, and optional notification-backed watch.
+- Options: `base`, `storage` (or legacy `fetch`), headers, default content type, and optional `notifications`/`watch`.
 - Concurrency: `getMeta` returns an ETag; pass it to a write to use `If-Match`.
 - Errors: `SolidHttpError`, `SolidPreconditionFailedError`, and the deprecated
   `SolidRedirectError` alias of `@jeswr/guarded-fetch`’s `RedirectRefusedError`.
 
-Container listings use `@jeswr/ldp-container` for RDF parsing and per-entry scope filtering.
-The local `listContainer(containerUrl, base, fetchImpl)` wrapper keeps its signature and
-returns `null` for 404/410. Invalid or unsafe member URLs are skipped individually; request
-headers, recursion, key mapping, and the existing stricter scope/redirect checks stay local.
+Container listings use `storage.listAll`, with local per-entry scope filtering. The local
+`listContainer(containerUrl, base, fetchImpl)` compatibility wrapper keeps accepting fetch
+and returns `null` for 404/410. Invalid or unsafe member URLs are skipped individually.
+Headers, recursion, key mapping and scope/redirect checks stay local. The fetch option creates
+clients through the public `createPodClient` factory; discovery errors propagate. Driver and
+transaction headers apply to this transport; an injected client owns its own transport headers.
+`getMeta` reads resource headers, using listing metadata for optional size on injected clients;
+it does not fetch the separate RDF/linkset metadata document. Deletes read an ETag first and
+fail closed when a validator is unavailable. Clear still removes leaves before containers.
+
+The persisted key layout requires stable path-based child names. Both memory protocols support
+this layout. If an LWS create replaces a name hint with another identifier, the call fails;
+it can leave an unindexed resource, which this driver never deletes implicitly. A persistent
+key-to-identifier index is outside this mechanical migration.
+
+Watch is opt-in (`watch: true`) and maps normalized `pod-notifications` changes to unstorage
+`update`/`remove` callbacks. Pass `notifications` to reuse an existing client. The stacked T-040
+implementation uses polling every 30 seconds, even when push is advertised. Containers observe
+membership; individual edits require hot-resource subscriptions supplied by the notification client.
+Unwatch/dispose detach listeners and close subscriptions, including subscriptions still opening.
+The legacy internal `wsFactory` option remains accepted but no longer controls transport.
 
 Request inputs use `@jeswr/guarded-fetch`'s `snapshotFetchInput` before scope validation.
 Both wrappers forward the captured URL string and explicit init, preserving init bodies,

@@ -1,13 +1,12 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * `@jeswr/unstorage-solid` — an {@link https://unstorage.unjs.io | unstorage}
  * `defineDriver()` driver that backs unstorage's KV API with a
  * {@link https://solidproject.org | Solid} pod over LDP.
  *
- * unstorage keys map to LDP resource paths under a fixed `base` container; stored
- * VALUES are opaque KV blobs (text / JSON / binary) and are never RDF-parsed. The
- * ONLY RDF the driver touches is the container listing used by `getKeys` /
- * `clear`, parsed via `@jeswr/fetch-rdf` + `@solid/object` (never hand-built).
+ * unstorage keys keep their existing paths. Values are opaque KV blobs;
+ * StorageClient owns protocol-specific reads, writes and container listings.
  *
  * Authentication is injected: pass a (DPoP-bound) authenticated `fetch` — e.g. a
  * browser Solid session's `fetch`, or a Node client-credentials fetch from
@@ -17,11 +16,19 @@
  * @packageDocumentation
  */
 
+import { createNotifications, type NotificationsClient } from "@jeswr/pod-notifications";
+import {
+  type Body,
+  type ReadResult,
+  type StorageClient,
+  StorageError,
+} from "@jeswr/storage-client";
 import type { Driver, StorageMeta, StorageValue, WatchCallback } from "unstorage";
 import { defineDriver } from "unstorage";
 import { listContainer } from "./container.js";
 import { assertWithinBase, keyToContainerUrl, keyToUrl, normalizeBase, urlToKey } from "./keys.js";
-import { createSameOriginRedirectRefusingFetch, createScopedFetch } from "./scope.js";
+import { createSameOriginRedirectRefusingFetch } from "./scope.js";
+import { isMissing, storageFromFetch, transportCause } from "./storage.js";
 import { type ActiveWatch, startWatch, type WatchSocketFactory } from "./watch.js";
 
 const DRIVER_NAME = "solid";
@@ -40,6 +47,10 @@ export interface SolidDriverOptions {
    * pods. Defaults to the global `fetch`.
    */
   fetch?: typeof globalThis.fetch;
+  /** Existing storage client. Its transport owns authentication and headers. */
+  storage?: StorageClient;
+  /** Existing notification client; otherwise built from storage and fetch. */
+  notifications?: NotificationsClient;
   /**
    * Extra request headers merged into every request (e.g. a custom auth header).
    * Per-transaction `opts.headers` override these.
@@ -51,14 +62,14 @@ export interface SolidDriverOptions {
    */
   defaultContentType?: string;
   /**
-   * Enable live `watch()` via Solid Notifications (WebSocketChannel2023). When
+   * Enable `watch()` through pod-notifications (currently polling). When
    * `false` (default), `watch()` is a graceful no-op. Watch always degrades
-   * gracefully when the pod advertises no notification channel.
+   * to the SDK polling fallback when no push transport is available.
    */
   watch?: boolean;
   /**
-   * Internal/testing seam: build a WebSocket from a `wss://` URL. Defaults to the
-   * global `WebSocket`. Not part of the stable public contract.
+   * Legacy internal seam retained for compatibility. Transport selection now belongs
+   * to pod-notifications; this option is unused by the current polling client.
    * @internal
    */
   wsFactory?: WatchSocketFactory;
@@ -107,14 +118,6 @@ export class SolidHttpError extends Error {
   }
 }
 
-function buildHeaders(
-  driverHeaders: Record<string, string> | undefined,
-  txHeaders: Record<string, string> | undefined,
-  extra?: Record<string, string>,
-): Record<string, string> {
-  return { ...driverHeaders, ...extra, ...txHeaders };
-}
-
 function asTx(opts: unknown): SolidTransactionOptions {
   return (opts && typeof opts === "object" ? opts : {}) as SolidTransactionOptions;
 }
@@ -134,426 +137,358 @@ function relativePrefixKey(base_: string | null | undefined): string | undefined
   return stripped.length > 0 ? stripped : undefined;
 }
 
-/**
- * The Solid unstorage driver. Mount it with unstorage's `createStorage`:
- *
- * ```ts
- * import { createStorage } from "unstorage";
- * import solidDriver from "@jeswr/unstorage-solid";
- * const storage = createStorage({
- *   driver: solidDriver({ base: "https://alice.pod.example/kv/", fetch: session.fetch }),
- * });
- * ```
- */
+/** Back unstorage keys with the public storage SDK and optional change subscriptions. */
 const solidDriver = defineDriver<SolidDriverOptions, undefined>((options) => {
   if (!options || typeof options.base !== "string" || options.base.length === 0) {
     throw new Error("[unstorage-solid] `base` option is required");
   }
   const base = normalizeBase(options.base);
   const fetchImpl = options.fetch ?? globalThis.fetch;
-  if (typeof fetchImpl !== "function") {
+  if (!options.storage && typeof fetchImpl !== "function") {
     throw new Error("[unstorage-solid] no `fetch` available (pass `fetch` in options)");
   }
-  const defaultContentType = options.defaultContentType ?? "text/plain; charset=utf-8";
-  const watchEnabled = options.watch === true;
-
-  // Track open watches so dispose() can close them.
   const activeWatches = new Set<ActiveWatch>();
+  let disposed = false;
+  const client = (
+    tx: SolidTransactionOptions = {},
+    observe?: (url: string, headers: Headers) => void,
+  ) =>
+    options.storage
+      ? Promise.resolve(options.storage)
+      : storageFromFetch(
+          base,
+          fetchImpl,
+          options.headers,
+          tx.etag ? { ...tx.headers, "if-match": tx.etag } : tx.headers,
+          observe,
+        );
 
-  // The single credentialed-fetch choke point for the data path: asserts base
-  // containment of the target AND refuses redirects (credential-leak / SSRF guard —
-  // see scope.ts). Reads, writes, deletes, and container listings all go through it.
-  const doFetch = createScopedFetch(base, fetchImpl);
-
-  /**
-   * Ensure the parent containers of `resourceUrl` exist, creating any missing
-   * ones with a `PUT` + `Link: <ldp#BasicContainer>; rel="type"`. CSS auto-creates
-   * intermediate containers on a deep PUT; ESS historically did not — so we create
-   * them explicitly, top-down, idempotently (an existing container PUT is a no-op
-   * 2xx/205 on CSS; a 4xx that is not "exists" is surfaced).
-   */
-  const ensureParentContainers = async (
-    resourceUrl: string,
-    headers: Record<string, string>,
-  ): Promise<void> => {
-    const u = new URL(resourceUrl);
-    const baseUrl = new URL(base);
-    // The path segments between base and the resource's own name are containers.
-    const rel = u.pathname.slice(baseUrl.pathname.length);
-    const parts = rel.split("/").filter((s) => s.length > 0);
-    // Drop the last part (the resource itself).
-    parts.pop();
-    let current = base;
-    for (const part of parts) {
-      current = `${current}${part}/`;
-      const res = await doFetch(current, {
-        method: "PUT",
-        headers: {
-          ...headers,
-          "content-type": "text/turtle",
-          link: '<http://www.w3.org/ns/ldp#BasicContainer>; rel="type"',
-        },
-      });
-      // 2xx = created/updated; 409/412 can mean "already exists" on some servers;
-      // 405 can mean the container path is fixed. Tolerate those, surface the rest.
-      if (!res.ok && res.status !== 409 && res.status !== 412 && res.status !== 405) {
-        throw new SolidHttpError("PUT", current, res.status, res.statusText);
+  const run = async <T>(method: string, url: string, operation: () => Promise<T>): Promise<T> => {
+    try {
+      return await operation();
+    } catch (error) {
+      if (error instanceof StorageError && error.status !== null) {
+        throw new SolidHttpError(method, url, error.status, error.message);
       }
+      throw transportCause(error);
     }
   };
 
-  const putResource = async (
-    url: string,
-    body: BodyInit,
+  const observeResource = async (storage: StorageClient, url: string): Promise<ReadResult> => {
+    try {
+      return await storage.head(url);
+    } catch (error) {
+      if (error instanceof StorageError && error.status === 405) return storage.read(url);
+      throw error;
+    }
+  };
+
+  const remove = async (storage: StorageClient, url: string): Promise<void> => {
+    assertWithinBase(base, url);
+    try {
+      const current = await observeResource(storage, url);
+      await current.body?.cancel();
+      if (!current.etag)
+        throw new Error("[unstorage-solid] cannot delete a resource without an ETag");
+      await storage.delete(url, { ifMatch: current.etag });
+    } catch (error) {
+      if (!isMissing(error)) throw error;
+    }
+  };
+
+  const ensureParents = async (storage: StorageClient, url: string): Promise<void> => {
+    const parts = new URL(url).pathname.slice(new URL(base).pathname.length).split("/");
+    parts.pop();
+    let parent = base;
+    for (const part of parts) {
+      const expected = `${parent}${part}/`;
+      try {
+        const current = await observeResource(storage, expected);
+        await current.body?.cancel();
+        if (current.kind !== "container")
+          throw new Error("[unstorage-solid] parent is not a container");
+        parent = expected;
+        continue;
+      } catch (error) {
+        if (!isMissing(error)) throw error;
+      }
+      try {
+        const created = await storage.create(parent, null, {
+          name: decodeURIComponent(part),
+          kind: "container",
+        });
+        if (created.url !== expected)
+          throw new Error("[unstorage-solid] storage did not preserve the container name");
+      } catch (error) {
+        if (!(error instanceof StorageError) || ![405, 409, 412].includes(error.status ?? 0))
+          throw error;
+      }
+      parent = expected;
+    }
+  };
+
+  const put = async (
+    key: string,
+    body: Body,
     contentType: string,
     tx: SolidTransactionOptions,
   ): Promise<void> => {
-    const headers = buildHeaders(options.headers, tx.headers, { "content-type": contentType });
-    if (tx.etag) {
-      headers["if-match"] = tx.etag;
+    const url = keyToUrl(base, key);
+    await run("PUT", url, async () => {
+      const storage = await client(tx);
+      const write = async () => {
+        if (storage.protocol !== "lws" || tx.etag) {
+          return storage.write(url, body, { contentType, ifMatch: tx.etag || "*" });
+        }
+        try {
+          await storage.head(url);
+        } catch (error) {
+          if (!isMissing(error)) throw error;
+          const parent = new URL("./", url).href;
+          const result = await storage.create(parent, body, {
+            name: decodeURIComponent(new URL(url).pathname.split("/").pop() as string),
+            contentType,
+          });
+          if (result.url !== url)
+            throw new Error("[unstorage-solid] storage did not preserve the key name");
+          return result;
+        }
+        return storage.write(url, body, { contentType, ifMatch: "*" });
+      };
+      try {
+        await write();
+      } catch (error) {
+        if (error instanceof StorageError && (error.status === 412 || error.status === 428)) {
+          throw new SolidPreconditionFailedError(url, error.status);
+        }
+        if (
+          !tx.etag &&
+          error instanceof StorageError &&
+          (error.status === 404 || error.status === 409)
+        ) {
+          await ensureParents(storage, url);
+          try {
+            await write();
+          } catch (retryError) {
+            if (
+              retryError instanceof StorageError &&
+              (retryError.status === 412 || retryError.status === 428)
+            ) {
+              throw new SolidPreconditionFailedError(url, retryError.status);
+            }
+            throw retryError;
+          }
+        } else throw error;
+      }
+    });
+  };
+
+  const members = (storage: StorageClient, url: string) => listContainer(url, base, storage);
+  const collect = async (
+    storage: StorageClient,
+    url: string,
+    depth: number,
+    maxDepth: number,
+    out: string[],
+  ) => {
+    for (const member of (await members(storage, url)) ?? []) {
+      if (member.container) {
+        if (depth < maxDepth) await collect(storage, member.url, depth + 1, maxDepth, out);
+      } else {
+        const key = urlToKey(base, member.url);
+        if (key) out.push(key);
+      }
     }
-    let res = await doFetch(url, { method: "PUT", headers, body });
-    if (res.status === 412 || res.status === 428) {
-      // Precondition failed (optimistic concurrency) — surface, do not retry.
-      throw new SolidPreconditionFailedError(url, res.status);
+  };
+  const clear = async (storage: StorageClient, url: string, deleteSelf: boolean) => {
+    for (const member of (await members(storage, url)) ?? []) {
+      if (member.container) await clear(storage, member.url, true);
+      else await remove(storage, member.url);
     }
-    // A missing parent container surfaces as 404/409 on some servers. Create the
-    // ancestors then retry ONCE. (We only do this when no If-Match is set, so a
-    // concurrency rejection is never masked by a container-create retry.)
-    if ((res.status === 404 || res.status === 409) && !tx.etag) {
-      await ensureParentContainers(url, buildHeaders(options.headers, tx.headers));
-      res = await doFetch(url, { method: "PUT", headers, body });
-    }
-    if (!res.ok) {
-      throw new SolidHttpError("PUT", url, res.status, res.statusText);
-    }
+    if (deleteSelf) await remove(storage, url);
   };
 
   const driver: Driver<SolidDriverOptions, undefined> = {
     name: DRIVER_NAME,
     options,
     flags: { maxDepth: true },
-
     async hasItem(key, opts) {
       const url = keyToUrl(base, key);
-      const headers = buildHeaders(options.headers, asTx(opts).headers);
-      let res = await doFetch(url, { method: "HEAD", headers });
-      // Some pods do not support HEAD on resources (405) — fall back to GET.
-      if (res.status === 405) {
-        res = await doFetch(url, { method: "GET", headers });
-      }
-      if (res.status === 404 || res.status === 410) {
-        return false;
-      }
-      if (!res.ok) {
-        throw new SolidHttpError("HEAD", url, res.status, res.statusText);
-      }
-      return true;
+      return run("HEAD", url, async () => {
+        try {
+          const result = await observeResource(await client(asTx(opts)), url);
+          await result.body?.cancel();
+          return true;
+        } catch (error) {
+          if (isMissing(error)) return false;
+          throw error;
+        }
+      });
     },
-
     async getItem(key, opts) {
       const url = keyToUrl(base, key);
-      const headers = buildHeaders(options.headers, asTx(opts).headers);
-      const res = await doFetch(url, { method: "GET", headers });
-      if (res.status === 404 || res.status === 410) {
-        return null;
-      }
-      if (!res.ok) {
-        throw new SolidHttpError("GET", url, res.status, res.statusText);
-      }
-      // Return the raw text body; unstorage's Storage layer applies destr() to
-      // parse JSON/number/boolean for the caller.
-      return (await res.text()) as StorageValue;
+      return run("GET", url, async () => {
+        try {
+          return (await (await (await client(asTx(opts))).read(url)).text()) as StorageValue;
+        } catch (error) {
+          if (isMissing(error)) return null;
+          throw error;
+        }
+      });
     },
-
     async getItemRaw(key, opts) {
       const url = keyToUrl(base, key);
-      const headers = buildHeaders(options.headers, asTx(opts).headers, {
-        accept: "application/octet-stream",
+      return run("GET", url, async () => {
+        try {
+          return await (
+            await (await client(asTx(opts))).read(url, { accept: "application/octet-stream" })
+          ).bytes();
+        } catch (error) {
+          if (isMissing(error)) return null;
+          throw error;
+        }
       });
-      const res = await doFetch(url, { method: "GET", headers });
-      if (res.status === 404 || res.status === 410) {
-        return null;
-      }
-      if (!res.ok) {
-        throw new SolidHttpError("GET", url, res.status, res.statusText);
-      }
-      const buf = await res.arrayBuffer();
-      return new Uint8Array(buf);
     },
-
     async setItem(key, value, opts) {
       const tx = asTx(opts);
-      const url = keyToUrl(base, key);
-      await putResource(url, value, tx.contentType ?? defaultContentType, tx);
+      await put(
+        key,
+        value,
+        tx.contentType ?? options.defaultContentType ?? "text/plain; charset=utf-8",
+        tx,
+      );
     },
-
     async setItemRaw(key, value, opts) {
       const tx = asTx(opts);
-      const url = keyToUrl(base, key);
-      const body = toBodyInit(value);
-      await putResource(url, body, tx.contentType ?? "application/octet-stream", tx);
+      await put(key, toBody(value), tx.contentType ?? "application/octet-stream", tx);
     },
-
     async removeItem(key, opts) {
       const url = keyToUrl(base, key);
-      const headers = buildHeaders(options.headers, asTx(opts).headers);
-      const res = await doFetch(url, { method: "DELETE", headers });
-      // DELETE is idempotent: a 404/410 means already gone — success.
-      if (res.ok || res.status === 404 || res.status === 410) {
-        return;
-      }
-      throw new SolidHttpError("DELETE", url, res.status, res.statusText);
+      await run("DELETE", url, async () => remove(await client(asTx(opts)), url));
     },
-
     async getMeta(key, opts) {
       const url = keyToUrl(base, key);
-      const headers = buildHeaders(options.headers, asTx(opts).headers);
-      let res = await doFetch(url, { method: "HEAD", headers });
-      if (res.status === 405) {
-        res = await doFetch(url, { method: "GET", headers });
-      }
-      if (res.status === 404 || res.status === 410) {
-        return null;
-      }
-      if (!res.ok) {
-        throw new SolidHttpError("HEAD", url, res.status, res.statusText);
-      }
-      const meta: StorageMeta = { status: res.status };
-      const lastModified = res.headers.get("last-modified");
-      if (lastModified) {
-        const d = new Date(lastModified);
-        if (!Number.isNaN(d.getTime())) {
-          meta.mtime = d;
+      return run("HEAD", url, async () => {
+        try {
+          let length: string | null = null;
+          const storage = await client(asTx(opts), (target, headers) => {
+            if (target === url) length = headers.get("content-length");
+          });
+          const result = await observeResource(storage, url);
+          await result.body?.cancel();
+          const meta: StorageMeta = { status: result.status };
+          if (result.lastModified) meta.mtime = result.lastModified;
+          if (result.etag) meta.etag = result.etag;
+          if (result.contentType) meta.mimeType = result.contentType;
+          if (length !== null && length !== "" && Number.isFinite(Number(length)))
+            meta.size = Number(length);
+          // Injected clients expose size in entries, rather than raw HTTP headers.
+          if (options.storage) {
+            try {
+              const parent = await storage.parentOf(url);
+              if (parent) {
+                assertWithinBase(base, parent);
+                for await (const entry of storage.listAll(parent)) {
+                  if (entry.url === url) {
+                    if (entry.size !== null) meta.size = entry.size;
+                    break;
+                  }
+                }
+              }
+            } catch {
+              /* Size is optional when listing permission is unavailable. */
+            }
+          }
+          return meta;
+        } catch (error) {
+          if (isMissing(error)) return null;
+          throw error;
         }
-      }
-      const length = res.headers.get("content-length");
-      if (length !== null && length !== "") {
-        const n = Number(length);
-        if (Number.isFinite(n)) {
-          meta.size = n;
-        }
-      }
-      const etag = res.headers.get("etag");
-      if (etag) {
-        meta.etag = etag;
-      }
-      const contentType = res.headers.get("content-type");
-      if (contentType) {
-        meta.mimeType = contentType;
-      }
-      return meta;
+      });
     },
-
     async getKeys(base_, opts) {
-      const maxDepth =
-        typeof opts?.maxDepth === "number" ? opts.maxDepth : Number.POSITIVE_INFINITY;
-      // `base_` is unstorage's `relativeBase`: a normalised colon-delimited prefix
-      // with a TRAILING `:` (e.g. `"dir:"`) when a sub-prefix is requested, or
-      // empty/`null` for the whole mount. Strip the trailing colon, then map to
-      // the container to start listing at.
       const prefix = relativePrefixKey(base_);
-      const startContainer = prefix ? keyToContainerUrl(base, prefix) : base;
-      const keys: string[] = [];
-      const txHeaders = asTx(opts).headers;
-      await collectKeys(
-        startContainer,
-        base,
-        doFetch,
-        txHeaders,
-        options.headers,
-        0,
-        maxDepth,
-        keys,
-      );
-      return keys;
+      const url = prefix ? keyToContainerUrl(base, prefix) : base;
+      return run("GET", url, async () => {
+        const out: string[] = [];
+        await collect(
+          await client(asTx(opts)),
+          url,
+          0,
+          typeof opts?.maxDepth === "number" ? opts.maxDepth : Infinity,
+          out,
+        );
+        return out;
+      });
     },
-
     async clear(base_, opts) {
-      // Gather everything under the prefix, then delete resources before their
-      // containers (depth-first leaves-first) so a container is empty when removed.
-      // `base_` is unstorage's `relativeBase` (trailing-colon prefix or empty/null).
       const prefix = relativePrefixKey(base_);
-      const startContainer = prefix ? keyToContainerUrl(base, prefix) : base;
-      const txHeaders = asTx(opts).headers;
-      const headers = buildHeaders(options.headers, txHeaders);
-      // Only delete the prefix container itself when a prefix was given; never
-      // delete the driver base container. `doFetch` (the scoped fetch) applies the
-      // base-containment + redirect guards to every listing GET and DELETE here.
-      await clearContainer(startContainer, base, doFetch, headers, prefix !== undefined);
+      const url = prefix ? keyToContainerUrl(base, prefix) : base;
+      await run("DELETE", url, async () =>
+        clear(await client(asTx(opts)), url, prefix !== undefined),
+      );
     },
-
     async watch(callback: WatchCallback) {
-      if (!watchEnabled) {
+      if (disposed) return () => {};
+      if (options.watch !== true) {
         options.onWatchDegrade?.("watch disabled (set `watch: true` in driver options)");
         return () => {};
       }
-      // The notification discovery/subscribe requests carry the driver `headers`
-      // (the option is documented as merged into EVERY request) and go through the
-      // SAME-ORIGIN, redirect-REFUSING fetch (`createSameOriginRedirectRefusingFetch`).
-      // Watch discovery follows pod-controlled URLs (a Link header, then RDF in the
-      // description doc); those are legitimately same-origin but may lie OUTSIDE the
-      // driver base sub-tree (the storage-description doc, the subscription
-      // endpoint), so we cannot use `createScopedFetch` (it enforces base-PATH
-      // containment). The same-origin variant still fails closed: a request whose
-      // target leaves the pod origin, or that answers with a redirect, is refused —
-      // so the caller's (possibly credentialed) `headers` can never be forwarded
-      // off-origin. A refusal throws; `startWatch` catches it and degrades to a
-      // no-op watch.
-      const baseOrigin = new URL(base).origin;
-      const guardedFetch = createSameOriginRedirectRefusingFetch(baseOrigin, fetchImpl);
-      const watchFetch: typeof globalThis.fetch = (input, init) =>
-        guardedFetch(input, {
-          ...init,
-          headers: { ...options.headers, ...(init?.headers as object) },
+      let active: ActiveWatch;
+      try {
+        const notifications =
+          options.notifications ??
+          createNotifications({
+            storage: await client(),
+            fetch: (input, init) => {
+              const guarded = createSameOriginRedirectRefusingFetch(
+                new URL(base).origin,
+                fetchImpl,
+              );
+              const headers = new Headers(options.headers);
+              new Headers(init?.headers).forEach((value, key) => {
+                headers.set(key, value);
+              });
+              return guarded(input, { ...init, headers });
+            },
+          });
+        active = await startWatch({
+          base,
+          notifications,
+          callback,
+          onDegrade: options.onWatchDegrade,
         });
-      const startOpts = {
-        base,
-        fetch: watchFetch,
-        callback,
-        ...(options.wsFactory ? { wsFactory: options.wsFactory } : {}),
-        ...(options.onWatchDegrade ? { onDegrade: options.onWatchDegrade } : {}),
-      };
-      const active = await startWatch(startOpts);
+      } catch {
+        options.onWatchDegrade?.("notification setup failed");
+        return () => {};
+      }
+      if (disposed) {
+        active.unwatch();
+        return () => {};
+      }
       activeWatches.add(active);
       return () => {
         active.unwatch();
         activeWatches.delete(active);
       };
     },
-
     dispose() {
-      for (const active of activeWatches) {
-        active.unwatch();
-      }
+      disposed = true;
+      for (const active of activeWatches) active.unwatch();
       activeWatches.clear();
     },
   };
-
   return driver;
 });
 
-/**
- * Recursively collect resource keys under `containerUrl`. Sub-containers are
- * recursed into while `depth < maxDepth`. Only NON-container members become keys
- * (an unstorage key denotes a resource).
- */
-async function collectKeys(
-  containerUrl: string,
-  base: string,
-  fetchImpl: typeof globalThis.fetch,
-  txHeaders: Record<string, string> | undefined,
-  driverHeaders: Record<string, string> | undefined,
-  depth: number,
-  maxDepth: number,
-  out: string[],
-): Promise<void> {
-  const headers = buildHeaders(driverHeaders, txHeaders);
-  const members = await listContainerWithHeaders(containerUrl, base, fetchImpl, headers);
-  if (members === null) {
-    return;
-  }
-  for (const member of members) {
-    if (member.container) {
-      if (depth + 1 <= maxDepth) {
-        await collectKeys(
-          member.url,
-          base,
-          fetchImpl,
-          txHeaders,
-          driverHeaders,
-          depth + 1,
-          maxDepth,
-          out,
-        );
-      }
-    } else {
-      const key = urlToKey(base, member.url);
-      if (key) {
-        out.push(key);
-      }
-    }
-  }
+function toBody(value: unknown): Body {
+  if (value instanceof ArrayBuffer) return new Uint8Array(value);
+  if (ArrayBuffer.isView(value))
+    return new Uint8Array(value.buffer, value.byteOffset, value.byteLength).slice();
+  return typeof value === "string" ? value : JSON.stringify(value);
 }
 
-/** Recursively delete everything under `containerUrl` (leaves before containers). */
-async function clearContainer(
-  containerUrl: string,
-  base: string,
-  fetchImpl: typeof globalThis.fetch,
-  headers: Record<string, string>,
-  deleteSelf: boolean,
-): Promise<void> {
-  const members = await listContainerWithHeaders(containerUrl, base, fetchImpl, headers);
-  if (members !== null) {
-    for (const member of members) {
-      if (member.container) {
-        await clearContainer(member.url, base, fetchImpl, headers, true);
-      } else {
-        assertWithinBase(base, member.url);
-        const res = await fetchImpl(member.url, { method: "DELETE", headers });
-        if (!res.ok && res.status !== 404 && res.status !== 410) {
-          throw new SolidHttpError("DELETE", member.url, res.status, res.statusText);
-        }
-      }
-    }
-  }
-  if (deleteSelf) {
-    assertWithinBase(base, containerUrl);
-    const res = await fetchImpl(containerUrl, { method: "DELETE", headers });
-    if (!res.ok && res.status !== 404 && res.status !== 410) {
-      throw new SolidHttpError("DELETE", containerUrl, res.status, res.statusText);
-    }
-  }
-}
-
-/** listContainer that also threads request headers (auth, etc.). */
-async function listContainerWithHeaders(
-  containerUrl: string,
-  base: string,
-  fetchImpl: typeof globalThis.fetch,
-  headers: Record<string, string>,
-) {
-  const wrapped: typeof globalThis.fetch = (input, init) =>
-    fetchImpl(input, { ...init, headers: { ...headers, ...(init?.headers as object) } });
-  return listContainer(containerUrl, base, wrapped);
-}
-
-/**
- * Normalise setItemRaw's value into a BodyInit accepted by `fetch` in both Node
- * and the browser. Binary inputs are copied into a fresh `ArrayBuffer` (an
- * unambiguous `BodyInit` across lib targets); strings pass through; anything else
- * falls back to JSON (callers should prefer `setItem` for JSON).
- */
-function toBodyInit(value: unknown): BodyInit {
-  if (value instanceof ArrayBuffer) {
-    return value;
-  }
-  if (ArrayBuffer.isView(value)) {
-    // Copy the exact view bytes into a standalone ArrayBuffer (avoids leaking a
-    // larger backing buffer and sidesteps lib BodyInit/ArrayBufferView strictness).
-    const view = new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
-    return view.slice().buffer;
-  }
-  if (typeof value === "string") {
-    return value;
-  }
-  // Fall back to JSON for plain objects (callers should prefer setItem for JSON).
-  return JSON.stringify(value);
-}
-
-/**
- * Thrown when the driver refuses to follow a redirect on a pod request (the
- * credential-leak / SSRF guard — see the Security section of the README).
- * @deprecated Use `RedirectRefusedError` from `@jeswr/guarded-fetch`.
- */
 export { SolidRedirectError } from "./scope.js";
-/**
- * Internal testing seam types, re-exported so the `wsFactory` field on
- * {@link SolidDriverOptions} is resolvable in the public `.d.ts`. Not part of the
- * stable public contract.
- * @internal
- */
 export type { WatchSocket, WatchSocketFactory } from "./watch.js";
 export type { SolidDriverOptions as Options };
 export default solidDriver;
