@@ -1,7 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import assert from "node:assert/strict";
 import { parseRdf } from "@jeswr/fetch-rdf";
-import { type Entry, type StorageClient, StorageError } from "@jeswr/storage-client";
+import {
+  type Entry,
+  type StorageClient,
+  StorageError,
+  type WriteResult,
+} from "@jeswr/storage-client";
 import { assertIsomorphic, expectStorageError } from "./testing.js";
 import type { ConformanceCase, RunningTarget, SupportProbe } from "./types.js";
 
@@ -296,10 +301,19 @@ const rdf: ConformanceCase[] = [
       const parent = await container(target, "rdf-invalid");
       const plain = await text(target.storage, parent);
       await expectStorageError(target.storage.readRdf(plain.url), "not-rdf");
-      const malformed = await target.storage.create(parent, "< invalid turtle", {
-        name: "bad.ttl",
-        contentType: "text/turtle",
-      });
+      let malformed: WriteResult;
+      try {
+        malformed = await target.storage.create(parent, "< invalid turtle", {
+          name: "bad.ttl",
+          contentType: "text/turtle",
+        });
+      } catch (error) {
+        // RDF-aware servers may validate input before storing it. Other failures still fail.
+        assert(error instanceof StorageError);
+        assert.equal(error.code, "bad-request");
+        assert(error.status === 400 || error.status === 422);
+        return;
+      }
       await expectStorageError(target.storage.readRdf(malformed.url), "not-rdf");
     },
   },

@@ -50,6 +50,8 @@ opaque LWS body does not require server content negotiation, and recursive clien
 not require the separate recursive-delete service. The RDF cases cover Turtle and inline-context
 JSON-LD input, Turtle `writeRdf`, and semantic prefix/blank-node preservation. The stacked SDK
 explicitly refuses JSON-LD serialization; the suite asserts its structured `unsupported` error.
+Non-RDF reads must return `not-rdf`. Malformed Turtle may instead be rejected during creation
+with HTTP 400 or 422 (`bad-request`); if stored, reading it as RDF must return `not-rdf`.
 
 Current integration limitations:
 
