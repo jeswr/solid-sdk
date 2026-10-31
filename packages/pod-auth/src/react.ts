@@ -67,6 +67,7 @@ export function PodAuthProvider(props: PodAuthProviderProps): ReactNode {
     // One promise across StrictMode effect replay. A later lifecycle event supersedes its result.
     restoreRef.current ??= auth.restore();
     void restoreRef.current
+      .catch(() => auth.identity())
       .catch(() => null)
       .then((restored) => {
         if (!disposed && !changed) mirror(restored);

@@ -1,10 +1,17 @@
 // @vitest-environment jsdom
 // AUTHORED-BY Codex GPT-6.1-Sol
 // Adapted from solid-auth-core/test/react.test.tsx (AUTHORED-BY Claude Fable 5).
-import { act, createElement, StrictMode } from "react";
+import { webcrypto } from "node:crypto";
+import { act, createElement, StrictMode, useEffect } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, expect, test, vi } from "vitest";
-import type { AuthEvent, AuthEventType, Identity, PodAuth } from "./index.js";
+import {
+  type AuthEvent,
+  type AuthEventType,
+  createPodAuth,
+  type Identity,
+  type PodAuth,
+} from "./index.js";
 import { PodAuthProvider, type PodAuthSession, usePodAuth } from "./react.js";
 import { createMockOp } from "./testing.js";
 
@@ -61,12 +68,12 @@ function Probe() {
     session.status + ":" + (session.identity?.subject ?? "anonymous"),
   );
 }
-async function mount(auth: FakeAuth, strict = false) {
+async function mount(auth: PodAuth, strict = false, child = createElement(Probe)) {
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   await act(async () => {
-    const tree = createElement(PodAuthProvider, { auth }, createElement(Probe));
+    const tree = createElement(PodAuthProvider, { auth }, child);
     root!.render(strict ? createElement(StrictMode, null, tree) : tree);
   });
 }
@@ -121,6 +128,76 @@ test.each([null, "failure"])("restore %s lands unauthenticated", async (outcome)
   });
   expect(session.status).toBe("unauthenticated");
   expect(session.identity).toBeNull();
+});
+
+test.each([
+  false,
+  true,
+])("rejected restore reconciles an authenticated core during descendant login (StrictMode: %s)", async (strict) => {
+  const op = createMockOp();
+  vi.stubGlobal("fetch", op.fetch);
+  vi.stubGlobal("crypto", webcrypto);
+  // Match Node WebCrypto's ArrayBuffer realm while running the real engine in jsdom.
+  vi.stubGlobal("ArrayBuffer", Buffer.alloc(0).buffer.constructor);
+  vi.stubGlobal("location", { origin: "https://app.example" });
+  const auth = createPodAuth({
+    clientId: op.clientId,
+    redirectUri: op.redirectUri,
+    ui: { getWebId: async () => op.webId!, getCode: op.getCode },
+    boundary: { roots: [op.root], automatic: false },
+  });
+  const authenticated = await auth.login();
+  const loginEvent = vi.fn();
+  auth.on("login", loginEvent);
+  const restore = vi.spyOn(auth, "restore");
+  function LoginOnMount() {
+    useEffect(() => {
+      void auth.login();
+    }, []);
+    return createElement(Probe);
+  }
+  await mount(auth, strict, createElement(LoginOnMount));
+  expect(restore).toHaveBeenCalledTimes(1);
+  await expect(restore.mock.results[0]!.value).rejects.toThrow("Authentication is in progress");
+  expect(loginEvent).not.toHaveBeenCalled();
+  expect(session.status).toBe("authenticated");
+  expect(session.identity).toEqual(authenticated);
+  expect(session.error).toBeNull();
+  await act(async () => {
+    await session.login();
+  });
+  expect(session.identity).toEqual(authenticated);
+  expect(op.stats.authorizations).toBe(1);
+});
+
+test("failed identity reconciliation lands unauthenticated", async () => {
+  const auth = new FakeAuth();
+  vi.spyOn(auth, "identity").mockRejectedValue(Error("identity unavailable"));
+  await mount(auth);
+  await act(async () => auth.deferred.reject(Error("restore unavailable")));
+  expect(session.status).toBe("unauthenticated");
+  expect(session.identity).toBeNull();
+  expect(session.error).toBeNull();
+});
+
+test.each([
+  "login",
+  "logout",
+  "expired",
+] as const)("late identity reconciliation cannot overwrite a later %s event", async (event) => {
+  const auth = new FakeAuth();
+  const pending = Promise.withResolvers<Identity | null>();
+  const readIdentity = vi.spyOn(auth, "identity").mockReturnValue(pending.promise);
+  await mount(auth);
+  await act(async () => auth.deferred.reject(Error("restore unavailable")));
+  expect(readIdentity).toHaveBeenCalledTimes(1);
+  expect(session.status).toBe("restoring");
+  await act(async () => {
+    auth.emit(event, event === "login" ? identity : null);
+    pending.resolve(event === "login" ? null : identity);
+  });
+  expect(session.status).toBe(event === "login" ? "authenticated" : "unauthenticated");
+  expect(session.identity).toEqual(event === "login" ? identity : null);
 });
 
 test.each([
