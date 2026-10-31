@@ -85,13 +85,65 @@ Each event contains `type`, an identity snapshot and `timestamp`; challenge even
 Observer exceptions do not interrupt authentication. `restore` fires when a remembered session is rebuilt; `expired` fires when its credential is gone;
 `logout` fires after cleanup, including failed revocation. Identity snapshots include the current boundary roots.
 
-React and Node subpaths remain empty for their own tasks. CID agent mode currently rejects: `{ documentUrl, keyId }` does not supply a signing key;
-T-034 owns the Node key configuration. No keys are silently generated for an existing CID document.
+LWS supports both RFC 9728 `resource_metadata` and legacy Bearer `as_uri`/`realm` challenges.
+The default `oidc-id-token` subject reuses the selected Solid session; no second OP login is needed in
+that credential context. Discovery bindings are verified before acquiring a subject credential.
 
-The Node-only `@jeswr/pod-auth/testing` subpath exports `createMockOp` and `createMemoryStore`.
+Node agents use `@jeswr/pod-auth/node`:
+
+```ts
+import { forClientCredentials, forCid } from '@jeswr/pod-auth/node';
+
+const service = await forClientCredentials({
+  issuer: 'https://op.example/', clientId, clientSecret,
+  boundary: ['https://pod.example/agent/'],
+});
+const agent = await forCid({
+  documentUrl: 'https://agent.example/id', keyId: 'https://agent.example/id#key-1',
+  privateKey, // caller-provisioned, non-extractable ES256 CryptoKey
+  boundary: ['https://storage.example/agent/'],
+});
+```
+
+Both factories establish an identity before returning. Client credentials use a DPoP grant and report
+the configured client identifier as the subject, with no inferred WebID. CID mode signs short-lived,
+AS-audience JWTs with `sub = iss = client_id = documentUrl`, exchanged for storage Bearer tokens.
+Before exposing a CID identity or signing a subject token, pod-auth dereferences the CID document
+without credentials or redirects, requires the exact `JsonWebKey` method, controller and
+`authentication` authorization, and proves that its public key matches the supplied private key.
+An unresolved, unauthorized or mismatched method rejects; there is no OIDC fallback or implicit key generation.
+
+The equivalent core configuration is
+`lws: { subject: { cid: { documentUrl, keyId, privateKey } } }`. CID mode is an agent identity,
+so UI hooks are unused; configuration without a signing key fails closed. CID URLs require HTTPS and
+`keyId` must be an absolute fragment URL in the same document. ES256 is the supported agent algorithm.
+Agent credentials, access tokens and keys stay in memory. `restore()` returns an existing live identity
+or null; `remembered()` is empty. Logout fences outstanding work, clears token caches, and requires
+CID resolution again on the next login. The caller owns provisioning and retention of the signing key.
+Node factories require explicit static roots; the core CID configuration also supports the normal boundary options.
+
+React consumers mount one provider and read `usePodAuth()` from `@jeswr/pod-auth/react`:
+
+```tsx
+<PodAuthProvider auth={auth}><App /></PodAuthProvider>
+// Or provide config={options} to construct the core once.
+const { status, identity, webId, fetch, login, logout, error } = usePodAuth();
+```
+
+The provider silently restores once on mount, including StrictMode effect replay, and reports
+`restoring`, `unauthenticated` or `authenticated`. Authentication depends on identity rather than
+WebID presence, so CID and client-credentials agents work too. Login/restore/logout/expired events
+from the same core instance update React even when initiated elsewhere. Late restore results cannot
+overwrite a newer lifecycle event; unmount removes subscriptions and ignores delayed work.
+Fetch and action handles remain stable across renders. Login takes the core's optional `{ webId, issuer }`
+hint; action failures reject and populate `error`, while aborted login is suppressed. The next action
+clears the error. React is an optional peer and is imported only through the React subpath.
+
+
+The Node-only `@jeswr/pod-auth/testing` subpath exports `createMockOp`, `createMockLwsAs` and `createMemoryStore`.
 The mock OP ports the imported protocol test helpers to an injected HTTPS transport, checking actual
 PKCE, state/nonce, DPoP signatures/binding/replay and LWS ID-token exchange. It also supplies a fake
-`getCode` UI hook. Install its fetch as the pristine transport **before** constructing auth in tests.
+`getCode` UI hook. The separate mock LWS AS supports both challenge forms and validates signed OIDC/CID subjects, audiences and CID replay. Install its fetch as the pristine transport **before** constructing auth in tests.
 
 ```sh
 pnpm --filter @jeswr/reactive-authentication run build

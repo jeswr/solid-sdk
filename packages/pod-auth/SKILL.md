@@ -8,7 +8,13 @@ description: Work on @jeswr/pod-auth, the suite client authentication and sessio
 
 `createPodAuth` supplies injected UI hooks, provider composition, `fetch`, `login`, `identity`,
 `restore`, `logout`, `remembered` and lifecycle event subscriptions. Read `README.md` for the API.
-React hooks and Node/CID signing belong to later tasks; their subpaths remain reserved.
+`./node` supplies `forClientCredentials` and `forCid` with explicit static roots and memory-only credentials.
+CID mode (`lws.subject.cid`) requires a caller-provided non-extractable ES256 key; resolve and authorize
+its exact same-document authentication method and prove key possession before releasing a credential.
+Never infer a WebID from an opaque client-credentials token or fall back to OIDC for a failed CID identity.
+`./react` supplies the thin `PodAuthProvider` / `usePodAuth` lifecycle mirror, ported from solid-auth-core.
+Restore once across StrictMode replay, mirror lifecycle events, and fence late restore results against
+newer events. Keep React optional and expose only identity plus stable public core actions.
 
 Persist only refresh records with matching non-extractable ES256 keys, scoped by issuer/WebID/clientId.
 Remembered pointers contain public metadata only. Restore refreshes under a Web Lock (keyed FIFO Node fallback)
