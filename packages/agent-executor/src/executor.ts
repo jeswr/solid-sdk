@@ -207,7 +207,10 @@ export function createExecutor(options: ExecutorOptions) {
             : record.status === "not-sent"
               ? "not-executed"
               : "uncertain",
-        final: record.status !== "uncertain",
+        // A definitive non-send settles this attempt; explicit retries can still complete it.
+        final:
+          record.status === "sent" ||
+          (record.status === "not-sent" && record.attempts >= MAX_TRANSMISSION_ATTEMPTS),
       },
     });
     await o.proposals.writeDisposition(record.proposal, result);

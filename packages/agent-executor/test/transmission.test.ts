@@ -138,8 +138,20 @@ describe("step 7: durable idempotency and pilot recovery", () => {
         status: "not-sent",
       });
       expect(h.records.get(e.proposal.id)?.attempts).toBe(attempts);
+      expect([...h.receipts.values()]).toEqual([
+        expect.objectContaining({
+          body: expect.objectContaining({
+            outcome: "not-executed",
+            final: attempts === MAX_TRANSMISSION_ATTEMPTS,
+          }),
+        }),
+      ]);
     }
     expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ reason: "attempt-limit" });
+    expect([...h.receipts.values()][0]?.body).toMatchObject({
+      outcome: "not-executed",
+      final: true,
+    });
     expect(h.binding.send.transmit).toHaveBeenCalledTimes(MAX_TRANSMISSION_ATTEMPTS);
   });
   it("finalAbsence permits a fresh authorized request, bounded at MAX 3", async () => {
@@ -214,7 +226,7 @@ describe("step 7: durable idempotency and pilot recovery", () => {
               : outcome === "rejected"
                 ? "not-executed"
                 : "uncertain",
-          final: outcome !== "unknown",
+          final: outcome === "accepted",
         }),
       }),
     );
@@ -839,7 +851,7 @@ it.each([
       expect([...h.receipts.values()]).toEqual([
         expect.objectContaining({
           conversation: "urn:conversation:1",
-          body: expect.objectContaining({ outcome: "not-executed", final: true }),
+          body: expect.objectContaining({ outcome: "not-executed", final: false }),
         }),
       ]);
       expect(h.records.get(e.proposal.id)).toMatchObject({ status: "not-sent", attempts: 1 });
@@ -850,17 +862,42 @@ it.each([
     }
   }
 });
-it("an explicit retry remains possible after repairing a rejected send receipt", async () => {
+it.each([
+  false,
+  true,
+])("an explicit retry completes only a non-final rejected receipt, compacted=%s", async (compacted) => {
   const h = harness();
   const e = await h.enqueue();
-  h.prior(e, "not-sent");
-  expect(await h.executor.runOutboxOnce()).toEqual({
+  vi.mocked(h.binding.send.transmit).mockResolvedValueOnce({
+    outcome: "rejected",
+    detail: "not accepted",
+  });
+  expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "not-sent" });
+  const rejected = [...h.receipts.values()][0];
+  expect(rejected?.body).toMatchObject({ outcome: "not-executed", final: false });
+  if (compacted) h.records.clear();
+  // Simulate a restart with settlement repair still queued.
+  h.dispositions.delete(e.proposal.id);
+  const executor = createExecutor(h.options);
+  expect(await executor.runOutboxOnce()).toEqual({
     [e.proposal.id]: { status: "not-sent", reason: "not-sent" },
   });
-  expect(h.binding.send.transmit).not.toHaveBeenCalled();
-  expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "sent" });
+  expect([...h.receipts.values()]).toEqual([rejected]);
   expect(h.binding.send.transmit).toHaveBeenCalledOnce();
+  expect(await executor.transmit(e.proposal.id)).toMatchObject({ status: "sent" });
+  expect(h.binding.send.transmit).toHaveBeenCalledTimes(2);
   expect(h.records.get(e.proposal.id)).toMatchObject({ status: "sent", attempts: 2 });
+  expect([...h.receipts.values()].map((receipt) => receipt.body)).toEqual([
+    rejected?.body,
+    expect.objectContaining({
+      ref: rejected?.body.ref,
+      activity: rejected?.body.activity,
+      outcome: "completed",
+      final: true,
+    }),
+  ]);
+  expect(await executor.transmit(e.proposal.id)).toMatchObject({ status: "duplicate" });
+  expect(h.binding.send.transmit).toHaveBeenCalledTimes(2);
 });
 it("outbox repairs a legacy sent receipt without a provider reference", async () => {
   const h = harness();

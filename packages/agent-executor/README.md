@@ -91,6 +91,9 @@ id `a2a` with `idempotentResend: true` and receiver deduplication. All paths are
 at **three provider attempts**. Rejected A2A resends retain the earlier uncertainty.
 Positive lookup can still reconcile delivery after all three attempts, including for A2A;
 the cap prevents further transmissions.
+Rejected sends emit non-final `not-executed` receipts while explicit retries remain
+available. At the three-attempt bound, a definitive non-send emits final `not-executed`;
+successful sends emit final `completed`, and unresolved sends remain non-final `uncertain`.
 
 Timeouts do not cancel the original call. Pending requests remain guarded across
 executor instances sharing a store, and late outcomes are persisted. Positive delivery
