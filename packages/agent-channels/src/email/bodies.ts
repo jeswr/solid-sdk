@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { AnyMessage, JsonObject } from "@jeswr/agent-model";
+import type { AnyMessage, Json, JsonObject } from "@jeswr/agent-model";
 import { envelope } from "../direct/shared.js";
 
 const SUMMARY_START = "--- Summary generated from the signed statement ---";
@@ -7,7 +7,18 @@ const SUMMARY_END = "--- End of summary ---";
 
 function short(v: unknown, max = 160): string {
   const s = typeof v === "string" ? v : JSON.stringify(v);
-  return s.length > max ? `${s.slice(0, max - 3)}...` : s;
+  const points = Array.from(s);
+  return points.length > max ? `${points.slice(0, max - 3).join("")}...` : s;
+}
+
+function isTimeSlot(value: Json): value is { start: string; end: string } {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    typeof value.start === "string" &&
+    typeof value.end === "string"
+  );
 }
 
 /** Deterministic, parity-critical summary lines for one message. */
@@ -23,12 +34,17 @@ export function summaryLines(m: AnyMessage): string[] {
       );
       const t = m.body.terms as JsonObject;
       for (const key of Object.keys(t).sort()) {
-        if (key === "candidates" && Array.isArray(t[key])) {
+        const value = t[key];
+        if (
+          key === "candidates" &&
+          Array.isArray(value) &&
+          value.length > 0 &&
+          value.every(isTimeSlot)
+        ) {
           lines.push("Candidate times (UTC):");
-          for (const c of t[key] as JsonObject[])
-            lines.push(`  - ${String(c.start)} to ${String(c.end)}`);
+          for (const c of value) lines.push(`  - ${c.start} to ${c.end}`);
         } else {
-          lines.push(`Term ${key}: ${short(t[key])}`);
+          lines.push(`Term ${key}: ${short(value)}`);
         }
       }
       break;

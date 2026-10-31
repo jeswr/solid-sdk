@@ -67,6 +67,92 @@ it("renders exact deterministic MIME with three copies, approved footer and lega
   expect(inspectEmail(Buffer.from(wire.bytes), config).parity).toBe("match");
 });
 
+it.for([
+  null,
+  true,
+  1,
+  {},
+  [],
+  ["Alice", "Bob"],
+  [null],
+  [true, 1],
+  [[]],
+  [{}],
+  [{ start: "a" }],
+  [{ end: "b" }],
+  [{ start: 1, end: "b" }],
+  [{ start: "a", end: null }],
+  [{ start: "a", end: "b" }, "Alice"],
+])("renders nonscheduling candidates as JSON (%j)", async (candidates) => {
+  const terms = { candidates };
+  const value = {
+    ...message,
+    kind: "propose",
+    body: {
+      operation: { id: "urn:op", version: "1" },
+      round: 1,
+      terms,
+      termsDigest: digestOf(terms),
+    },
+  };
+  const wire = await wireFor(value);
+  const parsed = inspectEmail(Buffer.from(wire.bytes), config);
+  expect(parsed.parity).toBe("match");
+  expect(parsed.message.textBody).toContain(`Term candidates: ${canonicalJson(candidates)}`);
+  expect(parsed.message.textBody).not.toContain("Candidate times (UTC):");
+});
+
+it("retains scheduling summaries for arrays of time-slot objects", async () => {
+  const terms = {
+    candidates: [
+      { start: "2026-11-01T12:00:00Z", end: "2026-11-01T13:00:00Z" },
+      { start: "2026-11-02T12:00:00Z", end: "2026-11-02T13:00:00Z" },
+    ],
+  };
+  const wire = await wireFor({
+    ...message,
+    kind: "propose",
+    body: {
+      operation: { id: "urn:op", version: "1" },
+      round: 1,
+      terms,
+      termsDigest: digestOf(terms),
+    },
+  });
+  const parsed = inspectEmail(Buffer.from(wire.bytes), config);
+  expect(parsed.parity).toBe("match");
+  expect(parsed.message.textBody).toContain(
+    "Candidate times (UTC):\n  - 2026-11-01T12:00:00Z to 2026-11-01T13:00:00Z\n  - 2026-11-02T12:00:00Z to 2026-11-02T13:00:00Z",
+  );
+});
+
+it.each([
+  [`${"x".repeat(156)}😀 more`, `${"x".repeat(156)}😀...`],
+  [`${"x".repeat(157)}😀 more`, `${"x".repeat(157)}...`],
+  [`${"x".repeat(159)}😀`, `${"x".repeat(159)}😀`],
+  ["😀".repeat(160), "😀".repeat(160)],
+  ["😀".repeat(161), `${"😀".repeat(157)}...`],
+])("preserves Unicode code points in term summaries (%s)", async (text, expected) => {
+  const terms = { text };
+  const proposal = signed({
+    ...message,
+    kind: "propose",
+    body: {
+      operation: { id: "urn:op", version: "1" },
+      round: 1,
+      terms,
+      termsDigest: digestOf(terms),
+    },
+  });
+  const renderer = createEmailRenderer(renderOptions);
+  const wire = await renderer.render(proposal, EMAIL_MIME);
+  expect(await renderer.validate(wire, proposal)).toEqual({ ok: true });
+  const parsed = inspectEmail(Buffer.from(wire.bytes), config);
+  expect(parsed.parity).toBe("match");
+  expect(parsed.message.textBody).toContain(`Term text: ${expected}`);
+  expect(parsed.message.textBody).not.toContain("\uFFFD");
+});
+
 it("rejects changed visible parts under STRICT and preserves unverified human mail under LENIENT", async () => {
   const wire = await wireFor();
   const proposal = signed();

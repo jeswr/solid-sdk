@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { digestBytes } from "@jeswr/agent-model";
+import { digestBytes, digestOf } from "@jeswr/agent-model";
 import type { guardedFetch } from "@jeswr/guarded-fetch";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer uses bare builtins
 import { readFileSync } from "fs";
@@ -396,6 +396,32 @@ it("refuses tampering and rechecks expiry after credential and owner-approval aw
   await expect(expiredApproval.send.transmit(wire, io)).rejects.toThrow("expired");
   expect(s.requests).toEqual([]);
   expect(expiredApproval.requests).toEqual([]);
+});
+
+it("transmits approved MIME with Unicode at the summary truncation boundary", async () => {
+  const s = sender([fixtures.accepted]);
+  const terms = { text: `${"x".repeat(156)}😀 more` };
+  const proposal = signed({
+    ...message,
+    kind: "propose",
+    body: {
+      operation: { id: "urn:op", version: "1" },
+      round: 1,
+      terms,
+      termsDigest: digestOf(terms),
+    },
+  });
+  const wire = await s.send.render(proposal, EMAIL_MIME);
+  expect(await s.send.validate(wire, proposal)).toEqual({ ok: true });
+  expect(await s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false })).toEqual({
+    outcome: "accepted",
+    providerRef: "d4",
+  });
+  expect(s.requests).toHaveLength(1);
+  expect(s.verifyApproval).toHaveBeenCalledWith(wire, account);
+  expect(Buffer.from(JSON.parse(s.requests[0]?.body ?? "null").raw, "base64url").toString()).toBe(
+    wire.bytes,
+  );
 });
 
 it.each([
