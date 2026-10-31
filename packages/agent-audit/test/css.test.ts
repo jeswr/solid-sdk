@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
 import { issueApproval, issueMandate, mandateToTurtle } from "@jeswr/agent-mandate";
+import { digestOf } from "@jeswr/agent-model";
 import { createNodeGuardedFetch } from "@jeswr/guarded-fetch/node";
 import {
   buildBitstringStatusListCredential,
@@ -24,7 +25,7 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import { afterAll, beforeAll, expect, it } from "vitest";
 import { runAuditCli } from "../src/cli.js";
-import { AT, fixture } from "./fixture.js";
+import { AT, fixture, required } from "./fixture.js";
 
 let child: ChildProcess;
 let directory: string;
@@ -111,7 +112,10 @@ it("audits a real in-memory CSS pod anonymously: intact, forged, out-of-scope, r
   await cli(0);
   f.pod.put(
     f.approvalId,
-    await issueApproval({ ...f.approval, decision: "deny" }, f.p256, new Date(AT)),
+    required(f.pod.resources.get(f.approvalId)).body.replace(
+      f.approval.termsDigest,
+      digestOf("forged terms"),
+    ),
     "application/trig",
   );
   await upload();

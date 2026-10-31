@@ -57,10 +57,9 @@ it.each([
   if (code === "forged-approval")
     f.pod.put(
       f.approvalId,
-      await issueApproval(
-        { ...f.approval, termsDigest: digestOf("different") },
-        f.p256,
-        new Date(AT),
+      required(f.pod.resources.get(f.approvalId)).body.replace(
+        f.approval.termsDigest,
+        digestOf("different"),
       ),
       "application/trig",
     );
@@ -94,6 +93,11 @@ it.each([
 it("requires all recipients to be in scope", async () => {
   f.terms.recipientHashes.push(`sha256:${"b".repeat(64)}`);
   for (const r of f.records) if (r.terms) r.termsDigest = digestOf(f.terms);
+  f.pod.put(
+    f.approvalId,
+    await issueApproval({ ...f.approval, termsDigest: digestOf(f.terms) }, f.p256, new Date(AT)),
+    "application/trig",
+  );
   await f.mirror();
   await breach("out-of-scope");
 });
@@ -294,5 +298,5 @@ it("handles CLI usage, nested storage roots and invalid proposal URLs", async ()
   expect(await runAuditCli(["--help"], () => {})).toBe(0);
   for (const args of [[], [f.proposal, "--bad"], [f.proposal, "--bad", AT]])
     expect(await runAuditCli(args, () => {})).toBe(1);
-  expect(await runAuditCli([f.proposal], () => {})).toBe(1);
+  expect(await runAuditCli([f.proposal, "--at", "invalid"], () => {})).toBe(1);
 });
