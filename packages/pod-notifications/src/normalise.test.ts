@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { describe, expect, test } from "vitest";
-import { createChangeNormalizer } from "./index.js";
+import { createChangeNormalizer } from "./normalise.js";
 
 const root = "https://pod.example/alice/";
 const storage = createMemoryStorage({ protocol: "lws", root });
@@ -90,6 +90,10 @@ describe("untrusted notification normalisation", () => {
     "https://pod.example/alice-other/note",
     "https://pod.example/alice/%2e%2e/secret",
     "https://user:pass@pod.example/alice/note",
+    "https://:pass@pod.example/alice/note",
+    "https://pod.example/alice/\nnote",
+    "https://pod.example/alice/\\note",
+    "https://[invalid/alice/note",
     "https:pod.example/alice/note",
     "file:///alice/note",
     "/alice/note",
@@ -182,5 +186,24 @@ describe("untrusted notification normalisation", () => {
     const [event] = parse({ type: "Update", object: root, id: 7 });
     expect(event?.published.getTime()).toBeLessThanOrEqual(Date.now());
     expect(event?.id).toBe(`${root}#${event?.published.toISOString()}`);
+  });
+
+  test("distinct ids for the same object and timestamp survive regardless of id spelling", () => {
+    const n = normalizer();
+    const ids = [
+      "__proto__",
+      "constructor",
+      "toString",
+      ...Array.from({ length: 500 }, (_, i) => `id-${i}`),
+    ];
+    const raw = {
+      type: "Notification",
+      storage: storageId,
+      activity: ids.map((id) => ({ ...frame, id })),
+    };
+    expect(n.parse(raw).map((event) => event.id)).toEqual(ids);
+    expect(n.parse(raw)).toEqual([]);
+    n.advance(5_000);
+    expect(n.parse(raw).map((event) => event.id)).toEqual(ids);
   });
 });

@@ -1,5 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-/** Storage-scoped notification contracts and untrusted frame normalisation. */
+/** Storage-scoped notification subscriptions and ADR-005 contracts. */
 export { createNotifications } from "./client.js";
-export { createChangeNormalizer, type NormalisationOptions } from "./normalise.js";
 export type * from "./types.js";
