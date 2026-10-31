@@ -95,7 +95,10 @@ export function createTrashClient(storage: StorageClient): TrashClient {
       if (!(await client.listTrash()).some((entry) => entry.url === url))
         throw new StorageError("not-found", { method: "DELETE", url });
       const head = await storage.head(url);
-      await storage.delete(url, { ifMatch: serviceEtag(head) });
+      await storage.delete(url, {
+        ifMatch: serviceEtag(head),
+        recursive: head.kind === "container",
+      });
     },
   };
   return client;

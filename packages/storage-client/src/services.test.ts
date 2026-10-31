@@ -67,22 +67,23 @@ function metadataResponses(
   protocol: "solid" | "lws",
   original = LIVE,
   modified: string | null = AT,
+  copy = COPY,
 ) {
-  const meta = `${COPY}.meta`;
+  const meta = `${copy}.meta`;
   return [
     new Response(null, {
       headers: { Link: `<${meta}>; rel="${protocol === "solid" ? "describedby" : "linkset"}"` },
     }),
     protocol === "solid"
       ? new Response(
-          `<${COPY}> <http://www.iana.org/assignments/relation/original> <${original}> ${modified === null ? "." : `; <http://purl.org/dc/terms/modified> ${JSON.stringify(modified)} .`}`,
+          `<${copy}> <http://www.iana.org/assignments/relation/original> <${original}> ${modified === null ? "." : `; <http://purl.org/dc/terms/modified> ${JSON.stringify(modified)} .`}`,
           { headers: { "Content-Type": "text/turtle" } },
         )
       : Response.json(
           {
             linkset: [
               {
-                anchor: COPY,
+                anchor: copy,
                 original: [{ href: original, ...(modified === null ? {} : { modified }) }],
               },
             ],
@@ -135,6 +136,35 @@ for (const protocol of ["solid", "lws"] as const) {
         code: "not-found",
       });
       await expect(trash.purge(restored.url)).rejects.toMatchObject({ code: "not-found" });
+    });
+    test("purge removes a populated folder and its nested descendants, preserving live folders", async () => {
+      const storage = createMemoryStorage({ protocol, root: ROOT, trash: true, pageSize: 1 });
+      const trash = createTrashClient(storage);
+      const folder = await storage.create(ROOT, null, { kind: "container", name: "folder" });
+      await storage.create(folder.url, "direct", { contentType: "text/plain" });
+      const nested = await storage.create(folder.url, null, { kind: "container" });
+      await storage.create(nested.url, "nested", { contentType: "text/plain" });
+      const live = await storage.create(ROOT, null, { kind: "container", name: "live" });
+      const liveFile = await storage.create(live.url, "keep", { contentType: "text/plain" });
+      const copy = await trash.trash(folder.url);
+      const removed = [copy.url];
+      for await (const entry of storage.listAll(copy.url)) {
+        removed.push(entry.url);
+        if (entry.kind === "container")
+          for await (const child of storage.listAll(entry.url)) removed.push(child.url);
+      }
+      expect(removed).toHaveLength(4);
+      const head = vi.spyOn(storage, "head");
+      const remove = vi.spyOn(storage, "delete");
+      await expect(trash.purge(live.url)).rejects.toMatchObject({ code: "not-found" });
+      expect(head).not.toHaveBeenCalled();
+      expect(remove).not.toHaveBeenCalled();
+      await trash.purge(copy.url);
+      for (const url of removed)
+        await expect(storage.head(url)).rejects.toMatchObject({ code: "not-found" });
+      expect(await trash.listTrash()).toEqual([]);
+      expect((await storage.head(live.url)).kind).toBe("container");
+      expect(await (await storage.read(liveFile.url)).text()).toBe("keep");
     });
     test("three content writes create three immutable versions; restore creates a fourth", async () => {
       const storage = createMemoryStorage({ protocol, root: ROOT, versioning: true });
@@ -258,6 +288,60 @@ for (const protocol of ["solid", "lws"] as const) {
       expect(fetcher).toHaveBeenLastCalledWith(
         COPY,
         expect.objectContaining({ method: "DELETE", headers: { "If-Match": '"copy"' } }),
+      );
+    });
+    test("purge traverses a populated container before deleting it", async () => {
+      const copy = protocol === "solid" ? `${COPY}/` : COPY;
+      const child = protocol === "solid" ? `${copy}child` : `${ROOT}opaque-child`;
+      const link = `<${protocol === "solid" ? "http://www.w3.org/ns/ldp#Container" : "https://www.w3.org/ns/lws#Container"}>; rel="type", <${TRASH}>; rel="up"`;
+      const containerHead = (etag = '"copy"') =>
+        new Response(null, { headers: { ETag: etag, Link: link } });
+      const { storage, fetcher } = network(protocol, [
+        listing(protocol, [copy]),
+        ...metadataResponses(protocol, LIVE, AT, copy),
+        containerHead(),
+        containerHead(),
+        listing(protocol, [child], copy),
+        ...(protocol === "lws"
+          ? [
+              new Response(null, {
+                headers: { ETag: '"child"', Link: `<${copy}>; rel="up"` },
+              }),
+            ]
+          : []),
+        new Response(null, { status: 204 }),
+        ...(protocol === "lws" ? [containerHead('"empty"')] : []),
+        new Response(null, { status: 204 }),
+      ]);
+      await createTrashClient(storage).purge(copy);
+      const deletes = (fetcher.mock.calls as unknown as [string, RequestInit][]).filter(
+        ([, init]) => init.method === "DELETE",
+      );
+      expect(deletes.map(([url]) => url)).toEqual([child, copy]);
+      if (protocol === "lws") {
+        expect(deletes[0]?.[1].headers).toEqual({ "If-Match": '"child"' });
+        expect(deletes[1]?.[1].headers).toEqual({ "If-Match": '"empty"' });
+      }
+    });
+    test.each([
+      null,
+      'W/"copy"',
+      '"stale"',
+    ])("purge refuses a missing, weak or stale container ETag (%s) before deletion", async (etag) => {
+      const copy = protocol === "solid" ? `${COPY}/` : COPY;
+      const link = `<${protocol === "solid" ? "http://www.w3.org/ns/ldp#Container" : "https://www.w3.org/ns/lws#Container"}>; rel="type"`;
+      const { storage, fetcher } = network(protocol, [
+        listing(protocol, [copy]),
+        ...metadataResponses(protocol, LIVE, AT, copy),
+        new Response(null, { headers: { Link: link, ...(etag === null ? {} : { ETag: etag }) } }),
+        new Response(null, { headers: { Link: link, ETag: '"current"' } }),
+      ]);
+      await expect(createTrashClient(storage).purge(copy)).rejects.toMatchObject({
+        code: etag === '"stale"' ? "precondition-failed" : "invalid-response",
+      });
+      expect(fetcher).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ method: "DELETE" }),
       );
     });
     test("template history listing and Memento-Datetime support conditional restore", async () => {
