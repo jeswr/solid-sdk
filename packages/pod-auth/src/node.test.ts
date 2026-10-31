@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { SessionFence } from "@jeswr/reactive-authentication";
 import { afterEach, expect, test, vi } from "vitest";
 import { createPodAuth, type PodAuthOptions } from "./index.js";
@@ -15,16 +16,20 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-async function cidFixture(challenge: "resource_metadata" | "legacy" = "resource_metadata") {
+async function cidFixture(
+  challenge: "resource_metadata" | "legacy" = "resource_metadata",
+  methodForm: "reference" | "embedded" = "reference",
+) {
   const keys = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, [
     "sign",
     "verify",
   ]);
   const publicKeyJwk = await crypto.subtle.exportKey("jwk", keys.publicKey);
+  const method = { id: keyId, type: "JsonWebKey", controller: documentUrl, publicKeyJwk };
   const document = {
     id: documentUrl,
-    verificationMethod: [{ id: keyId, type: "JsonWebKey", controller: documentUrl, publicKeyJwk }],
-    authentication: [keyId],
+    ...(methodForm === "reference" ? { verificationMethod: [method] } : {}),
+    authentication: methodForm === "reference" ? [keyId] : [method],
   };
   const as = createMockLwsAs({
     challenge,
@@ -142,6 +147,62 @@ test("Node CID factory resolves an existing identity and cached-token rejection 
   expect(event).toHaveBeenCalledWith(
     expect.objectContaining({ timestamp: 7, url: f.as.root + "private" }),
   );
+});
+
+test.each([
+  ["node", "resource_metadata"],
+  ["node", "legacy"],
+  ["core", "resource_metadata"],
+  ["core", "legacy"],
+] as const)("%s CID accepts an embedded authentication method with %s", async (mode, challenge) => {
+  const f = await cidFixture(challenge, "embedded");
+  expect((await f.as.fetch(f.as.root + "private")).status).toBe(401);
+  const auth =
+    mode === "node" ? await forCid({ ...f.cid, boundary: [f.as.root] }) : createPodAuth(f.options);
+  expect((await auth.fetch(f.as.root + "private")).status).toBe(200);
+  expect(await auth.identity()).toMatchObject({ subject: documentUrl, protocol: "lws" });
+  expect(f.as.stats.exchanges).toBe(1);
+  expect(f.options.ui.getWebId).not.toHaveBeenCalled();
+  expect(f.options.ui.getCode).not.toHaveBeenCalled();
+});
+
+test.each([
+  "controller",
+  "type",
+  "private",
+  "mismatch",
+  "duplicate",
+  "duplicate-top-level",
+  "foreign-id",
+  "null",
+])("embedded CID authentication fails closed: %s", async (kind) => {
+  const f = await cidFixture("resource_metadata", "embedded");
+  const doc: any = structuredClone(f.document);
+  const method = doc.authentication[0];
+  if (kind === "controller") method.controller = "https://other.example/id";
+  if (kind === "type") method.type = "unknown";
+  if (kind === "private") method.publicKeyJwk.d = "forbidden";
+  if (kind === "mismatch") {
+    const keys = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, [
+      "sign",
+      "verify",
+    ]);
+    method.publicKeyJwk = await crypto.subtle.exportKey("jwk", keys.publicKey);
+  }
+  if (kind === "duplicate") doc.authentication.push(structuredClone(method));
+  if (kind === "duplicate-top-level") doc.verificationMethod = [structuredClone(method)];
+  if (kind === "foreign-id") method.id = "https://other.example/id#key";
+  if (kind === "null") doc.authentication = [null, keyId];
+  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) =>
+    new Request(input, init).url === documentUrl
+      ? Promise.resolve(Response.json(doc))
+      : f.as.fetch(input, init),
+  );
+  await expect(forCid({ ...f.cid, boundary: [f.as.root] })).rejects.toThrow();
+  const auth = createPodAuth(f.options);
+  await expect(auth.fetch(f.as.root + "private")).rejects.toThrow();
+  expect(await auth.identity()).toBeNull();
+  expect(f.as.stats.exchanges).toBe(0);
 });
 
 test.each([

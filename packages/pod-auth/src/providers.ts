@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import {
   CachingAuthorizationServerProvider,
   CachingClientProvider,
@@ -79,19 +80,20 @@ export function createAgentProviders(
         });
         if (!response.ok || response.redirected) throw new Error("CID document resolution failed");
         const document = await response.json();
-        const methods: Record<string, unknown>[] = Array.isArray(document?.verificationMethod)
-          ? document.verificationMethod.filter(
-              (method: Record<string, unknown> | null) => method?.id === cid.keyId,
-            )
+        const authentication: unknown[] = Array.isArray(document?.authentication)
+          ? document.authentication
           : [];
+        const methods: Record<string, unknown>[] = [
+          ...(Array.isArray(document?.verificationMethod) ? document.verificationMethod : []),
+          ...authentication,
+        ].filter((method: Record<string, unknown> | null) => method?.id === cid.keyId);
         const method = methods[0];
         if (
           document?.id !== cid.documentUrl ||
           methods.length !== 1 ||
           method?.type !== "JsonWebKey" ||
           method.controller !== cid.documentUrl ||
-          !Array.isArray(document.authentication) ||
-          !document.authentication.includes(cid.keyId) ||
+          !(authentication.includes(cid.keyId) || authentication.includes(method)) ||
           !method.publicKeyJwk ||
           typeof method.publicKeyJwk !== "object" ||
           "d" in method.publicKeyJwk
