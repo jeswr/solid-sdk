@@ -36,16 +36,24 @@ export async function storageFromFetch(
     });
     const response = await (discovering ? discovery : data)(input, { ...init, headers: merged });
     if (initialMountHead && [404, 410].includes(response.status)) {
-      // Discovery otherwise discards the status and reports missing capability links.
+      // Preserve absence if discovery has no links, but let the SDK use advertised
+      // storage metadata so a first PUT can create the missing mount and its path.
       discoveryAbsence = toStorageError(init?.method ?? "GET", base, response);
-      void response.body?.cancel().catch(() => undefined);
-      throw discoveryAbsence;
     }
     if (!discovering) observe?.(String(input), response.headers);
     return response;
   };
   const { storage } = await createPodClient({ storage: base, fetch: transport }).catch((error) => {
-    throw discoveryAbsence ?? error;
+    if (
+      discoveryAbsence &&
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "no-storage-link" &&
+      "url" in error &&
+      error.url === base
+    )
+      throw discoveryAbsence;
+    throw error;
   });
   discovering = false;
   return storage;
