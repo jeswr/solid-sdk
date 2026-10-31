@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
-import { issueApproval, issueMandate, mandateToTurtle } from "@jeswr/agent-mandate";
+import { defaultMandate, issueApproval, issueMandate, mandateToTurtle } from "@jeswr/agent-mandate";
 import { digestOf } from "@jeswr/agent-model";
 import { beforeEach, expect, it } from "vitest";
 import { proposalStorage, runAuditCli } from "../src/cli.js";
@@ -100,6 +100,100 @@ it("requires all recipients to be in scope", async () => {
   );
   await f.mirror();
   await breach("out-of-scope");
+});
+it.each([
+  "root",
+  "autonomous",
+  "withApproval",
+] as const)("preserves set-wide prohibitions in %s and compares the combined verdict", async (placement) => {
+  f.terms.recipientHashes.push(`sha256:${"b".repeat(64)}`);
+  for (const r of f.records) if (r.terms) r.termsDigest = digestOf(f.terms);
+  f.pod.put(
+    f.approvalId,
+    await issueApproval({ ...f.approval, termsDigest: digestOf(f.terms) }, f.p256, new Date(AT)),
+    "application/trig",
+  );
+  const mandate = defaultMandate({
+    id: f.mandateId,
+    ownerWebId: f.owner,
+    agentWebId: f.agent,
+    recipientHashes: f.terms.recipientHashes,
+    now: new Date(AT),
+  });
+  for (const matches of [false, true]) {
+    const prohibitions = [
+      {
+        type: "prohibition" as const,
+        action: f.terms.action,
+        constraints: [
+          {
+            leftOperand: `${AGENT}recipientSet`,
+            operator: "isAllOf" as const,
+            rightOperand: matches
+              ? f.terms.recipientHashes
+              : [required(f.terms.recipientHashes[0]), `sha256:${"c".repeat(64)}`],
+          },
+        ],
+      },
+    ];
+    const restricted =
+      placement === "root"
+        ? { ...mandate, prohibitions: [...mandate.prohibitions, ...prohibitions] }
+        : { ...mandate, [placement]: { ...mandate[placement], prohibitions } };
+    f.pod.put(
+      f.mandateId,
+      await mandateToTurtle(
+        await issueMandate(restricted, f.ed, {
+          statusListCredential: f.statusId,
+          statusListIndex: "1",
+        }),
+      ),
+      "application/trig",
+    );
+    await f.mirror();
+    expect((await audit()).breaches).toEqual(
+      matches ? ["out-of-scope", "decision-divergence"] : [],
+    );
+  }
+  required(f.records[1]).decision = "prohibited";
+  await f.mirror();
+  expect((await audit()).breaches).toEqual(["out-of-scope"]);
+});
+it("combines autonomous and approval-required recipients into one recorded verdict", async () => {
+  f.terms.recipientHashes.push(`sha256:${"b".repeat(64)}`);
+  for (const r of f.records) if (r.terms) r.termsDigest = digestOf(f.terms);
+  f.pod.put(
+    f.approvalId,
+    await issueApproval({ ...f.approval, termsDigest: digestOf(f.terms) }, f.p256, new Date(AT)),
+    "application/trig",
+  );
+  const permissions = f.terms.recipientHashes.map((hash) => ({
+    type: "permission" as const,
+    action: f.terms.action,
+    constraints: [
+      { leftOperand: `${AGENT}recipientSet`, operator: "eq" as const, rightOperand: hash },
+    ],
+  }));
+  f.pod.put(
+    f.mandateId,
+    await mandateToTurtle(
+      await issueMandate(
+        {
+          ...f.mandate,
+          autonomous: { ...f.mandate.autonomous, permissions: permissions.slice(0, 1) },
+          withApproval: { ...f.mandate.withApproval, permissions },
+        },
+        f.ed,
+        { statusListCredential: f.statusId, statusListIndex: "1" },
+      ),
+    ),
+    "application/trig",
+  );
+  await f.mirror();
+  expect((await audit()).ok).toBe(true);
+  required(f.records[1]).decision = "permit";
+  await f.mirror();
+  expect((await audit()).breaches).toEqual(["decision-divergence"]);
 });
 it("binds proposal, decision, transmission and signed approval terms", async () => {
   required(f.records[0]).termsDigest = digestOf("bad");

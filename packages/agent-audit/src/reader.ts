@@ -216,28 +216,33 @@ export async function auditArtifact(options: AuditOptions): Promise<AuditReport>
       const terms = p.terms;
       // isAnyOf is existential: verify each recipient separately to prevent a mixed set
       // containing one allowed recipient from laundering an unauthorized recipient.
-      const decisions = await Promise.all(
-        terms.recipientHashes.map((recipient) =>
-          evaluateIntent(mandate, {
-            agent: p.agent,
-            action: terms.action,
-            target: terms.target,
-            at: now.toISOString(),
-            attributes: {
-              [`${AGENT}binding`]: terms.binding,
-              [`${AGENT}recipientSet`]: recipient,
-              ...(terms.purpose ? { purpose: terms.purpose } : {}),
-            },
-          }),
-        ),
-      );
+      const evaluateRecipients = (recipientSet: string | readonly string[]) =>
+        evaluateIntent(mandate, {
+          agent: p.agent,
+          action: terms.action,
+          target: terms.target,
+          at: now.toISOString(),
+          attributes: {
+            [`${AGENT}binding`]: terms.binding,
+            [`${AGENT}recipientSet`]: recipientSet,
+            ...(terms.purpose ? { purpose: terms.purpose } : {}),
+          },
+        });
+      const wholeSet = await evaluateRecipients(terms.recipientHashes);
+      const decisions = await Promise.all(terms.recipientHashes.map(evaluateRecipients));
+      // Set-wide prohibitions (e.g. isAllOf) must also win. Scope still requires
+      // each recipient to pass; scalar permissions need not match an entire set.
+      if (wholeSet.decision === "prohibited") decisions.push(wholeSet);
       if (
         decisions.some(
           (decision) => decision.decision !== "permit" && decision.reason !== "owner-approval",
         )
       )
         breaches.push("out-of-scope");
-      if (decisions.some((decision) => d.record.decision !== decision.decision))
+      const combined =
+        decisions.find((decision) => decision.decision === "prohibited") ??
+        decisions.find((decision) => decision.decision !== "permit");
+      if (d.record.decision !== (combined?.decision ?? "permit"))
         breaches.push("decision-divergence");
       if (mandate.limits.length > 0) breaches.push("accounting-unverified");
       // v1 requires fresh approval for every send, even for an autonomous policy match.
