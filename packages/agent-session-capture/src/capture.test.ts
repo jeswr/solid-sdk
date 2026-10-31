@@ -13,6 +13,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type CaptureOptions, runCapture } from "./capture.js";
+import * as io from "./io.js";
 import { digest } from "./parsers.js";
 import { createCaptureTestTransport } from "./testing.js";
 
@@ -348,6 +349,81 @@ describe("capture with real ChatWriter and client credentials", () => {
     expect([...transport.resources.keys()].filter((url) => /\/m-.*\.ttl$/.test(url))).toHaveLength(
       4,
     );
+  });
+
+  it("captures the notified native rollout before an earlier slow unrelated transcript", async () => {
+    const text = await fixture("codex");
+    const slow = await rollout(
+      text.replaceAll("codex-fixture-session", "another-thread"),
+      "rollout-2026-10-24-another-thread.jsonl",
+    );
+    const notified = await rollout(text, "rollout-2026-10-25-codex-fixture-session.jsonl");
+    const read = io.readRegular;
+    const reads: string[] = [];
+    vi.useFakeTimers();
+    vi.spyOn(io, "readRegular").mockImplementation(async (path, signal, privateFile) => {
+      if (path === notified || path === slow) reads.push(path);
+      if (path === slow) {
+        await vi.advanceTimersByTimeAsync(100);
+        signal.throwIfAborted();
+      }
+      return read(path, signal, privateFile);
+    });
+    await runCapture(
+      [
+        "codex",
+        JSON.stringify({ type: "agent-turn-complete", "thread-id": "codex-fixture-session", cwd }),
+      ],
+      { ...options, budgetMs: 100 },
+    );
+    expect(reads[0]).toBe(notified);
+    expect((await storedConversation("codex")).messages).toHaveLength(4);
+    expect(
+      [...transport.resources.keys()].some((url) =>
+        url.includes(digest(["codex", "another-thread"])),
+      ),
+    ).toBe(false);
+  });
+
+  it("advances discovery after a transcript repeatedly exhausts the parsing budget", async () => {
+    const text = await fixture("codex");
+    const slow = await rollout(text.replaceAll("codex-fixture-session", "slow"), "rollout-a.jsonl");
+    const later = await rollout(text, "rollout-z.jsonl");
+    const read = io.readRegular;
+    const reads: string[] = [];
+    vi.useFakeTimers();
+    vi.spyOn(io, "readRegular").mockImplementation(async (path, signal, privateFile) => {
+      if (path === later || path === slow) reads.push(path);
+      if (path === slow) {
+        await vi.advanceTimersByTimeAsync(100);
+        signal.throwIfAborted();
+      }
+      return read(path, signal, privateFile);
+    });
+    await runCapture(["codex"], { ...options, budgetMs: 100 });
+    expect(reads).toEqual([slow]);
+    expect(transport.resources.size).toBe(0);
+    reads.length = 0;
+    await runCapture(["codex"], { ...options, budgetMs: 100 });
+    expect(reads).toEqual([later, slow]);
+    expect((await storedConversation("codex")).messages).toHaveLength(4);
+    expect(await queued()).toEqual([]);
+  });
+
+  it("validates the notified thread even when its filename matches", async () => {
+    await rollout(
+      (await fixture("codex")).replaceAll("codex-fixture-session", "another-thread"),
+      "rollout-2026-10-25-codex-fixture-session.jsonl",
+    );
+    await runCapture(
+      [
+        "codex",
+        JSON.stringify({ type: "agent-turn-complete", "thread-id": "codex-fixture-session" }),
+      ],
+      options,
+    );
+    expect(transport.requests).toEqual([]);
+    expect(await queued()).toEqual([]);
   });
 
   it.each([
@@ -752,7 +828,7 @@ describe("capture with real ChatWriter and client credentials", () => {
         }),
       ).toBe(0);
       expect(transport.requests).toHaveLength(0);
-      expect(await readdir(queue())).toEqual([]);
+      expect(await queued()).toEqual([]);
     });
   });
 

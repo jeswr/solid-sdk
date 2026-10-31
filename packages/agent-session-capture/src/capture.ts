@@ -4,11 +4,10 @@ import { createNodeGuardedFetch } from "@jeswr/guarded-fetch/node";
 import { ChatWriter } from "@jeswr/solid-chat-interop";
 import { createChatPodPort, createCliFetch, loadCliConfig } from "@jeswr/solid-mcp";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
-import { readdir } from "fs/promises";
-// biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { homedir } from "os";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { join, resolve } from "path";
+import { discoverRollouts } from "./discovery.js";
 import { isIgnored, queueDirectory, readRegular } from "./io.js";
 import { digest, parseClaudeTranscript, parseCodexTranscript, record } from "./parsers.js";
 import { enqueue, replay, sequenceConversation } from "./queue.js";
@@ -45,23 +44,6 @@ async function hookInput(input: AsyncIterable<string | Uint8Array>, signal: Abor
     if (Buffer.byteLength(text) > 65536) throw new Error("Hook input exceeds limit");
   }
   return record(JSON.parse(text));
-}
-
-async function* rollouts(directory: string, signal: AbortSignal): AsyncGenerator<string> {
-  signal.throwIfAborted();
-  let entries: import("fs").Dirent[];
-  try {
-    entries = await readdir(directory, { withFileTypes: true, encoding: "utf8" });
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw error;
-  }
-  for (const entry of entries) {
-    signal.throwIfAborted();
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) yield* rollouts(path, signal);
-    if (entry.isFile() && /^rollout-.*\.jsonl$/.test(entry.name)) yield path;
-  }
 }
 
 async function capture(args: string[], options: CaptureOptions, signal: AbortSignal) {
@@ -131,7 +113,13 @@ async function capture(args: string[], options: CaptureOptions, signal: AbortSig
   const files =
     command === "claude"
       ? [resolve(cwd, transcript as string)]
-      : rollouts(join(home, ".codex", "sessions"), signal);
+      : discoverRollouts(
+          join(home, ".codex", "sessions"),
+          directory,
+          target,
+          signal,
+          notify["thread-id"] as string | undefined,
+        );
   for await (const path of files) {
     signal.throwIfAborted();
     try {

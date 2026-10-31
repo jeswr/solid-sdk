@@ -17,7 +17,13 @@ export interface QueueEntry extends CapturedSession {
   target: { podRoot: string; webId: string };
 }
 
-async function persist(directory: string, name: string, value: unknown, signal: AbortSignal) {
+/** Atomically persist private capture state, including discovery checkpoints. */
+export async function persist(
+  directory: string,
+  name: string,
+  value: unknown,
+  signal: AbortSignal,
+) {
   signal.throwIfAborted();
   const text = JSON.stringify(value);
   if (Buffer.byteLength(text) > MAX_BYTES) throw new Error("Capture queue entry exceeds limit");
