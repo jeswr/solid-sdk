@@ -47,6 +47,53 @@ for (const name of fixtureNames)
     await reflow(page);
   });
 
+// The root density can match either fixture; each control must still target one region.
+for (const density of ["comfortable", "compact"] as const)
+  test(`density regions: ${density} root keeps controls independent`, async ({ page }) => {
+    await page.goto("/dev/components/switch");
+    await page.locator("html").evaluate((root, value) => {
+      root.setAttribute("data-density", value);
+    }, density);
+    const control = page
+      .getByRole("region", { name: `${density} fixtures`, exact: true })
+      .getByRole("switch", { name: "Enable notifications" });
+    const other = page
+      .getByRole("region", {
+        name: `${density === "comfortable" ? "compact" : "comfortable"} fixtures`,
+        exact: true,
+      })
+      .getByRole("switch", { name: "Enable notifications" });
+    await control.click();
+    await expect(control).toBeChecked();
+    await expect(other).not.toBeChecked();
+  });
+
+test("calendar: day names include the visible day number", async ({ page }) => {
+  // The fixture's today must stay fixed even when the browser clock differs.
+  await page.clock.setFixedTime(new Date(2030, 0, 1, 12));
+  const response = await page.goto("/dev/components/calendar");
+  expect(await response?.text()).toContain('aria-label="Today, Sunday, 25 October 2026, selected"');
+  for (const density of ["comfortable", "compact"]) {
+    const calendar = page.getByRole("region", { name: `${density} fixtures`, exact: true });
+    const days = calendar.locator("button[data-day]");
+    await expect(days).toHaveCount(35);
+    for (const day of await days.all()) {
+      const number = (await day.innerText()).trim();
+      await expect(day).toHaveAccessibleName(new RegExp(`\\b${number}\\b`));
+    }
+    await expect(
+      calendar.getByRole("button", {
+        name: "Today, Sunday, 25 October 2026, selected",
+        exact: true,
+      }),
+    ).toHaveText("25");
+    await expect(
+      calendar.getByRole("button", { name: "Sunday, 4 October 2026", exact: true }),
+    ).toBeDisabled();
+  }
+  await accessible(page);
+});
+
 const overlayCases = [
   ["dialog", "Open dialog", "dialog"],
   ["sheet", "Open sheet", "dialog"],
@@ -59,7 +106,7 @@ for (const density of ["comfortable", "compact"] as const) {
   for (const [name, label, role] of overlayCases)
     test(`${name}: ${density} keyboard open and close`, async ({ page }, info) => {
       await page.goto(`/dev/components/${name}`);
-      const region = page.locator(`[data-density="${density}"]`);
+      const region = page.getByRole("region", { name: `${density} fixtures`, exact: true });
       const trigger =
         name === "select"
           ? region.getByRole("combobox", { name: label, exact: true })
@@ -86,7 +133,9 @@ for (const density of ["comfortable", "compact"] as const) {
     });
   test(`context-menu: ${density} keyboard and pointer paths`, async ({ page }, info) => {
     await page.goto("/dev/components/context-menu");
-    const trigger = page.locator(`[data-density="${density}"]`).getByRole("button");
+    const trigger = page
+      .getByRole("region", { name: `${density} fixtures`, exact: true })
+      .getByRole("button");
     await trigger.focus();
     await page.keyboard.press("Shift+F10");
     await expect(page.getByRole("menu")).toBeVisible();
@@ -105,7 +154,7 @@ for (const density of ["comfortable", "compact"] as const) {
   ] as const)
     test(`${name}: ${density} help`, async ({ page }, info) => {
       await page.goto(`/dev/components/${name}`);
-      const region = page.locator(`[data-density="${density}"]`);
+      const region = page.getByRole("region", { name: `${density} fixtures`, exact: true });
       const trigger =
         name === "hover-card"
           ? region.getByRole("link", { name: triggerName })
@@ -124,7 +173,9 @@ for (const density of ["comfortable", "compact"] as const) {
     });
   test(`form: ${density} validation and saved states`, async ({ page }, info) => {
     await page.goto("/dev/components/form");
-    const form = page.locator(`[data-density="${density}"] form`);
+    const form = page
+      .getByRole("region", { name: `${density} fixtures`, exact: true })
+      .locator("form");
     await form.getByRole("button", { name: "Save title" }).click();
     await expect(form.getByRole("alert")).toHaveText("Enter a title");
     await invalidBorder(form.getByRole("textbox", { name: "Document title" }));
@@ -145,7 +196,9 @@ for (const [name, slot] of [
   test(`${name}: invalid borders override adapter defaults`, async ({ page }, info) => {
     await page.goto(`/dev/components/${name}`);
     for (const density of ["comfortable", "compact"]) {
-      const controls = page.locator(`[data-density="${density}"] [data-slot="${slot}"]`);
+      const controls = page
+        .getByRole("region", { name: `${density} fixtures`, exact: true })
+        .locator(`[data-slot="${slot}"]`);
       await expect(controls.first()).toBeVisible();
       // Includes unchecked, checked and indeterminate checkbox states.
       for (const control of await controls.all()) {
@@ -162,7 +215,10 @@ for (const [label, suffix] of [
 ] as const)
   test(`toast: ${suffix}`, async ({ page }, info) => {
     await page.goto("/dev/components/toast");
-    await page.locator('[data-density="comfortable"]').getByRole("button", { name: label }).click();
+    await page
+      .getByRole("region", { name: "comfortable fixtures", exact: true })
+      .getByRole("button", { name: label })
+      .click();
     await expect(page.locator("[data-sonner-toast]")).toBeVisible();
     await capture(page, info, `toast-${suffix}`);
     await reflow(page);
@@ -172,7 +228,7 @@ test("keyboard controls, selection states, density and focus geometry", async ({
   await page.goto("/dev/components/tabs");
   await page.keyboard.press("Tab");
   await page.keyboard.press("Enter");
-  const compact = page.locator('[data-density="compact"]');
+  const compact = page.getByRole("region", { name: "compact fixtures", exact: true });
   await compact.getByRole("tab", { name: "Details" }).focus();
   await page.keyboard.press("ArrowRight");
   await expect(compact.getByRole("tab", { name: "Activity" })).toHaveAttribute(
@@ -182,7 +238,7 @@ test("keyboard controls, selection states, density and focus geometry", async ({
   await capture(page, info, "tabs-keyboard-activity");
   await page.goto("/dev/components/checkbox");
   const checkbox = page
-    .locator('[data-density="comfortable"]')
+    .getByRole("region", { name: "comfortable fixtures", exact: true })
     .getByRole("checkbox", { name: "Select false", exact: true });
   await checkbox.focus();
   await page.keyboard.press("Space");
@@ -190,7 +246,7 @@ test("keyboard controls, selection states, density and focus geometry", async ({
   await capture(page, info, "checkbox-keyboard-checked");
   await page.goto("/dev/components/button");
   for (const density of ["comfortable", "compact"] as const) {
-    const region = page.locator(`[data-density="${density}"]`);
+    const region = page.getByRole("region", { name: `${density} fixtures`, exact: true });
     for (const name of ["default", "outline", "ghost", "destructive", "secondary", "link"]) {
       const button = region.getByRole("button", { name, exact: true });
       await button.hover();
@@ -215,7 +271,7 @@ for (const [name, trigger, text] of [
 ] as const)
   test(`${name}: expanded state`, async ({ page }, info) => {
     await page.goto(`/dev/components/${name}`);
-    const region = page.locator('[data-density="comfortable"]');
+    const region = page.getByRole("region", { name: "comfortable fixtures", exact: true });
     await region.getByRole("button", { name: trigger }).focus();
     await page.keyboard.press("Enter");
     await expect(region.getByText(text, { exact: true })).toBeVisible();
@@ -224,7 +280,9 @@ for (const [name, trigger, text] of [
   });
 test("command: keyboard search and filtered empty state", async ({ page }, info) => {
   await page.goto("/dev/components/command");
-  const search = page.locator('[data-density="comfortable"]').getByRole("combobox");
+  const search = page
+    .getByRole("region", { name: "comfortable fixtures", exact: true })
+    .getByRole("combobox");
   await search.focus();
   await search.fill("No matching action");
   await expect(page.getByText("No actions found.", { exact: true })).toBeVisible();
@@ -239,7 +297,7 @@ for (const density of ["comfortable", "compact"] as const) {
     test(`${name}: ${density} keyboard toggled`, async ({ page }, info) => {
       await page.goto(`/dev/components/${name}`);
       const control = page
-        .locator(`[data-density="${density}"]`)
+        .getByRole("region", { name: `${density} fixtures`, exact: true })
         .getByRole(role, { name: label, exact: true });
       await control.focus();
       await page.keyboard.press("Space");
@@ -252,7 +310,7 @@ for (const density of ["comfortable", "compact"] as const) {
     });
   test(`radio-group: ${density} arrow selection`, async ({ page }, info) => {
     await page.goto("/dev/components/radio-group");
-    const region = page.locator(`[data-density="${density}"]`);
+    const region = page.getByRole("region", { name: `${density} fixtures`, exact: true });
     await region.getByRole("radio", { name: "Comfortable", exact: true }).focus();
     await page.keyboard.press("ArrowDown");
     await expect(region.getByRole("radio", { name: "Compact", exact: true })).toBeChecked();
@@ -261,7 +319,7 @@ for (const density of ["comfortable", "compact"] as const) {
   });
   test(`toggle-group: ${density} arrow selection`, async ({ page }, info) => {
     await page.goto("/dev/components/toggle-group");
-    const region = page.locator(`[data-density="${density}"]`);
+    const region = page.getByRole("region", { name: `${density} fixtures`, exact: true });
     await region.getByRole("radio", { name: "List" }).focus();
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("Space");
@@ -272,7 +330,7 @@ for (const density of ["comfortable", "compact"] as const) {
   test(`slider: ${density} keyboard adjustment`, async ({ page }, info) => {
     await page.goto("/dev/components/slider");
     const slider = page
-      .locator(`[data-density="${density}"]`)
+      .getByRole("region", { name: `${density} fixtures`, exact: true })
       .getByRole("slider", { name: "Volume", exact: true });
     await slider.focus();
     await page.keyboard.press("ArrowRight");
@@ -283,7 +341,7 @@ for (const density of ["comfortable", "compact"] as const) {
   test(`resizable: ${density} keyboard adjustment`, async ({ page }, info) => {
     await page.goto("/dev/components/resizable");
     const handle = page
-      .locator(`[data-density="${density}"]`)
+      .getByRole("region", { name: `${density} fixtures`, exact: true })
       .getByRole("separator", { name: "Resize file panes" });
     await handle.focus();
     const before = await handle.getAttribute("aria-valuenow");
@@ -294,7 +352,9 @@ for (const density of ["comfortable", "compact"] as const) {
   });
   test(`calendar: ${density} keyboard day navigation`, async ({ page }, info) => {
     await page.goto("/dev/components/calendar");
-    const selected = page.locator(`[data-density="${density}"] [data-selected-single="true"]`);
+    const selected = page
+      .getByRole("region", { name: `${density} fixtures`, exact: true })
+      .locator('[data-selected-single="true"]');
     await selected.focus();
     await page.keyboard.press("ArrowRight");
     await expect(selected).not.toBeFocused();
@@ -308,7 +368,7 @@ for (const density of ["comfortable", "compact"] as const) {
     test(`${name}: ${density} focus`, async ({ page }, info) => {
       await page.goto(`/dev/components/${name}`);
       await page
-        .locator(`[data-density="${density}"]`)
+        .getByRole("region", { name: `${density} fixtures`, exact: true })
         .getByRole("textbox", { name: label, exact: true })
         .focus();
       await capture(page, info, `${name}-${density}-focus`);
@@ -328,7 +388,7 @@ test("coarse pointers enforce comfortable controls and reduced motion", async ({
   const page = await context.newPage();
   await page.goto("/dev/components/button");
   const button = page
-    .locator('[data-density="compact"]')
+    .getByRole("region", { name: "compact fixtures", exact: true })
     .getByRole("button", { name: "default", exact: true });
   expect(await page.evaluate(() => matchMedia("(pointer: coarse)").matches)).toBe(true);
   expect(await button.evaluate((el) => el.getBoundingClientRect().height)).toBeGreaterThanOrEqual(
@@ -341,7 +401,9 @@ test("coarse pointers enforce comfortable controls and reduced motion", async ({
 });
 test("scroll-area: keyboard scrolling", async ({ page }, info) => {
   await page.goto("/dev/components/scroll-area");
-  const viewport = page.locator('[data-density="comfortable"] [data-slot="scroll-area-viewport"]');
+  const viewport = page
+    .getByRole("region", { name: "comfortable fixtures", exact: true })
+    .locator('[data-slot="scroll-area-viewport"]');
   await viewport.focus();
   await page.keyboard.press("End");
   await expect.poll(() => viewport.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);

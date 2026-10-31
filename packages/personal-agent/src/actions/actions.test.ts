@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import {
   existsSync,
   mkdirSync,
@@ -917,6 +918,53 @@ describe("operator CLI, MCP and runtime execution (temporary demo state)", () =>
     expect(none.json.status).toBe("needs-setup");
   });
 
+  it.each([
+    "a".repeat(24),
+    `-${"a".repeat(23)}`,
+    `--${"a".repeat(22)}`,
+  ])("passes preparation token %s unchanged through both CLI argument forms", async (token) => {
+    const preparations = new FilePreparationStore(join(state, "action-preparations"));
+    for (const args of [["--token", token], [`--token=${token}`]]) {
+      // A known expired preparation proves the exact token reached the store, while
+      // expiry and single-use checks still prevent execution. No runtime writes are needed.
+      preparations.put({
+        token,
+        action: "agent.propose-meeting",
+        version: "1",
+        digest: "unused",
+        input: {},
+        result: {},
+        expiresAt: "2000-01-01T00:00:00Z",
+      });
+      const expired = await cli("actions", "execute", ...args);
+      expect(expired.code).toBe(2);
+      expect(expired.json).toMatchObject({
+        status: "needs-review",
+        reasons: ["the preparation expired; prepare again with fresh data"],
+      });
+      const again = await cli("actions", "execute", ...args);
+      expect(again.code).toBe(2);
+      expect(again.json).toMatchObject({
+        status: "refused",
+        reasons: ["unknown or already used preparation"],
+      });
+    }
+  });
+
+  it.each([
+    { args: ["--token"], code: "ERR_PARSE_ARGS_INVALID_OPTION_VALUE" },
+    {
+      args: ["--token=-synthetic", "--unknown-option"],
+      code: "ERR_PARSE_ARGS_UNKNOWN_OPTION",
+    },
+    { args: ["--state", "--token", "-synthetic"], code: "ERR_PARSE_ARGS_INVALID_OPTION_VALUE" },
+    { args: ["--", "--token", "-synthetic"], code: "ERR_PARSE_ARGS_UNEXPECTED_POSITIONAL" },
+  ])("keeps strict CLI validation for $args", async ({ args, code }) => {
+    await expect(
+      dashboard(["actions", "execute", "--state", state, ...args], io().io),
+    ).rejects.toMatchObject({ code });
+  });
+
   it("prepares and then executes a runtime proposal to the pinned peer (separate CLI processes); nothing is sent", async () => {
     const input = writeInput("propose.json", {
       agent: "demo-owner",
@@ -931,12 +979,12 @@ describe("operator CLI, MCP and runtime execution (temporary demo state)", () =>
     const p = await cli("actions", "prepare", "--id", "agent.propose-meeting", "--input", input);
     expect(p.json.status).toBe("ok");
     expect(p.json.preparation.token).toBeTruthy();
-    const e = await cli("actions", "execute", "--token", p.json.preparation.token);
+    const e = await cli("actions", "execute", `--token=${p.json.preparation.token}`);
     expect(e.json.status).toBe("ok");
     expect(e.json.result.files.length).toBeGreaterThan(0);
     expect(readdirSync(join(state, "outbound", "demo-owner")).length).toBeGreaterThan(0);
     expect(e.json.result.notice).toMatch(/not sent|NOT sent|nothing/i);
-    const again = await cli("actions", "execute", "--token", p.json.preparation.token);
+    const again = await cli("actions", "execute", `--token=${p.json.preparation.token}`);
     expect(again.json.status).toBe("refused");
     const stranger = await cli(
       "actions",

@@ -55,7 +55,22 @@ function CalendarFixture() {
       selected={date}
       onSelect={setDate}
       defaultMonth={new Date(2026, 9, 1)}
+      today={new Date(2026, 9, 25)}
       disabled={{ before: new Date(2026, 9, 5) }}
+      labels={{
+        labelDayButton: (day, modifiers) => {
+          // Keep the visible number as a word in the name ("5", rather than "5th").
+          let label = day.toLocaleDateString("en-GB", {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          });
+          if (modifiers.today) label = `Today, ${label}`;
+          if (modifiers.selected) label = `${label}, selected`;
+          return label;
+        },
+      }}
     />
   );
 }

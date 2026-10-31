@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * awp-dashboard: the owner's local settings dashboard.
  *
@@ -40,8 +41,9 @@ const USAGE = `awp-dashboard <command> [options]
   label-demo-clock              one-off, recorded migration: label history entries and record
                                 times later than the real time (written by the demo clock before
                                 the clocks were separated); times are kept, not rewritten
-  actions list | describe --id ID | prepare --id ID --input FILE|- | execute --token T | mcp
+  actions list | describe --id ID | prepare --id ID --input FILE|- | execute --token=T | mcp
                                 the deterministic action catalogue (see docs/ACTIONS.md)
+                                use --token=VALUE for preparation tokens, which may start with '-'
   demo-provider-fixtures        add SYNTHETIC Google and Microsoft fixture calendars to a separate
                                 demo state (use with --provider-fixtures)
 
@@ -82,23 +84,32 @@ export async function main(
   // `actions` takes a sub-command word before its options.
   const sub = command === "actions" ? afterCommand[0] : undefined;
   const rest = command === "actions" ? afterCommand.slice(1) : afterCommand;
+  const options = {
+    state: { type: "string" },
+    "agents-dir": { type: "string" },
+    file: { type: "string" },
+    port: { type: "string" },
+    now: { type: "string" },
+    "sparq-bin": { type: "string" },
+    "policy-engine": { type: "string" },
+    open: { type: "boolean" },
+    id: { type: "string" },
+    input: { type: "string" },
+    token: { type: "string" },
+    "provider-config": { type: "string" },
+    "provider-fixtures": { type: "boolean" },
+  } as const;
+  // Base64url preparation tokens can start with '-' (including '--'). Tokenize first so
+  // only actual --token options are joined, respecting other option values and '--'.
+  // The final strict parse still rejects unknown options and missing arguments.
+  const { tokens } = parseArgs({ args: rest, options, strict: false, tokens: true });
+  for (const token of tokens.reverse()) {
+    if (token.kind === "option" && token.name === "token" && token.inlineValue === false)
+      rest.splice(token.index, 2, `--token=${token.value}`);
+  }
   const { values } = parseArgs({
     args: rest,
-    options: {
-      state: { type: "string" },
-      "agents-dir": { type: "string" },
-      file: { type: "string" },
-      port: { type: "string" },
-      now: { type: "string" },
-      "sparq-bin": { type: "string" },
-      "policy-engine": { type: "string" },
-      open: { type: "boolean" },
-      id: { type: "string" },
-      input: { type: "string" },
-      token: { type: "string" },
-      "provider-config": { type: "string" },
-      "provider-fixtures": { type: "boolean" },
-    },
+    options,
     strict: true,
   });
   const stateDir = resolve(values.state ?? ".awp-dashboard");
