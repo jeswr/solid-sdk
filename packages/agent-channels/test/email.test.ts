@@ -103,6 +103,27 @@ it("rejects changed visible parts under STRICT and preserves unverified human ma
   expect(plain.message.textBody).toBe("Hello");
 });
 
+it("normalizes CRLF and trailing newlines while preserving other human text", async () => {
+  const wire = await wireFor();
+  const human = renderHuman(message, config.footer);
+  for (const text of [`${human}\n\n`, `${human.replace(/\n/g, "\r\n")}\r\n\r\n`])
+    expect(inspectEmail(rewrite(wire.bytes, human, text), config).parity).toBe("match");
+  for (const text of ["", `${human}\r`, `${human}\n \n`])
+    expect(() => inspectEmail(rewrite(wire.bytes, human, text), config)).toThrow(
+      "human-parity-mismatch",
+    );
+});
+
+it("checks parity of long internal newline runs within the byte cap without stalling", async () => {
+  const wire = await wireFor();
+  const text = `${"\n".repeat(131072)}changed\n\n`;
+  const raw = rewrite(wire.bytes, renderHuman(message, config.footer), text);
+  expect(Buffer.byteLength(raw)).toBeLessThan(MAX_EMAIL_BYTES);
+  const start = performance.now();
+  expect(() => inspectEmail(raw, config)).toThrow("human-parity-mismatch");
+  expect(performance.now() - start).toBeLessThan(1000);
+});
+
 it("fails closed on conflicting/malformed carriers and leaves unrelated JSON-LD untrusted", async () => {
   const raw = (await wireFor()).bytes;
   const withBlocks = (blocks?: readonly string[]) => ({

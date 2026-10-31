@@ -71,7 +71,10 @@ export function decodeEmailProposal(compactJws: string): RenderableProposal {
   }
 }
 function normalized(s: string): string {
-  return s.replace(/\r\n/g, "\n").replace(/\n+$/, "");
+  const text = s.replace(/\r\n/g, "\n");
+  let end = text.length;
+  while (end > 0 && text[end - 1] === "\n") end--;
+  return text.slice(0, end);
 }
 function parityMatches(root: MimeNode, proposal: RenderableProposal, footer: string): boolean {
   if (shapeOf(root) !== SUPPORTED_SHAPE) return false;

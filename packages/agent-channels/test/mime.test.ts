@@ -41,6 +41,19 @@ it("parses bounded folded headers, charset and content-type parameters, all supp
   });
 });
 
+it("scans long multipart whitespace runs within the byte cap without stalling or changing leaf text", () => {
+  const whitespace = " \t".repeat(65536);
+  const text = `${whitespace}x \t`;
+  const raw = multipart([`Content-Type: text/plain\r\n\r\n${text}`])
+    .replaceAll("--boundary", `--boundary${whitespace}`)
+    .replace(`--boundary${whitespace}--`, `--boundary--${whitespace}`);
+  expect(Buffer.byteLength(raw)).toBeLessThan(limits.maxBytes);
+  const start = performance.now();
+  const result = parseMime(raw);
+  expect(performance.now() - start).toBeLessThan(1000);
+  expect(result).toMatchObject({ ok: true, root: { children: [{ text }] } });
+});
+
 it.each([
   [" folded: before header\r\n\r\nbody", "continuation"],
   ["badheader\r\n\r\nbody", "malformed header"],

@@ -143,7 +143,9 @@ function splitMultipart(body: string, boundary: string): string[] {
   let current: string[] | undefined;
   let closed = false;
   for (const line of lines) {
-    const trimmed = line.replace(/[ \t]+$/, "");
+    let end = line.length;
+    while (end > 0 && (line[end - 1] === " " || line[end - 1] === "\t")) end--;
+    const trimmed = line.slice(0, end);
     if (trimmed === `--${boundary}--`) {
       if (current) parts.push(current.join("\r\n"));
       current = undefined;
