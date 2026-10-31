@@ -468,9 +468,7 @@ describe("asynchronous send boundary", () => {
     vi.spyOn(h.proposals, "emitReceipt").mockRejectedValue(new Error("receipt failure"));
     await expect(h.executor.transmit(e.proposal.id)).rejects.toThrow("receipt failure");
     expect(h.records.get(e.proposal.id)?.status).toBe("sent");
-    await expect(createExecutor(h.options).transmit(e.proposal.id)).rejects.toThrow(
-      "receipt failure",
-    );
+    await expect(createExecutor(h.options).runOutboxOnce()).rejects.toThrow("receipt failure");
     expect(h.binding.send.transmit).toHaveBeenCalledTimes(1);
   });
   it.each([
@@ -646,17 +644,43 @@ it("audit metadata alone recovers committed usage and idempotency after compacti
   });
   expect(h.binding.send.transmit).toHaveBeenCalledTimes(1);
 });
-it("a duplicate repairs missing audit/outbox/receipt writes without resending", async () => {
-  const h = harness();
-  const e = await h.enqueue();
-  vi.spyOn(h.proposals, "emitReceipt").mockRejectedValueOnce(new Error("receipt unavailable"));
-  await expect(h.executor.transmit(e.proposal.id)).rejects.toThrow("receipt unavailable");
-  expect(h.receipts.size).toBe(0);
-  expect(await createExecutor(h.options).transmit(e.proposal.id)).toMatchObject({
-    status: "duplicate",
-  });
-  expect(h.receipts.size).toBe(1);
-  expect(h.binding.send.transmit).toHaveBeenCalledTimes(1);
+it.each([
+  "before-receipt",
+  "after-receipt",
+  "disposition",
+])("outbox polling repairs %s failure without resending", async (failure) => {
+  for (const replacement of [false, true]) {
+    const h = harness();
+    const e = await h.enqueue();
+    const error = new Error("settlement unavailable");
+    if (failure === "disposition") {
+      const write = h.proposals.writeDisposition;
+      vi.spyOn(h.proposals, "writeDisposition").mockImplementation(async (id, result) => {
+        if (result.status === "sent") throw error;
+        await write(id, result);
+      });
+    } else {
+      const emit = h.proposals.emitReceipt;
+      vi.spyOn(h.proposals, "emitReceipt").mockImplementationOnce(async (receipt) => {
+        if (failure === "after-receipt") await emit(receipt);
+        throw error;
+      });
+    }
+    await expect(h.executor.runOutboxOnce()).rejects.toBe(error);
+    expect(h.records.get(e.proposal.id)).toMatchObject({ status: "sent", attempts: 1 });
+    expect(await h.proposals.queued()).toEqual([e.proposal.id]);
+    expect(h.receipts.size).toBe(failure === "before-receipt" ? 0 : 1);
+    if (failure === "disposition") vi.mocked(h.proposals.writeDisposition).mockRestore();
+    const executor = replacement ? createExecutor(h.options) : h.executor;
+    expect(await executor.runOutboxOnce()).toEqual({
+      [e.proposal.id]: { status: "duplicate", providerRef: "test:1" },
+    });
+    expect(h.receipts.size).toBe(1);
+    expect(h.dispositions.get(e.proposal.id)).toEqual({ status: "sent", reason: "sent" });
+    expect(await executor.runOutboxOnce()).toEqual({});
+    expect(h.binding.send.transmit).toHaveBeenCalledTimes(1);
+    expect(h.options.tokens.send).toHaveBeenCalledTimes(1);
+  }
 });
 it("receipt conversation cannot be swapped by changing a proposal during send", async () => {
   const h = harness();

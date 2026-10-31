@@ -72,7 +72,10 @@ it("atomic local store fsyncs before the effect and survives a fresh instance", 
   expect((await restarted.list()).map((r) => r.status)).toEqual(["sent"]);
   expect((await fs.stat(`${directory}/transmissions.json`)).mode & 0o777).toBe(0o600);
 });
-it("actual process death between durable attempting and transmit stays uncertain on restart", async () => {
+it.each([
+  "dispatch",
+  "receipt",
+])("actual process death before %s recovers without resending", async (stage) => {
   const { directory, store } = await fixture();
   const h = harness();
   const e = await h.enqueue();
@@ -87,26 +90,40 @@ it("actual process death between durable attempting and transmit stays uncertain
     import * as fs from 'node:fs/promises';
     import { createExecutor, createFileTransmissionStore } from ${JSON.stringify(modulePath)};
     import { createMemoryStores } from ${JSON.stringify(testingPath)};
-    const [entry, mandate, binding] = JSON.parse(process.argv[2]);
+    const [entry, mandate, binding, stage] = JSON.parse(process.argv[2]);
     const memory = createMemoryStores();
     memory.entries.set(entry.proposal.id, entry);
     const store = await createFileTransmissionStore({ io: fs, directory: process.argv[1], exclusive: memory.transmissions.exclusive });
     setInterval(() => {}, 1000);
     const executor = createExecutor({ ownerWebId: mandate.issuer, agentWebId: mandate.subject,
-      proposals: memory.proposals, approvals: memory.approvalStore, controls: memory.controls, clock: memory.clock,
+      proposals: { ...memory.proposals,
+        writeDisposition: async (id, result) => {
+          await memory.proposals.writeDisposition(id, result);
+          await fs.writeFile(process.argv[1] + '/dispositions.json', JSON.stringify([...memory.dispositions]));
+        },
+        emitReceipt: async () => { process.stdout.write('durable\\n'); await new Promise(() => {}); },
+      }, approvals: memory.approvalStore, controls: memory.controls, clock: memory.clock,
       mandates: { load: async () => mandate }, transmissions: store,
       policy: { id: 'synthetic', evaluate: (policy) => ({ effect: policy.id === mandate.autonomous.id ? 'permit' : 'not-applicable' }) },
       audit: { listCommitted: async () => [], append: async (record) => {
-        if (record.outcome === 'attempting') { process.stdout.write('durable\\n'); await new Promise(() => {}); }
+        if (stage === 'dispatch' && record.outcome === 'attempting') { process.stdout.write('durable\\n'); await new Promise(() => {}); }
       } },
       tokens: { send: async () => { throw new Error('must not request credentials'); } },
       bindings: { [binding.id]: { ...binding, send: { render: async () => entry.wire, validate: async () => ({ ok: true }),
-        transmit: async () => { throw new Error('must not transmit before process death'); } } } }, dryRun: false,
+        transmit: async () => {
+          if (stage === 'dispatch') throw new Error('must not transmit before process death');
+          return { outcome: 'accepted', providerRef: 'test:before-crash' };
+        } } } }, dryRun: false,
     });
     await executor.transmit(entry.proposal.id);
   `,
       directory,
-      JSON.stringify([e, h.state.mandate, { id: h.binding.id, carriage: h.binding.carriage }]),
+      JSON.stringify([
+        e,
+        h.state.mandate,
+        { id: h.binding.id, carriage: h.binding.carriage },
+        stage,
+      ]),
     ],
     { stdio: ["ignore", "pipe", "pipe"] },
   );
@@ -117,9 +134,32 @@ it("actual process death between durable attempting and transmit stays uncertain
     child.kill("SIGKILL");
     const [, signal] = await exited;
     expect(signal).toBe("SIGKILL");
-    expect(await store.get(e.proposal.id)).toMatchObject({ status: "attempting" });
-    const executor = createExecutor({ ...h.options, transmissions: store });
-    expect(await executor.transmit(e.proposal.id)).toMatchObject({ status: "uncertain" });
+    const restarted = await createFileTransmissionStore({
+      io: fs,
+      directory,
+      exclusive: store.exclusive,
+    });
+    const executor = createExecutor({ ...h.options, transmissions: restarted });
+    if (stage === "dispatch") {
+      expect(await restarted.get(e.proposal.id)).toMatchObject({ status: "attempting" });
+      expect(await executor.runOutboxOnce()).toEqual({
+        [e.proposal.id]: { status: "uncertain", reason: "uncertain" },
+      });
+    } else {
+      expect(await restarted.get(e.proposal.id)).toMatchObject({ status: "sent", attempts: 1 });
+      const dispositions = JSON.parse(await fs.readFile(`${directory}/dispositions.json`, "utf8"));
+      for (const [id, result] of dispositions) h.dispositions.set(id, result);
+      expect(await h.proposals.queued()).toEqual([e.proposal.id]);
+      expect(h.receipts.size).toBe(0);
+      expect(await executor.runOutboxOnce()).toEqual({
+        [e.proposal.id]: { status: "duplicate", providerRef: "test:before-crash" },
+      });
+      expect([...h.receipts.values()][0]?.body).toMatchObject({
+        outcome: "completed",
+        final: true,
+      });
+      expect(await executor.runOutboxOnce()).toEqual({});
+    }
     expect(h.binding.send.transmit).not.toHaveBeenCalled();
   } finally {
     child.kill("SIGKILL");

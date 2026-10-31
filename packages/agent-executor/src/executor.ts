@@ -121,7 +121,7 @@ export function createExecutor(options: ExecutorOptions) {
       status: record.status as "sent" | "not-sent" | "uncertain",
       reason: record.status,
     };
-    await o.proposals.writeDisposition(record.proposal, result);
+    // Keep incomplete settlements queued until the idempotent receipt write succeeds.
     await o.proposals.emitReceipt({
       proposal: record.proposal,
       conversation: record.conversation,
@@ -138,6 +138,7 @@ export function createExecutor(options: ExecutorOptions) {
         final: record.status !== "uncertain",
       },
     });
+    await o.proposals.writeDisposition(record.proposal, result);
     return result;
   }
 
