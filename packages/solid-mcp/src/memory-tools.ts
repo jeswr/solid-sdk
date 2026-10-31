@@ -6,32 +6,28 @@ import {
   type EpistemicStatus,
   type Nanopublication,
   type Nanopublications,
-  NanopubStore,
   pkgId,
   purposeFilter,
 } from "@jeswr/pkg-memory";
 import { safeHttpIri, safeIri, serialize } from "@jeswr/rdf-serialize";
 import { buildMemory } from "@jeswr/solid-memory/memory";
 import type { DatasetCore } from "@rdfjs/types";
-import { SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { z } from "zod";
-import { requirePodScopedUrl, requirePodScopedWriteUrl } from "./auth.js";
-import { MAX_CONTENT_BYTES } from "./content.js";
-import { PodOutput } from "./output.js";
+import { auditSpecialRead } from "./audit.js";
+import {
+  assertion,
+  type MemoryClientInfo,
+  MemoryNode,
+  memoryContext,
+  values,
+} from "./memory-context.js";
+import { purposeDenied } from "./personal-policy.js";
 import { withPodReadLimits } from "./pod-operation.js";
 import type { PodPort } from "./pod-port.js";
 import { defineTool, type PodTool, toolText } from "./tool.js";
 
-/** Operator-supplied identity; never take deletion authority from tool arguments. */
-export interface MemoryClientInfo {
-  /** Absolute IRI identifying the authenticated MCP client (an HTTPS URL or URN). */
-  clientId: string;
-  /** Human-readable client name. */
-  name?: string;
-  /** Model name supplied by the client, retained as provenance metadata. */
-  model?: string;
-}
+export type { MemoryClientInfo } from "./memory-context.js";
 
 const SCHEMA = "https://schema.org/";
 const DCT = "http://purl.org/dc/terms/";
@@ -110,79 +106,6 @@ const factSchema = z.discriminatedUnion("template", [
     }),
   }),
 ]);
-
-/** Accessors are graph scoped, including reads used for deletion authority. */
-class MemoryNode extends TermWrapper {
-  terms(predicate: string) {
-    return SetFrom.subjectPredicate(this, predicate, TermAs.term, TermFrom.itself);
-  }
-  text(predicate: string, value: string) {
-    this.terms(predicate).add(DataFactory.literal(value));
-    return this;
-  }
-}
-
-function graphOf(value: Nanopublications, graph: string): Store {
-  const store = new Store();
-  for (const quad of value.dataset.match(null, null, null, DataFactory.namedNode(graph)))
-    store.addQuad(DataFactory.quad(quad.subject, quad.predicate, quad.object));
-  return store;
-}
-function values(value: Nanopublications, graph: string, subject: string, predicate: string) {
-  return [...new MemoryNode(subject, graphOf(value, graph), DataFactory).terms(predicate)].map(
-    (term) => term.value,
-  );
-}
-function assertion(value: Nanopublications, np: Nanopublication): Store {
-  return graphOf(value, np.assertionId);
-}
-function status(error: unknown): number | undefined {
-  if (error && typeof error === "object" && "status" in error && typeof error.status === "number")
-    return error.status;
-  return error instanceof Error ? Number(/\bHTTP (\d{3})\b/.exec(error.message)?.[1]) : undefined;
-}
-
-/** A fresh projection per call; never recover an underlying fetch from a decorated port. */
-function memoryContext(pod: PodPort, readOnly: boolean, client?: MemoryClientInfo) {
-  if (!client || safeIri(client.clientId) !== client.clientId || !client.clientId)
-    throw new Error("Memory requires a configured client IRI");
-  const output = new PodOutput(pod);
-  const reads = new Map<string, { etag?: string }>();
-  function mutationTarget(url: string) {
-    if (readOnly) throw new Error("write disabled: server is read-only");
-    return requirePodScopedWriteUrl({ podRoot: pod.root }, url);
-  }
-  const port: PodPort = {
-    root: pod.root,
-    webId: pod.webId,
-    async read(url) {
-      const read = await output.read(url);
-      reads.set(url, read);
-      return output.representation(url, read);
-    },
-    async list(container) {
-      const target = requirePodScopedUrl({ podRoot: pod.root }, container);
-      try {
-        await output.read(target, { accept: "text/turtle" });
-        // Entries stay internal. NanopubStore accepts only fixed UUID paths
-        // and reads every selected resource through the projection above.
-        return await pod.list(target);
-      } catch (error) {
-        if (status(error) !== 404) throw error;
-        return [];
-      }
-    },
-    async write(url, body, contentType, cond) {
-      const target = mutationTarget(url);
-      if (body.byteLength > MAX_CONTENT_BYTES)
-        throw new Error("Resource exceeds the bounded read limit.");
-      return pod.write(target, body, contentType, cond);
-    },
-    delete: (url, cond) => pod.delete(mutationTarget(url), cond),
-  };
-  const store = new NanopubStore(port);
-  return { store, port, reads, output, client };
-}
 
 function addClientMetadata(
   value: Nanopublications,
@@ -353,25 +276,17 @@ export function createMemoryTools(
             // Denied contents must never determine matches or denial diagnostics.
             const denied = candidates.filter((np) => !permits(np));
             if (denied.length) {
-              const known = new Set<string>(Object.values(categories));
-              const deniedCategories = [
-                ...new Set(
-                  denied.flatMap((np) =>
-                    np.categories.length
-                      ? np.categories.map((category) =>
-                          known.has(category.slice(PD.length)) && category.startsWith(PD)
-                            ? category.slice(PD.length)
-                            : "unsupported category",
-                        )
-                      : ["uncategorized"],
-                  ),
-                ),
-              ].sort();
-              return {
-                ...toolText(`purpose denied: ${deniedCategories.join(", ")}`),
-                isError: true,
-              };
+              return purposeDenied(
+                denied.flatMap((np) => (np.categories.length ? np.categories : [""])),
+              );
             }
+            await auditSpecialRead(
+              pod,
+              readOnly,
+              client.clientId,
+              purpose,
+              candidates.flatMap((np) => np.categories),
+            );
             const selected = candidates.filter(
               (np) =>
                 (!about || matchesAbout(assertion(value, np), about)) &&

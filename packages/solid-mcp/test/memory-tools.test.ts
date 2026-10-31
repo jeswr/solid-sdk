@@ -960,3 +960,42 @@ it("honors owner policy edits, the calling client, and the requested purpose on 
   );
   expect(new TextDecoder().decode((await pod.read(store.policyUrl)).body)).toBe(body);
 });
+
+it.each([
+  "MedicalHealth",
+  "Financial",
+])("audits permitted %s recall and withholds results when audit cannot commit", async (category) => {
+  const pod = podFixture();
+  await seed(pod, { categories: [`${PD}${category}`] });
+  const store = new NanopubStore(pod);
+  await pod.write(
+    store.policyUrl,
+    new TextEncoder().encode(`
+    @prefix odrl: <http://www.w3.org/ns/odrl/2/> .
+    <${store.policyUrl}> a odrl:Set ; odrl:permission [
+      odrl:action odrl:read ; odrl:target <${PD}${category}> ; odrl:assignee <${CLIENT}> ;
+      odrl:constraint [ odrl:leftOperand odrl:purpose ; odrl:operator odrl:eq ;
+        odrl:rightOperand <https://w3id.org/dpv#ServiceProvision> ]
+    ] .`),
+    "text/turtle",
+    {},
+  );
+  const result = json(await registry(pod)("memory_recall", recall));
+  expect(result.facts).toHaveLength(1);
+  const auditUrl = `${ROOT}private/pkg/audit/${new Date().toISOString().slice(0, 7)}.ttl`;
+  const audit = new TextDecoder().decode((await pod.read(auditUrl)).body);
+  expect(audit).toContain(CLIENT);
+  expect(audit).toContain(`${PD}${category}`);
+  expect(audit).not.toContain("Fictional email");
+  const readOnly = await registry(pod, true)("memory_recall", recall);
+  expect(readOnly.isError).toBe(true);
+  expect(text(readOnly)).not.toContain("Fictional email");
+  const write = pod.write;
+  pod.write = async (url, ...args) => {
+    if (url.includes("/audit/")) throw new Error("PRIVATE error");
+    return write(url, ...args);
+  };
+  const failed = await registry(pod)("memory_recall", { ...recall, query: "no match" });
+  expect(failed.isError).toBe(true);
+  expect(text(failed)).not.toContain("PRIVATE");
+});
