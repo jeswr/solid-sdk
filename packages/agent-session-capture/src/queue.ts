@@ -36,12 +36,12 @@ function progressKey(entry: Pick<QueueEntry, "target" | "conversation">) {
   return digest([entry.target, entry.conversation.provider, entry.conversation.conversationId]);
 }
 
-async function acknowledged(directory: string, key: string, signal: AbortSignal) {
+async function storedIds(directory: string, name: string, key: string, signal: AbortSignal) {
   let text: string;
   try {
-    text = await readRegular(join(directory, `.progress-${key}`), signal, true);
+    text = await readRegular(join(directory, name), signal, true);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return new Set<string>();
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return [] as string[];
     throw error;
   }
   const progress = record(JSON.parse(text));
@@ -52,7 +52,41 @@ async function acknowledged(directory: string, key: string, signal: AbortSignal)
     !progress.messageIds.every((id) => typeof id === "string" && /^[a-f0-9]{64}$/.test(id))
   )
     throw new Error("Invalid capture progress");
-  return new Set<string>(progress.messageIds);
+  return progress.messageIds as string[];
+}
+
+async function acknowledged(directory: string, key: string, signal: AbortSignal) {
+  return new Set(await storedIds(directory, `.progress-${key}`, key, signal));
+}
+
+/** Persist source-identity sequence assignments before snapshots, independent of transcript trimming. */
+export async function sequenceConversation(
+  directory: string,
+  target: QueueEntry["target"],
+  chat: ChatConversation,
+  signal: AbortSignal,
+): Promise<ChatConversation> {
+  const key = progressKey({ target, conversation: chat });
+  const name = `.sequence-${key}`;
+  const ids = await storedIds(directory, name, key, signal);
+  const positions = new Map(ids.map((id, index) => [id, index]));
+  if (positions.size !== ids.length) throw new Error("Invalid capture sequence");
+  const previousLength = ids.length;
+  const messages = chat.messages.map((message) => {
+    const id = message.id as string;
+    let position = positions.get(id);
+    if (position === undefined) {
+      position = ids.length;
+      ids.push(id);
+      positions.set(id, position);
+    }
+    // ChatWriter sorts timestamp ties by ID. Keep the existing 64-hex format and
+    // opaque source suffix, but never recompute a sequence from retained blocks.
+    return { ...message, id: `${position.toString(16).padStart(8, "0")}${id.slice(8)}` };
+  });
+  if (ids.length !== previousLength)
+    await persist(directory, name, { version: 1, key, messageIds: ids }, signal);
+  return { ...chat, messages };
 }
 
 /** Persist a complete redacted snapshot before network I/O, unless all messages were saved. */

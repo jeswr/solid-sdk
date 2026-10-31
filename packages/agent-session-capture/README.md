@@ -125,10 +125,13 @@ only opaque message IDs, scoped to the pod root, owner and conversation. Retries
 acknowledged messages even when a transcript grows or the timestamp filter changes;
 completed Codex rollouts require no further upload requests. A save interrupted before
 its checkpoint is recorded may be retried with the same create-only ID.
-Successful snapshots are removed; checkpoints remain. Failed or partial uploads,
-corrupt entries and unsafe files remain local. Delete unwanted snapshots manually,
-or remove the queue to clear all pending captures and completion checkpoints. Config
-and opt-out checks still apply before replay.
+Private `.sequence-*` files retain opaque source hashes and their assigned sequence
+positions before snapshots are queued. Transcript trimming preserves existing uploaded
+IDs and checkpoint matches; sequence prefixes retain source order on timestamp ties.
+Successful snapshots are removed; checkpoints and sequence assignments remain. Failed
+or partial uploads, corrupt entries and unsafe files remain local. Delete unwanted
+snapshots manually, or remove the queue to clear all pending captures, completion
+checkpoints and sequence assignments. Config and opt-out checks still apply before replay.
 
 ## Library and tests
 

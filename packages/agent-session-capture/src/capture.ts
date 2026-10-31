@@ -11,7 +11,7 @@ import { homedir } from "os";
 import { join, resolve } from "path";
 import { isIgnored, queueDirectory, readRegular } from "./io.js";
 import { digest, parseClaudeTranscript, parseCodexTranscript, record } from "./parsers.js";
-import { enqueue, replay } from "./queue.js";
+import { enqueue, replay, sequenceConversation } from "./queue.js";
 
 /** Injectable process boundaries; production callers may omit all options. */
 export interface CaptureOptions {
@@ -150,6 +150,12 @@ async function capture(args: string[], options: CaptureOptions, signal: AbortSig
       )
         continue;
       parsed.projectDirectories = [...new Set([...projects, ...parsed.projectDirectories])];
+      parsed.conversation = await sequenceConversation(
+        directory,
+        target,
+        parsed.conversation,
+        signal,
+      );
       parsed.conversation.messages = parsed.conversation.messages.filter(
         (m) => Date.parse(m.createdAt) > since,
       );

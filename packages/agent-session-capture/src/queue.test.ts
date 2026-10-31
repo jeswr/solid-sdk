@@ -8,7 +8,7 @@ import { join } from "path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MAX_BYTES, queueDirectory } from "./io.js";
 import { digest, parseClaudeTranscript } from "./parsers.js";
-import { enqueue, type QueueEntry, replay } from "./queue.js";
+import { enqueue, type QueueEntry, replay, sequenceConversation } from "./queue.js";
 
 let home: string;
 let directory: string;
@@ -51,6 +51,70 @@ afterEach(async () => {
 });
 
 describe("offline queue", () => {
+  it("persists private sequence assignments before snapshots and reuses them across trimming", async () => {
+    const chat = entry.conversation;
+    chat.messages.push({ id: "b".repeat(64), role: "assistant", text: "Next", createdAt: stamp });
+    const original = await sequenceConversation(directory, target, chat, signal());
+    const name = `.sequence-${digest([target, chat.provider, chat.conversationId])}`;
+    const path = join(directory, name);
+    expect((await fs.stat(path)).mode & 0o7777).toBe(0o600);
+    const saved = await fs.readFile(path, "utf8");
+    expect(JSON.parse(saved).messageIds).toEqual(chat.messages.map((message) => message.id));
+    expect(saved).not.toMatch(/Safe|Next|session/);
+    const trimmed = { ...chat, messages: chat.messages.slice(1) };
+    expect(await sequenceConversation(directory, target, trimmed, signal())).toEqual({
+      ...chat,
+      messages: original.messages.slice(1),
+    });
+    expect(await fs.readFile(path, "utf8")).toBe(saved);
+    trimmed.messages.push({ id: "c".repeat(64), role: "tool", text: "Read", createdAt: stamp });
+    const appended = await sequenceConversation(directory, target, trimmed, signal());
+    expect(appended.messages[0]).toEqual(original.messages[1]);
+    const orderedIds = [...original.messages, ...appended.messages.slice(1)].map(
+      (message) => message.id,
+    );
+    expect([...orderedIds].sort()).toEqual(orderedIds);
+    // Account changes keep independent assignment state, just like checkpoints.
+    const other = await sequenceConversation(
+      directory,
+      { ...target, webId: "https://other.example/#me" },
+      trimmed,
+      signal(),
+    );
+    expect(other.messages[0]?.id).not.toBe(appended.messages[0]?.id);
+  });
+
+  it.each([
+    "duplicate",
+    "symlink",
+    "permissions",
+    "json",
+    "shape",
+  ])("fails closed on unsafe %s sequence state", async (kind) => {
+    await sequenceConversation(directory, target, entry.conversation, signal());
+    const path = join(
+      directory,
+      `.sequence-${digest([target, entry.conversation.provider, entry.conversation.conversationId])}`,
+    );
+    const text = await fs.readFile(path, "utf8");
+    await fs.rm(path);
+    if (kind === "symlink") {
+      const external = join(home, "external-sequence");
+      await fs.writeFile(external, text, { mode: 0o600 });
+      await fs.symlink(external, path);
+    } else {
+      const state = JSON.parse(text);
+      if (kind === "duplicate") state.messageIds.push(state.messageIds[0]);
+      if (kind === "shape") state.messageIds = ["unsafe/path"];
+      await fs.writeFile(path, kind === "json" ? "not-json" : JSON.stringify(state), {
+        mode: kind === "permissions" ? 0o644 : 0o600,
+      });
+    }
+    await expect(
+      sequenceConversation(directory, target, entry.conversation, signal()),
+    ).rejects.toThrow();
+  });
+
   it("uses atomic private, deterministic snapshots, re-redacts replay data and removes only complete saves", async () => {
     entry.conversation.title = "sk-fixture-title";
     (entry.conversation.messages[0] as { text: string }).text = "sk-fixture-body";

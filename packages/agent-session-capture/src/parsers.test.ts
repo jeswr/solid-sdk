@@ -60,7 +60,7 @@ describe("real-shaped redacted JSONL", () => {
   it.each([
     "claude",
     "codex",
-  ] as const)("preserves %s block and row order on timestamp ties, including duplicates and appends", (provider) => {
+  ] as const)("preserves %s source order and IDs across duplicates, appends and trimming", (provider) => {
     const parser = provider === "claude" ? parseClaudeTranscript : parseCodexTranscript;
     const row = (id: string, texts: string[]) => {
       const message = { role: "assistant", content: texts.map((text) => ({ type: "text", text })) };
@@ -70,13 +70,11 @@ describe("real-shaped redacted JSONL", () => {
     };
     const texts = Array.from({ length: 20 }, (_, index) => `Block ${index}`);
     const first = row("first-row", texts);
-    const entries = [first, first, row("second-row", ["Next row"])];
+    const second = row("second-row", ["Next row"]);
+    const entries = [first, first, second];
     const parsed = parser(jsonl(entries)).conversation.messages;
     expect(parsed.map((message) => message.text)).toEqual([...texts, "Next row"]);
-    // ChatWriter orders timestamp ties by ID; listings need not follow write order.
-    expect(
-      [...parsed].reverse().sort((a, b) => (a.id as string).localeCompare(b.id as string)),
-    ).toEqual(parsed);
+    expect(parser(jsonl([second])).conversation.messages).toEqual(parsed.slice(texts.length));
     expect(parser(jsonl([first])).conversation.messages).toEqual(parsed.slice(0, texts.length));
     expect(
       parser(jsonl([...entries, row("appended-row", ["Appended"])])).conversation.messages.slice(

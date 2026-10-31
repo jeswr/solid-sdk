@@ -127,6 +127,73 @@ describe("capture with real ChatWriter and client credentials", () => {
     ]);
   });
 
+  it.each([
+    "claude",
+    "codex",
+  ] as const)("keeps %s IDs, checkpoints and timestamp-tie order after trimming", async (provider) => {
+    const stamp = "2026-10-25T12:00:00.000Z";
+    const metadata =
+      provider === "claude"
+        ? { sessionId: "claude-fixture-session", cwd }
+        : { type: "session_meta", payload: { id: "codex-fixture-session", cwd } };
+    const row = (id: string, texts: string[]) => {
+      const message = { role: "assistant", content: texts.map((text) => ({ type: "text", text })) };
+      return provider === "claude"
+        ? { type: "assistant", timestamp: stamp, uuid: id, message }
+        : { type: "response_item", timestamp: stamp, payload: { ...message, type: "message", id } };
+    };
+    const texts = Array.from({ length: 20 }, (_, index) => `Block ${index}`);
+    const retained = row("retained", texts);
+    const jsonl = (rows: unknown[]) => rows.map((value) => JSON.stringify(value)).join("\n");
+    const original = jsonl([metadata, row("earlier", ["Before"]), retained]);
+    const path = provider === "claude" ? transcript : await rollout(original);
+    await writeFile(path, original);
+    const args = provider === "claude" ? [provider, "--transcript", path] : [provider];
+    await runCapture(args, options);
+    const first = await storedConversation(provider);
+    expect(first.messages.map((message) => message.text)).toEqual(["Before", ...texts]);
+    const resources = new Map(transport.resources);
+    transport.requests.length = 0;
+    await writeFile(path, jsonl([metadata, retained]));
+    await runCapture(args, options);
+    expect(transport.requests).toEqual([]);
+    expect(transport.resources).toEqual(resources);
+
+    const appended = jsonl([metadata, retained, row("appended", ["Appended"])]);
+    await writeFile(path, appended);
+    await runCapture(args, {
+      ...options,
+      fetch: async () => {
+        throw new Error("offline");
+      },
+    });
+    const snapshots = await queued();
+    expect(snapshots).toHaveLength(1);
+    const snapshot = JSON.parse(await readFile(join(queue(), snapshots[0] as string), "utf8"));
+    expect(snapshot.conversation.messages.slice(0, texts.length)).toEqual(first.messages.slice(1));
+    // Replay after the source disappears must retain the persisted assignments.
+    await rm(path);
+    transport.requests.length = 0;
+    await runCapture(["codex"], options);
+    expect(
+      transport.requests.filter(
+        (request) => request.method === "PUT" && /\/m-.*\.ttl$/.test(request.url),
+      ),
+    ).toHaveLength(1);
+    const result = await storedConversation(provider);
+    expect(result.messages.map((message) => message.text)).toEqual([
+      "Before",
+      ...texts,
+      "Appended",
+    ]);
+    expect(result.messages.slice(0, first.messages.length)).toEqual(first.messages);
+    expect(await queued()).toEqual([]);
+    await writeFile(path, appended);
+    transport.requests.length = 0;
+    await runCapture(args, options);
+    expect(transport.requests).toEqual([]);
+  });
+
   it("queues and uploads native Codex tool names without their arguments or results", async () => {
     const calls = ["web_search_call", "image_generation_call"].map((type) =>
       JSON.stringify({

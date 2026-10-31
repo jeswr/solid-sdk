@@ -80,10 +80,9 @@ function append(
   const key = digest(id);
   if (seen.has(key)) return;
   seen.add(key);
-  // ChatWriter sorts timestamp ties by ID. Prefix the retained block sequence,
-  // keeping the queue's 64-hex format and a 224-bit opaque source-identity suffix.
-  const messageId = `${messages.length.toString(16).padStart(8, "0")}${key.slice(8)}`;
-  messages.push({ id: messageId, role, text: redactSecrets(text), createdAt });
+  // Identity must survive removal of earlier rows. Capture persists sequence assignments
+  // separately before queueing so ChatWriter can also retain timestamp-tie order.
+  messages.push({ id: key, role, text: redactSecrets(text), createdAt });
 }
 
 /** Parse Claude Code JSONL: user/assistant text and tool names, without arguments/results/thinking. */
