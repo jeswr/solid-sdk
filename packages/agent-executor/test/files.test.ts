@@ -75,6 +75,8 @@ it("atomic local store fsyncs before the effect and survives a fresh instance", 
 it.each([
   "dispatch",
   "settlement",
+  "retry-reopen",
+  "retry-claim",
 ])("actual process death before %s recovers without resending", async (stage) => {
   const { directory, store } = await fixture();
   const h = harness();
@@ -100,22 +102,28 @@ it.each([
         writeDisposition: async (id, result) => {
           await memory.proposals.writeDisposition(id, result);
           await fs.writeFile(process.argv[1] + '/dispositions.json', JSON.stringify([...memory.dispositions]));
+          if (stage === 'retry-reopen' && result.reason === 'retrying') { process.stdout.write('durable\\n'); await new Promise(() => {}); }
         },
-        emitTransmission: async () => { process.stdout.write('durable\\n'); await new Promise(() => {}); },
+        emitTransmission: async (event) => {
+          if (stage === 'settlement') { process.stdout.write('durable\\n'); await new Promise(() => {}); }
+          await memory.proposals.emitTransmission(event);
+        },
       }, approvals: memory.approvalStore, controls: memory.controls, clock: memory.clock,
       mandates: { load: async () => mandate }, transmissions: store,
       policy: { id: 'synthetic', evaluate: (policy) => ({ effect: policy.id === mandate.autonomous.id ? 'permit' : 'not-applicable' }) },
       audit: { listCommitted: async () => [], append: async (record) => {
-        if (stage === 'dispatch' && record.outcome === 'attempting') { process.stdout.write('durable\\n'); await new Promise(() => {}); }
+        if (record.outcome === 'attempting' && (stage === 'dispatch' || (stage === 'retry-claim' && record.transmission.attempts === 2))) { process.stdout.write('durable\\n'); await new Promise(() => {}); }
       } },
       tokens: { send: async () => { throw new Error('must not request credentials'); } },
       bindings: { [binding.id]: { ...binding, send: { render: async () => entry.wire, validate: async () => ({ ok: true }),
         transmit: async () => {
           if (stage === 'dispatch') throw new Error('must not transmit before process death');
+          if (stage.startsWith('retry-')) return { outcome: 'rejected', detail: 'not accepted' };
           return { outcome: 'accepted', providerRef: 'test:before-crash' };
         } } } }, dryRun: false,
     });
     await executor.transmit(entry.proposal.id);
+    if (stage.startsWith('retry-')) await executor.transmit(entry.proposal.id);
   `,
       directory,
       JSON.stringify([
@@ -140,16 +148,27 @@ it.each([
       exclusive: store.exclusive,
     });
     const executor = createExecutor({ ...h.options, transmissions: restarted });
-    if (stage === "dispatch") {
-      expect(await restarted.get(e.proposal.id)).toMatchObject({ status: "attempting" });
+    if (stage !== "dispatch") {
+      const dispositions = JSON.parse(await fs.readFile(`${directory}/dispositions.json`, "utf8"));
+      for (const [id, result] of dispositions) h.dispositions.set(id, result);
+    }
+    expect(await h.proposals.queued()).toEqual([e.proposal.id]);
+    if (stage === "dispatch" || stage === "retry-claim") {
+      expect(await restarted.get(e.proposal.id)).toMatchObject({
+        status: "attempting",
+        attempts: stage === "dispatch" ? 1 : 2,
+      });
       expect(await executor.runOutboxOnce()).toEqual({
         [e.proposal.id]: { status: "uncertain", reason: "uncertain" },
       });
+    } else if (stage === "retry-reopen") {
+      expect(await restarted.get(e.proposal.id)).toMatchObject({ status: "not-sent", attempts: 1 });
+      expect(await executor.runOutboxOnce()).toEqual({
+        [e.proposal.id]: { status: "not-sent", reason: "not-sent" },
+      });
+      expect(await executor.runOutboxOnce()).toEqual({});
     } else {
       expect(await restarted.get(e.proposal.id)).toMatchObject({ status: "sent", attempts: 1 });
-      const dispositions = JSON.parse(await fs.readFile(`${directory}/dispositions.json`, "utf8"));
-      for (const [id, result] of dispositions) h.dispositions.set(id, result);
-      expect(await h.proposals.queued()).toEqual([e.proposal.id]);
       expect(h.settlements.size).toBe(0);
       expect(await executor.runOutboxOnce()).toEqual({
         [e.proposal.id]: { status: "duplicate", providerRef: "test:before-crash" },

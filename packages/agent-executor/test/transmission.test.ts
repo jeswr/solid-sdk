@@ -905,6 +905,42 @@ it("outbox repairs a legacy sent settlement without a provider reference", async
   expect([...h.settlements.values()][0]).toMatchObject({ status: "sent", final: true });
   expect(h.binding.send.transmit).not.toHaveBeenCalled();
 });
+it("a failed retry reopen cannot leave an unresolved claim outside the queue", async () => {
+  const h = harness();
+  const e = await h.enqueue();
+  vi.mocked(h.binding.send.transmit).mockResolvedValueOnce({
+    outcome: "rejected",
+    detail: "not accepted",
+  });
+  expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "not-sent" });
+  expect(await h.proposals.queued()).toEqual([]);
+  vi.spyOn(h.proposals, "writeDisposition").mockRejectedValueOnce(new Error("reopen failed"));
+  await expect(h.executor.transmit(e.proposal.id)).rejects.toThrow("reopen failed");
+  expect(h.records.get(e.proposal.id)).toMatchObject({ status: "not-sent", attempts: 1 });
+  expect(await h.proposals.queued()).toEqual([]);
+  expect(h.binding.send.transmit).toHaveBeenCalledOnce();
+});
+
+it("a halt arriving during retry reopen prevents a new claim", async () => {
+  const h = harness();
+  const e = await h.enqueue();
+  vi.mocked(h.binding.send.transmit).mockResolvedValueOnce({
+    outcome: "rejected",
+    detail: "not accepted",
+  });
+  expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "not-sent" });
+  const write = h.proposals.writeDisposition;
+  vi.spyOn(h.proposals, "writeDisposition").mockImplementationOnce(async (id, result) => {
+    await write(id, result);
+    h.state.haltFile = true;
+  });
+  expect(await h.executor.transmit(e.proposal.id)).toMatchObject({
+    status: "refused",
+    reason: "halted",
+  });
+  expect(h.records.get(e.proposal.id)).toMatchObject({ status: "not-sent", attempts: 1 });
+  expect(h.binding.send.transmit).toHaveBeenCalledOnce();
+});
 it.each([
   "lock",
   "history",

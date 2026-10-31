@@ -435,6 +435,9 @@ export function createExecutor(options: ExecutorOptions) {
     }
     if ((previous?.attempts ?? 0) >= MAX_TRANSMISSION_ATTEMPTS)
       return disposition(id, { status: "refused", reason: "attempt-limit" });
+    // Reopen a settled outbox before a retry can leave a durable unresolved claim.
+    if (previous?.status === "not-sent")
+      await disposition(id, { status: "ready", reason: "retrying" });
     // Provider lookup / approval / disk I/O can suspend: re-check controls immediately before claiming.
     const failure = await authorityFailure();
     if (failure) return disposition(id, failure);
