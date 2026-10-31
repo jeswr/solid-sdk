@@ -9,3 +9,26 @@ export function scopedStore<T extends {}>(store: KvStore, prefix: string): KvSto
     removeItem: async (key) => await store.removeItem(JSON.stringify([prefix, key])),
   };
 }
+
+/** Classify failures at either storage seam before restore handles protocol failures. */
+export function protectStore<T extends {}>(store: KvStore<T>): KvStore<T> {
+  const protect = async <R>(operation: () => Promise<R>): Promise<R> => {
+    try {
+      return await operation();
+    } catch (cause) {
+      throw new StorageFailure(cause);
+    }
+  };
+  return {
+    getItem: async (key) => await protect(() => store.getItem(key)),
+    setItem: async (key, value) => await protect(() => store.setItem(key, value)),
+    removeItem: async (key) => await protect(() => store.removeItem(key)),
+  };
+}
+
+/** Distinguish storage faults from network/protocol failures without exposing their values. */
+export class StorageFailure extends Error {
+  constructor(cause: unknown) {
+    super("Session storage failed", { cause });
+  }
+}

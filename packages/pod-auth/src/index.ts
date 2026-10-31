@@ -1,9 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { type Identity as Claims, sameIssuer } from "@jeswr/reactive-authentication";
+import { StorageFailure } from "./kv.js";
 import { secureUrl, validateOptions } from "./options.js";
 import { AmbiguousIssuerError, createProviders } from "./providers.js";
 import { decideSilentRestore } from "./session-restore.js";
-import { StorageFailure } from "./sessions.js";
 import type {
   AuthEvent,
   AuthEventType,

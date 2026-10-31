@@ -408,7 +408,9 @@ test("custom KV stores are namespaced and errors fail closed", async () => {
       },
     },
   );
-  await expect(broken.auth.login()).rejects.toThrow("unavailable");
+  await expect(broken.auth.login()).rejects.toMatchObject({
+    cause: { message: "unavailable" },
+  });
 });
 
 describe("option validation", () => {

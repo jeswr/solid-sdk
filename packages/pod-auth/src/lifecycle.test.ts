@@ -306,6 +306,48 @@ test("storage failures reject without exposing a session or discarding an unprov
   expect(f.values.has(key)).toBe(false);
 });
 
+test.each([
+  ["as", "getItem"],
+  ["as", "setItem"],
+  ["issuer", "getItem"],
+  ["issuer", "setItem"],
+] as const)("restore rejects %s metadata %s failures and retains the credential and pointer", async (cache, operation) => {
+  const f = fixture();
+  await f.load().login();
+  const before = structuredClone([...f.values.entries()]);
+  const caches = createMemoryStore();
+  const failure = new Error("Metadata storage unavailable");
+  let unavailable = true;
+  const fails = (key: string) => unavailable && JSON.parse(key)[0].endsWith(`:${cache}`);
+  f.options.storage!.caches = {
+    ...caches,
+    getItem: async (key) => {
+      if (operation === "getItem" && fails(key)) throw failure;
+      return await caches.getItem(key);
+    },
+    setItem: async (key, value) => {
+      if (operation === "setItem" && fails(key)) throw failure;
+      await caches.setItem(key, value);
+    },
+  };
+  const auth = f.load();
+  const restored = vi.fn(),
+    expired = vi.fn();
+  auth.on("restore", restored);
+  auth.on("expired", expired);
+  await expect(auth.restore()).rejects.toBe(failure);
+  expect(await auth.identity()).toBeNull();
+  expect([...f.values.entries()]).toEqual(before);
+  expect(await auth.remembered()).toEqual([{ webId: f.op.webId, issuer: f.op.issuer }]);
+  expect(f.op.stats.refreshes).toBe(0);
+  expect(f.op.stats.authorizations).toBe(1);
+  expect(restored).not.toHaveBeenCalled();
+  expect(expired).not.toHaveBeenCalled();
+  unavailable = false;
+  await expect(auth.restore()).resolves.toMatchObject({ webId: f.op.webId });
+  expect(f.op.stats.refreshes).toBe(1);
+});
+
 test.each(["solid", "lws"])("issuers without ES256 are refused through %s", async (protocol) => {
   const f = fixture();
   vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {

@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { type RefreshSessionRecord, withLock } from "@jeswr/reactive-authentication";
-import { scopedStore } from "./kv.js";
+import { protectStore, scopedStore } from "./kv.js";
 import { secureUrl } from "./options.js";
 import type { KvStore, LoginHint, PodAuthOptions } from "./types.js";
 
@@ -35,19 +35,7 @@ export function memoryStore<T extends {} = {}>(): KvStore<T> {
 
 /** Translate engine context keys to the canonical (issuer, WebID, actual client_id) credential key. */
 export function sessionStorage(raw: KvStore, namespace: string, options: PodAuthOptions) {
-  const scoped = scopedStore(raw, namespace + ":sessions");
-  const protect = async <T>(operation: () => Promise<T>): Promise<T> => {
-    try {
-      return await operation();
-    } catch (cause) {
-      throw new StorageFailure(cause);
-    }
-  };
-  const store: KvStore = {
-    getItem: async (key) => await protect(() => scoped.getItem(key)),
-    setItem: async (key, value) => await protect(() => scoped.setItem(key, value)),
-    removeItem: async (key) => await protect(() => scoped.removeItem(key)),
-  };
+  const store = protectStore(scopedStore(raw, namespace + ":sessions"));
   const catalog = async () => ((await store.getItem("accounts")) ?? []) as Account[];
   const active = async (): Promise<ActiveAccount | null> => {
     const value = (await store.getItem("active")) as ActiveAccount | null;
@@ -172,11 +160,4 @@ export function sessionStorage(raw: KvStore, namespace: string, options: PodAuth
       await store.removeItem("active");
     },
   };
-}
-
-/** Distinguish storage faults from normal network/protocol restore failures without exposing their values. */
-export class StorageFailure extends Error {
-  constructor(cause: unknown) {
-    super("Session storage failed", { cause });
-  }
 }

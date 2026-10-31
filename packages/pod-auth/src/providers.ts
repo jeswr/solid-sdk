@@ -26,10 +26,10 @@ import {
   XASProvider,
 } from "@jeswr/reactive-authentication";
 import { createBoundary } from "./boundary.js";
-import { scopedStore } from "./kv.js";
+import { protectStore, scopedStore } from "./kv.js";
 import { secureUrl } from "./options.js";
 import { memoryStore, sessionStorage } from "./sessions.js";
-import type { LoginHint, PodAuthOptions } from "./types.js";
+import type { KvStore, LoginHint, PodAuthOptions } from "./types.js";
 
 export class AmbiguousIssuerError extends Error {
   constructor() {
@@ -78,10 +78,13 @@ export function createProviders(
       : new SessionFence(namespace, {
           store: scopedStore<number>(options.storage.sessions, "pod-auth:fence:" + namespace),
         });
-  const metadata = <T extends {}>(name: string) =>
-    options.storage === undefined
-      ? undefined
-      : scopedStore<T>(options.storage.caches, namespace + ":" + name);
+  const metadata = <T extends {}>(name: string, fallback?: KvStore<T>) => {
+    const store =
+      options.storage === undefined
+        ? fallback
+        : scopedStore<T>(options.storage.caches, namespace + ":" + name);
+    return store === undefined ? undefined : protectStore(store);
+  };
   let hint: LoginHint = {};
   let restoredContext: { selected: LoginHint; context: string } | undefined;
   let sessionRequest: Request | undefined;
@@ -148,12 +151,12 @@ export function createProviders(
         selected.webId === undefined && selected.issuer !== undefined
           ? { getIssuer: async () => new URL(selected.issuer!) }
           : webIdProvider,
-        metadata("issuer") ?? browser?.issuer,
+        metadata("issuer", browser?.issuer),
         context,
       );
       provider = new CachingAuthorizationServerProvider(
         new XASProvider(issuerProvider, http),
-        metadata("as") ?? browser?.authorizationServer,
+        metadata("as", browser?.authorizationServer),
         context,
       );
       authorizationServers.set(key, provider);
