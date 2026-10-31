@@ -570,10 +570,22 @@ export function lwsWrites(
           nodes.push(child);
         }
       }
+      const changedMembership = new Set<string>();
       for (const node of nodes.reverse()) {
-        const current =
-          node.kind === "container" ? await client().head(node.url, { signal: opts.signal }) : node;
+        // Keep the preflight validator unless our own child deletion changed membership.
+        // Refreshing an untouched container would authorise deleting a replacement.
+        let current = node;
+        if (node.kind === "container" && changedMembership.has(node.url)) {
+          current = await client().head(node.url, { signal: opts.signal });
+          if (
+            current.kind !== node.kind ||
+            current.parent !== node.parent ||
+            current.metadataUrl !== node.metadataUrl
+          )
+            throw invalid("HEAD", node.url, "Container identity changed during recursive deletion");
+        }
         await remove(node.url, requiredEtag("HEAD", node.url, current.etag), opts.signal);
+        if (node.parent !== null) changedMembership.add(node.parent);
       }
     },
   };

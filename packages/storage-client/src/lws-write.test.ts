@@ -1183,10 +1183,94 @@ describe("LWS conditional delete", () => {
     expect(calls.map(({ method, url }) => `${method} ${url}`)).toEqual([
       `HEAD ${container}`,
       `GET ${container}`,
-      `HEAD ${container}`,
       `DELETE ${container}`,
     ]);
     expect(calls.at(-1)?.headers.get("if-match")).toBe(tag);
+  });
+  test.each([
+    { nested: false, kind: "resource" },
+    { nested: false, kind: "container" },
+    { nested: true, kind: "resource" },
+    { nested: true, kind: "container" },
+  ])("empty container retains its preflight ETag after replacement: %j", async ({
+    nested,
+    kind,
+  }) => {
+    const container = nested ? NEST : NOTES;
+    const parent = nested ? NOTES : ROOT;
+    const replacementTag = '"replacement"';
+    let replaced = false;
+    let replacementDeleted = false;
+    const { storage, calls } = treeBackend({
+      [`GET ${NOTES}`]: listReply([NEST]),
+      [`HEAD ${container}`]: () =>
+        headReply(replaced ? kind : "container", parent, replaced ? replacementTag : tag),
+      [`GET ${container}`]: () => {
+        replaced = true;
+        return listReply([]);
+      },
+      [`DELETE ${container}`]: ({ headers }) => {
+        if (headers.get("if-match") !== replacementTag) return reply(412, { etag: replacementTag });
+        replacementDeleted = true;
+        return reply();
+      },
+    });
+    const error = await rejects(
+      storage.delete(NOTES, { ifMatch: tag, recursive: true }),
+      "precondition-failed",
+    );
+    expect(error.etag).toBe(replacementTag);
+    expect(replacementDeleted).toBe(false);
+    expect(mutationCalls(calls).map(({ url }) => url)).toEqual([container]);
+    expect(calls.filter(({ method, url }) => method === "HEAD" && url === container)).toHaveLength(
+      1,
+    );
+    expect(calls.at(-1)?.headers.get("if-match")).toBe(tag);
+  });
+  test.each([
+    "kind",
+    "parent",
+    "linkset",
+  ])("refresh after child deletion rejects a changed container %s", async (changed) => {
+    const original = headReply("container", ROOT);
+    original.headers = {
+      ...original.headers,
+      link: `${original.headers?.link}, <${META}>; rel="linkset"`,
+    };
+    const replacement = headReply(
+      changed === "kind" ? "resource" : "container",
+      changed === "parent" ? NEST : ROOT,
+      '"replacement"',
+    );
+    replacement.headers = {
+      ...replacement.headers,
+      link: `${replacement.headers?.link}, <${changed === "linkset" ? `${ROOT}new-linkset` : META}>; rel="linkset"`,
+    };
+    let childDeleted = false;
+    const { storage, calls } = treeBackend({
+      [`HEAD ${NOTES}`]: () => (childDeleted ? replacement : original),
+      [`GET ${NOTES}`]: listReply([CHILD]),
+      [`DELETE ${CHILD}`]: () => {
+        childDeleted = true;
+        return reply();
+      },
+    });
+    await rejects(storage.delete(NOTES, { ifMatch: tag, recursive: true }), "invalid-response");
+    expect(childDeleted).toBe(true);
+    expect(mutationCalls(calls).map(({ url }) => url)).toEqual([CHILD]);
+  });
+  test("refresh after child deletion still requires an ETag", async () => {
+    let heads = 0;
+    const { storage, calls } = treeBackend({
+      [`GET ${NOTES}`]: listReply([CHILD]),
+      [`HEAD ${NOTES}`]: () => {
+        const response = headReply("container", ROOT);
+        if (heads++ && response.headers) delete response.headers.etag;
+        return response;
+      },
+    });
+    await rejects(storage.delete(NOTES, { ifMatch: tag, recursive: true }), "invalid-response");
+    expect(mutationCalls(calls).map(({ url }) => url)).toEqual([CHILD]);
   });
   test("recursive deletion paginates opaque containers and follows nested logical containment", async () => {
     const container = `${ROOT}opaque-container`;
@@ -1331,8 +1415,11 @@ describe("LWS conditional delete", () => {
       firstDelete,
     );
   });
-  test("recursive resource delete needs no listing", async () => {
-    const { storage, calls } = backend();
+  test.each([
+    headReply(),
+    reply(200, { etag: tag }),
+  ])("recursive resource delete needs no listing: %j", async (head) => {
+    const { storage, calls } = backend({ [`HEAD ${URL}`]: head });
     await storage.delete(URL, { ifMatch: tag, recursive: true });
     expect(calls.map(({ method }) => method)).toEqual(["HEAD", "DELETE"]);
   });
