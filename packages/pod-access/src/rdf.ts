@@ -19,8 +19,9 @@ export function modeIri(mode: Mode): string {
 }
 /** Read recognized WAC modes, including the Write to Append implication. */
 export function readModes(iris: Iterable<string>): Set<Mode> {
+  const values = new Set(iris);
   const result = new Set<Mode>();
-  for (const mode of modes) if ([...iris].includes(modeIri(mode))) result.add(mode);
+  for (const mode of modes) if (values.has(modeIri(mode))) result.add(mode);
   if (result.has("write")) result.add("append");
   return result;
 }
