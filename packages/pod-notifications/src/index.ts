@@ -1,3 +1,4 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-/** Reserved public entry point for @jeswr/pod-notifications; implementation follows T-001. */
-export {};
+/** Storage-scoped notification contracts and untrusted frame normalisation. */
+export { createChangeNormalizer, type NormalisationOptions } from "./normalise.js";
+export type * from "./types.js";
