@@ -359,7 +359,12 @@ export function lwsWrites(
       )
         throw new StorageError("bad-request", { method: "PATCH", url: dest });
       const formats = client().features.patch.detail.formats;
-      if (Object.values(formats).some((types) => types.includes(SPARQL))) {
+      // The shared SPARQL formula serializer accepts default-graph triples only.
+      // Named graphs use RMW, which preserves graph identity in TriG and N-Quads.
+      if (
+        quads.every((q) => q.graph.termType === "DefaultGraph") &&
+        Object.values(formats).some((types) => types.includes(SPARQL))
+      ) {
         const described = await client().head(dest, { signal: opts.signal });
         const type = mediaTypeOf(described.contentType);
         if (type !== null && formats[type]?.includes(SPARQL)) {

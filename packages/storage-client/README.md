@@ -38,7 +38,8 @@ Create parents and move destinations may use opaque identifiers without a traili
 **LWS RDF patch is read-modify-write by default.** It checks the caller's ETag on the initial
 read, applies inserts/deletes, and PUTs with that read's ETag. A 412 triggers one fresh read
 and reapplication; a second 412 is returned. Advertised SPARQL Update is used only for the
-resource's actual media type. Variables and nonempty `where` clauses are unsupported.
+resource's actual media type and default-graph patches. Named-graph patches retain RMW for
+TriG/N-Quads. Variables and nonempty `where` clauses are unsupported.
 
 LWS moves require MoveResource and update the linkset's `up` relation. `setMetadata` takes
 the **metadata document's ETag**, and refuses server-managed `type`, `up`, and `linkset`.

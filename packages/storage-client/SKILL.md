@@ -160,7 +160,8 @@ Solid read side (ADR-003 §6):
   string body. RDF patch rebuilds caller quads before asynchronous reads, refuses invalid term
   positions, variables and any nonempty where clause. When any SPARQL format is advertised, HEAD
   discovers the actual resource media type: only that format's advertisement enables SPARQL
-  DELETE DATA/INSERT DATA, using the shared safe formula serializer.
+  DELETE DATA/INSERT DATA for default-graph patches, using the shared safe formula serializer.
+  Patches containing named graphs always use RMW to preserve graph identity in TriG/N-Quads.
 - **Otherwise RDF patch is RMW:** readRdf, check the initial ETag against the caller's ifMatch,
   applyQuadPatch in n3 Store, serialize in the original writable RDF format, then PUT with the
   read ETag. On 412 reread and reapply exactly once; the initial caller ETag check is not repeated

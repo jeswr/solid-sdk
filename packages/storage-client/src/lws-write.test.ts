@@ -601,6 +601,68 @@ describe("LWS JSON, raw and RDF patches", () => {
       expect(fallback.calls.map(({ method }) => method)).toEqual(["HEAD", "GET", "PUT"]);
     }
   });
+  test.each([
+    {
+      contentType: "application/trig",
+      body: '<urn:s> <urn:p> "old". <urn:g> { <urn:s> <urn:p> "old". } <urn:other> { <urn:s> <urn:p> "keep". }',
+    },
+    {
+      contentType: "application/n-quads",
+      body: '<urn:s> <urn:p> "old".\n<urn:s> <urn:p> "old" <urn:g>.\n<urn:s> <urn:p> "keep" <urn:other>.',
+    },
+  ])("named-graph patches use RMW with SPARQL advertised for $contentType", async ({
+    contentType,
+    body,
+  }) => {
+    const namedOld = quad(old.subject, old.predicate, old.object, nn("urn:g"));
+    const namedAdded = quad(added.subject, added.predicate, added.object, nn("urn:g"));
+    for (const patch of [
+      rdf([namedAdded]),
+      rdf([], [namedOld]),
+      rdf([added, namedAdded], [old, namedOld]),
+    ]) {
+      const { storage, calls } = backend(
+        {
+          [`HEAD ${URL}`]: reply(200, { "content-type": contentType, etag: tag }),
+          [`GET ${URL}`]: {
+            status: 200,
+            headers: { "content-type": contentType, etag: tag },
+            body,
+          },
+        },
+        (features) => {
+          features.patch.detail.formats = { [contentType]: ["application/sparql-update"] };
+        },
+      );
+      expect(await storage.patch(URL, patch, { ifMatch: tag })).toEqual({
+        url: URL,
+        etag: '"written"',
+        created: false,
+      });
+      expect(calls.map(({ method }) => method)).toEqual(["GET", "PUT"]);
+      expect(calls[1]?.headers.get("if-match")).toBe(tag);
+      expect(calls[1]?.headers.get("content-type")).toBe(contentType);
+      const expected = new Store(new Parser({ format: contentType }).parse(body));
+      if (patch.kind !== "rdf") throw new Error("Expected an RDF patch");
+      expected.removeQuads([...patch.deletes]);
+      expected.addQuads([...patch.inserts]);
+      const actual = new Store(new Parser({ format: contentType }).parse(calls[1]?.body as string));
+      expect(actual.size).toBe(expected.size);
+      for (const quad of expected) expect(actual.has(quad)).toBe(true);
+    }
+  });
+  test("named graphs remain invalid for a triple-only format advertising SPARQL", async () => {
+    const { storage, calls } = backend({}, (features) => {
+      features.patch.detail.formats = { "text/turtle": ["application/sparql-update"] };
+    });
+    await rejects(
+      storage.patch(URL, rdf([quad(nn("urn:s"), nn("urn:p"), literal("x"), nn("urn:g"))]), {
+        ifMatch: tag,
+      }),
+      "bad-request",
+    );
+    expect(calls.map(({ method }) => method)).toEqual(["GET"]);
+  });
 });
 
 describe("linkset metadata JSON Patch generation", () => {
