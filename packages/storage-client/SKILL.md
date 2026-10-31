@@ -177,9 +177,11 @@ Solid read side (ADR-003 §6):
   On every response (HEAD, read, readRdf, list, metadata), ANY lws#storage link in the response URL's
   context that differs from `storage` gives `scope` and discards the body. Matching/absent links
   are accepted; links with a different anchor context are ignored. Errors never echo the foreign id.
-- `list` takes a scoped container ending `/`, without query/fragment (even empty `?`/`#`), else
-  `bad-request`. GET Accept: `application/lws+json, application/ld+json;q=0.5`. Cursors are scoped
-  first, then fetched as canonical URLs with opaque queries preserved. Only 200 succeeds; other 2xx/3xx are
+- `list` and `listAll` accept scoped opaque container identifiers, including those without a trailing
+  slash, preserving their URLs. Query/fragment (even empty `?`/`#`) gives `bad-request`; the response
+  must be a valid Container or ContainerPage. GET Accept:
+  `application/lws+json, application/ld+json;q=0.5`. Cursors are scoped first, then fetched as canonical
+  URLs with opaque queries preserved. Only 200 succeeds; other 2xx/3xx are
   `invalid-response`, HTTP errors use the shared mapping, redirects are never followed.
 - Listing media type must be lws+json or ld+json. JSON is capped at **16 MiB of streamed bytes**
   for listings and linksets, independently of Content-Length; overflow/bad JSON → `invalid-response`.
@@ -243,7 +245,8 @@ Solid read side (ADR-003 §6):
   values; media types must be syntactically valid. Root content cannot be PUT; other resource
   kinds are validated by the server, never inferred from an identifier's trailing slash.
   RDF serialisation uses the shared serializer; JSON-LD writing remains unsupported.
-- `create` always POSTs: optional `name` is the Slug hint, never an exact child name. Emit Container
+- `create` always POSTs: optional decoded `name` is percent-encoded as the Slug hint, never an exact child name.
+  Name hints reject empty values and control characters before any request; spaces are encoded. Emit Container
   or DataResource Link type plus each validated `opts.links` entry. Initial up/linkset metadata is
   refused. Create parents and move destinations may be slashless opaque identifiers; the server
   validates their kind. Null bodies become empty bodies; containers default to application/lws+json, resources

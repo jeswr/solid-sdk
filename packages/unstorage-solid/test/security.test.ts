@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 //
 // Adversarial, driver-level security regression tests:
@@ -94,7 +95,7 @@ describe("hostile container listing — clear() never deletes a foreign IRI", ()
         // GET (container listing) — serve the hostile listing for the base.
         return new Response(listing, {
           status: 200,
-          headers: { "content-type": "text/turtle" },
+          headers: { "content-type": "text/turtle", etag: '"v1"' },
         });
       }) as unknown as typeof fetch,
     });
@@ -116,7 +117,7 @@ describe("hostile container listing — clear() never deletes a foreign IRI", ()
       fetch: (async () =>
         new Response(listing, {
           status: 200,
-          headers: { "content-type": "text/turtle" },
+          headers: { "content-type": "text/turtle", etag: '"v1"' },
         })) as unknown as typeof fetch,
     });
     const keys = await driver.getKeys("", {});

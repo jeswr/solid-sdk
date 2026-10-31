@@ -1,6 +1,7 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
- * `SolidDocStore` — the LDP client for {@link ./replication.js | replicateSolid}.
+ * `SolidDocStore` — the StorageClient adapter for {@link ./replication.js | replicateSolid}.
  *
  * It stores ONE pod resource per RxDB document under a single configured
  * container. Each document body is JSON by default (an envelope carrying the
@@ -24,16 +25,18 @@
  * op that may legitimately observe the container as its own member passes
  * `{ allowRoot: true }`.
  *
- * **RDF discipline (house rule).** The ONLY RDF the store touches is the
- * container LISTING, parsed (read-only) via `@jeswr/fetch-rdf` `parseRdf` +
- * `@solid/object` `ContainerDataset`. Document payloads are JSON (or the
- * consumer's own RDF via the seam); we never hand-build triples.
+ * Listings and protocol details belong to StorageClient. Document payloads stay
+ * opaque JSON or consumer-supplied RDF; this adapter never builds triples.
  */
 
-import { parseRdf } from "@jeswr/fetch-rdf";
 import { assertWithinPodScope, isContainerUrl, normalizePodBase } from "@jeswr/guarded-fetch";
-import { ContainerDataset } from "@solid/object";
-import { DataFactory } from "n3";
+import {
+  createPodClient,
+  type StorageClient,
+  StorageError,
+  type WriteResult,
+} from "@jeswr/storage-client";
+import { readTextBounded, storageTransport } from "./transport.js";
 
 /** Default media type a document resource is stored with (JSON storage mode). */
 export const DOC_CONTENT_TYPE = "application/json";
@@ -62,7 +65,9 @@ export interface SolidDocStoreOptions {
   /** Absolute container URL the store owns (normalised to one trailing slash). */
   container: string;
   /** The (authenticated) fetch the store issues every request with. */
-  fetch: typeof globalThis.fetch;
+  fetch?: typeof globalThis.fetch;
+  /** Use an existing client; its authenticated transport is retained. */
+  storage?: StorageClient;
   /**
    * Hard cap (bytes) on any response body the store reads. A hostile / buggy
    * server cannot make the store allocate an unbounded buffer: a body that
@@ -92,168 +97,6 @@ export function resolveMaxResponseBytes(value: number | undefined): number {
     return DEFAULT_MAX_RESPONSE_BYTES;
   }
   return value;
-}
-
-/**
- * Fail-closed refusal of a REDIRECTED response on a credentialed request.
- *
- * Every request the store issues carries the caller's authenticated `fetch`
- * (DPoP-bound or Bearer credentials). If that request were transparently
- * followed to a `Location:` on ANOTHER origin, the credential (and the request
- * body) could be replayed to an attacker-controlled server — a
- * credential-exfiltration / SSRF vector. So every request is issued with
- * `redirect: "manual"` and this guard REFUSES any redirect rather than
- * following it: undici surfaces the raw 3xx (`status` 300–399), browsers
- * surface an `opaqueredirect` filtered response (`type === "opaqueredirect"`,
- * `status === 0`), and a `redirected` flag is checked defensively.
- */
-function assertNotRedirected(res: Response, url: string): void {
-  if (
-    res.type === "opaqueredirect" ||
-    res.redirected === true ||
-    (res.status >= 300 && res.status < 400)
-  ) {
-    throw new Error(
-      `[rxdb-solid] refusing to follow a redirect from ${url} (status ${res.status}, type ${res.type}) — a credentialed request must not be redirected to another location`,
-    );
-  }
-}
-
-/** The over-cap error, one message for every path. */
-function overCapError(url: string, maxBytes: number, detail?: string): Error {
-  return new Error(
-    `[rxdb-solid] response body from ${url} exceeds the ${maxBytes}-byte limit${
-      detail ? ` (${detail})` : ""
-    }`,
-  );
-}
-
-/**
- * Best-effort cancellation of a response body, tolerant of the concrete body
- * shape. A WHATWG {@link ReadableStream} exposes `cancel()`; a Node-style
- * `Readable`/async-iterable body may expose `destroy()`; anything else is left
- * to GC. Never throws (a cancel failure must not mask the real error).
- */
-async function cancelBody(body: unknown): Promise<void> {
-  if (body == null || typeof body !== "object") return;
-  const b = body as { cancel?: () => Promise<void> | void; destroy?: () => void };
-  try {
-    if (typeof b.cancel === "function") {
-      await b.cancel();
-    } else if (typeof b.destroy === "function") {
-      b.destroy();
-    }
-  } catch {
-    // ignore
-  }
-}
-
-/** Accumulate chunks (Uint8Array or Buffer) into a single UTF-8 string. */
-function decodeChunks(chunks: Uint8Array[], total: number): string {
-  const merged = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    merged.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return new TextDecoder("utf-8").decode(merged);
-}
-
-/** Coerce a stream/iterable chunk to a `Uint8Array` (handles string chunks). */
-function chunkToBytes(chunk: unknown): Uint8Array {
-  if (chunk instanceof Uint8Array) return chunk; // Buffer is a Uint8Array subclass
-  if (chunk instanceof ArrayBuffer) return new Uint8Array(chunk);
-  if (ArrayBuffer.isView(chunk)) {
-    return new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength);
-  }
-  if (typeof chunk === "string") return new TextEncoder().encode(chunk);
-  // Unknown chunk shape — treat as empty rather than crash; the caller still
-  // enforces the cap on the bytes we DID account for.
-  return new Uint8Array();
-}
-
-/**
- * Read a response body to text with a HARD byte cap. Reads the body
- * chunk-by-chunk, aborting (and cancelling the body) the instant the running
- * total exceeds `maxBytes`, so an oversized / endless body from a hostile
- * server can never be buffered into memory. An advertised `Content-Length`
- * over the cap is refused up front (cancelling the body before throwing).
- *
- * **Body-shape tolerance.** A conforming `fetch` returns a WHATWG
- * {@link ReadableStream} body (`getReader()`); some auth-fetch shims return a
- * Node `Readable` / async-iterable body while still supporting `res.text()`.
- * We use the web-stream path only when `res.body.getReader` is a function,
- * else fall back to iterating an async-iterable body under the SAME cap. Only
- * when the body is neither shape do we read via a bounded `res.text()`; if even
- * `res.text()` is unavailable we FAIL CLOSED with a clear compatibility error
- * (never an unbounded read).
- */
-async function readTextBounded(res: Response, maxBytes: number, url: string): Promise<string> {
-  const body: unknown = res.body;
-  const advertised = res.headers.get("content-length");
-  if (advertised !== null) {
-    const n = Number(advertised);
-    if (Number.isFinite(n) && n > maxBytes) {
-      // Cancel the body we are about to abandon before throwing.
-      await cancelBody(body);
-      throw overCapError(url, maxBytes, `content-length ${n}`);
-    }
-  }
-
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-
-  // 1) WHATWG ReadableStream body (the conforming fetch shape).
-  if (body != null && typeof (body as { getReader?: unknown }).getReader === "function") {
-    const reader = (body as ReadableStream<Uint8Array>).getReader();
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        if (!value) continue;
-        total += value.byteLength;
-        if (total > maxBytes) throw overCapError(url, maxBytes);
-        chunks.push(value);
-      }
-    } finally {
-      await reader.cancel().catch(() => {});
-    }
-    return decodeChunks(chunks, total);
-  }
-
-  // 2) Node Readable / async-iterable body (still bounded).
-  if (
-    body != null &&
-    typeof (body as AsyncIterable<unknown>)[Symbol.asyncIterator] === "function"
-  ) {
-    try {
-      for await (const raw of body as AsyncIterable<unknown>) {
-        const value = chunkToBytes(raw);
-        total += value.byteLength;
-        if (total > maxBytes) throw overCapError(url, maxBytes);
-        chunks.push(value);
-      }
-    } catch (err) {
-      await cancelBody(body);
-      throw err;
-    }
-    return decodeChunks(chunks, total);
-  }
-
-  // 3) No iterable body — fall back to a bounded res.text() (still capped).
-  if (typeof res.text === "function") {
-    const text = await res.text();
-    if (new TextEncoder().encode(text).length > maxBytes) {
-      throw overCapError(url, maxBytes);
-    }
-    return text;
-  }
-
-  // 4) Neither a stream, an async-iterable, nor res.text() — fail closed
-  // rather than read an unbounded / unknown body.
-  throw new Error(
-    `[rxdb-solid] cannot read the response body from ${url}: the injected fetch returned a body that is neither a ReadableStream, an async-iterable, nor text-readable`,
-  );
 }
 
 // ---------------------------------------------------------------------------
@@ -367,16 +210,42 @@ function isMetaName(name: string): boolean {
 export class SolidDocStore {
   /** The normalised container URL (one trailing slash). */
   readonly container: string;
-  private readonly fetch: typeof globalThis.fetch;
+  private readonly storage: () => Promise<StorageClient>;
   private readonly maxResponseBytes: number;
 
   constructor(options: SolidDocStoreOptions) {
     // normalizePodBase throws on a non-http(s) / non-absolute container.
     this.container = normalizePodBase(options.container);
-    this.fetch = options.fetch;
     // Never let an invalid cap (NaN/Infinity/non-positive/non-integer) silently
     // DISABLE the byte limit — an invalid value falls back to the default.
     this.maxResponseBytes = resolveMaxResponseBytes(options.maxResponseBytes);
+    if (!options.storage && typeof options.fetch !== "function") {
+      throw new TypeError("[rxdb-solid] pass storage or an authenticated fetch");
+    }
+    let pending: Promise<StorageClient> | undefined;
+    let discovering = true;
+    this.storage = () => {
+      if (options.storage) return Promise.resolve(options.storage);
+      pending ??= createPodClient({
+        storage: this.container,
+        fetch: storageTransport(
+          this.container,
+          options.fetch as typeof fetch,
+          this.maxResponseBytes,
+          () => discovering,
+        ),
+      })
+        .then(({ storage }) => {
+          discovering = false;
+          return storage;
+        })
+        .catch((error: unknown) => {
+          pending = undefined;
+          discovering = true;
+          throw storageCause(error);
+        });
+      return pending;
+    };
   }
 
   /** The absolute URL of the resource named `resourceName` under the container. */
@@ -419,22 +288,53 @@ export class SolidDocStore {
     { ok: true; url: string; etag: string | null } | { ok: false; precondition: "failed" }
   > {
     const url = this.resourceUrl(resourceName);
-    const headers: Record<string, string> = { "content-type": contentType };
-    if (opts?.ifMatch) headers["if-match"] = opts.ifMatch;
-    if (opts?.ifNoneMatch) headers["if-none-match"] = opts.ifNoneMatch;
-    const res = await this.fetch(url, { method: "PUT", headers, body, redirect: "manual" });
-    // A credentialed write must never be followed to another Location (SSRF /
-    // credential-exfil). Refuse any redirect BEFORE interpreting the status.
-    assertNotRedirected(res, url);
-    // 412 Precondition Failed (and 428 Precondition Required) are the concurrency
-    // signal, not a hard error — let the caller reconcile.
-    if (res.status === 412 || res.status === 428) {
-      return { ok: false, precondition: "failed" };
+    try {
+      const storage = await this.storage();
+      let result: WriteResult;
+      if (opts?.ifNoneMatch) {
+        if (opts.ifNoneMatch !== "*" || opts.ifMatch) {
+          throw new TypeError("[rxdb-solid] create requires only ifNoneMatch: '*'");
+        }
+        if (storage.protocol === "lws") {
+          try {
+            await storage.head(url);
+            return { ok: false, precondition: "failed" };
+          } catch (error) {
+            if (!isMissing(error)) throw error;
+          }
+        }
+        result = await storage.create(this.container, body, { name: resourceName, contentType });
+      } else if (storage.protocol === "lws" && !opts?.ifMatch) {
+        try {
+          await storage.head(url);
+          result = await storage.write(url, body, { contentType, ifMatch: "*" });
+        } catch (error) {
+          if (!isMissing(error)) throw error;
+          result = await storage.create(this.container, body, { name: resourceName, contentType });
+        }
+      } else {
+        result = await storage.write(url, body, { contentType, ifMatch: opts?.ifMatch || "*" });
+      }
+      // This adapter's persisted index uses stable resource names. Do not silently
+      // acknowledge a server-chosen identifier that the next pull cannot resolve.
+      if (result.url !== url)
+        throw new Error("[rxdb-solid] storage did not preserve the document name");
+      return { ok: true, url: result.url, etag: result.etag };
+    } catch (error) {
+      if (
+        error instanceof StorageError &&
+        (error.status === 412 ||
+          error.status === 428 ||
+          // A generic conflict can mean a missing parent, not a concurrent create.
+          // Confirm the target exists before asking RxDB to reconcile master state.
+          (opts?.ifNoneMatch === "*" &&
+            error.code === "conflict" &&
+            (await this.getDoc(resourceName)) !== null))
+      ) {
+        return { ok: false, precondition: "failed" };
+      }
+      throw storageCause(error);
     }
-    if (!res.ok) {
-      throw new Error(`[rxdb-solid] putDoc ${url} failed: ${res.status} ${res.statusText}`);
-    }
-    return { ok: true, url, etag: res.headers.get("etag") };
   }
 
   /**
@@ -445,24 +345,20 @@ export class SolidDocStore {
    */
   async getDoc(resourceName: string): Promise<FetchedDoc | null> {
     const url = this.resourceUrl(resourceName);
-    const res = await this.fetch(url, {
-      method: "GET",
-      headers: { accept: "application/json, text/turtle, application/ld+json;q=0.9, */*;q=0.1" },
-      redirect: "manual",
-    });
-    assertNotRedirected(res, url);
-    if (res.status === 404 || res.status === 410) {
-      return null;
+    try {
+      const result = await (await this.storage()).read(url, {
+        accept: "application/json, text/turtle, application/ld+json;q=0.9, */*;q=0.1",
+      });
+      const body = await readTextBounded(
+        { body: result.body, headers: new Headers(), text: () => result.text() } as Response,
+        this.maxResponseBytes,
+        url,
+      );
+      return { body, contentType: result.contentType ?? DOC_CONTENT_TYPE, etag: result.etag };
+    } catch (error) {
+      if (isMissing(error)) return null;
+      throw storageCause(error);
     }
-    if (!res.ok) {
-      throw new Error(`[rxdb-solid] getDoc ${url} failed: ${res.status} ${res.statusText}`);
-    }
-    const body = await readTextBounded(res, this.maxResponseBytes, url);
-    return {
-      body,
-      contentType: res.headers.get("content-type") ?? DOC_CONTENT_TYPE,
-      etag: res.headers.get("etag"),
-    };
   }
 
   /**
@@ -476,13 +372,17 @@ export class SolidDocStore {
    */
   async deleteDoc(resourceName: string): Promise<void> {
     const url = this.resourceUrl(resourceName);
-    const res = await this.fetch(url, { method: "DELETE", redirect: "manual" });
-    assertNotRedirected(res, url);
-    if (res.status === 404 || res.status === 410) {
-      return;
-    }
-    if (!res.ok) {
-      throw new Error(`[rxdb-solid] deleteDoc ${url} failed: ${res.status} ${res.statusText}`);
+    try {
+      const storage = await this.storage();
+      const current = await storage.head(url).catch((error: unknown) => {
+        if (error instanceof StorageError && error.status === 405) return storage.read(url);
+        throw error;
+      });
+      await current.body?.cancel();
+      if (!current.etag) throw new Error("[rxdb-solid] cannot delete a resource without an ETag");
+      await storage.delete(url, { ifMatch: current.etag });
+    } catch (error) {
+      if (!isMissing(error)) throw storageCause(error);
     }
   }
 
@@ -498,73 +398,41 @@ export class SolidDocStore {
    * @throws on any non-ok, non-404/410 response.
    */
   async listDocUrls(): Promise<string[]> {
-    const res = await this.fetch(this.container, {
-      method: "GET",
-      headers: { accept: "text/turtle, application/ld+json;q=0.9" },
-      redirect: "manual",
-    });
-    assertNotRedirected(res, this.container);
-    if (res.status === 404 || res.status === 410) {
-      return [];
-    }
-    if (!res.ok) {
-      throw new Error(
-        `[rxdb-solid] list ${this.container} failed: ${res.status} ${res.statusText}`,
-      );
-    }
-    const body = await readTextBounded(res, this.maxResponseBytes, this.container);
-    // parseRdf resolves relative IRIs against the container URL (baseIRI), so
-    // ldp:contains object IRIs come back absolute.
-    const dataset = await parseRdf(body, res.headers.get("content-type"), {
-      baseIRI: this.container,
-    });
-    const container = new ContainerDataset(dataset, DataFactory).container;
-    if (!container) {
-      // A valid but empty / non-container document — no members.
-      return [];
-    }
     const urls: string[] = [];
-    // The container lists ITSELF as a member; skip it. Compare on the normalised
-    // origin + pathname (ignoring any query/fragment) so a root ALIAS a hostile
-    // or buggy server might list — `…/c/?x=1`, `…/c/#frag` — is skipped too.
-    const base = new URL(this.container);
-    for (const resource of container.contains) {
-      // resource.id may be relative; resolve against the container URL to be safe.
-      const absolute = new URL(resource.id, this.container).toString();
-      const member = new URL(absolute);
-      if (member.origin === base.origin && member.pathname === base.pathname) {
-        continue;
+    let receivedEntry = false;
+    try {
+      const storage = await this.storage();
+      for await (const entry of storage.listAll(this.container)) {
+        receivedEntry = true;
+        const absolute = entry.url;
+        if (entry.kind === "container" || isContainerUrl(absolute)) continue;
+        try {
+          assertWithinPodScope(this.container, absolute, { allowRoot: false });
+        } catch {
+          continue;
+        }
+        const name = absolute.slice(this.container.length);
+        if (
+          name.includes("/") ||
+          isMetaName(name) ||
+          !name.startsWith(DOC_PREFIX) ||
+          !name.endsWith(DOC_SUFFIX)
+        )
+          continue;
+        urls.push(absolute);
       }
-      // A document resource is never a (sub-)container.
-      if (isContainerUrl(absolute)) {
-        continue;
-      }
-      // Defence in depth: never surface a member that escapes the container.
-      try {
-        assertWithinPodScope(this.container, absolute, { allowRoot: true });
-      } catch {
-        continue;
-      }
-      // The member must be a DIRECT child of the container (no nested path) and a
-      // well-formed document resource name. Strip the container prefix to get the
-      // bare resource name.
-      const name = absolute.slice(this.container.length);
-      if (name.includes("/")) {
-        // A resource nested under a sub-path — not a document we manage.
-        continue;
-      }
-      if (isMetaName(name)) {
-        // The metadata resource is never a document.
-        continue;
-      }
-      if (!name.startsWith(DOC_PREFIX) || !name.endsWith(DOC_SUFFIX)) {
-        // Not one of our document resources (foreign content) — ignore it.
-        continue;
-      }
-      urls.push(absolute);
+    } catch (error) {
+      if (
+        receivedEntry ||
+        !(error instanceof StorageError) ||
+        !(
+          (isMissing(error) && error.url === this.container) ||
+          (error.code === "method-not-allowed" && error.status === null)
+        )
+      )
+        throw storageCause(error);
     }
-    urls.sort();
-    return urls;
+    return urls.sort();
   }
 
   /**
@@ -582,4 +450,15 @@ export class SolidDocStore {
     }
     return name;
   }
+}
+
+function isMissing(error: unknown): boolean {
+  return error instanceof StorageError && (error.status === 404 || error.status === 410);
+}
+
+/** Retain transport guard errors through the SDK's network error wrapper. */
+function storageCause(error: unknown): unknown {
+  return error instanceof StorageError && error.code === "network" && error.cause
+    ? error.cause
+    : error;
 }

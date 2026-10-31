@@ -299,8 +299,15 @@ export function lwsWrites(
       contentType(type);
       const headers: Record<string, string> = { "Content-Type": type };
       if (opts.name !== undefined) {
-        header(opts.name);
-        headers.Slug = opts.name;
+        const name = opts.name;
+        if (
+          typeof name !== "string" ||
+          [...name].some((char) => char.charCodeAt(0) < 0x20 || char.charCodeAt(0) === 0x7f)
+        )
+          throw new TypeError("Invalid name hint");
+        // Clients supply decoded names; percent-encode only at the HTTP boundary.
+        headers.Slug = encodeURIComponent(name);
+        header(headers.Slug);
       }
       const links = [`<${LWS}${kind === "container" ? "Container" : "DataResource"}>; rel="type"`];
       for (const link of opts.links ?? []) {
