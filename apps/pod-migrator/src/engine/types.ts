@@ -1,5 +1,21 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-export type AccessSystem = "wac" | "acp" | "unknown";
+import type { AccessSystem, ReportItem, Resolutions } from "@jeswr/pod-access";
+
+export type {
+  AccessDocument,
+  AccessSystem,
+  Denial,
+  EffectivePolicy,
+  Grant,
+  Mode,
+  OptionId,
+  ReportItem,
+  ReportKind,
+  ReportOption,
+  Resolutions,
+  Subject,
+} from "@jeswr/pod-access";
 export interface PodHttp {
   readonly root: string;
   get(url: string, init?: { accept?: string; signal?: AbortSignal }): Promise<Response>;
@@ -20,47 +36,6 @@ export interface PodSide {
   /** Established by the caller independently of editable access RDF; never inferred from mode IRIs. */
   implementation?: "css" | "ess" | "nss";
 }
-export type ReportKind =
-  | "group-unsupported"
-  | "origin-unsupported"
-  | "condition-unsupported"
-  | "exclusion-unsupported"
-  | "deny-unsupported"
-  | "owner-mapped"
-  | "source-owner-kept"
-  | "inheritance-narrowed"
-  | "acl-unreadable"
-  | "acl-system-unknown"
-  | "target-exists"
-  | "protected-target"
-  | "metadata-skipped"
-  | "too-complex";
-export type OptionId =
-  | "skip"
-  | "expand"
-  | "owner-only"
-  | "per-resource"
-  | "overwrite"
-  | "merge"
-  | "drop-overlapping"
-  | "abort"
-  | "acknowledge";
-export interface ReportOption {
-  id: OptionId;
-  label: string;
-  description: string;
-}
-export interface ReportItem {
-  id: string;
-  kind: ReportKind;
-  severity: "info" | "needs-decision";
-  resourceUrl: string;
-  title: string;
-  explanation: string;
-  sourceRuleTurtle?: string;
-  options: ReportOption[];
-  recommended: OptionId;
-}
 export interface PlannedResource {
   sourceUrl: string;
   targetUrl: string;
@@ -75,7 +50,6 @@ export interface MigrationPlan {
   report: ReportItem[];
   stats: { containers: number; resources: number; bytes: number; aclDocuments: number };
 }
-export type Resolutions = Readonly<Record<string, OptionId>>;
 export interface Progress {
   phase: "crawl" | "read-access" | "plan" | "lock" | "copy" | "grant" | "verify";
   done: number;
@@ -97,37 +71,4 @@ export interface MigrationResult {
 }
 export class MigrationAborted extends Error {
   override name = "MigrationAborted";
-}
-export type Mode = "read" | "append" | "write" | "control";
-export type Subject =
-  | { kind: "agent"; webId: string }
-  | { kind: "public" }
-  | { kind: "authenticated" }
-  | { kind: "group"; group: string }
-  | { kind: "creator" }
-  | { kind: "owner" }
-  | { kind: "client"; clientId: string }
-  | { kind: "issuer"; issuer: string }
-  | { kind: "vc"; vcType: string }
-  | { kind: "origin"; origin: string };
-export interface Grant {
-  modes: Set<Mode>;
-  who: Subject[][];
-  except: Subject[];
-  appliesTo: "resource" | "members" | "both";
-  source: { url: string; node: string };
-}
-export type Denial = Grant;
-export interface EffectivePolicy {
-  grants: Grant[];
-  denials: Denial[];
-  /** An ACP document attached at least one policy that can apply to the resource itself. */
-  explicit?: boolean;
-}
-export interface AccessDocument {
-  policy: EffectivePolicy;
-  url: string;
-  turtle: string;
-  etag: string | null;
-  inactiveGrants?: { node: string; reason: string }[];
 }

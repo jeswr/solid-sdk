@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY GPT-6.1-Sol (Codex)
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { JeswrThemeToggle } from "../src/components/theme-toggle.js";
 
@@ -59,12 +60,45 @@ describe("<jeswr-theme-toggle> reactivity (useDefineForClassFields footgun check
 
   it("renders the right label per theme", async () => {
     const el = await mount();
-    el.theme = "light";
-    await el.updateComplete;
-    expect(el.shadowRoot?.querySelector(".label")?.textContent).toBe("Light");
-    el.theme = "dark";
-    await el.updateComplete;
-    expect(el.shadowRoot?.querySelector(".label")?.textContent).toBe("Dark");
+    for (const [theme, label] of [
+      ["light", "Light"],
+      ["dark", "Dark"],
+      ["system", "System"],
+    ] as const) {
+      el.theme = theme;
+      await el.updateComplete;
+      expect(el.shadowRoot?.querySelector(".label")?.textContent).toBe(label);
+      expect(el.shadowRoot?.querySelector("button")?.getAttribute("aria-label")).toMatch(
+        new RegExp(`^${label}\\b`),
+      );
+    }
+  });
+});
+
+describe("<jeswr-theme-toggle> label in name (WCAG 2.5.3)", () => {
+  it.each([
+    ["light", "Light"],
+    ["dark", "Dark"],
+    ["system", "System"],
+  ])("starts the accessible name with the stored %s label", async (theme, label) => {
+    localStorage.setItem("app-shell-theme", theme);
+    const el = await mount();
+    const button = el.shadowRoot?.querySelector("button") as HTMLButtonElement;
+    expect(button.querySelector(".label")?.textContent).toBe(label);
+    expect(button.getAttribute("aria-label")).toMatch(new RegExp(`^${label}\\b`));
+    expect(button.getAttribute("aria-label")).toMatch(/change colour theme/i);
+    expect(button.title).toBe(`Theme: ${label}`);
+  });
+
+  it("keeps the visible label at the start of the name throughout the click cycle", async () => {
+    const el = await mount();
+    const button = el.shadowRoot?.querySelector("button") as HTMLButtonElement;
+    for (const label of ["System", "Light", "Dark", "System"]) {
+      expect(button.querySelector(".label")?.textContent).toBe(label);
+      expect(button.getAttribute("aria-label")).toMatch(new RegExp(`^${label}\\b`));
+      button.click();
+      await el.updateComplete;
+    }
   });
 });
 

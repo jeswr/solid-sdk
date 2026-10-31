@@ -1,6 +1,11 @@
 <!-- AUTHORED-BY Codex GPT-6 -->
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 
 # Migration engine safety notes
+
+The offline WAC/ACP readers, writers, translation, policy model, inheritance and access proof
+implementation live in `@jeswr/pod-access`. Local policy/translation/system modules preserve the
+engine imports through compatibility exports. HTTP, review, planning and execution stay here.
 
 The public contract is `index.ts`. `planMigration` performs reads only. `finalizePlan` requires
 an explicit valid choice for every decision item and proves the resulting access policies do
