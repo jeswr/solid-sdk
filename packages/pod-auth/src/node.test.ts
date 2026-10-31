@@ -298,6 +298,115 @@ test("invalid discovery and excluded resource never resolve CID or release crede
   expect(f.as.stats.exchanges).toBe(0);
 });
 
+test("canceling a CID fetch leaves shared resolution available to an independent login", async () => {
+  const f = await cidFixture();
+  const started = Promise.withResolvers<Request>();
+  const release = Promise.withResolvers<void>();
+  const resolve = vi.fn();
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.url === documentUrl) {
+      resolve();
+      started.resolve(request);
+      await release.promise;
+      request.signal.throwIfAborted();
+    }
+    return f.transport(request);
+  });
+  const auth = createPodAuth(f.options);
+  const controller = new AbortController();
+  const pending = auth.fetch(f.as.root + "private", { signal: controller.signal });
+  const rejected = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  const resolution = await started.promise;
+  const login = auth.login();
+  controller.abort();
+  try {
+    expect(resolution.signal.aborted).toBe(false);
+    // Cancellation settles the caller even while the shared transport is still blocked.
+    await rejected;
+    expect(await auth.identity()).toBeNull();
+    release.resolve();
+    await expect(login).resolves.toMatchObject({ subject: documentUrl });
+    expect((await auth.fetch(f.as.root + "private")).status).toBe(200);
+    expect(resolve).toHaveBeenCalledTimes(1);
+    expect(f.as.stats.exchanges).toBe(1);
+  } finally {
+    release.resolve();
+    await Promise.allSettled([rejected, login]);
+  }
+});
+
+test("an abandoned CID resolution failure is handled and a later login retries", async () => {
+  const f = await cidFixture();
+  const started = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  let attempts = 0;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.url === documentUrl && ++attempts === 1) {
+      started.resolve();
+      await release.promise;
+      throw new Error("CID temporarily unavailable");
+    }
+    return f.transport(request);
+  });
+  const auth = createPodAuth(f.options);
+  const controller = new AbortController();
+  const pending = auth.fetch(f.as.root + "private", { signal: controller.signal });
+  const rejected = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  await started.promise;
+  controller.abort();
+  try {
+    await rejected;
+    release.resolve();
+    // Drain the delayed failure and its cache cleanup before starting a retry.
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await expect(auth.login()).resolves.toMatchObject({ subject: documentUrl });
+    expect(attempts).toBe(2);
+  } finally {
+    release.resolve();
+    await Promise.allSettled([rejected]);
+  }
+});
+
+test("logout cancels CID waiters and a stale resolution failure preserves the new session cache", async () => {
+  const f = await cidFixture();
+  const started = Promise.withResolvers<Request>();
+  const release = Promise.withResolvers<void>();
+  let attempts = 0;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.url === documentUrl && ++attempts === 1) {
+      started.resolve(request);
+      // Deliberately ignore cancellation, as a late transport/body failure still needs fencing.
+      await release.promise;
+      throw new Error("stale resolution failed");
+    }
+    return f.transport(request);
+  });
+  const providers = createAgentProviders(
+    f.options,
+    { kind: "cid", cid: f.cid },
+    { challenge: vi.fn(), session: vi.fn() },
+  );
+  const pending = providers.login();
+  const rejected = expect(pending).rejects.toThrow();
+  const resolution = await started.promise;
+  try {
+    await providers.manager.logout();
+    expect(resolution.signal.aborted).toBe(true);
+    await rejected;
+    await providers.login();
+    release.resolve();
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    await providers.login();
+    expect(attempts).toBe(2);
+  } finally {
+    release.resolve();
+    await Promise.allSettled([rejected]);
+  }
+});
+
 test("logout fences delayed CID resolution and exchange", async () => {
   for (const hop of [documentUrl, "https://lws.example/exchange"]) {
     const f = await cidFixture();

@@ -72,14 +72,17 @@ export function createAgentProviders(
     let resolved: Promise<void> | undefined;
     prepare = async (signal) => {
       signal.throwIfAborted();
+      // Resolution belongs to the session; individual callers only cancel their own wait.
+      const resolutionSignal = fence.signal;
       resolved ??= (async () => {
         const response = await http.fetch!(cid.documentUrl, {
           headers: { accept: "application/cid, application/ld+json" },
           redirect: "error",
-          signal,
+          signal: resolutionSignal,
         });
         if (!response.ok || response.redirected) throw new Error("CID document resolution failed");
         const document = await response.json();
+        resolutionSignal.throwIfAborted();
         const authentication: unknown[] = Array.isArray(document?.authentication)
           ? document.authentication
           : [];
@@ -121,12 +124,25 @@ export function createAgentProviders(
           ))
         )
           throw new Error("CID signing key does not match the published authentication method");
-      })().catch((error: unknown) => {
-        resolved = undefined;
-        throw error;
+        resolutionSignal.throwIfAborted();
+      })();
+      // Handle failures even when all waiters leave; a late failure must not evict a newer session.
+      const pending = resolved;
+      pending.catch(() => {
+        if (resolved === pending) resolved = undefined;
       });
-      await resolved;
       signal.throwIfAborted();
+      let onAbort!: () => void;
+      const aborted = new Promise<never>((_resolve, reject) => {
+        onAbort = () => reject(signal.reason);
+      });
+      signal.addEventListener("abort", onAbort, { once: true });
+      try {
+        await Promise.race([pending, aborted]);
+        signal.throwIfAborted();
+      } finally {
+        signal.removeEventListener("abort", onAbort);
+      }
     };
     provider = new LwsTokenProvider(
       {
