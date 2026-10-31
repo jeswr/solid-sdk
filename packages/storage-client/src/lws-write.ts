@@ -508,11 +508,23 @@ export function lwsWrites(
           ["application/linkset+json", "application/json"],
           opts.signal,
         );
-        linksetOf(raw, delivered);
+        const returned = linksetOf(raw, delivered);
+        // Context order is not stable across a move. Bind identity to the delivered
+        // linkset and the requested destination, refusing missing or ambiguous matches.
+        const anchors = [...returned].flatMap(([anchor, relations]) => {
+          const parents = relations.get("up");
+          const linksets = relations.get("linkset");
+          return parents?.length === 1 &&
+            parents[0]?.href === dest &&
+            linksets?.length === 1 &&
+            linksets[0]?.href === delivered
+            ? [anchor]
+            : [];
+        });
+        if (anchors.length !== 1)
+          throw invalid("PATCH", metaUrl, "Expected one moved resource context");
         try {
-          const movedContext = (raw as Linkset).linkset[i];
-          if (movedContext === undefined) throw new TypeError("Missing moved context");
-          moved = target("MOVE", new URL(movedContext.anchor, delivered).href);
+          moved = target("MOVE", anchors[0] as string);
           if (moved === root) throw new TypeError("Cannot move to root");
         } catch {
           throw invalid("PATCH", metaUrl, "Invalid moved resource anchor");

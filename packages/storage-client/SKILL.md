@@ -179,7 +179,9 @@ Solid read side (ADR-003 §6):
   one resource context with one up target, then send test of the raw anchor and replace of
   `/linkset/i/up/0/href`, with the linkset's If-Match. When Content-Location is present (or
   preservesIdentifier is false), require scoped Content-Location and parse the bounded returned
-  linkset; the same context index's scoped anchor identifies the moved resource. A move with
+  linkset; require one scoped anchor with exactly one up target naming the destination and one
+  linkset target naming Content-Location, independently of context order. Reject missing or
+  ambiguous identity relations before the follow-up HEAD. A move with
   preservesIdentifier false requires Content-Location. HEAD the resulting resource for its ETag;
   the PATCH ETag belongs to the linkset. created is true only when the identifier changes.
 - Nonrecursive delete sends If-Match and refuses the root. Recursive delete always uses client

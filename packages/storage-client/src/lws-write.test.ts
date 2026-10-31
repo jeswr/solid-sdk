@@ -879,7 +879,11 @@ describe("MoveResource linkset mutation", () => {
     const { storage, calls } = backend(
       {
         [`PATCH ${META}`]: json(
-          { linkset: [{ anchor: "new-id", up: [{ href: ROOT }] }] },
+          {
+            linkset: [
+              { anchor: "new-id", up: [{ href: ROOT }], linkset: [{ href: "new-id.meta" }] },
+            ],
+          },
           { "content-location": "../opaque/new-id.meta", etag: '"linkset-only"' },
         ),
         [`HEAD ${moved}`]: reply(200, { etag: '"new-content"' }),
@@ -900,9 +904,14 @@ describe("MoveResource linkset mutation", () => {
   test("Content-Location is honored when preservation is unknown; HEAD failure after move yields null", async () => {
     const { storage } = backend(
       {
-        [`PATCH ${META}`]: json(linkset({ anchor: `${ROOT}moved` }), {
-          "content-location": `${ROOT}moved.meta`,
-        }),
+        [`PATCH ${META}`]: json(
+          linkset({
+            anchor: `${ROOT}moved`,
+            up: [{ href: ROOT }],
+            linkset: [{ href: `${ROOT}moved.meta` }],
+          }),
+          { "content-location": `${ROOT}moved.meta` },
+        ),
         [`HEAD ${ROOT}moved`]: reply(503),
       },
       (features) => {
@@ -915,6 +924,83 @@ describe("MoveResource linkset mutation", () => {
       etag: null,
       created: true,
     });
+  });
+  test.each([0, 1])("returned context order is independent of source index %i", async (index) => {
+    const moved = `${ROOT}opaque/new-id`;
+    const delivered = `${moved}.meta`;
+    const other = { anchor: `${ROOT}unrelated`, up: [{ href: ROOT }] };
+    const before = [other];
+    before.splice(index, 0, linkset().linkset[0] as typeof other);
+    const after = [
+      { ...other, linkset: [{ href: `${ROOT}unrelated.meta` }] },
+      // Same linkset, different destination: this auxiliary context is not the moved resource.
+      { anchor: `${ROOT}auxiliary`, up: [{ href: NOTES }], linkset: [{ href: delivered }] },
+    ];
+    after.splice(1 - index, 0, {
+      anchor: "new-id",
+      up: [{ href: "../" }],
+      linkset: [{ href: "new-id.meta" }],
+    });
+    const { storage, calls } = backend(
+      {
+        [`GET ${META}`]: json({ linkset: before }),
+        [`PATCH ${META}`]: json({ linkset: after }, { "content-location": delivered }),
+        [`HEAD ${moved}`]: reply(200, { etag: '"moved-content"' }),
+        [`HEAD ${ROOT}unrelated`]: reply(200, { etag: '"unrelated-content"' }),
+      },
+      (features) => {
+        move(features);
+        features.move.detail.preservesIdentifier = false;
+      },
+    );
+    expect(await storage.move(URL, ROOT, { ifMatch: tag })).toEqual({
+      url: moved,
+      etag: '"moved-content"',
+      created: true,
+    });
+    expect(calls[2]?.body).toContain(`/linkset/${index}/up/0/href`);
+    expect(calls.slice(3).map(({ method, url }) => `${method} ${url}`)).toEqual([`HEAD ${moved}`]);
+  });
+  test.each([
+    {},
+    { up: [{ href: ROOT }] },
+    { linkset: [{ href: "new.meta" }] },
+    { up: [], linkset: [{ href: "new.meta" }] },
+    { up: [{ href: ROOT }], linkset: [] },
+    { up: [{ href: NOTES }], linkset: [{ href: "new.meta" }] },
+    { up: [{ href: ROOT }], linkset: [{ href: "other.meta" }] },
+    { up: [{ href: ROOT }, { href: NOTES }], linkset: [{ href: "new.meta" }] },
+    { up: [{ href: ROOT }], linkset: [{ href: "new.meta" }, { href: "other.meta" }] },
+  ])("missing or conflicting moved identity relations reject: %j", async (relations) => {
+    const { storage, calls } = backend(
+      {
+        [`PATCH ${META}`]: json(
+          { linkset: [{ anchor: `${ROOT}unrelated`, ...relations }] },
+          { "content-location": `${ROOT}new.meta` },
+        ),
+      },
+      move,
+    );
+    await rejects(storage.move(URL, ROOT, { ifMatch: tag }), "invalid-response");
+    expect(calls).toHaveLength(3);
+  });
+  test.each([false, true])("ambiguous returned anchors reject (same anchor: %s)", async (same) => {
+    const context = {
+      anchor: `${ROOT}moved`,
+      up: [{ href: ROOT }],
+      linkset: [{ href: "new.meta" }],
+    };
+    const { storage, calls } = backend(
+      {
+        [`PATCH ${META}`]: json(
+          { linkset: [context, { ...context, anchor: same ? context.anchor : `${ROOT}other` }] },
+          { "content-location": `${ROOT}new.meta` },
+        ),
+      },
+      move,
+    );
+    await rejects(storage.move(URL, ROOT, { ifMatch: tag }), "invalid-response");
+    expect(calls).toHaveLength(3);
   });
   test.each([
     undefined,
@@ -946,13 +1032,25 @@ describe("MoveResource linkset mutation", () => {
     { contexts: [{ anchor: "https://user:secret@evil.example/x" }] },
     { contexts: [{ anchor: `${ROOT}moved?` }] },
   ])("invalid returned anchors reject: %j", async ({ contexts }) => {
-    const { storage } = backend(
-      { [`PATCH ${META}`]: json({ linkset: contexts }, { "content-location": `${ROOT}new.meta` }) },
+    const { storage, calls } = backend(
+      {
+        [`PATCH ${META}`]: json(
+          {
+            linkset: contexts.map((context) => ({
+              ...context,
+              up: [{ href: ROOT }],
+              linkset: [{ href: "new.meta" }],
+            })),
+          },
+          { "content-location": `${ROOT}new.meta` },
+        ),
+      },
       move,
     );
     const error = await rejects(storage.move(URL, ROOT, { ifMatch: tag }), "invalid-response");
     expect(error.cause).toBeUndefined();
     expect(error.message).not.toContain("secret");
+    expect(calls).toHaveLength(3);
   });
   test.each([
     { linkset: [] },
