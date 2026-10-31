@@ -116,3 +116,37 @@ test("throwing observers cannot interrupt other observers or close cleanup", asy
   await sub.close();
   expect(sub.cleanup).toHaveBeenCalledTimes(1);
 });
+
+test("reentrant close observers share the promise that awaits asynchronous cleanup", async () => {
+  const sub = new SubscriptionController([]);
+  const cleanup = Promise.withResolvers<void>();
+  sub.cleanup = () => cleanup.promise;
+  let reentrant: Promise<void> | undefined;
+  let done = false;
+  sub.on("state", (state) => {
+    if (state === "closed") reentrant = sub.close();
+  });
+  const close = sub.close();
+  expect(reentrant).toBe(close);
+  void close.then(() => {
+    done = true;
+  });
+  await Promise.resolve();
+  expect(done).toBe(false);
+  cleanup.resolve();
+  await close;
+  expect(done).toBe(true);
+});
+
+test("asynchronous cleanup rejection reaches close callers after iterators settle", async () => {
+  const sub = new SubscriptionController([]);
+  const cleanup = Promise.withResolvers<void>();
+  sub.cleanup = () => cleanup.promise;
+  const waiting = sub[Symbol.asyncIterator]().next();
+  const close = sub.close();
+  const rejection = expect(close).rejects.toThrow("cleanup failed");
+  expect(await waiting).toEqual({ done: true, value: undefined });
+  cleanup.reject(new Error("cleanup failed"));
+  await rejection;
+  expect(sub.close()).toBe(close);
+});

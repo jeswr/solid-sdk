@@ -66,12 +66,17 @@ export class SubscriptionController implements Subscription {
 
   close(): Promise<void> {
     if (!this.closing) {
-      this.closing = Promise.resolve();
+      let resolveClose!: () => void;
+      let rejectClose!: (reason: unknown) => void;
+      this.closing = new Promise<void>((resolve, reject) => {
+        resolveClose = resolve;
+        rejectClose = reject;
+      });
       this.transition("closed");
       const cleanup = this.cleanup();
       for (const finish of this.finish) finish();
       for (const listeners of Object.values(this.listeners)) listeners.clear();
-      this.closing = Promise.resolve(cleanup);
+      void Promise.resolve(cleanup).then(resolveClose, rejectClose);
     }
     return this.closing;
   }
