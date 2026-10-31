@@ -77,6 +77,7 @@ export async function send(
   headers: Record<string, string>,
   signal: AbortSignal | undefined,
   body?: Body,
+  revalidate = false,
 ): Promise<Response> {
   throwIfAborted(method, url, signal);
   try {
@@ -84,6 +85,7 @@ export async function send(
       method,
       headers,
       redirect: "manual",
+      ...(revalidate ? { cache: "no-cache" } : {}),
       ...(signal ? { signal } : {}),
       ...(body === undefined
         ? {}

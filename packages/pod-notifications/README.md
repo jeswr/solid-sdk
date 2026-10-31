@@ -37,6 +37,7 @@ Polling starts on the next timer turn with a quiet HEAD/listAll baseline, then r
 30 seconds by default. Changed non-null ETags produce `Update`; complete membership diffs
 produce `Create` with `target` and `Delete` with `origin`. Missing ETags do not imply updates;
 listings still detect membership changes. A failed page never commits a partial snapshot.
+Every polling HEAD and listing page requests HTTP cache revalidation through the storage API.
 Polling is serial across topics and ticks, without overlapping requests. The public storage
 client owns authentication, scope checks and pagination. No direct backend calls are used.
 

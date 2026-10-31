@@ -75,11 +75,17 @@ export function createPollChannel(options: PollChannelOptions): SubscriptionCont
       for (const topic of options.topics) {
         if (request.signal.aborted) break;
         try {
-          const head = await options.storage.head(topic, { signal: request.signal });
+          const head = await options.storage.head(topic, {
+            signal: request.signal,
+            revalidate: true,
+          });
           request.signal.throwIfAborted();
           const members = new Map<string, Entry>();
           if (head.kind === "container") {
-            for await (const entry of options.storage.listAll(topic, { signal: request.signal })) {
+            for await (const entry of options.storage.listAll(topic, {
+              signal: request.signal,
+              revalidate: true,
+            })) {
               request.signal.throwIfAborted();
               if (options.storage.isWithinStorage(entry.url)) members.set(entry.url, entry);
             }

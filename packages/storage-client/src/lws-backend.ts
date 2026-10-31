@@ -254,6 +254,8 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
       opts.cursor === undefined ? container : opts.cursor.url,
       { Accept: LIST_ACCEPT },
       opts.signal,
+      false,
+      opts.revalidate,
     );
     const raw = await jsonBody(
       result,
@@ -335,7 +337,7 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
       const container = listingContainer(root, url, "lws");
       yield* paginate(
         container,
-        (cursor) => client.list(container, { cursor, signal: opts.signal }),
+        (cursor) => client.list(container, { ...opts, cursor }),
         opts.signal,
       );
     },

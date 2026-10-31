@@ -34,6 +34,10 @@ await storage.write(url, 'second draft', { contentType: 'text/plain', ifMatch: e
 All mutations except `create` require `ifMatch`. A name is exact on Solid and a hint on LWS.
 See [SKILL.md](SKILL.md) for app usage and fixture workflows.
 
+`head`, `list`, and `listAll` accept `{ revalidate: true }` to revalidate cached HTTP
+responses before using them (`cache: 'no-cache'`). `listAll` applies it to every page.
+Omitting the option preserves the transport's default cache behavior.
+
 LWS writes require `ifMatch`; `'*'` on `write`/`writeRdf` sends `If-Match: *` and never
 creates a missing resource. Use `create` for POST creation: `name` is a Slug hint, and the
 returned URL comes from the server's Location, independently of the parent path.
