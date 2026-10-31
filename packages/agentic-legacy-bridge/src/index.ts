@@ -120,6 +120,7 @@ export {
   CHANNEL_PREFERENCE,
   CHANNELS_HEADER,
   type Channel,
+  type DetectedCarriage,
   decideUpgrade,
   detectBridgeCapability,
   highestMutualChannel,
