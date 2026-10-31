@@ -29,5 +29,9 @@ test("entry points expose the storage client and testing surface", () => {
   expect(Object.keys(memory)).toEqual(["createMemoryStorage"]);
   expect(Object.keys(solid).sort()).toEqual(["buildN3Patch", "createSolidBackend"]);
   expect(Object.keys(lws)).toEqual(["createLwsBackend"]);
-  expect(Object.keys(testing)).toEqual([]);
+  expect(Object.keys(testing).sort()).toEqual([
+    "createRecordingFetch",
+    "createReplayFetch",
+    "loadFixtures",
+  ]);
 });
