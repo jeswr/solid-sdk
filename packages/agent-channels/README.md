@@ -58,3 +58,26 @@ Run `pnpm run lint`, `pnpm run build`, `pnpm run typecheck`, and `pnpm run test`
 
 Tests enforce 100% coverage per source file in every metric, with real local
 Ed25519 signatures, adversarial inputs, a loopback HTTP server and a Turtle golden.
+
+`./email-mime` implements the pilot's bounded MIME inspection and provider-copy
+verification. The caller injects legacy-bridge's `parseEmail` function; this keeps
+its hardened parser and avoids reversing legacy-bridge's dependency on channels.
+`inspectEmail(raw, { parseEmail, recipient, ownAccounts, footer })` returns the
+BridgeMessage, unverified structured proposal and parity result. The trusted
+receiving account selects STRICT parity when it is in `ownAccounts`, otherwise
+LENIENT parity. An unauthenticated `To` header cannot select a weaker mode.
+Plain human email remains an observation. Conflicting carriers always fail closed;
+parsing and parity never confer verified identity or authority.
+
+`./email-mime/send` exports `createEmailRenderer({ from, recipients, footer,
+verify, now? })`. `recipients` pins actor identifiers to single mailboxes; no
+inbound Reply-To or model-selected address is used. The pure local `verify`
+callback verifies the compact JWS, sender key and intended audience. Rendering
+preserves the pilot's deterministic synthetic-test summary and appends the
+configured single-line footer (normally `AGENT_FOOTER`). MIME has plain text,
+HTML with an inline JSON-LD carrier, a matching `application/ld+json` attachment,
+and `X-Agentic-Reply: 1`. Its date and boundaries are derived from protected
+content, so rendering and validation re-derive identical bytes. Validation checks
+the entire MIME and digest, refusing extra recipients, changed headers or content.
+The pilot's 512 KiB local MIME ceiling remains stricter than email's advertised
+25,000,000-byte provider profile. MIME itself has no transmit method.
