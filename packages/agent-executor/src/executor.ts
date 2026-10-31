@@ -36,15 +36,19 @@ export function proposalTermsDigest(entry: OutboxEntry): string {
   });
 }
 
-const pendingByStore = new WeakMap<ExecutorOptions["transmissions"], Set<string>>();
+const stateByStore = new WeakMap<
+  ExecutorOptions["transmissions"],
+  { pending: Set<string>; revision: number }
+>();
 
 /** This instance holds send scopes; no model or Actor capability enters the effect path. */
 export function createExecutor(options: ExecutorOptions) {
   const o = options;
   const timeout = o.timeoutMs ?? 30000;
   if (!Number.isFinite(timeout) || timeout <= 0) throw new Error("Invalid provider timeout");
-  const pending = pendingByStore.get(o.transmissions) ?? new Set<string>();
-  pendingByStore.set(o.transmissions, pending);
+  const state = stateByStore.get(o.transmissions) ?? { pending: new Set<string>(), revision: 0 };
+  stateByStore.set(o.transmissions, state);
+  const { pending } = state;
   const background = new Set<Promise<unknown>>();
   let backgroundError: unknown;
   let backgroundFailed = false;
@@ -135,6 +139,7 @@ export function createExecutor(options: ExecutorOptions) {
     | TransmitResult
     | { entry: OutboxEntry; binding: SendBinding; record: TransmissionRecord; resend: boolean }
   > {
+    const revision = state.revision;
     // DESIGN §4.1: no proposal, mandate, approval or credential work before the halt check.
     if (backgroundFailed)
       throw new Error("Audit or persistence failed during late settlement", {
@@ -260,7 +265,21 @@ export function createExecutor(options: ExecutorOptions) {
         ...(previous.providerRef ? { providerRef: previous.providerRef } : {}),
       };
     }
-    if (!execute) return disposition(id, { status: "ready", reason: "re-evaluated" });
+    const mandateId = mandate.id;
+    async function authorityFailure(): Promise<Disposition | undefined> {
+      const latest = await controls();
+      if (latest.halted) return { status: "refused", reason: "halted" };
+      if (latest.statements.some((c) => c.kind === "RevokeMandate" && c.target === mandateId))
+        return { status: "refused", reason: "mandate-invalid" };
+      if (revision !== state.revision) return { status: "refused", reason: "authority-changed" };
+      return undefined;
+    }
+    if (!execute) {
+      const ready = await disposition(id, { status: "ready", reason: "re-evaluated" });
+      // Decision persistence can suspend too; ready is never sufficient authority by itself.
+      const failure = await authorityFailure();
+      return failure ? disposition(id, failure) : ready;
+    }
     if (pending.has(id)) return { status: "uncertain", reason: "in-flight" };
     let unresolved = previous?.status === "attempting" || previous?.status === "uncertain";
     if (
@@ -295,7 +314,8 @@ export function createExecutor(options: ExecutorOptions) {
     if ((previous?.attempts ?? 0) >= MAX_TRANSMISSION_ATTEMPTS)
       return disposition(id, { status: "refused", reason: "attempt-limit" });
     // Provider lookup / approval / disk I/O can suspend: re-check controls immediately before claiming.
-    if ((await controls()).halted) return disposition(id, { status: "refused", reason: "halted" });
+    const failure = await authorityFailure();
+    if (failure) return disposition(id, failure);
     const record: TransmissionRecord = {
       proposal: id,
       binding: binding.id,
@@ -338,6 +358,7 @@ export function createExecutor(options: ExecutorOptions) {
   }
 
   async function transmit(id: string): Promise<TransmitResult> {
+    const revision = state.revision;
     const prepared = await o.transmissions.exclusive(() => prepare(id, true));
     if (!("record" in prepared)) return prepared;
     const { entry, binding, record, resend } = prepared;
@@ -359,7 +380,7 @@ export function createExecutor(options: ExecutorOptions) {
     };
     async function recheck(): Promise<boolean> {
       const result = await o.transmissions.exclusive(() => prepare(id, false));
-      return "status" in result && result.status === "ready";
+      return "status" in result && result.status === "ready" && revision === state.revision;
     }
     const call = Promise.resolve().then(async () => {
       if (!(await recheck())) return { outcome: "rejected", detail: "halted" } as const;
@@ -429,7 +450,11 @@ export function createExecutor(options: ExecutorOptions) {
     transmit,
     runOutboxOnce,
     /** Daemon notifications/polling MUST call this for every control or mandate change. */
-    onControlOrMandateChange: () => runOutboxOnce(false),
+    onControlOrMandateChange: () => {
+      // Invalidate in-flight decisions before waiting for the store lock or queue enumeration.
+      state.revision++;
+      return runOutboxOnce(false);
+    },
     /** Await late writes during orderly shutdown. Crash recovery uses the durable records. */
     drain: async () => {
       await Promise.all(background);
