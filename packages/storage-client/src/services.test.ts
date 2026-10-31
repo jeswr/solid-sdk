@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { deriveFeatures, type Features } from "@jeswr/storage-capabilities";
+import type { Store } from "n3";
 import { describe, expect, test, vi } from "vitest";
 import { createLwsBackend } from "./lws.js";
 import { createMemoryStorage } from "./memory.js";
@@ -136,6 +137,75 @@ for (const protocol of ["solid", "lws"] as const) {
         code: "not-found",
       });
       await expect(trash.purge(restored.url)).rejects.toMatchObject({ code: "not-found" });
+    });
+    test("trash shadows user original links and restores them without losing other metadata", async () => {
+      const storage = createMemoryStorage({
+        protocol,
+        root: ROOT,
+        trash: true,
+        clock: () => Date.parse(AT),
+      });
+      const trash = createTrashClient(storage);
+      const item = await storage.create(ROOT, "hello", { contentType: "text/plain" });
+      const rel =
+        protocol === "solid" ? "http://www.iana.org/assignments/relation/original" : "original";
+      const originals = [`${ROOT}previous`, "https://source.example/previous"];
+      const userTargets = originals.map((href) => ({ href, params: {} }));
+      await storage.setMetadata(
+        item.url,
+        [
+          ...originals.map((href) => ({ op: "add" as const, rel: "original", href })),
+          { op: "add", rel: "original", anchor: `${item.url}#part`, href: LIVE },
+          { op: "add", rel: "original", anchor: ROOT, href: LIVE },
+          { op: "add", rel: "https://example.org/related", href: LIVE },
+        ],
+        { ifMatch: (await storage.metadata(item.url)).etag as string },
+      );
+      expect((await storage.metadata(item.url)).links.get(item.url)?.get(rel)).toEqual(userTargets);
+      const copy = await trash.trash(item.url);
+      expect(await trash.listTrash()).toEqual([
+        {
+          url: copy.url,
+          original: item.url,
+          trashedAt: new Date(AT),
+          size: 5,
+          contentType: "text/plain",
+        },
+      ]);
+      const metadata = await storage.metadata(copy.url);
+      const serviceTarget = {
+        href: item.url,
+        params: protocol === "lws" ? { modified: new Date(AT).toISOString() } : {},
+      };
+      expect(metadata.links.get(copy.url)?.get(rel)).toEqual([serviceTarget]);
+      expect(metadata.links.get(`${copy.url}#part`)?.get(rel)).toEqual([
+        { href: LIVE, params: {} },
+      ]);
+      expect(metadata.links.get(ROOT)?.get(rel)).toEqual([{ href: LIVE, params: {} }]);
+      expect(metadata.links.get(copy.url)?.get("https://example.org/related")).toEqual([
+        { href: LIVE, params: {} },
+      ]);
+      if (protocol === "solid") {
+        expect(
+          (metadata.raw as Store).getQuads(copy.url, rel, null, null).map((q) => q.object.value),
+        ).toEqual([item.url]);
+      } else {
+        const raw = metadata.raw as { linkset: Record<string, unknown>[] };
+        expect(raw.linkset.find((context) => context.anchor === copy.url)?.original).toEqual([
+          { href: item.url, modified: new Date(AT).toISOString() },
+        ]);
+      }
+      const restored = await trash.restore(copy.url);
+      const restoredMetadata = await storage.metadata(restored.url);
+      expect(restoredMetadata.links.get(restored.url)?.get(rel)).toEqual(userTargets);
+      expect(restoredMetadata.links.get(`${restored.url}#part`)?.get(rel)).toEqual([
+        { href: LIVE, params: {} },
+      ]);
+      expect(await (await storage.read(restored.url)).text()).toBe("hello");
+      const retrash = await trash.trash(restored.url);
+      await trash.purge(retrash.url);
+      await expect(storage.head(retrash.url)).rejects.toMatchObject({ code: "not-found" });
+      expect(await trash.listTrash()).toEqual([]);
     });
     test("purge removes a populated folder and its nested descendants, preserving live folders", async () => {
       const storage = createMemoryStorage({ protocol, root: ROOT, trash: true, pageSize: 1 });

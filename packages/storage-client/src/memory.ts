@@ -1020,9 +1020,15 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
           if (rel !== "linkset") for (const { target } of targets) add(url, rel, target);
         }
       }
-      for (const link of node.links) add(link.anchor, link.rel, link.href);
+      const originalRel = lws ? "original" : `${IANA_REL}original`;
+      // Hide colliding user links while trashed, retaining them for restoration.
+      const userLinks =
+        node.original === undefined
+          ? node.links
+          : node.links.filter((link) => link.anchor !== url || link.rel !== originalRel);
+      for (const link of userLinks) add(link.anchor, link.rel, link.href);
       if (node.original !== undefined) {
-        const original = add(url, lws ? "original" : `${IANA_REL}original`, node.original);
+        const original = add(url, originalRel, node.original);
         if (lws) original.params.modified = new Date(node.trashedAt as number).toISOString();
       }
       let raw: unknown;
@@ -1041,7 +1047,7 @@ export function createMemoryStorage(options: MemoryStorageOptions = {}): MemoryS
       } else {
         const { namedNode, quad } = DataFactory;
         raw = new Store(
-          node.links.map((link) =>
+          userLinks.map((link) =>
             quad(namedNode(link.anchor), namedNode(link.rel), namedNode(link.href)),
           ),
         );
