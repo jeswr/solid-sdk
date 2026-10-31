@@ -99,3 +99,22 @@ export const cssReadExchanges: RecordedExchanges = {
     body: "PNGBYTES",
   },
 };
+
+// AUTHORED-BY Codex GPT-6.1-Sol
+/** Synthetic CSS 7.x mutation responses: 205 updates, 201 creates, conditional errors. */
+export const cssWriteExchanges: RecordedExchanges = {
+  ...cssReadExchanges,
+  [`PUT ${notes}today.ttl`]: { status: 205, headers: { etag: '"updated"' } },
+  [`PUT ${notes}new%20note.ttl`]: { status: 201, headers: { etag: '"created"' } },
+  [`PUT ${notes}folder/`]: { status: 201, headers: { etag: '"folder"' } },
+  [`POST ${notes}`]: { status: 201, headers: { location: "generated.ttl", etag: '"created"' } },
+  [`PATCH ${notes}today.ttl`]: { status: 205, headers: { etag: '"patched"' } },
+  [`PATCH ${notes}today.ttl.meta`]: { status: 205, headers: { etag: '"metadata"' } },
+  [`DELETE ${notes}today.ttl`]: { status: 205, headers: {} },
+  [`PUT ${notes}stale.ttl`]: { status: 412, headers: { etag: '"current"' } },
+  [`DELETE ${notes}`]: {
+    status: 409,
+    headers: { "content-type": "application/problem+json" },
+    body: '{"title":"Container is not empty"}',
+  },
+};

@@ -1,0 +1,15 @@
+# Manas single_fs_wac (config-template.toml of v0.1.2): one pod owned by the local CSS account alice.
+dev_mode = true
+
+[storage.space]
+root_uri = "http://localhost:39310/"
+owner_id = "http://localhost:39301/alice/profile/card#me"
+
+[storage.repo]
+databrowser_enabled = false
+
+[storage.repo.backend]
+root = "/data/"
+
+[server]
+addr = "0.0.0.0:39310"

@@ -1,0 +1,119 @@
+name: Continuous Integration (CI)
+
+on:
+  push:
+    branches:
+      - "**"
+
+permissions:
+    contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: npm i
+      - run: npm audit --omit=dev --audit-level=moderate
+  test:
+    # Minimum supported Node.js (engines: >=24.5.0), the latest 24 LTS and the current 26 line, on every OS.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+        node: ["24.5.0", "24", "26"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm i
+      - run: npm test # offline: no browser is installed or launched
+      - run: npm pack --dry-run
+  browser:
+    # The browser suite (library executing in the page) on each Playwright engine, with capability reporting.
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: npm i
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      - run: npm run test:browser -- --browser ${{ matrix.browser }}
+      # Harness regressions in this engine; a browser that cannot launch fails the job (no skips).
+      - run: npm run test:browser:regressions
+        env:
+          RA_TEST_BROWSER: ${{ matrix.browser }}
+      - run: node interop/browser/wiring.js --browser ${{ matrix.browser }}
+      - run: node interop/runtime/selftest.js --browser ${{ matrix.browser }}
+  interop-local:
+    # Mandatory real-server interoperability on disposable local containers (Docker, loopback only):
+    # compatible targets must pass strictly; declared incompatibilities must reproduce (never a static skip).
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: npm i
+      - run: npx playwright install --with-deps chromium
+      - run: npm run interop:local -- --report-dir interop/reports/local
+      - run: npm run interop:local:incompatible -- --report-dir interop/reports/incompatible
+      - if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: interop-local-reports
+          path: interop/reports/*/report.*
+          if-no-files-found: error
+  interop-browser:
+    # The library running in each browser engine against a real local Community Solid Server.
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: npm i
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      - run: npm run interop:local:browser -- --browser ${{ matrix.browser }} --report-dir interop/reports/browser-${{ matrix.browser }}
+      - if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: interop-browser-${{ matrix.browser }}
+          path: interop/reports/*/report.*
+          if-no-files-found: error
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+      - run: npm i
+      - run: npx typedoc --emit none
+
+  summary:
+    if: always()
+    needs: [audit, test, browser, interop-local, interop-browser, docs]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Summary
+        run: |
+          for result in "${{ needs.audit.result }}" "${{ needs.test.result }}" "${{ needs.browser.result }}" "${{ needs.interop-local.result }}" "${{ needs.interop-browser.result }}" "${{ needs.docs.result }}"; do
+            [[ "$result" == "success" ]] || exit 1
+          done

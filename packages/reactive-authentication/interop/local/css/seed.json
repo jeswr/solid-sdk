@@ -1,0 +1,4 @@
+[
+  { "email": "alice@interop.test", "password": "alice-local-only", "pods": [{ "name": "alice" }] },
+  { "email": "bob@interop.test", "password": "bob-local-only", "pods": [{ "name": "bob" }] }
+]

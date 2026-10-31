@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 // RDF helpers shared by the backends: serialise through @jeswr/rdf-serialize (n3.Writer) and
 // apply insert/delete quad patches to an n3 Store. Never hand-builds RDF text.
 
@@ -53,7 +54,7 @@ function iriField(value: unknown, field: string): string {
  * inside n3's id), language tags and base directions must be well formed, and every empty
  * blank-node label maps to one fresh label shared across `quads`. Anything else is a TypeError.
  */
-function rebuildQuads(quads: readonly Quad[]): Quad[] {
+export function rebuildQuads(quads: readonly Quad[]): Quad[] {
   const { namedNode, blankNode, variable, literal, defaultGraph, quad } = DataFactory;
   let empty: Term | undefined;
   const rebuild = (value: Term): Term => {
@@ -119,20 +120,38 @@ function rebuildQuads(quads: readonly Quad[]): Quad[] {
  * n3.Writer emits IRIs, blank-node labels and language tags verbatim, so a crafted value could
  * break out of `<…>` and forge triples. Rebuild every term first (see `rebuild`), then
  * percent-encode IRIREF-forbidden characters in every IRI (@jeswr/rdf-serialize `escapeIri`;
- * legitimate IRIs are unchanged) and relabel unsafe blank nodes consistently.
+ * legitimate IRIs are unchanged) and relabel unsafe or reserved blank-node labels consistently
+ * and deterministically (`x0`, `x1`, … avoiding every label in use). Variables are kept only
+ * when `allowVariables` (N3 Patch formulas).
  */
-function injectionSafe(quads: readonly Quad[]): Quad[] {
+export function injectionSafe(
+  quads: readonly Quad[],
+  allowVariables = false,
+  reservedLabels: ReadonlySet<string> = new Set(),
+): Quad[] {
   const { namedNode, blankNode, literal, quad } = DataFactory;
+  const rebuilt = rebuildQuads(quads);
   const labels = new Map<string, string>();
+  const taken = new Set([
+    ...reservedLabels,
+    ...rebuilt
+      .flatMap((q) => [q.subject, q.predicate, q.object, q.graph])
+      .filter((t) => t.termType === "BlankNode")
+      .map((t) => t.value),
+  ]);
   const term = (value: Term): Term => {
     switch (value.termType) {
       case "NamedNode":
         return namedNode(escapeIri(value.value));
       case "BlankNode": {
-        if (BLANK_LABEL.test(value.value)) return value;
+        if (BLANK_LABEL.test(value.value) && !reservedLabels.has(value.value)) return value;
         let label = labels.get(value.value);
         if (label === undefined) {
-          label = `x${labels.size}_${crypto.randomUUID().replaceAll("-", "")}`;
+          let index = labels.size;
+          do {
+            label = `x${index++}`;
+          } while (taken.has(label));
+          taken.add(label);
           labels.set(value.value, label);
         }
         return blankNode(label);
@@ -144,10 +163,12 @@ function injectionSafe(quads: readonly Quad[]): Quad[] {
       case "DefaultGraph":
         return value;
       default:
+        // `rebuild` admits only Variable here.
+        if (allowVariables) return value;
         throw new TypeError(`${value.termType} terms cannot be serialised`);
     }
   };
-  return rebuildQuads(quads).map((q) =>
+  return rebuilt.map((q) =>
     quad(
       term(q.subject) as Quad["subject"],
       term(q.predicate) as Quad["predicate"],
