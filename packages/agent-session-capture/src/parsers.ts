@@ -136,6 +136,17 @@ export function parseCodexTranscript(jsonl: string, source = "codex"): CapturedS
       append(result.conversation.messages, seen, [key, "tool"], "tool", payload.name, createdAt);
     if (payload.type === "local_shell_call")
       append(result.conversation.messages, seen, [key, "tool"], "tool", "shell", createdAt);
+    if (payload.type === "web_search_call")
+      append(result.conversation.messages, seen, [key, "tool"], "tool", "web_search", createdAt);
+    if (payload.type === "image_generation_call")
+      append(
+        result.conversation.messages,
+        seen,
+        [key, "tool"],
+        "tool",
+        "image_generation",
+        createdAt,
+      );
   });
   return result;
 }

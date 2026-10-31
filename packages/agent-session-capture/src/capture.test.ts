@@ -56,6 +56,19 @@ async function rollout(text: string, name = "rollout-fixture.jsonl") {
   await writeFile(path, text.replaceAll("/fixture-project", cwd));
   return path;
 }
+async function storedConversation(provider: "claude" | "codex") {
+  const port = createChatPodPort({ ...config, fetch: transport.fetch });
+  const writer = new ChatWriter({
+    ...port,
+    async list(container) {
+      return [...transport.resources.keys()]
+        .filter((url) => url.startsWith(container) && !url.slice(container.length).includes("/"))
+        .reverse()
+        .map((url) => ({ url, isContainer: url.endsWith("/") }));
+    },
+  });
+  return writer.get(provider, digest([provider, `${provider}-fixture-session`]));
+}
 
 beforeEach(async () => {
   home = await mkdtemp(join(tmpdir(), "solid-capture-test-"));
@@ -105,23 +118,57 @@ describe("capture with real ChatWriter and client credentials", () => {
     const before = new Map(transport.resources);
     await runCapture(["claude", "--transcript", transcript], options);
     expect(transport.resources).toEqual(before);
-    const port = createChatPodPort({ ...config, fetch: transport.fetch });
-    const writer = new ChatWriter({
-      ...port,
-      async list(container) {
-        return [...transport.resources.keys()]
-          .filter((url) => url.startsWith(container) && !url.slice(container.length).includes("/"))
-          .reverse()
-          .map((url) => ({ url, isContainer: url.endsWith("/") }));
-      },
-    });
-    const result = await writer.get("claude", digest(["claude", "claude-fixture-session"]));
+    const result = await storedConversation("claude");
     expect(result.messages.map((m) => m.text)).toEqual([
       "Please inspect. [REDACTED TOKEN]",
       "I will inspect it.",
       "Read",
       "The project looks good.",
     ]);
+  });
+
+  it("queues and uploads native Codex tool names without their arguments or results", async () => {
+    const calls = ["web_search_call", "image_generation_call"].map((type) =>
+      JSON.stringify({
+        type: "response_item",
+        timestamp: "2026-10-25T12:00:05.000Z",
+        payload: {
+          type,
+          id: type,
+          status: "completed",
+          action: { type: "search", query: "DROP_QUERY" },
+          revised_prompt: "DROP_PROMPT",
+          result: "DROP_RESULT",
+        },
+      }),
+    );
+    await rollout(`${await fixture("codex")}\n${calls.join("\n")}`);
+    await runCapture(["codex"], {
+      ...options,
+      fetch: async () => {
+        throw new Error("offline");
+      },
+    });
+    const snapshots = await queued();
+    expect(snapshots).toHaveLength(1);
+    const snapshot = await readFile(join(queue(), snapshots[0] as string), "utf8");
+    expect(snapshot).not.toContain("DROP_");
+    expect(
+      JSON.parse(snapshot)
+        .conversation.messages.slice(-2)
+        .map((m: { text: string }) => m.text),
+    ).toEqual(["web_search", "image_generation"]);
+    await runCapture(["codex"], options);
+    expect(await queued()).toEqual([]);
+    const result = await storedConversation("codex");
+    expect(
+      result.messages.slice(-2).map((message) => ({ role: message.role, text: message.text })),
+    ).toEqual([
+      { role: "tool", text: "web_search" },
+      { role: "tool", text: "image_generation" },
+    ]);
+    expect(result.messages).toHaveLength(6);
+    expect(JSON.stringify([...transport.resources])).not.toContain("DROP_");
   });
 
   it("reads hook stdin bytes and reuses the private MCP-12 JSON config", async () => {

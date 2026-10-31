@@ -110,6 +110,36 @@ describe("real-shaped redacted JSONL", () => {
   });
 
   it.each([
+    ["web_search_call", "web_search"],
+    ["image_generation_call", "image_generation"],
+  ])("captures native %s names while dropping arguments, results and event mirrors", (type, name) => {
+    const call = codexRow({
+      type,
+      id: "native-call",
+      status: "completed",
+      name: "DROP_UNTRUSTED_NAME",
+      action: { type: "search", query: "DROP_QUERY" },
+      revised_prompt: "DROP_PROMPT",
+      result: "DROP_IMAGE_RESULT",
+      arguments: "DROP_ARGUMENTS",
+    });
+    const parsed = parseCodexTranscript(
+      jsonl([
+        call,
+        call,
+        { type: "event_msg", timestamp: stamp, payload: { type, text: "DROP_EVENT_MIRROR" } },
+        codexRow({ type: `${type}_output`, output: "DROP_OUTPUT" }),
+      ]),
+    );
+    expect(parsed.conversation.messages).toEqual([
+      { id: expect.stringMatching(/^[a-f0-9]{64}$/), role: "tool", text: name, createdAt: stamp },
+    ]);
+    expect(JSON.stringify(parsed)).not.toContain("DROP_");
+    const withoutId = parseCodexTranscript(jsonl([codexRow({ type })]));
+    expect(withoutId.conversation.messages.map((message) => message.text)).toEqual([name]);
+  });
+
+  it.each([
     parseClaudeTranscript,
     parseCodexTranscript,
   ])("ignores malformed rows and JSON primitives", (parser) => {
