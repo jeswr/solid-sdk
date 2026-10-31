@@ -283,8 +283,11 @@ export function createExecutor(options: ExecutorOptions) {
       if (revision !== state.revision) return { status: "refused", reason: "authority-changed" };
       return undefined;
     }
-    if (!execute) {
-      const ready = await disposition(id, { status: "ready", reason: "re-evaluated" });
+    if (!execute || o.dryRun !== false) {
+      const ready = await disposition(id, {
+        status: "ready",
+        reason: execute ? "dry-run" : "re-evaluated",
+      });
       // Decision persistence can suspend too; ready is never sufficient authority by itself.
       const failure = await authorityFailure();
       return failure ? disposition(id, failure) : ready;
@@ -447,7 +450,7 @@ export function createExecutor(options: ExecutorOptions) {
       return binding.send.transmit(entry.wire, {
         account: entry.account,
         tokens,
-        dryRun: o.dryRun !== false,
+        dryRun: false,
       });
     }
     const call = dispatch().catch(() => undefined); // Provider exceptions establish no delivery outcome.

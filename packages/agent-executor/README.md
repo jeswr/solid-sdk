@@ -14,6 +14,8 @@ integrity, expiry, current verified mandate and policy, exact verified approval 
 required, committed limits, durable idempotency, provider outcome and conversation receipt.
 Actor-writable proposal state never grants permission or controls idempotency. Dry-run
 is the default; both the executor and binding must explicitly enable effects.
+Dry runs record a `ready(dry-run)` evaluation and leave the proposal queued. They do not
+call the send binding, reserve a commitment or consume a provider attempt.
 
 `runOutboxOnce()` processes the trusted outbox queue. The daemon must call
 `onControlOrMandateChange()` on **every** notification or polling-detected change in

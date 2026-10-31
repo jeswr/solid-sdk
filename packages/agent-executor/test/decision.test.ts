@@ -340,9 +340,42 @@ describe("DESIGN §4.1 ordered enforcement", () => {
     const h = harness();
     const e = await h.enqueue();
     const { dryRun: _dryRun, ...options } = h.options;
-    expect(await createExecutor(options).transmit(e.proposal.id)).toMatchObject({
-      status: "not-sent",
+    const executor = createExecutor(options);
+    for (let runs = 0; runs < 4; runs++)
+      expect(await executor.transmit(e.proposal.id)).toEqual({
+        status: "ready",
+        reason: "dry-run",
+      });
+    expect(h.options.tokens.send).not.toHaveBeenCalled();
+    expect(h.binding.send.transmit).not.toHaveBeenCalled();
+    expect(h.records.size).toBe(0);
+    expect(h.ledger).toEqual([]);
+    expect(h.receipts.size).toBe(0);
+    expect(await h.proposals.queued()).toEqual([e.proposal.id]);
+    expect(await h.executor.runOutboxOnce()).toEqual({
+      [e.proposal.id]: { status: "sent", reason: "sent" },
     });
+    expect(h.records.get(e.proposal.id)?.attempts).toBe(1);
+  });
+  it.each([
+    "attempting",
+    "uncertain",
+    "not-sent",
+  ] as const)("explicit dry-run leaves existing %s history and recovery untouched", async (status) => {
+    const h = harness();
+    const e = await h.enqueue();
+    const prior = h.prior(e, status, 3);
+    h.binding.send.lookup = vi.fn(async () => ({
+      outcome: "found" as const,
+      providerRef: "lookup:1",
+    }));
+    expect(await createExecutor({ ...h.options, dryRun: true }).transmit(e.proposal.id)).toEqual({
+      status: "ready",
+      reason: "dry-run",
+    });
+    expect(h.records.get(e.proposal.id)).toEqual(prior);
+    expect(h.binding.send.lookup).not.toHaveBeenCalled();
+    expect(h.binding.send.transmit).not.toHaveBeenCalled();
     expect(h.options.tokens.send).not.toHaveBeenCalled();
   });
   it("step 9: control and mandate changes re-evaluate EVERY queued item", async () => {
