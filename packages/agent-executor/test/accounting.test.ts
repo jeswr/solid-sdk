@@ -1,14 +1,16 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { AGENT, type Limit } from "@jeswr/agent-mandate";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   checkLimits,
   committedRecords,
+  nextAccountingTransition,
   periodStart,
   transmissionRecords,
 } from "../src/accounting.js";
+import { createExecutor } from "../src/index.js";
 import type { AccountingMandate, TransmissionRecord } from "../src/types.js";
-import { harness, NOW, seal } from "./helpers.js";
+import { deferred, harness, NOW, seal } from "./helpers.js";
 
 function limit(operand: string, value: number, enforcement: "hard" | "soft" = "hard"): Limit {
   return { leftOperand: `${AGENT}${operand}`, operator: "lteq", rightOperand: value, enforcement };
@@ -399,4 +401,150 @@ it("a definitive non-send retried on a new day commits against the new day's bud
   expect(await h.executor.transmit(next.proposal.id)).toMatchObject({
     reason: "limit:spendPerDay",
   });
+});
+
+const windowTransitions = [
+  ["sendsPerDay", "2026-11-01T00:00:00.000Z"],
+  ["spendPerDay", "2026-11-01T00:00:00.000Z"],
+  ["spendPerWeek", "2026-11-02T00:00:00.000Z"],
+  ["spendPerMonth", "2026-11-01T00:00:00.000Z"],
+  ["perRecipientPerDay", "2026-11-01T12:00:00.001Z"],
+] as const;
+
+it.each(windowTransitions)("%s bounds the authority snapshot at %s", async (operand, boundary) => {
+  const h = harness();
+  setLimits(h, [limit(operand, 1)]);
+  expect(nextAccountingTransition(h.state.mandate as AccountingMandate, new Date(NOW))).toBe(
+    Date.parse(boundary),
+  );
+});
+
+for (const stage of ["claim", "token"] as const) {
+  it.each(
+    windowTransitions,
+  )(`%s refreshes an undispatched claim after a window change during ${stage}`, async (operand, boundary) => {
+    const h = harness();
+    const e = await h.enqueue("urn:first", 1);
+    setLimits(h, [limit(operand, 1)]);
+    if (stage === "claim") {
+      const put = h.transmissions.put;
+      vi.spyOn(h.transmissions, "put").mockImplementationOnce(async (record) => {
+        await put(record);
+        h.state.at = boundary;
+      });
+    } else {
+      vi.mocked(h.options.tokens.send).mockImplementationOnce(async () => {
+        h.state.at = boundary;
+        return { access: "send", accessToken: "synthetic" };
+      });
+    }
+    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "sent" });
+    expect(h.records.get(e.proposal.id)?.committedAt).toBe(boundary);
+    expect(h.ledger.at(-1)?.committedAt).toBe(boundary);
+    const next = await h.enqueue("urn:next", 1);
+    expect(await h.executor.transmit(next.proposal.id)).toMatchObject({
+      reason: `limit:${operand}`,
+    });
+    expect(h.binding.send.transmit).toHaveBeenCalledOnce();
+  });
+}
+
+it("a refreshed claim cannot take a slot consumed while its token was pending", async () => {
+  const h = harness();
+  const first = await h.enqueue("urn:first");
+  const next = await h.enqueue("urn:next");
+  setLimits(h, [limit("sendsPerDay", 1)]);
+  const waiting = deferred<void>();
+  const release = deferred<void>();
+  vi.mocked(h.options.tokens.send).mockImplementationOnce(async () => {
+    waiting.resolve();
+    await release.promise;
+    return { access: "send", accessToken: "synthetic" };
+  });
+  const provider = vi.fn();
+  vi.mocked(h.binding.send.transmit).mockImplementation(async (_wire, io) => {
+    await io.tokens.send(io.account);
+    provider(io.account);
+    return { outcome: "accepted", providerRef: "synthetic:accepted" };
+  });
+  const pending = h.executor.transmit(first.proposal.id);
+  await waiting.promise;
+  h.state.at = "2026-11-01T00:00:00.000Z";
+  expect(await h.executor.transmit(next.proposal.id)).toMatchObject({ status: "sent" });
+  release.resolve();
+  expect(await pending).toMatchObject({ status: "uncertain" });
+  expect(provider).toHaveBeenCalledOnce();
+  expect(h.records.get(first.proposal.id)?.committedAt).toBe(h.state.at);
+});
+
+for (const stage of ["disposition", "handoff"] as const) {
+  it.each(
+    windowTransitions,
+  )(`%s window expiry during ${stage} prevents credential release`, async (operand, boundary) => {
+    const h = harness();
+    const e = await h.enqueue("urn:first", 1);
+    setLimits(h, [limit(operand, 1)]);
+    let checkingCredentials = false;
+    if (stage === "disposition") {
+      const write = h.proposals.writeDisposition;
+      vi.spyOn(h.proposals, "writeDisposition").mockImplementation(async (id, result) => {
+        await write(id, result);
+        if (checkingCredentials && result.status === "ready") h.state.at = boundary;
+      });
+    } else {
+      const exclusive = h.transmissions.exclusive;
+      Object.assign(h.transmissions, {
+        async exclusive<T>(work: () => Promise<T>): Promise<T> {
+          const result = await exclusive(work);
+          if (checkingCredentials)
+            queueMicrotask(() =>
+              queueMicrotask(() => {
+                h.state.at = boundary;
+              }),
+            );
+          return result;
+        },
+      });
+    }
+    const provider = vi.fn();
+    vi.mocked(h.binding.send.transmit).mockImplementation(async (_wire, io) => {
+      checkingCredentials = true;
+      await io.tokens.send(io.account);
+      provider();
+      return { outcome: "accepted", providerRef: "must-not-send" };
+    });
+    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "uncertain" });
+    expect(provider).not.toHaveBeenCalled();
+  });
+}
+
+it("an unresolved A2A resend retains its original accounting window", async () => {
+  const h = harness("a2a");
+  const e = await h.enqueue();
+  h.prior(e);
+  Object.assign(h.binding.send, { idempotentResend: true });
+  h.state.at = "2026-11-02T00:00:00.000Z";
+  setLimits(h, [limit("sendsPerDay", 0)]);
+  expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "sent" });
+  expect(h.records.get(e.proposal.id)?.committedAt).toBe(NOW);
+});
+
+it("a token resolved after timeout refreshes the still-undispatched uncertain claim", async () => {
+  const h = harness();
+  const e = await h.enqueue("urn:waiting", 1);
+  setLimits(h, [limit("spendPerDay", 1)]);
+  const release = deferred<void>();
+  vi.mocked(h.options.tokens.send).mockImplementationOnce(async () => {
+    await release.promise;
+    return { access: "send", accessToken: "synthetic" };
+  });
+  const executor = createExecutor({ ...h.options, timeoutMs: 10 });
+  expect(await executor.transmit(e.proposal.id)).toMatchObject({ status: "uncertain" });
+  h.state.at = "2026-11-01T00:00:00.000Z";
+  release.resolve();
+  await executor.drain();
+  expect(h.records.get(e.proposal.id)).toMatchObject({ status: "sent", committedAt: h.state.at });
+  const next = await h.enqueue("urn:next", 1);
+  expect(await executor.transmit(next.proposal.id)).toMatchObject({ reason: "limit:spendPerDay" });
+  expect(h.binding.send.transmit).toHaveBeenCalledOnce();
 });

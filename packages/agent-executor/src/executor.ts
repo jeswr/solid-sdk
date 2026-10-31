@@ -8,7 +8,7 @@ import {
   digestOf,
   podRecordSchema,
 } from "@jeswr/agent-model";
-import { checkLimits, transmissionRecords } from "./accounting.js";
+import { checkLimits, nextAccountingTransition, transmissionRecords } from "./accounting.js";
 import { bounded, MAX_TRANSMISSION_ATTEMPTS, providerResult } from "./transmission.js";
 import type {
   AccountingMandate,
@@ -47,6 +47,7 @@ interface AuthorityDeadlines {
   approval?: number;
   controls: number;
   policy: number;
+  accounting: number;
 }
 interface ReadyEvaluation {
   status: "ready";
@@ -108,6 +109,7 @@ export function createExecutor(options: ExecutorOptions) {
       return { status: "awaiting-approval", reason: "approval-required" };
     if (!(deadlines.controls > now)) return { status: "refused", reason: "halted" };
     if (!(deadlines.policy > now)) return { status: "refused", reason: "authority-changed" };
+    if (!(deadlines.accounting > now)) return { status: "refused", reason: "authority-changed" };
     return undefined;
   }
 
@@ -236,6 +238,7 @@ export function createExecutor(options: ExecutorOptions) {
   async function prepare(
     id: string,
     execute: boolean,
+    reservation?: { record: TransmissionRecord },
   ): Promise<
     | TransmitResult
     | ReadyEvaluation
@@ -350,9 +353,19 @@ export function createExecutor(options: ExecutorOptions) {
       ...(approval ? { approval: Date.parse(approval.expires) } : {}),
       controls: Infinity,
       policy: nextPolicyTransition(mandate, now.getTime()),
+      accounting: nextAccountingTransition(mandate, now),
     };
     // Limits and claims share a store-wide lock. Ledger failure never means zero usage.
     const records = [...(await o.transmissions.list()), ...(await o.audit.listCommitted())];
+    if (reservation && reservation.record.committedAt !== now.toISOString()) {
+      // Only this live, undispatched claim can move windows; unresolved provider effects cannot.
+      reservation.record = await recordTransmission({
+        ...reservation.record,
+        committedAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      });
+      records.push(reservation.record);
+    }
     const limit = checkLimits(mandate, entry, records, now);
     if (limit) return disposition(id, limit);
     const previous = transmissionRecords(records).find((r) => r.proposal === id);
@@ -473,7 +486,8 @@ export function createExecutor(options: ExecutorOptions) {
       return "deadlines" in prepared
         ? { status: prepared.status, reason: prepared.reason }
         : prepared;
-    const { entry, binding, record, resend } = prepared;
+    const { entry, binding, resend } = prepared;
+    const reservation = { record: prepared.record };
     let executorFailure: { error: unknown } | undefined;
     let credentialsReleased = false;
     function checkExecutorFailure() {
@@ -499,7 +513,9 @@ export function createExecutor(options: ExecutorOptions) {
     };
     async function recheck(): Promise<AuthorityDeadlines | undefined> {
       try {
-        const result = await o.transmissions.exclusive(() => prepare(id, false));
+        const result = await o.transmissions.exclusive(() =>
+          prepare(id, false, !resend && !credentialsReleased ? reservation : undefined),
+        );
         return "deadlines" in result && revision === state.revision ? result.deadlines : undefined;
       } catch (error) {
         executorFailure = { error };
@@ -523,7 +539,7 @@ export function createExecutor(options: ExecutorOptions) {
                 ? "not-sent"
                 : "uncertain";
           return finish({
-            ...record,
+            ...reservation.record,
             status,
             updatedAt: o.clock.now().toISOString(),
             ...(outcome === "accepted"
@@ -570,7 +586,12 @@ export function createExecutor(options: ExecutorOptions) {
         const current = await o.transmissions.get(id);
         if (current?.status === "sent" || current?.status === "not-sent")
           return { status: current.status, reason: current.status };
-        return finish({ ...record, status: "uncertain", updatedAt: o.clock.now().toISOString() });
+        reservation.record = {
+          ...reservation.record,
+          status: "uncertain",
+          updatedAt: o.clock.now().toISOString(),
+        };
+        return finish(reservation.record);
       });
     }
     return settle(value);

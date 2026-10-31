@@ -92,6 +92,23 @@ export function periodStart(at: Date, period: "day" | "week" | "month"): number 
   return start.getTime();
 }
 
+/** A checked reservation must not outlive the accounting window used to authorize it. */
+export function nextAccountingTransition(mandate: AccountingMandate, at: Date): number {
+  return Math.min(
+    ...mandate.limits.map((limit) => {
+      const operand = limit.leftOperand.slice(AGENT.length);
+      // Rolling contacts include the exact 24-hour boundary.
+      if (operand === "perRecipientPerDay") return at.getTime() + 86400001;
+      const period =
+        operand === "spendPerWeek" ? "week" : operand === "spendPerMonth" ? "month" : "day";
+      const next = new Date(periodStart(at, period));
+      if (period === "month") next.setUTCMonth(next.getUTCMonth() + 1);
+      else next.setUTCDate(next.getUTCDate() + (period === "week" ? 7 : 1));
+      return next.getTime();
+    }),
+  );
+}
+
 export function checkLimits(
   mandate: AccountingMandate,
   entry: OutboxEntry,
