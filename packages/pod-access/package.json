@@ -3,7 +3,7 @@
   "name": "@jeswr/pod-access",
   "version": "0.1.0",
   "private": true,
-  "description": "Pod sharing and permissions across access-control models. Experimental, AI-agent-generated scaffold.",
+  "description": "Pod sharing and permissions across access-control models. Experimental, AI-agent-generated.",
   "type": "module",
   "sideEffects": false,
   "securityCritical": true,
@@ -34,7 +34,14 @@
   "license": "MIT",
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
+    "@types/n3": "^1.16.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.9"
+  },
+  "dependencies": {
+    "@jeswr/storage-client": "workspace:*",
+    "@rdfjs/wrapper": "^0.34.0",
+    "@solid/object": "^0.6.0",
+    "n3": "^2.0.3"
   }
 }
