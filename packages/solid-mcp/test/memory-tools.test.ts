@@ -14,6 +14,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { DatasetCore } from "@rdfjs/types";
 import { DataFactory as df, Store } from "n3";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MAX_CONTENT_BYTES } from "../src/content.js";
 import type { MemoryClientInfo } from "../src/memory-tools.js";
 import { createFetchPodPort, type PodPort } from "../src/pod-port.js";
 import { createSolidMcpServer } from "../src/server.js";
@@ -481,6 +482,67 @@ describe("memory forget", () => {
     };
     expect((await run("memory_forget", { id: saved.id, mode: "delete" })).isError).toBe(true);
     expect((await new NanopubStore(pod).get(saved.id)).nanopubs[0].agent).toBe(CLIENT);
+  });
+});
+
+describe("memory serialized write limits", () => {
+  it.each([
+    "fact",
+    "note",
+    "metadata",
+  ])("rejects serialized %s overflow before persistence", async (kind) => {
+    const pod = podFixture();
+    const run = registry(pod);
+    const saved = json(await run("memory_remember", remember));
+    const largeText = "é".repeat(MAX_CONTENT_BYTES / 2);
+    const input =
+      kind === "note"
+        ? { text: largeText }
+        : kind === "metadata"
+          ? { ...remember, conversationId: largeText }
+          : { ...remember, text: largeText };
+    const write = vi.spyOn(pod, "write");
+    const rejected = await run("memory_remember", input);
+    expect(rejected.isError).toBe(true);
+    expect(text(rejected)).toBe("Pod operation failed");
+    expect(write.mock.calls.some(([url]) => url.endsWith(".trig"))).toBe(false);
+    expect(write.mock.calls.every(([, body]) => body.byteLength <= MAX_CONTENT_BYTES)).toBe(true);
+    expect(json(await run("memory_recall", recall)).facts.map((fact) => fact.id)).toEqual([
+      saved.id,
+    ]);
+    json(await run("memory_remember", remember));
+    json(await run("memory_forget", { id: saved.id, mode: "delete" }));
+  });
+
+  it("rejects an oversized retraction while preserving the readable original", async () => {
+    const pod = podFixture();
+    const run = registry(pod);
+    const store = new NanopubStore(pod);
+    const input = {
+      text: "Preference",
+      quote: "Preference",
+      fact: { template: "preference", value: { propertyID: "fixture", value: "x" } },
+    };
+    const small = json(await run("memory_remember", input));
+    const overhead = (await pod.read(store.url(small.id))).body.byteLength - 1;
+    const saved = json(
+      await run("memory_remember", {
+        ...input,
+        fact: {
+          ...input.fact,
+          value: { ...input.fact.value, value: "x".repeat(MAX_CONTENT_BYTES - overhead - 64) },
+        },
+      }),
+    );
+    const original = await pod.read(store.url(saved.id));
+    expect(original.body.byteLength).toBeLessThanOrEqual(MAX_CONTENT_BYTES);
+    expect(original.body.byteLength).toBeGreaterThan(MAX_CONTENT_BYTES - 128);
+    const write = vi.spyOn(pod, "write");
+    expect((await run("memory_forget", { id: saved.id, mode: "retract" })).isError).toBe(true);
+    expect(write.mock.calls.some(([url]) => url.endsWith(".trig"))).toBe(false);
+    expect(await pod.read(store.url(saved.id))).toEqual(original);
+    expect(json(await run("memory_recall", recall)).facts).toHaveLength(2);
+    json(await run("memory_forget", { id: saved.id, mode: "delete" }));
   });
 });
 

@@ -17,6 +17,7 @@ import { SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { z } from "zod";
 import { requirePodScopedUrl, requirePodScopedWriteUrl } from "./auth.js";
+import { MAX_CONTENT_BYTES } from "./content.js";
 import { PodOutput } from "./output.js";
 import { withPodReadLimits } from "./pod-operation.js";
 import type { PodPort } from "./pod-port.js";
@@ -171,8 +172,12 @@ function memoryContext(pod: PodPort, readOnly: boolean, client?: MemoryClientInf
         return [];
       }
     },
-    write: (url, body, contentType, cond) =>
-      pod.write(mutationTarget(url), body, contentType, cond),
+    async write(url, body, contentType, cond) {
+      const target = mutationTarget(url);
+      if (body.byteLength > MAX_CONTENT_BYTES)
+        throw new Error("Resource exceeds the bounded read limit.");
+      return pod.write(target, body, contentType, cond);
+    },
     delete: (url, cond) => pod.delete(mutationTarget(url), cond),
   };
   const store = new NanopubStore(port);
