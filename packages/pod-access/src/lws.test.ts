@@ -431,7 +431,13 @@ describe("fail closed before transport", () => {
     ).rejects.toMatchObject({ code: "unsupported" });
     expect(storage.create).not.toHaveBeenCalled();
   });
-  test.each([new Date(NaN), "2030-01-01", 1])("rejects invalid expiry %s", async (expires) => {
+  test.each([
+    new Date(NaN),
+    new Date("+010000-01-01T00:00:00Z"),
+    new Date("-000001-01-01T00:00:00Z"),
+    "2030-01-01",
+    1,
+  ])("rejects invalid expiry %s", async (expires) => {
     const { client, target, storage } = await setup();
     await expect(
       client.request({ target, agent: BOB, modes: ["read"], expires } as AccessRequest),

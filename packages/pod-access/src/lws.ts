@@ -119,9 +119,11 @@ export function createLwsAccess({ storage, storageId, identity }: AccessClientOp
     if (value.purpose !== undefined) iri(value.purpose);
     if (
       value.expires !== undefined &&
-      (!(value.expires instanceof Date) || !Number.isFinite(value.expires.getTime()))
+      (!(value.expires instanceof Date) ||
+        !Number.isFinite(value.expires.getTime()) ||
+        !/^\d{4}-/.test(value.expires.toISOString()))
     ) {
-      throw new TypeError("Expected a valid expiry date");
+      throw new TypeError("Expected an expiry date with a four-digit year");
     }
     return {
       agent,
