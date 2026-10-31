@@ -173,7 +173,11 @@ export function lwsIndex({ storage, features, fetch: transport }: TypeIndexOptio
       if (!target) continue;
       const itemTypes = strings(item.type);
       if (itemTypes.length === 0) throw error("invalid-response", url);
-      for (const type of itemTypes) wanted.get(canonicalize(type))?.add(target);
+      for (const type of itemTypes) {
+        const iri =
+          type === "Container" || type === "DataResource" ? LWS + type : canonicalize(type);
+        wanted.get(iri)?.add(target);
+      }
     }
     for (const iri of output.keys())
       output.set(iri, [...(wanted.get(canonicalize(iri)) as Set<string>)]);

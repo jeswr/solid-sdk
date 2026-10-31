@@ -100,6 +100,34 @@ describe("LWS type services", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
+  it.each([
+    "Container",
+    "DataResource",
+  ])("matches compact and expanded native %s types alongside suite aliases", async (type) => {
+    const { index, fetch } = setup();
+    const iri = `https://www.w3.org/ns/lws#${type}`;
+    fetch.mockImplementation(async () =>
+      response(
+        page([
+          { id: `${ROOT}compact`, type },
+          { id: `${ROOT}expanded`, type: [iri, CLASS] },
+          { id: `${ROOT}mixed`, type: [type, LEGACY] },
+          { id: `${ROOT}other`, type: "urn:other" },
+        ]),
+      ),
+    );
+    const locations = [`${ROOT}compact`, `${ROOT}expanded`, `${ROOT}mixed`];
+    expect(await index.find(iri)).toEqual(locations);
+    expect(await index.findAll([iri, CLASS, LEGACY])).toEqual(
+      new Map([
+        [iri, locations],
+        [CLASS, [`${ROOT}expanded`, `${ROOT}mixed`]],
+        [LEGACY, [`${ROOT}expanded`, `${ROOT}mixed`]],
+      ]),
+    );
+    expect(JSON.parse(fetch.mock.calls[0]?.[1]?.body as string)).toEqual({ type: [[iri]] });
+  });
+
   it("performs no I/O for an empty batch", async () => {
     const { index, fetch } = setup();
     expect(await index.findAll([])).toEqual(new Map());
