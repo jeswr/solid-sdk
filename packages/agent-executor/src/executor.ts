@@ -591,15 +591,18 @@ export function createExecutor(options: ExecutorOptions) {
     }
     return results;
   }
+  function onAuthorityChange() {
+    // Invalidate in-flight decisions before waiting for the store lock or queue enumeration.
+    state.revision++;
+    return runOutboxOnce(false);
+  }
   return {
     transmit,
     runOutboxOnce,
     /** Daemon notifications/polling MUST call this for every control or mandate change. */
-    onControlOrMandateChange: () => {
-      // Invalidate in-flight decisions before waiting for the store lock or queue enumeration.
-      state.revision++;
-      return runOutboxOnce(false);
-    },
+    onControlOrMandateChange: onAuthorityChange,
+    /** Daemon MUST call this for every approval change, including denials or removal. */
+    onApprovalChange: onAuthorityChange,
     /** Await late writes during orderly shutdown. Crash recovery uses the durable records. */
     drain: async () => {
       await Promise.all(background);

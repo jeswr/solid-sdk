@@ -101,7 +101,11 @@ export interface ApprovalContext {
   readonly ownerWebId: string;
   readonly now: Date;
 }
-/** Must verify owner WebID assertionMethod proofs (agent-mandate.verifyApproval), never parse-only. */
+/**
+ * Must verify owner WebID assertionMethod proofs (agent-mandate.verifyApproval), never parse-only.
+ * The host MUST call onApprovalChange for every detected approval-store change (including
+ * denials, removals and availability changes) to invalidate in-flight authority snapshots.
+ */
 export interface ApprovalStore {
   findVerified(context: ApprovalContext): Promise<readonly Approval[]>;
 }

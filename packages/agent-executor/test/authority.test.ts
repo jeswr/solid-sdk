@@ -391,6 +391,107 @@ describe("final temporal transitions", () => {
 });
 
 describe("final credential authority", () => {
+  for (const change of ["deny-autonomous", "deny-approved", "remove", "unavailable"] as const) {
+    it.each([
+      "token",
+      "ledger",
+      "audit",
+      "disposition",
+      "controls",
+      "handoff",
+    ])(`${change} approval notification during %s invalidates credentials across executors`, async (stage) => {
+      const h = harness();
+      const e = await h.enqueue();
+      const queued = await h.enqueue("urn:proposal:queued");
+      if (change !== "deny-autonomous") {
+        h.needsApproval();
+        h.confirm(e);
+        h.confirm(queued);
+      }
+      const observer = createExecutor(h.options);
+      let credential = false;
+      let notification: ReturnType<typeof observer.onApprovalChange> | undefined;
+      const notify = () => {
+        if (!credential || notification) return;
+        if (change === "remove") h.approvals.length = 0;
+        else if (change === "unavailable")
+          vi.spyOn(h.approvalStore, "findVerified").mockRejectedValue(new Error("unavailable"));
+        else {
+          h.confirm(e, "deny");
+          h.confirm(queued, "deny");
+        }
+        notification = observer.onApprovalChange();
+      };
+      if (stage === "token")
+        vi.mocked(h.options.tokens.send).mockImplementationOnce(async () => {
+          notify();
+          return { access: "send", accessToken: "synthetic" };
+        });
+      if (stage === "ledger") {
+        const list = h.audit.listCommitted;
+        vi.spyOn(h.audit, "listCommitted").mockImplementation(async () => {
+          const records = await list();
+          notify();
+          return records;
+        });
+      }
+      if (stage === "audit") {
+        const append = h.audit.append;
+        vi.spyOn(h.audit, "append").mockImplementation(async (record) => {
+          await append(record);
+          if (record.outcome === "re-evaluated") notify();
+        });
+      }
+      if (stage === "disposition") {
+        const write = h.proposals.writeDisposition;
+        vi.spyOn(h.proposals, "writeDisposition").mockImplementation(async (id, result) => {
+          await write(id, result);
+          if (result.status === "ready") notify();
+        });
+      }
+      if (stage === "controls") {
+        const list = h.controls.listVerified;
+        let checks = 0;
+        vi.spyOn(h.controls, "listVerified").mockImplementation(async (owner) => {
+          const result = await list(owner);
+          if (credential && ++checks === 3) notify();
+          return result;
+        });
+      }
+      if (stage === "handoff") {
+        const exclusive = h.transmissions.exclusive;
+        Object.assign(h.transmissions, {
+          async exclusive<T>(work: () => Promise<T>): Promise<T> {
+            const result = await exclusive(work);
+            if (credential) queueMicrotask(() => queueMicrotask(notify));
+            return result;
+          },
+        });
+      }
+      const provider = vi.fn();
+      vi.mocked(h.binding.send.transmit).mockImplementation(async (_wire, io) => {
+        credential = true;
+        await io.tokens.send(io.account);
+        provider();
+        return { outcome: "accepted", providerRef: "must-not-send" };
+      });
+      expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "uncertain" });
+      expect(notification).toBeDefined();
+      const reevaluated = await notification;
+      expect(reevaluated?.[queued.proposal.id]).toMatchObject({
+        status: change.startsWith("deny") ? "refused" : "awaiting-approval",
+        reason:
+          change === "remove"
+            ? "approval-required"
+            : change === "unavailable"
+              ? "approval-unavailable"
+              : "approval-denied",
+      });
+      expect(provider).not.toHaveBeenCalled();
+      expect(h.binding.send.transmit).toHaveBeenCalledOnce();
+    });
+  }
+
   for (const stage of [
     "render",
     "validate",

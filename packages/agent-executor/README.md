@@ -20,6 +20,11 @@ call the send binding, reserve a commitment or consume a provider attempt.
 `runOutboxOnce()` processes the trusted outbox queue. The daemon must call
 `onControlOrMandateChange()` on **every** notification or polling-detected change in
 control statements or mandate/status. It re-evaluates every queued item without sending.
+The daemon must also call `onApprovalChange()` on **every** detected approval-store change,
+including new denials, removed approvals and availability changes. Both hooks immediately
+invalidate in-flight authority snapshots across executors sharing the transmission store,
+before waiting for persistence or queue locks; notifications must reach the hook before
+credentials are released.
 Every later attempt evaluates again. Halt, policy and proposal checks also run after
 lookup and before handing over send credentials, closing asynchronous revocation races.
 

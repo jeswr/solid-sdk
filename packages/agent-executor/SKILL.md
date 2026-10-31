@@ -12,7 +12,9 @@ bound. Contracts are in src/types.ts; explicit synthetic fakes live only in ./te
 
 Preserve the nine-step order and fail closed. Halt precedes proposal/mandate reads;
 proposal state never grants authority. Re-evaluate every queued item on control/mandate
-change, and recheck authority after asynchronous lookup/token waits. Only verified owner
+change, and recheck authority after asynchronous lookup/token waits. The host must call
+onApprovalChange for every detected approval-store change to invalidate in-flight snapshots
+and re-evaluate queued items. Only verified owner
 approvals and controls enter their adapter seams. Exact wire and all action terms are
 approval-bound; a normal approval cannot override a prohibition or hard limit.
 
