@@ -46,7 +46,8 @@ The bundled `solid-mcp` CLI reads `SOLID_MCP_POD_ROOT`, optional `SOLID_MCP_WEBI
 - Data seam: `PodPort`, `createFetchPodPort`, `PodConditions`.
 - Registry: `createPodToolRegistry`, `registerPodTools`, `PodTool` (Zod schema, handler, readOnly flag).
 - MCP tools: `pod_list`, `pod_read`, `search`, `fetch`, and opt-in `pod_write`;
-  `memory_remember`, `memory_recall`, and `memory_forget` with trusted client identity.
+  `memory_remember`, `memory_recall`, `memory_forget`, `profile_get`, `address_get`,
+  and `health_query` with trusted client identity.
 - One-release aliases in v0.2: `solid_list`, `solid_read`, `solid_search`, `solid_write`.
   List/read/write aliases retain the same schemas, output and read-only enforcement.
   `solid_search` retains its optional scope and ranked array response.
@@ -209,6 +210,45 @@ every call. Health and finance are denied by default. Denials expose category na
 only. The first memory write creates the default policy; recall always requires an
 existing policy and never creates one. Existing owner policies are preserved, and
 unreadable or malformed policies fail closed.
+
+## Profile, address and health tools
+
+These tools require the same trusted `clientInfo` and owner WebID as memory tools.
+Every call requires `purpose: "ServiceProvision" | "Personalisation"` and reevaluates
+the existing owner policy for that client. Reads never create a missing policy.
+Missing, unreadable or malformed policies fail closed. Denial errors contain only
+fixed category names, without values, subject identities or owner-supplied IRIs.
+
+- `profile_get({purpose})` returns `{name, emails, phones}` from the configured
+  in-pod WebID under `pd:Contact`. Names use vCard then FOAF; missing names are
+  `null`. Contacts support direct `mailto:`/`tel:` IRIs and local vCard
+  `hasValue` nodes, deduplicated and sorted, with scheme prefixes removed.
+  Linked documents are never followed. Off-pod WebIDs and redirects are refused.
+- `address_get({purpose, at?})` returns `{addresses:[...]}` from `pd:PhysicalAddress`
+  nanopublications. Only definitely-true, Current claims about the owner qualify,
+  including for as-of reads. `at` accepts an ISO date (midnight UTC) or a datetime
+  with an explicit timezone, up to microsecond precision; it defaults to now.
+  `schema:validFrom`/`validThrough` are inclusive. Date, year-month and year
+  bounds cover their whole calendar period in UTC; datetime bounds are exact.
+  Absent bounds are open; ambiguous, malformed or timezone-free datetime bounds
+  fail closed. Results retain every qualifying address, its fields, validity
+  bounds and `provenanceId`, ordered by address ID then provenance ID.
+- `health_query({kind, purpose})` returns `{kind, facts:[{id, provenanceId, assertion}]}`,
+  where `assertion` is graph-scoped Turtle. Kinds are `conditions`, `allergies`,
+  `medications` and `observations`. Only definitely-true, Current owner health
+  claims qualify. Canonical and legacy suite health terms are read without
+  rewriting stored claims. Every candidate category needs a permit before
+  content filtering; `pd:MedicalHealth` also needs a permit for an empty query.
+
+Special-category reads, including permitted memory recall and financial data,
+require a writable server and PodPort. Before returning results they append a
+PROV activity to `private/pkg/audit/<yyyy-mm>.ttl`: client IRI, DPV purpose,
+special categories and UTC time, with no fact values. Empty permitted health
+queries are audited too. Owner-only WAC ACLs precede audit content; strong ETags
+and bounded compare-and-swap retries preserve concurrent entries. The saved
+activity is verified through the current PodPort. Audit denial, corruption,
+overflow or persistence failure withholds the tool result. Ordinary contact
+and address reads remain available on a read-only server when permitted.
 
 ## Chat tools
 

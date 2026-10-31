@@ -42,3 +42,16 @@ Recall requires a closed purpose and defaults to definitely plus Current. Reuse
 missing policy, including on a writable server. Retraction is append-only; deletion
 requires this client's pubinfo attribution and a strong conditional ETag. Private pkg-memory is bundled
 without leaking its imports into public declarations or mirror manifests.
+
+Personal reads (`profile_get`, `address_get`, `health_query`) require the same
+trusted client identity, closed purpose and existing policy. Profile reads are
+confined to the configured in-pod WebID and project only Contact fields. Address
+and health reads use definitely-true Current owner assertions; address `at` is
+an additional inclusive validFrom/validThrough filter, retaining calendar
+granularity and exact datetime microseconds. Reject ambiguous temporal bounds.
+Check all candidate categories before content filters. Never disclose special
+data, including through recall, unless its monthly private PROV audit append
+succeeds and is verified. Audit uses the current PodPort, owner-only ACLs,
+strong conditional ETags and bounded retries. A read-only server must withhold
+results that require auditing. Keep shared internal helpers stripped from
+declarations so private pkg-memory types remain bundled.
