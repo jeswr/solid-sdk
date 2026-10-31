@@ -2,7 +2,7 @@
 import type { Approval, Mandate, MandateVerifier, PolicyEngine } from "@jeswr/agent-mandate";
 import type { ActionProposal, AnyMessage, ControlStatement, ReceiptBody } from "@jeswr/agent-model";
 
-// Structural send-only projection of ChannelBinding: importing its root is forbidden by layer lint.
+// Send-only projection with action validation: channel root imports are forbidden by layer lint.
 export interface Wire {
   readonly bytes: string;
   readonly mediaType: string;
@@ -46,9 +46,14 @@ export interface SendBinding {
   };
   readonly send: {
     render(proposal: RenderableProposal, carriage: SendBinding["carriage"]): Promise<Wire>;
+    /** Trusted validator must bind every intent term and account to the signed wire/destination. */
     validate(
       wire: Wire,
-      proposal: RenderableProposal,
+      context: {
+        readonly renderable: RenderableProposal;
+        readonly intent: ActionProposal["intent"];
+        readonly account: AccountRef;
+      },
     ): Promise<{ ok: true } | { ok: false; reason: string }>;
     transmit(
       wire: Wire,

@@ -163,7 +163,13 @@ export function createExecutor(options: ExecutorOptions) {
         entry.wire.digest !== entry.wireDigest ||
         rendered.digest !== entry.wireDigest ||
         proposalTermsDigest(entry) !== entry.proposal.intent.termsDigest ||
-        (await binding.send.validate(entry.wire, entry.renderable)).ok !== true
+        (
+          await binding.send.validate(entry.wire, {
+            renderable: entry.renderable,
+            intent: entry.proposal.intent,
+            account: entry.account,
+          })
+        ).ok !== true
       )
         throw new Error("Invalid wire");
     } catch {

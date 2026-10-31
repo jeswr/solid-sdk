@@ -40,8 +40,12 @@ lookup and before handing over send credentials, closing asynchronous revocation
   `wireDigest`, then set `proposal.intent.termsDigest` using this helper before approval.
   It covers the complete intent except the digest itself, proposal id, preview, expiry,
   signed carrier, account, wire digest and media type. Changing any term invalidates old approvals.
-- The binding's renderer/validator must bind its signed carrier to the action terms and
-  actual destination. Bindings are trusted code, created only from their `/send` exports.
+- The binding's `send.validate(wire, { renderable, intent, account })` must verify that
+  every intent term (including recipient, operation, parameters, purpose and amount) and
+  the sending account describe the signed carrier and actual destination. It runs before
+  policy or accounting. A channel's renderable-only validator needs a trusted adapter
+  implementing these additional checks. Bindings are trusted code, created only from
+  their `/send` exports.
   The executor supplies a send-only TokenProvider projection; wrong-account requests,
   wrong-scope/empty grants and grants resolved after revocation fail closed.
 - `AuditSink` is system-only and must retain historical transmission accounting records.

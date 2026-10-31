@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { AGENT } from "@jeswr/agent-mandate";
+import { canonicalJson } from "@jeswr/agent-model";
 import { describe, expect, it, vi } from "vitest";
 import { createExecutor } from "../src/index.js";
 import { control, harness, NOW, seal, UNTIL } from "./helpers.js";
@@ -85,6 +86,62 @@ describe("DESIGN §4.1 ordered enforcement", () => {
     await h.enqueue();
     Object.assign(h.binding, { id: "other" });
     expect(await h.executor.transmit("urn:proposal:1")).toMatchObject({ reason: "wire-mismatch" });
+  });
+  it.each([
+    ["unchanged", undefined],
+    ["action", `${AGENT}Pay`],
+    ["target", "urn:other-target"],
+    ["binding", "direct"],
+    ["recipientHash", "sha256:other-recipient"],
+    ["amount", { value: 0, currency: "GBP" }],
+    ["amount", { value: 100, currency: "EUR" }],
+    ["purpose", "urn:other-purpose"],
+    ["operation", "urn:other-operation"],
+    ["operationVersion", "2"],
+    ["parameters", { changed: true }],
+    ["conversation", "urn:other-conversation"],
+    ["account", { id: "urn:other-account" }],
+  ] as const)("step 2: trusted validation binds %s to the carrier before policy", async (field, value) => {
+    const h = harness();
+    const e = await h.enqueue("urn:proposal:1", 100);
+    const { termsDigest: _digest, ...signedIntent } = structuredClone(e.proposal.intent);
+    if (e.renderable.message.kind !== "invoke") throw new Error("Expected synthetic invoke");
+    // Synthetic signed-carrier payload: validation derives its action terms from the wire.
+    Object.assign(e.renderable.message.body, {
+      input: { intent: signedIntent, account: structuredClone(e.account) },
+    });
+    const wire = await h.binding.send.render(e.renderable, h.binding.carriage);
+    Object.assign(e, { wire, wireDigest: wire.digest });
+    vi.mocked(h.binding.send.validate).mockImplementation(async (wire, context) => {
+      const { termsDigest: _digest, ...intent } = context.intent;
+      const carrier = JSON.parse(wire.bytes);
+      return canonicalJson(carrier.message.body.input) ===
+        canonicalJson({ intent, account: context.account }) &&
+        canonicalJson(carrier) === canonicalJson(context.renderable)
+        ? { ok: true }
+        : { ok: false, reason: "action-mismatch" };
+    });
+    if (field === "binding")
+      Object.assign(h.options.bindings, { [value]: { ...h.binding, id: value } });
+    if (field === "account") Object.assign(e.account, value);
+    else if (field !== "unchanged") Object.assign(e.proposal.intent, { [field]: value });
+    // An Actor can recompute the terms digest, but cannot change the signed carrier.
+    seal(e);
+    expect(await h.executor.transmit(e.proposal.id)).toMatchObject(
+      field === "unchanged" ? { status: "sent" } : { status: "refused", reason: "wire-mismatch" },
+    );
+    expect(h.binding.send.validate).toHaveBeenCalledWith(e.wire, {
+      renderable: e.renderable,
+      intent: e.proposal.intent,
+      account: e.account,
+    });
+    if (field !== "unchanged") {
+      expect(h.options.mandates.load).not.toHaveBeenCalled();
+      expect(h.binding.send.transmit).not.toHaveBeenCalled();
+      expect(h.options.tokens.send).not.toHaveBeenCalled();
+      expect(h.records.size).toBe(0);
+      expect(h.auditRecords).toContainEqual(expect.objectContaining({ type: "tamper-suspected" }));
+    }
   });
   it("step 3: expiry runs before mandate", async () => {
     const h = harness();
