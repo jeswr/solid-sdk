@@ -386,6 +386,37 @@ it("requires approval observation, proof, approve decision, expiry and one use",
   await f.mirror();
   await breach("approval-reused");
 });
+it.each([
+  { created: 0, seen: 0, sent: 0, at: undefined, ok: true },
+  { created: 0, seen: 1000, sent: 2000, at: undefined, ok: true },
+  { created: 1000, seen: 1000, sent: 2000, at: 1000, ok: true },
+  { created: 1000, seen: 2000, sent: 3000, at: 0, ok: false },
+  { created: 1000, seen: 0, sent: 2000, at: undefined, ok: false },
+  { created: 1000, seen: 0, sent: 2000, at: 3000, ok: false },
+  { created: 1000, seen: 0, sent: 0, at: undefined, ok: false },
+])("bounds signed approval creation by audit and observation times: %j", async ({
+  created,
+  seen,
+  sent,
+  at,
+  ok,
+}) => {
+  const instant = (offset: number) => new Date(Date.parse(AT) + offset).toISOString();
+  f.pod.put(
+    f.approvalId,
+    await issueApproval(f.approval, f.p256, new Date(instant(created))),
+    "application/trig",
+  );
+  await f.mirror([AT, AT, instant(seen), instant(sent), instant(sent)]);
+  const report = await audit(at === undefined ? {} : { at: instant(at) });
+  expect(report).toMatchObject({ ok, breaches: ok ? [] : ["forged-approval"] });
+});
+it("authenticates the approval creation time before trusting it", async () => {
+  const later = "2026-10-26T12:00:01.000Z";
+  const signed = await issueApproval(f.approval, f.p256, new Date(later));
+  f.pod.put(f.approvalId, signed.replace(later, AT), "application/trig");
+  await breach("forged-approval");
+});
 it("requires sent status and an unambiguous subsequent receipt", async () => {
   required(f.records[3]).status = "uncertain";
   await f.mirror();

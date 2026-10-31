@@ -1,8 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { canonicalJson } from "@jeswr/agent-model";
 import { parseRdf } from "@jeswr/fetch-rdf";
-import type { DataFactory as Factory } from "@rdfjs/types";
-import { NamedNodeFrom, SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
+import type { DataFactory as Factory, Quad } from "@rdfjs/types";
+import {
+  NamedGraphDataset,
+  NamedNodeFrom,
+  SetFrom,
+  TermAs,
+  TermFrom,
+  TermWrapper,
+} from "@rdfjs/wrapper";
 import { DataFactory, Store, Writer } from "n3";
 import { writeDecisionRecord } from "./decision-record.js";
 import type { LedgerEntry } from "./records.js";
@@ -42,6 +49,15 @@ export function node(store: Store, id: string): Node {
     store,
     DataFactory as unknown as Factory,
   );
+}
+/** Read only after verifyApproval has authenticated the single linked proof graph. */
+export async function verifiedApprovalCreatedAt(document: string, id: string): Promise<number> {
+  const store = await parseRdf(document, "application/trig");
+  const graph = node(store, id).values("https://w3id.org/security#proof")[0] as Node;
+  const dataset = new NamedGraphDataset(TermAs.term(graph) as Quad["graph"], store, graph.factory);
+  // Approval verification requires one proof subject and one creation-time literal.
+  const proof = new Node(([...dataset][0] as Quad).subject, dataset, graph.factory);
+  return Date.parse(proof.text("http://purl.org/dc/terms/created"));
 }
 export function entryGraph(url: string, e: LedgerEntry): Store {
   const store = new Store();

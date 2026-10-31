@@ -16,7 +16,15 @@ import {
   createWebIdKeyResolver,
 } from "@jeswr/solid-vc";
 import { CHAIN_SCOPE, type LedgerCheck, verifyLedger } from "./ledger.js";
-import { AGENT, assertSameGraph, entryGraph, headGraph, node, parseTurtle } from "./rdf.js";
+import {
+  AGENT,
+  assertSameGraph,
+  entryGraph,
+  headGraph,
+  node,
+  parseTurtle,
+  verifiedApprovalCreatedAt,
+} from "./rdf.js";
 import {
   type AuditRecord,
   digestSchema,
@@ -287,7 +295,15 @@ export async function auditArtifact(options: AuditOptions): Promise<AuditReport>
           webIdKeyResolver: keys,
           now: () => now,
         }));
-      if (!approval?.valid || approval.approval.decision !== "approve")
+      const created =
+        approvalDoc && approval?.valid
+          ? await verifiedApprovalCreatedAt(approvalDoc.body, t.approval)
+          : Number.NaN;
+      if (
+        !approval?.valid ||
+        approval.approval.decision !== "approve" ||
+        !(created <= now.getTime() && created <= Date.parse(seen.at))
+      )
         breaches.push("forged-approval");
       if (transmissions.filter((e) => e.record.approval === t.approval).length !== 1)
         breaches.push("approval-reused");
