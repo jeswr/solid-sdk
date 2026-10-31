@@ -14,6 +14,7 @@ import {
   TRIPLE_FORMATS,
   WRITABLE_RDF,
 } from "./rdf.js";
+import { rdfBody } from "./read.js";
 import { patchFormulas } from "./solid-patch.js";
 import type {
   Body,
@@ -390,12 +391,13 @@ export function lwsWrites(
         }
       }
       for (let attempt = 0; ; attempt++) {
-        const read = await client().readRdf(dest, { signal: opts.signal });
+        // Accept the stored representation, including native N-Triples, TriG and N-Quads.
+        const read = await client().read(dest, { accept: "*/*", signal: opts.signal });
+        const { type, dataset } = await rdfBody(read, "not-rdf");
         if (attempt === 0) checkEtag("PATCH", dest, read.etag, opts.ifMatch);
         const tag = requiredEtag("GET", dest, read.etag);
-        const type = mediaTypeOf(read.contentType) as string;
         if (!WRITABLE_RDF.has(type)) throw unsupported("PATCH", dest, "rdfConneg");
-        const store = new Store([...read.dataset]);
+        const store = new Store([...dataset]);
         try {
           applyQuadPatch(store, inserts, deletes, TRIPLE_FORMATS.has(type));
         } catch (cause) {
@@ -411,7 +413,7 @@ export function lwsWrites(
         const body = await serializeQuads(store, type);
         try {
           return await writes.write(dest, body, {
-            contentType: read.contentType,
+            contentType: read.contentType as string,
             ifMatch: tag,
             signal: opts.signal,
           });

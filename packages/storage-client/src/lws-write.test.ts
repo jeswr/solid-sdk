@@ -64,6 +64,19 @@ function backend(
   return { storage: createLwsBackend({ root: ROOT, fetch, features }), fetch, calls };
 }
 const reply = (status = 204, headers: Record<string, string> = {}): Reply => ({ status, headers });
+function nativeRdfReply(call: Call, contentType: string, body: string, etag = tag): Reply {
+  const type = contentType.split(";")[0];
+  const accepted = call.headers
+    .get("accept")
+    ?.split(",")
+    .some((range) => {
+      const media = range.trim().split(";")[0];
+      return media === "*/*" || media === type;
+    });
+  return accepted
+    ? { status: 200, headers: { "content-type": contentType, etag }, body }
+    : reply(406);
+}
 function json(value: unknown, headers: Record<string, string> = {}): Reply {
   return {
     status: 200,
@@ -471,6 +484,44 @@ describe("LWS JSON, raw and RDF patches", () => {
     expect(store.has(old)).toBe(false);
     expect(store.has(added)).toBe(true);
   });
+  test.each([
+    "text/turtle",
+    "application/n-triples",
+    "application/trig",
+    "application/n-quads",
+  ])("RMW accepts native %s and preserves its media type on retry", async (type) => {
+    const contentType = `${type}; charset=utf-8`;
+    const kept = quad(nn("urn:keep"), nn("urn:p"), literal("untouched"));
+    const concurrent = quad(nn("urn:other"), nn("urn:p"), literal("concurrent"));
+    let reads = 0;
+    let writes = 0;
+    const { storage, calls } = backend({
+      [`GET ${URL}`]: (call) =>
+        nativeRdfReply(
+          call,
+          contentType,
+          '<urn:s> <urn:p> "old". <urn:keep> <urn:p> "untouched".' +
+            (reads ? '<urn:other> <urn:p> "concurrent".' : ""),
+          reads++ ? '"concurrent"' : tag,
+        ),
+      [`PUT ${URL}`]: () => reply(writes++ ? 204 : 412, { etag: '"final"' }),
+    });
+    expect((await storage.patch(URL, rdf([added], [old]), { ifMatch: tag })).etag).toBe('"final"');
+    expect(calls.map(({ method }) => method)).toEqual(["GET", "PUT", "GET", "PUT"]);
+    for (const call of calls.filter(({ method }) => method === "GET"))
+      expect(call.headers.get("accept")).toBe("*/*");
+    const puts = calls.filter(({ method }) => method === "PUT");
+    expect(puts.map(({ headers }) => headers.get("if-match"))).toEqual([tag, '"concurrent"']);
+    for (const [i, call] of puts.entries()) {
+      expect(call.headers.get("content-type")).toBe(contentType);
+      const actual = new Store(new Parser({ format: type }).parse(call.body as string));
+      expect(actual.size).toBe(i ? 3 : 2);
+      expect(actual.has(old)).toBe(false);
+      expect(actual.has(added)).toBe(true);
+      expect(actual.has(kept)).toBe(true);
+      expect(actual.has(concurrent)).toBe(i === 1);
+    }
+  });
   test.each([false, true])("RMW rereads once after 412; repeated conflict %s", async (repeated) => {
     let reads = 0,
       writes = 0;
@@ -624,11 +675,7 @@ describe("LWS JSON, raw and RDF patches", () => {
       const { storage, calls } = backend(
         {
           [`HEAD ${URL}`]: reply(200, { "content-type": contentType, etag: tag }),
-          [`GET ${URL}`]: {
-            status: 200,
-            headers: { "content-type": contentType, etag: tag },
-            body,
-          },
+          [`GET ${URL}`]: (call) => nativeRdfReply(call, contentType, body),
         },
         (features) => {
           features.patch.detail.formats = { [contentType]: ["application/sparql-update"] };
