@@ -5,11 +5,16 @@ import { appendFileSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileS
 import { tmpdir } from "os";
 // biome-ignore lint/style/useNodejsImportProtocol: agent layer requires bare specifiers
 import { join } from "path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { FileLedger } from "../src/file-ledger.js";
 import { MemoryLedger, verifyLedger } from "../src/ledger.js";
 import { checkedRecord, ENTRY_KINDS, GENESIS, type LedgerEntry, seal } from "../src/records.js";
 import { required } from "./fixture.js";
+
+vi.mock("fs", async (importOriginal) => {
+  const fs = await importOriginal<typeof import("fs")>();
+  return { ...fs, rmSync: vi.fn(fs.rmSync) };
+});
 
 export const AT = "2026-10-26T12:00:00.000Z";
 export const record = {
@@ -25,6 +30,7 @@ function file() {
   return join(dir, "ledger.jsonl");
 }
 afterEach(() => {
+  vi.mocked(rmSync).mockReset();
   for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true });
 });
 it("accepts every specified kind, snapshots input/output and uses the pilot hash shape", () => {
@@ -110,6 +116,61 @@ it("reopens an archived-only tail after a rotation crash", () => {
   const next = new FileLedger(path);
   expect(next.append(record, AT).seq).toBe(2);
   expect(verifyLedger(next.entries()).ok).toBe(true);
+});
+it.each([1, 2, 3])("recovers pruning interrupted at deletion boundary %i", async (boundary) => {
+  const { rmSync: remove } = await vi.importActual<typeof import("fs")>("fs");
+  for (const interruptBeforeDelete of [true, false]) {
+    const path = file();
+    const original = new FileLedger(path, { segmentMaxEntries: 2, maxSegments: 4 });
+    for (let i = 0; i < 8; i++) original.append(record, AT);
+    const shrinking = new FileLedger(path, { segmentMaxEntries: 2, maxSegments: 1 });
+    let deletions = 0;
+    vi.mocked(rmSync).mockImplementation((archive) => {
+      const last = JSON.parse(readFileSync(archive, "utf8").trim().split("\n").at(-1) as string);
+      expect(shrinking.entries().at(-1)?.record).toEqual({
+        type: "ledger-checkpoint",
+        lastPrunedSeq: last.seq,
+        lastPrunedHash: last.hash,
+      });
+      deletions++;
+      if (deletions === boundary && interruptBeforeDelete) throw new Error("interrupted prune");
+      remove(archive);
+      expect(verifyLedger(new FileLedger(path).entries()).ok).toBe(true);
+      if (deletions === boundary) throw new Error("interrupted prune");
+    });
+    expect(() => shrinking.append(record, AT)).toThrow("interrupted prune");
+    vi.mocked(rmSync).mockReset();
+    const reopened = new FileLedger(path, { segmentMaxEntries: 2, maxSegments: 1 });
+    expect(verifyLedger(reopened.entries()).ok).toBe(true);
+    const previous = required(reopened.entries().at(-1));
+    reopened.append(record, AT);
+    expect(required(reopened.entries().at(-1)).seq).toBeGreaterThan(previous.seq);
+    expect(verifyLedger(new FileLedger(path).entries()).ok).toBe(true);
+  }
+});
+it.each([
+  false,
+  true,
+])("separates an unterminated final record on append (reopen: %s)", (reopen) => {
+  const path = file();
+  let ledger = new FileLedger(path);
+  ledger.append(record, AT);
+  const intact = readFileSync(path, "utf8").trimEnd();
+  writeFileSync(path, intact);
+  if (reopen) ledger = new FileLedger(path);
+  const entry = ledger.append(record, AT);
+  expect(entry.seq).toBe(2);
+  expect(readFileSync(path, "utf8")).toBe(`${intact}\n${JSON.stringify(entry)}\n`);
+  expect(new FileLedger(path).entries()).toEqual(ledger.entries());
+  expect(verifyLedger(ledger.entries()).ok).toBe(true);
+});
+it("appends to an existing empty ledger", () => {
+  const path = file();
+  writeFileSync(path, "");
+  const ledger = new FileLedger(path);
+  const entry = ledger.append(record, AT);
+  expect(readFileSync(path, "utf8")).toBe(`${JSON.stringify(entry)}\n`);
+  expect(verifyLedger(new FileLedger(path).entries()).ok).toBe(true);
 });
 it("rejects corrupt storage and invalid bounds without deleting evidence", () => {
   const path = file();

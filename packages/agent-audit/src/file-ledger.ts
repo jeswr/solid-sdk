@@ -70,7 +70,12 @@ export class FileLedger implements EvidenceLedger {
   }
   private writeLine(entry: LedgerEntry): void {
     const existed = existsSync(this.path);
-    appendFileSync(this.path, `${JSON.stringify(entry)}\n`, { encoding: "utf8", mode: 0o600 });
+    const tail = existed ? readFileSync(this.path, "utf8") : "";
+    const separator = tail.length > 0 && !tail.endsWith("\n") ? "\n" : "";
+    appendFileSync(this.path, `${separator}${JSON.stringify(entry)}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
     sync(this.path);
     if (!existed) sync(dirname(this.path));
     this.last = entry;
@@ -98,15 +103,18 @@ export class FileLedger implements EvidenceLedger {
     const excess = archived.length - this.bounds.maxSegments;
     if (excess <= 0) return;
     const pruned = archived.slice(0, excess);
-    const last = readSegment(pruned[pruned.length - 1] as string).at(-1) as LedgerEntry;
-    this.writeLine(
-      this.next(
-        { type: "ledger-checkpoint", lastPrunedSeq: last.seq, lastPrunedHash: last.hash },
-        at,
-      ),
-    );
-    for (const p of pruned) rmSync(p);
-    sync(dirname(this.path));
+    for (const p of pruned) {
+      const last = readSegment(p).at(-1) as LedgerEntry;
+      // Every interrupted deletion prefix needs its own durable checkpoint.
+      this.writeLine(
+        this.next(
+          { type: "ledger-checkpoint", lastPrunedSeq: last.seq, lastPrunedHash: last.hash },
+          at,
+        ),
+      );
+      rmSync(p);
+      sync(dirname(this.path));
+    }
   }
   entries(): readonly LedgerEntry[] {
     return [...this.segments().flatMap(readSegment), ...readSegment(this.path)];
