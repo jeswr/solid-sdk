@@ -57,6 +57,13 @@ export function createCaptureTestZip(
     const name = Buffer.from(entry.name);
     const raw = Buffer.from(entry.text);
     const data = entry.deflate ? deflateRawSync(raw) : raw;
+    const descriptor = Buffer.alloc(entry.descriptor ? 16 : 0);
+    if (entry.descriptor) {
+      descriptor.writeUInt32LE(0x08074b50);
+      descriptor.writeUInt32LE(crc32(raw), 4);
+      descriptor.writeUInt32LE(data.length, 8);
+      descriptor.writeUInt32LE(raw.length, 12);
+    }
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50);
     local.writeUInt16LE(entry.descriptor ? 8 : 0, 6);
@@ -76,9 +83,9 @@ export function createCaptureTestZip(
     header.writeUInt32LE(raw.length, 24);
     header.writeUInt16LE(name.length, 28);
     header.writeUInt32LE(offset, 42);
-    locals.push(local, name, data);
+    locals.push(local, name, data, descriptor);
     headers.push(header, name);
-    offset += local.length + name.length + data.length;
+    offset += local.length + name.length + data.length + descriptor.length;
   }
   const directory = Buffer.concat(headers);
   const end = Buffer.alloc(22);

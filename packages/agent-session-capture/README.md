@@ -4,8 +4,9 @@
 
 > Experimental — AI-agent-generated. Private Node >=24 ESM package; review before enabling hooks.
 
-`solid-capture` copies Claude Code and Codex CLI sessions to owner-only AS2 chat
-history in a Solid pod. It reuses MCP-08's ChatWriter and MCP-12's CSS
+`solid-capture` copies Claude Code and Codex CLI sessions and imports ChatGPT and
+Claude.ai exports to owner-only AS2 chat history in a Solid pod. It reuses
+MCP-08's ChatWriter and MCP-12's CSS
 client-credentials configuration and DPoP login. Nothing is published or enabled
 by building this package.
 
@@ -83,6 +84,48 @@ runs use stable opaque conversation/message IDs and ChatWriter's
 ChatWriter writes owner-only WAC ACLs before content and refuses unsupported ACL
 discovery or redirects.
 
+## Export imports (MCP-16)
+
+With the same writable MCP configuration:
+
+```sh
+solid-capture chatgpt-export /path/to/export.zip
+solid-capture chatgpt-export /path/to/conversations.json
+solid-capture claude-export /path/to/conversations.json
+```
+
+ChatGPT accepts the export array or a `{ "conversations": [...] }` wrapper.
+All user/assistant mapping branches are retained in timestamp order, matching the
+Pod Manager importer. Claude.ai accepts conversation arrays with `chat_messages`,
+using text blocks or the legacy `text` field. Both drop system/tool messages,
+images, attachments, tool arguments/results and thinking. Titles and message text
+are redacted before upload. Missing/invalid message dates use the conversation's
+creation date, then the Unix epoch; no current-time fallback changes retry IDs.
+
+Imports use the `chatgpt` and `claude` ChatWriter providers with opaque IDs scoped
+separately from coding-agent hooks. Source IDs and filenames never become pod paths.
+Stable message IDs and private local sequence assignments preserve idempotence and
+timestamp-tie order across retries, including exports that remove earlier messages.
+Exports lacking source IDs use deterministic content/position fallbacks; modified
+exports without IDs may be treated as new conversations or messages.
+
+Inputs must be regular, non-symlink UTF-8 files of at most **16 MiB**. JSON is
+limited to **10,000 conversations**, **100,000 source message nodes** in total,
+and **10,000 content parts** per message. Oversized inputs fail instead of being
+silently truncated. ZIPs also have a 16 MiB archive limit and independently capped
+16 MiB decompression. Only single-disk stored/deflated ZIPs with one root
+`conversations.json` are supported; unrelated entries are not decompressed.
+Encrypted/ZIP64 archives, symlinks, unsafe entry paths, duplicate JSON entries and
+CRC/header mismatches are refused. Nothing is extracted to disk.
+
+An import checks `.solid-capture-ignore` in the invoking directory and export's
+parent chains, including real paths, and rechecks before saving each conversation.
+It writes owner-only ACLs before AS2 content with the shared DPoP transport.
+Imports exit **0** on success or **1** with a fixed, content-free diagnostic on
+failure. They run outside the hook watchdog and do not queue export snapshots;
+after an interrupted/failed upload, re-run the same export to complete it safely.
+The library accepts an `AbortSignal` to cancel file reads and requests.
+
 ## Content and opt-out
 
 Capture retains user/assistant text and tool names. Claude Code `tool_result`,
@@ -137,15 +180,19 @@ checkpoints and sequence assignments. Config and opt-out checks still apply befo
 
 The root exports `runCapture(args, options?)`, `parseClaudeTranscript(jsonl, source?)`,
 `parseCodexTranscript(jsonl, source?)`, `redactSecrets(text)`, and their public types.
+It also exports `runExportImport(args, options?)`, `parseChatgptExport(json)`, and
+`parseClaudeExport(json)`. Export parsers return redacted `ChatConversation[]`
+and throw on malformed top-level JSON or exceeded limits; the import runner
+returns `0 | 1` and suppresses error details.
 Parser results include redacted `ChatConversation` values and local-only project
 locations. `runCapture` accepts injected home/cwd/env/stdin/HTTP transport and a
 shorter budget for embedding or tests; it always resolves to `0`.
-`./testing` exports an in-memory HTTP pod/token transport.
+`./testing` exports an in-memory HTTP pod/token transport and a ZIP fixture builder.
 
 ```sh
 pnpm --filter @jeswr/agent-session-capture test
 ```
 
-Tests use reduced, redacted JSONL shape fixtures and the real ChatWriter and DPoP
+Tests use reduced, redacted JSONL/export shape fixtures and the real ChatWriter and DPoP
 code over fixture HTTP. Coverage thresholds remain 100% for statements, branches,
 functions and lines, including privacy boundaries and CLI exit behavior.

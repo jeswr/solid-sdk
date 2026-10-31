@@ -6,10 +6,19 @@ description: Use when implementing or consuming @jeswr/agent-session-capture in 
 
 # @jeswr/agent-session-capture
 
-Claude Code and Codex session capture into the pod (MCP-13). Read the planning
+Claude Code and Codex session capture into the pod (MCP-13), plus ChatGPT/Claude.ai
+export imports (MCP-16). Read the planning
 repository's `specs/mcp/DESIGN.md` §6 and the assigned task before changing behavior.
 Keep the package private, ESM, Node >=24, and securityCritical. Document public
-exports with TSDoc. Export/import commands belong to the separate MCP-16 task.
+exports with TSDoc.
+
+Use `runExportImport` for explicit `chatgpt-export <zip|json>` and
+`claude-export <json>` commands. It returns 0/1 with no secret-bearing errors,
+outside the hook watchdog. Reuse MCP config/auth, ChatWriter and private sequence
+assignments; retries are create-only and no raw export snapshots are queued.
+Redact titles and text. Bound input bytes, conversation/message/part counts and
+ZIP decompression independently; never extract archive paths to disk. Refuse
+unsafe paths, links, encryption, ZIP64 and duplicate root conversations.json.
 
 Use `runCapture` for the hook boundary; it is silent, always resolves to zero,
 and caps its processing/request budget at ten seconds. The CLI starts an independent
