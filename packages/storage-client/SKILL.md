@@ -473,3 +473,36 @@ Keep development tool versions aligned with the root manifest. The pinned pnpm 1
 `ignore-scripts` requires local tool declarations for filtered scripts.
 
 Validate changes with this package's `lint`, `build`, `typecheck`, and `test` scripts.
+
+## Optional trash and version clients (SDK-APP-12)
+
+`./trash` exports `createTrashClient(storage)` with `trash(url)`, `listTrash()`,
+`restore(trashedUrl)` and `purge(trashedUrl)`. Mutation results are `WriteResult`;
+list rows contain `url`, `original`, `trashedAt: Date`, `size`, `contentType`.
+Trashing is a server move via a JSON command POST, not client copy/delete. Restore
+uses the server Location (the original URL on Solid, a new identifier on LWS).
+Purge verifies trash membership, HEADs the copy and sends conditional DELETE.
+
+`./versions` exports `createVersionsClient(storage)` with `versions(url)` returning
+`{ url, at: Date, etag }[]`, and `restoreVersion(url, versionUrl)` returning
+`WriteResult`. Histories use a scoped version-history Link when advertised, otherwise
+the one-variable `{resource}` endpoint template with a percent-encoded absolute URL.
+Query-based template listings are accepted only for that advertised template and a
+scoped resource. Encoded slashes in paths remain refused; use a query template or a
+safe version-history Link. Each version must expose `ReadResult.mementoDatetime`.
+Restore verifies membership, reads a usable strong live ETag, and writes version bytes
+with that If-Match; it never substitutes the version ETag or retries a 412.
+
+Both clients require their respective feature state to be available and an endpoint;
+unknown/unavailable/missing endpoint fails unsupported before any I/O. All service
+URLs and returned Locations retain the ordinary scope rules. The public create
+operation at the advertised TrashService endpoint accepts JSON resource/restore
+commands, bypassing ordinary child creation rules only there. Retention is server
+policy, advertised as ssd:retention xsd:duration; clients do not expire entries locally.
+
+Memory flags `trash` and `versioning` default false. Enabled services use ordinary
+list/read/metadata/create/delete operations. Content creates, writes and patches
+record immutable snapshots; reads and failed writes do not. Version nodes and history
+containers reject mutations. Tests must cover disabled features as well as both
+protocols. See the [appendix contribution](../../docs/specs/service-description/trash-and-versions-appendix.md)
+for the full protocol and three examples.

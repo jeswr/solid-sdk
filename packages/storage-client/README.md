@@ -63,3 +63,31 @@ pnpm --filter @jeswr/storage-client run test
 Coverage is enabled with 100% thresholds for branches, functions, lines, and statements. The tests
 include the RFC 6902 Appendix A examples, a table over every `StorageErrorCode`, and fast-check
 properties for the memory backend (ADR-003 §10).
+
+Optional service clients (SDK-APP-12):
+
+```ts
+import { createTrashClient } from '@jeswr/storage-client/trash';
+import { createVersionsClient } from '@jeswr/storage-client/versions';
+
+const trash = createTrashClient(storage);
+const versions = createVersionsClient(storage);
+const [version] = await versions.versions(url); // url, at, etag
+if (version) await versions.restoreVersion(url, version.url);
+const copy = await trash.trash(url);
+const entries = await trash.listTrash(); // url, original, trashedAt, size, contentType
+const restored = await trash.restore(copy.url); // use returned url, especially on LWS
+```
+
+`trash.purge(trashedUrl)` permanently deletes a listed copy using its observed ETag.
+Every service method rejects with `unsupported` before I/O unless its feature is
+available with an endpoint. Version restore verifies history membership and writes
+with the current live ETag; a concurrent edit returns 412. `ReadResult.mementoDatetime`
+exposes the Memento-Datetime header. The memory backend's `trash: true` and
+`versioning: true` flags enable both paths independently (both default false).
+
+The public `storage.create()` operation accepts JSON command POSTs at the advertised
+TrashService endpoint: restore allows 200/201 and Location may identify a live resource
+outside the trash container. Ordinary create behavior is unchanged. The protocol
+appendix and three examples live in
+[the appendix contribution](../../docs/specs/service-description/trash-and-versions-appendix.md).
