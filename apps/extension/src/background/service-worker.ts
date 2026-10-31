@@ -774,11 +774,14 @@ async function handleProfileFetch(
     const headers = filterResponseHeaders(result.response.headers);
     // A HEAD response carries NO body (Low #5) — the replica already strips it; relay no body.
     const isHead = message.method.toUpperCase() === 'HEAD';
+    // Response.url identifies the fetched document and excludes any fragment.
+    const finalUrl = new URL(result.url ?? message.url);
+    finalUrl.hash = '';
     return {
       requestId: message.requestId,
       status: result.response.status,
       statusText: result.response.statusText,
-      url: result.url ?? message.url,
+      url: finalUrl.href,
       // Manual resource sends do not set Response.redirected. Distinct sent URLs record
       // actual redirect hops, including a return to the original URL; nonce retries dedupe.
       redirected: sent.size > 1,

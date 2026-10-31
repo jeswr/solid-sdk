@@ -1592,6 +1592,22 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
     expect(cacheStore.size).toBe(0);
   });
 
+  it.each([
+    'https://alice.pod.example/finance/x.ttl?view=1#me',
+    'https://ALICE.POD.EXAMPLE:443/finance/./x.ttl?view=1#me',
+    'https://alice.pod.example/finance/x.ttl?view=1#',
+  ])('reports a canonical document URL without a fragment for direct responses (%s)', async (url) => {
+    await boot();
+    fetchImpl = async () => new Response('document bytes');
+    expect(await fetchFinance({ url })).toMatchObject({
+      status: 200,
+      url: 'https://alice.pod.example/finance/x.ttl?view=1',
+      redirected: false,
+      body: 'document bytes',
+    });
+    expect(fetchCalls.map((call) => call.url)).toEqual([url]);
+  });
+
   it('does not count a DPoP nonce retry as a redirect', async () => {
     await boot();
     const url = 'https://alice.pod.example/finance/x.ttl';
