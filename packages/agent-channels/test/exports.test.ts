@@ -35,6 +35,7 @@ import * as entry12 from "@jeswr/agent-channels/telegram";
 import * as entry27 from "@jeswr/agent-channels/telegram/send";
 import * as entry1 from "@jeswr/agent-channels/testing";
 import * as entry33 from "@jeswr/agent-channels/testing/send";
+import * as x from "@jeswr/agent-channels/x";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
 import { existsSync, readFileSync } from "fs";
 // biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
@@ -47,6 +48,7 @@ const modules: Record<string, object> = {
   "./testing": entry1,
   "./email-mime": entry2,
   "./gmail": entry3,
+  "./x": x,
   "./graph-mail": entry4,
   "./graph-teams": entry5,
   "./matrix": entry6,
@@ -103,6 +105,7 @@ it.each(entries)("resolves the declared %s surface", (subpath, target) => {
       "./email-mime/send",
       "./gmail",
       "./gmail/send",
+      "./x",
     ].includes(subpath)
   )
     expect(Object.getOwnPropertyNames(modules[subpath])).toEqual([]);
@@ -122,4 +125,8 @@ it("keeps Gmail send and MIME render factories out of read surfaces", () => {
   expect(entry2).not.toHaveProperty("createEmailRenderer");
   expect(entry19).toHaveProperty("createGmailSend");
   expect(entry18).toHaveProperty("createEmailRenderer");
+  expect(x).toHaveProperty("createXReader");
+  expect(x).not.toHaveProperty("send");
+  expect(entry0).not.toHaveProperty("createXReader");
+  expect(manifest.exports).not.toHaveProperty("./x/send");
 });

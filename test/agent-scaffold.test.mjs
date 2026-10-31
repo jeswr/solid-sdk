@@ -24,6 +24,7 @@ const securityCritical = new Set([
 const bindings = [
   "email-mime",
   "gmail",
+  "x",
   "graph-mail",
   "graph-teams",
   "matrix",
@@ -60,13 +61,15 @@ it("registers the nine private package scaffolds and private daemon under their 
   ]);
 });
 
-it("exports every channel ingest and send placeholder while keeping GitHub read-only", () => {
+it("exports every channel surface while keeping GitHub and X read-only", () => {
   const { exports } = read("packages/agent-channels/package.json");
   expect(Object.keys(exports).sort()).toEqual(
     [
       ".",
       ...bindings.map((binding) => `./${binding}`),
-      ...bindings.filter((binding) => binding !== "github").map((binding) => `./${binding}/send`),
+      ...bindings
+        .filter((binding) => !["github", "x"].includes(binding))
+        .map((binding) => `./${binding}/send`),
     ].sort(),
   );
   for (const [subpath, target] of Object.entries(exports)) {
