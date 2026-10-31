@@ -36,6 +36,49 @@ async function linkLegacy(storage: StorageClient, body = reg()) {
 
 afterEach(() => vi.restoreAllMocks());
 
+describe.each([
+  ["instance", "instance", "résumé.ttl"],
+  ["container", "instanceContainer", "résumé/"],
+] as const)("normalized %s locations", (kind, predicate, path) => {
+  it("recognizes existing raw RDF IRIs as idempotent registrations", async () => {
+    const { storage, index } = await setup();
+    const raw = `${ROOT}${path}`;
+    await linkLegacy(
+      storage,
+      `<#r> a solid:TypeRegistration; solid:forClass <${CLASS}>; solid:${predicate} <${raw}>.`,
+    );
+    const encoded = new URL(raw).href;
+    expect(await index.find(CLASS)).toEqual([encoded]);
+    const before = await (await storage.read(IDX)).text();
+    const write = vi.spyOn(storage, "writeRdf");
+    const create = vi.spyOn(storage, "create");
+    await index.register(CLASS, { [kind]: raw });
+    await index.register(CLASS, { [kind]: encoded });
+    expect(write).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+    expect(await (await storage.read(IDX)).text()).toBe(before);
+  });
+
+  it.each(["raw", "encoded"])("removes the original RDF IRI using a %s URL", async (form) => {
+    const { storage, index } = await setup();
+    const raw = `${ROOT}${path}`;
+    await linkLegacy(
+      storage,
+      `<#unicode> a solid:TypeRegistration; solid:forClass <${CLASS}>; solid:${predicate} <${raw}>; <urn:annotation> "keep". ${reg()}`,
+    );
+    const encoded = new URL(raw).href;
+    expect(await index.find(CLASS)).toEqual([encoded, LOCATION.container]);
+    const write = vi.spyOn(storage, "writeRdf");
+    await index.unregister(CLASS, { [kind]: form === "raw" ? raw : encoded });
+    expect(write).toHaveBeenCalledTimes(1);
+    expect(await index.find(CLASS)).toEqual([LOCATION.container]);
+    const { dataset } = await storage.readRdf(IDX);
+    expect([...dataset].filter((quad) => quad.subject.value === `${IDX}#unicode`)).toMatchObject([
+      { predicate: { value: "urn:annotation" }, object: { value: "keep" } },
+    ]);
+  });
+});
+
 describe("Solid discovery and bootstrap adversarial cases", () => {
   it("exports the public memory fixture and makes no request for an empty batch", async () => {
     expect(testingMemory).toBe(createMemoryStorage);

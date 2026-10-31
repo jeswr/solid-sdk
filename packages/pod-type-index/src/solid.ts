@@ -208,7 +208,7 @@ export function solidIndex(storage: StorageClient, webId: string) {
         const matching = [...indexDataset(document).registrations].filter(
           (reg) =>
             reg.iris(CLASS).some((value) => canonicalize(value) === iri) &&
-            reg.iris(locationPredicate).includes(target),
+            reg.iris(locationPredicate).some((value) => scoped(storage, value) === target),
         );
         let changed = false;
         if (remove) {
@@ -220,7 +220,7 @@ export function solidIndex(storage: StorageClient, webId: string) {
               throw error("conflict", url);
             }
             // Delete only the registration contract; preserve third-party annotations.
-            reg.values(locationPredicate).delete(target);
+            reg.values(locationPredicate).delete(reg.iris(locationPredicate)[0] as string);
             reg.values(CLASS).delete(reg.iris(CLASS)[0] as string);
             reg.values(TYPE).delete(REGISTRATION);
             changed = true;
