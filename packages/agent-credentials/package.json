@@ -2,7 +2,7 @@
   "name": "@jeswr/agent-credentials",
   "version": "0.1.0",
   "private": true,
-  "description": "Credential and token provider seams (experimental scaffold).",
+  "description": "Private credential store, OAuth PKCE and purpose-separated token providers.",
   "type": "module",
   "license": "MIT",
   "x-authored-by": "Codex GPT-6.1-Sol",
@@ -19,6 +19,22 @@
     "./testing": {
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "default": "./dist/cli.js"
+    },
+    "./providers/google": {
+      "types": "./dist/providers/google.d.ts",
+      "default": "./dist/providers/google.js"
+    },
+    "./providers/microsoft": {
+      "types": "./dist/providers/microsoft.d.ts",
+      "default": "./dist/providers/microsoft.js"
+    },
+    "./providers/setup": {
+      "types": "./dist/providers/setup.d.ts",
+      "default": "./dist/providers/setup.js"
     }
   },
   "files": [
@@ -34,5 +50,9 @@
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.10"
+  },
+  "dependencies": {
+    "jose": "^6.2.3",
+    "zod": "^4.4.3"
   }
 }
