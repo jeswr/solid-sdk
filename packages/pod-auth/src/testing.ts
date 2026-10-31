@@ -30,6 +30,120 @@ export function createMemoryStore<T extends {} = {}>(): KvStore<T> {
 const encoded = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
 const hash = (value: string) => createHash("sha256").update(value).digest("base64url");
 
+/** Injected LWS authorization/storage server with real subject signature and claim validation. */
+export function createMockLwsAs(options: {
+  challenge: "resource_metadata" | "legacy";
+  subject: {
+    issuer: string;
+    subject: string;
+    clientId: string;
+    publicKey: JsonWebKey;
+    tokenType: "id_token" | "jwt";
+  };
+}) {
+  const issuer = "https://lws.example/";
+  const root = issuer + "data/";
+  const storage = issuer + "storage";
+  const tokenEndpoint = issuer + "exchange";
+  const requests: Request[] = [];
+  const tokens = new Set<string>();
+  const seen = new Set<string>();
+  const stats = { exchanges: 0, accepted: 0 };
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    const request = new Request(input, init);
+    requests.push(request.clone());
+    const url = new URL(request.url);
+    const prefix = "/.well-known/oauth-protected-resource";
+    if (url.pathname.startsWith(prefix))
+      return Response.json({
+        resource: url.origin + url.pathname.slice(prefix.length) + url.search,
+        authorization_servers: [issuer],
+      });
+    if (request.url === storage)
+      return Response.json({
+        id: storage,
+        type: "Storage",
+        service: [{ type: "StorageRoot", serviceEndpoint: root }],
+      });
+    if (request.url === issuer + ".well-known/lws-configuration")
+      return Response.json({ issuer, token_endpoint: tokenEndpoint });
+    if (request.url === tokenEndpoint) {
+      const form = new URLSearchParams(await request.text());
+      try {
+        const token = form.get("subject_token")!;
+        const [header, body, signature] = token.split(".");
+        const head = JSON.parse(Buffer.from(header!, "base64url").toString());
+        const claims = JSON.parse(Buffer.from(body!, "base64url").toString());
+        const subject = options.subject;
+        if (
+          head.alg !== "ES256" ||
+          !verify(
+            "sha256",
+            Buffer.from(header + "." + body),
+            {
+              key: createPublicKey({ key: subject.publicKey, format: "jwk" }),
+              dsaEncoding: "ieee-p1363",
+            },
+            Buffer.from(signature!, "base64url"),
+          ) ||
+          claims.iss !== subject.issuer ||
+          claims.sub !== subject.subject ||
+          claims.exp <= Date.now() / 1000 ||
+          claims.iat > Date.now() / 1000 + 1 ||
+          form.get("grant_type") !== "urn:ietf:params:oauth:grant-type:token-exchange" ||
+          form.get("resource") !== storage ||
+          form.get("subject_token_type") !==
+            "urn:ietf:params:oauth:token-type:" + subject.tokenType ||
+          form.get("client_id") !== subject.clientId ||
+          (subject.tokenType === "id_token"
+            ? claims.azp !== subject.clientId
+            : claims.client_id !== subject.clientId ||
+              !claims.aud?.includes(issuer) ||
+              !claims.jti ||
+              seen.has(claims.jti))
+        )
+          throw new Error("Invalid subject credential");
+        seen.add(claims.jti);
+        stats.exchanges++;
+        const access = randomUUID();
+        tokens.add(access);
+        return Response.json({ access_token: access, token_type: "Bearer", expires_in: 300 });
+      } catch {
+        return Response.json({ error: "invalid_grant" }, { status: 400 });
+      }
+    }
+    const authorization = request.headers.get("authorization");
+    if (
+      request.url.startsWith(root) &&
+      authorization?.startsWith("Bearer ") &&
+      tokens.has(authorization.slice(7))
+    ) {
+      stats.accepted++;
+      return new Response("protected LWS");
+    }
+    return new Response(null, {
+      status: 401,
+      headers: {
+        "www-authenticate":
+          options.challenge === "legacy"
+            ? `Bearer as_uri="${issuer}", realm="${storage}"`
+            : `Bearer resource_metadata="${url.origin}${prefix}${url.pathname}${url.search}"`,
+        link: `<${storage}>; rel="https://www.w3.org/ns/lws#storage"`,
+      },
+    });
+  };
+  return {
+    issuer,
+    root,
+    storage,
+    tokenEndpoint,
+    fetch,
+    requests,
+    stats,
+    rejectAccessTokens: () => tokens.clear(),
+  };
+}
+
 /** Real signature, PKCE, nonce, DPoP binding and replay checks, without mocking the protocol engine. */
 export function createMockOp(
   options: {
@@ -41,6 +155,7 @@ export function createMockOp(
     omitAzp?: boolean;
     refreshTokens?: boolean;
     revocation?: boolean;
+    clientCredentials?: { clientId: string; clientSecret: string };
   } = {},
 ) {
   const issuer = options.issuer ?? "https://op.example/";
@@ -205,6 +320,25 @@ export function createMockOp(
       } catch {
         return Response.json({ error: "invalid_dpop_proof" }, { status: 400 });
       }
+      if (form.get("grant_type") === "client_credentials") {
+        const credentials = options.clientCredentials;
+        const authorization = request.headers.get("authorization") ?? "";
+        const [clientId, clientSecret] = Buffer.from(authorization.slice(6), "base64")
+          .toString()
+          .split(":")
+          .map((part) => decodeURIComponent(part.replaceAll("+", " ")));
+        if (
+          credentials === undefined ||
+          !authorization.startsWith("Basic ") ||
+          clientId !== credentials.clientId ||
+          clientSecret !== credentials.clientSecret
+        )
+          return Response.json({ error: "invalid_client" }, { status: 401 });
+        stats.tokens++;
+        const access = randomUUID();
+        tokens.set(access, jkt);
+        return Response.json({ access_token: access, token_type: "DPoP", expires_in: 300 });
+      }
       if (form.get("grant_type") === "refresh_token") {
         stats.refreshes++;
         if (refreshError)
@@ -346,6 +480,7 @@ export function createMockOp(
     clientId,
     redirectUri,
     root,
+    publicKey: jwk,
     requests,
     stats,
     fetch,

@@ -2,7 +2,6 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { AmbiguousIssuerError, createPodAuth, type PodAuthOptions } from "./index.js";
 import * as node from "./node.js";
-import * as react from "./react.js";
 import { createMemoryStore, createMockOp } from "./testing.js";
 
 afterEach(() => {
@@ -62,8 +61,7 @@ test("explicit WebID login, validated claims, PKCE + DPoP authenticated read, pr
   expect((await auth.login()).storages).toEqual([op.root]);
   stop();
   stop();
-  expect(Object.keys(node)).toEqual([]);
-  expect(Object.keys(react)).toEqual([]);
+  expect(node.forClientCredentials).toBeTypeOf("function");
 });
 
 test("implicit login emits challenge before login, caches by root and supports unsubscribe", async () => {

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { type Identity as Claims, sameIssuer } from "@jeswr/reactive-authentication";
+import { createAgentAuth } from "./agent.js";
 import { StorageFailure } from "./kv.js";
 import { secureUrl, validateOptions } from "./options.js";
 import { AmbiguousIssuerError, createProviders } from "./providers.js";
@@ -16,6 +17,7 @@ import type {
 export type {
   AuthEvent,
   AuthEventType,
+  CidSubject,
   Identity,
   KvStore,
   LoginHint,
@@ -26,6 +28,8 @@ export { AmbiguousIssuerError };
 
 export function createPodAuth(options: PodAuthOptions): PodAuth {
   validateOptions(options);
+  if (options.lws !== undefined && options.lws.subject !== "oidc-id-token")
+    return createAgentAuth(options, { kind: "cid", cid: { ...options.lws.subject.cid } });
   let current: Identity | null = null;
   let restoring: Promise<Identity | null> | undefined;
   let loggingOut: Promise<void> | undefined;

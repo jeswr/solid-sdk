@@ -4,6 +4,7 @@ import {
   CachingClientProvider,
   CachingIssuerProvider,
   type Identity as Claims,
+  ClientCredentialsTokenProvider,
   ClientIdClientProvider,
   type CodeProvider,
   type ContextKey,
@@ -18,6 +19,7 @@ import {
   OidcIdTokenSource,
   ReactiveFetchManager,
   type RefreshSessionRecord,
+  SelfIssuedJwtSource,
   SessionFence,
   SolidUmaTokenProvider,
   sameIssuer,
@@ -29,7 +31,192 @@ import { createBoundary } from "./boundary.js";
 import { protectStore, scopedStore } from "./kv.js";
 import { secureUrl } from "./options.js";
 import { memoryStore, sessionStorage } from "./sessions.js";
-import type { KvStore, LoginHint, PodAuthOptions } from "./types.js";
+import type { CidSubject, Identity, KvStore, LoginHint, PodAuthOptions } from "./types.js";
+
+export type AgentPolicy = Pick<PodAuthOptions, "boundary" | "allowInsecureLoopback" | "clock">;
+export type AgentConfiguration =
+  | { kind: "cid"; cid: CidSubject }
+  | { kind: "client-credentials"; issuer: string; clientId: string; clientSecret: string };
+
+/** Node agent composition uses the same transport, boundary and generation fences as browser auth. */
+export function createAgentProviders(
+  policy: AgentPolicy,
+  config: AgentConfiguration,
+  hooks: { challenge(url: string): void; session(signal: AbortSignal): void },
+) {
+  const transport = nonReactiveFetch();
+  const http: HttpOptions = {
+    allowInsecureRequests: policy.allowInsecureLoopback === true,
+    fetch: (input, init) => {
+      const request = new Request(input, init);
+      secureUrl(request.url, policy.allowInsecureLoopback === true, "protocol endpoint");
+      return transport(request);
+    },
+  };
+  const boundary = createBoundary(policy, http);
+  const fence = new SessionFence(`pod-auth-agent:${crypto.randomUUID()}`, { broadcast: false });
+  let provider: TokenProvider;
+  let prepare: (signal: AbortSignal) => Promise<void>;
+  let identity: Omit<Identity, "storages">;
+  if (config.kind === "cid") {
+    const cid = { ...config.cid };
+    const source = new SelfIssuedJwtSource({
+      subject: cid.documentUrl,
+      keyId: cid.keyId,
+      privateKey: cid.privateKey!,
+      algorithm: "ES256",
+    });
+    // Validate the published authentication method and prove possession before publishing an identity
+    // or releasing a subject credential. Never fetch a remote JSON-LD context or follow redirects.
+    let resolved: Promise<void> | undefined;
+    prepare = async (signal) => {
+      signal.throwIfAborted();
+      resolved ??= (async () => {
+        const response = await http.fetch!(cid.documentUrl, {
+          headers: { accept: "application/cid, application/ld+json" },
+          redirect: "error",
+          signal,
+        });
+        if (!response.ok || response.redirected) throw new Error("CID document resolution failed");
+        const document = await response.json();
+        const methods: Record<string, unknown>[] = Array.isArray(document?.verificationMethod)
+          ? document.verificationMethod.filter(
+              (method: Record<string, unknown> | null) => method?.id === cid.keyId,
+            )
+          : [];
+        const method = methods[0];
+        if (
+          document?.id !== cid.documentUrl ||
+          methods.length !== 1 ||
+          method?.type !== "JsonWebKey" ||
+          method.controller !== cid.documentUrl ||
+          !Array.isArray(document.authentication) ||
+          !document.authentication.includes(cid.keyId) ||
+          !method.publicKeyJwk ||
+          typeof method.publicKeyJwk !== "object" ||
+          "d" in method.publicKeyJwk
+        )
+          throw new Error("CID authentication method could not be resolved");
+        const publicKey = await crypto.subtle.importKey(
+          "jwk",
+          method.publicKeyJwk,
+          { name: "ECDSA", namedCurve: "P-256" },
+          false,
+          ["verify"],
+        );
+        const challenge = crypto.getRandomValues(new Uint8Array(32));
+        const signature = await crypto.subtle.sign(
+          { name: "ECDSA", hash: "SHA-256" },
+          cid.privateKey!,
+          challenge,
+        );
+        if (
+          !(await crypto.subtle.verify(
+            { name: "ECDSA", hash: "SHA-256" },
+            publicKey,
+            signature,
+            challenge,
+          ))
+        )
+          throw new Error("CID signing key does not match the published authentication method");
+      })().catch((error: unknown) => {
+        resolved = undefined;
+        throw error;
+      });
+      await resolved;
+      signal.throwIfAborted();
+    };
+    provider = new LwsTokenProvider(
+      {
+        id: source.id,
+        fence,
+        getCredential: async (request) => {
+          await prepare(request.signal);
+          const credential = await source.getCredential(request);
+          request.signal.throwIfAborted();
+          return credential;
+        },
+        forget: async () => {
+          resolved = undefined;
+        },
+      },
+      { http, fence },
+    );
+    identity = {
+      webId: null,
+      issuer: cid.documentUrl,
+      subject: cid.documentUrl,
+      clientId: cid.documentUrl,
+      protocol: "lws",
+    };
+  } else {
+    const discovered = new CachingAuthorizationServerProvider(
+      new XASProvider({ getIssuer: async () => new URL(config.issuer) }, http),
+    );
+    const as = {
+      getAuthorizationServer: async (request: Request) => {
+        const metadata = await discovered.getAuthorizationServer(request);
+        if (
+          metadata.dpop_signing_alg_values_supported !== undefined &&
+          !metadata.dpop_signing_alg_values_supported.includes("ES256")
+        )
+          throw new Error("The issuer must support ES256 DPoP");
+        return { ...metadata, dpop_signing_alg_values_supported: ["ES256"] };
+      },
+    };
+    provider = new ClientCredentialsTokenProvider(as, config.clientId, config.clientSecret, {
+      http,
+      fence,
+    });
+    prepare = async (signal) => {
+      const root = boundary.roots()[0]!;
+      await provider.upgrade(new Request(root, { signal }));
+    };
+    identity = {
+      webId: null,
+      issuer: config.issuer,
+      subject: config.clientId,
+      clientId: config.clientId,
+      protocol: "solid-oidc",
+    };
+  }
+  const observed: TokenProvider = {
+    fence,
+    matches: async (request, challenge) => {
+      if (
+        config.kind === "client-credentials" &&
+        challenge?.challenges.some(
+          (c) =>
+            c.scheme === "uma" ||
+            (c.scheme === "bearer" && ("resource_metadata" in c.params || "as_uri" in c.params)),
+        )
+      )
+        return false;
+      if (!(await provider.matches(request, challenge))) return false;
+      hooks.challenge(request.url);
+      return true;
+    },
+    upgrade: async (request, challenge) => {
+      const upgraded = await provider.upgrade(request, challenge);
+      hooks.session(upgraded.signal);
+      return upgraded;
+    },
+    invalidate: async (request, challenge) => await provider.invalidate!(request, challenge),
+    forget: async () => await provider.forget!(),
+  };
+  return {
+    boundary,
+    identity,
+    manager: new ReactiveFetchManager({ providers: [observed], boundary, fetch: transport, fence }),
+    login: async () => {
+      const initial = fence.signal;
+      const generation = await fence.generation();
+      const signal = AbortSignal.any([initial, fence.signalFor(generation)]);
+      await prepare(signal);
+      hooks.session(signal);
+    },
+  };
+}
 
 export class AmbiguousIssuerError extends Error {
   constructor() {

@@ -17,9 +17,18 @@ export interface PodAuthOptions {
     /** Return the complete callback URL, including state, code and issuer parameters. */
     getCode(authorizationUrl: URL, signal: AbortSignal): Promise<string>;
   };
-  lws?: { subject: "oidc-id-token" | { cid: { documentUrl: string; keyId: string } } };
+  lws?: { subject: "oidc-id-token" | { cid: CidSubject } };
   allowInsecureLoopback?: boolean;
   clock?: () => number;
+}
+
+/** Existing CID identity and its caller-owned signing key; no key is generated implicitly. */
+export interface CidSubject {
+  documentUrl: string;
+  /** Absolute verification method URL in documentUrl. */
+  keyId: string;
+  /** Required for CID mode. Non-extractable ES256 private key, retained only in memory. */
+  privateKey?: CryptoKey;
 }
 
 export interface Identity {

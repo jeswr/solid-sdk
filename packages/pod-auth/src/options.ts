@@ -71,7 +71,7 @@ export function validateOptions(options: PodAuthOptions): void {
     throw new TypeError("boundary.roots must be an array of URLs");
   for (const root of options.boundary?.roots ?? []) secureUrl(root, insecure, "boundary root");
   if (options.lws !== undefined && options.lws.subject !== "oidc-id-token")
-    throw new TypeError("CID agent signing requires the pod-auth/node key configuration (T-034)");
+    validateCid(options.lws.subject?.cid);
   if (options.storage !== undefined) {
     for (const store of [options.storage.sessions, options.storage.caches]) {
       if (
@@ -83,4 +83,24 @@ export function validateOptions(options: PodAuthOptions): void {
         throw new TypeError("storage requires sessions and caches key-value stores");
     }
   }
+}
+
+export function validateCid(cid: import("./types.js").CidSubject): void {
+  if (!cid) throw new TypeError("CID subject is required");
+  const document = secureUrl(cid.documentUrl, false, "CID document");
+  const keyId = secureUrl(cid.keyId, false, "CID keyId");
+  const keyDocument = new URL(keyId);
+  keyDocument.hash = "";
+  if (document.hash || !keyId.hash || keyDocument.href !== document.href)
+    throw new TypeError("CID keyId must name a verification method in the CID document");
+  const key = cid.privateKey;
+  if (
+    !(key instanceof CryptoKey) ||
+    key.type !== "private" ||
+    key.extractable ||
+    key.algorithm.name !== "ECDSA" ||
+    (key.algorithm as EcKeyAlgorithm).namedCurve !== "P-256" ||
+    !key.usages.includes("sign")
+  )
+    throw new TypeError("CID requires a non-extractable ES256 private signing key");
 }

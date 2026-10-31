@@ -12,7 +12,7 @@ import type { PodAuthOptions } from "./types.js";
 
 /** Static roots plus verified automatic roots, using the same context for every provider. */
 export function createBoundary(
-  options: PodAuthOptions,
+  options: Pick<PodAuthOptions, "boundary" | "allowInsecureLoopback">,
   http: HttpOptions,
 ): Boundary & { contextKey: ContextKey; roots(): readonly string[] } {
   const insecure = options.allowInsecureLoopback === true;
