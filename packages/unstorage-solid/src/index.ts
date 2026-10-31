@@ -358,7 +358,13 @@ const solidDriver = defineDriver<SolidDriverOptions, undefined>((options) => {
     },
     async removeItem(key, opts) {
       const url = keyToUrl(base, key);
-      await run("DELETE", url, async () => remove(await client(asTx(opts)), url));
+      await run("DELETE", url, async () => {
+        try {
+          await remove(await client(asTx(opts)), url);
+        } catch (error) {
+          if (!isMissing(error)) throw error;
+        }
+      });
     },
     async getMeta(key, opts) {
       const url = keyToUrl(base, key);

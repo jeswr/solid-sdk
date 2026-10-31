@@ -67,6 +67,15 @@ describe.each([404, 410])("cold discovery on an absent mount (%s)", (status) => 
     expect(cancel).toHaveBeenCalledTimes(1);
   });
 
+  it.each(["a", "sub:a"])("removes the absent key %s without discovery links", async (key) => {
+    const { base, fetch, cancel } = fixture(status);
+    const driver = solidDriver({ base, fetch });
+    await expect(driver.removeItem?.(key, {})).resolves.toBeUndefined();
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledWith(base, expect.objectContaining({ method: "HEAD" }));
+    expect(cancel).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     "",
     "sub:",
@@ -108,6 +117,7 @@ it.each([200, 401, 403, 500])("does not infer absence from discovery status %s",
   const driver = solidDriver({ base, fetch });
   await expect(driver.getKeys("", {})).rejects.toMatchObject({ code: "no-storage-link" });
   await expect(driver.clear?.("", {})).rejects.toMatchObject({ code: "no-storage-link" });
+  await expect(driver.removeItem?.("a", {})).rejects.toMatchObject({ code: "no-storage-link" });
 });
 
 it.each([
@@ -133,6 +143,10 @@ it.each([
   const driver = solidDriver({ base, fetch });
   await expect(driver.getKeys("", {})).rejects.toMatchObject({ code: "description-unreachable" });
   await expect(driver.clear?.("", {})).rejects.toMatchObject({ code: "description-unreachable" });
+  await expect(driver.removeItem?.("a", {})).rejects.toMatchObject({
+    code: "description-unreachable",
+    status,
+  });
 });
 
 it.each([
