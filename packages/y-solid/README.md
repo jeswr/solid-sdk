@@ -58,7 +58,9 @@ must stay on the ticket endpoint's host. HTTPS ticket endpoints require WSS sock
 
 The transport uses y-websocket binary messages: sync (0), awareness (1), auth (2), and awareness
 queries (3). The relay owns persistence into the same update-log container. While `mode` reports
-`'live'`, document edits go only to the socket, and provider compaction is disabled. On socket loss,
+`'live'`, document edits stream to the socket, and provider compaction is disabled. Explicit
+`flush()` and `disconnect()` checkpoint unacknowledged live state to the log before resolving,
+because socket sends carry no durability acknowledgement. On socket loss,
 `mode` becomes `'log'`: a full-state checkpoint preserves potentially unacknowledged edits, and
 subsequent edits use the normal debounced log writes. Ticket/socket failures emit sanitized errors
 and also fall back to the log. Reconnection obtains a fresh ticket, reconciles the log and exchanges
