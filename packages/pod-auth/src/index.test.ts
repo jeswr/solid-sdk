@@ -293,12 +293,34 @@ test("LWS RFC9728 exchanges the current Solid ID token without a second login", 
   expect((await auth.identity())?.protocol).toBe("lws");
   expect(op.stats.exchanges).toBe(1);
   expect(op.stats.tokens).toBe(1);
+  expect((await auth.fetch(op.root + "private")).status).toBe(200);
+  expect((await auth.identity())?.protocol).toBe("solid-oidc");
+  expect((await auth.fetch(op.root + "lws")).status).toBe(200);
+  expect((await auth.identity())?.protocol).toBe("lws");
+  expect(op.stats.exchanges).toBe(1);
 });
 
 test("LWS can be the first authentication request", async () => {
   const { auth, op } = fixture();
   expect((await auth.fetch(op.root + "lws")).status).toBe(200);
   expect((await auth.identity())?.protocol).toBe("lws");
+});
+
+test("an LWS-first session is reused across boundary roots", async () => {
+  const { auth, op, options } = fixture(
+    {},
+    {
+      boundary: {
+        roots: ["https://pod.example/alice/", "https://pod.example/alice/nested/"],
+        automatic: false,
+      },
+    },
+  );
+  expect((await auth.fetch(op.root + "lws")).status).toBe(200);
+  expect((await auth.fetch(op.root + "nested/lws")).status).toBe(200);
+  expect(options.ui.getWebId).toHaveBeenCalledTimes(1);
+  expect(op.stats.tokens).toBe(1);
+  expect(op.stats.exchanges).toBe(1);
 });
 
 test("identity may have no WebID and reports no token material", async () => {

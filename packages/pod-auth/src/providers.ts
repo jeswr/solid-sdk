@@ -167,24 +167,67 @@ export function createProviders(
     clientProvider,
     { ...sessionOptions, session: solidProvider.session },
   );
-  const source: CredentialSource = {
-    id: namespace,
+  const lwsContexts = new Map<string, { provider: LwsTokenProvider; validate(): Promise<void> }>();
+  const lwsRequests = new WeakMap<Request, LwsTokenProvider>();
+  const lwsFor = async (request: Request) => {
+    // Capture the selected Solid session before any awaits; another upgrade may select a new one.
+    const target = sessionRequest ?? request;
+    const selected = hint;
+    const context = await boundary.contextKey(target);
+    const key = JSON.stringify([namespace, context, selected.webId, selected.issuer]);
+    let binding = lwsContexts.get(key);
+    if (binding === undefined) {
+      let oidc: OidcIdTokenSource | undefined;
+      const getOidc = async () => {
+        if (oidc === undefined) {
+          const as = await asProvider.getAuthorizationServer(target);
+          oidc = new OidcIdTokenSource(as, options.redirectUri, codeProvider, clientProvider, {
+            ...sessionOptions,
+            session: solidProvider.session,
+            context,
+          });
+        }
+        return oidc;
+      };
+      const validate = async () => {
+        const claims = await (await getOidc()).identity();
+        if (claims === undefined) throw new Error("Authentication did not establish an identity");
+        await hooks.session(target, claims, "lws");
+        sessionRequest = target;
+      };
+      const source: CredentialSource = {
+        id: key,
+        fence,
+        getCredential: async (request: CredentialRequest) => {
+          const credential = await (await getOidc()).getCredential(request);
+          // Validate the identity of this exact credential context before it leaves the source.
+          await validate();
+          return credential;
+        },
+      };
+      binding = { provider: new LwsTokenProvider(source, { http, fence }), validate };
+      lwsContexts.set(key, binding);
+    }
+    return binding;
+  };
+  const lwsProvider: TokenProvider = {
     fence,
-    getCredential: async (request: CredentialRequest) => {
-      const target = sessionRequest ?? new Request(request.resource, { signal: request.signal });
-      const as = await asProvider.getAuthorizationServer(target);
-      const context = await boundary.contextKey(target);
-      const oidc = new OidcIdTokenSource(as, options.redirectUri, codeProvider, clientProvider, {
-        ...sessionOptions,
-        session: solidProvider.session,
-        context,
-      });
-      const credential = await oidc.getCredential(request);
-      sessionRequest = target;
-      return credential;
+    matches: async (request, challenge) =>
+      await (await lwsFor(request)).provider.matches(request, challenge),
+    upgrade: async (request, challenge) => {
+      const { provider, validate } = await lwsFor(request);
+      const upgraded = await provider.upgrade(request, challenge);
+      // Cached tokens also use their original credential context, never the latest sessionRequest.
+      await validate();
+      lwsRequests.set(upgraded, provider);
+      return upgraded;
+    },
+    invalidate: async (request) => await lwsRequests.get(request)!.invalidate(request),
+    forget: async () => {
+      await Promise.all([...lwsContexts.values()].map(({ provider }) => provider.forget()));
+      lwsContexts.clear();
     },
   };
-  const lwsProvider = new LwsTokenProvider(source, { http, fence });
   const observe = (
     provider: TokenProvider,
     protocol: "solid-oidc" | "lws",
@@ -208,11 +251,10 @@ export function createProviders(
     },
     upgrade: async (request, challenge) => {
       const upgraded = await provider.upgrade(request, challenge);
-      const target = protocol === "lws" ? sessionRequest! : request;
-      const claims = await solidProvider.identity(target);
+      const claims = await solidProvider.identity(request);
       if (claims === undefined) throw new Error("Authentication did not establish an identity");
       await hooks.session(request, claims, protocol);
-      sessionRequest = target;
+      sessionRequest = request;
       return upgraded;
     },
     invalidate: async (request, challenge) => await provider.invalidate!(request, challenge),
@@ -222,7 +264,14 @@ export function createProviders(
     providers: [
       observe(solidProvider, "solid-oidc", true),
       observe(umaProvider, "solid-oidc"),
-      observe(lwsProvider, "lws"),
+      {
+        ...lwsProvider,
+        matches: async (request, challenge) => {
+          if (!(await lwsProvider.matches(request, challenge))) return false;
+          hooks.challenge(request.url);
+          return true;
+        },
+      },
     ],
     boundary,
     fetch: transport,

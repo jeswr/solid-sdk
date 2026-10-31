@@ -1,6 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { createHash, generateKeyPairSync, randomUUID, sign } from "node:crypto";
-import { DPoPTokenProvider, SolidUmaTokenProvider } from "@jeswr/reactive-authentication";
+import {
+  DPoPTokenProvider,
+  OidcIdTokenSource,
+  SolidUmaTokenProvider,
+} from "@jeswr/reactive-authentication";
 import { afterEach, expect, test, vi } from "vitest";
 import { createBoundary } from "./boundary.js";
 import { createPodAuth, type PodAuthOptions } from "./index.js";
@@ -148,6 +152,131 @@ test("missing identity fails closed before sending the upgraded request", async 
   expect(
     op.requests.filter((r) => r.url === op.root + "private" && r.headers.has("authorization")),
   ).toHaveLength(0);
+});
+
+test("LWS refuses missing credential identity before exchange", async () => {
+  const { op, options } = setup();
+  vi.spyOn(OidcIdTokenSource.prototype, "identity").mockResolvedValue(undefined);
+  const auth = createPodAuth(options);
+  await expect(auth.fetch(op.root + "lws")).rejects.toThrow("did not establish an identity");
+  expect(op.stats.exchanges).toBe(0);
+  expect(op.stats.accepted).toBe(0);
+  expect(await auth.identity()).toBeNull();
+});
+
+function twoAccounts(onExchange?: (request: Request) => Promise<Response>) {
+  const alice = createMockOp();
+  const bob = createMockOp({
+    issuer: "https://bob-op.example/",
+    subject: "https://id.example/bob",
+    webId: "https://id.example/bob#me",
+  });
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.url === "https://pod.example/exchange" && onExchange) return onExchange(request);
+    return request.url.startsWith(alice.issuer) ||
+      request.url.startsWith("https://id.example/alice") ||
+      request.url.startsWith(alice.root + "nested/")
+      ? alice.fetch(request)
+      : bob.fetch(request);
+  });
+  const options: PodAuthOptions = {
+    clientId: alice.clientId,
+    redirectUri: alice.redirectUri,
+    boundary: { roots: [alice.root, alice.root + "nested/"], automatic: false },
+    ui: {
+      getWebId: vi.fn().mockResolvedValueOnce(bob.webId).mockResolvedValue(alice.webId),
+      getCode: (url, signal) =>
+        url.href.startsWith(bob.issuer) ? bob.getCode(url, signal) : alice.getCode(url, signal),
+    },
+  };
+  return { alice, bob, options };
+}
+
+test("LWS checks the credential account before exchange when another context logs in first", async () => {
+  const { alice, bob, options } = twoAccounts();
+  const ready = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const getCode = options.ui.getCode;
+  options.ui.getCode = async (url, signal) => {
+    if (url.href.startsWith(bob.issuer)) {
+      ready.resolve();
+      await release.promise;
+    }
+    return getCode(url, signal);
+  };
+  const auth = createPodAuth(options);
+  const lws = Promise.allSettled([auth.fetch(bob.root + "lws")]);
+  await ready.promise;
+  try {
+    expect((await auth.fetch(alice.root + "nested/private")).status).toBe(200);
+    expect((await auth.identity())?.issuer).toBe(alice.issuer);
+  } finally {
+    release.resolve();
+  }
+  const [result] = await lws;
+  expect(result).toMatchObject({
+    status: "rejected",
+    reason: { message: expect.stringContaining("selected account") },
+  });
+  expect(bob.stats.exchanges).toBe(0);
+  expect(bob.stats.accepted).toBe(0);
+  expect(await auth.identity()).toBeNull();
+});
+
+test("a concurrent Solid upgrade cannot relabel an in-flight LWS credential as another account", async () => {
+  const ready = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const { alice, bob, options } = twoAccounts(async (request) => {
+    const response = await bob.fetch(request);
+    ready.resolve();
+    await release.promise;
+    return response;
+  });
+  const auth = createPodAuth(options);
+  const lws = Promise.allSettled([auth.fetch(bob.root + "lws")]);
+  await ready.promise;
+  let solid: PromiseSettledResult<Response>[];
+  try {
+    solid = await Promise.allSettled([auth.fetch(alice.root + "nested/private")]);
+  } finally {
+    release.resolve();
+  }
+  expect(solid[0]).toMatchObject({
+    status: "rejected",
+    reason: { message: expect.stringContaining("selected account") },
+  });
+  expect((await lws)[0]?.status).toBe("rejected");
+  expect(alice.stats.accepted).toBe(0);
+  expect(bob.stats.accepted).toBe(0);
+  expect(await auth.identity()).toBeNull();
+});
+
+test("LWS validates cached credential context before presentation and delegates invalidation and forget", async () => {
+  const { op, options } = setup();
+  let rejected = false;
+  vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.url === op.root + "lws" && request.headers.has("authorization") && !rejected) {
+      rejected = true;
+      return op.fetch(op.root + "lws");
+    }
+    return op.fetch(request);
+  });
+  const providers = createProviders(options, {
+    challenge: vi.fn(),
+    session: vi.fn(async () => {}),
+  });
+  expect((await providers.manager.fetch(op.root + "lws")).status).toBe(200);
+  expect(op.stats.exchanges).toBe(2);
+  const identity = vi.spyOn(OidcIdTokenSource.prototype, "identity").mockResolvedValue(undefined);
+  await expect(providers.manager.fetch(op.root + "lws")).rejects.toThrow(
+    "did not establish an identity",
+  );
+  expect(op.stats.exchanges).toBe(2);
+  expect(op.stats.accepted).toBe(1);
+  identity.mockRestore();
+  await providers.manager.logout();
 });
 
 test("identity with no azp reports null clientId and does not expose credentials", async () => {
