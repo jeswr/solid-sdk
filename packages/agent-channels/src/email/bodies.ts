@@ -1,12 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { AnyMessage, Json, JsonObject } from "@jeswr/agent-model";
+import { type AnyMessage, canonicalJson, type Json, type JsonObject } from "@jeswr/agent-model";
 import { envelope } from "../direct/shared.js";
 
 const SUMMARY_START = "--- Summary generated from the signed statement ---";
 const SUMMARY_END = "--- End of summary ---";
 
 function short(v: unknown, max = 160): string {
-  const s = typeof v === "string" ? v : JSON.stringify(v);
+  const s = typeof v === "string" ? v : canonicalJson(v);
   const points = Array.from(s);
   return points.length > max ? `${points.slice(0, max - 3).join("")}...` : s;
 }

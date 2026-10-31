@@ -424,6 +424,37 @@ it("transmits approved MIME with Unicode at the summary truncation boundary", as
   );
 });
 
+it("transmits approved MIME when verified object keys differ from the signed payload order", async () => {
+  const terms = { value: { z: 2, a: 1 } };
+  const proposal = signed({
+    ...message,
+    kind: "propose",
+    body: {
+      operation: { id: "urn:op", version: "1" },
+      round: 1,
+      terms,
+      termsDigest: digestOf(terms),
+    },
+  });
+  const s = sender([fixtures.accepted], {
+    verify: async (jws: string) => {
+      expect(await verifyMessage(jws)).toEqual(proposal.message);
+      return proposal.message;
+    },
+  });
+  const wire = await s.send.render(proposal, EMAIL_MIME);
+  expect(await s.send.validate(wire, proposal)).toEqual({ ok: true });
+  expect(await s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false })).toEqual({
+    outcome: "accepted",
+    providerRef: "d4",
+  });
+  expect(s.verifyApproval).toHaveBeenCalledWith(wire, account);
+  expect(s.requests).toHaveLength(1);
+  expect(Buffer.from(JSON.parse(s.requests[0]?.body ?? "null").raw, "base64url").toString()).toBe(
+    wire.bytes,
+  );
+});
+
 it.each([
   400, 401, 403, 429, 500, 503,
 ])("distinguishes definitive HTTP 400 rejection from uncertain HTTP %s", async (status) => {

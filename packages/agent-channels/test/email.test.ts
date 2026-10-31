@@ -67,6 +67,59 @@ it("renders exact deterministic MIME with three copies, approved footer and lega
   expect(inspectEmail(Buffer.from(wire.bytes), config).parity).toBe("match");
 });
 
+it.each([
+  "propose",
+  "accept",
+  "receipt",
+] as const)("keeps %s MIME identical when the verifier reconstructs object key order", async (kind) => {
+  const object = { z: 2, a: 1 };
+  const terms = { object, array: [{ z: 4, a: 3 }, object] };
+  const cases = {
+    propose: {
+      body: {
+        operation: { id: "urn:op", version: "1" },
+        round: 1,
+        terms,
+        termsDigest: digestOf(terms),
+      },
+      summaries: ['Term object: {"a":1,"z":2}', 'Term array: [{"a":3,"z":4},{"a":1,"z":2}]'],
+    },
+    accept: {
+      body: {
+        proposal: "urn:proposal",
+        agreement: "urn:agreement",
+        termsDigest: digestOf(terms),
+        selection: terms,
+      },
+      summaries: ['Selection: {"array":[{"a":3,"z":4},{"a":1,"z":2}],"object":{"a":1,"z":2}}'],
+    },
+    receipt: {
+      body: {
+        ref: "urn:invocation",
+        activity: "urn:activity",
+        outcome: "completed",
+        observed: terms,
+      },
+      summaries: ['Observed: {"array":[{"a":3,"z":4},{"a":1,"z":2}],"object":{"a":1,"z":2}}'],
+    },
+  };
+  const { body, summaries } = cases[kind];
+  const proposal = signed({ ...message, kind, body });
+  const renderer = createEmailRenderer({
+    ...renderOptions,
+    verify: async (jws) => {
+      expect(await verifyMessage(jws)).toEqual(proposal.message);
+      return proposal.message;
+    },
+  });
+  const wire = await renderer.render(proposal, EMAIL_MIME);
+  expect(wire).toEqual(await createEmailRenderer(renderOptions).render(proposal, EMAIL_MIME));
+  expect(await renderer.validate(wire, proposal)).toEqual({ ok: true });
+  const parsed = inspectEmail(Buffer.from(wire.bytes), config);
+  expect(parsed.parity).toBe("match");
+  for (const summary of summaries) expect(parsed.message.textBody).toContain(summary);
+});
+
 it.for([
   null,
   true,
