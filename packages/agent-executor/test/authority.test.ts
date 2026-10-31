@@ -2,7 +2,7 @@
 import { AGENT } from "@jeswr/agent-mandate";
 import { describe, expect, it, vi } from "vitest";
 import { createExecutor } from "../src/index.js";
-import { control, harness, NOW, seal } from "./helpers.js";
+import { control, deferred, harness, NOW, seal } from "./helpers.js";
 
 describe("temporal authority", () => {
   for (const authority of [
@@ -391,6 +391,45 @@ describe("final temporal transitions", () => {
 });
 
 describe("final credential authority", () => {
+  it.each([
+    "present",
+    "unreadable",
+  ])("local HALT becoming %s during the final control read prevents credential release", async (change) => {
+    const h = harness();
+    const e = await h.enqueue();
+    const reading = deferred<void>();
+    const resume = deferred<void>();
+    const list = h.controls.listVerified;
+    let checkingCredentials = false;
+    let checks = 0;
+    vi.spyOn(h.controls, "listVerified").mockImplementation(async (owner) => {
+      const result = await list(owner);
+      // Suspend the final control read after its initial local HALT check.
+      if (checkingCredentials && ++checks === 3) {
+        reading.resolve();
+        await resume.promise;
+      }
+      return result;
+    });
+    const provider = vi.fn();
+    vi.mocked(h.binding.send.transmit).mockImplementation(async (_wire, io) => {
+      checkingCredentials = true;
+      await io.tokens.send(io.account);
+      provider();
+      return { outcome: "accepted", providerRef: "must-not-send" };
+    });
+    const transmission = h.executor.transmit(e.proposal.id);
+    await reading.promise;
+    if (change === "present") h.state.haltFile = true;
+    else vi.spyOn(h.controls, "haltFileExists").mockRejectedValue(new Error("HALT unreadable"));
+    resume.resolve();
+    expect(await transmission).toMatchObject({ status: "uncertain" });
+    await h.executor.drain();
+    expect(h.options.tokens.send).toHaveBeenCalledOnce();
+    expect(provider).not.toHaveBeenCalled();
+    expect(h.auditRecords).toContainEqual(expect.objectContaining({ outcome: "halted" }));
+  });
+
   for (const change of ["deny-autonomous", "deny-approved", "remove", "unavailable"] as const) {
     it.each([
       "token",

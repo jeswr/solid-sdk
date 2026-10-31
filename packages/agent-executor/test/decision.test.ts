@@ -29,6 +29,28 @@ describe("DESIGN §4.1 ordered enforcement", () => {
       reason: "halted",
     });
   });
+  it.each([
+    "present",
+    "unreadable",
+  ])("step 1: local HALT becoming %s during the control read halts before proposal reads", async (change) => {
+    const h = harness();
+    const list = h.controls.listVerified;
+    vi.spyOn(h.controls, "listVerified").mockImplementationOnce(async (owner) => {
+      const result = await list(owner);
+      if (change === "present") h.state.haltFile = true;
+      else vi.spyOn(h.controls, "haltFileExists").mockRejectedValue(new Error("HALT unreadable"));
+      return result;
+    });
+    const get = vi.spyOn(h.proposals, "get");
+    expect(await h.executor.transmit("urn:missing")).toEqual({
+      status: "refused",
+      reason: "halted",
+    });
+    expect(get).not.toHaveBeenCalled();
+    expect(h.options.mandates.load).not.toHaveBeenCalled();
+    expect(h.options.tokens.send).not.toHaveBeenCalled();
+    expect(h.binding.send.transmit).not.toHaveBeenCalled();
+  });
   it("step 1: invalid clock fails closed", async () => {
     const h = harness();
     h.state.at = "invalid";

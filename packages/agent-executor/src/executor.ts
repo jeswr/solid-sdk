@@ -120,6 +120,9 @@ export function createExecutor(options: ExecutorOptions) {
       if (await o.controls.haltFileExists())
         return { halted: true, statements: [], nextTransition: -Infinity };
       const verified = await o.controls.listVerified(o.ownerWebId);
+      // A local HALT can arrive while verified controls are being read.
+      if (await o.controls.haltFileExists())
+        return { halted: true, statements: [], nextTransition: -Infinity };
       const now = o.clock.now().getTime();
       if (!Number.isFinite(now)) return { halted: true, statements: [], nextTransition: -Infinity };
       const unexpired = verified.filter(
