@@ -100,6 +100,30 @@ function sender(replies: unknown[], extra: Record<string, unknown> = {}) {
   return { ...fake, config, tokens, verifyApproval, send: createGmailSend(config) };
 }
 
+it.each([
+  "",
+  "x",
+  "xx",
+])("ingests optionally padded raw responses (%s) and advances history", async (suffix) => {
+  const bytes = raw + suffix;
+  const encoded = Buffer.from(bytes).toString("base64").replaceAll("+", "-").replaceAll("/", "_");
+  const r = reader([
+    { history: [{ id: "105", messagesAdded: [{ message: { id: "a1" } }] }], historyId: "120" },
+    { ...native("a1", bytes), raw: encoded },
+    { historyId: "130" },
+  ]);
+  const page = await r.binding.ingest.list(account, historyCursor(), bounds);
+  expect(page.items).toHaveLength(1);
+  const item = page.items[0];
+  if (!item) throw new Error("missing fixture message");
+  expect(item.raw).toEqual(new Uint8Array(Buffer.from(bytes)));
+  expect(r.binding.ingest.parse(item).textBody).toBe(`Hello fixture${suffix}`);
+  expect(JSON.parse(page.next).start).toBe("120");
+  const next = await r.binding.ingest.list(account, page.next, bounds);
+  expect(next.items).toEqual([]);
+  expect(JSON.parse(next.next).start).toBe("130");
+});
+
 it("reads initial list/get fixtures then uses deduplicated messagesAdded history, checkpointing only fully drained pages", async () => {
   const r = reader([
     fixtures.profile,
@@ -441,6 +465,60 @@ it("never reports final absence for empty, incomplete, malformed, failed or unve
   ).toMatchObject({ outcome: "unknown" });
 });
 
+it.each(["", "x", "xx"])("reconciles optionally padded provider copies (%s)", async (suffix) => {
+  const s = sender([]);
+  const wire = await s.send.render(signed(), EMAIL_MIME);
+  const bytes = `Received: google${suffix}.test\r\n${wire.bytes}`;
+  const raw = Buffer.from(bytes).toString("base64").replaceAll("+", "-").replaceAll("/", "_");
+  s.queue.push({ messages: [{ id: "a1" }] }, { ...native("a1", bytes), raw });
+  expect(await s.send.lookup?.(wire)).toEqual({ outcome: "found", providerRef: "a1" });
+  expect(s.tokens.calls.every((call) => call.access === "read")).toBe(true);
+  expect(s.send.finalAbsence).toBeUndefined();
+});
+
+it.each([
+  ["Zg", [102]],
+  ["Zg==", [102]],
+  ["Zm8", [102, 111]],
+  ["Zm8=", [102, 111]],
+  ["Zm9v", [102, 111, 111]],
+  ["-_8=", [251, 255]],
+] as const)("decodes canonical base64url with valid optional padding: %s", (raw, bytes) => {
+  expect(rawMessage({ id: "a1", raw }, "a1").raw).toEqual(new Uint8Array(bytes));
+});
+
+it.each([
+  MAX_EMAIL_BYTES - 2,
+  MAX_EMAIL_BYTES - 1,
+  MAX_EMAIL_BYTES,
+])("accepts padded and unpadded raw bytes at the local cap boundary (%s)", (length) => {
+  const bytes = Buffer.alloc(length);
+  for (const raw of [bytes.toString("base64"), bytes.toString("base64url")])
+    expect(Buffer.from(rawMessage({ id: "a1", raw }, "a1").raw).equals(bytes)).toBe(true);
+});
+
+it.each([
+  "",
+  "=",
+  "==",
+  "Z",
+  "Zg=",
+  "Zg===",
+  "Zm8==",
+  "Zm9v=",
+  "Zm9v==",
+  "Z=g=",
+  "Zg==x",
+  "Zg==\n",
+  "Zg== ",
+  "Zg+",
+  "Zg/",
+  "Zh==",
+  "Zm9=",
+])("refuses malformed padding, alphabet or noncanonical pad bits: %s", (raw) => {
+  expect(() => rawMessage({ id: "a1", raw }, "a1")).toThrow();
+});
+
 it("validates provider scalar fields, canonical raw encoding, JSON shape and status without leaking remote bodies", async () => {
   for (const value of [null, [], "str"]) expect(() => record(value)).toThrow();
   for (const value of ["", "bad/id", "x".repeat(2049), null]) expect(() => opaque(value)).toThrow();
@@ -453,8 +531,9 @@ it("validates provider scalar fields, canonical raw encoding, JSON shape and sta
     { id: "a1", raw: 1 },
     { id: "a1", raw: "bad===" },
     { id: "a1", raw: "eB" },
-    { id: "a1", raw: "x".repeat(Math.ceil((MAX_EMAIL_BYTES * 4) / 3) + 1) },
+    { id: "a1", raw: "x".repeat(Math.ceil(MAX_EMAIL_BYTES / 3) * 4 + 1) },
     { id: "a1", raw: Buffer.alloc(MAX_EMAIL_BYTES + 1).toString("base64url") },
+    { id: "a1", raw: Buffer.alloc(MAX_EMAIL_BYTES + 2).toString("base64") },
   ])
     expect(() => rawMessage(value, "a1")).toThrow();
   expect(rawMessage({ id: "a1", raw: "eA" }, "a1").historyId).toBeUndefined();

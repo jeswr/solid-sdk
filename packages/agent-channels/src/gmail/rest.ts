@@ -38,12 +38,16 @@ export function rawMessage(
   if (
     body.id !== id ||
     typeof body.raw !== "string" ||
-    body.raw.length > Math.ceil((MAX_EMAIL_BYTES * 4) / 3) ||
-    !/^[A-Za-z0-9_-]+$/.test(body.raw)
+    body.raw.length > Math.ceil(MAX_EMAIL_BYTES / 3) * 4 ||
+    !/^[A-Za-z0-9_-]+={0,2}$/.test(body.raw)
   )
     throw new ChannelParseError("invalid Gmail raw message");
-  const raw = Buffer.from(body.raw, "base64url");
-  if (raw.toString("base64url") !== body.raw || raw.length > MAX_EMAIL_BYTES)
+  const padding = body.raw.indexOf("=");
+  if (padding >= 0 && body.raw.length % 4 !== 0)
+    throw new ChannelParseError("invalid Gmail raw encoding");
+  const encoded = padding < 0 ? body.raw : body.raw.slice(0, padding);
+  const raw = Buffer.from(encoded, "base64url");
+  if (raw.toString("base64url") !== encoded || raw.length > MAX_EMAIL_BYTES)
     throw new ChannelParseError("invalid Gmail raw encoding");
   return {
     id,
