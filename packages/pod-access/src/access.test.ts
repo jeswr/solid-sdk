@@ -172,7 +172,14 @@ test("WAC serialization matches an independent ACL fixture and byte snapshot", a
   const actual = await memory.readRdf(accessUrl);
   expect(actual.dataset.size).toBe(expected.size);
   for (const q of expected) expect(actual.dataset.has(q)).toBe(true);
-  expect(await (await memory.read(accessUrl)).text()).toMatchSnapshot();
+  expect(await (await memory.read(accessUrl)).text()).toMatchInlineSnapshot(`
+"<https://pod.example/note.acl#grant-00000000-0000-4000-8000-000000000000> a <http://www.w3.org/ns/auth/acl#Authorization>;
+    <http://www.w3.org/ns/auth/acl#accessTo> <https://pod.example/>;
+    <http://www.w3.org/ns/auth/acl#default> <https://pod.example/>;
+    <http://www.w3.org/ns/auth/acl#mode> <http://www.w3.org/ns/auth/acl#Read>;
+    <http://www.w3.org/ns/auth/acl#agent> <https://bob.example/#me>.
+"
+`);
 });
 
 test("ACP serialization matches an independent simplest-policy fixture and byte snapshot", async () => {
@@ -193,7 +200,20 @@ test("ACP serialization matches an independent simplest-policy fixture and byte 
   const actual = await memory.readRdf(accessUrl);
   expect(actual.dataset.size).toBe(expected.size);
   for (const q of expected) expect(actual.dataset.has(q)).toBe(true);
-  expect(await (await memory.read(accessUrl)).text()).toMatchSnapshot();
+  expect(await (await memory.read(accessUrl)).text()).toMatchInlineSnapshot(`
+"<https://pod.example/note.acr> a <http://www.w3.org/ns/solid/acp#AccessControlResource>;
+    <http://www.w3.org/ns/solid/acp#resource> <https://pod.example/>;
+    <http://www.w3.org/ns/solid/acp#accessControl> <https://pod.example/note.acr#grant-00000000-0000-4000-8000-000000000000-control>;
+    <http://www.w3.org/ns/solid/acp#memberAccessControl> <https://pod.example/note.acr#grant-00000000-0000-4000-8000-000000000000-control>.
+<https://pod.example/note.acr#grant-00000000-0000-4000-8000-000000000000-control> a <http://www.w3.org/ns/solid/acp#AccessControl>;
+    <http://www.w3.org/ns/solid/acp#apply> <https://pod.example/note.acr#grant-00000000-0000-4000-8000-000000000000>.
+<https://pod.example/note.acr#grant-00000000-0000-4000-8000-000000000000> a <http://www.w3.org/ns/solid/acp#Policy>;
+    <http://www.w3.org/ns/solid/acp#allOf> <https://pod.example/note.acr#grant-00000000-0000-4000-8000-000000000000-matcher>;
+    <http://www.w3.org/ns/solid/acp#allow> <http://www.w3.org/ns/auth/acl#Read>.
+<https://pod.example/note.acr#grant-00000000-0000-4000-8000-000000000000-matcher> a <http://www.w3.org/ns/solid/acp#Matcher>;
+    <http://www.w3.org/ns/solid/acp#agent> <http://www.w3.org/ns/solid/acp#PublicAgent>.
+"
+`);
 });
 
 test("reads WAC multi-target and default-only authorizations, omits unrelated rules", async () => {
