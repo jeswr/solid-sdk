@@ -42,8 +42,9 @@ resource's actual media type. Variables and nonempty `where` clauses are unsuppo
 
 LWS moves require MoveResource and update the linkset's `up` relation. `setMetadata` takes
 the **metadata document's ETag**, and refuses server-managed `type`, `up`, and `linkset`.
-Recursive deletion uses `Depth: infinity` when advertised; otherwise it preflights logical
-containment and deletes children before containers, with conditional requests throughout.
+Recursive deletion preflights logical containment and deletes children before containers, with
+conditional requests throughout. `RecursiveDeleteService` availability does not establish
+`Depth: infinity` support, so deletion retains client traversal even when that service is advertised.
 
 From the workspace root:
 

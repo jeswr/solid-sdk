@@ -181,8 +181,9 @@ Solid read side (ADR-003 §6):
   linkset; the same context index's scoped anchor identifies the moved resource. A move with
   preservesIdentifier false requires Content-Location. HEAD the resulting resource for its ETag;
   the PATCH ETag belongs to the linkset. created is true only when the identifier changes.
-- Nonrecursive delete sends If-Match and refuses the root. Recursive delete sends Depth infinity
-  when features.recursiveDelete is available, per T-024. Otherwise HEAD-check the top ETag,
+- Nonrecursive delete sends If-Match and refuses the root. Recursive delete always uses client
+  traversal: features.recursiveDelete advertises the POST-based RecursiveDeleteService, which
+  does not establish Depth support for DELETE. HEAD-check the top ETag,
   preflight listAll + HEAD through logical containment (not URI prefixes), require each child's
   up to match its listed parent and every child to have an ETag. Cycles, duplicates, root members,
   and trees above 10,000 nodes fail before deletion. Delete in reverse traversal order, refreshing

@@ -989,20 +989,26 @@ function listReply(ids: string[]): Reply {
     body: JSON.stringify({ type: "Container", items: ids.map((id) => ({ id })) }),
   };
 }
-function treeBackend(extra: Record<string, Exchange> = {}) {
-  return backend({
-    [`HEAD ${NOTES}`]: headReply("container", ROOT),
-    [`GET ${NOTES}`]: listReply([CHILD, NEST]),
-    [`HEAD ${CHILD}`]: headReply(),
-    [`HEAD ${NEST}`]: headReply("container"),
-    [`GET ${NEST}`]: listReply([LEAF]),
-    [`HEAD ${LEAF}`]: headReply("resource", NEST),
-    [`DELETE ${LEAF}`]: reply(),
-    [`DELETE ${CHILD}`]: reply(),
-    [`DELETE ${NEST}`]: reply(),
-    [`DELETE ${NOTES}`]: reply(),
-    ...extra,
-  });
+function treeBackend(
+  extra: Record<string, Exchange> = {},
+  configure?: (features: Features) => void,
+) {
+  return backend(
+    {
+      [`HEAD ${NOTES}`]: headReply("container", ROOT),
+      [`GET ${NOTES}`]: listReply([CHILD, NEST]),
+      [`HEAD ${CHILD}`]: headReply(),
+      [`HEAD ${NEST}`]: headReply("container"),
+      [`GET ${NEST}`]: listReply([LEAF]),
+      [`HEAD ${LEAF}`]: headReply("resource", NEST),
+      [`DELETE ${LEAF}`]: reply(),
+      [`DELETE ${CHILD}`]: reply(),
+      [`DELETE ${NEST}`]: reply(),
+      [`DELETE ${NOTES}`]: reply(),
+      ...extra,
+    },
+    configure,
+  );
 }
 
 describe("LWS conditional delete", () => {
@@ -1013,13 +1019,35 @@ describe("LWS conditional delete", () => {
     expect(calls[0]?.headers.get("if-match")).toBe(tag);
     expect(calls[0]?.headers.has("depth")).toBe(false);
   });
-  test("available recursiveDelete sends Depth infinity without a traversal", async () => {
-    const { storage, calls } = backend({}, (features) => {
-      features.recursiveDelete.state = "available";
-    });
-    await storage.delete(URL, { ifMatch: tag, recursive: true });
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.headers.get("depth")).toBe("infinity");
+  test("RecursiveDeleteService advertisement still traverses a nonempty container", async () => {
+    let childDeleted = false;
+    const { storage, calls } = treeBackend(
+      {
+        [`GET ${NOTES}`]: listReply([CHILD]),
+        [`DELETE ${CHILD}`]: () => {
+          childDeleted = true;
+          return reply();
+        },
+        [`DELETE ${NOTES}`]: () => reply(childDeleted ? 204 : 409),
+      },
+      (features) => {
+        features.recursiveDelete.state = "available";
+        features.recursiveDelete.evidence = `lws-cid:RecursiveDeleteService:${ROOT}delete-service`;
+      },
+    );
+    await storage.delete(NOTES, { ifMatch: tag, recursive: true });
+    expect(calls.map(({ method, url }) => `${method} ${url}`)).toEqual([
+      `HEAD ${NOTES}`,
+      `GET ${NOTES}`,
+      `HEAD ${CHILD}`,
+      `DELETE ${CHILD}`,
+      `HEAD ${NOTES}`,
+      `DELETE ${NOTES}`,
+    ]);
+    for (const call of mutationCalls(calls)) {
+      expect(call.headers.get("if-match")).toBe(tag);
+      expect(call.headers.has("depth")).toBe(false);
+    }
   });
   test("fallback preflights logical containment and deletes children before containers with refreshed ETags", async () => {
     let parentHeads = 0;

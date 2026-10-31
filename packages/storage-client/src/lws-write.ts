@@ -208,13 +208,8 @@ export function lwsWrites(
       created: response.status === 201,
     };
   }
-  async function remove(url: string, ifMatch: string, signal?: AbortSignal, depth = false) {
-    const response = await request(
-      "DELETE",
-      url,
-      { "If-Match": ifMatch, ...(depth ? { Depth: "infinity" } : {}) },
-      signal,
-    );
+  async function remove(url: string, ifMatch: string, signal?: AbortSignal) {
+    const response = await request("DELETE", url, { "If-Match": ifMatch }, signal);
     discard(response.body);
   }
   async function patchJson(
@@ -527,9 +522,11 @@ export function lwsWrites(
       notRoot("DELETE", source);
       if (opts.recursive !== undefined && typeof opts.recursive !== "boolean")
         throw new TypeError("Invalid recursive option");
-      if (!opts.recursive || client().features.recursiveDelete.state === "available") {
-        return remove(source, opts.ifMatch, opts.signal, opts.recursive === true);
+      if (!opts.recursive) {
+        return remove(source, opts.ifMatch, opts.signal);
       }
+      // RecursiveDeleteService advertises POST {container}, not DELETE with Depth support.
+      // Retain conditional client traversal until recursive DELETE is established separately.
       const first = await client().head(source, { signal: opts.signal });
       checkEtag("DELETE", source, first.etag, opts.ifMatch);
       const nodes = [first];
