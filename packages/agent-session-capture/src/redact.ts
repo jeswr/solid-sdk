@@ -16,7 +16,7 @@ export function redactSecrets(text: string): string {
       // Redact every shell/.env assignment, including non-secret-looking variable names,
       // multiline quoted values and an unfinished final quote. Retain no variable value.
       .replace(
-        /\b(?:export[ \t]+)?[A-Za-z_][A-Za-z0-9_]*[ \t]*=[ \t]*(?:"[^"\\]*(?:\\.[^"\\]*)*(?:"|$)|'[^']*(?:'|$)|[^\r\n]*)/g,
+        /\b(?:export[ \t]+)?[A-Za-z_][A-Za-z0-9_]*[ \t]*=[ \t]*(?:"[^"\\]*(?:\\[\s\S][^"\\]*)*(?:"|\\?$)|'[^']*(?:'|$)|[^\r\n]*)/g,
         "[REDACTED ENV]",
       )
   );

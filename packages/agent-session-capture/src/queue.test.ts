@@ -100,6 +100,22 @@ describe("offline queue", () => {
   });
 
   it.each([
+    "\n",
+    "\r\n",
+  ])("redacts old queued quoted continuations with %j on replay", async (newline) => {
+    (entry.conversation.messages[0] as { text: string }).text =
+      `VALUE="FAKE_FIRST\\${newline}FAKE_SECOND\\${newline}FAKE_LAST\\`;
+    await store(entry);
+    const save = vi.fn().mockResolvedValue({});
+    await replay(directory, target, save, signal());
+    expect(save).toHaveBeenCalledWith({
+      ...entry.conversation,
+      messages: [{ ...entry.conversation.messages[0], text: "[REDACTED ENV]" }],
+    });
+    expect(await files()).toEqual([]);
+  });
+
+  it.each([
     "failure",
     "deadline",
   ])("resumes acknowledged messages after %s, including overlapping and completed snapshots", async (reason) => {

@@ -341,12 +341,17 @@ describe("capture with real ChatWriter and client credentials", () => {
     ).toHaveLength(4);
   });
 
-  it("queues redacted snapshots offline and recovers later even without a transcript", async () => {
+  it.each([
+    "\n",
+    "\r\n",
+  ])("queues redacted continuations with %j and recovers without a transcript", async (newline) => {
     await writeFile(
       transcript,
       (await readFile(transcript, "utf8")).replace(
         "Please inspect the project. [REDACTED TOKEN]",
-        "API_TOKEN=FAKE_QUEUE_SECRET",
+        JSON.stringify(
+          `API_TOKEN="FAKE_QUEUE_SECRET\\${newline}FAKE_CONTINUATION\\${newline}FAKE_LAST`,
+        ).slice(1, -1),
       ),
     );
     await runCapture(["claude", "--transcript", transcript], {
@@ -358,7 +363,9 @@ describe("capture with real ChatWriter and client credentials", () => {
     const files = await queued();
     expect(files).toHaveLength(1);
     const stored = await readFile(join(queue(), files[0] as string), "utf8");
-    expect(stored).not.toMatch(/FAKE_QUEUE_SECRET|fixture-secret|DROP_/);
+    expect(stored).not.toMatch(
+      /FAKE_QUEUE_SECRET|FAKE_CONTINUATION|FAKE_LAST|fixture-secret|DROP_/,
+    );
     expect(stored).toContain("[REDACTED ENV]");
     // Re-running offline does not duplicate the local snapshot.
     await runCapture(["claude", "--transcript", transcript], {
@@ -371,6 +378,9 @@ describe("capture with real ChatWriter and client credentials", () => {
     await runCapture(["codex"], options);
     expect(await queued()).toEqual([]);
     expect(transport.resources.size).toBeGreaterThan(0);
+    expect(JSON.stringify([...transport.resources])).not.toMatch(
+      /FAKE_QUEUE_SECRET|FAKE_CONTINUATION|FAKE_LAST/,
+    );
   });
 
   it("keeps partial uploads queued and resumes with create-only messages", async () => {
