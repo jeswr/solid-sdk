@@ -360,11 +360,12 @@ describe("asynchronous send boundary", () => {
     vi.spyOn(h.proposals, "emitReceipt").mockRejectedValue(new Error("receipt failure"));
     await expect(h.executor.transmit(e.proposal.id)).rejects.toThrow("receipt failure");
     expect(h.records.get(e.proposal.id)?.status).toBe("sent");
-    expect(await createExecutor(h.options).transmit(e.proposal.id)).toMatchObject({
-      status: "duplicate",
-    });
+    await expect(createExecutor(h.options).transmit(e.proposal.id)).rejects.toThrow(
+      "receipt failure",
+    );
+    expect(h.binding.send.transmit).toHaveBeenCalledTimes(1);
   });
-  it("missing proposal at outcome persistence never invents a receipt", async () => {
+  it("outcome receipt retains the original conversation if the proposal disappears", async () => {
     const h = harness();
     const e = await h.enqueue();
     vi.mocked(h.binding.send.transmit).mockImplementation(async () => {
@@ -372,7 +373,7 @@ describe("asynchronous send boundary", () => {
       return { outcome: "accepted", providerRef: "test:1" };
     });
     expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "sent" });
-    expect(h.receipts.size).toBe(0);
+    expect([...h.receipts.values()][0]?.conversation).toBe(e.proposal.intent.conversation);
   });
   it.each([
     0,
@@ -449,4 +450,70 @@ it.each([
   pending.resolve({ outcome: "rejected", detail: "late refusal" });
   await ex.drain();
   expect(h.records.get(e.proposal.id)?.status).toBe(status);
+});
+
+it("audit metadata alone recovers committed usage and idempotency after compaction", async () => {
+  const h = harness();
+  const e = await h.enqueue();
+  await h.executor.transmit(e.proposal.id);
+  h.records.clear();
+  const event = h.auditRecords.find(
+    (record) => record.type === "transmission" && record.outcome === "sent",
+  );
+  expect(event?.transmission).toMatchObject({
+    amount: { value: 0, currency: "GBP" },
+    conversation: e.proposal.intent.conversation,
+  });
+  expect(await createExecutor(h.options).transmit(e.proposal.id)).toMatchObject({
+    status: "duplicate",
+  });
+  expect(h.binding.send.transmit).toHaveBeenCalledTimes(1);
+});
+it("a duplicate repairs missing audit/outbox/receipt writes without resending", async () => {
+  const h = harness();
+  const e = await h.enqueue();
+  vi.spyOn(h.proposals, "emitReceipt").mockRejectedValueOnce(new Error("receipt unavailable"));
+  await expect(h.executor.transmit(e.proposal.id)).rejects.toThrow("receipt unavailable");
+  expect(h.receipts.size).toBe(0);
+  expect(await createExecutor(h.options).transmit(e.proposal.id)).toMatchObject({
+    status: "duplicate",
+  });
+  expect(h.receipts.size).toBe(1);
+  expect(h.binding.send.transmit).toHaveBeenCalledTimes(1);
+});
+it("receipt conversation cannot be swapped by changing a proposal during send", async () => {
+  const h = harness();
+  const e = await h.enqueue();
+  const original = e.proposal.intent.conversation;
+  vi.mocked(h.binding.send.transmit).mockImplementation(async () => {
+    e.proposal.intent.conversation = "urn:attacker-conversation";
+    return { outcome: "accepted", providerRef: "test:1" };
+  });
+  expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "sent" });
+  expect([...h.receipts.values()][0]?.conversation).toBe(original);
+});
+
+it("tamper auditing failure propagates without an implicit retry", async () => {
+  const h = harness();
+  const e = await h.enqueue();
+  e.proposal.intent.amount.value = -1;
+  const append = vi.spyOn(h.audit, "append").mockRejectedValueOnce(new Error("audit offline"));
+  await expect(h.executor.transmit(e.proposal.id)).rejects.toThrow("audit offline");
+  expect(append).toHaveBeenCalledTimes(1);
+  expect(h.binding.send.transmit).not.toHaveBeenCalled();
+});
+it("even an undefined late audit rejection latches the executor closed", async () => {
+  vi.useFakeTimers();
+  const h = harness();
+  const e = await h.enqueue();
+  const pending = deferred<SendResult>();
+  vi.mocked(h.binding.send.transmit).mockReturnValue(pending.promise);
+  const ex = createExecutor({ ...h.options, timeoutMs: 10 });
+  const send = ex.transmit(e.proposal.id);
+  await vi.advanceTimersByTimeAsync(10);
+  await send;
+  vi.spyOn(h.audit, "append").mockRejectedValue(undefined);
+  pending.resolve({ outcome: "accepted", providerRef: "test:1" });
+  await expect(ex.drain()).rejects.toBeUndefined();
+  await expect(ex.transmit(e.proposal.id)).rejects.toThrow("late settlement");
 });

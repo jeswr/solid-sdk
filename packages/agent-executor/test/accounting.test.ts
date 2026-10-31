@@ -72,7 +72,11 @@ describe("step 6: committed outbox + ledger accounting", () => {
       new Date(NOW),
       operand === "spendPerWeek" ? "week" : operand === "spendPerMonth" ? "month" : "day",
     );
-    h.records.set(p.proposal, { ...p, startedAt: new Date(start - 1).toISOString() });
+    h.records.set(p.proposal, {
+      ...p,
+      startedAt: new Date(start - 1).toISOString(),
+      committedAt: new Date(start - 1).toISOString(),
+    });
     const e = await h.enqueue("urn:new", 10);
     setLimits(h, [limit(operand, 10)]);
     expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "sent" });
@@ -81,7 +85,11 @@ describe("step 6: committed outbox + ledger accounting", () => {
     const h = harness();
     const old = await h.enqueue("urn:old");
     const p = h.prior(old, "sent");
-    h.records.set(p.proposal, { ...p, startedAt: "2026-10-30T12:00:00.000Z" });
+    h.records.set(p.proposal, {
+      ...p,
+      startedAt: "2026-10-30T12:00:00.000Z",
+      committedAt: "2026-10-30T12:00:00.000Z",
+    });
     const e = await h.enqueue("urn:new");
     setLimits(h, [limit("perRecipientPerDay", 1)]);
     expect(await h.executor.transmit(e.proposal.id)).toMatchObject({
@@ -95,7 +103,11 @@ describe("step 6: committed outbox + ledger accounting", () => {
     const h = harness();
     const old = await h.enqueue("urn:old");
     const p = h.prior(old, "sent");
-    h.records.set(p.proposal, { ...p, startedAt: "2026-10-30T11:59:59.999Z" });
+    h.records.set(p.proposal, {
+      ...p,
+      startedAt: "2026-10-30T11:59:59.999Z",
+      committedAt: "2026-10-30T11:59:59.999Z",
+    });
     const e = await h.enqueue("urn:new");
     setLimits(h, [limit("perRecipientPerDay", 1)]);
     expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "sent" });
@@ -183,7 +195,11 @@ describe("step 6: committed outbox + ledger accounting", () => {
     const h = harness();
     const e = await h.enqueue();
     const p = h.prior(e);
-    h.records.set(p.proposal, { ...p, startedAt: "2026-10-01T00:00:00Z" });
+    h.records.set(p.proposal, {
+      ...p,
+      startedAt: "2026-10-01T00:00:00Z",
+      committedAt: "2026-10-01T00:00:00Z",
+    });
     expect(
       checkLimits(
         { ...(h.state.mandate as AccountingMandate), limits: [limit("sendsPerDay", 0)] },
@@ -243,6 +259,7 @@ it.each([
   { attempts: 1.5 },
   { startedAt: "invalid" },
   { updatedAt: "invalid" },
+  { committedAt: "invalid" },
   { status: "invalid" },
   { amount: { value: -1, currency: "GBP" } },
   { amount: { value: Infinity, currency: "GBP" } },
@@ -254,4 +271,57 @@ it.each([
   expect(() => committedRecords([{ ...record, ...patch } as TransmissionRecord])).toThrow(
     "Invalid accounting",
   );
+});
+
+it("the highest attempt count survives stale ledger ordering", async () => {
+  const h = harness();
+  const e = await h.enqueue();
+  const record = h.prior(e, "uncertain", 3);
+  const newer = { ...record, attempts: 1, updatedAt: "2026-10-31T13:00:00Z" };
+  expect(committedRecords([record, newer])[0]?.attempts).toBe(3);
+  expect(committedRecords([newer, record])[0]?.attempts).toBe(3);
+});
+it.each([undefined, 1, ""])("corrupt accounting identity %j fails closed", async (value) => {
+  const h = harness();
+  const e = await h.enqueue();
+  const record = h.prior(e);
+  expect(() =>
+    committedRecords([{ ...record, recipientHash: value } as TransmissionRecord]),
+  ).toThrow("Invalid accounting identity");
+});
+
+it.each([
+  { existing: 10000000000000000, candidate: 1, cap: 10000000000000000, refused: true },
+  { existing: 0.1, candidate: 0.2, cap: 0.3, refused: false },
+  { existing: 1e-7, candidate: 1e-7, cap: 1e-7, refused: true },
+  { existing: 5e-324, candidate: 5e-324, cap: 5e-324, refused: true },
+])("exact decimal spend arithmetic cannot round away a commitment: %j", async ({
+  existing,
+  candidate,
+  cap,
+  refused,
+}) => {
+  const h = harness();
+  const old = await h.enqueue("urn:old", existing);
+  h.prior(old, "sent");
+  const e = await h.enqueue("urn:new", candidate);
+  setLimits(h, [limit("spendPerDay", cap)]);
+  expect((await h.executor.transmit(e.proposal.id)).status).toBe(refused ? "refused" : "sent");
+});
+it("a definitive non-send retried on a new day commits against the new day's budget", async () => {
+  const h = harness();
+  const e = await h.enqueue("urn:retry", 10);
+  const p = h.prior(e, "not-sent");
+  h.records.set(p.proposal, {
+    ...p,
+    startedAt: "2026-10-01T00:00:00Z",
+    committedAt: "2026-10-01T00:00:00Z",
+  });
+  setLimits(h, [limit("spendPerDay", 10)]);
+  expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "sent" });
+  expect(h.records.get(e.proposal.id)?.committedAt).toBe(NOW);
+  const next = await h.enqueue("urn:next", 1);
+  expect(await h.executor.transmit(next.proposal.id)).toMatchObject({
+    reason: "limit:spendPerDay",
+  });
 });

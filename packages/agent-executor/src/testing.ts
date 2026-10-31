@@ -61,6 +61,7 @@ export function createMemoryStores(at = "2026-10-31T12:00:00.000Z") {
   const audit: AuditSink = {
     append: async (record) => {
       auditRecords.push(structuredClone(record));
+      if (record.transmission) ledger.push(structuredClone(record.transmission));
     },
     listCommitted: async () => structuredClone(ledger),
   };

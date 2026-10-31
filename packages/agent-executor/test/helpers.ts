@@ -161,8 +161,10 @@ export function harness(bindingId = "gmail") {
       status,
       attempts,
       startedAt: NOW,
+      committedAt: NOW,
       updatedAt: NOW,
       underMandate: "urn:old-mandate",
+      conversation: entry.proposal.intent.conversation,
       recipientHash: entry.proposal.intent.recipientHash,
       amount: entry.proposal.intent.amount,
     };

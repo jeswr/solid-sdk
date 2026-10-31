@@ -324,3 +324,14 @@ it("property: for all 4^4 halt/resume/file control sequences no send begins whil
     }
   }
 });
+
+it("a changed wire media type invalidates an earlier approval even with identical bytes", async () => {
+  const h = harness();
+  const e = await h.enqueue();
+  h.needsApproval();
+  h.confirm(e);
+  Object.assign(e.wire, { mediaType: "application/ld+json" });
+  vi.mocked(h.binding.send.render).mockResolvedValue(e.wire);
+  seal(e);
+  expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "awaiting-approval" });
+});

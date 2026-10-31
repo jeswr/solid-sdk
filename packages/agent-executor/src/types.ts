@@ -119,10 +119,12 @@ export interface TransmissionRecord {
   readonly status: TransmissionStatus;
   readonly attempts: number;
   readonly startedAt: string;
+  readonly committedAt: string;
   readonly updatedAt: string;
   readonly underMandate: string;
   readonly underApproval?: string;
   readonly providerRef?: string;
+  readonly conversation: string;
   readonly recipientHash: string;
   /** The committed obligation, including invoke amounts, never just settled payments. */
   readonly amount: { readonly value: number; readonly currency: string };
@@ -146,6 +148,7 @@ export interface AuditRecord {
   readonly wireDigest?: string;
   readonly underMandate?: string;
   readonly underApproval?: string;
+  readonly transmission?: TransmissionRecord;
 }
 /** System-only writer; listCommitted returns historical transmission records, never message bodies. */
 export interface AuditSink {

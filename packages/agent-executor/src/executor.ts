@@ -32,6 +32,7 @@ export function proposalTermsDigest(entry: OutboxEntry): string {
     renderable: entry.renderable,
     account: entry.account,
     wireDigest: entry.wireDigest,
+    wireMediaType: entry.wire.mediaType,
   });
 }
 
@@ -46,6 +47,7 @@ export function createExecutor(options: ExecutorOptions) {
   pendingByStore.set(o.transmissions, pending);
   const background = new Set<Promise<unknown>>();
   let backgroundError: unknown;
+  let backgroundFailed = false;
 
   async function controls(): Promise<{ halted: boolean; statements: readonly ControlStatement[] }> {
     try {
@@ -97,6 +99,7 @@ export function createExecutor(options: ExecutorOptions) {
       proposal: record.proposal,
       at: record.updatedAt,
       outcome: record.status,
+      transmission: record,
       wireDigest: record.wireDigest,
       underMandate: record.underMandate,
       ...(record.underApproval ? { underApproval: record.underApproval } : {}),
@@ -106,24 +109,22 @@ export function createExecutor(options: ExecutorOptions) {
       reason: record.status,
     };
     await o.proposals.writeDisposition(record.proposal, result);
-    const entry = await o.proposals.get(record.proposal);
-    if (entry)
-      await o.proposals.emitReceipt({
-        proposal: record.proposal,
-        conversation: entry.proposal.intent.conversation,
-        kind: "receipt",
-        body: {
-          ref: record.proposal,
-          activity: derivedUrn("transmission", record.proposal),
-          outcome:
-            record.status === "sent"
-              ? "completed"
-              : record.status === "not-sent"
-                ? "not-executed"
-                : "uncertain",
-          final: record.status !== "uncertain",
-        },
-      });
+    await o.proposals.emitReceipt({
+      proposal: record.proposal,
+      conversation: record.conversation,
+      kind: "receipt",
+      body: {
+        ref: record.proposal,
+        activity: derivedUrn("transmission", record.proposal),
+        outcome:
+          record.status === "sent"
+            ? "completed"
+            : record.status === "not-sent"
+              ? "not-executed"
+              : "uncertain",
+        final: record.status !== "uncertain",
+      },
+    });
     return result;
   }
 
@@ -135,7 +136,7 @@ export function createExecutor(options: ExecutorOptions) {
     | { entry: OutboxEntry; binding: SendBinding; record: TransmissionRecord; resend: boolean }
   > {
     // DESIGN §4.1: no proposal, mandate, approval or credential work before the halt check.
-    if (backgroundError)
+    if (backgroundFailed)
       throw new Error("Audit or persistence failed during late settlement", {
         cause: backgroundError,
       });
@@ -149,7 +150,8 @@ export function createExecutor(options: ExecutorOptions) {
     try {
       entry = JSON.parse(canonicalJson(loaded)) as OutboxEntry;
       const candidate = o.bindings[entry.proposal.intent.binding];
-      if (!candidate || candidate.id !== entry.proposal.intent.binding) return await tamper(id);
+      if (!candidate || candidate.id !== entry.proposal.intent.binding)
+        throw new Error("Invalid binding");
       binding = candidate;
       const rendered = await binding.send.render(entry.renderable, binding.carriage);
       if (
@@ -163,7 +165,7 @@ export function createExecutor(options: ExecutorOptions) {
         proposalTermsDigest(entry) !== entry.proposal.intent.termsDigest ||
         (await binding.send.validate(entry.wire, entry.renderable)).ok !== true
       )
-        return await tamper(id);
+        throw new Error("Invalid wire");
     } catch {
       return tamper(id);
     }
@@ -244,11 +246,13 @@ export function createExecutor(options: ExecutorOptions) {
         previous.termsDigest !== intent.termsDigest)
     )
       return tamper(id);
-    if (previous?.status === "sent")
+    if (previous?.status === "sent") {
+      await finish(previous);
       return {
         status: "duplicate",
         ...(previous.providerRef ? { providerRef: previous.providerRef } : {}),
       };
+    }
     if (!execute) return disposition(id, { status: "ready", reason: "re-evaluated" });
     if (pending.has(id)) return { status: "uncertain", reason: "in-flight" };
     let unresolved = previous?.status === "attempting" || previous?.status === "uncertain";
@@ -294,9 +298,11 @@ export function createExecutor(options: ExecutorOptions) {
       status: "attempting",
       attempts: (previous?.attempts ?? 0) + 1,
       startedAt: previous?.startedAt ?? now.toISOString(),
+      committedAt: unresolved && previous ? previous.committedAt : now.toISOString(),
       updatedAt: o.clock.now().toISOString(),
       underMandate: mandate.id,
       ...(approval ? { underApproval: approval } : {}),
+      conversation: intent.conversation,
       recipientHash: intent.recipientHash,
       amount: intent.amount,
     };
@@ -315,6 +321,7 @@ export function createExecutor(options: ExecutorOptions) {
       proposal: id,
       at: record.updatedAt,
       outcome: "attempting",
+      transmission: record,
       wireDigest: record.wireDigest,
       underMandate: mandate.id,
       ...(approval ? { underApproval: approval } : {}),
@@ -360,7 +367,7 @@ export function createExecutor(options: ExecutorOptions) {
         const current = await o.transmissions.get(id);
         if (current?.status === "sent") {
           pending.delete(id);
-          return { status: "sent", reason: "sent" };
+          return finish(current);
         }
         const outcome = providerResult(value, false);
         const status =
@@ -390,6 +397,7 @@ export function createExecutor(options: ExecutorOptions) {
         .then(settle, () => settle(undefined))
         .catch((error: unknown) => {
           backgroundError = error;
+          backgroundFailed = true;
         });
       background.add(late);
       void late.finally(() => background.delete(late));
@@ -418,7 +426,7 @@ export function createExecutor(options: ExecutorOptions) {
     /** Await late writes during orderly shutdown. Crash recovery uses the durable records. */
     drain: async () => {
       await Promise.all(background);
-      if (backgroundError) throw backgroundError;
+      if (backgroundFailed) throw backgroundError;
     },
   };
 }
