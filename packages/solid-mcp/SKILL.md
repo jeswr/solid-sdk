@@ -29,3 +29,16 @@ Use fetch-rdf and typed wrappers for RDF reads, rdf-serialize for serialization.
 Tests use fake fetch and portable pods only. Run lint, build, typecheck and test;
 exercise canonical tools and aliases, read-only enforcement and SSRF regressions.
 The stdio CLI must keep stdout exclusively for MCP messages.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+Memory tools use `NanopubStore` through the current PodPort and PodOutput. Trusted
+`clientInfo.clientId` is an absolute IRI; tool input must never select deletion
+authority. Model and optional conversation metadata belong in publication info;
+assertion attribution is always the owner. Quoted unhedged facts are explicit,
+hedged facts are hedged, other facts inferred; embedded solid-memory notes are
+always Mentioned and uncategorized. Never infer a permissive category from prose.
+Recall requires a closed purpose and defaults to definitely plus Current. Reuse
+`purposeFilter` per call and preserve edited policies. Recall must never create a
+missing policy, including on a writable server. Retraction is append-only; deletion
+requires this client's pubinfo attribution and a strong conditional ETag. Private pkg-memory is bundled
+without leaking its imports into public declarations or mirror manifests.
