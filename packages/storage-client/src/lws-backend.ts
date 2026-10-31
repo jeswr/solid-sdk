@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-// LWS read side (ADR-003 §7, T-023); mutations arrive with T-024.
+// LWS backend (ADR-003 §7, T-023/T-024).
 import { deriveFeatures, type Features } from "@jeswr/storage-capabilities";
 import { StorageError } from "./errors.js";
 import {
@@ -12,6 +12,7 @@ import {
   scoped,
 } from "./http.js";
 import { paginate, throwIfAborted } from "./internal.js";
+import { lwsWrites } from "./lws-write.js";
 import {
   acceptReadStatus,
   createReadOperations,
@@ -74,7 +75,7 @@ function resolve(value: string, base: string): string | null {
 
 /** Bounded JSON collection, with transport errors kept as network errors. */
 async function jsonBody(
-  result: ReadResult,
+  result: Pick<ReadResult, "url" | "contentType" | "body">,
   accepted: string[],
   signal?: AbortSignal,
 ): Promise<unknown> {
@@ -169,7 +170,7 @@ function writesPending(method: string, url: string): Promise<never> {
   );
 }
 
-/** Create the LWS StorageClient. Read operations only; mutations reject with `unsupported`. */
+/** Create a scoped LWS StorageClient with conditional mutations. */
 export function createLwsBackend(options: LwsBackendOptions): StorageClient {
   const root = scoped(options.root, "GET", options.root);
   if (!root.endsWith("/") || /[?#]/.test(root))
@@ -208,12 +209,7 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
   const safeLink = (url: string | undefined) =>
     url !== undefined && isWithinStorage(url) ? url : null;
 
-  async function shapeOf(
-    method: string,
-    url: string,
-    response: Response,
-    expect: ReadExpectation,
-  ): Promise<ReadShape> {
+  function inspect(method: string, url: string, response: Response) {
     const links = linksOf(response, url, method);
     if ((links.get(`${LWS}storage`) ?? []).some(({ target }) => target !== storage)) {
       discard(response.body);
@@ -223,6 +219,15 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
         message: `${method} ${url} advertises a foreign storage`,
       });
     }
+    return links;
+  }
+  async function shapeOf(
+    method: string,
+    url: string,
+    response: Response,
+    expect: ReadExpectation,
+  ): Promise<ReadShape> {
+    const links = inspect(method, url, response);
     await acceptReadStatus(method, url, response, expect);
     const status = response.status as 200 | 206 | 304;
     return {
@@ -348,13 +353,10 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
       const target = scoped(root, "HEAD", url);
       return isRoot(target) ? null : (await head(target)).parent;
     },
-    write: (url) => writesPending("PUT", url),
-    writeRdf: (url) => writesPending("PUT", url),
-    create: (url) => writesPending("POST", url),
-    patch: (url) => writesPending("PATCH", url),
     move: (url) => writesPending("MOVE", url),
     delete: (url) => writesPending("DELETE", url),
     setMetadata: (url) => writesPending("PATCH", url),
+    ...lwsWrites({ ...options, root }, () => client, inspect),
   };
   return client;
 }
