@@ -436,6 +436,36 @@ test("storage failures reject without exposing a session or discarding an unprov
 });
 
 test.each([
+  2, 3, 4,
+])("restore propagates a fence storage failure on generation read %s and remains retryable", async (failedRead) => {
+  const f = fixture();
+  await f.load().login();
+  const before = structuredClone([...f.values.entries()]);
+  const failure = new Error("Fence storage unavailable");
+  const get = f.sessions.getItem;
+  let reads = 0;
+  f.sessions.getItem = vi.fn(async (key) => {
+    if (JSON.parse(key)[1] === "generation" && ++reads === failedRead) throw failure;
+    return await get(key);
+  });
+  const auth = f.load();
+  const restored = vi.fn(),
+    expired = vi.fn();
+  auth.on("restore", restored);
+  auth.on("expired", expired);
+  await expect(auth.restore()).rejects.toBe(failure);
+  expect(await auth.identity()).toBeNull();
+  expect([...f.values.entries()]).toEqual(before);
+  expect(await auth.remembered()).toEqual([{ webId: f.op.webId, issuer: f.op.issuer }]);
+  expect(f.op.stats.refreshes).toBe(0);
+  expect(f.op.stats.authorizations).toBe(1);
+  expect(restored).not.toHaveBeenCalled();
+  expect(expired).not.toHaveBeenCalled();
+  await expect(auth.restore()).resolves.toMatchObject({ webId: f.op.webId });
+  expect(f.op.stats.refreshes).toBe(1);
+});
+
+test.each([
   ["as", "getItem"],
   ["as", "setItem"],
   ["issuer", "getItem"],

@@ -76,7 +76,9 @@ export function createProviders(
     options.storage === undefined
       ? (browser?.fence ?? new SessionFence(namespace, { broadcast: false }))
       : new SessionFence(namespace, {
-          store: scopedStore<number>(options.storage.sessions, "pod-auth:fence:" + namespace),
+          store: protectStore(
+            scopedStore<number>(options.storage.sessions, "pod-auth:fence:" + namespace),
+          ),
         });
   const metadata = <T extends {}>(name: string, fallback?: KvStore<T>) => {
     const store =
