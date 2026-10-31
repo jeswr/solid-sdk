@@ -11,7 +11,7 @@ subscription lifecycle/async iteration, `./channels/poll`, and `./testing` fakes
 `./channels/websocket2023` and `./channels/lws-websocket`: Solid subscribes per topic, LWS
 batches all topics. T-042 adds `./channels/streaming-http`, `./channels/lws-sse` and
 `./channels/legacy-ws`. `plan()` reports advertised preference; WebSocket/SSE/legacy run push,
-while webhook relay still uses polling until T-043. The subscription's `channel` is the
+and T-043 adds `./channels/webhook-relay` for registered LWS webhook delivery over relay SSE. The subscription's `channel` is the
 actual transport. Keep that distinction explicit in the README.
 
 Use only the storage-client public API (`features`, `head`, `listAll`, `isWithinStorage`,
@@ -71,3 +71,13 @@ adversarial tests with every behavior change. Keep development tool versions ali
 the root manifest. The pinned pnpm 10.4.1 with `ignore-scripts` requires local tool declarations
 for filtered scripts. Validate with this package's lint, dependency-first build, typecheck and
 test scripts, and the repository gate.
+
+T-043 registers the canonical storage id using `relay.getIdToken(signal)` and a separate
+`relay.fetch` (default global fetch). Never send pod access tokens through the relay
+transport. Relay base URLs are explicit origins; validate scheme/credentials/controls,
+returned id/token, and the exact inbox path before subscribing. The relay stream URL is
+constructed locally. Reuse native SSE retry/Last-Event-ID and terminal rediscovery behavior.
+Webhook subscriptions batch all topics, select the WebhookSubscription service even when
+another push service is preferred, retain DELETE cleanup, and report `webhook-relay` as via.
+A relay registration 403 closes forbidden. The optional ID-token callback preserves existing
+`plan()` configuration, but an actual webhook subscription requires it.

@@ -2,7 +2,7 @@
 
 # @jeswr/pod-notifications
 
-> **Experimental — AI-agent-generated.** Subscriptions, polling, WebSockets, StreamingHTTP, LWS SSE and NSS (T-040–T-042).
+> **Experimental — AI-agent-generated.** Subscriptions, polling, WebSockets, StreamingHTTP, LWS SSE, webhook relay and NSS (T-040–T-043).
 
 One storage-scoped change API for Solid and LWS. Private at version 0.1.0; Node.js >=24.
 Design of record: SDK core `ADR-005-live-updates.md` and ADR-001 D4.
@@ -29,8 +29,8 @@ await subscription.close();
 `plan()` selects the first advertised usable channel: WebSocket, SSE, LWS webhook with a
 configured relay, legacy WebSocket, then polling. It reads `storage.features.liveUpdates`
 without I/O; unavailable/unknown features cannot select push. Advertised WebSocket, SSE and
-legacy WebSocket channels use push adapters. Webhook relay remains reserved for T-043 and
-still uses polling. `channel` reports the actual transport (`websocket`, `sse`, `legacy-ws`,
+legacy WebSocket and webhook relay channels use push adapters. `channel` reports the actual
+transport (`websocket`, `sse`, `webhook-relay`, `legacy-ws`,
 `poll`, or `null` when polling is disabled).
 
 Push channels rediscover through the storage-client public `createPodClient` API with
@@ -143,3 +143,30 @@ pnpm --filter @jeswr/pod-notifications run test
 ```
 
 Behavioral/adversarial tests enforce 100% statement, branch, function and line coverage.
+
+For LWS webhook-only servers, configure the notification-relay app and supply the session
+ID token explicitly. Relay traffic uses a separate fetch so storage access tokens are never
+sent to the relay:
+
+```ts
+const notifications = createNotifications({
+  fetch: authenticatedPodFetch,
+  storage,
+  relay: {
+    url: 'https://relay.example',
+    getIdToken: async (signal) => sessionIdToken, // Refresh through your session adapter.
+    // fetch: relayFetch, // Optional; defaults to globalThis.fetch.
+  },
+});
+```
+
+The relay registers the canonical storage description id, returns an inbox capability, and
+receives one batched LWS WebhookSubscription. The browser opens a native EventSource with
+the returned stream capability. Native reconnects retain Last-Event-ID and request the
+relay's 15-minute replay buffer; terminal errors rediscover/register/subscribe with backoff.
+`resync` also fires after recoverable drops: reconcile ETags because replay retention is
+bounded. Closing/offline releases the stream and DELETEs the LWS subscription; relay
+registrations expire with the ID token, capped at 24 hours. Relay registration 403 closes
+with `forbidden`. A configured relay without `getIdToken` can be inspected through `plan()`
+but cannot connect; the subscription enters degraded retry state. The relay URL must be
+an HTTPS origin, or loopback HTTP with the development opt-in at both storage and relay.
