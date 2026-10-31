@@ -4,7 +4,6 @@
 
 ```ts
 
-import type { ChannelCapability } from '@jeswr/agent-model';
 import type { DatasetCore } from '@rdfjs/types';
 import { Quad } from '@rdfjs/types';
 
@@ -26,7 +25,7 @@ export interface AgentCard {
             readonly uri: string;
             readonly required: false;
             readonly params: {
-                readonly bindings: readonly ChannelCapability[];
+                readonly bindings: readonly { type: "channel-capability"; id: string; channel: string; binding: string; carriage: string; structuredPayload: boolean; endToEndEncrypted: boolean; deliveryReceipts: boolean; historyWindow: string; maxMessageBytes: number; sendSupported: boolean; costPerMessage: number; rateLimit: { perRecipient: number; perDay: number; }; credentialState: "error" | "none" | "setup-required" | "connected" | "disabled"; lastIngest?: string | undefined; }[];
             };
         }[];
     };
@@ -76,7 +75,7 @@ export function agentDescriptionsUrl(origin: string): string;
 
 // @public
 export interface AgentDescriptor {
-    readonly bindings?: readonly ChannelCapability[];
+    readonly bindings?: readonly { type: "channel-capability"; id: string; channel: string; binding: string; carriage: string; structuredPayload: boolean; endToEndEncrypted: boolean; deliveryReceipts: boolean; historyWindow: string; maxMessageBytes: number; sendSupported: boolean; costPerMessage: number; rateLimit: { perRecipient: number; perDay: number; }; credentialState: "error" | "none" | "setup-required" | "connected" | "disabled"; lastIngest?: string | undefined; }[];
     readonly description?: string;
     readonly did?: string;
     readonly id: string;

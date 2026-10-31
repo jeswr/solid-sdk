@@ -53,6 +53,8 @@ const found = await discoverAgent("https://alice.example/profile/card#me", {
 ## Channel bindings
 
 `AgentDescriptor.bindings` accepts `ChannelCapability` records from `@jeswr/agent-model`.
+Published artifacts inline the model's implementation and capability type; consumers do not
+need to install the private model package. The shipped renderer uses the same bundled code.
 `describeAgent` validates and copies the records, rejects duplicate ids, and projects them into:
 
 - A2A `capabilities.extensions[]`: `{ uri: "https://jeswr.org/ns/agent#bindings", required: false,

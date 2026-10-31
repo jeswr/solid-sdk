@@ -81,5 +81,13 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "mirrorPublish": {
+    "inlined": [
+      "@jeswr/agent-model",
+      "@jeswr/fetch-rdf",
+      "@jeswr/ldp-container",
+      "@jeswr/rdf-serialize"
+    ]
   }
 }
