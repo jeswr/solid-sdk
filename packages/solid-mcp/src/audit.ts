@@ -50,7 +50,7 @@ export async function auditSpecialRead(
   }
   function condition(existing?: PodReadResult): PodConditions {
     if (!existing) return { ifNoneMatch: "*" };
-    if (!existing.etag || !/^"[^"\r\n]*"$/.test(existing.etag))
+    if (!existing.etag || !/^"[^"\r\n]*"(?![\s\S])/.test(existing.etag))
       throw new Error("Strong ETag required for audit");
     return { ifMatch: existing.etag };
   }

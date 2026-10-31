@@ -5,6 +5,7 @@ import { z } from "zod";
 import { requirePodScopedUrl } from "./auth.js";
 import { fetchDocument } from "./fetch.js";
 import { createMemoryTools, type MemoryClientInfo } from "./memory-tools.js";
+import { createPersonalTools } from "./personal-tools.js";
 import {
   listContainer,
   RDF_MEDIA_TYPES,
@@ -133,6 +134,7 @@ export function createPodToolRegistry(
       readOnly,
     ),
     ...createMemoryTools(pod, readOnly, clientInfo),
+    ...createPersonalTools(pod, readOnly, clientInfo),
   ];
 }
 

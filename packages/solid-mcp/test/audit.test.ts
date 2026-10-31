@@ -124,6 +124,7 @@ it.each([
   'W/"1"',
   "invalid",
   '"bad\r\nheader"',
+  '"1"\n',
 ])("refuses replacement without a strong ETag (%s)", async (etag) => {
   const pod = fixture();
   await audit(pod);

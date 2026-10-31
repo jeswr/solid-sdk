@@ -17,6 +17,10 @@ export default defineConfig({
       thresholds: {
         "src/http.ts": { branches: 100, functions: 100, lines: 100, statements: 100 },
         "src/memory-tools.ts": { branches: 100, functions: 100, lines: 100, statements: 100 },
+        "src/memory-context.ts": { branches: 100, functions: 100, lines: 100, statements: 100 },
+        "src/personal-policy.ts": { branches: 100, functions: 100, lines: 100, statements: 100 },
+        "src/personal-tools.ts": { branches: 100, functions: 100, lines: 100, statements: 100 },
+        "src/audit.ts": { branches: 100, functions: 100, lines: 100, statements: 100 },
         "src/tool.ts": { branches: 100, functions: 100, lines: 100, statements: 100 },
       },
     },

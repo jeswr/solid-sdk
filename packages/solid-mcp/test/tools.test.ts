@@ -49,6 +49,9 @@ describe("tool registry over a fetch-free portable pod", () => {
       { name: "memory_remember", aliases: [], readOnly: false },
       { name: "memory_recall", aliases: [], readOnly: true },
       { name: "memory_forget", aliases: [], readOnly: false },
+      { name: "profile_get", aliases: [], readOnly: true },
+      { name: "address_get", aliases: [], readOnly: true },
+      { name: "health_query", aliases: [], readOnly: true },
     ]);
     for (const tool of tools) expect(tool.inputSchema.toJSONSchema().type).toBe("object");
   });
