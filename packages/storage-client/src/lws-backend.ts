@@ -247,6 +247,79 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
     return { url: result.url, etag: result.etag, raw, links: linksetOf(raw, result.url) };
   }
 
+  // Also used by recursive deletion, after HEAD confirms a scoped target is a container.
+  // Unlike public list(), that traversal must accept slashless opaque identifiers.
+  const list: StorageClient["list"] = async (container, opts = {}) => {
+    const result = await get(
+      opts.cursor === undefined ? container : opts.cursor.url,
+      { Accept: LIST_ACCEPT },
+      opts.signal,
+    );
+    const raw = await jsonBody(
+      result,
+      ["application/lws+json", "application/ld+json"],
+      opts.signal,
+    );
+    if (
+      !object(raw) ||
+      !(hasType(typesOf(raw.type), "Container") || hasType(typesOf(raw.type), "ContainerPage")) ||
+      !Array.isArray(raw.items)
+    )
+      throw invalid(result.url, "Expected Container or ContainerPage with items array");
+    if (raw.items.length > MAX_LIST_ITEMS) throw invalid(result.url, "Listing exceeds 10000 items");
+    const seen = new Set<string>();
+    const items: Entry[] = [];
+    let urlLength = 0;
+    for (const item of raw.items) {
+      if (!object(item) || typeof item.id !== "string")
+        throw invalid(result.url, "Expected item with string id");
+      const id = resolve(item.id, result.url);
+      if (id === null) continue;
+      urlLength += id.length;
+      if (urlLength > MAX_LIST_URL_LENGTH)
+        throw invalid(result.url, "Resolved listing IDs exceed 4 MiB");
+      if (!isWithinStorage(id) || seen.has(id)) continue;
+      seen.add(id);
+      const types = typesOf(item.type);
+      const kind = hasType(types, "Container") ? "container" : "resource";
+      items.push({
+        url: id,
+        kind,
+        contentType:
+          kind !== "container" && typeof item.format === "string" && MEDIA_TYPE.test(item.format)
+            ? item.format
+            : null,
+        size: count(item.size),
+        modified: typeof item.modified === "string" ? dateOf(item.modified) : null,
+        types: types.filter(
+          (type) =>
+            !["Container", "DataResource", `${LWS}Container`, `${LWS}DataResource`].includes(
+              type,
+            ) &&
+            /^[a-z][a-z0-9+.-]*:[^\s<>"{}|^`\\]*$/i.test(type) &&
+            URL.canParse(type),
+        ),
+      });
+    }
+    const nextLink = result.links.get("next")?.[0]?.target;
+    let next: string | null = null;
+    if (nextLink !== undefined) {
+      try {
+        next = scoped(root, "GET", nextLink);
+      } catch {
+        throw invalid(result.url, "Invalid next page URL");
+      }
+      if (next.length > MAX_CURSOR_LENGTH || next === result.url)
+        throw invalid(result.url, "Invalid next page URL");
+    }
+    return {
+      items,
+      next: next === null ? null : { url: next },
+      total: count(raw.totalItems),
+      etag: result.etag,
+    };
+  };
+
   const client: StorageClient = {
     protocol: "lws",
     root,
@@ -255,77 +328,8 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
     read,
     readRdf,
     isWithinStorage,
-    async list(url, opts = {}) {
-      const container = listingContainer(root, url, "lws");
-      const result = await get(
-        opts.cursor === undefined ? container : opts.cursor.url,
-        { Accept: LIST_ACCEPT },
-        opts.signal,
-      );
-      const raw = await jsonBody(
-        result,
-        ["application/lws+json", "application/ld+json"],
-        opts.signal,
-      );
-      if (
-        !object(raw) ||
-        !(hasType(typesOf(raw.type), "Container") || hasType(typesOf(raw.type), "ContainerPage")) ||
-        !Array.isArray(raw.items)
-      )
-        throw invalid(result.url, "Expected Container or ContainerPage with items array");
-      if (raw.items.length > MAX_LIST_ITEMS)
-        throw invalid(result.url, "Listing exceeds 10000 items");
-      const seen = new Set<string>();
-      const items: Entry[] = [];
-      let urlLength = 0;
-      for (const item of raw.items) {
-        if (!object(item) || typeof item.id !== "string")
-          throw invalid(result.url, "Expected item with string id");
-        const id = resolve(item.id, result.url);
-        if (id === null) continue;
-        urlLength += id.length;
-        if (urlLength > MAX_LIST_URL_LENGTH)
-          throw invalid(result.url, "Resolved listing IDs exceed 4 MiB");
-        if (!isWithinStorage(id) || seen.has(id)) continue;
-        seen.add(id);
-        const types = typesOf(item.type);
-        const kind = hasType(types, "Container") ? "container" : "resource";
-        items.push({
-          url: id,
-          kind,
-          contentType:
-            kind !== "container" && typeof item.format === "string" && MEDIA_TYPE.test(item.format)
-              ? item.format
-              : null,
-          size: count(item.size),
-          modified: typeof item.modified === "string" ? dateOf(item.modified) : null,
-          types: types.filter(
-            (type) =>
-              !["Container", "DataResource", `${LWS}Container`, `${LWS}DataResource`].includes(
-                type,
-              ) &&
-              /^[a-z][a-z0-9+.-]*:[^\s<>"{}|^`\\]*$/i.test(type) &&
-              URL.canParse(type),
-          ),
-        });
-      }
-      const nextLink = result.links.get("next")?.[0]?.target;
-      let next: string | null = null;
-      if (nextLink !== undefined) {
-        try {
-          next = scoped(root, "GET", nextLink);
-        } catch {
-          throw invalid(result.url, "Invalid next page URL");
-        }
-        if (next.length > MAX_CURSOR_LENGTH || next === result.url)
-          throw invalid(result.url, "Invalid next page URL");
-      }
-      return {
-        items,
-        next: next === null ? null : { url: next },
-        total: count(raw.totalItems),
-        etag: result.etag,
-      };
+    async list(url, opts) {
+      return list(listingContainer(root, url, "lws"), opts);
     },
     async *listAll(url, opts = {}) {
       const container = listingContainer(root, url, "lws");
@@ -340,7 +344,7 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
       const target = scoped(root, "HEAD", url);
       return isRoot(target) ? null : (await head(target)).parent;
     },
-    ...lwsWrites({ ...options, root }, () => client, inspect, metadata),
+    ...lwsWrites({ ...options, root }, () => client, inspect, metadata, list),
   };
   return client;
 }

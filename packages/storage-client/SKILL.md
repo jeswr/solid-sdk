@@ -187,8 +187,9 @@ Solid read side (ADR-003 §6):
 - Nonrecursive delete sends If-Match and refuses the root. Recursive delete always uses client
   traversal: features.recursiveDelete advertises the POST-based RecursiveDeleteService, which
   does not establish Depth support for DELETE. HEAD-check the top ETag,
-  preflight listAll + HEAD through logical containment (not URI prefixes), require each child's
-  up to match its listed parent and every child to have an ETag. Cycles, duplicates, root members,
+  preflight paginated listings + HEAD through logical containment (not URI prefixes), accepting
+  slashless opaque container identifiers only after HEAD confirms their container kind. Require
+  each child's up to match its listed parent and every child to have an ETag. Cycles, duplicates, root members,
   and trees above 10,000 nodes fail before deletion. Delete in reverse traversal order, refreshing
   container ETags after child deletion; every DELETE is conditional. Concurrent additions can
   still produce 409 and partial deletion. Errors propagate without a destructive retry.

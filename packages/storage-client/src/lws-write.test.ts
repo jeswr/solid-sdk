@@ -1172,6 +1172,109 @@ function treeBackend(
 }
 
 describe("LWS conditional delete", () => {
+  test("recursive deletion traverses an empty opaque container after HEAD confirms its kind", async () => {
+    const container = `${ROOT}opaque-container`;
+    const { storage, calls } = backend({
+      [`HEAD ${container}`]: headReply("container", ROOT),
+      [`GET ${container}`]: listReply([]),
+      [`DELETE ${container}`]: reply(),
+    });
+    await storage.delete(container, { ifMatch: tag, recursive: true });
+    expect(calls.map(({ method, url }) => `${method} ${url}`)).toEqual([
+      `HEAD ${container}`,
+      `GET ${container}`,
+      `HEAD ${container}`,
+      `DELETE ${container}`,
+    ]);
+    expect(calls.at(-1)?.headers.get("if-match")).toBe(tag);
+  });
+  test("recursive deletion paginates opaque containers and follows nested logical containment", async () => {
+    const container = `${ROOT}opaque-container`;
+    const nested = `${ROOT}unrelated-path/nested-container`;
+    const cursor = `${ROOT}pages?opaque=a%2fb&cursor=2`;
+    let heads = 0;
+    const { storage, calls } = backend({
+      [`HEAD ${container}`]: () => headReply("container", ROOT, heads++ ? '"refreshed"' : tag),
+      [`GET ${container}`]: {
+        ...listReply([nested]),
+        headers: { "content-type": "application/lws+json", link: `<${cursor}>; rel="next"` },
+      },
+      [`GET ${cursor}`]: listReply([CHILD]),
+      [`HEAD ${nested}`]: headReply("container", container),
+      [`GET ${nested}`]: listReply([LEAF]),
+      [`HEAD ${CHILD}`]: headReply("resource", container),
+      [`HEAD ${LEAF}`]: headReply("resource", nested),
+      [`DELETE ${LEAF}`]: reply(),
+      [`DELETE ${CHILD}`]: reply(),
+      [`DELETE ${nested}`]: reply(),
+      [`DELETE ${container}`]: reply(),
+    });
+    await storage.delete(container, { ifMatch: tag, recursive: true });
+    expect(calls.filter(({ method }) => method === "GET").map(({ url }) => url)).toEqual([
+      container,
+      cursor,
+      nested,
+    ]);
+    const deletes = mutationCalls(calls);
+    expect(deletes.map(({ url }) => url)).toEqual([LEAF, CHILD, nested, container]);
+    expect(deletes.map(({ headers }) => headers.get("if-match"))).toEqual([
+      tag,
+      tag,
+      tag,
+      '"refreshed"',
+    ]);
+    expect(calls.findIndex(({ method }) => method === "DELETE")).toBeGreaterThan(
+      calls.findIndex(({ method, url }) => method === "HEAD" && url === LEAF),
+    );
+  });
+  test.each([
+    {
+      listing: json(
+        { type: "DataResource", items: [] },
+        { "content-type": "application/lws+json" },
+      ),
+      code: "invalid-response",
+    },
+    { listing: reply(302, { location: "https://evil.example/" }), code: "invalid-response" },
+    {
+      listing: {
+        ...listReply([]),
+        headers: {
+          "content-type": "application/lws+json",
+          link: '<https://evil.example/>; rel="https://www.w3.org/ns/lws#storage"',
+        },
+      },
+      code: "scope",
+    },
+  ])("opaque container listing still validates response: $code", async ({ listing, code }) => {
+    const container = `${ROOT}opaque-container`;
+    const { storage, calls } = backend({
+      [`HEAD ${container}`]: headReply("container", ROOT),
+      [`GET ${container}`]: listing,
+    });
+    await rejects(storage.delete(container, { ifMatch: tag, recursive: true }), code);
+    expect(calls.map(({ method }) => method)).toEqual(["HEAD", "GET"]);
+  });
+  test("opaque container traversal rejects children with a different logical parent", async () => {
+    const container = `${ROOT}opaque-container`;
+    const { storage, calls } = backend({
+      [`HEAD ${container}`]: headReply("container", ROOT),
+      [`GET ${container}`]: listReply([CHILD]),
+      [`HEAD ${CHILD}`]: headReply("resource", ROOT),
+    });
+    await rejects(storage.delete(container, { ifMatch: tag, recursive: true }), "invalid-response");
+    expect(mutationCalls(calls)).toHaveLength(0);
+    expect(calls.at(-1)?.url).toBe(CHILD);
+  });
+  test("opaque container traversal checks the source ETag before listing", async () => {
+    const container = `${ROOT}opaque-container`;
+    const { storage, calls } = backend({ [`HEAD ${container}`]: headReply("container", ROOT) });
+    await rejects(
+      storage.delete(container, { ifMatch: '"stale"', recursive: true }),
+      "precondition-failed",
+    );
+    expect(calls.map(({ method }) => method)).toEqual(["HEAD"]);
+  });
   test("nonrecursive fixture DELETE sends If-Match without Depth", async () => {
     const { storage, calls } = backend();
     await storage.delete(URL, { ifMatch: tag });

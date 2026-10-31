@@ -4,7 +4,7 @@ import { escapeIri } from "@jeswr/rdf-serialize";
 import { Store } from "n3";
 import { StorageError, storageErrorFrom } from "./errors.js";
 import { discard, mediaTypeOf, readResultFrom, scoped, send } from "./http.js";
-import { throwIfAborted } from "./internal.js";
+import { paginate, throwIfAborted } from "./internal.js";
 import { jsonBody, type LwsBackendOptions, linksetOf } from "./lws-backend.js";
 import {
   applyQuadPatch,
@@ -155,6 +155,7 @@ export function lwsWrites(
   client: () => StorageClient,
   inspect: (method: string, url: string, response: Response) => ReadResult["links"],
   metadata: (url: string, signal?: AbortSignal, described?: ReadResult) => Promise<Metadata>,
+  list: StorageClient["list"],
 ): Writes {
   const { root, fetch } = options;
   function target(method: string, url: string): string {
@@ -551,7 +552,13 @@ export function lwsWrites(
       // Follow logical containment, never path prefixes; preflight the whole tree before deleting.
       for (const node of nodes) {
         if (node.kind !== "container") continue;
-        for await (const entry of client().listAll(node.url, { signal: opts.signal })) {
+        // HEAD already established the kind; an opaque container need not end in '/'.
+        const entries = paginate(
+          node.url,
+          (cursor) => list(node.url, { cursor, signal: opts.signal }),
+          opts.signal,
+        );
+        for await (const entry of entries) {
           const childUrl = target("DELETE", entry.url);
           if (childUrl === root || seen.has(childUrl) || nodes.length >= 10000)
             throw invalid("GET", node.url, "Invalid recursive containment tree");
