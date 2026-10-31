@@ -86,7 +86,7 @@ export interface WebSocketLike {
 /** Browser-compatible event source surface; close is always explicit. */
 export type EventSourceLike = Omit<WebSocketLike, "send">;
 
-/** All I/O is injected. Push factories/random are reserved for the push channel tasks. */
+/** All I/O is injected; browser WebSocket and system clocks are the defaults. */
 export interface NotificationsDependencies {
   fetch: typeof fetch;
   storage: StorageClient;
@@ -96,4 +96,6 @@ export interface NotificationsDependencies {
   timers?: Timers;
   now?: () => number;
   random?: () => number;
+  /** Permit HTTP/WS only when both storage and destination are loopback. Default false. */
+  allowInsecureLoopback?: boolean;
 }

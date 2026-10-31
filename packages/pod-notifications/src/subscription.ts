@@ -33,7 +33,7 @@ export class SubscriptionController implements Subscription {
   };
   private readonly finish = new Set<() => void>();
   private closing?: Promise<void>;
-  cleanup: () => void = () => {};
+  cleanup: () => void | Promise<void> = () => {};
 
   constructor(topics: readonly string[]) {
     this.topics = Object.freeze([...topics]);
@@ -68,9 +68,10 @@ export class SubscriptionController implements Subscription {
     if (!this.closing) {
       this.closing = Promise.resolve();
       this.transition("closed");
-      this.cleanup();
+      const cleanup = this.cleanup();
       for (const finish of this.finish) finish();
       for (const listeners of Object.values(this.listeners)) listeners.clear();
+      this.closing = Promise.resolve(cleanup);
     }
     return this.closing;
   }

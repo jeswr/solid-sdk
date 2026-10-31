@@ -1,15 +1,18 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+
+import { createLwsWebSocketChannel } from "./channels/lws-websocket.js";
 import { createPollChannel } from "./channels/poll.js";
+import { createWebSocket2023Channel } from "./channels/websocket2023.js";
 import { systemTimers } from "./runtime.js";
 import { SubscriptionController } from "./subscription.js";
 import type { NotificationPlan, NotificationsClient, NotificationsDependencies } from "./types.js";
 
 /**
  * Create the ADR-005 client. plan() reports advertised transport preference without I/O.
- * T-040 runs the polling fallback; push channel implementations arrive in T-041/T-042.
+ * WebSockets use discovery and one-shot channels; other transports retain polling for T-042.
  */
 export function createNotifications(deps: NotificationsDependencies): NotificationsClient {
-  return {
+  const client: NotificationsClient = {
     plan(): NotificationPlan {
       const live = deps.storage.features.liveUpdates;
       if (live.state === "available") {
@@ -46,6 +49,11 @@ export function createNotifications(deps: NotificationsDependencies): Notificati
       ) {
         throw new TypeError("Unsupported notification depth");
       }
+      if (client.plan().channel === "websocket") {
+        const create =
+          deps.storage.protocol === "lws" ? createLwsWebSocketChannel : createWebSocket2023Channel;
+        return create({ ...deps, topics: all, signal: options.signal });
+      }
       if (intervalMs === 0) {
         const subscription = new SubscriptionController(all);
         subscription.transition("degraded", "polling-disabled");
@@ -66,4 +74,5 @@ export function createNotifications(deps: NotificationsDependencies): Notificati
       });
     },
   };
+  return client;
 }
