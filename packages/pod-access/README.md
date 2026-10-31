@@ -53,6 +53,8 @@ container it writes both `acl:accessTo` and `acl:default`. ACP uses one AccessCo
 and Matcher per grant, with `acp:allow` ACL modes and `acp:allOf` matching a single agent.
 Inheritance links the control through both `acp:accessControl` and `acp:memberAccessControl`.
 Inherited entries here mean defaults on this document; ancestor grants are not resolved.
+ACP roots shared by the requested resource and other resources return `unsupported`.
+Every `acp:resource` association must be an IRI, otherwise the document returns `invalid-response`.
 
 `revoke` accepts an authorization/policy IRI or an agent/group IRI. A matching rule id takes
 precedence over the same IRI used as an agent. WAC retains co-agents and

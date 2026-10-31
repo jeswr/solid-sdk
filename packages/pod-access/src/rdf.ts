@@ -181,7 +181,10 @@ class Acrs extends DatasetWrapper {
 export function acr(dataset: Dataset, target: string, url: string): AccessControlResource {
   const candidates = new Map<string, AccessControlResource>();
   for (const root of new Acrs(dataset, DataFactory).resources) {
-    if (root.resource === target || (root.resource === undefined && root.value === url)) {
+    // Materialize every typed association before selecting or mutating a root.
+    const resources = [...iris(root, `${ACP}resource`)];
+    if (resources.includes(target) || (resources.length === 0 && root.value === url)) {
+      if (resources.length > 1) fail("unsupported", url);
       candidates.set(`${root.termType}:${root.value}`, root);
     }
   }

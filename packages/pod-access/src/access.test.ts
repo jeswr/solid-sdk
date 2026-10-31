@@ -618,6 +618,41 @@ describe("untrusted access graphs", () => {
     );
     await expect(client.grants(target)).rejects.toMatchObject({ code: "invalid-response" });
   });
+  describe.each(["<>", "<#root>", "_:root"])("ACP root %s", (root) => {
+    describe.each([
+      ["<https://pod.example/note.txt>, <https://pod.example/other>", "unsupported"],
+      ["<https://pod.example/other>, <https://pod.example/note.txt>", "unsupported"],
+      ['<https://pod.example/note.txt>, "literal"', "invalid-response"],
+      ['"literal", <https://pod.example/note.txt>', "invalid-response"],
+      ["<https://pod.example/note.txt>, []", "invalid-response"],
+      ["[], <https://pod.example/note.txt>", "invalid-response"],
+    ])("associations %s", (associations, code) => {
+      test.each([
+        "grants",
+        "share",
+        "revoke by agent",
+        "revoke by id",
+      ])("refuses %s and preserves all RDF", async (operation) => {
+        const { client, target, storage, memory, accessUrl } = await setup(
+          "acp",
+          `${root} a acp:AccessControlResource; acp:resource ${associations};
+            acp:accessControl <#control>; acp:memberAccessControl <#control>.
+          <#control> acp:apply <#policy>. <#policy> acp:allow acl:Read; acp:allOf <#matcher>.
+          <#matcher> acp:agent <${BOB}>.`,
+        );
+        const before = await (await memory.read(accessUrl)).text();
+        const result =
+          operation === "grants"
+            ? client.grants(target)
+            : operation === "share"
+              ? client.share(target, { agent: ALICE, modes: ["write"] }, {})
+              : client.revoke(target, operation === "revoke by id" ? `${accessUrl}#policy` : BOB);
+        await expect(result).rejects.toMatchObject({ code });
+        expect(storage.writeRdf).not.toHaveBeenCalled();
+        expect(await (await memory.read(accessUrl)).text()).toBe(before);
+      });
+    });
+  });
   test("refuses to repurpose a conflicting ACP root", async () => {
     const { client, target, storage } = await setup(
       "acp",
