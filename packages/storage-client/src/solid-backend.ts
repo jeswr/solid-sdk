@@ -159,7 +159,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     opts: Parameters<StorageClient["list"]>[1] = {},
     inspect?: InspectContainer,
   ) {
-    const container = listingContainer(root, url, "solid");
+    const container = listingContainer(root, url);
     if (opts.cursor !== undefined) {
       throw new StorageError("bad-request", {
         method: "GET",
@@ -200,7 +200,7 @@ export function createSolidBackend(options: SolidBackendOptions): StorageClient 
     opts: Parameters<StorageClient["listAll"]>[1] = {},
     inspect?: InspectContainer,
   ) {
-    const container = listingContainer(root, url, "solid");
+    const container = listingContainer(root, url);
     yield* paginate(
       container,
       (cursor) =>

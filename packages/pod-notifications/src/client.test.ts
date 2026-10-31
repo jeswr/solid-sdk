@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { StorageError } from "@jeswr/storage-client";
+import { type AuthFetch, StorageError } from "@jeswr/storage-client";
+import { createLwsBackend } from "@jeswr/storage-client/lws";
 import { createMemoryStorage } from "@jeswr/storage-client/memory";
 import { afterEach, expect, test, vi } from "vitest";
 import { createNotifications } from "./index.js";
@@ -215,6 +216,80 @@ test("offline resumes missed membership changes without advancing a partial base
   expect(changes.mock.calls.map(([e]) => e.type)).toEqual(["Update", "Create"]);
   expect(changes.mock.calls[1]?.[0].object).toBe(child.url);
   await sub.close();
+});
+
+test("opaque LWS containers establish a baseline, observe changes and reconcile after offline", async () => {
+  const net = network();
+  const container = `${root}opaque-container`;
+  const next = `${container}?cursor=a%2fb&x=1&x=2`;
+  let revision = 0;
+  const calls: [string, string, string | undefined][] = [];
+  const fetch: AuthFetch = async (input, init) => {
+    const url = String(input);
+    const method = init?.method ?? "GET";
+    calls.push([method, url, init?.cache]);
+    const headers = {
+      etag: `"${revision}"`,
+      link: "<https://www.w3.org/ns/lws#Container>; rel=type",
+    };
+    if (method === "HEAD" && url === container) return new Response(null, { headers });
+    if (method !== "GET" || (url !== container && url !== next))
+      throw new Error("Unexpected polling request");
+    return Response.json(
+      {
+        type: "Container",
+        items: [{ id: url === container ? "stable" : `member-${revision}`, type: "DataResource" }],
+      },
+      {
+        headers: {
+          ...headers,
+          "content-type": "application/lws+json",
+          ...(url === container
+            ? { link: `${headers.link}, <?cursor=a%2fb&x=1&x=2>; rel=next` }
+            : {}),
+        },
+      },
+    );
+  };
+  const storage = createLwsBackend({ root, fetch });
+  const timers = new FakeTimers();
+  const client = createNotifications({ fetch, storage, timers, now: timers.now });
+  const sub = await client.subscribe([container], { pollIntervalMs: 10 });
+  const changes: ChangeEvent[] = [];
+  const resync = vi.fn();
+  sub.on("change", (event) => changes.push(event));
+  sub.on("resync", resync);
+  await timers.advanceBy(0);
+  expect(changes).toEqual([]);
+  revision = 1;
+  await timers.advanceBy(10);
+  expect(changes).toMatchObject([
+    { type: "Update", object: container, state: '"1"' },
+    { type: "Create", object: `${root}member-1`, target: container },
+    { type: "Delete", object: `${root}member-0`, origin: container },
+  ]);
+  net.set(false);
+  revision = 2;
+  await timers.advanceBy(100);
+  expect(calls).toHaveLength(6);
+  expect(changes).toHaveLength(3);
+  net.set(true);
+  await timers.advanceBy(0);
+  expect(changes.slice(3)).toMatchObject([
+    { type: "Update", object: container, state: '"2"' },
+    { type: "Create", object: `${root}member-2`, target: container },
+    { type: "Delete", object: `${root}member-1`, origin: container },
+  ]);
+  expect(resync).toHaveBeenCalledExactlyOnceWith(new Date(10));
+  expect(calls).toEqual(
+    [...Array(3)].flatMap(() => [
+      ["HEAD", container, "no-cache"],
+      ["GET", container, "no-cache"],
+      ["GET", next, "no-cache"],
+    ]),
+  );
+  await sub.close();
+  expect(timers.pending).toBe(0);
 });
 
 test.each([
