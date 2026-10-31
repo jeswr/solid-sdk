@@ -183,6 +183,59 @@ describe.each(["solid", "lws"] as const)("%s notifications", (protocol) => {
     writer.destroy();
     expect(timers.pending).toBe(0);
   });
+
+  it("disconnects after a failed flush and retains edits for reconnection", async () => {
+    vi.useFakeTimers();
+    const { storage, container } = await setup(protocol);
+    const timers = new FakeTimers();
+    const notifications = createNotifications({ fetch: noFetch, storage, timers, now: timers.now });
+    const failure = new Error("append failed during disconnect");
+    const create = vi.fn(storage.create).mockRejectedValueOnce(failure);
+    const doc = new Y.Doc();
+    const provider = new YSolidProvider({
+      doc,
+      storage: { ...storage, create },
+      container,
+      notifications,
+    });
+    const status = vi.fn();
+    provider.on("status", status);
+    try {
+      await provider.whenSynced;
+      await timers.advanceBy(0);
+      doc.getText("text").insert(0, "retained");
+      await expect(provider.disconnect()).rejects.toBe(failure);
+      expect(provider.synced).toBe(false);
+      expect(status).toHaveBeenLastCalledWith("disconnected");
+      expect(timers.pending).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+      doc.getText("text").insert(8, " plus");
+      const remote = new Y.Doc();
+      remote.getMap("remote").set("seen", true);
+      await new SolidUpdateStore({ storage, container }).appendUpdate(
+        Y.encodeStateAsUpdate(remote),
+      );
+      await timers.advanceBy(60_000);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(create).toHaveBeenCalledOnce();
+      expect(doc.getMap("remote").get("seen")).toBeUndefined();
+      await provider.connect();
+      expect(doc.getMap("remote").get("seen")).toBe(true);
+      await provider.flush();
+      const reader = new YSolidProvider({ doc: new Y.Doc(), storage, container });
+      try {
+        await reader.whenSynced;
+        expect(reader.doc.getText("text").toString()).toBe("retained plus");
+        expect(reader.doc.getMap("remote").get("seen")).toBe(true);
+      } finally {
+        reader.destroy();
+      }
+    } finally {
+      provider.destroy();
+    }
+    expect(timers.pending).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });
 
 it("debounces local updates for 300 ms and flush bypasses the timer", async () => {
@@ -287,6 +340,38 @@ it("discards a late hydration after destroy without mutating the caller's doc or
   expect(doc.getText("text").toString()).toBe("");
   expect(provider.synced).toBe(false);
   expect(synced).not.toHaveBeenCalled();
+});
+
+it("preserves the flush error when closing the subscription also fails", async () => {
+  const { storage, container } = await setup();
+  const subscription = await createNotifications({ fetch: noFetch, storage }).subscribe(
+    [container],
+    { pollIntervalMs: 0 },
+  );
+  const close = subscription.close.bind(subscription);
+  vi.spyOn(subscription, "close").mockImplementation(async () => {
+    await close();
+    throw new Error("close failed");
+  });
+  const failure = new Error("append failed");
+  const provider = new SolidPersistence({
+    doc: new Y.Doc(),
+    container,
+    storage: { ...storage, create: vi.fn().mockRejectedValue(failure) },
+    notifications: {
+      subscribe: async () => subscription,
+      plan: () => ({ channel: "none", reason: "test close failure" }),
+    },
+  });
+  try {
+    await provider.whenSynced;
+    provider.doc.getText("text").insert(0, "pending");
+    await expect(provider.disconnect()).rejects.toBe(failure);
+    expect(provider.synced).toBe(false);
+    expect(subscription.state).toBe("closed");
+  } finally {
+    provider.destroy();
+  }
 });
 
 it("closes a subscription that arrives after destroy", async () => {

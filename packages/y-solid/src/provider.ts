@@ -427,12 +427,24 @@ export class SolidPersistence {
 
   async disconnect(): Promise<void> {
     if (this.destroyed) return;
-    await this.flush();
+    let failure: { cause: unknown } | undefined;
+    try {
+      await this.flush();
+    } catch (cause) {
+      failure = { cause };
+    }
     this.stop();
     const subscription = this.subscription;
     this.subscription = undefined;
-    await subscription?.close();
-    if (!this.active && !this.destroyed) this.emit("status", "disconnected");
+    try {
+      await subscription?.close();
+    } catch (cause) {
+      // Preserve the failed append as the disconnect error if closing also fails.
+      failure ??= { cause };
+    } finally {
+      if (!this.active && !this.destroyed) this.emit("status", "disconnected");
+    }
+    if (failure) throw failure.cause;
   }
 
   private stop(): void {
