@@ -107,6 +107,38 @@ test("issuer hint skips WebID picker and validates token WebID issuer binding", 
   expect(op.requests.some((r) => r.url.startsWith("https://id.example"))).toBe(true);
 });
 
+test.each([
+  "https://op.example",
+  "https://op.example/",
+])("origin-only issuer hint %s accepts slashless validated claims and an existing session", async (issuer) => {
+  const { op, auth, options } = fixture({ issuer: "https://op.example" });
+  const identity = await auth.login({ issuer });
+  expect(identity.issuer).toBe(op.issuer);
+  expect(await auth.login({ issuer: "https://op.example" })).toEqual(identity);
+  expect(await auth.login({ issuer: "https://op.example/" })).toEqual(identity);
+  expect(options.ui.getCode).toHaveBeenCalledTimes(1);
+  expect((await auth.fetch(op.root + "private")).status).toBe(200);
+  expect(op.stats.tokens).toBe(1);
+});
+
+test("issuer hints preserve the distinction between tenant paths with and without a slash", async () => {
+  const op = createMockOp({ issuer: "https://op.example/tenant" });
+  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    // Serve the path issuer's discovery document at the OIDC discovery URL.
+    return request.url.includes(".well-known/openid-configuration")
+      ? op.fetch(new URL(".well-known/openid-configuration", op.issuer))
+      : op.fetch(request);
+  });
+  const auth = createPodAuth({
+    clientId: op.clientId,
+    redirectUri: op.redirectUri,
+    ui: { getWebId: async () => op.webId!, getCode: op.getCode },
+  });
+  await auth.login({ issuer: op.issuer });
+  await expect(auth.login({ issuer: op.issuer + "/" })).rejects.toThrow("Account changes");
+});
+
 test("WebID and issuer hint must agree before authorization", async () => {
   const { op, auth } = fixture();
   await expect(auth.login({ webId: op.webId, issuer: "https://evil.example/" })).rejects.toThrow(

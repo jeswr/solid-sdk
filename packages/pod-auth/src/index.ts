@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { Identity as Claims } from "@jeswr/reactive-authentication";
+import { type Identity as Claims, sameIssuer } from "@jeswr/reactive-authentication";
 import { secureUrl, validateOptions } from "./options.js";
 import { AmbiguousIssuerError, createProviders } from "./providers.js";
 import type {
@@ -47,7 +47,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
   const session = async (_request: Request, claims: Claims, protocol: Identity["protocol"]) => {
     if (
       (expected.webId !== undefined && expected.webId !== claims.webId) ||
-      (expected.issuer !== undefined && expected.issuer !== claims.issuer) ||
+      (expected.issuer !== undefined && !sameIssuer(expected.issuer, claims.issuer)) ||
       (current !== null &&
         (claims.issuer !== current.issuer ||
           claims.subject !== current.subject ||
@@ -95,7 +95,7 @@ export function createPodAuth(options: PodAuthOptions): PodAuth {
       if (current !== null) {
         if (
           (selected.webId !== undefined && selected.webId !== current.webId) ||
-          (selected.issuer !== undefined && selected.issuer !== current.issuer)
+          (selected.issuer !== undefined && !sameIssuer(selected.issuer, current.issuer))
         )
           return Promise.reject(
             new Error("Account changes require a new PodAuth instance until logout is available"),
