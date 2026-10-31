@@ -16,10 +16,10 @@ afterAll(async () => {
   await op.close();
 });
 
-function setup() {
+function setup(fenceStore = createMemoryStore()) {
   const namespace = crypto.randomUUID();
   const sessions = createMemoryStore();
-  const fence = new SessionFence(namespace, { broadcast: false });
+  const fence = new SessionFence(namespace, { store: fenceStore, broadcast: false });
   const provider = {
     namespace,
     sessionStore: sessions,
@@ -61,6 +61,55 @@ test("opt-in restore preserves transient credentials, clears invalid_grant, and 
     assert.equal(absent.code.calls, 0);
   } finally {
     op.failRefresh(undefined);
+    f.fence.close();
+  }
+});
+
+test("a rotated refresh credential survives a failed final fence read and restores on retry", async () => {
+  const fenceStore = createMemoryStore();
+  const getGeneration = fenceStore.getItem;
+  const failure = new Error("transient fence read failure");
+  let failNextRead = false;
+  fenceStore.getItem = async (key) => {
+    if (failNextRead) {
+      failNextRead = false;
+      throw failure;
+    }
+    return await getGeneration(key);
+  };
+  const f = setup(fenceStore);
+  const setSession = f.sessions.setItem;
+  let sessionKey, record;
+  let failAfterRotation = false;
+  f.sessions.setItem = async (key, value) => {
+    await setSession(key, value);
+    sessionKey = key;
+    record = value;
+    if (failAfterRotation) {
+      failAfterRotation = false;
+      failNextRead = true;
+    }
+  };
+  const request = new Request(`${rs.url}/alice/final-commit-retry`);
+  try {
+    await f.load().provider.upgrade(request);
+    const original = record;
+    const refreshes = op.stats.refresh;
+    const authorizations = op.stats.authorize.length;
+    const reuses = op.stats.reuse;
+    failAfterRotation = true;
+    await assert.rejects(f.load().provider.restore(request), (e) => e === failure);
+    assert.equal(op.stats.refresh, refreshes + 1);
+    assert.notEqual(record.refreshToken, original.refreshToken);
+    assert.equal(await f.sessions.getItem(sessionKey), record);
+
+    const retry = f.load();
+    assert.ok(await retry.provider.restore(request));
+    assert.equal(op.stats.refresh, refreshes + 2);
+    assert.equal(op.stats.reuse, reuses);
+    assert.equal(op.stats.authorize.length, authorizations);
+    assert.equal(retry.code.calls, 0);
+  } finally {
     f.fence.close();
   }
 });

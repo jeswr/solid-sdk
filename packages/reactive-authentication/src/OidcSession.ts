@@ -123,7 +123,7 @@ export interface OidcSessionOptions {
   /** Revoke refresh tokens known to this instance on {@link OidcSession.forget} when supported. @defaultValue true */
   readonly revokeOnForget?: boolean;
 
-  /** Keep durable refresh credentials on transient failures; clear on invalid_grant or successful consumption. */
+  /** Keep durable refresh credentials on transient failures; clear on invalid_grant and persist rotations. */
   readonly preserveRefreshOnFailure?: boolean;
 
   /** During noninteractive restore only, try one prompt=none grant after invalid_grant. Never falls back to interaction. */
@@ -260,7 +260,7 @@ export class OidcSession {
         if (record !== null) {
           const refreshed = await this.#refresh(key, record, combined);
           invalidGrant = refreshed === undefined;
-          if (durable !== null && this.#options.preserveRefreshOnFailure === true)
+          if (invalidGrant && durable !== null && this.#options.preserveRefreshOnFailure === true)
             await store!.removeItem(key);
           if (refreshed !== undefined) {
             const committed = await this.#commit(key, refreshed, generation, combined);
