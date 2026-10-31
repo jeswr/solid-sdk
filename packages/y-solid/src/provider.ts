@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import type { NotificationsClient, Subscription } from "@jeswr/pod-notifications";
+import type { ChangeEvent, NotificationsClient, Subscription } from "@jeswr/pod-notifications";
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import { applyUpdate, Doc, encodeStateAsUpdate, encodeStateVector, mergeUpdates } from "yjs";
 import { SolidUpdateStore } from "./store.js";
@@ -43,7 +43,7 @@ export class SolidPersistence {
   private readonly notifications?: NotificationsClient;
   private readonly debounceMs: number;
   private readonly compaction: { afterUpdates: number; minIntervalMs: number };
-  private lastCompaction = 0;
+  private lastCompaction = Number.NEGATIVE_INFINITY;
   private compacting?: Promise<{ url: string } | undefined>;
   private readonly listeners = new Map<keyof SolidPersistenceEvents, Set<Listener>>();
   private readonly knownUrls = new Set<string>();
@@ -118,17 +118,19 @@ export class SolidPersistence {
             return;
           }
           this.subscription = subscription;
-          const reconcile = () => {
+          const reconcile = (change?: ChangeEvent) => {
             if (!this.current(generation)) return;
-            void this.serial(() => this.ingest(generation))
+            void this.serial(() =>
+              change ? this.ingestChange(change, generation) : this.ingest(generation),
+            )
               .then(() => this.autoCompact())
               .catch((cause) => this.report(cause));
           };
           subscription.on("change", (change) => {
-            // Hints trigger an authoritative listing, never a fetch of an event URL.
-            if (this.store.storage.isWithinStorage(change.object)) reconcile();
+            // Create hints are read only after checking logical container membership.
+            if (this.store.storage.isWithinStorage(change.object)) reconcile(change);
           });
-          subscription.on("resync", reconcile);
+          subscription.on("resync", () => reconcile());
         }
         await this.serial(() => this.ingest(generation));
         if (!this.current(generation)) return;
@@ -171,6 +173,36 @@ export class SolidPersistence {
     this.updatesSinceCompaction += stored.filter((s) => s.kind === "update").length;
     return count;
   }
+  private async ingestChange(change: ChangeEvent, generation: number): Promise<number> {
+    if (!this.current(generation)) return 0;
+    if (
+      change.type !== "Create" ||
+      change.objectKind === "container" ||
+      change.object === this.store.container
+    ) {
+      return this.ingest(generation);
+    }
+    if (this.knownUrls.has(change.object)) return 0;
+    // A Create may precede listing visibility. Check its parent before reading,
+    // using logical LWS containment rather than constructing a path from a hint.
+    try {
+      if ((await this.store.storage.parentOf(change.object)) !== this.store.container) return 0;
+    } catch (cause) {
+      if (cause instanceof StorageError && (cause.code === "not-found" || cause.status === 410)) {
+        return this.ingest(generation);
+      }
+      throw cause;
+    }
+    if (!this.current(generation)) return 0;
+    const record = await this.store.readStoredUpdate(change.object);
+    if (!this.current(generation)) return 0;
+    if (!record) return this.ingest(generation);
+    const count = this.applyStored([record.update]);
+    this.knownUrls.add(record.url);
+    if (record.kind === "update") this.updatesSinceCompaction++;
+    return count;
+  }
+
   private applyStored(updates: readonly Uint8Array[]): number {
     if (updates.length === 0) return 0;
     const errors: Error[] = [];
@@ -231,8 +263,8 @@ export class SolidPersistence {
   }
 
   private scheduleWrite(): void {
-    if (!this.active || !this.synced || this.destroyed || this.timer || !this.pending.length)
-      return;
+    if (!this.active || !this.synced || this.destroyed || !this.pending.length) return;
+    if (this.timer) clearTimeout(this.timer);
     this.timer = setTimeout(() => {
       this.timer = undefined;
       this.drainWrites();
@@ -252,7 +284,7 @@ export class SolidPersistence {
           this.updatesSinceCompaction++;
           this.autoCompact();
         } catch (cause) {
-          this.pending.unshift(...batch);
+          if (!this.destroyed) this.pending.unshift(...batch);
           this.report(cause);
           throw cause;
         }
@@ -295,9 +327,11 @@ export class SolidPersistence {
         if (this.applyStored(stored.map((s) => s.update)) !== stored.length) {
           throw new Error("[y-solid] compaction could not integrate every record");
         }
+        if (!this.current(generation)) return undefined;
         const snapshot = encodeStateAsUpdate(this.doc);
         const count = this.updatesSinceCompaction;
         const created = await this.store.compact(snapshot, stored);
+        if (!this.current(generation)) return created;
         for (const { url } of stored) this.knownUrls.delete(url);
         this.knownUrls.add(created.url);
         this.updatesSinceCompaction = Math.max(0, this.updatesSinceCompaction - count);
@@ -328,7 +362,7 @@ export class SolidPersistence {
       this.timer = undefined;
     }
     // A failed batch stays pending and a later explicit flush retries it.
-    this.writeTail = this.writeTail.catch(() => {});
+    // Preserve an in-flight failure when there is no new batch to enqueue.
     this.drainWrites();
     await this.writeTail;
   }
@@ -337,9 +371,10 @@ export class SolidPersistence {
     if (this.destroyed) return;
     await this.flush();
     this.stop();
-    await this.subscription?.close();
+    const subscription = this.subscription;
     this.subscription = undefined;
-    this.emit("status", "disconnected");
+    await subscription?.close();
+    if (!this.active && !this.destroyed) this.emit("status", "disconnected");
   }
 
   private stop(): void {
@@ -347,6 +382,8 @@ export class SolidPersistence {
     this.synced = false;
     this.generation++;
     this.connection = undefined;
+    this.operationTail = Promise.resolve();
+    this.compacting = undefined;
     this.subscriptionAbort?.abort();
     if (this.timer) {
       clearTimeout(this.timer);

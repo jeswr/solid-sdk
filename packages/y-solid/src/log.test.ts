@@ -327,3 +327,119 @@ it("rejects truncated versioned headers", () => {
     /truncated/,
   );
 });
+
+it("uses opaque LWS container and server resource URLs, verifying logical membership", async () => {
+  const memory = createMemoryStorage({ protocol: "lws", root: ROOT });
+  const { url: backingContainer } = await memory.create(ROOT, null, {
+    kind: "container",
+    name: "backing",
+  });
+  const container = `${ROOT}opaque-container`;
+  const outward = new Map<string, string>();
+  const inward = new Map<string, string>();
+  const storage: StorageClient = {
+    ...memory,
+    create: async (target, body, opts) => {
+      expect(target).toBe(container);
+      const result = await memory.create(backingContainer, body, opts);
+      const url = `${ROOT}server-id-${outward.size}`;
+      outward.set(result.url, url);
+      inward.set(url, result.url);
+      return { ...result, url };
+    },
+    listAll: async function* (target) {
+      expect(target).toBe(container);
+      for await (const entry of memory.listAll(backingContainer)) {
+        yield { ...entry, url: outward.get(entry.url) as string };
+      }
+    },
+    read: async (url, opts) => {
+      const result = await memory.read(inward.get(url) ?? url, opts);
+      return { ...result, url, parent: inward.has(url) ? container : ROOT };
+    },
+    parentOf: async (url) => (inward.has(url) ? container : ROOT),
+    delete: (url, opts) => memory.delete(inward.get(url) ?? url, opts),
+  };
+  const store = new SolidUpdateStore({ storage, container });
+  expect(store.container).toBe(container);
+  const a = await store.appendUpdate(state("opaque").update);
+  const b = await store.appendUpdate(state("other").update);
+  expect(a.url).toBe(`${ROOT}server-id-0`);
+  expect(a.url.startsWith(container)).toBe(false);
+  const doc = new Y.Doc();
+  const provider = new SolidPersistence({ doc, store });
+  await provider.whenSynced;
+  expect(doc.getMap("m").toJSON()).toEqual({ opaque: "opaque", other: "other" });
+  await provider.compact();
+  expect(await store.listUpdateUrls()).toHaveLength(1);
+  await expect(store.readUpdate(`${ROOT}unrelated`)).rejects.toThrow(/not a member/);
+  await store.deleteUpdate(b.url); // Already removed by compaction.
+  provider.destroy();
+});
+
+it("retains the original ETag for legacy URL-array compaction across later reads", async () => {
+  const { storage, store } = await setup();
+  const first = await store.appendUpdate(state("first").update);
+  const original = await store.loadUpdates();
+  await storage.write(first.url, state("replacement").update, {
+    ...CONTENT,
+    ifMatch: original[0]?.etag as string,
+  });
+  await store.readUpdate(first.url); // Must not upgrade the earlier merge's deletion validator.
+  await expect(store.compact(original[0]?.update as Uint8Array, [first.url])).rejects.toMatchObject(
+    { code: "precondition-failed" },
+  );
+});
+
+it("fails on a missing pagination page instead of treating a partial listing as empty", async () => {
+  const { storage, container, store } = await setup();
+  await store.appendUpdate(state("entry").update);
+  const broken = new SolidUpdateStore({
+    container,
+    storage: {
+      ...storage,
+      listAll: async function* (target) {
+        yield* storage.listAll(target);
+        throw new StorageError("not-found", { url: target, method: "GET", status: 404 });
+      },
+    },
+  });
+  await expect(broken.loadUpdates()).rejects.toMatchObject({ code: "not-found" });
+});
+
+it("refuses a foreign snapshot create result before any deletion", async () => {
+  const { storage, container, store } = await setup();
+  await store.appendUpdate(state("safe").update);
+  const loaded = await store.loadUpdates();
+  const del = vi.fn(storage.delete);
+  const hostile = new SolidUpdateStore({
+    container,
+    storage: {
+      ...storage,
+      delete: del,
+      create: async () => ({ created: true, etag: '"x"', url: "https://evil.example/stolen" }),
+    },
+  });
+  await expect(hostile.compact(loaded[0]?.update as Uint8Array, loaded)).rejects.toThrow(/escapes/);
+  expect(del).not.toHaveBeenCalled();
+});
+
+it("refuses to replace readable originals with a snapshot exceeding the read cap", async () => {
+  const { storage, container, store } = await setup();
+  await store.appendUpdate(new Uint8Array([1]));
+  await store.appendUpdate(new Uint8Array([2]));
+  const loaded = await store.loadUpdates();
+  const create = vi.fn(storage.create);
+  const del = vi.fn(storage.delete);
+  const compactor = new SolidUpdateStore({
+    container,
+    maxUpdateBytes: 24,
+    storage: { ...storage, create, delete: del },
+  });
+  await expect(compactor.compact(new Uint8Array(9), loaded)).rejects.toThrow(
+    /snapshot exceeds max size/,
+  );
+  expect(create).not.toHaveBeenCalled();
+  expect(del).not.toHaveBeenCalled();
+  expect(await entries(storage, container)).toHaveLength(2);
+});

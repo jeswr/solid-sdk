@@ -84,6 +84,9 @@ export class SolidUpdateStore {
 
   private async create(update: Uint8Array, kind: StoredUpdate["kind"]): Promise<{ url: string }> {
     const { bytes, name } = encodeRecord(update, kind);
+    if (kind === "snapshot" && bytes.byteLength > this.maxUpdateBytes) {
+      throw new Error("[y-solid] snapshot exceeds max size; originals retained");
+    }
     const result = await this.storage.create(this.container, bytes, {
       contentType: UPDATE_CONTENT_TYPE,
       name,
@@ -114,13 +117,14 @@ export class SolidUpdateStore {
         }
       }
     } catch (cause) {
-      if (!missing(cause)) throw cause;
+      if (!missing(cause) || size > 0) throw cause;
       return [];
     }
     return [...urls].sort();
   }
 
-  private async readRecord(url: string): Promise<StoredUpdate | null> {
+  /** Read a scoped member with its immutable header and deletion validator. */
+  async readStoredUpdate(url: string): Promise<StoredUpdate | null> {
     try {
       const target = await this.member(url);
       const result = await this.storage.read(target, { accept: UPDATE_CONTENT_TYPE });
@@ -151,7 +155,9 @@ export class SolidUpdateStore {
         offset += chunk.byteLength;
       }
       const record = { url: target, etag: result.etag, ...decodeRecord(bytes, target) };
-      this.observed.set(target, record);
+      // The legacy compact(merged, urls) form must never acquire a newer ETag
+      // than its first read. New callers pass StoredUpdate records explicitly.
+      if (!this.observed.has(target)) this.observed.set(target, record);
       return record;
     } catch (cause) {
       if (missing(cause)) return null;
@@ -160,7 +166,7 @@ export class SolidUpdateStore {
   }
 
   async readUpdate(url: string): Promise<Uint8Array | null> {
-    return (await this.readRecord(url))?.update ?? null;
+    return (await this.readStoredUpdate(url))?.update ?? null;
   }
 
   /** Replay all snapshots, then all updates, including offline writes with older timestamps. */
@@ -170,7 +176,7 @@ export class SolidUpdateStore {
       let vanished = false;
       for (const url of await this.listUpdateUrls()) {
         if (knownUrls.has(url) || read.has(url)) continue;
-        const record = await this.readRecord(url);
+        const record = await this.readStoredUpdate(url);
         if (record) read.set(url, record);
         else vanished = true;
       }
@@ -180,11 +186,16 @@ export class SolidUpdateStore {
   }
 
   async deleteUpdate(url: string): Promise<void> {
-    const target = await this.member(url);
-    const record = this.observed.get(target) ?? (await this.readRecord(target));
-    if (!record) return;
-    if (!validator(record.etag)) throw new Error("[y-solid] deletion requires a strong read ETag");
-    await this.deleteObserved(record);
+    try {
+      const target = await this.member(url);
+      const record = this.observed.get(target) ?? (await this.readStoredUpdate(target));
+      if (!record) return;
+      if (!validator(record.etag))
+        throw new Error("[y-solid] deletion requires a strong read ETag");
+      await this.deleteObserved(record);
+    } catch (cause) {
+      if (!missing(cause)) throw cause;
+    }
   }
 
   private async deleteObserved(record: StoredUpdate): Promise<void> {
