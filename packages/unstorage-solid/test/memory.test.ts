@@ -24,11 +24,13 @@ describe.each(["solid", "lws"] as const)("KV through StorageClient (%s)", (proto
     await storage.setItemRaw("dir:blob", new Uint8Array([0, 255, 1]));
     await storage.setItem("dir:a%3Ab", "colon");
     await storage.setItem("dir:percent%25", "percent");
+    await storage.setItem("資料:📁:café", "Unicode");
     expect(await storage.getItem("greeting")).toBe("hello");
     expect(await storage.getItem("config")).toEqual({ dark: true });
     expect(await storage.getItemRaw("dir:blob")).toEqual(new Uint8Array([0, 255, 1]));
     expect(await storage.getItem("dir:a%3Ab")).toBe("colon");
     expect(await storage.getItem("dir:percent%25")).toBe("percent");
+    expect(await storage.getItem("資料:📁:café")).toBe("Unicode");
     expect(await storage.hasItem("absent")).toBe(false);
     expect(await storage.getItem("absent")).toBeNull();
     expect(await storage.getItemRaw("absent")).toBeNull();

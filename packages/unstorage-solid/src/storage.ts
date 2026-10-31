@@ -27,7 +27,17 @@ export async function storageFromFetch(
   };
   const { storage } = await createPodClient({ storage: base, fetch: transport });
   discovering = false;
-  return storage;
+  if (storage.protocol !== "lws") return storage;
+  return {
+    ...storage,
+    // Network LWS names become Slug headers; send the key's encoded path segment.
+    // Solid and injected clients retain their decoded-name contract.
+    create: (container, body, opts) =>
+      storage.create(container, body, {
+        ...opts,
+        name: opts?.name === undefined ? undefined : encodeURIComponent(opts.name),
+      }),
+  };
 }
 
 export function isMissing(error: unknown): boolean {
