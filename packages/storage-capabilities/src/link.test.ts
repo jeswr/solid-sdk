@@ -1,6 +1,6 @@
 // AUTHORED-BY GPT-6.1-Sol
 import { describe, expect, test } from "vitest";
-import { parseLinkHeaders } from "./link.js";
+import { LinkHeaderOverflowError, parseLinkHeaders } from "./link.js";
 
 const base = "http://example.com/TheBook/chapter3";
 
@@ -230,6 +230,174 @@ test("stops at 64 members across combined and separate fields", () => {
   expect(
     parseLinkHeaders([Array(64).fill("malformed").join(","), fields[0] as string], base),
   ).toEqual([]);
+});
+
+describe("explicit Link parsing bounds", () => {
+  test("strict mode accepts exact byte/member limits, including trailing empty members", () => {
+    const value = '<x>; rel=next; title="é"';
+    const maxBytes = new TextEncoder().encode(value).byteLength;
+    expect(
+      parseLinkHeaders(value, base, { maxBytes, maxMembers: 1, onOverflow: "throw" }),
+    ).toHaveLength(1);
+    expect(
+      parseLinkHeaders(["<a>; rel=next, ,", " , <b>; rel=prev, ,"], base, {
+        maxMembers: 2,
+        onOverflow: "throw",
+      }),
+    ).toHaveLength(2);
+    expect(
+      parseLinkHeaders(Array(64).fill("<x>; rel=next"), base, { onOverflow: "throw" }),
+    ).toHaveLength(64);
+    expect(
+      parseLinkHeaders(null, base, { maxBytes: 0, maxMembers: 0, onOverflow: "throw" }),
+    ).toEqual([]);
+    expect(parseLinkHeaders("", base, { maxBytes: 0, maxMembers: 0, onOverflow: "throw" })).toEqual(
+      [],
+    );
+  });
+
+  test("strict mode rejects oversized fields, including UTF-8 overflow and later fields", () => {
+    for (const values of [
+      "x".repeat(8193),
+      "é".repeat(4097),
+      ["<x>; rel=next", "x".repeat(8193)],
+    ]) {
+      const error = (() => {
+        try {
+          parseLinkHeaders(values, base, { onOverflow: "throw" });
+        } catch (error) {
+          return error;
+        }
+      })();
+      expect(error).toBeInstanceOf(LinkHeaderOverflowError);
+      expect(error).toBeInstanceOf(Error);
+      expect(error).toMatchObject({ name: "LinkHeaderOverflowError", limit: "maxBytes" });
+      expect(String(error)).not.toContain("é");
+    }
+  });
+
+  test("strict mode counts malformed members and rejects overflow across all fields", () => {
+    const members = Array(65).fill("<x>; rel=next");
+    for (const values of [
+      members.join(","),
+      members,
+      [Array(64).fill("malformed").join(","), "<x>; rel=next"],
+    ]) {
+      expect(() => parseLinkHeaders(values, base, { onOverflow: "throw" })).toThrow(
+        LinkHeaderOverflowError,
+      );
+      expect(() => parseLinkHeaders(values, base, { onOverflow: "throw" })).toThrow("maxMembers");
+    }
+    expect(() =>
+      parseLinkHeaders("malformed", base, { maxMembers: 0, onOverflow: "throw" }),
+    ).toThrow(LinkHeaderOverflowError);
+  });
+
+  test("larger bounds allow full inspection; custom truncation retains the original policy", () => {
+    const values = Array(70).fill(`<x>; rel=next; title="${"x".repeat(120)}"`);
+    const joined = values.join(",");
+    expect(joined.length).toBeGreaterThan(8192);
+    expect(
+      parseLinkHeaders(joined, base, {
+        maxBytes: 65536,
+        maxMembers: 1024,
+        onOverflow: "throw",
+      }),
+    ).toHaveLength(70);
+    expect(
+      parseLinkHeaders(["oversized".repeat(3), "<x>; rel=next"], base, {
+        maxBytes: 15,
+        maxMembers: 1,
+        onOverflow: "truncate",
+      }),
+    ).toHaveLength(1);
+    expect(parseLinkHeaders(values, base, { maxMembers: 2 })).toHaveLength(2);
+    expect(parseLinkHeaders("<x>; rel=next", base, { maxMembers: 0 })).toEqual([]);
+  });
+
+  test("rejects invalid configured limits", () => {
+    for (const limit of [-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() => parseLinkHeaders(null, base, { maxBytes: limit })).toThrow(RangeError);
+      expect(() => parseLinkHeaders(null, base, { maxMembers: limit })).toThrow(RangeError);
+      expect(() => parseLinkHeaders(null, base, { maxResolvedBytes: limit })).toThrow(RangeError);
+    }
+  });
+
+  test.each([
+    "truncate",
+    "throw",
+  ] as const)("%s accepts exact cumulative target and context lengths across fields", (onOverflow) => {
+    const values = ["<#a>; rel=next", '<urn:b>; rel=prev; anchor="#context"'];
+    const expected = parseLinkHeaders(values, base);
+    const maxResolvedBytes = expected.reduce(
+      (sum, { target, context }) => sum + target.length + context.length,
+      0,
+    );
+    expect(parseLinkHeaders(values, base, { maxResolvedBytes, onOverflow })).toEqual(expected);
+    expect(parseLinkHeaders(values.join(","), base, { maxResolvedBytes, onOverflow })).toEqual(
+      expected,
+    );
+    const options = { maxResolvedBytes: maxResolvedBytes - 1, onOverflow };
+    if (onOverflow === "throw") {
+      expect(() => parseLinkHeaders(values, base, options)).toThrow(LinkHeaderOverflowError);
+      expect(() => parseLinkHeaders(values, base, options)).toThrow("maxResolvedBytes");
+    } else {
+      // Stop at the overflowing member, even if a later link would fit.
+      expect(parseLinkHeaders([...values, "<urn:x>; rel=x; anchor=urn:y"], base, options)).toEqual(
+        expected.slice(0, 1),
+      );
+    }
+  });
+
+  test("counts duplicate targets and contexts, but only once per member with repeated relations", () => {
+    const member = '<#same>; rel="next next prev"; anchor="#same"; anchor="#ignored"';
+    const maxResolvedBytes = 2 * `${base}#same`.length;
+    expect(parseLinkHeaders(member, base, { maxResolvedBytes, onOverflow: "throw" })).toHaveLength(
+      1,
+    );
+    expect(() =>
+      parseLinkHeaders([member, member], base, { maxResolvedBytes, onOverflow: "throw" }),
+    ).toThrow("maxResolvedBytes");
+  });
+
+  test("counts resolved URL code units after non-ASCII references are serialised", () => {
+    const member = '<urn:📖>; rel=x; anchor="urn:🔖"';
+    const expected = parseLinkHeaders(member, base);
+    const target = "urn:%F0%9F%93%96";
+    const context = "urn:%F0%9F%94%96";
+    const maxResolvedBytes = target.length + context.length;
+    expect(parseLinkHeaders(member, base, { maxResolvedBytes, onOverflow: "throw" })).toEqual(
+      expected,
+    );
+    expect(expected).toMatchObject([{ target, context }]);
+    expect(parseLinkHeaders(member, base, { maxResolvedBytes: maxResolvedBytes - 1 })).toEqual([]);
+  });
+
+  test("a zero resolved budget accepts empty and invalid members only", () => {
+    const options = { maxResolvedBytes: 0, onOverflow: "throw" } as const;
+    expect(parseLinkHeaders(null, base, options)).toEqual([]);
+    expect(
+      parseLinkHeaders(
+        'malformed, <no-rel>, <http://[>; rel=x, <x>; rel=x; anchor="http://["',
+        base,
+        options,
+      ),
+    ).toEqual([]);
+    expect(() => parseLinkHeaders("<urn:x>; rel=x", base, options)).toThrow("maxResolvedBytes");
+  });
+
+  test("resolved lengths are unlimited by default; an explicit budget bounds long-base expansion", () => {
+    const longBase = `${base}?token=${"x".repeat(9000)}`;
+    const values = Array.from({ length: 64 }, (_, i) => `<#${i}>; rel=x`);
+    const links = parseLinkHeaders(values, longBase);
+    expect(links).toHaveLength(64);
+    expect(
+      links.reduce((sum, { target, context }) => sum + target.length + context.length, 0),
+    ).toBeGreaterThan(1024 * 1024);
+    expect(() =>
+      parseLinkHeaders(values, longBase, { maxResolvedBytes: 1024 * 1024, onOverflow: "throw" }),
+    ).toThrow("maxResolvedBytes");
+  });
 });
 
 test("parses pathological whitespace, escapes, and unterminated input in under 50 ms", () => {

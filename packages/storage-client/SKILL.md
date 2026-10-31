@@ -15,11 +15,18 @@ T-020 implements the ADR-003 §1 types (`src/types.ts`, re-exported as types fro
 and `./memory` (`createMemoryStorage({ protocol, root, pageSize, moveResource, strictConditional, clock })`).
 T-021 adds the Solid backend's read side; T-022 adds its mutations. `./solid` exports
 `createSolidBackend({ fetch, root, features?, etagFollowUp? })` and the pure async
-`buildN3Patch({ inserts, deletes, where? })`. `./lws` and `./testing` remain reserved (T-023…T-025).
+`buildN3Patch({ inserts, deletes, where? })`. T-023 adds `./lws` →
+`createLwsBackend({ fetch, root, storage?, features? })`. `./testing` is still reserved (T-025);
+LWS mutations reject with `unsupported` until T-024.
 
 Solid read side (ADR-003 §6):
-- Every URL must be absolute and pass guarded-fetch `assertWithinPodScope(root, url)`; otherwise
-  `scope`, before any request. The canonical URL is the one fetched. Redirects are never followed
+- Every URL must be absolute: its standalone parse (`new URL(url)`, without a base) must pass
+  guarded-fetch `assertWithinPodScope(root, …)` and equal the root-based resolution of the input;
+  otherwise `scope`, before any request, on both backends. This rejects ambiguous same-scheme
+  references (`https:host/path`, `https:/path` and their backslash variants), redacting credentials
+  from errors and causes. The canonical scoped URL is always fetched, including cursor pages;
+  opaque query spelling/order survives canonicalisation. Solid scopes supplied cursors before
+  rejecting them with `bad-request` (one page). Redirects are never followed
   (`redirect: 'manual'`; a 3xx is `invalid-response`). Transport failures are retryable `network`
   errors; aborts are non-retryable `network` errors.
 - `list` GETs Turtle and reads `ldp:contains` through `@solid/object`'s `Container`, with a local
@@ -38,11 +45,95 @@ Solid read side (ADR-003 §6):
 - Scope errors redact embedded credentials of the target and the root in every authority
   spelling (backslashes included). `list()` refuses a URL with a query or fragment
   (`bad-request`), `kind` follows the path (never the query), and the slashless root alias is the root even with a query or fragment (`parentOf` → null).
+  Both network backends' `listAll()` scope, canonicalise and validate the container exactly as
+  `list()` before pagination checks aborts, so even an already-aborted signal cannot expose raw
+  container credentials in errors. Pagination receives only the canonical container and cursors.
 - `readRdf` accepts `text/turtle, application/ld+json;q=0.9`, maps 304 to `notModified`, and
   reports a non-RDF or unparsable body as `not-rdf`. `metadata` reads the `describedby` document as
   RDF (`unsupported` when none is advertised).
 - `Link` and WAC-Allow parsing reuse `@jeswr/storage-capabilities` (`parseLinkHeaders`,
-  `parseWacAllow`).
+  `parseWacAllow`). Both backends parse authoritative Link headers with explicit overflow rejection:
+  at most **64 KiB UTF-8 per combined field value**, **1,024 nonempty members** (including malformed
+  members), and **1 MiB of cumulative resolved target + anchor context URL lengths**, measured in
+  UTF-16 code units before retaining each member. Every retained member counts both URLs, including
+  duplicates and the response URL used when no anchor is supplied. Overflow gives `invalid-response`
+  and discards the body before storage validation or type, next, describedby, up or linkset discovery
+  can use partial results. Exact limits are accepted.
+  Repeated relation tokens within one member add only one target per relation; separate members
+  retain their order and duplicates. Targets append without copying earlier entries.
+
+## LWS read side
+
+- `root` is a scoped HTTP(S) StorageRoot container URL ending `/`, without query/fragment
+  (including empty delimiters); malformed container roots throw TypeError, unsafe roots `scope`,
+  like Solid. `storage` is StorageDescription.id; default `root`: sparq's `LwsConfig::storage()`
+  returns the root and its lws#storage link names that URL (`src/lws/mod.rs:421-425`,
+  `src/lws/resources.rs:684-704`). Normalise `storage` once with `new URL(storage).href`; non-absolute
+  or non-HTTP(S) ids throw TypeError. Link comparisons use that normalised id, so equivalent URL
+  spellings match. `features` defaults to `deriveFeatures` for an undescribed LWS
+  storage (empty services/capabilities, probe source), or retains the supplied Features object.
+- Design call: `isWithinStorage` calls `scoped(root, …)` synchronously on both backends, returning
+  true only when it succeeds. It applies the same standalone-destination and resolution-equivalence
+  checks as requests, including rejection of ambiguous same-scheme references.
+  Every request must pass `scoped(root, …)` before fetch; storage-id equality never authorises an
+  authenticated request outside the root, narrowing ADR-003's non-path-aligned identifier rule.
+  On every response (HEAD, read, readRdf, list, metadata), ANY lws#storage link in the response URL's
+  context that differs from `storage` gives `scope` and discards the body. Matching/absent links
+  are accepted; links with a different anchor context are ignored. Errors never echo the foreign id.
+- `list` takes a scoped container ending `/`, without query/fragment (even empty `?`/`#`), else
+  `bad-request`. GET Accept: `application/lws+json, application/ld+json;q=0.5`. Cursors are scoped
+  first, then fetched as canonical URLs with opaque queries preserved. Only 200 succeeds; other 2xx/3xx are
+  `invalid-response`, HTTP errors use the shared mapping, redirects are never followed.
+- Listing media type must be lws+json or ld+json. JSON is capped at **16 MiB of streamed bytes**
+  for listings and linksets, independently of Content-Length; overflow/bad JSON → `invalid-response`.
+  Top level must be an object, type (string/array) includes Container or ContainerPage (compact or
+  full https://www.w3.org/ns/lws# IRI), and items must be an array. sparq's ordinary pages all use
+  Container; type-search pages use ContainerPage (`src/lws/index.rs:625-675`). Each item must be an
+  object with string id; malformed structure → `invalid-response`. Resolve ids against response
+  URL; drop invalid, non-HTTP(S), unsafe or foreign ids; duplicate resolved ids keep the first.
+  Each page accepts at most **10,000 raw items** and **4 MiB of cumulative resolved id lengths**,
+  measured in UTF-16 code units before retaining entries. Every successfully resolved id occurrence
+  counts, including duplicates and ids later dropped by scope checks. Exceeding either budget gives
+  `invalid-response`; exact limits are accepted. These budgets apply independently of the streamed
+  JSON byte cap and prevent short ids from amplifying a long cursor URL.
+- Entry order follows the server. Kind depends only on Container type, never a trailing slash.
+  Content type is valid RFC 6838 `format` (shared MEDIA_TYPE with Solid), null for containers;
+  size is a non-negative safe integer; modified is a parseable date string; else null. Types retain
+  only absolute IRIs, excluding compact/full Container and DataResource; malformed optional fields
+  drop only that field. `total` is non-negative safe-integer totalItems or null; etag is verbatim.
+  `next` uses the first response-context next Link, resolved against that URL; foreign/unsafe or
+  self links → `invalid-response`. Compare next links with the current page after scoping and
+  canonicalisation (including the slashless root alias), and return canonical cursor URLs with
+  opaque queries preserved. A canonical `next` cursor exceeding **8,192 UTF-16 code units** gives
+  `invalid-response`; the exact limit is accepted. This also stops page-by-page cursor growth before
+  short Link targets can amplify an oversized response URL. `listAll` uses shared paginate: loop guard,
+  10,000 pages maximum, abort between entries. No client sorting or cursor reconstruction.
+- HEAD/read/readRdf share status, GET/HEAD headers, range validation, conditional 304, body buffering,
+  transport/abort mapping and RDF parsing with Solid (`src/read.ts`, `src/http.ts`). Accept defaults
+  to */*, readRdf to `text/turtle, application/ld+json;q=0.9`; 304 gives an empty dataset and
+  notModified, non-RDF/unparsable RDF → `not-rdf`. Only requested 206 and conditional 304 succeed.
+  Parent is the first `up` link only if scoped, metadataUrl the first scoped `linkset` link, else
+  null; do not fall through to a later safe link. Root parent is always null, root kind container;
+  other kinds use ONLY the exact https://www.w3.org/ns/lws#Container type link. allow is always null.
+- `metadata` does one HEAD, then GET metadataUrl with Accept application/linkset+json; absent/suppressed
+  linkset → `unsupported`. Accept application/linkset+json or application/json only. RFC 9264 §4.2:
+  object with linkset array of context objects, each with string anchor, all other keys relation
+  arrays of target objects with string href; malformed structure/reference → `invalid-response`.
+  Resolve anchors/hrefs against the linkset URL. Anchors must be HTTP(S), foreign anchors are kept
+  as data and never fetched; hrefs may name other absolute schemes. Duplicate anchors/relations
+  merge in order. Normalisation accepts at most **10,000 targets** across all contexts and relations
+  and **4 MiB of cumulative resolved anchor + href URL lengths**, measured in UTF-16 code units.
+  Every anchor occurrence counts, including duplicates and contexts without targets, and every
+  target href counts. Exceeding either budget gives `invalid-response` during expansion, before
+  retaining further entries or allocating their params; exact limits are accepted. These limits
+  apply independently of the streamed JSON byte cap and prevent short references amplifying a long
+  linkset base URL. Params keep only string-valued attributes except href; array attributes including
+  hreflang/title* are skipped (preserved in raw). raw is parsed JSON, url is the fetched linkset URL,
+  etag is its ETag. Maps and own-property params preserve hostile property names as data.
+- `parentOf` scopes first; root → null without a request, otherwise one HEAD returning parent.
+  write/writeRdf/create/patch/move/delete/setMetadata reject `unsupported` without fetching (T-024).
+  Fixtures in src/fixtures/lws.ts are synthetic, shaped exactly after the cited sparq lines; the
+  1,500-member listing overrides sparq's default page_size=100 to 500 for three pages.
 
 Solid write side (ADR-003 §6, T-022; implementation isolated in `src/solid-write.ts`):
 - Every target, container, destination, Location and describedby URL passes `scoped(root, method,

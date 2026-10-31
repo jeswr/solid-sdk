@@ -1,9 +1,10 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Claude Opus 5.5 -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/storage-client
 
-> **Experimental — AI-agent-generated.** Types, errors, helpers, the in-memory backend and the Solid HTTP backend are implemented; LWS follows.
+> **Experimental — AI-agent-generated.** Types, errors, helpers, the in-memory backend, the Solid HTTP backend, and the LWS HTTP read side are implemented. LWS mutations follow.
 
 Protocol-neutral storage clients for Solid and LWS. Design of record: SDK core `ADR-003-storage-client.md` and ADR-001 D4 in
 `solid-suite-planning/specs/sdk-core/`.
@@ -18,7 +19,8 @@ Entry points:
 - `@jeswr/storage-client/helpers`: `retryOnConflict(fn, read, attempts = 3)` and an RFC 6902 `applyJsonPatch`.
 - `@jeswr/storage-client/memory`: `createMemoryStorage({ protocol: 'solid' | 'lws', pageSize, moveResource, strictConditional })`, a full in-memory `StorageClient` for tests.
 - `@jeswr/storage-client/solid`: `createSolidBackend({ fetch, root, features?, etagFollowUp? })` and `buildN3Patch({ inserts, deletes, where? })`. Solid moves use copy/delete emulation with rollback; ACLs and describedby metadata are not copied.
-- `@jeswr/storage-client/lws`, `/testing`: reserved for the LWS backend and recorded fixtures.
+- `@jeswr/storage-client/lws`: `createLwsBackend({ fetch, root, storage?, features? })`, the LWS HTTP read side with scoped paging and RFC 9264 metadata. `storage` defaults to `root`.
+- `@jeswr/storage-client/testing`: reserved for recorded fixtures.
 
 ```ts
 import { createMemoryStorage } from '@jeswr/storage-client/memory';

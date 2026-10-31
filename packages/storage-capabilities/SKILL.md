@@ -34,6 +34,16 @@ apply response cache metadata, injected clocks, and the response-size limit; par
 
 Reuse `src/link.ts` for Link parsing. Its output retains the resolved `context` from `anchor`;
 callers must check that context before treating a link as metadata about the response resource.
+`parseLinkHeaders(values, responseUrl, options?)` retains the legacy defaults: ignore field values
+over 8,192 UTF-8 bytes and silently stop at 64 nonempty members across fields (malformed members
+count). The optional `maxBytes` / `maxMembers` limits are non-negative safe integers.
+`maxResolvedBytes` optionally caps cumulative resolved target + anchor context URL lengths in
+UTF-16 code units (a non-negative safe integer; default unlimited). Every retained member counts
+both URLs, including duplicates and the response URL used when no anchor is supplied. The budget
+is checked before retaining each member; truncation stops at the first overflowing member.
+For authoritative links, set `onOverflow: 'throw'`: exceeding any limit throws the root-exported
+`LinkHeaderOverflowError` (`limit`: `maxBytes`, `maxMembers` or `maxResolvedBytes`) instead of returning
+partial results; exact limits are accepted. `onOverflow: 'truncate'` is the default. The parser never fetches.
 `src/probe-headers.ts` converts supplied response headers into `ProbeResult` without fetching.
 Pass ordered raw header pairs when response evidence order matters; a `Headers` instance may
 already have sorted/combined the fields. Network probing belongs to the resolver task.
