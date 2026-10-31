@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { CarriageProfile } from "./binding.js";
 
-/** DESIGN §3.2's accepted footer (J2). */
+/** Single deployment-config default for DESIGN §3.2's footer (J2). */
 export const AGENT_FOOTER =
   "— Sent by Jesse Wright's software agent · how to talk to it: https://jeswr.org/agent · spec: https://jeswr.org/agentic-web";
 // Only email's provider byte limit is specified in the design. Other profiles use

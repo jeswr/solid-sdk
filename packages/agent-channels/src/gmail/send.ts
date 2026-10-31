@@ -10,7 +10,7 @@ import {
 } from "../email-mime.js";
 import { ChannelParseError, ProviderRejectedError } from "../errors.js";
 import type { OriginFetchOptions } from "../origins.js";
-import { EMAIL_MIME } from "../profiles.js";
+import { AGENT_FOOTER, EMAIL_MIME } from "../profiles.js";
 import type { AccountRef, TokenProvider, Wire } from "../types.js";
 import { gmailRest, messageId, rawMessage, record, responseBody } from "./rest.js";
 
@@ -31,7 +31,7 @@ export function createGmailSend(options: GmailSendOptions): NonNullable<ChannelB
   const lookupTokens = options.tokens;
   const recipients = new Map(options.recipients);
   const parseEmail = options.parseEmail;
-  const footer = options.footer;
+  const footer = options.footer ?? AGENT_FOOTER;
   const rest = gmailRest(options.transport);
   async function checked(wire: Wire) {
     const snapshot = renderer.assertWire(wire);

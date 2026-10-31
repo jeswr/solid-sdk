@@ -64,7 +64,6 @@ function reader(replies: unknown[]) {
     parseEmail,
     recipient,
     ownAccounts: new Set([recipient]),
-    footer: AGENT_FOOTER,
     transport: fake.options,
   };
   return { ...fake, tokens, config, binding: createGmailReader(config) };
@@ -86,7 +85,6 @@ function sender(replies: unknown[], extra: Record<string, unknown> = {}) {
   const verifyApproval = vi.fn(async () => true);
   const config = {
     from,
-    footer: AGENT_FOOTER,
     recipients: new Map([[message.to?.actor as string, recipient]]),
     verify: verifyMessage,
     now: () => at,
