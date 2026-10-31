@@ -144,4 +144,54 @@ describe("final credential authority", () => {
       );
     }
   });
+
+  it.each([
+    "binding",
+    "credential",
+  ])("notification after the %s recheck invalidates its result", async (stage) => {
+    const h = harness();
+    const e = await h.enqueue();
+    const observer = createExecutor(h.options);
+    const exclusive = h.transmissions.exclusive;
+    let credential = false;
+    let scheduled = false;
+    let notification: ReturnType<typeof observer.onControlOrMandateChange> | undefined;
+    Object.assign(h.transmissions, {
+      async exclusive<T>(work: () => Promise<T>): Promise<T> {
+        const result = await exclusive(work);
+        if (
+          !scheduled &&
+          (stage === "binding" || credential) &&
+          result &&
+          typeof result === "object" &&
+          "status" in result &&
+          result.status === "ready"
+        ) {
+          scheduled = true;
+          // Notify after recheck returns, before its caller resumes to dispatch or release a grant.
+          queueMicrotask(() =>
+            queueMicrotask(() => {
+              notification = observer.onControlOrMandateChange();
+            }),
+          );
+        }
+        return result;
+      },
+    });
+    const provider = vi.fn();
+    vi.mocked(h.binding.send.transmit).mockImplementation(async (_wire, io) => {
+      credential = true;
+      await io.tokens.send(io.account);
+      provider();
+      return { outcome: "accepted", providerRef: "must-not-send" };
+    });
+    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({
+      status: stage === "binding" ? "not-sent" : "uncertain",
+    });
+    await notification;
+    await h.executor.drain();
+    expect(scheduled).toBe(true);
+    expect(provider).not.toHaveBeenCalled();
+    expect(h.binding.send.transmit).toHaveBeenCalledTimes(stage === "binding" ? 0 : 1);
+  });
 });

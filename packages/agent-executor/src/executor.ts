@@ -362,9 +362,15 @@ export function createExecutor(options: ExecutorOptions) {
     const prepared = await o.transmissions.exclusive(() => prepare(id, true));
     if (!("record" in prepared)) return prepared;
     const { entry, binding, record, resend } = prepared;
+    let executorFailure: { error: unknown } | undefined;
+    let credentialsReleased = false;
+    function checkExecutorFailure() {
+      if (executorFailure) throw executorFailure.error;
+    }
     // Token acquisition is delayed until the binding actually calls send; no read grant exists.
     const tokens: TokenProviderProjection = {
       send: async (account) => {
+        checkExecutorFailure();
         if (account.id !== entry.account.id || (await controls()).halted)
           throw new Error("Send gate closed");
         const grant = await o.tokens.send({ id: account.id });
@@ -372,30 +378,34 @@ export function createExecutor(options: ExecutorOptions) {
           grant.access !== "send" ||
           typeof grant.accessToken !== "string" ||
           !grant.accessToken ||
-          !(await recheck())
+          !(await recheck()) ||
+          revision !== state.revision
         )
           throw new Error("Send grant unavailable");
+        checkExecutorFailure();
+        credentialsReleased = true;
         return grant;
       },
     };
     async function recheck(): Promise<boolean> {
-      const result = await o.transmissions.exclusive(() => prepare(id, false));
-      return "status" in result && result.status === "ready" && revision === state.revision;
+      try {
+        const result = await o.transmissions.exclusive(() => prepare(id, false));
+        return "status" in result && result.status === "ready" && revision === state.revision;
+      } catch (error) {
+        executorFailure = { error };
+        throw error;
+      }
     }
-    const call = Promise.resolve().then(async () => {
-      if (!(await recheck())) return { outcome: "rejected", detail: "halted" } as const;
-      return binding.send.transmit(entry.wire, {
-        account: entry.account,
-        tokens,
-        dryRun: o.dryRun !== false,
-      });
-    });
     async function settle(value: unknown): Promise<Disposition> {
       try {
-        return await o.transmissions.exclusive(async () => {
+        const result = await o.transmissions.exclusive(async () => {
           const current = await o.transmissions.get(id);
           if (current?.status === "sent") return finish(current);
-          const outcome = providerResult(value, false);
+          const reported = providerResult(value, false);
+          const outcome =
+            reported === "unknown" && executorFailure && !credentialsReleased
+              ? "rejected"
+              : reported;
           const status =
             outcome === "accepted"
               ? "sent"
@@ -411,22 +421,39 @@ export function createExecutor(options: ExecutorOptions) {
               : {}),
           });
         });
+        if (executorFailure) throw executorFailure.error;
+        return result;
       } finally {
         // The provider call has settled, even if a lock, durable write, audit or receipt failed.
         pending.delete(id);
       }
     }
+    // Executor I/O before dispatch is not a provider operation or an ambiguous provider failure.
+    let ready: boolean;
+    try {
+      ready = await recheck();
+    } catch {
+      return settle(undefined);
+    }
+    if (!ready || revision !== state.revision)
+      return settle({ outcome: "rejected", detail: "gate-closed" });
+    async function dispatch() {
+      return binding.send.transmit(entry.wire, {
+        account: entry.account,
+        tokens,
+        dryRun: o.dryRun !== false,
+      });
+    }
+    const call = dispatch().catch(() => undefined); // Provider exceptions establish no delivery outcome.
     let value: unknown;
     try {
       value = await bounded(call, timeout);
     } catch {
       // Keep observing the original request: timeouts do not cancel provider effects.
-      const late = call
-        .then(settle, () => settle(undefined))
-        .catch((error: unknown) => {
-          backgroundError = error;
-          backgroundFailed = true;
-        });
+      const late = call.then(settle).catch((error: unknown) => {
+        backgroundError = error;
+        backgroundFailed = true;
+      });
       background.add(late);
       void late.finally(() => background.delete(late));
       return o.transmissions.exclusive(async () => {
