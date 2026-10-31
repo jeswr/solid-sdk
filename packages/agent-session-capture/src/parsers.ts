@@ -1,6 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { createHash } from "node:crypto";
+
 import type { ChatConversation, ChatMessage } from "@jeswr/solid-chat-interop";
+// biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
+import { createHash } from "crypto";
 import { redactSecrets } from "./redact.js";
 
 /** Redacted canonical conversation and local-only project locations used for opt-out checks. */
@@ -67,6 +69,7 @@ function session(provider: "claude" | "codex", entries: Record<string, unknown>[
 
 function append(
   messages: ChatMessage[],
+  seen: Set<string>,
   id: unknown,
   role: "user" | "assistant" | "tool",
   text: unknown,
@@ -74,14 +77,17 @@ function append(
 ) {
   if (typeof text !== "string" || text.length === 0) return;
   if (role === "tool" && !/^[A-Za-z][A-Za-z0-9_.:-]{0,127}$/.test(text)) return;
-  const message = { id: digest(id), role, text: redactSecrets(text), createdAt };
-  if (!messages.some((existing) => existing.id === message.id)) messages.push(message);
+  const messageId = digest(id);
+  if (seen.has(messageId)) return;
+  seen.add(messageId);
+  messages.push({ id: messageId, role, text: redactSecrets(text), createdAt });
 }
 
 /** Parse Claude Code JSONL: user/assistant text and tool names, without arguments/results/thinking. */
 export function parseClaudeTranscript(jsonl: string, source = "claude"): CapturedSession {
   const entries = rows(jsonl);
   const result = session("claude", entries, source);
+  const seen = new Set<string>();
   entries.forEach((entry, line) => {
     if (entry.type !== "user" && entry.type !== "assistant") return;
     const message = record(entry.message);
@@ -95,9 +101,9 @@ export function parseClaudeTranscript(jsonl: string, source = "claude"): Capture
     blocks.forEach((value, index) => {
       const block = record(value);
       if (block.type === "text")
-        append(result.conversation.messages, [key, index], role, block.text, createdAt);
+        append(result.conversation.messages, seen, [key, index], role, block.text, createdAt);
       if (role === "assistant" && block.type === "tool_use")
-        append(result.conversation.messages, [key, index], "tool", block.name, createdAt);
+        append(result.conversation.messages, seen, [key, index], "tool", block.name, createdAt);
     });
   });
   return result;
@@ -107,6 +113,7 @@ export function parseClaudeTranscript(jsonl: string, source = "claude"): Capture
 export function parseCodexTranscript(jsonl: string, source = "codex"): CapturedSession {
   const entries = rows(jsonl);
   const result = session("codex", entries, source);
+  const seen = new Set<string>();
   entries.forEach((entry, line) => {
     if (entry.type !== "response_item") return;
     const payload = record(entry.payload);
@@ -119,13 +126,13 @@ export function parseCodexTranscript(jsonl: string, source = "codex"): CapturedS
       payload.content.forEach((value, index) => {
         const block = record(value);
         if (["input_text", "output_text", "text"].includes(String(block.type)))
-          append(result.conversation.messages, [key, index], role, block.text, createdAt);
+          append(result.conversation.messages, seen, [key, index], role, block.text, createdAt);
       });
     }
     if (payload.type === "function_call" || payload.type === "custom_tool_call")
-      append(result.conversation.messages, [key, "tool"], "tool", payload.name, createdAt);
+      append(result.conversation.messages, seen, [key, "tool"], "tool", payload.name, createdAt);
     if (payload.type === "local_shell_call")
-      append(result.conversation.messages, [key, "tool"], "tool", "shell", createdAt);
+      append(result.conversation.messages, seen, [key, "tool"], "tool", "shell", createdAt);
   });
   return result;
 }

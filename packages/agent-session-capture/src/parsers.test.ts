@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { readFileSync } from "node:fs";
+// biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
+import { readFileSync } from "fs";
 import { describe, expect, it } from "vitest";
 import { digest, parseClaudeTranscript, parseCodexTranscript } from "./parsers.js";
 
