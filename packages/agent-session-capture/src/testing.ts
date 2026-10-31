@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { SolidMcpConfig } from "@jeswr/solid-mcp";
+// biome-ignore lint/style/useNodejsImportProtocol: agent imports allow only bare package names or relative paths
+import { crc32, deflateRawSync } from "zlib";
 
 /** Recorded request made through the real client-credentials and ChatWriter implementations. */
 export interface CaptureRequest {
@@ -42,4 +44,48 @@ export function createCaptureTestTransport() {
     });
   };
   return { fetch: httpTransport, requests, resources };
+}
+
+/** Build small stored/deflated ZIP fixtures in memory, without touching the filesystem. */
+export function createCaptureTestZip(
+  entries: { name: string; text: string; deflate?: boolean; descriptor?: boolean }[],
+) {
+  const locals: Buffer[] = [];
+  const headers: Buffer[] = [];
+  let offset = 0;
+  for (const entry of entries) {
+    const name = Buffer.from(entry.name);
+    const raw = Buffer.from(entry.text);
+    const data = entry.deflate ? deflateRawSync(raw) : raw;
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50);
+    local.writeUInt16LE(entry.descriptor ? 8 : 0, 6);
+    local.writeUInt16LE(entry.deflate ? 8 : 0, 8);
+    if (!entry.descriptor) {
+      local.writeUInt32LE(crc32(raw), 14);
+      local.writeUInt32LE(data.length, 18);
+      local.writeUInt32LE(raw.length, 22);
+    }
+    local.writeUInt16LE(name.length, 26);
+    const header = Buffer.alloc(46);
+    header.writeUInt32LE(0x02014b50);
+    header.writeUInt16LE(local.readUInt16LE(6), 8);
+    header.writeUInt16LE(local.readUInt16LE(8), 10);
+    header.writeUInt32LE(crc32(raw), 16);
+    header.writeUInt32LE(data.length, 20);
+    header.writeUInt32LE(raw.length, 24);
+    header.writeUInt16LE(name.length, 28);
+    header.writeUInt32LE(offset, 42);
+    locals.push(local, name, data);
+    headers.push(header, name);
+    offset += local.length + name.length + data.length;
+  }
+  const directory = Buffer.concat(headers);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, directory, end]);
 }
