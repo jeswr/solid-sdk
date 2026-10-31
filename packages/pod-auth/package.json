@@ -3,7 +3,7 @@
   "name": "@jeswr/pod-auth",
   "version": "0.1.0",
   "private": true,
-  "description": "Suite client authentication and session lifecycle. Experimental, AI-agent-generated scaffold.",
+  "description": "Suite client authentication core. Experimental, AI-agent-generated.",
   "type": "module",
   "sideEffects": false,
   "securityCritical": true,
@@ -43,6 +43,12 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "@types/n3": "^1"
+  },
+  "dependencies": {
+    "@jeswr/reactive-authentication": "workspace:*",
+    "@rdfjs/wrapper": "^0.34",
+    "n3": "^2"
   }
 }
