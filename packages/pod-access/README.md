@@ -56,13 +56,16 @@ Inherited entries here mean defaults on this document; ancestor grants are not r
 ACP roots shared by the requested resource and other resources return `unsupported`.
 Every `acp:resource` association must be an IRI, otherwise the document returns `invalid-response`.
 
-`revoke` accepts an authorization/policy IRI or an agent/group IRI. A matching rule id takes
-precedence over the same IRI used as an agent. WAC retains co-agents and
-unrelated resource targets; agent revocation on a rule shared with other targets is
-`unsupported`. ACP unlinks this resource's control, retaining definitions that other resources
+`revoke` accepts a `RevocationKey`: an authorization/policy IRI, an agent/group IRI,
+`{ public: true }`, or `{ authenticated: true }`. Selectors revoke all matching grants,
+including blank-node rules that have no stable id. For example,
+`await access.revoke(resourceUrl, { public: true })` removes public grants.
+A matching rule id takes precedence over the same IRI used as an agent. WAC retains co-agents,
+co-selectors and unrelated resource targets; agent or selector revocation on a rule shared
+with other targets is `unsupported`. ACP unlinks this resource's control, retaining definitions that other resources
 may reference. Revoking one policy of a multi-policy control is `unsupported`. No matching
-grant means no write. Public/authenticated grants can be revoked by their returned ids.
-Anonymous rules have no stable id and can be revoked by agent.
+grant means no write. Public/authenticated grants can also be revoked by their returned ids.
+Malformed selector keys fail before storage operations.
 
 Listing never flattens unsupported conditions into unconditional grants: WAC origins/unknown
 conditions and ACP deny/anyOf/noneOf/multiple matchers or conditional matchers return

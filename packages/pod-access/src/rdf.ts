@@ -19,7 +19,7 @@ import {
   Policy,
 } from "@solid/object";
 import { DataFactory } from "n3";
-import type { AccessMode, Grant } from "./types.js";
+import type { AccessMode, Grant, RevocationKey } from "./types.js";
 
 export const ACL = "http://www.w3.org/ns/auth/acl#";
 export const ACP = "http://www.w3.org/ns/solid/acp#";
@@ -135,20 +135,35 @@ export function addWac(
   else rule.agentGroup = new Group(grant.agent.group, dataset, DataFactory);
 }
 
-export function revokeWac(dataset: Dataset, target: string, key: string, url: string): boolean {
+export function revokeWac(
+  dataset: Dataset,
+  target: string,
+  key: RevocationKey,
+  url: string,
+): boolean {
   let changed = false;
   const rules = wacRules(dataset, target, url);
-  const byId = rules.some((rule) => rule.termType === "NamedNode" && rule.value === key);
+  const byId =
+    typeof key === "string" &&
+    rules.some((rule) => rule.termType === "NamedNode" && rule.value === key);
+  const selector =
+    typeof key === "string" ? key : "public" in key ? PUBLIC : `${ACL}AuthenticatedAgent`;
   for (const rule of rules) {
     if (byId) {
       if (rule.termType !== "NamedNode" || rule.value !== key) continue;
       rule.targets.delete(target);
       rule.defaults.delete(target);
-    } else if (rule.agent.has(key) || rule.groups.has(key)) {
+    } else if (
+      typeof key === "string"
+        ? rule.agent.has(key) || rule.groups.has(key)
+        : rule.agentClass.has(selector)
+    ) {
       if ([...rule.targets, ...rule.defaults].some((value) => value !== target))
         fail("unsupported", url);
-      rule.agent.delete(key);
-      rule.groups.delete(key);
+      if (typeof key === "string") {
+        rule.agent.delete(key);
+        rule.groups.delete(key);
+      } else rule.agentClass.delete(selector);
     } else continue;
     changed = true;
     if (
@@ -269,12 +284,17 @@ export function addAcp(
   );
 }
 
-export function revokeAcp(root: AccessControlResource, key: string, url: string): boolean {
+export function revokeAcp(root: AccessControlResource, key: RevocationKey, url: string): boolean {
   let changed = false;
   const entries = acpEntries(root, url);
   const byId = entries.some(({ grant }) => grant.id === key);
   for (const { control, grant } of entries) {
-    if (byId ? grant.id !== key : grant.agent !== key) continue;
+    const matchesAgent =
+      typeof key === "string"
+        ? grant.agent === key
+        : typeof grant.agent !== "string" &&
+          ("public" in key ? "public" in grant.agent : "authenticated" in grant.agent);
+    if (byId ? grant.id !== key : !matchesAgent) continue;
     if (control.apply.size !== 1) fail("unsupported", url);
     // Unlink locally. Definitions may be referenced by other ACRs or policies.
     root.accessControl.delete(control);

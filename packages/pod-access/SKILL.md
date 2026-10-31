@@ -23,8 +23,11 @@ represent conditional grants as unconditional. Named graphs and malformed typed 
 
 Every share creates a separate rule; caller-supplied ids never overwrite rules. Inheritance
 requires a container and writes both direct and default/member control. WAC revoke preserves
-co-agents and other targets. ACP revoke unlinks local controls, preserving shared definitions;
-multi-policy control revocation is unsupported. Blank-node rules have no stable grant id.
+co-agents, co-selectors and other targets. ACP revoke unlinks local controls, preserving shared
+definitions; multi-policy control revocation is unsupported. RevocationKey accepts grant ids,
+agent/group IRIs, `{ public: true }` and `{ authenticated: true }`. Explicit selectors also
+revoke blank-node rules, which have no stable grant id. Validate and snapshot selector keys
+before storage operations; shared WAC targets still fail closed.
 Purpose/expiry and ACP groups/reserved agent IRIs passed as WebIDs are unsupported.
 
 `effective()` uses only HEAD's caller `allow` booleans, without adding implied modes. It returns

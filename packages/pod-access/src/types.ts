@@ -14,6 +14,9 @@ export interface Grant {
   id?: string;
 }
 
+/** A grant id, agent/group IRI, or explicit public/authenticated selector. */
+export type RevocationKey = string | { public: true } | { authenticated: true };
+
 /** Sharing operations over a discovered storage client. LWS operations follow in T-051. */
 export interface AccessClient {
   model(): "wac" | "acp" | "odrl-grants" | "none";
@@ -21,7 +24,7 @@ export interface AccessClient {
   effective(url: string): Promise<{ me: AccessMode[]; public: AccessMode[] } | null>;
   grants(url: string): Promise<readonly Grant[]>;
   share(url: string, grant: Grant, opts: { inherit?: boolean }): Promise<Grant>;
-  revoke(url: string, grantIdOrAgent: string): Promise<void>;
+  revoke(url: string, key: RevocationKey): Promise<void>;
 }
 
 /** Use the public storage interface; authentication and transport stay in storage-client. */

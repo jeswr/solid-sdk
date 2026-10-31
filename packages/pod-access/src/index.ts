@@ -14,9 +14,21 @@ import {
   revokeWac,
   wacGrants,
 } from "./rdf.js";
-import type { AccessClient, AccessClientOptions, AccessMode, Grant } from "./types.js";
+import type {
+  AccessClient,
+  AccessClientOptions,
+  AccessMode,
+  Grant,
+  RevocationKey,
+} from "./types.js";
 
-export type { AccessClient, AccessClientOptions, AccessMode, Grant } from "./types.js";
+export type {
+  AccessClient,
+  AccessClientOptions,
+  AccessMode,
+  Grant,
+  RevocationKey,
+} from "./types.js";
 
 /** Solid sharing over advertised access documents, with conditional writes and no retries. */
 export function createAccessClient({ storage }: AccessClientOptions): AccessClient {
@@ -100,6 +112,15 @@ export function createAccessClient({ storage }: AccessClientOptions): AccessClie
     }
   }
 
+  function validateRevokeKey(key: RevocationKey): RevocationKey {
+    if (typeof key === "string") return key;
+    if (key !== null && typeof key === "object" && Object.keys(key).length === 1) {
+      if ("public" in key && key.public === true) return { public: true };
+      if ("authenticated" in key && key.authenticated === true) return { authenticated: true };
+    }
+    throw new TypeError("Invalid revocation key");
+  }
+
   async function write(doc: Awaited<ReturnType<typeof document>>) {
     if (doc.etag === null || doc.etag.trim() === "" || doc.etag === "*") {
       throw new StorageError("precondition-required", { url: doc.url, method: "PUT", status: 428 });
@@ -149,11 +170,12 @@ export function createAccessClient({ storage }: AccessClientOptions): AccessClie
       return { ...value, id };
     },
     async revoke(url, key) {
+      const value = validateRevokeKey(key);
       const doc = await document(url, true);
       const changed = parse(doc.url, () =>
         doc.model === "wac"
-          ? revokeWac(doc.dataset, doc.target, key, doc.url)
-          : revokeAcp(acr(doc.dataset, doc.target, doc.url), key, doc.url),
+          ? revokeWac(doc.dataset, doc.target, value, doc.url)
+          : revokeAcp(acr(doc.dataset, doc.target, doc.url), value, doc.url),
       );
       if (changed) await write(doc);
     },
