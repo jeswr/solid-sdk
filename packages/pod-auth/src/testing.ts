@@ -39,6 +39,8 @@ export function createMockOp(
     issuers?: string[];
     requireInteraction?: boolean;
     omitAzp?: boolean;
+    refreshTokens?: boolean;
+    revocation?: boolean;
   } = {},
 ) {
   const issuer = options.issuer ?? "https://op.example/";
@@ -57,9 +59,21 @@ export function createMockOp(
   };
   const codes = new Map<string, URLSearchParams>();
   const tokens = new Map<string, string>();
+  const refreshTokens = new Map<string, { jkt: string; clientId: string }>();
+  let refreshError: string | undefined;
+  let revokeError = false;
   const seen = new Set<string>();
   const requests: Request[] = [];
-  const stats = { authorizations: 0, tokens: 0, registrations: 0, accepted: 0, exchanges: 0 };
+  const stats = {
+    authorizations: 0,
+    tokens: 0,
+    registrations: 0,
+    accepted: 0,
+    exchanges: 0,
+    refreshes: 0,
+    revocations: 0,
+    reuse: 0,
+  };
   const jwt = (payload: Record<string, unknown>) => {
     const data = encoded({ alg: "ES256", kid: "op-key" }) + "." + encoded(payload);
     return (
@@ -111,6 +125,7 @@ export function createMockOp(
         authorization_endpoint: new URL("authorize", issuer).href,
         token_endpoint: new URL("token", issuer).href,
         registration_endpoint: new URL("register", issuer).href,
+        ...(options.revocation ? { revocation_endpoint: new URL("revoke", issuer).href } : {}),
         jwks_uri: new URL("jwks", issuer).href,
         scopes_supported: ["openid", "webid", "offline_access"],
         response_types_supported: ["code"],
@@ -171,6 +186,15 @@ export function createMockOp(
       }
       return new Response(null, { status: 302, headers: { location: callback.href } });
     }
+    if (request.url === new URL("revoke", issuer).href) {
+      stats.revocations++;
+      const form = new URLSearchParams(await request.text());
+      if (revokeError) return Response.json({ error: "server_error" }, { status: 500 });
+      if (form.get("token_type_hint") !== "refresh_token")
+        throw new Error("Missing refresh token hint");
+      refreshTokens.delete(form.get("token")!);
+      return new Response(null, { status: 200 });
+    }
     if (request.url === new URL("token", issuer).href) {
       const form = new URLSearchParams(await request.text());
       const params = codes.get(form.get("code")!);
@@ -180,6 +204,34 @@ export function createMockOp(
         jkt = proofKey(request);
       } catch {
         return Response.json({ error: "invalid_dpop_proof" }, { status: 400 });
+      }
+      if (form.get("grant_type") === "refresh_token") {
+        stats.refreshes++;
+        if (refreshError)
+          return Response.json(
+            { error: refreshError },
+            { status: refreshError === "invalid_grant" ? 400 : 503 },
+          );
+        const token = form.get("refresh_token")!;
+        const previous = refreshTokens.get(token);
+        if (previous === undefined) stats.reuse++;
+        if (
+          previous === undefined ||
+          previous.jkt !== jkt ||
+          previous.clientId !== form.get("client_id")
+        )
+          return Response.json({ error: "invalid_grant" }, { status: 400 });
+        refreshTokens.delete(token);
+        const rotated = randomUUID();
+        refreshTokens.set(rotated, previous);
+        const access = randomUUID();
+        tokens.set(access, jkt);
+        return Response.json({
+          access_token: access,
+          token_type: "DPoP",
+          expires_in: 300,
+          refresh_token: rotated,
+        });
       }
       if (
         params === undefined ||
@@ -203,7 +255,11 @@ export function createMockOp(
         ...(webId === undefined ? {} : { webid: webId }),
         cnf: { jkt },
       });
+      const refresh = randomUUID();
+      if (options.refreshTokens)
+        refreshTokens.set(refresh, { jkt, clientId: params.get("client_id")! });
       return Response.json({
+        ...(options.refreshTokens ? { refresh_token: refresh } : {}),
         access_token: access,
         token_type: "DPoP",
         expires_in: 300,
@@ -293,6 +349,12 @@ export function createMockOp(
     requests,
     stats,
     fetch,
+    failRefresh: (error?: string) => {
+      refreshError = error;
+    },
+    failRevocation: (fail: boolean) => {
+      revokeError = fail;
+    },
     getCode: async (url: URL, signal: AbortSignal) => {
       const response = await fetch(url, { redirect: "manual", signal });
       return response.headers.get("location")!;

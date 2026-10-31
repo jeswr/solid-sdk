@@ -44,10 +44,16 @@ export interface AuthEvent {
   url?: string;
 }
 
-/** T-031 core. Persistence lifecycle, React and agent entry points are implemented by later tasks. */
+/** Suite authentication and credential-free session lifecycle. */
 export interface PodAuth {
   fetch: typeof fetch;
   login(hint?: LoginHint): Promise<Identity>;
+  /** Restore the remembered account; never requests interactive authorization. */
+  restore(): Promise<Identity | null>;
+  /** Revoke when advertised, purge local credentials, and emit logout even if revocation fails. */
+  logout(): Promise<void>;
+  /** Read only the credential-free remembered pointer, without discovery or credential access. */
+  remembered(): Promise<{ webId: string; issuer: string; displayName?: string; avatar?: string }[]>;
   /** Reports current claims without discovery, refresh or UI interaction. */
   identity(): Promise<Identity | null>;
   on(event: AuthEventType, handler: (event: AuthEvent) => void): () => void;

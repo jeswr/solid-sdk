@@ -2,9 +2,9 @@
 
 # @jeswr/pod-auth
 
-> **Experimental — AI-agent-generated.** T-031 authentication core; private pending conformance.
+> **Experimental — AI-agent-generated.** Authentication and session lifecycle; private pending conformance.
 
-Suite policy over `@jeswr/reactive-authentication`, following SDK core ADR-004 D2/D3.
+Suite policy over `@jeswr/reactive-authentication`, following SDK core ADR-004 D2/D3/D5.
 Requires Node.js >=24.5 for the protocol engine, or a browser with WebCrypto and IndexedDB.
 
 ```ts
@@ -34,7 +34,7 @@ DPoP proofs, refresh machinery and discovery stay in the protocol engine. A miss
 throws `AmbiguousIssuerError` when a profile lists several issuers; a chooser must return a listed URL.
 Explicit WebID and issuer hints must agree with the profile and the authenticated identity.
 Concurrent logins with the same hint share one promise; different hints reject while login is pending.
-Account changes require a new instance until the logout lifecycle is implemented in T-032.
+Call `logout()` before switching accounts on the same instance.
 
 `auth.fetch` is the manager's unbound fetch function. Global fetch is preserved and captured for all
 protocol requests. Providers are ordered Solid-OIDC, UMA, then LWS; UMA and the default LWS ID-token
@@ -54,14 +54,37 @@ tokens and client registrations stay in memory. Browser defaults use `createBrow
 IndexedDB and a shared fence; Node defaults use memory. Storage failures propagate. `clock` supplies
 event timestamps; protocol expiry validation remains in the engine.
 
+`restore()` reads the last-active account pointer and attempts a DPoP refresh grant without opening
+interactive authorization. The same non-extractable ES256 private key and exportable public key are
+persisted beside the refresh token under `(issuer, WebID, actual client_id)`, within the app namespace.
+An unloadable, extractable, mismatched or non-ES256 key discards the credential before redemption.
+Access and ID tokens stay in memory. Rotation is persisted before an identity or restore event is exposed.
+Web Locks serialize refreshes across tabs; Node falls back to a no-op lock when Web Locks are unavailable.
+Browsers without Web Locks fail closed.
+
+A definitive `invalid_grant` deletes the dead credential, then permits one `prompt=none` authorization
+through `ui.getCode`. That hook must honor `prompt=none`; restore never falls back to an interactive
+attempt and never creates an iframe. Initial login requests consent directly. Transient refresh,
+network and discovery failures return `null` and retain the credential/pointer for a later retry.
+Storage failures reject. `remembered()` reads only the last-active public pointer and returns zero or one
+`{ webId, issuer }` records, without loading credentials, contacting the issuer or invoking UI.
+The pure `decideSilentRestore` decision and its tests are ported verbatim from solid-session-restore
+(the test import path is relocated); they remain internal to pod-auth.
+
+`logout()` revokes stored refresh tokens through the engine when the issuer advertises RFC 7009,
+fences in-flight work, purges all sessions/keys and the remembered pointer for this client configuration,
+and emits `logout`. It also works on a fresh instance without redeeming the stored token. Revocation
+and storage failures reject after cleanup has been attempted and the event emitted. Caller-owned data
+outside the auth namespace is preserved. Local logout does not sign out the OP browser session.
+Listen for `logout` to clear application capability caches. A subsequent login can select another account.
+
 `on` returns an idempotent unsubscribe function. `login` fires once when an identity is established,
 including reactive authentication; `challenge` fires when a provider accepts an authorized 401.
 Each event contains `type`, an identity snapshot and `timestamp`; challenge events also have `url`.
-Observer exceptions do not interrupt authentication. Event names `restore`, `logout` and `expired`
-are reserved for the T-032 session lifecycle. Identity snapshots include the current boundary roots.
+Observer exceptions do not interrupt authentication. `restore` fires when a remembered session is rebuilt; `expired` fires when its credential is gone;
+`logout` fires after cleanup, including failed revocation. Identity snapshots include the current boundary roots.
 
-T-032 supplies restore/logout/remembered-account policy. React and Node subpaths remain empty for their
-own tasks. CID agent mode currently rejects: `{ documentUrl, keyId }` does not supply a signing key;
+React and Node subpaths remain empty for their own tasks. CID agent mode currently rejects: `{ documentUrl, keyId }` does not supply a signing key;
 T-034 owns the Node key configuration. No keys are silently generated for an existing CID document.
 
 The Node-only `@jeswr/pod-auth/testing` subpath exports `createMockOp` and `createMemoryStore`.

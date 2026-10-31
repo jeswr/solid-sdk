@@ -6,10 +6,16 @@ description: Work on @jeswr/pod-auth, the suite client authentication and sessio
 
 # @jeswr/pod-auth
 
-T-031 implements `createPodAuth`, injected UI hooks, provider composition, `fetch`, `login`, `identity`
-and login/challenge event subscriptions. Read `README.md` for the supported core API and limitations.
-Restore/logout/remembered policy, React hooks and Node/CID signing belong to later tasks; their subpaths
-remain reserved. CID configuration without a private signing key must fail closed.
+`createPodAuth` supplies injected UI hooks, provider composition, `fetch`, `login`, `identity`,
+`restore`, `logout`, `remembered` and lifecycle event subscriptions. Read `README.md` for the API.
+React hooks and Node/CID signing belong to later tasks; their subpaths remain reserved.
+
+Persist only refresh records with matching non-extractable ES256 keys, scoped by issuer/WebID/clientId.
+Remembered pointers contain public metadata only. Restore refreshes under a Web Lock (Node no-op fallback)
+and permits prompt=none only after invalid_grant, with no interactive fallback. Preserve credentials on
+transient failures; discard invalid keys; propagate storage errors. Rotation must be durable before use.
+Logout must revoke when advertised, purge across reloads, fence late results and emit even on failure.
+The pure session-restore decision and tests are a verbatim port; preserve their behavior and attribution. CID configuration without a private signing key must fail closed.
 
 Before changing authentication policy, read SDK core ADR-001 D4 and `ADR-004-auth.md` in
 `solid-suite-planning/specs/sdk-core/`, alongside this repository's `AGENTS.md`.

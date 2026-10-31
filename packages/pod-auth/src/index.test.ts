@@ -45,7 +45,7 @@ test("explicit WebID login, validated claims, PKCE + DPoP authenticated read, pr
   });
   expect(events).toEqual([{ type: "login", identity, timestamp: 42 }]);
   expect(options.ui.getWebId).not.toHaveBeenCalled();
-  expect(op.stats.authorizations).toBe(2);
+  expect(op.stats.authorizations).toBe(1);
   expect(op.stats.tokens).toBe(1);
   expect(globalThis.fetch).toBe(op.fetch);
   const { fetch: authFetch } = auth;

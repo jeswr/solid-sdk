@@ -17,8 +17,10 @@ import {
   nonReactiveFetch,
   OidcIdTokenSource,
   ReactiveFetchManager,
+  type RefreshSessionRecord,
   SessionFence,
   SolidUmaTokenProvider,
+  sameIssuer,
   type TokenProvider,
   WebIdIssuerProvider,
   XASProvider,
@@ -26,6 +28,7 @@ import {
 import { createBoundary } from "./boundary.js";
 import { scopedStore } from "./kv.js";
 import { secureUrl } from "./options.js";
+import { memoryStore, sessionStorage } from "./sessions.js";
 import type { LoginHint, PodAuthOptions } from "./types.js";
 
 export class AmbiguousIssuerError extends Error {
@@ -64,6 +67,11 @@ export function createProviders(
     options.storage === undefined && typeof indexedDB !== "undefined"
       ? createBrowserCaches(namespace, { persistSessions: true })
       : undefined;
+  const persistence = sessionStorage(
+    options.storage?.sessions ?? browser?.sessions ?? memoryStore(),
+    namespace,
+    options,
+  );
   const fence =
     options.storage === undefined
       ? (browser?.fence ?? new SessionFence(namespace, { broadcast: false }))
@@ -75,6 +83,7 @@ export function createProviders(
       ? undefined
       : scopedStore<T>(options.storage.caches, namespace + ":" + name);
   let hint: LoginHint = {};
+  let restoredContext: { selected: LoginHint; context: string } | undefined;
   let sessionRequest: Request | undefined;
   const selections = new Map<string, Promise<LoginHint>>();
   const requestSelections = new WeakMap<Request, Promise<LoginHint>>();
@@ -102,11 +111,14 @@ export function createProviders(
     return selection;
   };
   const contextFor = async (request: Request, selected: LoginHint) =>
-    JSON.stringify([
-      await boundary.contextKey(request),
-      selected.webId ?? null,
-      selected.issuer ?? null,
-    ]);
+    restoredContext !== undefined &&
+    JSON.stringify(selected) === JSON.stringify(restoredContext.selected)
+      ? restoredContext.context
+      : JSON.stringify([
+          await boundary.contextKey(request),
+          selected.webId ?? null,
+          selected.issuer ?? null,
+        ]);
   const sessionContext: ContextKey = async (request) =>
     await contextFor(request, await selectionFor(request));
   const authorizationServers = new Map<string, CachingAuthorizationServerProvider>();
@@ -148,9 +160,19 @@ export function createProviders(
     }
     return provider;
   };
+  const es256 = (as: RefreshSessionRecord["authorizationServer"]) => {
+    if (
+      as.dpop_signing_alg_values_supported !== undefined &&
+      !as.dpop_signing_alg_values_supported.includes("ES256")
+    )
+      throw new Error("The issuer must support ES256 DPoP");
+    return { ...as, dpop_signing_alg_values_supported: ["ES256"] };
+  };
   const asProvider = {
-    getAuthorizationServer: async (request: Request) =>
-      await asFor(await selectionFor(request)).getAuthorizationServer(request),
+    getAuthorizationServer: async (
+      request: Request,
+    ): Promise<RefreshSessionRecord["authorizationServer"]> =>
+      es256(await asFor(await selectionFor(request)).getAuthorizationServer(request)),
   };
   // Client registrations can contain secrets and always stay in memory.
   const clientProvider = new CachingClientProvider(
@@ -179,16 +201,11 @@ export function createProviders(
     scopes: ["openid", "webid"],
     serverQuirks: true,
     verifyWebId: true,
-    ...(options.storage === undefined
-      ? browser?.sessions === undefined
-        ? {}
-        : { sessionStore: browser.sessions }
-      : {
-          sessionStore: scopedStore<import("@jeswr/reactive-authentication").RefreshSessionRecord>(
-            options.storage.sessions,
-            namespace + ":sessions",
-          ),
-        }),
+    sessionStore: persistence.sessions,
+    preserveRefreshOnFailure: true,
+    silentAfterRefreshFailure: true,
+    silentFirst: false,
+    sessionLock: persistence.lock,
   };
   const solidProvider = new DPoPTokenProvider(
     options.redirectUri,
@@ -211,10 +228,15 @@ export function createProviders(
             string | null,
             string | null,
           ];
-          await hooks.session(new Request(url), entry.identity, "solid-oidc", {
-            ...(webId === null ? {} : { webId }),
-            ...(issuer === null ? {} : { issuer }),
-          });
+          await hooks.session(
+            new Request(url, { signal: fence.signalFor(entry.generation!) }),
+            entry.identity,
+            "solid-oidc",
+            {
+              ...(webId === null ? {} : { webId }),
+              ...(issuer === null ? {} : { issuer }),
+            },
+          );
           return entry;
         };
       // OidcSession's accessors and methods need the original receiver for their private fields.
@@ -247,8 +269,8 @@ export function createProviders(
           // Defer the picker until LWS has verified its challenge and authorization server.
           const selected = await selectionFor(target, selectedHint);
           const context = await contextFor(target, selected);
-          const as = await asFor(selected).getAuthorizationServer(
-            new Request(target.url, { signal }),
+          const as = es256(
+            await asFor(selected).getAuthorizationServer(new Request(target.url, { signal })),
           );
           const oidc = new OidcIdTokenSource(
             as,
@@ -269,7 +291,7 @@ export function createProviders(
         const { oidc, selected } = await getOidc(signal);
         const claims = await oidc.identity();
         if (claims === undefined) throw new Error("Authentication did not establish an identity");
-        await hooks.session(target, claims, "lws", selected);
+        await hooks.session(new Request(target.url, { signal }), claims, "lws", selected);
         sessionRequest = target;
       };
       const source: CredentialSource = {
@@ -364,11 +386,59 @@ export function createProviders(
     manager,
     boundary,
     solidProvider,
+    persistence,
+    contextFor,
+    fence,
+    restore: async (account: import("./sessions.js").ActiveAccount) => {
+      restoredContext = { selected: account.selected, context: account.context };
+      hint = account.selected;
+      selections.clear();
+      const generation = await fence.generation();
+      const request = new Request(account.requestUrl, { signal: fence.signalFor(generation) });
+      const claims = await solidProvider.restore(request);
+      if (claims === undefined) return undefined;
+      if (claims.webId !== account.webId || !sameIssuer(claims.issuer, account.issuer)) {
+        await solidProvider.forget();
+        throw new Error("Restored identity does not match the remembered account");
+      }
+      await hooks.session(request, claims, "solid-oidc", account.selected);
+      sessionRequest = request;
+      return claims;
+    },
+    logout: async () => {
+      const failures: unknown[] = [];
+      // Load the catalog without redeeming a token, so a fresh instance can revoke and purge too.
+      try {
+        await solidProvider.session.forget(persistence.keys);
+      } catch (error) {
+        failures.push(error);
+      }
+      try {
+        await manager.logout();
+      } catch (error) {
+        failures.push(error);
+      }
+      try {
+        await fence.supersede(persistence.clear);
+      } catch (error) {
+        failures.push(error);
+      }
+      hint = {};
+      restoredContext = undefined;
+      sessionRequest = undefined;
+      selections.clear();
+      authorizationServers.clear();
+      if (failures.length > 0) throw new AggregateError(failures, "Logout cleanup failed");
+    },
     login: async (value: LoginHint) => {
+      restoredContext = undefined;
       hint = value;
       selections.clear();
       // A synthetic upgrade obtains a session without sending credentials to a login hint's URL.
-      const request = new Request(boundary.roots()[0] ?? options.redirectUri);
+      const generation = await fence.generation();
+      const request = new Request(boundary.roots()[0] ?? options.redirectUri, {
+        signal: fence.signalFor(generation),
+      });
       const selected = await selectionFor(request);
       await solidProvider.upgrade(request);
       const claims = await solidProvider.identity(request);
