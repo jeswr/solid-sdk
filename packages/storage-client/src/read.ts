@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // Shared read semantics; each protocol supplies only its response shape.
 import { parseRdf, SUPPORTED_RDF_MEDIA_TYPES } from "@jeswr/fetch-rdf";
 import { Store } from "n3";
@@ -22,6 +23,7 @@ const RDF_READABLE: ReadonlySet<string> = new Set(SUPPORTED_RDF_MEDIA_TYPES);
 export interface ReadExpectation {
   range: boolean;
   conditional: boolean;
+  signal?: AbortSignal;
 }
 export type ShapeOf = (
   method: string,
@@ -42,7 +44,8 @@ export async function acceptReadStatus(
     (response.status === 206 && expect.range) ||
     (response.status === 304 && expect.conditional);
   if (!expected) {
-    if (response.status < 200 || response.status >= 400) await failed(method, url, response);
+    if (response.status < 200 || response.status >= 400)
+      await failed(method, url, response, expect.signal);
     // Any other success or redirect (204, unsolicited 206/304, 3xx) is not a read result.
     discard(response.body);
     throw new StorageError("invalid-response", {
@@ -95,6 +98,7 @@ export function createReadOperations(fetch: AuthFetch, root: string, shapeOf: Sh
     const shape = await shapeOf("GET", target, response, {
       range,
       conditional: "If-None-Match" in headers,
+      signal,
     });
     return readResultFrom(response, target, shape, signal);
   }
@@ -103,7 +107,11 @@ export function createReadOperations(fetch: AuthFetch, root: string, shapeOf: Sh
     async head(url: string, opts: { signal?: AbortSignal } = {}) {
       const target = scoped(root, "HEAD", url);
       const response = await send(fetch, "HEAD", target, { Accept: "*/*" }, opts.signal);
-      const shape = await shapeOf("HEAD", target, response, { range: false, conditional: false });
+      const shape = await shapeOf("HEAD", target, response, {
+        range: false,
+        conditional: false,
+        signal: opts.signal,
+      });
       return readResultFrom(response, target, shape, opts.signal);
     },
     async read(url: string, opts: Parameters<StorageClient["read"]>[1] = {}) {
