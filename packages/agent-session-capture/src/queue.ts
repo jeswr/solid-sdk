@@ -23,10 +23,12 @@ export async function enqueue(directory: string, entry: QueueEntry, signal: Abor
   const text = JSON.stringify(entry);
   if (Buffer.byteLength(text) > MAX_BYTES) throw new Error("Capture queue entry exceeds limit");
   const temp = join(directory, `.tmp-${randomUUID()}`);
+  const name = `${digest(entry)}.json`;
   try {
     await writeFile(temp, text, { flag: "wx", mode: 0o600, signal });
     signal.throwIfAborted();
-    await rename(temp, join(directory, `${digest(entry)}.json`));
+    await rename(temp, join(directory, name));
+    return name;
   } finally {
     await unlink(temp).catch(() => {});
   }
@@ -67,11 +69,12 @@ export async function replay(
   target: QueueEntry["target"],
   save: (conversation: ChatConversation) => Promise<unknown>,
   signal: AbortSignal,
+  only?: string,
 ) {
   const files = (await readdir(directory))
-    .filter((name) => /^[a-f0-9]{64}\.json$/.test(name))
+    .filter((name) => /^[a-f0-9]{64}\.json$/.test(name) && (only === undefined || name === only))
     .sort();
-  for (const name of files.slice(0, 100)) {
+  for (const name of files) {
     signal.throwIfAborted();
     const path = join(directory, name);
     let entry: Record<string, unknown>;

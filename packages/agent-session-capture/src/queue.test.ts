@@ -172,4 +172,29 @@ describe("offline queue", () => {
     expect(save).toHaveBeenCalledOnce();
     expect(await files()).toHaveLength(1);
   });
+
+  it("replays just a newly queued snapshot without retrying unrelated failures", async () => {
+    await store({ ...entry, conversation: null });
+    const name = await enqueue(directory, entry, signal());
+    const save = vi.fn().mockResolvedValue({});
+    await replay(directory, target, save, signal(), name);
+    expect(save).toHaveBeenCalledOnce();
+    expect(await files()).toHaveLength(1);
+  });
+
+  it("does not let another account's backlog starve this account's pending captures", async () => {
+    while (!digest(entry).startsWith("f")) entry.conversation.title += "x";
+    await store(entry);
+    let stored = 0;
+    for (let index = 0; stored < 101; index++) {
+      const foreign = { ...entry, target: { ...target, webId: `https://other.example/${index}` } };
+      if (!digest(foreign).startsWith("0")) continue;
+      await store(foreign);
+      stored++;
+    }
+    const save = vi.fn().mockResolvedValue({});
+    await replay(directory, target, save, signal());
+    expect(save).toHaveBeenCalledOnce();
+    expect(await files()).toHaveLength(101);
+  });
 });
