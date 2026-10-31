@@ -17,6 +17,7 @@ function browserCaches(
   sessions: KvStore<
     import("@jeswr/reactive-authentication").RefreshSessionRecord
   > = createMemoryStore(),
+  fenceStore: KvStore<number> = createMemoryStore(),
 ) {
   const memory = <T extends {}>() => ({ ...createMemoryStore<T>(), clear: vi.fn(async () => {}) });
   const caches: ReturnType<typeof createBrowserCaches> = {
@@ -28,7 +29,14 @@ function browserCaches(
     sessions: { ...sessions, clear: vi.fn(async () => {}) },
     fence: new SessionFence("test-browser", { broadcast: false }),
   };
-  vi.mocked(createBrowserCaches).mockReturnValue(caches);
+  vi.mocked(createBrowserCaches).mockImplementation((namespace, options) => {
+    const policy = typeof options === "object" ? options : undefined;
+    caches.fence = new SessionFence(namespace, {
+      store: policy?.wrapFenceStore?.(fenceStore) ?? fenceStore,
+      broadcast: false,
+    });
+    return caches;
+  });
   vi.stubGlobal("indexedDB", {});
   return caches;
 }
@@ -44,8 +52,51 @@ test("browser defaults use browser metadata and refresh-only session caches", as
     lws: { subject: "oidc-id-token" },
   });
   await auth.login();
-  expect(createBrowserCaches).toHaveBeenCalledWith(expect.any(String), { persistSessions: true });
+  expect(createBrowserCaches).toHaveBeenCalledWith(expect.any(String), {
+    persistSessions: true,
+    wrapFenceStore: expect.any(Function),
+  });
   expect((await auth.identity())?.webId).toBe(op.webId);
+});
+
+test.each([
+  2, 3, 4,
+])("browser restore propagates a fence storage failure on generation read %s and remains retryable", async (failedRead) => {
+  const sessions =
+    createMemoryStore<import("@jeswr/reactive-authentication").RefreshSessionRecord>();
+  const fenceStore = createMemoryStore<number>();
+  browserCaches(sessions, fenceStore);
+  const op = createMockOp({ refreshTokens: true });
+  vi.stubGlobal("fetch", op.fetch);
+  const options = {
+    clientId: op.clientId,
+    redirectUri: op.redirectUri,
+    boundary: { roots: [op.root], automatic: false },
+    ui: { getWebId: async () => op.webId!, getCode: op.getCode },
+  };
+  await createPodAuth(options).login();
+  browserCaches(sessions, fenceStore);
+  const failure = new Error("Browser fence storage unavailable");
+  const get = fenceStore.getItem;
+  let reads = 0;
+  vi.spyOn(fenceStore, "getItem").mockImplementation(async (key) => {
+    if (++reads === failedRead) throw failure;
+    return await get(key);
+  });
+  const auth = createPodAuth(options);
+  const restored = vi.fn(),
+    expired = vi.fn();
+  auth.on("restore", restored);
+  auth.on("expired", expired);
+  await expect(auth.restore()).rejects.toBe(failure);
+  expect(await auth.identity()).toBeNull();
+  expect(await auth.remembered()).toEqual([{ webId: op.webId, issuer: op.issuer }]);
+  expect(op.stats.refreshes).toBe(0);
+  expect(restored).not.toHaveBeenCalled();
+  expect(expired).not.toHaveBeenCalled();
+  await expect(auth.restore()).resolves.toMatchObject({ webId: op.webId });
+  expect(op.stats.refreshes).toBe(1);
+  expect(op.stats.authorizations).toBe(1);
 });
 
 test.each([

@@ -65,7 +65,7 @@ export function createProviders(
   const namespace = JSON.stringify(["pod-auth", options.clientId, options.redirectUri]);
   const browser =
     options.storage === undefined && typeof indexedDB !== "undefined"
-      ? createBrowserCaches(namespace, { persistSessions: true })
+      ? createBrowserCaches(namespace, { persistSessions: true, wrapFenceStore: protectStore })
       : undefined;
   const persistence = sessionStorage(
     options.storage?.sessions ?? browser?.sessions ?? memoryStore(),
