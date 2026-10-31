@@ -1,0 +1,128 @@
+[
+  {
+    "test": "claims:move",
+    "status": "pass",
+    "feature": "move",
+    "reason": null
+  },
+  {
+    "test": "claims:pagination",
+    "status": "pass",
+    "feature": "pagination",
+    "reason": null
+  },
+  {
+    "test": "claims:protocol",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "claims:rdfConneg",
+    "status": "pass",
+    "feature": "rdfConneg",
+    "reason": null
+  },
+  {
+    "test": "SC-LIST-0",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-LIST-1",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-LIST-25",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-LIST-1500",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-LIST-kinds-types",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-RW-create",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-RW-etag",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-RW-wildcard",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-RW-range-head-binary",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-RDF-turtle",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-RDF-jsonld",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-RDF-not-rdf",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-DEL-conditional",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-DEL-nonempty-recursive",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-ERR-input-media",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-ERR-common",
+    "status": "pass",
+    "feature": null,
+    "reason": null
+  },
+  {
+    "test": "SC-ERR-move-capability",
+    "status": "pass",
+    "feature": "move",
+    "reason": null
+  }
+]
