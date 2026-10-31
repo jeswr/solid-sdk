@@ -1,5 +1,10 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { createPodClient, type StorageClient, StorageError } from "@jeswr/storage-client";
+import {
+  createPodClient,
+  type StorageClient,
+  StorageError,
+  toStorageError,
+} from "@jeswr/storage-client";
 import { createSameOriginRedirectRefusingFetch, createScopedFetch } from "./scope.js";
 
 /** SDK transport adapter: discovery stays same-origin, data stays under the mount. */
@@ -13,6 +18,7 @@ export async function storageFromFetch(
   const discovery = createSameOriginRedirectRefusingFetch(new URL(base).origin, fetchImpl);
   const data = createScopedFetch(base, fetchImpl);
   let discovering = true;
+  let discoveryAbsence: StorageError | undefined;
   const transport: typeof fetch = async (input, init) => {
     const merged = new Headers(headers);
     new Headers(init?.headers).forEach((value, key) => {
@@ -25,10 +31,18 @@ export async function storageFromFetch(
       merged.set(key, value);
     });
     const response = await (discovering ? discovery : data)(input, { ...init, headers: merged });
+    if (discovering && String(input) === base && [404, 410].includes(response.status)) {
+      // Discovery otherwise discards the status and reports missing capability links.
+      discoveryAbsence = toStorageError(init?.method ?? "GET", base, response);
+      void response.body?.cancel().catch(() => undefined);
+      throw discoveryAbsence;
+    }
     if (!discovering) observe?.(String(input), response.headers);
     return response;
   };
-  const { storage } = await createPodClient({ storage: base, fetch: transport });
+  const { storage } = await createPodClient({ storage: base, fetch: transport }).catch((error) => {
+    throw discoveryAbsence ?? error;
+  });
   discovering = false;
   if (storage.protocol !== "lws") return storage;
   return {

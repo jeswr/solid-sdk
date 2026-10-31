@@ -405,22 +405,30 @@ const solidDriver = defineDriver<SolidDriverOptions, undefined>((options) => {
       const url = prefix ? keyToContainerUrl(base, prefix) : base;
       return run("GET", url, async () => {
         const out: string[] = [];
-        await collect(
-          await client(asTx(opts)),
-          url,
-          0,
-          typeof opts?.maxDepth === "number" ? opts.maxDepth : Infinity,
-          out,
-        );
+        try {
+          await collect(
+            await client(asTx(opts)),
+            url,
+            0,
+            typeof opts?.maxDepth === "number" ? opts.maxDepth : Infinity,
+            out,
+          );
+        } catch (error) {
+          if (!isMissing(error)) throw error;
+        }
         return out;
       });
     },
     async clear(base_, opts) {
       const prefix = relativePrefixKey(base_);
       const url = prefix ? keyToContainerUrl(base, prefix) : base;
-      await run("DELETE", url, async () =>
-        clear(await client(asTx(opts)), url, prefix !== undefined),
-      );
+      await run("DELETE", url, async () => {
+        try {
+          await clear(await client(asTx(opts)), url, prefix !== undefined);
+        } catch (error) {
+          if (!isMissing(error)) throw error;
+        }
+      });
     },
     async watch(callback: WatchCallback) {
       if (disposed) return () => {};
