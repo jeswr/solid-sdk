@@ -7,6 +7,11 @@ export {
   normalizePodBase,
   PodScopeError,
 } from "@jeswr/guarded-fetch";
+export type {
+  LiveOptions,
+  SyncSocket,
+  SyncSocketEvents,
+} from "./live.js";
 export {
   SolidPersistence,
   type SolidPersistenceEvents,

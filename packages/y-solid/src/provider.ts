@@ -1,7 +1,9 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { ChangeEvent, NotificationsClient, Subscription } from "@jeswr/pod-notifications";
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
+import { Awareness } from "y-protocols/awareness";
 import { applyUpdate, Doc, encodeStateAsUpdate, encodeStateVector, mergeUpdates } from "yjs";
+import { type LiveOptions, LiveTransport, selectLiveService } from "./live.js";
 import { SolidUpdateStore } from "./store.js";
 
 function toError(cause: unknown): Error {
@@ -31,7 +33,10 @@ export interface SolidPersistenceOptions {
 export class SolidPersistence {
   readonly doc: Doc;
   readonly store: SolidUpdateStore;
-  readonly mode = "log" as const;
+  get mode(): "live" | "log" {
+    return this.transport?.connected ? "live" : "log";
+  }
+  protected transport?: LiveTransport;
   readonly whenSynced: Promise<void>;
   synced = false;
   destroyed = false;
@@ -83,7 +88,9 @@ export class SolidPersistence {
       throw new TypeError("[y-solid] invalid debounce or compaction options");
     }
     this.updateHandler = (update, origin) => {
-      if (this.destroyed || origin === this) return;
+      if (this.destroyed || origin === this || (this.transport && origin === this.transport))
+        return;
+      if (this.transport?.sendUpdate(update)) return;
       this.pending.push(update.slice());
       this.scheduleWrite();
     };
@@ -177,6 +184,8 @@ export class SolidPersistence {
           }
         }
         await this.serial(() => this.ingest(generation));
+        if (!this.current(generation)) return;
+        await this.transport?.connect();
         if (!this.current(generation)) return;
         this.synced = true;
         this.emit("synced");
@@ -294,6 +303,7 @@ export class SolidPersistence {
         this.doc.transact(() => {
           applyUpdate(this.doc, diff, this);
         }, this);
+        this.transport?.sendUpdate(diff);
         applied = valid.length;
       } catch (cause) {
         // A decode-validated update failed to integrate into the scratch — not
@@ -337,7 +347,9 @@ export class SolidPersistence {
         if (!this.active || this.destroyed || !this.pending.length) return;
         const batch = this.pending.splice(0);
         try {
-          const { url } = await this.store.appendUpdate(mergeUpdates(batch));
+          const update = mergeUpdates(batch);
+          if (this.transport?.sendUpdate(update)) return;
+          const { url } = await this.store.appendUpdate(update);
           this.knownUrls.add(url);
           this.updatesSinceCompaction++;
           this.autoCompact();
@@ -356,6 +368,7 @@ export class SolidPersistence {
       !this.active ||
       !this.synced ||
       this.destroyed ||
+      this.mode === "live" ||
       this.compacting ||
       this.updatesSinceCompaction < this.compaction.afterUpdates ||
       Date.now() - this.lastCompaction < this.compaction.minIntervalMs
@@ -365,14 +378,15 @@ export class SolidPersistence {
   }
 
   async compact(): Promise<{ url: string } | undefined> {
-    if (this.destroyed || !this.active) return undefined;
+    if (this.destroyed || !this.active || this.mode === "live") return undefined;
     if (this.compacting) return this.compacting;
     const generation = this.generation;
     const compacting = (async () => {
       await this.flush();
       return this.serial(async () => {
         const stored = await this.store.loadUpdates();
-        if (!this.current(generation) || stored.length <= 1) return undefined;
+        if (!this.current(generation) || this.mode === "live" || stored.length <= 1)
+          return undefined;
         // Refuse to retire any record if even one payload cannot be decoded safely.
         for (const { update } of stored) {
           const probe = new Doc();
@@ -406,8 +420,9 @@ export class SolidPersistence {
     }
   }
 
-  async persistFullState(): Promise<{ url: string }> {
+  async persistFullState(): Promise<{ url: string } | undefined> {
     if (this.destroyed || !this.active) throw new Error("[y-solid] provider is disconnected");
+    if (this.transport?.sendUpdate(encodeStateAsUpdate(this.doc))) return undefined;
     const result = await this.store.appendUpdate(encodeStateAsUpdate(this.doc));
     this.knownUrls.add(result.url);
     this.updatesSinceCompaction++;
@@ -456,6 +471,7 @@ export class SolidPersistence {
     this.operationTail = Promise.resolve();
     this.compacting = undefined;
     this.clearReconciliationTimers();
+    this.transport?.disconnect();
     this.subscriptionAbort?.abort();
     if (this.timer) {
       clearTimeout(this.timer);
@@ -467,6 +483,7 @@ export class SolidPersistence {
     if (this.destroyed) return;
     this.stop();
     this.destroyed = true;
+    this.transport?.destroy();
     this.doc.off("update", this.updateHandler);
     void this.subscription?.close().catch(() => {});
     this.subscription = undefined;
@@ -491,7 +508,7 @@ export class SolidPersistence {
     this.listeners.get(event)?.delete(listener as Listener);
   }
 
-  private report(cause: unknown): void {
+  protected report(cause: unknown): void {
     if (this.destroyed) return;
     if (cause instanceof StorageError && cause.code === "precondition-failed") {
       this.emit("conflict", cause);
@@ -499,7 +516,7 @@ export class SolidPersistence {
     this.emit("error", toError(cause));
   }
 
-  private emit<K extends keyof SolidPersistenceEvents>(
+  protected emit<K extends keyof SolidPersistenceEvents>(
     event: K,
     ...args: Parameters<SolidPersistenceEvents[K]>
   ): void {
@@ -507,18 +524,91 @@ export class SolidPersistence {
       (listener as (...a: Parameters<SolidPersistenceEvents[K]>) => void)(...args);
     }
   }
+
+  protected installTransport(transport: LiveTransport): void {
+    this.transport = transport;
+  }
+
+  protected transportCallbacks() {
+    return {
+      lost: (checkpoint: boolean) => {
+        if (!this.active || this.destroyed) return;
+        // The wire protocol has no per-update durability acknowledgement. Keep
+        // all local state on loss, including edits sent just before the close.
+        if (checkpoint) this.pending.push(encodeStateAsUpdate(this.doc));
+        this.scheduleWrite();
+        this.emit("status", "connecting");
+      },
+      ready: () => {
+        this.scheduleWrite();
+        if (this.synced) this.emit("status", "connected");
+      },
+      prepare: async () => {
+        // A temporarily failing pod append must not prevent the relay from
+        // accepting the retained batch on the next successful live connection.
+        await this.flush().catch(() => {});
+        await this.sync().catch((cause) => this.report(cause));
+      },
+      settled: async () => {
+        await this.writeTail.catch(() => {});
+      },
+      error: (error: Error) => this.report(error),
+    };
+  }
 }
 
-export interface YSolidOptions extends SolidPersistenceOptions {
+export interface YSolidOptions extends SolidPersistenceOptions, LiveOptions {
   storage: StorageClient;
   container: string;
   mode?: "auto" | "log" | "live";
+  awareness?: Awareness;
 }
 
-/** T-060 supplies log mode; the live transport is a separate task. */
+/** Ticket-authenticated y-websocket sync with immutable-log fallback. */
 export class YSolidProvider extends SolidPersistence {
+  private awarenessValue?: Awareness;
+  private readonly ownsAwareness: boolean;
+
+  get awareness(): Awareness {
+    if (this.destroyed && !this.awarenessValue) throw new Error("[y-solid] provider is destroyed");
+    this.awarenessValue ??= new Awareness(this.doc);
+    return this.awarenessValue;
+  }
+
   constructor(options: YSolidOptions) {
-    if (options.mode === "live") throw new Error("[y-solid] live mode is not available");
-    super(options);
+    const store = options.store ?? new SolidUpdateStore(options);
+    const service =
+      options.mode === "log"
+        ? undefined
+        : selectLiveService(store.storage, store.container, options);
+    if (options.mode === "live" && !service)
+      throw new Error("[y-solid] live mode requires y-protocol-v1 support");
+    if (options.awareness && options.awareness.doc !== options.doc) {
+      throw new Error("[y-solid] awareness must belong to the provider document");
+    }
+    for (const value of [options.reconnectDelayMs ?? 1_000, options.connectTimeoutMs ?? 10_000]) {
+      if (!Number.isFinite(value) || value <= 0)
+        throw new TypeError("[y-solid] invalid live timing options");
+    }
+    super({ ...options, store });
+    this.ownsAwareness = !options.awareness;
+    this.awarenessValue = options.awareness;
+    if (service)
+      this.installTransport(
+        new LiveTransport(
+          options.doc,
+          this.awareness,
+          this.store.container,
+          service,
+          options,
+          this.transportCallbacks(),
+        ),
+      );
+  }
+
+  override destroy(): void {
+    if (this.destroyed) return;
+    super.destroy();
+    if (this.ownsAwareness) this.awarenessValue?.destroy();
   }
 }

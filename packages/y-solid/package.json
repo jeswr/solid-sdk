@@ -50,7 +50,9 @@
   "dependencies": {
     "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/storage-client": "workspace:*",
-    "@jeswr/pod-notifications": "workspace:*"
+    "@jeswr/pod-notifications": "workspace:*",
+    "lib0": "^0.2.117",
+    "y-protocols": "^1.0.6"
   },
   "peerDependencies": {
     "@rdfjs/types": "^2.0.1",
