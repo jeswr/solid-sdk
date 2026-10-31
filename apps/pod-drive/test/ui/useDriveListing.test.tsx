@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // @vitest-environment jsdom
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
@@ -269,4 +270,29 @@ describe("useDriveListing", () => {
     rerender({ root: "https://pod.example/drive" });
     expect(result.current.currentUrl).toBe("https://pod.example/drive/sub/");
   });
+});
+
+it("discards an already completed SDK listing delivered after navigation", async () => {
+  const drive = await import("../../src/drive.js");
+  let release: (value: import("../../src/drive.js").ContainerListing) => void = () => {};
+  const slow = new Promise<import("../../src/drive.js").ContainerListing>((resolve) => {
+    release = resolve;
+  });
+  const spy = vi.spyOn(drive, "listContainer").mockImplementation(async (url) => {
+    if (url === "https://pod.example/slow/") return slow;
+    return { url, etag: null, container: { url, entries: [] } };
+  });
+  const { result } = renderHook(() => useDriveListing("https://pod.example/slow/"));
+  act(() => result.current.navigate("https://pod.example/fast/"));
+  await waitFor(() => expect(result.current.listing?.url).toBe("https://pod.example/fast/"));
+  await act(async () => {
+    release({
+      url: "https://pod.example/slow/",
+      etag: null,
+      container: { url: "https://pod.example/slow/", entries: [] },
+    });
+    await slow;
+  });
+  expect(result.current.listing?.url).toBe("https://pod.example/fast/");
+  spy.mockRestore();
 });
