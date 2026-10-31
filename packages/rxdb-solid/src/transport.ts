@@ -10,7 +10,8 @@ import { assertWithinPodScope, snapshotFetchInput } from "@jeswr/guarded-fetch";
  * body) could be replayed to an attacker-controlled server — a
  * credential-exfiltration / SSRF vector. So every request is issued with
  * `redirect: "manual"` and this guard REFUSES any redirect rather than
- * following it: undici surfaces the raw 3xx (`status` 300–399), browsers
+ * following it: undici surfaces the raw 3xx (`status` 300–399, except 304
+ * Not Modified for cache revalidation), browsers
  * surface an `opaqueredirect` filtered response (`type === "opaqueredirect"`,
  * `status === 0`), and a `redirected` flag is checked defensively.
  */
@@ -18,7 +19,7 @@ function assertNotRedirected(res: Response, url: string): void {
   if (
     res.type === "opaqueredirect" ||
     res.redirected === true ||
-    (res.status >= 300 && res.status < 400)
+    (res.status >= 300 && res.status < 400 && res.status !== 304)
   ) {
     throw new Error(
       `[rxdb-solid] refusing to follow a redirect from ${url} (status ${res.status}, type ${res.type}) — a credentialed request must not be redirected to another location`,
