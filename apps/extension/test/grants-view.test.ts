@@ -280,6 +280,12 @@ describe('sites with access view', () => {
     expect(root.querySelector('.grants-bound-account')?.textContent).toContain('Work');
     expect(root.querySelector('img')?.src).toBe(profiles[1].avatar);
     expect(root.querySelector('img')?.referrerPolicy).toBe('no-referrer');
+    // The photo replaces the initials; they return only if it fails to load.
+    const accountAvatar = root.querySelector('.grants-bound-account .grants-avatar')!;
+    expect(accountAvatar.textContent).toBe('');
+    root.querySelector('img')!.dispatchEvent(new dom.window.Event('error'));
+    expect(accountAvatar.querySelector('img')).toBeNull();
+    expect(accountAvatar.textContent).not.toBe('');
     expect(root.querySelector('.grants-details')?.textContent).toContain('No data access');
   });
 
