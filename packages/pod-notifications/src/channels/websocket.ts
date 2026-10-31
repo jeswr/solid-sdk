@@ -69,6 +69,7 @@ export function createWebSocketChannel(
   let storageId: string | undefined;
   let normalise: ReturnType<typeof createChangeNormalizer>;
   const sockets = new Map<WebSocketLike, () => void>();
+  const frameTimes = new Map<WebSocketLike, number>();
   const deletions = new Set<Promise<void>>();
   const subscriptions = new Set<string>();
 
@@ -88,6 +89,14 @@ export function createWebSocketChannel(
     retry = undefined;
   };
   const disconnect = () => {
+    // A healthy topic must not advance the resync boundary past a silent sibling.
+    // Preserve the first gap's boundary through partially successful reconnects.
+    if (!interrupted && frameTimes.size > 0) {
+      let earliest = Infinity;
+      for (const time of frameTimes.values()) earliest = Math.min(earliest, time);
+      lastFrame = new Date(earliest);
+    }
+    frameTimes.clear();
     active?.abort();
     active = undefined;
     for (const cleanup of sockets.values()) cleanup();
@@ -200,6 +209,7 @@ export function createWebSocketChannel(
           true,
         );
         const socket = factory(receiveFrom);
+        frameTimes.set(socket, now());
         let heartbeat: unknown;
         let open = false;
         const clearHeartbeat = () => {
@@ -228,7 +238,7 @@ export function createWebSocketChannel(
         };
         const onMessage = (event: { data: unknown }) => {
           if (!current() || !open) return;
-          lastFrame = new Date(now());
+          frameTimes.set(socket, now());
           armHeartbeat();
           if (typeof event.data !== "string") return;
           let frame: unknown;

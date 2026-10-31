@@ -808,3 +808,93 @@ test("queued socket events and timers after close cannot reopen or reschedule", 
   expect(f.timers.pending).toBe(0);
   expect(f.posts()).toHaveLength(1);
 });
+
+test("a busy topic cannot hide a silent sibling's gap from resync", async () => {
+  const f = fixture();
+  const sub = await f.client.subscribe([f.root, `${f.root}hot`]);
+  const resync = vi.fn();
+  sub.on("resync", resync);
+  await f.timers.advanceBy(0);
+  f.sockets[0]?.open();
+  f.sockets[1]?.open();
+  await f.timers.advanceBy(10);
+  f.sockets[0]?.message("ping");
+  await f.timers.advanceBy(10);
+  f.sockets[1]?.message("ping");
+  f.sockets[0]?.close();
+  await f.timers.advanceBy(1_000);
+  f.sockets[2]?.open();
+  f.sockets[3]?.open();
+  expect(resync).toHaveBeenCalledExactlyOnceWith(new Date(10));
+  await sub.close();
+});
+
+test("partial reconnect frames preserve the original gap until every topic is live", async () => {
+  const f = fixture();
+  const sub = await f.client.subscribe([f.root, `${f.root}hot`]);
+  const resync = vi.fn();
+  sub.on("resync", resync);
+  await f.timers.advanceBy(0);
+  f.sockets[0]?.open();
+  f.sockets[1]?.open();
+  await f.timers.advanceBy(10);
+  f.sockets[0]?.message("ping");
+  f.sockets[1]?.message("ping");
+  f.sockets[0]?.error();
+  await f.timers.advanceBy(1_000);
+  f.sockets[2]?.open();
+  f.sockets[2]?.message("ping");
+  f.sockets[3]?.error();
+  expect(resync).not.toHaveBeenCalled();
+  await f.timers.advanceBy(1_000);
+  f.sockets[4]?.open();
+  f.sockets[5]?.open();
+  expect(resync).toHaveBeenCalledExactlyOnceWith(new Date(10));
+  await sub.close();
+});
+
+test("a later Solid topic POST failure closes the first topic socket before retrying", async () => {
+  const f = fixture();
+  const base = f.fetch.getMockImplementation() as typeof globalThis.fetch;
+  f.fetch.mockImplementation(async (input, init) => {
+    if (init?.method === "POST" && JSON.parse(init.body as string).topic.endsWith("hot"))
+      return new Response(null, { status: 500 });
+    return base(input, init);
+  });
+  const sub = await f.client.subscribe([f.root, `${f.root}hot`]);
+  await f.timers.advanceBy(0);
+  expect(sub.state).toBe("degraded");
+  expect(f.sockets[0]?.listenerCount).toBe(0);
+  expect(f.sockets[0]?.readyState).toBe(3);
+  expect(f.timers.pending).toBe(1);
+  await sub.close();
+});
+
+test("a stale forbidden LWS response cannot close a newer online attempt", async () => {
+  const net = network();
+  const f = fixture("lws");
+  const base = f.fetch.getMockImplementation() as typeof globalThis.fetch;
+  const entered = Promise.withResolvers<void>();
+  const gate = Promise.withResolvers<Response>();
+  let first = true;
+  f.fetch.mockImplementation(async (input, init) => {
+    if (first && init?.method === "POST") {
+      first = false;
+      entered.resolve();
+      return gate.promise;
+    }
+    return base(input, init);
+  });
+  const sub = await f.client.subscribe([f.root]);
+  const oldTick = f.timers.advanceBy(0);
+  await entered.promise;
+  net.set(false);
+  net.set(true);
+  await f.timers.advanceBy(0);
+  f.sockets[0]?.open();
+  expect(sub.state).toBe("live");
+  gate.resolve(new Response(null, { status: 403 }));
+  await oldTick;
+  expect(sub.state).toBe("live");
+  await sub.close();
+});
