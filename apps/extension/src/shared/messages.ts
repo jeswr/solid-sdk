@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The message protocol shared across the four contexts (MAIN-world inject, ISOLATED
  * content script, service worker, popup). All payloads MUST be JSON-serialisable —
@@ -287,6 +288,10 @@ export interface FetchResponse {
   readonly requestId: string;
   readonly status?: number;
   readonly statusText?: string;
+  /** Final authorized resource URL, present only when serving a response. */
+  readonly url?: string;
+  /** Whether the worker followed a resource redirect before serving this response. */
+  readonly redirected?: boolean;
   readonly headers?: Record<string, string>;
   readonly body?: string;
   readonly error?: string;

@@ -1,6 +1,7 @@
 import type { OriginGrant } from '../src/background/core/origin-grant';
 import { seedOriginGrantFixtures } from './profile-fixtures';
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // INTEGRATION tests for the Phase-2 PER-DATA-CLASS gate AS WIRED INTO the service worker. These
 // drive the REAL `chrome.runtime.onMessage` listener with an in-memory chrome + captured fetch,
@@ -1511,7 +1512,11 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
           : new Response('final bytes', {
               headers: { etag: 'final-etag', 'DPoP-Nonce': 'final-nonce' },
             });
-    expect((await fetchFinance()).body).toBe('final bytes');
+    expect(await fetchFinance()).toMatchObject({
+      body: 'final bytes',
+      url: `${final}?view=1`,
+      redirected: true,
+    });
     expect(fetchCalls.map((c) => c.url)).toEqual([original, original, `${final}?view=1`]);
     expect(fetchCalls[1].init).toMatchObject({
       method: 'HEAD',
@@ -1544,6 +1549,107 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
     fetchCalls.length = 0;
     expect((await fetchFinance({ url: `${final}?view=1` })).status).toBe(403);
     expect(fetchCalls).toHaveLength(0);
+  });
+
+  it.each([
+    'GET',
+    'HEAD',
+  ])('reports the original URL without a redirect on a direct %s and cached revalidation', async (method) => {
+    await boot();
+    const url = 'https://alice.pod.example/finance/x.ttl';
+    fetchImpl = async (_url, init) =>
+      new Headers(init?.headers).has('if-none-match')
+        ? new Response(null, { status: 304 })
+        : new Response('cached bytes', { headers: { etag: 'v1' } });
+    expect(await fetchFinance()).toMatchObject({ url, redirected: false, body: 'cached bytes' });
+    expect(await fetchFinance({ method })).toMatchObject({
+      url,
+      redirected: false,
+      status: 200,
+      body: method === 'HEAD' ? undefined : 'cached bytes',
+    });
+    expect(fetchCalls).toHaveLength(2);
+    expect(new Headers(fetchCalls[1].init?.headers).get('if-none-match')).toBe('v1');
+  });
+
+  it('reports the final authorized URL for a redirected HEAD without relaying a body', async () => {
+    await boot();
+    const original = 'https://alice.pod.example/finance/x.ttl';
+    const final = `${original}/?view=1`;
+    fetchImpl = async (url, init) =>
+      init?.redirect === 'follow'
+        ? redirectProbe(final)
+        : url === original
+          ? opaqueRedirect()
+          : new Response('must not relay');
+    expect(await fetchFinance({ method: 'HEAD' })).toMatchObject({
+      status: 200,
+      url: final,
+      redirected: true,
+      body: undefined,
+    });
+    expect(fetchCalls.map((call) => call.url)).toEqual([original, original, final]);
+    expect(cacheStore.size).toBe(0);
+  });
+
+  it.each([
+    'https://alice.pod.example/finance/x.ttl?view=1#me',
+    'https://ALICE.POD.EXAMPLE:443/finance/./x.ttl?view=1#me',
+    'https://alice.pod.example/finance/x.ttl?view=1#',
+  ])('reports a canonical document URL without a fragment for direct responses (%s)', async (url) => {
+    await boot();
+    fetchImpl = async () => new Response('document bytes');
+    expect(await fetchFinance({ url })).toMatchObject({
+      status: 200,
+      url: 'https://alice.pod.example/finance/x.ttl?view=1',
+      redirected: false,
+      body: 'document bytes',
+    });
+    expect(fetchCalls.map((call) => call.url)).toEqual([url]);
+  });
+
+  it('does not count a DPoP nonce retry as a redirect', async () => {
+    await boot();
+    const url = 'https://alice.pod.example/finance/x.ttl';
+    fetchImpl = async () =>
+      fetchCalls.length === 1
+        ? new Response(null, {
+            status: 401,
+            headers: {
+              'WWW-Authenticate': 'DPoP error="use_dpop_nonce"',
+              'DPoP-Nonce': 'retry-nonce',
+            },
+          })
+        : new Response('retried bytes');
+    expect(await fetchFinance()).toMatchObject({
+      url,
+      redirected: false,
+      body: 'retried bytes',
+    });
+    expect(fetchCalls.map((call) => call.url)).toEqual([url, url]);
+  });
+
+  it('reports a redirect even when multiple hops return to the original URL', async () => {
+    await boot();
+    const original = 'https://alice.pod.example/finance/x.ttl';
+    const middle = 'https://alice.pod.example/finance/middle';
+    let resourceSends = 0;
+    fetchImpl = async (url, init) => {
+      if (init?.redirect === 'follow') return redirectProbe(url === original ? middle : original);
+      return ++resourceSends < 3 ? opaqueRedirect() : new Response('final bytes');
+    };
+    expect(await fetchFinance()).toMatchObject({
+      url: original,
+      redirected: true,
+      body: 'final bytes',
+    });
+    expect(fetchCalls.map((call) => call.url)).toEqual([
+      original,
+      original,
+      middle,
+      middle,
+      original,
+    ]);
   });
 
   it.each([
