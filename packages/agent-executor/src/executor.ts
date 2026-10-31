@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { AGENT, evaluateIntent } from "@jeswr/agent-mandate";
+import { AGENT, evaluateIntent, type Mandate, type Policy } from "@jeswr/agent-mandate";
 import type { ControlStatement } from "@jeswr/agent-model";
 import {
   canonicalJson,
@@ -46,11 +46,39 @@ interface AuthorityDeadlines {
   mandate: number;
   approval?: number;
   controls: number;
+  policy: number;
 }
 interface ReadyEvaluation {
   status: "ready";
   reason: string;
   deadlines: AuthorityDeadlines;
+}
+
+/** Bound every policy set, including duties, without duplicating the engine's decisions. */
+function nextPolicyTransition(mandate: Mandate, at: number): number {
+  const policies: readonly Policy[] = [
+    mandate.autonomous,
+    mandate.withApproval,
+    { id: mandate.id, prohibitions: mandate.prohibitions },
+  ];
+  const constraints = policies.flatMap((policy) => [
+    ...(policy.obligations ?? []).flatMap((duty) => duty.constraints ?? []),
+    ...[...(policy.permissions ?? []), ...(policy.prohibitions ?? [])].flatMap((rule) => [
+      ...(rule.constraints ?? []),
+      ...(rule.duties ?? []).flatMap((duty) => duty.constraints ?? []),
+    ]),
+  ]);
+  return Math.min(
+    ...constraints
+      .filter((constraint) => constraint.leftOperand === "dateTime")
+      .flatMap((constraint) => [constraint.rightOperand].flat())
+      .flatMap((value) => {
+        const boundary = Date.parse(String(value));
+        // Equality, inclusive bounds and set membership can also change just after a boundary.
+        return [boundary, boundary + 1];
+      })
+      .filter((transition) => transition > at),
+  );
 }
 
 /** This instance holds send scopes; no model or Actor capability enters the effect path. */
@@ -79,21 +107,25 @@ export function createExecutor(options: ExecutorOptions) {
     if (deadlines.approval !== undefined && !(deadlines.approval > now))
       return { status: "awaiting-approval", reason: "approval-required" };
     if (!(deadlines.controls > now)) return { status: "refused", reason: "halted" };
+    if (!(deadlines.policy > now)) return { status: "refused", reason: "authority-changed" };
     return undefined;
   }
 
-  async function controls(): Promise<{ halted: boolean; statements: readonly ControlStatement[] }> {
+  async function controls(): Promise<{
+    halted: boolean;
+    statements: readonly ControlStatement[];
+    nextTransition: number;
+  }> {
     try {
-      if (await o.controls.haltFileExists()) return { halted: true, statements: [] };
+      if (await o.controls.haltFileExists())
+        return { halted: true, statements: [], nextTransition: -Infinity };
       const verified = await o.controls.listVerified(o.ownerWebId);
       const now = o.clock.now().getTime();
-      if (!Number.isFinite(now)) return { halted: true, statements: [] };
-      const statements = verified.filter(
-        (c) =>
-          c.attributedTo === o.ownerWebId &&
-          Date.parse(c.createdAt) <= now &&
-          Date.parse(c.expires) > now,
+      if (!Number.isFinite(now)) return { halted: true, statements: [], nextTransition: -Infinity };
+      const unexpired = verified.filter(
+        (c) => c.attributedTo === o.ownerWebId && Date.parse(c.expires) > now,
       );
+      const statements = unexpired.filter((c) => Date.parse(c.createdAt) <= now);
       const halts = statements.filter((c) => c.kind === "Halt").map((c) => Date.parse(c.createdAt));
       const resumes = statements
         .filter((c) => c.kind === "Resume")
@@ -101,9 +133,14 @@ export function createExecutor(options: ExecutorOptions) {
       return {
         halted: halts.length > 0 && Math.max(...halts) >= Math.max(-Infinity, ...resumes),
         statements,
+        nextTransition: Math.min(
+          ...unexpired
+            .flatMap((c) => [Date.parse(c.createdAt), Date.parse(c.expires)])
+            .filter((transition) => transition > now),
+        ),
       };
     } catch {
-      return { halted: true, statements: [] };
+      return { halted: true, statements: [], nextTransition: -Infinity };
     }
   }
   async function disposition(id: string, result: Disposition): Promise<Disposition> {
@@ -312,6 +349,7 @@ export function createExecutor(options: ExecutorOptions) {
       mandate: Date.parse(mandate.validUntil),
       ...(approval ? { approval: Date.parse(approval.expires) } : {}),
       controls: Infinity,
+      policy: nextPolicyTransition(mandate, now.getTime()),
     };
     // Limits and claims share a store-wide lock. Ledger failure never means zero usage.
     const records = [...(await o.transmissions.list()), ...(await o.audit.listCommitted())];
@@ -334,8 +372,8 @@ export function createExecutor(options: ExecutorOptions) {
       if (latest.statements.some((c) => c.kind === "RevokeMandate" && c.target === mandateId))
         return { status: "refused", reason: "mandate-invalid" };
       if (revision !== state.revision) return { status: "refused", reason: "authority-changed" };
-      // Bound this snapshot conservatively: expiry may expose an older Halt after the await.
-      deadlines.controls = Math.min(...latest.statements.map((c) => Date.parse(c.expires)));
+      // Expiry may expose an older Halt; a future Halt or revocation may activate after the await.
+      deadlines.controls = latest.nextTransition;
       return temporalFailure(deadlines);
     }
     if (!execute || o.dryRun !== false) {

@@ -1,10 +1,20 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { AGENT } from "@jeswr/agent-mandate";
 import { describe, expect, it, vi } from "vitest";
 import { createExecutor } from "../src/index.js";
 import { control, harness, NOW, seal } from "./helpers.js";
 
 describe("temporal authority", () => {
-  for (const authority of ["proposal", "mandate", "approval", "control"] as const) {
+  for (const authority of [
+    "proposal",
+    "mandate",
+    "approval",
+    "control",
+    "future-halt",
+    "future-revoke",
+    "permission",
+    "prohibition",
+  ] as const) {
     it.each([
       "policy",
       "ledger",
@@ -31,6 +41,33 @@ describe("temporal authority", () => {
       }
       if (authority === "control")
         h.statements.push(control("Halt", 0), control("Resume", 1, { expires: deadline }));
+      if (authority === "future-halt" || authority === "future-revoke")
+        h.statements.push(
+          control(authority === "future-halt" ? "Halt" : "RevokeMandate", 0, {
+            createdAt: deadline,
+            target: h.state.mandate?.id,
+          }),
+        );
+      if (authority === "permission")
+        Object.assign(h.state.mandate?.autonomous as object, {
+          permissions: [
+            {
+              type: "permission",
+              action: `${AGENT}SendMessage`,
+              constraints: [{ leftOperand: "dateTime", operator: "lt", rightOperand: deadline }],
+            },
+          ],
+        });
+      if (authority === "prohibition")
+        Object.assign(h.state.mandate as object, {
+          prohibitions: [
+            {
+              type: "prohibition",
+              action: `${AGENT}SendMessage`,
+              constraints: [{ leftOperand: "dateTime", operator: "gteq", rightOperand: deadline }],
+            },
+          ],
+        });
       let checkingCredentials = false;
       const expire = () => {
         h.state.at = new Date(
@@ -159,11 +196,23 @@ describe("temporal authority", () => {
     expect(h.options.tokens.send).toHaveBeenCalledTimes(change === "halt-expired" ? 1 : 0);
   });
 
-  it("Resume expiry after the dispatch recheck prevents calling the binding", async () => {
+  it.each([
+    "resume-expired",
+    "halt-active",
+    "revoke-active",
+  ])("%s after the dispatch recheck prevents calling the binding", async (change) => {
     const h = harness();
     const e = await h.enqueue();
     const deadline = new Date(Date.parse(NOW) + 1000).toISOString();
-    h.statements.push(control("Halt", 0), control("Resume", 1, { expires: deadline }));
+    if (change === "resume-expired")
+      h.statements.push(control("Halt", 0), control("Resume", 1, { expires: deadline }));
+    else
+      h.statements.push(
+        control(change === "halt-active" ? "Halt" : "RevokeMandate", 0, {
+          createdAt: deadline,
+          target: h.state.mandate?.id,
+        }),
+      );
     const exclusive = h.transmissions.exclusive;
     let scheduled = false;
     Object.assign(h.transmissions, {
@@ -191,6 +240,154 @@ describe("temporal authority", () => {
     expect(h.binding.send.transmit).not.toHaveBeenCalled();
     expect(h.options.tokens.send).not.toHaveBeenCalled();
   });
+});
+
+describe("final temporal transitions", () => {
+  it.each([
+    "with-approval-permission",
+    "with-approval-prohibition",
+    "duty",
+    "obligation",
+  ])("credential snapshots include temporal %s constraints", async (surface) => {
+    const h = harness();
+    const e = await h.enqueue();
+    h.confirm(e);
+    const boundary = new Date(Date.parse(NOW) + 1000).toISOString();
+    const constraint = { leftOperand: "dateTime", operator: "lt", rightOperand: boundary };
+    const permission = { type: "permission", action: `${AGENT}SendMessage` };
+    const duty = { action: "inform", constraints: [constraint] };
+    if (surface === "with-approval-permission") {
+      h.needsApproval();
+      Object.assign(h.state.mandate?.withApproval as object, {
+        permissions: [{ ...permission, constraints: [constraint] }],
+      });
+    }
+    if (surface === "with-approval-prohibition")
+      Object.assign(h.state.mandate?.withApproval as object, {
+        prohibitions: [
+          {
+            ...permission,
+            type: "prohibition",
+            constraints: [{ ...constraint, operator: "gteq" }],
+          },
+        ],
+      });
+    if (surface === "duty")
+      Object.assign(h.state.mandate?.autonomous as object, {
+        permissions: [{ ...permission, duties: [duty, { action: "inform" }] }],
+      });
+    if (surface === "obligation")
+      Object.assign(h.state.mandate?.autonomous as object, {
+        obligations: [duty, { action: "inform" }],
+      });
+    let credential = false;
+    const write = h.proposals.writeDisposition;
+    vi.spyOn(h.proposals, "writeDisposition").mockImplementation(async (id, result) => {
+      await write(id, result);
+      if (credential && result.status === "ready") h.state.at = boundary;
+    });
+    const provider = vi.fn();
+    vi.mocked(h.binding.send.transmit).mockImplementation(async (_wire, io) => {
+      credential = true;
+      await io.tokens.send(io.account);
+      provider();
+      return { outcome: "accepted", providerRef: "must-not-send" };
+    });
+    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "uncertain" });
+    expect(provider).not.toHaveBeenCalled();
+  });
+
+  it("past policy boundaries and unrelated constraints do not expire a fresh evaluation", async () => {
+    const h = harness();
+    const e = await h.enqueue();
+    Object.assign(h.state.mandate?.autonomous as object, {
+      permissions: [
+        {
+          type: "permission",
+          action: `${AGENT}SendMessage`,
+          constraints: [
+            { leftOperand: "purpose", operator: "eq", rightOperand: e.proposal.intent.purpose },
+            {
+              leftOperand: "dateTime",
+              operator: "gt",
+              rightOperand: "2026-10-31T11:00:00.000Z",
+            },
+          ],
+        },
+      ],
+    });
+    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status: "sent" });
+  });
+
+  for (const stage of ["binding", "credential"] as const) {
+    it.each([
+      ["lt", "permission", 1000, 0],
+      ["lteq", "permission", 0, 1],
+      ["eq", "permission", 0, 1],
+      ["neq", "permission", 1000, 0],
+      ["gt", "prohibition", 1000, 1],
+      ["gteq", "prohibition", 1000, 0],
+      ["isAnyOf", "permission", 0, 1],
+      ["isNoneOf", "permission", 1000, 0],
+      ["isAllOf", "permission", 0, 1],
+    ] as const)(`${stage} recheck expires across %s %s boundary`, async (operator, type, offset, after) => {
+      const h = harness();
+      const e = await h.enqueue();
+      const boundary = new Date(Date.parse(NOW) + offset).toISOString();
+      const rule = {
+        type,
+        action: `${AGENT}SendMessage`,
+        constraints: [
+          {
+            leftOperand: "dateTime",
+            operator,
+            rightOperand: operator.startsWith("is") ? [boundary] : boundary,
+          },
+        ],
+      };
+      Object.assign(h.state.mandate?.autonomous as object, {
+        [type === "permission" ? "permissions" : "prohibitions"]: [rule],
+      });
+      const exclusive = h.transmissions.exclusive;
+      let credential = false;
+      let scheduled = false;
+      Object.assign(h.transmissions, {
+        async exclusive<T>(work: () => Promise<T>): Promise<T> {
+          const result = await exclusive(work);
+          if (
+            !scheduled &&
+            (stage === "binding" || credential) &&
+            result &&
+            typeof result === "object" &&
+            "status" in result &&
+            result.status === "ready"
+          ) {
+            scheduled = true;
+            queueMicrotask(() =>
+              queueMicrotask(() => {
+                h.state.at = new Date(Date.parse(boundary) + after).toISOString();
+              }),
+            );
+          }
+          return result;
+        },
+      });
+      const provider = vi.fn();
+      vi.mocked(h.binding.send.transmit).mockImplementation(async (_wire, io) => {
+        credential = true;
+        await io.tokens.send(io.account);
+        provider();
+        return { outcome: "accepted", providerRef: "must-not-send" };
+      });
+      expect(await h.executor.transmit(e.proposal.id)).toMatchObject({
+        status: stage === "binding" ? "not-sent" : "uncertain",
+      });
+      expect(scheduled).toBe(true);
+      expect(provider).not.toHaveBeenCalled();
+      expect(h.binding.send.transmit).toHaveBeenCalledTimes(stage === "binding" ? 0 : 1);
+      expect(h.options.tokens.send).toHaveBeenCalledTimes(stage === "binding" ? 0 : 1);
+    });
+  }
 });
 
 describe("final credential authority", () => {
