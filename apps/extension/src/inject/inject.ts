@@ -101,6 +101,23 @@ type PendingFetch = Pending<Response> & {
   readonly init?: RequestInit;
 };
 
+/** Preserve the worker's final URL metadata through native body cloning. */
+function withResponseMetadata(response: Response, url: string, redirected: boolean): Response {
+  const clone = response.clone;
+  Object.defineProperties(response, {
+    url: { value: url },
+    redirected: { value: redirected },
+    clone: {
+      value(this: Response): Response {
+        return withResponseMetadata(clone.call(this), this.url, this.redirected);
+      },
+      writable: true,
+      configurable: true,
+    },
+  });
+  return response;
+}
+
 // Install exactly once, even if inject.js runs twice (Medium #2). The marker covers a re-run
 // after our own install; the `'solid' in window` check covers a prior install from a different
 // code path. A double-run is then an inert no-op, NOT a throw on the `configurable:false`
@@ -178,11 +195,7 @@ function installSolidInjection(): void {
           });
           // ResponseInit cannot carry these read-only properties. Preserve the worker's
           // final URL so apps resolve relative RDF references against the served resource.
-          Object.defineProperties(response, {
-            url: { value: data.url ?? '' },
-            redirected: { value: data.redirected === true },
-          });
-          pending.resolve(response);
+          pending.resolve(withResponseMetadata(response, data.url ?? '', data.redirected === true));
         }
         break;
       }

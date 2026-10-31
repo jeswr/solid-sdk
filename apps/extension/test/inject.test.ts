@@ -186,7 +186,7 @@ describe('inject — fetch response URL metadata', () => {
   it.each([
     false,
     true,
-  ])('exposes the worker URL and redirected=%s as read-only properties', async (redirected) => {
+  ])('preserves the worker URL and redirected=%s on the response and repeated clones', async (redirected) => {
     await importInject();
     posted.length = 0;
     const original = 'https://alice.pod.example/private/notes';
@@ -206,20 +206,29 @@ describe('inject — fetch response URL metadata', () => {
     });
 
     const response = await promise;
-    expect(response).toBeInstanceOf(Response);
-    expect(response.url).toBe(final);
-    expect(response.redirected).toBe(redirected);
-    expect(Reflect.set(response, 'url', 'https://other.example/')).toBe(false);
-    expect(Reflect.set(response, 'redirected', !redirected)).toBe(false);
-    expect(new URL('child.ttl', response.url).href).toBe(
-      redirected
-        ? 'https://alice.pod.example/private/notes/child.ttl'
-        : 'https://alice.pod.example/private/child.ttl',
-    );
-    expect(response.status).toBe(200);
-    expect(response.statusText).toBe('OK');
-    expect(response.headers.get('content-type')).toBe('text/turtle');
-    expect(await response.text()).toBe('<#it> <relative> <child.ttl> .');
+    const clone = response.clone();
+    const nextClone = clone.clone();
+    expect(clone).not.toBe(response);
+    expect(nextClone).not.toBe(clone);
+    for (const copy of [response, clone, nextClone]) {
+      expect(copy).toBeInstanceOf(Response);
+      expect(copy.url).toBe(final);
+      expect(copy.redirected).toBe(redirected);
+      expect(Reflect.set(copy, 'url', 'https://other.example/')).toBe(false);
+      expect(Reflect.set(copy, 'redirected', !redirected)).toBe(false);
+      expect(new URL('child.ttl', copy.url).href).toBe(
+        redirected
+          ? 'https://alice.pod.example/private/notes/child.ttl'
+          : 'https://alice.pod.example/private/child.ttl',
+      );
+      expect(copy.status).toBe(200);
+      expect(copy.statusText).toBe('OK');
+      expect(copy.headers.get('content-type')).toBe('text/turtle');
+      expect(copy.bodyUsed).toBe(false);
+      expect(await copy.text()).toBe('<#it> <relative> <child.ttl> .');
+      expect(copy.bodyUsed).toBe(true);
+      expect(() => copy.clone()).toThrow(TypeError);
+    }
     expect(nativeFetch).not.toHaveBeenCalled();
   });
 
