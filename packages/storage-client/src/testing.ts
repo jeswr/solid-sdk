@@ -46,9 +46,13 @@ function publicHeaders(headers: Headers): FixtureHeaders {
 }
 
 function requestOf(input: Parameters<AuthFetch>[0], init?: RequestInit): Request {
-  // Clone Request inputs so collecting the fixture never consumes the caller's body.
+  // Clone only inherited bodies; replacements must also work on consumed Request inputs.
   // A single effective Request also preserves init overrides and multipart boundaries.
-  return new Request(input instanceof Request ? input.clone() : input, {
+  const source =
+    input instanceof Request && (init?.body === undefined || init.body === null)
+      ? input.clone()
+      : input;
+  return new Request(source, {
     ...init,
     duplex: "half",
   } as RequestInit);
@@ -214,6 +218,19 @@ export async function loadFixtures(directory: string): Promise<HttpFixture[]> {
 /** An offline fetch with an explicit assertion that every expected exchange was consumed. */
 export type ReplayFetch = AuthFetch & { assertDone(): void };
 
+function withResponseMetadata(response: Response, recorded: HttpFixture["response"]): Response {
+  return Object.defineProperties(response, {
+    url: { value: recorded.url },
+    redirected: { value: recorded.redirected },
+    clone: {
+      value(this: Response): Response {
+        // Native cloning keeps stream teeing, headers and body-used checks intact.
+        return withResponseMetadata(Response.prototype.clone.call(this), recorded);
+      },
+    },
+  });
+}
+
 /**
  * Replay an ordered scenario without network access. Match URL, method, public headers and exact
  * body bytes; credentials are ignored. Mismatches/extra calls throw without echoing request data.
@@ -249,11 +266,7 @@ export function createReplayFetch(fixtures: readonly HttpFixture[]): ReplayFetch
           headers: entry.response.headers as [string, string][],
         },
       );
-      Object.defineProperties(response, {
-        url: { value: entry.response.url },
-        redirected: { value: entry.response.redirected },
-      });
-      return response;
+      return withResponseMetadata(response, entry.response);
     });
     queue = result.then(
       () => undefined,

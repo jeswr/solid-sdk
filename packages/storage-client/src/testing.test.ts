@@ -174,6 +174,70 @@ describe("fixture recording", () => {
     replay.assertDone();
   });
 
+  test.each([
+    "override",
+    "",
+  ])("replacement body %j overrides a consumed Request in recording and replay", async (body) => {
+    vi.stubEnv("RECORD", "1");
+    const dir = await directory();
+    const original = new Request(URL, {
+      method: "POST",
+      body: "original",
+      redirect: "manual",
+      credentials: "include",
+    });
+    await original.text();
+    const init = { method: "PATCH", body, headers: { "x-override": "yes" } };
+    // The native Request constructor accepts a replacement even after consumption.
+    expect(await new Request(original, init).text()).toBe(body);
+    const fetch = vi.fn<typeof globalThis.fetch>(async (input) => {
+      const req = input as Request;
+      expect(req.method).toBe("PATCH");
+      expect(req.redirect).toBe("manual");
+      expect(req.credentials).toBe("include");
+      expect(req.headers.get("x-override")).toBe("yes");
+      expect(await req.text()).toBe(body);
+      return new Response(null, { status: 204 });
+    });
+    await createRecordingFetch({ fetch, directory: dir })(original, init);
+    expect(fetch).toHaveBeenCalledOnce();
+    const fixtures = await loadFixtures(dir);
+    expect(fixtures[0]?.request.body).toBe(encode(body));
+    const replay = createReplayFetch(fixtures);
+    expect((await replay(original, init)).status).toBe(204);
+    replay.assertDone();
+  });
+
+  test.each([
+    {},
+    { body: undefined },
+    { body: null },
+  ])("rejects a consumed Request without a replacement body (%j)", async (init) => {
+    vi.stubEnv("RECORD", "1");
+    const dir = await directory();
+    const original = new Request(URL, { method: "POST", body: "original" });
+    await original.text();
+    expect(() => new Request(original, init)).toThrow(TypeError);
+    const fetch = vi.fn();
+    await expect(
+      createRecordingFetch({ fetch, directory: dir })(original, init),
+    ).rejects.toBeInstanceOf(TypeError);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(await readdir(dir)).toEqual([]);
+    const entry = fixture();
+    entry.request = {
+      ...entry.request,
+      method: "POST",
+      headers: [["content-type", "text/plain;charset=UTF-8"]],
+      body: encode("original"),
+    };
+    const replay = createReplayFetch([entry]);
+    await expect(replay(original, init)).rejects.toBeInstanceOf(TypeError);
+    expect(() => replay.assertDone()).toThrow("unused exchanges");
+    await replay(new Request(URL, { method: "POST", body: "original" }));
+    replay.assertDone();
+  });
+
   test("streams are forwarded intact and binary bytes round-trip", async () => {
     vi.stubEnv("RECORD", "1");
     const bytes = new Uint8Array([0, 128, 255, 1]);
@@ -314,6 +378,42 @@ test("interrupts stalled bodies during recording and replay", async () => {
 });
 
 describe("strict offline replay", () => {
+  test.each([
+    true,
+    false,
+  ])("preserves response metadata through subsequent clones (redirected=%s)", async (redirected) => {
+    const entry = fixture();
+    const bytes = new Uint8Array([0, 128, 255]);
+    entry.response = {
+      url: "https://pod.example/final/data",
+      status: 201,
+      statusText: "Created",
+      headers: [["link", '<meta>; rel="describedby"']],
+      body: encode(bytes),
+      redirected,
+    };
+    const replay = createReplayFetch([entry]);
+    const response = await replay(URL);
+    const clone = response.clone();
+    const nextClone = clone.clone();
+    expect(clone).not.toBe(response);
+    expect(nextClone).not.toBe(clone);
+    for (const copy of [response, clone, nextClone]) {
+      expect(copy).toBeInstanceOf(Response);
+      expect(copy.url).toBe(entry.response.url);
+      expect(copy.redirected).toBe(redirected);
+      expect(copy.status).toBe(201);
+      expect(copy.statusText).toBe("Created");
+      expect(copy.headers.get("link")).toBe('<meta>; rel="describedby"');
+      expect(new globalThis.URL("meta", copy.url).href).toBe("https://pod.example/final/meta");
+      expect(copy.bodyUsed).toBe(false);
+      expect(new Uint8Array(await copy.arrayBuffer())).toEqual(bytes);
+      expect(copy.bodyUsed).toBe(true);
+      expect(() => copy.clone()).toThrow(TypeError);
+    }
+    replay.assertDone();
+  });
+
   test.each([
     "url",
     "method",
