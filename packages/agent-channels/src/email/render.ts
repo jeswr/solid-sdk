@@ -1,5 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { assertJsonBounds, canonicalJson, digestBytes, validateMessage } from "@jeswr/agent-model";
+import {
+  assertJsonBounds,
+  canonicalJson,
+  DEFAULT_LIMITS,
+  digestBytes,
+  validateMessage,
+} from "@jeswr/agent-model";
 import type { CarriageProfile, ChannelBinding } from "../binding.js";
 import {
   assertEmailAddress,
@@ -69,6 +75,8 @@ export function emailRenderer(options: EmailRenderOptions) {
     const to = message.to && recipients.get(message.to.actor);
     if (!to) throw new ChannelParseError("no pinned email recipient");
     const { human, html, carrier } = renderBodies(message, compactJws, footer);
+    if (Buffer.byteLength(carrier) > DEFAULT_LIMITS.maxEnvelopeBytes)
+      throw new ChannelParseError("email carrier exceeds parser byte cap");
     const suffix = digestBytes(compactJws).slice(8, 40);
     const mixed = `agent-mixed-${suffix}`;
     const alt = `agent-alt-${suffix}`;

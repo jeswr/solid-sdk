@@ -46,7 +46,8 @@ export function assertFooter(footer: string): void {
     throw new ChannelParseError("invalid agent footer");
 }
 export function emailMessageIdFor(id: string): string {
-  return `<agent-${digestBytes(id).slice(8, 48)}@agent.invalid>`;
+  // Preserve the pilot identifier so reconciliation searches remain stable on migration.
+  return `<awp-${digestBytes(id).slice(8, 48)}@awp-pilot.invalid>`;
 }
 /** Decode for parity only. A decoded statement conveys no verified identity or authority. */
 export function decodeEmailProposal(compactJws: string): RenderableProposal {
@@ -88,7 +89,7 @@ function parityMatches(root: MimeNode, proposal: RenderableProposal, footer: str
   );
 }
 /** Parse observations and enforce carrier agreement. This never verifies a signature. */
-export function inspectEmail(raw: string | Uint8Array, config: EmailConfig) {
+function inspectEmailDetails(raw: string | Uint8Array, config: EmailConfig) {
   if (Buffer.byteLength(raw) > MAX_EMAIL_BYTES)
     throw new ChannelParseError("email exceeds local byte cap");
   assertFooter(config.footer);
@@ -147,6 +148,11 @@ export function inspectEmail(raw: string | Uint8Array, config: EmailConfig) {
     parity: match ? ("match" as const) : ("unverified" as const),
   };
 }
+/** Public observations never expose the decoded HTML MIME tree. */
+export function inspectEmail(raw: string | Uint8Array, config: EmailConfig) {
+  const { message, proposal, parity } = inspectEmailDetails(raw, config);
+  return { message, proposal, parity };
+}
 /** Positive evidence permits provider-added headers, never changed content or recipients. */
 export function verifyProviderCopy(
   raw: Uint8Array,
@@ -154,8 +160,14 @@ export function verifyProviderCopy(
 ): boolean {
   try {
     const { sent, config } = expected;
-    const parsed = inspectEmail(raw, { ...config, ownAccounts: new Set([config.recipient]) });
-    const original = inspectEmail(sent, { ...config, ownAccounts: new Set([config.recipient]) });
+    const parsed = inspectEmailDetails(raw, {
+      ...config,
+      ownAccounts: new Set([config.recipient]),
+    });
+    const original = inspectEmailDetails(sent, {
+      ...config,
+      ownAccounts: new Set([config.recipient]),
+    });
     if (
       parsed.parity !== "match" ||
       original.parity !== "match" ||

@@ -4,6 +4,7 @@ import {
   DEFAULT_MIME_LIMITS,
   headerValues,
   leaves,
+  type MimeNode,
   parseMime,
   shapeOf,
 } from "../src/email/mime.js";
@@ -28,8 +29,8 @@ it("parses bounded folded headers, charset and content-type parameters, all supp
     );
     const parts = leaves(result.root);
     expect(parts.map((p) => p.text)).toEqual(["hello", "hello world!", "{}", "hello", "world"]);
-    expect(headerValues(parts[0]!, "x-test")).toEqual(["first continuation"]);
-    expect(parts[0]!.params.foo).toBe("bar");
+    expect(headerValues(parts[0] as MimeNode, "x-test")).toEqual(["first continuation"]);
+    expect(parts[0]?.params.foo).toBe("bar");
   }
   expect(parseMime("X-Header: value\n\nbody\r\n\r\n")).toMatchObject({ ok: true });
   expect(parseMime("X-Header: value")).toMatchObject({ ok: true, root: { text: "" } });

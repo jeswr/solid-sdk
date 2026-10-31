@@ -1,7 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { type AnyMessage, canonicalJson, digestBytes, digestOf } from "@jeswr/agent-model";
-import { describe, expect, it, vi } from "vitest";
-import { parseEmail } from "../../agentic-legacy-bridge/dist/email/index.js";
+import { expect, it, vi } from "vitest";
+import { parseEmail } from "../../agentic-legacy-bridge/src/email/parse.js";
 import { envelope } from "../src/direct/shared.js";
 import { renderBodies, renderHuman, summaryLines } from "../src/email/bodies.js";
 import { createEmailRenderer } from "../src/email-mime/send.js";
@@ -23,23 +23,20 @@ const config = { parseEmail, recipient, ownAccounts: new Set([recipient]), foote
 const renderOptions = {
   from,
   footer: AGENT_FOOTER,
-  recipients: new Map([[message.to!.actor, recipient]]),
+  recipients: new Map([[message.to?.actor as string, recipient]]),
   verify: verifyMessage,
   now: () => at,
 };
 const wireFor = async (value: unknown = message) =>
   createEmailRenderer(renderOptions).render(signed(value), EMAIL_MIME);
-const rewrite = (raw: string, oldText: string, text: string) =>
-  raw.replace(
-    Buffer.from(oldText)
-      .toString("base64")
-      .match(/.{1,76}/g)!
-      .join("\r\n"),
+const base64 = (text: string) =>
+  (
     Buffer.from(text)
       .toString("base64")
-      .match(/.{1,76}/g)!
-      .join("\r\n"),
-  );
+      .match(/.{1,76}/g) ?? []
+  ).join("\r\n");
+const rewrite = (raw: string, oldText: string, text: string) =>
+  raw.replace(base64(oldText), base64(text));
 
 it("renders exact deterministic MIME with three copies, approved footer and legacy BridgeMessage observations", async () => {
   const renderer = createEmailRenderer(renderOptions);
@@ -60,11 +57,13 @@ it("renders exact deterministic MIME with three copies, approved footer and lega
       warnings: ["signature-unverified"],
     },
   });
+  expect(parsed).not.toHaveProperty("root");
+  expect(parsed.message.textBody).not.toContain("<html>");
   expect(parsed.message.textBody).toContain(AGENT_FOOTER);
   expect(parsed.message.jsonLdBlocks).toHaveLength(2);
   expect(parsed.message.signals["x-agentic-reply"]).toBe("1");
   expect(await renderer.validate(wire, proposal)).toEqual({ ok: true });
-  expect(emailMessageIdFor(message.id)).toMatch(/^<agent-[a-f0-9]{40}@agent.invalid>$/);
+  expect(emailMessageIdFor(message.id)).toMatch(/^<awp-[a-f0-9]{40}@awp-pilot\.invalid>$/);
   expect(inspectEmail(Buffer.from(wire.bytes), config).parity).toBe("match");
 });
 
@@ -375,4 +374,15 @@ it("cannot extend an expired signed message by editing the proposal during valid
   proposal.message = { ...message, expiresAt: "2027-01-01T00:00:00Z" };
   resolve();
   expect(await pending).toEqual({ ok: false, reason: "malformed" });
+});
+
+it("round-trips the largest carrier accepted by the legacy parser and refuses expansion past its cap", async () => {
+  const description = { first: "x".repeat(16384), second: "x".repeat(16384), third: "" };
+  const value = { ...message, kind: "description", body: { description } };
+  const initial = Buffer.byteLength(envelope(signed(value).compactJws));
+  description.third = "x".repeat(Math.floor(((65536 - initial) * 3) / 4));
+  const wire = await wireFor(value);
+  expect(inspectEmail(wire.bytes, config).parity).toBe("match");
+  description.third += "x".repeat(30);
+  await expect(wireFor(value)).rejects.toThrow("carrier exceeds parser byte cap");
 });
