@@ -5,6 +5,7 @@ import {
   createFactAssertion,
   NanopubStore,
   parseNanopublications,
+  pkgId,
   serializeNanopublications,
 } from "@jeswr/pkg-memory";
 import { createMemoryPodPort } from "@jeswr/pkg-memory/testing";
@@ -82,13 +83,15 @@ async function seed(
     about?: string;
     agent?: string;
     text?: string;
+    batchId?: string;
+    generatedAt?: string;
   } = {},
 ) {
   const store = new NanopubStore(pod);
   await store.writeDefaultPolicy();
   const value = await buildNanopublications(
     {
-      batch_id: crypto.randomUUID(),
+      batch_id: options.batchId ?? crypto.randomUUID(),
       worker: { agent_id: options.agent ?? CLIENT, agent_label: "fixture" },
       claims: [
         {
@@ -105,7 +108,7 @@ async function seed(
         },
       ],
     },
-    { owner: OWNER, generatedAt: "2026-10-29T10:00:00Z" },
+    { owner: OWNER, generatedAt: options.generatedAt ?? "2026-10-29T10:00:00Z" },
   );
   await store.put(value);
   return value.nanopubs[0];
@@ -315,6 +318,72 @@ describe("memory recall", () => {
       json(await run("memory_recall", { ...filter, categories: [`${PD}Preference`] })).facts,
     ).toEqual([]);
     expect(json(await run("memory_recall", { ...recall, limit: 1 })).facts).toHaveLength(1);
+  });
+
+  it.each([
+    {
+      precision: "whole and fractional seconds",
+      dates: [
+        "2026-10-29T10:00:00Z",
+        "2026-10-29T10:00:00.100000Z",
+        "2026-10-29T10:00:00.999999Z",
+        "2026-10-29T10:00:01Z",
+      ],
+    },
+    {
+      precision: "microseconds within a millisecond",
+      dates: [
+        "2026-10-29T10:00:00Z",
+        "2026-10-29T10:00:00.000001Z",
+        "2026-10-29T10:00:00.000002Z",
+        "2026-10-29T10:00:00.000999Z",
+      ],
+    },
+    {
+      precision: "timezone offsets and microseconds",
+      dates: [
+        "2026-10-29T11:00:00.000001+01:00",
+        "2026-10-29T05:00:00.000002-05:00",
+        "2026-10-29T10:00:00.100000Z",
+        "2026-10-30T00:00:00.100001+14:00",
+      ],
+    },
+  ])("sorts $precision chronologically before applying the limit", async ({ dates }) => {
+    const pod = podFixture();
+    const run = registry(pod);
+    // Increasing IDs oppose newest-first order, exposing lost submillisecond precision.
+    const batches = dates
+      .map((_, index) => `recall-${index}`)
+      .sort((a, b) => pkgId("np", a, "fact").localeCompare(pkgId("np", b, "fact")));
+    const saved = [];
+    for (const [index, generatedAt] of dates.entries())
+      saved.push(await seed(pod, { batchId: batches[index], generatedAt }));
+    const expected = saved.toReversed().map((np) => np.id);
+    expect(json(await run("memory_recall", recall)).facts.map((fact) => fact.id)).toEqual(expected);
+    expect(
+      json(await run("memory_recall", { ...recall, limit: 1 })).facts.map((fact) => fact.id),
+    ).toEqual(expected.slice(0, 1));
+  });
+
+  it.each([
+    ["2026-10-29T10:00:00Z", "2026-10-29T12:00:00.000000+02:00", "2026-10-29T05:00:00-05:00"],
+    [
+      "2026-10-29T10:00:00.123456Z",
+      "2026-10-29T12:00:00.123456+02:00",
+      "2026-10-29T05:00:00.123456-05:00",
+    ],
+  ])("breaks equal-instant ties by ID for %s", async (...dates) => {
+    const pod = podFixture();
+    const saved = [];
+    for (const generatedAt of dates) saved.push(await seed(pod, { generatedAt }));
+    const expected = saved.map((np) => np.id).sort((a, b) => a.localeCompare(b));
+    const run = registry(pod);
+    expect(json(await run("memory_recall", recall)).facts.map((fact) => fact.id)).toEqual(expected);
+    const list = pod.list;
+    pod.list = async (container) => (await list(container)).toReversed();
+    expect(
+      json(await run("memory_recall", { ...recall, limit: 1 })).facts.map((fact) => fact.id),
+    ).toEqual(expected.slice(0, 1));
   });
 
   it("evaluates policy per call and never discloses denied values", async () => {

@@ -222,6 +222,15 @@ function matchesQuery(graph: DatasetCore, text: string, query: string): boolean 
   );
 }
 
+/** Compare validated instants without losing the memory model's microseconds. */
+function compareDateTimes(left: string, right: string): number {
+  const milliseconds = Date.parse(left) - Date.parse(right);
+  if (milliseconds !== 0) return milliseconds;
+  const remainder = (value: string) =>
+    Number((/\.(\d+)/.exec(value)?.[1] ?? "").padEnd(6, "0").slice(3, 6));
+  return remainder(left) - remainder(right);
+}
+
 /** Memory tools share the registry's schema validation and independent write guard. */
 export function createMemoryTools(
   pod: PodPort,
@@ -370,7 +379,7 @@ export function createMemoryTools(
                   matchesQuery(assertion(value, np), textOf(value, np), query)),
             );
             selected.sort(
-              (a, b) => b.generatedAt.localeCompare(a.generatedAt) || a.id.localeCompare(b.id),
+              (a, b) => compareDateTimes(b.generatedAt, a.generatedAt) || a.id.localeCompare(b.id),
             );
             const facts = await Promise.all(
               selected.slice(0, limit).map(async (np) => ({
