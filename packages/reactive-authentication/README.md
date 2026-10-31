@@ -237,8 +237,9 @@ await manager.logout() // aborts in-flight upgrades and fences writes in every t
   durable record is authoritative and written before memory; a failed write leaves nothing usable.
 - Logout increments a generation kept in IndexedDB, aborts in-flight work locally and (via BroadcastChannel) in
   other tabs, and clears stores; credentials from an older generation are never used. Refresh tokens known
-  to the instance are revoked (RFC 7009) when the server supports it. Logout does not end the session at the
-  identity provider.
+  to the instance are revoked (RFC 7009) when the server supports it, after local cleanup releases the fence
+  lock. Each revocation has a five-second deadline and aborts on timeout; failures reject logout after local
+  state is cleared. Logout does not end the session at the identity provider.
 - Namespaces isolate applications, client configurations and accounts; they are a convention, not a security
   boundary against same-origin scripts. Non-extractable keys prevent export, not use, by malicious same-origin
   JavaScript ([OAuth 2.0 for Browser-Based Applications](https://www.rfc-editor.org/rfc/rfc10017.html)).

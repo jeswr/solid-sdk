@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 import type { KeyValueStore } from "@key-value-kit/core";
 import { createMemoryStore } from "@key-value-kit/storage/memory";
 import * as oauth from "oauth4webapi";
@@ -125,6 +126,9 @@ export interface OidcSessionOptions {
 
 /** Treat tokens as expired this long before their stated expiry. */
 const expirySkewMs = 30_000;
+
+/** Bound each best-effort revocation attempt independently of transport cancellation support. */
+const revocationTimeoutMs = 5_000;
 
 /**
  * OpenID Connect session management shared by {@link DPoPTokenProvider} (Solid-OIDC) and
@@ -277,7 +281,8 @@ export class OidcSession {
 
   /**
    * Logout: supersedes the fence (aborting in-flight work, so pending flows cannot commit afterwards),
-   * revokes refresh tokens known to this instance when the server supports RFC 7009, and clears the stores.
+   * snapshots known refresh tokens and clears the stores under the lock, then revokes outside it when
+   * the server supports RFC 7009. Each revocation has a five-second deadline and aborts on timeout.
    *
    * Stores with `clear()` are emptied completely; stores without it only lose the keys this instance
    * wrote. Records that remain are unusable anyway because they carry an older fence generation, but
@@ -285,18 +290,19 @@ export class OidcSession {
    */
   async forget(): Promise<void> {
     const failures: unknown[] = [];
+    let records: RefreshSessionRecord[] = [];
     await this.#fence.supersede(async () => {
-      if (this.#options.revokeOnForget !== false) {
-        for (const record of await this.#records()) {
-          await this.#revoke(record).catch((e) => failures.push(e));
-        }
-      }
+      if (this.#options.revokeOnForget !== false) records = await this.#records();
 
       await clearStore(this.#cache, this.#keys);
       if (this.#options.sessionStore !== undefined)
         await clearStore(this.#options.sessionStore, this.#keys);
       this.#keys.clear();
     });
+
+    for (const record of records) {
+      await this.#revoke(record).catch((e) => failures.push(e));
+    }
 
     if (failures.length > 0)
       throw new AggregateError(failures, "Local session cleared, but token revocation failed");
@@ -491,17 +497,33 @@ export class OidcSession {
   async #revoke(record: RefreshSessionRecord): Promise<void> {
     const as = record.authorizationServer;
     if (as.revocation_endpoint === undefined) return;
-    const response = await oauth.revocationRequest(
-      as,
-      record.client,
-      clientAuthFor(as.issuer, record.client, this.#options.serverQuirks ?? true),
-      record.refreshToken,
-      {
-        ...oauthOptions(this.#options.http),
-        additionalParameters: { token_type_hint: "refresh_token" },
-      },
-    );
-    await oauth.processRevocationResponse(response);
+    const controller = new AbortController();
+    const { promise: timeout, reject } = Promise.withResolvers<never>();
+    const timer = setTimeout(() => {
+      const error = new DOMException("Token revocation timed out", "TimeoutError");
+      controller.abort(error);
+      reject(error);
+    }, revocationTimeoutMs);
+    try {
+      // Race the whole operation: injected transports and stalled response bodies may ignore abort.
+      await Promise.race([
+        oauth
+          .revocationRequest(
+            as,
+            record.client,
+            clientAuthFor(as.issuer, record.client, this.#options.serverQuirks ?? true),
+            record.refreshToken,
+            {
+              ...oauthOptions(this.#options.http, controller.signal),
+              additionalParameters: { token_type_hint: "refresh_token" },
+            },
+          )
+          .then(oauth.processRevocationResponse),
+        timeout,
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   #scopes(as: oauth.AuthorizationServer): string[] {
