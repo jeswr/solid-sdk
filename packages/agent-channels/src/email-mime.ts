@@ -91,20 +91,51 @@ function parityMatches(root: MimeNode, proposal: RenderableProposal, footer: str
     )
   );
 }
-/** Parse observations and enforce carrier agreement. This never verifies a signature. */
-function inspectEmailDetails(raw: string | Uint8Array, config: EmailConfig) {
-  if (Buffer.byteLength(raw) > MAX_EMAIL_BYTES)
-    throw new ChannelParseError("email exceeds local byte cap");
-  assertFooter(config.footer);
-  let email: EmailMessage;
-  try {
-    email = config.parseEmail(raw);
-  } catch {
-    throw new ChannelParseError("email parser refused input");
+function scriptTagEnd(text: string, start: number): number {
+  let quote: string | undefined;
+  for (let i = start; i < text.length; i++) {
+    const c = text[i];
+    if (quote !== undefined) {
+      if (c === quote) quote = undefined;
+    } else if (c === '"' || c === "'") quote = c;
+    else if (c === ">") return i;
   }
-  const message = toBridgeMessage(email);
-  const copies = new Set<string>();
-  for (const block of email.jsonLdBlocks ?? []) {
+  return -1;
+}
+/** Inspect every carrier in the bounded tree, without the legacy parser's extraction caps. */
+function mimeCarriers(root: MimeNode): string[] {
+  const blocks: string[] = [];
+  for (const part of leaves(root)) {
+    const text = part.text as string;
+    if (part.type === "application/ld+json") blocks.push(text);
+    if (part.type !== "text/html") continue;
+    // ASCII folding preserves indices even when body text contains expanding Unicode case folds.
+    const lower = text.replace(/[A-Z]/g, (c) => c.toLowerCase());
+    let cursor = 0;
+    while (cursor < text.length) {
+      const start = lower.indexOf("<script", cursor);
+      if (start < 0) break;
+      const end = scriptTagEnd(lower, start + 7);
+      if (end < 0) throw new ChannelParseError("incomplete structured-copy extraction");
+      cursor = end + 1;
+      if (!lower.slice(start + 7, end).includes("application/ld+json")) continue;
+      const close = lower.indexOf("</script", cursor);
+      if (close < 0) throw new ChannelParseError("incomplete structured-copy extraction");
+      blocks.push(text.slice(cursor, close));
+      const closeEnd = lower.indexOf(">", close + 8);
+      if (closeEnd < 0 || !/^[\t\n\f\r ]*$/.test(lower.slice(close + 8, closeEnd)))
+        throw new ChannelParseError("incomplete structured-copy extraction");
+      cursor = closeEnd + 1;
+    }
+  }
+  return blocks;
+}
+function collectStructuredCopies(
+  blocks: readonly string[],
+  copies: Set<string>,
+  requireComplete = false,
+): void {
+  for (const block of blocks) {
     let value: unknown;
     try {
       value = parseBoundedJson(block, {
@@ -112,7 +143,8 @@ function inspectEmailDetails(raw: string | Uint8Array, config: EmailConfig) {
         maxStringLength: DEFAULT_LIMITS.maxEnvelopeBytes,
       });
     } catch {
-      if (block.includes("SignedMessage")) throw new ChannelParseError("malformed structured copy");
+      if (requireComplete || block.includes("SignedMessage"))
+        throw new ChannelParseError("malformed structured copy");
       continue;
     }
     if (
@@ -127,12 +159,29 @@ function inspectEmailDetails(raw: string | Uint8Array, config: EmailConfig) {
       throw new ChannelParseError("invalid structured copy");
     copies.add(jws);
   }
+}
+/** Parse observations and enforce carrier agreement. This never verifies a signature. */
+function inspectEmailDetails(raw: string | Uint8Array, config: EmailConfig) {
+  if (Buffer.byteLength(raw) > MAX_EMAIL_BYTES)
+    throw new ChannelParseError("email exceeds local byte cap");
+  assertFooter(config.footer);
+  let email: EmailMessage;
+  try {
+    email = config.parseEmail(raw);
+  } catch {
+    throw new ChannelParseError("email parser refused input");
+  }
+  const message = toBridgeMessage(email);
+  const copies = new Set<string>();
+  collectStructuredCopies(email.jsonLdBlocks ?? [], copies);
   if (copies.size === 0)
     return { message, root: undefined, proposal: undefined, parity: "none" as const };
+  const mime = parseMime(raw);
+  if (!mime.ok) throw new ChannelParseError("incomplete structured-copy extraction");
+  collectStructuredCopies(mimeCarriers(mime.root), copies, true);
   if (copies.size !== 1) throw new ChannelParseError("conflicting structured copies");
   const proposal = decodeEmailProposal([...copies][0] as string);
-  const mime = parseMime(raw);
-  const match = mime.ok && parityMatches(mime.root, proposal, config.footer);
+  const match = parityMatches(mime.root, proposal, config.footer);
   const strict = new Set([...config.ownAccounts].map((a) => a.toLowerCase())).has(
     config.recipient.toLowerCase(),
   );
@@ -147,7 +196,7 @@ function inspectEmailDetails(raw: string | Uint8Array, config: EmailConfig) {
       ],
     },
     proposal,
-    root: mime.ok ? mime.root : undefined,
+    root: mime.root,
     parity: match ? ("match" as const) : ("unverified" as const),
   };
 }

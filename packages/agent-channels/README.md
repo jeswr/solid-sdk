@@ -68,6 +68,9 @@ receiving account selects STRICT parity when it is in `ownAccounts`, otherwise
 LENIENT parity. An unauthenticated `To` header cannot select a weaker mode.
 Plain human email remains an observation. Conflicting carriers always fail closed;
 parsing and parity never confer verified identity or authority.
+Before returning a proposal, inspection checks every JSON-LD part and HTML script
+carrier in the bounded MIME tree, including copies omitted by the legacy parser's
+caps. Incomplete extraction or unparseable JSON-LD refuses the proposal in both modes.
 
 `./email-mime/send` exports `createEmailRenderer({ from, recipients, footer,
 verify, now? })`. `recipients` pins actor identifiers to single mailboxes; no

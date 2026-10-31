@@ -215,7 +215,6 @@ it("rejects changed visible parts under STRICT and preserves unverified human ma
     rewrite(wire.bytes, html, `${html}<p>pay me</p>`),
     wire.bytes.replace("Content-Type: text/plain", "X-Untrusted: yes\r\nContent-Type: text/plain"),
     wire.bytes.replace("multipart/alternative", "multipart/mixed"),
-    wire.bytes.replace(/--agent-mixed-[a-f0-9]+--\r\n$/, ""),
   ]) {
     expect(() => inspectEmail(altered, config)).toThrow("human-parity-mismatch");
     expect(inspectEmail(altered, { ...config, ownAccounts: new Set() })).toMatchObject({
@@ -295,6 +294,125 @@ it("fails closed on conflicting/malformed carriers and leaves unrelated JSON-LD 
       },
     }),
   ).toThrow();
+});
+
+it.each([true, false])("checks carriers past the legacy block cap (STRICT=%s)", async (strict) => {
+  const proposal = signed();
+  const copy = envelope(proposal.compactJws);
+  const other = envelope(signed({ ...message, id: "urn:other" }).compactJws);
+  const script = (block: string) => `<script type="application/ld+json">${block}</script>`;
+  const options = { ...config, ownAccounts: strict ? config.ownAccounts : new Set<string>() };
+  for (const format of ["html", "mime"]) {
+    const rawFor = (last: string) => {
+      const blocks = [...Array<string>(8).fill(copy), last];
+      if (format === "html")
+        return `Content-Type: text/html; charset=utf-8\r\n\r\n${blocks.map(script).join("")}`;
+      return `Content-Type: multipart/mixed; boundary=copies\r\n\r\n${blocks
+        .map((block) => `--copies\r\nContent-Type: application/ld+json\r\n\r\n${block}\r\n`)
+        .join("")}--copies--\r\n`;
+    };
+    for (const last of [other, '{"@type":"agent:SignedMessage",']) {
+      const raw = rawFor(last);
+      expect(parseEmail(raw).jsonLdBlocks).toEqual(Array(8).fill(copy));
+      expect(() => inspectEmail(raw, options)).toThrow(
+        last === other ? "conflicting structured copies" : "malformed structured copy",
+      );
+    }
+    if (strict) expect(() => inspectEmail(rawFor(copy), options)).toThrow("human-parity-mismatch");
+    else
+      expect(inspectEmail(rawFor(copy), options)).toMatchObject({ proposal, parity: "unverified" });
+  }
+});
+
+it.each([
+  true,
+  false,
+])("checks carriers in HTML siblings the legacy parser omits (STRICT=%s)", async (strict) => {
+  const copy = envelope(signed().compactJws);
+  const other = envelope(signed({ ...message, id: "urn:other" }).compactJws);
+  const raw = [
+    'Content-Type: multipart/mixed; boundary="copies"',
+    "",
+    "--copies",
+    "Content-Type: application/ld+json",
+    "",
+    copy,
+    "--copies",
+    "Content-Type: text/html",
+    "",
+    "<p>First HTML body</p>",
+    "--copies",
+    "Content-Type: text/html; charset=utf-8",
+    "",
+    `İ<SCRIPT TYPE="application/ld+json">${other}</SCRIPT>`,
+    "--copies--",
+    "",
+  ].join("\r\n");
+  expect(parseEmail(raw).jsonLdBlocks).toEqual([copy]);
+  expect(() =>
+    inspectEmail(raw, { ...config, ownAccounts: strict ? config.ownAccounts : new Set() }),
+  ).toThrow("conflicting structured copies");
+});
+
+it("checks oversized carriers that the legacy parser drops", async () => {
+  const wire = await wireFor();
+  const { html, carrier } = renderBodies(message, signed().compactJws, config.footer);
+  const other = envelope(signed({ ...message, id: "urn:other" }).compactJws);
+  // Include an escaped type name: an unparseable block cannot be classified by substring.
+  const oversized = `${" ".repeat(65536)}${other.replace("SignedMessage", "Signed\\u004dessage")}`;
+  for (const raw of [
+    rewrite(wire.bytes, html, `${html}<script type="application/ld+json">${oversized}</script>`),
+    rewrite(wire.bytes, carrier, oversized),
+  ]) {
+    expect(parseEmail(raw).jsonLdBlocks).toContain(carrier);
+    expect(parseEmail(raw).jsonLdBlocks).not.toContain(oversized);
+    expect(Buffer.byteLength(raw)).toBeLessThan(MAX_EMAIL_BYTES);
+    expect(() => inspectEmail(raw, { ...config, ownAccounts: new Set() })).toThrow(
+      "malformed structured copy",
+    );
+  }
+});
+
+it("refuses proposals when MIME or HTML carrier extraction cannot complete", async () => {
+  const wire = await wireFor();
+  const { html } = renderBodies(message, signed().compactJws, config.footer);
+  for (const raw of [
+    wire.bytes.replace(/--agent-mixed-[a-f0-9]+--\r\n$/, ""),
+    wire.bytes.replace("charset=utf-8", "charset=iso-8859-1"),
+    rewrite(wire.bytes, html, `${html}<script type="application/ld+json"`),
+    rewrite(wire.bytes, html, `${html}<script type="application/ld+json">{`),
+    rewrite(wire.bytes, html, `${html}<script type="application/ld+json">{}</script`),
+    rewrite(wire.bytes, html, `${html}<script type="application/ld+json">{}</scripture>`),
+  ])
+    for (const ownAccounts of [config.ownAccounts, new Set<string>()])
+      expect(() => inspectEmail(raw, { ...config, ownAccounts })).toThrow(
+        "incomplete structured-copy extraction",
+      );
+});
+
+it("scans all HTML script attributes while leaving unrelated scripts and JSON-LD untrusted", async () => {
+  const wire = await wireFor();
+  const { html } = renderBodies(message, signed().compactJws, config.footer);
+  const other = envelope(signed({ ...message, id: "urn:other" }).compactJws);
+  for (const attrs of [
+    `${" ".repeat(1024)}type="application/ld+json"`,
+    `data-test='>' type="application/ld+json"`,
+  ]) {
+    const changed = rewrite(wire.bytes, html, `${html}<script ${attrs}>${other}</script>`);
+    expect(parseEmail(changed).jsonLdBlocks).toHaveLength(2);
+    expect(() => inspectEmail(changed, { ...config, ownAccounts: new Set() })).toThrow(
+      "conflicting structured copies",
+    );
+  }
+  const raw = rewrite(
+    wire.bytes,
+    html,
+    `${html}<script>untrusted</script><script type="application/ld+json">{}</script>`,
+  );
+  expect(inspectEmail(raw, { ...config, ownAccounts: new Set() })).toMatchObject({
+    proposal: signed(),
+    parity: "unverified",
+  });
 });
 
 it("requires the same signed payload, recipient, every header, bytes and digest at validation", async () => {
