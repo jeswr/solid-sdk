@@ -1,0 +1,95 @@
+<!doctype html>
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<html lang="en">
+<meta charset="utf-8">
+<title>Reactive authentication: popup lifecycle</title>
+<script src="/test/browser/.bundle/page.js"></script>
+<authorization-code-flow></authorization-code-flow>
+<pre id="result">Running…</pre>
+<script type="module">
+const q = new URLSearchParams(location.search)
+const rs = q.get("rs")
+const element = document.querySelector("authorization-code-flow")
+element.closedPollMs = 50
+const callback = new URL("/callback.html", location.href).href
+const authorize = (target, extra = "") => new URL(`${target}?redirect_uri=${encodeURIComponent(callback)}${extra}`)
+const settle = promise => promise.then(v => ({ok: v.value}), e => ({error: e.name}))
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+const result = {}
+try {
+    // 1. A popup on another origin posts a forged callback; the page itself posts one too. Both are ignored.
+    const forged = new AbortController()
+    const forgedCode = settle(element.getCode(authorize(`${rs}/popup-evil`), forged.signal))
+    await sleep(800)
+    window.postMessage(`${callback}?code=from-page`, "*")
+    await sleep(200)
+    // 2. While the first flow holds the lock, a queued flow can be aborted.
+    const queued = new AbortController()
+    const queuedCode = settle(element.getCode(authorize(callback, "&code=queued"), queued.signal))
+    await sleep(100)
+    queued.abort()
+    result.queued = await queuedCode
+    forged.abort()
+    result.forged = await forgedCode
+    // 3. The user closes the popup: the flow settles as cancelled.
+    const closing = settle(element.getCode(authorize(`${rs}/popup-evil`), new AbortController().signal))
+    await sleep(500)
+    open("", "oidcAuthentication")?.close()
+    result.closed = await closing
+    // 4. A genuine callback on the redirect_uri origin, from the popup, resolves.
+    const genuine = await element.getCode(authorize(callback, "&code=good"), new AbortController().signal)
+    result.genuine = new URL(genuine.value).searchParams.get("code")
+    genuine[Symbol.dispose]()
+    // 5. Queued successes must use separate popups; disposing the first result cannot close the next.
+    result.disposals = []
+    for (const disposal of ["immediate", "delayed"]) {
+        const nativeOpen = window.open.bind(window)
+        const opened = Promise.withResolvers()
+        const nextOpened = Promise.withResolvers()
+        let firstPopup, nextPopup, closedBeforeNextOpen
+        window.open = (...args) => {
+            if (firstPopup) closedBeforeNextOpen = firstPopup.closed
+            const popup = nativeOpen(...args)
+            if (!firstPopup) { firstPopup = popup; opened.resolve() }
+            else { nextPopup = popup; nextOpened.resolve() }
+            return popup
+        }
+        const controller = new AbortController()
+        const firstCallback = `${callback}?code=first`
+        const nextCallback = `${callback}?code=second`
+        try {
+            const first = element.getCode(authorize("about:blank"), controller.signal).then(value => {
+                if (disposal === "immediate") value[Symbol.dispose]()
+                return value
+            })
+            const next = element.getCode(authorize("about:blank"), controller.signal).then(
+                value => ({value}), error => ({error: error.name}),
+            )
+            await opened.promise
+            firstPopup.eval(`opener.postMessage(${JSON.stringify(firstCallback)}, ${JSON.stringify(location.origin)})`)
+            await nextOpened.promise
+            const firstResult = await first
+            firstResult[Symbol.dispose]()
+            const nextStayedOpen = !nextPopup.closed
+            if (nextStayedOpen) {
+                nextPopup.eval(`opener.postMessage(${JSON.stringify(nextCallback)}, ${JSON.stringify(location.origin)})`)
+            } else controller.abort()
+            const nextResult = await next
+            result.disposals.push({
+                disposal, closedBeforeNextOpen, distinctPopups: firstPopup !== nextPopup, nextStayedOpen,
+                first: firstResult.value === firstCallback, second: nextResult.value?.value === nextCallback,
+                error: nextResult.error,
+            })
+            nextResult.value?.[Symbol.dispose]()
+        } finally {
+            controller.abort()
+            window.open = nativeOpen
+        }
+    }
+} catch (e) {
+    result.error = String(e.stack ?? e)
+}
+window.__result = result
+document.querySelector("#result").textContent = JSON.stringify(result)
+</script>
+</html>
