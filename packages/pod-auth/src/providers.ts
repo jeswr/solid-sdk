@@ -77,6 +77,7 @@ export function createAgentProviders(
       resolved ??= (async () => {
         const response = await http.fetch!(cid.documentUrl, {
           headers: { accept: "application/cid, application/ld+json" },
+          credentials: "omit",
           redirect: "error",
           signal: resolutionSignal,
         });

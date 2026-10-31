@@ -150,6 +150,27 @@ test("Node CID factory resolves an existing identity and cached-token rejection 
 });
 
 test.each([
+  "node",
+  "core",
+] as const)("%s CID document resolution omits ambient credentials", async (mode) => {
+  const f = await cidFixture();
+  const requests: Request[] = [];
+  vi.stubGlobal("fetch", (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    if (request.url === documentUrl) requests.push(request);
+    return f.transport(request);
+  });
+  const auth =
+    mode === "node" ? await forCid({ ...f.cid, boundary: [f.as.root] }) : createPodAuth(f.options);
+  await auth.login();
+  expect(requests).toHaveLength(1);
+  expect(requests[0]!.credentials).toBe("omit");
+  expect(requests[0]!.redirect).toBe("error");
+  expect(requests[0]!.headers.has("authorization")).toBe(false);
+  expect(await auth.identity()).toMatchObject({ subject: documentUrl });
+});
+
+test.each([
   ["node", "resource_metadata"],
   ["node", "legacy"],
   ["core", "resource_metadata"],
