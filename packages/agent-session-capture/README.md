@@ -46,18 +46,23 @@ checkout, configure Claude Code's `SessionEnd` and `PreCompact` command hooks:
     "SessionEnd": [{
       "hooks": [{
         "type": "command",
+        "timeout": 15,
         "command": "/absolute/path/to/node /absolute/path/to/solid-sdk/packages/agent-session-capture/dist/cli.js claude"
       }]
     }],
     "PreCompact": [{
       "hooks": [{
         "type": "command",
+        "timeout": 15,
         "command": "/absolute/path/to/node /absolute/path/to/solid-sdk/packages/agent-session-capture/dist/cli.js claude"
       }]
     }]
   }
 }
 ```
+
+The 15-second hook timeouts leave room for process startup around capture's
+10-second budget.
 
 `codex` reads `~/.codex/sessions/**/rollout-*.jsonl`. `--since` keeps messages
 strictly newer than a timestamp with an explicit timezone. Without `--since`, all
