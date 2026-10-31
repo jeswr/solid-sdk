@@ -155,13 +155,7 @@ const solidDriver = defineDriver<SolidDriverOptions, undefined>((options) => {
   ) =>
     options.storage
       ? Promise.resolve(options.storage)
-      : storageFromFetch(
-          base,
-          fetchImpl,
-          options.headers,
-          tx.etag ? { ...tx.headers, "if-match": tx.etag } : tx.headers,
-          observe,
-        );
+      : storageFromFetch(base, fetchImpl, options.headers, tx.headers, observe);
 
   const run = async <T>(method: string, url: string, operation: () => Promise<T>): Promise<T> => {
     try {
