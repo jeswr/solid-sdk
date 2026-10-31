@@ -173,6 +173,52 @@ describe("step 7: durable idempotency and pilot recovery", () => {
     });
     expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ reason: "attempt-limit" });
     expect(h.records.get(e.proposal.id)?.status).toBe("not-sent");
+    expect([...h.receipts.values()][0]?.body).toMatchObject({
+      outcome: "not-executed",
+      final: true,
+    });
+    expect(h.binding.send.transmit).not.toHaveBeenCalled();
+  });
+  it.each([
+    "accepted",
+    "rejected",
+    "unknown",
+  ])("final absence emits only the retried proposal's %s receipt", async (outcome) => {
+    const h = harness();
+    const e = await h.enqueue();
+    h.prior(e);
+    Object.assign(h.binding.send, {
+      finalAbsence: true,
+      lookup: async () => ({ outcome: "absent" as const }),
+    });
+    const emit = vi.spyOn(h.proposals, "emitReceipt");
+    vi.mocked(h.binding.send.transmit).mockImplementation(async () => {
+      if (outcome === "unknown") throw new Error("offline");
+      return outcome === "accepted"
+        ? { outcome: "accepted", providerRef: "retry:1" }
+        : { outcome: "rejected", detail: "not accepted" };
+    });
+    const status =
+      outcome === "accepted" ? "sent" : outcome === "rejected" ? "not-sent" : "uncertain";
+    expect(await h.executor.transmit(e.proposal.id)).toMatchObject({ status });
+    expect(emit.mock.invocationCallOrder[0]).toBeGreaterThan(
+      vi.mocked(h.binding.send.transmit).mock.invocationCallOrder[0] as number,
+    );
+    expect(h.ledger).toContainEqual(expect.objectContaining({ status: "not-sent", attempts: 1 }));
+    expect(emit).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        body: expect.objectContaining({
+          outcome:
+            outcome === "accepted"
+              ? "completed"
+              : outcome === "rejected"
+                ? "not-executed"
+                : "uncertain",
+          final: outcome !== "unknown",
+        }),
+      }),
+    );
+    expect(h.records.get(e.proposal.id)).toMatchObject({ status, attempts: 2 });
   });
   it.each(["gmail", "direct"])("%s cannot opt into idempotentResend", async (id) => {
     const h = harness(id);

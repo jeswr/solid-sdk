@@ -132,7 +132,7 @@ export function createExecutor(options: ExecutorOptions) {
     return next;
   }
 
-  async function finish(record: TransmissionRecord): Promise<Disposition> {
+  async function recordTransmission(record: TransmissionRecord): Promise<TransmissionRecord> {
     record = await persist(record);
     await o.audit.append({
       type: "transmission",
@@ -144,6 +144,11 @@ export function createExecutor(options: ExecutorOptions) {
       underMandate: record.underMandate,
       ...(record.underApproval ? { underApproval: record.underApproval } : {}),
     });
+    return record;
+  }
+
+  async function finish(record: TransmissionRecord): Promise<Disposition> {
+    record = await recordTransmission(record);
     const result = {
       status: record.status as "sent" | "not-sent" | "uncertain",
       reason: record.status,
@@ -354,8 +359,14 @@ export function createExecutor(options: ExecutorOptions) {
           updatedAt: o.clock.now().toISOString(),
         });
       if (outcome === "absent" && binding.send.finalAbsence === true) {
-        // Persist authoritative absence even when the attempt bound prevents a new request.
-        await finish({ ...previous, status: "not-sent", updatedAt: o.clock.now().toISOString() });
+        const absent = {
+          ...previous,
+          status: "not-sent" as const,
+          updatedAt: o.clock.now().toISOString(),
+        };
+        // Absence settles the old attempt, not the proposal while another attempt may follow.
+        if (previous.attempts >= MAX_TRANSMISSION_ATTEMPTS) await finish(absent);
+        else await recordTransmission(absent);
         unresolved = false;
       } else if (!(binding.id === "a2a" && binding.send.idempotentResend === true))
         return finish({
