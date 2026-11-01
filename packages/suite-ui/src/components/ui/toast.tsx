@@ -79,6 +79,7 @@ function options(data: PolicyOptions = {}, error = false, getId = () => data.id)
       ...(error ? { closeButton: true, dismissible: true } : {}),
       // Sonner retains dismissed entries; a fresh record must not inherit their actions.
       ...(!previous && !("action" in data) ? { action: undefined } : {}),
+      ...(!previous && !("cancel" in data) ? { cancel: undefined } : {}),
       ...buttons(data, getId),
       ...lifecycle,
     },

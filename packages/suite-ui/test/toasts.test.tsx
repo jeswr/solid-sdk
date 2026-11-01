@@ -168,10 +168,12 @@ test.each([
   expect(toast.getToasts().find((toast) => toast.id === entry.id)).toMatchObject({
     duration: 5000,
     action: undefined,
+    cancel: undefined,
   });
   await act(() => vi.advanceTimersByTimeAsync(0));
   expect(screen.getByText("Fresh toast")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
   await act(() => vi.advanceTimersByTimeAsync(5300));
   expect(screen.queryByText("Fresh toast")).toBeNull();
 });
