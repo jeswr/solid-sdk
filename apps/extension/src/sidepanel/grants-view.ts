@@ -2,6 +2,7 @@
 import type { ClassGrant } from '../background/core/class-grant';
 import type { OriginGrant } from '../background/core/origin-grant';
 import { accessModeLabel, dataClassCopy } from '../shared/data-labels';
+import { PIM_STORAGE_CLASS } from '../shared/storage-class';
 import type { Confirmation, GrantsController, GrantsState } from './grants-controller';
 
 function date(value: number): string {
@@ -175,7 +176,9 @@ export function mountGrantsView(root: HTMLElement, controller: GrantsController)
       element('p', `Expires ${date(expiry)}`, 'grants-expiry'),
       element(
         'p',
-        `Revoking site access means ${parent.origin} will lose access to your ${label}.`,
+        grant.dataClass === PIM_STORAGE_CLASS
+          ? `Revoking site access means ${parent.origin} will lose access to this pod.`
+          : `Revoking site access means ${parent.origin} will lose access to your ${label}.`,
         'grants-consequence',
       ),
     );
@@ -234,6 +237,10 @@ export function mountGrantsView(root: HTMLElement, controller: GrantsController)
     else {
       for (const label of labels.slice(0, 4)) chips.append(element('span', label));
       if (labels.length > 4) chips.append(element('span', `+${labels.length - 4}`));
+    }
+    for (const item of classes ?? []) {
+      if (item.dataClass === PIM_STORAGE_CLASS)
+        for (const target of item.targets) chips.append(element('span', target.url));
     }
     chips.append(
       element(

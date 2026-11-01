@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { PIM_STORAGE_CLASS } from '../src/shared/storage-class';
 import {
   GrantsController,
   type GrantsMessage,
@@ -53,6 +54,31 @@ async function fixture(grants = [siteGrant()]) {
 }
 
 describe('sites with access view', () => {
+  it('shows full pod access and every pinned storage URL in the site summary', async () => {
+    const grant = siteGrant();
+    const targets = [
+      { url: 'https://pod.example/', kind: 'container' as const },
+      { url: 'https://other-pod.example/storage/', kind: 'container' as const },
+    ];
+    const { root, button, doc } = await fixture([
+      siteGrant({
+        scope: {
+          pods: [],
+          classes: [{ ...grant.scope.classes![0], dataClass: PIM_STORAGE_CLASS, targets }],
+        },
+      }),
+    ]);
+    const summary = root.querySelector('.permission-header')!;
+    expect(summary.textContent).toContain('Full access to your pod');
+    for (const target of targets) expect(summary.textContent).toContain(target.url);
+    button('Access details').click();
+    expect(root.querySelector('.grants-class strong')?.textContent).toBe('Full access to your pod');
+    expect(root.querySelector('.grants-consequence')?.textContent).toContain(
+      'lose access to this pod',
+    );
+    await expectAccessible(doc);
+  });
+
   it.each([
     'light',
     'dark',

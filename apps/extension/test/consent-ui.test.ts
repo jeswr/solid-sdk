@@ -1,8 +1,10 @@
 // AUTHORED-BY GPT-6.1-Sol (Codex)
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { PendingConsentView } from '../src/shared/messages';
+import { PIM_STORAGE_CLASS } from '../src/shared/storage-class';
 import { expectAccessible } from './permission-a11y';
 
 let dom: JSDOM;
@@ -98,6 +100,116 @@ it('shows the purpose headline, readable data cards, exact scope and the worker-
   expect(approve.className).toBe(document.querySelector('#deny')?.className);
   expect(approve.disabled).toBe(false);
   await expectAccessible(document);
+});
+
+function storageView(id = '1'): PendingConsentView {
+  const initial = view(id);
+  return {
+    ...initial,
+    classes: [
+      {
+        ...initial.classes[0],
+        dataClass: PIM_STORAGE_CLASS,
+        modes: ['read', 'write'],
+        targets: [
+          { url: `https://pod.example/${id}/`, kind: 'container' },
+          { url: 'https://other-pod.example/storage/', kind: 'container' },
+        ],
+      },
+    ],
+  };
+}
+
+it.each([
+  {
+    modes: ['read', 'write'] as const,
+    copy: 'This site can read and change everything in this pod',
+  },
+  { modes: ['read'] as const, copy: 'This site can read everything in this pod' },
+  { modes: ['append'] as const, copy: 'This site can read and change everything in this pod' },
+])('warns about full pod access for $modes and requires selection plus Share', async ({
+  modes,
+  copy,
+}) => {
+  const initial = storageView();
+  const { document, approve, all } = await mount({
+    ...initial,
+    classes: [{ ...initial.classes[0], modes }],
+  });
+  const card = document.querySelector('.class-item')!;
+  expect(card.querySelector('.class-title')?.textContent).toBe('Full access to your pod');
+  expect(card.querySelector('.warning')?.textContent).toBe(copy);
+  expect(card.querySelector('.targets')?.textContent).toBe(
+    'https://pod.example/1/https://other-pod.example/storage/',
+  );
+  expect(card.querySelector('details')).toBeNull();
+  const box = card.querySelector('input')!;
+  expect(box.checked).toBe(false);
+  expect(all.checked).toBe(false);
+  expect(approve.disabled).toBe(true);
+  approve.click();
+  expect(send).toHaveBeenCalledOnce();
+  box.click();
+  expect(approve.disabled).toBe(false);
+  expect(send).toHaveBeenCalledOnce();
+  await expectAccessible(document);
+  approve.click();
+  expect(send).toHaveBeenLastCalledWith(
+    {
+      type: 'SOLID_CONSENT_DECISION',
+      consentId: 'fixture',
+      profileId: '1',
+      approvedClasses: [PIM_STORAGE_CLASS],
+    },
+    expect.any(Function),
+  );
+});
+
+it('keeps ordinary classes selected in mixed requests without approving storage', async () => {
+  const initial = view();
+  const { document, approve, all } = await mount({
+    ...initial,
+    classes: [...initial.classes, ...storageView().classes],
+  });
+  const boxes = document.querySelectorAll<HTMLInputElement>('.class-head input');
+  expect(boxes[0].checked).toBe(true);
+  expect(boxes[1].checked).toBe(false);
+  expect(all.checked).toBe(false);
+  expect(all.indeterminate).toBe(true);
+  expect(document.querySelectorAll('.warning')).toHaveLength(1);
+  approve.click();
+  expect(send).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      approvedClasses: ['https://schema.org/Person'],
+    }),
+    expect.any(Function),
+  );
+});
+
+it('resets full pod access to unchecked after switching accounts', async () => {
+  const { document, picker, approve } = await mount(storageView());
+  document.querySelector<HTMLInputElement>('.class-head input')!.click();
+  expect(approve.disabled).toBe(false);
+  send.mockResolvedValueOnce(storageView('2'));
+  picker.value = '2';
+  picker.dispatchEvent(new dom.window.Event('change'));
+  await vi.waitFor(() => expect(document.querySelector('.targets')?.textContent).toContain('/2/'));
+  expect(document.querySelector<HTMLInputElement>('.class-head input')!.checked).toBe(false);
+  expect(approve.disabled).toBe(true);
+  expect(send.mock.calls.some(([m]) => m.type === 'SOLID_CONSENT_DECISION')).toBe(false);
+});
+
+it('keeps storage without any roots unchecked and sharing disabled', async () => {
+  const initial = storageView();
+  const { document, approve, all } = await mount({
+    ...initial,
+    classes: [{ ...initial.classes[0], targets: [] }],
+  });
+  expect(document.querySelector<HTMLInputElement>('.class-head input')!.checked).toBe(false);
+  expect(document.querySelector<HTMLElement>('#empty-note')!.hidden).toBe(false);
+  expect(all.checked).toBe(false);
+  expect(approve.disabled).toBe(true);
+  expect(send).toHaveBeenCalledOnce();
 });
 
 it.each([
