@@ -286,6 +286,15 @@ describe("authorization namespace migration", () => {
     });
   });
 
+  it("denies a non-array type instead of throwing", async () => {
+    const vc = {
+      ...credential("AgentAuthorizationCredential", SVC),
+      type: "AgentAuthorizationCredential",
+    } as unknown as VerifiableCredential;
+    expect(readBoundAuthorization(vc)).toBeUndefined();
+    expect(await verify(vc)).toMatchObject({ authorized: false, code: "BINDING_MISMATCH" });
+  });
+
   it("does not derive authority from inherited claims absent from the signed graph", async () => {
     const claims = subject(SVC);
     delete claims[`${SVC}authorizes`];
