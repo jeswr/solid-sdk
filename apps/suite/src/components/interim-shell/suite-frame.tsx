@@ -21,6 +21,7 @@ import {
   Music,
   Search,
   SquareCheckBig,
+  StickyNote,
   Users,
   Wallet,
 } from "lucide-react";
@@ -37,12 +38,14 @@ export type SuiteAppId =
   | "money"
   | "health"
   | "tasks"
-  | "music";
+  | "music"
+  | "notes";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
   { id: "drive", label: "Drive", href: "/drive", icon: HardDrive },
   { id: "calendar", label: "Calendar", href: "/calendar", icon: CalendarDays },
   { id: "docs", label: "Docs", href: "/docs", icon: FileText },
+  { id: "notes", label: "Notes", href: "/notes", icon: StickyNote },
   { id: "contacts", label: "Contacts", href: "/contacts", icon: Users },
   { id: "photos", label: "Photos", href: "/photos", icon: Images },
   { id: "money", label: "Money", href: "/money", icon: Wallet },
