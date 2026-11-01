@@ -191,7 +191,10 @@ export async function openExtensionSession(
       if (disconnect) {
         assertCurrent();
         // Successful self-revocation may broadcast and invalidate us before its reply.
-        await disconnect.call(api);
+        if ((await disconnect.call(api)) !== true) {
+          assertCurrent();
+          throw new Error("The extension did not acknowledge disconnect.");
+        }
         return;
       }
       if (!listGrants || !revokeGrant) throw new ExtensionSessionError("unavailable");
@@ -203,7 +206,10 @@ export async function openExtensionSession(
       for (const grant of grants) {
         if (grant.dataClass !== STORAGE_CLASS) continue;
         assertCurrent();
-        await revokeGrant.call(api, grant.grantId);
+        if ((await revokeGrant.call(api, grant.grantId)) !== true) {
+          assertCurrent();
+          throw new Error("The extension did not acknowledge disconnect.");
+        }
       }
     },
   };

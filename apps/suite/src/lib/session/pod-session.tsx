@@ -165,12 +165,14 @@ export function PodSessionProvider({ children }: { children: ReactNode }) {
             const session: ExtensionPodSession = {
               ...opened,
               disconnect: async () => {
+                let disconnected = false;
                 try {
                   await opened.disconnect();
+                  disconnected = true;
                 } finally {
                   // Older extensions don't broadcast class revocations. Re-read even on failure.
                   if (live) {
-                    if (isCurrent(captured)) invalidate();
+                    if (disconnected && isCurrent(captured)) invalidate();
                     await refresh();
                   }
                 }

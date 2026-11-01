@@ -628,10 +628,14 @@ describe("PodSessionProvider", () => {
     } else expect(api.revokeGrant).toHaveBeenCalledWith("storage");
   });
 
-  it.each([
-    "native",
-    "class",
-  ])("resolves %s disconnect after a revocation broadcast precedes its reply", async (method) => {
+  it.each(
+    ["native", "class"].flatMap((method) =>
+      [true, false].map((acknowledgement) => ({ method, acknowledgement })),
+    ),
+  )("handles $method disconnect ack=$acknowledgement after a revocation broadcast", async ({
+    method,
+    acknowledgement,
+  }) => {
     const actual = await vi.importActual<typeof import("../src/lib/session/extension-pod-session")>(
       "../src/lib/session/extension-pod-session",
     );
@@ -656,10 +660,40 @@ describe("PodSessionProvider", () => {
     await stateMessage();
     expect(state).toMatchObject({ session: { mode: "demo" } });
     await act(async () => {
-      reply.resolve(true);
-      await expect(closing).resolves.toBeUndefined();
+      reply.resolve(acknowledgement);
+      if (acknowledgement) await expect(closing).resolves.toBeUndefined();
+      else await expect(closing).rejects.toMatchObject({ code: "stale" });
     });
     expect(state).toMatchObject({ session: { mode: "demo" } });
+  });
+
+  it.each([
+    "native",
+    "class",
+  ])("shows retry copy when a current %s disconnect is unacknowledged", async (method) => {
+    const actual = await vi.importActual<typeof import("../src/lib/session/extension-pod-session")>(
+      "../src/lib/session/extension-pod-session",
+    );
+    vi.mocked(openExtensionSession).mockImplementation(actual.openExtensionSession);
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("public profile offline"));
+    grant();
+    const disconnect = vi.fn(async () => false);
+    if (method === "native") api.disconnect = disconnect;
+    else api.revokeGrant.mockResolvedValueOnce(false);
+    const view = await render(true);
+    if (state.status !== "ready") throw new Error("Expected Alice");
+    const session = state.session;
+    const button = [...view.host.querySelectorAll("button")].find(
+      (candidate) => candidate.textContent === "Disconnect",
+    );
+    expect(button).toBeDefined();
+    await click(button as HTMLButtonElement);
+    expect(state).toMatchObject({ session: { mode: "extension", webId: WEBID } });
+    if (state.status !== "ready") throw new Error("Expected Alice");
+    expect(state.session).toBe(session);
+    expect(view.host.textContent).toContain("Couldn't disconnect. Please try again.");
+    if (method === "native") expect(disconnect).toHaveBeenCalledOnce();
+    else expect(api.revokeGrant).toHaveBeenCalledWith("storage");
   });
 
   it("waits for detection before falling back to the demo when the extension is absent", async () => {
