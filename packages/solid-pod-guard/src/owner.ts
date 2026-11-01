@@ -4,8 +4,8 @@
  * derived from the VERIFIED token WebID by a bidirectional `pim:storage`
  * binding — never from a request parameter.
  *
- * Extracted verbatim from the reviewed reference implementation (config
- * renamed only).
+ * Originally extracted from the reviewed reference implementation; since
+ * hardened here (storage-root check, malformed-claim handling).
  *
  *   1. FORWARD claim — the WebID's own profile document must claim
  *      `<webid> pim:storage <pod>`;
@@ -28,27 +28,38 @@
  *      OWNER-ONLY-WRITABLE — an operator requirement on every allowlisted pod
  *      host that this code cannot verify from outside. See SKILL.md.
  *
- * All RDF via `@jeswr/fetch-rdf` + `@solid/object` typed accessors (house
- * rule). The WebID profile fetch is DNS-pinned SSRF-guarded in production
- * (`@jeswr/guarded-fetch/node`); the dev/e2e loopback flag swaps ONLY the
- * transport (plain redirect-refusing fetch + the https→http loopback mapping
- * the dev issuer's TLS-terminator stand-in needs) — every binding check runs
- * identically.
+ *      The candidate must also be a storage root (`pim:Storage` type link), so
+ *      a shared sub-container where others can write cannot pose as a pod.
+ *
+ * All RDF is parsed via `@jeswr/fetch-rdf`; storage claims are read by quad
+ * match so one malformed value cannot abort the walk (see `storageClaims`).
+ * The WebID profile fetch is DNS-pinned and SSRF-guarded
+ * (`@jeswr/guarded-fetch/node`). The dev/e2e loopback flag admits loopback
+ * addresses to that guard and adds the https→http loopback mapping the dev
+ * issuer's TLS-terminator stand-in needs; every binding check runs identically.
  */
 import { fetchRdf } from "@jeswr/fetch-rdf";
 import type { DatasetCore } from "@rdfjs/types";
-import { Agent } from "@solid/object";
 import { DataFactory } from "n3";
 import type { PodGuardConfig } from "./config.js";
-import { assertAllowedPodBase, PodAccessError, readPodResource } from "./pod.js";
+import {
+  assertAllowedPodBase,
+  assertStorageRoot,
+  isLoopback,
+  PodAccessError,
+  type PodIoFetch,
+  readPodResource,
+} from "./pod.js";
 
 /** Test seams for {@link resolveAuthorizedPod}. */
 export interface OwnerBindingSeams {
   /** Fetch for the WebID profile document (defaults per the module header). */
   profileFetch?: typeof fetch;
+  /** Fetch for the pod-root probe and the owner-card read (default: anonymous, redirect-refusing). */
+  podFetch?: PodIoFetch;
 }
 
-const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+const PIM_STORAGE = "http://www.w3.org/ns/pim/space#storage";
 
 /**
  * Dev-only TLS-terminator stand-in for loopback WebID profile fetches. WebIDs
@@ -81,7 +92,7 @@ export function loopbackMappedFetch(base: typeof fetch): typeof fetch {
       // Not an absolute URL — let the underlying fetch produce the error.
       return base(input, init);
     }
-    if (url.protocol !== "https:" || !LOOPBACK_HOSTS.has(url.hostname)) {
+    if (url.protocol !== "https:" || !isLoopback(url)) {
       // Not a loopback https target — pass through untouched.
       return base(input, init);
     }
@@ -116,30 +127,41 @@ function productionProfileFetch(): Promise<typeof fetch> {
   return pinnedProfileFetch;
 }
 
+/** Dev/e2e profile fetch: still DNS-pinned and SSRF-guarded, with loopback admitted. */
+let loopbackProfileFetch: Promise<typeof fetch> | undefined;
+
+function devProfileFetch(): Promise<typeof fetch> {
+  loopbackProfileFetch ??= import("@jeswr/guarded-fetch/node").then((mod) =>
+    mod.createNodeGuardedFetch({ allowLoopback: true }),
+  );
+  return loopbackProfileFetch;
+}
+
 async function profileFetchFor(
   config: PodGuardConfig,
   seams: OwnerBindingSeams,
 ): Promise<typeof fetch> {
   if (seams.profileFetch !== undefined) return seams.profileFetch;
   if (config.allowInsecureLoopback === true) {
-    const plain: typeof fetch = (input, init) => fetch(input, { ...init, redirect: "error" });
-    return loopbackMappedFetch(plain);
+    const guarded = await devProfileFetch();
+    return loopbackMappedFetch((input, init) => guarded(input, { ...init, redirect: "error" }));
   }
   return productionProfileFetch();
 }
 
 /**
- * The claimed storages of `webid` in `dataset`, via the typed accessor. Pod
- * RDF is untrusted input: a malformed claim (e.g. a literal where an IRI is
- * expected) reads as NO claim (fail closed), never as a crash.
+ * The claimed storages of `webid` in `dataset`. Pod RDF is untrusted input: a
+ * claim whose object is not an IRI (a literal or blank node) is skipped, so a
+ * stray value next to a valid claim neither crashes the binding nor counts.
+ * (The typed `Agent.pimStorage` set throws mid-iteration on such a value.)
  */
 function storageClaims(dataset: DatasetCore, webid: string): ReadonlySet<string> {
-  try {
-    const agent = new Agent(DataFactory.namedNode(webid), dataset, DataFactory);
-    return agent.pimStorage;
-  } catch {
-    return new Set();
+  const claims = new Set<string>();
+  const { namedNode } = DataFactory;
+  for (const quad of dataset.match(namedNode(webid), namedNode(PIM_STORAGE), null)) {
+    if (quad.object.termType === "NamedNode") claims.add(quad.object.value);
   }
+  return claims;
 }
 
 /**
@@ -152,6 +174,14 @@ export async function resolveAuthorizedPod(
   config: PodGuardConfig,
   seams: OwnerBindingSeams = {},
 ): Promise<string> {
+  // An unconfigured rail is a 503 before any outbound IO, whatever the profile says.
+  if (config.allowedPodOrigins.length === 0) {
+    throw new PodAccessError(
+      503,
+      "the allowedPodOrigins pod allowlist is unset — pod rail disabled",
+    );
+  }
+
   // 1. Forward claim from the WebID's own (authoritative) profile document.
   const profileFetch = await profileFetchFor(config, seams);
   let claims: ReadonlySet<string>;
@@ -194,11 +224,15 @@ export async function resolveAuthorizedPod(
   const [podBase] = candidates;
   if (podBase === undefined) throw new PodAccessError(500, "unreachable: empty candidate set");
 
+  // The candidate must be a storage root: otherwise a container where a non-owner can
+  // create `profile/card` would pass both the pod-rooted shortcut and step 3.
+  await assertStorageRoot(podBase, seams.podFetch);
+
   // 3. Backward acknowledgment from the pod's owner-controlled profile card.
   const cardIri = `${podBase}profile/card`;
   const webidDocIri = webid.split("#")[0];
   if (webidDocIri !== cardIri) {
-    const card = await readPodResource(cardIri, podBase);
+    const card = await readPodResource(cardIri, podBase, seams.podFetch);
     if (card === undefined) {
       throw new PodAccessError(
         403,
