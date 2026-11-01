@@ -37,7 +37,12 @@
       "types": "./dist/shell/index.d.ts",
       "import": "./dist/shell/index.js"
     },
-    "./styles/shell.css": "./dist/styles/shell.css"
+    "./styles/shell.css": "./dist/styles/shell.css",
+    "./sync": {
+      "types": "./dist/sync/index.d.ts",
+      "import": "./dist/sync/index.js"
+    },
+    "./styles/sync.css": "./dist/styles/sync.css"
   },
   "files": [
     "dist",

@@ -7,6 +7,7 @@ import { type ReactNode, useId, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { atomNames, type FixtureName, primitiveNames } from "./fixture-names";
+import { SyncFixtures } from "./sync-fixtures";
 
 function Field({ label, children }: { label: string; children: (id: string) => ReactNode }) {
   const id = useId();
@@ -681,6 +682,13 @@ function StateExamples() {
   );
 }
 export function FixtureCatalog({ name }: { name: FixtureName }) {
+  if (
+    name === "offline-pill" ||
+    name === "sync-sheet" ||
+    name === "conflict-dialog" ||
+    name === "capability-gate"
+  )
+    return <SyncFixtures name={name} />;
   const names = name === "primitives" ? primitiveNames : name === "atoms" ? atomNames : [name];
   return (
     <main id="main-content" tabIndex={-1} className="fixture-page">

@@ -347,3 +347,19 @@ shows, the details toggle reports collapsed, and any change writes back one regi
 and the TopBar is 48px. The details breakpoint follows the DS-04 task and 02-§2 (sheet below
 1024), not the ≥1280 persistent pane in 01-§4 and the mockups.
 Dev routes: `/dev/components/{shell,top-bar,sidebar-nav,details-pane}` in apps/suite.
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+### Sync and storage capabilities
+
+Import `CapabilityProvider`, `CapabilityGate`, `OfflinePill` (also named `SyncStatus`),
+`SyncSheet`, `ConflictDialog`, `syncStatus` and their types from `@jeswr/suite-ui/sync`
+or the package root. Import `@jeswr/suite-ui/styles/sync.css` after the shared component CSS.
+All sync state comes from a `SyncSnapshot` prop; these components do not start network requests.
+`SyncSheet` accepts optional `locale` and `now` props for locale-aware dates and a fixed clock.
+
+Provide capabilities with `<CapabilityProvider capabilities={capabilities}>`.
+Missing capabilities are unsupported. Gate children must be controls that forward native
+`disabled` and `aria-disabled` props; fragments and multiple controls are supported.
+`useRequiresOnline(online, "change sharing")` returns `{ disabled, reason }` for controls that
+need a connection. Pass the current online value explicitly. `ConflictDialog` calls `onChoose`
+with `mine`, `theirs` or `both`; the caller applies the choice and controls when it closes.
