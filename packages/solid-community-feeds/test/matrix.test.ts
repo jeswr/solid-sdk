@@ -139,3 +139,82 @@ describe("MatrixFeedSource error handling", () => {
     }
   });
 });
+
+describe("MatrixFeedSource hostile events", () => {
+  function stubWith(chunk: unknown) {
+    return stubFetch([
+      { match: (u) => u.includes("/state/m.room.name/"), body: MATRIX_ROOM_NAME },
+      { match: (u) => u.includes("/messages"), body: { chunk } },
+    ]);
+  }
+
+  it("skips an event whose timestamp is outside the Date range instead of failing the room", async () => {
+    const { fetch } = stubWith([
+      ...MATRIX_MESSAGES.chunk,
+      {
+        type: "m.room.message",
+        event_id: "$huge",
+        sender: "@mallory:evil.example",
+        origin_server_ts: Number.MAX_SAFE_INTEGER,
+        content: { msgtype: "m.text", body: "far future" },
+      },
+    ]);
+    const src = new MatrixFeedSource({ homeserverUrl: HS, accessToken: TOKEN }, { fetch });
+    const thread = await src.getRoomThread(ROOM_ID);
+    expect(thread.messages.map((m) => m.id)).toEqual(["$evt2", "$evt1"]);
+  });
+
+  it("skips events with a non-string sender or id, and tolerates a non-array chunk", async () => {
+    const bad = [
+      {
+        type: "m.room.message",
+        event_id: 7,
+        sender: "@a:x",
+        origin_server_ts: 1,
+        content: { body: "x" },
+      },
+      {
+        type: "m.room.message",
+        event_id: "$x",
+        sender: {},
+        origin_server_ts: 1,
+        content: { body: "x" },
+      },
+      null,
+    ];
+    const one = await new MatrixFeedSource(
+      { homeserverUrl: HS, accessToken: TOKEN },
+      { fetch: stubWith(bad).fetch },
+    ).getRoomThread(ROOM_ID);
+    expect(one.messages).toHaveLength(0);
+    const two = await new MatrixFeedSource(
+      { homeserverUrl: HS, accessToken: TOKEN },
+      { fetch: stubWith({ length: 1 }).fetch },
+    ).getRoomThread(ROOM_ID);
+    expect(two.messages).toHaveLength(0);
+  });
+
+  it("a hostile formatted_body does not stall the thread read", async () => {
+    const { fetch } = stubWith(
+      Array.from({ length: 20 }, (_, n) => ({
+        type: "m.room.message",
+        event_id: `$redos${n}`,
+        sender: "@mallory:evil.example",
+        origin_server_ts: 1_780_000_000_000 + n,
+        content: {
+          msgtype: "m.text",
+          body: "x",
+          format: "org.matrix.custom.html",
+          formatted_body: "<".repeat(60_000),
+        },
+      })),
+    );
+    const start = performance.now();
+    const thread = await new MatrixFeedSource(
+      { homeserverUrl: HS, accessToken: TOKEN },
+      { fetch },
+    ).getRoomThread(ROOM_ID);
+    expect(thread.messages).toHaveLength(20);
+    expect(performance.now() - start).toBeLessThan(2000);
+  });
+});

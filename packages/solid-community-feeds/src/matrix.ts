@@ -179,7 +179,9 @@ export class MatrixFeedSource {
     const raw = await this.getJson<RawMessages>(
       `${CSAPI}/rooms/${encodeURIComponent(roomId)}/messages?dir=b&limit=${limit}`,
     );
-    const events = raw.chunk ?? [];
+    // Federated servers control these fields: keep only well-formed events, so
+    // one hostile event cannot throw and empty the whole room's thread.
+    const events = (Array.isArray(raw.chunk) ? raw.chunk : []).filter(wellFormed);
     const messages: CommunityMessage[] = events
       .filter(isTextMessage)
       .map((e) => this.toMessage(e, roomId))
@@ -224,6 +226,22 @@ export class MatrixFeedSource {
     }
     return msg;
   }
+}
+
+/** The largest `Date` timestamp, in ms (ECMAScript time-value range). */
+const MAX_TIME_VALUE = 8.64e15;
+
+/** An event whose id, sender and timestamp are safe to map. */
+function wellFormed(e: RawEvent): boolean {
+  return (
+    typeof e === "object" &&
+    e !== null &&
+    typeof e.event_id === "string" &&
+    typeof e.sender === "string" &&
+    Number.isSafeInteger(e.origin_server_ts) &&
+    (e.origin_server_ts as number) >= 0 &&
+    (e.origin_server_ts as number) <= MAX_TIME_VALUE
+  );
 }
 
 /** A textual room message we surface (m.room.message with a non-empty body). */

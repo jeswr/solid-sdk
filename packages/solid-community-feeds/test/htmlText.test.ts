@@ -40,3 +40,39 @@ describe("htmlToText", () => {
     expect(htmlToText("line1<br>line2")).toBe("line1\nline2");
   });
 });
+
+describe("htmlToText on hostile input (linear time)", () => {
+  // Each of these took seconds with the previous backtracking regexes.
+  for (const [name, input] of [
+    ["unclosed < run", "<".repeat(64 * 1024)],
+    ["unclosed <p run", "<p".repeat(32 * 1024)],
+    ["unclosed <script run", "<script>".repeat(8 * 1024)],
+    ["bare & run", "&".repeat(64 * 1024)],
+  ] as const) {
+    it(`${name} completes quickly`, () => {
+      const start = performance.now();
+      htmlToText(input);
+      expect(performance.now() - start).toBeLessThan(500);
+    });
+  }
+
+  it("keeps a < with no closing > as text", () => {
+    expect(htmlToText("a < b")).toBe("a < b");
+  });
+
+  it("drops the rest after an unclosed script", () => {
+    expect(htmlToText("hi<script>alert(1)")).toBe("hi");
+  });
+
+  it("treats tag names case-insensitively", () => {
+    expect(htmlToText("<P>one</P><SCRIPT>x</SCRIPT>two")).toBe("one\ntwo");
+  });
+
+  it("leaves unknown or prototype-named entities alone", () => {
+    expect(htmlToText("&constructor; &bogus;")).toBe("&constructor; &bogus;");
+  });
+
+  it("caps the scanned input", () => {
+    expect(htmlToText("a".repeat(2 * 1024 * 1024)).length).toBe(1024 * 1024);
+  });
+});
