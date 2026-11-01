@@ -45,7 +45,7 @@ export function LedgerScreen({ accountId }: { accountId: string }) {
   const [add, setAdd] = useState(false);
   const [transfer, setTransfer] = useState(false);
   const [edit, setEdit] = useState<Transaction>();
-  const [deleting, setDeleting] = useState(false);
+  const [deleteTargets, setDeleteTargets] = useState<Transaction[]>();
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState("");
   const selection = useSelection();
@@ -213,7 +213,12 @@ export function LedgerScreen({ accountId }: { accountId: string }) {
               label="Categorise selected as"
               onChange={(value) => categorise(ids, value)}
             />
-            <Button variant="outline" onClick={() => setDeleting(true)}>
+            <Button
+              variant="outline"
+              onClick={() =>
+                setDeleteTargets(money.transactions.filter((row) => ids.includes(row.id)))
+              }
+            >
               Delete selected
             </Button>
             <Button variant="ghost" onClick={selection.clear}>
@@ -407,29 +412,38 @@ export function LedgerScreen({ accountId }: { accountId: string }) {
       />
       <TransferDialog account={account} open={transfer} onOpenChange={setTransfer} />
       <Modal
-        open={deleting}
-        onOpenChange={setDeleting}
-        title={`Delete ${ids.length} transactions?`}
+        open={Boolean(deleteTargets)}
+        onOpenChange={(open) => {
+          if (!open && !money.saving) setDeleteTargets(undefined);
+        }}
+        title={`Delete ${deleteTargets?.length ?? 0} transactions?`}
         description="This cannot be undone. Paired transfers cannot be deleted individually."
       >
         <Button
           variant="destructive"
+          disabled={money.saving || !deleteTargets?.length}
           onClick={async () => {
+            if (!deleteTargets?.length) return;
+            const targets = deleteTargets;
             if (
               await money.mutate(
                 async () => {
-                  const selected = money.transactions.filter((row) => ids.includes(row.id));
-                  if (selected.some((row) => row.debitAccount))
+                  if (targets.some((row) => row.debitAccount || row.creditAccount))
                     throw new Error("Exclude paired transfers before deleting transactions");
-                  for (const row of selected) await deleteTransaction(money.session, row);
+                  for (const [index, row] of targets.entries()) {
+                    await deleteTransaction(money.session, row);
+                    setDeleteTargets(targets.slice(index + 1));
+                  }
                 },
                 (snapshot) => ({
                   ...snapshot,
-                  transactions: snapshot.transactions.filter((row) => !ids.includes(row.id)),
+                  transactions: snapshot.transactions.filter(
+                    (row) => !targets.some((target) => target.id === row.id),
+                  ),
                 }),
               )
             ) {
-              setDeleting(false);
+              setDeleteTargets(undefined);
               selection.clear();
             }
           }}

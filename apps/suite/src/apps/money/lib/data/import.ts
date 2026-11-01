@@ -133,11 +133,26 @@ export class PendingImportError extends Error {
   }
 }
 async function readImportPlan(client: MoneyClient, text: string) {
-  const journal = storeOf(client).resolve(`statements/${statementId(text)}.import.json`);
+  return readPlan(client, statementId(text));
+}
+async function readPlan(client: MoneyClient, key: string) {
+  const journal = storeOf(client).resolve(`statements/${key}.import.json`);
   const response = await client.fetch(journal, { redirect: "error" });
   if (!response.ok && response.status !== 404) throw new MoneyIoError(response.status);
   const previous: ImportPlan | undefined = response.ok ? await response.json() : undefined;
   return { journal, response, previous };
+}
+/** Recovery fills missing deterministic rows; keep pending rows until it has finished. */
+export async function assertImportDeletionAllowed(client: MoneyClient, derivedFrom?: string) {
+  const prefix = storeOf(client).resolve("statements/");
+  if (!derivedFrom?.startsWith(prefix)) return;
+  const source = derivedFrom.slice(prefix.length);
+  if (!/^statement-[a-f0-9]+\.(csv|ofx)$/.test(source)) return;
+  const { previous } = await readPlan(client, source.replace(/\.(csv|ofx)$/, ""));
+  if (previous?.status === "pending")
+    throw new Error(
+      "This transaction belongs to an unfinished import. Resume the statement import before deleting its transactions.",
+    );
 }
 export async function importStatus(client: MoneyClient, text: string) {
   return (await readImportPlan(client, text)).previous?.status ?? "new";

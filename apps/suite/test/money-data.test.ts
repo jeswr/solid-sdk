@@ -330,7 +330,7 @@ describe("Money data against the demo pod", () => {
       categories.saveCategories(client, () => [{ ...food, parent: child.id }, child, other]),
     ).rejects.toThrow("hierarchy");
     await expect(categories.deleteCategory(client, food.id)).rejects.toThrow("in use");
-    await expect(categories.deleteCategory(client, "absent")).rejects.toThrow("no longer exists");
+    await expect(categories.deleteCategory(client, "absent")).resolves.toBeUndefined();
     await expect(categories.deleteCategory(client, food.id, food.id)).rejects.toThrow("another");
     await expect(categories.deleteCategory(client, food.id, "missing")).rejects.toThrow("another");
     await categories.deleteCategory(client, food.id, other.id);
@@ -543,7 +543,11 @@ describe("Money data against the demo pod", () => {
       },
     };
     await expect(
-      ledger.bulkCategorise(noEtag, [must((await ledger.allTransactions(client))[0]).id]),
+      ledger.bulkCategorise(
+        noEtag,
+        [must((await ledger.allTransactions(client))[0]).id],
+        "https://money.example/food",
+      ),
     ).rejects.toThrow("strong ETag");
     await expect(ledger.allTransactions({ ...client, fetch: fail(403) })).rejects.toMatchObject({
       status: 403,

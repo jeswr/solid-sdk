@@ -93,7 +93,10 @@ export function MoneyProvider({ session, children }: { session: PodSession; chil
     let timer: ReturnType<typeof setTimeout>;
     void refresh();
     const unsubscribe = session.subscribe((url) => {
-      if (!url.startsWith(moneyRoot(session))) return;
+      const root = moneyRoot(session);
+      // Extension focus events invalidate the storage root. Ancestor hints cover Money too;
+      // require container boundaries so similarly named siblings cannot match.
+      if (!url.startsWith(root) && !(url.endsWith("/") && root.startsWith(url))) return;
       invalidated.current = true;
       ++generation.current;
       clearTimeout(timer);

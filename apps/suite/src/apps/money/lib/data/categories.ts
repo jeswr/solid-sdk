@@ -7,6 +7,7 @@ import { DataFactory } from "n3";
 import { type Category, categoryTree, MoneyDocument, putCategories, V } from "../model";
 import { type MoneyClient, storeOf } from "./container";
 import { allTransactions, bulkCategorise } from "./ledger";
+import { reconcileMutation } from "./mutations";
 export async function loadCategories(client: MoneyClient) {
   try {
     const result = await fetchRdf(storeOf(client).resolve("categories.ttl"), {
@@ -43,47 +44,75 @@ async function writeCategories(
   loaded: Awaited<ReturnType<ReturnType<typeof storeOf>["read"]>>,
   categories: readonly Category[],
 ) {
-  for (const old of loaded.document.categories()) {
-    for (const predicate of [V.type, V.label, V.parent]) {
-      for (const quad of [
-        ...loaded.document.dataset.match(
-          DataFactory.namedNode(old.id),
-          DataFactory.namedNode(predicate),
-        ),
-      ]) {
-        if (predicate !== V.type || quad.object.value === V.categoryClass)
-          loaded.document.dataset.delete(quad);
+  await reconcileMutation(
+    loaded,
+    (value) => {
+      const current = value.document.categories();
+      return (
+        current.length === categories.length &&
+        categories.every((category) =>
+          current.some(
+            (saved) =>
+              saved.id === category.id &&
+              saved.label === category.label &&
+              saved.parent === category.parent,
+          ),
+        )
+      );
+    },
+    async () => {
+      for (const old of loaded.document.categories()) {
+        for (const predicate of [V.type, V.label, V.parent]) {
+          for (const quad of [
+            ...loaded.document.dataset.match(
+              DataFactory.namedNode(old.id),
+              DataFactory.namedNode(predicate),
+            ),
+          ]) {
+            if (predicate !== V.type || quad.object.value === V.categoryClass)
+              loaded.document.dataset.delete(quad);
+          }
+        }
       }
-    }
-  }
-  putCategories(loaded.document, categories);
-  await storeOf(client).write(loaded.url, loaded.document, loaded.condition);
+      putCategories(loaded.document, categories);
+      await storeOf(client).write(loaded.url, loaded.document, loaded.condition);
+    },
+    () => storeOf(client).read(loaded.url),
+    // Explicit saves also persist the model's in-memory legacy vocabulary migration.
+    false,
+  );
 }
 export async function deleteCategory(client: MoneyClient, id: string, replacement?: string) {
   const loaded = await storeOf(client).read("categories.ttl");
   const categories = loaded.document.categories();
-  if (!categories.some((c) => c.id === id)) throw new Error("This category no longer exists");
-  if (
-    replacement === id ||
-    (replacement !== undefined && !categories.some((c) => c.id === replacement))
-  )
-    throw new Error("Choose another category");
-  const affected = (await allTransactions(client)).filter((row) => row.category === id);
-  if (affected.length && !replacement)
-    throw new Error("This category is in use. Choose a replacement category.");
-  const next = categories
-    .filter((c) => c.id !== id)
-    .map((c) =>
-      c.parent === id ? reparent(c, categories.find((old) => old.id === id)?.parent) : c,
-    );
-  categoryTree(next);
-  if (affected.length)
-    await bulkCategorise(
-      client,
-      affected.map((row) => row.id),
-      replacement,
-    );
-  await writeCategories(client, loaded, next);
+  await reconcileMutation(
+    categories,
+    (current) => !current.some((category) => category.id === id),
+    async () => {
+      if (
+        replacement === id ||
+        (replacement !== undefined && !categories.some((c) => c.id === replacement))
+      )
+        throw new Error("Choose another category");
+      const affected = (await allTransactions(client)).filter((row) => row.category === id);
+      if (affected.length && !replacement)
+        throw new Error("This category is in use. Choose a replacement category.");
+      const next = categories
+        .filter((c) => c.id !== id)
+        .map((c) =>
+          c.parent === id ? reparent(c, categories.find((old) => old.id === id)?.parent) : c,
+        );
+      categoryTree(next);
+      if (affected.length)
+        await bulkCategorise(
+          client,
+          affected.map((row) => row.id),
+          replacement,
+        );
+      await writeCategories(client, loaded, next);
+    },
+    async () => (await storeOf(client).read("categories.ttl")).document.categories(),
+  );
 }
 
 export function reparent(category: Category, parent: string | undefined): Category {

@@ -3,7 +3,7 @@
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { Fragment } from "react";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 import { must } from "./money/helpers";
 
@@ -35,10 +35,13 @@ import {
   bulkCategorise,
   categorised,
 } from "../src/apps/money/lib/data/ledger";
-import { putBalance } from "../src/apps/money/lib/model";
+import { MoneyDocument, putBalance } from "../src/apps/money/lib/model";
 import { MoneyProvider, useMoney } from "../src/apps/money/state/money-context";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
+import { openExtensionSession, STORAGE_CLASS } from "../src/lib/session/extension-pod-session";
 import type { PodSession } from "../src/lib/session/pod-session";
+
+afterEach(() => vi.useRealTimers());
 
 const requireSuite = createRequire(import.meta.url);
 const axe = createRequire(requireSuite.resolve("@axe-core/playwright"))("axe-core") as {
@@ -66,8 +69,12 @@ function Probe() {
   money = useMoney();
   return h("p", { "data-testid": "money-status" }, money.status);
 }
-async function setup(empty = false) {
-  const pod = createDemoPod({ root: "https://money-ui.example/", latency: 0 });
+async function setup(
+  empty = false,
+  root = "https://money-ui.example/",
+  subscribe?: PodSession["subscribe"],
+) {
+  const pod = createDemoPod({ root, latency: 0 });
   let broken = false;
   let transport = pod.fetch;
   const session: PodSession = {
@@ -77,7 +84,7 @@ async function setup(empty = false) {
     displayName: "Example",
     fetch: async (input, init) =>
       broken ? new Response(null, { status: 500 }) : transport(input, init),
-    subscribe: pod.subscribe,
+    subscribe: subscribe ?? pod.subscribe,
     reset: async () => {},
   };
   await provision(session);
@@ -259,6 +266,8 @@ it("renders first-use actions and validates a transaction dialog without writing
 });
 
 it("imports the 100-row fixture through mapping and preview, updating balances and provenance", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-01T12:00:00Z"));
   const f = await setup();
   await screen(f, h(ImportScreen));
   const text = await readFile(
@@ -979,4 +988,153 @@ it("shows orphaned categories as Uncategorised in ledger cards, filters and sear
     expect(money.saving).toBe(false);
   });
   expect(money.transactions.find((row) => row.id === f.rowId)?.category).toBe(must(f.cats[2]).id);
+});
+
+it.each([
+  "failed first",
+  "partially deleted",
+  "lost response",
+] as const)("retains unresolved delete targets after %s and retries them", async (phase) => {
+  const f = await setup();
+  const second = await addTransaction(f.session, "second", {
+    account: f.id,
+    postingTime: money.today,
+    description: "Second purchase",
+    currency: "GBP",
+    amount: "-5",
+  });
+  await act(() => money.refresh());
+  await screen(f, h(LedgerScreen, { accountId: f.id }));
+  for (const label of ["Market", "Second purchase"])
+    await click(must(f.app.host.querySelector(`input[aria-label="Select ${label}"]`)));
+  const button = (text: string) =>
+    must(Array.from(document.querySelectorAll("button")).find((node) => node.textContent === text));
+  await click(button("Delete selected"));
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+    "Delete 2 transactions?",
+  );
+  let writes = 0;
+  let failed = false;
+  const entered = deferred<void>();
+  const release = deferred<void>();
+  f.intercept(async (input, init) => {
+    if (init?.method === "PUT" && String(input).includes("transactions/")) {
+      writes++;
+      if (!failed && writes === (phase === "partially deleted" ? 2 : 1)) {
+        failed = true;
+        if (phase === "lost response") await f.pod.fetch(input, init);
+        entered.resolve();
+        await release.promise;
+        throw new Error("Delete failed");
+      }
+    }
+    return f.pod.fetch(input, init);
+  });
+  await click(button("Delete transactions"));
+  await entered.promise;
+  expect(money.transactions).toHaveLength(0);
+  expect(button("Delete transactions").disabled).toBe(true);
+  await act(async () => release.resolve());
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(money.saving).toBe(false);
+  });
+  expect(f.app.host.querySelector('[aria-label="Selection actions"]')).toBeNull();
+  const unresolved = phase === "partially deleted" ? 1 : 2;
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+    `Delete ${unresolved} transactions?`,
+  );
+  expect(button("Delete transactions").disabled).toBe(false);
+  await click(button("Delete transactions"));
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
+  expect(await allTransactions(f.session)).toEqual([]);
+  expect(money.transactions.some((row) => row.id === f.rowId || row.id === second.id)).toBe(false);
+  expect(writes).toBe(phase === "lost response" ? 2 : 3);
+});
+
+it("refreshes Money through the actual extension session's storage-root notification on focus", async () => {
+  const f = await setup();
+  await f.app.unmount();
+  const api = { webId: f.session.webId, fetch: f.pod.fetch };
+  const session = await openExtensionSession(api, {
+    window: {
+      solid: api,
+      addEventListener: window.addEventListener.bind(window),
+      removeEventListener: window.removeEventListener.bind(window),
+      setTimeout: window.setTimeout.bind(window),
+      clearTimeout: window.clearTimeout.bind(window),
+    },
+    grant: {
+      grantId: "money-test",
+      dataClass: STORAGE_CLASS,
+      modes: ["read", "write"],
+      purpose: null,
+      expiresAt: Date.now() + 60_000,
+      targets: [{ kind: "container", url: f.session.storageUrl }],
+    },
+    fetchRdf: async () => ({ dataset: new MoneyDocument().dataset }),
+  });
+  const app = await mount(h(MoneyProvider, { session, children: h(Probe) }));
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(money.status).toBe("ready");
+  });
+  await bulkCategorise(f.session, [f.rowId], must(f.cats[1]).id);
+  expect(money.transactions[0]?.category).toBeUndefined();
+  await act(async () => {
+    window.dispatchEvent(new Event("focus"));
+  });
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(money.transactions[0]?.category).toBe(must(f.cats[1]).id);
+  });
+  await app.unmount();
+});
+
+it("accepts ancestor container notifications and ignores unrelated URLs and path prefixes", async () => {
+  let notify!: (url: string) => void;
+  const unsubscribe = vi.fn();
+  const f = await setup(false, "https://money-ui.example/storage/alice/", (listener) => {
+    notify = listener;
+    return unsubscribe;
+  });
+  for (const url of [
+    "https://money-ui.example/",
+    "https://money-ui.example/storage/",
+    f.session.storageUrl,
+    `${f.session.storageUrl}money/`,
+    `${f.session.storageUrl}money/transactions/`,
+    `${f.session.storageUrl}money/transactions/2026-11.ttl`,
+  ]) {
+    const category = money.transactions[0]?.category ? undefined : must(f.cats[0]).id;
+    await bulkCategorise(f.session, [f.rowId], category);
+    await act(async () => notify(url));
+    await vi.waitFor(async () => {
+      await act(async () => {});
+      expect(money.transactions[0]?.category).toBe(category);
+    });
+  }
+  const fetches = vi.fn(f.pod.fetch);
+  f.intercept(fetches);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  await act(async () => {
+    for (const url of [
+      "https://money-ui.example/storage",
+      "https://money-ui.example/stor",
+      "https://other.example/",
+      `${f.session.storageUrl}music/`,
+      `${f.session.storageUrl}money-other/`,
+      `${f.session.storageUrl}money`,
+      "invalid",
+    ])
+      notify(url);
+    await vi.advanceTimersByTimeAsync(101);
+  });
+  expect(fetches).not.toHaveBeenCalled();
+  vi.useRealTimers();
+  await f.app.unmount();
+  expect(unsubscribe).toHaveBeenCalledOnce();
 });

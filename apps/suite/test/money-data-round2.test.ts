@@ -175,7 +175,7 @@ describe("Money round 2 persistence regressions", () => {
     const other = await addTransaction(client, "unrelated", value);
     await deleteTransaction(client, { ...current, runningBalance: "480" } as typeof current);
     expect(await allTransactions(client)).toEqual([other]);
-    await expect(deleteTransaction(client, current)).rejects.toMatchObject({ status: 412 });
+    await expect(deleteTransaction(client, current)).resolves.toBeUndefined();
   });
   it("recovers an unfinished import after a saved row is moved to a different shard", async () => {
     const { client, account } = await setup();

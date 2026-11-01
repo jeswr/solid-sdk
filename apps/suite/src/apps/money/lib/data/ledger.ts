@@ -7,9 +7,9 @@ import {
   conditionalHeaders,
   MoneyDocument,
   MoneyIoError,
+  type MoneyStore,
   createTransfer as modelTransfer,
   monthKey,
-  type Precondition,
   putTransaction,
   type Range,
   runningBalance,
@@ -20,6 +20,8 @@ import { parseMoney } from "../reports";
 import type { AccountSummary } from "./accounts";
 import { loadCategories, resolveCategory } from "./categories";
 import { type MoneyClient, storeOf } from "./container";
+import { assertImportDeletionAllowed } from "./import";
+import { reconcileMutation } from "./mutations";
 export async function allTransactions(client: MoneyClient): Promise<Transaction[]> {
   const store = storeOf(client);
   const listing = await store.read("transactions/");
@@ -119,27 +121,34 @@ export async function updateTransaction(
   if (value.id !== original.id) throw new Error("A transaction ID cannot change");
   const source = await store.read(original.id.slice(0, original.id.indexOf("#")));
   const current = source.document.transactions().find((row) => row.id === original.id);
+  if (current?.debitAccount || current?.creditAccount)
+    throw new Error(
+      "Transfer legs must be changed together. Editing transfers is not supported yet.",
+    );
   const moving = monthKey(original.postingTime) !== monthKey(value.postingTime);
   const moved = {
     ...value,
     id: `${store.resolve(`transactions/${monthKey(value.postingTime)}.ttl`)}#${original.id.split("#")[1]}`,
   };
-  // Compare the record the editor actually read; a new shard ETag alone cannot detect stale forms.
-  if (current && !sameTransaction(current, original)) throw new MoneyIoError(412);
-  if (!current && !moving) throw new MoneyIoError(412);
   if (moving) {
-    const destination = await store.read(moved.id.slice(0, moved.id.indexOf("#")));
-    const existing = destination.document.transactions().find((row) => row.id === moved.id);
-    if (existing && !sameTransaction(existing, moved)) throw new MoneyIoError(412);
-    // An identical destination is a previous partially completed attempt. Never overwrite it.
-    if (!existing) {
-      if (!current) throw new MoneyIoError(412);
-      putTransaction(destination.document, moved);
-      await store.write(destination.url, destination.document, destination.condition);
-    }
+    // A completed destination never authorises removal of a subsequently changed source.
+    if (current && !sameTransaction(current, original)) throw new MoneyIoError(412);
+    const readDestination = () => store.read(moved.id.slice(0, moved.id.indexOf("#")));
+    const destination = await readDestination();
+    await reconcileMutation(
+      destination,
+      (loaded) => loaded.document.transactions().some((row) => sameTransaction(row, moved)),
+      async () => {
+        if (!current || destination.document.transactions().some((row) => row.id === moved.id))
+          throw new MoneyIoError(412);
+        putTransaction(destination.document, moved);
+        await store.write(destination.url, destination.document, destination.condition);
+      },
+      readDestination,
+    );
     if (current) {
       try {
-        await deleteAtVersion(client, original, source.condition);
+        await deleteAtVersion(client, original, source);
       } catch (cause) {
         throw new Error(
           "The destination was saved, but the move did not finish. Retry the same edit to finish safely; both copies may currently be visible.",
@@ -149,8 +158,17 @@ export async function updateTransaction(
     }
     return moved;
   }
-  putTransaction(source.document, value);
-  await store.write(source.url, source.document, source.condition);
+  await reconcileMutation(
+    source,
+    (loaded) => loaded.document.transactions().some((row) => sameTransaction(row, value)),
+    async () => {
+      // Compare persisted fields, ignoring ledger presentation fields such as runningBalance.
+      if (!current || !sameTransaction(current, original)) throw new MoneyIoError(412);
+      putTransaction(source.document, value);
+      await store.write(source.url, source.document, source.condition);
+    },
+    () => store.read(source.url),
+  );
   return value;
 }
 function sameTransaction(left: Transaction, right: Transaction) {
@@ -172,19 +190,35 @@ function sameTransaction(left: Transaction, right: Transaction) {
   ).every((key) => left[key] === right[key]);
 }
 /** Reuse the model's RDF deletion, pinned to the document version whose transaction we checked. */
-async function deleteAtVersion(client: MoneyClient, row: Transaction, condition: Precondition) {
-  const headers = conditionalHeaders(condition);
-  const store = storeOf({
-    ...client,
-    fetch: (input, init) =>
-      client.fetch(
-        input,
-        init?.method === "PUT"
-          ? { ...init, headers: { ...Object.fromEntries(new Headers(init.headers)), ...headers } }
-          : init,
-      ),
-  });
-  return store.deleteTransaction(transactionKey(row.id), row.postingTime);
+async function deleteAtVersion(
+  client: MoneyClient,
+  row: Transaction,
+  loaded: Awaited<ReturnType<MoneyStore["read"]>>,
+) {
+  await reconcileMutation(
+    loaded,
+    (value) => !value.document.transactions().some((current) => current.id === row.id),
+    async () => {
+      if (!loaded.document.transactions().some((value) => sameTransaction(value, row)))
+        throw new MoneyIoError(412);
+      const headers = conditionalHeaders(loaded.condition);
+      const store = storeOf({
+        ...client,
+        fetch: (input, init) =>
+          client.fetch(
+            input,
+            init?.method === "PUT"
+              ? {
+                  ...init,
+                  headers: { ...Object.fromEntries(new Headers(init.headers)), ...headers },
+                }
+              : init,
+          ),
+      });
+      await store.deleteTransaction(transactionKey(row.id), row.postingTime);
+    },
+    () => storeOf(client).read(loaded.url),
+  );
 }
 export async function bulkCategorise(
   client: MoneyClient,
@@ -201,13 +235,32 @@ export async function bulkCategorise(
   const saved: string[] = [];
   for (const key of new Set(rows.map((row) => monthKey(row.postingTime)))) {
     const loaded = await store.read(`transactions/${key}.ttl`);
-    const current = loaded.document.transactions();
-    for (const row of rows.filter((row) => monthKey(row.postingTime) === key)) {
-      const latest = current.find((value) => value.id === row.id);
-      if (!latest || latest.debitAccount || latest.creditAccount) throw new MoneyIoError(412);
-      putTransaction(loaded.document, categorised(latest, category));
-    }
-    await store.write(loaded.url, loaded.document, loaded.condition);
+    const group = rows.filter((row) => monthKey(row.postingTime) === key);
+    await reconcileMutation(
+      loaded,
+      (value) => {
+        const current = value.document.transactions();
+        return group.every((row) =>
+          current.some(
+            (latest) =>
+              latest.id === row.id &&
+              !latest.debitAccount &&
+              !latest.creditAccount &&
+              latest.category === category,
+          ),
+        );
+      },
+      async () => {
+        const current = loaded.document.transactions();
+        for (const row of group) {
+          const latest = current.find((value) => value.id === row.id);
+          if (!latest || latest.debitAccount || latest.creditAccount) throw new MoneyIoError(412);
+          putTransaction(loaded.document, categorised(latest, category));
+        }
+        await store.write(loaded.url, loaded.document, loaded.condition);
+      },
+      () => store.read(loaded.url),
+    );
     saved.push(loaded.url);
   }
   return saved;
@@ -215,8 +268,8 @@ export async function bulkCategorise(
 export async function deleteTransaction(client: MoneyClient, row: Transaction) {
   const loaded = await storeOf(client).read(row.id.slice(0, row.id.indexOf("#")));
   const current = loaded.document.transactions().find((value) => value.id === row.id);
-  if (!current || !sameTransaction(current, row)) throw new MoneyIoError(412);
-  return deleteAtVersion(client, row, loaded.condition);
+  if (current) await assertImportDeletionAllowed(client, current.derivedFrom);
+  return deleteAtVersion(client, row, loaded);
 }
 /** The fragment remains stable when a transaction is explicitly moved to another month. */
 export function transactionKey(id: string) {

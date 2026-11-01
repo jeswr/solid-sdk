@@ -11,6 +11,7 @@ import {
 import { parseMoney } from "../reports";
 import { type MoneyClient, provision, storeOf } from "./container";
 import { allTransactions } from "./ledger";
+import { reconcileMutation } from "./mutations";
 export const accountTypes = ["current", "savings", "credit card", "cash"] as const;
 export type AccountType = (typeof accountTypes)[number];
 export interface AccountSummary {
@@ -96,8 +97,16 @@ export async function createAccount(
 }
 export async function renameAccount(client: MoneyClient, id: string, label: string) {
   const store = storeOf(client);
-  const loaded = await store.read(id.slice(0, id.indexOf("#")));
-  if (!loaded.document.accounts().some((row) => row.id === id)) throw new MoneyIoError(412);
-  putAccount(loaded.document, { id, label });
-  await store.write(loaded.url, loaded.document, loaded.condition);
+  const read = () => store.read(id.slice(0, id.indexOf("#")));
+  const loaded = await read();
+  await reconcileMutation(
+    loaded,
+    (value) => value.document.accounts().some((row) => row.id === id && row.label === label),
+    async () => {
+      if (!loaded.document.accounts().some((row) => row.id === id)) throw new MoneyIoError(412);
+      putAccount(loaded.document, { id, label });
+      await store.write(loaded.url, loaded.document, loaded.condition);
+    },
+    read,
+  );
 }
