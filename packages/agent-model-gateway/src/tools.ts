@@ -18,7 +18,16 @@ const proposalRecord = podRecordSchema.options.find(
 const proposal = z.strictObject({
   action: proposalRecord.omit({ wasGeneratedBy: true }).extend({
     state: z.literal("proposed"),
-    intent: proposalRecord.shape.intent.extend({ parameters: z.record(z.string(), z.json()) }),
+    intent: proposalRecord.shape.intent.extend({
+      // Advertise an object schema while retaining agent-model's canonical JSON checks.
+      parameters: z
+        .record(z.string(), z.json())
+        .refine(
+          (parameters) =>
+            proposalRecord.shape.intent.shape.parameters.safeParse(parameters).success,
+          "Expected canonicalisable JSON object",
+        ),
+    }),
   }),
 });
 
@@ -29,7 +38,12 @@ export function proposerTools(ctx: ProposerContext, proposals: ProposalDraft[]):
       name: tool.name === "search" ? "pod_search" : tool.name,
       description: tool.description,
       schema: tool.inputSchema,
-      run: tool.handler,
+      async run(input: unknown) {
+        const result = await tool.handler(input);
+        return result.isError
+          ? { isError: true, content: [{ type: "text", text: "Tool request failed" }] }
+          : result;
+      },
     }));
   const recall = z.strictObject({ query: z.string().min(1).max(4096) });
   return [
