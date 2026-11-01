@@ -88,7 +88,11 @@ function ProjectRow({
       )}
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <IconButton label={`Project actions for ${name}`} variant="ghost">
+          <IconButton
+            className="tsk-project-actions"
+            label={`Project actions for ${name}`}
+            variant="ghost"
+          >
             <Ellipsis size={16} aria-hidden="true" />
           </IconButton>
         </DropdownMenuTrigger>
@@ -232,34 +236,38 @@ export function TasksSidebar() {
         {link("/tasks/upcoming", "Upcoming", <CalendarRange size={18} aria-hidden="true" />)}
         {link("/tasks/completed", "Completed", <Check size={18} aria-hidden="true" />)}
       </ul>
-      <button
-        type="button"
-        className="tsk-nav-heading tsk-disclosure"
-        aria-expanded={preferences.sidebar.labelsOpen}
-        onClick={() => dispatch({ type: "sidebar", group: "labelsOpen" })}
-      >
-        {preferences.sidebar.labelsOpen ? (
-          <ChevronDown size={14} aria-hidden="true" />
-        ) : (
-          <ChevronRight size={14} aria-hidden="true" />
-        )}
-        Labels
-      </button>
-      {preferences.sidebar.labelsOpen && (
-        <ul className="tsk-nav-list">
-          {[...labels]
-            .sort(([a], [b]) => a.localeCompare(b))
-            .map(([name, categories]) =>
-              link(
-                `/tasks/l/${encodeURIComponent(name)}`,
-                `@${categories[0]?.name}`,
-                <Tag size={16} aria-hidden="true" />,
-                open.filter((task) =>
-                  task.labelIds.some((id) => categories.some((category) => category.id === id)),
-                ).length,
-              ),
+      {labels.size > 0 && (
+        <>
+          <button
+            type="button"
+            className="tsk-nav-heading tsk-disclosure"
+            aria-expanded={preferences.sidebar.labelsOpen}
+            onClick={() => dispatch({ type: "sidebar", group: "labelsOpen" })}
+          >
+            {preferences.sidebar.labelsOpen ? (
+              <ChevronDown size={14} aria-hidden="true" />
+            ) : (
+              <ChevronRight size={14} aria-hidden="true" />
             )}
-        </ul>
+            Labels
+          </button>
+          {preferences.sidebar.labelsOpen && (
+            <ul className="tsk-nav-list">
+              {[...labels]
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([name, categories]) =>
+                  link(
+                    `/tasks/l/${encodeURIComponent(name)}`,
+                    `@${categories[0]?.name}`,
+                    <Tag size={16} aria-hidden="true" />,
+                    open.filter((task) =>
+                      task.labelIds.some((id) => categories.some((category) => category.id === id)),
+                    ).length,
+                  ),
+                )}
+            </ul>
+          )}
+        </>
       )}
       <button
         type="button"

@@ -53,6 +53,16 @@ export function TaskRow({
       ?.tracker.labels.filter((label) => task.labelIds.includes(label.id)) ?? [];
   const pending = !tasks.tasks[task.projectUrl]?.items.find((item) => item.url === task.url)?.etag;
   const now = new Date();
+  const hasMeta = Boolean(
+    task.due ||
+      task.allDay ||
+      task.recurring ||
+      task.hasReminders ||
+      children.length ||
+      orphanParentTitle ||
+      labels.length ||
+      (showProject && task.projectTitle),
+  );
   return (
     <li
       className="tsk-row"
@@ -86,64 +96,68 @@ export function TaskRow({
         }
       }}
     >
-      <input
-        className="tsk-check"
-        data-priority={task.priority}
-        type="checkbox"
-        tabIndex={-1}
-        checked={task.state === "closed"}
-        disabled={pending || task.state === "closed"}
-        aria-label={`Complete '${task.title}'`}
-        onChange={() => {
-          void completeTask(task, tasks);
-        }}
-      />
+      <label className="tsk-check-target">
+        <input
+          className="tsk-check"
+          data-priority={task.priority}
+          type="checkbox"
+          tabIndex={-1}
+          checked={task.state === "closed"}
+          disabled={pending || task.state === "closed"}
+          aria-label={`Complete '${task.title}'`}
+          onChange={() => {
+            void completeTask(task, tasks);
+          }}
+        />
+      </label>
       <div className="tsk-row-body">
         <Link className="tsk-task-title" tabIndex={-1} href={href}>
           {task.title}
         </Link>
-        <div className="tsk-meta">
-          {(task.due || task.allDay) && (
-            <span className="tsk-due" data-overdue={isOverdue(task, now) || undefined}>
-              {formatDue(task, now)}
-            </span>
-          )}
-          {task.recurring && (
-            <span title="Recurring task">
-              <Repeat2 size={14} aria-label="Recurring task" />
-            </span>
-          )}
-          {task.hasReminders && (
-            <span title="Reminder set">
-              <Bell size={14} aria-label="Reminder set" />
-            </span>
-          )}
-          {children.length > 0 && (
-            <span
-              role="img"
-              aria-label={`${children.filter((child) => child.state === "closed").length} of ${children.length} sub-tasks complete`}
-            >
-              {children.filter((child) => child.state === "closed").length}/{children.length}
-            </span>
-          )}
-          {orphanParentTitle && <span>↳ {orphanParentTitle}</span>}
-          {labels.slice(0, 3).map((label) => (
-            <span className="tsk-chip" key={label.id}>
-              @{label.name}
-            </span>
-          ))}
-          {labels.length > 3 && (
-            <span
-              title={labels
-                .slice(3)
-                .map((label) => label.name)
-                .join(", ")}
-            >
-              +{labels.length - 3}
-            </span>
-          )}
-          {showProject && <span>{task.projectTitle}</span>}
-        </div>
+        {hasMeta && (
+          <div className="tsk-meta">
+            {(task.due || task.allDay) && (
+              <span className="tsk-due" data-overdue={isOverdue(task, now) || undefined}>
+                {formatDue(task, now)}
+              </span>
+            )}
+            {task.recurring && (
+              <span title="Recurring task">
+                <Repeat2 size={14} aria-label="Recurring task" />
+              </span>
+            )}
+            {task.hasReminders && (
+              <span title="Reminder set">
+                <Bell size={14} aria-label="Reminder set" />
+              </span>
+            )}
+            {children.length > 0 && (
+              <span
+                role="img"
+                aria-label={`${children.filter((child) => child.state === "closed").length} of ${children.length} sub-tasks complete`}
+              >
+                {children.filter((child) => child.state === "closed").length}/{children.length}
+              </span>
+            )}
+            {orphanParentTitle && <span>↳ {orphanParentTitle}</span>}
+            {labels.slice(0, 3).map((label) => (
+              <span className="tsk-chip" key={label.id}>
+                @{label.name}
+              </span>
+            ))}
+            {labels.length > 3 && (
+              <span
+                title={labels
+                  .slice(3)
+                  .map((label) => label.name)
+                  .join(", ")}
+              >
+                +{labels.length - 3}
+              </span>
+            )}
+            {showProject && task.projectTitle && <span>{task.projectTitle}</span>}
+          </div>
+        )}
       </div>
       <div className="tsk-row-actions">
         <IconButton

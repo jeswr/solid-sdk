@@ -11,9 +11,11 @@ export const TASK_PLACEHOLDER =
 export function AddTaskRow({
   project,
   sectionId,
+  hideTrigger = false,
 }: {
   project: StoredProject;
   sectionId?: string | undefined;
+  hideTrigger?: boolean;
 }) {
   const { createTask } = useTasks();
   const [open, setOpen] = useState(false);
@@ -34,7 +36,12 @@ export function AddTaskRow({
     if (open) input.current?.focus();
   }, [open]);
   return (
-    <div ref={container} data-tsk-add={sectionId ?? ""} className="tsk-add-row">
+    <div
+      ref={container}
+      data-tsk-add={sectionId ?? ""}
+      className="tsk-add-row"
+      hidden={hideTrigger && !open}
+    >
       {open ? (
         <form
           onSubmit={(event) => {
@@ -56,7 +63,14 @@ export function AddTaskRow({
                 event.preventDefault();
                 setOpen(false);
                 setTitle("");
-                requestAnimationFrame(() => trigger.current?.focus());
+                requestAnimationFrame(() => {
+                  if (hideTrigger) {
+                    container.current
+                      ?.closest(".tsk-content")
+                      ?.querySelector<HTMLButtonElement>(".tsk-empty-add")
+                      ?.focus();
+                  } else trigger.current?.focus();
+                });
               }
             }}
           />

@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { CalendarRange } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { dueDate, localDay } from "../../lib/format/due";
 import { compareTasks } from "../../lib/views/project-groups";
@@ -22,6 +23,7 @@ export function UpcomingView() {
       title="Upcoming"
       rows={rows}
       emptyTitle="Nothing upcoming"
+      emptyIcon={<CalendarRange size={24} strokeWidth={1.5} aria-hidden="true" />}
       emptyBody="Tasks with a future due date will show up here"
     />
   );

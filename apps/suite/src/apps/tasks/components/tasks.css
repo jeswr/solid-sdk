@@ -24,6 +24,17 @@
 .tsk-view-header :where(h1) .suite-editable {
   font: inherit;
 }
+.tsk-view-header :where(h1) .suite-editable,
+.tsk-section-header .suite-editable {
+  padding-inline: 0;
+  background: transparent;
+}
+.tsk-view-header :where(h1) .suite-editable:hover,
+.tsk-view-header :where(h1) .suite-editable:focus-visible,
+.tsk-section-header .suite-editable:hover,
+.tsk-section-header .suite-editable:focus-visible {
+  background: var(--surface-2);
+}
 .tsk-section-header .suite-label,
 .tsk-inline-edit .suite-label,
 .tsk-view-header h1 .suite-label {
@@ -82,11 +93,17 @@
   color: var(--foreground);
   font-size: var(--text-sm);
 }
-.tsk-nav-list a:hover {
+.tsk-nav-list > li {
+  border-radius: var(--radius-md);
+}
+.tsk-nav-list > li:hover,
+.tsk-nav-list > li:focus-within {
   background: var(--surface-2);
 }
-.tsk-nav-list a[aria-current="page"] {
+.tsk-nav-list > li:has(> a[aria-current="page"]) {
   background: var(--primary-soft);
+}
+.tsk-nav-list a[aria-current="page"] {
   color: var(--primary);
   font-weight: 600;
 }
@@ -175,12 +192,13 @@
   font-weight: 600;
 }
 .tsk-row {
+  --tsk-title-line-h: var(--lh-sm, 1.25rem);
   position: relative;
   display: flex;
   align-items: start;
   gap: 12px;
   min-height: var(--row-h, 44px);
-  padding: 10px 4px;
+  padding: 0 4px;
   border-bottom: 1px solid var(--border);
   border-radius: var(--radius-sm);
 }
@@ -191,14 +209,28 @@
 .tsk-row:focus-within {
   background: var(--surface-2);
 }
+.tsk-check-target {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  padding: 2px;
+  flex-shrink: 0;
+  margin-top: calc((var(--row-h, 44px) - 24px - 1px) / 2);
+  cursor: pointer;
+}
 .tsk-check {
   appearance: none;
   display: grid;
   place-content: center;
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
-  margin: 3px 0 0;
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  padding: 0;
+  margin: 0;
+  background: transparent;
   border: 2px solid var(--border-strong);
   border-radius: var(--radius-full);
   cursor: pointer;
@@ -227,6 +259,7 @@
 .tsk-row-body {
   flex: 1;
   min-width: 0;
+  padding-block: calc((var(--row-h, 44px) - var(--tsk-title-line-h) - 1px) / 2);
 }
 .tsk-task-title {
   display: -webkit-box;
@@ -235,7 +268,7 @@
   overflow: hidden;
   color: var(--foreground);
   font-size: var(--text-sm);
-  line-height: 1.5;
+  line-height: var(--tsk-title-line-h);
   text-decoration: none;
   overflow-wrap: anywhere;
 }
@@ -269,7 +302,7 @@
 .tsk-row-actions {
   display: flex;
   align-items: center;
-  align-self: center;
+  margin-top: calc((var(--row-h, 44px) - var(--control-h) - 1px) / 2);
   gap: 2px;
 }
 .tsk-icon-link {
@@ -290,6 +323,11 @@
   flex: 1;
   min-width: 0;
 }
+.tsk-context-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .tsk-sidebar :focus-visible,
 .tsk-content :focus-visible {
   outline: 2px solid var(--ring);
@@ -308,13 +346,34 @@
     padding-top: 40px;
   }
 }
+@media (max-width: 767px) {
+  .tsk-toaster[data-sonner-toaster][data-y-position="bottom"] {
+    /* The interim shell's tab bar is 56px; it has no shared height token yet. */
+    --tsk-tabbar-h: 56px;
+    bottom: calc(var(--tsk-tabbar-h) + env(safe-area-inset-bottom, 0px) + var(--space-4));
+  }
+}
 @media (hover: hover) and (pointer: fine) {
-  .tsk-row-actions {
+  .tsk-row-actions,
+  .tsk-project-actions {
     opacity: 0;
   }
+  .tsk-project-actions {
+    pointer-events: none;
+  }
   .tsk-row:hover .tsk-row-actions,
-  .tsk-row:focus-within .tsk-row-actions {
+  .tsk-row:focus-within .tsk-row-actions,
+  .tsk-project-row:hover .tsk-project-actions,
+  .tsk-project-row:focus-within .tsk-project-actions,
+  .tsk-project-row:has(> a[aria-current="page"]) .tsk-project-actions,
+  .tsk-project-actions[data-state="open"] {
     opacity: 1;
+  }
+  .tsk-project-row:hover .tsk-project-actions,
+  .tsk-project-row:focus-within .tsk-project-actions,
+  .tsk-project-row:has(> a[aria-current="page"]) .tsk-project-actions,
+  .tsk-project-actions[data-state="open"] {
+    pointer-events: auto;
   }
 }
 @media (prefers-reduced-motion: reduce) {

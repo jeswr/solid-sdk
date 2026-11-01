@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 "use client";
+import { CircleCheck } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { compareTasks } from "../../lib/views/project-groups";
 import { useTasksPreferences } from "../../state/preferences";
@@ -21,6 +22,7 @@ export function CompletedView() {
       title="Completed"
       rows={rows}
       emptyTitle="Nothing completed yet"
+      emptyIcon={<CircleCheck size={24} strokeWidth={1.5} aria-hidden="true" />}
       emptyBody="Completed tasks will show up here"
     />
   );
