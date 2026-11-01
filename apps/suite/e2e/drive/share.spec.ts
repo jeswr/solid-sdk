@@ -25,7 +25,9 @@ test("shares a file as Editor, persists across reload, enables link access and r
   const row = page
     .locator("tr[data-url]")
     .filter({ has: page.getByText("notes.md", { exact: true }) });
-  await row.click();
+  // On phones a row click opens the preview; Space selects at every viewport.
+  await row.focus();
+  await row.press("Space");
   await page
     .getByRole("toolbar", { name: "Selection actions" })
     .getByRole("button", { name: "Share", exact: true })
@@ -41,7 +43,8 @@ test("shares a file as Editor, persists across reload, enables link access and r
   await expect(dialog.getByLabel(`Role for ${BOB}`)).toHaveValue("editor");
   await dialog.getByRole("button", { name: "Done" }).click();
   await page.reload();
-  await row.click();
+  await row.focus();
+  await row.press("Space");
   await page
     .getByRole("toolbar", { name: "Selection actions" })
     .getByRole("button", { name: "Share", exact: true })

@@ -142,11 +142,16 @@ it.each([
   await vi.waitFor(() => expect(document.querySelector(`[data-node="${child}"]`)).not.toBeNull());
 });
 
-it.each([
-  "Details",
-  "item menu",
-  "selection toolbar",
-])("opens sharing from %s and closes with Escape", async (entry) => {
+it.each(
+  [375, 768, 1280].flatMap((width) =>
+    ["Details", "item menu", "selection toolbar"].map((entry) => ({ width, entry })),
+  ),
+)("opens sharing from $entry at $width px and closes with Escape", async ({ entry, width }) => {
+  const matchMedia = window.matchMedia;
+  vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+    ...matchMedia(query),
+    matches: query === "(max-width: 767px)" && width < 768,
+  }));
   const f = await rdfPod();
   drive.client = createSolidDriveClient({ storageUrl: ROOT, fetch: f.fetch, webId: OWNER });
   drive.session.fetch = f.fetch;
@@ -163,7 +168,16 @@ it.each([
   else {
     const row = view.host.querySelector<HTMLElement>(`[data-url="${PRIVATE}secret"]`);
     if (!row) throw new Error("Missing file");
-    await click(row);
+    if (width < 768) {
+      await click(row);
+      expect(ui.preview?.items[0]?.url).toBe(row.dataset.url);
+      expect(row.getAttribute("aria-selected")).toBe("false");
+      await act(async () => ui.setPreview(undefined));
+    }
+    await act(async () => row.focus());
+    await key(row, " ");
+    expect(ui.preview).toBeUndefined();
+    expect(row.getAttribute("aria-selected")).toBe("true");
     const trigger = view.host.querySelector<HTMLElement>(
       '[aria-label="Selection actions"] [aria-label="Share"]',
     );
