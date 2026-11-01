@@ -8,7 +8,7 @@ import {
   type SignInProvider,
   type SignInRecentAccount,
 } from "@jeswr/suite-ui/sign-in";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import "@jeswr/suite-ui/styles/sign-in.css";
 
 // Fixture literals from lane A's directory and suite spec 02-§8.1.
@@ -60,25 +60,17 @@ const states = [
 ] as const;
 
 function Demo({ state }: { state: string }) {
-  const wrapper = useRef<HTMLDivElement>(null);
   const [pending, setPending] = useState<NonNullable<SignInCardProps["pending"]> | null>(
     state === "pending" ? { kind: "provider", key: "home" } : null,
   );
   const [status, setStatus] = useState("");
-  useEffect(() => {
-    if (state !== "custom") return;
-    const trigger = wrapper.current?.querySelector<HTMLButtonElement>(
-      '[data-slot="collapsible-trigger"]',
-    );
-    if (trigger?.getAttribute("aria-expanded") === "false") trigger.click();
-  }, [state]);
-
   return (
-    <div ref={wrapper} className="grid min-w-0 gap-3">
+    <div className="grid min-w-0 gap-3">
       <SignInCard
         providers={providers}
         recentAccounts={state === "recent" ? accounts : []}
         recentProviders={["https://past.example/", "https://another.example/"]}
+        defaultCustomProviderOpen={state === "custom"}
         pending={pending}
         error={
           state === "error"

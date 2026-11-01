@@ -25,6 +25,8 @@ export interface SignInCardProps {
   providers: SignInProvider[];
   recentProviders?: string[];
   allowCustomProvider?: boolean;
+  /** Initial expansion only; later changes do not override the user's choice. */
+  defaultCustomProviderOpen?: boolean;
   /** Provider key: id or issuer. Account key: WebID. Form key: submitted input. */
   pending?: {
     kind: "webid" | "provider" | "account" | "custom";

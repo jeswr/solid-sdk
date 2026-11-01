@@ -16,6 +16,30 @@ export function toneFor(issuer: string): string {
   return `var(--app-${tones[hash % tones.length]})`;
 }
 
+/** Rotate the app palette by a provider's zero-based list position. */
+export function toneAt(index: number): string {
+  return `var(--app-${tones[index % tones.length]})`;
+}
+
+/** HTTP(S) only; single-slash local paths require explicit opt-in for help links. */
+export function safeHref(
+  value: string | undefined,
+  allowSameOriginPath = false,
+): string | undefined {
+  const target = value?.trim();
+  // URL parsers can discard embedded whitespace or treat backslashes as slashes.
+  if (!target || /[\s\\]/u.test(target)) return undefined;
+  try {
+    if (allowSameOriginPath && target.startsWith("/") && !target.startsWith("//")) {
+      return target;
+    }
+    const url = new URL(target);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Display metadata only. URL validation and login resolution belong to the host. */
 export function hostOf(url: string): string {
   try {
@@ -27,7 +51,7 @@ export function hostOf(url: string): string {
 
 export function signUpTarget(providers: readonly SignInProvider[]): string | undefined {
   for (const provider of providers) {
-    const target = provider.signUpUrl?.trim();
+    const target = safeHref(provider.signUpUrl);
     if (target) return target;
   }
   return undefined;

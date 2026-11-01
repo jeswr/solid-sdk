@@ -125,6 +125,12 @@
   color: var(--foreground);
   font-family: var(--font-ui);
 }
+.su-sign-in-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
 .su-sign-in-spinner {
   flex: none;
   animation: su-sign-in-spin 1s linear infinite;

@@ -45,7 +45,10 @@ function props(overrides: Partial<SignInCardProps> = {}): SignInCardProps {
     ...overrides,
   };
 }
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 describe("SignInCard", () => {
   it("renders recent accounts, WebID form, providers and footer in visual order", () => {
@@ -77,6 +80,8 @@ describe("SignInCard", () => {
     const [home, community] = within(list).getAllByRole("button");
     expect(home?.dataset.variant).toBe("default");
     expect(community?.dataset.variant).toBe("outline");
+    expect(screen.getByRole("button", { name: "Continue" }).dataset.variant).toBe("outline");
+    expect(document.querySelectorAll('button[data-variant="default"]')).toHaveLength(1);
     const link = screen.getByRole("link", { name: "Get a pod" });
     expect(link.getAttribute("href")).toBe(providers[0]?.signUpUrl);
     expect(link.getAttribute("target")).toBe("_blank");
@@ -114,15 +119,84 @@ describe("SignInCard", () => {
     render(
       <SignInCard
         {...props({
-          providers: [{ ...providers[0], iconUrl: "/my-provider.svg" }, providers[1]],
+          providers: [
+            { ...providers[0], iconUrl: " https://home.example/my-provider.svg " },
+            providers[1],
+          ],
         })}
       />,
     );
     const images = document.querySelectorAll("img");
     expect(images).toHaveLength(1);
-    expect(images[0]?.getAttribute("src")).toBe("/my-provider.svg");
+    expect(images[0]?.getAttribute("src")).toBe("https://home.example/my-provider.svg");
     expect(images[0]?.getAttribute("alt")).toBe("");
     expect(screen.queryByRole("img")).toBeNull();
+  });
+
+  it("gives six providers distinct monogram colours even with matching names and issuers", () => {
+    render(
+      <SignInCard
+        {...props({
+          providers: Array.from({ length: 7 }, (_, index) => ({
+            ...providers[0],
+            id: `provider-${index}`,
+            name: "Solid provider",
+          })),
+        })}
+      />,
+    );
+    const tones = Array.from(document.querySelectorAll<HTMLElement>(".su-sign-in-monogram")).map(
+      (tile) => tile.style.backgroundColor,
+    );
+    expect(tones).toHaveLength(7);
+    expect(new Set(tones.slice(0, 6)).size).toBe(6);
+    expect(tones[0]).toBe("var(--app-home)");
+    expect(tones[6]).toBe(tones[0]);
+  });
+
+  it.each([
+    "javascript:alert(1)",
+    "data:image/svg+xml,<svg/>",
+    "//evil.example/image",
+    "/local/image.png",
+    "images/photo.png",
+    "/\\evil.example/image",
+    "/\t/evil.example/image",
+    " \t\n",
+  ])("treats unsafe host URLs as absent: %j", async (url) => {
+    const imageSource = vi.spyOn(window.HTMLImageElement.prototype, "src", "set");
+    render(
+      <SignInCard
+        {...props({
+          providers: [{ ...providers[0], signUpUrl: url, iconUrl: url }],
+          recentAccounts: [{ ...accounts[0], photoUrl: url }],
+          // A local help path is allowed; image and sign-up paths are not.
+          webIdHelpHref: url === "/local/image.png" ? "help/webid" : url,
+        })}
+      />,
+    );
+    expect(screen.queryByRole("link", { name: "Get a pod" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "What is a WebID?" })).toBeNull();
+    expect(document.querySelectorAll("img")).toHaveLength(0);
+    expect(imageSource).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: /Continue with Home pod/ }).textContent).toContain(
+      "HContinue with Home pod",
+    );
+    expect(screen.getByRole("button", { name: /Continue as Alice/ }).textContent).toContain("AW");
+    await userEvent.setup().click(screen.getByRole("button", { name: "What is a WebID?" }));
+    expect(screen.getByRole("dialog", { name: "What is a WebID?" })).toBeDefined();
+  });
+
+  it("loads an explicitly supplied absolute account photo URL", () => {
+    const imageSource = vi.spyOn(window.HTMLImageElement.prototype, "src", "set");
+    render(
+      <SignInCard
+        {...props({
+          recentAccounts: [{ ...accounts[0], photoUrl: " https://alice.example/photo.png " }],
+        })}
+      />,
+    );
+    expect(imageSource).toHaveBeenCalledWith("https://alice.example/photo.png");
   });
 
   it("generates independent field, help, error and datalist IDs for multiple cards", async () => {
@@ -198,10 +272,43 @@ describe("SignInCard", () => {
   });
 
   it("hides custom providers when disallowed and omits sign-up when unavailable", () => {
-    render(<SignInCard {...props({ allowCustomProvider: false, providers: [] })} />);
+    render(
+      <SignInCard
+        {...props({
+          allowCustomProvider: false,
+          defaultCustomProviderOpen: true,
+          providers: [],
+        })}
+      />,
+    );
     expect(screen.queryByRole("button", { name: "Another provider" })).toBeNull();
+    expect(screen.queryByLabelText("Provider address")).toBeNull();
     expect(screen.queryByRole("link", { name: "Get a pod" })).toBeNull();
     expect(screen.queryByText("New to Solid?")).toBeNull();
+  });
+
+  it("uses the custom-provider default only on mount and lets the user toggle it", async () => {
+    const user = userEvent.setup();
+    const callbacks = props({ defaultCustomProviderOpen: true });
+    const { rerender } = render(<SignInCard {...callbacks} />);
+    const trigger = screen.getByRole("button", { name: "Another provider" });
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByRole("combobox", { name: "Provider address" })).toBe(document.activeElement);
+    expect(document.querySelectorAll('button[data-variant="default"]')).toHaveLength(1);
+    expect(
+      within(formOf(screen.getByRole("combobox", { name: "Provider address" }))).getByRole(
+        "button",
+        { name: "Continue" },
+      ).dataset.variant,
+    ).toBe("outline");
+    rerender(<SignInCard {...callbacks} defaultCustomProviderOpen={false} />);
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    await user.click(trigger);
+    expect(screen.queryByLabelText("Provider address")).toBeNull();
+    rerender(<SignInCard {...callbacks} />);
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    await user.click(trigger);
+    expect(screen.getByRole("combobox", { name: "Provider address" })).toBe(document.activeElement);
   });
 
   it("uses the next available sign-up URL", () => {
@@ -227,9 +334,23 @@ describe("SignInCard", () => {
     const user = userEvent.setup();
     const callbacks = props({ pending, recentAccounts: accounts, onCancel: vi.fn() });
     render(<SignInCard {...callbacks} />);
-    const busy = screen.getByRole("button", { name: /Signing in…/ });
+    const busy = screen.getByRole("button", {
+      name:
+        pending.kind === "provider"
+          ? /Signing in with Home pod…/
+          : pending.kind === "account"
+            ? /Signing in as Alice Wilder…/
+            : "Signing in…",
+    });
     expect(busy.getAttribute("aria-busy")).toBe("true");
     expect(busy.querySelector("svg")).not.toBeNull();
+    if (pending.kind === "provider") {
+      expect(busy.querySelector(".su-sign-in-monogram")?.textContent).toBe("H");
+      expect(busy.textContent).toContain("Your home for Solid");
+    } else if (pending.kind === "account") {
+      expect(busy.querySelector('[data-slot="avatar"]')?.textContent).toBe("AW");
+      expect(busy.textContent).toContain("alice.example");
+    }
     expect(document.querySelectorAll('button[aria-busy="true"]')).toHaveLength(1);
     for (const control of screen.getAllByRole("button")) {
       expect((control as HTMLButtonElement).disabled).toBe(control.textContent !== "Cancel");
@@ -313,10 +434,14 @@ describe("SignInCard", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
-  it("uses a native help link when supplied", () => {
-    render(<SignInCard {...props({ webIdHelpHref: "https://help.example/webid" })} />);
+  it.each([
+    "https://help.example/webid",
+    "http://help.example/webid",
+    "/help/webid",
+  ])("uses a native help link for a safe target: %s", (webIdHelpHref) => {
+    render(<SignInCard {...props({ webIdHelpHref })} />);
     expect(screen.getByRole("link", { name: "What is a WebID?" }).getAttribute("href")).toBe(
-      "https://help.example/webid",
+      webIdHelpHref,
     );
     expect(screen.queryByRole("button", { name: "What is a WebID?" })).toBeNull();
   });

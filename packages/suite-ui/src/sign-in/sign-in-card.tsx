@@ -23,20 +23,28 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "../components/ui/sheet.js";
-import { hostOf, monogramFor, signUpTarget, toneFor } from "./model.js";
+import { hostOf, monogramFor, safeHref, signUpTarget, toneAt } from "./model.js";
 import type { SignInCardProps } from "./types.js";
 
-function Progress({ active, children }: { active: boolean; children: ReactNode }) {
+function Progress({
+  active,
+  label = "Signing in…",
+  children,
+}: {
+  active: boolean;
+  label?: string;
+  children: ReactNode;
+}) {
   return active ? (
-    <>
+    <span className="su-sign-in-progress">
       <LoaderCircle
         className="su-sign-in-spinner"
         size={20}
         strokeWidth={1.75}
         aria-hidden="true"
       />
-      <span>Signing in…</span>
-    </>
+      <span>{label}</span>
+    </span>
   ) : (
     children
   );
@@ -49,6 +57,7 @@ export function SignInCard({
   providers,
   recentProviders = [],
   allowCustomProvider = true,
+  defaultCustomProviderOpen = false,
   pending = null,
   error = null,
   onWebId,
@@ -62,7 +71,7 @@ export function SignInCard({
   const id = useId();
   const [webId, setWebId] = useState("");
   const [customProvider, setCustomProvider] = useState("");
-  const [customOpen, setCustomOpen] = useState(false);
+  const [customOpen, setCustomOpen] = useState(defaultCustomProviderOpen);
   const [helpOpen, setHelpOpen] = useState(false);
   const [lastInput, setLastInput] = useState<"webid" | "custom" | null>("webid");
   const customRef = useRef<HTMLInputElement>(null);
@@ -76,6 +85,7 @@ export function SignInCard({
   const webIdError = !!error && errorInput === "webid";
   const customError = !!error && errorInput === "custom";
   const signUp = signUpTarget(providers);
+  const helpHref = safeHref(webIdHelpHref, true);
 
   useEffect(() => {
     if (customOpen && allowCustomProvider) customRef.current?.focus();
@@ -96,6 +106,7 @@ export function SignInCard({
             const name = account.name?.trim() || hostOf(account.webId) || "your account";
             const initials = name.split(/\s+/).slice(0, 2).map(monogramFor).join("");
             const active = pending?.kind === "account" && pending.key === account.webId;
+            const photoUrl = safeHref(account.photoUrl);
             return (
               <Button
                 key={account.webId}
@@ -109,16 +120,16 @@ export function SignInCard({
                   onAccount(account);
                 }}
               >
-                <Progress active={active}>
-                  <Avatar className="su-sign-in-avatar" aria-hidden="true">
-                    {account.photoUrl && <AvatarImage src={account.photoUrl} alt="" />}
-                    <AvatarFallback>{initials}</AvatarFallback>
-                  </Avatar>
-                  <span className="su-sign-in-choice-copy">
+                <Avatar className="su-sign-in-avatar" aria-hidden="true">
+                  {photoUrl && <AvatarImage src={photoUrl} alt="" />}
+                  <AvatarFallback>{initials}</AvatarFallback>
+                </Avatar>
+                <span className="su-sign-in-choice-copy">
+                  <Progress active={active} label={`Signing in as ${name}…`}>
                     <span>Continue as {name}</span>
-                    <span className="su-sign-in-muted">{hostOf(account.webId)}</span>
-                  </span>
-                </Progress>
+                  </Progress>
+                  <span className="su-sign-in-muted">{hostOf(account.webId)}</span>
+                </span>
               </Button>
             );
           })}
@@ -158,6 +169,7 @@ export function SignInCard({
         </p>
         <Button
           type="submit"
+          variant="outline"
           disabled={busy || !webId.trim()}
           aria-busy={pending?.kind === "webid" || undefined}
         >
@@ -182,6 +194,7 @@ export function SignInCard({
           const active =
             pending?.kind === "provider" &&
             (pending.key === provider.id || pending.key === provider.issuer);
+          const iconUrl = safeHref(provider.iconUrl);
           return (
             <li key={provider.id}>
               <Button
@@ -195,26 +208,26 @@ export function SignInCard({
                   onProvider(provider);
                 }}
               >
-                <Progress active={active}>
-                  <span
-                    className="su-sign-in-monogram"
-                    style={{ backgroundColor: toneFor(provider.issuer) }}
-                    aria-hidden="true"
-                  >
-                    {provider.iconUrl ? (
-                      // biome-ignore lint/performance/noImgElement: Optional host-supplied icons need no Next.js image loader.
-                      <img src={provider.iconUrl} alt="" />
-                    ) : (
-                      monogramFor(provider.name)
-                    )}
-                  </span>
-                  <span className="su-sign-in-choice-copy">
+                <span
+                  className="su-sign-in-monogram"
+                  style={{ backgroundColor: toneAt(index) }}
+                  aria-hidden="true"
+                >
+                  {iconUrl ? (
+                    // biome-ignore lint/performance/noImgElement: Optional host-supplied icons need no Next.js image loader.
+                    <img src={iconUrl} alt="" />
+                  ) : (
+                    monogramFor(provider.name)
+                  )}
+                </span>
+                <span className="su-sign-in-choice-copy">
+                  <Progress active={active} label={`Signing in with ${provider.name}…`}>
                     <span>{provider.label ?? `Continue with ${provider.name}`}</span>
-                    {provider.description && (
-                      <span className="su-sign-in-muted">{provider.description}</span>
-                    )}
-                  </span>
-                </Progress>
+                  </Progress>
+                  {provider.description && (
+                    <span className="su-sign-in-muted">{provider.description}</span>
+                  )}
+                </span>
               </Button>
             </li>
           );
@@ -269,6 +282,7 @@ export function SignInCard({
               </datalist>
               <Button
                 type="submit"
+                variant="outline"
                 disabled={busy || !customProvider.trim()}
                 aria-busy={pending?.kind === "custom" || undefined}
               >
@@ -300,9 +314,9 @@ export function SignInCard({
             </a>
           </p>
         )}
-        {webIdHelpHref ? (
+        {helpHref ? (
           <a
-            href={busy ? undefined : webIdHelpHref}
+            href={busy ? undefined : helpHref}
             aria-disabled={busy || undefined}
             tabIndex={busy ? -1 : undefined}
             rel="noopener noreferrer"
