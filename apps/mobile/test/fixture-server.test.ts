@@ -122,6 +122,14 @@ describe("loopback-only static fixture server", () => {
       expect(String(response.body)).toContain("AUTHORED-BY GPT-5.6 Codex");
     }
   });
+  test("serves secure-store probes only through the fixture server", () => {
+    const response = request("/secure-store.js");
+    expect(response.status).toBe(200);
+    expect(response.headers["Content-Type"]).toContain("javascript");
+    expect(String(response.body)).toContain("AUTHORED-BY Codex GPT-6.1-Sol");
+    for (const page of ["/index.html", "/hostile.html"])
+      expect(String(request(page).body)).toContain("/secure-store.js");
+  });
   test("serves HEAD without a body", () => {
     const response = request("/index.js", "HEAD");
     expect(response.status).toBe(200);

@@ -46,6 +46,13 @@ Checks require explicit evidence and exit nonzero on failure:
 - `crypto.subtle`, Web Locks, service worker API presence, and `isSecureContext`.
   This checks API availability, not registration or persistence of a service worker.
 - A successful top-frame `SuiteShareIntake.getPending` and share listener registration.
+- Real `SuiteSecureStore` calls through the trusted top frame's Capacitor bridge: `status`,
+  ungated set/get with exact value and version, stale rejection, a current-version update,
+  remove/get-null, and clear/get-null for two populated keys. A fresh plaintext marker remains
+  stored until the host lists and base64-reads every file under `no_backup/securestore/` with
+  `adb shell run-as org.jeswr.suite`. A non-empty state `.bin` must exist, and the decoded
+  bytes must contain neither the marker's UTF-8 nor UTF-16LE encoding. The host then clears
+  the retained item. This exercises AndroidKeyStore and native bridge serialization.
 - An unsandboxed cross-origin iframe tries the legacy bridge, cookie/HTTP interfaces,
   Capacitor plugin proxy and the WebMessage listener. Capacitor 8.5.3 names both bridge
   transports `androidBridge`. Exposed native surfaces fail even without a response.
@@ -53,6 +60,21 @@ Checks require explicit evidence and exit nonzero on failure:
   accepted only when all native transports are absent; unexpected probe exceptions fail;
   malformed, missing and timed-out iframe results fail. Parent messages check source,
   exact origin and a fresh nonce. There is no CSP masking native isolation failures.
+  The same frame also tries secure-store get/set through every Android probe channel. Every
+  call must remain without a native reply over at least two seconds; unexpected errors,
+  exposed native transports and replies delivered into the main document fail.
+- Two independent gated set/get attempts drive the real system authentication UI. The host
+  sets and verifies disposable PIN `1234`, opens `android.settings.FINGERPRINT_ENROLL`, advances
+  recognized setup controls and sends repeated `adb emu finger touch 1` events. Fingerprint
+  enrollment must be confirmed by `dumpsys fingerprint` before that path is attempted.
+  One get is unlocked with a sensor touch; the other selects the device credential control
+  and enters the PIN with `input text 1234` and `input keyevent 66`. A pass requires an
+  observed prompt, authentication input and the exact decrypted value and committed version.
+  Returning before input, native errors and mismatched values fail. Missing enrollment,
+  unavailable user presence, unrecognized system UI or input that the runner cannot complete
+  records `not automatable` with a reason, printed as `not automatable on this runner: ...`.
+  Both paths are reported separately; a skip never counts as a passing unwrap. Pending prompts
+  are cancelled and the store cleared between attempts; the PIN is cleared in `finally`.
 - A unique ACTION_SEND text (including quotes and shell metacharacters) must appear as exactly
   one item in one pending batch. A document identity token recorded before sending requires
   exactly one matching listener event when the original document survives; pending alone
@@ -69,10 +91,21 @@ Checks require explicit evidence and exit nonzero on failure:
   survive, including after foregrounding the app. An external browser may open as designed.
 
 `e2e/artifacts/report.json` records every step, fixture evidence, share results and the explicit
-real-suite deferral; `logcat.txt` is collected on driver failure. CI also uploads emulator
-logs and logcat on any failed step. `.github/workflows/mobile.yml` provisions KVM and boots
+real-suite deferral. Its `secureStore` member contains `ungated`, `disk` (file paths, byte counts
+and plaintext absence), `cleanup`, `setup`, and independent `gated.fingerprint` / `gated.credential`
+verdicts (`passed`, `failed`, or `not automatable` with `reason` and available prompt evidence).
+Only a real failure fails the gated step. CI uploads the report on success as well as failure,
+so runner limitations remain reviewable; `logcat.txt` is collected on driver failure.
+CI also uploads emulator logs and logcat on any failed step. `.github/workflows/mobile.yml` provisions KVM and boots
 the AVD using SDK tools directly. Native compilation, emulator/CDP behavior and actual bridge
 isolation are verified there; they cannot be verified in the cloud development container.
+
+Secure-store manual checks still include either authentication path reported as not automatable
+on that runner, physical-device biometric/PIN UX, hardware backing (an emulator may report false),
+enrollment changes/key invalidation, lockout, background/cancellation races, and backup/restore
+behavior. This Android lane does not claim iOS secure-store or real-session refresh coverage.
+All secure-store fixture code is served remotely from `e2e/fixture`; `prepare-www` never copies
+it into bundled assets or Release builds.
 
 For a host-only fixture smoke test (not evidence of native bridge isolation):
 

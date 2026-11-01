@@ -17,6 +17,7 @@
     );
     return;
   }
+  const secureStore = window.__e2eSecureStore.hostile(params.get("nonce"));
   const message = JSON.stringify({
     callbackId: `mob07-hostile-${params.get("nonce")}`,
     pluginId: "SuiteShareIntake",
@@ -86,7 +87,7 @@
     {
       type: "mob07-hostile",
       nonce: params.get("nonce"),
-      result: { origin: location.origin, attempts },
+      result: { origin: location.origin, attempts, secureStore: await secureStore },
     },
     params.get("parent"),
   );

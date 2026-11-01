@@ -442,6 +442,32 @@ describe("mobile CI emulator guardrails", () => {
     expect(job).toContain("path: apps/mobile/e2e/artifacts/");
   });
 
+  test("secure-store lane inspects real state, attempts both prompts and always preserves the report", () => {
+    const driver = read("e2e/android-e2e.mjs");
+    expect(driver).toContain("checkSecureStoreFixture(report.fixture)");
+    expect(driver).toContain('const directory = "no_backup/securestore"');
+    expect(driver).toContain('shell("run-as", APP, "find", directory, "-type", "f")');
+    expect(driver).toContain('shell("run-as", APP, "base64", path)');
+    expect(driver).toContain("checkSecureStoreFiles(files, report.fixture.secureStore.marker)");
+    expect(driver).toContain('shell("locksettings", "set-pin", "1234")');
+    expect(driver).toContain('shell("locksettings", "verify", "--old", "1234")');
+    expect(driver).toContain('adb(["emu", "finger", "touch", "1"])');
+    expect(driver).toContain('for (const path of ["fingerprint", "credential"])');
+    expect(driver).toContain("attemptGatedUnwrap(path, io)");
+    expect(driver).toContain("checkGatedUnwrap(verdict)");
+    expect(driver).toContain("not automatable on this runner");
+    expect(driver).toContain("window.__e2eSecureStore.cleanup()");
+    const finalCleanup = driver.slice(driver.lastIndexOf("} finally {"));
+    expect(finalCleanup).toContain("if (pinInstalled)");
+    expect(finalCleanup).toContain("/Lock credential cleared/i.test(cleared)");
+    expect(finalCleanup).toContain('shell("locksettings", "clear", "--old", "1234")');
+    expect(job).toMatch(
+      /- if: always\(\)\n\s+uses: actions\/upload-artifact@v4\n\s+with:\n\s+name: android-e2e-diagnostics/,
+    );
+    // Production preparation's explicit files stay independent of the remote fixture map.
+    expect(read("scripts/prepare-www.ts")).not.toContain("secure-store.js");
+  });
+
   test("bounds boot commands and failure diagnostics so artifacts can still upload", () => {
     const boot = job.match(/ {6}- name: Create and boot the AVD\n[\s\S]*?(?= {6}- )/)?.[0] ?? "";
     expect(boot).toContain("timeout-minutes: 10");

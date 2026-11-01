@@ -88,6 +88,10 @@
     }
     await window.__e2eRefreshShares();
     state.topBridge = true;
+    if (state.platform === "android") {
+      state.secureStoreResponses = window.__e2eSecureStore.responses;
+      state.secureStore = await window.__e2eSecureStore.ungated();
+    }
     state.hostile = await deadline(hostile, 10000);
   }
   run()
