@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Reactive authentication: Google token model adapter (mock GIS)</title>
+<script src="/test/browser/.bundle/page.js"></script>
+<button type="button" id="connect">Connect Google Drive</button>
+<pre id="result">Waiting…</pre>
+<script type="module">
+// A mock of google.accounts.oauth2 (no live Google registration): it records whether requestAccessToken ran
+// during a user activation — the condition for Google's real popup — and lets the page resolve callbacks.
+const q = new URLSearchParams(location.search)
+const api = q.get("api")
+const scope = "https://www.googleapis.com/auth/drive.readonly"
+const google = {
+    config: undefined, requests: [],
+    initTokenClient(config) { google.config = config; return {requestAccessToken: () => google.requests.push(navigator.userActivation.isActive)} },
+    hasGrantedAllScopes: (response, ...scopes) => scopes.every(s => response.scope.split(" ").includes(s)),
+}
+const {CredentialBoundary, GoogleTokenSource, InteractionRequiredError, OAuthBearerTokenProvider, ReactiveFetchManager} = RA
+const source = new GoogleTokenSource(google, {clientId: "web-client.apps.googleusercontent.com", scopes: [scope]})
+const resources = new CredentialBoundary([`${api}/`], {allowInsecureHttp: true})
+const manager = new ReactiveFetchManager({providers: [new OAuthBearerTokenProvider(source, {resources})], boundary: resources})
+const result = {}
+
+try {
+    await manager.fetch(`${api}/files`)
+} catch (e) {
+    result.beforeClick = e instanceof InteractionRequiredError ? "interaction_required" : String(e)
+}
+
+document.querySelector("#connect").addEventListener("click", async () => {
+    const authorizing = source.authorize() // synchronously, inside the click
+    setTimeout(() => google.config.callback({access_token: "g-browser", expires_in: 3599, scope, token_type: "Bearer"}), 50)
+    await authorizing
+    result.activation = google.requests.at(-1)
+    result.afterClick = (await manager.fetch(`${api}/files`)).status
+
+    const controller = new AbortController()
+    const abandoned = source.authorize(controller.signal)
+    controller.abort(new DOMException("user navigated", "AbortError"))
+    result.aborted = await abandoned.then(() => "resolved", e => e.name)
+    google.config.callback({access_token: "g-late", expires_in: 3599, scope}) // late SDK callback
+    result.stillUsesOriginal = (await manager.fetch(`${api}/files`)).status
+    window.__result = result
+    document.querySelector("#result").textContent = JSON.stringify(result)
+})
+window.__ready = true
+</script>
+</html>
