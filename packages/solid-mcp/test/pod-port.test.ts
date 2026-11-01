@@ -139,14 +139,14 @@ describe("fetch PodPort", () => {
     expect(pod.list).toHaveBeenCalledWith(FILE);
   });
 
-  it("preserves an ordinary document with an unrelated Link relation", async () => {
+  it.each([
+    '<http://www.w3.org/ns/ldp#Container>; rel="describedby"; title="rel=type"',
+    '<http://www.w3.org/ns/ldp#Container>; rel="describedby"; title="listing; rel=type details"',
+  ])("preserves an ordinary document with an unrelated Link relation: %s", async (link) => {
     const fetch = vi.fn<typeof globalThis.fetch>(
       async () =>
         new Response("ordinary HTML", {
-          headers: {
-            "content-type": "text/html",
-            link: '<http://www.w3.org/ns/ldp#Container>; rel="describedby"; title="rel=type"',
-          },
+          headers: { "content-type": "text/html", link },
         }),
     );
     const pod = createFetchPodPort({ fetch, podRoot: ROOT });

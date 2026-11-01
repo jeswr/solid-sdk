@@ -9,7 +9,6 @@
  * (`ContainerDataset`), and any RDF representation we hand back to a client is
  * re-serialised with `@jeswr/rdf-serialize` over the parsed quads.
  */
-import { parseRdf } from "@jeswr/fetch-rdf";
 import { isContainerUrl } from "@jeswr/guarded-fetch";
 import { serialize } from "@jeswr/rdf-serialize";
 import { DataFactory } from "n3";
@@ -196,9 +195,11 @@ export async function readRdf(source: PodSource, url: string): Promise<ReadRdfRe
       (await output.rdf(
         target,
         read,
-        await parseRdf(new TextDecoder().decode(read.body), read.contentType || null, {
-          baseIRI: read.url ?? target,
-        }),
+        await parseBoundedRdf(
+          new TextDecoder().decode(read.body),
+          mediaType(read.contentType || "text/turtle"),
+          read.url ?? target,
+        ),
       ));
     const turtle = await serializeTurtle(dataset);
     return { turtle, dataset };
