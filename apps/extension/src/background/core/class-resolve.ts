@@ -28,7 +28,7 @@
 import { DataFactory, Parser, Store } from 'n3';
 import { PIM_STORAGE_CLASS } from '../../shared/storage-class';
 import type { PinnedTarget } from './class-grant';
-import { safePathUrl } from './class-path';
+import { safePathUrl, safeTargetUrl } from './class-path';
 import { ResolutionBudget } from './class-resolution-budget';
 import { checkClassCandidates } from './class-resolve-check';
 import type { InternalRead } from './class-resolve-read';
@@ -81,9 +81,9 @@ function parse(baseUrl: string, turtle: string, budget?: ResolutionBudget): Stor
   return store;
 }
 
-/** Normalise an IRI to its `origin + pathname`, keeping only http(s); else `null`. */
+/** Pin only path-safe resources without query/fragment delimiters or credentials. */
 function normaliseTargetUrl(value: string): { url: string; origin: string } | null {
-  const u = safePathUrl(value);
+  const u = safeTargetUrl(value);
   if (!u) return null;
   return { url: `${u.origin}${u.pathname}`, origin: u.origin };
 }
@@ -112,7 +112,7 @@ export function parseTypeIndexRefs(
     )) {
       if (budget && !budget.active()) return out;
       if (q.object.termType !== 'NamedNode') continue;
-      if (!seen.has(q.object.value) && normaliseTargetUrl(q.object.value)) {
+      if (!seen.has(q.object.value) && safePathUrl(q.object.value)) {
         seen.add(q.object.value);
         out.push({ url: q.object.value, authenticated: pred === PRIVATE_TYPE_INDEX });
       }
@@ -313,7 +313,7 @@ async function resolveTypeIndexTargets(
       null,
     )) {
       if (opts.signal?.aborted || (opts.budget && !opts.budget.active())) break;
-      if (q.object.termType === 'NamedNode' && normaliseTargetUrl(q.object.value)) {
+      if (q.object.termType === 'NamedNode' && safePathUrl(q.object.value)) {
         hasPrivateIndex = true;
         break;
       }
@@ -326,7 +326,7 @@ async function resolveTypeIndexTargets(
         null,
       )) {
         if (opts.signal?.aborted || (opts.budget && !opts.budget.active())) break;
-        if (q.object.termType !== 'NamedNode' || !normaliseTargetUrl(q.object.value)) continue;
+        if (q.object.termType !== 'NamedNode' || !safePathUrl(q.object.value)) continue;
         const url = q.object.value;
         if (!opts.authenticatedOrigins || !isAllowedOrigin(url, opts.authenticatedOrigins))
           continue;

@@ -2,7 +2,7 @@
 /** Private C4 sampling: no page gate, replica, or new candidate discovery. */
 import { DataFactory, type Store } from 'n3';
 import type { PinnedTarget } from './class-grant';
-import { safePathUrl } from './class-path';
+import { safeTargetUrl } from './class-path';
 import { RESOLUTION_LIMITS, type ResolutionBudget } from './class-resolution-budget';
 import type { ResolveFetch } from './class-resolve';
 import type { InternalRead } from './class-resolve-read';
@@ -32,19 +32,13 @@ function rdfKind(body: Body): 'supported' | 'unsupported' | 'non-rdf' {
 
 /** Only explicitly listed, path-safe direct members can enter the private read capability. */
 export function directMember(target: PinnedTarget, value: string): string | null {
-  const parent = safePathUrl(target.url);
-  const member = safePathUrl(value);
+  const parent = safeTargetUrl(target.url);
+  const member = safeTargetUrl(value);
   if (
     !parent ||
     !member ||
     target.kind !== 'container' ||
     !parent.pathname.endsWith('/') ||
-    parent.search ||
-    parent.hash ||
-    member.search ||
-    member.hash ||
-    member.username ||
-    member.password ||
     member.origin !== parent.origin ||
     !member.pathname.startsWith(parent.pathname)
   )

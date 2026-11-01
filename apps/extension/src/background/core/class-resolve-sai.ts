@@ -3,7 +3,7 @@
 /** Bounded SAI discovery and class matching; exact shapes stay private to the check. */
 import { DataFactory, Parser, Store } from 'n3';
 import type { PinnedTarget } from './class-grant';
-import { safePathUrl } from './class-path';
+import { safePathUrl, safeTargetUrl } from './class-path';
 import type { ResolutionBudget } from './class-resolution-budget';
 import type { ResolveFetch, ResolveOptions } from './class-resolve';
 import { CLASS_SHAPE_TREES } from './class-shape-trees';
@@ -125,12 +125,10 @@ function registrationTarget(
   registration: string,
   opts: ResolveOptions,
 ): string | null {
-  const parent = safePathUrl(registry);
-  const child = safePathUrl(registration);
+  const parent = safeTargetUrl(registry);
+  const child = safeTargetUrl(registration);
   if (!parent || !child || !parent.pathname.endsWith('/') || !child.pathname.endsWith('/'))
     return null;
-  // Queries/fragments must not turn a metadata document into a broader pinned container.
-  if (parent.search || parent.hash || child.search || child.hash) return null;
   if (
     parent.origin !== child.origin ||
     parent.pathname === child.pathname ||
@@ -215,12 +213,14 @@ export async function resolveSaiTargets(
     }
     return false;
   };
-  const privateDocument = async (url: string): Promise<ParsedDocument | null> => {
-    if (!active() || !isAuthenticated(url, opts)) return null;
-    opts.read?.allowDocument(url, true);
+  const privateDocument = async (url: string, pathOnly = false): Promise<ParsedDocument | null> => {
+    if (!active() || !isAuthenticated(url, opts) || (pathOnly && !safeTargetUrl(url))) return null;
+    opts.read?.allowDocument(url, true, pathOnly);
     const body = await opts.fetch(url, true);
     const doc = active() ? parse(body, opts.budget) : null;
-    return doc && isAuthenticated(doc.url, opts) ? doc : null;
+    return doc && isAuthenticated(doc.url, opts) && (!pathOnly || safeTargetUrl(doc.url))
+      ? doc
+      : null;
   };
   const profileDoc = parse(profile, opts.budget);
   if (!profileDoc) return { targets, truncated };
@@ -230,7 +230,8 @@ export async function resolveSaiTargets(
     if (!setDoc) continue;
     for (const registry of refs(setDoc, set, `${INTEROP}hasDataRegistry`, opts.budget)) {
       if (!active()) break;
-      if (!isAuthenticated(registry, opts) || registries.has(registry)) continue;
+      if (!safeTargetUrl(registry) || !isAuthenticated(registry, opts) || registries.has(registry))
+        continue;
       if (
         registries.size >= MAX_REGISTRIES ||
         (opts.budget &&
@@ -240,7 +241,7 @@ export async function resolveSaiTargets(
         continue;
       }
       registries.add(registry);
-      const registryDoc = await privateDocument(registry);
+      const registryDoc = await privateDocument(registry, true);
       if (!registryDoc) continue;
       for (const registration of refs(
         registryDoc,
@@ -259,7 +260,7 @@ export async function resolveSaiTargets(
           continue;
         }
         registrations.add(url);
-        const doc = await privateDocument(registration);
+        const doc = await privateDocument(registration, true);
         if (!doc || !registrationTarget(registry, doc.url, opts)) continue;
         for (const tree of refs(doc, registration, `${INTEROP}registeredShapeTree`, opts.budget)) {
           const match = await treeMatches(tree);

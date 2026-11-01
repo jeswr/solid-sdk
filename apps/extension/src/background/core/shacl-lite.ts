@@ -44,6 +44,10 @@ const NODE_KINDS: Record<string, readonly string[]> = {
   BlankNodeOrLiteral: ['BlankNode', 'Literal'],
   IRIOrLiteral: ['NamedNode', 'Literal'],
 };
+const SUPPORTED_DATATYPES = new Set([
+  ...['string', 'boolean', 'integer', 'decimal', 'float', 'double', 'dateTime'].map((s) => XSD + s),
+  `${RDF}langString`,
+]);
 
 /** No network, recursion, SPARQL, nested shapes, or executable regex supplied by the pod. */
 export function compileShaclLite(
@@ -91,6 +95,15 @@ export function compileShaclLite(
       out.add(termToId(first[0]));
       head = rest[0];
     }
+    // rdf:nil is a list node too: SHACL forbids rdf:first/rdf:rest on the
+    // terminator, including an empty list. Charge its inspection to the same budget.
+    tick();
+    const first = objects(head, `${RDF}first`);
+    const rest = objects(head, `${RDF}rest`);
+    if (first.length || rest.length) {
+      incomplete = true;
+      return;
+    }
     return out;
   };
   const compile = (node: Term, property: boolean): Rule => {
@@ -133,7 +146,10 @@ export function compileShaclLite(
       } else if (p === `${SH}class` || p === `${SH}datatype`) {
         if (v.termType !== 'NamedNode') incomplete = true;
         else if (p === `${SH}class`) rule.classes.push(v.value);
-        else rule.datatype = v.value;
+        else {
+          rule.datatype = v.value;
+          if (!SUPPORTED_DATATYPES.has(v.value)) incomplete = true;
+        }
       } else if (p === `${SH}nodeKind`) {
         rule.kinds = v.termType === 'NamedNode' ? NODE_KINDS[v.value.slice(SH.length)] : undefined;
         if (!v.value.startsWith(SH) || !rule.kinds) incomplete = true;
@@ -254,7 +270,8 @@ export function compileShaclLite(
             if (rule.inside && !rule.inside.has(termToId(value))) conforms = false;
             if (rule.datatype) {
               const valid = datatypeMatches(value, rule.datatype);
-              if (!valid) conforms = false;
+              if (valid === undefined) unknown = true;
+              else if (!valid) conforms = false;
             }
           }
         }
@@ -267,7 +284,7 @@ export function compileShaclLite(
 }
 
 /** SPARQL datatypes need lexical checks as well as matching datatype IRIs (SHACL §4.1.2). */
-function datatypeMatches(value: Term, datatype: string): boolean {
+function datatypeMatches(value: Term, datatype: string): boolean | undefined {
   if (value.termType !== 'Literal' || value.datatype.value !== datatype) return false;
   const text = value.value;
   if (datatype === `${XSD}string` || datatype === `${RDF}langString`) return true;
@@ -306,8 +323,9 @@ function datatypeMatches(value: Term, datatype: string): boolean {
       (!zone || (!zone.startsWith('+14:') && !zone.startsWith('-14:')) || zone.endsWith(':00'))
     );
   }
-  // Non-SPARQL datatypes are compared by IRI; their lexical spaces are not interpreted.
-  return true;
+  // Derived integers (including their ranges), date, and custom datatypes are
+  // unsupported until their lexical spaces are checked. IRI equality is not evidence.
+  return undefined;
 }
 
 export function memberEvidence(

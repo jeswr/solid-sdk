@@ -25,6 +25,7 @@ const PREFIX = `@prefix sh: <http://www.w3.org/ns/shacl#> .
  @prefix ldp: <http://www.w3.org/ns/ldp#> .
  @prefix dct: <http://purl.org/dc/terms/> .
  @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+ @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
  @prefix solid: <http://www.w3.org/ns/solid/terms#> .
  @prefix i: <http://www.w3.org/ns/solid/interop#> .
  @prefix st: <http://www.w3.org/ns/shapetrees#> .`;
@@ -199,14 +200,39 @@ describe('C4 sampling through the confined read', () => {
   });
 
   it('refuses foreign, nested, sibling, unlisted and ambiguous member URLs before egress', async () => {
-    const names = ['one', 'deep/nested', '../outside', '%2fescape', 'x?query', 'x#fragment'].map(
-      (s) => TARGET + s,
-    );
+    const names = [
+      'one',
+      'deep/nested',
+      '../outside',
+      '%2fescape',
+      'x?query',
+      'x#fragment',
+      'x?',
+      'x#',
+    ].map((s) => TARGET + s);
     names.push('https://evil.example/one', `${POD}/data/contacts-other/one`, TARGET);
     const f = fixture({ [TARGET]: listing(names), [`${TARGET}one`]: good });
     expect((await f.resolve()).targets[0].check).toBe('conforms');
     expect(f.send.mock.calls.slice(3).map(([url]) => url)).toEqual([`${TARGET}one`]);
     expect((await f.read.fetch(`${TARGET}unlisted`, true)).ok).toBe(false);
+  });
+
+  it.each([
+    '?',
+    '#',
+    '?query',
+    '#fragment',
+  ])('refuses member delimiter %s before admission or egress', async (suffix) => {
+    const url = `${TARGET}one${suffix}`;
+    const f = fixture({ [TARGET]: listing([url]), [url]: good });
+    expect(directMember(candidate(), url)).toBeNull();
+    expect(directMember(candidate(TARGET + suffix), `${TARGET}one`)).toBeNull();
+    expect((await f.resolve()).targets).toEqual([candidate()]);
+    f.read.allowMember(candidate(), url);
+    expect((await f.read.fetch(url, true)).ok).toBe(false);
+    f.read.allowMember(candidate(), `${TARGET}one`);
+    expect((await f.read.fetch(url, true)).ok).toBe(false);
+    expect(f.send.mock.calls.map(([url]) => url)).toEqual([WEBID, `${POD}/index`, TARGET]);
   });
 
   it('does not follow a member redirect to an unconfined sibling', async () => {
@@ -289,6 +315,52 @@ describe('C4 sampling through the confined read', () => {
       shape: SHAPE,
       targets: [candidate()],
     });
+  });
+
+  it.each([
+    ['rdf:first "bad"', 'Alice'],
+    ['rdf:first "bad"', 'Nobody'],
+    ['rdf:rest rdf:nil', 'Alice'],
+    ['rdf:rest rdf:nil', 'Nobody'],
+    ['rdf:first "bad"; rdf:rest rdf:nil', 'Alice'],
+    ['rdf:first "bad"; rdf:rest rdf:nil', 'Nobody'],
+  ])('polluted rdf:nil (%s, sample %s) keeps the target unchecked', async (pollution, name) => {
+    const f = fixture({
+      [TARGET]: listing([`${TARGET}one`]),
+      [`${TARGET}one`]: `<#one> a <${CLASS}>; <https://example.org/name> "${name}" .`,
+    });
+    const store = f.budget.parse(
+      SHAPE,
+      `${PREFIX}<${SHAPE}> sh:property [
+      sh:path <https://example.org/name>; sh:in ("Alice") ] . rdf:nil ${pollution} .`,
+    );
+    const shapes = new Map([[`container ${TARGET}`, { iri: SHAPE, store }]]);
+    expect(await checkClassCandidates(CLASS, [candidate()], shapes, f.read, f.budget)).toEqual({
+      shape: SHAPE,
+      targets: [candidate()],
+    });
+    expect(f.send.mock.calls.map(([url]) => url)).toEqual([TARGET, `${TARGET}one`]);
+  });
+
+  it.each([
+    ['int', 'nonsense'],
+    ['int', '2147483648'],
+    ['unsignedByte', 'nonsense'],
+    ['unsignedByte', '999'],
+  ])('unsupported datatype %s with value %s keeps the target unchecked', async (type, value) => {
+    const f = fixture({
+      [TARGET]: listing([`${TARGET}one`]),
+      [`${TARGET}one`]: `<#one> a <${CLASS}>; <https://example.org/value> "${value}"^^xsd:${type} .`,
+    });
+    const store = f.budget.parse(
+      SHAPE,
+      `${PREFIX}<${SHAPE}> sh:property [
+      sh:path <https://example.org/value>; sh:datatype xsd:${type} ] .`,
+    );
+    const shapes = new Map([[`container ${TARGET}`, { iri: SHAPE, store }]]);
+    expect(
+      (await checkClassCandidates(CLASS, [candidate()], shapes, f.read, f.budget)).targets,
+    ).toEqual([candidate()]);
   });
 
   it('does not sample the built-in Storage class', async () => {

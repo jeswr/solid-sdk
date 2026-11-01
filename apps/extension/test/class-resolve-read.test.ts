@@ -58,6 +58,137 @@ afterEach(() => {
 });
 
 describe('resolver internal capability', () => {
+  it.each([
+    '?',
+    '#',
+    '?query',
+    '#fragment',
+  ])('refuses candidate delimiters %s before egress, including normalized aliases', async (suffix) => {
+    for (const kind of ['container', 'instance'] as const) {
+      const url = `${pod}/contacts/`;
+      const h = harness({ [url]: '', [url + suffix]: '' });
+      h.read.allowTarget({ url: url + suffix, kind });
+      expect((await h.read.fetch(url + suffix, true)).ok).toBe(false);
+      expect((await h.read.fetch(url, true)).ok).toBe(false);
+      h.read.allowTarget({ url, kind });
+      expect((await h.read.fetch(url + suffix, true)).ok).toBe(false);
+      expect(h.send).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each([
+    '?',
+    '#',
+    '?query',
+    '#fragment',
+  ])('refuses delimiter %s on target/member redirect hops before egress', async (suffix) => {
+    for (const member of [false, true]) {
+      const h = harness();
+      const target = { url: `${pod}/contacts/`, kind: 'container' as const };
+      const source = member ? `${target.url}one` : target.url;
+      const destination = `${target.url}two`;
+      h.read.allowTarget(target);
+      h.read.allowMember(target, source);
+      // Even a discovery document cannot relax confinement of a member redirect.
+      h.read.allowDocument(destination + suffix, true);
+      h.send.mockResolvedValue(
+        new Response(null, { status: 302, headers: { location: destination + suffix } }),
+      );
+      expect((await h.read.fetch(source, true)).ok).toBe(false);
+      expect(h.send.mock.calls.map(([url]) => url)).toEqual([source]);
+    }
+  });
+
+  it('does not reuse a discovery redirect cache after a document becomes a candidate', async () => {
+    const source = `${pod}/contacts/`;
+    const destination = `${pod}/metadata#shape`;
+    const h = harness({ [destination]: 'discovery bytes' });
+    h.read.allowDocument(source, true);
+    h.read.allowDocument(destination, true);
+    const send = h.send.getMockImplementation()!;
+    h.send.mockImplementation(async (...args) =>
+      args[0] === source
+        ? new Response(null, { status: 302, headers: { location: destination } })
+        : send(...args),
+    );
+    expect((await h.read.fetch(source, true)).ok).toBe(true);
+    h.send.mockClear();
+    h.read.allowTarget({ url: source, kind: 'container' });
+    expect((await h.read.fetch(source, true)).ok).toBe(false);
+    expect(h.send.mock.calls.map(([url]) => url)).toEqual([source]);
+  });
+
+  it.each([
+    '?',
+    '#',
+    '?query',
+    '#fragment',
+  ])('drops Type Index candidates with delimiter %s before sampling', async (suffix) => {
+    const url = `${pod}/contacts/`;
+    const h = harness({
+      [webId]: `<${webId}> <${solid}publicTypeIndex> <${pod}/index> .`,
+      [`${pod}/index`]: `${index(url + suffix)} <#r> <${solid}instance> <${url + suffix}> .`,
+      [url]: '',
+      [url + suffix]: '',
+    });
+    expect((await h.resolve()).targets).toEqual([]);
+    expect(h.send.mock.calls.map(([url]) => url)).toEqual([webId, `${pod}/index`]);
+  });
+
+  it.each([
+    '?',
+    '#',
+    '?query',
+    '#fragment',
+  ])('drops storage targets with delimiter %s', async (suffix) => {
+    const h = harness({ [webId]: `<${webId}> <${pim}storage> <${pod}/${suffix}> .` });
+    expect((await h.resolve(PIM_STORAGE_CLASS)).targets).toEqual([]);
+    expect(h.send.mock.calls.map(([url]) => url)).toEqual([webId]);
+  });
+
+  it.each([
+    '?',
+    '#',
+    '?query',
+    '#fragment',
+  ])('refuses SAI registry/registration delimiters %s before egress', async (suffix) => {
+    for (const badRegistry of [false, true]) {
+      const registry = `${pod}/data/${badRegistry ? suffix : ''}`;
+      const registration = `${pod}/data/contact/${badRegistry ? '' : suffix}`;
+      const h = harness({
+        [webId]: `<${webId}> <${interop}hasRegistrySet> <${pod}/set> .`,
+        [`${pod}/set`]: `<${pod}/set> <${interop}hasDataRegistry> <${registry}> .`,
+        [registry]: `<${registry}> <${interop}hasDataRegistration> <${registration}> .`,
+        [registration]: `<${registration}> <${interop}registeredShapeTree> <${tree}> .`,
+      });
+      expect((await h.resolve()).targets).toEqual([]);
+      expect(h.send.mock.calls.map(([url]) => url)).toEqual(
+        badRegistry ? [webId, `${pod}/set`] : [webId, `${pod}/set`, registry],
+      );
+    }
+  });
+
+  it.each([
+    '?',
+    '#',
+  ])('refuses an empty delimiter %s on SAI registry redirect hops', async (suffix) => {
+    const registry = `${pod}/data/`;
+    const destination = `${pod}/other/`;
+    const h = harness({
+      [webId]: `<${webId}> <${interop}hasRegistrySet> <${pod}/set> .`,
+      [`${pod}/set`]: `<${pod}/set> <${interop}hasDataRegistry> <${registry}> .`,
+    });
+    h.read.allowDocument(destination + suffix, true);
+    const send = h.send.getMockImplementation()!;
+    h.send.mockImplementation(async (...args) =>
+      args[0] === registry
+        ? new Response(null, { status: 302, headers: { location: destination + suffix } })
+        : send(...args),
+    );
+    expect((await h.resolve()).targets).toEqual([]);
+    expect(h.send.mock.calls.map(([url]) => url)).toEqual([webId, `${pod}/set`, registry]);
+  });
+
   it('refuses off-list documents and credential escalation without any send', async () => {
     const h = harness();
     h.read.allowDocument('https://public.example/index', false);

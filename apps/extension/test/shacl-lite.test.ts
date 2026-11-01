@@ -113,9 +113,41 @@ describe('shacl-lite supported subset', () => {
     ).toBe(true);
   });
 
-  it('matches language and custom datatypes by IRI', () => {
+  it('matches language datatypes', () => {
     expect(validate('sh:datatype rdf:langString', ':focus a :C; :p "x"@en .').conforms).toBe(true);
-    expect(validate('sh:datatype :custom', ':focus a :C; :p "x"^^:custom .').conforms).toBe(true);
+  });
+
+  it.each([
+    ['nonPositiveInteger', '0', '1'],
+    ['negativeInteger', '-1', '0'],
+    ['long', '9223372036854775807', '9223372036854775808'],
+    ['int', '2147483647', '2147483648'],
+    ['short', '32767', '32768'],
+    ['byte', '127', '128'],
+    ['nonNegativeInteger', '0', '-1'],
+    ['unsignedLong', '18446744073709551615', '18446744073709551616'],
+    ['unsignedInt', '4294967295', '4294967296'],
+    ['unsignedShort', '65535', '65536'],
+    ['unsignedByte', '255', '999'],
+    ['positiveInteger', '1', '0'],
+    ['date', '2024-02-29', '2023-02-29'],
+  ])('datatype %s is incomplete until lexical and range checks are supported', (type, valid, invalid) => {
+    const b = budget();
+    const v = compileShaclLite(
+      { iri: S, store: graph(`:Shape sh:property [ sh:path :p; sh:datatype xsd:${type} ] .`) },
+      b,
+    );
+    for (const value of [valid, invalid, 'nonsense']) {
+      const data = graph(`:focus a :C; :p "${value}"^^xsd:${type} .`);
+      expect(v(data, C).incomplete).toBe(true);
+      expect(memberEvidence(data, C, b, v)).toBe('incomplete');
+    }
+    expect(v(graph(':focus a :C .'), C).incomplete).toBe(true);
+  });
+
+  it('custom datatypes never certify or drop a target from IRI equality alone', () => {
+    for (const value of ['"x"^^:custom', '"x"', ':value'])
+      expect(validate('sh:datatype :custom', `:focus a :C; :p ${value} .`).incomplete).toBe(true);
   });
 
   it('supports root constraints, shapes without targetClass and blank focus nodes', () => {
@@ -216,6 +248,42 @@ describe('shacl-lite supported subset', () => {
 });
 
 describe('unsupported, malformed and bounded shapes', () => {
+  it.each([
+    'rdf:first "bad"',
+    'rdf:rest rdf:nil',
+    'rdf:first "bad"; rdf:rest rdf:nil',
+  ])('rejects a polluted rdf:nil terminator (%s), including empty lists', (pollution) => {
+    for (const list of ['("yes")', '()']) {
+      const b = budget();
+      const store = graph(
+        `:Shape sh:property [ sh:path :p; sh:in ${list} ] . rdf:nil ${pollution} .`,
+      );
+      const v = compileShaclLite({ iri: S, store }, b);
+      for (const value of ['yes', 'no'])
+        expect(memberEvidence(graph(`:focus a :C; :p "${value}" .`), C, b, v)).toBe('incomplete');
+    }
+  });
+
+  it('checks the work budget while inspecting rdf:nil statements', () => {
+    const b = budget();
+    const store = graph(':Shape sh:in () . rdf:nil rdf:first "bad" .');
+    const reads = store.readQuads;
+    let visited = false;
+    vi.spyOn(store, 'readQuads').mockImplementation(function* (...args) {
+      for (const q of reads.apply(store, args)) {
+        if (q.subject.value.endsWith('#nil')) {
+          visited = true;
+          b.exhaust();
+        }
+        yield q;
+      }
+    });
+    const v = compileShaclLite({ iri: S, store }, b);
+    expect(visited).toBe(true);
+    expect(b.truncated).toBe(true);
+    expect(v(graph(':focus a :C .'), C).incomplete).toBe(true);
+  });
+
   it.each([
     'sh:sparql []',
     'sh:or ([ sh:class :Other ])',
