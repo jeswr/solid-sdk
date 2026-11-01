@@ -23,7 +23,9 @@ function rdfKind(body: Body): 'supported' | 'unsupported' | 'non-rdf' {
   if (!body.contentType) return 'supported'; // Legacy injected RDF transports.
   const type = body.contentType.split(';')[0].trim().toLowerCase();
   if (RDF_TYPES.has(type)) return 'supported';
-  return type === 'application/ld+json' || type === 'application/rdf+xml' || type === 'application/trix'
+  return type === 'application/ld+json' ||
+    type === 'application/rdf+xml' ||
+    type === 'application/trix'
     ? 'unsupported'
     : 'non-rdf';
 }

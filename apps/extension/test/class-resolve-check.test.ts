@@ -154,6 +154,24 @@ describe('C4 sampling through the confined read', () => {
   });
 
   it.each([
+    'Text/Turtle; charset=UTF-8',
+    'text/n3',
+    'application/trig',
+    'application/n-triples',
+    'application/n-quads',
+  ])('checks N3-supported RDF media type %s', async (type) => {
+    const triple = `<${TARGET}one#focus> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <${CLASS}>`;
+    const text =
+      type === 'application/n-quads'
+        ? `${triple} <urn:graph> .`
+        : type === 'application/trig'
+          ? `<urn:graph> { ${triple} . }`
+          : `${triple} .`;
+    const f = fixture({ [TARGET]: listing([`${TARGET}one`]), [`${TARGET}one`]: { text, type } });
+    expect((await f.resolve()).targets).toEqual([{ ...candidate(), check: 'conforms' }]);
+  });
+
+  it.each([
     'throw',
     '404',
     'malformed',
