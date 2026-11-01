@@ -1,4 +1,12 @@
+<!-- AUTHORED-BY Claude Opus 5.5 (workspace import edits) -->
+
 # @jeswr/solid-scheduling
+
+> **Experimental, AI-agent-generated.** Lives in `packages/solid-scheduling` of the
+> [`jeswr/solid-sdk`](https://github.com/jeswr/solid-sdk) workspace; the standalone
+> `jeswr/solid-scheduling` repository becomes a read-only build mirror. The model is still
+> hand-written; flipping it to a generated core is codegen Phase S (bead sst-ild.7.5,
+> [`decisions/0003-domain-model-codegen.md`](../../decisions/0003-domain-model-codegen.md)).
 
 The RDF model for **scheduling** — tasks and calendars, one task per pod resource,
 owner-private. The data model a [Vikunja](https://vikunja.io)→Solid fork writes to
@@ -25,12 +33,9 @@ surfaced.
 
 ## Install
 
-GitHub-installable now (no build step — the built `dist/` is committed and the
-package sets `ignore-scripts=true`):
-
-```bash
-npm install github:jeswr/solid-scheduling#main
-```
+Inside the workspace, depend on it as `"@jeswr/solid-scheduling": "workspace:*"`.
+Outside it, install the read-only mirror once it is published
+(`github:jeswr/solid-scheduling#<sha>`); mirrors carry the built `dist/`.
 
 ## The model — one task document (dual-vocab, same subject)
 
@@ -147,14 +152,15 @@ Subpath exports: `@jeswr/solid-scheduling/vocab`, `/shape`,
 
 ## Develop
 
+From the workspace root:
+
 ```bash
-npm run gate   # lint + typecheck + test + build + check:dist + check:lockfile-transport
+pnpm exec turbo run lint build typecheck test --filter=@jeswr/solid-scheduling
 ```
 
-`dist/` is committed and a `check:dist` gate fails if it drifts from a fresh
-build — rebuild + commit `dist/` alongside any `src/` change. After any `npm
-install` that touches the `@jeswr/solid-task-model` git dependency, run
-`npm run fix:lockfile-transport` (the #78 SSH-transport guard's FIX half).
+`dist/` is built fresh and never committed here. `@jeswr/solid-task-model` is a
+`workspace:*` dependency, so the `wf:Task` cross-serialisation always runs against the
+workspace task model.
 
 ## License
 

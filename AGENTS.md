@@ -23,6 +23,7 @@ additions are inventoried in `suite.json`. Maintainer-directed packages include
 helper `@jeswr/ldp-container` (bead sst-8xm.7). The latter has no mirror repository configured.
 The codegen rev-3 packages `@jeswr/model-runtime` and `@jeswr/federation-codegen` were imported
 with full history (bead sst-ild.4; design of record `decisions/0003-domain-model-codegen.md`).
+`@jeswr/solid-scheduling` was imported with full history as codegen Phase S step 1 (bead sst-ild.7.5); its model is still hand-written.
 The browser extension (`apps/extension`, `@jeswr/app-extension`) was imported with full history
 from `jeswr/solid-suite-extension`. Mirror publishing has NOT run yet. Do not import further packages outside the phased
 package plan or explicit maintainer direction.
