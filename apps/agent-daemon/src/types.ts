@@ -69,7 +69,8 @@ export interface DaemonOptions {
   readonly log?: (message: string) => void;
 }
 export interface Daemon {
-  once(): Promise<void>;
+  /** Cancellation prevents outbox execution after ingest; drain retains the lease. */
+  once(signal?: AbortSignal): Promise<void>;
   /** No ingress server. Shutdown drains before releasing the lease. */
   run(signal: AbortSignal): Promise<void>;
 }

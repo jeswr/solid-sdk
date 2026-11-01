@@ -260,7 +260,7 @@ export function createDaemon(o: DaemonOptions): Daemon {
     await o.checkpoints.put(account.id, next);
   }
   let active = false;
-  async function session(signal?: AbortSignal) {
+  async function session(repeat: boolean, signal?: AbortSignal) {
     if (active) throw new Error("Daemon already running");
     active = true;
     let release: (() => Promise<void>) | undefined;
@@ -357,7 +357,7 @@ export function createDaemon(o: DaemonOptions): Daemon {
         if (fault) throw new Error("Authority reconciliation failed");
         if (signal?.aborted) break;
         await o.executor.runOutboxOnce();
-        if (!signal) break;
+        if (!repeat || !signal) break;
         await pause(
           Math.max(
             1,
@@ -388,7 +388,7 @@ export function createDaemon(o: DaemonOptions): Daemon {
       }
     }
   }
-  return { once: () => session(), run: (signal) => session(signal) };
+  return { once: (signal) => session(false, signal), run: (signal) => session(true, signal) };
 }
 function pause(ms: number, signal: AbortSignal, timers: Timers): Promise<void> {
   return new Promise((resolve) => {

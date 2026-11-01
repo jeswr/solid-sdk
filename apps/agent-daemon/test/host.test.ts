@@ -178,7 +178,9 @@ it("keeps local commands independent of authentication and closes lazy compositi
   expect(await h.stats("urn:proposal:fixture")).toEqual({ calls: 1, tokens: 4 });
   expect(await h.stats("urn:proposal:other")).toEqual({ calls: 0, tokens: 0 });
   expect(compose).not.toHaveBeenCalled();
-  await h.once();
+  const signal = new AbortController().signal;
+  await h.once(signal);
+  expect(daemon.once).toHaveBeenCalledWith(signal);
   expect(close).toHaveBeenCalledOnce();
   vi.mocked(daemon.run).mockRejectedValueOnce(new Error("fixture"));
   await expect(h.run(new AbortController().signal)).rejects.toThrow("fixture");
@@ -214,13 +216,16 @@ it.each([
 ])("dispatches awp %j", async (...args) => {
   const h = host();
   const lines: string[] = [];
+  const signal = new AbortController().signal;
   expect(
     await runCli(args, h, {
-      signal: new AbortController().signal,
+      signal,
       print: (s) => lines.push(s),
       confirm: async () => false,
     }),
   ).toBe(0);
+  if (args[0] === "run") expect(h.run).toHaveBeenCalledWith(signal);
+  if (args[0] === "once") expect(h.once).toHaveBeenCalledWith(signal);
   expect(JSON.stringify(lines)).not.toContain("https://pod.example");
 });
 it.each([

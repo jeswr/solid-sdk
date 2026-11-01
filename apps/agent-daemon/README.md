@@ -81,6 +81,9 @@ local state, credential helper and ledger. Prefer a lazy factory: local commands
 authenticate, and run/once close the pod session after draining. Task statistics filter proposal-associated
 model calls; Reader calls and calls producing several proposals remain in global
 counts. Audit delegates to agent-audit's independent anonymous verifier.
+Both `run` and `once` receive the CLI shutdown signal. Cancellation during ingestion
+prevents a new outbox execution pass, while watcher cleanup and executor drain
+finish under the process lease. A signal passed to `once` still runs only one pass.
 
 A trusted local Node preload calls `configureCli(host)` before the executable:
 

@@ -815,6 +815,61 @@ it("skips a malformed message but fails a binding that exceeds the ingest bound"
     createDaemon({ ...h.options, limits: { maxItems: 1, maxBytes: 1 } }).once(),
   ).rejects.toThrow("bound");
 });
+it("refuses a cancelled single pass before acquiring the lease", async () => {
+  const h = harness();
+  const acquire = vi.spyOn(h.state.lease, "acquire");
+  await expect(createDaemon(h.options).once(AbortSignal.abort())).rejects.toThrow();
+  expect(acquire).not.toHaveBeenCalled();
+  expect(h.ingest.list).not.toHaveBeenCalled();
+  expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
+  expect(h.state.held()).toBe(false);
+});
+it("keeps a single pass single even with a live cancellation signal", async () => {
+  vi.useFakeTimers({ now: AT });
+  const h = harness();
+  const controller = new AbortController();
+  const pass = createDaemon({ ...h.options, now: Date.now }).once(controller.signal);
+  await vi.advanceTimersByTimeAsync(300_000);
+  controller.abort();
+  await pass;
+  expect(h.ingest.list).toHaveBeenCalledOnce();
+  expect(h.executor.runOutboxOnce).toHaveBeenCalledOnce();
+  expect(h.state.held()).toBe(false);
+});
+it("cancels a single pass during ingest before execution and holds its lease through drain", async () => {
+  vi.useFakeTimers({ now: AT });
+  const h = harness();
+  let finishIngest!: () => void;
+  let finishDrain!: () => void;
+  const ingestWait = new Promise<void>((resolve) => {
+    finishIngest = resolve;
+  });
+  const drainWait = new Promise<void>((resolve) => {
+    finishDrain = resolve;
+  });
+  const list = h.ingest.list.getMockImplementation();
+  if (!list) throw new Error("Fixture list missing");
+  h.ingest.list.mockImplementationOnce(async (...args) => {
+    await ingestWait;
+    return list(...args);
+  });
+  h.executor.drain.mockImplementationOnce(async () => drainWait);
+  const controller = new AbortController();
+  const pass = createDaemon({ ...h.options, now: Date.now }).once(controller.signal);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(h.ingest.list).toHaveBeenCalledOnce();
+  controller.abort();
+  expect(h.state.held()).toBe(true);
+  finishIngest();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
+  expect(h.executor.drain).toHaveBeenCalledOnce();
+  expect(h.state.held()).toBe(true);
+  await expect(h.state.lease.acquire()).rejects.toThrow("Lease held");
+  finishDrain();
+  await pass;
+  expect(h.state.held()).toBe(false);
+});
 it("serializes accounts sharing a binding and respects email/chat/social intervals", async () => {
   vi.useFakeTimers({ now: AT });
   const h = harness();

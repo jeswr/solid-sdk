@@ -13,7 +13,7 @@ export interface CliIo {
 }
 export interface CliHost {
   run(signal: AbortSignal): Promise<void>;
-  once(): Promise<void>;
+  once(signal?: AbortSignal): Promise<void>;
   halt(): Promise<void>;
   status(): Promise<unknown>;
   accounts(): Promise<readonly { id: string; binding: string; enabled: boolean }[]>;
@@ -37,7 +37,7 @@ export function createCliHost(o: CliHostOptions): CliHost {
     const composition = typeof o.daemon === "function" ? await o.daemon() : undefined;
     const daemon = composition?.daemon ?? (o.daemon as Daemon);
     try {
-      if (mode === "once") await daemon.once();
+      if (mode === "once") await daemon.once(signal);
       else if (signal) await daemon.run(signal);
       else throw new Error("Run requires an abort signal");
     } finally {
@@ -46,7 +46,7 @@ export function createCliHost(o: CliHostOptions): CliHost {
   }
   return {
     run: (signal) => execute("run", signal),
-    once: () => execute("once"),
+    once: (signal) => execute("once", signal),
     halt: () => o.local.halt(),
     status: () => o.local.status(),
     accounts: o.accounts,
@@ -91,7 +91,7 @@ export async function runCli(args: readonly string[], host: CliHost, io: CliIo):
         await host.run(io.signal);
         break;
       case "once":
-        await host.once();
+        await host.once(io.signal);
         break;
       case "halt":
         await host.halt();
