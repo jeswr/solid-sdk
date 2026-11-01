@@ -8,12 +8,14 @@ import { z } from "zod";
 import type { ChecklistItem } from "../lib/capture";
 import { NoteColour } from "../lib/model/prefs";
 import { captureTitle, captureToNote, escapeHtml } from "../lib/ui/capture";
-import { getPendingDrafts } from "../state/draft-registry";
+import { getPendingDrafts, heartbeatLive } from "../state/draft-registry";
 import { useNotesContext } from "../state/notes-context";
 import { ColourPicker, LabelChips, LabelPicker } from "./controls";
 
 const capturePrefix = "notes-capture-draft";
 const submitting = new Set<string>();
+const MAYBE_SAVED =
+  "This note may already have been saved before the page closed. Check your notes before adding it again.";
 const recovering = new Set<string>();
 const captureSettled = "notes-capture-settled";
 const captureRetry = "notes-capture-retry";
@@ -88,6 +90,7 @@ export function CaptureBar({ label }: { label?: string }) {
   const finish = async () => {
     if (submitted.current || submitting.has(captureKey)) return;
     let input: ReturnType<typeof captureToNote>;
+    let settled = false;
     try {
       input = captureToNote(title, body, items);
     } catch {
@@ -144,12 +147,12 @@ export function CaptureBar({ label }: { label?: string }) {
         toast.error(message, {
           action: {
             label: "Retry",
-            onClick: () =>
-              window.dispatchEvent(
-                new CustomEvent(captureRetry, {
-                  detail: { key: captureKey, webId: session.webId },
-                }),
-              ),
+            onClick: () => {
+              const detail = { key: captureKey, webId: session.webId, handled: false };
+              window.dispatchEvent(new CustomEvent(captureRetry, { detail }));
+              // No capture bar is mounted for this key: retry from this closure.
+              if (!detail.handled) void finish();
+            },
           },
         });
         window.dispatchEvent(new CustomEvent(captureSettled, { detail: captureKey }));
@@ -164,9 +167,17 @@ export function CaptureBar({ label }: { label?: string }) {
         // A successful pod write does not depend on browser storage cleanup.
       }
       submitting.delete(captureKey);
-      window.dispatchEvent(new CustomEvent(captureSettled, { detail: captureKey }));
+      settled = true;
     }
-    if (!mounted.current) return;
+    // Announce settlement only after this form has reset, so a capture that
+    // restore() recovers into the bar is not wiped by the reset below.
+    const announce = () => {
+      if (settled) window.dispatchEvent(new CustomEvent(captureSettled, { detail: captureKey }));
+    };
+    if (!mounted.current) {
+      announce();
+      return;
+    }
     setExpanded(false);
     setTitle("");
     setBody("");
@@ -177,6 +188,7 @@ export function CaptureBar({ label }: { label?: string }) {
     setBusy(false);
     setError(undefined);
     submitted.current = false;
+    announce();
   };
   latestClose.current = finish;
   useEffect(() => {
@@ -217,13 +229,7 @@ export function CaptureBar({ label }: { label?: string }) {
             const saved = captureDraft.parse(JSON.parse(text));
             if (saved.webId !== session.webId || key !== `${capturePrefix}:${saved.tabId}`)
               continue;
-            const last = localStorage.getItem(`suite.notes.heartbeat:${saved.tabId}`);
-            if (
-              key !== captureKey &&
-              last !== null &&
-              Number.isFinite(Number(last)) &&
-              Date.now() - Number(last) <= 30_000
-            )
+            if (key !== captureKey && heartbeatLive(localStorage, saved.tabId as string, Date.now()))
               continue;
             drafts.push({ key, text, saved });
           } catch {
@@ -256,10 +262,14 @@ export function CaptureBar({ label }: { label?: string }) {
           setLabels(saved.labels);
           setPinned(saved.pinned);
           setColour(saved.colour);
-          setError(saved.error);
+          // The page closed while this capture's create was in flight; it may exist already.
+          setError(saved.submitting ? MAYBE_SAVED : saved.error);
           setExpanded(true);
         }
         for (const orphan of drafts) {
+          // Never auto-create a capture that may already have been saved; it
+          // waits to be offered in the bar with a warning.
+          if (orphan.saved.submitting) continue;
           recovering.add(orphan.key);
           // Preserve checklist syntax literally; recovery must not reject unique text.
           const raw = [
@@ -299,8 +309,11 @@ export function CaptureBar({ label }: { label?: string }) {
       if ((event as CustomEvent<string>).detail === captureKey) restore();
     };
     const retry = (event: Event) => {
-      const { key, webId } = (event as CustomEvent<{ key: string; webId: string }>).detail;
-      if (key === captureKey && webId === session.webId) void latestClose.current();
+      const detail = (event as CustomEvent<{ key: string; webId: string; handled: boolean }>)
+        .detail;
+      if (detail.key !== captureKey || detail.webId !== session.webId) return;
+      detail.handled = true;
+      void latestClose.current();
     };
     window.addEventListener(captureSettled, settled);
     window.addEventListener(captureRetry, retry);

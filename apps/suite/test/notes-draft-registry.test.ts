@@ -21,6 +21,7 @@ const events = new Map<string, EventListener>();
 beforeEach(() => {
   vi.resetModules();
   localStorage.clear();
+  sessionStorage.clear();
   vi.spyOn(crypto, "randomUUID").mockReturnValueOnce(
     "tab-a" as `${string}-${string}-${string}-${string}-${string}`,
   );
@@ -57,10 +58,9 @@ it("durably records before the debounce; reload recovers the latest draft and it
     claims: [],
   });
   expect(localStorage.getItem(key)).toBeNull();
+  // The old page's pagehide released its heartbeat, so the reload keeps its tab id.
+  localStorage.removeItem("suite.notes.heartbeat:tab-a");
   vi.resetModules();
-  vi.mocked(crypto.randomUUID).mockReturnValueOnce(
-    "tab-a" as `${string}-${string}-${string}-${string}-${string}`,
-  );
   const reloaded = await registry();
   expect(reloaded.get(note.url)).toEqual(stored.snapshot);
   const saved = { ...note, ...draft, etag: '"v2"' };
@@ -299,10 +299,9 @@ it("prefers per-note recovery to a legacy envelope and ignores damaged or miskey
   );
   localStorage.setItem(`${key}:bad`, "{");
   localStorage.setItem(`${key}:wrong-url`, latest);
+  // The old page's pagehide released its heartbeat, so the reload keeps its tab id.
+  localStorage.removeItem("suite.notes.heartbeat:tab-a");
   vi.resetModules();
-  vi.mocked(crypto.randomUUID).mockReturnValueOnce(
-    "tab-a" as `${string}-${string}-${string}-${string}-${string}`,
-  );
   expect((await registry()).all()).toEqual([{ note, draft, status: "saving" }]);
   expect(localStorage.getItem(noteKey)).toBe(latest);
   expect(localStorage.getItem(key)).toBeNull();
@@ -316,10 +315,9 @@ it("migrates valid legacy recovery over a damaged per-note key", async () => {
   localStorage.setItem(noteKey, "{");
   expect((await registry()).get(note.url)).toMatchObject({ draft, status: "failed" });
   expect(localStorage.getItem(key)).toBeNull();
+  // The old page's pagehide released its heartbeat, so the reload keeps its tab id.
+  localStorage.removeItem("suite.notes.heartbeat:tab-a");
   vi.resetModules();
-  vi.mocked(crypto.randomUUID).mockReturnValueOnce(
-    "tab-a" as `${string}-${string}-${string}-${string}-${string}`,
-  );
   expect((await registry()).get(note.url)).toMatchObject({ draft, status: "failed" });
 });
 
@@ -370,17 +368,21 @@ it("keeps an orphan claim across reload and removes its source only after the no
   expect(localStorage.getItem(`${key}:${note.url}:receiver`)).toBeNull();
 });
 
-it("gives duplicated session storage a fresh page ID and recovers B's conflict without A overwriting it", async () => {
+it("gives a duplicated tab a fresh ID, keeps a reloaded tab's ID, and never overwrites the other tab's draft", async () => {
   sessionStorage.setItem("suite.notes.tab-id", "copied-tab-id");
   const a = await registry();
+  // No live heartbeat owns the stored id (a reload), so it is kept.
+  expect(a.tabId).toBe("copied-tab-id");
   const unloadA = events.get("beforeunload");
   const save = vi.fn(async () => ({ ...note, ...draft, etag: '"v2"' }));
   a.change(note, draft, save);
   await a.flush(note, save);
   vi.resetModules();
+  // The duplicate copies sessionStorage while A's heartbeat is live.
   const b = await registry();
   expect(b.tabId).not.toBe(a.tabId);
-  expect(sessionStorage.getItem("suite.notes.tab-id")).toBe("copied-tab-id");
+  expect(sessionStorage.getItem("suite.notes.tab-id")).toBe(b.tabId);
+  const releaseB = events.get("pagehide");
   const bDraft = { ...draft, body: "B's unique unresolved conflict" };
   const { NoteConflictError } = await import("../src/apps/notes/lib/model/errors");
   const conflict = vi.fn().mockRejectedValue(new NoteConflictError(note.url));
@@ -395,21 +397,24 @@ it("gives duplicated session storage a fresh page ID and recovers B's conflict w
   await b.retry();
   const bKey = `${key}:${note.url}:${b.tabId}`;
   expect(JSON.parse(localStorage.getItem(bKey) as string).snapshot.draft).toEqual(bDraft);
-  // B reloads; A stays live while B's old heartbeat becomes stale.
+  // B reloads: its pagehide releases the heartbeat, so the reload keeps B's id and its conflict.
+  releaseB?.(new Event("pagehide"));
+  await b.retry();
+  expect(localStorage.getItem(`suite.notes.heartbeat:${b.tabId}`)).toBeNull();
   vi.resetModules();
   const reloaded = await registry();
-  expect(reloaded.tabId).not.toBe(b.tabId);
-  await vi.advanceTimersByTimeAsync(30_001);
-  a.heartbeat();
-  // Fake timers keep the old page's interval alive; simulate its teardown.
-  localStorage.setItem(`suite.notes.heartbeat:${b.tabId}`, String(Date.now() - 30_001));
-  const create = vi.fn();
-  await reloaded.recover(note, create);
+  expect(reloaded.tabId).toBe(b.tabId);
   expect(reloaded.get(note.url)).toMatchObject({ draft: bDraft, status: "conflict" });
-  expect(create).not.toHaveBeenCalled();
-  expect(JSON.parse(localStorage.getItem(noteKey) as string).snapshot.draft.body).toBe(
-    "A's later failing edit",
-  );
+  expect(
+    JSON.parse(localStorage.getItem(`${key}:${note.url}:copied-tab-id`) as string).snapshot.draft
+      .body,
+  ).toBe("A's later failing edit");
+  // Restored from the back/forward cache: the page is live again.
+  events.get("pageshow")?.(Object.assign(new Event("pageshow"), { persisted: true }));
+  expect(localStorage.getItem(`suite.notes.heartbeat:${b.tabId}`)).not.toBeNull();
+  localStorage.removeItem(`suite.notes.heartbeat:${b.tabId}`);
+  events.get("pageshow")?.(Object.assign(new Event("pageshow"), { persisted: false }));
+  expect(localStorage.getItem(`suite.notes.heartbeat:${b.tabId}`)).toBeNull();
 });
 
 it("preserves an orphan's claims when its recovering page reloads with a new ID", async () => {

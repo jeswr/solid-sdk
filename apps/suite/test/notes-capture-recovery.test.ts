@@ -16,6 +16,7 @@ vi.mock("@jeswr/suite-ui", async (original) => ({
 let clock = 1_000;
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
   mocks.toast.error.mockClear();
   vi.useFakeTimers();
   clock = 1_000;
@@ -66,8 +67,8 @@ it("recovers both different captures after two duplicated tabs close, clearing e
   const a = await page();
   const first = await mount(h(a.CaptureBar));
   await enter(first.host, "A's unique <capture>");
-  await act(() => window.dispatchEvent(new Event("pagehide")));
   clock++;
+  // The duplicate opens while A is live, so it takes a fresh id.
   const b = await page();
   const second = await mount(h(b.CaptureBar));
   await enter(second.host, "B's different capture");
@@ -240,12 +241,20 @@ it("keeps failed extra orphan recovery durable for a later mount, including lite
   );
   expect(localStorage.getItem("notes-capture-draft:older")).not.toBeNull();
   await close(first.host);
+  // Once the bar is free, the orphan whose recovery failed is offered in it,
+  // and the reset after the successful capture does not wipe it.
+  expect(first.host.querySelector("textarea")?.value).toBe("[X] Keep <this>");
+  // Navigation's plain-text fallback saves unsupported syntax.
   await first.unmount();
-  const reopened = await mount(h(CaptureBar));
-  expect(reopened.host.querySelector("textarea")?.value).toBe("[X] Keep <this>");
-  // Navigation's plain-text fallback can save unsupported syntax.
-  await reopened.unmount();
+  expect(create).toHaveBeenLastCalledWith(
+    { title: "[X] Keep <this>", body: "<p>[X] Keep &lt;this&gt;</p>", labels: [] },
+    false,
+    "default",
+  );
   expect(localStorage.getItem("notes-capture-draft:older")).toBeNull();
+  const reopened = await mount(h(CaptureBar));
+  expect(reopened.host.querySelector("textarea")).toBeNull();
+  await reopened.unmount();
 });
 
 it("retains an older draft from this tab when a newer orphan replaces the bar and extra recovery fails", async () => {
@@ -278,4 +287,75 @@ it("retains an older draft from this tab when a newer orphan replaces the bar an
   expect(storedBodies()).toContain("Other tab's newer capture");
   await ui.unmount();
   expect(storedBodies()).toContain("This tab's unique older capture");
+});
+
+it("restores this tab's own unfinished capture right after a reload", async () => {
+  // The reload cancels the unmount's create request, so it never settles.
+  mocks.context.create = vi.fn(() => new Promise<StoredNote>(() => {}));
+  const before = await page();
+  const ui = await mount(h(before.CaptureBar));
+  await enter(ui.host, "Typed before reload");
+  // A reload fires pagehide (flush + heartbeat release) and then unmounts.
+  await act(() => window.dispatchEvent(new Event("pagehide")));
+  await ui.unmount();
+  clock += 2_000;
+  const after = await page();
+  expect(after.id).toBe(before.id);
+  const reloaded = await mount(h(after.CaptureBar));
+  expect(reloaded.host.querySelector("textarea")?.value).toBe("Typed before reload");
+  expect(reloaded.host.querySelector('[role="alert"]')?.textContent).toContain(
+    "may already have been saved",
+  );
+  await reloaded.unmount();
+});
+
+it("retries from the toast even when no capture bar is mounted", async () => {
+  const create = vi.fn().mockRejectedValue(new Error("Offline"));
+  mocks.context.create = create;
+  const { CaptureBar, key } = await page();
+  const ui = await mount(h(CaptureBar));
+  await enter(ui.host, "Retry me later");
+  await close(ui.host);
+  const onClick = mocks.toast.error.mock.lastCall?.[1].action.onClick;
+  await ui.unmount();
+  expect(create).toHaveBeenCalledTimes(2);
+  create.mockResolvedValue({} as StoredNote);
+  await act(() => onClick());
+  expect(create).toHaveBeenCalledTimes(3);
+  expect(create).toHaveBeenLastCalledWith(
+    { title: "Retry me later", body: "<p>Retry me later</p>", labels: [] },
+    false,
+    "default",
+  );
+  expect(localStorage.getItem(key)).toBeNull();
+});
+
+it("never auto-creates a capture that was in flight when its page closed, and warns when offering it", async () => {
+  const base = { webId, title: "", labels: [], pinned: false, colour: "default" };
+  localStorage.setItem(
+    "notes-capture-draft:gone-1",
+    JSON.stringify({
+      ...base,
+      body: "Maybe saved",
+      tabId: "gone-1",
+      updatedAt: 1,
+      submitting: true,
+    }),
+  );
+  localStorage.setItem(
+    "notes-capture-draft:gone-2",
+    JSON.stringify({ ...base, body: "Newest", tabId: "gone-2", updatedAt: 2 }),
+  );
+  const create = mocks.context.create as ReturnType<typeof vi.fn>;
+  const { CaptureBar } = await page();
+  const ui = await mount(h(CaptureBar));
+  expect(ui.host.querySelector("textarea")?.value).toBe("Newest");
+  expect(create).not.toHaveBeenCalled();
+  expect(localStorage.getItem("notes-capture-draft:gone-1")).not.toBeNull();
+  await close(ui.host);
+  expect(ui.host.querySelector("textarea")?.value).toBe("Maybe saved");
+  expect(ui.host.querySelector('[role="alert"]')?.textContent).toContain(
+    "may already have been saved",
+  );
+  await ui.unmount();
 });

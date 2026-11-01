@@ -39,10 +39,33 @@ interface RegistrySeams {
   now: () => number;
 }
 
+const TAB_KEY = "suite.notes.tab-id";
+export const HEARTBEAT_TTL = 30_000;
+export const heartbeatKey = (id: string) => `suite.notes.heartbeat:${id}`;
+
+/** A heartbeat younger than the TTL means a live page owns that tab id. */
+export function heartbeatLive(storage: Pick<Storage, "getItem">, id: string, now: number) {
+  const last = storage.getItem(heartbeatKey(id));
+  return last !== null && Number.isFinite(Number(last)) && now - Number(last) <= HEARTBEAT_TTL;
+}
+
 let pageTabId: string | undefined;
+/**
+ * The tab id lives in sessionStorage so a reload keeps its own drafts. A page
+ * clears its heartbeat on pagehide, so a reload finds no live heartbeat and
+ * reuses the id; a duplicated tab copies sessionStorage while the original is
+ * still live, so it sees a fresh heartbeat and takes a new id.
+ */
 function getTabId(): string {
-  // Duplicated tabs copy sessionStorage, so identity must live only in this document.
-  pageTabId ??= crypto.randomUUID();
+  if (pageTabId) return pageTabId;
+  try {
+    const saved = sessionStorage.getItem(TAB_KEY);
+    pageTabId =
+      saved && !heartbeatLive(localStorage, saved, Date.now()) ? saved : crypto.randomUUID();
+    sessionStorage.setItem(TAB_KEY, pageTabId);
+  } catch {
+    pageTabId ??= crypto.randomUUID();
+  }
   return pageTabId;
 }
 
@@ -51,12 +74,19 @@ export function createDraftRegistry(webId: string, seams: RegistrySeams) {
   const { storage, now, tabId = getTabId() } = seams;
   const key = `suite.notes.pending-drafts.${webId}`;
   const prefix = `${key}:`;
-  const heartbeatKey = (id: string) => `suite.notes.heartbeat:${id}`;
   const heartbeat = () => {
     try {
       storage.setItem(heartbeatKey(tabId), String(now()));
     } catch {
       // Storage failure must not prevent editing or the unload prompt.
+    }
+  };
+  /** On pagehide: this page no longer owns its tab id, so a reload may reuse it. */
+  const release = () => {
+    try {
+      storage.removeItem(heartbeatKey(tabId));
+    } catch {
+      // Without storage the heartbeat simply goes stale.
     }
   };
   heartbeat();
@@ -224,9 +254,7 @@ export function createDraftRegistry(webId: string, seams: RegistrySeams) {
               continue;
             for (const claim of record.claims ?? [])
               sources.add(`${claim.key}\u0000${claim.revision}`);
-            const last = storage.getItem(heartbeatKey(record.tabId));
-            if (last !== null && Number.isFinite(Number(last)) && now() - Number(last) <= 30_000)
-              continue;
+            if (heartbeatLive(storage, record.tabId, now())) continue;
             orphans.push({ storageKey, text, record });
           } catch {
             // Ignore invalid and foreign records.
@@ -279,7 +307,7 @@ export function createDraftRegistry(webId: string, seams: RegistrySeams) {
     void promise.finally(() => recovering.delete(note.url));
     return promise;
   };
-  return { ...pending, tabId, heartbeat, recover };
+  return { ...pending, tabId, heartbeat, release, recover };
 }
 export type DraftRegistry = ReturnType<typeof createDraftRegistry>;
 const registries = new Map<string, DraftRegistry>();
@@ -306,7 +334,14 @@ export function getPendingDrafts(webId: string): DraftRegistry {
   if (typeof window !== "undefined") {
     setInterval(pending.heartbeat, 10_000);
     window.addEventListener("online", retry);
-    window.addEventListener("pagehide", retry);
+    window.addEventListener("pagehide", () => {
+      retry();
+      pending.release();
+    });
+    window.addEventListener("pageshow", (event) => {
+      // Restored from the back/forward cache: this page is live again.
+      if (event.persisted) pending.heartbeat();
+    });
     window.addEventListener("beforeunload", (event) => {
       pending.beforeUnload(event);
       retry();
