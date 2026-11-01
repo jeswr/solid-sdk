@@ -180,13 +180,20 @@ export function createMatrixSend(options: MatrixSendOptions): NonNullable<Channe
       } catch {
         throw new ProviderRejectedError("Matrix room state is unreadable");
       }
-      if (
-        !Array.isArray(state) ||
-        state.some((value) => record(value).type === "m.room.encryption")
-      )
+      if (!Array.isArray(state))
         throw new ProviderRejectedError(
           "Matrix plaintext send requires a confirmed unencrypted room",
         );
+      for (const value of state) {
+        const event = record(value);
+        if (typeof event.type !== "string" || !event.type || typeof event.state_key !== "string")
+          throw new ProviderRejectedError("invalid Matrix room state");
+        record(event.content);
+        if (event.type === "m.room.encryption")
+          throw new ProviderRejectedError(
+            "Matrix plaintext send requires a confirmed unencrypted room",
+          );
+      }
       // Re-check room state even for native Matrix wires: a newly bridged room must
       // never receive a structured carrier approved for a different carriage.
       const bridge = detectMatrixBridge(undefined, state);

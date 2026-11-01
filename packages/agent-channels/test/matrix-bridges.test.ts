@@ -166,7 +166,12 @@ it.each([
 });
 
 it("never trusts malformed cursor hints or mismatched decrypted/wrapped identities", async () => {
-  for (const bridges of [[], { $one: "telegram" }, { $orphan: "signal" }, { bad: "signal" }])
+  for (const bridges of [
+    [],
+    Object.fromEntries([["$one", "telegram"]]),
+    Object.fromEntries([["$orphan", "signal"]]),
+    { bad: "signal" },
+  ])
     await expect(
       reader([]).binding.ingest.list(account, cursor({ pending: [event()], bridges }), limits),
     ).rejects.toThrow();
@@ -340,4 +345,22 @@ it("refuses structured Matrix carriage when a previously native room becomes bri
     "carriage",
   );
   expect(s.requests).toHaveLength(1);
+});
+
+it.each([
+  [null],
+  [{}],
+  [{ type: "", state_key: "", content: {} }],
+  [{ type: "m.room.name", content: {} }],
+  [{ type: "m.room.name", state_key: "", content: null }],
+])("refuses incomplete room-state records before native or bridge sends", async (state) => {
+  for (const bridge of [false, true]) {
+    const s = sender("signal", [state], bridge ? {} : { bridgeRooms: undefined });
+    const wire = await s.send.render(signed(), bridge ? CARRIAGE_PROFILES.signal : MATRIX_CONTENT);
+    await expect(
+      s.send.transmit(wire, { account, tokens: s.tokens, dryRun: false }),
+    ).rejects.toThrow();
+    expect(s.requests).toHaveLength(1);
+    expect(s.tokens.calls.map((call) => call.access)).toEqual(["read"]);
+  }
 });
