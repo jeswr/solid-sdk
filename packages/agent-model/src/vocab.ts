@@ -177,6 +177,7 @@ export const TERM_DEFINITIONS = {
   draft: "Whether drafts may be proposed for an account; false by default.",
   effectKey: "Idempotency key of the effect.",
   endToEndEncrypted: "Whether channel content has end-to-end encryption.",
+  federated: "Whether channel messages can be relayed between independently operated servers.",
   entryHash: "SHA-256 digest sealing the entry (over seq, time, previous hash and record).",
   evaluatedActor: "The software actor whose representation was assessed.",
   evaluatedPolicy: "The grant or policy the decision was evaluated under.",
