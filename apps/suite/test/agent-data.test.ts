@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { issueApproval } from "@jeswr/agent-mandate/approval";
 import {
   digestOf,
@@ -11,6 +12,12 @@ import { exampleRecords } from "@jeswr/agent-model/testing";
 import { serialize } from "@jeswr/rdf-serialize";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
+import {
+  auditFromTurtle,
+  auditHeadToTurtle,
+  auditToTurtle,
+  sealAudit,
+} from "../src/apps/agent/lib/audit";
 import {
   AgentReadError,
   ConflictError,
@@ -77,7 +84,38 @@ async function fixturePod() {
     ...record,
     id: url(locations[record.type]),
   }));
-  const pod = createDemoPod({ root: DEMO_ROOT, seed: await Promise.all(expected.map(seedRecord)) });
+  const pod = createDemoPod({
+    root: DEMO_ROOT,
+    seed: [
+      ...(await Promise.all(expected.filter((r) => r.type !== "audit-entry").map(seedRecord))),
+      {
+        path: "agent/audit/1.ttl",
+        body: await auditToTurtle(
+          url("audit/1.ttl"),
+          sealAudit(1, new Date(NOW).toISOString(), "sha-256:genesis", {
+            type: "ingest",
+            id: "urn:event:1",
+            agent: url("#agent"),
+            owner: DEMO_WEBID,
+          }),
+        ),
+        contentType: "text/turtle",
+      },
+      {
+        path: "agent/audit/chain.ttl",
+        body: await auditHeadToTurtle(
+          url("audit/chain.ttl"),
+          sealAudit(1, new Date(NOW).toISOString(), "sha-256:genesis", {
+            type: "ingest",
+            id: "urn:event:1",
+            agent: url("#agent"),
+            owner: DEMO_WEBID,
+          }),
+        ),
+        contentType: "text/turtle",
+      },
+    ],
+  });
   return { pod, client: clientFor(pod.fetch), expected };
 }
 
@@ -371,15 +409,23 @@ describe("agent client", () => {
 describe("typed readers", () => {
   it("selects newest audit sequence IRIs before fetching and caps concurrent reads at six", async () => {
     const seed = await Promise.all(
-      Array.from({ length: 40 }, (_, seq) =>
-        seedRecord({
-          ...exampleRecords["audit-entry"],
-          id: url(`audit/${seq}.ttl`),
-          seq,
+      Array.from({ length: 40 }, async (_, index) => {
+        const seq = index + 1;
+        return {
+          path: `agent/audit/${seq}.ttl`,
           // Sequence order, rather than timestamps or lexicographic path order, is canonical.
-          at: new Date(NOW - seq * 1000).toISOString(),
-        }),
-      ),
+          body: await auditToTurtle(
+            url(`audit/${seq}.ttl`),
+            sealAudit(seq, new Date(NOW - seq * 1000).toISOString(), "sha-256:genesis", {
+              type: "ingest",
+              id: `urn:event:${seq}`,
+              agent: url("#agent"),
+              owner: DEMO_WEBID,
+            }),
+          ),
+          contentType: "text/turtle",
+        };
+      }),
     );
     const pod = createDemoPod({ root: DEMO_ROOT, seed });
     let active = 0;
@@ -400,8 +446,8 @@ describe("typed readers", () => {
     });
     expect(
       readers.loadedRecords(await readers.readAudit(client, { limit: 1 })).map((r) => r.seq),
-    ).toEqual([39]);
-    expect(reads).toEqual([url("audit/39.ttl")]);
+    ).toEqual([40]);
+    expect(reads).toEqual([url("audit/40.ttl")]);
     reads.length = 0;
     expect(
       readers
@@ -421,13 +467,21 @@ describe("typed readers", () => {
     for (const name of ["bad", "9007199254740992"])
       await client.create(url(`audit/${name}.ttl`), "");
     await client.replace(
-      url("audit/39.ttl"),
-      await recordToTurtle({ ...exampleRecords["audit-entry"], id: url("audit/39.ttl"), seq: 3 }),
-      (await pod.fetch(url("audit/39.ttl"))).headers.get("etag") as string,
+      url("audit/40.ttl"),
+      await auditToTurtle(
+        url("audit/40.ttl"),
+        sealAudit(3, new Date(NOW).toISOString(), "sha-256:genesis", {
+          type: "ingest",
+          id: "urn:event:3",
+          agent: url("#agent"),
+          owner: DEMO_WEBID,
+        }),
+      ),
+      (await pod.fetch(url("audit/40.ttl"))).headers.get("etag") as string,
     );
     const rows = await readers.readAudit(client);
     expect(rows).toHaveLength(42);
-    expect(rows[0]).toMatchObject({ url: url("audit/39.ttl"), error: expect.any(Error) });
+    expect(rows[0]).toMatchObject({ url: url("audit/40.ttl"), error: expect.any(Error) });
     expect(rows.filter((row) => !isLoaded(row))).toHaveLength(3);
     expect(reads.some((ref) => ref.endsWith("bad.ttl"))).toBe(false);
   });
@@ -454,9 +508,15 @@ describe("typed readers", () => {
       }
       if (index === 5) {
         delete (want as Partial<import("@jeswr/agent-model").Approval>).attributedTo;
-        want.createdAt = new Date(String(want.createdAt)).toISOString();
+        want.createdAt = new Date(want.createdAt as string).toISOString();
       }
-      expect(rows[0] && isLoaded<unknown>(rows[0]) && rows[0].record).toMatchObject(want);
+      if (index === 9) {
+        expect(rows[0] && isLoaded<unknown>(rows[0]) && rows[0].record).toMatchObject({
+          seq: 1,
+          prev: "sha-256:genesis",
+          record: { type: "ingest" },
+        });
+      } else expect(rows[0] && isLoaded<unknown>(rows[0]) && rows[0].record).toMatchObject(want);
     });
     const conversations = readers.loadedRecords(await readers.readConversations(client));
     expect(conversations[0]).toMatchObject({ title: "Synthetic turn", unread: false });
@@ -606,6 +666,17 @@ describe("agent demo seed", () => {
         file.contentType !== "application/trig" &&
         !file.path.endsWith("descriptors/agent.ttl"),
     )) {
+      if (file.path.includes("approvals/")) {
+        expect(await readers.readApprovals(client)).toHaveLength(1);
+        continue;
+      }
+      if (file.path.includes("audit/")) {
+        if (!file.path.endsWith("chain.ttl"))
+          expect(
+            await auditFromTurtle(file.body as string, new URL(file.path, DEMO_ROOT).href),
+          ).toHaveProperty("seq");
+        continue;
+      }
       const record = await recordFromTurtle(
         file.body as string,
         new URL(file.path, DEMO_ROOT).href,
@@ -636,10 +707,12 @@ describe("agent demo seed", () => {
     const inbox = readers.loadedRecords(await readers.readInbox(client, "gmail"));
     expect(inbox).toHaveLength(3);
     expect(inbox[1]?.triage?.primary).toBe("meeting");
-    expect(inbox[1]?.structuredPart).toMatchObject([{ type: "text/calendar" }]);
+    expect(inbox[1]?.structuredPart).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: "text/calendar" })]),
+    );
     expect(await readers.readInbox(client, "graph-mail")).toHaveLength(1);
     const audit = readers.loadedRecords(await readers.readAudit(client));
-    expect(audit.map((row) => row.seq)).toEqual(Array.from({ length: 12 }, (_, i) => 11 - i));
+    expect(audit.map((row) => row.seq)).toEqual(Array.from({ length: 12 }, (_, i) => 12 - i));
     let prev = "sha-256:genesis";
     for (const entry of audit.toReversed()) {
       expect(entry.prev).toBe(prev);

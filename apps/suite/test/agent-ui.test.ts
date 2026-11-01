@@ -1,10 +1,12 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-
+// AUTHORED-BY Codex GPT-6
 import { issueApproval } from "@jeswr/agent-mandate/approval";
 import { issueControlStatement } from "@jeswr/agent-mandate/control";
 import { recordToTurtle } from "@jeswr/agent-model";
 import { afterEach, expect, it, vi } from "vitest";
+import type { Row } from "../src/apps/agent/lib/client";
 import { collection, isComplete } from "../src/apps/agent/lib/collections";
+import type { Query } from "../src/apps/agent/lib/hooks";
 import { AgentWorkspaceProvider } from "../src/apps/agent/lib/hooks";
 import type { PendingApproval } from "../src/apps/agent/lib/queue";
 import { loadedRecords } from "../src/apps/agent/lib/readers";
@@ -24,6 +26,7 @@ vi.mock("../src/apps/agent/components/approval-key-setup-sheet", () => ({
   useApprovalDevice: () => ({ requireKey: vi.fn() }),
 }));
 
+import { ActivityScreen } from "../src/apps/agent/components/activity";
 // Radix reads DOM availability at import time; initialise the harness first.
 import { ApprovalsScreen } from "../src/apps/agent/components/approvals";
 import { ChatScreen } from "../src/apps/agent/components/chat";
@@ -65,8 +68,9 @@ async function fixture() {
       h(AgentWorkspaceProvider, { session, children, fallback: () => null }),
   };
 }
-async function until(condition: () => boolean, attempts = 200) {
-  for (let i = 0; i < attempts && !condition(); i++)
+async function until(condition: () => boolean, timeoutMs = 5000) {
+  const deadline = performance.now() + timeoutMs;
+  while (!condition() && performance.now() < deadline)
     await act(async () => {
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
     });
@@ -88,13 +92,163 @@ it("renders URN proposal references as plain text beside supported proposal link
     }),
   });
   const view = await mount(f.tree(h(ChatScreen, { id: "welcome" })));
-  await until(() => Boolean(view.host.textContent?.includes("urn:test:proposal")));
+  await until(() =>
+    Boolean(view.host.querySelector(".agent-inline-proposal .agent-proposal-link")),
+  );
+  expect(view.host.textContent).toContain("urn:test:proposal");
   expect(view.host.querySelector(".agent-proposal-link")?.getAttribute("href")).toBe(
     "/agent/approvals/send-reply",
   );
   expect(
     [...view.host.querySelectorAll("a")].some((a) => a.textContent?.includes("urn:test:proposal")),
   ).toBe(false);
+  expect(
+    [...view.host.querySelectorAll(".agent-inline-proposal button")].map((b) => b.textContent),
+  ).toEqual(["Approve", "Change", "Deny"]);
+  await view.unmount();
+});
+
+it("disables the composer throughout a pending send and shows the model's character limit", async () => {
+  const f = await fixture();
+  const pending = deferred<void>();
+  let saving = false;
+  vi.spyOn(f.session, "fetch").mockImplementation(async (url, init) => {
+    if (String(url).startsWith(`${BASE}conversations/welcome/`) && init?.method === "PUT") {
+      saving = true;
+      await pending.promise;
+    }
+    return f.pod.fetch(url, init);
+  });
+  const view = await mount(f.tree(h(ChatScreen, { id: "welcome" })));
+  await until(() => Boolean(view.host.querySelector(".agent-inline-proposal")));
+  const composer = view.host.querySelector<HTMLTextAreaElement>("textarea");
+  const form = view.host.querySelector("form");
+  const send = form?.querySelector<HTMLButtonElement>('button[type="submit"]');
+  if (!composer || !form || !send) throw new Error("Missing composer");
+  const draft = "a".repeat(16384);
+  await act(() => {
+    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")?.set?.call(
+      composer,
+      draft,
+    );
+    composer.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(composer.maxLength).toBe(16384);
+  expect(form.textContent).toContain("16,384 / 16,384 characters");
+  await act(() => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await until(() => saving);
+  expect(form.getAttribute("aria-busy")).toBe("true");
+  // Read-only, not disabled, so the focused control keeps focus during the save.
+  expect(composer.readOnly).toBe(true);
+  expect(composer.getAttribute("aria-disabled")).toBe("true");
+  expect(send.getAttribute("aria-disabled")).toBe("true");
+  expect(composer.value).toBe(draft);
+  await act(() => pending.resolve());
+  await until(() => !composer.readOnly);
+  expect(composer.value).toBe("");
+  expect(form.getAttribute("aria-busy")).toBe("false");
+  await view.unmount();
+});
+
+it("debounces each affected Chat container for 300 ms and confines heartbeat changes to status", async () => {
+  const f = await fixture();
+  const reads = vi.spyOn(f.session, "fetch");
+  const view = await mount(
+    f.tree(h("div", null, h(AgentSidebar), h(ChatScreen, { id: "welcome" }))),
+  );
+  await until(() => Boolean(view.host.querySelector(".agent-inline-proposal")));
+  reads.mockClear();
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  await act(() => {
+    f.emit(`${BASE}proposals/one.ttl`);
+    f.emit(`${BASE}proposals/two.ttl`);
+  });
+  await act(() => vi.advanceTimersByTime(299));
+  expect(reads).not.toHaveBeenCalled();
+  await act(() => vi.advanceTimersByTime(1));
+  // The sidebar's waiting count and Chat each have their own scoped query.
+  expect(reads.mock.calls.filter(([url]) => String(url) === `${BASE}proposals/`)).toHaveLength(2);
+  expect(reads.mock.calls.every(([url]) => String(url).startsWith(`${BASE}proposals/`))).toBe(true);
+  reads.mockClear();
+  await act(() => f.emit(`${BASE}control/heartbeat.ttl`));
+  await act(() => vi.advanceTimersByTime(300));
+  expect(reads.mock.calls.length).toBeGreaterThan(0);
+  expect(reads.mock.calls.every(([url]) => String(url).startsWith(`${BASE}control/`))).toBe(true);
+  await view.unmount();
+});
+
+it.each([
+  "proposals",
+  "approvals",
+  "outbox",
+])("retries an unreachable %s query for the sidebar and approval queue", async (container) => {
+  const f = await fixture();
+  let fail = true;
+  vi.spyOn(f.session, "fetch").mockImplementation(async (url, init) =>
+    fail && String(url) === `${BASE}${container}/`
+      ? new Response(null, { status: 403 })
+      : f.pod.fetch(url, init),
+  );
+  let query: Query<Row<PendingApproval>[]> | undefined;
+  function Probe() {
+    query = useApprovalQueue();
+    return null;
+  }
+  const view = await mount(f.tree(h(Probe)));
+  await until(() => query?.status === "error");
+  fail = false;
+  await act(() => query?.reload());
+  await until(() => query?.status === "ready");
+  expect(query?.data).toHaveLength(3);
+  await view.unmount();
+});
+
+it.each([
+  "12",
+  "4999",
+])("restores focus by activity sequence %s, falling back to the timeline heading", async (seq) => {
+  const f = await fixture();
+  const view = await mount(f.tree(h(ActivityScreen, { seq })));
+  await until(() => Boolean(document.querySelector('[role="dialog"] button[aria-label="Close"]')));
+  const close = document.querySelector<HTMLButtonElement>(
+    '[role="dialog"] button[aria-label="Close"]',
+  );
+  if (!close) throw new Error("Missing close button");
+  await click(close);
+  await view.render(f.tree(h(ActivityScreen)));
+  await until(
+    () =>
+      document.activeElement?.matches(
+        seq === "12" ? '.agent-timeline-row[data-seq="12"]' : "#agent-timeline-heading",
+      ) === true,
+  );
+  await view.unmount();
+});
+
+it.each([
+  "__proto__",
+  "constructor",
+  "<img src=x onerror=alert(1)>",
+])("renders the triage label %s as plain text", async (label) => {
+  const f = await fixture();
+  // Use the seeded assessment's exact subject/source; only replace the label literal.
+  const { loadedRecords, readInbox } = await import("../src/apps/agent/lib/readers");
+  const { createAgentClient } = await import("../src/apps/agent/lib/client");
+  const client = createAgentClient({ fetch: f.pod.fetch, storage: DEMO_ROOT, workspace: BASE });
+  const message = loadedRecords(await readInbox(client, "gmail")).find(
+    (m) => m.triage?.primary === "meeting",
+  );
+  if (!message) throw new Error("Missing triage fixture");
+  const url = message.id.replace(/\.ttl$/, ".triage.ttl");
+  const body = await (await f.pod.fetch(url)).text();
+  await f.pod.fetch(url, {
+    method: "PUT",
+    headers: { "content-type": "text/turtle" },
+    body: body.replace('"meeting"', JSON.stringify(label)),
+  });
+  const view = await mount(f.tree(h(InboxScreen, { binding: "gmail" })));
+  await until(() => Boolean(view.host.textContent?.includes(label)));
+  expect(view.host.querySelector(".agent-list img")).toBeNull();
   await view.unmount();
 });
 
@@ -291,23 +445,37 @@ it("recomputes proposal and approval expiry and the sidebar waiting count withou
   function Probe() {
     const query = useApprovalQueue();
     rows = query.status === "ready" ? loadedRecords(query.data) : [];
-    return h(AgentSidebar);
+    return h("div", null, h(AgentSidebar), h(ChatScreen, { id: "welcome" }));
   }
   const reads = vi.spyOn(f.session, "fetch");
   const view = await mount(f.tree(h(Probe)));
   await until(
     () =>
       rows.find((r) => r.proposal.id === proposal.id)?.state === "approved" &&
-      Boolean(view.host.querySelector('[aria-label="2 waiting for approval"]')),
+      Boolean(view.host.querySelector('[aria-label="2 waiting for approval"]')) &&
+      Boolean(
+        view.host
+          .querySelector(".agent-inline-proposal")
+          ?.textContent?.includes("Approved, waiting"),
+      ),
   );
   const count = reads.mock.calls.length;
   expect(count).toBeGreaterThan(0);
   await act(() => vi.advanceTimersByTime(10_000));
   expect(rows.find((r) => r.proposal.id === proposal.id)?.state).toBe("pending");
   expect(view.host.querySelector('[aria-label="3 waiting for approval"]')).not.toBeNull();
+  expect(view.host.querySelector(".agent-inline-proposal")?.textContent).toContain(
+    "Awaiting your approval",
+  );
   await act(() => vi.advanceTimersByTime(10_000));
   expect(rows.some((r) => r.proposal.id === proposal.id)).toBe(false);
   expect(view.host.querySelector('[aria-label="2 waiting for approval"]')).not.toBeNull();
+  expect(view.host.querySelector(".agent-inline-proposal")?.textContent).toContain(
+    "This proposal has expired",
+  );
+  expect(
+    view.host.querySelector<HTMLButtonElement>(".agent-inline-proposal button")?.disabled,
+  ).toBe(true);
   expect(reads.mock.calls.length).toBe(count);
   await view.unmount();
   vi.useRealTimers();
@@ -419,7 +587,7 @@ it("retains a new verified denial after 500 older approvals with larger random U
     ),
   });
   const view = await mount(f.tree(h(ApprovalsScreen, { id: "send-reply" })));
-  await until(() => Boolean(view.host.textContent?.includes("Denied")), 3000);
+  await until(() => Boolean(view.host.textContent?.includes("Denied")));
   expect(view.host.textContent).not.toContain("Too many approval records");
   expect(
     [...view.host.querySelectorAll<HTMLButtonElement>("button")].find(

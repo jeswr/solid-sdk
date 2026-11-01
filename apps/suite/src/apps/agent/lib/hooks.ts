@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   createContext,
@@ -104,6 +105,7 @@ export function AgentWorkspaceProvider({
 export function useAgentQuery<T>(
   key: string,
   loader: (client: AgentClient) => Promise<T>,
+  debounceMs = 150,
 ): Query<T> {
   const { client, session } = useAgentWorkspace();
   const load = useRef(loader);
@@ -140,7 +142,7 @@ export function useAgentQuery<T>(
       if (url === key || url.startsWith(key.endsWith("/") ? key : `${key}/`)) {
         ++generation;
         clearTimeout(timer);
-        timer = setTimeout(run, 150);
+        timer = setTimeout(run, debounceMs);
       }
     });
     return () => {
@@ -149,6 +151,6 @@ export function useAgentQuery<T>(
       clearTimeout(timer);
       unsubscribe();
     };
-  }, [client, session, key, reload, attempt]);
+  }, [client, session, key, reload, attempt, debounceMs]);
   return state.key === key && state.client === client ? state.query : { status: "loading", reload };
 }

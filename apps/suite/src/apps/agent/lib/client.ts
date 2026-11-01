@@ -110,6 +110,11 @@ export function createAgentClient(options: {
     },
     create: (url: string, body: string, contentType = "text/turtle") =>
       write(url, body, contentType, { "if-none-match": "*" }),
+    createContainer: (url: string) =>
+      write(url, "", "text/turtle", {
+        "if-none-match": "*",
+        link: '<http://www.w3.org/ns/ldp#BasicContainer>; rel="type"',
+      }),
     replace: (url: string, body: string, etag: string, contentType = "text/turtle") => {
       if (!etag.trim()) throw new Error("A validator is required to replace a record");
       return write(url, body, contentType, { "if-match": etag });

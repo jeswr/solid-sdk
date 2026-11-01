@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 "use client";
 import {
   Button,
@@ -17,9 +18,9 @@ import { createAgentVerifier } from "../lib/verify";
 import { AgentControl } from "./agent-control";
 
 export function useDaemonStatus() {
-  const { session } = useAgentWorkspace();
+  const { client, session } = useAgentWorkspace();
   const now = useAgentClock();
-  const query = useAgentQuery(session.storageUrl, async (c) => ({
+  const query = useAgentQuery(client.paths.control, async (c) => ({
     heartbeat: await readHeartbeat(c),
     controls: await readControl(c, createAgentVerifier(session)),
   }));
