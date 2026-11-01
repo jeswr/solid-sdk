@@ -1,0 +1,26 @@
+{
+  "shapesBase": "https://w3id.org/jeswr/bookmark/shapes#",
+  "prefixes": {
+    "book": "https://w3id.org/jeswr/bookmark#",
+    "schema": "http://schema.org/",
+    "dct": "http://purl.org/dc/terms/",
+    "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "entities": [
+    {
+      "targetClass": "https://w3id.org/jeswr/bookmark#Bookmark",
+      "name": "Bookmark",
+      "subject": { "convention": "hash-it" },
+      "fields": {
+        "title": { "emptyStringDrop": true },
+        "description": { "emptyStringDrop": true },
+        "notes": { "emptyStringDrop": true },
+        "archived": { "default": false, "materializeDefault": true },
+        "created": { "defaultNow": true },
+        "tags": { "trim": true, "dropBlank": true, "sortOnRead": true }
+      }
+    }
+  ]
+}

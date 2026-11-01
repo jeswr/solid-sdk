@@ -1,0 +1,73 @@
+# AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+#
+# SHACL shape for the bookmark / read-it-later model (@jeswr/solid-bookmark).
+#
+# The single contract a `book:Bookmark` document must satisfy so it reads
+# identically through every consumer's accessor. Authored against the minted
+# book: terms + reused, dereferenceable IRIs only — schema.org (schema:url,
+# schema:keywords), Dublin Core Terms (dct:), and xsd datatypes.
+#
+# The shape is ANONYMOUS (a blank node), so this file mints nothing at a
+# non-resolving domain. Validate a bookmark's typed-accessor output before write,
+# and on read of untrusted pod data (rdf-validate-shacl; see src/shape.test.ts).
+
+@prefix sh:     <http://www.w3.org/ns/shacl#> .
+@prefix book:   <https://w3id.org/jeswr/bookmark#> .
+@prefix schema: <http://schema.org/> .
+@prefix dct:    <http://purl.org/dc/terms/> .
+@prefix xsd:    <http://www.w3.org/2001/XMLSchema#> .
+
+# --- A bookmark (book:Bookmark) ---
+[] a sh:NodeShape ;
+  sh:targetClass book:Bookmark ;
+
+  # URL — required, exactly one http(s) IRI. The one field every bookmark must
+  # have. sh:nodeKind sh:IRI rejects a literal; sh:pattern "^https?://" rejects a
+  # non-http(s) scheme (e.g. a hostile javascript:/data: URL), matching the
+  # untrusted-input filter the typed writer applies (isHttpIri).
+  sh:property [
+    sh:path schema:url ; sh:name "url" ;
+    sh:nodeKind sh:IRI ; sh:minCount 1 ; sh:maxCount 1 ;
+    sh:pattern "^https?://" ;
+  ] ;
+
+  # Title — at most one string (optional; a bookmark may have only a URL).
+  sh:property [
+    sh:path dct:title ; sh:name "title" ;
+    sh:datatype xsd:string ; sh:maxCount 1 ;
+  ] ;
+
+  # Description (the short summary / blurb) — at most one string.
+  sh:property [
+    sh:path dct:description ; sh:name "description" ;
+    sh:datatype xsd:string ; sh:maxCount 1 ;
+  ] ;
+
+  # Notes (the user's markdown body) — at most one string.
+  sh:property [
+    sh:path book:notes ; sh:name "notes" ;
+    sh:datatype xsd:string ; sh:maxCount 1 ;
+  ] ;
+
+  # Archived flag — at most one xsd:boolean.
+  sh:property [
+    sh:path book:archived ; sh:name "archived" ;
+    sh:datatype xsd:boolean ; sh:maxCount 1 ;
+  ] ;
+
+  # Timestamps — xsd:dateTime, at most one each.
+  sh:property [
+    sh:path dct:created ; sh:name "created" ;
+    sh:datatype xsd:dateTime ; sh:maxCount 1 ;
+  ] ;
+  sh:property [
+    sh:path dct:modified ; sh:name "modified" ;
+    sh:datatype xsd:dateTime ; sh:maxCount 1 ;
+  ] ;
+
+  # Tags — zero or more string literals (schema:keywords). Unbounded (a bookmark
+  # may carry many tags); each must be a string, never an IRI or other datatype.
+  sh:property [
+    sh:path schema:keywords ; sh:name "tags" ;
+    sh:datatype xsd:string ;
+  ] .
