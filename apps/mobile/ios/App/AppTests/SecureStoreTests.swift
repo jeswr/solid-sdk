@@ -1,14 +1,104 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
+import Capacitor
 import Foundation
 import CryptoKit
 import LocalAuthentication
 import Security
 import XCTest
+import WebKit
 @testable import App
 
 struct FakeSecureStoreInstallation: SecureStoreInstallChecking {
     var error: Error?
     func prepare() throws { if let error = error { throw error } }
+}
+
+/// Exercise real WKWebView KVO and delegate delivery, without a server, Keychain or LA prompt.
+private final class SecureStoreTestNavigationHandler: WebViewDelegationHandler {
+    var finished: (() -> Void)?
+
+    override func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        super.webView(webView, didFinish: navigation)
+        finished?()
+    }
+}
+
+@MainActor
+final class SecureStoreNavigationObserverTests: XCTestCase {
+    private func load(_ webView: WKWebView, handler: SecureStoreTestNavigationHandler, action: () -> Void) {
+        let finished = expectation(description: "Capacitor didFinish still delivered")
+        handler.finished = { finished.fulfill() }
+        action()
+        wait(for: [finished], timeout: 10)
+        handler.finished = nil
+    }
+
+    func testNavigationAndSameURLReloadCancelWithoutReplacingEitherDelegate() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let first = directory.appendingPathComponent("first.html")
+        let second = directory.appendingPathComponent("second.html")
+        for url in [first, second] { try Data("<!doctype html><p>fixture</p>".utf8).write(to: url) }
+        let webView = WKWebView(frame: .zero)
+        let handler = SecureStoreTestNavigationHandler()
+        let allowed = try XCTUnwrap(SuiteOrigin(url: URL(string: "https://suite.example")))
+        let uiGuard = UIDelegateOriginGuard(inner: handler, allowed: allowed)
+        webView.navigationDelegate = handler
+        webView.uiDelegate = uiGuard
+        load(webView, handler: handler) { webView.loadFileURL(first, allowingReadAccessTo: directory) }
+
+        let cancellation = SecureStoreCancellation()
+        var ticket = cancellation.ticket(key: "a")
+        var observer: SecureStoreNavigationObserver? = SecureStoreNavigationObserver(webView: webView) {
+            XCTAssertTrue(Thread.isMainThread)
+            cancellation.cancel()
+        }
+        XCTAssertTrue(cancellation.isCurrent(ticket), "Installing observations must not cancel reads")
+        load(webView, handler: handler) { webView.loadFileURL(second, allowingReadAccessTo: directory) }
+        XCTAssertFalse(cancellation.isCurrent(ticket))
+        XCTAssertTrue(webView.navigationDelegate === handler)
+        XCTAssertTrue(webView.uiDelegate === uiGuard)
+
+        ticket = cancellation.ticket(key: "a")
+        let iframeLoaded = expectation(description: "Subframe load completed")
+        webView.callAsyncJavaScript("""
+            await new Promise(resolve => {
+                const frame = document.createElement('iframe');
+                frame.onload = resolve;
+                frame.srcdoc = '<p>child document</p>';
+                document.body.append(frame);
+            });
+            return true;
+            """, arguments: [:], in: nil, in: .page) { result in
+            if case .failure(let error) = result { XCTFail("Subframe failed: \(error)") }
+            iframeLoaded.fulfill()
+        }
+        wait(for: [iframeLoaded], timeout: 10)
+        XCTAssertTrue(cancellation.isCurrent(ticket), "Subframe loads must not cancel main-frame reads")
+
+        ticket = cancellation.ticket(key: "a")
+        load(webView, handler: handler) { webView.reload() }
+        XCTAssertEqual(webView.url, second)
+        XCTAssertFalse(cancellation.isCurrent(ticket), "URL-only observation misses reloads")
+
+        // Same-document URL changes do not start loading, but also invalidate outstanding reads.
+        ticket = cancellation.ticket(key: "a")
+        webView.evaluateJavaScript("history.pushState(null, '', '#next')") { _, error in
+            XCTAssertNil(error)
+        }
+        let changed = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+            !cancellation.isCurrent(ticket)
+        }, object: nil)
+        wait(for: [changed], timeout: 10)
+
+        XCTAssertNotNil(observer)
+        observer = nil
+        ticket = cancellation.ticket(key: "a")
+        load(webView, handler: handler) { webView.loadFileURL(first, allowingReadAccessTo: directory) }
+        XCTAssertTrue(cancellation.isCurrent(ticket), "Releasing the owner must remove its observations")
+    }
 }
 
 /// Asserts a completion result failed with `expected`, without `try`, so completion closures

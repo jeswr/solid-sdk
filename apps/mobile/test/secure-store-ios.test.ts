@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 
@@ -105,12 +106,12 @@ describe("iOS secure store guardrails", () => {
     expect(plugin).toContain('"available": false');
   });
 
-  test("cancels on lifecycle and main-frame navigation commits while forwarding the delegate", () => {
+  test("cancels on lifecycle, URL changes and reloads without replacing Capacitor's delegate", () => {
     expect(plugin).toContain("UIScene.didEnterBackgroundNotification");
     expect(plugin).toContain("UIApplication.didEnterBackgroundNotification");
     expect(plugin).toContain("UIScene.didDisconnectNotification");
     expect(plugin).toContain("@objc private func backgrounded() { cancelReads() }");
-    expect(plugin).toContain("func navigationCommitted() { cancelReads() }");
+    expect(plugin).toContain("func navigationChanged() { cancelReads() }");
     expect(plugin).toMatch(
       /private func cancelReads\(key: String\? = nil\) \{\s+cancellation\.cancel\(key: key\)\s+queue\.async/,
     );
@@ -118,15 +119,15 @@ describe("iOS secure store guardrails", () => {
       /DispatchQueue\.main\.async \{\s+(?:\/\/[^\n]*\s+)*cancellation\.deliver\(ticket, result\)/,
     );
     expect(plugin).toContain("store.teardown()");
-    expect(plugin).toContain(
-      "func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!)",
-    );
-    expect(plugin).toContain("inner?.webView?(webView, didCommit: navigation)");
-    expect(plugin).toContain("forwardingTarget(for selector:");
+    expect(plugin).toContain("webView.observe(\\.url, options: [.new])");
+    expect(plugin).toContain("webView.observe(\\.isLoading, options: [.new])");
+    expect(plugin).toContain("if change.newValue == true { navigated() }");
+    expect(plugin).not.toMatch(/WKNavigationDelegate|forwardingTarget|\.navigationDelegate\s*=/);
     const main = read("App/MainViewController.swift");
-    expect(main).toContain("private var navigationGuard: SecureStoreNavigationGuard?");
-    expect(main).toContain("bridge.webView?.navigationDelegate = navigation");
-    expect(main).toContain("secureStore?.navigationCommitted()");
+    expect(main).toContain("private var navigationObserver: SecureStoreNavigationObserver?");
+    expect(main).toContain("SecureStoreNavigationObserver(webView: webView)");
+    expect(main).toContain("secureStore?.navigationChanged()");
+    expect(main).not.toMatch(/\.navigationDelegate\s*=/);
     const store = read("App/SecureStore.swift");
     expect(store).toContain("guard self.operations.contains(id) else { return }");
     expect(store).toContain("operations.cancel(key: key)");

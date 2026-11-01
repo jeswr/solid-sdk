@@ -173,6 +173,40 @@ describe("iOS project", () => {
     expect(plist).not.toContain("CFBundleURLTypes");
   });
 
+  test("UI result timeouts attach step and hierarchy diagnostics without querying a vanished element", () => {
+    const ui = read("ios/App/AppUITests/FixtureTests.swift");
+    const missing = ui.match(
+      /guard XCTWaiter\.wait\(for: \[present\][\s\S]*?throw FixtureFailure[^\n]*/,
+    )?.[0];
+    const timeout = ui.match(
+      /guard XCTWaiter\.wait\(for: \[expectation\][\s\S]*?throw FixtureFailure[^\n]*/,
+    )?.[0];
+    for (const branch of [missing, timeout]) {
+      expect(branch).toBeDefined();
+      expect(branch).not.toMatch(/element\.(?:value|label|debugDescription)/);
+      expect(branch).toContain("attachDebug(app, page: page, done: done, step: step,");
+      expect(branch?.indexOf("attachDebug(")).toBeLessThan(
+        branch?.indexOf("throw FixtureFailure") ?? -1,
+      );
+    }
+    expect(ui).toContain("let hasWebView = app.webViews.count > 0");
+    expect(ui).toContain("app.debugDescription");
+    for (const step of [
+      "initial fixture",
+      "before foreign navigation",
+      "after foreign navigation",
+      "after reactivation",
+    ])
+      expect(ui).toContain(`step: "${step}"`);
+    expect(ui).toMatch(
+      /guard foreground\(\), element\.exists else \{ return nil \}[\s\S]*?element\.value/,
+    );
+    expect(ui).toContain(
+      "if state == .runningBackground || state == .runningBackgroundSuspended { app.activate() }",
+    );
+    expect(ui).toContain("return state == .runningForeground");
+  });
+
   test("targets iOS 16 and compiles the local plugins", () => {
     expect(pbxproj).not.toMatch(/IPHONEOS_DEPLOYMENT_TARGET = 15/);
     expect(pbxproj).toMatch(/IPHONEOS_DEPLOYMENT_TARGET = 16\.0/);

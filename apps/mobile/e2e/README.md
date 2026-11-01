@@ -192,6 +192,19 @@ the attempt, after the two-second observation window, and after backgrounding/fo
 `e2e-navigation.json` preserves all three snapshots, including their document identity and URL.
 There are no test-only hooks in the application target.
 
+Result polling regains the foreground if the asynchronous external-browser handoff arrives after
+`activate()`. If the result disappears or WebContent accessibility stops responding, timeout
+diagnostics use the last cached value length without querying the vanished element. The
+`e2e-debug.txt` attachment records the expected page, done flag, exact navigation step, WebView
+presence and application hierarchy. The host retains these diagnostics through both bulk and
+legacy attachment export, including when navigation evidence is missing.
+
+Secure-store reads are cancelled through observations of the main WebView's URL and loading
+state (including reloads of the same URL). Capacitor retains its original navigation delegate,
+which owns bridge reset, navigation policy and WebContent-process reload. The secure-store
+fixture script is loaded only by the Android paths in both frames; iOS keeps its existing
+share-intake/prompt probes and does not wrap `toNative` for Android secure-store checks.
+
 The iOS checks require all four secure-context APIs and a successful top-frame
 `SuiteShareIntake.getPending`. On iOS, `addListener` returns a JS removal handle synchronously,
 so the fixture reports only `listenerSubscriptionRequested`; this field is excluded from pass

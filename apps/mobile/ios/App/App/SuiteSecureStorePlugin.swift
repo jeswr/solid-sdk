@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 import Foundation
 import Capacitor
 import UIKit
@@ -52,7 +53,7 @@ public class SuiteSecureStorePlugin: CAPPlugin, CAPBridgedPlugin {
 
     @objc private func backgrounded() { cancelReads() }
 
-    func navigationCommitted() { cancelReads() }
+    func navigationChanged() { cancelReads() }
 
     private func cancelReads(key: String? = nil) {
         cancellation.cancel(key: key)
@@ -149,26 +150,18 @@ public class SuiteSecureStorePlugin: CAPPlugin, CAPBridgedPlugin {
     }
 }
 
-/// Keeps Capacitor's navigation delegate intact and cancels unlocks at a main-frame commit.
-final class SecureStoreNavigationGuard: NSObject, WKNavigationDelegate {
-    private weak var inner: (NSObject & WKNavigationDelegate)?
-    private let committed: () -> Void
+/// Observes the main page without replacing Capacitor's navigation delegate. URL changes cover
+/// navigation, redirects and history changes; loading covers reloads whose URL stays identical.
+/// Cancellation is deliberately conservative and starts before commit. The callback invalidates
+/// tickets synchronously, then enqueues prompt cleanup without waiting for the storage queue.
+final class SecureStoreNavigationObserver {
+    private let urlObservation: NSKeyValueObservation
+    private let loadingObservation: NSKeyValueObservation
 
-    init(inner: NSObject & WKNavigationDelegate, committed: @escaping () -> Void) {
-        self.inner = inner
-        self.committed = committed
-    }
-
-    override func responds(to selector: Selector!) -> Bool {
-        return super.responds(to: selector) || (inner?.responds(to: selector) ?? false)
-    }
-
-    override func forwardingTarget(for selector: Selector!) -> Any? {
-        return inner?.responds(to: selector) == true ? inner : nil
-    }
-
-    func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
-        committed()
-        inner?.webView?(webView, didCommit: navigation)
+    init(webView: WKWebView, navigated: @escaping () -> Void) {
+        urlObservation = webView.observe(\.url, options: [.new]) { _, _ in navigated() }
+        loadingObservation = webView.observe(\.isLoading, options: [.new]) { _, change in
+            if change.newValue == true { navigated() }
+        }
     }
 }

@@ -1,6 +1,7 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 import { readFileSync } from "node:fs";
-import { createContext, runInContext } from "node:vm";
+import { type Context, createContext, runInContext } from "node:vm";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   CAPABILITIES,
@@ -31,6 +32,22 @@ const verdict = (attempts: unknown) =>
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
 
+// Execute the scripts requested by the real page code, so tests cover platform-specific loading.
+function secureStoreLoader(context: Context, fails = false) {
+  const append = vi.fn((element: { src: string; onload: () => void; onerror: () => void }) => {
+    expect(element.src).toBe("/secure-store.js");
+    if (fails) element.onerror();
+    else {
+      runInContext(script("secure-store"), context);
+      element.onload();
+    }
+  });
+  context.document ??= {};
+  context.document.createElement = vi.fn(() => ({}));
+  context.document.head = { append };
+  return append;
+}
+
 async function hostile(window: object, advance = 2000, ios = false, secure = false) {
   const postMessage = vi.fn();
   const context = createContext({
@@ -45,11 +62,12 @@ async function hostile(window: object, advance = 2000, ios = false, secure = fal
     clearTimeout,
     performance: { now: () => Date.now() },
   });
-  runInContext(script("secure-store"), context);
+  const loadSecureStore = secureStoreLoader(context);
   if (ios) runInContext(script("ios-probes"), context);
   const completion = runInContext(script("hostile"), context);
   await vi.advanceTimersByTimeAsync(advance);
   await completion;
+  expect(loadSecureStore).toHaveBeenCalledTimes(ios ? 0 : 1);
   expect(postMessage).toHaveBeenCalledOnce();
   expect(postMessage.mock.calls[0]?.[1]).toBe(suiteOrigin);
   const message = postMessage.mock.calls[0]?.[0];
@@ -296,7 +314,7 @@ function fakeSecureStore() {
   };
 }
 
-function topFrame(hasPlugin = true, ios = false) {
+function topFrame(hasPlugin = true, ios = false, secureStoreLoadFails = false) {
   const secureStore = fakeSecureStore();
   const listeners = new Map<string, (event: object) => void>();
   const contentWindow = {};
@@ -311,11 +329,15 @@ function topFrame(hasPlugin = true, ios = false) {
     return ios ? handle : Promise.resolve(handle);
   });
   const acknowledge = vi.fn(async () => {});
+  const toNative = vi.fn(() => "callback-id");
+  const fromNative = vi.fn();
   const window = {
     isSecureContext: true,
     crypto: { subtle: {} },
     Capacitor: hasPlugin
       ? {
+          toNative,
+          fromNative,
           Plugins: {
             SuiteShareIntake: { getPending, addListener, acknowledge },
             SuiteSecureStore: secureStore,
@@ -358,7 +380,7 @@ function topFrame(hasPlugin = true, ios = false) {
     });
     runInContext(script("ios-probes"), context);
   }
-  runInContext(script("secure-store"), context);
+  const loadSecureStore = secureStoreLoader(context, secureStoreLoadFails);
   runInContext(script("index"), context);
   return {
     context,
@@ -370,6 +392,9 @@ function topFrame(hasPlugin = true, ios = false) {
     addListener,
     acknowledge,
     result,
+    toNative,
+    fromNative,
+    loadSecureStore,
     receive: (batch: object) => received?.(batch),
   };
 }
@@ -450,6 +475,11 @@ describe("top-frame fixture JavaScript", () => {
     expect(state.listenerSubscriptionRequested).toBe(true);
     expect(state).not.toHaveProperty("listenerReady");
     expect(top.frame.src).toContain("&platform=ios");
+    expect(top.loadSecureStore).not.toHaveBeenCalled();
+    expect(top.context.window).not.toHaveProperty("__e2eSecureStore");
+    expect(top.context.window.Capacitor.toNative).toBe(top.toNative);
+    expect(top.secureStore.status).not.toHaveBeenCalled();
+    expect(top.fromNative).toHaveBeenCalledOnce();
     top.context.window.Capacitor.fromNative({
       callbackId: "mob07-hostile-nonce-webkit",
       success: true,
@@ -552,6 +582,17 @@ test("manual navigation exposes a pre-attempt result and waits for a real link a
 });
 
 describe("secure-store fixture JavaScript", () => {
+  test("reports an Android probe script load failure instead of running partial checks", async () => {
+    const top = topFrame(true, false, true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(top.loadSecureStore).toHaveBeenCalledOnce();
+    expect(top.context.window.__e2e).toMatchObject({
+      done: true,
+      errors: ["Error: Could not load Android secure-store probes"],
+    });
+    expect(top.secureStore.status).not.toHaveBeenCalled();
+  });
+
   test("runs the full trusted bridge sequence and retains the marker until host cleanup", async () => {
     const top = topFrame();
     await vi.advanceTimersByTimeAsync(0);

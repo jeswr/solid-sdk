@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 import Capacitor
 import UIKit
 
@@ -8,7 +9,7 @@ class MainViewController: CAPBridgeViewController {
     private var bridgeGuard: BridgeOriginGuard?
     // WKWebView.uiDelegate is weak, so the controller keeps the guard alive.
     private var uiGuard: UIDelegateOriginGuard?
-    private var navigationGuard: SecureStoreNavigationGuard?
+    private var navigationObserver: SecureStoreNavigationObserver?
 
     override open func capacitorDidLoad() {
         // The protocol hides the delegation handler; the concrete bridge exposes it.
@@ -37,10 +38,10 @@ class MainViewController: CAPBridgeViewController {
         let ui = UIDelegateOriginGuard(inner: handler, allowed: allowed)
         bridge.webView?.uiDelegate = ui
         uiGuard = ui
-        let navigation = SecureStoreNavigationGuard(inner: handler) { [weak secureStore] in
-            secureStore?.navigationCommitted()
+        if let webView = bridge.webView {
+            navigationObserver = SecureStoreNavigationObserver(webView: webView) { [weak secureStore] in
+                secureStore?.navigationChanged()
+            }
         }
-        bridge.webView?.navigationDelegate = navigation
-        navigationGuard = navigation
     }
 }

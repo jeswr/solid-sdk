@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 (async () => {
   const params = new URLSearchParams(location.search);
   const attempts = {};
@@ -17,6 +18,13 @@
     );
     return;
   }
+  await new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "/secure-store.js";
+    script.onload = resolve;
+    script.onerror = () => reject(new Error("Could not load Android secure-store probes"));
+    document.head.append(script);
+  });
   const secureStore = window.__e2eSecureStore.hostile(params.get("nonce"));
   const message = JSON.stringify({
     callbackId: `mob07-hostile-${params.get("nonce")}`,
