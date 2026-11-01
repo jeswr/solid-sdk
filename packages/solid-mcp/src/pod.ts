@@ -613,7 +613,15 @@ async function searchRdf(
     expectedProfile.hash = "";
     finalDocument.hash = "";
   }
-  if (expectedProfile?.href !== finalDocument.href) {
+  // An off-pod WebID may redirect within its own origin (the CLI transport's
+  // validated hops); every other final document must be inside the pod.
+  const offPodProfile =
+    expectedProfile !== undefined &&
+    podScopedUrlOrUndefined({ podRoot: pod.root }, pod.webId) === undefined;
+  if (
+    expectedProfile?.href !== finalDocument.href &&
+    !(offPodProfile && expectedProfile?.origin === finalDocument.origin)
+  ) {
     requirePodScopedUrl({ podRoot: pod.root }, base);
   }
   return parseSearchRead(read, url);

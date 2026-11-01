@@ -9,7 +9,12 @@ const dist = new URL("../dist/", import.meta.url);
 describe("MCP mirror artifacts", () => {
   it("publishes without a private mcp-oauth mirror SHA", () => {
     const sha = "a".repeat(40);
-    const external = ["@jeswr/guarded-fetch", "@jeswr/rdf-serialize", "@jeswr/solid-chat-interop"];
+    const external = [
+      "@jeswr/guarded-fetch",
+      "@jeswr/rdf-serialize",
+      "@jeswr/solid-chat-interop",
+      "@jeswr/solid-dpop",
+    ];
     const mirror = rewriteManifest(manifest, new Map(external.map((name) => [name, sha])));
     expect(mirror.dependencies).not.toHaveProperty("@jeswr/mcp-oauth");
     for (const name of external) {
