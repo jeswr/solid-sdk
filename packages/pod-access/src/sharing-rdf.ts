@@ -25,6 +25,7 @@ import {
   acpModeIri,
   activeAcpGrantModes,
   canonicalAcpModeIris,
+  readAcp,
 } from "./systems/acp.js";
 import type { AccessGrant, AccessMode, RevocationKey } from "./types.js";
 
@@ -99,6 +100,9 @@ export function wacRules(dataset: Dataset, target: string, url: string) {
   const result: WacRule[] = [];
   for (const auth of new AclResource(dataset, DataFactory).authorizations) {
     const rule = new WacRule(TermAs.term(auth), dataset, DataFactory);
+    // NSS can activate legacy defaults without accessTo or default. Refuse
+    // matching legacy rules before filtering; this editor has no WAC dialect.
+    if ([...iris(rule, `${ACL}defaultForNew`)].includes(target)) fail("unsupported", url);
     if (!rule.targets.has(target) && !rule.defaults.has(target)) continue;
     // Force typed validation of every target, including multi-target documents.
     [...rule.targets, ...rule.defaults];
@@ -211,6 +215,7 @@ export function acr(
   dialect: AcpDialect,
 ): AccessControlResource {
   const candidates = new Map<string, AccessControlResource>();
+  let hasForeignRoots = false;
   for (const root of new Acrs(dataset, DataFactory).resources) {
     // Materialize every typed association before selecting or mutating a root.
     const resources = [...iris(root, `${ACP}resource`)];
@@ -235,6 +240,17 @@ export function acr(
     if (resources.includes(target) || (resources.length === 0 && root.value === url)) {
       if (resources.length > 1) fail("unsupported", url);
       candidates.set(`${root.termType}:${root.value}`, root);
+    } else hasForeignRoots = true;
+  }
+  if (hasForeignRoots) {
+    // CSS can select foreign member controls too. Reuse the translation core's
+    // complete placement validation, including foreign accessControl grants,
+    // before allowing the local editor to omit any root. Local entries are
+    // validated below; their detached definitions are intentionally preserved.
+    try {
+      readAcp(dataset, target, url, dialect);
+    } catch {
+      fail("unsupported", url);
     }
   }
   if (candidates.size > 1) fail("invalid-response", url);

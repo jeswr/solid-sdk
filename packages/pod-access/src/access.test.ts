@@ -10,6 +10,7 @@ import {
   type AccessGrant as Grant,
   type RevocationKey,
   readAcp,
+  readWac,
 } from "./index.js";
 import * as testing from "./testing.js";
 
@@ -309,6 +310,56 @@ test("reads WAC multi-target and default-only authorizations, omits unrelated ru
     ALICE,
     { group: GROUP },
   ]);
+});
+
+describe.each(["<#legacy>", "[]"])("legacy WAC authorization %s", (subject) => {
+  test.each([
+    BOB,
+    GROUP,
+    ...SELECTORS,
+  ])("refuses to overlook inherited access for %j", async (key) => {
+    const selector =
+      typeof key === "string"
+        ? `acl:${key === GROUP ? "agentGroup" : "agent"} <${key}>`
+        : `acl:agentClass ${"public" in key ? "foaf:Agent" : "acl:AuthenticatedAgent"}`;
+    const { client, target, storage, memory, accessUrl } = await setup(
+      "wac",
+      `${subject} a acl:Authorization; acl:defaultForNew <${ROOT}>;
+        ${selector}; acl:mode acl:Read.
+      <#local> a acl:Authorization; acl:accessTo <${ROOT}>; ${selector}; acl:mode acl:Append.`,
+      true,
+    );
+    const before = await (await memory.read(accessUrl)).text();
+    const policy = readWac((await memory.readRdf(accessUrl)).dataset, target, accessUrl, "nss");
+    expect(policy.grants[0]).toMatchObject({ appliesTo: "members", modes: new Set(["read"]) });
+    await expect(client.grants(target)).rejects.toMatchObject({ code: "unsupported" });
+    await expect(client.revoke(target, key)).rejects.toMatchObject({ code: "unsupported" });
+    await expect(client.revoke(target, `${accessUrl}#local`)).rejects.toMatchObject({
+      code: "unsupported",
+    });
+    await expect(client.revoke(target, `${accessUrl}#legacy`)).rejects.toMatchObject({
+      code: "unsupported",
+    });
+    expect(storage.writeRdf).not.toHaveBeenCalled();
+    expect(await (await memory.read(accessUrl)).text()).toBe(before);
+  });
+});
+
+test("leaves legacy WAC defaults for other targets unchanged", async () => {
+  const { client, target, storage, memory, accessUrl } = await setup(
+    "wac",
+    `<#legacy> a acl:Authorization; acl:defaultForNew <https://pod.example/other/>;
+      acl:agent <${BOB}>; acl:mode acl:Read.`,
+    true,
+  );
+  const before = await (await memory.read(accessUrl)).text();
+  expect(
+    readWac((await memory.readRdf(accessUrl)).dataset, target, accessUrl, "nss").grants,
+  ).toEqual([]);
+  expect(await client.grants(target)).toEqual([]);
+  await client.revoke(target, BOB);
+  expect(storage.writeRdf).not.toHaveBeenCalled();
+  expect(await (await memory.read(accessUrl)).text()).toBe(before);
 });
 
 test("WAC revoke preserves co-agents and group selectors", async () => {
@@ -862,36 +913,43 @@ describe("untrusted access graphs", () => {
     });
     expect(storage.writeRdf).not.toHaveBeenCalled();
   });
-  test.each([
-    BOB,
-    ...SELECTORS,
-  ])("revoke by %j preserves another resource and shared ACP definitions", async (key) => {
-    const agent =
-      typeof key === "string"
-        ? `<${key}>`
-        : "public" in key
-          ? "acp:PublicAgent"
-          : "acp:AuthenticatedAgent";
-    const initial = `<> acp:resource <https://pod.example/note.txt>; acp:accessControl <#control>; acp:memberAccessControl <#control>.
-      <#foreign> acp:resource <https://pod.example/other>; acp:accessControl <#control>.
-      <#control> acp:apply <#policy>. <#policy> acp:allow acl:Read; acp:allOf <#matcher>. <#matcher> acp:agent ${agent}.`;
-    const { client, target, memory, accessUrl } = await setup("acp", initial);
-    const before = (await memory.readRdf(accessUrl)).dataset;
-    await client.revoke(target, key);
-    expect(await client.grants(target)).toEqual([]);
-    const dataset = (await memory.readRdf(accessUrl)).dataset;
-    const foreign = new AccessControlResource(`${accessUrl}#foreign`, dataset, DataFactory);
-    expect(foreign.accessControl.size).toBe(1);
-    expect([...foreign.accessControl][0]?.apply.size).toBe(1);
-    expect(dataset.size).toBe(before.size - 2);
-    for (const q of before) {
-      if (
-        q.subject.value === accessUrl &&
-        ["accessControl", "memberAccessControl"].some((name) => q.predicate.value === ACP + name)
-      )
-        continue;
-      expect(dataset.has(q)).toBe(true);
-    }
+  describe.each(["css", "ess"] as const)("foreign-root %s grants", (acpDialect) => {
+    describe.each(["accessControl", "memberAccessControl"])("acp:%s", (predicate) => {
+      describe.each(["foreign-only", "local-and-foreign", "shared-control"])("%s", (placement) => {
+        test.each([BOB, ...SELECTORS])("refuses to overlook access for %j", async (key) => {
+          const agent =
+            typeof key === "string"
+              ? `<${key}>`
+              : "public" in key
+                ? "acp:PublicAgent"
+                : "acp:AuthenticatedAgent";
+          const mode = acpDialect === "css" ? "acl:Read" : "acp:Read";
+          const initial = `
+            ${placement === "foreign-only" ? "" : `<> acp:resource <https://pod.example/note.txt>; acp:accessControl <#local-control>.`}
+            <#foreign> acp:resource <https://pod.example/other>; acp:${predicate} <#${placement === "shared-control" ? "local" : "foreign"}-control>.
+            ${placement === "local-and-foreign" ? `<#local-control> acp:apply <#local-policy>. <#local-policy> acp:allow ${mode}; acp:allOf [acp:agent ${agent}].` : ""}
+            <#${placement === "shared-control" ? "local" : "foreign"}-control> acp:apply <#policy>.
+            <#policy> acp:allow ${mode}; acp:allOf [acp:agent ${agent}].`;
+          const { target, storage, memory, accessUrl } = await setup("acp", initial);
+          const client = createAccessClient({ storage, acpDialect });
+          const before = await (await memory.read(accessUrl)).text();
+          const { dataset } = await memory.readRdf(accessUrl);
+          expect(() => readAcp(dataset, target, accessUrl, acpDialect)).toThrow(
+            "Cannot safely place grants from another ACP resource node",
+          );
+          await expect(client.grants(target)).rejects.toMatchObject({ code: "unsupported" });
+          await expect(
+            client.share(target, { agent: ALICE, modes: ["read"] }, {}),
+          ).rejects.toMatchObject({ code: "unsupported" });
+          await expect(client.revoke(target, key)).rejects.toMatchObject({ code: "unsupported" });
+          await expect(client.revoke(target, `${accessUrl}#policy`)).rejects.toMatchObject({
+            code: "unsupported",
+          });
+          expect(storage.writeRdf).not.toHaveBeenCalled();
+          expect(await (await memory.read(accessUrl)).text()).toBe(before);
+        });
+      });
+    });
   });
   test("reads anonymous ACP policies without unstable ids", async () => {
     const { client, target } = await setup(

@@ -36,7 +36,10 @@ represent conditional grants as unconditional. Named graphs and malformed typed 
 
 Every share creates a separate rule; caller-supplied ids never overwrite rules. Inheritance
 requires a container and writes both direct and default/member control. WAC revoke preserves
-co-agents, co-selectors and other targets. ACP revoke unlinks local controls, preserving shared
+co-agents, co-selectors and other targets. Before filtering WAC rules, reject matching
+`acl:defaultForNew` with `unsupported` for listing/revocation, even without modern targets:
+the NSS translation reader recognizes these legacy inherited grants, but sharing has no trusted
+WAC dialect. Preserve unrelated legacy defaults. ACP revoke unlinks local controls, preserving shared
 definitions; multi-policy control revocation is unsupported. RevocationKey accepts grant ids,
 agent/group IRIs, `{ public: true }` and `{ authenticated: true }`. Explicit selectors also
 revoke blank-node rules, which have no stable grant id. Validate and snapshot selector keys
@@ -48,7 +51,9 @@ serialization: CSS `acl:*`, ESS `acp:*`. Unknown dialects refuse before I/O. ESS
 Control sharing is unsupported. Refuse `acp:access`/`acp:memberAccess`, ACR-self resource
 bindings and resource-less fragment/blank roots before listing or any edit; these must never
 be silently skipped during revocation. Resource-less canonical roots require the ESS dialect
-and `acp:AccessControlResource` type. Keep the shared translation semantics in sync.
+and `acp:AccessControlResource` type. Before omitting foreign roots, run the translation reader's
+placement validation: potentially active foreign `accessControl` and `memberAccessControl` grants
+must fail with `unsupported`, including shared controls. Keep the shared translation semantics in sync.
 
 On Solid, `effective()` uses only HEAD's caller `allow` booleans, without adding implied modes. It returns
 null when absent; `public: []` means unknown because StorageClient exposes no anonymous modes.

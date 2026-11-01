@@ -66,7 +66,10 @@ expiry constraints return `unsupported` on Solid. Mode lists round-trip explicit
 adding implied modes.
 
 WAC uses `AclResource`/`Authorization` from `@solid/object`. With `inherit: true` on a
-container it writes both `acl:accessTo` and `acl:default`. ACP requires an explicit trusted
+container it writes both `acl:accessTo` and `acl:default`. Listing and revocation return
+`unsupported` for matching legacy `acl:defaultForNew` rules, including rules without modern
+targets: NSS can activate these inherited grants, and the sharing client has no trusted WAC dialect.
+Legacy defaults for other targets are preserved. ACP requires an explicit trusted
 `acpDialect: 'css' | 'ess'` assertion; absent or unknown dialects return `unsupported` before I/O.
 Never infer the dialect from editable access RDF, hostname guesses, or capability diagnostics.
 Mode activation and serialization reuse the offline translation core: CSS uses `acl:*` modes,
@@ -76,6 +79,10 @@ on ESS is `unsupported`; its ACR access policies require a richer editor.
 Inheritance links the control through both `acp:accessControl` and `acp:memberAccessControl`.
 Inherited entries here mean defaults on this document; ancestor grants are not resolved.
 ACP roots shared by the requested resource and other resources return `unsupported`.
+Documents with potentially active grants on foreign roots also return `unsupported`, for both
+`acp:accessControl` and `acp:memberAccessControl`, including controls shared with a local root.
+Foreign-root placement validation reuses the translation reader before listing or any edit;
+revocation cannot succeed after merely unlinking local controls while foreign grants remain active.
 Every `acp:resource` association must be an IRI, otherwise the document returns `invalid-response`.
 Resource-less roots are accepted only for a typed canonical ESS ACR subject. Resource-less
 fragment/blank roots, ACR-self resource bindings, and `acp:access`/`acp:memberAccess` policies
