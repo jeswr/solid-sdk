@@ -25,6 +25,7 @@ import {
   clearEmulatorPin,
   enrollFingerprint,
   fingerprintEnrolled,
+  gatedUiPreflight,
   gatedUnwrapPreflight,
   uiTarget,
 } from "../e2e/secure-store-probes.ts";
@@ -742,7 +743,7 @@ describe("secure-store evidence", () => {
     };
     expect(checkGatedUnwrap(verdict)).toEqual([]);
     for (const reason of GATED_NOT_AUTOMATABLE_REASONS)
-      expect(checkGatedUnwrap({ status: "not automatable", reason })).toEqual([]);
+      expect(checkGatedUnwrap({ status: "not automatable", reason }).length).toBeGreaterThan(0);
     for (const invalid of [
       null,
       {},
@@ -781,6 +782,46 @@ describe("secure-store evidence", () => {
       { ...verdict, evidence: { ...verdict.evidence, committed: { version: -1 } } },
     ])
       expect(checkGatedUnwrap(invalid).length).toBeGreaterThan(0);
+  });
+  test("skips require independent capability evidence collected before the gated read", async () => {
+    const skips = [
+      gatedUnwrapPreflight(
+        "credential",
+        { pinVerified: false, fingerprintEnrolled: false },
+        { available: true, userPresence: false, hardwareBacked: false },
+      ),
+      await gatedUiPreflight({
+        ui: async () => {
+          throw new Error("uiautomator unavailable");
+        },
+      }),
+    ];
+    for (const skip of skips) {
+      expect(checkGatedUnwrap(skip)).toEqual([]);
+      const evidence = skip?.evidence as Record<string, unknown>;
+      for (const invalid of [
+        { ...skip, evidence: undefined },
+        { ...skip, evidence: {} },
+        { ...skip, evidence: { ...evidence, source: "native gated read" } },
+        { ...skip, evidence: { ...evidence, runner: {}, uiError: undefined } },
+        ...[undefined, "after-gated-read", "after-authentication"].map((phase) => ({
+          ...skip,
+          evidence: { ...evidence, phase },
+        })),
+        { ...skip, evidence: { ...evidence, stage: "waiting" } },
+        ...[
+          "gatedReadStarted",
+          "authenticationAttempted",
+          "authenticationSent",
+          "authenticationConfirmed",
+        ].flatMap((flag) => [
+          { ...skip, [flag]: true },
+          { ...skip, [flag]: undefined },
+        ]),
+        { ...skip, reason: "system prompt never appeared" },
+      ])
+        expect(checkGatedUnwrap(invalid).length).toBeGreaterThan(0);
+    }
   });
 });
 
@@ -912,20 +953,81 @@ describe("Android gated prompt automation", () => {
       .mockResolvedValue(completed());
     expect((await attemptGatedUnwrap("fingerprint", io)).status).toBe("failed");
   });
-  test("unknown prompts and unavailable UI before authentication stay manual", async () => {
+  test.each([
+    "fingerprint",
+    "credential",
+  ] as const)("%s pending native get fails when no prompt appears on a capable runner", async (path) => {
     const io = driver();
-    io.ui.mockResolvedValue("");
-    expect(await attemptGatedUnwrap("credential", io)).toMatchObject({
-      status: "not automatable",
+    const appUI = '<hierarchy><node package="org.jeswr.suite" /></hierarchy>';
+    io.ui.mockResolvedValue(appUI);
+    expect(
+      gatedUnwrapPreflight(
+        path,
+        { pinVerified: true, fingerprintEnrolled: true },
+        { available: true, userPresence: true, hardwareBacked: false },
+      ),
+    ).toBeUndefined();
+    expect(await gatedUiPreflight(io)).toBeUndefined();
+    // The app remains readable while the native get never resolves or dispatches its prompt.
+    const verdict = await attemptGatedUnwrap(path, io);
+    expect(verdict).toMatchObject({
+      status: "failed",
+      reason: "gated read pending but no system prompt appeared",
+      gatedReadStarted: true,
+      promptObserved: false,
+      authenticationAttempted: false,
       authenticationSent: false,
+      evidence: { stage: "waiting" },
     });
-    io.ui.mockRejectedValueOnce(new Error("uiautomator unavailable"));
-    expect(await attemptGatedUnwrap("fingerprint", io)).toMatchObject({
-      status: "not automatable",
-      reason: "system prompt controls unavailable before authentication",
-      evidence: { automationError: "Error: uiautomator unavailable" },
+    expect(io.evaluate).toHaveBeenCalledWith(`window.__e2eSecureStore.startGated("${path}")`);
+    expect(io.finger).not.toHaveBeenCalled();
+    expect(io.shell).not.toHaveBeenCalled();
+    expect(checkGatedUnwrap(verdict).length).toBeGreaterThan(0);
+  });
+  test.each([
+    "fingerprint",
+    "credential",
+  ] as const)("%s skips only when UI capability fails before the native read", async (path) => {
+    for (const dump of ["", "not XML", "<hierarchy />", new Error("uiautomator unavailable")]) {
+      const io = driver();
+      if (dump instanceof Error) io.ui.mockRejectedValue(dump);
+      else io.ui.mockResolvedValue(dump);
+      const verdict = (await gatedUiPreflight(io)) ?? (await attemptGatedUnwrap(path, io));
+      expect(verdict).toMatchObject({
+        status: "not automatable",
+        reason: "UI dump unreadable before gated read",
+        gatedReadStarted: false,
+        authenticationAttempted: false,
+        evidence: {
+          source: "uiautomator",
+          phase: "before-gated-read",
+          uiError: expect.any(String),
+        },
+      });
+      expect(checkGatedUnwrap(verdict)).toEqual([]);
+      expect(io.evaluate).not.toHaveBeenCalled();
+      expect(io.finger).not.toHaveBeenCalled();
+      expect(io.shell).not.toHaveBeenCalled();
+    }
+  });
+  test("UI errors and unavailable controls after the read starts fail before authentication input", async () => {
+    const io = driver();
+    expect(await gatedUiPreflight(io)).toBeUndefined();
+    io.ui.mockRejectedValue(new Error("uiautomator unavailable"));
+    const verdict = await attemptGatedUnwrap("fingerprint", io);
+    expect(verdict).toMatchObject({
+      status: "failed",
+      gatedReadStarted: true,
+      authenticationAttempted: false,
     });
-    expect(checkGatedUnwrap(await attemptGatedUnwrap("credential", io))).toEqual([]);
+    expect(checkGatedUnwrap(verdict).length).toBeGreaterThan(0);
+    io.ui.mockResolvedValue(fingerprintUI);
+    expect(await attemptGatedUnwrap("credential", io)).toMatchObject({
+      status: "failed",
+      reason: "System prompt controls unavailable after gated read started",
+      promptObserved: true,
+      authenticationAttempted: false,
+    });
   });
   test.each([
     "fingerprint",
@@ -1028,7 +1130,12 @@ describe("Android gated runner capability", () => {
       ["fingerprint", { ...capable, fingerprintEnrolled: false }, "fingerprint enrollment failed"],
     ] as const) {
       const verdict = gatedUnwrapPreflight(path, runner, status);
-      expect(verdict).toMatchObject({ status: "not automatable", reason });
+      expect(verdict).toMatchObject({
+        status: "not automatable",
+        reason,
+        gatedReadStarted: false,
+        evidence: { phase: "before-gated-read", source: "runner setup", path, runner, status },
+      });
       expect(checkGatedUnwrap(verdict)).toEqual([]);
     }
     expect(

@@ -17,13 +17,13 @@ export const SECURE_STORE_PROBES = FRAME_PROBES.flatMap((channel) =>
 export const GATED_NOT_AUTOMATABLE_REASONS = [
   "PIN setup failed",
   "fingerprint enrollment failed",
-  "system prompt never appeared",
-  "system prompt controls unavailable before authentication",
+  "UI dump unreadable before gated read",
 ] as const;
 
 export type GatedUnwrapVerdict = {
   status: "passed" | "failed" | "not automatable";
   reason?: string;
+  gatedReadStarted?: boolean;
   promptObserved?: boolean;
   authenticationAttempted?: boolean;
   authenticationSent?: boolean;
@@ -257,15 +257,33 @@ export function checkSecureStoreFiles(
 export function checkGatedUnwrap(value: unknown): string[] {
   const verdict = record(value);
   const evidence = record(verdict.evidence);
+  const runner = record(evidence.runner);
+  const setupFailure =
+    evidence.source === "runner setup" &&
+    checkSecureStoreStatus(evidence.status).length === 0 &&
+    ((verdict.reason === "PIN setup failed" && runner.pinVerified === false) ||
+      (verdict.reason === "fingerprint enrollment failed" &&
+        evidence.path === "fingerprint" &&
+        runner.pinVerified === true &&
+        record(evidence.status).userPresence === true &&
+        runner.fingerprintEnrolled === false));
+  const uiFailure =
+    verdict.reason === "UI dump unreadable before gated read" &&
+    evidence.source === "uiautomator" &&
+    typeof evidence.uiError === "string" &&
+    evidence.uiError.trim().length > 0;
   if (
     verdict.status === "not automatable" &&
     GATED_NOT_AUTOMATABLE_REASONS.some((reason) => reason === verdict.reason) &&
+    evidence.phase === "before-gated-read" &&
+    (setupFailure || uiFailure) &&
+    verdict.gatedReadStarted === false &&
     [
       verdict.authenticationAttempted,
       verdict.authenticationSent,
       verdict.authenticationConfirmed,
-    ].every((flag) => flag === undefined || flag === false) &&
-    (evidence.stage === undefined || evidence.stage === "waiting")
+    ].every((flag) => flag === false) &&
+    evidence.stage === undefined
   )
     return [];
   return verdict.status === "passed" &&

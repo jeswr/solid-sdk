@@ -21,6 +21,7 @@ import {
   attemptGatedUnwrap,
   clearEmulatorPin,
   enrollFingerprint,
+  gatedUiPreflight,
   gatedUnwrapPreflight,
 } from "./secure-store-probes.ts";
 import { verifyRejectedShare, waitForTextShare } from "./share-probes.ts";
@@ -374,11 +375,13 @@ async function run() {
     const runner = {
       pinVerified: pin === "installed and verified",
       fingerprintEnrolled: fingerprint === "enrolled",
+      setup: secureStoreReport.setup,
     };
     for (const path of ["fingerprint", "credential"]) {
       try {
         secureStoreReport.gated[path] =
           gatedUnwrapPreflight(path, runner, secureStoreReport.status) ??
+          (await gatedUiPreflight(io)) ??
           (await attemptGatedUnwrap(path, io));
       } catch (error) {
         secureStoreReport.gated[path] = {

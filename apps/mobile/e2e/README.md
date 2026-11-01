@@ -78,13 +78,22 @@ Checks require explicit evidence and exit nonzero on failure:
   fields. Runner capability comes from verified PIN setup and confirmed enrollment, independently
   of the plugin. A false `userPresence` despite a verified PIN, an unavailable store, or malformed
   status fails; the plugin cannot suppress its own gated tests.
-  Only capability limitations established before attempting authentication record `not automatable`.
-  The allowed reasons are `PIN setup failed`, `fingerprint enrollment failed`,
-  `system prompt never appeared`, and `system prompt controls unavailable before authentication`.
-  Details remain in setup/prompt evidence; the verdict is printed as
-  `not automatable on this runner: ...`. Every error or timeout after an authentication attempt
-  fails. A UI dump showing the app again with the authentication prompt dismissed confirms the
-  sent input; if the native get still never replies, the failure reason is
+  Before each gated read, the host also checks that the UI dump contains readable nodes.
+  Only independent capability failures collected **before starting the gated read** record
+  `not automatable`: `PIN setup failed`, `fingerprint enrollment failed`, or
+  `UI dump unreadable before gated read`. Each skip must include `evidence.phase` equal to
+  `before-gated-read`, the independent source (`runner setup` or `uiautomator`) and its failed
+  probe result; setup verdicts retain the runner's PIN/enrollment details and native status,
+  and UI verdicts retain the dump/error. `gatedReadStarted`, `authenticationAttempted`,
+  `authenticationSent` and `authenticationConfirmed` must all explicitly be false.
+  The verdict validator rejects missing evidence, evidence collected after the read or an
+  authentication attempt, contradictory results, and native read outcomes used as skip evidence.
+  The verdict is printed as `not automatable on this runner: ...`.
+  Once the read starts, missing prompts, unavailable controls, UI errors and timeouts fail.
+  A pending read with no prompt fails with `gated read pending but no system prompt appeared`,
+  even when no authentication input was sent. A UI dump showing the app again with the
+  authentication prompt dismissed confirms the sent input; if the native get still never
+  replies, the failure reason is
   `native callback never resolved after confirmed authentication`.
   Both paths are reported separately; a skip never counts as a passing unwrap. Pending prompts
   are cancelled and the store cleared between attempts. In `finally`, every attempted PIN setup
@@ -110,9 +119,9 @@ Checks require explicit evidence and exit nonzero on failure:
 real-suite deferral. Its `secureStore` member contains `ungated`, `disk` (file paths, byte counts
 and plaintext absence), `cleanup`, `setup`, post-setup native `status`, and independent
 `gated.fingerprint` / `gated.credential` verdicts (`passed`, `failed`, or `not automatable` with
-`reason` and available prompt evidence). Only the allowed capability reasons before authentication
-may skip the gated step. CI uploads the report on success as well as failure, so runner limitations
-remain reviewable; `logcat.txt` is collected on driver failure.
+`reason` and setup/UI/prompt evidence). Only independently evidenced capability failures before
+the gated read may skip the gated step. CI uploads the report on success as well as failure,
+so runner limitations remain reviewable; `logcat.txt` is collected on driver failure.
 CI also uploads emulator logs and logcat on any failed step. `.github/workflows/mobile.yml` provisions KVM and boots
 the AVD using SDK tools directly. Native compilation, emulator/CDP behavior and actual bridge
 isolation are verified there; they cannot be verified in the cloud development container.

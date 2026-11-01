@@ -54,17 +54,35 @@ export async function clearEmulatorPin(shell: AndroidProbe["shell"]): Promise<vo
   await assertUnsecuredEmulator(shell);
 }
 
+function capabilityFailure(
+  reason: (typeof GATED_NOT_AUTOMATABLE_REASONS)[number],
+  evidence: Record<string, unknown>,
+): GatedUnwrapVerdict {
+  return {
+    status: "not automatable",
+    reason,
+    gatedReadStarted: false,
+    authenticationAttempted: false,
+    authenticationSent: false,
+    authenticationConfirmed: false,
+    evidence: { ...evidence, phase: "before-gated-read" },
+  };
+}
+
 /** The harness proves capability; the plugin cannot opt itself out of these tests. */
 export function gatedUnwrapPreflight(
   path: "fingerprint" | "credential",
-  runner: { pinVerified: boolean; fingerprintEnrolled: boolean },
+  runner: {
+    pinVerified: boolean;
+    fingerprintEnrolled: boolean;
+    setup?: { pin: string; fingerprint: string };
+  },
   status: unknown,
 ): GatedUnwrapVerdict | undefined {
-  const evidence = { runner, status };
+  const evidence = { source: "runner setup", path, runner, status };
   if (checkSecureStoreStatus(status).length)
     return { status: "failed", reason: "Invalid native secure-store status", evidence };
-  if (!runner.pinVerified)
-    return { status: "not automatable", reason: "PIN setup failed", evidence };
+  if (!runner.pinVerified) return capabilityFailure("PIN setup failed", evidence);
   if (row(status).userPresence !== true)
     return {
       status: "failed",
@@ -72,8 +90,26 @@ export function gatedUnwrapPreflight(
       evidence,
     };
   if (path === "fingerprint" && !runner.fingerprintEnrolled)
-    return { status: "not automatable", reason: "fingerprint enrollment failed", evidence };
+    return capabilityFailure("fingerprint enrollment failed", evidence);
   return undefined;
+}
+
+/** Run before startGated: a later UI failure cannot excuse a pending native read. */
+export async function gatedUiPreflight(
+  io: Pick<AndroidProbe, "ui">,
+): Promise<GatedUnwrapVerdict | undefined> {
+  let uiDump: string | undefined;
+  try {
+    uiDump = await io.ui();
+    if (!/<node\b[^>]*>/.test(uiDump)) throw new Error("UI dump contains no readable nodes");
+    return undefined;
+  } catch (error) {
+    return capabilityFailure("UI dump unreadable before gated read", {
+      source: "uiautomator",
+      uiError: String(error),
+      uiDump,
+    });
+  }
 }
 
 /** Only tap visible system controls with a matching label/id and concrete screen bounds. */
@@ -142,45 +178,17 @@ export async function attemptGatedUnwrap(
   let authenticationConfirmed = false;
   let promptAfterInput: string | undefined;
   const snapshot = () => io.evaluate("window.__e2eSecureStore.gated()");
-  const skipped = (
-    reason: (typeof GATED_NOT_AUTOMATABLE_REASONS)[number],
-    evidence: unknown,
-  ): GatedUnwrapVerdict => ({
-    status: "not automatable",
-    reason,
-    promptObserved,
-    authenticationAttempted,
-    authenticationSent,
-    authenticationConfirmed,
-    evidence,
-  });
   const failed = (reason: string, evidence: unknown): GatedUnwrapVerdict => ({
     status: "failed",
     reason,
+    gatedReadStarted: true,
     promptObserved,
     authenticationAttempted,
     authenticationSent,
     authenticationConfirmed,
     evidence: { ...row(evidence), ...(promptAfterInput === undefined ? {} : { promptAfterInput }) },
   });
-  const unautomatable = async (
-    reason: (typeof GATED_NOT_AUTOMATABLE_REASONS)[number],
-    error?: unknown,
-  ) => {
-    const evidence = await snapshot();
-    if (authenticationAttempted)
-      return failed(
-        `System authentication automation failed after input attempt: ${String(error)}`,
-        evidence,
-      );
-    return row(evidence).stage === "waiting"
-      ? skipped(reason, {
-          ...row(evidence),
-          ...(error === undefined ? {} : { automationError: String(error) }),
-        })
-      : failed("Native get settled while system authentication could not be automated", evidence);
-  };
-  // Bridge errors and early unwraps are product failures, never runner skips.
+  // Capability skips have already been decided independently, before this native read.
   await io.evaluate(`window.__e2eSecureStore.startGated(${JSON.stringify(path)})`);
   let evidence = await snapshot();
   for (let attempt = 0; row(evidence).stage === "preparing" && attempt < 40; attempt++) {
@@ -224,14 +232,19 @@ export async function attemptGatedUnwrap(
       await io.pause();
     }
   } catch (error) {
-    return unautomatable("system prompt controls unavailable before authentication", error);
+    return failed(`System authentication automation failed: ${String(error)}`, evidence);
   }
-  if (!authenticationSent)
-    return unautomatable(
+  if (!authenticationSent) {
+    evidence = await snapshot();
+    if (row(evidence).stage !== "waiting")
+      return failed("Unwrap settled before authentication input", evidence);
+    return failed(
       promptObserved
-        ? "system prompt controls unavailable before authentication"
-        : "system prompt never appeared",
+        ? "System prompt controls unavailable after gated read started"
+        : "gated read pending but no system prompt appeared",
+      evidence,
     );
+  }
   for (let attempt = 0; attempt < 40; attempt++) {
     evidence = await snapshot();
     if (row(evidence).stage === "error")
@@ -239,6 +252,7 @@ export async function attemptGatedUnwrap(
     if (row(evidence).stage === "done") {
       const verdict: GatedUnwrapVerdict = {
         status: "passed",
+        gatedReadStarted: true,
         promptObserved,
         authenticationAttempted,
         authenticationSent,
