@@ -13,7 +13,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { classifyError } from "../../lib/model/errors";
 import { projectGroups } from "../../lib/views/project-groups";
-import { toTaskView } from "../../lib/views/types";
 import { focusAddTask } from "../../state/add-focus";
 import { useTasksPreferences } from "../../state/preferences";
 import { useTasks } from "../../state/tasks-context";
@@ -51,7 +50,7 @@ export function ProjectView({
     }
   }, [add, load?.status, params, pathname, router]);
   const groups = projectGroups(
-    project ? (load?.items ?? []).map((item) => toTaskView(item, project)) : [],
+    tasks.views.filter((task) => task.projectUrl === url),
     project?.tracker.sections ?? [],
     preferences.sort[pathname] ?? "manual",
     preferences.showCompletedInProject,

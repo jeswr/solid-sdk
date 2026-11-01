@@ -4,6 +4,7 @@ import { CalendarRange } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { dueDate, localDay } from "../../lib/format/due";
 import { compareTasks } from "../../lib/views/project-groups";
+import { useNow } from "../../state/clock";
 import { useTasksPreferences } from "../../state/preferences";
 import { useTasks } from "../../state/tasks-context";
 import { CrossProjectView } from "./cross-project-view";
@@ -11,7 +12,7 @@ export function UpcomingView() {
   const { views } = useTasks();
   const { preferences } = useTasksPreferences();
   const path = usePathname();
-  const today = localDay(new Date());
+  const today = localDay(useNow());
   const rows = views
     .filter((task) => {
       const due = dueDate(task);

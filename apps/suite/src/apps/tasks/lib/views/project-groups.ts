@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6
 import type { Category } from "../model/tracker";
+import { compareDue } from "./today";
 import type { TaskView } from "./types";
 
 export type SortMode = "manual" | "due" | "priority" | "name";
@@ -16,8 +17,7 @@ const position = (task: TaskView) => task.position ?? Infinity;
 export function compareTasks(mode: SortMode): (a: TaskView, b: TaskView) => number {
   return (a, b) => {
     if (mode === "name") return a.title.localeCompare(b.title);
-    if (mode === "due")
-      return (a.due?.getTime() ?? Infinity) - (b.due?.getTime() ?? Infinity) || manual(a, b);
+    if (mode === "due") return compareDue(a, b) || manual(a, b);
     if (mode === "priority") return a.priority - b.priority || manual(a, b);
     return manual(a, b);
   };

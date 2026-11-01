@@ -13,7 +13,6 @@ import {
 import type { PodSession } from "@/lib/session/pod-session";
 import { classifyError } from "../lib/model/errors";
 import { TaskStore } from "../lib/model/store";
-import { toTaskView } from "../lib/views/types";
 import { ensurePrivateIndexAccess, ensurePrivateTasksAccess } from "./access";
 import { TasksCache } from "./tasks-cache";
 
@@ -77,9 +76,6 @@ function useTasksValue(session: PodSession) {
       ...snapshot,
       cache,
       inboxUrl: cache.inboxUrl,
-      views: snapshot.projects.flatMap((project) =>
-        (snapshot.tasks[project.url]?.items ?? []).map((task) => toTaskView(task, project)),
-      ),
       loadTasks: cache.loadTasks.bind(cache),
       retry: cache.retry,
       createTask: cache.createTask.bind(cache),

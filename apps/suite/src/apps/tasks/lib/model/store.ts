@@ -12,6 +12,7 @@ const initializationState = `${NS.SCHEDULING}initializationState`;
 const initializationOwner = `${NS.SCHEDULING}initializationOwner`;
 const cleanupResources = `${NS.SCHEDULING}cleanupResources`;
 const cleanupEtag = `${NS.SCHEDULING}cleanupEtag`;
+const deletionState = `${NS.SCHEDULING}deletionState`;
 interface ProjectCleanup {
   resource: Resource;
   resources: Pick<Resource, "url" | "etag">[];
@@ -71,7 +72,7 @@ export class TaskStore {
     if (!tracker.isTracker) throw new TypeError("Expected a wf:Tracker.");
     return { ...resource, tracker };
   }
-  async listProjects(): Promise<StoredProject[]> {
+  async listProjects(onError?: (url: string, error: unknown) => void): Promise<StoredProject[]> {
     const urls = new Set((await this.io.list(this.projects)).filter((url) => url.endsWith(".ttl")));
     if (this.options.typeIndex !== false)
       for (const reg of await this.index.locations(`${NS.WF}Tracker`)) {
@@ -82,10 +83,15 @@ export class TaskStore {
       }
     const projects: StoredProject[] = [];
     for (const url of urls) {
-      const resource = await this.readListedResource(url);
-      if (!resource) continue;
-      const tracker = new TaskTracker(`${resource.url}#this`, resource.dataset, DataFactory);
-      if (tracker.isTracker) projects.push({ ...resource, tracker });
+      try {
+        const resource = await this.readListedResource(url);
+        if (!resource) continue;
+        const tracker = new TaskTracker(`${resource.url}#this`, resource.dataset, DataFactory);
+        if (tracker.isTracker) projects.push({ ...resource, tracker });
+      } catch (error) {
+        if (!onError) throw error;
+        onError(url, error);
+      }
     }
     return projects.sort((a, b) => (a.tracker.position ?? 0) - (b.tracker.position ?? 0));
   }
@@ -204,7 +210,7 @@ export class TaskStore {
   private async claimResource(resource: Resource, subject: string): Promise<Resource> {
     const dataset = new Store([...resource.dataset]);
     const value = node(subject, dataset);
-    if (value.text(initializationState) === "cleanup")
+    if (value.text(initializationState) === "cleanup" || value.text(deletionState) === "pending")
       throw new ModelError(412, resource.url, resource.etag);
     const previous = value.date(`${NS.DCT}modified`)?.getTime() ?? -Infinity;
     value.setDate(`${NS.DCT}modified`, new Date(Math.max(this.now().getTime(), previous + 1)));
@@ -274,6 +280,8 @@ export class TaskStore {
     project: StoredProject,
     change: (tracker: TaskTracker) => void,
   ): Promise<StoredProject> {
+    if (node(project.tracker.id, project.dataset).text(deletionState) === "pending")
+      throw new ModelError(412, project.url, project.etag);
     const dataset = new Store([...project.dataset]);
     const tracker = new TaskTracker(`${project.url}#this`, dataset, DataFactory);
     change(tracker);
@@ -291,7 +299,7 @@ export class TaskStore {
   async listTasks(stateStore: string): Promise<StoredTask[]> {
     const tasks: StoredTask[] = [];
     for (const url of await this.io.list(stateStore)) {
-      if (!url.endsWith(".ttl")) continue;
+      if (!isTaskMember(url, stateStore)) continue;
       const resource = await this.readListedResource(url);
       if (!resource) continue;
       const task = new TaskItem(`${resource.url}#it`, resource.dataset, DataFactory);
@@ -343,12 +351,56 @@ export class TaskStore {
     }
     return this.updateProject(project, (tracker) => tracker.removeSection(id));
   }
-  /** Delete children before their container. Stale Type Index locations are ignored on discovery. */
+  /** Reserve the tracker before removing anything; the persisted marker permits recovery after a restart. */
   async deleteProject(project: StoredProject): Promise<void> {
+    const current = await this.io.optional(project.url);
+    if (!current) return;
+    const pending = node(project.tracker.id, current.dataset).text(deletionState) === "pending";
+    if (!pending && current.etag !== project.etag)
+      throw new ModelError(412, project.url, current.etag);
     const container = project.tracker.stateStore as string;
-    for (const item of await this.listTasks(container)) await this.deleteTask(item);
-    const resource = await this.io.read(container);
-    await this.io.remove(container, resource.etag);
-    await this.io.remove(project.url, project.etag);
+    const tracker = new TaskTracker(project.tracker.id, current.dataset, DataFactory);
+    if (tracker.stateStore !== container) throw new ModelError(412, project.url, current.etag);
+    const dataset = new Store([...current.dataset]);
+    const marker = node(project.tracker.id, dataset);
+    marker.setText(deletionState, "pending");
+    marker.setText(initializationOwner, crypto.randomUUID());
+    const reserved = await this.io.write(project.url, dataset, { etag: current.etag });
+    for (const item of await this.listTasks(container))
+      await this.removeIfPresent(item.url, item.etag);
+    const resource = await this.io.optional(container);
+    if (resource) await this.removeIfPresent(container, resource.etag);
+    await this.removeIfPresent(project.url, reserved.etag);
+  }
+  private async removeIfPresent(url: string, etag: string | null): Promise<void> {
+    try {
+      await this.io.remove(url, etag);
+    } catch (error) {
+      if (!(error instanceof ModelError && error.status === 404)) throw error;
+    }
+  }
+}
+
+/** The suite app has no ldp-container dependency. Keep this stricter task-resource policy local. */
+function isTaskMember(value: string, container: string): boolean {
+  try {
+    const scope = new URL(container);
+    const member = new URL(value);
+    const child = member.pathname.slice(scope.pathname.length);
+    return (
+      ["http:", "https:"].includes(scope.protocol) &&
+      scope.pathname.endsWith("/") &&
+      !/[?#]/.test(container) &&
+      member.origin === scope.origin &&
+      !member.username &&
+      !member.password &&
+      !/[?#]/.test(value) &&
+      member.pathname.startsWith(scope.pathname) &&
+      !/[/\\]/.test(decodeURIComponent(child)) &&
+      child.endsWith(".ttl") &&
+      child.length > 4
+    );
+  } catch {
+    return false;
   }
 }
