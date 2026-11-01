@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // The Pod Docs document-browser VIEW — a list of the documents in a pod's
@@ -58,7 +59,7 @@ function SaveIndicator({ status, error }: { status: SaveStatus; error: string | 
 
 /** Props for {@link DocumentBrowser}. */
 export interface DocumentBrowserProps
-  extends Pick<UseDocsListingOptions, "container" | "onContainerChange"> {
+  extends Pick<UseDocsListingOptions, "container" | "onContainerChange" | "allowInsecureLoopback"> {
   /** The storage root; defaults to its `pod-docs/` collection unless `container` is supplied. */
   podRoot: string;
   /** The pod owner's WebID — needed by the data layer for type-index discovery. */
@@ -86,6 +87,7 @@ export function DocumentBrowser({
   title,
   container,
   onContainerChange,
+  allowInsecureLoopback,
 }: DocumentBrowserProps) {
   const {
     entries,
@@ -101,7 +103,12 @@ export function DocumentBrowser({
     saveError,
     createDocument,
     saveOpenDocument,
-  } = useDocsListing(podRoot, webId, { fetch, container, onContainerChange });
+  } = useDocsListing(podRoot, webId, {
+    fetch,
+    container,
+    onContainerChange,
+    allowInsecureLoopback,
+  });
 
   const heading = title ?? "Pod Docs";
 

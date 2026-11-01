@@ -12,6 +12,12 @@
  * bootstraps a private index when missing.
  */
 import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
+import {
+  createGuardedFetch,
+  isLoopbackAddress,
+  isWithinPodScope,
+  SsrfError,
+} from "@jeswr/guarded-fetch";
 import { type StorageClient, StorageError, toStorageError } from "@jeswr/storage-client";
 import { canonicalize, NS as SUITE_NS, termsEqual } from "@jeswr/suite-vocab";
 import type { DatasetCore } from "@rdfjs/types";
@@ -98,6 +104,11 @@ export interface TypeIndexLinks {
   privateIndex?: string;
 }
 
+export interface IdentityReadOptions {
+  /** Development only: permit HTTP on localhost or a loopback IP, on every hop. */
+  allowInsecureLoopback?: boolean;
+}
+
 /** The WebID subject's type-index links, readable AND (privateIndex) writable. */
 export class ProfileTypeIndexAnchor extends TermWrapper {
   /** Preferences must resolve unambiguously before a public fallback is safe. */
@@ -147,31 +158,24 @@ async function resolveTypeIndexLinks(
   profile: DatasetCore,
   fetchImpl?: typeof fetch,
   storage?: StorageClient,
+  options: IdentityReadOptions = {},
 ): Promise<TypeIndexLinks> {
   const links = typeIndexLinks(webId, profile);
   const preferences = new ProfileTypeIndexAnchor(webId, profile, DataFactory).preferencesFile;
   if (!preferences) return links;
   // Account metadata can live in another pod. Only this WebID's storage claims
   // vouch for additional roots; never discover storage from the identity document.
-  const roots = [...new Agent(webId, profile, DataFactory).storageUrls];
-  const requireVouched = (url: string) => {
-    const target = new URL(identityDocumentUrl(url));
-    const vouched =
-      storage?.isWithinStorage(url) ||
-      roots.some((root) => {
-        const base = new URL(identityDocumentUrl(root));
-        const path = base.pathname.replace(/\/?$/, "/");
-        return (
-          target.origin === base.origin &&
-          (target.pathname === path.slice(0, -1) || target.pathname.startsWith(path))
-        );
-      });
-    if (!vouched) throw new StorageError("scope", { url, method: "GET" });
-  };
+  const requireVouched = identityScope(webId, profile, storage, options);
   requireVouched(preferences);
   // Unreadable, missing or malformed linked preferences are not proof that no private
   // index exists. Propagate the failure rather than registering in the public index.
-  const { dataset } = await readIdentityRdf(preferences, fetchImpl, storage);
+  const { dataset } = await readIdentityRdf(
+    preferences,
+    fetchImpl,
+    storage,
+    options,
+    requireVouched,
+  );
   const anchor = new ProfileTypeIndexAnchor(webId, dataset, DataFactory);
   const indexes = [
     ...SetFrom.subjectPredicate(
@@ -218,11 +222,15 @@ function documentUrl(webId: string): string {
   return u.toString();
 }
 
-/** Identity metadata must use an unambiguous HTTPS URL before attaching credentials. */
-function identityDocumentUrl(url: string): string {
+/** HTTPS by default; explicit development HTTP is limited to loopback. */
+function identityDocumentUrl(url: string, options: IdentityReadOptions): string {
   const target = new URL(url);
+  const loopbackHttp =
+    options.allowInsecureLoopback === true &&
+    target.protocol === "http:" &&
+    (target.hostname === "localhost" || isLoopbackAddress(target.hostname.replace(/^\[|\]$/g, "")));
   if (
-    target.protocol !== "https:" ||
+    (target.protocol !== "https:" && !loopbackHttp) ||
     target.username ||
     target.password ||
     target.href !== url ||
@@ -232,23 +240,77 @@ function identityDocumentUrl(url: string): string {
   return documentUrl(url);
 }
 
+/** Only the authenticated WebID's own storage claims can vouch for private metadata. */
+function identityScope(
+  webId: string,
+  profile: DatasetCore,
+  storage: StorageClient | undefined,
+  options: IdentityReadOptions,
+): (url: string) => void {
+  const roots = [...new Agent(webId, profile, DataFactory).storageUrls];
+  return (url) => {
+    const target = identityDocumentUrl(url, options);
+    if (
+      !storage?.isWithinStorage(target) &&
+      !roots.some((root) => isWithinPodScope(identityDocumentUrl(root, options), target))
+    )
+      throw new StorageError("scope", { url: target, method: "GET" });
+  };
+}
+
 /** Profiles, preferences and indexes are identity documents, not storage discovery targets. */
-async function readIdentityRdf(url: string, fetchImpl = globalThis.fetch, storage?: StorageClient) {
-  const target = identityDocumentUrl(url);
-  if (storage?.isWithinStorage(target)) return readRdf(target, fetchImpl, storage);
-  return fetchRdf(target, {
-    headers: REVALIDATE_HEADERS,
+async function readIdentityRdf(
+  url: string,
+  fetchImpl = globalThis.fetch,
+  storage?: StorageClient,
+  options: IdentityReadOptions = {},
+  validateTarget?: (url: string) => void,
+) {
+  const target = identityDocumentUrl(url, options);
+  validateTarget?.(target);
+  if (storage?.isWithinStorage(target)) {
+    try {
+      return await readRdf(target, fetchImpl, storage);
+    } catch (error) {
+      // Storage deliberately refuses redirects. Re-read only a visible redirect
+      // through the shared bounded guard; never reinterpret another failure as absence.
+      if (
+        !(error instanceof StorageError) ||
+        ![301, 302, 303, 307, 308].includes(error.status ?? 0)
+      )
+        throw error;
+    }
+  }
+  const guarded = createGuardedFetch({
+    allowLoopback: options.allowInsecureLoopback === true,
     fetch: async (input, init) => {
-      const response = await fetchImpl(input, { ...init, redirect: "manual" });
-      // An injected/authenticated fetch may ignore redirect mode. Do not accept
-      // metadata or validators from a different document in that case either.
-      if (response.redirected || (response.url && response.url !== target)) {
+      const hop = identityDocumentUrl(String(input), options);
+      validateTarget?.(hop);
+      const response = await fetchImpl(hop, { ...init, redirect: "manual" });
+      // Hidden/native redirects cannot prove which intermediate URLs were visited.
+      if (
+        response.type === "opaqueredirect" ||
+        response.redirected ||
+        (response.url && response.url !== hop)
+      ) {
         void response.body?.cancel();
-        throw new StorageError("scope", { url: target, method: "GET" });
+        throw new StorageError("scope", { url: hop, method: "GET" });
       }
       return response;
     },
   });
+  const result = await fetchRdf(target, {
+    headers: REVALIDATE_HEADERS,
+    fetch: async (input, init) => {
+      try {
+        return await guarded(input, init);
+      } catch (error) {
+        if (error instanceof SsrfError && error.cause instanceof StorageError) throw error.cause;
+        throw error;
+      }
+    },
+  });
+  return { ...result, url: identityDocumentUrl(result.url, options) };
 }
 
 /** External profiles and indexes are RDF documents, independent of storage discovery. */
@@ -317,25 +379,26 @@ async function createIndexDocument(
  * @param fetchImpl - test-only override; **omit in production** so the
  *   auth-patched global fetch runs.
  */
-export async function ensureTypeRegistrations(opts: {
-  webId: string;
-  podRoot: string;
-  registrations: DesiredRegistration[];
-  fetchImpl?: typeof fetch;
-  storage?: StorageClient;
-}): Promise<EnsureRegistrationsResult> {
+export async function ensureTypeRegistrations(
+  opts: {
+    webId: string;
+    podRoot: string;
+    registrations: DesiredRegistration[];
+    fetchImpl?: typeof fetch;
+    storage?: StorageClient;
+  } & IdentityReadOptions,
+): Promise<EnsureRegistrationsResult> {
   const { webId, podRoot, registrations, fetchImpl } = opts;
   const storage = await storageFor(podRoot, fetchImpl, opts.storage);
 
-  const profileUrl = documentUrl(webId);
-  const profileStorage = storage.isWithinStorage(profileUrl) ? storage : undefined;
   // A WebID can live outside every pod. It is an RDF document, not a storage root.
-  const { dataset: profileDs, etag: profileEtag } = await readIdentityRdf(
-    webId,
-    fetchImpl,
-    profileStorage,
-  );
-  const links = await resolveTypeIndexLinks(webId, profileDs, fetchImpl, storage);
+  const {
+    dataset: profileDs,
+    etag: profileEtag,
+    url: profileUrl,
+  } = await readIdentityRdf(webId, fetchImpl, storage, opts);
+  const profileStorage = storage.isWithinStorage(profileUrl) ? storage : undefined;
+  const links = await resolveTypeIndexLinks(webId, profileDs, fetchImpl, storage, opts);
   let indexUrl = links.privateIndex ?? links.publicIndex;
   let bootstrapped = false;
 
@@ -359,13 +422,17 @@ export async function ensureTypeRegistrations(opts: {
     bootstrapped = true;
   }
 
+  const requireVouched = identityScope(webId, profileDs, storage, opts);
+  const indexOrigin = new URL(indexUrl).origin;
+  const {
+    dataset: indexDs,
+    etag: indexEtag,
+    url: indexDocument,
+  } = await readIdentityRdf(indexUrl, fetchImpl, storage, opts, (target) => {
+    if (new URL(target).origin !== indexOrigin) requireVouched(target);
+  });
+  indexUrl = indexDocument;
   const indexStorage = storage.isWithinStorage(indexUrl) ? storage : undefined;
-  const indexDocument = documentUrl(indexUrl);
-  const { dataset: indexDs, etag: indexEtag } = await readIdentityRdf(
-    indexUrl,
-    fetchImpl,
-    indexStorage,
-  );
   const index = new TypeIndexDataset(indexDs, DataFactory);
 
   let added = 0;
@@ -412,15 +479,20 @@ export async function discoverRegistrations(
   profile: DatasetCore,
   fetchImpl?: typeof fetch,
   storage?: StorageClient,
+  options: IdentityReadOptions = {},
 ): Promise<RegisteredLocation[]> {
-  const links = await resolveTypeIndexLinks(webId, profile, fetchImpl, storage);
+  const links = await resolveTypeIndexLinks(webId, profile, fetchImpl, storage, options);
   const urls = [links.publicIndex, links.privateIndex].filter((u): u is string => Boolean(u));
   const out: RegisteredLocation[] = [];
   if (urls.length === 0) return out;
   for (const url of urls) {
     try {
       // Indexes are RDF documents; cold reads need no storage-discovery headers.
-      const { dataset } = await readIdentityRdf(url, fetchImpl, storage);
+      const origin = new URL(url).origin;
+      const requireVouched = identityScope(webId, profile, storage, options);
+      const { dataset } = await readIdentityRdf(url, fetchImpl, storage, options, (target) => {
+        if (new URL(target).origin !== origin) requireVouched(target);
+      });
       out.push(...new TypeIndexDataset(dataset, DataFactory).all());
     } catch (e) {
       if (

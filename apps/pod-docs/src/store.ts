@@ -57,6 +57,8 @@ export type DocsStoreOptions = {
   podRoot: string;
   webId: string;
   fetchImpl?: typeof fetch;
+  /** Explicit development opt-in for HTTP loopback identity metadata. */
+  allowInsecureLoopback?: boolean;
   storage?: StorageClient;
   /** Canonical description.id when injecting a discovered storage client. */
   storageId?: string;
@@ -81,6 +83,7 @@ export class DocsStore {
     private readonly onContainerChange?: (container: string) => void,
     private storageId?: string,
     private readonly acpDialect?: AccessClientOptions["acpDialect"],
+    private readonly allowInsecureLoopback = false,
   ) {
     this.explicitContainer = container !== undefined;
     this.containerUrl = container ?? new URL(DOCS_SLUG, podRoot).href;
@@ -273,6 +276,7 @@ export class DocsStore {
         registrations: [{ forClass: DOCUMENT_CLASS, container: this.containerUrl }],
         fetchImpl: this.fetchImpl,
         storage,
+        allowInsecureLoopback: this.allowInsecureLoopback,
       });
   }
 }
@@ -287,6 +291,7 @@ export function createDocsStore(opts: DocsStoreOptions): DocsStore {
     opts.onContainerChange,
     opts.storageId,
     opts.acpDialect,
+    opts.allowInsecureLoopback,
   );
 }
 export { nameFromUrl };

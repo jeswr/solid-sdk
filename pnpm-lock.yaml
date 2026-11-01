@@ -841,6 +841,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../packages/fetch-rdf
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../../packages/guarded-fetch
       '@jeswr/pod-access':
         specifier: workspace:*
         version: link:../../packages/pod-access
@@ -917,6 +920,9 @@ importers:
       '@jeswr/fetch-rdf':
         specifier: workspace:*
         version: link:../../../packages/fetch-rdf
+      '@jeswr/guarded-fetch':
+        specifier: workspace:*
+        version: link:../../../packages/guarded-fetch
       '@jeswr/pod-access':
         specifier: workspace:*
         version: link:../../../packages/pod-access

@@ -23,6 +23,7 @@
   "dependencies": {
     "@jeswr/app-shell": "workspace:*",
     "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/guarded-fetch": "workspace:*",
     "@jeswr/pod-access": "workspace:*",
     "@jeswr/solid-elements": "workspace:*",
     "@jeswr/solid-session-restore": "workspace:*",

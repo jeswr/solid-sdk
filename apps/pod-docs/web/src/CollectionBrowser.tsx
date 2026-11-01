@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { DocumentBrowser } from "@jeswr/pod-docs/ui";
 import { useState } from "react";
+import { isLoopbackOrigin } from "./auth/loopback";
 
 type Selection = { webId: string; podRoot: string; container: string };
 const keyFor = (webId: string, podRoot: string) =>
@@ -58,6 +59,7 @@ export function CollectionBrowser({ webId, podRoot }: Pick<Selection, "webId" | 
       title="Your documents"
       container={selection.container}
       onContainerChange={remember}
+      allowInsecureLoopback={isLoopbackOrigin(window.location.origin)}
     />
   );
 }

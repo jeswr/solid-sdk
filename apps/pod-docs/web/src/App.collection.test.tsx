@@ -7,10 +7,12 @@ import { App } from "./App";
 const fixtures = vi.hoisted(() => ({
   session: { webId: "https://alice.example/#me", podRoot: "https://storage.example/pod/" },
   browser: undefined as DocumentBrowserProps | undefined,
+  loopback: false,
 }));
 vi.mock("./auth/SessionProvider", () => ({
   useSession: () => ({ webId: fixtures.session.webId, session: fixtures.session }),
 }));
+vi.mock("./auth/loopback", () => ({ isLoopbackOrigin: () => fixtures.loopback }));
 vi.mock("@jeswr/app-shell", () => ({
   AccountMenu: () => null,
   FeedbackButton: () => null,
@@ -25,10 +27,20 @@ vi.mock("@jeswr/pod-docs/ui", () => ({
 
 beforeEach(() => {
   localStorage.clear();
+  fixtures.loopback = false;
   fixtures.session = {
     webId: "https://alice.example/#me",
     podRoot: "https://storage.example/pod/",
   };
+});
+
+it.each([
+  false,
+  true,
+])("threads the host's explicit auth loopback opt-in (%s) into the document browser", (loopback) => {
+  fixtures.loopback = loopback;
+  render(<App />);
+  expect(fixtures.browser?.allowInsecureLoopback).toBe(loopback);
 });
 afterEach(() => {
   cleanup();

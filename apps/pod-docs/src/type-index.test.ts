@@ -458,11 +458,12 @@ describe("discoverRegistrations", () => {
       Response.redirect("https://foreign.example/prefs.ttl", 302),
     );
     await expect(discoverRegistrations(WEBID, profile, fetch)).rejects.toMatchObject({
-      status: 302,
+      cause: { code: "scope" },
     });
     expect(fetch).toHaveBeenCalledExactlyOnceWith(PREFERENCES, {
       headers: expect.any(Headers),
       redirect: "manual",
+      signal: expect.any(AbortSignal),
     });
   });
 

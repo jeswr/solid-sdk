@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // The document-browser's data hook — the SINGLE place the view touches the data
@@ -113,6 +114,8 @@ export interface DocsListingState {
 
 /** Options for {@link useDocsListing}. */
 export interface UseDocsListingOptions {
+  /** Development only: allow HTTP loopback identity metadata during registration. */
+  allowInsecureLoopback?: boolean;
   /** Restore the collection saved for this WebID and storage root, preserving its identifier. */
   container?: string;
   /** Save the assigned collection under the supplied identity, including when a write finishes after navigation. */
@@ -154,6 +157,7 @@ export function useDocsListing(
     createStore = createDocsStore,
     container,
     onContainerChange,
+    allowInsecureLoopback = false,
   } = options;
   const containerCallback = useRef(onContainerChange);
   useEffect(() => {
@@ -166,11 +170,12 @@ export function useDocsListing(
     () => ({
       podRoot,
       webId,
+      allowInsecureLoopback,
       onContainerChange: (assigned: string) =>
         containerCallback.current?.({ podRoot, webId, container: assigned }),
       ...(authedFetch ? { fetchImpl: authedFetch } : {}),
     }),
-    [podRoot, webId, authedFetch],
+    [podRoot, webId, authedFetch, allowInsecureLoopback],
   );
   const [selection, setSelection] = useState(() => ({
     storeOptions,

@@ -71,6 +71,7 @@ import { appUrl } from "./app-url";
 import { authFlowHolder, getCodeThroughHolder, lazyElementGetCode } from "./auth-flow-holder";
 import { planAutologin } from "./autologin-plan";
 import { assessLoginProbe } from "./login-result";
+import { isLoopbackOrigin } from "./loopback";
 import { readProfile } from "./profile";
 import { type DerivedSession, deriveSession } from "./session-derivation";
 import { decideSingleFlight } from "./single-flight";
@@ -116,15 +117,6 @@ export function useSession(): SessionContextValue {
   if (!ctx) throw new Error("useSession must be used inside <SessionProvider>");
   return ctx;
 }
-
-const isLoopbackOrigin = (origin: string): boolean => {
-  try {
-    const h = new URL(origin).hostname;
-    return h === "localhost" || h === "127.0.0.1" || h === "[::1]";
-  } catch {
-    return false;
-  }
-};
 
 /**
  * MODULE-LEVEL singleton for the auth runtime — the fix for the global-fetch

@@ -22,6 +22,8 @@ declare module "@jeswr/pod-docs/ui" {
      * fetch (patched by @solid/reactive-authentication in a real session).
      */
     fetch?: typeof fetch;
+    /** Development only: explicitly allow HTTP loopback identity metadata. */
+    allowInsecureLoopback?: boolean;
     /** Optional heading rendered above the listing. */
     title?: string;
     container?: string;

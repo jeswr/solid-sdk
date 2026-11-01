@@ -23,7 +23,7 @@ legacy class IRIs. Standard vocabularies keep their published namespaces.
 
 ## Storage client API
 
-`createDocsStore({ podRoot, webId, fetchImpl?, storage?, storageId?, acpDialect?, container?, onContainerChange? })` uses the
+`createDocsStore({ podRoot, webId, fetchImpl?, storage?, storageId?, acpDialect?, container?, onContainerChange?, allowInsecureLoopback? })` uses the
 public PodClient storage surface. Inject either memory protocol with `storage`.
 Supply `container` to reopen a server-assigned LWS collection; otherwise the first
 create prepares the default collection and retains its returned identifier in
@@ -46,6 +46,12 @@ missing, malformed, or ambiguous preferences fail closed; conflicting legacy and
 private destinations also fail. Discovery follows the same preferences links. The local
 compatibility API retains separately hosted WebIDs and legacy external index documents;
 the shared `@jeswr/pod-type-index` client currently requires a storage-scoped WebID.
+Identity reads follow at most five validated redirects, retaining the canonical document
+URL and its ETag for conditional writes. Preferences redirects must remain within storage
+vouched for by the WebID or the injected client. HTTPS cannot downgrade to HTTP; hidden
+redirects fail closed. For local CSS, explicitly pass `allowInsecureLoopback: true` to the
+store or `DocumentBrowser` (or the options of the Type Index functions). This permits only
+loopback HTTP. The web host uses the same loopback-origin opt-in as its authentication.
 LWS has no Solid Type Index bootstrap,
 and sharing reports unsupported where pod-access does not implement the access model.
 
