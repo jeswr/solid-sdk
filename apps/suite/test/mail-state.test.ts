@@ -154,3 +154,57 @@ it("keeps existing rows visible while loading another page", async () => {
   await view.unmount();
   vi.restoreAllMocks();
 });
+
+it.each([
+  "reader",
+  "list",
+] as const)("%s Archive Undo preserves every original membership in a mixed thread", async (entry) => {
+  const { view, writer } = await setup(4);
+  const row = threads.data!.items[0]!;
+  const ids = (await writer.thread(row.iri)).messages.map((message) => message.iri);
+  const inbox = folderIriFromKey(writer.root("imported"), "inbox");
+  await writer.archive([ids[0]!, ids[1]!]);
+  await writer.label(ids[0]!, inbox, true); // Already in Archive AND Inbox.
+  await writer.label(ids[2]!, inbox, false); // Never in either system folder.
+  const before = (await writer.thread(row.iri)).messages.map((message) =>
+    [...message.labels].sort(),
+  );
+  notices.toast.mockClear();
+  await act(async () => {
+    if (entry === "reader") await actions.archive(ids, row.iri);
+    else await actions.forRows([row], "archive");
+  });
+  const [, options] = notices.toast.mock.calls.at(-1)! as [
+    string,
+    { action: { onClick: () => void } },
+  ];
+  await act(() => options.action.onClick());
+  await settle(() => !context.patches.some((patch) => patch.confirmedAt === undefined));
+  expect(
+    (await writer.thread(row.iri)).messages.map((message) => [...message.labels].sort()),
+  ).toEqual(before);
+  await view.unmount();
+});
+
+it.each([
+  "reader",
+  "list",
+] as const)("%s suppresses Undo and archive writes for already archived mail", async (entry) => {
+  const { view, writer } = await setup();
+  const row = threads.data!.items[0]!;
+  const ids = (await writer.thread(row.iri)).messages.map((message) => message.iri);
+  await writer.archive(ids);
+  const archive = vi.spyOn(context.client, "archive");
+  notices.toast.mockClear();
+  await act(async () => {
+    if (entry === "reader") await actions.archive(ids, row.iri);
+    else await actions.forRows([row], "archive");
+  });
+  expect(archive).not.toHaveBeenCalled();
+  expect(notices.toast).not.toHaveBeenCalled();
+  expect((await writer.thread(row.iri)).messages[0]?.labels).not.toContain(
+    folderIriFromKey(writer.root("imported"), "inbox"),
+  );
+  await view.unmount();
+  vi.restoreAllMocks();
+});

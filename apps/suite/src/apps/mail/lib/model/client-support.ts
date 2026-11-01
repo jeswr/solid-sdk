@@ -1,10 +1,18 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { NamedNodeAs, OptionalFrom, TermWrapper } from "@rdfjs/wrapper";
+import {
+  LiteralAs,
+  LiteralFrom,
+  NamedNodeAs,
+  OptionalAs,
+  OptionalFrom,
+  TermWrapper,
+} from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
 import { Attachment } from "./attachment";
 import type { MailStore } from "./io";
+import type { Message } from "./message";
 import { documentOf } from "./operations";
-import { SOLID } from "./vocab";
+import { SCHEMA, SOLID } from "./vocab";
 
 /** Profile pointers stay in the model, including preference-document discovery. */
 class ProfilePointers extends TermWrapper {
@@ -36,14 +44,25 @@ export async function mailAttachments(store: MailStore, messageIri: string) {
   const attachments = [];
   for (const url of message.attachments) {
     const metadata = new Attachment(url, loaded.mailbox, DataFactory);
-    const response = await store.fetch(url, { method: "HEAD" });
-    if (!response.ok) throw new Error("Couldn't load an attachment");
     attachments.push({
       name: metadata.name ?? "attachment",
       contentType: metadata.contentType ?? "application/octet-stream",
-      size: Number(response.headers.get("content-length") ?? 0),
+      size: metadata.size ?? 0,
       url,
     });
   }
   return attachments;
+}
+
+/** Display names live on the address resource in each message document. */
+export class MailContact extends TermWrapper {
+  get name(): string | undefined {
+    return OptionalFrom.subjectPredicate(this, `${SCHEMA}name`, LiteralAs.string);
+  }
+  set name(value: string | undefined) {
+    OptionalAs.object(this, `${SCHEMA}name`, value, LiteralFrom.string);
+  }
+}
+export function mailAddressName(message: Message, iri: string): string | undefined {
+  return new MailContact(iri, message.dataset, DataFactory).name;
 }

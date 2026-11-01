@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 import {
+  Badge,
   Button,
   IconButton,
   Select,
@@ -65,7 +66,9 @@ function MessageCard({
           dateTime={message.date.toISOString()}
           title={message.date.toLocaleString()}
         >
-          {message.date.toLocaleDateString()}
+          {new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(
+            message.date,
+          )}
         </time>
       </button>
       {visible && (
@@ -103,6 +106,16 @@ function MessageCard({
               )}
             </>
           )}
+          {message.truncated && (
+            <p className="mail-muted">
+              This message is too long to display in full.{" "}
+              {message.originalUrl && (
+                <a href={message.originalUrl} download>
+                  Download the original message
+                </a>
+              )}
+            </p>
+          )}
           {message.attachments.length > 0 && (
             <section className="mail-attachments" aria-label="Attachments">
               {message.attachments.map((a) => (
@@ -115,7 +128,16 @@ function MessageCard({
     </article>
   );
 }
-export function ThreadView({ iri, back = "/mail/inbox" }: { iri: string; back?: string }) {
+export function ThreadView({
+  iri,
+  back = "/mail/inbox",
+  headingLevel = 1,
+}: {
+  iri: string;
+  back?: string;
+  headingLevel?: 1 | 2;
+}) {
+  const Heading = headingLevel === 1 ? "h1" : "h2";
   const state = useThread(iri);
   const folders = useFolders();
   const { client, invalidate } = useMail();
@@ -175,16 +197,17 @@ export function ThreadView({ iri, back = "/mail/inbox" }: { iri: string; back?: 
                   <Star size={18} fill={starred ? "currentColor" : "none"} aria-hidden="true" />
                 </IconButton>
               </div>
-              <h1>{thread.subject}</h1>
+              <Heading>{thread.subject}</Heading>
               <div className="mail-chips">
                 {labels.map((iri) => {
                   const folder = folders.data?.find((f) => f.iri === iri);
                   return (
                     folder && (
-                      <span className="mail-chip" key={iri}>
+                      <Badge variant="secondary" className="mail-chip" key={iri}>
                         {folder.title}
                         {!folder.system && (
                           <IconButton
+                            size="icon-sm"
                             label={`Remove ${folder.title} label`}
                             variant="ghost"
                             onClick={() => void label(iri, false)}
@@ -192,7 +215,7 @@ export function ThreadView({ iri, back = "/mail/inbox" }: { iri: string; back?: 
                             <X size={14} aria-hidden="true" />
                           </IconButton>
                         )}
-                      </span>
+                      </Badge>
                     )
                   );
                 })}
@@ -213,7 +236,12 @@ export function ThreadView({ iri, back = "/mail/inbox" }: { iri: string; back?: 
                   </Select>
                 )}
               </div>
-              <Button variant="ghost" size="sm" onClick={() => setExpandAll(!expandAll)}>
+              <Button
+                className="mail-expand"
+                variant="ghost"
+                size="sm"
+                onClick={() => setExpandAll(!expandAll)}
+              >
                 {expandAll ? "Collapse messages" : "Expand all"}
               </Button>
               {thread.messages.map((m, i) => (

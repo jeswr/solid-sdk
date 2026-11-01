@@ -1,11 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
-import { EmptyState, ErrorState } from "@jeswr/suite-ui";
+import { ErrorState } from "@jeswr/suite-ui";
 import { useSearchParams } from "next/navigation";
 import { decodeRef } from "@/lib/refs";
 import { folderIriFromKey } from "../lib/client";
 import { useFolders, useMail, useMailSearch, useThreads } from "../state/mail-context";
-import { MailAsync, MissingFolder } from "./async";
+import { MailAsync, MailEmptyState, MissingFolder } from "./async";
 import { NoMail, ThreadList } from "./thread-list";
 import { ThreadView } from "./thread-view";
 
@@ -51,11 +51,12 @@ function FolderContent({ folderKey }: { folderKey: string }) {
                 {selected ? (
                   <ThreadView
                     key={selected}
+                    headingLevel={2}
                     iri={selected}
                     back={`/mail/${encodeURIComponent(folderKey)}`}
                   />
                 ) : (
-                  <EmptyState
+                  <MailEmptyState
                     title="Choose a conversation"
                     body="Open a thread to read your mail."
                   />
@@ -95,9 +96,9 @@ export function SearchPage() {
               rows.length ? (
                 <ThreadList title="Search" rows={rows} refresh={state.retry} />
               ) : (
-                <EmptyState
-                  variant="no-results"
-                  query={query}
+                <MailEmptyState
+                  title={`No results for ‘${query}’`}
+                  body="Try another search or clear your filters."
                   primaryAction={<a href="/mail/inbox">Go to Inbox</a>}
                 />
               )
@@ -109,6 +110,7 @@ export function SearchPage() {
             <ThreadView
               key={selected}
               iri={selected}
+              headingLevel={2}
               back={`/mail/search?q=${encodeURIComponent(query)}`}
             />
           )}

@@ -1,8 +1,8 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
-import { Button, DropZoneOverlay, Input, Progress, toast } from "@jeswr/suite-ui";
+import { Button, formatBytes, Input, Progress, toast } from "@jeswr/suite-ui";
 import Link from "next/link";
-import { useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   fileChunks,
   type ImportProgress,
@@ -29,6 +29,14 @@ export function ImportWizard() {
   const [error, setError] = useState("");
   const controller = useRef<AbortController | null>(null);
   const busy = useRef(false);
+  const alive = useRef(false);
+  const generation = useRef(0);
+  const picker = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const leave = useCallback(() => {
+    generation.current++;
+    controller.current?.abort();
+  }, []);
   const nameId = useId();
   const fileId = useId();
   const pick = (file: File | undefined) => {
@@ -45,7 +53,14 @@ export function ImportWizard() {
     }
     setFile(file);
   };
-  useEffect(() => () => controller.current?.abort(), []);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+      generation.current++;
+      controller.current?.abort();
+    };
+  }, []);
   useEffect(() => {
     if (step !== "importing") return;
     const unload = (event: BeforeUnloadEvent) => {
@@ -61,7 +76,7 @@ export function ImportWizard() {
       if (!window.confirm("An import is in progress. Leave and cancel the remaining messages?")) {
         event.preventDefault();
         event.stopImmediatePropagation();
-      } else controller.current?.abort();
+      } else leave();
     };
     // A same-URL history entry catches browser Back before it leaves this route.
     history.pushState({ ...history.state, mailImportGuard: true }, "", location.href);
@@ -69,7 +84,7 @@ export function ImportWizard() {
       if (leaving) return;
       if (window.confirm("An import is in progress. Leave and cancel the remaining messages?")) {
         leaving = true;
-        controller.current?.abort();
+        leave();
         history.back();
       } else history.pushState({ ...history.state, mailImportGuard: true }, "", location.href);
     };
@@ -85,10 +100,12 @@ export function ImportWizard() {
       window.removeEventListener("beforeunload", unload);
       document.removeEventListener("click", click, true);
     };
-  }, [step]);
+  }, [step, leave]);
   const start = async () => {
     if (!file || !validAccount || busy.current) return;
     busy.current = true;
+    const run = ++generation.current;
+    const current = () => alive.current && generation.current === run;
     const abort = new AbortController();
     controller.current = abort;
     setStep("importing");
@@ -96,21 +113,27 @@ export function ImportWizard() {
     try {
       const summary = await client.importMailbox(account, fileChunks(file), {
         signal: abort.signal,
-        onProgress: setProgress,
+        onProgress: (value) => {
+          if (current()) setProgress(value);
+        },
       });
+      if (!current()) return;
       setResult(summary);
       setProgress(summary);
       setAccount(account);
       invalidate();
       setStep("done");
     } catch (error) {
+      if (!current()) return;
       setError(mailErrorMessage(error));
       setStep("choose");
       invalidate();
       toast.error(mailErrorMessage(error));
     } finally {
-      busy.current = false;
-      controller.current = null;
+      if (current()) {
+        busy.current = false;
+        controller.current = null;
+      }
     }
   };
   return (
@@ -122,67 +145,94 @@ export function ImportWizard() {
         <li aria-current={step === "done" ? "step" : undefined}>3. Summary</li>
       </ol>
       {step === "choose" && (
-        <DropZoneOverlay
-          folderName="Mail"
-          readOptions={{ maxEntries: 1 }}
-          onFiles={(drop) => pick(drop.files[0]?.file)}
+        <form
+          className="mail-form"
+          aria-label="Mailbox import"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void start();
+          }}
         >
-          <form
-            className="mail-form"
-            onSubmit={(event) => {
+          <p>
+            Import a mailbox export to read and organise it in your pod. Sending and live sync need
+            a connected mail account.
+          </p>
+          <section
+            className="mail-file-picker"
+            aria-label="Choose a mailbox export"
+            data-dragging={dragging}
+            onDragOver={(event) => {
               event.preventDefault();
-              void start();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragging(false);
+              if (event.dataTransfer.files.length !== 1) {
+                setError("Choose one mailbox file at a time.");
+                return;
+              }
+              pick(event.dataTransfer.files[0]);
             }}
           >
-            <p>
-              Import a mailbox export to read and organise it in your pod. Sending and live sync
-              need a connected mail account.
-            </p>
-            <label htmlFor={fileId}>Mailbox file</label>
+            <label htmlFor={fileId} className="mail-visually-hidden">
+              Mailbox file
+            </label>
             <input
               id={fileId}
+              ref={picker}
               type="file"
+              hidden
               accept=".mbox,.mbx,.zip,application/mbox"
               onChange={(event) => pick(event.target.files?.[0])}
             />
-            {file && <p>{file.name}</p>}
-            <label htmlFor={nameId}>Account name</label>
-            <Input
-              id={nameId}
-              value={account}
-              onChange={(event) => setName(event.target.value)}
-              aria-invalid={!validAccount}
-              aria-describedby={`${nameId}-help`}
-            />
-            <p id={`${nameId}-help`} className="mail-muted">
-              Use lowercase letters, numbers and single hyphens, for example personal-mail.
-            </p>
-            {!validAccount && (
-              <p role="alert">Choose a valid account name; “attachments” is reserved.</p>
-            )}
-            <details>
-              <summary>Get a mailbox export</summary>
-              <ul>
-                <li>
-                  Gmail: use Google Takeout, select Mail, download the export, then unzip it and
-                  choose the .mbox file.
-                </li>
-                <li>
-                  Thunderbird: locate the mailbox files in your profile's Mail folder. Copy the
-                  mailbox without the .msf index and give the copy an .mbox extension.
-                </li>
-                <li>
-                  Apple Mail: select a mailbox, choose Mailbox → Export Mailbox, then choose the
-                  mbox file inside the exported folder.
-                </li>
-              </ul>
-            </details>
-            {error && <p role="alert">{error}</p>}
-            <Button type="submit" disabled={!file || !validAccount}>
-              Import mailbox
+            <Button variant="outline" onClick={() => picker.current?.click()}>
+              Choose mailbox file
             </Button>
-          </form>
-        </DropZoneOverlay>
+            <p className="mail-muted">Or drag and drop an .mbox or .mbx file here.</p>
+            {file && (
+              <p className="mail-picked-file">
+                {file.name} · {formatBytes(file.size)}
+              </p>
+            )}
+          </section>
+          <label htmlFor={nameId}>Account name</label>
+          <Input
+            id={nameId}
+            value={account}
+            onChange={(event) => setName(event.target.value)}
+            aria-invalid={!validAccount}
+            aria-describedby={`${nameId}-help`}
+          />
+          <p id={`${nameId}-help`} className="mail-muted">
+            Use lowercase letters, numbers and single hyphens, for example personal-mail.
+          </p>
+          {!validAccount && (
+            <p role="alert">Choose a valid account name; “attachments” is reserved.</p>
+          )}
+          <details>
+            <summary>Get a mailbox export</summary>
+            <ul>
+              <li>
+                Gmail: use Google Takeout, select Mail, download the export, then unzip it and
+                choose the .mbox file.
+              </li>
+              <li>
+                Thunderbird: locate the mailbox files in your profile's Mail folder. Copy the
+                mailbox without the .msf index and give the copy an .mbox extension.
+              </li>
+              <li>
+                Apple Mail: select a mailbox, choose Mailbox → Export Mailbox, then choose the mbox
+                file inside the exported folder.
+              </li>
+            </ul>
+          </details>
+          {error && <p role="alert">{error}</p>}
+          <Button type="submit" disabled={!file || !validAccount}>
+            Import mailbox
+          </Button>
+        </form>
       )}
       {step === "importing" && (
         <section className="mail-form" aria-label="Import progress">

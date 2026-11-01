@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
-import { Button, EmptyState, IconButton, toast } from "@jeswr/suite-ui";
+import { Button, IconButton, toast } from "@jeswr/suite-ui";
 import { Archive, MailCheck, MailOpen, Paperclip, RefreshCw, Star } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -8,6 +8,7 @@ import { type KeyboardEvent, type MouseEvent, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import { fileChunks, mailErrorMessage, type ThreadRow } from "../lib/client";
 import { useMail, useMailActions } from "../state/mail-context";
+import { MailEmptyState } from "./async";
 
 function dateLabel(date: Date) {
   const now = new Date();
@@ -44,7 +45,7 @@ export function NoMail({ title, inbox = false }: { title: string; inbox?: boolea
   };
   return (
     <>
-      <EmptyState
+      <MailEmptyState
         title={inbox ? "No mail yet" : `Nothing in ${title}`}
         body={
           inbox
@@ -53,9 +54,9 @@ export function NoMail({ title, inbox = false }: { title: string; inbox?: boolea
         }
         primaryAction={
           inbox && (
-            <Link className="mail-action-link" href="/mail/import">
-              Import a mailbox
-            </Link>
+            <Button asChild>
+              <Link href="/mail/import">Import a mailbox</Link>
+            </Button>
           )
         }
         secondaryAction={
@@ -118,8 +119,9 @@ export function ThreadList({
     } else if (!event) router.push(href(row));
   };
   const keyDown = (event: KeyboardEvent<HTMLTableRowElement>, row: ThreadRow, index: number) => {
-    if (event.target !== event.currentTarget || event.ctrlKey || event.metaKey || event.altKey)
-      return;
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    // Preserve native activation of checkboxes, buttons and links with Enter/Space.
+    if (event.target !== event.currentTarget && ["Enter", " "].includes(event.key)) return;
     const key = event.key;
     if (["ArrowDown", "ArrowUp", "j", "k", "Enter", "o", "x", "s", "e", "I", "U"].includes(key))
       event.preventDefault();
@@ -143,6 +145,7 @@ export function ThreadList({
     if (event.shiftKey && (key === "I" || key === "U"))
       void actions.forRows(selectedRows.length ? selectedRows : [row], "read", key === "I");
   };
+  const active = rows.some((row) => row.iri === focused) ? focused : rows[0]?.iri;
   return (
     <div className="mail-list">
       <div className="mail-toolbar" role="toolbar" aria-label="Mail actions">
@@ -203,9 +206,7 @@ export function ThreadList({
               data-unread={row.unread}
               aria-label={row.subject}
               aria-selected={selected.has(row.iri)}
-              tabIndex={
-                row.iri === (rows.some((r) => r.iri === focused) ? focused : rows[0]?.iri) ? 0 : -1
-              }
+              tabIndex={row.iri === active ? 0 : -1}
               className="mail-row"
               ref={(node) => {
                 if (node) refs.current.set(row.iri, node);
@@ -217,6 +218,7 @@ export function ThreadList({
               <td className="mail-row-check">
                 <input
                   type="checkbox"
+                  tabIndex={row.iri === active ? 0 : -1}
                   aria-label={`Select ${row.subject}`}
                   checked={selected.has(row.iri)}
                   onChange={() => toggle(row.iri)}
@@ -224,6 +226,7 @@ export function ThreadList({
               </td>
               <td className="mail-row-star">
                 <IconButton
+                  tabIndex={row.iri === active ? 0 : -1}
                   label={row.starred ? "Unstar" : "Star"}
                   aria-pressed={row.starred}
                   variant="ghost"
@@ -232,23 +235,27 @@ export function ThreadList({
                   <Star size={18} fill={row.starred ? "currentColor" : "none"} aria-hidden="true" />
                 </IconButton>
               </td>
-              <td className="mail-row-people">
-                {row.participants.join(", ") || "Unknown sender"}
-                {row.count > 1 && <span className="mail-muted"> ({row.count})</span>}
-              </td>
-              <td className="mail-row-copy">
-                <Link href={href(row)} onClick={(event) => open(row, event)}>
+              <td className="mail-row-content">
+                <div className="mail-row-people">
+                  {row.participants.join(", ") || "Unknown sender"}
+                  {row.count > 1 && <span className="mail-muted"> ({row.count})</span>}
+                </div>
+                <Link
+                  className="mail-row-copy"
+                  tabIndex={row.iri === active ? 0 : -1}
+                  href={href(row)}
+                  onClick={(event) => open(row, event)}
+                >
                   <span className="mail-row-subject">{row.subject}</span>
-                  <span className="mail-row-snippet"> — {row.snippet}</span>
+                  {" — "}
+                  <span className="mail-row-snippet">{row.snippet}</span>
                 </Link>
               </td>
-              <td className="mail-row-attachment">
-                {row.hasAttachment && <Paperclip size={16} aria-label="Has attachment" />}
-              </td>
-              <td className="mail-row-date">
+              <td className="mail-row-meta">
                 <time dateTime={row.latest.toISOString()} title={row.latest.toLocaleString()}>
                   {dateLabel(row.latest)}
                 </time>
+                {row.hasAttachment && <Paperclip size={16} aria-label="Has attachment" />}
               </td>
             </tr>
           ))}

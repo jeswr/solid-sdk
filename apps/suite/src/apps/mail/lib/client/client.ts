@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 
 import { RdfFetchError } from "@jeswr/fetch-rdf";
+import { createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { sanitizeMessageHtml } from "../mime";
 import {
   archive,
@@ -14,15 +15,13 @@ import {
   type Message,
   mailDocument,
   mailRoot,
-  parseEmail,
   persistImportedMail,
   setLabel,
   setRead,
   setStarred,
-  splitMbox,
 } from "../model";
-import { mailAttachments, privateMailIndex } from "../model/client-support";
-import { splitQuotedText } from "../quotes";
+import { mailAddressName, mailAttachments, privateMailIndex } from "../model/client-support";
+import { type QuotedText, QuoteError, splitQuotedText } from "../quotes";
 import { evaluateQuery, parseQuery } from "../search";
 import { isMissing } from "./errors";
 import { folderIriFromKey, folderKey, SYSTEM_KEYS } from "./keys";
@@ -40,7 +39,32 @@ import type {
 function address(iri: string): string {
   return decodeURIComponent(iri.replace(/^mailto:/i, ""));
 }
-function row(iri: string, messages: Message[]): ThreadRow {
+function displayAddress(message: Message, iri: string, owner: string): string {
+  if (address(iri).toLowerCase() === address(owner).toLowerCase()) return "me";
+  return mailAddressName(message, iri) ?? address(iri);
+}
+function headerAddress(message: Message, iri: string, owner: string): string {
+  const label = displayAddress(message, iri, owner);
+  const email = address(iri);
+  return label === email ? email : `${label} <${email}>`;
+}
+function quotedBody(text: string): { quoted: QuotedText; truncated: boolean } {
+  try {
+    return { quoted: splitQuotedText(text), truncated: false };
+  } catch (error) {
+    if (!(error instanceof QuoteError) || error.code !== "BODY_TOO_LARGE") throw error;
+    const preview = text.slice(0, 64 * 1024);
+    return {
+      quoted: {
+        segments: [{ kind: "body", text: preview, depth: 0 }],
+        visibleText: preview,
+        hasQuotedHistory: false,
+      },
+      truncated: true,
+    };
+  }
+}
+function row(iri: string, messages: Message[], owner: string): ThreadRow {
   const newest = [...messages].sort(
     (a, b) => (b.dateSent?.getTime() ?? 0) - (a.dateSent?.getTime() ?? 0),
   );
@@ -51,7 +75,9 @@ function row(iri: string, messages: Message[]): ThreadRow {
     participants: [
       ...new Set(
         newest.flatMap((m) =>
-          [m.sender, ...m.to, ...m.cc].filter((s): s is string => s !== undefined).map(address),
+          [m.sender, ...m.to, ...m.cc]
+            .filter((s): s is string => s !== undefined)
+            .map((iri) => displayAddress(m, iri, owner)),
         ),
       ),
     ],
@@ -65,11 +91,13 @@ function row(iri: string, messages: Message[]): ThreadRow {
 }
 export class MailClient {
   readonly store: MailStore;
+  readonly binaryFetch: typeof globalThis.fetch;
   readonly storageUrl: string;
   readonly webId: string;
   constructor(fetch: typeof globalThis.fetch, storageUrl: string, webId?: string) {
     this.storageUrl = new URL(".", storageUrl.endsWith("/") ? storageUrl : `${storageUrl}/`).href;
     this.store = new MailStore(fetch, this.storageUrl);
+    this.binaryFetch = createPodScopedFetch(this.storageUrl, { fetch });
     this.webId = webId ?? new URL("profile/card#me", this.storageUrl).href;
   }
   root(account: string): string {
@@ -128,8 +156,8 @@ export class MailClient {
   }
   async folders(account: string): Promise<FolderView[]> {
     const root = this.root(account);
-    const counts = await this.absent(() => loadFolders(this.store, root), []);
-    const folders = counts.map(({ folder, total, unread }) => {
+    const counts = await loadFolders(this.store, root);
+    const folders = counts.map(({ folder, total, unreadThreads }) => {
       const key = folderKey(folder.value);
       return {
         iri: folder.value,
@@ -137,7 +165,7 @@ export class MailClient {
         title: folder.title ?? key,
         system: !key.startsWith("label:"),
         total,
-        unread,
+        unread: unreadThreads,
       };
     });
     if (!folders.some((f) => f.key === "inbox"))
@@ -164,7 +192,7 @@ export class MailClient {
     const page = await loadThreads(this.store, folderIri, offset, limit);
     return {
       ...page,
-      items: page.items.map(({ thread, messages }) => row(thread.value, messages)),
+      items: page.items.map(({ thread, messages }) => row(thread.value, messages, this.webId)),
     };
   }
   async thread(threadIri: string): Promise<ThreadView> {
@@ -173,16 +201,21 @@ export class MailClient {
     const views: MessageView[] = [];
     for (const message of messages) {
       const text = message.body ?? "";
+      const body = quotedBody(text);
       views.push({
         iri: message.value,
-        from: address(message.sender ?? "Unknown sender"),
-        to: [...message.to].map(address),
-        cc: [...message.cc].map(address),
+        from: message.sender
+          ? headerAddress(message, message.sender, this.webId)
+          : "Unknown sender",
+        to: [...message.to].map((iri) => headerAddress(message, iri, this.webId)),
+        cc: [...message.cc].map((iri) => headerAddress(message, iri, this.webId)),
         date: message.dateSent ?? new Date(0),
         subject: message.subjectLine ?? "(No subject)",
         text,
         ...(message.bodyHtml === undefined ? {} : { html: sanitizeMessageHtml(message.bodyHtml) }),
-        quoted: splitQuotedText(text),
+        quoted: body.quoted,
+        truncated: body.truncated,
+        ...(message.encoding === undefined ? {} : { originalUrl: message.encoding }),
         read: message.isRead,
         starred: [...message.folderIris].some((f) => folderKey(f) === "starred"),
         labels: [...message.folderIris],
@@ -277,7 +310,7 @@ export class MailClient {
         .filter((iri): iri is string => iri !== undefined),
     );
     const rows: ThreadRow[] = [];
-    for (const iri of threads) rows.push(row(iri, await loadThread(this.store, iri)));
+    for (const iri of threads) rows.push(row(iri, await loadThread(this.store, iri), this.webId));
     return rows
       .sort((a, b) => b.latest.getTime() - a.latest.getTime() || a.iri.localeCompare(b.iri))
       .slice(0, limit);
@@ -311,7 +344,6 @@ export class MailClient {
         failed: result.failed,
       });
     const mint = options.mintId ?? (() => crypto.randomUUID());
-    const ids: string[] = [];
     const storage = this.storageUrl;
     async function* counted() {
       for await (const chunk of source) {
@@ -320,51 +352,14 @@ export class MailClient {
         yield chunk;
       }
     }
-    // importMbox owns thread ancestry across the whole run. Preflight each bounded
-    // RFC822 message so a MIME failure cannot close that generator permanently.
-    async function* validMessages() {
-      let attempted = 0;
-      for await (const raw of splitMbox(counted())) {
-        if (options.signal?.aborted) return;
-        const id = mint();
-        try {
-          await parseEmail(raw, storage, account, id);
-        } catch (error) {
-          result.failed++;
-          result.failures.push({ iri: `Message ${++attempted}`, error });
-          progress();
-          continue;
-        }
-        attempted++;
-        ids.push(id);
-        yield new TextEncoder().encode("From import@example.org Thu Jan 01 00:00:00 2026\n");
-        // Reapply mboxrd escaping because splitMbox has already removed one level.
-        let start = 0;
-        for (let i = 0; i < raw.length; i++) {
-          if (i > 0 && raw[i - 1] !== 10) continue;
-          let marker = i;
-          while (raw[marker] === 62) marker++;
-          if (
-            raw[marker] === 70 &&
-            raw[marker + 1] === 114 &&
-            raw[marker + 2] === 111 &&
-            raw[marker + 3] === 109 &&
-            raw[marker + 4] === 32
-          ) {
-            yield raw.subarray(start, i);
-            yield new Uint8Array([62]);
-            start = i;
-          }
-        }
-        yield raw.subarray(start);
-      }
-    }
-    for await (const item of importMbox(
-      validMessages(),
-      storage,
-      account,
-      () => ids.shift() as string,
-    )) {
+    // A single splitter owns recovery and ancestry; no lookahead can discard its predecessor.
+    for await (const item of importMbox(counted(), storage, account, mint, {
+      onError: (error) => {
+        result.failed++;
+        result.failures.push({ iri: `Message ${result.messages + result.failed}`, error });
+        progress();
+      },
+    })) {
       if (options.signal?.aborted) break;
       try {
         await persistImportedMail(this.store, item);

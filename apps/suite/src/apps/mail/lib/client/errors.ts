@@ -10,6 +10,8 @@ export class MailFileError extends Error {
 }
 export function mailErrorMessage(error: unknown): string {
   if (error instanceof SearchQueryError || error instanceof MailFileError) return error.message;
+  if (error instanceof RangeError && error.message === "Mail message exceeds import limit")
+    return "This message exceeds the 25 MiB import limit and was skipped.";
   if (error instanceof MailError)
     return {
       "not-found": "This item isn't here any more",

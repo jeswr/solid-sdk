@@ -33,8 +33,8 @@ export function MailAttachment({ attachment }: { attachment: AttachmentView }) {
     if (!open) return;
     let live = true;
     setError(false);
-    void client.store
-      .fetch(attachment.url)
+    void client
+      .binaryFetch(attachment.url)
       .then(async (response) => {
         if (!response.ok) throw new Error("Attachment unavailable");
         return response.blob();

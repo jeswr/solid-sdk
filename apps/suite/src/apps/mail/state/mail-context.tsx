@@ -15,6 +15,7 @@ import type { PodSession } from "@/lib/session/pod-session";
 import {
   folderIriFromKey,
   MailClient,
+  type MessageView,
   mailErrorMessage,
   type ThreadPage,
   type ThreadRow,
@@ -272,24 +273,44 @@ export function useMailActions() {
     mutate(thread, { starred: on }, async () => {
       for (const iri of iris) await client.star(iri, on);
     });
-  const archive = (iris: string[], thread: string) =>
-    mutate(thread, { archived: true }, async () => {
-      checkBatch(await client.archive(iris));
+  const archiveMessages = async (messages: MessageView[], thread: string) => {
+    const changes = messages.flatMap((message) => {
+      const root = message.iri.slice(0, message.iri.indexOf("/messages/") + 1);
+      const inbox = folderIriFromKey(root, "inbox");
+      const archive = folderIriFromKey(root, "archive");
+      const hadInbox = message.labels.includes(inbox);
+      const hadArchive = message.labels.includes(archive);
+      return hadInbox || !hadArchive
+        ? [{ iri: message.iri, inbox, archive, hadInbox, hadArchive }]
+        : [];
+    });
+    if (!changes.length) return;
+    const result = await client.archive(changes.map((change) => change.iri));
+    const applied = changes.filter((change) => result.done.includes(change.iri));
+    if (applied.length)
       toast("Mail archived", {
         duration: 8000,
         action: {
           label: "Undo",
           onClick: () => {
             void mutate(thread, { archived: false }, async () => {
-              for (const iri of iris) {
-                const root = iri.slice(0, iri.indexOf("/messages/") + 1);
-                await client.label(iri, folderIriFromKey(root, "inbox"), true);
-                await client.label(iri, folderIriFromKey(root, "archive"), false);
+              for (const change of applied) {
+                if (change.hadInbox) await client.label(change.iri, change.inbox, true);
+                if (!change.hadArchive) await client.label(change.iri, change.archive, false);
               }
             });
           },
         },
       });
+    checkBatch(result);
+  };
+  const archive = (iris: string[], thread: string) =>
+    mutate(thread, { archived: true }, async () => {
+      const view = await client.thread(thread);
+      await archiveMessages(
+        view.messages.filter((message) => iris.includes(message.iri)),
+        thread,
+      );
     });
   const forRows = (rows: ThreadRow[], kind: "read" | "star" | "archive", on = true) =>
     Promise.all(
@@ -306,29 +327,10 @@ export function useMailActions() {
             const iris = view.messages.map((m) => m.iri);
             if (kind === "read") checkBatch(await client.markRead(iris, on));
             if (kind === "star") for (const iri of iris) await client.star(iri, on);
-            if (kind === "archive") {
-              checkBatch(await client.archive(iris));
-              toast("Mail archived", {
-                duration: 8000,
-                action: {
-                  label: "Undo",
-                  onClick: () => {
-                    void undoArchive(iris, row.iri);
-                  },
-                },
-              });
-            }
+            if (kind === "archive") await archiveMessages(view.messages, row.iri);
           },
         ),
       ),
     );
-  const undoArchive = (iris: string[], thread: string) =>
-    mutate(thread, { archived: false }, async () => {
-      for (const iri of iris) {
-        const root = iri.slice(0, iri.indexOf("/messages/") + 1);
-        await client.label(iri, folderIriFromKey(root, "inbox"), true);
-        await client.label(iri, folderIriFromKey(root, "archive"), false);
-      }
-    });
   return { markRead, star, archive, forRows, refresh: invalidate };
 }

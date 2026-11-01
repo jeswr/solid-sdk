@@ -40,6 +40,8 @@ export interface MessageView {
   text: string;
   html?: string;
   quoted: QuotedText;
+  truncated?: boolean;
+  originalUrl?: string;
   read: boolean;
   starred: boolean;
   labels: string[];

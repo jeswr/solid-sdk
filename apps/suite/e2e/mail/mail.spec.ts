@@ -69,9 +69,39 @@ test("imports, reads with the keyboard, stars, archives and searches a mailbox",
   ).toBeVisible();
   await page.getByRole("link", { name: "Open Inbox", exact: true }).click();
   const rows = page.locator("tr[data-thread]");
-  await expect(rows).toHaveCount(4);
+  await expect(rows).toHaveCount(11);
   await accessible(page);
   await capture(page, info, "inbox");
+  await expect(rows.first()).toContainText("Noel Hart");
+  await expect(rows.first().locator(".mail-row-copy")).toContainText(
+    "Re: Saturday at the garden — The east gate",
+  );
+  // Both ellipsis lines and the date fit inside each row at every project width.
+  expect(
+    await rows.evaluateAll((elements) =>
+      elements.every((row) => {
+        const meta = row.querySelector(".mail-row-meta");
+        const content = row.querySelector(".mail-row-content");
+        const date = meta?.querySelector("time");
+        const people = row.querySelector(".mail-row-people");
+        const copy = row.querySelector(".mail-row-copy");
+        if (!meta || !content || !date || !people || !copy) return false;
+        return (
+          date.scrollWidth <= meta.clientWidth &&
+          meta.getBoundingClientRect().right < row.getBoundingClientRect().right &&
+          content.getBoundingClientRect().right <= meta.getBoundingClientRect().left &&
+          [people, copy].every((line) => getComputedStyle(line).textOverflow === "ellipsis")
+        );
+      }),
+    ),
+  ).toBe(true);
+  // Inactive descendants cannot bypass the roving row focus.
+  await rows.first().locator('input[type="checkbox"]').focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(rows.nth(1)).toBeFocused();
+  await expect(rows.first().locator("a")).toHaveAttribute("tabindex", "-1");
+  await page.keyboard.press("ArrowUp");
+  await expect(rows.first()).toBeFocused();
   if ((page.viewportSize()?.width ?? 1280) < 1024)
     await page.getByRole("button", { name: "Open navigation", exact: true }).click();
   const compose = page
@@ -83,45 +113,70 @@ test("imports, reads with the keyboard, stars, archives and searches a mailbox",
   const iri = await rows.first().getAttribute("data-thread");
   await rows.first().focus();
   await page.keyboard.press("Enter");
-  await expect(page.getByRole("heading", { name: "Garden plans 4", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Saturday at the garden", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Saturday at the garden", exact: true }),
+  ).toHaveJSProperty("tagName", (page.viewportSize()?.width ?? 1280) < 1024 ? "H1" : "H2");
   await page.getByRole("button", { name: "Star thread", exact: true }).click();
   await expect(page.getByRole("button", { name: "Unstar thread", exact: true })).toHaveAttribute(
     "aria-pressed",
     "true",
   );
   await expect(page.getByRole("status", { name: "Mail save status", exact: true })).toHaveText("");
+  // A desktop selection URL remains visible when loaded on narrow layouts too.
+  if (!iri) throw new Error("The imported thread has no resource identifier");
+  await page.goto(`/mail/inbox?t=${encodeRef(iri)}`);
+  await expect(
+    page.getByRole("heading", { name: "Saturday at the garden", exact: true, level: 2 }),
+  ).toBeVisible();
+  await accessible(page);
   // Also verify the full thread deep link on the wide layout.
   if (!iri) throw new Error("The imported thread has no resource identifier");
   await page.goto(`/mail/t/${encodeRef(iri)}`);
-  await expect(page.getByRole("heading", { name: "Garden plans 4", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Saturday at the garden", exact: true }),
+  ).toBeVisible();
   await accessible(page);
   await capture(page, info, "thread");
+  await expect(page.getByRole("status", { name: "Mail save status", exact: true })).toHaveText("");
   await nav(page, "Starred");
-  await expect(page.locator("tr[data-thread]").filter({ hasText: "Garden plans 4" })).toBeVisible();
-  const starred = page.locator("tr[data-thread]").filter({ hasText: "Garden plans 4" });
+  await expect(
+    page.locator("tr[data-thread]").filter({ hasText: "Re: Saturday at the garden" }),
+  ).toBeVisible();
+  const starred = page.locator("tr[data-thread]").filter({ hasText: "Re: Saturday at the garden" });
   await starred.focus();
   await page.keyboard.press("e");
   await nav(page, "Archive");
-  await expect(page.locator("tr[data-thread]").filter({ hasText: "Garden plans 4" })).toBeVisible();
+  await expect(
+    page.locator("tr[data-thread]").filter({ hasText: "Re: Saturday at the garden" }),
+  ).toBeVisible();
   await page
     .getByRole("searchbox", { name: "Search mail", exact: true })
-    .fill('subject:"Garden plans 4"');
+    .fill('subject:"Re: Saturday at the garden"');
   await page.getByRole("searchbox", { name: "Search mail", exact: true }).press("Enter");
   await expect(page.locator("tr[data-thread]")).toHaveCount(1);
-  await expect(page.locator("tr[data-thread]")).toContainText("Garden plans 4");
+  await expect(page.locator("tr[data-thread]")).toContainText("Re: Saturday at the garden");
   await accessible(page);
   await capture(page, info, "search");
 });
-test("shows import ZIP guidance and query errors without losing navigation", async ({ page }) => {
+test("shows import ZIP guidance and query errors without losing navigation", async ({
+  page,
+}, info) => {
+  await page.goto("/mail/inbox");
+  await expect(page.getByRole("heading", { name: "No mail yet", level: 2 })).toBeVisible();
+  await accessible(page);
+  await capture(page, info, "empty");
   await page.goto("/mail/import");
   await page
     .getByLabel("Mailbox file", { exact: true })
     .setInputFiles({ name: "Takeout.zip", mimeType: "application/zip", buffer: Buffer.from("PK") });
-  await expect(page.getByRole("alert")).toContainText(
-    "Unzip your Takeout and choose the .mbox file inside",
-  );
+  await expect(
+    page.getByRole("form", { name: "Mailbox import", exact: true }).getByRole("alert"),
+  ).toContainText("Unzip your Takeout and choose the .mbox file inside");
   await page.goto("/mail/search?q=unknown%3Aoperator");
-  await expect(page.getByRole("alert")).toBeVisible();
+  await expect(page.locator(".mail-query-error")).toBeVisible();
   await page.goto("/mail/not-a-folder");
   await expect(page.getByRole("heading", { name: "This folder doesn't exist" })).toBeVisible();
 });

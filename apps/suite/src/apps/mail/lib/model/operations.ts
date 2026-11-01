@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { RdfFetchError } from "@jeswr/fetch-rdf";
 import { DataFactory, Store } from "n3";
 import {
   archiveMessage,
@@ -13,12 +14,48 @@ import { systemFolderDocument } from "./paths.js";
 
 /** Load folders and their messages to produce counts for a consistent loaded snapshot. */
 export async function loadFolders(store: MailStore, root: string) {
-  const folders = await store.snapshot(await store.list(new URL("folders/", root).href));
+  // Only the container itself may be absent; referenced resource failures must surface.
+  let children: string[];
+  try {
+    children = await store.list(new URL("folders/", root).href);
+  } catch (error) {
+    if (error instanceof RdfFetchError && error.status === 404) return [];
+    if (error instanceof RdfFetchError && (error.status === 401 || error.status === 403))
+      throw new MailError("forbidden", error.status);
+    throw error;
+  }
+  const folders = await store.snapshot(children);
   const messages = await store.snapshot(
     [...folders.folders].flatMap((f) => [...f.messageIris].map(documentOf)),
   );
-  const combined = combine([folders, messages]);
-  return folderCounts(combined);
+  const threads = await store.snapshot(
+    [...messages.messages].flatMap((message) =>
+      message.partOfThread ? [documentOf(message.partOfThread)] : [],
+    ),
+  );
+  const members = await store.snapshot(
+    [...threads.threads].flatMap((thread) => [...thread.messageIris].map(documentOf)),
+  );
+  const combined = combine([folders, messages, members]);
+  const all = [...combined.messages];
+  const unread = new Set(
+    all
+      .filter((message) => !message.isRead)
+      .map((message) => message.partOfThread ?? message.value),
+  );
+  return folderCounts(combined).map((count) => ({
+    ...count,
+    unreadThreads: new Set(
+      all
+        .filter(
+          (message) =>
+            count.folder.messageIris.has(message.value) ||
+            message.folderIris.has(count.folder.value),
+        )
+        .map((message) => message.partOfThread ?? message.value)
+        .filter((thread) => unread.has(thread)),
+    ).size,
+  }));
 }
 export async function loadThreads(store: MailStore, folderIri: string, offset = 0, limit = 50) {
   const folder = await store.load(documentOf(folderIri));

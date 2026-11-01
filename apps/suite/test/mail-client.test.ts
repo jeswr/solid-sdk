@@ -68,7 +68,7 @@ describe("MailClient demo pod integration", () => {
       "label:Important",
       "label:Travel",
     ]);
-    expect(folders[0]).toMatchObject({ total: 50, unread: 25, system: true });
+    expect(folders[0]).toMatchObject({ total: 50, unread: 10, system: true });
     const inbox = folderIriFromKey(client.root(account), "inbox");
     const page = await client.threads(account, inbox, 0, 3);
     expect(page).toMatchObject({ total: 10, next: 3 });
@@ -81,12 +81,7 @@ describe("MailClient demo pod integration", () => {
       count: 5,
       unread: true,
       hasAttachment: false,
-      participants: [
-        "noel@example.org",
-        "friends@example.org",
-        "alex@example.org",
-        "mira@example.org",
-      ],
+      participants: ["Noel Reed", "Garden friends", "Alex Moss", "Mira Vale"],
     });
     expect(page.items[0]?.snippet).not.toContain("\n");
     expect((await client.threads(account, inbox, 9, 3)).next).toBeNull();
@@ -119,7 +114,7 @@ describe("MailClient demo pod integration", () => {
     expect(await client.markRead([...ids, ids[0]!], true)).toEqual({ done: ids, failed: [] });
     expect((await client.folders(account))[0]?.unread).toBe(0);
     await client.markRead(ids, false);
-    expect((await client.folders(account))[0]?.unread).toBe(5);
+    expect((await client.folders(account))[0]?.unread).toBe(1);
     for (const id of ids) await client.star(id, false);
     expect(
       (await client.threads(account, folderIriFromKey(client.root(account), "starred"))).items,
@@ -337,6 +332,10 @@ describe("Folder keys and error copy", () => {
     }
     expect(mailErrorMessage(queryError)).toBe((queryError as Error).message);
     expect(mailErrorMessage(new MailFileError())).toContain("Unzip your Takeout");
+    expect(mailErrorMessage(new RangeError("Mail message exceeds import limit"))).toContain(
+      "25 MiB",
+    );
+    expect(mailErrorMessage(new RangeError("private details"))).toContain("Couldn't finish");
     expect(mailErrorMessage(new TypeError("Choose a label"))).toBe("Choose a label");
     expect(mailErrorMessage(new Error("secret transport details"))).toBe(
       "Couldn't finish the mail operation. Try again.",
@@ -454,7 +453,7 @@ describe("Sparse and bounded account snapshots", () => {
     const foreign = new MailClient(pod.fetch, root, "https://foreign.example/profile#me");
     await expect(foreign.registerTypeIndex(account)).rejects.toThrow();
   });
-  it("uses attachment fallbacks and surfaces failed binary metadata requests", async () => {
+  it("uses attachment metadata without probing binaries, even when they are missing", async () => {
     const { client, inbox } = await imported(5);
     const row = (await client.threads(account, inbox)).items[0]!;
     const view = await client.thread(row.iri);
@@ -464,6 +463,7 @@ describe("Sparse and bounded account snapshots", () => {
     const metadata = new Attachment(message.attachments[0]!.url, loaded.mailbox, DataFactory);
     metadata.name = undefined;
     metadata.contentType = undefined;
+    metadata.size = undefined;
     await client.store.save(loaded);
     const original = client.store.fetch;
     vi.spyOn(client.store, "fetch").mockImplementation(async (input, init) => {
@@ -479,6 +479,200 @@ describe("Sparse and bounded account snapshots", () => {
     vi.mocked(client.store.fetch).mockImplementation(async (input, init) =>
       init?.method === "HEAD" ? new Response(null, { status: 404 }) : original(input, init),
     );
-    await expect(client.thread(row.iri)).rejects.toThrow("Couldn't load an attachment");
+    await expect(client.thread(row.iri)).resolves.toMatchObject({ messages: expect.any(Array) });
+    expect(
+      vi.mocked(client.store.fetch).mock.calls.every(([, init]) => init?.method !== "HEAD"),
+    ).toBe(true);
+  });
+});
+
+describe("Round one client regressions", () => {
+  it("renders accepted large and line-heavy bodies with a bounded preview and original source", async () => {
+    const { client, inbox } = setup();
+    const large = mailboxFixture(1).replace(
+      /Hello friends,[\s\S]*/,
+      `${"x".repeat(2 * 1024 * 1024 + 1)}\n`,
+    );
+    expect(await client.importMailbox(account, bytes(large))).toMatchObject({
+      messages: 1,
+      failed: 0,
+    });
+    const thread = (await client.threads(account, inbox)).items[0]!;
+    let message = (await client.thread(thread.iri)).messages[0]!;
+    expect(message.truncated).toBe(true);
+    expect(message.quoted.visibleText).toHaveLength(64 * 1024);
+    expect(message.originalUrl).toMatch(/\.eml$/);
+    expect((await client.binaryFetch(message.originalUrl!)).ok).toBe(true);
+    const loaded = await client.store.load(documentOf(message.iri));
+    loaded.mailbox.message(message.iri).body = "line\n".repeat(50_001);
+    await client.store.save(loaded);
+    message = (await client.thread(thread.iri)).messages[0]!;
+    expect(message.truncated).toBe(true);
+    expect((await client.markRead([message.iri], true)).failed).toEqual([]);
+    expect((await client.archive([message.iri])).failed).toEqual([]);
+    // Only size limits use the fallback; malformed text and unexpected failures surface.
+    const quotes = await import("../src/apps/mail/lib/quotes");
+    const split = vi.spyOn(quotes, "splitQuotedText");
+    for (const error of [new quotes.QuoteError("INVALID_TEXT"), new Error("parser failure")]) {
+      split.mockImplementationOnce(() => {
+        throw error;
+      });
+      await expect(client.thread(thread.iri)).rejects.toBe(error);
+    }
+    split.mockRestore();
+  });
+  it("retains both neighbours of an oversized message, reports failure and preserves ancestry", async () => {
+    const { client, inbox } = setup();
+    const first = mailboxFixture(1);
+    const last = mailboxFixture(2).slice(first.length);
+    const oversize =
+      "From sender@example.org Thu Jan 01 00:00:00 2026\nMessage-ID: <large@example.org>\n\n";
+    async function* source() {
+      yield new TextEncoder().encode(first + oversize);
+      const block = new Uint8Array(64 * 1024).fill(120);
+      for (let i = 0; i < 401; i++) yield block;
+      yield new TextEncoder().encode(`\n${last}`);
+    }
+    const onProgress = vi.fn();
+    const result = await client.importMailbox(account, source(), { onProgress });
+    expect(result).toMatchObject({ messages: 2, failed: 1, aborted: false, typeIndex: "missing" });
+    expect(result.failures[0]?.error).toBeInstanceOf(RangeError);
+    expect(onProgress.mock.calls.at(-1)?.[0]).toMatchObject({ messages: 2, failed: 1 });
+    const rows = (await client.threads(account, inbox)).items;
+    expect(rows).toHaveLength(1);
+    expect((await client.thread(rows[0]!.iri)).messages).toHaveLength(2);
+  });
+  it("surfaces nested folder/message 404s and counts unread conversations per label", async () => {
+    const { client, inbox, pod } = await imported(7);
+    expect((await client.folders(account)).find((folder) => folder.key === "inbox")?.unread).toBe(
+      2,
+    );
+    expect(
+      (await client.folders(account)).find((folder) => folder.title === "Garden club")?.unread,
+    ).toBe(2);
+    const row = (await client.threads(account, inbox)).items[0]!;
+    const message = (await client.thread(row.iri)).messages[0]!;
+    expect((await pod.fetch(documentOf(message.iri), { method: "DELETE" })).ok).toBe(true);
+    await expect(client.folders(account)).rejects.toMatchObject({ code: "not-found" });
+    await expect(client.threads(account, inbox)).rejects.toMatchObject({ code: "not-found" });
+    const isolated = setup();
+    const label = await isolated.client.createLabel(account, "Work");
+    const list = isolated.client.store.list.bind(isolated.client.store);
+    vi.spyOn(isolated.client.store, "list").mockImplementation(async (url) => {
+      const children = await list(url);
+      await isolated.pod.fetch(documentOf(label), { method: "DELETE" });
+      return children;
+    });
+    await expect(isolated.client.folders(account)).rejects.toMatchObject({ code: "not-found" });
+  });
+  it("uses a scoped binary transport for JSON-LD attachments and leaves missing attachments lazy", async () => {
+    const { client, pod, inbox } = await imported(5);
+    const row = (await client.threads(account, inbox)).items[0]!;
+    const message = (await client.thread(row.iri)).messages[3]!;
+    const attachment = message.attachments[0]!;
+    const json = '{"@context":"https://example.net/context","name":"Seeds"}';
+    const response = await pod.fetch(attachment.url);
+    await pod.fetch(attachment.url, {
+      method: "PUT",
+      headers: { "content-type": "application/ld+json", "if-match": response.headers.get("etag")! },
+      body: json,
+    });
+    expect(await (await client.binaryFetch(attachment.url, { method: "HEAD" })).text()).toBe("");
+    expect(await (await client.binaryFetch(attachment.url)).text()).toBe(json);
+    await expect(client.binaryFetch("https://elsewhere.example/file")).rejects.toThrow();
+    await pod.fetch(attachment.url, { method: "DELETE" });
+    expect((await client.thread(row.iri)).messages[3]?.attachments).toHaveLength(1);
+    expect((await client.binaryFetch(attachment.url)).status).toBe(404);
+  });
+  it("prefers header display names, detects a mailto owner and preserves sparse originals", async () => {
+    const { client, pod, inbox } = await imported(1);
+    const owner = new MailClient(pod.fetch, root, "mailto:mira@example.org");
+    const row = (await owner.threads(account, inbox)).items[0]!;
+    expect(row.participants).toEqual(["me", "Garden friends", "Alex Moss"]);
+    expect((await owner.thread(row.iri)).messages[0]).toMatchObject({
+      from: "me <mira@example.org>",
+      to: ["Garden friends <friends@example.org>"],
+      cc: ["Alex Moss <alex@example.org>"],
+    });
+    expect(await client.search(account, "from:mira@example.org")).toHaveLength(1);
+  });
+  it("ships eighteen varied messages across six weeks with names, quotes, HTML and PNG/PDF attachments", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const content = await readFile(
+      new URL("../public/samples/sample-mailbox.mbox", import.meta.url),
+      "utf8",
+    );
+    expect(content).not.toMatch(/fictional|sample/i);
+    const { client, inbox } = setup();
+    expect(await client.importMailbox(account, bytes(content))).toMatchObject({
+      messages: 18,
+      attachments: 2,
+      failed: 0,
+    });
+    const page = await client.threads(account, inbox);
+    expect(page.total).toBe(11);
+    expect(page.items[0]).toMatchObject({
+      subject: "Re: Saturday at the garden",
+      count: 4,
+      participants: ["Noel Hart", "Mira Vale", "Alex Moss"],
+    });
+    const views = await Promise.all(page.items.map((row) => client.thread(row.iri)));
+    const messages = views.flatMap((view) => view.messages);
+    const times = messages.map((message) => message.date.getTime());
+    expect((Math.max(...times) - Math.min(...times)) / 86400000).toBeGreaterThan(40);
+    expect(messages.every((message) => message.date.getUTCFullYear() === 2026)).toBe(true);
+    expect(messages.some((message) => message.quoted.hasQuotedHistory)).toBe(true);
+    expect(messages.find((message) => message.html)?.html).not.toContain("tracking.example.net");
+    expect(
+      messages
+        .flatMap((message) => message.attachments)
+        .map((attachment) => attachment.contentType)
+        .sort(),
+    ).toEqual(["application/pdf", "image/png"]);
+    expect((await client.folders(account)).map((folder) => folder.title)).toEqual(
+      expect.arrayContaining(["Starred", "Important", "Travel", "Garden club"]),
+    );
+  });
+});
+
+it("falls back to addresses when headers have no display names", async () => {
+  const { client, inbox } = setup();
+  await client.importMailbox(
+    account,
+    bytes(
+      "From sender@example.org Thu Jan 01 00:00:00 2026\nFrom: sender@example.org\nTo: reader@example.net\nCc: cc@example.org\n\nHello\n",
+    ),
+  );
+  const row = (await client.threads(account, inbox)).items[0]!;
+  expect(row.participants).toEqual(["sender@example.org", "reader@example.net", "cc@example.org"]);
+  expect((await client.thread(row.iri)).messages[0]).toMatchObject({
+    from: "sender@example.org",
+    to: ["reader@example.net"],
+    cc: ["cc@example.org"],
+  });
+});
+it("keeps folder-list network, server and access errors distinct from an empty account", async () => {
+  for (const status of [401, 403, 500]) {
+    const { client } = setup(() => async () => new Response(null, { status }));
+    await expect(client.folders(account)).rejects.toMatchObject(
+      status === 500 ? { status } : { code: "forbidden", status },
+    );
+  }
+  const { client } = setup();
+  vi.spyOn(client.store, "list").mockRejectedValue(new Error("network"));
+  await expect(client.folders(account)).rejects.toThrow("network");
+});
+it("counts an unread conversation even when the label is on a read member only", async () => {
+  const { client, inbox } = await imported(2);
+  const thread = await client.thread((await client.threads(account, inbox)).items[0]!.iri);
+  const label = await client.createLabel(account, "Read reply");
+  expect(thread.messages[1]?.read).toBe(true);
+  await client.label(thread.messages[1]!.iri, label, true);
+  // The unread root can even have no folder: it is still part of this conversation.
+  for (const folder of thread.messages[0]!.labels)
+    await client.label(thread.messages[0]!.iri, folder, false);
+  expect((await client.folders(account)).find((folder) => folder.iri === label)).toMatchObject({
+    total: 1,
+    unread: 1,
   });
 });
