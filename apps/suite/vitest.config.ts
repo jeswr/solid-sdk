@@ -122,6 +122,7 @@ export default defineConfig({
         "src/apps/money/lib/reports/**/*.ts",
         "src/apps/mail/lib/compose/**/*.ts",
         "src/apps/tasks/lib/board/**/*.ts",
+        "src/apps/tasks/lib/dnd/**/*.ts",
         "src/apps/mail/lib/search/**/*.ts",
         "src/apps/music/lib/library/**/*.ts",
         "src/apps/music/lib/smart/**/*.ts",

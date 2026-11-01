@@ -16,34 +16,38 @@ import {
   EditableText,
   IconButton,
 } from "@jeswr/suite-ui";
-import { Bell, CalendarDays, Ellipsis, Pencil, Repeat2 } from "lucide-react";
+import { Bell, CalendarDays, Ellipsis, GripVertical, Pencil, Repeat2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
+import type { DropContainer } from "../lib/dnd/types";
 import { formatDue, isOverdue } from "../lib/format/due";
-import { runBulk } from "../lib/views/bulk";
 import { addDays, localDayKey } from "../lib/views/days";
-import { moveDown, moveUp } from "../lib/views/positions";
 import type { Row } from "../lib/views/project-groups";
-import { compareTasks } from "../lib/views/project-groups";
 import { priorityValue } from "../lib/views/types";
 import { completeTask, deleteTask } from "../state/actions";
+import { completeTasks } from "../state/bulk-actions";
 import { useNow } from "../state/clock";
-import { completionVisuals } from "../state/completion-visuals";
 import { useTaskListFocus } from "../state/list-focus";
 import { useTasksShortcuts } from "../state/shortcuts";
 import { useTasks } from "../state/tasks-context";
 import { reopenTask, rescheduleTasks } from "../state/view-actions";
+import { useTaskDrag } from "./dnd/use-task-drag";
+import { MoveMenuItems, moveDown, moveUp, useTaskMoves } from "./move-menu";
 import { RowProperties } from "./row-properties";
+import { TaskCheck, useCompleting } from "./task-check";
 import { ReschedulePopover } from "./views/reschedule-popover";
 import "./views/views.css";
+import "./selection.css";
 export interface TaskRowProps {
   row: Row;
   showProject?: boolean | undefined;
   tabIndex: number;
   onFocus: () => void;
   onMove: (direction: -1 | 1) => void;
+  /** Where the row renders, for drag and drop; omitted rows cannot be dragged. */
+  container?: DropContainer | undefined;
 }
 export function TaskRow({
   row: { task, depth, orphanParentTitle },
@@ -51,14 +55,10 @@ export function TaskRow({
   tabIndex,
   onFocus,
   onMove,
+  container,
 }: TaskRowProps) {
   const tasks = useTasks();
-  const visuals = completionVisuals(tasks.cache);
-  const completing = useSyncExternalStore(
-    visuals.subscribe,
-    visuals.getSnapshot,
-    visuals.getSnapshot,
-  ).has(task.url);
+  const completing = useCompleting(task);
   const pathname = usePathname();
   const params = useSearchParams();
   const router = useRouter();
@@ -92,6 +92,37 @@ export function TaskRow({
       ?.tracker.labels.filter((label) => task.labelIds.includes(label.id)) ?? [];
   const pending = !tasks.tasks[task.projectUrl]?.items.find((item) => item.url === task.url)?.etag;
   const now = useNow();
+  const moves = useTaskMoves(task);
+  const toggleSelected = () => {
+    if (!focus) return;
+    focus.toggleSelection(task.url);
+    focus.announce(
+      focus.selection.has(task.url) ? `Deselected '${task.title}'` : `Selected '${task.title}'`,
+    );
+  };
+  /** A long-press selects; the click its release may fire must not open the task. */
+  const longPressed = useRef(0);
+  const drag = useTaskDrag(task, container, {
+    disabled: pending || completing || editing,
+    // A sorted list has no manual order: its rows accept only section moves, never nesting.
+    allowChild: container?.kind === "section" && moves.manual,
+    onLongPress: focus
+      ? () => {
+          longPressed.current = Date.now();
+          toggleSelected();
+        }
+      : undefined,
+  });
+  const { ref: dragRef } = drag;
+  const rowRef = useCallback(
+    (node: HTMLTableRowElement | null) => {
+      rowElement.current = node;
+      dragRef(node);
+    },
+    [dragRef],
+  );
+  const selecting = (focus?.selection.size ?? 0) > 0;
+  const selected = focus?.selection.has(task.url) ?? false;
   const hasMeta = Boolean(
     task.due ||
       task.allDay ||
@@ -118,21 +149,15 @@ export function TaskRow({
     if (command.type === "focus") return onMove(command.direction);
     if (command.type === "open") return router.push(href);
     if (command.type === "clear") return focus?.clearSelection();
-    if (command.type === "select") {
-      focus?.toggleSelection(task.url);
-      focus?.announce(
-        focus.selection.has(task.url) ? `Deselected '${task.title}'` : `Selected '${task.title}'`,
-      );
-      return;
-    }
+    if (command.type === "selectAll") return focus?.selectAll();
+    if (command.type === "extend") return focus?.extendSelection(task.url, command.direction);
+    if (command.type === "select") return toggleSelected();
     if (command.type === "menu") return setMenuOpen(true);
     if (pending) return;
     if (command.type === "complete") {
       const selected = selectedTasks();
       focus?.clearSelection();
-      void runBulk(selected, async (view) => {
-        if (view.state === "open") await completeTask(view, tasks, { animate: true });
-      });
+      void completeTasks(selected, tasks);
     }
     if (command.type === "edit") setEditing(true);
     if (command.type === "delete") void deleteTask(task, tasks);
@@ -149,37 +174,7 @@ export function TaskRow({
         });
       focus?.announce(`Priority P${command.level}`);
     }
-    if (command.type === "reorder") {
-      const siblings = tasks.views
-        .filter(
-          (view) =>
-            view.state === task.state &&
-            view.projectUrl === task.projectUrl &&
-            view.sectionId === task.sectionId &&
-            view.parentId === task.parentId,
-        )
-        .sort(compareTasks("manual"));
-      const plan = (command.direction === -1 ? moveUp : moveDown)(siblings, task.url);
-      if (!plan) return;
-      void (async () => {
-        for (const patch of [
-          ...(plan.renumber ?? []),
-          { url: task.url, position: plan.position },
-        ]) {
-          const stored = tasks.cache
-            .getSnapshot()
-            .tasks[task.projectUrl]?.items.find((item) => item.url === patch.url);
-          if (
-            !stored ||
-            !(await tasks.updateTask(stored, (task) => {
-              task.rank = patch.position;
-            }))
-          )
-            return;
-        }
-        focus?.announce(`Moved '${task.title}' ${command.direction === -1 ? "up" : "down"}`);
-      })();
-    }
+    if (command.type === "reorder") void moves.run(command.direction === -1 ? moveUp : moveDown);
   });
   return (
     <tr
@@ -187,6 +182,9 @@ export function TaskRow({
       data-tsk-row={task.url}
       data-task-url={task.url}
       data-depth={depth}
+      data-selecting={selecting || undefined}
+      data-dragging={drag.dragging || undefined}
+      data-drop={drag.hint}
       data-closed={task.state === "closed" || completing || undefined}
       data-completing={completing || undefined}
       tabIndex={tabIndex}
@@ -194,27 +192,45 @@ export function TaskRow({
         if ((event.target as HTMLElement).tagName === "TD") event.currentTarget.focus();
         onFocus();
       }}
-      aria-selected={focus?.selection.has(task.url) ?? false}
-      ref={rowElement}
+      aria-selected={selected}
+      ref={rowRef}
       onKeyDown={onKeyDown}
+      onClickCapture={(event) => {
+        if (Date.now() - longPressed.current > 700) return;
+        longPressed.current = 0;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      {...drag.touch}
     >
+      <td className="tsk-drag-cell">
+        {drag.handle && (
+          <button
+            type="button"
+            className="tsk-drag-handle"
+            {...drag.handle}
+            tabIndex={tabIndex}
+            aria-label={`Move '${task.title}'`}
+          >
+            <GripVertical size={16} aria-hidden="true" />
+          </button>
+        )}
+      </td>
+      <td className="tsk-select-cell">
+        <button
+          type="button"
+          className="tsk-select"
+          tabIndex={-1}
+          aria-pressed={selected}
+          aria-label={`Select '${task.title}'`}
+          onClick={(event) => {
+            if (event.shiftKey) focus?.selectRange(task.url, task.url);
+            else focus?.toggleSelection(task.url);
+          }}
+        />
+      </td>
       <td className="tsk-completion-cell">
-        <label className="tsk-check-target">
-          <input
-            className="tsk-check"
-            data-priority={task.priority}
-            type="checkbox"
-            tabIndex={-1}
-            checked={task.state === "closed" || completing}
-            disabled={pending || completing}
-            aria-label={`${task.state === "closed" ? "Reopen" : "Complete"} '${task.title}'`}
-            onChange={() => {
-              void (task.state === "closed"
-                ? reopenTask(task, tasks)
-                : completeTask(task, tasks, { animate: true }));
-            }}
-          />
-        </label>
+        <TaskCheck task={task} pending={pending} completing={completing} />
       </td>
       <td className="tsk-row-body">
         {editing ? (
@@ -411,6 +427,11 @@ export function TaskRow({
                 >
                   Edit title
                 </DropdownMenuItem>
+                {focus && (
+                  <DropdownMenuItem onSelect={toggleSelected}>
+                    {selected ? "Deselect" : "Select"}
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem
                   disabled={pending || completing}
                   onSelect={() => setPanel("labels")}
@@ -439,6 +460,11 @@ export function TaskRow({
                 >
                   Delete
                 </DropdownMenuItem>
+                <MoveMenuItems
+                  task={task}
+                  disabled={pending || completing}
+                  reorder={container?.kind === "section"}
+                />
               </DropdownMenuContent>
             </DropdownMenu>
             <AlertDialog open={confirmForever} onOpenChange={setConfirmForever}>

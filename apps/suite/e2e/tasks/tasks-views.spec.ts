@@ -36,7 +36,7 @@ async function seed(
 ) {
   const pod = createDemoPod({
     root: DEMO_ROOT,
-    seed: await buildDemoSeed(now.getTime()),
+    seed: await buildDemoSeed(now.getTime(), { calendar: false }),
     now: () => now.getTime(),
   });
   const store = new TaskStore({
