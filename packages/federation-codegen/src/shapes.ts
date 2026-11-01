@@ -1,8 +1,9 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
 /**
  * L2 (shapes) — parse a SHACL profile into a normalized shape model and produce the
- * SKOLEMIZED shape graph (design §5): every anonymous NodeShape / property shape
+ * normalized shape graph (design §5): every anonymous NodeShape / property shape
  * blank node is promoted to a deterministic named IRI, so the emitted `shapes.ttl`
  * is byte-reproducible (no blank-node label nondeterminism) and the manifest can
  * key stably off it. shapes.ttl is THE STABLE WAIST — everything below it (manifest,
@@ -14,9 +15,12 @@
  * ontologies tighten (design §5).
  */
 
+import { createHash } from "node:crypto";
 import { literalMapper } from "@jeswr/model-runtime";
 import type { Quad, Quad_Object, Quad_Subject, Term } from "@rdfjs/types";
 import { DataFactory } from "n3";
+import { type NormalizedOntology, owlRdfsAdapter } from "./adapter.js";
+import { AdmissionError } from "./admission.js";
 import { Graph, parseTurtle, RDF, RDFS, SH, XSD } from "./rdf.js";
 
 /** A scalar a closed `sh:in` value set may carry (mirrors the manifest's ManifestScalar). */
@@ -28,6 +32,8 @@ export type ShapeKind = "iri" | "literal";
 export interface ShapeConstraint {
   /** `sh:path` — the predicate IRI. */
   pathIri: string;
+  /** Ordered read aliases from sh:alternativePath, excluding the canonical member. */
+  aliasPredicates?: string[];
   /** `sh:name`, if declared. */
   name?: string;
   /** Resolved value kind (from `sh:nodeKind` / `sh:datatype` / `sh:class`). */
@@ -64,12 +70,14 @@ export interface NodeShapeModel {
   iri: string;
   /** `sh:targetClass`. */
   targetClass: string;
+  /** Sorted additional sh:targetClass values; canonical is the unique owl:Class. */
+  aliasTypeIris?: string[];
   /** Property shapes, sorted by path IRI (stable). */
   properties: ShapeConstraint[];
 }
 
 export interface NormalizedShapes {
-  /** The skolemized shape graph — byte-reproducible when serialised. */
+  /** Shape/list nodes skolemized; path roots retain deterministic blank labels (SHACL semantics). */
   quads: Quad[];
   /** Explicit input ontology subclass edges, for checking composite sh:class targets. */
   superClasses?: Record<string, string[]>;
@@ -154,32 +162,121 @@ function resolveKind(nodeKind: string | undefined, datatype: string | undefined)
   return "iri";
 }
 
+function rejectAlias(subject: string, message: string): never {
+  throw new AdmissionError([{ code: "invalid-read-alias", severity: "error", subject, message }]);
+}
+
+/** Only the bounded, flat alternativePath form is supported; all other paths fail closed. */
+function resolvePath(
+  graph: Graph,
+  property: Term,
+  ontology?: NormalizedOntology,
+): {
+  pathIri: string;
+  aliasPredicates?: string[];
+} {
+  const paths = graph.objects(property, `${SH}path`);
+  const path = paths[0];
+  if (paths.length !== 1 || !path) rejectAlias(property.value, "expected exactly one sh:path");
+  if (path.termType === "NamedNode") return { pathIri: path.value };
+  if (path.termType !== "BlankNode") rejectAlias(property.value, "unsupported complex sh:path");
+  const triples = graph.store.getQuads(path, null, null, null);
+  const heads = graph.objects(path, `${SH}alternativePath`);
+  if (triples.length !== 1 || heads.length !== 1 || !heads[0]) {
+    rejectAlias(property.value, "only a flat sh:alternativePath is supported");
+  }
+  const members = rdfList(graph, heads[0]);
+  if (
+    !members ||
+    members.length < 2 ||
+    members.length > 4 ||
+    members.some((m) => m.termType !== "NamedNode")
+  ) {
+    rejectAlias(property.value, "sh:alternativePath requires 2 to 4 IRI members");
+  }
+  const iris = members.map((m) => m.value);
+  if (new Set(iris).size !== iris.length)
+    rejectAlias(property.value, "duplicate alternativePath member");
+  const declared = new Set(ontology?.properties.map((p) => p.iri));
+  const canonical = iris.filter((iri) => declared.has(iri));
+  if (canonical.length !== 1 || !canonical[0]) {
+    rejectAlias(property.value, "alternativePath must contain exactly one ontology property");
+  }
+  return { pathIri: canonical[0], aliasPredicates: iris.filter((iri) => iri !== canonical[0]) };
+}
+
 /**
- * Parse a SHACL profile into a normalized shape model with a skolemized graph.
+ * Parse SHACL into a normalized model. Complex-path roots retain stable blank labels.
  * `shapesBase` is the namespace the skolem IRIs are minted under.
+ * The normalized ontology selects alias canonicals; raw quads supply subclass ancestry.
+ * The legacy third-argument quad form uses the default OWL/RDFS adapter.
  */
 export function parseShapes(
   shapesTtl: string,
   shapesBase: string,
+  ontology?: NormalizedOntology,
+  ontologyQuads?: Quad[],
+): NormalizedShapes;
+export function parseShapes(
+  shapesTtl: string,
+  shapesBase: string,
+  ontologyQuads: Quad[],
+): NormalizedShapes;
+export function parseShapes(
+  shapesTtl: string,
+  shapesBase: string,
+  ontologyOrQuads?: NormalizedOntology | Quad[],
   ontologyQuads: Quad[] = [],
 ): NormalizedShapes {
+  const ontology = Array.isArray(ontologyOrQuads)
+    ? owlRdfsAdapter.adapt(ontologyOrQuads)
+    : ontologyOrQuads;
+  const sourceQuads = Array.isArray(ontologyOrQuads) ? ontologyOrQuads : ontologyQuads;
   const quads = parseTurtle(shapesTtl);
   const graph = new Graph(quads);
 
-  // NodeShapes = subjects carrying sh:targetClass.
-  const nodeShapeSubjects: Array<{ subject: Term; targetClass: string }> = [];
+  // Group targets by SHAPE, never by class: extra targets are read aliases.
+  const subjects = new Map<string, Term>();
   for (const q of graph.store.getQuads(null, `${SH}targetClass`, null, null)) {
-    if (q.object.termType === "NamedNode") {
-      nodeShapeSubjects.push({ subject: q.subject, targetClass: q.object.value });
-    }
+    subjects.set(`${q.subject.termType}:${q.subject.value}`, q.subject);
   }
-  nodeShapeSubjects.sort((a, b) => a.targetClass.localeCompare(b.targetClass));
+  const nodeShapeSubjects = [...subjects.values()]
+    .map((subject) => {
+      const targets = graph.objects(subject, `${SH}targetClass`);
+      if (targets.some((t) => t.termType !== "NamedNode") || targets.length > 5) {
+        rejectAlias(subject.value, "targetClass must be IRIs with at most four aliases");
+      }
+      const iris = targets.map((t) => t.value).sort();
+      if (iris.length === 1) return { subject, targetClass: iris[0] as string };
+      const declared = new Set(
+        ontology?.classes.filter((c) => c.owlClass === true).map((c) => c.iri),
+      );
+      const canonical = iris.filter((iri) => declared.has(iri));
+      if (canonical.length !== 1 || !canonical[0]) {
+        rejectAlias(
+          subject.value,
+          "multiple targetClass values require exactly one ontology owl:Class",
+        );
+      }
+      return {
+        subject,
+        targetClass: canonical[0],
+        aliasTypeIris: iris.filter((iri) => iri !== canonical[0]),
+      };
+    })
+    .sort((a, b) => a.targetClass.localeCompare(b.targetClass));
+  if (new Set(nodeShapeSubjects.map((s) => s.targetClass)).size !== nodeShapeSubjects.length) {
+    rejectAlias(shapesBase, "multiple NodeShapes for one canonical targetClass");
+  }
 
   // Blank-node → skolem IRI map (deterministic from class + path local names).
   const skolem = new Map<string, string>();
+  // SHACL interprets an IRI-valued sh:path as a predicate, regardless of its
+  // outgoing triples. Complex-path roots MUST stay blank, with stable labels.
+  const pathRoots = new Set<string>();
   const nodeShapes: NodeShapeModel[] = [];
 
-  for (const { subject, targetClass } of nodeShapeSubjects) {
+  for (const { subject, targetClass, aliasTypeIris } of nodeShapeSubjects) {
     const classLocal = localName(targetClass);
     const shapeIri = `${shapesBase}${classLocal}Shape`;
     if (subject.termType === "BlankNode") skolem.set(subject.value, shapeIri);
@@ -187,8 +284,9 @@ export function parseShapes(
     const usedPropIris = new Set<string>();
     const properties: ShapeConstraint[] = [];
     for (const propObj of graph.objects(subject, `${SH}property`)) {
-      const pathIri = graph.value(propObj, `${SH}path`);
-      if (pathIri === undefined) continue; // a property shape must name a path
+      const { pathIri, aliasPredicates } = resolvePath(graph, propObj, ontology);
+      const pathRoot = graph.object(propObj, `${SH}path`);
+      if (aliasPredicates && pathRoot?.termType === "BlankNode") pathRoots.add(pathRoot.value);
       const pathLocal = localName(pathIri);
       let propShapeIri = `${shapesBase}${classLocal}-${pathLocal}`;
       let n = 2;
@@ -201,8 +299,9 @@ export function parseShapes(
       const datatype = graph.value(propObj, `${SH}datatype`);
       const constraint: ShapeConstraint = {
         pathIri,
+        ...(aliasPredicates ? { aliasPredicates } : {}),
         kind: resolveKind(nodeKind, datatype),
-        shapeIri: propShapeIri,
+        shapeIri: propObj.termType === "NamedNode" ? propObj.value : propShapeIri,
       };
       const name = graph.value(propObj, `${SH}name`);
       if (name !== undefined) constraint.name = name;
@@ -244,8 +343,21 @@ export function parseShapes(
     nodeShapes.push({
       iri: subject.termType === "NamedNode" ? subject.value : shapeIri,
       targetClass,
+      ...(aliasTypeIris ? { aliasTypeIris } : {}),
       properties,
     });
+  }
+
+  const fields = nodeShapes.flatMap((shape) => shape.properties);
+  const canonicalPredicates = new Set(fields.map((field) => field.pathIri));
+  const aliases = new Set<string>();
+  for (const field of fields) {
+    for (const alias of field.aliasPredicates ?? []) {
+      if (canonicalPredicates.has(alias) || aliases.has(alias)) {
+        rejectAlias(field.shapeIri, "alias overlaps another field predicate or alias");
+      }
+      aliases.add(alias);
+    }
   }
 
   // Any remaining blank nodes (e.g. nested lists) get a deterministic skolem by a
@@ -254,8 +366,8 @@ export function parseShapes(
 
   // Rewrite the graph: replace mapped blank nodes with their skolem IRIs.
   const rewritten: Quad[] = quads.map((q) => {
-    const subject = rewriteTerm(q.subject, skolem);
-    const object = rewriteTerm(q.object, skolem);
+    const subject = rewriteTerm(q.subject, skolem, pathRoots);
+    const object = rewriteTerm(q.object, skolem, pathRoots);
     if (subject === q.subject && object === q.object) return q;
     return DataFactory.quad(
       subject as Quad_Subject,
@@ -264,14 +376,21 @@ export function parseShapes(
     );
   });
 
+  const allowedBlanks = new Set(
+    [...pathRoots].map((id) => stablePathLabel(skolem.get(id) as string)),
+  );
   if (
-    rewritten.some((q) => q.subject.termType === "BlankNode" || q.object.termType === "BlankNode")
+    rewritten.some((q) =>
+      [q.subject, q.object].some(
+        (term) => term.termType === "BlankNode" && !allowedBlanks.has(term.value),
+      ),
+    )
   ) {
     throw new Error("shapes skolemization left an unmapped blank node");
   }
 
   const superClasses: Record<string, string[]> = Object.create(null);
-  for (const q of ontologyQuads) {
+  for (const q of sourceQuads) {
     if (
       q.predicate.value === `${RDFS}subClassOf` &&
       q.subject.termType === "NamedNode" &&
@@ -285,35 +404,55 @@ export function parseShapes(
   return { quads: rewritten, nodeShapes, superClasses };
 }
 
-function rewriteTerm(term: Term, skolem: Map<string, string>): Term {
+function stablePathLabel(iri: string): string {
+  return `path_${createHash("sha256").update(iri).digest("hex")}`;
+}
+
+function rewriteTerm(term: Term, skolem: Map<string, string>, pathRoots: Set<string>): Term {
   if (term.termType === "BlankNode") {
     const iri = skolem.get(term.value);
-    if (iri !== undefined) return DataFactory.namedNode(iri);
+    if (iri !== undefined)
+      return pathRoots.has(term.value)
+        ? DataFactory.blankNode(stablePathLabel(iri))
+        : DataFactory.namedNode(iri);
   }
   return term;
 }
 
 /** Assign deterministic skolem IRIs to any blank node not already mapped. */
 function skolemizeRemaining(quads: Quad[], skolem: Map<string, string>, shapesBase: string): void {
-  const keyOf = new Map<string, string[]>();
-  for (const q of quads) {
-    if (q.subject.termType === "BlankNode" && !skolem.has(q.subject.value)) {
-      const arr = keyOf.get(q.subject.value) ?? [];
-      arr.push(`s ${q.predicate.value} ${q.object.termType}:${q.object.value}`);
-      keyOf.set(q.subject.value, arr);
+  const ids = new Set<string>();
+  for (const q of quads)
+    for (const term of [q.subject, q.object]) {
+      if (term.termType === "BlankNode" && !skolem.has(term.value)) ids.add(term.value);
     }
-    if (q.object.termType === "BlankNode" && !skolem.has(q.object.value)) {
-      const arr = keyOf.get(q.object.value) ?? [];
-      arr.push(`o ${q.subject.termType}:${q.subject.value} ${q.predicate.value}`);
-      keyOf.set(q.object.value, arr);
+  let colors = new Map([...ids].map((id) => [id, "blank"]));
+  const key = (term: Term): string => {
+    if (term.termType === "BlankNode")
+      return skolem.get(term.value) ?? colors.get(term.value) ?? "blank";
+    return JSON.stringify(term);
+  };
+  // Propagate anchored property identities through every RDF-list cell. Hashes keep
+  // the refinement bounded in size; neither blank labels nor input quad order enter it.
+  for (let round = 0; round <= ids.size; round++) {
+    const next = new Map<string, string>();
+    for (const id of ids) {
+      const edges: string[] = [];
+      for (const q of quads) {
+        if (q.subject.termType === "BlankNode" && q.subject.value === id)
+          edges.push(`s ${q.predicate.value} ${key(q.object)}`);
+        if (q.object.termType === "BlankNode" && q.object.value === id)
+          edges.push(`o ${key(q.subject)} ${q.predicate.value}`);
+      }
+      next.set(id, createHash("sha256").update(edges.sort().join("|")).digest("hex"));
     }
+    colors = next;
   }
-  const canonical = [...keyOf.entries()]
-    .map(([id, keys]) => ({ id, key: keys.slice().sort().join("|") }))
-    .sort((a, b) => a.key.localeCompare(b.key));
-  canonical.forEach(({ id }, index) => {
-    skolem.set(id, `${shapesBase}n${index}`);
-  });
+  [...ids]
+    .sort((a, b) => (colors.get(a) as string).localeCompare(colors.get(b) as string))
+    .forEach((id, index) => {
+      skolem.set(id, `${shapesBase}n${index}`);
+    });
 }
 
 /** Whether the graph declares a NodeShape (a `sh:NodeShape` typed subject). */

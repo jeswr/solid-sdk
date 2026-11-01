@@ -10,7 +10,7 @@ const manifest = {
     "major": 0
   },
   "prefixes": {
-    "book": "https://w3id.org/jeswr/bookmark#",
+    "book": "https://jeswr.org/ns/bookmark#",
     "schema": "http://schema.org/",
     "dct": "http://purl.org/dc/terms/",
     "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
@@ -21,6 +21,9 @@ const manifest = {
     {
       "name": "Bookmark",
       "typeIris": [
+        "https://jeswr.org/ns/bookmark#Bookmark"
+      ],
+      "aliasTypeIris": [
         "https://w3id.org/jeswr/bookmark#Bookmark"
       ],
       "subject": {
@@ -89,8 +92,11 @@ const manifest = {
         },
         {
           "name": "archived",
-          "predicate": "https://w3id.org/jeswr/bookmark#archived",
+          "predicate": "https://jeswr.org/ns/bookmark#archived",
           "kind": "literal",
+          "aliasPredicates": [
+            "https://w3id.org/jeswr/bookmark#archived"
+          ],
           "datatype": "http://www.w3.org/2001/XMLSchema#boolean",
           "maxCount": 1,
           "default": false,
@@ -99,8 +105,11 @@ const manifest = {
         },
         {
           "name": "notes",
-          "predicate": "https://w3id.org/jeswr/bookmark#notes",
+          "predicate": "https://jeswr.org/ns/bookmark#notes",
           "kind": "literal",
+          "aliasPredicates": [
+            "https://w3id.org/jeswr/bookmark#notes"
+          ],
           "datatype": "http://www.w3.org/2001/XMLSchema#string",
           "maxCount": 1,
           "guards": {

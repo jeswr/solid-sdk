@@ -77,6 +77,22 @@ export function admit(
   // must have an effective runtime projection; unknown components fail even at
   // advisory severity. This also covers external / orphan / nested shape subjects.
   const graph = new Graph(shapes.quads);
+  const shapeByIri = new Map(shapes.nodeShapes.map((shape) => [shape.iri, shape]));
+  const constraintByIri = new Map(
+    shapes.nodeShapes.flatMap((shape) => shape.properties.map((c) => [c.shapeIri, c] as const)),
+  );
+  // Only complex paths already checked by parseShapes have a runtime projection.
+  // Orphan paths and unsupported sh:* components still fail the closed allowlist.
+  const aliasPathRoots = new Set(
+    shapes.quads
+      .filter(
+        (q) =>
+          q.predicate.value === `${SH}path` &&
+          q.object.termType === "BlankNode" &&
+          (constraintByIri.get(q.subject.value)?.aliasPredicates?.length ?? 0) > 0,
+      )
+      .map((q) => q.object.value),
+  );
   const metadata = new Set(["name", "description", "message", "order", "group", "severity"]);
   const propertyComponents = new Set([
     "path",
@@ -93,6 +109,7 @@ export function admit(
     "node",
   ]);
   const nodeComponents = new Set(["targetClass", "property"]);
+  const aliasPathComponents = new Set(["alternativePath"]);
   const subjects = new Map(
     shapes.quads
       .filter(
@@ -109,9 +126,9 @@ export function admit(
       graph.has(subject, `${RDF}type`, `${SH}PropertyShape`);
     const path = graph.object(subject, `${SH}path`);
     const parent = graph.subjects(`${SH}property`, subject)[0];
-    const tc = parent === undefined ? undefined : graph.value(parent, `${SH}targetClass`);
-    const shape = shapes.nodeShapes.find((candidate) => candidate.targetClass === tc);
-    const c = shape?.properties.find((candidate) => candidate.pathIri === path?.value);
+    const shape = parent === undefined ? undefined : shapeByIri.get(parent.value);
+    const tc = shape?.targetClass;
+    const c = constraintByIri.get(subject.value);
     const name = c?.name ?? path?.value.split(/[/#]/).pop() ?? "";
     const isNested =
       config?.entities.some(
@@ -127,15 +144,31 @@ export function admit(
       if (metadata.has(component)) continue;
       const unsupported = (reason: string, severity: AdmissionSeverity = "error") =>
         add("unsupported-constraint", severity, subject.value, `${q.predicate.value}: ${reason}`);
-      if (!(isProperty ? propertyComponents : nodeComponents).has(component)) {
+      const components = aliasPathRoots.has(subject.value)
+        ? aliasPathComponents
+        : isProperty
+          ? propertyComponents
+          : nodeComponents;
+      if (!components.has(component)) {
         unsupported("no runtime projection");
         continue;
       }
-      if (component !== "property" && graph.objects(subject, q.predicate.value).length !== 1) {
+      const isAliasedTarget =
+        component === "targetClass" &&
+        (shapeByIri.get(subject.value)?.aliasTypeIris?.length ?? 0) > 0;
+      if (
+        component !== "property" &&
+        !isAliasedTarget &&
+        graph.objects(subject, q.predicate.value).length !== 1
+      ) {
         unsupported("multiple constraint parameters cannot be projected");
       }
-      if (component === "path" && q.object.termType !== "NamedNode")
-        unsupported("only direct IRI paths are supported");
+      if (
+        component === "path" &&
+        q.object.termType !== "NamedNode" &&
+        !aliasPathRoots.has(q.object.value)
+      )
+        unsupported("only direct IRI or admitted alternative paths are supported");
       if (component === "nodeKind" && ![`${SH}IRI`, `${SH}Literal`].includes(q.object.value))
         unsupported("only IRI and Literal node kinds are projected");
       if (component === "pattern") {

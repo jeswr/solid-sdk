@@ -1,16 +1,16 @@
-@prefix book: <https://w3id.org/jeswr/bookmark#>.
+@prefix book: <https://jeswr.org/ns/bookmark#>.
 @prefix dct: <http://purl.org/dc/terms/>.
 @prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>.
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.
 @prefix schema: <http://schema.org/>.
 @prefix sh: <http://www.w3.org/ns/shacl#>.
-@prefix shapes: <https://w3id.org/jeswr/bookmark/shapes#>.
+@prefix shapes: <https://jeswr.org/ns/bookmark/shapes#>.
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
 
 shapes:Bookmark-archived sh:datatype xsd:boolean;
     sh:maxCount 1;
     sh:name "archived";
-    sh:path book:archived.
+    sh:path _:path_d3de33b68ea8066a8f87328d9e5818e01742980d00e739b9019b8c52511f1b78.
 shapes:Bookmark-created sh:datatype xsd:dateTime;
     sh:maxCount 1;
     sh:name "created";
@@ -29,7 +29,7 @@ shapes:Bookmark-modified sh:datatype xsd:dateTime;
 shapes:Bookmark-notes sh:datatype xsd:string;
     sh:maxCount 1;
     sh:name "notes";
-    sh:path book:notes.
+    sh:path _:path_2bc2c83be7d6dcdd63a28d90013484c1e511939b4ea3e125666866fdaa2423bf.
 shapes:Bookmark-title sh:datatype xsd:string;
     sh:maxCount 1;
     sh:name "title";
@@ -42,4 +42,14 @@ shapes:Bookmark-url sh:maxCount 1;
     sh:pattern "^https?://".
 shapes:BookmarkShape a sh:NodeShape;
     sh:property shapes:Bookmark-archived, shapes:Bookmark-created, shapes:Bookmark-description, shapes:Bookmark-keywords, shapes:Bookmark-modified, shapes:Bookmark-notes, shapes:Bookmark-title, shapes:Bookmark-url;
-    sh:targetClass book:Bookmark.
+    sh:targetClass book:Bookmark, <https://w3id.org/jeswr/bookmark#Bookmark>.
+shapes:n0 rdf:first <https://w3id.org/jeswr/bookmark#notes>;
+    rdf:rest rdf:nil.
+shapes:n1 rdf:first <https://w3id.org/jeswr/bookmark#archived>;
+    rdf:rest rdf:nil.
+shapes:n2 rdf:first book:notes;
+    rdf:rest shapes:n0.
+shapes:n3 rdf:first book:archived;
+    rdf:rest shapes:n1.
+_:path_2bc2c83be7d6dcdd63a28d90013484c1e511939b4ea3e125666866fdaa2423bf sh:alternativePath shapes:n2.
+_:path_d3de33b68ea8066a8f87328d9e5818e01742980d00e739b9019b8c52511f1b78 sh:alternativePath shapes:n3.

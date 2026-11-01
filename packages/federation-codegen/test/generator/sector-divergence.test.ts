@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 //
 // HONEST P0 FINDING — the fed-vocab bookmarks SECTOR profile diverges from the
@@ -8,37 +9,22 @@
 // the sector aligns to), and this test documents the divergence the sector must
 // close (the §4 ratchet) before it can drive package generation.
 //
-// The sector shape below is a snapshot of
-// solid-federation-vocab/sectors/bookmarks/bookmarks.shacl.ttl (bmsh:BookmarkShape).
+// Read the current workspace sector profile so this comparison cannot go stale.
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { localName, parseShapes } from "../../src/index.js";
 
-const SECTOR_SHAPE = `
-@prefix bmsh:    <https://w3id.org/jeswr/sectors/bookmarks/shapes#> .
-@prefix bookmark:<https://w3id.org/jeswr/sectors/bookmarks#> .
-@prefix sh:      <http://www.w3.org/ns/shacl#> .
-@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
-@prefix dcterms: <http://purl.org/dc/terms/> .
-@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
-@prefix schema:  <http://schema.org/> .
-
-bmsh:BookmarkShape a sh:NodeShape ;
-    sh:targetClass bookmark:Bookmark ;
-    sh:property [ sh:path schema:url ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
-    sh:property [ sh:path dcterms:title ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
-    sh:property [ sh:path bookmark:archived ; sh:datatype xsd:boolean ; sh:maxCount 1 ] ;
-    sh:property [ sh:path bookmark:notes ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
-    sh:property [ sh:path dcterms:description ; sh:datatype xsd:string ; sh:maxCount 1 ] ;
-    sh:property [ sh:path bookmark:hasTag ; sh:class skos:Concept ] .
-`;
-
-const shapes = parseShapes(SECTOR_SHAPE, "https://w3id.org/jeswr/sectors/bookmarks/shapes#");
+const sectorTtl = readFileSync(
+  new URL("../../../solid-federation-vocab/sectors/bookmarks/bookmarks.shacl.ttl", import.meta.url),
+  "utf8",
+);
+const shapes = parseShapes(sectorTtl, "https://jeswr.org/ns/sectors/bookmarks/shapes#");
 const shape = shapes.nodeShapes[0];
 
 describe("fed-vocab bookmarks SECTOR vs the solid-bookmark package contract", () => {
   it("uses a DIFFERENT target class IRI (sectors/bookmarks# vs bookmark#)", () => {
-    expect(shape?.targetClass).toBe("https://w3id.org/jeswr/sectors/bookmarks#Bookmark");
-    expect(shape?.targetClass).not.toBe("https://w3id.org/jeswr/bookmark#Bookmark");
+    expect(shape?.targetClass).toBe("https://jeswr.org/ns/sectors/bookmarks#Bookmark");
+    expect(shape?.targetClass).not.toBe("https://jeswr.org/ns/bookmark#Bookmark");
   });
 
   it("models tags as bookmark:hasTag skos:Concept (IRI), NOT schema:keywords string literals", () => {
@@ -67,4 +53,13 @@ describe("fed-vocab bookmarks SECTOR vs the solid-bookmark package contract", ()
       "url",
     ]);
   });
+});
+
+// The sector still lacks the package's http(s) URL policy and legacy read contract.
+it("does not express the package's URL pattern or legacy type/predicate aliases", () => {
+  expect(
+    shape?.properties.find((p) => p.pathIri === "http://schema.org/url")?.pattern,
+  ).toBeUndefined();
+  expect(shape?.aliasTypeIris).toBeUndefined();
+  expect(shape?.properties.every((p) => p.aliasPredicates === undefined)).toBe(true);
 });

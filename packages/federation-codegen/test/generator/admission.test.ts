@@ -100,8 +100,14 @@ describe("tier-a admission — fail-closed on a broken ontology / profile", () =
 
   it("the bookmark package admits cleanly (a warning for the unbounded tags set is non-blocking)", () => {
     const result = generateModel({
-      ontologyTtl: readFileSync(join(exampleDir, "bookmark.ttl"), "utf8"),
-      shapesTtl: readFileSync(join(exampleDir, "bookmark.shacl.ttl"), "utf8"),
+      ontologyTtl: readFileSync(
+        join(exampleDir, "..", "..", "..", "solid-bookmark", "bookmark.ttl"),
+        "utf8",
+      ),
+      shapesTtl: readFileSync(
+        join(exampleDir, "..", "..", "..", "solid-bookmark", "bookmark.shacl.ttl"),
+        "utf8",
+      ),
       config,
     });
     expect(result.admission.ok).toBe(true);

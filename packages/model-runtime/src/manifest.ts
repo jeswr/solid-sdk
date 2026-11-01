@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
 /**
@@ -27,6 +28,7 @@ const CAP = {
   entities: 64,
   fields_per_entity: 256,
   type_iris_per_entity: 16,
+  aliases: 4,
   prefixes: 256,
   string_len: 4096,
   in_values: 1024,
@@ -72,6 +74,8 @@ export interface ManifestField {
   name: string;
   /** The full predicate IRI. */
   predicate: string;
+  /** Ordered read-only predicates; writes clear these and use `predicate` only. */
+  aliasPredicates?: string[];
   /**
    * The RDF term kind of the value. `iri` / `literal` are FLAT (single-node) fields;
    * `nested` is a COMPOSITE structural link — a single-valued object-property edge from
@@ -108,6 +112,8 @@ export interface ManifestEntity {
   kind?: "flat";
   /** The `rdf:type` IRI(s) this entity is stamped with / recognised by. */
   typeIris: string[];
+  /** Read-only types accepted on read and removed by `mark`. */
+  aliasTypeIris?: string[];
   /** Subject convention: `hash-it` ⇒ `${resourceUrl}#it`; `self` ⇒ `resourceUrl`. */
   subject: { convention: "hash-it" | "self" };
   fields: ManifestField[];
@@ -125,6 +131,8 @@ export interface ManifestNode {
   name: string;
   /** The `rdf:type` IRI(s) this node is stamped with / recognised by. */
   typeIris: string[];
+  /** Read-only types accepted on read and removed by `mark`. */
+  aliasTypeIris?: string[];
   /** The document fragment (e.g. `it`, `track`) — the node IRI is `${resourceUrl}#${fragment}`. */
   fragment: string;
   /** The node's flat (`iri`/`literal`) fields plus its outgoing `nested` link fields. */
@@ -223,6 +231,14 @@ function checkIri(value: unknown, what: string): string {
   return iri;
 }
 
+/** Names used as object keys must not invoke inherited prototype machinery. */
+function checkRecordName(value: unknown, what: string): string {
+  const name = checkString(value, what);
+  if (["__proto__", "constructor", "prototype"].includes(name))
+    fail(`${what} "${name}" is reserved`);
+  return name;
+}
+
 function checkScalar(value: unknown, what: string): ManifestScalar {
   if (typeof value === "string") return checkString(value, what);
   if (typeof value === "boolean") return value;
@@ -255,6 +271,7 @@ const GUARD_KEYS = new Set<string>([
 const FIELD_KEYS = new Set<string>([
   "name",
   "predicate",
+  "aliasPredicates",
   "kind",
   "node",
   "collection",
@@ -267,9 +284,16 @@ const FIELD_KEYS = new Set<string>([
   "in",
   "guards",
 ]);
-const ENTITY_KEYS = new Set<string>(["name", "kind", "typeIris", "subject", "fields"]);
+const ENTITY_KEYS = new Set<string>([
+  "name",
+  "kind",
+  "typeIris",
+  "aliasTypeIris",
+  "subject",
+  "fields",
+]);
 const COMPOSITE_ENTITY_KEYS = new Set<string>(["name", "kind", "root", "nodes"]);
-const NODE_KEYS = new Set<string>(["name", "typeIris", "fragment", "fields"]);
+const NODE_KEYS = new Set<string>(["name", "typeIris", "aliasTypeIris", "fragment", "fields"]);
 const ROOT_KEYS = new Set<string>(["manifestVersion", "runtime", "prefixes", "entities"]);
 
 function isObject(v: unknown): v is Record<string, unknown> {
@@ -350,6 +374,7 @@ function validateNestedField(
   const node = checkString(raw.node, "field.node (required for a nested field)");
   if (!NAME_RE.test(node)) fail(`field.node "${node}" is not a valid node name`);
   for (const forbidden of [
+    "aliasPredicates",
     "datatype",
     "collection",
     "minCount",
@@ -415,6 +440,13 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
   }
 
   const field: ManifestField = { name, predicate, kind };
+  if (raw.aliasPredicates !== undefined) {
+    field.aliasPredicates = validateAliases(
+      raw.aliasPredicates,
+      [predicate],
+      "field.aliasPredicates",
+    );
+  }
   if (collection) field.collection = collection;
   if (datatype) field.datatype = datatype;
 
@@ -485,6 +517,43 @@ function validateField(raw: unknown, seenNames: Set<string>, allowNested = false
   return field;
 }
 
+/** Aliases are bounded absolute http(s) IRIs, never executable paths or names. */
+function validateAliases(raw: unknown, canonical: string[], what: string): string[] {
+  if (!Array.isArray(raw)) fail(`${what} must be an array`);
+  if (raw.length > CAP.aliases) fail(`${what} exceeds the ${CAP.aliases}-alias cap`);
+  const seen = new Set(canonical);
+  return raw.map((value, i) => {
+    const iri = checkIri(value, `${what}[${i}]`);
+    if (
+      !/^https?:\/\//.test(iri) ||
+      /\s/u.test(iri) ||
+      !["http:", "https:"].includes(new URL(iri).protocol)
+    ) {
+      fail(`${what} must contain absolute http(s) IRIs`);
+    }
+    if (seen.has(iri)) fail(`${what} contains a duplicate or canonical IRI`);
+    seen.add(iri);
+    return iri;
+  });
+}
+
+/** No alias may overlap another field's canonical predicate or alias, even across nodes/entities. */
+function validatePredicateAliases(entities: AnyManifestEntity[]): void {
+  const fields = entities.flatMap((entity) =>
+    isCompositeEntity(entity) ? entity.nodes.flatMap((node) => node.fields) : entity.fields,
+  );
+  const canonical = new Set(fields.map((field) => field.predicate));
+  const aliases = new Set<string>();
+  for (const field of fields) {
+    for (const alias of field.aliasPredicates ?? []) {
+      if (canonical.has(alias) || aliases.has(alias)) {
+        fail(`field.aliasPredicates overlaps another field predicate or alias: ${alias}`);
+      }
+      aliases.add(alias);
+    }
+  }
+}
+
 /** Validate a non-empty, capped, control-char-free array of type IRIs. */
 function validateTypeIris(raw: unknown, what: string): string[] {
   if (!Array.isArray(raw) || raw.length === 0) fail(`${what} must be a non-empty array`);
@@ -500,7 +569,7 @@ function validateEntity(raw: Record<string, unknown>): ManifestEntity {
     fail('entity.kind must be "flat" or "composite"');
   }
 
-  const name = checkString(raw.name, "entity.name");
+  const name = checkRecordName(raw.name, "entity.name");
   const typeIris = validateTypeIris(raw.typeIris, "entity.typeIris");
 
   if (!isObject(raw.subject)) fail("entity.subject must be an object");
@@ -518,7 +587,15 @@ function validateEntity(raw: Record<string, unknown>): ManifestEntity {
   const fields = raw.fields.map((f) => validateField(f, seenNames));
 
   // A flat entity carries no `kind` key (byte-compatible with existing manifests).
-  return { name, typeIris, subject: { convention }, fields };
+  return {
+    name,
+    typeIris,
+    ...(raw.aliasTypeIris !== undefined
+      ? { aliasTypeIris: validateAliases(raw.aliasTypeIris, typeIris, "entity.aliasTypeIris") }
+      : {}),
+    subject: { convention },
+    fields,
+  };
 }
 
 // A document fragment must be a bare fragment (no `#` / `/` / whitespace) so the node
@@ -529,7 +606,7 @@ function validateNode(raw: unknown, seenFieldNames: Set<string>): ManifestNode {
   if (!isObject(raw)) fail("composite node must be an object");
   assertKnownKeys(raw, NODE_KEYS, "composite node");
 
-  const name = checkString(raw.name, "node.name");
+  const name = checkRecordName(raw.name, "node.name");
   if (!NAME_RE.test(name)) fail(`node.name "${name}" is not a valid node name`);
 
   const typeIris = validateTypeIris(raw.typeIris, "node.typeIris");
@@ -545,7 +622,15 @@ function validateNode(raw: unknown, seenFieldNames: Set<string>): ManifestNode {
   // object), so the seen-set is shared across all the composite's nodes.
   const fields = raw.fields.map((f) => validateField(f, seenFieldNames, /* allowNested */ true));
 
-  return { name, typeIris, fragment, fields };
+  return {
+    name,
+    typeIris,
+    ...(raw.aliasTypeIris !== undefined
+      ? { aliasTypeIris: validateAliases(raw.aliasTypeIris, typeIris, "node.aliasTypeIris") }
+      : {}),
+    fragment,
+    fields,
+  };
 }
 
 /**
@@ -557,7 +642,7 @@ function validateNode(raw: unknown, seenFieldNames: Set<string>): ManifestNode {
  */
 function validateCompositeEntity(raw: Record<string, unknown>): CompositeManifestEntity {
   assertKnownKeys(raw, COMPOSITE_ENTITY_KEYS, "composite entity");
-  const name = checkString(raw.name, "entity.name");
+  const name = checkRecordName(raw.name, "entity.name");
   const root = checkString(raw.root, "entity.root");
 
   if (!Array.isArray(raw.nodes) || raw.nodes.length === 0) {
@@ -682,6 +767,8 @@ export function validateManifest(input: unknown): ModelManifest {
     seenEntityNames.add(entity.name);
     return entity;
   });
+
+  validatePredicateAliases(entities);
 
   return {
     manifestVersion: MANIFEST_VERSION,

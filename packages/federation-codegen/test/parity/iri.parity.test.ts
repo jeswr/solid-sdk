@@ -1,7 +1,4 @@
-// AUTHORED-BY Claude Opus 4.8
-// PARITY: @jeswr/solid-bookmark's src/iri.test.ts, VERBATIM except the IRI filters
-// are imported from the facade (which re-exports them from @jeswr/model-runtime's
-// guard inventory) rather than the hand-written package.
+// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { describe, expect, it } from "vitest";
 import { httpIriOrUndefined, isHttpIri } from "../../examples/bookmark/facade.js";
 
@@ -29,12 +26,15 @@ describe("isHttpIri — canonical-consistent boolean guard", () => {
   });
 
   it("rejects NON-canonical http(s) strings (the guard agrees with httpIriOrUndefined)", () => {
+    // These parse but normalize, so the RAW string is not a well-formed IRI to
+    // write verbatim — the guard must say false (lock-step with the value filter).
     for (const noncanonical of [
       "http://example.org",
       "  https://example.org/a  ",
       "https://x.org\n",
     ]) {
       expect(isHttpIri(noncanonical)).toBe(false);
+      // ...but httpIriOrUndefined still yields the usable normalized value.
       expect(httpIriOrUndefined(noncanonical)).toBeDefined();
     }
   });
@@ -58,9 +58,13 @@ describe("httpIriOrUndefined — returns the CANONICAL href (whitespace/control 
   });
 
   it("NORMALIZES whitespace/control noise WHATWG URL tolerates, never writing it through", () => {
+    // new URL() strips leading/trailing C0-control+space and some tab/newline,
+    // so the RAW string contains chars illegal inside an RDF IRI. The filter must
+    // return the normalized href, not the raw input (the roborev Medium finding).
     expect(httpIriOrUndefined("  https://example.org/a  ")).toBe("https://example.org/a");
     expect(httpIriOrUndefined("https://example.org/a\n")).toBe("https://example.org/a");
     expect(httpIriOrUndefined("\thttps://example.org")).toBe("https://example.org/");
+    // No returned value ever contains whitespace.
     for (const v of ["  https://x.org ", "https://x.org\t", "\nhttps://x.org\n"]) {
       const out = httpIriOrUndefined(v);
       expect(out).toBeDefined();

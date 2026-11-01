@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
 /**
@@ -44,6 +45,7 @@ import {
 interface FieldProjection {
   name: string;
   predicate: string;
+  aliasPredicates: string;
   kind: "iri" | "literal";
   datatype: string | null;
   minCount: number | null;
@@ -78,6 +80,7 @@ function projectShapes(shapes: NormalizedShapes): Map<string, FieldProjection[]>
       // Fallback MUST match compile's (localName), so an unnamed field agrees.
       name: c.name ?? localName(c.pathIri),
       predicate: c.pathIri,
+      aliasPredicates: JSON.stringify(c.aliasPredicates ?? []),
       kind: c.kind,
       datatype: norm(c.datatype),
       minCount: c.minCount ?? null,
@@ -97,6 +100,7 @@ function projectManifest(manifest: ModelManifest): Map<string, FieldProjection[]
     const fields: FieldProjection[] = entity.fields.map((f) => ({
       name: f.name,
       predicate: f.predicate,
+      aliasPredicates: JSON.stringify(f.aliasPredicates ?? []),
       // A flat entity's fields are only iri/literal (the runtime rejects a `nested`
       // field outside a composite), so this narrowing cast is always sound.
       kind: f.kind as "iri" | "literal",
@@ -115,6 +119,7 @@ function diffField(a: FieldProjection, b: FieldProjection): string[] {
   const diffs: string[] = [];
   for (const key of [
     "name",
+    "aliasPredicates",
     "kind",
     "datatype",
     "minCount",
@@ -128,8 +133,26 @@ function diffField(a: FieldProjection, b: FieldProjection): string[] {
   return diffs;
 }
 
+/** Alias types trace exactly to the extra targetClasses, in both directions. */
+function assertTypeAliases(
+  shape: { targetClass: string; aliasTypeIris?: string[] },
+  node: { typeIris: string[]; aliasTypeIris?: string[] },
+): void {
+  if (
+    JSON.stringify(node.typeIris) !== JSON.stringify([shape.targetClass]) ||
+    JSON.stringify(node.aliasTypeIris ?? []) !== JSON.stringify(shape.aliasTypeIris ?? [])
+  ) {
+    throw new FidelityError(`type alias mismatch for ${shape.targetClass}`);
+  }
+}
+
 /** (a) Structural projection equality — the core fidelity check. */
 function assertStructural(shapes: NormalizedShapes, manifest: ModelManifest): void {
+  for (const entity of manifest.entities) {
+    if (isCompositeEntity(entity)) continue;
+    const shape = shapes.nodeShapes.find((s) => entity.typeIris.includes(s.targetClass));
+    if (shape) assertTypeAliases(shape, entity);
+  }
   const shapeProj = projectShapes(shapes);
   const manifestProj = projectManifest(manifest);
 
@@ -365,6 +388,7 @@ function assertCompositeFidelity(
         `composite ${composite.name} node "${node.name}" has no shape for target class ${targetClass}`,
       );
     }
+    assertTypeAliases(shape, node);
     const constraintByPred = new Map(shape.properties.map((c) => [c.pathIri, c] as const));
     const coveredPreds = new Set<string>();
 
@@ -378,6 +402,9 @@ function assertCompositeFidelity(
       coveredPreds.add(field.predicate);
 
       if (field.kind === "nested") {
+        if (field.aliasPredicates !== undefined || constraint.aliasPredicates !== undefined) {
+          throw new FidelityError("read aliases are not supported on nested links");
+        }
         // A nested link may only map an IRI-valued (object-property) shape property.
         if (constraint.kind !== "iri") {
           throw new FidelityError(
@@ -429,6 +456,7 @@ function assertCompositeFidelity(
       const shapeProj: FieldProjection = {
         name: field.name,
         predicate: constraint.pathIri,
+        aliasPredicates: JSON.stringify(constraint.aliasPredicates ?? []),
         kind: constraint.kind,
         datatype: norm(constraint.datatype),
         minCount: constraint.minCount ?? null,
@@ -439,6 +467,7 @@ function assertCompositeFidelity(
       const manifestProj: FieldProjection = {
         name: field.name,
         predicate: field.predicate,
+        aliasPredicates: JSON.stringify(field.aliasPredicates ?? []),
         kind: field.kind,
         datatype: norm(field.datatype),
         minCount: field.minCount ?? null,
@@ -464,6 +493,9 @@ function assertCompositeFidelity(
 
     // MUST-coverage — every presence-MUST property of the node must be projected.
     for (const constraint of shape.properties) {
+      if (constraint.aliasPredicates !== undefined && !coveredPreds.has(constraint.pathIri)) {
+        throw new FidelityError(`composite omits aliased property ${constraint.pathIri}`);
+      }
       if (isPresenceMust(constraint) && !coveredPreds.has(constraint.pathIri)) {
         throw new FidelityError(
           `composite ${composite.name} node "${node.name}" omits the Violation-graded MUST property ${constraint.pathIri}`,

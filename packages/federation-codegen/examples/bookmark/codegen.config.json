@@ -1,7 +1,7 @@
 {
-  "shapesBase": "https://w3id.org/jeswr/bookmark/shapes#",
+  "shapesBase": "https://jeswr.org/ns/bookmark/shapes#",
   "prefixes": {
-    "book": "https://w3id.org/jeswr/bookmark#",
+    "book": "https://jeswr.org/ns/bookmark#",
     "schema": "http://schema.org/",
     "dct": "http://purl.org/dc/terms/",
     "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
@@ -10,7 +10,7 @@
   },
   "entities": [
     {
-      "targetClass": "https://w3id.org/jeswr/bookmark#Bookmark",
+      "targetClass": "https://jeswr.org/ns/bookmark#Bookmark",
       "name": "Bookmark",
       "subject": { "convention": "hash-it" },
       "fields": {

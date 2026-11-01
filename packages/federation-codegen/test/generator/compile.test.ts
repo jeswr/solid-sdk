@@ -7,7 +7,9 @@ import {
   type CodegenConfig,
   compileManifest,
   isCompositeConfig,
+  owlRdfsAdapter,
   parseShapes,
+  parseTurtle,
 } from "../../src/index.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -16,8 +18,13 @@ const baseConfig = JSON.parse(
   readFileSync(join(exampleDir, "codegen.config.json"), "utf8"),
 ) as CodegenConfig;
 const shapes = parseShapes(
-  readFileSync(join(exampleDir, "bookmark.shacl.ttl"), "utf8"),
+  readFileSync(join(exampleDir, "..", "..", "..", "solid-bookmark", "bookmark.shacl.ttl"), "utf8"),
   baseConfig.shapesBase,
+  owlRdfsAdapter.adapt(
+    parseTurtle(
+      readFileSync(join(exampleDir, "..", "..", "..", "solid-bookmark", "bookmark.ttl"), "utf8"),
+    ),
+  ),
 );
 
 describe("compileManifest — config validation", () => {

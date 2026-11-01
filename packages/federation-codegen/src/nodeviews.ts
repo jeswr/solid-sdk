@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Fable
 /**
  * COMPOSITE PER-NODE VIEWS — derive, from a compiled (fidelity-asserted) manifest,
@@ -118,6 +119,7 @@ export function deriveNodeViews(manifest: ModelManifest): NodeViews | undefined 
       viewEntities.push({
         name: viewName,
         typeIris: [...node.typeIris],
+        ...(node.aliasTypeIris ? { aliasTypeIris: [...node.aliasTypeIris] } : {}),
         // Schema-required placeholder — unused (see the module doc): only the view's
         // Wrapper is surfaced; the emitted handle carries the fragment-correct subject.
         subject: { convention: "hash-it" },

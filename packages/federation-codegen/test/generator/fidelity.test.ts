@@ -8,7 +8,9 @@ import {
   type CodegenConfig,
   compileManifest,
   FidelityError,
+  owlRdfsAdapter,
   parseShapes,
+  parseTurtle,
 } from "../../src/index.js";
 import { flat } from "../helpers.js";
 
@@ -19,8 +21,13 @@ const config = JSON.parse(
   readFileSync(join(exampleDir, "codegen.config.json"), "utf8"),
 ) as CodegenConfig;
 const shapes = parseShapes(
-  readFileSync(join(exampleDir, "bookmark.shacl.ttl"), "utf8"),
+  readFileSync(join(exampleDir, "..", "..", "..", "solid-bookmark", "bookmark.shacl.ttl"), "utf8"),
   config.shapesBase,
+  owlRdfsAdapter.adapt(
+    parseTurtle(
+      readFileSync(join(exampleDir, "..", "..", "..", "solid-bookmark", "bookmark.ttl"), "utf8"),
+    ),
+  ),
 );
 
 describe("fidelity assertion (the P0 exit criterion)", () => {

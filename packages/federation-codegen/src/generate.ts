@@ -89,7 +89,7 @@ export function generateModel(input: GenerateInput): GenerateResult {
   const ontology = adapter.adapt(ontologyQuads);
 
   // [L2] parse + skolemize the SHACL profile (the stable waist).
-  const shapes = parseShapes(input.shapesTtl, input.config.shapesBase, ontologyQuads);
+  const shapes = parseShapes(input.shapesTtl, input.config.shapesBase, ontology, ontologyQuads);
 
   // [L1] tier-a admission (fail-closed unless explicitly demonstrating a gap).
   const namespace = input.admissionNamespace ?? ontology.namespace ?? "";

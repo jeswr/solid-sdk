@@ -16,8 +16,14 @@ const exampleDir = join(here, "..", "examples", "bookmark");
 const outDir = join(exampleDir, "generated");
 
 const input = {
-  ontologyTtl: readFileSync(join(exampleDir, "bookmark.ttl"), "utf8"),
-  shapesTtl: readFileSync(join(exampleDir, "bookmark.shacl.ttl"), "utf8"),
+  ontologyTtl: readFileSync(
+    join(exampleDir, "..", "..", "..", "solid-bookmark", "bookmark.ttl"),
+    "utf8",
+  ),
+  shapesTtl: readFileSync(
+    join(exampleDir, "..", "..", "..", "solid-bookmark", "bookmark.shacl.ttl"),
+    "utf8",
+  ),
   config: JSON.parse(readFileSync(join(exampleDir, "codegen.config.json"), "utf8")),
 };
 

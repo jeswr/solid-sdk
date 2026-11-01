@@ -12,7 +12,10 @@ const exampleDir = join(here, "..", "..", "examples", "bookmark");
 const generatedDir = join(exampleDir, "generated");
 
 function readExample(name: string): string {
-  return readFileSync(join(exampleDir, name), "utf8");
+  const dir = name.endsWith(".ttl")
+    ? join(exampleDir, "..", "..", "..", "solid-bookmark")
+    : exampleDir;
+  return readFileSync(join(dir, name), "utf8");
 }
 function readGenerated(name: string): string {
   return readFileSync(join(generatedDir, name), "utf8");

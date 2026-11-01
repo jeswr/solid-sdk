@@ -73,6 +73,35 @@ The manifest schema (`ModelManifest`) and `validateManifest` are exported for th
 tooling. The IRI filters (`httpIriOrUndefined`, `isHttpIri`, `sanitizeText`, `tryRead`) are exported so
 consumers migrating off a hand-written package keep the exact filter behaviour.
 
+## Read-only IRI aliases
+
+A flat entity or composite **node** may declare `aliasTypeIris: string[]`; a flat field
+may declare `aliasPredicates: string[]`. Both keys are optional, contain at most four
+**distinct, Turtle-safe absolute http(s) IRIs**, and exclude their canonical `typeIris` / `predicate`.
+Predicate aliases cannot overlap any field's canonical predicate or another alias anywhere
+in the manifest. `nested` structural links reject `aliasPredicates`, even an empty array.
+Aliases do not bypass the reserved-name or unknown-key checks.
+
+- Singleton getters and `parse` apply the normal field guards to the canonical predicate
+  first, then each alias **in array order**, stopping at the first defined value. `false`,
+  `0`, and `""` win over aliases. Each predicate checks distinct raw terms and `maxCount`
+  before strict mapping; ambiguity or a cardinality violation drops the field without alias
+  fallback (and rejects a required record). Defaults apply only when **all** predicates are absent; invalid present
+  values cannot be masked by defaults. Reads do not mutate the dataset.
+- Sets read the guarded, deduplicated union (Dates compare by instant). Their mutations
+  migrate surviving members to the canonical predicate and remove alias triples. Parse checks
+  raw-union `maxCount` (including malformed terms) and guarded-union `minCount`.
+- Type checks accept canonical or alias types. `mark()` removes alias types, adds the
+  canonical types, and preserves unrelated types. Builds and setters write canonical
+  predicates only; every setter, including `undefined` or an invalid value, clears all
+  alias triples for its field.
+- `serialize` and `storeToTurtle` emit canonical field/type IRIs. `storeToTurtle` migrates
+  known aliases in a copy, applying the same value guards and write sanitisation, without
+  mutating its input. Prefixes advertising alias namespaces are omitted.
+
+The generator derives aliases exclusively from explicit extra `sh:targetClass` values and
+bounded `sh:alternativePath` lists. Vocabulary alignment annotations never grant aliases.
+
 ## Composite (document-projection) entities
 
 A `kind: "composite"` entity models ONE flat object projected across SEVERAL connected RDF nodes of

@@ -27,7 +27,7 @@ For each `sh:NodeShape` in a domain's SHACL profile:
 | `model.d.ts` | Types only — precise `Data` / `Wrapper` / `Entity` interfaces. Zero runtime code. |
 | `model.json` | The compiled shape-manifest — a **fidelity-asserted verified projection of `shapes.ttl`**, never a bespoke schema (§7.2). |
 | `model.js` | A **fixed-template shim** — imports `@jeswr/model-runtime`, inlines the manifest, calls `defineModel`. Bytes vary only in the JSON. For a composite it also inlines the derived per-node view manifest + index and exports `nodes` (see below). |
-| `shapes.ttl` | The **skolemized, byte-reproducible** SHACL shape — the stable waist (§5). |
+| `shapes.ttl` | The **byte-reproducible** SHACL shape (shape/list nodes skolemized; complex-path roots retain deterministic blank labels) — the stable waist (§5). |
 | `codegen-manifest.json` / `codegen.lock.json` | Input/output sha256s + adapter + runtime pins; the Mode-A lockfile (fail-closed on input drift). |
 
 ## Pipeline
@@ -36,7 +36,7 @@ For each `sh:NodeShape` in a domain's SHACL profile:
 ontology (OWL/RDFS) + SHACL profile + codegen config
   └─[L0] ontology-input adapter (swappable seam; V1 = owl-rdfs-v1)
   └─[L1] tier-a admission (fail-closed): labels+definitions, domain/range-or-waiver, SHACL coverage
-  └─[L2] parse + SKOLEMIZE the SHACL profile  → shapes.ttl (byte-reproducible)
+  └─[L2] parse + normalize the SHACL profile → shapes.ttl (byte-reproducible)
   └─     compile manifest (shape-derived + config-supplied guards)
   └─     FIDELITY ASSERTION (P0 exit) — model.json ↔ shapes.ttl, order-independent, fails on mismatch
   └─     emit model.d.ts / model.json / model.js
@@ -62,13 +62,15 @@ ontology (OWL/RDFS) + SHACL profile + codegen config
 ## The bookmarks pilot + the parity bar
 
 `examples/bookmark/` generates the `@jeswr/solid-bookmark` model from that package's own ontology +
-SHACL profile (the detailed `book:` vocabulary the fed-vocab bookmarks *sector* aligns to). The
+SHACL profile, read directly from `../solid-bookmark/bookmark{,.shacl}.ttl` (the detailed
+`book:` vocabulary the fed-vocab bookmarks *sector* aligns to). Stale pilot copies are not kept. The
 package's **unmodified** test suite runs against the generated wrapper via a thin facade
-(`examples/bookmark/facade.ts`) — the parity bar. **Result: 42/42 of solid-bookmark's suite passes**
-against the generated model (`test/parity/`): 18 model tests, 7 IRI-filter tests, 6 vocab tests, and
-11 SHACL-conformance tests (the generated model's output validated against the generated `shapes.ttl`
-via `rdf-validate-shacl`). Every test is genuinely mechanical/accessor logic — nothing in
-solid-bookmark falls outside what generation covers, which is why it is the pilot.
+(`examples/bookmark/facade.ts`) — the parity bar. **Result: 78/78 of the current solid-bookmark suite passes**
+against the generated model (`test/parity/`), including dual-namespace reads and adversarial
+SHACL alias tests. The four oracle files are copied verbatim except imports. SHACL tests use
+the same workspace RDF engine as the source package, imported through its built relative path
+in this test harness (no new dependency); they validate the generated `shapes.ttl`. The facade adapts the public
+exports and artifact readers; it contains no alias behavior.
 
 > **Snapshot caveat (Nov 2026).** The 42/42 result is against the July 2026 copy of solid-bookmark
 > (legacy `https://w3id.org/jeswr/bookmark#` namespace), vendored in `examples/bookmark/`. The
@@ -77,9 +79,43 @@ solid-bookmark falls outside what generation covers, which is why it is the pilo
 > Re-establishing it is bead sst-ild.4.2 (legacy-IRI read aliases) and sst-ild.7.1 (the flip).
 
 `test/generator/sector-divergence.test.ts` documents (honestly) why the fed-vocab **sector** profile
-cannot yet drive this generation: it uses a different class IRI, models tags as `bookmark:hasTag`
-`skos:Concept` (not `schema:keywords` literals), and omits `dct:created`/`dct:modified` — the §4
-ratchet the sector must close first.
+cannot yet drive this generation: it uses `https://jeswr.org/ns/sectors/bookmarks#Bookmark` instead of the package's
+`https://jeswr.org/ns/bookmark#Bookmark`, models tags as `bookmark:hasTag`
+`skos:Concept` (not `schema:keywords` literals), omits `dct:created`/`dct:modified`, and lacks
+the package's URL scheme pattern and legacy aliases. The test reads the actual
+workspace sector profile; these are the §4 ratchet gaps the sector must close first.
+
+## Shape-derived read aliases
+
+No config or `skos:closeMatch` / `skos:exactMatch` annotation grants a read alias.
+
+- One NodeShape can have several `sh:targetClass` IRIs when exactly one is explicitly
+  declared `owl:Class` in the ontology. It becomes the canonical `typeIris` member; extra
+  targets become sorted `aliasTypeIris` (at most four). Zero or several declared OWL
+  classes, non-IRI targets, and duplicate canonical shapes fail admission. A single target
+  retains the existing OWL/RDFS behavior.
+- `sh:path [ sh:alternativePath ( p1 … pn ) ]` accepts 2–4 distinct IRI members when exactly
+  one is declared as a property by the ontology adapter. That member becomes `predicate`;
+  the remaining members become ordered `aliasPredicates`. Malformed/cyclic lists, blank
+  or nested members, all other complex paths, ambiguous ownership, and aliases overlapping
+  any other field's canonical or alias predicate fail admission.
+- Fidelity compares both alias keys exactly against the normalized shapes in both
+  directions, including order. Adding, removing, exchanging, or reordering manifest aliases
+  fails the build. Composite nodes and derived node views preserve these keys; aliases on
+  structural `nested` links are explicitly rejected, and aliased shape fields cannot be
+  omitted from a composite projection.
+- The runtime checks alias caps, distinctness, and absolute http(s) IRIs. Singleton reads
+  try the guarded canonical predicate before ordered aliases; sets read a guarded union.
+  Writes remove aliases and use canonical IRIs only.
+
+`parseShapes(ttl, shapesBase, ontology?, ontologyQuads?)` uses the adapter's normalized ontology
+to resolve aliases and raw ontology quads to check composite subclass ancestry. `generateModel`
+supplies both automatically; the legacy third-argument quad form uses the OWL/RDFS adapter.
+Shapes stay deterministic
+under triple permutation and blank-node relabelling. SHACL complex-path roots **remain blank
+nodes with deterministic labels**: turning one into an IRI would change its meaning to a
+predicate path and silently lose the constraints. Shape nodes and RDF-list cells are skolemized.
+Hash artifacts intentionally retain hashes of the original input bytes.
 
 ## Composite (document-projection) entities
 

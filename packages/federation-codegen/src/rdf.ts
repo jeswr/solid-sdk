@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 /**
  * RDF helpers for the generator: parse Turtle with the suite parser (`n3.Parser`),
@@ -62,7 +63,7 @@ export class Graph {
   }
 }
 
-/** Canonical string form of a term (for stable ordering; no blank nodes expected). */
+/** Canonical term key; any path-root blank nodes already have deterministic labels. */
 function termKey(term: Term): string {
   switch (term.termType) {
     case "NamedNode":
@@ -89,8 +90,8 @@ export function compareQuads(a: Quad, b: Quad): number {
 
 /**
  * Serialise quads to Turtle DETERMINISTICALLY: quads are sorted by canonical key
- * and prefixes emitted in sorted order, so (given a blank-node-free graph — the
- * skolemization pass guarantees this) the output is byte-reproducible regardless
+ * and prefixes emitted in sorted order, so (given skolemized nodes and stable
+ * blank labels for complex-path roots) output is byte-reproducible regardless
  * of input quad order. Uses `n3.Writer` (never a bespoke serializer).
  */
 export function serializeCanonicalTurtle(

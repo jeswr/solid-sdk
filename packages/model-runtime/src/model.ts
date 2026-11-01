@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
 /**
@@ -354,51 +355,40 @@ function makeGuardedSet(
   return guarded;
 }
 
-/** Whether the predicate carries at least one object quad on `doc` (raw presence). */
-function predicatePresent(doc: TermWrapper, predicate: string): boolean {
-  const pred = doc.factory.namedNode(predicate);
-  for (const _q of doc.dataset.match(doc as unknown as Term, pred, null, null)) return true;
-  return false;
-}
-
 /** Read a single (non-set) field's value, applying read-side guards, fail-closed. */
 function readSingle(doc: TermWrapper, plan: FieldPlan): unknown {
   const { field, mapper } = plan;
-  // Count DISTINCT RDF terms, including malformed terms, before selecting any value.
-  let object: Term | undefined;
-  for (const candidate of matchObjects(
-    doc.dataset,
-    doc as unknown as Term,
-    doc.factory.namedNode(field.predicate),
-  )) {
-    if (object !== undefined && !object.equals(candidate)) return undefined;
-    object = candidate;
-  }
-  if (object !== undefined && field.maxCount === 0) return undefined;
-  const raw =
-    object === undefined
-      ? undefined
-      : tryRead(() => mapper.as(new TermWrapper(object, doc.dataset, doc.factory)));
-  // Normalise through the field's value filter — the http(s) scheme filter for an
-  // IRI field, else the datatype lexical/numeric validity — THEN the scalar guards
-  // (numeric range / string length). Both categories apply even to an IRI field
-  // that carries a scalar guard (e.g. minLength), fail-closed.
   const normalise = (v: unknown): unknown =>
     hasIriSchemeGuard(field)
       ? applyScalarGuards(field, fieldIri(field, v))
       : applyScalarGuards(field, applyDatatypeValidity(mapper, v));
-  // A configured default is applied ONLY when the predicate is genuinely ABSENT. A
-  // PRESENT value that is unreadable (the mapper threw ⇒ raw undefined) or fails
-  // normalisation reads as undefined (fail-closed) — it is NOT masked by the default,
-  // and it still triggers requiredFailClosed. The default itself is normalised too.
-  if (!predicatePresent(doc, field.predicate)) {
-    return field.default !== undefined ? normalise(field.default) : undefined;
+  let present = false;
+  for (const predicate of [field.predicate, ...(field.aliasPredicates ?? [])]) {
+    // Count DISTINCT raw RDF terms per predicate, including malformed terms, before
+    // mapping. Ambiguity/cardinality violations drop the field WITHOUT alias fallback.
+    let object: Term | undefined;
+    for (const candidate of matchObjects(
+      doc.dataset,
+      doc as unknown as Term,
+      doc.factory.namedNode(predicate),
+    )) {
+      if (object !== undefined && !object.equals(candidate)) return undefined;
+      object = candidate;
+    }
+    if (object === undefined) continue;
+    present = true;
+    if (field.maxCount === 0) return undefined;
+    const raw = tryRead(() => mapper.as(new TermWrapper(object, doc.dataset, doc.factory)));
+    const value = normalise(raw);
+    // Undefined alone triggers fallback: false, zero and the empty string win.
+    if (value !== undefined) return value;
   }
-  return normalise(raw);
+  // A present but malformed value must never be masked by a configured default.
+  return !present && field.default !== undefined ? normalise(field.default) : undefined;
 }
 
 /** Live set for a set field (mutations write through @rdfjs/wrapper's SetFrom). */
-function fieldSet(doc: TermWrapper, plan: FieldPlan): Set<unknown> {
+function predicateSet(doc: TermWrapper, plan: FieldPlan): Set<unknown> {
   const { field, mapper } = plan;
   const base = SetFrom.subjectPredicate(
     doc,
@@ -410,9 +400,98 @@ function fieldSet(doc: TermWrapper, plan: FieldPlan): Set<unknown> {
   return makeGuardedSet(doc, field.predicate, base as Set<unknown>, field, mapper);
 }
 
+/** Delete raw alias quads too, including malformed values a mapper would drop. */
+function clearAliases(doc: TermWrapper, field: ManifestField): void {
+  for (const alias of field.aliasPredicates ?? []) {
+    const predicate = doc.factory.namedNode(alias);
+    for (const quad of doc.dataset.match(doc as unknown as Term, predicate, null, null)) {
+      doc.dataset.delete(quad);
+    }
+  }
+}
+
+/** A live union of guarded predicate sets; every mutation migrates retained values. */
+function fieldSet(doc: TermWrapper, plan: FieldPlan): Set<unknown> {
+  const canonical = predicateSet(doc, plan);
+  const aliases = plan.field.aliasPredicates ?? [];
+  if (aliases.length === 0) return canonical;
+  const sets = [
+    canonical,
+    ...aliases.map((predicate) =>
+      predicateSet(doc, {
+        ...plan,
+        field: { ...plan.field, predicate },
+      }),
+    ),
+  ];
+  const members = (): unknown[] => {
+    const out: unknown[] = [];
+    for (const set of sets)
+      for (const value of set) {
+        if (!out.some((other) => sameValueZero(other, value))) out.push(value);
+      }
+    return out;
+  };
+  const migrate = (values: unknown[]): void => {
+    clearAliases(doc, plan.field);
+    canonical.clear();
+    // Reuse the build path for sanitisation and datatype/scalar/scheme guards.
+    for (const value of values)
+      writeFlatField(
+        doc,
+        { ...plan, field: { ...plan.field, aliasPredicates: undefined } },
+        { [plan.field.name]: [value] },
+      );
+  };
+  const union: Set<unknown> = {
+    add(value) {
+      migrate([...members(), value]);
+      return union;
+    },
+    delete(value) {
+      const all = members();
+      const normalized = hasIriSchemeGuard(plan.field)
+        ? fieldIri(plan.field, value)
+        : applyDatatypeValidity(plan.mapper, value);
+      const retained = all.filter((member) => !sameValueZero(member, normalized));
+      migrate(retained);
+      return retained.length !== all.length;
+    },
+    clear() {
+      migrate([]);
+    },
+    has(value) {
+      return sets.some((set) => set.has(value));
+    },
+    forEach(callback, thisArg?) {
+      for (const value of members()) callback.call(thisArg, value, value, union);
+    },
+    keys() {
+      return members()[Symbol.iterator]();
+    },
+    values() {
+      return members()[Symbol.iterator]();
+    },
+    entries() {
+      return members()
+        .map((value) => [value, value] as [unknown, unknown])
+        [Symbol.iterator]();
+    },
+    [Symbol.iterator]() {
+      return members()[Symbol.iterator]();
+    },
+    get size() {
+      return members().length;
+    },
+    [Symbol.toStringTag]: "Set",
+  } as Set<unknown>;
+  return union;
+}
+
 /** Write a single (non-set) field's value, applying write-side guards, fail-closed. */
 function writeSingle(doc: TermWrapper, plan: FieldPlan, value: unknown): void {
   const { field, mapper } = plan;
+  clearAliases(doc, field);
   let v = value;
   if (field.kind === "iri") {
     // An IRI value must be a string; the scheme filter (when present) also
@@ -463,7 +542,11 @@ function subjectIri(convention: "hash-it" | "self", resourceUrl: string): string
  * single field). Shared by the flat entity and by every composite node — so a node's
  * flat fields go through the exact same audited read/write path as a flat entity's.
  */
-function makeWrapperClass(typeIris: string[], plans: FieldPlan[]): EntityWrapperConstructor {
+function makeWrapperClass(
+  typeIris: string[],
+  plans: FieldPlan[],
+  aliasTypeIris: string[] = [],
+): EntityWrapperConstructor {
   class Wrapper extends TermWrapper {
     get id(): string {
       return this.value;
@@ -473,10 +556,11 @@ function makeWrapperClass(typeIris: string[], plans: FieldPlan[]): EntityWrapper
     }
     get isInstance(): boolean {
       const types = this.types;
-      return typeIris.some((t) => types.has(t));
+      return [...typeIris, ...aliasTypeIris].some((t) => types.has(t));
     }
     mark(): this {
       const types = this.types;
+      for (const t of aliasTypeIris) types.delete(t);
       for (const t of typeIris) types.add(t);
       return this;
     }
@@ -552,21 +636,23 @@ function writeFlatField(doc: TermWrapper, plan: FieldPlan, data: EntityData): vo
   writeSingle(doc, plan, v);
 }
 
-/** SHACL counts distinct RDF terms, including terms whose mapper later drops them. */
+/** SHACL counts distinct raw RDF terms across the canonical/alias union, even invalid terms. */
 function exceedsMaximum(doc: TermWrapper, field: ManifestField): boolean {
   if (field.maxCount === undefined) return false;
   const seen = new Set<string>();
-  for (const term of matchObjects(
-    doc.dataset,
-    doc as unknown as Term,
-    doc.factory.namedNode(field.predicate),
-  )) {
-    const key =
-      term.termType === "Literal"
-        ? JSON.stringify([term.termType, term.value, term.language, term.datatype.value])
-        : JSON.stringify([term.termType, term.value]);
-    seen.add(key);
-    if (seen.size > field.maxCount) return true;
+  for (const predicate of [field.predicate, ...(field.aliasPredicates ?? [])]) {
+    for (const term of matchObjects(
+      doc.dataset,
+      doc as unknown as Term,
+      doc.factory.namedNode(predicate),
+    )) {
+      const key =
+        term.termType === "Literal"
+          ? JSON.stringify([term.termType, term.value, term.language, term.datatype.value])
+          : JSON.stringify([term.termType, term.value]);
+      seen.add(key);
+      if (seen.size > field.maxCount) return true;
+    }
   }
   return false;
 }
@@ -611,6 +697,55 @@ function writeIriLink(doc: TermWrapper, predicate: string, targetIri: string): v
   );
 }
 
+/** Canonicalise known aliases in a COPY; serialising never mutates the caller's store. */
+function canonicalizeAliases(store: Store, manifest: ModelManifest, factory: DataFactory): Store {
+  const output = new Store([...store]);
+  const nodes = manifest.entities.flatMap<ManifestEntity | ManifestNode>((entity) =>
+    isCompositeEntity(entity) ? entity.nodes : [entity],
+  );
+  for (const node of nodes) {
+    for (const field of node.fields) {
+      if (!field.aliasPredicates?.length) continue;
+      const subjects = new Map<string, Term>();
+      for (const alias of field.aliasPredicates) {
+        for (const quad of output.getQuads(null, alias, null, null)) {
+          subjects.set(`${quad.subject.termType}:${quad.subject.value}`, quad.subject);
+        }
+      }
+      const plan = planField(field);
+      for (const subject of subjects.values()) {
+        const doc = new TermWrapper(subject, output, factory);
+        if (field.collection === "set") {
+          const members = [...fieldSet(doc, plan)];
+          clearAliases(doc, field);
+          predicateSet(doc, plan).clear();
+          writeFlatField(
+            doc,
+            { ...plan, field: { ...field, aliasPredicates: undefined } },
+            { [field.name]: members },
+          );
+        } else {
+          writeSingle(doc, plan, readSingle(doc, plan));
+        }
+      }
+    }
+    for (const alias of node.aliasTypeIris ?? []) {
+      for (const quad of output.getQuads(null, RDF_TYPE, alias, null)) {
+        const doc = new TermWrapper(quad.subject, output, factory);
+        const types = SetFrom.subjectPredicate(
+          doc,
+          RDF_TYPE,
+          NamedNodeAs.string,
+          NamedNodeFrom.string,
+        );
+        types.delete(alias);
+        for (const type of node.typeIris) types.add(type);
+      }
+    }
+  }
+  return output;
+}
+
 /** Assemble the shared serialize / storeToTurtle / parseDocument members over build + parse. */
 function assembleEntity(
   core: {
@@ -621,11 +756,25 @@ function assembleEntity(
     build: (resourceUrl: string, data: EntityData) => Store;
     parse: (resourceUrl: string, dataset: DatasetCore) => EntityData | undefined;
   },
-  prefixes: Record<string, string>,
+  manifest: ModelManifest,
+  factory: DataFactory,
 ): ModelEntity {
   const storeToTurtle = (store: Store): Promise<string> => {
-    const writer = new Writer({ prefixes: { ...prefixes } });
-    writer.addQuads([...store]);
+    const aliases = manifest.entities
+      .flatMap<ManifestEntity | ManifestNode>((entity) =>
+        isCompositeEntity(entity) ? entity.nodes : [entity],
+      )
+      .flatMap((node) => [
+        ...(node.aliasTypeIris ?? []),
+        ...node.fields.flatMap((field) => field.aliasPredicates ?? []),
+      ]);
+    const prefixes = Object.fromEntries(
+      Object.entries(manifest.prefixes).filter(
+        ([, iri]) => !aliases.some((alias) => alias.startsWith(iri)),
+      ),
+    );
+    const writer = new Writer({ prefixes });
+    writer.addQuads([...canonicalizeAliases(store, manifest, factory)]);
     return new Promise<string>((resolve, reject) => {
       writer.end((error, result) => (error ? reject(error) : resolve(result)));
     });
@@ -651,7 +800,7 @@ function makeEntity(
   factory: DataFactory,
 ): ModelEntity {
   const plans = entity.fields.map(planField);
-  const Wrapper = makeWrapperClass(entity.typeIris, plans);
+  const Wrapper = makeWrapperClass(entity.typeIris, plans, entity.aliasTypeIris);
 
   const subject = (resourceUrl: string): string =>
     subjectIri(entity.subject.convention, resourceUrl);
@@ -676,7 +825,8 @@ function makeEntity(
 
   return assembleEntity(
     { name: entity.name, typeIri: entity.typeIris[0] as string, Wrapper, subject, build, parse },
-    manifest.prefixes,
+    manifest,
+    factory,
   );
 }
 
@@ -757,7 +907,7 @@ function makeCompositeEntity(
     const nested = node.fields.filter((f) => f.kind === "nested");
     runtimes.set(node.name, {
       node,
-      Wrapper: makeWrapperClass(node.typeIris, plans),
+      Wrapper: makeWrapperClass(node.typeIris, plans, node.aliasTypeIris),
       plans,
       nested,
     });
@@ -873,7 +1023,8 @@ function makeCompositeEntity(
       build,
       parse,
     },
-    manifest.prefixes,
+    manifest,
+    factory,
   );
 }
 

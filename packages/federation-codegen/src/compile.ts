@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6
 /**
@@ -133,6 +134,7 @@ function compileField(
   const field: ManifestField = {
     name,
     predicate: constraint.pathIri,
+    ...(constraint.aliasPredicates ? { aliasPredicates: [...constraint.aliasPredicates] } : {}),
     kind: constraint.kind,
   };
   const collection = collectionOf(constraint);
@@ -284,6 +286,7 @@ function compileEntity(
   return {
     name: entityConfig.name,
     typeIris: [shape.targetClass],
+    ...(shape.aliasTypeIris ? { aliasTypeIris: [...shape.aliasTypeIris] } : {}),
     subject: entityConfig.subject,
     fields,
   };
@@ -380,6 +383,9 @@ function compileCompositeEntity(
       const shapeFieldName = constraint.name ?? localName(constraint.pathIri);
       const targetNode = links[shapeFieldName];
       if (targetNode !== undefined) {
+        if (constraint.aliasPredicates !== undefined) {
+          throw new Error("read aliases are not supported on nested links");
+        }
         // A NESTED link — the shape property MUST be an IRI-valued link.
         if (constraint.kind !== "iri") {
           throw new Error(
@@ -444,6 +450,7 @@ function compileCompositeEntity(
     return {
       name: nodeName,
       typeIris: [nodeConfig.targetClass],
+      ...(shape.aliasTypeIris ? { aliasTypeIris: [...shape.aliasTypeIris] } : {}),
       fragment: nodeConfig.fragment,
       fields,
     };

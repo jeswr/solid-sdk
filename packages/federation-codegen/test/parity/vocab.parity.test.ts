@@ -1,7 +1,5 @@
-// AUTHORED-BY Claude Opus 4.8
-// PARITY: @jeswr/solid-bookmark's src/vocab.test.ts, VERBATIM except the vocab
-// constants are imported from the facade (which derives them from the generated
-// manifest — the verified projection) rather than the hand-written vocab module.
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 import { describe, expect, it } from "vitest";
 import {
   BOOK,
@@ -22,19 +20,21 @@ import {
 } from "../../examples/bookmark/facade.js";
 
 describe("vocab IRIs", () => {
-  it("the namespace is the w3id bookmark home", () => {
-    expect(BOOK).toBe("https://w3id.org/jeswr/bookmark#");
-    expect(CORE).toBe("https://w3id.org/jeswr/core#");
+  it("the namespace is the canonical bookmark home", () => {
+    expect(BOOK).toBe("https://jeswr.org/ns/bookmark#");
+    expect(CORE).toBe("https://jeswr.org/ns/core#");
   });
 
   it("schema.org uses the canonical http scheme (matching the suite producers)", () => {
+    // task-model et al. write http://schema.org/ ; a https:// scheme would be a
+    // DIFFERENT, non-interchangeable IRI and break the federation contract.
     expect(SCHEMA).toBe("http://schema.org/");
   });
 
   it("mints EXACTLY the three book: terms (Bookmark, archived, notes)", () => {
-    expect(BOOKMARK_CLASS).toBe("https://w3id.org/jeswr/bookmark#Bookmark");
-    expect(BOOK_ARCHIVED).toBe("https://w3id.org/jeswr/bookmark#archived");
-    expect(BOOK_NOTES).toBe("https://w3id.org/jeswr/bookmark#notes");
+    expect(BOOKMARK_CLASS).toBe("https://jeswr.org/ns/bookmark#Bookmark");
+    expect(BOOK_ARCHIVED).toBe("https://jeswr.org/ns/bookmark#archived");
+    expect(BOOK_NOTES).toBe("https://jeswr.org/ns/bookmark#notes");
   });
 
   it("reuses schema.org / Dublin Core for the rest (nothing minted)", () => {
@@ -56,6 +56,7 @@ describe("vocab IRIs", () => {
     expect(PREFIXES.book).toBe(BOOK);
     expect(PREFIXES.schema).toBe(SCHEMA);
     expect(PREFIXES.dct).toBe("http://purl.org/dc/terms/");
+    // Every prefix value is an absolute IRI ending in # or /.
     for (const ns of Object.values(PREFIXES)) {
       expect(ns).toMatch(/^https?:\/\/.+[#/]$/);
     }

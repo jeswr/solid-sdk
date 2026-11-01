@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 /**
  * The bookmarks PARITY FACADE — a thin hand-written compat layer (the ~50–150 LOC
@@ -51,7 +52,9 @@ export const DCT = P.dct as string;
 export const RDF = P.rdf as string;
 export const RDFS = P.rdfs as string;
 export const XSD = P.xsd as string;
-export const CORE = "https://w3id.org/jeswr/core#";
+export const CORE = "https://jeswr.org/ns/core#";
+export const LEGACY_BOOK_NS = "https://w3id.org/jeswr/bookmark#";
+export const LEGACY_CORE_NS = "https://w3id.org/jeswr/core#";
 export const SKOS = "http://www.w3.org/2004/02/skos/core#";
 
 export const book = (local: string): string => `${BOOK}${local}`;
@@ -99,7 +102,10 @@ export function bookmarkShapeTtl(): string {
 /** The source bookmark ontology, as Turtle. */
 export function bookmarkOntologyTtl(): string {
   if (cachedOntology === undefined) {
-    cachedOntology = readFileSync(join(here, "bookmark.ttl"), "utf8");
+    cachedOntology = readFileSync(
+      join(here, "..", "..", "..", "solid-bookmark", "bookmark.ttl"),
+      "utf8",
+    );
   }
   return cachedOntology;
 }

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8
 /**
  * L0 — the ontology-INPUT adapter seam (design §3.4). An adapter consumes a source
@@ -17,6 +18,8 @@ const VANN_PREFERRED_NS_URI = "http://purl.org/vocab/vann/preferredNamespaceUri"
 
 export interface OntologyClass {
   iri: string;
+  /** Explicit owl:Class declaration (RDFS-only classes cannot select an alias canonical). */
+  owlClass?: boolean;
   labels: string[];
   definitions: string[];
 }
@@ -89,6 +92,7 @@ export const owlRdfsAdapter: OntologyAdapter = {
 
     const classes: OntologyClass[] = [...classIris].sort().map((iri) => ({
       iri,
+      owlClass: graph.has(iri, `${RDF}type`, DataFactory.namedNode(`${OWL}Class`)),
       labels: labelsOf(graph, iri),
       definitions: definitionsOf(graph, iri),
     }));
