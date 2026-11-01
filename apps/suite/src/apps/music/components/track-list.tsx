@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import { type MusicTrack, sortTracks } from "../lib/data/library";
 import type { MusicPlaylist } from "../lib/data/playlists";
@@ -58,16 +58,19 @@ export function TrackMenu({
   track,
   playlist,
   position,
+  onMove,
 }: {
   track: MusicTrack;
   playlist?: MusicPlaylist;
   position?: number;
+  onMove?: (from: number, to: number) => void;
 }) {
   const music = useMusic();
   const source = safeSource(track.sourceUrl);
   const [adding, setAdding] = useState(false);
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const fromMenu = useRef(false);
+  const reordering = useRef(false);
   return (
     <div className="mus-row-actions">
       <AddToPlaylist
@@ -83,13 +86,22 @@ export function TrackMenu({
           <Plus size={16} aria-hidden="true" />
         </IconButton>
       </AddToPlaylist>
-      <DropdownMenu>
+      <DropdownMenu
+        onOpenChange={(open) => {
+          if (open) reordering.current = false;
+        }}
+      >
         <DropdownMenuTrigger asChild>
           <IconButton ref={menuTrigger} label={`More actions for ${track.title}`} variant="ghost">
             <MoreHorizontal size={18} aria-hidden="true" />
           </IconButton>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent
+          align="end"
+          onCloseAutoFocus={(event) => {
+            if (reordering.current) event.preventDefault();
+          }}
+        >
           <DropdownMenuItem
             onSelect={() => {
               fromMenu.current = true;
@@ -118,18 +130,20 @@ export function TrackMenu({
             <>
               <DropdownMenuItem
                 disabled={position === 0}
-                onSelect={() =>
-                  music.edit(playlist, { kind: "move", from: position, to: position - 1 })
-                }
+                onSelect={() => {
+                  reordering.current = true;
+                  onMove?.(position, position - 1);
+                }}
               >
                 <ArrowUp size={16} aria-hidden="true" />
                 Move up
               </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={position === playlist.tracks.length - 1}
-                onSelect={() =>
-                  music.edit(playlist, { kind: "move", from: position, to: position + 1 })
-                }
+                onSelect={() => {
+                  reordering.current = true;
+                  onMove?.(position, position + 1);
+                }}
               >
                 <ArrowDown size={16} aria-hidden="true" />
                 Move down
@@ -288,14 +302,24 @@ export function PlaylistTracks({ playlist }: { playlist: MusicPlaylist }) {
   const music = useMusic();
   const dragged = useRef<number | undefined>(undefined);
   const [announcement, setAnnouncement] = useState("");
+  const [focusPosition, setFocusPosition] = useState<number>();
+  const list = useRef<HTMLOListElement>(null);
+  useEffect(() => {
+    if (focusPosition === undefined) return;
+    const frame = requestAnimationFrame(() => {
+      list.current
+        ?.querySelector<HTMLButtonElement>(`[data-mus-handle="${focusPosition}"]`)
+        ?.focus();
+      setFocusPosition(undefined);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [focusPosition]);
   const tracks = new Map(music.snapshot?.library.tracks.map((track) => [track.id, track]));
   function move(from: number, to: number) {
     if (from === to || to < 0 || to >= playlist.tracks.length) return;
     music.edit(playlist, { kind: "move", from, to });
     setAnnouncement(`Moved song from position ${from + 1} to ${to + 1}`);
-    requestAnimationFrame(() =>
-      document.querySelector<HTMLButtonElement>(`[data-mus-handle="${to}"]`)?.focus(),
-    );
+    setFocusPosition(to);
   }
   return (
     <>
@@ -303,7 +327,7 @@ export function PlaylistTracks({ playlist }: { playlist: MusicPlaylist }) {
       <p role="status" className="mus-sr-only">
         {announcement}
       </p>
-      <ol className="mus-playlist-tracks" aria-label="Playlist songs">
+      <ol ref={list} className="mus-playlist-tracks" aria-label="Playlist songs">
         {playlist.tracks.map((id, position) => {
           const track = tracks.get(id);
           // Position is the identity of a playlist occurrence; repeats remain separate.
@@ -353,7 +377,7 @@ export function PlaylistTracks({ playlist }: { playlist: MusicPlaylist }) {
                     {formatDuration(track.durationSeconds)}
                   </span>
                   <Like track={track} />
-                  <TrackMenu track={track} playlist={playlist} position={position} />
+                  <TrackMenu track={track} playlist={playlist} position={position} onMove={move} />
                 </>
               ) : (
                 <>

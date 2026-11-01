@@ -15,7 +15,7 @@ import { ensureSample } from "../demo/sample";
 import { importSpotifyFixture } from "../demo/spotify";
 import { loadHistory } from "../lib/data/history";
 import { type Library, loadLibrary, musicRoot } from "../lib/data/library";
-import { setLiked } from "../lib/data/liked";
+import { LikedSyncPendingError, retryLikedSync, setLiked } from "../lib/data/liked";
 import {
   createPlaylist,
   deletePlaylist,
@@ -84,13 +84,14 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
   const [olderLoading, setOlderLoading] = useState(false);
   const [olderError, setOlderError] = useState(false);
   const baseline = useRef<MusicSnapshot | undefined>(undefined);
-  const patches = useRef<{ id: number; apply: Patch }[]>([]);
+  const patches = useRef<{ id: number; apply: Patch; positionalFor?: string | undefined }[]>([]);
   const serial = useRef<Promise<unknown>>(Promise.resolve());
   const generation = useRef(0);
   const mounted = useRef(false);
   const counter = useRef(0);
   const months = useRef(13);
   const dirty = useRef(false);
+  const reconciliationPending = useRef(false);
   const publish = useCallback(() => {
     if (!mounted.current || !baseline.current) return;
     const snapshot = patches.current.reduce((value, patch) => patch.apply(value), baseline.current);
@@ -114,15 +115,27 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
     const request = ++generation.current;
     try {
       await ensureSample(session);
-      const snapshot = await read();
+      let snapshot = await read();
+      try {
+        if (await retryLikedSync(session.fetch, session.storageUrl, snapshot.library)) {
+          snapshot = await read();
+          setNotice("Liked songs playlist synchronized.");
+        }
+      } catch {
+        setNotice("Liked songs are saved. Playlist synchronization is pending; refresh to retry.");
+      }
       if (mounted.current && request === generation.current && !patches.current.length) {
         baseline.current = snapshot;
+        reconciliationPending.current = false;
         publish();
       }
     } catch (error) {
       if (mounted.current && request === generation.current && !patches.current.length) {
-        baseline.current = undefined;
-        setState({ status: "error", error });
+        if (reconciliationPending.current && baseline.current) publish();
+        else {
+          baseline.current = undefined;
+          setState({ status: "error", error });
+        }
       }
     }
   }, [read, publish, session]);
@@ -165,37 +178,55 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
 
   function mutate(
     apply: Patch,
-    work: (current: MusicSnapshot) => Promise<void>,
+    work: (current: MusicSnapshot) => Promise<Patch> | Promise<void>,
     success: string,
+    playlistId?: string,
+    positional = false,
   ): Promise<boolean> {
     if (!baseline.current) return Promise.resolve(false);
     const id = ++counter.current;
     ++generation.current;
-    patches.current.push({ id, apply });
+    patches.current.push({ id, apply, positionalFor: positional ? playlistId : undefined });
     publish();
     const task = serial.current.then(async () => {
+      // A failed earlier edit invalidates positions captured from its optimistic order.
+      if (!patches.current.some((patch) => patch.id === id)) return false;
       let ok = false;
+      let message = success;
       try {
         if (!baseline.current) throw new Error("Music is unavailable");
-        await work(baseline.current);
-        baseline.current = await read();
+        const committed = await work(baseline.current);
+        baseline.current = (committed ?? apply)(baseline.current);
         ok = true;
-        if (mounted.current) setNotice(success);
       } catch (error) {
-        if (mounted.current) {
-          const message =
+        if (error instanceof LikedSyncPendingError) {
+          if (baseline.current) baseline.current = apply(baseline.current);
+          ok = true;
+          message = "Liked songs are saved. Playlist synchronization is pending; refresh to retry.";
+        } else {
+          message =
             error instanceof MusicWriteError && error.status === 412
               ? "This item changed elsewhere. We refreshed it; try your change again."
               : "Couldn’t save your change. Please try again.";
-          toast.error(message);
-          setNotice(message);
+          if (playlistId) {
+            patches.current = patches.current.filter((patch) => patch.positionalFor !== playlistId);
+            message += " Queued song moves and removals were cancelled; please try them again.";
+          }
         }
-        try {
-          baseline.current = await read();
-        } catch {
-          /* Keep the confirmed snapshot if storage is offline. */
+        if (mounted.current) toast.error(message);
+      }
+      // Reconciliation cannot turn a committed write into a failed save. Keep its
+      // result (including fresh playlist ETags) and retry reads on refresh/focus.
+      try {
+        baseline.current = await read();
+        reconciliationPending.current = false;
+      } catch {
+        if (ok) {
+          reconciliationPending.current = true;
+          message += " Saved changes are shown; refresh Music to retry loading from your pod.";
         }
       }
+      if (mounted.current) setNotice(message);
       patches.current = patches.current.filter((patch) => patch.id !== id);
       publish();
       if (dirty.current && patches.current.length === 0) void refresh();
@@ -237,6 +268,7 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
             description,
           );
           id = playlist.id;
+          return (snapshot) => ({ ...snapshot, playlists: [...snapshot.playlists, playlist] });
         },
         "Playlist created",
       );
@@ -253,14 +285,25 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
         return;
       void mutate(
         (snapshot) => optimisticPlaylist(snapshot, playlist.id, edit),
-        (snapshot) =>
-          editPlaylist(
-            session.fetch,
-            session.storageUrl,
-            snapshot.playlists.find((p) => p.id === playlist.id) ?? playlist,
-            edit,
-          ),
+        async (snapshot) => {
+          const current = snapshot.playlists.find((p) => p.id === playlist.id) ?? playlist;
+          // Also fence edits enqueued while a failed write is still reconciling:
+          // their displayed positions may belong to the discarded optimistic order.
+          if (
+            (edit.kind === "move" || edit.kind === "remove") &&
+            (current.tracks.length !== playlist.tracks.length ||
+              current.tracks.some((id, index) => id !== playlist.tracks[index]))
+          )
+            throw new MusicWriteError(412, current.etag);
+          const saved = await editPlaylist(session.fetch, session.storageUrl, current, edit);
+          return (current) => ({
+            ...current,
+            playlists: current.playlists.map((p) => (p.id === saved.id ? saved : p)),
+          });
+        },
         edit.kind === "move" ? `Moved song to position ${edit.to + 1}` : "Playlist saved",
+        playlist.id,
+        edit.kind === "move" || edit.kind === "remove",
       );
     },
     remove(playlist) {
@@ -276,6 +319,7 @@ export function MusicProvider({ session, children }: { session: PodSession; chil
             snapshot.playlists.find((p) => p.id === playlist.id) ?? playlist,
           ),
         "Playlist deleted",
+        playlist.id,
       );
     },
     artwork(enabled) {

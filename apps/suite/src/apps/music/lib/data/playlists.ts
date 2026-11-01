@@ -3,9 +3,9 @@ import { createPodScopedFetch } from "@jeswr/guarded-fetch";
 import {
   DataFactory,
   loadMusic,
+  MusicNode,
   MusicWriteError,
   Playlist,
-  readLibrary,
   Store,
   saveMusic,
 } from "../model";
@@ -55,7 +55,7 @@ export async function editPlaylist(
   storage: string,
   current: MusicPlaylist,
   edit: PlaylistEdit,
-): Promise<void> {
+): Promise<MusicPlaylist> {
   const url = documentUrl(storage, current.id);
   const doc = await loadMusic(createPodScopedFetch(storage, { fetch }), url);
   const p = new Playlist(current.id, doc.dataset);
@@ -65,7 +65,16 @@ export async function editPlaylist(
   } else if (edit.kind === "add") p.setTracks([...p.tracks, ...edit.tracks]);
   else if (edit.kind === "remove") p.removeAt(edit.position);
   else p.reorder(edit.from, edit.to);
-  await saveMusic(fetch, storage, url, doc.dataset, { ifMatch: requireEtag(current.etag) });
+  const etag = await saveMusic(fetch, storage, url, doc.dataset, {
+    ifMatch: requireEtag(current.etag),
+  });
+  return {
+    id: current.id,
+    name: p.title,
+    description: p.strings(`${S}description`)[0] ?? "",
+    tracks: p.tracks,
+    etag,
+  };
 }
 export async function deletePlaylist(
   fetch: typeof globalThis.fetch,
@@ -75,16 +84,23 @@ export async function deletePlaylist(
   const url = documentUrl(storage, current.id);
   const scoped = createPodScopedFetch(storage, { fetch, maxRedirects: 0 });
   const doc = await loadMusic(scoped, url);
-  const models = readLibrary(doc.dataset);
-  if (
-    models.playlists.length > 1 ||
-    models.tracks.length ||
-    models.albums.length ||
-    models.artists.length
-  ) {
-    doc.dataset.removeQuads(
-      doc.dataset.getQuads(DataFactory.namedNode(current.id), null, null, null),
-    );
+  const entries = new Playlist(current.id, doc.dataset).objects(`${S}itemListElement`);
+  doc.dataset.removeQuads(
+    doc.dataset.getQuads(DataFactory.namedNode(current.id), null, null, null),
+  );
+  for (const entry of entries) {
+    if (entry.termType !== "NamedNode" && entry.termType !== "BlankNode") continue;
+    const term =
+      entry.termType === "NamedNode"
+        ? DataFactory.namedNode(entry.value)
+        : DataFactory.blankNode(entry.value);
+    if (
+      new MusicNode(term, doc.dataset).types.has(`${S}ListItem`) &&
+      doc.dataset.getQuads(null, null, term, null).length === 0
+    )
+      doc.dataset.removeQuads(doc.dataset.getQuads(term, null, null, null));
+  }
+  if (doc.dataset.size) {
     await saveMusic(fetch, storage, url, doc.dataset, { ifMatch: requireEtag(current.etag) });
     return;
   }

@@ -44,6 +44,10 @@ async function accessible(page: Page) {
       () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
     ),
   ).toBe(true);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollHeight <= window.innerHeight + 1),
+    "Music content must scroll inside the shell without increasing document height",
+  ).toBe(true);
 }
 async function capture(page: Page, info: TestInfo, screen: string) {
   await accessible(page);
@@ -68,6 +72,16 @@ test("home periods, library, likes, search, albums, artists and history", async 
   await expect(
     page.getByRole("list", { name: "Recently played", exact: true }).getByRole("listitem"),
   ).not.toHaveCount(0);
+  const recent = page.getByRole("list", { name: "Recently played", exact: true });
+  const albums = await recent
+    .getByRole("link")
+    .evaluateAll((links) => links.map((link) => link.getAttribute("href")));
+  expect(new Set(albums).size).toBe(albums.length);
+  expect(albums.length).toBeGreaterThan(1);
+  const tones = await recent
+    .locator(".mus-artwork")
+    .evaluateAll((tiles) => tiles.map((tile) => getComputedStyle(tile).backgroundColor));
+  expect(new Set(tones).size).toBeGreaterThan(1);
   const leaders: string[] = [];
   for (const period of ["Today", "1W", "1M", "1Y"]) {
     await page.getByRole("button", { name: period, exact: true }).click();
@@ -170,6 +184,9 @@ test("create playlist, add three songs, reorder by keyboard and persist", async 
     "Morning Glass",
     "Wildflower",
   ]);
+  await expect(
+    page.getByRole("button", { name: "Reorder Morning Glass, position 2", exact: true }),
+  ).toBeFocused();
   await expect(page.locator(".mus-save")).toBeHidden();
   const url = page.url();
   await page.reload();
@@ -183,20 +200,42 @@ test("create playlist, add three songs, reorder by keyboard and persist", async 
   ]);
   expect(page.url()).toBe(url);
   await capture(page, info, "playlist");
-  await page.getByRole("button", { name: "More actions for Wildflower", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Move up", exact: true }).click();
+  await page.getByRole("button", { name: "More actions for Wildflower", exact: true }).focus();
+  await page.keyboard.press("ArrowDown");
+  await page.getByRole("menuitem", { name: "Move up", exact: true }).press("Enter");
   await expect(list.locator(".mus-track-name strong")).toHaveText([
     "Blue Hour",
     "Wildflower",
     "Morning Glass",
   ]);
+  await expect(
+    page.getByRole("button", { name: "Reorder Wildflower, position 2", exact: true }),
+  ).toBeFocused();
   await expect(page.locator(".mus-save")).toBeHidden();
-  await page.getByRole("button", { name: "Playlist name: Sunday study", exact: true }).click();
-  await page.getByRole("textbox", { name: "Playlist name", exact: true }).fill("Sunday focus");
-  await page.getByRole("textbox", { name: "Playlist name", exact: true }).press("Enter");
+  await expect(
+    page.getByRole("button", { name: "Reorder Wildflower, position 2", exact: true }),
+  ).toBeFocused();
+  await page.reload();
+  await expect(list.locator(".mus-track-name strong")).toHaveText([
+    "Blue Hour",
+    "Wildflower",
+    "Morning Glass",
+  ]);
+  await page.getByRole("button", { name: "Edit details", exact: true }).click();
+  const details = page.getByRole("dialog", { name: "Edit playlist details", exact: true });
+  await details.getByRole("textbox", { name: "Name", exact: true }).fill("Sunday focus");
+  await details
+    .getByRole("textbox", { name: "Description", exact: true })
+    .fill("A focused afternoon.");
+  await accessible(page);
+  await details.getByRole("button", { name: "Save details", exact: true }).click();
   await expect(
     page.getByRole("heading", { level: 1, name: "Sunday focus", exact: true }),
   ).toBeVisible();
+  await expect(page.getByText("A focused afternoon.", { exact: true })).toBeVisible();
+  await expect(page.locator(".mus-content").getByRole("textbox")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Edit details", exact: true })).toBeFocused();
+  await accessible(page);
 });
 
 test("imports the offline Spotify fixture and finds its tracks", async ({ page }) => {

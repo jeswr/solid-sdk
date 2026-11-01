@@ -3,11 +3,23 @@
 import { useState } from "react";
 import { artworkUrl } from "../lib/model";
 import { useMusic } from "../state/music-context";
-export function Artwork({ name, image }: { name: string; image?: string | undefined }) {
+export function Artwork({
+  name,
+  image,
+  identity = name,
+}: {
+  name: string;
+  image?: string | undefined;
+  identity?: string;
+}) {
   const music = useMusic();
   const [failed, setFailed] = useState<string>();
   const url = music.snapshot ? artworkUrl(image, music.snapshot.preferences.value) : undefined;
-  const tone = Array.from(name).reduce((sum, char) => sum + (char.codePointAt(0) ?? 0), 0) % 3;
+  const hash = Array.from(identity).reduce(
+    (value, char) => (Math.imul(value, 31) + (char.codePointAt(0) ?? 0)) >>> 0,
+    0,
+  );
+  const tone = hash % 6;
   return (
     <span className={`mus-artwork mus-tone-${tone}`} aria-hidden="true">
       {url && failed !== url ? (

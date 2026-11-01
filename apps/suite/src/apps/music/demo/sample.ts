@@ -1,9 +1,20 @@
 // AUTHORED-BY Codex GPT-6
 import type { PodSession } from "@/lib/session/pod-session";
-import { createDocument, loadLibrary, musicRoot, provision } from "../lib/data/library";
-import { setLiked } from "../lib/data/liked";
-import { createPlaylist, editPlaylist } from "../lib/data/playlists";
-import { Album, Artist, historyShard, PlaybackEvent, Store, Track } from "../lib/model";
+import { createDocument, musicRoot, provision } from "../lib/data/library";
+import {
+  Album,
+  Artist,
+  historyShard,
+  loadMusic,
+  MusicNode,
+  MusicWriteError,
+  PlaybackEvent,
+  Playlist,
+  readLibrary,
+  Store,
+  syncLikedPlaylist,
+  Track,
+} from "../lib/model";
 import { S } from "../lib/model/vocab";
 
 const pending = new WeakMap<typeof globalThis.fetch, Promise<void>>();
@@ -25,9 +36,32 @@ async function seed(session: Pick<PodSession, "mode" | "fetch" | "storageUrl">, 
   if (session.mode !== "demo") return;
   const { fetch, storageUrl } = session;
   const base = musicRoot(storageUrl);
-  const exists = await fetch(base, { method: "HEAD" });
-  if (exists.ok) return;
-  if (exists.status !== 404) throw new Error("Could not open Music sample storage");
+  async function exists(url: string) {
+    const response = await fetch(url, { method: "HEAD" });
+    if (response.ok) return true;
+    if (response.status === 404) return false;
+    throw new Error("Could not open Music sample storage");
+  }
+  async function createMissing(url: string, dataset: Store) {
+    try {
+      await createDocument(fetch, storageUrl, url, dataset);
+    } catch (error) {
+      if (!(error instanceof MusicWriteError) || error.status !== 412) throw error;
+    }
+  }
+  const started = `${base}sample-started.ttl`;
+  const completed = `${base}sample-complete.ttl`;
+  if (await exists(completed)) return;
+  // Existing user libraries must not acquire sample songs. The start marker precedes
+  // provisioning, so an interruption at any subsequent write can resume on Retry.
+  if (!(await exists(started))) {
+    if (await exists(base)) return;
+    const marker = new Store();
+    new MusicNode(started, marker).writeString(`${S}dateCreated`, now.toISOString());
+    await createMissing(started, marker);
+  }
+  const marker = await loadMusic(fetch, started);
+  now = new Date(new MusicNode(started, marker.dataset).strings(`${S}dateCreated`)[0] as string);
   await provision(fetch, storageUrl);
   const artists = [
     "Mira & the Tides",
@@ -118,25 +152,31 @@ async function seed(session: Pick<PodSession, "mode" | "fetch" | "storageUrl">, 
     if (i % 7 === 0) track.sourceUrl = `https://open.spotify.com/track/fictional${i}`;
     return track.value;
   });
-  await createDocument(fetch, storageUrl, `${base}artists/catalog.ttl`, artistData);
-  await createDocument(fetch, storageUrl, `${base}albums/catalog.ttl`, albumData);
-  await createDocument(fetch, storageUrl, `${base}tracks/catalog.ttl`, trackData);
-  const a = await createPlaylist(
-    fetch,
-    storageUrl,
-    "slow-mornings",
-    "Slow mornings",
-    "A soft start, an open window, and nowhere to rush.",
-  );
-  await editPlaylist(fetch, storageUrl, a, { kind: "add", tracks: trackIds.slice(0, 6) });
-  const b = await createPlaylist(
-    fetch,
-    storageUrl,
-    "after-hours",
-    "After hours",
-    "For the last train and the quiet walk home.",
-  );
-  await editPlaylist(fetch, storageUrl, b, { kind: "add", tracks: trackIds.slice(25, 33) });
+  await createMissing(`${base}artists/catalog.ttl`, artistData);
+  await createMissing(`${base}albums/catalog.ttl`, albumData);
+  await createMissing(`${base}tracks/catalog.ttl`, trackData);
+  for (const [slug, name, description, ids] of [
+    [
+      "slow-mornings",
+      "Slow mornings",
+      "A soft start, an open window, and nowhere to rush.",
+      trackIds.slice(0, 6),
+    ],
+    [
+      "after-hours",
+      "After hours",
+      "For the last train and the quiet walk home.",
+      trackIds.slice(25, 33),
+    ],
+  ] as const) {
+    const url = `${base}playlists/${slug}.ttl`;
+    const dataset = new Store();
+    const playlist = new Playlist(`${url}#it`, dataset).stampType();
+    playlist.title = name;
+    playlist.writeString(`${S}description`, description);
+    playlist.setTracks(ids);
+    await createMissing(url, dataset);
+  }
   const shards = new Map<string, Store>();
   for (let i = 0; i < 300; i++) {
     // Each wider window favours a different artist. Times are never in the future.
@@ -162,7 +202,9 @@ async function seed(session: Pick<PodSession, "mode" | "fetch" | "storageUrl">, 
     play.startTime = startTime;
     play.agent = i % 3 === 0 ? "https://open.spotify.com/" : "https://music.example.org/";
   }
-  for (const [url, dataset] of shards) await createDocument(fetch, storageUrl, url, dataset);
-  const library = await loadLibrary(fetch, storageUrl);
-  await setLiked(fetch, storageUrl, library, trackIds[0] as string, true);
+  for (const [url, dataset] of shards) await createMissing(url, dataset);
+  const liked = new Store();
+  syncLikedPlaylist(liked, `${base}playlists/liked.ttl#it`, readLibrary(trackData).tracks);
+  await createMissing(`${base}playlists/liked.ttl`, liked);
+  await createMissing(completed, new Store());
 }

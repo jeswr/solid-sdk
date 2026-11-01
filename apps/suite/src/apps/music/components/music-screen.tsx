@@ -10,7 +10,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  EditableText,
   EmptyState,
   ErrorState,
   FilterChips,
@@ -28,7 +27,7 @@ import type { ArtistPeriod } from "../lib/model";
 import { useMusic } from "../state/music-context";
 import { Artwork } from "./artwork";
 import { MusicSurface } from "./music-app";
-import { AddSongs, CreatePlaylist } from "./playlist-dialogs";
+import { AddSongs, CreatePlaylist, EditPlaylistDetails } from "./playlist-dialogs";
 import { albumHref, artistHref, Like, PlaylistTracks, TrackList, TrackName } from "./track-list";
 
 export type MusicView =
@@ -87,6 +86,7 @@ function AlbumCards({ ids }: { ids?: readonly string[] }) {
         <li key={album.id}>
           <Link className="mus-card" href={albumHref(album.id)}>
             <Artwork
+              identity={album.id}
               name={album.title}
               image={
                 snapshot?.library.models.albums.find((node) => node.value === album.id)?.imageUrl
@@ -108,9 +108,15 @@ function Home() {
   const [period, setPeriod] = useState<ArtistPeriod>("1M");
   if (!snapshot) return null;
   const byId = new Map(snapshot.library.tracks.map((track) => [track.id, track]));
-  const recent = recentlyPlayed(snapshot.history, 10)
+  const seenAlbums = new Set<string>();
+  const recent = recentlyPlayed(snapshot.history, snapshot.history.length)
     .map((play) => byId.get(play.trackIri))
-    .filter((track): track is MusicTrack => Boolean(track));
+    .filter((track): track is MusicTrack => {
+      if (!track || seenAlbums.has(track.albumId)) return false;
+      seenAlbums.add(track.albumId);
+      return true;
+    })
+    .slice(0, 10);
   const top = computeTopArtists(
     snapshot.history,
     snapshot.library.models.tracks,
@@ -133,13 +139,15 @@ function Home() {
               <li key={track.id}>
                 <Link className="mus-card" href={albumHref(track.albumId)}>
                   <Artwork
+                    identity={track.albumId}
                     name={track.albumTitle}
                     image={
                       snapshot.library.models.albums.find((node) => node.value === track.albumId)
                         ?.imageUrl
                     }
                   />
-                  <strong>{track.title}</strong>
+                  <strong>{track.albumTitle}</strong>
+                  <span>Last played: {track.title}</span>
                   <span>{track.artist}</span>
                 </Link>
               </li>
@@ -156,7 +164,6 @@ function Home() {
         <section className="mus-panel" aria-labelledby="mus-top-title">
           <div className="mus-section-head">
             <h2 id="mus-top-title">Your top artists</h2>
-            <Badge variant="secondary">{period}</Badge>
           </div>
           <FilterChips
             label="Listening period"
@@ -408,6 +415,7 @@ function Content({ view, id, query }: { view: MusicView; id?: string | undefined
           <li key={artist.id}>
             <Link className="mus-card" href={artistHref(artist.id)}>
               <Artwork
+                identity={artist.id}
                 name={artist.name}
                 image={library.models.artists.find((node) => node.value === artist.id)?.imageUrl}
               />
@@ -453,6 +461,7 @@ function Content({ view, id, query }: { view: MusicView; id?: string | undefined
         <>
           <div className="mus-detail-header">
             <Artwork
+              identity={album.id}
               name={album.title}
               image={library.models.albums.find((node) => node.value === id)?.imageUrl}
             />
@@ -520,26 +529,13 @@ function Content({ view, id, query }: { view: MusicView; id?: string | undefined
               <ListMusic size={48} strokeWidth={1.25} aria-hidden="true" />
             </span>
             <div className="mus-playlist-fields">
-              <EditableText
-                label="Playlist name"
-                value={playlist.name}
-                validate={(name) => (!name.trim() ? "Enter a playlist name." : undefined)}
-                onCommit={(name) =>
-                  music.edit(playlist, { kind: "rename", name, description: playlist.description })
-                }
-              />
-              <EditableText
-                label="Description"
-                value={playlist.description}
-                onCommit={(description) =>
-                  music.edit(playlist, { kind: "rename", name: playlist.name, description })
-                }
-              />
+              {playlist.description && <p>{playlist.description}</p>}
               <p className="mus-muted">{playlist.tracks.length} songs · Saved to your pod</p>
             </div>
           </div>
           <div className="mus-playlist-toolbar">
             <AddSongs playlist={playlist} />
+            <EditPlaylistDetails playlist={playlist} />
             <DeletePlaylist playlist={playlist} />
           </div>
           {playlist.tracks.length ? (

@@ -1,5 +1,7 @@
 /* AUTHORED-BY Codex GPT-6 */
 .mus-content {
+  /* Contain hidden live regions within the shell's scrolling content. */
+  position: relative;
   padding: var(--space-6);
   min-width: 0;
   max-width: 100%;
@@ -218,27 +220,31 @@
   color: var(--foreground);
 }
 .mus-tone-1 {
-  background: var(--primary-soft);
-  color: var(--primary-soft-foreground);
+  background: var(--app-drive-soft);
 }
 .mus-tone-2 {
-  background: var(--surface-3);
-  color: var(--foreground);
+  background: var(--app-tasks-soft);
+}
+.mus-tone-3 {
+  background: var(--app-calendar-soft);
+}
+.mus-tone-4 {
+  background: var(--app-notes-soft);
+}
+.mus-tone-5 {
+  background: var(--app-docs-soft);
 }
 .mus-artist-grid .mus-artwork {
   border-radius: var(--radius-full);
 }
 .mus-recent {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(152px, 1fr));
   gap: var(--space-5);
-  overflow-x: auto;
   padding: var(--space-1) var(--space-1) var(--space-4);
-  scroll-snap-type: x proximity;
 }
 .mus-recent > li {
-  width: 152px;
-  flex: 0 0 152px;
-  scroll-snap-align: start;
+  min-width: 0;
 }
 .mus-recent .mus-card > span:last-child {
   color: var(--foreground-muted);
@@ -413,10 +419,9 @@
   display: grid;
   gap: var(--space-3);
 }
-.mus-playlist-fields .suite-editable {
-  max-width: 100%;
+.mus-playlist-fields p {
+  margin: 0;
   overflow-wrap: anywhere;
-  text-align: left;
 }
 .mus-playlist-toolbar {
   justify-content: flex-start;
@@ -556,10 +561,15 @@
 }
 .mus-sr-only {
   position: absolute;
+  top: 0;
+  left: 0;
   width: 1px;
   height: 1px;
   padding: 0;
+  margin: 0;
+  border: 0;
   overflow: hidden;
+  clip: rect(0, 0, 0, 0);
   clip-path: inset(50%);
   white-space: nowrap;
 }
@@ -583,9 +593,8 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-4);
   }
-  .mus-recent > li {
-    flex-basis: 136px;
-    width: 136px;
+  .mus-recent {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .mus-panel {
     padding: var(--space-4);

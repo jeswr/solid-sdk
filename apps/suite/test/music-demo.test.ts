@@ -3,8 +3,12 @@ import { expect, it } from "vitest";
 import { ensureSample } from "../src/apps/music/demo/sample";
 import { importSpotifyFixture } from "../src/apps/music/demo/spotify";
 import { computeTopArtists, loadHistory } from "../src/apps/music/lib/data/history";
-import { loadLibrary, search } from "../src/apps/music/lib/data/library";
-import { listPlaylists } from "../src/apps/music/lib/data/playlists";
+import { loadLibrary, musicRoot, search } from "../src/apps/music/lib/data/library";
+import {
+  editPlaylist,
+  listPlaylists,
+  type MusicPlaylist,
+} from "../src/apps/music/lib/data/playlists";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 
 const root = "https://sample.test/alice/";
@@ -63,4 +67,49 @@ it("runs the real Spotify mapping entirely against recorded JSON and the pod", a
   const before = pod.snapshot();
   await importSpotifyFixture(pod.fetch, root);
   expect(pod.snapshot()).toEqual(before);
+});
+
+it.each([
+  "albums/catalog.ttl",
+  "playlists/after-hours.ttl",
+  "history/2026-10.ttl",
+  "sample-complete.ttl",
+])("resumes interrupted seeding at %s across sessions without overwriting existing resources", async (path) => {
+  const pod = createDemoPod({ root });
+  let fail = true;
+  const session = {
+    mode: "demo" as const,
+    storageUrl: root,
+    fetch: (async (input, init) => {
+      if (fail && String(input) === `${musicRoot(root)}${path}` && init?.method === "PUT")
+        return new Response(null, { status: 500 });
+      return pod.fetch(input, init);
+    }) as typeof fetch,
+  };
+  await expect(ensureSample(session, now)).rejects.toThrow();
+  expect((await pod.fetch(musicRoot(root), { method: "HEAD" })).ok).toBe(true);
+  const before = pod.snapshot();
+  fail = false;
+  // A later clock and fresh fetch facade simulate reopening the app after interruption.
+  await ensureSample(
+    { ...session, fetch: (input, init) => pod.fetch(input, init) },
+    new Date("2026-12-05"),
+  );
+  const after = pod.snapshot();
+  for (const resource of before.resources) {
+    expect(after.resources.find(([url]) => url === resource[0])).toEqual(resource);
+  }
+  const library = await loadLibrary(pod.fetch, root);
+  expect(library.tracks).toHaveLength(40);
+  expect(
+    listPlaylists(library)
+      .map((p) => p.tracks.length)
+      .sort((a, b) => a - b),
+  ).toEqual([6, 8]);
+  expect(await loadHistory(pod.fetch, root, now, 14)).toHaveLength(300);
+  const playlist = listPlaylists(library)[0] as MusicPlaylist;
+  await editPlaylist(pod.fetch, root, playlist, { kind: "remove", position: 0 });
+  const finished = pod.snapshot();
+  await ensureSample(session, now);
+  expect(pod.snapshot()).toEqual(finished);
 });

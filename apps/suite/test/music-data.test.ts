@@ -19,7 +19,7 @@ import {
   search,
   sortTracks,
 } from "../src/apps/music/lib/data/library";
-import { setLiked } from "../src/apps/music/lib/data/liked";
+import { LikedSyncPendingError, retryLikedSync, setLiked } from "../src/apps/music/lib/data/liked";
 import {
   createPlaylist,
   deletePlaylist,
@@ -347,7 +347,9 @@ describe("Playlists and likes", () => {
       if (String(input).endsWith("liked.ttl")) throw new Error("offline");
       return pod.fetch(input, init);
     };
-    await expect(setLiked(offline, root, library, id, true)).rejects.toThrow("offline");
+    await expect(setLiked(offline, root, library, id, true)).rejects.toMatchObject({
+      cause: { message: expect.stringContaining("offline") },
+    });
     library = await loadLibrary(pod.fetch, root);
     await setLiked(pod.fetch, root, library, id, true);
     library = await loadLibrary(pod.fetch, root);
@@ -356,7 +358,115 @@ describe("Playlists and likes", () => {
       if (String(input).endsWith("liked.ttl")) response.headers.delete("etag");
       return response;
     };
-    await expect(setLiked(noEtag, root, library, id, true)).rejects.toThrow("ETag");
+    await expect(setLiked(noEtag, root, library, id, true)).rejects.toMatchObject({
+      cause: { message: expect.stringContaining("ETag") },
+    });
+  });
+  it("deletes only a playlist and its exclusive entries, preserving arbitrary RDF and shared entries", async () => {
+    const { pod, tracks } = await fixture();
+    const url = `${base}playlists/notes.ttl`;
+    const dataset = new Store();
+    const playlist = new Playlist(`${url}#list`, dataset).stampType();
+    playlist.title = "With notes";
+    playlist.setTracks(tracks.map((track) => track.value));
+    const shared = playlist.objects(`${S}itemListElement`)[0] as MusicNode;
+    const notes = new MusicNode(`${url}#notes`, dataset);
+    notes.writeString(`${S}text`, "Keep these unrelated notes");
+    SetFrom.subjectPredicate(notes, `${S}about`, TermAs.is, TermFrom.instance).add(shared);
+    const named = new MusicNode(`${url}#entry`, dataset);
+    named.stamp(`${S}ListItem`);
+    named.writeIri(`${S}item`, tracks[0]?.value);
+    named.writeString(`${S}position`, "4");
+    const links = SetFrom.subjectPredicate(
+      playlist,
+      `${S}itemListElement`,
+      TermAs.is,
+      TermFrom.instance,
+    );
+    links.add(named);
+    links.add(notes); // An unrelated subject is not an owned ListItem.
+    links.add(new MusicNode(DataFactory.literal("malformed list member"), dataset));
+    await createDocument(pod.fetch, root, url, dataset);
+    const current = listPlaylists(await loadLibrary(pod.fetch, root))[0] as MusicPlaylist;
+    await deletePlaylist(pod.fetch, root, current);
+    const kept = (await loadMusic(pod.fetch, url)).dataset;
+    expect(new MusicNode(notes.value, kept).strings(`${S}text`)).toEqual([
+      "Keep these unrelated notes",
+    ]);
+    expect(kept.getQuads(DataFactory.namedNode(playlist.value), null, null, null)).toHaveLength(0);
+    expect(kept.getQuads(DataFactory.namedNode(named.value), null, null, null)).toHaveLength(0);
+    expect(kept.getQuads(null, DataFactory.namedNode(`${S}item`), null, null)).toHaveLength(1);
+    expect(new MusicNode(notes.value, kept).objects(`${S}about`)).toHaveLength(1);
+    await expect(
+      deletePlaylist(
+        failure(pod.fetch, (_url, init) => init?.method === "PUT", 412),
+        root,
+        { ...current, etag: (await loadMusic(pod.fetch, url)).etag },
+      ),
+    ).rejects.toMatchObject({ status: 412 });
+  });
+  it("retains partial like completion and repairs the mirror with fresh ETags without rewriting the track", async () => {
+    const { pod, tracks } = await fixture();
+    let mirrorFailure = 500;
+    let trackWrites = 0;
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      if (init?.method === "PUT") {
+        if (String(input).endsWith("liked.ttl") && mirrorFailure)
+          return new Response(null, { status: mirrorFailure });
+        if (String(input).includes("tracks/")) trackWrites++;
+      }
+      return pod.fetch(input, init);
+    };
+    await retryLikedSync(fetch, root); // No pending work for this session.
+    const library = await loadLibrary(fetch, root);
+    expect(await retryLikedSync(fetch, root, library)).toBe(false);
+    const id = tracks[0]?.value as string;
+    await expect(setLiked(fetch, root, library, id, true)).rejects.toBeInstanceOf(
+      LikedSyncPendingError,
+    );
+    expect((await loadLibrary(fetch, root)).tracks.find((track) => track.id === id)?.loved).toBe(
+      true,
+    );
+    expect((await pod.fetch(`${base}playlists/liked.ttl`)).status).toBe(404);
+    // Another writer creates the mirror in the meantime. A retry must re-read it.
+    await createDocument(pod.fetch, root, `${base}playlists/liked.ttl`, new Store());
+    mirrorFailure = 412;
+    await expect(retryLikedSync(fetch, root)).rejects.toMatchObject({ status: 412 });
+    mirrorFailure = 0;
+    await retryLikedSync(fetch, root);
+    const synced = await loadLibrary(fetch, root);
+    expect(synced.models.playlists[0]?.tracks).toEqual([id]);
+    const before = pod.snapshot();
+    await retryLikedSync(fetch, root, synced);
+    expect(pod.snapshot()).toEqual(before);
+    expect(trackWrites).toBe(1);
+  });
+  it("rediscovers stale liked mirrors after reopening, including equal-length mismatches", async () => {
+    const { pod, tracks } = await fixture();
+    const facade = (): typeof globalThis.fetch => (input, init) => pod.fetch(input, init);
+    const failing = failure(
+      pod.fetch,
+      (url, init) => url.endsWith("liked.ttl") && init?.method === "PUT",
+    );
+    const id = tracks[0]?.value as string;
+    await expect(
+      setLiked(failing, root, await loadLibrary(pod.fetch, root), id, true),
+    ).rejects.toBeInstanceOf(LikedSyncPendingError);
+    let fetch = facade();
+    expect(await retryLikedSync(fetch, root, await loadLibrary(fetch, root))).toBe(true);
+    const url = `${base}playlists/liked.ttl`;
+    const doc = await loadMusic(pod.fetch, url);
+    new Playlist(`${url}#it`, doc.dataset).setTracks([tracks[1]?.value as string]);
+    await pod.fetch(url, {
+      method: "PUT",
+      headers: { "If-Match": doc.etag as string, "Content-Type": "text/turtle" },
+      body: await serializeMusic(doc.dataset),
+    });
+    fetch = facade();
+    expect(await retryLikedSync(fetch, root, await loadLibrary(fetch, root))).toBe(true);
+    const synced = await loadLibrary(fetch, root);
+    expect(synced.models.playlists[0]?.tracks).toEqual([id]);
+    expect(await retryLikedSync(fetch, root, synced)).toBe(false);
   });
   it("lists missing document metadata safely", async () => {
     const { pod } = await fixture();

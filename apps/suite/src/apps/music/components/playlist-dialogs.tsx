@@ -116,6 +116,78 @@ export function CreatePlaylist({ compact = false }: { compact?: boolean }) {
   );
 }
 
+export function EditPlaylistDetails({ playlist }: { playlist: MusicPlaylist }) {
+  const music = useMusic();
+  const id = useId();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(playlist.name);
+  const [description, setDescription] = useState(playlist.description);
+  const [error, setError] = useState("");
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) {
+          setName(playlist.name);
+          setDescription(playlist.description);
+          setError("");
+        }
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button variant="outline">Edit details</Button>
+      </DialogTrigger>
+      <DialogContent className="mus-dialog">
+        <DialogHeader>
+          <DialogTitle>Edit playlist details</DialogTitle>
+          <DialogDescription>Update the name and description of your collection.</DialogDescription>
+        </DialogHeader>
+        <form
+          className="mus-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!name.trim()) {
+              setError("Enter a playlist name.");
+              return;
+            }
+            music.edit(playlist, { kind: "rename", name, description });
+            setOpen(false);
+          }}
+        >
+          <Label htmlFor={`${id}-name`}>Name</Label>
+          <Input
+            id={`${id}-name`}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            maxLength={200}
+            aria-invalid={Boolean(error)}
+            aria-describedby={error ? `${id}-error` : undefined}
+          />
+          <Label htmlFor={`${id}-description`}>Description</Label>
+          <Textarea
+            id={`${id}-description`}
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+            maxLength={2000}
+          />
+          {error && (
+            <p role="alert" id={`${id}-error`}>
+              {error}
+            </p>
+          )}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit">Save details</Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function AddSongs({ playlist }: { playlist: MusicPlaylist }) {
   const music = useMusic();
   const [open, setOpen] = useState(false);

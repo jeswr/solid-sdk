@@ -117,10 +117,12 @@ function Chrome({ children }: { children: ReactNode }) {
       search={{ placeholder: "Search in Music", action: "/music/search", scopeLabel: "in Music" }}
       actions={<Settings />}
     >
-      <div className="mus-content">{children}</div>
-      <p role="status" aria-live="polite" className={music.saving ? "mus-save" : "mus-sr-only"}>
-        {music.saving ? "Saving…" : music.notice}
-      </p>
+      <div className="mus-content">
+        {children}
+        <p role="status" aria-live="polite" className={music.saving ? "mus-save" : "mus-sr-only"}>
+          {music.saving ? "Saving…" : music.notice}
+        </p>
+      </div>
     </SuiteFrame>
   );
 }

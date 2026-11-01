@@ -4,9 +4,19 @@ import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
 
 import type { ReactNode } from "react";
 import { expect, it, vi } from "vitest";
-import { TrackMenu } from "../src/apps/music/components/track-list";
-import { createDocument, musicRoot, provision } from "../src/apps/music/lib/data/library";
-import { createPlaylist } from "../src/apps/music/lib/data/playlists";
+import { EditPlaylistDetails } from "../src/apps/music/components/playlist-dialogs";
+import { PlaylistTracks, TrackMenu } from "../src/apps/music/components/track-list";
+import {
+  createDocument,
+  loadLibrary,
+  musicRoot,
+  provision,
+} from "../src/apps/music/lib/data/library";
+import {
+  createPlaylist,
+  listPlaylists,
+  type MusicPlaylist,
+} from "../src/apps/music/lib/data/playlists";
 import { Store, Track } from "../src/apps/music/lib/model";
 import { MusicProvider, useMusic } from "../src/apps/music/state/music-context";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
@@ -27,11 +37,12 @@ function Probe() {
 async function fixture(
   wrap: (fetch: typeof globalThis.fetch) => typeof globalThis.fetch = (fetch) => fetch,
   child: ReactNode = h(Probe),
+  names = ["First", "Second"],
 ) {
   const pod = createDemoPod({ root });
   await provision(pod.fetch, root);
   const dataset = new Store();
-  const tracks = ["First", "Second"].map((name, i) => {
+  const tracks = names.map((name, i) => {
     const track = new Track(`${musicRoot(root)}tracks/a.ttl#${i}`, dataset).stampType();
     track.title = name;
     return track.value;
@@ -185,6 +196,216 @@ it("opens Add to playlist from the row menu and restores focus when dismissed", 
   });
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain("A playlist");
   await key(document.activeElement as Element, "Escape");
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+});
+
+it.each([
+  412, 500,
+])("cancels dependent positional edits after a failed move (%i)", async (status) => {
+  const move = deferred<Response>();
+  let rejectMove = false;
+  let writes = 0;
+  const { pod, tracks } = await fixture(
+    (fetch) => async (input, init) => {
+      if (rejectMove && init?.method === "PUT" && String(input).endsWith("playlists/one.ttl")) {
+        writes++;
+        return move.promise;
+      }
+      return fetch(input, init);
+    },
+    h(Probe),
+    ["First", "Second", "Third"],
+  );
+  await ready();
+  await act(async () =>
+    music.edit(music.snapshot?.playlists[0] as MusicPlaylist, { kind: "add", tracks }),
+  );
+  await settled();
+  rejectMove = true;
+  await act(async () =>
+    music.edit(music.snapshot?.playlists[0] as MusicPlaylist, { kind: "move", from: 0, to: 1 }),
+  );
+  expect(music.snapshot?.playlists[0]?.tracks).toEqual([tracks[1], tracks[0], tracks[2]]);
+  // Remove B at its optimistic position, while the preceding move remains unresolved.
+  await act(async () =>
+    music.edit(music.snapshot?.playlists[0] as MusicPlaylist, { kind: "remove", position: 0 }),
+  );
+  expect(music.snapshot?.playlists[0]?.tracks).toEqual([tracks[0], tracks[2]]);
+  await act(async () => move.resolve(new Response(null, { status })));
+  await settled();
+  expect(writes).toBe(1);
+  expect(music.snapshot?.playlists[0]?.tracks).toEqual(tracks);
+  expect(listPlaylists(await loadLibrary(pod.fetch, root))[0]?.tracks).toEqual(tracks);
+  expect(music.notice).toContain("Queued song moves and removals were cancelled");
+  rejectMove = false;
+  await act(async () =>
+    music.edit(music.snapshot?.playlists[0] as MusicPlaylist, { kind: "remove", position: 1 }),
+  );
+  await settled();
+  expect(music.snapshot?.playlists[0]?.tracks).toEqual([tracks[0], tracks[2]]);
+});
+
+it("rejects positional edits captured while a failed move is still reconciling", async () => {
+  const move = deferred<Response>();
+  const read = deferred<void>();
+  let moving = false;
+  let slowRead = false;
+  let reading = false;
+  let writes = 0;
+  const { tracks } = await fixture((fetch) => async (input, init) => {
+    if (String(input).endsWith("playlists/one.ttl")) {
+      if (moving && init?.method === "PUT" && ++writes === 1) return move.promise;
+      if (slowRead && !init?.method) {
+        slowRead = false;
+        reading = true;
+        await read.promise;
+      }
+    }
+    return fetch(input, init);
+  });
+  await ready();
+  await act(async () =>
+    music.edit(music.snapshot?.playlists[0] as MusicPlaylist, { kind: "add", tracks }),
+  );
+  await settled();
+  moving = true;
+  await act(async () =>
+    music.edit(music.snapshot?.playlists[0] as MusicPlaylist, { kind: "move", from: 0, to: 1 }),
+  );
+  slowRead = true;
+  await act(async () => move.resolve(new Response(null, { status: 412 })));
+  await vi.waitFor(() => expect(reading).toBe(true));
+  await act(async () =>
+    music.edit(music.snapshot?.playlists[0] as MusicPlaylist, { kind: "remove", position: 0 }),
+  );
+  await act(async () => read.resolve());
+  await settled();
+  expect(writes).toBe(1);
+  expect(music.snapshot?.playlists[0]?.tracks).toEqual(tracks);
+});
+
+it("returns a committed playlist and retains it when subsequent GETs fail, then reconciles separately", async () => {
+  let blockReads = false;
+  const { pod } = await fixture((fetch) => async (input, init) => {
+    if (!init?.method && blockReads) return new Response(null, { status: 500 });
+    const response = await fetch(input, init);
+    if (init?.method === "PUT" && String(input).includes("playlists/")) blockReads = true;
+    return response;
+  });
+  await ready();
+  mocks.error.mockClear();
+  let created: string | undefined;
+  await act(async () => {
+    created = await music.create("Committed once", "Still here");
+  });
+  expect(created).toBeDefined();
+  expect(music.snapshot?.playlists.find((p) => p.id === created)?.name).toBe("Committed once");
+  expect(music.notice).toContain("refresh Music to retry");
+  expect(mocks.error).not.toHaveBeenCalled();
+  await act(async () => music.refresh());
+  expect(music.status).toBe("ready");
+  expect(music.snapshot?.playlists.find((p) => p.id === created)).toBeDefined();
+  blockReads = false;
+  await act(async () => music.refresh());
+  expect(music.snapshot?.playlists.filter((p) => p.name === "Committed once")).toHaveLength(1);
+  expect(
+    listPlaylists(await loadLibrary(pod.fetch, root)).filter((p) => p.name === "Committed once"),
+  ).toHaveLength(1);
+});
+
+it("reports a committed like with pending mirror work and repairs it on refresh", async () => {
+  let fail = true;
+  let trackWrites = 0;
+  const { tracks } = await fixture((fetch) => async (input, init) => {
+    if (init?.method === "PUT") {
+      if (String(input).endsWith("liked.ttl") && fail) return new Response(null, { status: 500 });
+      if (String(input).includes("tracks/")) trackWrites++;
+    }
+    return fetch(input, init);
+  });
+  await ready();
+  await act(async () => music.like(tracks[0] as string, true));
+  await settled();
+  expect(music.snapshot?.library.tracks[0]?.loved).toBe(true);
+  expect(music.notice).toContain("Playlist synchronization is pending");
+  fail = false;
+  await act(async () => music.refresh());
+  expect(
+    music.snapshot?.library.models.playlists.find((p) => p.title === "Liked songs")?.tracks,
+  ).toEqual([tracks[0]]);
+  expect(trackWrites).toBe(1);
+});
+
+it.each([
+  "Move up",
+  "Move down",
+])("restores focus to the moved occurrence after keyboard menu %s", async (action) => {
+  function PlaylistProbe() {
+    music = useMusic();
+    const playlist = music.snapshot?.playlists[0];
+    return playlist ? h(PlaylistTracks, { playlist }) : null;
+  }
+  const { tracks, view } = await fixture(undefined, h(PlaylistProbe));
+  await ready();
+  await act(async () =>
+    music.edit(music.snapshot?.playlists[0] as MusicPlaylist, { kind: "add", tracks }),
+  );
+  await settled();
+  const title = action === "Move up" ? "Second" : "First";
+  const position = action === "Move up" ? 1 : 2;
+  const trigger = view.host.querySelector(
+    `button[aria-label="More actions for ${title}"]`,
+  ) as HTMLButtonElement;
+  await act(async () => trigger.focus());
+  await key(trigger, "ArrowDown");
+  const item = [...document.querySelectorAll('[role="menuitem"]')].find(
+    (element) => element.textContent?.trim() === action,
+  ) as HTMLElement;
+  await act(async () => item.focus());
+  await key(item, "Enter");
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(document.activeElement?.getAttribute("aria-label")).toBe(
+      `Reorder ${title}, position ${position}`,
+    );
+  });
+  await settled();
+  expect(document.activeElement?.getAttribute("aria-label")).toBe(
+    `Reorder ${title}, position ${position}`,
+  );
+});
+
+it("edits playlist details in a dialog and returns focus to the action after saving", async () => {
+  function DetailsProbe() {
+    music = useMusic();
+    const playlist = music.snapshot?.playlists[0];
+    return playlist ? h(EditPlaylistDetails, { playlist }) : null;
+  }
+  const { view } = await fixture(undefined, h(DetailsProbe));
+  await ready();
+  const trigger = view.host.querySelector("button") as HTMLButtonElement;
+  await act(async () => trigger.focus());
+  await click(trigger);
+  const dialog = document.querySelector('[role="dialog"]') as HTMLElement;
+  const input = dialog.querySelector("input") as HTMLInputElement;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      input,
+      "New title",
+    );
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => {
+    dialog
+      .querySelector("form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  await settled();
+  expect(music.snapshot?.playlists[0]?.name).toBe("New title");
   await vi.waitFor(async () => {
     await act(async () => {});
     expect(document.querySelector('[role="dialog"]')).toBeNull();
