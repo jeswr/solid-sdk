@@ -45,7 +45,13 @@ import {
   validateEvent,
 } from "../lib/model";
 import { useCalendarState, useEventMutations } from "../state/calendar-context";
-import { decodeEventRef, planSeriesEdit, quickDraft, type SeriesMode } from "../state/editing";
+import {
+  decodeEventRef,
+  editorRecurrence,
+  planSeriesEdit,
+  quickDraft,
+  type SeriesMode,
+} from "../state/editing";
 import { type CalendarInfo, calendarHref, dateKey, eventDateRange, localDate } from "../state/view";
 import { CalendarScreen } from "./calendar-views";
 
@@ -420,7 +426,9 @@ function EventEditor({
   item: StoredItem<CalendarEvent>;
   occurrence: string | null;
 }) {
-  const { calendars, closeEvent } = useCalendarState();
+  const { calendars, closeEvent, session } = useCalendarState();
+  const confirmed = useRef(item);
+  const replacement = useRef<{ url: string; etag: string | null } | undefined>(undefined);
   const editing = useCalendarEditing();
   const router = useRouter();
   const params = useSearchParams();
@@ -476,7 +484,9 @@ function EventEditor({
         : calendarHref("week", dateKey(initial.start)),
     );
   };
-  const cancel = () => (dirty ? setDiscard(true) : close());
+  const cancel = () => {
+    if (!busy) dirty ? setDiscard(true) : close();
+  };
   const calendar =
     calendars.status === "ready"
       ? calendars.calendars.find((c) => `${c.url}#it` === data.inCalendar)
@@ -488,52 +498,77 @@ function EventEditor({
     if (!begin || !finish) throw new Error("Enter a start and end date.");
     if (+new Date(finish) <= +new Date(begin)) throw new Error("End must be after start.");
     if (ruleError) throw new Error(ruleError);
-    const result = { ...data, name: data.name.trim(), start: begin, end: finish };
+    const result = {
+      ...data,
+      name: data.name.trim(),
+      start: begin,
+      end: finish,
+      recurrence: editorRecurrence(data.recurrence, begin, zone),
+    };
     validateEvent(result);
     if (!calendar) throw new Error("Choose a calendar.");
     return result;
   }
+  async function removeReplacement() {
+    const pending = replacement.current;
+    if (!pending) return;
+    await mutations.delete(pending.url, pending.etag ?? "", true);
+    replacement.current = undefined;
+  }
   async function persist(action: "save" | "delete", mode: SeriesMode) {
+    if (busy) return;
     try {
       const edited = action === "save" ? assembled() : null;
-      const plan = planSeriesEdit(item.data, initial.start, edited, mode, zone);
+      const source = confirmed.current;
+      const plan = planSeriesEdit(source.data, initial.start, edited, mode, zone);
       setBusy(true);
       setScope(undefined);
       setError("");
+      // Finish a failed compensation before retrying, so a retry cannot duplicate replacements.
+      await removeReplacement();
       const target = calendar as CalendarInfo;
-      const create = (event: CalendarEvent) =>
-        mutations.create(new URL(`${crypto.randomUUID()}.ttl`, target.container).href, {
-          ...event,
-          uid: crypto.randomUUID(),
-        });
-      // Initiate the optimistic mutation before closing the editor; replay can finish in the background.
-      const save = async () => {
-        if (item.url) {
-          if (!item.etag) throw new Error("Reload this event before saving.");
-          if (plan.original) {
-            if (plan.original.inCalendar !== item.data.inCalendar && mode === "all") {
-              await create(plan.original);
-              await mutations.delete(item.url, item.etag);
-            } else await mutations.update(item.url, plan.original, item.etag);
-          } else await mutations.delete(item.url, item.etag);
-        } else if (plan.original) await create(plan.original);
-        if (plan.created) await create(plan.created);
-        if (target) editing?.remember(target.url);
+      const create = async (event: CalendarEvent, compound: boolean) => {
+        const url = new URL(`${crypto.randomUUID()}.ttl`, target.container).href;
+        await mutations.create(url, { ...event, uid: crypto.randomUUID() }, compound);
+        if (compound) {
+          replacement.current = { url, etag: null };
+          replacement.current.etag = await mutations.resolve(url, null);
+        }
       };
-      const operation = save();
+      const moving =
+        source.url &&
+        plan.original &&
+        plan.original.inCalendar !== source.data.inCalendar &&
+        mode === "all";
+      const compound = Boolean(plan.created || moving);
+      // Compound operations require confirmed prerequisites; ordinary edits can stay queued offline.
+      const etag = source.url ? await mutations.resolve(source.url, source.etag, compound) : "";
+      if (moving && plan.original) await create(plan.original, true);
+      else if (plan.created) await create(plan.created, true);
+      if (source.url) {
+        if (plan.original && !moving)
+          await mutations.update(source.url, plan.original, etag, compound);
+        else await mutations.delete(source.url, etag, compound);
+      } else if (plan.original) await create(plan.original, false);
+      replacement.current = undefined;
+      if (target) editing?.remember(target.url);
       close();
-      void operation.catch((failure) => {
-        if (!(failure instanceof Error && "status" in failure))
-          toast.error("Couldn't finish saving this event. Please retry.");
-      });
     } catch (failure) {
+      let message =
+        failure instanceof Error ? failure.message : "Couldn't save this event. Please retry.";
+      try {
+        await removeReplacement();
+      } catch {
+        message = "Couldn't finish saving. Save again to retry cleanup; your draft is still here.";
+      }
       if (failure instanceof Error && "status" in failure && failure.status === 412) {
-        router.refresh();
-        close();
-      } else
-        setError(
-          failure instanceof Error ? failure.message : "Couldn't save this event. Please retry.",
-        );
+        const latest = await calendarIO(session.fetch, session.storageUrl)
+          .loadEvent(item.url)
+          .catch(() => null);
+        if (latest) confirmed.current = latest;
+        message = "This event changed elsewhere. Review your draft and save again.";
+      }
+      setError(message);
     } finally {
       setBusy(false);
     }

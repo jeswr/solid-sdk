@@ -1295,3 +1295,431 @@ it("rejects an impossible date in a direct new-event URL", async () => {
   );
   expect(mounted.host.querySelector(".cal-editor-page")).toBeNull();
 });
+
+it.each([
+  ["create", "save"],
+  ["create", "delete"],
+  ["update", "save"],
+  ["update", "delete"],
+] as const)("keeps the editor draft while a pending %s resolves before %s", async (kind, action) => {
+  const account = mocks.session as PodSession;
+  const url = `${DEMO_ROOT}calendar/work/pending-editor.ttl`;
+  const io = calendarIO(account.fetch, account.storageUrl);
+  const data = {
+    name: "Pending event",
+    start: new Date("2026-11-01T12:00Z"),
+    end: new Date("2026-11-01T13:00Z"),
+    inCalendar: `${DEMO_ROOT}calendar/work.ttl#it`,
+  };
+  const etag = kind === "update" ? await io.saveEvent(url, data, { create: true }) : null;
+  const gate = deferred<void>();
+  let first = true;
+  const requests: RequestInit[] = [];
+  mocks.session = {
+    ...account,
+    fetch: async (input, init) => {
+      if (String(input) === url && (init?.method === "PUT" || init?.method === "DELETE")) {
+        requests.push(init);
+        if (first) {
+          first = false;
+          await gate.promise;
+        }
+      }
+      return account.fetch(input, init);
+    },
+  };
+  let api!: ReturnType<typeof useEventMutations>;
+  function Probe() {
+    api = useEventMutations();
+    return null;
+  }
+  const content = (edit: boolean) =>
+    h(CalendarApp, {
+      children: h(
+        "div",
+        null,
+        h(Probe),
+        edit ? h(CalendarEditorRoute, { eventRef: encodeRef(url) }) : null,
+      ),
+    });
+  const mounted = await mount(content(false));
+  await settle();
+  let pending!: Promise<void>;
+  await act(() => {
+    pending = kind === "create" ? api.create(url, data) : api.update(url, data, etag as string);
+  });
+  mocks.path = `/calendar/e/${encodeRef(url)}`;
+  await mounted.render(content(true));
+  await settle();
+  const form = document.querySelector(".cal-editor-page") as HTMLElement;
+  await changeField(
+    form.querySelector('[aria-label="Title"]') as HTMLInputElement,
+    "Retained draft",
+  );
+  if (action === "save")
+    await act(() =>
+      form
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+  else
+    await click(
+      [...form.querySelectorAll("button")].find(
+        (button) => button.textContent === "Delete",
+      ) as HTMLElement,
+    );
+  expect(mocks.router.push).not.toHaveBeenCalled();
+  expect((form.querySelector('[aria-label="Title"]') as HTMLInputElement).value).toBe(
+    "Retained draft",
+  );
+  expect(requests).toHaveLength(1);
+  await act(async () => {
+    gate.resolve();
+    await pending;
+  });
+  await settle();
+  expect(requests).toHaveLength(2);
+  expect(new Headers(requests[1]?.headers).get("If-Match")).toBeTruthy();
+  expect(mocks.router.push).toHaveBeenCalled();
+  if (action === "save") expect((await io.loadEvent(url))?.data.name).toBe("Retained draft");
+  else expect((await account.fetch(url)).status).toBe(404);
+});
+it("retains the editor draft on a 412, refreshes preconditions, and allows an explicit retry", async () => {
+  const account = mocks.session as PodSession;
+  const io = calendarIO(account.fetch, account.storageUrl);
+  const url = `${DEMO_ROOT}calendar/work/stand-up.ttl`;
+  const old = (await io.loadEvent(url))!;
+  await io.saveEvent(url, { ...old.data, recurrence: undefined }, { etag: old.etag as string });
+  mocks.path = `/calendar/e/${encodeRef(url)}`;
+  await mount(h(CalendarApp, { children: h(CalendarEditorRoute, { eventRef: encodeRef(url) }) }));
+  await settle();
+  const form = document.querySelector(".cal-editor-page") as HTMLElement;
+  await changeField(
+    form.querySelector('[aria-label="Title"]') as HTMLInputElement,
+    "My conflict draft",
+  );
+  const current = (await io.loadEvent(url))!;
+  await act(async () => {
+    await io.saveEvent(
+      url,
+      { ...current.data, name: "Changed elsewhere" },
+      { etag: current.etag as string },
+    );
+  });
+  const submit = () =>
+    act(() =>
+      form
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+  await submit();
+  await settle();
+  expect(mocks.router.push).not.toHaveBeenCalled();
+  expect(form.querySelector('[role="alert"]')?.textContent).toContain("changed elsewhere");
+  expect((form.querySelector('[aria-label="Title"]') as HTMLInputElement).value).toBe(
+    "My conflict draft",
+  );
+  await submit();
+  await settle();
+  expect(mocks.router.push).toHaveBeenCalled();
+  expect((await io.loadEvent(url))?.data.name).toBe("My conflict draft");
+});
+it.each([
+  "This event",
+  "This and following events",
+])("preserves the series and draft if replacement creation fails for %s", async (mode) => {
+  const account = mocks.session as PodSession;
+  const url = `${DEMO_ROOT}calendar/work/stand-up.ttl`;
+  const io = calendarIO(account.fetch, account.storageUrl);
+  const before = await io.loadEvent(url);
+  let broken = true;
+  const writes: string[] = [];
+  mocks.session = {
+    ...account,
+    fetch: async (input, init) => {
+      if (init?.method === "PUT" || init?.method === "DELETE") {
+        writes.push(`${init.method} ${String(input)}`);
+        if (broken && String(input) !== url) return new Response(null, { status: 500 });
+      }
+      return account.fetch(input, init);
+    },
+  };
+  mocks.path = `/calendar/e/${encodeRef(url)}`;
+  mocks.extra = { occurrence: "2026-10-28T09:30:00.000Z" };
+  await mount(h(CalendarApp, { children: h(CalendarEditorRoute, { eventRef: encodeRef(url) }) }));
+  await settle();
+  const form = document.querySelector(".cal-editor-page") as HTMLElement;
+  await changeField(
+    form.querySelector('[aria-label="Title"]') as HTMLInputElement,
+    "Retry replacement",
+  );
+  const save = async () => {
+    await act(() =>
+      form
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    await click(
+      [...document.querySelectorAll(".cal-series-dialog button")].find(
+        (button) => button.textContent === mode,
+      ) as HTMLElement,
+    );
+    await settle();
+  };
+  await save();
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).not.toContain(url);
+  expect(await io.loadEvent(url)).toEqual(before);
+  expect(mocks.router.push).not.toHaveBeenCalled();
+  expect(form.querySelector('[role="alert"]')).not.toBeNull();
+  expect((form.querySelector('[aria-label="Title"]') as HTMLInputElement).value).toBe(
+    "Retry replacement",
+  );
+  broken = false;
+  await save();
+  expect(mocks.router.push).toHaveBeenCalled();
+  expect(writes[2]).toBe(`PUT ${url}`);
+});
+it.each([
+  "This event",
+  "This and following events",
+])("compensates the replacement when the original write fails for %s", async (mode) => {
+  const account = mocks.session as PodSession;
+  const url = `${DEMO_ROOT}calendar/work/stand-up.ttl`;
+  const io = calendarIO(account.fetch, account.storageUrl);
+  const before = await io.loadEvent(url);
+  const writes: [string, string][] = [];
+  mocks.session = {
+    ...account,
+    fetch: async (input, init) => {
+      if (init?.method === "PUT" || init?.method === "DELETE") {
+        writes.push([init.method, String(input)]);
+        if (String(input) === url) return new Response(null, { status: 500 });
+      }
+      return account.fetch(input, init);
+    },
+  };
+  mocks.path = `/calendar/e/${encodeRef(url)}`;
+  mocks.extra = { occurrence: "2026-10-28T09:30:00.000Z" };
+  await mount(h(CalendarApp, { children: h(CalendarEditorRoute, { eventRef: encodeRef(url) }) }));
+  await settle();
+  const form = document.querySelector(".cal-editor-page") as HTMLElement;
+  await changeField(
+    form.querySelector('[aria-label="Title"]') as HTMLInputElement,
+    "Retain after rollback",
+  );
+  await act(() =>
+    form
+      .querySelector("form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  await click(
+    [...document.querySelectorAll(".cal-series-dialog button")].find(
+      (button) => button.textContent === mode,
+    ) as HTMLElement,
+  );
+  await settle();
+  expect(writes.map(([method]) => method)).toEqual(["PUT", "PUT", "DELETE"]);
+  expect(writes[1]?.[1]).toBe(url);
+  expect(writes[2]?.[1]).toBe(writes[0]?.[1]);
+  expect((await account.fetch(writes[0]![1])).status).toBe(404);
+  expect(await io.loadEvent(url)).toEqual(before);
+  expect(mocks.router.push).not.toHaveBeenCalled();
+  expect((form.querySelector('[aria-label="Title"]') as HTMLInputElement).value).toBe(
+    "Retain after rollback",
+  );
+  expect(form.querySelector('[role="alert"]')).not.toBeNull();
+});
+it("exports and re-imports a timed series saved through the editor's Ends on date field", async () => {
+  mocks.path = "/calendar/e/new";
+  mocks.extra = {
+    start: "2026-10-18T08:00:00Z",
+    end: "2026-10-18T09:00:00Z",
+    cal: `${DEMO_ROOT}calendar/work.ttl#it`,
+  };
+  await mount(h(CalendarApp, { children: h(CalendarEditorRoute, { eventRef: "new" }) }));
+  await settle();
+  const form = document.querySelector(".cal-editor-page") as HTMLElement;
+  await changeField(form.querySelector('[aria-label="Title"]') as HTMLInputElement, "Timed ending");
+  const labelled = (name: string) =>
+    [...form.querySelectorAll("select")].find((select) =>
+      select.closest("label")?.textContent?.startsWith(name),
+    ) as HTMLSelectElement;
+  await changeField(labelled("Frequency"), "WEEKLY");
+  await changeField(labelled("Ends"), "on");
+  await changeField(form.querySelector('input[type="date"]') as HTMLInputElement, "2026-10-25");
+  await act(() =>
+    form
+      .querySelector("form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  await settle();
+  expect(mocks.router.push).toHaveBeenCalled();
+  const account = mocks.session as PodSession;
+  const { exportCalendar } = await import("../src/apps/calendar/state/transfer");
+  const { discoverCalendars } = await import("../src/apps/calendar/state/repository");
+  const { importICal } = await import("../src/apps/calendar/lib/model");
+  const calendar = (await discoverCalendars(account)).calendars.find(
+    (calendar) => calendar.title === "Work",
+  )!;
+  const parsed = importICal(await exportCalendar(account, calendar));
+  expect(parsed.skipped).toBe(0);
+  expect(parsed.warnings).toEqual([]);
+  const event = parsed.events.find((event) => event.name === "Timed ending");
+  expect(event?.recurrence?.until).toEqual(new Date("2026-10-25T23:59:59Z"));
+});
+
+it("retries a failed compensation before creating another replacement and deleting the original", async () => {
+  const account = mocks.session as PodSession;
+  const url = `${DEMO_ROOT}calendar/work/stand-up.ttl`;
+  const io = calendarIO(account.fetch, account.storageUrl);
+  const original = (await io.loadEvent(url))!;
+  let broken = true;
+  const writes: [string, string][] = [];
+  mocks.session = {
+    ...account,
+    fetch: async (input, init) => {
+      if (init?.method === "PUT" || init?.method === "DELETE") {
+        writes.push([init.method, String(input)]);
+        if (broken && init.method === "DELETE") return new Response(null, { status: 500 });
+      }
+      return account.fetch(input, init);
+    },
+  };
+  mocks.path = `/calendar/e/${encodeRef(url)}`;
+  mocks.extra = { occurrence: new Date(original.data.start).toISOString() };
+  await mount(h(CalendarApp, { children: h(CalendarEditorRoute, { eventRef: encodeRef(url) }) }));
+  await settle();
+  const form = document.querySelector(".cal-editor-page") as HTMLElement;
+  await changeField(
+    form.querySelector('[aria-label="Title"]') as HTMLInputElement,
+    "Cleanup then retry",
+  );
+  const save = async () => {
+    await act(() =>
+      form
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    await click(
+      [...document.querySelectorAll(".cal-series-dialog button")].find(
+        (button) => button.textContent === "This and following events",
+      ) as HTMLElement,
+    );
+    await settle();
+  };
+  await save();
+  expect(writes.map(([method]) => method)).toEqual(["PUT", "DELETE", "DELETE"]);
+  expect(await io.loadEvent(url)).toEqual(original);
+  expect(form.querySelector('[role="alert"]')?.textContent).toContain("retry cleanup");
+  expect(mocks.router.push).not.toHaveBeenCalled();
+  broken = false;
+  await save();
+  expect(writes.map(([method]) => method)).toEqual([
+    "PUT",
+    "DELETE",
+    "DELETE",
+    "DELETE",
+    "PUT",
+    "DELETE",
+  ]);
+  expect(writes[3]?.[1]).toBe(writes[0]?.[1]);
+  expect((await account.fetch(writes[0]![1])).status).toBe(404);
+  expect((await account.fetch(url)).status).toBe(404);
+  const events = await io.eventsInRange(
+    `${DEMO_ROOT}calendar/work/`,
+    new Date("2026-10-26"),
+    new Date("2026-11-02"),
+  );
+  expect(events.filter((event) => event.data.name === "Cleanup then retry")).toHaveLength(3);
+  expect(mocks.router.push).toHaveBeenCalled();
+});
+
+it("shows the import warning before an unsupported New York series can be saved", async () => {
+  await mount(screen());
+  await settle();
+  const text =
+    "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:ny\nSUMMARY:New York weekly\nDTSTART;TZID=America/New_York:20261018T090000\nRRULE:FREQ=WEEKLY;COUNT=4\nEND:VEVENT\nEND:VCALENDAR";
+  const input = document.querySelector('[aria-label="Import ICS file"]') as HTMLInputElement;
+  Object.defineProperty(input, "files", {
+    value: [{ name: "new-york.ics", size: text.length, text: async () => text }],
+    configurable: true,
+  });
+  await act(() => input.dispatchEvent(new Event("change", { bubbles: true })));
+  await settle();
+  const dialog = document.querySelector(".cal-import-dialog") as HTMLElement;
+  expect(dialog.textContent).toContain("0 events · 1 skipped");
+  expect(dialog.querySelector('[aria-label="Import warnings"]')?.textContent).toContain(
+    '"New York weekly": recurring events in America/New_York',
+  );
+  expect(
+    [...dialog.querySelectorAll("button")].find((button) => button.textContent === "Import")
+      ?.disabled,
+  ).toBe(true);
+});
+it.each([
+  "create",
+  "update",
+] as const)("keeps a draft open when its pending %s prerequisite is rejected", async (kind) => {
+  const account = mocks.session as PodSession;
+  const url = `${DEMO_ROOT}calendar/work/rejected-prerequisite.ttl`;
+  const io = calendarIO(account.fetch, account.storageUrl);
+  const data = {
+    name: "Prerequisite",
+    start: new Date("2026-11-01T12:00Z"),
+    end: new Date("2026-11-01T13:00Z"),
+    inCalendar: `${DEMO_ROOT}calendar/work.ttl#it`,
+  };
+  const etag = kind === "update" ? await io.saveEvent(url, data, { create: true }) : null;
+  const gate = deferred<Response>();
+  mocks.session = {
+    ...account,
+    fetch: (input, init) =>
+      String(input) === url && init?.method === "PUT" ? gate.promise : account.fetch(input, init),
+  };
+  let api!: ReturnType<typeof useEventMutations>;
+  function Probe() {
+    api = useEventMutations();
+    return null;
+  }
+  const content = (edit: boolean) =>
+    h(CalendarApp, {
+      children: h(
+        "div",
+        null,
+        h(Probe),
+        edit ? h(CalendarEditorRoute, { eventRef: encodeRef(url) }) : null,
+      ),
+    });
+  const mounted = await mount(content(false));
+  await settle();
+  let pending!: Promise<unknown>;
+  await act(() => {
+    pending = (
+      kind === "create" ? api.create(url, data) : api.update(url, data, etag as string)
+    ).catch((error: unknown) => error);
+  });
+  mocks.path = `/calendar/e/${encodeRef(url)}`;
+  await mounted.render(content(true));
+  await settle();
+  const form = document.querySelector(".cal-editor-page") as HTMLElement;
+  await changeField(
+    form.querySelector('[aria-label="Title"]') as HTMLInputElement,
+    "Still my draft",
+  );
+  await act(() =>
+    form
+      .querySelector("form")
+      ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+  );
+  await act(async () => {
+    gate.resolve(new Response(null, { status: 500 }));
+    await pending;
+  });
+  await settle();
+  expect(mocks.router.push).not.toHaveBeenCalled();
+  expect((form.querySelector('[aria-label="Title"]') as HTMLInputElement).value).toBe(
+    "Still my draft",
+  );
+  expect(form.querySelector('[role="alert"]')?.textContent).toContain("500");
+});

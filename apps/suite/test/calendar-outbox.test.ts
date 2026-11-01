@@ -230,3 +230,155 @@ it("rebases queued conditional writes on the ETag returned by the preceding repl
   expect(seen[2]).toMatchObject({ etag: '"old"' });
   expect(seen[3]?.kind).toBe("create");
 });
+
+it.each([
+  "update",
+  "delete",
+] as const)("chains a %s on an in-flight create and uses its ETag", async (kind) => {
+  let finish!: (etag: string) => void;
+  const send = vi.fn(async (current: EventWrite) => {
+    if (current.kind === "create")
+      return await new Promise<string>((resolve) => {
+        finish = resolve;
+      });
+    return '"edited"';
+  });
+  const box = createEventOutbox(
+    web,
+    store(),
+    send,
+    () => {},
+    () => {},
+  );
+  const first = box.save({ ...write });
+  const dependent: EventWrite =
+    kind === "update"
+      ? { kind, url: write.url, etag: "", data: { ...write.data, name: "Edited draft" } }
+      : { kind, url: write.url, etag: "" };
+  const second = box.save(dependent);
+  expect(send).toHaveBeenCalledOnce();
+  finish('"created"');
+  await Promise.all([first, second]);
+  expect(send.mock.calls[1]?.[0]).toMatchObject({ kind, etag: '"created"' });
+  expect(await box.resolve(write.url, null)).toBe('"edited"');
+});
+it("resolves the latest local ETag even after a preceding write has finished", async () => {
+  const box = createEventOutbox(
+    web,
+    store(),
+    async () => '"new"',
+    () => {},
+    () => {},
+  );
+  await box.save({ ...write });
+  expect(await box.resolve(write.url, null)).toBe('"new"');
+  expect(await box.resolve(write.url, '"remote"')).toBe('"remote"');
+  expect(await box.resolve(`${write.url}-other`, '"other"')).toBe('"other"');
+  for (const etag of [null, "", "*", 'W/"weak"'])
+    await expect(box.resolve(`${write.url}-unknown`, etag)).rejects.toThrow("Reload");
+  const noTag = createEventOutbox(
+    web,
+    store(),
+    async () => null,
+    () => {},
+    () => {},
+  );
+  await noTag.save({ ...write });
+  await expect(noTag.resolve(write.url, null)).rejects.toThrow("Reload");
+});
+it("waits for pending writes before resolving preconditions and surfaces prerequisite rejection", async () => {
+  let reject!: (error: Error) => void;
+  const failure = new Error("412");
+  const send = vi.fn(
+    () =>
+      new Promise<string>((_resolve, fail) => {
+        reject = fail;
+      }),
+  );
+  const box = createEventOutbox(
+    web,
+    store(),
+    send,
+    () => {},
+    () => {},
+  );
+  const first = box.save({ ...write });
+  const firstRejected = expect(first).rejects.toBe(failure);
+  const second = box.save({ kind: "delete", url: write.url, etag: "" });
+  const secondRejected = expect(second).rejects.toBe(failure);
+  const resolved = box.resolve(write.url, null);
+  const resolvedRejected = expect(resolved).rejects.toBe(failure);
+  reject(failure);
+  await Promise.all([firstRejected, secondRejected, resolvedRejected]);
+  expect(send).toHaveBeenCalledOnce();
+});
+it("coalesces edits to offline creates, cancels unsent creates and refuses unconfirmed compound writes", async () => {
+  const send = vi.fn(async () => {
+    throw new TypeError("Calendar network unavailable");
+  });
+  const { box, changed } = setup(store(), send);
+  await box.save({ ...write });
+  await expect(box.resolve(write.url, null)).rejects.toThrow("Reconnect");
+  await box.save({
+    kind: "update",
+    url: write.url,
+    etag: "",
+    data: { ...write.data, name: "Queued edit" },
+  });
+  expect(changed).toHaveBeenLastCalledWith(
+    [
+      expect.objectContaining({
+        kind: "create",
+        data: expect.objectContaining({ name: "Queued edit" }),
+      }),
+    ],
+    true,
+  );
+  expect(await box.resolve(write.url, null, false)).toBe("");
+  expect(await box.resolve(write.url, '"queued"', false)).toBe('"queued"');
+  await box.save({ kind: "delete", url: write.url, etag: "" });
+  expect(changed).toHaveBeenLastCalledWith([], true);
+  for (const etag of ["", "*", 'W/"weak"'])
+    await expect(box.save({ kind: "delete", url: write.url, etag })).rejects.toThrow("Reload");
+});
+
+it("requires confirmed compound writes and removes unsent steps when the network disappears", async () => {
+  const { box, changed, storage } = setup(store(), async () => {
+    throw new TypeError("Calendar network unavailable");
+  });
+  await expect(box.save({ ...write }, true)).rejects.toThrow("Reconnect");
+  expect(changed).toHaveBeenLastCalledWith([], true);
+  expect(JSON.parse(storage.getItem(outboxKey(web))!).writes).toEqual([]);
+  await expect(box.save({ kind: "delete", url: write.url, etag: '"1"' }, true)).rejects.toThrow(
+    "Reconnect",
+  );
+  expect(changed).toHaveBeenLastCalledWith([], true);
+  const next = setup();
+  await next.box.save({ ...write }, true);
+  expect(next.changed).toHaveBeenLastCalledWith([], false);
+});
+
+it("rejects dependent intents without dropping unrelated queued resources", async () => {
+  let fail!: (error: Error) => void;
+  const failure = new Error("failed create");
+  const send = vi.fn(async (current: EventWrite) => {
+    if (current.url === write.url)
+      return await new Promise<string>((_resolve, reject) => {
+        fail = reject;
+      });
+    return '"unrelated"';
+  });
+  const box = createEventOutbox(
+    web,
+    store(),
+    send,
+    () => {},
+    () => {},
+  );
+  const first = box.save({ ...write });
+  const rejected = expect(first).rejects.toBe(failure);
+  const other = box.save({ ...write, url: `${write.url}-other` });
+  fail(failure);
+  await Promise.all([rejected, other]);
+  expect(send).toHaveBeenCalledTimes(2);
+});

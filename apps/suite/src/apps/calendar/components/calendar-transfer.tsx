@@ -16,9 +16,8 @@ import {
 } from "@jeswr/suite-ui";
 import { MoreHorizontal } from "lucide-react";
 import { createContext, type ReactNode, useContext, useRef, useState } from "react";
-import { importICal } from "../lib/model";
 import { useCalendarState, useEventMutations } from "../state/calendar-context";
-import { exportCalendar, importEvents } from "../state/transfer";
+import { exportCalendar, importCalendar, importEvents } from "../state/transfer";
 import type { CalendarInfo } from "../state/view";
 import { CalendarSelect, useCalendarEditing } from "./event-editor";
 
@@ -31,7 +30,7 @@ export function CalendarTransferProvider({ children }: { children: ReactNode }) 
   const editing = useCalendarEditing();
   const picker = useRef<HTMLInputElement>(null);
   const [calendar, setCalendar] = useState("");
-  const [parsed, setParsed] = useState<ReturnType<typeof importICal>>();
+  const [parsed, setParsed] = useState<ReturnType<typeof importCalendar>>();
   const [progress, setProgress] = useState<number>();
   const [result, setResult] = useState<Awaited<ReturnType<typeof importEvents>>>();
   const [error, setError] = useState("");
@@ -52,7 +51,7 @@ export function CalendarTransferProvider({ children }: { children: ReactNode }) 
         throw new Error("Choose .ics files up to 5 MB each.");
       const results = await Promise.all(
         files.map(async (f) =>
-          importICal(await f.text(), Intl.DateTimeFormat().resolvedOptions().timeZone),
+          importCalendar(await f.text(), Intl.DateTimeFormat().resolvedOptions().timeZone),
         ),
       );
       setParsed({

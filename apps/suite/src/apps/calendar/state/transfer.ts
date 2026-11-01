@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { type CalendarEvent, calendarIO, exportICal } from "../lib/model";
+import { type CalendarEvent, calendarIO, exportICal, importICal } from "../lib/model";
 import type { CalendarAccount } from "./repository";
 import type { CalendarInfo } from "./view";
 export async function exportCalendar(
@@ -39,4 +39,24 @@ export async function importEvents(
     }),
   );
   return { imported, failed };
+}
+
+/** The model cannot persist a TZID. Reject those series visibly instead of changing their zone. */
+export function importCalendar(text: string, floatingTimeZone: string) {
+  const parsed = importICal(text, floatingTimeZone);
+  const events: CalendarEvent[] = [];
+  const timeZones: (string | undefined)[] = [];
+  parsed.events.forEach((event, index) => {
+    const zone = parsed.timeZones[index];
+    if (event.recurrence && zone !== undefined) {
+      parsed.skipped++;
+      parsed.warnings.push(
+        `Skipped "${event.name}": recurring events in ${zone} cannot yet retain their timezone.`,
+      );
+    } else {
+      events.push(event);
+      timeZones.push(zone);
+    }
+  });
+  return { ...parsed, events, timeZones };
 }

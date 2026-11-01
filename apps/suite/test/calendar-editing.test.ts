@@ -1,9 +1,15 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
-import { type CalendarEvent, expandEvent } from "../src/apps/calendar/lib/model";
+import {
+  type CalendarEvent,
+  expandEvent,
+  exportICal,
+  importICal,
+} from "../src/apps/calendar/lib/model";
 import {
   decodeEventRef,
   editorHref,
+  editorRecurrence,
   eventDocument,
   planSeriesEdit,
   quickDraft,
@@ -183,4 +189,147 @@ it("shifts all-event edits in wall-clock time across the DST boundary", () => {
       zone,
     ).created?.recurrence?.count,
   ).toBeUndefined();
+});
+
+it.each([
+  "all",
+  "following",
+] as const)("converts all-day civil dates to timed %s events across London DST", (mode) => {
+  const edited = {
+    ...allDay,
+    start: new Date("2026-11-01T00:00Z"),
+    end: new Date("2026-11-01T01:00Z"),
+  };
+  const plan = planSeriesEdit(allDay, "2026-11-01", edited, mode, zone);
+  const series = (mode === "all" ? plan.original : plan.created)!;
+  expect(series.start).toEqual(
+    new Date(mode === "all" ? "2026-10-17T23:00Z" : "2026-11-01T00:00Z"),
+  );
+  expect(
+    occurrences(series).find((event) => +new Date(event.start) === +edited.start)?.end,
+  ).toEqual(edited.end);
+  if (mode === "all") {
+    expect(occurrences(series).map((event) => event.start)).toEqual([
+      new Date("2026-10-17T23:00Z"),
+      new Date("2026-10-24T23:00Z"),
+      new Date("2026-11-01T00:00Z"),
+      new Date("2026-11-08T00:00Z"),
+      new Date("2026-11-15T00:00Z"),
+    ]);
+  }
+});
+it.each([
+  "all",
+  "following",
+] as const)("shifts exceptions with a moved %s series without resurrecting detached events", (mode) => {
+  const generated = occurrences(timed);
+  const master = {
+    ...timed,
+    recurrence: { ...timed.recurrence!, exceptDate: [generated[0]!.start, generated[3]!.start] },
+  };
+  const at = generated[2]!;
+  const plan = planSeriesEdit(
+    master,
+    at.start,
+    {
+      ...at,
+      recurrence: master.recurrence,
+      start: new Date(+new Date(at.start) + 3600000),
+      end: new Date(+new Date(at.end!) + 3600000),
+    },
+    mode,
+    zone,
+  );
+  const series = (mode === "all" ? plan.original : plan.created)!;
+  expect(series.recurrence?.exceptDate).toEqual(
+    mode === "all"
+      ? [new Date("2026-10-18T09:00Z"), new Date("2026-11-08T10:00Z")]
+      : [new Date("2026-11-08T10:00Z")],
+  );
+  expect(
+    occurrences(series).some((event) => +new Date(event.start) === +new Date("2026-11-08T10:00Z")),
+  ).toBe(false);
+  expect(occurrences(series)).toHaveLength(mode === "all" ? 3 : 2);
+});
+it("remaps date-only exceptions during all-day conversion and handles a date-only target", () => {
+  const master = { ...allDay, recurrence: { ...allDay.recurrence!, exceptDate: ["2026-10-25"] } };
+  const converted = planSeriesEdit(
+    master,
+    "2026-11-01",
+    {
+      ...master,
+      start: new Date("2026-11-01T00:00Z"),
+      end: new Date("2026-11-01T01:00Z"),
+    },
+    "all",
+    zone,
+  ).original!;
+  expect(converted.recurrence?.exceptDate).toEqual([new Date("2026-10-24T23:00Z")]);
+  expect(occurrences(converted)).toHaveLength(4);
+  const restored = planSeriesEdit(
+    converted,
+    new Date("2026-11-01T00:00Z"),
+    {
+      ...converted,
+      start: "2026-11-01",
+      end: "2026-11-02",
+    },
+    "all",
+    zone,
+  ).original!;
+  expect(restored.start).toBe("2026-10-18");
+  expect(restored.recurrence?.exceptDate).toEqual(["2026-10-25"]);
+  const noRule = planSeriesEdit(
+    timed,
+    timed.start,
+    { ...timed, recurrence: undefined },
+    "all",
+    zone,
+  );
+  expect(noRule.original?.recurrence).toBeUndefined();
+});
+it("exports and re-imports timed split, following deletion, and editor inclusive UNTIL edits", () => {
+  const at = occurrences(timed)[2]!;
+  const split = planSeriesEdit(timed, at.start, at, "following", zone);
+  expect(split.original?.recurrence?.until).toEqual(new Date("2026-11-01T08:59:59Z"));
+  const ended = {
+    ...timed,
+    uid: "ended",
+    recurrence: editorRecurrence({ frequency: "WEEKLY", until: "2026-10-25" }, timed.start, zone),
+  };
+  expect(ended.recurrence?.until).toEqual(new Date("2026-10-25T23:59:59Z"));
+  const summer = editorRecurrence({ frequency: "WEEKLY", until: "2026-10-18" }, timed.start, zone);
+  expect(summer?.until).toEqual(new Date("2026-10-18T22:59:59Z"));
+  for (const events of [
+    [split.original!, { ...split.created!, uid: "split" }],
+    [planSeriesEdit(timed, at.start, null, "following", zone).original!],
+    [ended],
+  ]) {
+    const parsed = importICal(exportICal({ events }));
+    expect(parsed.warnings).toEqual([]);
+    expect(parsed.skipped).toBe(0);
+    expect(parsed.events).toHaveLength(events.length);
+    parsed.events.forEach((event, index) => {
+      expect(event.start).toEqual(events[index]!.start);
+      expect(event.recurrence?.until).toEqual(events[index]!.recurrence?.until);
+      expect(occurrences(event).map((e) => e.start)).toEqual(
+        occurrences(events[index]!).map((e) => e.start),
+      );
+    });
+  }
+  expect(editorRecurrence(undefined, timed.start, zone)).toBeUndefined();
+  expect(editorRecurrence({ frequency: "DAILY" }, timed.start, zone)).toEqual({
+    frequency: "DAILY",
+  });
+  expect(
+    editorRecurrence({ frequency: "DAILY", until: "2026-11-01" }, allDay.start, zone)?.until,
+  ).toBe("2026-11-01");
+  expect(
+    editorRecurrence(
+      { frequency: "DAILY", until: new Date("2026-10-18T22:59:59Z") },
+      allDay.start,
+      zone,
+    )?.until,
+  ).toBe("2026-10-18");
+  expect(editorRecurrence(summer, timed.start, zone)).toEqual(summer);
 });

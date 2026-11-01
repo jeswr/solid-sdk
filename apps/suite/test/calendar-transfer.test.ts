@@ -2,7 +2,7 @@
 import { expect, it, vi } from "vitest";
 import { importICal } from "../src/apps/calendar/lib/model";
 import { discoverCalendars } from "../src/apps/calendar/state/repository";
-import { exportCalendar, importEvents } from "../src/apps/calendar/state/transfer";
+import { exportCalendar, importCalendar, importEvents } from "../src/apps/calendar/state/transfer";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
 import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
 
@@ -54,4 +54,27 @@ it("bounds concurrency, reports partial failures and progress, including an empt
   expect(result).toEqual({ imported: 7, failed: ["Event 3"] });
   expect(progress).toHaveBeenLastCalledWith(8);
   expect(await importEvents([], async () => {}, progress)).toEqual({ imported: 0, failed: [] });
+});
+
+it("warns and skips TZID series the model cannot persist, including New York during London's rollback", () => {
+  const text = `BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:ny\nSUMMARY:New York weekly\nDTSTART;TZID=America/New_York:20261018T090000\nRRULE:FREQ=WEEKLY;COUNT=4\nEND:VEVENT\nBEGIN:VEVENT\nUID:single\nSUMMARY:New York one-off\nDTSTART;TZID=America/New_York:20261025T090000\nEND:VEVENT\nEND:VCALENDAR`;
+  const parsed = importCalendar(text, "Europe/London");
+  expect(parsed.events).toHaveLength(1);
+  expect(parsed.events[0]?.name).toBe("New York one-off");
+  expect(parsed.events[0]?.start).toEqual(new Date("2026-10-25T13:00:00Z"));
+  expect(parsed.timeZones).toEqual(["America/New_York"]);
+  expect(parsed.skipped).toBe(1);
+  expect(parsed.warnings).toEqual([
+    expect.stringContaining('"New York weekly": recurring events in America/New_York'),
+  ]);
+  expect(importCalendar("BEGIN:VCALENDAR\nEND:VCALENDAR", "Europe/London").events).toEqual([]);
+  const utc = importCalendar(
+    text
+      .replaceAll(";TZID=America/New_York", "")
+      .replaceAll("20261018T090000", "20261018T130000Z")
+      .replaceAll("20261025T090000", "20261025T130000Z"),
+    "Europe/London",
+  );
+  expect(utc.skipped).toBe(0);
+  expect(utc.timeZones).toEqual([undefined, undefined]);
 });

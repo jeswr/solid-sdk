@@ -70,13 +70,31 @@ export function createEventOutbox(
     changed([...entries], offline);
   }
   let running: Promise<void> | undefined;
-  const outcomes = new Map<EventWrite, unknown>();
+  const outcomes = new WeakMap<EventWrite, unknown>();
+  const etags = new Map<string, string | null>();
+  const knownEtags = new Map<string, Set<string | null>>();
+  let sending: EventWrite | undefined;
+  function conditional(write: EventWrite) {
+    if (write.kind !== "create") {
+      if (!write.etag || write.etag === "*" || write.etag.startsWith("W/"))
+        throw new Error("Reload this event before saving");
+    }
+  }
   async function drain() {
     while (entries.length) {
       const write = entries[0] as EventWrite;
       try {
+        conditional(write);
         allowed(write);
+        sending = write;
         const etag = await send(write);
+        if (typeof etag === "string" || etag === null) {
+          etags.set(write.url, etag);
+          const known = knownEtags.get(write.url) ?? new Set<string | null>();
+          known.add(write.kind === "create" ? null : write.etag);
+          known.add(etag);
+          knownEtags.set(write.url, known);
+        }
         if (typeof etag === "string") {
           for (const entry of entries)
             if (entry !== write && entry.url === write.url && entry.kind !== "create")
@@ -88,7 +106,13 @@ export function createEventOutbox(
           publish();
           return;
         }
-        outcomes.set(write, error);
+        etags.delete(write.url);
+        knownEtags.delete(write.url);
+        // A dependent intent must never run after its prerequisite failed.
+        for (const entry of entries) if (entry.url === write.url) outcomes.set(entry, error);
+        entries = entries.filter((entry) => entry.url !== write.url);
+      } finally {
+        sending = undefined;
       }
       entries = entries.filter((e) => e !== write);
       publish();
@@ -105,16 +129,48 @@ export function createEventOutbox(
   return {
     restore: publish,
     flush,
-    async save(write: EventWrite) {
+    async resolve(url: string, etag: string | null, requireConfirmation = true): Promise<string> {
+      const dependencies = entries.filter((entry) => entry.url === url);
+      if (dependencies.length) await flush();
+      for (const dependency of dependencies)
+        if (outcomes.has(dependency)) throw outcomes.get(dependency);
+      if (entries.some((entry) => entry.url === url)) {
+        if (!requireConfirmation) return etag ?? "";
+        throw new Error("Reconnect before finishing this series edit. Your draft is still here.");
+      }
+      const current = knownEtags.get(url)?.has(etag) ? etags.get(url) : etag;
+      if (!current || current === "*" || current.startsWith("W/"))
+        throw new Error("Reload this event before saving");
+      return current;
+    },
+    async save(write: EventWrite, requireConfirmation = false) {
+      const dependency = entries.find((entry) => entry.url === write.url);
+      if (!dependency) conditional(write);
       allowed(write);
+      // A create waiting offline has no server ETag yet: edit or cancel that queued intent.
+      if (
+        !requireConfirmation &&
+        dependency?.kind === "create" &&
+        dependency !== sending &&
+        write.kind !== "create"
+      ) {
+        if (write.kind === "delete") entries = entries.filter((entry) => entry !== dependency);
+        else dependency.data = write.data;
+        publish();
+        return;
+      }
       if (entries.length >= 100 || JSON.stringify([...entries, write]).length > 512000)
         throw new Error("Calendar outbox is full");
       entries.push(write);
       publish();
       if (!offline) await flush();
       const error = outcomes.get(write);
-      outcomes.delete(write);
       if (error !== undefined) throw error;
+      if (requireConfirmation && entries.includes(write)) {
+        entries = entries.filter((entry) => entry !== write);
+        publish();
+        throw new Error("Reconnect before finishing this series edit. Your draft is still here.");
+      }
     },
   };
 }

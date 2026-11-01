@@ -53,8 +53,8 @@ test("quick-create, edit one occurrence and delete following with accessible for
   await popover.getByRole("button", { name: "More options", exact: true }).click();
   const form = await editor(page);
   await expect(form.getByLabel("Title", { exact: true })).toHaveValue("Weekly planning");
-  await form.getByLabel("Frequency", { exact: true }).selectOption("WEEKLY");
-  await form.getByLabel("Ends", { exact: true }).selectOption("after");
+  await form.getByRole("combobox", { name: "Frequency", exact: true }).selectOption("WEEKLY");
+  await form.getByRole("combobox", { name: "Ends", exact: true }).selectOption("after");
   await form.getByLabel("Occurrences", { exact: true }).fill("6");
   await form.getByRole("button", { name: "Add reminder", exact: true }).click();
   await form.getByLabel("Reminder 1", { exact: true }).selectOption("-PT1H");
@@ -138,6 +138,29 @@ test("imports five fixture events and exports all calendar masters as parseable 
     await expect(page.getByRole("button", { name: new RegExp(`^Imported ${name},`) })).toHaveCount(
       1,
     );
+  // Give the download both a timed UNTIL edit and a timed split to validate.
+  await page.goto("/calendar/month?d=2026-11-01");
+  const series = await editOccurrence(page, "2026-11-02", "Imported breakfast");
+  await series.getByRole("combobox", { name: "Frequency", exact: true }).selectOption("WEEKLY");
+  await series.getByRole("combobox", { name: "Ends", exact: true }).selectOption("on");
+  await series.getByLabel("End date", { exact: true }).fill("2026-11-30");
+  await series.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page).toHaveURL(/\/calendar\/month\?d=2026-11-01$/);
+  const changed = await editOccurrence(page, "2026-11-09", "Imported breakfast");
+  await changed.getByLabel("Title", { exact: true }).fill("Imported breakfast edited");
+  await changed.getByLabel("Start", { exact: true }).fill("9 Nov 2026 9am");
+  await changed.getByLabel("End", { exact: true }).fill("9 Nov 2026 10am");
+  await changed.getByRole("button", { name: "Save", exact: true }).click();
+  await page
+    .getByRole("alertdialog")
+    .getByRole("button", { name: "This and following events", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/calendar\/month\?d=2026-11-01$/);
+  await expect(
+    page
+      .locator('.cal-month [data-day="2026-11-09"] button.cal-event')
+      .filter({ hasText: "Imported breakfast edited" }),
+  ).toHaveCount(1);
   const count = await page.evaluate(async () => {
     const request = indexedDB.open("solid-suite-demo", 1);
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -160,14 +183,55 @@ test("imports five fixture events and exports all calendar masters as parseable 
   await page.getByRole("menuitem", { name: "Export (.ics)", exact: true }).click();
   const file = await download;
   expect(file.suggestedFilename()).toBe("Work.ics");
-  // The model's importICal/exportICal round trip is unit-tested; Playwright's ESM loader cannot
-  // load rrule's CommonJS build, so the browser test checks the exported file's structure.
-  const ics = await readFile((await file.path())!, "utf8");
+  // Preserve content-line checks and parse the actual download through the app's import dialog.
+  const ics = await readFile(await file.path(), "utf8");
   const lines = ics.replace(/\r\n[ \t]/g, "").split(/\r\n/);
   expect(lines[0]).toBe("BEGIN:VCALENDAR");
   expect(lines.filter((line) => line === "BEGIN:VEVENT")).toHaveLength(count);
   expect(lines.filter((line) => line === "END:VEVENT")).toHaveLength(count);
-  expect(lines.filter((line) => /^SUMMARY[:;].*Imported /.test(line))).toHaveLength(5);
+  expect(lines.filter((line) => /^SUMMARY[:;].*Imported /.test(line))).toHaveLength(6);
+  expect(lines.some((line) => /^RRULE:.*UNTIL=20261109T075959Z/.test(line))).toBe(true);
+  expect(lines.some((line) => /^RRULE:.*UNTIL=20261130T235959Z/.test(line))).toBe(true);
+  await closeNavigation(page);
+  if ((page.viewportSize()?.width ?? 0) < 1024)
+    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+  await page.getByRole("button", { name: "Create calendar", exact: true }).click();
+  const create = page.getByRole("dialog", { name: "Create calendar", exact: true });
+  await create.getByLabel("Name", { exact: true }).fill("Roundtrip");
+  await create.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(create).toBeHidden();
+  await closeNavigation(page);
+  await menu(page, "Roundtrip");
+  await page.getByRole("menuitem", { name: "Import…", exact: true }).click();
+  await page.getByLabel("Import ICS file", { exact: true }).setInputFiles({
+    name: file.suggestedFilename(),
+    mimeType: "text/calendar",
+    buffer: Buffer.from(ics),
+  });
+  await expect(dialog.getByText(`${count} events · 0 skipped`, { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("list", { name: "Import warnings" })).toHaveCount(0);
+  await expect(dialog.getByLabel("Target calendar", { exact: true })).toHaveValue(
+    "https://alice.demo.pod/calendar/roundtrip.ttl#it",
+  );
+  await dialog.getByRole("button", { name: "Import", exact: true }).click();
+  await expect(dialog.getByRole("status")).toHaveText(`${count} imported, 0 failed`);
+  await dialog.getByRole("button", { name: "Done", exact: true }).click();
+  await closeNavigation(page);
+  if ((page.viewportSize()?.width ?? 0) < 1024)
+    await page.getByRole("button", { name: "Open navigation", exact: true }).click();
+  await page.getByRole("checkbox", { name: "Show Work calendar", exact: true }).uncheck();
+  await page.getByRole("checkbox", { name: "Show Personal calendar", exact: true }).uncheck();
+  await closeNavigation(page);
+  await page.getByRole("combobox", { name: "Calendar view", exact: true }).selectOption("agenda");
+  await expect(page.getByRole("button", { name: /^Imported breakfast,/ })).toHaveCount(1);
+  const edited = page.getByRole("button", { name: /^Imported breakfast edited,/ });
+  await expect(edited).toHaveCount(4);
+  for (const event of await edited.all())
+    await expect(event).toHaveAccessibleName(/09:00.*Roundtrip/);
+  for (const name of ["lunch", "walk", "concert", "holiday"])
+    await expect(page.getByRole("button", { name: new RegExp(`^Imported ${name},`) })).toHaveCount(
+      1,
+    );
 });
 test("drops ICS into the default visible calendar", async ({ page }) => {
   await open(page, "2026-11-01");
@@ -212,4 +276,25 @@ test("keeps offline saves across reload and syncs after reconnecting", async ({
       ).writes.length,
   );
   expect(queued).toBe(0);
+});
+
+test("warns and skips a New York recurring import instead of shifting its London occurrence", async ({
+  page,
+}) => {
+  await open(page, "2026-10-01");
+  await menu(page);
+  await page.getByRole("menuitem", { name: "Import…", exact: true }).click();
+  await page.getByLabel("Import ICS file", { exact: true }).setInputFiles({
+    name: "new-york.ics",
+    mimeType: "text/calendar",
+    buffer: Buffer.from(
+      "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:ny\nSUMMARY:New York weekly\nDTSTART;TZID=America/New_York:20261018T090000\nRRULE:FREQ=WEEKLY;COUNT=4\nEND:VEVENT\nEND:VCALENDAR",
+    ),
+  });
+  const dialog = page.getByRole("dialog", { name: "Import calendar events", exact: true });
+  await expect(dialog.getByText("0 events · 1 skipped", { exact: true })).toBeVisible();
+  await expect(dialog.getByRole("list", { name: "Import warnings" })).toContainText(
+    '"New York weekly": recurring events in America/New_York cannot yet retain their timezone.',
+  );
+  await expect(dialog.getByRole("button", { name: "Import", exact: true })).toBeDisabled();
 });

@@ -7,6 +7,7 @@ import {
   expandEvent,
   fromWallClock,
   importICal,
+  type RecurrenceRule,
   wallClock,
 } from "../lib/model";
 import { asDate, validateEvent } from "../lib/model/validation";
@@ -82,7 +83,24 @@ export interface SeriesPlan {
   original: CalendarEvent | null;
   created?: CalendarEvent;
 }
-/** Pure plan; callers persist original first, then the detached occurrence/new series. */
+/** Match the editor's inclusive civil end date to the DTSTART kind, at second precision. */
+export function editorRecurrence(
+  rule: RecurrenceRule | undefined,
+  start: CalendarDate,
+  timeZone: string,
+): RecurrenceRule | undefined {
+  if (!rule || rule.until === undefined) return rule;
+  const until =
+    typeof start === "string"
+      ? typeof rule.until === "string"
+        ? rule.until
+        : wallClock(rule.until, timeZone).toISOString().slice(0, 10)
+      : typeof rule.until === "string"
+        ? fromWallClock(new Date(+asDate(rule.until) + 86399000), timeZone)
+        : rule.until;
+  return { ...rule, until };
+}
+/** Pure plan; persist any replacement before touching the original. */
 export function planSeriesEdit(
   master: CalendarEvent,
   occurrence: CalendarDate,
@@ -95,6 +113,18 @@ export function planSeriesEdit(
   if (!rule) return { original: edited };
   validateEvent(master);
   const at = asDate(occurrence);
+  // Civil dates have no UTC offset. Interpret them in the target timed zone on conversion.
+  const floating = (date: CalendarDate) =>
+    typeof date === "string" ? asDate(date) : wallClock(date, timeZone);
+  const delta = edited ? +floating(edited.start) - +floating(occurrence) : 0;
+  const shift = (date: CalendarDate): CalendarDate => {
+    const wall = new Date(+floating(date) + delta);
+    return typeof edited?.start === "string"
+      ? wall.toISOString().slice(0, 10)
+      : fromWallClock(wall, timeZone);
+  };
+  const shiftedRule = (event: CalendarEvent, exceptions = event.recurrence?.exceptDate) =>
+    event.recurrence ? { ...event.recurrence, exceptDate: exceptions?.map(shift) } : undefined;
   const generated = expandEvent(
     { ...master, recurrence: { ...rule, exceptDate: [] } },
     asDate(master.start),
@@ -105,10 +135,7 @@ export function planSeriesEdit(
   if (index < 0) throw new TypeError("Occurrence is outside this series");
   if (mode === "all") {
     if (!edited) return { original: null };
-    const zone = typeof master.start === "string" ? "UTC" : timeZone;
-    const delta = +wallClock(asDate(edited.start), zone) - +wallClock(at, zone);
-    const shifted = fromWallClock(new Date(+wallClock(asDate(master.start), zone) + delta), zone);
-    const start = typeof edited.start === "string" ? shifted.toISOString().slice(0, 10) : shifted;
+    const start = shift(master.start);
     const duration =
       edited.end === undefined ? undefined : +asDate(edited.end) - +asDate(edited.start);
     const end =
@@ -117,7 +144,9 @@ export function planSeriesEdit(
         : typeof start === "string"
           ? new Date(+asDate(start) + duration).toISOString().slice(0, 10)
           : new Date(+asDate(start) + duration);
-    return { original: { ...edited, start, end, uid: master.uid } };
+    return {
+      original: { ...edited, start, end, recurrence: shiftedRule(edited), uid: master.uid },
+    };
   }
   if (mode === "this")
     return {
@@ -132,7 +161,7 @@ export function planSeriesEdit(
   const until =
     typeof occurrence === "string"
       ? new Date(+asDate(day) - 86400000).toISOString().slice(0, 10)
-      : new Date(+fromWallClock(asDate(day), zone) - 1);
+      : new Date(Math.floor(+at / 1000) * 1000 - 1000);
   const original =
     index === 0 ? null : { ...master, recurrence: { ...rule, count: undefined, until } };
   if (!edited) return { original };
@@ -149,9 +178,9 @@ export function planSeriesEdit(
               nextRule.count !== undefined && nextRule.count === rule.count
                 ? nextRule.count - index
                 : nextRule.count,
-            exceptDate: (nextRule.exceptDate ?? rule.exceptDate)?.filter(
-              (ex) => +asDate(ex) >= +at,
-            ),
+            exceptDate: (nextRule.exceptDate ?? rule.exceptDate)
+              ?.filter((ex) => +asDate(ex) >= +at)
+              .map(shift),
           }
         : undefined,
     },

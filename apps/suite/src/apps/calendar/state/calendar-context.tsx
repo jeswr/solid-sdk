@@ -58,7 +58,12 @@ interface CalendarContextValue {
   cache: Map<string, Promise<RangeResult>>;
   writes: EventWrite[];
   syncStatus: string;
-  mutate: (write: EventWrite) => Promise<void>;
+  mutate: (write: EventWrite, requireConfirmation?: boolean) => Promise<void>;
+  resolveEventEtag: (
+    url: string,
+    etag: string | null,
+    requireConfirmation?: boolean,
+  ) => Promise<string>;
   create: (title: string, colour: string) => Promise<void>;
   selected: Occurrence | undefined;
   focusRequest: { current: { view: CalendarView; date: string; slot: number } | undefined };
@@ -186,11 +191,6 @@ function SessionCalendarProvider({
           if (current.status !== "ready") throw new Error("Calendars are still loading");
           eventDocument(write.url, session.storageUrl, current.calendars);
           if (write.kind !== "delete") validateEvent(write.data);
-          if (
-            write.kind !== "create" &&
-            (!write.etag || write.etag === "*" || write.etag.startsWith("W/"))
-          )
-            throw new Error("Reload this event before saving");
         },
       ),
     [session, mutate],
@@ -260,6 +260,7 @@ function SessionCalendarProvider({
         writes: visibleWrites,
         syncStatus,
         mutate: outbox.save,
+        resolveEventEtag: outbox.resolve,
         create,
         selected,
         focusRequest,
@@ -393,15 +394,18 @@ export function useEventsInRange(
   return { ...state, reload };
 }
 export function useEventMutations() {
-  const { mutate } = useCalendarState();
+  const { mutate, resolveEventEtag } = useCalendarState();
   return useMemo(
     () => ({
-      create: (url: string, data: CalendarEvent) => mutate({ kind: "create", url, data }),
-      update: (url: string, data: CalendarEvent, etag: string) =>
-        mutate({ kind: "update", url, data, etag }),
-      delete: (url: string, etag: string) => mutate({ kind: "delete", url, etag }),
+      resolve: resolveEventEtag,
+      create: (url: string, data: CalendarEvent, requireConfirmation?: boolean) =>
+        mutate({ kind: "create", url, data }, requireConfirmation),
+      update: (url: string, data: CalendarEvent, etag: string, requireConfirmation?: boolean) =>
+        mutate({ kind: "update", url, data, etag }, requireConfirmation),
+      delete: (url: string, etag: string, requireConfirmation?: boolean) =>
+        mutate({ kind: "delete", url, etag }, requireConfirmation),
     }),
-    [mutate],
+    [mutate, resolveEventEtag],
   );
 }
 export type { CalendarInfo, CalendarView };
