@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 5.5
+// AUTHORED-BY Codex GPT-6.1-Sol
 "use client";
 /**
  * Detects the Solid browser extension (apps/extension) and reads its credential-free state.
@@ -19,6 +20,8 @@ export interface SolidExtensionApi {
   readonly webId?: string | null;
   readonly fetch?: typeof globalThis.fetch;
   requestAccess?(request: unknown): Promise<{ ok: boolean }>;
+  listGrants?(): Promise<ReadonlyArray<{ readonly grantId: string; readonly dataClass: string }>>;
+  revokeGrant?(grantId: string): Promise<boolean>;
   login?(webId: string): Promise<void>;
 }
 
