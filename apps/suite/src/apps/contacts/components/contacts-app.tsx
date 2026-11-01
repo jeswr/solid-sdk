@@ -224,28 +224,59 @@ function ContactsChrome({ children }: { children: ReactNode }) {
     restoreFocus.current = true;
     router.push(returnPath.current);
   };
-  // Route completion makes the mobile list visible. Its virtual rows may arrive after layout;
-  // find the contact by identity rather than focusing a detached or still-hidden trigger.
+  // Route completion makes the mobile list visible. Its virtual rows may arrive (or be replaced)
+  // after layout, and a hidden row ignores focus(); keep retrying by identity until focus has
+  // stuck for a few frames, without stealing focus the user has since moved elsewhere.
   useEffect(() => {
     const host = listHost.current;
     if (!listRoute || !restoreFocus.current || !host) return;
-    const observer = new MutationObserver(focus);
-    function focus() {
+    let frame = 0;
+    let attempts = 0;
+    let settled = 0;
+    const observer = new MutationObserver(() => {
+      settled = 0;
+      schedule();
+    });
+    function find() {
       const person = [...(host?.querySelectorAll<HTMLElement>("[data-contact-id]") ?? [])].find(
         (element) => element.dataset.contactId === openedId.current,
       );
-      const target =
+      return (
         person?.closest<HTMLElement>("[data-collection-item]") ??
         host?.querySelector<HTMLElement>("[data-collection-item][tabindex='0']") ??
         host?.querySelector<HTMLElement>("[data-collection-item]") ??
-        host?.querySelector<HTMLElement>(".con-list button, .con-list a");
-      if (!target) return;
-      target.focus({ preventScroll: true });
+        host?.querySelector<HTMLElement>(".con-list button, .con-list a")
+      );
+    }
+    function movedElsewhere() {
+      const active = document.activeElement as HTMLElement | null;
+      if (!active || active === document.body || host?.contains(active)) return false;
+      return active.isConnected && (active.checkVisibility?.() ?? true);
+    }
+    function stop() {
       restoreFocus.current = false;
       observer.disconnect();
+      cancelAnimationFrame(frame);
+      frame = 0;
+    }
+    function attempt() {
+      frame = 0;
+      if (movedElsewhere()) return stop();
+      const target = find();
+      if (target && document.activeElement !== target) {
+        settled = 0;
+        target.focus({ preventScroll: true });
+      }
+      if (target && document.activeElement === target) settled += 1;
+      attempts += 1;
+      if (settled >= 3 || attempts > 120) return stop();
+      schedule();
+    }
+    function schedule() {
+      if (!frame) frame = requestAnimationFrame(attempt);
     }
     observer.observe(host, { childList: true, subtree: true });
-    const frame = requestAnimationFrame(focus);
+    schedule();
     return () => {
       cancelAnimationFrame(frame);
       observer.disconnect();
