@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Live-sync over the pod (Solid Notifications Protocol — WebSocketChannel2023),
  * with a polling fallback for servers that don't advertise a channel. Notifications
@@ -15,7 +16,7 @@
  * SECURITY (own-pod SSRF guard, load-bearing): the discovered subscription
  * endpoint AND the `receiveFrom` socket URL both come from server-controlled
  * data, so before we POST our auth-patched `fetch` to the endpoint, or open the
- * socket, we confirm each points at one of the user's OWN pod storages
+ * socket, we confirm each uses one of the user's OWN pod storage origins
  * (`own-pod.ts`). A foreign URL is rejected fail-closed → we fall back to polling
  * rather than attach the user's token to / open a socket against another origin.
  * Callers without the user's storage roots (e.g. a context that can't supply
@@ -25,7 +26,7 @@
  */
 
 import { discoverWebSocketSubscriptionEndpoint, WEBSOCKET_CHANNEL_TYPE } from "./notification-discovery";
-import { isOwnPodUrl, isOwnPodWebSocketUrl } from "./own-pod";
+import { isOwnPodUrl, isOwnPodServiceUrl, isOwnPodWebSocketUrl } from "./own-pod";
 
 const CONTEXT = "https://www.w3.org/ns/solid/notifications-context/v1";
 
@@ -73,7 +74,9 @@ export interface WatchOptions {
 const POLL_MS = 25_000;
 
 /**
- * Watch a container for changes, calling `onChange` when it (or a member) changes.
+ * Watch one resource or container topic, calling `onChange` on notifications.
+ * Container topics cover membership changes; existing member edits require
+ * watching each member's resource URL as a separate topic.
  * Tries a WebSocketChannel2023 subscription against the user's OWN pod; on any
  * failure — including the own-pod SSRF guard rejecting a foreign subscription /
  * socket URL — it falls back to polling. Graceful: a server that advertises no
@@ -115,8 +118,9 @@ export function watchContainer(
         return;
       }
       // SSRF guard: the discovered endpoint is server-controlled — only POST our
-      // auth-patched fetch to it if it lives within the user's OWN pod.
-      if (!isOwnPodUrl(service, ownStorageUrls)) {
+      // auth-patched fetch to it on an OWN storage origin. CSS advertises its
+      // service outside the pod path; the topic itself must remain in-pod.
+      if (!isOwnPodUrl(containerUrl, ownStorageUrls) || !isOwnPodServiceUrl(service, ownStorageUrls)) {
         startPolling();
         return;
       }

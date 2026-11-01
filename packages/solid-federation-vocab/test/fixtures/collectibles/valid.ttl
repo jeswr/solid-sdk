@@ -1,0 +1,31 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Conforming instances of the collectibles profile's NodeShapes.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix schema: <http://schema.org/>.
+@prefix col: <https://jeswr.org/ns/sectors/collectibles#>.
+@prefix prov: <http://www.w3.org/ns/prov#>.
+
+<https://example.org/fixtures/collectibles/MonetaryAmount-1> a schema:MonetaryAmount;
+    schema:value 1.0;
+    schema:currency "GBP".
+<https://example.org/fixtures/collectibles/ProvenanceEvent-2> a col:ProvenanceEvent;
+    col:eventType <https://example.org/fixtures/collectibles/support-3>;
+    prov:startedAtTime "2026-11-01T09:00:00Z"^^xsd:dateTime.
+<https://example.org/fixtures/collectibles/Valuation-4> a col:Valuation;
+    col:amount <https://example.org/fixtures/collectibles/support-5>.
+<https://example.org/fixtures/collectibles/support-5> a schema:MonetaryAmount;
+    schema:value 1.0;
+    schema:currency "GBP".
+<https://example.org/fixtures/collectibles/Appraisal-6> a col:Appraisal;
+    col:amount <https://example.org/fixtures/collectibles/support-7>;
+    col:appraiser <https://example.org/fixtures/collectibles/support-8>.
+<https://example.org/fixtures/collectibles/support-7> a schema:MonetaryAmount;
+    schema:value 1.0;
+    schema:currency "GBP".
+<https://example.org/fixtures/collectibles/InsurancePolicy-9> a col:InsurancePolicy;
+    col:policyNumber "Fixture";
+    col:coverageAmount <https://example.org/fixtures/collectibles/support-10>.
+<https://example.org/fixtures/collectibles/support-10> a schema:MonetaryAmount;
+    schema:value 1.0;
+    schema:currency "GBP".

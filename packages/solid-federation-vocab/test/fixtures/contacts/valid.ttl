@@ -1,0 +1,44 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+# Conforming instances of the contacts profile's NodeShapes.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix contact: <https://jeswr.org/ns/sectors/contacts#>.
+
+<https://example.org/fixtures/contacts/Contact-1> a contact:Contact;
+    contact:identifies <https://example.org/fixtures/contacts/support-2>;
+    contact:hasContactPoint <https://example.org/fixtures/contacts/support-3>.
+<https://example.org/fixtures/contacts/support-2> a core:Agent.
+<https://example.org/fixtures/contacts/support-3> a contact:ContactPoint;
+    contact:rawValue "Fixture".
+<https://example.org/fixtures/contacts/ContactPoint-4> a contact:ContactPoint;
+    contact:rawValue "Fixture".
+<https://example.org/fixtures/contacts/PostalAddress-5> a contact:PostalAddress;
+    contact:locality "Fixture";
+    contact:countryName "Fixture".
+<https://example.org/fixtures/contacts/ContactRelationship-6> a contact:ContactRelationship;
+    contact:relatesContact <https://example.org/fixtures/contacts/support-7>, <https://example.org/fixtures/contacts/support-8>;
+    contact:relationshipRole <https://example.org/fixtures/contacts/support-9>.
+<https://example.org/fixtures/contacts/support-7> a core:Agent.
+<https://example.org/fixtures/contacts/support-8> a core:Agent.
+<https://example.org/fixtures/contacts/support-9> a core:Category.
+<https://example.org/fixtures/contacts/ContactGroup-10> a contact:ContactGroup.
+<https://example.org/fixtures/contacts/PersonContact-11> a contact:PersonContact;
+    contact:identifies <https://example.org/fixtures/contacts/support-12>.
+<https://example.org/fixtures/contacts/support-12> a core:Person.
+<https://example.org/fixtures/contacts/OrganizationContact-13> a contact:OrganizationContact;
+    contact:identifies <https://example.org/fixtures/contacts/support-14>.
+<https://example.org/fixtures/contacts/support-14> a core:Organization;
+    core:identifiedBy <https://example.org/fixtures/contacts/support-15>.
+<https://example.org/fixtures/contacts/support-15> a core:Identifier;
+    core:value "Fixture";
+    core:inScheme <https://example.org/fixtures/contacts/support-16>.
+<https://example.org/fixtures/contacts/support-16> a core:IdentifierScheme;
+    core:schemeAuthority <https://example.org/fixtures/contacts/support-17>.
+<https://example.org/fixtures/contacts/support-17> a core:Agent.
+<https://example.org/fixtures/contacts/EmailAddress-18> a contact:EmailAddress;
+    contact:rawValue "Fixture".
+<https://example.org/fixtures/contacts/PhoneNumber-20> a contact:PhoneNumber;
+    contact:rawValue "Fixture".
+<https://example.org/fixtures/contacts/OnlineHandle-21> a contact:OnlineHandle;
+    contact:rawValue "Fixture".

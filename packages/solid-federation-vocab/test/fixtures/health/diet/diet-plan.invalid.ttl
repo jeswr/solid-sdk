@@ -1,0 +1,8 @@
+# expect: https://jeswr.org/ns/sectors/health/diet#excludes
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/health/diet/shapes#DietPlanShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix diet: <https://jeswr.org/ns/sectors/health/diet#>.
+
+<https://example.org/fixtures/health/diet/DietPlan-17> a diet:DietPlan;
+    diet:excludes ex:untyped.

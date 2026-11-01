@@ -1,0 +1,7 @@
+# expect: http://purl.org/dc/terms/title
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/scheduling/shapes#CalendarShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix sched: <https://jeswr.org/ns/sectors/scheduling#>.
+
+<https://example.org/fixtures/scheduling/Calendar-4> a sched:Calendar.

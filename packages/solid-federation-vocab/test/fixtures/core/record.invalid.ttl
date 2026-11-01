@@ -1,0 +1,8 @@
+# expect: https://jeswr.org/ns/core#subject
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/core#RecordShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+
+<https://example.org/fixtures/core/Record-14> a core:Record.
+<https://example.org/fixtures/core/support-15> a core:Agent.

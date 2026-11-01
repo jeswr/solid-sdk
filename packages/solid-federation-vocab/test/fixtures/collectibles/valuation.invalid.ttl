@@ -1,0 +1,12 @@
+# expect: https://jeswr.org/ns/sectors/collectibles#amount
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/collectibles/shapes#ValuationShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix schema: <http://schema.org/>.
+@prefix col: <https://jeswr.org/ns/sectors/collectibles#>.
+
+<https://example.org/fixtures/collectibles/Valuation-4> a col:Valuation.
+<https://example.org/fixtures/collectibles/support-5> a schema:MonetaryAmount;
+    schema:value 1.0;
+    schema:currency "GBP".

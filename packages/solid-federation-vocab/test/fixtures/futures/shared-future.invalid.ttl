@@ -1,0 +1,14 @@
+# expect: https://www.w3.org/ns/activitystreams#content
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/futures/shapes#SharedFutureShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix fut: <https://jeswr.org/ns/sectors/futures#>.
+@prefix prov: <http://www.w3.org/ns/prov#>.
+
+<https://example.org/fixtures/futures/SharedFuture-19> a fut:SharedFuture;
+    prov:wasDerivedFrom <https://example.org/fixtures/futures/support-20>;
+    fut:bridgingEvidence "Fixture";
+    <https://w3id.org/security#proof> "Fixture";
+    prov:wasGeneratedBy "Fixture";
+    fut:dissent "Fixture".

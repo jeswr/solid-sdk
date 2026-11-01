@@ -1,0 +1,8 @@
+# expect: https://jeswr.org/ns/core#schemeAuthority
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/core#IdentifierSchemeShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+
+<https://example.org/fixtures/core/IdentifierScheme-9> a core:IdentifierScheme.
+<https://example.org/fixtures/core/support-10> a core:Agent.

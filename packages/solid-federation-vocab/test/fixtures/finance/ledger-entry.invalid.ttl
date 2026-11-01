@@ -1,0 +1,14 @@
+# expect: https://jeswr.org/ns/sectors/finance#entrySide
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/finance/shapes#LedgerEntryShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix fin: <https://jeswr.org/ns/sectors/finance#>.
+
+<https://example.org/fixtures/finance/LedgerEntry-66> a fin:LedgerEntry;
+    fin:postsTo <https://example.org/fixtures/finance/support-67>;
+    fin:hasMonetaryAmount <https://example.org/fixtures/finance/support-68>;
+    fin:partOfJournalEntry <https://example.org/fixtures/finance/support-69>.
+<https://example.org/fixtures/finance/support-68> a fin:MonetaryAmount;
+    fin:amount 1.0;
+    fin:currency "GBP".

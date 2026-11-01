@@ -37,6 +37,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
+    "@jeswr/solid-task-model": "workspace:*",
     "@playwright/test": "^1.60.0",
     "@rdfjs/types": "^2.0.1",
     "@tailwindcss/postcss": "^4",

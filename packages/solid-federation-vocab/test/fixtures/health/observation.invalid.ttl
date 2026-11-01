@@ -1,0 +1,17 @@
+# expect: https://jeswr.org/ns/sectors/health#hasCode
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/health/shapes#ObservationShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix health: <https://jeswr.org/ns/sectors/health#>.
+@prefix time: <http://www.w3.org/2006/time#>.
+
+<https://example.org/fixtures/health/Observation-7> a health:Observation;
+    health:patient <https://example.org/fixtures/health/support-9>;
+    health:value "Fixture";
+    health:effectiveTime <https://example.org/fixtures/health/support-10>.
+<https://example.org/fixtures/health/support-8> a health:CodeableConcept;
+    core:value "Fixture".
+<https://example.org/fixtures/health/support-9> a core:Person.
+<https://example.org/fixtures/health/support-10> a time:TemporalEntity.

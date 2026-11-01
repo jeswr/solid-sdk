@@ -1,0 +1,13 @@
+# expect: https://jeswr.org/ns/sectors/finance#fund
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/finance/shapes#CommitmentShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix fin: <https://jeswr.org/ns/sectors/finance#>.
+
+<https://example.org/fixtures/finance/Commitment-71> a fin:Commitment;
+    fin:limitedPartner <https://example.org/fixtures/finance/support-73>;
+    fin:commitmentAmount <https://example.org/fixtures/finance/support-74>.
+<https://example.org/fixtures/finance/support-74> a fin:MonetaryAmount;
+    fin:amount 1.0;
+    fin:currency "GBP".

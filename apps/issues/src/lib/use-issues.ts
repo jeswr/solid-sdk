@@ -1,4 +1,5 @@
 "use client";
+// AUTHORED-BY Codex GPT-6.1-Sol
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -317,28 +318,73 @@ export function useIssues(
   // Stable join of the own-storage roots so the live-sync effect doesn't re-run
   // (and re-subscribe) when the caller passes a fresh array of the same values.
   const ownStorageKey = ownStorageUrls.join("\n");
+  // Content edits keep the same topic set; membership changes add/remove topics.
+  const issueUrlsKey = JSON.stringify([...new Set(issues.map((issue) => issue.url))].sort());
+  const liveSyncs = useRef(new Map<string, ReturnType<typeof watchContainer>>());
+  const liveRefreshTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const liveRefreshMaxTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const liveRefreshRun = useRef<{ queued: boolean } | null>(null);
 
-  // Live-sync: refresh (debounced) when the tracker's container changes in the
-  // pod. The own-pod storage roots gate the WebSocket subscription's SSRF guard
-  // (notifications.ts) — a foreign subscription/socket URL degrades to polling.
+  // Keep queued invalidations and unchanged watchers across membership changes.
+  // Tear down only when the tracker, identity, or storage scope changes, or on unmount.
+  useEffect(() => {
+    const syncs = liveSyncs.current;
+    return () => {
+      for (const sync of syncs.values()) sync.close();
+      syncs.clear();
+      if (liveRefreshTimer.current) clearTimeout(liveRefreshTimer.current);
+      liveRefreshTimer.current = undefined;
+      if (liveRefreshMaxTimer.current) clearTimeout(liveRefreshMaxTimer.current);
+      liveRefreshMaxTimer.current = undefined;
+      liveRefreshRun.current = null;
+    };
+  }, [fetchInto, ownStorageKey]);
+
+  // Container notifications cover membership changes. Watch each loaded issue
+  // too so edits to existing resources invalidate the board on CSS.
   useEffect(() => {
     if (!trackerUrl) return;
     const containerUrl = new Repository(trackerUrl).containerUrl;
     const ownStorage = ownStorageKey ? ownStorageKey.split("\n") : [];
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const sync = watchContainer(
-      containerUrl,
-      () => {
-        if (timer) clearTimeout(timer);
-        timer = setTimeout(() => void fetchInto(), 800);
-      },
-      { ownStorageUrls: ownStorage },
-    );
-    return () => {
-      sync.close();
-      if (timer) clearTimeout(timer);
+    const flush = () => {
+      if (liveRefreshTimer.current) clearTimeout(liveRefreshTimer.current);
+      liveRefreshTimer.current = undefined;
+      if (liveRefreshMaxTimer.current) clearTimeout(liveRefreshMaxTimer.current);
+      liveRefreshMaxTimer.current = undefined;
+      // Let a slow live read apply before starting another. Coalesce due
+      // invalidations into one follow-up rather than superseding every result.
+      if (liveRefreshRun.current) {
+        liveRefreshRun.current.queued = true;
+        return;
+      }
+      const run = { queued: false };
+      liveRefreshRun.current = run;
+      void fetchInto().finally(() => {
+        // Scope cleanup cancels the follow-up even if this read finishes later.
+        if (liveRefreshRun.current !== run) return;
+        liveRefreshRun.current = null;
+        if (run.queued) flush();
+      });
     };
-  }, [trackerUrl, fetchInto, ownStorageKey]);
+    const onChange = () => {
+      // Keep burst debouncing, but bound the wait so staggered per-topic polls
+      // (or continuous socket events) cannot keep postponing the board refresh.
+      liveRefreshMaxTimer.current ??= setTimeout(flush, 5_000);
+      if (liveRefreshTimer.current) clearTimeout(liveRefreshTimer.current);
+      liveRefreshTimer.current = setTimeout(flush, 800);
+    };
+    const topics = new Set([containerUrl, ...JSON.parse(issueUrlsKey) as string[]]);
+    const syncs = liveSyncs.current;
+    for (const [topic, sync] of syncs) {
+      if (!topics.has(topic)) {
+        sync.close();
+        syncs.delete(topic);
+      }
+    }
+    for (const topic of topics) {
+      if (!syncs.has(topic)) syncs.set(topic, watchContainer(topic, onChange, { ownStorageUrls: ownStorage }));
+    }
+  }, [trackerUrl, fetchInto, ownStorageKey, issueUrlsKey]);
 
   const mutate = useCallback(
     async (apply: (r: Repository) => Promise<unknown>) => {

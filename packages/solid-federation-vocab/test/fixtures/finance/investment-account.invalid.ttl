@@ -1,0 +1,9 @@
+# expect: https://jeswr.org/ns/core#hasAccountHolder
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/finance/shapes#InvestmentAccountShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix fin: <https://jeswr.org/ns/sectors/finance#>.
+
+<https://example.org/fixtures/finance/InvestmentAccount-26> a fin:InvestmentAccount.
+<https://example.org/fixtures/finance/support-27> a core:Agent.

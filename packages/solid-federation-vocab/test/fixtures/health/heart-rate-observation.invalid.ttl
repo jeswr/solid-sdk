@@ -1,0 +1,7 @@
+# expect: https://jeswr.org/ns/sectors/health#hasUnit
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/health/shapes#HeartRateObservationShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix health: <https://jeswr.org/ns/sectors/health#>.
+
+<https://example.org/fixtures/health/HeartRateObservation-11> a health:HeartRateObservation.

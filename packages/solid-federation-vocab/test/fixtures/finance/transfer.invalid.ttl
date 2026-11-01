@@ -1,0 +1,41 @@
+# expect: https://jeswr.org/ns/sectors/finance#debitAccount
+# AUTHORED-BY Codex GPT-6.1-Sol
+# One property constraint failure for https://jeswr.org/ns/sectors/finance/shapes#TransferShape.
+@prefix ex: <https://example.org/fixtures/>.
+@prefix core: <https://jeswr.org/ns/core#>.
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
+@prefix fin: <https://jeswr.org/ns/sectors/finance#>.
+
+<https://example.org/fixtures/finance/Transfer-28> a fin:Transfer;
+    fin:creditAccount <https://example.org/fixtures/finance/support-35>;
+    fin:hasMonetaryAmount <https://example.org/fixtures/finance/support-41>;
+    fin:postingTime "2026-11-01T09:00:00Z"^^xsd:dateTime;
+    fin:hasCounterparty <https://example.org/fixtures/finance/support-42>.
+<https://example.org/fixtures/finance/support-29> a fin:FinancialAccount;
+    core:hasAccountHolder <https://example.org/fixtures/finance/support-30>;
+    core:hasAccountProvider <https://example.org/fixtures/finance/support-31>;
+    core:identifiedBy <https://example.org/fixtures/finance/support-32>.
+<https://example.org/fixtures/finance/support-35> a fin:FinancialAccount;
+    core:hasAccountHolder <https://example.org/fixtures/finance/support-36>;
+    core:hasAccountProvider <https://example.org/fixtures/finance/support-37>;
+    core:identifiedBy <https://example.org/fixtures/finance/support-38>.
+<https://example.org/fixtures/finance/support-41> a fin:MonetaryAmount;
+    fin:amount 1.0;
+    fin:currency "GBP".
+<https://example.org/fixtures/finance/support-42> a core:Agent.
+<https://example.org/fixtures/finance/support-30> a core:Agent.
+<https://example.org/fixtures/finance/support-31> a core:Agent.
+<https://example.org/fixtures/finance/support-32> a core:Identifier;
+    core:value "Fixture";
+    core:inScheme <https://example.org/fixtures/finance/support-33>.
+<https://example.org/fixtures/finance/support-33> a core:IdentifierScheme;
+    core:schemeAuthority <https://example.org/fixtures/finance/support-34>.
+<https://example.org/fixtures/finance/support-34> a core:Agent.
+<https://example.org/fixtures/finance/support-36> a core:Agent.
+<https://example.org/fixtures/finance/support-37> a core:Agent.
+<https://example.org/fixtures/finance/support-38> a core:Identifier;
+    core:value "Fixture";
+    core:inScheme <https://example.org/fixtures/finance/support-39>.
+<https://example.org/fixtures/finance/support-39> a core:IdentifierScheme;
+    core:schemeAuthority <https://example.org/fixtures/finance/support-40>.
+<https://example.org/fixtures/finance/support-40> a core:Agent.
