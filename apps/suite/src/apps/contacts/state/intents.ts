@@ -35,7 +35,7 @@ export function newIntent(
   bookUrl: string,
   destination: string,
   details: Partial<
-    Pick<Intent, "person" | "source" | "labels" | "destinations" | "duplicates">
+    Pick<Intent, "person" | "source" | "labels" | "destinations" | "duplicates" | "selection">
   > = {},
 ): Intent {
   return {

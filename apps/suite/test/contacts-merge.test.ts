@@ -2,9 +2,14 @@
 import { Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import type { ContactData, ContactGroupData, Snapshot } from "../src/apps/contacts/lib/model";
-import { ensureReplaced, saveDocument } from "../src/apps/contacts/lib/model/intent";
+import { ensureReplaced, openDocument, saveDocument } from "../src/apps/contacts/lib/model/intent";
 import { ContactsWriteError } from "../src/apps/contacts/lib/model/transport";
-import { ContactsController, type ContactsData } from "../src/apps/contacts/state/controller";
+import {
+  ContactsController,
+  type ContactsData,
+  PendingMergeError,
+  writeMessage,
+} from "../src/apps/contacts/state/controller";
 import { IntentConflictError, newIntent } from "../src/apps/contacts/state/intents";
 import { type Intent, journalPrefix } from "../src/apps/contacts/state/journal";
 import {
@@ -17,6 +22,8 @@ import {
   mergeChoices,
   mergeContactData,
   mergedDocument,
+  mergeFailureMessage,
+  mergeLosses,
   pairKey,
   readDismissed,
 } from "../src/apps/contacts/state/merge";
@@ -55,6 +62,7 @@ function group(name: string, members?: string[]): Snapshot<ContactGroupData> {
   };
 }
 const id = (snapshot: Snapshot<unknown>) => `${snapshot.url}#this`;
+const conflict = { outcome: "conflict", cause: expect.any(IntentConflictError) };
 
 class MemoryStorage {
   values = new Map<string, string>();
@@ -433,15 +441,19 @@ describe("journaled contact merge", () => {
   it("rejects merges without another existing contact before writing anything", async () => {
     const { controller, pod, storage } = await harness();
     const writes = pod.writes.length;
-    await expect(controller.merge(`${ALICE}#this`, [`${ALICE}#this`], {})).rejects.toThrow(
-      "Choose at least two contacts to merge.",
+    const unchanged = (message: string) => ({
+      outcome: "unchanged",
+      cause: expect.objectContaining({ message: expect.stringContaining(message) }),
+    });
+    await expect(controller.merge(`${ALICE}#this`, [`${ALICE}#this`], {})).rejects.toMatchObject(
+      unchanged("Choose at least two contacts to merge."),
     );
     await expect(
       controller.merge(`${ALICE}#this`, [`${ROOT}contacts/people/gone.ttl#this`], {}),
-    ).rejects.toThrow("Contact no longer exists.");
+    ).rejects.toMatchObject(unchanged("Contact no longer exists."));
     pod.seed(COPY, String(pod.files.get(COPY)?.body), null);
-    await expect(controller.merge(`${ALICE}#this`, [`${COPY}#this`], {})).rejects.toThrow(
-      "strong ETag",
+    await expect(controller.merge(`${ALICE}#this`, [`${COPY}#this`], {})).rejects.toMatchObject(
+      unchanged("strong ETag"),
     );
     expect(pod.writes).toHaveLength(writes);
     expect(storage.length).toBe(0);
@@ -456,8 +468,8 @@ describe("journaled contact merge", () => {
         pod.seed(ALICE, String(pod.files.get(ALICE)?.body), '"edited"');
       return undefined;
     };
-    await expect(controller.merge(`${ALICE}#this`, [`${COPY}#this`], {})).rejects.toBeInstanceOf(
-      IntentConflictError,
+    await expect(controller.merge(`${ALICE}#this`, [`${COPY}#this`], {})).rejects.toMatchObject(
+      conflict,
     );
     expect(errors).toHaveBeenCalledWith(expect.stringContaining("Contacts changed elsewhere"));
     expect(storage.length).toBe(0);
@@ -473,8 +485,8 @@ describe("journaled contact merge", () => {
         pod.seed(COPY, String(pod.files.get(COPY)?.body), '"edited"');
       return undefined;
     };
-    await expect(controller.merge(`${ALICE}#this`, [`${COPY}#this`], {})).rejects.toBeInstanceOf(
-      IntentConflictError,
+    await expect(controller.merge(`${ALICE}#this`, [`${COPY}#this`], {})).rejects.toMatchObject(
+      conflict,
     );
     expect(storage.length).toBe(0);
     expect(pod.files.has(COPY)).toBe(true);
@@ -498,7 +510,7 @@ describe("journaled contact merge", () => {
     };
     await expect(
       controller.merge(`${ALICE}#this`, [`${COPY}#this`, `${CAROL}#this`], {}),
-    ).rejects.toBeInstanceOf(IntentConflictError);
+    ).rejects.toMatchObject(conflict);
     expect(pod.files.has(COPY)).toBe(false);
     expect(pod.files.has(CAROL)).toBe(true);
     expect((await indexed(controller)).sort()).toEqual([`${ALICE}#this`, `${CAROL}#this`].sort());
@@ -518,7 +530,7 @@ describe("journaled contact merge", () => {
     };
     await expect(
       again.controller.merge(`${ALICE}#this`, [`${COPY}#this`], {}),
-    ).rejects.toBeInstanceOf(IntentConflictError);
+    ).rejects.toMatchObject(conflict);
     expect(repairReads).toBe(2);
     expect(again.storage.length).toBe(0);
     expect(again.pod.files.has(COPY)).toBe(true);
@@ -542,7 +554,7 @@ describe("journaled contact merge", () => {
     };
     await expect(
       controller.merge(`${ALICE}#this`, [`${COPY}#this`], { name: "Alice Smith" }),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ outcome: failure === "503" ? "pending" : "unknown" });
     expect(journaled).toMatchObject({
       kind: "merge",
       destination: ALICE,
@@ -594,5 +606,168 @@ describe("ensureReplaced", () => {
     const error = await ensureReplaced(model, saved).catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(ContactsWriteError);
     expect(error).toMatchObject({ status: 412, url: ALICE });
+  });
+});
+
+describe("review follow-ups", () => {
+  it("keeps a group linked only through a middle contact until its links are dismissed", () => {
+    const a = person("A", { emails: ["mailto:shared@example.org"] }, `${ROOT}a.ttl`);
+    const b = person(
+      "B",
+      { emails: ["mailto:shared@example.org"], phones: ["tel:+12025550111"] },
+      `${ROOT}b.ttl`,
+    );
+    const c = person("C", { phones: ["tel:+12025550111"] }, `${ROOT}c.ttl`);
+    expect(findDuplicates([a, b, c]).map((g) => g.contactIds)).toEqual([[id(a), id(b), id(c)]]);
+    // A and C never matched directly: dismissing A–B leaves B–C, and dismissing B–C leaves A–B.
+    expect(findDuplicates([a, b, c], new Set([pairKey(id(a), id(b))]))).toEqual([
+      {
+        id: `${id(b)} ${id(c)}`,
+        contactIds: [id(b), id(c)],
+        reasons: [{ kind: "phone", value: "+12025550111" }],
+      },
+    ]);
+    expect(
+      findDuplicates([a, b, c], new Set([pairKey(id(b), id(c))])).map((g) => g.contactIds),
+    ).toEqual([[id(a), id(b)]]);
+    // Dismissing the whole group records the indirect pair too, so nothing comes back.
+    const storage = new MemoryStorage();
+    const dismissed = dismissGroup(storage, WEBID, new Set(), [id(a), id(b), id(c)]);
+    expect(dismissed.has(pairKey(id(a), id(c)))).toBe(true);
+    expect(findDuplicates([a, b, c], dismissed)).toEqual([]);
+  });
+
+  it("lists every detail deleting a duplicate would discard, like the migration check", async () => {
+    const primary = await openDocument({
+      url: `${ROOT}contacts/people/pat.ttl`,
+      etag: '"1"',
+      turtle: `${VCARD_PREFIX} <#this> a vcard:Individual; vcard:fn "Pat";
+        vcard:hasEmail [ a vcard:Home; vcard:value <mailto:pat@example.org> ] .`,
+    });
+    const copy = await openDocument({
+      url: `${ROOT}contacts/people/pat-copy.ttl`,
+      etag: '"1"',
+      turtle: `${VCARD_PREFIX} <#this> a vcard:Individual, <https://example.org/Extra>;
+        vcard:fn "Pat D"; vcard:hasUID "urn:uuid:d"; vcard:inAddressBook <../book.ttl#this>;
+        <http://purl.org/dc/terms/created> "2020-01-01T00:00:00Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+        vcard:note "Chosen away"; vcard:organization-name "Org";
+        vcard:hasEmail [ a vcard:Work; vcard:value <mailto:PAT@example.org> ],
+          [ a vcard:Home; vcard:value <mailto:pd@example.org> ],
+          [ vcard:value <mailto:pat@example.org>; <https://example.org/pref> "1" ],
+          [ a vcard:Work ];
+        vcard:hasTelephone <tel:+12025550100>;
+        vcard:url [ a vcard:WebId; vcard:value <https://d.example/#me> ], <https://d.example/home>;
+        vcard:hasAddress _:addr; vcard:bday "2000-01-01"; <https://example.org/custom/> "x";
+        <https://example.org/x> _:addr .
+        _:addr vcard:locality "Town"; vcard:street-address [ vcard:x "y" ] .
+        <#other> vcard:fn "Someone" .`,
+    });
+    const merged = mergeContactData(primary.data, [copy.data], { note: "Chosen away" });
+    const document = mergedDocument(primary, merged);
+    expect(mergeLosses(document, id(primary), copy)).toEqual([
+      "Work label on email PAT@example.org",
+      "address",
+      "birthday",
+      "email",
+      "https://example.org/custom/",
+      "other data in the contact's document",
+      "pref on email pat@example.org",
+      "type Extra",
+      "website https://d.example/home",
+      "x",
+    ]);
+    // A plain copy whose contact points all carry over loses nothing.
+    const plain = await openDocument({
+      url: `${ROOT}contacts/people/pat-plain.ttl`,
+      etag: '"1"',
+      turtle: `${VCARD_PREFIX} <#this> a vcard:Individual; vcard:fn "Pat P"; vcard:hasUID "urn:uuid:p";
+        vcard:hasEmail [ a vcard:Home; vcard:value <mailto:pp@example.org> ];
+        vcard:hasTelephone [ a vcard:Cell; vcard:value <tel:+12025550100> ] .`,
+    });
+    const both = mergedDocument(primary, mergeContactData(primary.data, [plain.data], {}));
+    expect(mergeLosses(both, id(primary), plain)).toEqual([]);
+  });
+
+  it("only claims what each merge failure outcome guarantees", () => {
+    expect(mergeFailureMessage("unchanged", "A and B")).toBe(
+      "Could not merge A and B. No contacts were changed.",
+    );
+    expect(mergeFailureMessage("pending", "A and B")).toContain("will finish when Contacts loads");
+    expect(mergeFailureMessage("conflict", "A and B")).toContain(
+      "Contacts not yet merged were kept",
+    );
+    expect(mergeFailureMessage("unknown", "A and B")).toContain("Reload Contacts to check");
+    expect(writeMessage(new PendingMergeError())).toContain("hadn't finished");
+  });
+
+  async function pendingIntent() {
+    const first = await harness();
+    let captured: string | undefined;
+    first.pod.fail = (url, method) => {
+      if (url === ALICE && method === "PUT") captured = [...first.storage.values.values()][0];
+      if (url === ALICE && method === "PUT") return new Response(null, { status: 503 });
+      return undefined;
+    };
+    await expect(
+      first.controller.merge(`${ALICE}#this`, [`${COPY}#this`], { name: "Alice Smith" }),
+    ).rejects.toMatchObject({ outcome: "pending" });
+    const intent = JSON.parse(captured as string) as Intent;
+    const next = await harness();
+    next.storage.setItem(journalPrefix(next.webId, BOOK) + intent.id, JSON.stringify(intent));
+    return next;
+  }
+
+  it("resumes an identical unfinished merge instead of planning it again", async () => {
+    const { controller, pod, storage } = await pendingIntent();
+    const start = pod.requests.length;
+    await controller.merge(`${ALICE}#this`, [`${COPY}#this`], { name: "Alice Smith" });
+    const requests = pod.requests.slice(start);
+    const firstWrite = requests.findIndex((request) => request.method === "PUT");
+    expect(requests.slice(0, firstWrite).map((request) => request.url)).toEqual([ALICE]);
+    expect(storage.length).toBe(0);
+    expect(pod.files.has(COPY)).toBe(false);
+    expect((await controller.model.loadContact(ALICE)).data.name).toBe("Alice Smith");
+  });
+
+  it("refuses a different merge while one on the same contacts is unfinished, then finishes it", async () => {
+    const { controller, pod, storage, errors } = await pendingIntent();
+    const writes = pod.writes.length;
+    await expect(
+      controller.merge(`${COPY}#this`, [`${ALICE}#this`], { name: "Someone else" }),
+    ).rejects.toMatchObject({ outcome: "unchanged", cause: expect.any(PendingMergeError) });
+    expect(errors).toHaveBeenCalledWith(expect.stringContaining("hadn't finished"));
+    // Reconciliation completed the earlier, reviewed merge rather than the new request.
+    expect(pod.writes.length).toBeGreaterThan(writes);
+    expect(storage.length).toBe(0);
+    expect(pod.files.has(COPY)).toBe(false);
+    expect((await controller.model.loadContact(ALICE)).data.name).toBe("Alice Smith");
+    expect(controller.getSnapshot().data.people.map((p) => p.url)).toEqual([ALICE, CAROL]);
+  });
+
+  it("releases a merge whose duplicate changed while it waited to resume after a reload", async () => {
+    const { controller, pod, storage, errors, make } = await harness();
+    pod.fail = (url, method) =>
+      url === COPY && method === "DELETE" ? new Response(null, { status: 503 }) : undefined;
+    await expect(controller.merge(`${ALICE}#this`, [`${COPY}#this`], {})).rejects.toMatchObject({
+      outcome: "pending",
+    });
+    expect(storage.length).toBe(1);
+    pod.fail = undefined;
+    // Another client edits the duplicate before this browser reloads.
+    pod.seed(COPY, String(pod.files.get(COPY)?.body), '"elsewhere"');
+    errors.mockClear();
+    const reopened = make();
+    await reopened.refresh();
+    expect(reopened.getSnapshot().status, String(reopened.getSnapshot().error)).toBe("ready");
+    expect(errors).toHaveBeenCalledWith(expect.stringContaining("Contacts changed elsewhere"));
+    expect(storage.length).toBe(0);
+    expect(pod.files.has(COPY)).toBe(true);
+    expect((await indexed(reopened)).sort()).toEqual(
+      [`${ALICE}#this`, `${COPY}#this`, `${CAROL}#this`].sort(),
+    );
+    expect((await members(reopened, WORK)).sort()).toEqual(
+      [`${ALICE}#this`, `${COPY}#this`, `${CAROL}#this`].sort(),
+    );
+    expect(reopened.getSnapshot().data.people).toHaveLength(3);
   });
 });

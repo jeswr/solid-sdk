@@ -68,9 +68,11 @@ test("merges two contacts with chosen fields, unioning labels and emails, and su
 
   await expect(sage).toBeHidden();
   await expect(page.getByRole("heading", { name: "Omar Pine and Omar Pine" })).toBeFocused();
-  await expect(page.locator(".con-duplicates [role='status']")).toHaveText(
-    "Merged 2 contacts into Theodore Sage.",
-  );
+  // Success is announced once, by the toast, after the write finishes.
+  await expect(
+    page.getByText("Merged 2 contacts into Theodore Sage", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".con-duplicates [role='status']")).toHaveText("");
   await expect(page.locator(".con-dup-count")).toHaveText("2 groups");
   await expect(page.locator(".con-save")).toHaveText("");
 

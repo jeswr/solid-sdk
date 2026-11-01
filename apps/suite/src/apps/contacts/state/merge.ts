@@ -1,10 +1,11 @@
 // AUTHORED-BY Claude Opus 5.5
+import type { DatasetCore, Quad, Term } from "@rdfjs/types";
 import { DataFactory, Store } from "n3";
 import { clusterContacts, type DedupeContact, planMerges } from "../lib/dedupe";
 import { normaliseEmail, normalisePhone, validateWebId } from "../lib/dedupe/normalise";
 import { Contact, type ContactData, type ContactGroupData, type Snapshot } from "../lib/model";
-import { applyContact } from "../lib/model/data";
-import type { ContactsData } from "./controller";
+import { applyContact, VCARD } from "../lib/model/data";
+import type { ContactsData, MergeOutcome } from "./controller";
 import type { StarStorage } from "./data";
 
 /** Single-valued fields the merge review asks about. Contact points and labels are unioned. */
@@ -171,7 +172,7 @@ export function mergeChoices(people: readonly Snapshot<ContactData>[]): MergeCho
   return choices;
 }
 
-/** Defaults to the primary's values; otherwise the library's winner, so no value is lost. */
+/** Defaults to the primary's values; otherwise the library's winner, so no field goes empty. */
 export function defaultSelection(choices: MergeChoices, primary: string): MergeSelection {
   const selection: MergeSelection = {};
   for (const field of MERGE_FIELDS) {
@@ -214,7 +215,7 @@ export function mergeContactData(
   );
   const merged: ContactData = { ...primary, name: selection.name ?? primary.name };
   for (const field of ["organization", "note", "webId"] as const) {
-    // Unselected fields keep the primary's value, else a copy's: a merge never drops data.
+    // Unselected fields keep the primary's value, else a copy's, rather than going empty.
     const value =
       selection[field] ??
       primary[field] ??
@@ -232,6 +233,129 @@ export function mergedDocument(person: Snapshot<ContactData>, data: ContactData)
   const dataset = new Store([...person.dataset]);
   applyContact(new Contact(id(person), dataset, DataFactory), data);
   return dataset;
+}
+
+const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+/** Retired or reviewed with the merge: identity, membership, creation date and chosen fields. */
+const RETIRED = new Set([
+  `${VCARD}fn`,
+  `${VCARD}note`,
+  `${VCARD}organization-name`,
+  `${VCARD}inAddressBook`,
+  `${VCARD}hasUID`,
+  "http://purl.org/dc/terms/created",
+]);
+const POINTS: Record<string, string> = {
+  [`${VCARD}hasEmail`]: "email",
+  [`${VCARD}hasTelephone`]: "phone",
+  [`${VCARD}url`]: "website",
+};
+const NAMED: Record<string, string> = {
+  [`${VCARD}hasAddress`]: "address",
+  [`${VCARD}bday`]: "birthday",
+  [`${VCARD}anniversary`]: "anniversary",
+  [`${VCARD}hasPhoto`]: "photo",
+  [`${VCARD}nickname`]: "nickname",
+  [`${VCARD}title`]: "job title",
+  [`${VCARD}role`]: "role",
+};
+const local = (iri: string) => iri.replace(/^.*[#/]/, "") || iri;
+
+function pointValue(dataset: DatasetCore, node: Term): string {
+  if (node.termType !== "BlankNode") return node.value;
+  const [value] = dataset.match(node, DataFactory.namedNode(`${VCARD}value`));
+  return value?.object.value ?? "";
+}
+function pointKey(kind: string, value: string): string {
+  try {
+    if (kind === "email") return normaliseEmail(value.replace(/^mailto:/, ""));
+    if (kind === "phone") return normalisePhone(value.replace(/^tel:/, ""));
+  } catch {
+    // Unsupported spellings only match themselves.
+  }
+  return value;
+}
+const isWebIdNode = (dataset: DatasetCore, node: Term) =>
+  dataset.match(node, DataFactory.namedNode(RDF_TYPE), DataFactory.namedNode(`${VCARD}WebId`))
+    .size > 0;
+
+/**
+ * What deleting `duplicate` would discard, like the migration's lossless check: every RDF
+ * statement the merged primary does not carry. Identity, creation date and the reviewed fields
+ * (name, organisation, note, WebID) are deliberate choices and are not listed.
+ */
+export function mergeLosses(merged: DatasetCore, primaryId: string, duplicate: Snapshot<unknown>) {
+  const subject = id(duplicate);
+  const source = duplicate.dataset;
+  const losses = new Set<string>();
+  // Stores may mint fresh Quad objects per match, so compare statements by their terms.
+  const covered = new Set<string>();
+  const key = (quad: Quad) =>
+    JSON.stringify(
+      [quad.subject, quad.predicate, quad.object]
+        .map((t) => [t.termType, t.value])
+        .concat(
+          quad.object.termType === "Literal"
+            ? [[quad.object.language, quad.object.datatype.value]]
+            : [],
+        ),
+    );
+  // Whole subtrees below a lost edge belong to that loss (e.g. an address's parts).
+  const cover = (term: Term) => {
+    if (term.termType !== "BlankNode") return;
+    for (const quad of source.match(term)) {
+      if (covered.has(key(quad))) continue;
+      covered.add(key(quad));
+      cover(quad.object);
+    }
+  };
+  const target = DataFactory.namedNode(primaryId);
+  for (const quad of source.match(DataFactory.namedNode(subject))) {
+    covered.add(key(quad));
+    const predicate = quad.predicate.value;
+    if (RETIRED.has(predicate)) continue;
+    if (predicate === RDF_TYPE) {
+      if (quad.object.value !== `${VCARD}Individual`)
+        losses.add(`type ${local(quad.object.value)}`);
+      continue;
+    }
+    const kind = POINTS[predicate];
+    if (!kind) {
+      losses.add(NAMED[predicate] ?? local(predicate));
+      cover(quad.object);
+      continue;
+    }
+    cover(quad.object);
+    if (kind === "website" && isWebIdNode(source, quad.object)) continue;
+    const value = pointValue(source, quad.object);
+    const wanted = pointKey(kind, value);
+    const kept = [...merged.match(target, quad.predicate)].find(
+      (edge) => pointKey(kind, pointValue(merged, edge.object)) === wanted,
+    )?.object;
+    const shown = value.replace(/^(mailto|tel):/, "");
+    if (!kept) {
+      losses.add(`${kind} ${shown}`.trim());
+      continue;
+    }
+    if (quad.object.termType !== "BlankNode") continue;
+    for (const detail of source.match(quad.object)) {
+      if (detail.predicate.value === `${VCARD}value`) continue;
+      const same = merged.match(kept, detail.predicate, detail.object).size > 0;
+      if (same) continue;
+      losses.add(
+        detail.predicate.value === RDF_TYPE
+          ? `${local(detail.object.value)} label on ${kind} ${shown}`
+          : `${local(detail.predicate.value)} on ${kind} ${shown}`,
+      );
+    }
+  }
+  for (const quad of source) {
+    if (!covered.has(key(quad))) {
+      losses.add("other data in the contact's document");
+      break;
+    }
+  }
+  return [...losses].sort();
 }
 
 /** Optimistic view of a merge, replaced by the pod's state once the write settles. */
@@ -300,4 +424,18 @@ export function dismissGroup(
     for (const right of contactIds.slice(index + 1)) next.add(pairKey(left, right));
   storage.setItem(dismissedKey(webId), JSON.stringify([...next]));
   return next;
+}
+
+/** Only claim what the outcome guarantees. */
+export function mergeFailureMessage(outcome: MergeOutcome, names: string): string {
+  switch (outcome) {
+    case "unchanged":
+      return `Could not merge ${names}. No contacts were changed.`;
+    case "pending":
+      return `The merge of ${names} was interrupted. It will finish when Contacts loads again: retry or reload.`;
+    case "conflict":
+      return `Could not finish merging ${names} because a contact changed elsewhere. Contacts not yet merged were kept.`;
+    default:
+      return `Could not confirm the merge of ${names}. Reload Contacts to check the result.`;
+  }
 }

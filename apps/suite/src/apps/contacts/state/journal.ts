@@ -2,6 +2,7 @@
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 5.5
 import type { SavedDocument } from "../lib/model/intent";
+import type { MergeSelection } from "./merge";
 
 export interface Intent {
   id: string;
@@ -14,6 +15,8 @@ export interface Intent {
   source?: SavedDocument;
   /** Merge only: each duplicate's pre-merge RDF and the labels it must leave. */
   duplicates?: MergeDuplicate[];
+  /** Merge only: the reviewed choices, so only an identical request resumes this record. */
+  selection?: MergeSelection;
   labels: string[];
   completed: string[];
   repairs: string[];

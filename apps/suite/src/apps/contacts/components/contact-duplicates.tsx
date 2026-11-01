@@ -26,6 +26,7 @@ import {
   useDuplicates,
   useGroups,
 } from "../state/contacts-context";
+import { MergeFailure } from "../state/controller";
 import { contactLabels, displayPhone, encodeContactRef, projectContact } from "../state/data";
 import {
   type DuplicateGroup,
@@ -36,6 +37,9 @@ import {
   type MergeSelection,
   mergeChoices,
   mergeContactData,
+  mergedDocument,
+  mergeFailureMessage,
+  mergeLosses,
 } from "../state/merge";
 import { ContactAvatar } from "./contacts-list";
 
@@ -116,6 +120,19 @@ function MergeReview({
     ),
   ];
   const fixed = MERGE_FIELDS.filter((field) => choices[field].length === 1);
+  // Like migration's lossless check: list what deleting the other documents would discard.
+  let losses: { name: string; items: string[] }[] | undefined;
+  try {
+    const document = mergedDocument(primary, merged);
+    losses = others
+      .map((person) => ({
+        name: person.data.name,
+        items: mergeLosses(document, contactId(primary), person),
+      }))
+      .filter((loss) => loss.items.length);
+  } catch {
+    losses = undefined;
+  }
   const choose = (field: MergeField) => {
     const options = choices[field];
     const labelId = `${uid}-${field}`;
@@ -227,8 +244,34 @@ function MergeReview({
           <dd>{labels.length ? labels.join(", ") : "None"}</dd>
         </div>
       </dl>
+      {losses === undefined ? (
+        <div className="con-dup-warning" role="alert">
+          <p className="con-dup-warning-title">These contacts can't be merged here</p>
+          <p>
+            Some of their details aren't valid in the kept contact. Edit the contacts first, or keep
+            them separate.
+          </p>
+        </div>
+      ) : losses.length ? (
+        <div className="con-dup-warning" role="note" aria-labelledby={`${uid}-loss`}>
+          <p id={`${uid}-loss`} className="con-dup-warning-title">
+            Some details will be removed
+          </p>
+          <p>
+            These details can't be carried into {name}. They are deleted with the other
+            {others.length === 1 ? " contact" : " contacts"}:
+          </p>
+          <ul>
+            {losses.map((loss) => (
+              <li key={loss.name}>
+                {loss.name}: {loss.items.join(", ")}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <div className="con-form-actions">
-        <Button type="submit">
+        <Button type="submit" disabled={losses === undefined}>
           <Merge size={16} aria-hidden="true" />
           Merge contacts
         </Button>
@@ -242,7 +285,7 @@ function MergeReview({
             Merge {people.length} contacts into {name}?
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {`Keeps ${primary.data.name}${name === primary.data.name ? "" : ` (renamed to ${name})`} and deletes ${otherNames}, after adding their emails, phones and labels. This can't be undone.`}
+            {`Keeps ${primary.data.name}${name === primary.data.name ? "" : ` (renamed to ${name})`} and deletes ${otherNames}, after adding their emails, phones and labels.${losses?.length ? " The details listed in the review are removed." : ""} This can't be undone.`}
           </AlertDialogDescription>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep reviewing</AlertDialogCancel>
@@ -332,6 +375,15 @@ export function ContactDuplicates() {
   // After a merge or dismissal removes a group, focus the group now in its place (or the
   // previous one, or the empty state) once the list has re-rendered.
   const pendingFocus = useRef<number | null>(null);
+  // A failed merge's group reappears once the controller reconciles; focus it again.
+  const [restore, setRestore] = useState<string>();
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Headings register on commit, so retry whenever the groups re-render.
+  useEffect(() => {
+    if (restore === undefined) return;
+    const heading = headings.current.get(restore);
+    if (heading) heading.focus();
+    if (heading || state.status === "ready") setRestore(undefined);
+  }, [groups, restore, state.status]);
   useEffect(() => {
     const index = pendingFocus.current;
     if (index === null) return;
@@ -410,14 +462,20 @@ export function ContactDuplicates() {
                       const name = selection.name ?? primary.data.name;
                       pendingFocus.current = index;
                       setReviewing(undefined);
-                      setAnnouncement(`Merged ${people.length} contacts into ${name}.`);
+                      setAnnouncement("");
+                      // The success toast is the single announcement once the write settles.
                       void mutations
                         .merge(contactId(primary), others.map(contactId), selection)
                         .then(() => toast(`Merged ${people.length} contacts into ${name}`))
-                        .catch(() =>
-                          // The controller reports the error and restores the contacts.
-                          setAnnouncement(`Could not merge ${title}. No contacts were lost.`),
-                        );
+                        .catch((error: unknown) => {
+                          setAnnouncement(
+                            mergeFailureMessage(
+                              error instanceof MergeFailure ? error.outcome : "unknown",
+                              title,
+                            ),
+                          );
+                          setRestore(group.id);
+                        });
                     }}
                   />
                 </li>

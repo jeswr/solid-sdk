@@ -48,12 +48,20 @@ Pending migration records keep the destination and original source ETag across r
 retries create no duplicate and cannot delete a concurrently edited source. Records are removed
 only after completion or rollback; an unfinished recovery exposes the normal Retry error state.
 
-A merge journals the merged primary RDF (with the primary's reviewed ETag) and each duplicate's
-RDF, ETag and labels. Replay writes the primary, its index name and added labels, then removes each
-duplicate's labels, index entry and document (`If-Match`). A conflict releases the intent before
-any later step: a concurrently edited primary leaves everything unchanged, and a surviving
-duplicate gets back the links already removed, so no contact data is lost. There is no Undo; the
-review asks for confirmation instead.
+A merge journals the merged primary RDF, the reviewed choices, and each duplicate's RDF, ETag and
+labels. Replay writes the primary, its index name and added labels, then removes each duplicate's
+labels, index entry and document (`If-Match`). Only an identical request (same primary, duplicates
+and choices) resumes a journaled merge; a different merge touching the same contacts is refused
+with `PendingMergeError`, and reconciliation finishes the earlier one. A conflict releases the
+intent before any later step: a concurrently edited primary leaves everything unchanged, and a
+surviving duplicate gets back the links already removed. Rejections are `MergeFailure`s whose
+`outcome` (`unchanged`, `pending`, `conflict`, `unknown`) says what is guaranteed.
+
+Deleting a duplicate discards whatever its document holds beyond what the merge carries: its UID,
+creation date and unchosen name/organisation/note/WebID by design, and also contact-point types,
+other properties (addresses, birthdays, other apps' RDF) and other subjects. `mergeLosses` finds the
+latter, like migration's lossless check, and the review lists them before the merge. There is no
+Undo; the review asks for confirmation instead.
 
 Book creation resumes completed empty indexes. A missing private Type Index is created and linked
 through preferences using conditional writes; unreadable documents are never treated as missing.

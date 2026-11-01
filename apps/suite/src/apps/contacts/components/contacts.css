@@ -628,6 +628,25 @@
 .con-dup-review .con-form-actions {
   margin: 0;
 }
+.con-dup-warning {
+  border: 1px solid var(--warning);
+  border-left-width: 4px;
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 14px;
+  display: grid;
+  gap: 6px;
+}
+.con-dup-warning p,
+.con-dup-warning ul {
+  margin: 0;
+}
+.con-dup-warning ul {
+  padding-left: 20px;
+}
+.con-dup-warning-title {
+  font-weight: 600;
+}
 .con-dup-empty {
   text-align: center;
   padding: 48px 16px;
