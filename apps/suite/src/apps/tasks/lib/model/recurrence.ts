@@ -204,7 +204,8 @@ export function toRRule(rule: RecurrenceRule): string {
     );
   return fields.join(";");
 }
-export function humanise(rule: RecurrenceRule, due: Date): string {
+/** The optional zone formats the anchor's calendar fields; omitted means browser-local. */
+export function humanise(rule: RecurrenceRule, due: Date, timeZone?: string): string {
   validateRule(rule);
   const n = rule.interval ?? 1;
   const unit = { DAILY: "day", WEEKLY: "week", MONTHLY: "month", YEARLY: "year" }[rule.frequency];
@@ -219,13 +220,14 @@ export function humanise(rule: RecurrenceRule, due: Date): string {
     else text += ` on ${rule.byDay.map((day) => day.slice(0, 3)).join(", ")}`;
   }
   if (rule.frequency === "MONTHLY") {
-    const day = rule.byMonthDay ?? due.getDate();
+    const day =
+      rule.byMonthDay ?? Number(due.toLocaleString("en-GB", { day: "numeric", timeZone }));
     const suffix =
       day % 100 >= 11 && day % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" }[day % 10] ?? "th");
     text += ` on the ${day}${suffix}`;
   }
   if (rule.frequency === "YEARLY")
-    text += ` on ${due.getDate()} ${due.toLocaleString("en-GB", { month: "short" })}`;
+    text += ` on ${due.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone })}`;
   if (rule.count !== undefined) text += ` (${rule.count} times)`;
   if (rule.until !== undefined) {
     // An xsd:date is a calendar date; avoid parsing it as UTC and shifting it locally.

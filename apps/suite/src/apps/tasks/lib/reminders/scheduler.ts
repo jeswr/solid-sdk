@@ -15,57 +15,51 @@ export interface DueReminder {
   title: string;
   fireTime: Date;
 }
-interface Tick {
-  last?: number;
-  tail: Promise<unknown>;
+export interface ReminderTickResult {
+  due: DueReminder[];
+  errors: unknown[];
 }
-const ticks = new WeakMap<FiredReminderStore, Tick>();
 
 /**
- * First tick uses (now-window, now]; later successful ticks catch up since the last tick,
- * bounded to 24h. Tick state belongs to the store instance; fired keys survive reloads.
- * Calls sharing a store are serialised so overlapping local ticks cannot emit duplicates.
- * All-day markers are interpreted as browser-local midnight, ignoring the stored UTC time.
+ * Scan pending triggers in (now-window, now], capped at 24h and defaulting to that
+ * catch-up bound on every tick, including after reload. Atomic claims deduplicate
+ * overlapping ticks across tabs. Deliver every returned event even if errors exist;
+ * failed items remain unclaimed and can retry on the next tick.
+ * All-day markers use the browser's start of day, ignoring the stored UTC time.
  */
-export function collectDueReminders(
+export async function collectDueReminders(
   tasks: readonly ReminderTask[],
   now: Date,
   store: FiredReminderStore,
-  windowMs = 5 * 60_000,
-): Promise<DueReminder[]> {
+  windowMs = 86400000,
+): Promise<ReminderTickResult> {
   if (!Number.isFinite(now.getTime()) || !Number.isFinite(windowMs) || windowMs < 0)
-    return Promise.reject(new RangeError("Invalid reminder clock or window."));
-  let tick = ticks.get(store);
-  if (!tick) {
-    tick = { tail: Promise.resolve() };
-    ticks.set(store, tick);
-  }
-  const state = tick;
-  const instant = now.getTime();
-  const result = state.tail.then(async () => {
-    const lower = Math.max(instant - 86400000, Math.min(instant - windowMs, state.last ?? instant));
-    const due: DueReminder[] = [];
-    for (const task of tasks) {
-      if (task.state !== "open" || !task.due) continue;
-      let date = task.due;
-      if (task.allDay) {
-        const [year, month, day] = task.allDay.split("-").map(Number) as [number, number, number];
-        date = new Date(year, month - 1, day);
-      }
-      const times = pendingReminders(
-        computeFireTimes(task.url, date, task.reminders),
-        now,
-        new Set(),
-      );
-      for (const time of times) {
-        if (time.at.getTime() <= lower || (await store.has(time.key))) continue;
-        await store.add(time.key);
-        due.push({ taskUrl: task.url, title: task.title, fireTime: time.at });
+    throw new RangeError("Invalid reminder clock or window.");
+  const lower = now.getTime() - Math.min(windowMs, 86400000);
+  const due: DueReminder[] = [];
+  const errors: unknown[] = [];
+  for (const task of tasks) {
+    if (task.state !== "open" || !task.due) continue;
+    let date = task.due;
+    if (task.allDay) {
+      const [year, month, day] = task.allDay.split("-").map(Number) as [number, number, number];
+      date = new Date(year, month - 1, day);
+    }
+    for (const reminder of task.reminders) {
+      try {
+        const times = pendingReminders(
+          computeFireTimes(task.url, date, [reminder]),
+          now,
+          new Set(),
+        );
+        for (const time of times) {
+          if (time.at.getTime() <= lower || !(await store.claim(time.key))) continue;
+          due.push({ taskUrl: task.url, title: task.title, fireTime: time.at });
+        }
+      } catch (error) {
+        errors.push(error);
       }
     }
-    state.last = instant;
-    return due.sort((a, b) => a.fireTime.getTime() - b.fireTime.getTime());
-  });
-  state.tail = result.catch(() => {});
-  return result;
+  }
+  return { due: due.sort((a, b) => a.fireTime.getTime() - b.fireTime.getTime()), errors };
 }

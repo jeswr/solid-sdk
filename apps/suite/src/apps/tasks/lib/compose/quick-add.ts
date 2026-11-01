@@ -2,10 +2,14 @@
 import { humanise, type RecurrenceRule } from "../model/recurrence";
 import type { Reminder } from "../model/reminders";
 import { parseQuickAdd as parseTokens } from "../quickadd";
+import { reminderPhrase } from "../quickadd/parse";
 import { localCalendar, toInstant } from "../quickadd/time";
 
 export type ChipKind = "due" | "repeat" | "project" | "section" | "label" | "priority" | "reminder";
+export type ChipId = `${ChipKind}:${number}`;
 export interface Chip {
+  /** Stable for unchanged input: kind + UTF-16 span start (0 for defaults). */
+  id: ChipId;
   kind: ChipKind;
   label: string;
   /** Half-open UTF-16 offsets into the original input; defaults have an empty span. */
@@ -23,7 +27,8 @@ export interface ComposeContext {
   projects: { url: string; title: string }[];
   labels: string[];
   defaults?: { projectUrl?: string; sectionId?: string; sectionName?: string; due?: ComposeDue };
-  keepText?: Set<ChipKind>;
+  /** Suppressed chip ids from removeChip; those tokens remain literal title text. */
+  keepText?: Set<ChipId>;
 }
 export interface ComposeResult {
   title: string;
@@ -99,9 +104,23 @@ function formatDue(due: ComposeDue, ctx: ComposeContext): string {
 
 function dueValue(due: NonNullable<ReturnType<typeof parseTokens>["due"]>, tz: string): ComposeDue {
   if (due.kind === "dateTime") return { date: new Date(due.dateTime) };
-  // Midnight exists for the supported London calendar, even on DST transition days.
-  const date = toInstant(new Date(`${due.date}T00:00:00Z`), tz);
-  if (!date) throw new RangeError("Nonexistent all-day midnight");
+  const midnight = new Date(`${due.date}T00:00:00Z`);
+  let date = toInstant(midnight, tz);
+  if (!date) {
+    // Midnight can be skipped while the calendar date still exists. Find the
+    // transition's first instant, including gaps that end between whole hours.
+    let lower = midnight.getTime() - 86400000;
+    let upper = midnight.getTime() + 86400000;
+    while (lower < upper) {
+      const middle = Math.floor((lower + upper) / 2);
+      if (localCalendar(new Date(middle), tz).toISOString().slice(0, 10) < due.date)
+        lower = middle + 1;
+      else upper = middle;
+    }
+    date = new Date(lower);
+    if (localCalendar(date, tz).toISOString().slice(0, 10) !== due.date)
+      throw new RangeError("Nonexistent local date");
+  }
   return { date, allDay: due.date };
 }
 
@@ -110,7 +129,7 @@ export function parseQuickAdd(text: string, ctx: ComposeContext): ComposeResult 
   let working = text;
   const chips: Chip[] = [];
   const reminders: Reminder[] = [];
-  const keep = (kind: ChipKind) => ctx.keepText?.has(kind) === true;
+  const keep = (kind: ChipKind, start = 0) => ctx.keepText?.has(`${kind}:${start}`) === true;
   const mask = (start: number, end: number) => {
     working = working.slice(0, start) + "\u0000".repeat(end - start) + working.slice(end);
   };
@@ -128,10 +147,11 @@ export function parseQuickAdd(text: string, ctx: ComposeContext): ComposeResult 
       reminder = { offset: unit === "d" ? `-P${n}D` : `-PT${n}${unit === "h" ? "H" : "M"}` };
       when = `${n} ${unit === "d" ? "day" : unit === "h" ? "hour" : "minute"}${n === 1 ? "" : "s"} before`;
     } else {
-      const time = /^(?:\d{1,2}(?::\d{2})?\s*[ap]m|\d{1,2}:\d{2}|noon|midnight)\b/i.exec(rest);
-      const parsed = parseTokens(time ? time[0] : rest, ctx);
+      const phrase = reminderPhrase(rest, ctx);
+      if (!phrase) continue;
+      const parsed = parseTokens(phrase, ctx);
       const span = parsed.spans.find((span) => span.kind === "due" && span.start === 0);
-      if (!span || !parsed.due) continue;
+      if (!span || !parsed.due || span.end !== phrase.length) continue;
       length = span.end;
       const due = dueValue(parsed.due, ctx.tz);
       reminder = { time: due.date };
@@ -139,28 +159,36 @@ export function parseQuickAdd(text: string, ctx: ComposeContext): ComposeResult 
     }
     const end = start + marker[0].length + length;
     mask(start, end);
-    if (!keep("reminder")) {
+    if (!keep("reminder", start)) {
       reminders.push(reminder);
-      chips.push({ kind: "reminder", label: `Remind ${when}`, span: { start, end } });
+      chips.push({
+        id: `reminder:${start}`,
+        kind: "reminder",
+        label: `Remind ${when}`,
+        span: { start, end },
+      });
     }
   }
   const parsed = parseTokens(working, ctx);
+  const dueSpan = parsed.spans.find((span) => span.kind === "due");
+  const repeatSpan = parsed.spans.find((span) => span.kind === "recurrence");
+  const projectSpan = parsed.spans.find((span) => span.kind === "project");
+  const prioritySpan = parsed.spans.find((span) => span.kind === "priority");
   const result: ComposeResult = {
     title: "",
-    priority: keep("priority") ? 4 : parsed.priority,
+    priority: keep("priority", prioritySpan?.start) ? 4 : parsed.priority,
     labels: [],
     reminders,
     chips,
     canSubmit: false,
   };
-  const due = keep("due")
+  const due = keep("due", dueSpan?.start)
     ? undefined
-    : parsed.due && !(keep("repeat") && !parsed.spans.some((span) => span.kind === "due"))
+    : parsed.due && !(keep("repeat", repeatSpan?.start) && !dueSpan)
       ? dueValue(parsed.due, ctx.tz)
       : ctx.defaults?.due;
   if (due) result.due = due;
-  const anchor = localCalendar(due?.date ?? ctx.now, ctx.tz);
-  if (parsed.recurrence && !keep("repeat")) {
+  if (parsed.recurrence && !keep("repeat", repeatSpan?.start)) {
     result.recurrence = {
       frequency: parsed.recurrence.freq,
       interval: parsed.recurrence.interval,
@@ -170,7 +198,7 @@ export function parseQuickAdd(text: string, ctx: ComposeContext): ComposeResult 
   }
   for (const span of parsed.spans) {
     const kind = span.kind === "recurrence" ? "repeat" : span.kind;
-    if (keep(kind)) continue;
+    if (keep(kind, span.start)) continue;
     let label: string;
     if (kind === "project") {
       const name = matchName(
@@ -191,22 +219,38 @@ export function parseQuickAdd(text: string, ctx: ComposeContext): ComposeResult 
       label = `@${resolved.name}`;
     } else if (kind === "due") label = `Due ${formatDue(due as ComposeDue, ctx)}`;
     else if (kind === "repeat")
-      label = `Repeats ${humanise(result.recurrence as RecurrenceRule, anchor)}`;
+      label = `Repeats ${humanise(result.recurrence as RecurrenceRule, due?.date ?? ctx.now, ctx.tz)}`;
     else label = `P${result.priority}`;
-    chips.push({ kind, label, span: { start: span.start, end: span.end } });
+    chips.push({
+      id: `${kind}:${span.start}`,
+      kind,
+      label,
+      span: { start: span.start, end: span.end },
+    });
   }
-  if (!result.project && ctx.defaults?.projectUrl && !keep("project"))
+  if (!result.project && ctx.defaults?.projectUrl && !keep("project", projectSpan?.start))
     result.project = { kind: "existing", url: ctx.defaults.projectUrl };
-  if (ctx.defaults?.sectionId && !keep("section")) {
+  if (
+    ctx.defaults?.sectionId &&
+    !keep("section") &&
+    result.project?.kind === "existing" &&
+    result.project.url === ctx.defaults.projectUrl
+  ) {
     result.sectionId = ctx.defaults.sectionId;
     chips.push({
+      id: "section:0",
       kind: "section",
       label: ctx.defaults.sectionName ?? "Section",
       span: { start: 0, end: 0 },
     });
   }
   if (due && !chips.some((chip) => chip.kind === "due"))
-    chips.push({ kind: "due", label: `Due ${formatDue(due, ctx)}`, span: { start: 0, end: 0 } });
+    chips.push({
+      id: "due:0",
+      kind: "due",
+      label: `Due ${formatDue(due, ctx)}`,
+      span: { start: 0, end: 0 },
+    });
   if (!due) {
     result.reminders = [];
     for (const chip of chips) if (chip.kind === "reminder") chip.invalid = true;
@@ -226,14 +270,14 @@ export function parseQuickAdd(text: string, ctx: ComposeContext): ComposeResult 
 }
 
 /**
- * Removing a chip restores its literal token by disabling that kind of interpretation.
+ * Removing a chip restores only its literal token by suppressing its stable id.
  * Text remains unchanged (so spans stay valid). Pass the returned keepText into the next
- * parse; it suppresses all tokens of that kind until explicitly cleared by the composer.
+ * parse; other tokens of that kind still parse. Clear/rebase ids when editing the text.
  */
 export function removeChip(
   text: string,
   chip: Chip,
-  keepText = new Set<ChipKind>(),
-): { text: string; keepText: Set<ChipKind> } {
-  return { text, keepText: new Set([...keepText, chip.kind]) };
+  keepText = new Set<ChipId>(),
+): { text: string; keepText: Set<ChipId> } {
+  return { text, keepText: new Set([...keepText, chip.id]) };
 }
