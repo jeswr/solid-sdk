@@ -33,6 +33,29 @@ it("exposes the supported fetch signature with only an optional dispatch fence",
   >();
 });
 
+it("refuses a response from a transport that ignored the dispatch fence", async () => {
+  const origin = "https://allowed.example";
+  const transport = vi.fn<typeof guardedFetch>(async () => new Response("sent"));
+  const scoped = createOriginScopedFetch(new Set([origin]), {
+    dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }],
+    // Drops beforeDispatch, as a guarded-fetch without the hook would.
+    createTransport: ({ allowLoopback, maxRedirects }) =>
+      createGuardedFetch({
+        allowLoopback,
+        maxRedirects,
+        pinningFetch: transport,
+        requireDnsPinning: true,
+        dnsLookup: async () => [{ address: "1.1.1.1", family: 4 }],
+      }),
+  });
+  const fence = vi.fn();
+  await expect(scoped(origin, { beforeDispatch: fence })).rejects.toThrow(
+    "binding transport did not run the dispatch fence",
+  );
+  expect(fence).not.toHaveBeenCalled();
+  expect(await (await scoped(origin)).text()).toBe("sent");
+});
+
 it("isolates concurrent dispatch fences after inner DNS and preserves exact refusals", async () => {
   const origin = "https://allowed.example";
   const entered = deferred<void>();

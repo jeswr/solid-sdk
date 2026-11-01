@@ -142,8 +142,10 @@ export function createOriginScopedFetch(
     // Guard layers sanitize/wrap transport errors. Retain this request's exact fence refusal.
     let refusal: { error: unknown } | undefined;
     let sizeRefused = false;
+    let fenced = false;
     const singleHop = beforeDispatch
       ? createSingleHop(() => {
+          fenced = true;
           try {
             beforeDispatch();
           } catch (error) {
@@ -180,8 +182,9 @@ export function createOriginScopedFetch(
     const url = new URL(request.url);
     if (!allowed.has(url.origin)) throw new TypeError("request origin is outside binding ORIGINS");
     // guarded-fetch normalizes only part of Request; retain the effective policies explicitly.
+    let response: Response;
     try {
-      return await guarded(request, {
+      response = await guarded(request, {
         body: request.body,
         redirect: "manual",
         integrity: request.integrity,
@@ -197,5 +200,12 @@ export function createOriginScopedFetch(
       if (sizeRefused || isResponseSizeRefusal(error)) throw new ResponseSizeRefusedError();
       throw error;
     }
+    // A transport that drops beforeDispatch (e.g. an older guarded-fetch) would dispatch
+    // unfenced; surface that loudly rather than treat the send as authorised.
+    if (beforeDispatch && !fenced) {
+      await Promise.allSettled([response.body?.cancel()]);
+      throw new TypeError("binding transport did not run the dispatch fence");
+    }
+    return response;
   };
 }
