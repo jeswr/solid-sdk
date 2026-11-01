@@ -32,10 +32,10 @@ Read the [app-shell](../../packages/app-shell/SKILL.md) and
 
 ## The sign-in screen
 
-Chapter 3 describes the sign-in options to offer. The shared components render the account menu
-once someone is signed in. A shared sign-in card for `@jeswr/suite-ui` is being designed; until it
-ships, the sign-in screen is app code, so follow the order in chapter 3: "continue as", provider
-buttons, WebID, then "another provider".
+Chapter 3 describes the sign-in screen: recent accounts, the WebID field, provider buttons,
+"another provider", and a footer for newcomers. The shared components render the account menu
+once someone is signed in. A shared `SignInCard` in `@jeswr/suite-ui/sign-in` is in review; until
+it ships, build the screen in the app in the order chapter 3 gives.
 
 ## Show what the pod can do
 

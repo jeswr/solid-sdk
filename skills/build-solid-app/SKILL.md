@@ -175,8 +175,9 @@ feature check, until the package ships it.
   grant API. Show who-has-access as unavailable rather than writing `.acl` files by hand.
 - **React data hooks.** The `@jeswr/suite-sdk` React facade (session, resources, subscriptions) is
   planned; until then apps keep a small context of their own over the three clients above.
-- **A shared sign-in screen** (provider buttons, WebID, "another provider") is being designed for
-  `@jeswr/suite-ui`; until it lands, build the screen in the app following the guide's chapter 3.
+- **A shared sign-in screen.** `SignInCard` (`@jeswr/suite-ui/sign-in`) and the provider directory
+  (`@jeswr/pod-auth/directory`) are in review. Until they land, build the screen in the app in the
+  guide's chapter 3 order: recent accounts, WebID field, provider buttons, another provider.
 - **Collaboration on LWS.** `@jeswr/y-solid` persistence is Solid-only and has no real-time
   service adapter.
 - **Offline outbox.** `solid-offline` caches reads; queued offline writes are planned. Await

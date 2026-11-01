@@ -58,41 +58,44 @@ sign-in state lives in the page that called `login()`, so navigating that page a
 
 ## Design the sign-in screen
 
-Many people do not remember their WebID. Do not make it the only way in. A good sign-in screen
-offers, in this order:
+Many people do not remember their WebID. Do not make it the only way in. The suite's sign-in
+screen offers, in this order:
 
-1. **Continue as …** for a remembered account (`auth.remembered()`), one click.
-2. **A list of identity providers** the user may already have an account with. Clicking one calls
-   `auth.login({ issuer })`. The provider works out who the user is.
-3. **Use your WebID**, a text field, for people who know it. This calls `auth.login({ webId })`.
-4. **Another provider**, a text field for any issuer URL, for people running their own.
+1. **Continue as …** for each recent account (`auth.remembered()`), one click.
+2. **Sign in with your WebID**, a text field. It also accepts a provider's address, for people
+   who know that instead.
+3. **Or continue with your provider**, one button per identity provider. Clicking one calls
+   `auth.login({ issuer })` and the provider works out who the user is. Put the user's home
+   provider first, as the only filled button.
+4. **Another provider**, an address field (with recently used providers) for anyone else,
+   including people running their own.
+5. A footer with **Get a pod** and **What is a WebID?** for people new to Solid.
 
 ```ts
 import type { PodAuth } from '@jeswr/pod-auth';
 
 declare const auth: PodAuth;
 
-// Only list providers your app has been tested against.
-export const providers = [
-  { name: 'Solid Community', issuer: 'https://solidcommunity.net/' },
-  { name: 'Example Provider', issuer: 'https://login.example/' },
-];
-
 // 1. "Continue as …"
-export async function continueAsRemembered() {
-  const [account] = await auth.remembered();
-  return account === undefined ? null : auth.login({ webId: account.webId, issuer: account.issuer });
+export async function continueAs(account: { webId: string; issuer: string }) {
+  return auth.login({ webId: account.webId, issuer: account.issuer });
 }
+export const recentAccounts = await auth.remembered();
 
-// 2. and 4. A provider button, or the "another provider" field.
-export const signInWithProvider = (issuer: string) => auth.login({ issuer });
-
-// 3. The WebID field.
+// 2. The WebID field, when the text is a WebID.
 export const signInWithWebId = (webId: string) => auth.login({ webId });
+
+// 3. and 4. A provider button, or the "another provider" field.
+export const signInWithProvider = (issuer: string) => auth.login({ issuer });
 ```
 
-Keep the provider list short, and add a line for people who have no pod yet that says what a pod
-is and where to get one.
+Keep the provider list short, and only list providers your app has been tested against.
+
+**Coming soon.** A ready-made `SignInCard` (in `@jeswr/suite-ui/sign-in`) draws this screen, and
+`@jeswr/pod-auth/directory` adds a list of known providers and a helper that decides whether the
+text in the first field is a WebID or a provider address. With it, a provider-first sign-in
+whose WebID profile does not name that provider is refused (`IssuerNotAuthorizedError`). Both are
+in review; use them once they land instead of building the screen yourself.
 
 ## Restore the session on start-up
 

@@ -59,7 +59,7 @@ Vercel. [Deployment](../deployment.md) lists every app and its build command.
 
 ## Checklist before you call it done
 
-- [ ] Sign-in offers "continue as", providers, WebID and "another provider".
+- [ ] Sign-in offers recent accounts, a WebID field, provider buttons and "another provider".
 - [ ] Every edit sends the ETag it read, and conflicts are handled.
 - [ ] No URL is built from a container and a name.
 - [ ] RDF goes through a domain package or typed accessors only.
