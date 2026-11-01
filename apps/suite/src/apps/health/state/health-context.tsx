@@ -30,6 +30,7 @@ import {
   saveRecord,
 } from "../lib/data/records";
 import { createHealthDataStore } from "../lib/data/store";
+import { PartialGpxImportError } from "../lib/data/workouts";
 import type { Measurement, MetricKind, Precondition } from "../lib/model";
 
 export type AsyncState<T> =
@@ -153,18 +154,23 @@ export function HealthProvider({
         return result;
       } catch (error) {
         invalidate();
-        const underlying = error instanceof PartialImportError ? error.cause : error;
+        const underlying =
+          error instanceof PartialImportError || error instanceof PartialGpxImportError
+            ? error.cause
+            : error;
         const conflict =
           typeof underlying === "object" &&
           underlying !== null &&
           "status" in underlying &&
           underlying.status === 412;
         toast.error(
-          conflict
-            ? "This item changed elsewhere. We refreshed your data. Review it before saving again."
-            : error instanceof PartialImportError
-              ? error.message
-              : "Couldn't save to your private Health storage. Your change was rolled back.",
+          error instanceof PartialGpxImportError
+            ? error.message
+            : conflict
+              ? "This item changed elsewhere. We refreshed your data. Review it before saving again."
+              : error instanceof PartialImportError
+                ? error.message
+                : "Couldn't save to your private Health storage. Your change was rolled back.",
         );
         throw error;
       } finally {

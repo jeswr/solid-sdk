@@ -82,7 +82,7 @@ export function Dashboard() {
   const oldest = new Date(Date.UTC(viewNow.getUTCFullYear(), viewNow.getUTCMonth() - 1, 1));
   useEffect(() => {
     if (state.status === "ready" || state.status === "empty")
-      acknowledge(state.data.flatMap((card) => card.entries.map((entry) => entry.iri)));
+      acknowledge(state.data.flatMap((card) => card.observations.map((entry) => entry.iri)));
   }, [state, acknowledge]);
   return (
     <div className="hlt-page">

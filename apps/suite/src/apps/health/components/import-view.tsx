@@ -7,7 +7,7 @@ import { useRef, useState } from "react";
 import { encodeRef } from "@/lib/refs";
 import { fileChunks, fingerprintAppleRecord } from "../lib/browser/chunks";
 import { type ImportProgress, importHealth, PartialImportError } from "../lib/data/import";
-import { importGpx, previewGpx } from "../lib/data/workouts";
+import { importGpx, PartialGpxImportError, previewGpx } from "../lib/data/workouts";
 import { useHealth } from "../state/health-context";
 
 const LABELS: Record<string, string> = {
@@ -204,8 +204,10 @@ function GpxImport() {
     "idle" | "previewing" | "preview" | "importing" | "done" | "error"
   >("idle");
   const [error, setError] = useState("");
-  const [done, setDone] = useState<{ iri: string; name: string }[]>([]);
+  const [done, setDone] = useState<{ id: string; iri: string; name: string }[]>([]);
+  const [pendingRoute, setPendingRoute] = useState<string | null>(null);
   const busy = phase === "previewing" || phase === "importing";
+  const retryable = phase === "error" && previews.length > 0;
   return (
     <section className="hlt-panel hlt-import-card">
       <div className="hlt-import-icon">
@@ -223,12 +225,13 @@ function GpxImport() {
         type="file"
         accept=".gpx,application/gpx+xml"
         multiple
-        disabled={busy}
+        disabled={busy || retryable}
         onChange={async (event) => {
           const files = Array.from(event.target.files ?? []);
           setError("");
           setDone([]);
           setPreviews([]);
+          setPendingRoute(null);
           if (!files.length) {
             setPhase("idle");
             return;
@@ -274,30 +277,41 @@ function GpxImport() {
           </ul>
         </div>
       )}
-      {phase === "preview" && (
+      {(phase === "preview" || retryable) && (
         <Button
           onClick={async () => {
             setPhase("importing");
-            const completed: { iri: string; name: string }[] = [];
+            setError("");
+            const completed = [...done];
+            let current: GpxPreview | undefined;
+            let route = pendingRoute;
             try {
               for (const item of previews) {
+                if (completed.some((saved) => saved.id === item.id)) continue;
+                current = item;
                 const workout = await mutate(
                   () => importGpx(store, item.id, item.xml),
                   `Imported ${item.file.name}`,
                 );
-                completed.push({ iri: workout.value, name: item.file.name });
+                completed.push({ id: item.id, iri: workout.value, name: item.file.name });
+                route = null;
+                setPendingRoute(null);
                 setDone([...completed]);
               }
               setPhase("done");
-            } catch {
+            } catch (cause) {
+              if (cause instanceof PartialGpxImportError) route = current?.id ?? null;
+              setPendingRoute(route ?? null);
               setError(
-                `Import stopped. ${completed.length} of ${previews.length} workouts saved. Check your storage connection and private access before choosing the remaining files.`,
+                `Import stopped. ${completed.length} of ${previews.length} workouts complete. ${route ? "1 additional route is saved; its workout entry is pending. " : ""}Saved resources are kept. Check your storage connection and private access, then retry to finish the remaining workouts.`,
               );
               setPhase("error");
             }
           }}
         >
-          Import {previews.length} {previews.length === 1 ? "workout" : "workouts"}
+          {retryable
+            ? "Retry remaining workouts"
+            : `Import ${previews.length} ${previews.length === 1 ? "workout" : "workouts"}`}
         </Button>
       )}
       {phase === "importing" && (
@@ -308,16 +322,18 @@ function GpxImport() {
       {error && (
         <div role="alert">
           <p>{error}</p>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => {
-              setPhase("idle");
-              setError("");
-            }}
-          >
-            Choose another file
-          </Button>
+          {!retryable && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setPhase("idle");
+                setError("");
+              }}
+            >
+              Choose another file
+            </Button>
+          )}
         </div>
       )}
       {!!done.length && (

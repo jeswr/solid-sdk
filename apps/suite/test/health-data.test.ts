@@ -33,14 +33,19 @@ import {
   importGpx,
   listWorkouts,
   loadWorkout,
+  PartialGpxImportError,
   previewGpx,
 } from "../src/apps/health/lib/data/workouts";
 import {
   addRecord,
+  Condition,
   emptyHealthDocument,
+  Immunization,
   type Measurement,
+  MedicationStatement,
   RecordDetails,
   Reminder,
+  WorkoutFile,
   type WorkoutSummary,
 } from "../src/apps/health/lib/model";
 import { createDemoPod } from "../src/lib/demo-pod/pod";
@@ -164,6 +169,7 @@ describe("Health metric data over an in-memory pod", () => {
         sample("new", "weight", "2026-11-01T08:00:00Z", 72),
         sample("bp", "systolic", "2026-11-01T08:00:00Z", 120),
         sample("bp2", "diastolic", "2026-11-01T08:00:00Z", 80),
+        sample("older-bp2", "diastolic", "2026-10-31T08:00:00Z", 75),
       ],
       OWNER,
       () => {},
@@ -176,8 +182,12 @@ describe("Health metric data over an in-memory pod", () => {
     ]);
     expect(dashboard[3]).toMatchObject({ latest: { value: 72 }, change: -10 });
     expect(dashboard[4]?.secondary?.value).toBe(80);
+    expect(dashboard[4]?.observations.filter((entry) => entry.kind === "diastolic")).toHaveLength(
+      2,
+    );
+    expect(dashboard[4]?.entries.every((entry) => entry.kind === "systolic")).toBe(true);
     expect(dashboard[0]?.change).toBeNull();
-    expect((await loadMeasurements(store, RANGE)).length).toBe(4);
+    expect((await loadMeasurements(store, RANGE)).length).toBe(5);
     expect(metricRange("7d", NOW).start.toISOString()).toBe("2026-10-26T00:00:00.000Z");
     expect(metricRange("30d", NOW).start.toISOString()).toBe("2026-10-03T00:00:00.000Z");
     expect(metricRange("1y", NOW).start.toISOString()).toBe("2025-11-02T00:00:00.000Z");
@@ -361,6 +371,82 @@ describe("Apple Health preview and streaming writes", () => {
 });
 
 describe("clinical records and reminders", () => {
+  it.each([
+    "medications",
+    "conditions",
+    "immunisations",
+  ] as const)("preserves an external clinical reference when updating %s", async (kind) => {
+    const { store } = fixture();
+    await store.initialize();
+    const path = `${kind}/external.ttl`;
+    const iri = `${store.base}${path}#clinical-record`;
+    const reference = "https://snomed.info/id/123456";
+    const document = emptyHealthDocument();
+    addRecord(document, { iri, kind, patient: OWNER, name: "Original", reference, reminders: [] });
+    await store.write(path, document, { create: true });
+    const { etag } = await store.read(path);
+    await saveRecord(store, OWNER, kind, "external", DRAFT, { etag: etag as string }, NOW, iri);
+    const changed = (await store.read(path)).document;
+    const actual =
+      kind === "medications"
+        ? new MedicationStatement(iri, changed, DataFactory).medication
+        : kind === "conditions"
+          ? new Condition(iri, changed, DataFactory).code
+          : new Immunization(iri, changed, DataFactory).vaccine;
+    expect(actual).toBe(reference);
+    expect(new RecordDetails(iri, changed, DataFactory).name).toBe(DRAFT.name);
+  });
+  it.each([
+    ["Pacific/Auckland", "2026-11-01T05:00:00Z", "2026-10-31T19:00:00Z"],
+    ["America/Los_Angeles", "2026-11-02T02:00:00Z", "2026-11-01T16:00:00Z"],
+  ])("keeps today's overdue doses in %s, including timestamp-only reminders", async (timeZone, now, due) => {
+    const { store } = fixture();
+    await saveRecord(
+      store,
+      OWNER,
+      "medications",
+      "local",
+      { ...DRAFT, timeZone },
+      { create: true },
+      new Date(now as string),
+    );
+    const record = (await loadRecords(store, "medications"))[0] as ClinicalRecord;
+    expect(
+      dueMedications([record], new Date(now as string)).map(({ at }) => at.toISOString()),
+    ).toEqual([new Date(due as string).toISOString()]);
+    expect(
+      dueMedications(
+        [
+          {
+            ...record,
+            date: "",
+            reminders: [
+              new Date(due as string),
+              new Date(Date.parse(due as string) - 86400000),
+              new Date(Date.parse(due as string) + 86400000),
+            ],
+          },
+        ],
+        new Date(now as string),
+      ).map(({ at }) => at.toISOString()),
+    ).toEqual([new Date(due as string).toISOString()]);
+  });
+  it("does not invent a clinical reference for an existing incomplete record", async () => {
+    const { store } = fixture();
+    await store.initialize();
+    const document = emptyHealthDocument();
+    const iri = `${store.base}conditions/incomplete.ttl#it`;
+    document.mintCondition(iri);
+    await store.write("conditions/incomplete.ttl", document, { create: true });
+    const { etag } = await store.read("conditions/incomplete.ttl");
+    await expect(
+      saveRecord(store, OWNER, "conditions", "incomplete", DRAFT, { etag: etag as string }, NOW),
+    ).rejects.toThrow("no clinical reference");
+    expect(
+      new Condition(iri, (await store.read("conditions/incomplete.ttl")).document, DataFactory)
+        .code,
+    ).toBeUndefined();
+  });
   it("validates historical record dates separately from medication schedules", async () => {
     const { store } = fixture();
     for (const [kind, date] of [
@@ -590,6 +676,74 @@ describe("clinical records and reminders", () => {
 });
 
 describe("GPX workouts", () => {
+  it("reports a saved route after an index failure and resumes with the same ID", async () => {
+    let rejectIndex = true;
+    const routeWrites: string[] = [];
+    const { pod, store, fetch } = fixture(async (input, init, transport) => {
+      const url = String(input);
+      if (init?.method === "PUT" && url.endsWith("/route.gpx")) routeWrites.push(url);
+      if (rejectIndex && init?.method === "PUT" && url.endsWith("/index.ttl"))
+        return new Response(null, { status: 500 });
+      return transport(input, init);
+    });
+    const xml = sampleGpx(NOW);
+    await expect(importGpx(store, "resume", xml)).rejects.toBeInstanceOf(PartialGpxImportError);
+    expect(pod.has(`${store.base}workouts/resume/route.gpx`)).toBe(true);
+    expect(await listWorkouts(store, fetch)).toEqual([]);
+    rejectIndex = false;
+    await importGpx(store, "resume", xml);
+    expect(routeWrites).toEqual(Array(2).fill(`${store.base}workouts/resume/route.gpx`));
+    expect(await listWorkouts(store, fetch)).toHaveLength(1);
+  });
+  it("does not report a partial route when privacy or the route write fails", async () => {
+    const { store } = fixture(async (input, init, transport) =>
+      init?.method === "PUT" && String(input).endsWith("/route.gpx")
+        ? new Response(null, { status: 500 })
+        : transport(input, init),
+    );
+    await expect(importGpx(store, "failed", sampleGpx(NOW))).rejects.toMatchObject({ status: 500 });
+  });
+  it.each([
+    "missing",
+    "malformed",
+    "rejected",
+    "network",
+    "unsafe",
+  ])("keeps valid workout summaries and exposes a %s route error separately", async (failure) => {
+    const { store, pod } = fixture();
+    await importGpx(store, "good", sampleGpx(NOW));
+    await importGpx(store, "bad", sampleGpx(NOW));
+    const routeUrl = `${store.base}workouts/bad/route.gpx`;
+    if (failure === "missing") await pod.fetch(routeUrl, { method: "DELETE" });
+    if (failure === "malformed") await pod.fetch(routeUrl, { method: "PUT", body: "<gpx/>" });
+    if (failure === "unsafe") {
+      const index = await store.read("workouts/bad/index.ttl");
+      new WorkoutFile(`${store.base}workouts/bad/index.ttl#it`, index.document, DataFactory).gpx =
+        "https://evil.test/route.gpx";
+      await store.write("workouts/bad/index.ttl", index.document, { etag: index.etag as string });
+    }
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      if (String(input) === routeUrl && failure === "network") throw new Error("Offline");
+      if (String(input) === routeUrl && failure === "rejected")
+        return new Response(null, { status: 403 });
+      expect(String(input)).not.toContain("evil.test");
+      return pod.fetch(input, init);
+    };
+    const items = await listWorkouts(store, fetch);
+    expect(items).toHaveLength(2);
+    expect(items.find((item) => item.iri.includes("/good/"))?.elevationGain).toBeGreaterThan(0);
+    const bad = items.find((item) => item.iri.includes("/bad/")) as WorkoutSummary;
+    expect(bad).toMatchObject({
+      elevationGain: null,
+      routeError: expect.any(String),
+      source: "GPX",
+    });
+    expect(await loadWorkout(store, bad, fetch)).toMatchObject({
+      workout: bad,
+      route: null,
+      routeError: expect.any(String),
+    });
+  });
   it("previews segmented routes and loads the native workout without any map request", async () => {
     const { store, fetch } = fixture();
     expect(await listWorkouts(store, fetch)).toEqual([]);
@@ -608,6 +762,7 @@ describe("GPX workouts", () => {
     expect(await loadWorkout(store, EMPTY_WORKOUT, fetch)).toEqual({
       workout: EMPTY_WORKOUT,
       route: null,
+      routeError: null,
     });
     const sparse = previewGpx(
       '<gpx><trk><trkseg><trkpt lat="1" lon="2"/><trkpt lat="1.001" lon="2.001"><ele>10</ele></trkpt></trkseg><trkseg><trkpt lat="5" lon="6"><ele>20</ele></trkpt></trkseg></trk></gpx>',
@@ -618,7 +773,7 @@ describe("GPX workouts", () => {
     expect(() => previewGpx("<gpx/>")).toThrow("no track points");
     await expect(importGpx(store, "bad", "broken")).rejects.toThrow();
   });
-  it("handles optional dates, rejects unsafe route URLs and propagates route failures", async () => {
+  it("handles optional dates and reports unsafe route URLs and route failures", async () => {
     const { store, fetch } = fixture();
     await importGpx(store, "undated1", '<gpx><trkpt lat="1" lon="1"/></gpx>');
     await importGpx(store, "undated2", '<gpx><trkpt lat="1" lon="1"/></gpx>');
@@ -639,10 +794,10 @@ describe("GPX workouts", () => {
       `${ROOT}health/workouts/route.gpx#fragment`,
       "https://name:secret@health.test/health/workouts/route.gpx",
     ])
-      await expect(loadWorkout(store, { ...EMPTY_WORKOUT, gpx }, fetch)).rejects.toThrow("outside");
+      expect((await loadWorkout(store, { ...EMPTY_WORKOUT, gpx }, fetch)).routeError).toBeTruthy();
     await expect(
       loadWorkout(store, { ...EMPTY_WORKOUT, gpx: `${ROOT}health/workouts/missing.gpx` }, fetch),
-    ).rejects.toThrow("Couldn't load");
+    ).resolves.toMatchObject({ route: null, routeError: expect.any(String) });
   });
 });
 

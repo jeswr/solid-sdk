@@ -13,7 +13,10 @@ export async function loadDashboard(store: HealthStore, now: Date) {
   previous.setUTCDate(previous.getUTCDate() - 7);
   return CATALOGUE.map((metric) => {
     const kind: MetricKind = metric.kinds[0];
-    const all = entries.filter((entry) => entry.kind === kind);
+    const observations = entries.filter((entry) =>
+      (metric.kinds as readonly MetricKind[]).includes(entry.kind),
+    );
+    const all = observations.filter((entry) => entry.kind === kind);
     const current = summarizeMetric(
       all.filter((entry) => entry.at >= week),
       kind,
@@ -32,6 +35,14 @@ export async function loadDashboard(store: HealthStore, now: Date) {
       before.average && current.average !== null
         ? ((current.average - before.average) / before.average) * 100
         : null;
-    return { ...metric, entries: all, latest, secondary, buckets: current.buckets, change };
+    return {
+      ...metric,
+      observations,
+      entries: all,
+      latest,
+      secondary,
+      buckets: current.buckets,
+      change,
+    };
   });
 }

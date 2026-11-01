@@ -2,10 +2,14 @@
 import { NS } from "@jeswr/suite-vocab";
 import { LiteralAs, LiteralFrom, OptionalAs, OptionalFrom } from "@rdfjs/wrapper";
 import { DataFactory } from "n3";
+import { instantToWallClock, wallClockToInstant } from "../../../calendar/lib/tz";
 import { generateDueDoses, type MedicationSchedule } from "../medication";
 import {
   addRecord,
+  Condition,
   emptyHealthDocument,
+  Immunization,
+  MedicationStatement,
   type Precondition,
   RecordDetails,
   type RecordKind,
@@ -111,12 +115,21 @@ export async function saveRecord(
       : [];
   const document =
     "create" in condition ? emptyHealthDocument() : (await store.read(path)).document;
+  const reference =
+    "create" in condition
+      ? `${iri}-concept`
+      : kind === "medications"
+        ? new MedicationStatement(iri, document, DataFactory).medication
+        : kind === "conditions"
+          ? new Condition(iri, document, DataFactory).code
+          : new Immunization(iri, document, DataFactory).vaccine;
+  if (!reference) throw new TypeError("This record has no clinical reference to preserve");
   addRecord(document, {
     iri,
     kind,
     patient: owner,
     name: input.name.trim(),
-    reference: `${iri}-concept`,
+    reference,
     note: input.note,
     reminders: due.map((dose, index) => ({
       iri: `${iri}-reminder-${index}`,
@@ -139,10 +152,13 @@ export async function saveRecord(
 }
 /** Recur from the schedule, so reminders remain correct beyond the saved 90-day horizon. */
 export function dueMedications(records: readonly ClinicalRecord[], now: Date) {
-  const start = new Date(now);
-  start.setUTCHours(0, 0, 0, 0);
   return records
     .flatMap((record) => {
+      const date = instantToWallClock(
+        Math.floor(now.getTime() / 1000) * 1000,
+        record.timeZone,
+      ).wallTime.slice(0, 10);
+      const start = new Date(wallClockToInstant(`${date}T00:00:00`, record.timeZone));
       if (!record.date)
         return record.reminders
           .filter((at) => at >= start && at <= now)

@@ -45,6 +45,9 @@ read aliases come from `@jeswr/suite-vocab`. The original deployable is unchange
   Workout reads merge native indexes with `health/workouts.ttl` (Apple Health) and
   `health/activities.ttl` (Garmin/Fitbit), or explicitly supplied in-scope connector paths.
   Missing connector files are empty; other read errors propagate. Results are unique by subject IRI.
+  `importGpx` accepts an optional `onRouteSaved` callback after a route is saved or an identical
+  existing route is verified, before writing its index. The data layer uses it to report partial
+  imports; retrying with the same ID resumes that route without creating another resource.
   `migrate` rewrites vocabulary in an explicitly supplied existing resource once; repeat calls
   perform no PUT. Discovery of resources to migrate stays with the caller.
 

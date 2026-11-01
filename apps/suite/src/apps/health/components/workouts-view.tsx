@@ -221,6 +221,10 @@ export function WorkoutView({ reference }: { reference: string }) {
                 </p>
               </section>
             </>
+          ) : state.data.routeError ? (
+            <ErrorState error="unreachable" actions={{ retry: invalidate }}>
+              <p>{state.data.routeError}</p>
+            </ErrorState>
           ) : (
             <EmptyState
               title="No route attached"
