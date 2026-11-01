@@ -2918,7 +2918,7 @@ importers:
         version: https://codeload.github.com/jeswr/federation-registry/tar.gz/601e8a4b4981b2876adb760b3d92179e9326de54
       '@jeswr/solid-vc':
         specifier: github:jeswr/solid-vc#main
-        version: https://codeload.github.com/jeswr/solid-vc/tar.gz/bee27d508372e64021e23bdaeb2d79c06e08cf18
+        version: https://codeload.github.com/jeswr/solid-vc/tar.gz/1cb4ddfb3901fed2958fc50227713cab17230982
       '@rdfjs/types':
         specifier: ^2.0.1
         version: 2.0.1
@@ -8406,18 +8406,13 @@ packages:
     version: 0.1.0
     engines: {node: '>=24'}
 
-  '@jeswr/guarded-fetch@https://codeload.github.com/jeswr/guarded-fetch/tar.gz/81926b4481310ff74a5c02c3c4eaa2a51ce2dee6':
-    resolution: {tarball: https://codeload.github.com/jeswr/guarded-fetch/tar.gz/81926b4481310ff74a5c02c3c4eaa2a51ce2dee6}
+  '@jeswr/guarded-fetch@https://codeload.github.com/jeswr/guarded-fetch/tar.gz/bd4490927fd36d62f6b78a0021e8d40bbb572c3b':
+    resolution: {tarball: https://codeload.github.com/jeswr/guarded-fetch/tar.gz/bd4490927fd36d62f6b78a0021e8d40bbb572c3b}
     version: 0.1.0
     engines: {node: '>=22'}
 
   '@jeswr/prefixcc@1.2.1':
     resolution: {integrity: sha512-kBBXbqsaeh3Irp416h/RbelqJgIOp6X/OJJlYmLyr/9qlBYKTKSCuEv5/xjZ0Yf8Yec+QFRYBaOQ2JkMBSH7KA==}
-
-  '@jeswr/rdf-serialize@https://codeload.github.com/jeswr/rdf-serialize/tar.gz/9c3a34dd93f318fd00d9e6f22081123e502a0578':
-    resolution: {tarball: https://codeload.github.com/jeswr/rdf-serialize/tar.gz/9c3a34dd93f318fd00d9e6f22081123e502a0578}
-    version: 0.1.0
-    engines: {node: '>=24'}
 
   '@jeswr/rdf-serialize@https://codeload.github.com/jeswr/rdf-serialize/tar.gz/ef3dd85636b868ea336a45f79c0446ade0982e7b':
     resolution: {tarball: https://codeload.github.com/jeswr/rdf-serialize/tar.gz/ef3dd85636b868ea336a45f79c0446ade0982e7b}
@@ -8441,8 +8436,8 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  '@jeswr/solid-vc@https://codeload.github.com/jeswr/solid-vc/tar.gz/bee27d508372e64021e23bdaeb2d79c06e08cf18':
-    resolution: {tarball: https://codeload.github.com/jeswr/solid-vc/tar.gz/bee27d508372e64021e23bdaeb2d79c06e08cf18}
+  '@jeswr/solid-vc@https://codeload.github.com/jeswr/solid-vc/tar.gz/1cb4ddfb3901fed2958fc50227713cab17230982':
+    resolution: {tarball: https://codeload.github.com/jeswr/solid-vc/tar.gz/1cb4ddfb3901fed2958fc50227713cab17230982}
     version: 0.1.0
     engines: {node: '>=24'}
 
@@ -23933,7 +23928,7 @@ snapshots:
       jsonld-streaming-parser: 5.0.1
       n3: 2.1.1
 
-  '@jeswr/guarded-fetch@https://codeload.github.com/jeswr/guarded-fetch/tar.gz/81926b4481310ff74a5c02c3c4eaa2a51ce2dee6':
+  '@jeswr/guarded-fetch@https://codeload.github.com/jeswr/guarded-fetch/tar.gz/bd4490927fd36d62f6b78a0021e8d40bbb572c3b':
     dependencies:
       undici: 8.9.0
 
@@ -23944,11 +23939,6 @@ snapshots:
       fsevents: 2.3.3
     transitivePeerDependencies:
       - encoding
-
-  '@jeswr/rdf-serialize@https://codeload.github.com/jeswr/rdf-serialize/tar.gz/9c3a34dd93f318fd00d9e6f22081123e502a0578':
-    dependencies:
-      '@rdfjs/types': 2.0.1
-      n3: 2.1.1
 
   '@jeswr/rdf-serialize@https://codeload.github.com/jeswr/rdf-serialize/tar.gz/ef3dd85636b868ea336a45f79c0446ade0982e7b':
     dependencies:
@@ -23976,16 +23966,15 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  '@jeswr/solid-vc@https://codeload.github.com/jeswr/solid-vc/tar.gz/bee27d508372e64021e23bdaeb2d79c06e08cf18':
+  '@jeswr/solid-vc@https://codeload.github.com/jeswr/solid-vc/tar.gz/1cb4ddfb3901fed2958fc50227713cab17230982':
     dependencies:
-      '@jeswr/guarded-fetch': https://codeload.github.com/jeswr/guarded-fetch/tar.gz/81926b4481310ff74a5c02c3c4eaa2a51ce2dee6
-      '@jeswr/rdf-serialize': https://codeload.github.com/jeswr/rdf-serialize/tar.gz/9c3a34dd93f318fd00d9e6f22081123e502a0578
+      '@jeswr/guarded-fetch': https://codeload.github.com/jeswr/guarded-fetch/tar.gz/bd4490927fd36d62f6b78a0021e8d40bbb572c3b
       '@rdfjs/wrapper': 0.34.0
       '@solid/object': 0.6.0
       content-type: 1.0.5
       jose: 6.2.14
       jsonld-streaming-parser: 5.0.1
-      multiformats: 14.0.4
+      multiformats: 14.0.5
       n3: 2.1.1
       rdf-canonize: 5.0.0
 
