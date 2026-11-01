@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
 import {
@@ -36,7 +37,7 @@ import { encodeRef } from "@/lib/refs";
 import { dueDate, isOverdue, localDay } from "../lib/format/due";
 import type { StoredProject } from "../lib/model/store";
 import { unionLabels } from "../lib/model/tracker";
-import { focusAddTask } from "../state/add-focus";
+import { openAddTask } from "../state/add-focus";
 import { useTasksPreferences } from "../state/preferences";
 import { useTasks } from "../state/tasks-context";
 
@@ -165,10 +166,10 @@ function ProjectRow({
   );
 }
 export function TasksSidebar() {
+  const router = useRouter();
   const tasks = useTasks();
   const { preferences, dispatch } = useTasksPreferences();
   const path = usePathname();
-  const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const field = useRef<HTMLInputElement>(null);
@@ -216,7 +217,7 @@ export function TasksSidebar() {
             .querySelector<HTMLButtonElement>('[role="dialog"] button[aria-label="Close"]')
             ?.click();
           requestAnimationFrame(() => {
-            if (!focusAddTask()) router.push("/tasks/inbox?add=1");
+            openAddTask();
           });
         }}
       >

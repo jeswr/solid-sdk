@@ -1,9 +1,14 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+import { missingLabels } from "../lib/compose/planning";
 import { ModelError } from "../lib/model/errors";
 import { DataFactory } from "../lib/model/rdf";
 import type { StoredProject, StoredTask, TaskStore } from "../lib/model/store";
 import { createTask, type TaskDetails, TaskItem } from "../lib/model/task";
 import { createTracker, type TaskTracker } from "../lib/model/tracker";
+import { type DropPosition, positionForDrop } from "../lib/views/positions";
+import { compareTasks } from "../lib/views/project-groups";
+import { toTaskView } from "../lib/views/types";
 import { changeProject, changeTask, moveItem, optimisticValue, sortedProjects } from "./mutations";
 
 export interface TaskLoad {
@@ -25,6 +30,11 @@ export interface NewTask {
   due?: Date | undefined;
   allDay?: string | undefined;
   position?: number | undefined;
+  priority?: TaskDetails["priority"];
+  recurrence?: TaskDetails["recurrence"];
+  reminders?: TaskDetails["reminders"];
+  labelIds?: string[] | undefined;
+  parent?: string | undefined;
 }
 type Patch = (state: TasksSnapshot) => TasksSnapshot;
 interface Pending {
@@ -279,8 +289,12 @@ export class TasksCache {
           ? { dueDate: data.due }
           : {}),
       allDay: data.allDay,
-      rank: data.position,
-      categoryTypes: data.sectionId ? [data.sectionId] : [],
+      rank: this.appendPosition(project, data).position,
+      categoryTypes: [...(data.sectionId ? [data.sectionId] : []), ...(data.labelIds ?? [])],
+      priority: data.priority,
+      recurrence: data.recurrence,
+      reminders: data.reminders,
+      ...(data.parent ? { parent: data.parent } : {}),
     };
     const dataset = createTask(url, details);
     const optimistic = {
@@ -290,16 +304,86 @@ export class TasksCache {
       etag: null,
     };
     return this.mutate(
-      (state) => replaceTask(state, project.url, url, optimistic),
+      (state) => {
+        const placement = this.appendPosition(project, data, state);
+        let next = state;
+        for (const patch of placement.renumber ?? []) {
+          const sibling = next.tasks[project.url]?.items.find((item) => item.url === patch.url);
+          if (sibling)
+            next = replaceTask(
+              next,
+              project.url,
+              sibling.url,
+              changeTask(sibling, (task) => {
+                task.rank = patch.position;
+              }),
+            );
+        }
+        return replaceTask(
+          next,
+          project.url,
+          url,
+          changeTask(optimistic, (task) => {
+            task.rank = placement.position;
+          }),
+        );
+      },
       async () => {
+        const placement = this.appendPosition(this.project(project.url), data, this.baseline);
+        details.rank = placement.position;
+        const updated: StoredTask[] = [];
+        for (const patch of placement.renumber ?? [])
+          updated.push(
+            await this.store.updateTask(this.task(project.url, patch.url), (task) => {
+              task.rank = patch.position;
+            }),
+          );
         const task = await this.store.createTask(this.project(project.url), details, id);
-        return { result: task, commit: (state) => replaceTask(state, project.url, task.url, task) };
+        return {
+          result: task,
+          commit: (state) => {
+            let next = state;
+            for (const sibling of updated)
+              next = replaceTask(next, project.url, sibling.url, sibling);
+            return replaceTask(next, project.url, task.url, task);
+          },
+        };
       },
       () => {
         void this.createTask(project, data);
       },
       [url],
     );
+  }
+  private appendPosition(
+    project: StoredProject,
+    data: NewTask,
+    snapshot = this.snapshot,
+  ): DropPosition {
+    if (data.position !== undefined) return { position: data.position };
+    const siblings = (snapshot.tasks[project.url]?.items ?? [])
+      .map((item) => toTaskView(item, project))
+      .filter((task) => task.sectionId === data.sectionId && task.parentId === data.parent)
+      .sort(compareTasks("manual"));
+    return siblings.length ? positionForDrop(siblings, siblings.length) : { position: 1 };
+  }
+  /** Serialize tracker writes with other mutations, rechecking names against the latest baseline. */
+  ensureLabels(
+    project: StoredProject,
+    names: readonly string[],
+  ): Promise<StoredProject | undefined> {
+    const current = this.baseline.projects.find((item) => item.url === project.url);
+    if (!this.pending.length && current && !missingLabels(current, names).length)
+      return Promise.resolve(current);
+    const define = (tracker: TaskTracker) => {
+      for (const name of missingLabels({ ...project, tracker }, names)) {
+        const source = this.snapshot.projects
+          .flatMap((item) => item.tracker.labels)
+          .find((label) => label.name.toLowerCase() === name.toLowerCase());
+        tracker.defineCategory("Label", name, undefined, source?.color);
+      }
+    };
+    return this.updateProject(project, define);
   }
   updateTask(item: StoredTask, change: (task: TaskItem) => void): Promise<StoredTask | undefined> {
     const project = this.snapshot.projects.find((project) =>

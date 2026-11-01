@@ -1,14 +1,17 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
 import { ErrorState, Toaster } from "@jeswr/suite-ui";
-import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { type ReactNode, Suspense, useEffect } from "react";
+import { useParams, usePathname, useSearchParams } from "next/navigation";
+import { type ReactNode, Suspense, useEffect, useRef, useState } from "react";
 import { SuiteFrame } from "@/components/interim-shell/suite-frame";
 import { encodeRef } from "@/lib/refs";
 import { PodSessionProvider, usePodSessionState } from "@/lib/session/pod-session";
+import { parseQuickAdd } from "../lib/compose/quick-add";
 import { classifyError } from "../lib/model/errors";
-import { focusAddTask, isEditing } from "../state/add-focus";
+import { isEditing, openAddTask } from "../state/add-focus";
 import { TasksProvider, useTasks } from "../state/tasks-context";
+import { Composer } from "./composer/composer";
 import { TasksSidebar } from "./sidebar";
 import { SortMenu } from "./sort-menu";
 
@@ -24,7 +27,8 @@ function TasksChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const params = useSearchParams();
   const route = useParams();
-  const router = useRouter();
+  const [quickAdd, setQuickAdd] = useState(false);
+  const restoreFocus = useRef<HTMLElement | null>(null);
   const title =
     VIEW_NAMES[pathname] ??
     (typeof route.label === "string"
@@ -37,6 +41,19 @@ function TasksChrome({ children }: { children: ReactNode }) {
   const taskRef = params.get("task");
   const details = undefined;
   useEffect(() => {
+    const open = () => {
+      restoreFocus.current =
+        document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setQuickAdd(true);
+    };
+    addEventListener("tasks:quick-add", open);
+    return () => removeEventListener("tasks:quick-add", open);
+  }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: navigation closes the overlay.
+  useEffect(() => {
+    setQuickAdd(false);
+  }, [pathname]);
+  useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
       if (
         event.defaultPrevented ||
@@ -44,15 +61,16 @@ function TasksChrome({ children }: { children: ReactNode }) {
         event.ctrlKey ||
         event.metaKey ||
         event.altKey ||
-        event.key !== "q"
+        (event.key !== "q" && event.key !== "c")
       )
         return;
       event.preventDefault();
-      if (!focusAddTask()) router.push("/tasks/inbox?add=1");
+      openAddTask();
     };
     addEventListener("keydown", keydown);
     return () => removeEventListener("keydown", keydown);
-  }, [router]);
+  }, []);
+  const inbox = tasks.projects.find((project) => project.url === tasks.inboxUrl);
   return (
     <SuiteFrame
       app="tasks"
@@ -68,6 +86,26 @@ function TasksChrome({ children }: { children: ReactNode }) {
       }
       details={details}
     >
+      {quickAdd && inbox && (
+        <Composer
+          modal
+          project={inbox}
+          due={
+            pathname === "/tasks/today"
+              ? parseQuickAdd("today", {
+                  now: new Date(),
+                  tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                  projects: [],
+                  labels: [],
+                }).due
+              : undefined
+          }
+          onClose={() => {
+            setQuickAdd(false);
+            requestAnimationFrame(() => restoreFocus.current?.focus());
+          }}
+        />
+      )}
       <div data-tsk-task-ref={taskRef ?? undefined}>
         {tasks.status === "error" ? (
           <div className="tsk-content">

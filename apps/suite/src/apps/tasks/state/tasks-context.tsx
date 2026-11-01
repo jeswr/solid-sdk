@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
 import { toast } from "@jeswr/suite-ui";
@@ -86,6 +87,7 @@ function useTasksValue(session: PodSession) {
       updateTask: cache.updateTask.bind(cache),
       deleteTask: cache.deleteTask.bind(cache),
       createProject: cache.createProject.bind(cache),
+      ensureLabels: cache.ensureLabels.bind(cache),
       renameProject: cache.renameProject,
       archiveProject: cache.archiveProject,
       deleteProject: cache.deleteProject.bind(cache),

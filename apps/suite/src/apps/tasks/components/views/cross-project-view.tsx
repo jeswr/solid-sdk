@@ -1,11 +1,12 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 "use client";
 import { Button, EmptyState, ErrorState, LoadingSkeleton, renderAsync } from "@jeswr/suite-ui";
-import { useRouter } from "next/navigation";
 import { type ReactNode, useEffect } from "react";
 import { classifyError } from "../../lib/model/errors";
 import { flatRows } from "../../lib/views/project-groups";
 import type { TaskView } from "../../lib/views/types";
+import { openAddTask } from "../../state/add-focus";
 import { useTasks } from "../../state/tasks-context";
 import { TaskList } from "../task-list";
 /** Shared state handling; smart-view bodies stay in their own replaceable files. */
@@ -23,7 +24,6 @@ export function CrossProjectView({
   emptyIcon: ReactNode;
 }) {
   const tasks = useTasks();
-  const router = useRouter();
   useEffect(() => {
     document.title = `${title} · Tasks · Solid Suite`;
   }, [title]);
@@ -62,7 +62,7 @@ export function CrossProjectView({
               body={emptyBody}
               primaryAction={
                 title === "Today" ? (
-                  <Button onClick={() => router.push("/tasks/inbox?add=1")}>Add task</Button>
+                  <Button onClick={() => openAddTask()}>Add task</Button>
                 ) : undefined
               }
             />
