@@ -468,7 +468,7 @@ describe("project discovery and first use", () => {
       [url, '"3"'],
     ]);
     expect(inbox.url).toBe(url);
-    expect(node(inbox.tracker.id, inbox.dataset).text(initializationState)).toBeUndefined();
+    expect(node(inbox.tracker.id, inbox.dataset).text(initializationState)).toBe("ready");
     expect(
       (await restarted.createTask(inbox, { title: "Recovered", state: "open" })).task.title,
     ).toBe("Recovered");
@@ -514,7 +514,8 @@ describe("project discovery and first use", () => {
     const dataset = new Store([...inbox.dataset]);
     const marker = node(inbox.tracker.id, dataset);
     marker.setText(initializationState, "cleanup");
-    if (field !== "owner") marker.setText(initializationOwner, "cleanup-owner");
+    if (field === "owner") marker.clear(initializationOwner);
+    else marker.setText(initializationOwner, "cleanup-owner");
     const target = field === "resource" ? `${storage}unrelated/` : container;
     marker.iris(cleanupResources).add(target);
     if (field !== "validator") node(target, dataset).setText(cleanupEtag, '"1"');
@@ -546,7 +547,7 @@ describe("project discovery and first use", () => {
     };
     const recovered = await tasks.bootstrapInbox();
     expect(recovered.tracker.title).toBe("Inbox");
-    expect(node(recovered.tracker.id, recovered.dataset).text(initializationState)).toBeUndefined();
+    expect(node(recovered.tracker.id, recovered.dataset).text(initializationState)).toBe("ready");
     expect(
       pod.requests.some((request) => request.method === "DELETE" && request.url === container),
     ).toBe(true);
@@ -1069,7 +1070,7 @@ describe("task conditional CRUD", () => {
       }
     }
   });
-  it("uses final response identities for redirected tasks, projects and container listings", async () => {
+  it("rejects redirected tasks, projects and container listings before adopting their identities", async () => {
     const pod = new Pod();
     const tasks = store(pod, { typeIndex: false });
     const home = `${storage}canonical/home.ttl`;
@@ -1117,35 +1118,15 @@ describe("task conditional CRUD", () => {
       return response;
     };
     const io = new RdfIO(pod.fetch);
-    expect((await io.read(projectAlias)).url).toBe(home);
-    await expect(io.container(containerAlias)).resolves.toBeUndefined();
-    expect(await io.list(containerAlias)).toEqual([taskAlias]);
-    const project = await tasks.readProject(projectAlias);
-    expect(project.url).toBe(home);
-    expect(project.tracker.id).toBe(`${home}#this`);
-    expect((await tasks.listProjects()).map((item) => item.tracker.id)).toEqual([`${home}#this`]);
-    const task = await tasks.readTask(taskAlias);
-    expect(task.url).toBe(taskUrl);
-    expect(task.task.id).toBe(`${taskUrl}#it`);
-    expect((await tasks.listTasks(containerAlias)).map((item) => item.task.id)).toEqual([
-      `${taskUrl}#it`,
-    ]);
-    const updated = await tasks.updateTask(task, (item) => {
-      item.title = "Updated";
-    });
-    expect(updated.url).toBe(taskUrl);
-    expect((await tasks.readTask(taskUrl)).task.title).toBe("Updated");
-    const updatedProject = await tasks.updateProject(project, (item) => {
-      item.title = "Renamed";
-    });
-    expect(updatedProject.url).toBe(home);
-    await tasks.deleteTask(updated);
-    expect(
-      pod
-        .mutations()
-        .filter((request) => request.method === "DELETE")
-        .map((request) => request.url),
-    ).toEqual([taskUrl]);
+    const message = "The RDF response URL must match the requested resource.";
+    await expect(io.read(projectAlias)).rejects.toThrow(message);
+    await expect(io.container(containerAlias)).rejects.toThrow(message);
+    await expect(io.list(containerAlias)).rejects.toThrow(message);
+    await expect(tasks.readProject(projectAlias)).rejects.toThrow(message);
+    await expect(tasks.listProjects()).rejects.toThrow(message);
+    await expect(tasks.readTask(taskAlias)).rejects.toThrow(message);
+    await expect(tasks.listTasks(containerAlias)).rejects.toThrow(message);
+    expect(pod.mutations()).toEqual([]);
   });
   it("clears all-day markers on due-date edits and rejects conflicting persisted dates", async () => {
     const pod = new Pod();
