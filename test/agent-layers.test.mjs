@@ -225,7 +225,11 @@ describe("agent layer boundaries (DESIGN §2.2)", () => {
     ["packages/agent-channels/src/gmail/send.test.ts", 'import "./send.js";'],
     [
       "packages/agent-model-gateway/src/index.ts",
-      'import "openai/resources"; import "@anthropic-ai/sdk";',
+      'import "openai/resources"; import "@anthropic-ai/sdk"; import "@anthropic-ai/claude-agent-sdk";',
+    ],
+    [
+      "packages/personal-agent/src/actor/claude-actor.ts",
+      'import "@anthropic-ai/claude-agent-sdk";',
     ],
     [
       "packages/agent-model-gateway/src/index.ts",
@@ -258,6 +262,18 @@ describe("agent layer boundaries (DESIGN §2.2)", () => {
   it.each([
     ["packages/agent-channels/src/index.ts", 'import "@anthropic-ai/sdk";', "gateway-only"],
     ["packages/agent-executor/src/index.ts", 'import "openai";', "gateway-only"],
+    [
+      "packages/agent-credentials/src/index.ts",
+      'import "@anthropic-ai/claude-agent-sdk";',
+      "gateway-only",
+    ],
+    [
+      "packages/agent-memory/src/index.ts",
+      'import "@anthropic-ai/claude-agent-sdk";',
+      "gateway-only",
+    ],
+    ["apps/agent-daemon/src/index.ts", 'import "@anthropic-ai/claude-agent-sdk";', "gateway-only"],
+    ["packages/personal-agent/src/index.ts", 'import "openai";', "gateway-only"],
     [
       "packages/agent-executor/src/index.ts",
       'import "@jeswr/agent-model-gateway";',

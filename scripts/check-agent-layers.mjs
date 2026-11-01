@@ -21,7 +21,7 @@ const ignoredDirectories = new Set([
   "__fixtures__",
 ]);
 const dependencyFields = ["dependencies", "optionalDependencies", "peerDependencies"];
-const modelSdks = ["openai", "@anthropic-ai/sdk"];
+const modelSdks = ["openai", "@anthropic-ai/sdk", "@anthropic-ai/claude-agent-sdk"];
 const agent = (name) => `@jeswr/agent-${name}`;
 const allowed = {
   "agent-executor": new Set(["model", "mandate", "audit", "credentials", "channels"].map(agent)),
@@ -215,7 +215,11 @@ function importFailures(ctx, target, typeOnly = false, manifest = false) {
     failures.push("send subpaths are executor-only (except agent-channels tests)");
   if (/^@jeswr\/agent-channels\/(?:src\/|dist\/)?testing(?:\/|$)/.test(target) && !ctx.test)
     failures.push("channel testing helpers are test-only");
-  if (modelSdks.includes(name) && ctx.project !== "agent-model-gateway")
+  // The legacy pilot (personal-agent) predates DESIGN §2.2 and already ships its Claude actor;
+  // that one pre-existing edge stays allowed. New agent code reaches models only via the gateway.
+  const legacyPilotActor =
+    ctx.project === "personal-agent" && name === "@anthropic-ai/claude-agent-sdk";
+  if (modelSdks.includes(name) && ctx.project !== "agent-model-gateway" && !legacyPilotActor)
     failures.push("model SDKs are gateway-only");
   if (ctx.project === "agent-model-gateway" && name === agent("audit"))
     failures.push("gateway must not import agent-audit");
