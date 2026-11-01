@@ -462,7 +462,7 @@ describe("identity and generation binding", () => {
     Object.assign(f.api, { fetch: undefined });
     await expect(session.fetch(input)).rejects.toMatchObject({ code: "not-granted" });
   });
-  it("checks callbacks before and after dispatch and removes only its own listener", async () => {
+  it("silently skips stale callbacks and removes only its own listener", async () => {
     const f = fixture();
     const add = vi.spyOn(f.win, "addEventListener");
     const session = await openExtensionSession(f.api, f.deps);
@@ -479,11 +479,12 @@ describe("identity and generation binding", () => {
     stopSecond();
     const callback = add.mock.calls[1]?.[1] as () => void;
     f.api.webId = BOB;
-    expect(callback).toThrow(ExtensionSessionError);
+    expect(callback).not.toThrow();
     expect(second).toHaveBeenCalledTimes(2);
     f.api.webId = WEBID;
     session.subscribe(() => f.invalidate());
-    expect(add.mock.calls[2]?.[1]).toThrow(ExtensionSessionError);
+    expect(add.mock.calls[2]?.[1]).not.toThrow();
+    expect(add.mock.calls[2]?.[1]).not.toThrow();
   });
 });
 
@@ -499,6 +500,85 @@ describe("disconnect", () => {
     expect(f.api.listGrants).not.toHaveBeenCalled();
     expect(f.api.revokeGrant).not.toHaveBeenCalled();
   });
+  it.each([
+    "native",
+    "class",
+  ])("completes a successful %s self-revocation invalidated before the reply", async (method) => {
+    const f = fixture();
+    const reply = deferred<boolean>();
+    const disconnect = vi.fn(() => reply.promise);
+    if (method === "native") Object.assign(f.api, { disconnect });
+    else f.api.revokeGrant.mockReturnValueOnce(reply.promise);
+    const session = await openExtensionSession(f.api, f.deps);
+    const closing = session.disconnect();
+    if (method === "class")
+      await vi.waitFor(() => expect(f.api.revokeGrant).toHaveBeenCalledOnce());
+    else expect(disconnect).toHaveBeenCalledOnce();
+    // The extension removes this origin's binding and broadcasts before resolving the RPC.
+    f.api.webId = null;
+    f.invalidate();
+    reply.resolve(true);
+    await expect(closing).resolves.toBeUndefined();
+  });
+  it.each(
+    ["native", "class"].flatMap((method) =>
+      ["current", "self-invalidated", "invalidated", "switched"].map((state) => ({
+        method,
+        state,
+      })),
+    ),
+  )("rejects a false $method acknowledgement when $state", async ({ method, state }) => {
+    const f = fixture();
+    const reply = deferred<boolean>();
+    const disconnect = vi.fn(() => reply.promise);
+    if (method === "native") Object.assign(f.api, { disconnect });
+    else f.api.revokeGrant.mockReturnValueOnce(reply.promise);
+    const session = await openExtensionSession(f.api, f.deps);
+    const closing = session.disconnect();
+    if (method === "class")
+      await vi.waitFor(() => expect(f.api.revokeGrant).toHaveBeenCalledOnce());
+    else expect(disconnect).toHaveBeenCalledOnce();
+    if (state === "self-invalidated") {
+      f.api.webId = null;
+      f.invalidate();
+    } else if (state === "invalidated") f.invalidate();
+    else if (state === "switched") f.api.webId = BOB;
+    reply.resolve(false);
+    if (state === "current")
+      await expect(closing).rejects.toThrow("The extension did not acknowledge disconnect.");
+    else
+      await expect(closing).rejects.toMatchObject({
+        name: "ExtensionSessionError",
+        code: "stale",
+      });
+  });
+  it.each(
+    ["native", "class"].flatMap((method) =>
+      [undefined, 1].map((acknowledgement) => ({ method, acknowledgement })),
+    ),
+  )("rejects a non-boolean $method acknowledgement of $acknowledgement", async ({
+    method,
+    acknowledgement,
+  }) => {
+    const f = fixture();
+    // The page API is untrusted even though its interface promises a boolean.
+    const result = acknowledgement as unknown as boolean;
+    if (method === "native") Object.assign(f.api, { disconnect: vi.fn(async () => result) });
+    else f.api.revokeGrant.mockResolvedValueOnce(result);
+    const session = await openExtensionSession(f.api, f.deps);
+    await expect(session.disconnect()).rejects.toThrow(
+      "The extension did not acknowledge disconnect.",
+    );
+  });
+  it("rejects a retained native disconnect before dispatch", async () => {
+    const f = fixture();
+    const disconnect = vi.fn(async () => true);
+    Object.assign(f.api, { disconnect });
+    const session = await openExtensionSession(f.api, f.deps);
+    f.invalidate();
+    await expect(session.disconnect()).rejects.toMatchObject({ code: "stale" });
+    expect(disconnect).not.toHaveBeenCalled();
+  });
   it("otherwise revokes every storage grant, including expired ones, preserving other classes", async () => {
     const f = fixture();
     const session = await openExtensionSession(f.api, f.deps);
@@ -510,6 +590,20 @@ describe("disconnect", () => {
     await session.disconnect();
     expect(f.api.revokeGrant.mock.calls).toEqual([["one"], ["two"]]);
   });
+  it("rejects when one storage grant revoke is unacknowledged and stops later revokes", async () => {
+    const f = fixture();
+    const session = await openExtensionSession(f.api, f.deps);
+    f.api.listGrants.mockResolvedValue([
+      { ...f.grant, grantId: "one" },
+      { ...f.grant, grantId: "two" },
+      { ...f.grant, grantId: "three" },
+    ]);
+    f.api.revokeGrant.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    await expect(session.disconnect()).rejects.toThrow(
+      "The extension did not acknowledge disconnect.",
+    );
+    expect(f.api.revokeGrant.mock.calls).toEqual([["one"], ["two"]]);
+  });
   it.each(["listGrants", "revokeGrant"])("reports an unavailable %s API", async (method) => {
     const f = fixture();
     const session = await openExtensionSession(f.api, f.deps);
@@ -519,7 +613,6 @@ describe("disconnect", () => {
   it.each([
     "list",
     "revoke",
-    "disconnect",
   ])("stops after a delayed %s across an account switch", async (phase) => {
     const f = fixture();
     const session = await openExtensionSession(f.api, f.deps);
@@ -530,7 +623,6 @@ describe("disconnect", () => {
       f.api.listGrants.mockResolvedValue([f.grant, { ...f.grant, grantId: "bob-storage" }]);
       f.api.revokeGrant.mockReturnValueOnce(removed.promise);
     }
-    if (phase === "disconnect") Object.assign(f.api, { disconnect: vi.fn(() => removed.promise) });
     const closing = session.disconnect();
     await Promise.resolve();
     await Promise.resolve();
