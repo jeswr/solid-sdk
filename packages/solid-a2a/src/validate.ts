@@ -33,8 +33,35 @@ export async function validateIntent(
   intent: IntentInput,
   shape: ShapeInput,
 ): Promise<ValidationReport> {
+  try {
+    return await validateGraphs(intent, shape);
+  } catch (error) {
+    // A structured Intent the write path refuses, or a shape the validator cannot
+    // compile, is a non-conformance, never an exception.
+    return {
+      conforms: false,
+      results: [{ message: error instanceof Error ? error.message : String(error) }],
+    };
+  }
+}
+
+/**
+ * `sh:pattern` runs a shape-supplied regular expression over the data. A peer's
+ * Protocol Document is hash-pinned to the peer, not vetted, and a backtracking
+ * pattern would block the event loop with no way to time it out.
+ */
+const SH_PATTERN = "http://www.w3.org/ns/shacl#pattern";
+
+async function validateGraphs(intent: IntentInput, shape: ShapeInput): Promise<ValidationReport> {
   // Alias matching is confined to disposable validation views. The original
   // graphs must retain their IRIs so existing protocol hashes still verify.
+  const shapes = shapeQuads(shape);
+  if (shapes.some((q) => q.predicate.value === SH_PATTERN)) {
+    return {
+      conforms: false,
+      results: [{ message: "Shapes using sh:pattern are not evaluated (unbounded regex)" }],
+    };
+  }
   const data = toDataset(intentQuads(intent));
   const dataGraph = validationDataset(data);
   if (dataGraph === undefined) {
@@ -44,7 +71,7 @@ export async function validateIntent(
     };
   }
   // Shapes use the SAME total renaming, without interpreting constraint roles.
-  const shapeGraph = validationDataset(toDataset(shapeQuads(shape)), false) as Store;
+  const shapeGraph = validationDataset(toDataset(shapes), false) as Store;
 
   const validator = new SHACLValidator(shapeGraph);
   const report = await validator.validate(dataGraph);

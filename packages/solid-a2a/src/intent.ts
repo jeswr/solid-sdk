@@ -16,16 +16,17 @@ import { validationDataset } from "./validationDataset.js";
 import {
   ACL_MODE_IRI,
   type AclMode,
+  aclModeIriOf,
   LEGACY_A2A_INLINE_CONTEXT,
   VALID_ACL_MODE_IRIS,
   VALID_INTENT_ACTIONS,
 } from "./vocab.js";
 import {
   actionKindOf,
-  firstIri,
-  firstLiteral,
   IntentBuilder,
   type IntentNode,
+  soleIri,
+  soleLiteral,
   wrapIntent,
 } from "./wrappers.js";
 
@@ -58,7 +59,7 @@ export function intentToRdf(intent: Intent): Quad[] {
     action.setAgent(intent.agent);
   }
   for (const mode of intent.modes ?? []) {
-    action.addMode(ACL_MODE_IRI[mode]);
+    action.addMode(aclModeIriOf(mode));
   }
 
   for (const param of intent.parameters ?? []) {
@@ -108,7 +109,7 @@ export function intentToJsonLd(intent: Intent): Record<string, unknown> {
     action.agent = { "@id": requireIri(intent.agent, "agent") };
   }
   if (intent.modes && intent.modes.length > 0) {
-    action.mode = intent.modes.map((m) => ({ "@id": ACL_MODE_IRI[m] }));
+    action.mode = intent.modes.map((m) => ({ "@id": aclModeIriOf(m) }));
   }
 
   const doc: Record<string, unknown> = {
@@ -180,11 +181,17 @@ export async function parseIntentGraph(
   return intentFromRdf(dataset);
 }
 
-/** Project an {@link IntentNode} to a plain {@link Intent}, or `undefined` if malformed. */
+/**
+ * Project an {@link IntentNode} to a plain {@link Intent}, or `undefined` if
+ * malformed. Fails closed on anything ambiguous: the request shapes check the
+ * graph, but a graph with two action kinds, two targets, two recipients,
+ * disagreeing agents or an unknown mode would let the projection pick a value
+ * the shape never constrained.
+ */
 function projectIntent(node: IntentNode): Intent | undefined {
   const actions = [...node.actions];
   const action = actions[0];
-  if (action === undefined) {
+  if (action === undefined || actions.length !== 1) {
     return undefined;
   }
   const kind = actionKindOf(action);
@@ -193,22 +200,34 @@ function projectIntent(node: IntentNode): Intent | undefined {
   }
 
   // The target is schema:target for a list (the container) else schema:object.
-  const target = kind === "list" ? firstIri(action.targets) : firstIri(action.objects);
-  const recipient = firstIri(action.recipients);
-  // Prefer the action's agent; fall back to the intent-node-level agent.
-  const agent = firstIri(action.agents) ?? firstIri(node.agents);
+  const target = soleIri(kind === "list" ? action.targets : action.objects);
+  const recipient = soleIri(action.recipients);
+  const actionAgent = soleIri(action.agents);
+  const nodeAgent = soleIri(node.agents);
+  if (target === null || recipient === null || actionAgent === null || nodeAgent === null) {
+    return undefined;
+  }
+  // The action's agent and the intent's agent must agree when both are stated.
+  if (actionAgent !== undefined && nodeAgent !== undefined && actionAgent !== nodeAgent) {
+    return undefined;
+  }
+  const agent = actionAgent ?? nodeAgent;
 
   const modes: AclMode[] = [];
   for (const m of action.modes) {
-    if (m.termType === "NamedNode" && VALID_ACL_MODE_IRIS.has(m.value)) {
-      modes.push(aclModeFromIri(m.value));
+    if (m.termType !== "NamedNode" || !VALID_ACL_MODE_IRIS.has(m.value)) {
+      return undefined;
     }
+    modes.push(aclModeFromIri(m.value));
   }
 
   const parameters: IntentParameter[] = [];
   for (const p of node.parameters) {
-    const key = firstLiteral(p.keys);
-    const value = firstLiteral(p.values);
+    const key = soleLiteral(p.keys);
+    const value = soleLiteral(p.values);
+    if (key === null || value === null) {
+      return undefined;
+    }
     if (key !== undefined && value !== undefined) {
       parameters.push({ key, value });
     }
