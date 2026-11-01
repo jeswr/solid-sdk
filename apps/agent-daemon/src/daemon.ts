@@ -220,15 +220,30 @@ export function createDaemon(o: DaemonOptions): Daemon {
         // No proposal or model-call evidence may escape before its replay data is durable.
         await o.proposalResults.put(key, result);
       }
+      const entries = [];
+      for (const proposal of result.proposals) {
+        const entry = await o.proposalWritten(proposal);
+        if (entry.proposal.id !== proposal.id) throw new Error("Outbox proposal mismatch");
+        if (entry.proposal.intent.termsDigest !== digestOf(proposalApprovalTerms(entry)))
+          throw new Error("Outbox terms digest mismatch");
+        entries.push(entry);
+      }
+      result = checkedProposalResult({
+        calls: result.calls,
+        proposals: entries.map((entry) => entry.proposal),
+      });
+      // Publish only the finalized proposals returned by the trusted outbox projection.
+      // Keep the original result durable until this replacement succeeds, so retries
+      // retain model-call and proposal identities even if projection or fsync fails.
+      await o.proposalResults.put(key, result);
       const task =
         result.proposals.length === 1 && result.proposals[0]
           ? o.workspace.proposalLocation(result.proposals[0].id)
           : undefined;
       await calls(result.calls, task);
-      for (const proposal of result.proposals) {
+      for (const entry of entries) {
+        const proposal = entry.proposal;
         await o.workspace.proposal(proposal);
-        const entry = await o.proposalWritten(proposal);
-        if (entry.proposal.id !== proposal.id) throw new Error("Outbox proposal mismatch");
         const terms = proposalApprovalTerms(entry);
         await append({
           type: "proposal",

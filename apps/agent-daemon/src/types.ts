@@ -47,7 +47,11 @@ export interface DaemonOptions {
   readonly proposerContext: ProposerContext;
   /** Read trusted owner selections, never flags supplied by channel content. */
   readonly isFlagged: (account: string, thread: string) => Promise<boolean>;
-  /** Idempotently project into the trusted outbox and return the exact entry used by the executor. */
+  /**
+   * Finalize and idempotently project into the trusted outbox before pod publication.
+   * Return the exact executor entry with intent.termsDigest set to proposalTermsDigest(entry).
+   * The daemon durably caches that finalized proposal before publishing it or its audit evidence.
+   */
   readonly proposalWritten: (proposal: ActionProposal) => Promise<OutboxEntry>;
   readonly audit: {
     append(record: AuditRecord, at: string): Promise<unknown>;

@@ -20,7 +20,7 @@ import {
   solidOdrlEngine,
   verifyApproval,
 } from "@jeswr/agent-mandate";
-import { canonicalJson, digestBytes, digestOf, newUrn } from "@jeswr/agent-model";
+import { canonicalJson, digestBytes, digestOf, newUrn, recordFromTurtle } from "@jeswr/agent-model";
 import { exampleRecords } from "@jeswr/agent-model/testing";
 import { createGateway, GatewayError } from "@jeswr/agent-model-gateway";
 import type { ChangeEvent, NotificationsClient, Subscription } from "@jeswr/pod-notifications";
@@ -156,7 +156,7 @@ function harness() {
       };
       const bytes = canonicalJson(renderable);
       const wire = { bytes, digest: digestBytes(bytes), mediaType: "application/json" };
-      return {
+      const entry: OutboxEntry = {
         proposal: {
           ...proposal,
           intent: {
@@ -170,6 +170,8 @@ function harness() {
         wire,
         wireDigest: wire.digest,
       };
+      entry.proposal.intent.termsDigest = proposalTermsDigest(entry);
+      return entry;
     },
     gateway: {
       reader,
@@ -357,6 +359,56 @@ it("fails closed before any proposal effects when result persistence fails", asy
   expect(h.state.cursors.size).toBe(0);
   expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
 });
+it("persists finalized trusted proposals before publishing them and reuses them after restart", async () => {
+  const h = harness();
+  const project = vi.fn(h.options.proposalWritten);
+  const cache = vi.spyOn(h.state.proposalResults, "put");
+  const write = h.workspace.proposal.bind(h.workspace);
+  vi.spyOn(h.workspace, "proposal").mockImplementation(async (proposal) => {
+    const key = cache.mock.calls.at(-1)?.[0];
+    if (!key) throw new Error("Missing durable proposal result");
+    expect((await h.state.proposalResults.get(key))?.proposals).toContainEqual(proposal);
+    const entry = await project.mock.results.at(-1)?.value;
+    if (!entry) throw new Error("Missing outbox entry");
+    expect(entry.proposal).toEqual(proposal);
+    expect(proposal.intent.termsDigest).toBe(proposalTermsDigest(entry));
+    await write(proposal);
+  });
+  vi.spyOn(h.state.checkpoints, "put").mockRejectedValueOnce(new Error("cursor unavailable"));
+  const options = { ...h.options, proposalWritten: project };
+  await expect(createDaemon(options).once()).rejects.toThrow("cursor unavailable");
+  const published = [...h.pod.resources].filter(
+    ([url]) => url.includes("/proposals/") && url.endsWith(".ttl"),
+  );
+  expect(published).toHaveLength(1);
+  await createDaemon(options).once();
+  expect(h.options.gateway.proposer.propose).toHaveBeenCalledOnce();
+  for (const [url, resource] of published) {
+    expect(h.pod.resources.get(url)).toEqual(resource);
+    const proposal = await recordFromTurtle(resource.body, url);
+    const evidence = h.ledger.entries().find((entry) => entry.record.type === "proposal")?.record;
+    if (proposal.type !== "action-proposal" || evidence?.type !== "proposal")
+      throw new Error("Missing proposal");
+    expect(proposal.intent.termsDigest).toBe(evidence.termsDigest);
+  }
+});
+it("retries finalization persistence failure without publishing or regenerating proposals", async () => {
+  const h = harness();
+  const put = h.state.proposalResults.put;
+  vi.spyOn(h.state.proposalResults, "put")
+    .mockImplementationOnce(put)
+    .mockRejectedValueOnce(new Error("finalized cache unavailable"));
+  const publish = vi.spyOn(h.workspace, "proposal");
+  await expect(createDaemon(h.options).once()).rejects.toThrow("finalized cache unavailable");
+  expect(publish).not.toHaveBeenCalled();
+  expect(h.ledger.entries().map((entry) => entry.record.type)).toEqual(["ingest"]);
+  expect(h.state.cursors.size).toBe(0);
+  expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
+  await createDaemon(h.options).once();
+  expect(h.options.gateway.proposer.propose).toHaveBeenCalledOnce();
+  expect(publish).toHaveBeenCalledOnce();
+  expect(h.state.cursors.get("fixture")).toBe("one");
+});
 it("retries a failed audit mirror without duplicating local proposal evidence", async () => {
   const h = harness();
   const mirror = new PodMirror(h.pod.io, ROOT);
@@ -385,13 +437,13 @@ it("refuses changed trusted terms when replaying existing proposal evidence", as
   await expect(
     createDaemon({
       ...h.options,
-      proposalWritten: async (proposal) => ({
-        ...entry,
-        proposal,
-        wireDigest: digestBytes("different wire"),
-      }),
+      proposalWritten: async (proposal) => {
+        const changed = { ...entry, proposal, wireDigest: digestBytes("different wire") };
+        changed.proposal.intent.termsDigest = proposalTermsDigest(changed);
+        return changed;
+      },
     }).once(),
-  ).rejects.toThrow("Audit replay conflict");
+  ).rejects.toThrow("Proposal conflict");
   expect(h.state.cursors.size).toBe(0);
   expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
   expect(h.options.gateway.proposer.propose).toHaveBeenCalledOnce();
@@ -408,6 +460,23 @@ it("refuses an outbox entry for a different proposal before audit or cursor comm
     }).once(),
   ).rejects.toThrow("Outbox proposal mismatch");
   expect(h.ledger.entries().filter((entry) => entry.record.type === "proposal")).toEqual([]);
+  expect(h.state.cursors.size).toBe(0);
+  expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
+});
+it("refuses an outbox entry whose finalized approval digest does not match its trusted terms", async () => {
+  const h = harness();
+  const publish = vi.spyOn(h.workspace, "proposal");
+  await expect(
+    createDaemon({
+      ...h.options,
+      proposalWritten: async (proposal) => {
+        const entry = await h.options.proposalWritten(proposal);
+        entry.proposal.intent.termsDigest = digestOf("model-supplied digest");
+        return entry;
+      },
+    }).once(),
+  ).rejects.toThrow("Outbox terms digest mismatch");
+  expect(publish).not.toHaveBeenCalled();
   expect(h.state.cursors.size).toBe(0);
   expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
 });
@@ -456,7 +525,6 @@ it("executes and audits daemon proposal evidence using the same signed approval"
     wireDigest: wire.digest,
     account: { id: "own-account" },
   };
-  proposal.intent.termsDigest = proposalTermsDigest(outbox);
   vi.mocked(h.options.gateway.proposer.propose).mockResolvedValue({
     proposals: [proposal],
     calls: [],
@@ -464,7 +532,11 @@ it("executes and audits daemon proposal evidence using the same signed approval"
   const terms = proposalApprovalTerms(outbox);
   const mirror = new PodMirror(h.pod.io, ROOT);
   const writer = new AuditWriter(h.ledger, mirror);
-  const project = vi.fn(async () => outbox);
+  const project = vi.fn(async (candidate: OutboxEntry["proposal"]) => {
+    const entry = { ...outbox, proposal: structuredClone(candidate) };
+    entry.proposal.intent.termsDigest = proposalTermsDigest(entry);
+    return entry;
+  });
   const options = {
     ...h.options,
     proposalWritten: project,
@@ -483,6 +555,13 @@ it("executes and audits daemon proposal evidence using the same signed approval"
   expect(record.terms).toEqual(terms);
   expect(record.termsDigest).toBe(proposalTermsDigest(outbox));
   expect(project).toHaveBeenCalledBefore(h.executor.runOutboxOnce);
+  const persisted = await recordFromTurtle(
+    h.pod.resources.get(proposal.id)?.body ?? "",
+    proposal.id,
+  );
+  if (persisted.type !== "action-proposal") throw new Error("Missing persisted proposal");
+  expect(persisted.intent.termsDigest).not.toBe(proposal.intent.termsDigest);
+  expect(persisted.intent.termsDigest).toBe(record.termsDigest);
   const ed = await generateKeyPairForSuite(`${OWNER}/ed`);
   const p256 = await generateKeyPairForSuite(`${OWNER}/approval`, "P-256");
   const profiles = await Promise.all(
@@ -528,7 +607,7 @@ it("executes and audits daemon proposal evidence using the same signed approval"
       {
         id: approvalId,
         approves: record.id,
-        termsDigest: proposalTermsDigest(outbox),
+        termsDigest: persisted.intent.termsDigest,
         expires: until,
         decision: "approve",
       },
@@ -538,7 +617,9 @@ it("executes and audits daemon proposal evidence using the same signed approval"
     "application/trig",
   );
   const stores = createMemoryStores(at);
-  stores.entries.set(proposal.id, outbox);
+  const projected = await project.mock.results.at(-1)?.value;
+  if (!projected) throw new Error("Missing outbox entry");
+  stores.entries.set(proposal.id, projected);
   const transmit = vi.fn(async () => ({
     outcome: "accepted" as const,
     providerRef: "fixture:sent",

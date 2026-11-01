@@ -33,9 +33,10 @@ Each enabled account is processed serially, including accounts sharing a binding
    context supplies the gateway's read-only pod and memory tools.
 5. Stamp and create proposals only inside `agent/proposals/`; an identical replay
    is safe, but a conflicting rewrite fails. Save each stamped Proposer result in
-   durable local `proposalResults` before writing proposals or model counters, and
-   reuse it when a batch retries, including empty results. Commit the ingest cursor
-   only after the entire batch succeeds.
+   durable local `proposalResults` before outbox projection. Replace that cache with
+   the trusted outbox's finalized proposals before pod publication or model counters,
+   and reuse it when a batch retries, including empty results. Commit the ingest
+   cursor only after the entire batch succeeds.
 6. Run the executor's outbox pass. It alone owns send capabilities and credentials.
 
 Email polls every 120 seconds, chat every 30, social every 300. The control watcher
@@ -50,9 +51,11 @@ The host must construct the executor with fresh, cryptographically verified owne
 controls, approvals and mandates: parsing RDF is insufficient. Its local HALT check
 must read `createLocalState(...).halted` on every gate pass. Wire/action validation,
 exact approval terms, accounting, durable transmissions and send adapters remain
-executor obligations. `proposalWritten` must idempotently project proposals into
-the trusted outbox and return the exact `OutboxEntry` used by the executor.
-Set `proposal.intent.termsDigest` with `proposalTermsDigest(entry)` before approval.
+executor obligations. `proposalWritten` runs before pod publication and must
+idempotently project proposals into the trusted outbox, returning the exact
+`OutboxEntry` used by the executor with `proposal.intent.termsDigest` set using
+`proposalTermsDigest(entry)`. The daemon checks that digest and durably caches the
+finalized proposal before publishing the same proposal to the pod and audit.
 The hook must never send or grant approval. The daemon derives body-free evidence
 with `proposalApprovalTerms(entry)` from agent-executor, including account-bound
 recipient hashes, the exact wire digest and a hash committing the full private
