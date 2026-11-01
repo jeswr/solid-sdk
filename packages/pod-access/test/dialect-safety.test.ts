@@ -1,11 +1,14 @@
 // AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
+import { readAcp, translatePolicy, writeAcp } from "@jeswr/pod-access";
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
-import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
-import { ACL, ACP, RDF, RdfNode, serialize } from "../../src/engine/rdf.js";
-import { readAcp, writeAcp } from "../../src/engine/systems/acp.js";
-import { translatePolicy } from "../../src/engine/translation.js";
+import {
+  executeMigration,
+  finalizePlan,
+  planMigration,
+} from "../../../apps/pod-migrator/src/engine/index.js";
+import { ACL, ACP, RDF, RdfNode, serialize } from "../src/rdf.js";
 import { FakePod } from "./fake-pod.js";
 import { acl, grant, pods, policy, resolve, stranger } from "./helpers.js";
 

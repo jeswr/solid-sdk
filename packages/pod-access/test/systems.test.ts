@@ -1,23 +1,27 @@
 // AUTHORED-BY Codex GPT-6
 import { parseRdf } from "@jeswr/fetch-rdf";
+import type { Subject } from "@jeswr/pod-access";
+import {
+  emptyPolicy,
+  isPolicyTooComplex,
+  ownerPolicy,
+  policiesEqual,
+  readAcp,
+  readWac,
+  unionPolicies,
+  writeAcp,
+  writeWac,
+} from "@jeswr/pod-access";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
-import { detectAccessSystem, readAccess, writeAccess } from "../../src/engine/access.js";
-import { emptyPolicy, ownerPolicy, policiesEqual, unionPolicies } from "../../src/engine/policy.js";
 import {
-  ACL,
-  ACP,
-  aclLink,
-  modeIri,
-  RDF,
-  RdfNode,
-  readModes,
-  safeIri,
-  serialize,
-} from "../../src/engine/rdf.js";
-import { PolicyTooComplex, readAcp, writeAcp } from "../../src/engine/systems/acp.js";
-import { readWac, writeWac } from "../../src/engine/systems/wac.js";
-import type { Subject } from "../../src/engine/types.js";
+  detectAccessSystem,
+  readAccess,
+  writeAccess,
+} from "../../../apps/pod-migrator/src/engine/access.js";
+import { aclLink } from "../../../apps/pod-migrator/src/engine/rdf.js";
+import { ACL, ACP, modeIri, RDF, RdfNode, readModes, safeIri, serialize } from "../src/rdf.js";
+
 import { grant, pods, policy, stranger } from "./helpers.js";
 
 const resource = "https://pod.example/folder/";
@@ -255,7 +259,14 @@ describe("ACP expressions and writers", () => {
     expect(readAcp(dataset, resource, url, "ess").grants[0]?.who).toEqual([[{ kind: "public" }]]);
     p.add(`${ACP}noneOf`, "urn:exclusion");
     node("urn:exclusion", { [`${ACP}agent`]: [stranger], [`${ACP}client`]: ["urn:client"] });
-    expect(() => readAcp(dataset, resource, url, "ess")).toThrow(PolicyTooComplex);
+    try {
+      readAcp(dataset, resource, url, "ess");
+      throw new Error("Expected a complexity refusal");
+    } catch (error) {
+      expect(isPolicyTooComplex(error)).toBe(true);
+    }
+    for (const error of [null, undefined, new Error("unrelated"), { name: "PolicyTooComplex" }])
+      expect(isPolicyTooComplex(error)).toBe(false);
     for (const q of [
       ...dataset.match(DataFactory.namedNode("urn:policy"), DataFactory.namedNode(`${ACP}noneOf`)),
     ])

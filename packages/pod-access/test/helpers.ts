@@ -1,14 +1,8 @@
 // AUTHORED-BY Codex GPT-6
-import { ownerPolicy, unionPolicies } from "../../src/engine/policy.js";
-import { writeAcp } from "../../src/engine/systems/acp.js";
-import { writeWac } from "../../src/engine/systems/wac.js";
-import type {
-  EffectivePolicy,
-  Grant,
-  MigrationPlan,
-  Resolutions,
-  Subject,
-} from "../../src/engine/types.js";
+
+import type { EffectivePolicy, Grant, Resolutions, Subject } from "@jeswr/pod-access";
+import { ownerPolicy, unionPolicies, writeAcp, writeWac } from "@jeswr/pod-access";
+import type { MigrationPlan } from "../../../apps/pod-migrator/src/engine/types.js";
 import { FakePod } from "./fake-pod.js";
 export const stranger = "https://people.example/stranger#me";
 export function grant(

@@ -1,12 +1,15 @@
 // AUTHORED-BY Codex GPT-6
 import { createRequire } from "node:module";
+import { policiesEqual, readAcp, scopePolicy, writeWac } from "@jeswr/pod-access";
 import { DataFactory } from "n3";
 import { describe, expect, it } from "vitest";
-import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
-import { policiesEqual, scopePolicy } from "../../src/engine/policy.js";
-import { ACL, ACP, parse, RDF, RdfNode, serialize } from "../../src/engine/rdf.js";
-import { readAcp } from "../../src/engine/systems/acp.js";
-import { writeWac } from "../../src/engine/systems/wac.js";
+import {
+  executeMigration,
+  finalizePlan,
+  planMigration,
+} from "../../../apps/pod-migrator/src/engine/index.js";
+import { parse } from "../../../apps/pod-migrator/src/engine/rdf.js";
+import { ACL, ACP, RDF, RdfNode, serialize } from "../src/rdf.js";
 import { acl, grant, pods, policy, resolve, stranger } from "./helpers.js";
 
 const requireCss = createRequire(import.meta.url);

@@ -1,17 +1,22 @@
 // AUTHORED-BY Codex GPT-6
-import { modes, parent } from "./rdf.js";
+import { parent } from "./rdf.js";
 import type {
   AccessDocument,
   AccessSystem,
   EffectivePolicy,
   Grant,
   Mode,
-  PodSide,
+  PodImplementation,
   Subject,
 } from "./types.js";
+
+// Proof coverage and owner permissions must never depend on a caller-visible collection.
+const proofModes: readonly Mode[] = Object.freeze(["read", "append", "write", "control"]);
+/** Create a deny-all policy with no grants or denials. */
 export function emptyPolicy(): EffectivePolicy {
   return { grants: [], denials: [] };
 }
+/** Select rules for resource or member scope and normalize them to resource scope. */
 export function scopePolicy(
   policy: EffectivePolicy,
   scope: "resource" | "members",
@@ -22,6 +27,7 @@ export function scopePolicy(
       .map((rule) => ({ ...rule, appliesTo: "resource" as const }));
   return { grants: select(policy.grants), denials: select(policy.denials) };
 }
+/** Combine grants and denials without discarding any restriction. */
 export function unionPolicies(...policies: EffectivePolicy[]): EffectivePolicy {
   return { grants: policies.flatMap((p) => p.grants), denials: policies.flatMap((p) => p.denials) };
 }
@@ -31,7 +37,7 @@ export function effectivePolicy(
   url: string,
   root: string,
   documents: ReadonlyMap<string, Pick<AccessDocument, "policy"> | undefined>,
-  sourceImplementation?: PodSide["implementation"],
+  sourceImplementation?: PodImplementation,
 ): EffectivePolicy {
   const found: EffectivePolicy[] = [];
   // ESS documentation supports both additive and default-only member grants.
@@ -54,11 +60,12 @@ export function effectivePolicy(
   }
   return unionPolicies(...found);
 }
+/** Create an explicit all-mode owner grant, optionally covering descendants. */
 export function ownerPolicy(webId: string, members = false): EffectivePolicy {
   return {
     grants: [
       {
-        modes: new Set(modes),
+        modes: new Set(proofModes),
         who: [[{ kind: "agent", webId }]],
         except: [],
         appliesTo: members ? "both" : "resource",
@@ -68,6 +75,7 @@ export function ownerPolicy(webId: string, members = false): EffectivePolicy {
     denials: [],
   };
 }
+/** Compose policies applying to descendants; WAC replaces, ACP adds. */
 export function effectiveMembers(
   system: AccessSystem,
   url: string,
@@ -86,6 +94,7 @@ export function effectiveMembers(
   }
   return unionPolicies(...found);
 }
+/** Encode RDF subject identity independently of JavaScript property ordering. */
 export function subjectKey(subject: Subject): string {
   switch (subject.kind) {
     case "agent":
@@ -104,6 +113,7 @@ export function subjectKey(subject: Subject): string {
       return subject.kind;
   }
 }
+/** Trusted owner identities and publicly established group membership evidence. */
 export interface ProofContext {
   sourceOwner?: string;
   targetOwner?: string;
@@ -176,7 +186,7 @@ export function assertNotWider(
       }
     return true;
   }
-  for (const mode of modes) {
+  for (const mode of proofModes) {
     variables.clear();
     assignment.clear();
     budget = 65536;
@@ -201,6 +211,7 @@ export function assertNotWider(
     if (counterexample()) throw new TypeError(`Planned policy widens ${mode} access`);
   }
 }
+/** Prove mutual containment; return false on widening or excessive complexity. */
 export function policiesEqual(
   a: EffectivePolicy,
   b: EffectivePolicy,

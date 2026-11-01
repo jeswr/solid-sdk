@@ -5,9 +5,16 @@ import { DataFactory, Store } from "n3";
 import { ACL, ACP, modeIri, RDF, RdfNode, readModes, serialize } from "../rdf.js";
 import type { EffectivePolicy, Grant, Subject } from "../types.js";
 import { assertUnvalidatedTargetAcp } from "./acp-target.js";
-export class PolicyTooComplex extends Error {
+
+/** Safe refusal when ACP expressions exceed the bounded neutral representation. */
+class PolicyTooComplex extends Error {
   override name = "PolicyTooComplex";
 }
+/** Identify bounded-representation refusals without exposing the internal error class. */
+export function isPolicyTooComplex(error: unknown): boolean {
+  return error instanceof PolicyTooComplex;
+}
+/** Independently established CSS or ESS ACP implementation. */
 export type AcpDialect = "css" | "ess";
 function product(left: Subject[][], right: Subject[][]): Subject[][] {
   if (left.length * right.length > 64) throw new PolicyTooComplex("ACP policy exceeds 64 clauses");
@@ -335,6 +342,7 @@ export function readAcp(
   return result;
 }
 
+/** Serialize ACP using only the selected implementation's established vocabulary and scopes. */
 export async function writeAcp(
   policy: EffectivePolicy,
   resource: string,

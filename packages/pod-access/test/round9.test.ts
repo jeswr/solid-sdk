@@ -1,10 +1,16 @@
 // AUTHORED-BY Codex GPT-6
+
+import type { Mode } from "@jeswr/pod-access";
+import { readAcp } from "@jeswr/pod-access";
 import { DataFactory, Store } from "n3";
 import { describe, expect, it } from "vitest";
-import { executeMigration, finalizePlan, planMigration } from "../../src/engine/index.js";
-import { ACL, ACP, RdfNode, serialize } from "../../src/engine/rdf.js";
-import { readAcp } from "../../src/engine/systems/acp.js";
-import type { Mode } from "../../src/engine/types.js";
+import {
+  executeMigration,
+  finalizePlan,
+  planMigration,
+} from "../../../apps/pod-migrator/src/engine/index.js";
+import { ACL, ACP, RdfNode, serialize } from "../src/rdf.js";
+
 import { cssAccess } from "./css-oracle.js";
 import { FakePod, type Identity } from "./fake-pod.js";
 import { acl, resolve, stranger } from "./helpers.js";

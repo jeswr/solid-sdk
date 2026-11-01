@@ -5,6 +5,7 @@ import { DataFactory, Store } from "n3";
 import { ACL, FOAF, modeIri, RDF, RdfNode, readModes, serialize } from "../rdf.js";
 import type { EffectivePolicy, Grant, Subject } from "../types.js";
 
+/** Read WAC with conservative source semantics or widest existing-target validation. */
 export function readWac(
   dataset: DatasetCore,
   resource: string,
@@ -73,6 +74,7 @@ export function readWac(
   return { grants, denials: [] };
 }
 
+/** Serialize a representable WAC policy without weakening conditions. */
 export async function writeWac(
   policy: EffectivePolicy,
   resource: string,

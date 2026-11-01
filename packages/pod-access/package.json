@@ -3,7 +3,7 @@
   "name": "@jeswr/pod-access",
   "version": "0.1.0",
   "private": true,
-  "description": "Pod sharing and permissions across access-control models. Experimental, AI-agent-generated scaffold.",
+  "description": "Conservative WAC and ACP policy reading, translation, serialization and never-widen proofs. Experimental, AI-agent-generated.",
   "type": "module",
   "sideEffects": false,
   "securityCritical": true,
@@ -27,14 +27,27 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "lint": "biome check .",
     "test": "vitest run"
   },
   "license": "MIT",
   "devDependencies": {
+    "@jeswr/fetch-rdf": "workspace:*",
     "@biomejs/biome": "^2.5.1",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.9",
+    "@types/n3": "1.26.1",
+    "@types/node": "22.19.3",
+    "@solid/community-server": "7.2.0",
+    "@vitest/coverage-v8": "4.1.10",
+    "@jeswr/guarded-fetch": "workspace:*",
+    "@jeswr/storage-capabilities": "workspace:*"
+  },
+  "dependencies": {
+    "@rdfjs/wrapper": "0.34.0",
+    "@solid/object": "0.6.0",
+    "n3": "2.0.3",
+    "@rdfjs/types": "2.0.1"
   }
 }

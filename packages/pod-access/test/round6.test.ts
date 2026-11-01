@@ -1,4 +1,6 @@
 // AUTHORED-BY Codex GPT-6
+
+import { readAcp } from "@jeswr/pod-access";
 import { DataFactory } from "n3";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -6,9 +8,8 @@ import {
   executeMigration,
   finalizePlan,
   planMigration,
-} from "../../src/engine/index.js";
-import { ACL, ACP, RdfNode, serialize } from "../../src/engine/rdf.js";
-import { readAcp } from "../../src/engine/systems/acp.js";
+} from "../../../apps/pod-migrator/src/engine/index.js";
+import { ACL, ACP, RdfNode, serialize } from "../src/rdf.js";
 import { FakePod } from "./fake-pod.js";
 import { acl, grant, pods, policy, resolve, stranger } from "./helpers.js";
 

@@ -1,6 +1,17 @@
 // AUTHORED-BY Codex GPT-6
+
+import {
+  type AcpDialect,
+  assertNotWider,
+  ownerPolicy,
+  policiesEqual,
+  readAcp,
+  readWac,
+  scopePolicy,
+  writeAcp,
+  writeWac,
+} from "@jeswr/pod-access";
 import { DataFactory } from "n3";
-import { assertNotWider, ownerPolicy, policiesEqual, scopePolicy } from "./policy.js";
 import {
   ACL,
   ACP,
@@ -12,8 +23,6 @@ import {
   requireRepresentation,
   serialize,
 } from "./rdf.js";
-import { type AcpDialect, readAcp, writeAcp } from "./systems/acp.js";
-import { readWac, writeWac } from "./systems/wac.js";
 import { assertSpecificAccess } from "./target-access.js";
 import type { AccessDocument, AccessSystem, EffectivePolicy, PodSide } from "./types.js";
 export async function detectAccessSystem(
