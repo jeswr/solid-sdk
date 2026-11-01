@@ -311,6 +311,24 @@ test.each([
   expect(action).toHaveBeenCalledOnce();
   expect(onRetry).not.toHaveBeenCalled();
 });
+test.each([
+  "unknown",
+  "quota",
+] as const)("explicit retry overrides the legacy callback for %s fallback Retry", (category) => {
+  const onRetry = vi.fn();
+  const retry = vi.fn();
+  const { rerender } = render(
+    <TypedView state={{ status: "error", category, onRetry, actions: { retry } }} />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  expect(retry).toHaveBeenCalledOnce();
+  expect(onRetry).not.toHaveBeenCalled();
+  rerender(
+    <TypedView state={{ status: "error", category, onRetry, actions: { retry: "/retry" } }} />,
+  );
+  expect(screen.getByRole("link", { name: "Retry" }).getAttribute("href")).toBe("/retry");
+  expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+});
 test("content retries wait again for a new error with the same delay", async () => {
   vi.useFakeTimers();
   const retry = vi.fn();

@@ -3,13 +3,9 @@
 
 import { AlertCircle } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
-import {
-  type ErrorAction,
-  type ErrorCategory,
-  errorActionLabels,
-  errorStateCopy,
-} from "./async-copy.js";
+import { type ErrorAction, type ErrorCategory, errorStateCopy } from "./async-copy.js";
 import { type LoadingPreset, LoadingSkeleton } from "./loading-skeleton.js";
+import { RecoveryAction } from "./recovery-action.js";
 
 export interface ClassifiedError {
   category: ErrorCategory;
@@ -51,36 +47,6 @@ function RetryAction({
     return () => clearTimeout(timer);
   }, [delay, error]);
   return <RecoveryAction name="retry" action={action} disabled={waiting} />;
-}
-
-function RecoveryAction({
-  name,
-  action,
-  disabled = false,
-}: {
-  name: ErrorAction;
-  action: (() => void) | string;
-  disabled?: boolean;
-}) {
-  if (typeof action === "string" && !disabled) {
-    // Use native links for navigation; never expose non-HTTP executable schemes.
-    if (!/^(?:\/(?!\/)|https?:\/\/)/i.test(action)) return null;
-    return (
-      <a className="suite-async-action" href={action} rel="noopener noreferrer">
-        {errorActionLabels[name]}
-      </a>
-    );
-  }
-  return (
-    <button
-      type="button"
-      className="suite-async-action"
-      disabled={disabled}
-      onClick={typeof action === "function" ? action : undefined}
-    >
-      {errorActionLabels[name]}
-    </button>
-  );
 }
 
 export function ErrorState({

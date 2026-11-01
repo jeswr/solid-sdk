@@ -4,6 +4,7 @@ import { type ErrorCategory, errorStateCopy } from "./async-copy.js";
 import { EmptyState } from "./empty-state.js";
 import { type ClassifiedError, type ErrorRecovery, ErrorState } from "./error-state.js";
 import { LoadingSkeleton } from "./loading-skeleton.js";
+import { RecoveryAction } from "./recovery-action.js";
 import { renderAsync } from "./render-async.js";
 
 /** Defense at the presentation boundary: identifiers belong only in technical details. */
@@ -60,9 +61,8 @@ export function SurfaceFeedback({
         loadingPreset="detail"
       >
         {state.onRetry && !["reauth", "offline", "unreachable"].includes(state.category) && (
-          <button type="button" className="suite-async-action" onClick={state.onRetry}>
-            Retry
-          </button>
+          // An explicit retry action takes precedence over the legacy callback here too.
+          <RecoveryAction name="retry" action={state.actions?.retry ?? state.onRetry} />
         )}
       </ErrorState>
     ),
