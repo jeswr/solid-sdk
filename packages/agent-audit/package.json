@@ -28,10 +28,11 @@
     "bin"
   ],
   "scripts": {
+    "demo": "pnpm -r --filter-prod @jeswr/agent-audit... --filter-prod @jeswr/agent-executor... run build && pnpm -w exec tsc -p packages/agent-audit/demos/tsconfig.json && node demos/walkthrough.ts",
     "build": "pnpm -w exec tsc -p packages/agent-audit/tsconfig.json",
     "typecheck": "pnpm -w exec tsc -p packages/agent-audit/tsconfig.json --noEmit && pnpm -w exec tsc -p packages/agent-audit/tsconfig.test.json",
     "lint": "pnpm -w exec biome check packages/agent-audit",
-    "test": "pnpm -w exec vitest run --root packages/agent-audit --coverage"
+    "test": "pnpm --filter @jeswr/agent-executor run build && pnpm -w exec tsc -p packages/agent-audit/demos/tsconfig.json && pnpm -w exec vitest run --root packages/agent-audit --coverage"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.10",
