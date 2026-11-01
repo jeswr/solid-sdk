@@ -1,6 +1,13 @@
 // AUTHORED-BY Claude Opus 5.5
 "use client";
-import { Button, EmptyState, ErrorState, formatBytes, LoadingSkeleton } from "@jeswr/suite-ui";
+import {
+  Button,
+  EmptyState,
+  ErrorState,
+  formatBytes,
+  IconButton,
+  LoadingSkeleton,
+} from "@jeswr/suite-ui";
 import { HardDrive, RefreshCw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -203,11 +210,9 @@ export function StorageScreen() {
                     </div>
                     <span className="pho-storage-size">{formatBytes(item.bytes)}</span>
                     {!photo.readOnly && (
-                      <Button
+                      <IconButton
                         variant="ghost"
-                        size="icon"
-                        aria-label={`Move ${photo.name} to trash`}
-                        title="Move to trash"
+                        label={`Move ${photo.name} to trash`}
                         data-trash-for={item.key}
                         onClick={() => {
                           // Keep keyboard users in the list once this row disappears.
@@ -216,7 +221,7 @@ export function StorageScreen() {
                         }}
                       >
                         <Trash2 size={18} aria-hidden="true" />
-                      </Button>
+                      </IconButton>
                     )}
                   </li>
                 );
