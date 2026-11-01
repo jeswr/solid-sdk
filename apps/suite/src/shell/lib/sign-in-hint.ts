@@ -2,17 +2,16 @@
 import type { SignInHint } from "../session/types";
 
 /**
- * Until pod-auth's `resolveLoginTarget` lands: a URL with a path or fragment
- * names a profile document (WebID); a bare origin names a provider (issuer).
- * Anything else is passed through as an issuer for the backend to reject.
+ * The sign-in card's fields say what the person typed: the WebID field names a profile,
+ * the provider field names an issuer. Never re-guess from the URL's shape: a provider
+ * can live under a path (`/realms/solid`) and a WebID can be a bare origin.
  */
-export function hintFor(input: string): SignInHint {
+export function hintForField(field: "webid" | "provider", input: string): SignInHint {
   const value = input.trim();
-  try {
-    const url = new URL(value);
-    if (url.hash || url.pathname !== "/") return { webId: value };
-  } catch {
-    /* Not a URL. */
-  }
-  return { issuer: value };
+  return field === "webid" ? { webId: value } : { issuer: value };
+}
+
+/** Only issuers belong in the remembered-provider list, never a person's WebID. */
+export function rememberedIssuer(hint: SignInHint): string | null {
+  return "issuer" in hint ? hint.issuer : null;
 }

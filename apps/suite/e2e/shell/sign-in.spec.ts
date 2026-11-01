@@ -55,9 +55,20 @@ test("different-account validation and the provider preview seam", async ({ page
   await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toHaveText(
     "Signing in with a Solid provider isn't switched on in this preview yet.",
   );
-  expect(
-    await page.evaluate(() => JSON.parse(localStorage.getItem("suite.recentProviders.v1") ?? "[]")),
-  ).toEqual(["https://example.org/profile/card#me"]);
+  const remembered = () =>
+    page.evaluate(() => JSON.parse(localStorage.getItem("suite.recentProviders.v1") ?? "[]"));
+  // A WebID is never remembered as a provider.
+  expect(await remembered()).toEqual([]);
+  await accessible(page);
+  // The provider field keeps its intent, even for a provider that lives under a path.
+  await page.getByRole("button", { name: "Another provider" }).click();
+  const provider = page.getByRole("combobox", { name: "Provider address" });
+  await provider.fill("https://login.example.org/realms/solid");
+  await provider.press("Enter");
+  await expect(page.getByRole("alert").filter({ hasText: /\S/ })).toHaveText(
+    "Signing in with a Solid provider isn't switched on in this preview yet.",
+  );
+  expect(await remembered()).toEqual(["https://login.example.org/realms/solid"]);
   await accessible(page);
   // Provider buttons: the known community providers, each a real button.
   await expect(page.getByRole("list", { name: "Providers" }).getByRole("button")).not.toHaveCount(

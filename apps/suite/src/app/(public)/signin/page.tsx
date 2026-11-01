@@ -20,7 +20,7 @@ import { useSolidExtension } from "@/lib/session/extension-session";
 import { useSuiteEnvironment } from "@/shell/environment";
 import { safeNext } from "@/shell/lib/next";
 import { RECENT_PROVIDERS_KEY, recentProviders } from "@/shell/lib/preferences";
-import { hintFor } from "@/shell/lib/sign-in-hint";
+import { hintForField, rememberedIssuer } from "@/shell/lib/sign-in-hint";
 import { DemoButton } from "@/shell/public/demo-button";
 import { PodExplainer } from "@/shell/public/pod-explainer";
 import { useAccounts } from "@/shell/session/accounts-provider";
@@ -91,7 +91,8 @@ function SignIn() {
     } catch (cause) {
       if (cause instanceof SignInError) {
         setError(cause.message);
-        if (cause.code === "unavailable") remember("issuer" in hint ? hint.issuer : hint.webId);
+        const issuer = rememberedIssuer(hint);
+        if (cause.code === "unavailable" && issuer) remember(issuer);
       } else setError("We couldn't sign you in. Please try again.");
     } finally {
       setPending(null);
@@ -114,8 +115,12 @@ function SignIn() {
         recentAccounts={recentAccounts}
         pending={pending}
         error={error}
-        onWebId={(input) => void submit(hintFor(input), { kind: "webid", key: input })}
-        onCustomProvider={(input) => void submit(hintFor(input), { kind: "custom", key: input })}
+        onWebId={(input) =>
+          void submit(hintForField("webid", input), { kind: "webid", key: input })
+        }
+        onCustomProvider={(input) =>
+          void submit(hintForField("provider", input), { kind: "custom", key: input })
+        }
         onProvider={(provider) =>
           void submit({ issuer: provider.issuer }, { kind: "provider", key: provider.id })
         }
