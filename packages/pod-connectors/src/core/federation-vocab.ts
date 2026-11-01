@@ -1,12 +1,30 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-/** Constants from @jeswr/solid-federation-vocab sectors and their alignments.
- * That package currently exports ontology files only; see QUESTIONS.md Q1.
- * Keep this bridge isolated for CON-13's constants-only switch.
- */
+import { NS } from "@jeswr/suite-vocab";
+
+/** Federation terms built from the suite's canonical namespace bases. */
 export const FEDERATION = {
-  MusicRecording: "https://jeswr.org/ns/sectors/media#MusicRecording",
-  Playlist: "https://jeswr.org/ns/sectors/media#Playlist",
-  CalendarEvent: "https://jeswr.org/ns/sectors/scheduling#CalendarEvent",
-  Note: "https://jeswr.org/ns/sectors/social#Note",
+  MusicRecording: `${NS.MEDIA}MusicRecording`,
+  Playlist: `${NS.MEDIA}Playlist`,
+  CalendarEvent: `${NS.SCHEDULING}CalendarEvent`,
+  CreativeWork: `${NS.MEDIA}CreativeWork`,
+  ListeningActivity: `${NS.MEDIA}ListeningActivity`,
+  MediaAccount: `${NS.MEDIA}MediaAccount`,
+  HealthRecord: `${NS.HEALTH}HealthRecord`,
+  TransactionRecord: `${NS.FINANCE}TransactionRecord`,
+  Note: `${NS.SOCIAL}Note`,
+  Person: `${NS.CORE}Person`,
+  Agent: `${NS.CORE}Agent`,
+  AccountHolder: `${NS.CORE}AccountHolder`,
+  AccountProvider: `${NS.CORE}AccountProvider`,
+  Activity: `${NS.CORE}Activity`,
+} as const;
+
+export const FEDERATION_PROPERTIES = {
+  title: "http://purl.org/dc/terms/title",
+  content: `${NS.SOCIAL}content`,
+  about: `${NS.CORE}about`,
+  subject: `${NS.CORE}subject`,
+  hasAccountHolder: `${NS.CORE}hasAccountHolder`,
+  hasAccountProvider: `${NS.CORE}hasAccountProvider`,
 } as const;

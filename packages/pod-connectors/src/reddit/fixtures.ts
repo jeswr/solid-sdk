@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Recorded Reddit OAuth API shapes (oauth.reddit.com) — trimmed to the fields
  * the adapter reads. Sources: GET /api/v1/me, GET /user/{name}/saved,

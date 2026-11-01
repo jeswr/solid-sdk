@@ -14,7 +14,8 @@
     "ui": "vite + react + @jeswr/app-shell + @jeswr/solid-elements",
     "rdf": "@jeswr/fetch-rdf + @solid/object + @rdfjs/wrapper + @jeswr/solid-odrl + n3",
     "test": "vitest",
-    "lint": "biome"
+    "lint": "biome",
+    "deploy": "GitHub Pages: https://jeswr.github.io/solid-sdk/access-manager/; Vercel git deployments disabled"
   },
   "dependsOn": [
     "full-solid-ecosystem",

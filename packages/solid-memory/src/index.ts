@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * `@jeswr/solid-memory` — a typed RDF agent-memory model + Solid-pod store +
@@ -45,6 +46,8 @@ export {
   as,
   DCT,
   dct,
+  LEGACY_MEMORY_NS,
+  LEGACY_POD_CHAT_NS,
   MEM,
   MEM_EMBEDDING_REF,
   MEMORY_CLASS,

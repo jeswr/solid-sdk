@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6
 // (Ported from @jeswr/solid-elements `src/auth/index.ts` — the suite's best,
 // adversarially-reviewed login controller (Opus 4.8-authored original; every
 // "roborev finding" comment below refers to that history) — extracted as the
@@ -95,6 +96,7 @@ import {
   stripAuthCallbackParams,
   writePersistedRedirectFlow,
 } from "./redirect.js";
+import { requestHref } from "./request.js";
 import type { PersistedSession, SessionStore } from "./session-store.js";
 import type {
   BeginRedirectLoginOptions,
@@ -3128,7 +3130,7 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
 
   /** True only for an allowed-origin request while a session is live. */
   async matches(request: Request): Promise<boolean> {
-    return this.#allowed(this.#getSession(), request);
+    return this.#allowed(this.#getSession(), requestHref(request));
   }
 
   /**
@@ -3142,10 +3144,11 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
     const nonce = response.headers.get("DPoP-Nonce");
     if (!nonce) return false;
     const session = this.#getSession();
-    if (!this.#allowed(session, request)) return false;
+    const href = requestHref(request);
+    if (!this.#allowed(session, href)) return false;
     let origin: string;
     try {
-      origin = new URL(request.url).origin;
+      origin = new URL(href).origin;
     } catch {
       return false;
     }
@@ -3174,9 +3177,10 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
    */
   async upgrade(request: Request, forceRefresh = false): Promise<Request> {
     let session = this.#getSession();
+    const href = requestHref(request);
     // Defense in depth: re-check the origin here too, so even a direct/forced
     // `upgrade` (bypassing `matches`) never attaches the token cross-origin.
-    if (!this.#allowed(session, request) || !session) return request;
+    if (!this.#allowed(session, href) || !session) return request;
     // Refresh the access token if it is known-expired, or (on a 401 retry) if the
     // server rejected it. Refresh is single-flight + fail-closed.
     if (shouldRefresh(session.expiresAt, forceRefresh)) {
@@ -3188,7 +3192,9 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
       // credential after sign-out / across accounts (the roborev finding). Return the
       // original request unauthenticated when the session changed/disappeared.
       const current = this.#getSession();
-      if (current !== session || !this.#allowed(current, request)) return request;
+      if (current !== session || requestHref(request) !== href || !this.#allowed(current, href)) {
+        return request;
+      }
       session = current;
     }
     const headers = new Headers(request.headers);
@@ -3199,23 +3205,29 @@ export class WebIdDPoPTokenProvider implements TokenProvider {
         // RFC 9449 §4.2: the `htu` claim is the request URI WITHOUT query + fragment.
         // Pass a normalized htu (query/hash stripped) so a protected request like
         // `…?q=…#frag` produces a valid proof the RS will accept.
-        htuOf(request.url),
+        htuOf(href),
         request.method,
         // RFC 9449 §8: embed the resource server's cached `nonce` (from a prior
         // `use_dpop_nonce` 401 / a rotated `DPoP-Nonce` response header) so a server
         // that REQUIRES a nonce accepts the proof; `undefined` for servers that don't.
-        this.#nonceFor(request.url),
+        this.#nonceFor(href),
         session.accessToken,
       ),
     );
     headers.set("Authorization", `DPoP ${session.accessToken}`);
-    return new Request(request, { headers });
+    const upgraded = new Request(request, { headers });
+    // Check the outgoing platform destination synchronously, immediately before return.
+    if (requestHref(upgraded) !== href) {
+      upgraded.headers.delete("Authorization");
+      upgraded.headers.delete("DPoP");
+    }
+    return upgraded;
   }
 
   /** Whether `request`'s origin is in the live session's allowed set (fail-closed). */
-  #allowed(session: LiveSession | undefined, request: Request): boolean {
-    if (!session) return false;
-    return isOriginAllowed(session.allowedOrigins, request.url);
+  #allowed(session: LiveSession | undefined, href: string | undefined): href is string {
+    if (!session || href === undefined) return false;
+    return isOriginAllowed(session.allowedOrigins, href);
   }
 }
 

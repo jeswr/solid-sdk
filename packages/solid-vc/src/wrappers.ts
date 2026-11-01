@@ -1,3 +1,5 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // Typed @rdfjs/wrapper accessors over a VC graph + the low-level GraphBuilder
@@ -23,12 +25,14 @@ import { DataFactory, Store } from "n3";
 import { escapeIri } from "./iri.js";
 import {
   DC_CREATED,
+  LEGACY_SVC_NS,
   RDF_TYPE,
   SEC_CRYPTOSUITE,
   SEC_PROOF,
   SEC_PROOF_PURPOSE,
   SEC_PROOF_VALUE,
   SEC_VERIFICATION_METHOD,
+  SVC,
   VC_CREDENTIAL,
   VC_CREDENTIAL_SUBJECT,
   VC_HOLDER,
@@ -47,6 +51,30 @@ import {
  */
 function objectTerms(node: TermWrapper, predicate: string): Set<TermWrapperType> {
   return SetFrom.subjectPredicate(node, predicate, TermAs.instance(TermWrapper), TermFrom.instance);
+}
+
+/** Read-only authorization claims; every present namespace must agree. */
+export class AuthorizationSubjectNode extends TermWrapper {
+  constructor(subject: string, dataset: DatasetCore) {
+    super(subject, dataset, DataFactory as unknown as DataFactoryType);
+  }
+  iris(local: "authorizes" | "action" | "target" | "policy"): Set<string> | undefined {
+    let values: Set<string> | undefined;
+    for (const ns of [SVC, LEGACY_SVC_NS]) {
+      const terms = [...objectTerms(this, ns + local)];
+      if (terms.length === 0) continue;
+      // A malformed alias must not disappear behind another, well-formed alias.
+      if (terms.some((term) => term.termType !== "NamedNode")) return undefined;
+      const alias = new Set(terms.map((term) => term.value));
+      if (
+        values !== undefined &&
+        (values.size !== alias.size || [...values].some((v) => !alias.has(v)))
+      )
+        return undefined;
+      values ??= alias;
+    }
+    return values ?? new Set();
+  }
 }
 
 /** A typed view of a `sec:DataIntegrityProof` node. */

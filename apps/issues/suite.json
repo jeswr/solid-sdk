@@ -16,7 +16,7 @@
     "shacl": "rdf-validate-shacl",
     "auth": "@solid/reactive-authentication ^0.1.3, jose ^6",
     "test": "vitest, Playwright (e2e)",
-    "deploy": "Vercel Hobby"
+    "deploy": "Vercel git deployments disabled; Next.js app (not part of the static Pages site)"
   },
   "dependsOn": [
     "prod-solid-server",

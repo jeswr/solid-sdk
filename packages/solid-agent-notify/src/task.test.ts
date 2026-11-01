@@ -1,6 +1,7 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
- * Tests for the shared federation TASK model (https://w3id.org/jeswr/task):
+ * Tests for the shared federation TASK model (https://jeswr.org/ns/task#):
  * the typed wf:Task accessors (build + read), the task-notification round-trip
  * (an as:Announce carrying an embedded wf:Task), and the discover+deliver task
  * helpers (notifyTaskAssigned / notifyTaskStateChanged) against a 127.0.0.1

@@ -1,9 +1,14 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-5 -->
 
 # @jeswr/solid-health-diary
 
 Typed RDF models for meals, exposures, symptoms, elimination protocols, and tolerance conclusions
 in a Solid health diary.
+
+Writers use `https://jeswr.org/ns/sectors/health/diet#`, with canonical health and core
+vocabularies under `https://jeswr.org/ns/`. Readers also accept the read-only legacy aliases
+exported as `LEGACY_DIET_NS`, `LEGACY_HEALTH_NS`, and `LEGACY_CORE_NS`.
 
 > Health data is sensitive. Write an owner-only ACL before diary data, and treat the package as an
 > experimental data model rather than medical advice.

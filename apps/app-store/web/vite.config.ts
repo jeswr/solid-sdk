@@ -53,7 +53,9 @@ export default defineConfig({
   },
   // `base: "./"` makes the built asset URLs relative, so the static bundle works when
   // served from a domain root (the per-subdomain deploy) without rewriting.
-  base: "./",
+  // Vercel builds use "/" instead: vercel.json rewrites paths such as /catalog/
+  // to index.html, where relative asset URLs would resolve under that path.
+  base: process.env.VERCEL === "1" ? "/" : "./",
   build: {
     outDir: "dist",
     chunkSizeWarningLimit: 1500,

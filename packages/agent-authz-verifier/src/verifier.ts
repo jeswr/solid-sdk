@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6
 //
 // ===========================================================================
 //  The composed FOUR-PHASE agent-authorization chain verifier.
@@ -73,12 +74,9 @@ import {
   type VerifierPhase,
 } from "./errors.js";
 
-// The `svc:` claim IRIs the Phase-B cross-binding reads, derived from solid-vc's
-// exported `SVC` namespace — the exact IRIs `issueAgentAuthorization` writes.
-const SVC_AUTHORIZES = `${SVC}authorizes`;
-const SVC_ACTION = `${SVC}action`;
-const SVC_TARGET = `${SVC}target`;
-const SVC_POLICY = `${SVC}policy`;
+// solid-vc's phase-1 migration accepts canonical terms but still issues legacy
+// terms for pinned verifiers. Read both without rewriting the signed preimage.
+const AUTHORIZATION_NAMESPACES = ["https://w3id.org/jeswr/solid-vc#", SVC] as const;
 
 /** The bound agent-authorization claim read from an AgentAuthorizationCredential. */
 export interface BoundAuthorization {
@@ -229,12 +227,15 @@ export interface VerifyAuthorityResult {
 
 // --- reading the bound authorization from a credential ---------------------
 
-/** The credentialSubject as a claim record (first subject if an array). */
+/** Only a single subject record is supported; never ignore signed subjects. */
 function subjectRecord(vc: VerifiableCredential): Record<string, unknown> | undefined {
+  if (Array.isArray(vc.credentialSubject) && vc.credentialSubject.length !== 1) return undefined;
   const subject = Array.isArray(vc.credentialSubject)
     ? vc.credentialSubject[0]
     : vc.credentialSubject;
-  return subject && typeof subject === "object" ? (subject as Record<string, unknown>) : undefined;
+  return subject && typeof subject === "object" && !Array.isArray(subject)
+    ? (subject as Record<string, unknown>)
+    : undefined;
 }
 
 /** Coerce a claim value to a string, or `undefined`. */
@@ -242,15 +243,42 @@ function claimString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-/** Coerce a claim value to a string array. */
-function claimStrings(value: unknown): string[] {
-  if (typeof value === "string") {
-    return [value];
+/**
+ * Match credentialToRdf's expansion: bare names and explicit legacy keys share
+ * one predicate. Normalize each predicate's set separately, then require aliases
+ * to agree. Unioning different namespace predicates would widen the grant.
+ */
+function authorizationClaimValues(
+  subject: Record<string, unknown>,
+  claim: string,
+): string[] | undefined {
+  let values: Set<string> | undefined;
+  for (const namespace of AUTHORIZATION_NAMESPACES) {
+    const keys =
+      namespace === AUTHORIZATION_NAMESPACES[0]
+        ? [`${namespace}${claim}`, claim]
+        : [`${namespace}${claim}`];
+    const alias = new Set<string>();
+    let present = false;
+    for (const key of keys) {
+      // credentialToRdf signs own enumerable claims, never prototype properties.
+      if (!Object.prototype.propertyIsEnumerable.call(subject, key)) continue;
+      const value = subject[key];
+      if (value === undefined) continue;
+      present = true;
+      const strings = typeof value === "string" ? [value] : value;
+      if (!Array.isArray(strings) || strings.some((v) => typeof v !== "string")) return undefined;
+      for (const v of strings) alias.add(v);
+    }
+    if (!present) continue;
+    if (
+      values !== undefined &&
+      (values.size !== alias.size || [...values].some((v) => !alias.has(v)))
+    )
+      return undefined;
+    values ??= alias;
   }
-  if (Array.isArray(value)) {
-    return value.filter((v): v is string => typeof v === "string");
-  }
-  return [];
+  return [...(values ?? [])];
 }
 
 /**
@@ -259,25 +287,50 @@ function claimStrings(value: unknown): string[] {
  * self-asserted `credentialSubject.id` (see {@link BoundAuthorization.principal}
  * for why trusting the subject id would be a chain-of-trust bypass). The subject
  * carries the grant fields `svc:authorizes` / `svc:action` / `svc:target` /
- * `svc:policy`. NOTE this is a pure reader — it does NOT verify the proof; the
+ * `svc:policy` in either namespace. Identical singleton aliases are accepted;
+ * conflicting authorizes/target/policy values are rejected. Action aliases must
+ * describe equal sets. Bare names expand to the legacy namespace, as
+ * in the signed graph. Multiple subject records are unsupported and rejected.
+ * NOTE this is a pure reader — it does NOT verify the proof; the
  * verifier runs Phase A (`verifyCredential`) and the `subject.id === issuer`
  * fail-closed check before any of these fields are trusted.
  */
 export function readBoundAuthorization(vc: VerifiableCredential): BoundAuthorization | undefined {
   const types = vc.type ?? [];
-  if (!types.includes("AgentAuthorizationCredential")) {
+  if (
+    !types.some(
+      (type) =>
+        type === "AgentAuthorizationCredential" ||
+        AUTHORIZATION_NAMESPACES.some(
+          (namespace) => type === `${namespace}AgentAuthorizationCredential`,
+        ),
+    )
+  ) {
     return undefined;
   }
   const subject = subjectRecord(vc);
-  const authorizes = claimString(subject?.[SVC_AUTHORIZES]);
-  if (subject === undefined || authorizes === undefined || typeof vc.issuer !== "string") {
+  if (subject === undefined || typeof vc.issuer !== "string") {
     return undefined;
   }
+  const authorizesValues = authorizationClaimValues(subject, "authorizes");
+  const action = authorizationClaimValues(subject, "action");
+  const targetValues = authorizationClaimValues(subject, "target");
+  const policyValues = authorizationClaimValues(subject, "policy");
+  if (
+    authorizesValues?.length !== 1 ||
+    action === undefined ||
+    targetValues === undefined ||
+    targetValues.length > 1 ||
+    policyValues === undefined ||
+    policyValues.length > 1
+  )
+    return undefined;
+  const authorizes = authorizesValues[0];
+  if (authorizes === undefined) return undefined;
   // SECURITY: the delegating principal is the proof-anchored issuer, NOT subject.id.
   const principal = vc.issuer;
-  const action = claimStrings(subject[SVC_ACTION]);
-  const target = claimString(subject[SVC_TARGET]);
-  const policy = claimString(subject[SVC_POLICY]);
+  const target = targetValues[0];
+  const policy = policyValues[0];
   return {
     principal,
     authorizes,

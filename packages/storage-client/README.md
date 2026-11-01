@@ -1,8 +1,9 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
 
 # @jeswr/storage-client
 
-> **Experimental — AI-agent-generated.** Scaffold only; no runtime API is implemented.
+> **Experimental — AI-agent-generated.** Types, errors, helpers and the in-memory backend are implemented; the Solid and LWS HTTP backends follow.
 
 Protocol-neutral storage clients for Solid and LWS. Design of record: SDK core `ADR-003-storage-client.md` and ADR-001 D4 in
 `solid-suite-planning/specs/sdk-core/`.
@@ -10,8 +11,21 @@ Protocol-neutral storage clients for Solid and LWS. Design of record: SDK core `
 Private at version 0.1.0 pending the first gate-green conformance run (ADR-001 D5).
 Requires Node.js >=24 and the root pnpm workspace tooling.
 
-Reserved entry points: `@jeswr/storage-client`, `@jeswr/storage-client/solid`, `@jeswr/storage-client/lws`, `@jeswr/storage-client/memory`, `@jeswr/storage-client/errors`, `@jeswr/storage-client/helpers`, `@jeswr/storage-client/testing`.
-All currently export nothing; implementations and fakes arrive in later tasks.
+Entry points:
+
+- `@jeswr/storage-client`: the ADR-003 types (`StorageClient`, `ReadResult`, `Patch`, …), `StorageError` and `toStorageError`.
+- `@jeswr/storage-client/errors`: the error model, plus `storageErrorFrom(method, url, response)`, which reads at most 64 KiB of an RFC 9457 body.
+- `@jeswr/storage-client/helpers`: `retryOnConflict(fn, read, attempts = 3)` and an RFC 6902 `applyJsonPatch`.
+- `@jeswr/storage-client/memory`: `createMemoryStorage({ protocol: 'solid' | 'lws', pageSize, moveResource, strictConditional })`, a full in-memory `StorageClient` for tests.
+- `@jeswr/storage-client/solid`, `/lws`, `/testing`: reserved for the HTTP backends and recorded fixtures.
+
+```ts
+import { createMemoryStorage } from '@jeswr/storage-client/memory';
+
+const storage = createMemoryStorage({ protocol: 'lws', pageSize: 2 });
+const { url, etag } = await storage.create(storage.root, '{"a":1}', { contentType: 'application/json' });
+await storage.patch(url, { kind: 'json', ops: [{ op: 'replace', path: '/a', value: 2 }] }, { ifMatch: etag! });
+```
 
 From the workspace root:
 
@@ -22,5 +36,6 @@ pnpm --filter @jeswr/storage-client run typecheck
 pnpm --filter @jeswr/storage-client run test
 ```
 
-The smoke test loads the empty entry points. Coverage is enabled with 100% thresholds
-for branches, functions, lines, and statements; this scaffold does not validate protocol behavior.
+Coverage is enabled with 100% thresholds for branches, functions, lines, and statements. The tests
+include the RFC 6902 Appendix A examples, a table over every `StorageErrorCode`, and fast-check
+properties for the memory backend (ADR-003 §10).

@@ -15,7 +15,7 @@
  * overwrite, type-index registration, the WrittenDoc/category report — is
  * identical to the OAuth runner.
  *
- * Security: the uploaded file is fully untrusted. We only ever read its **text**
+ * Security: the uploaded file is fully untrusted. We only decode UTF-8 input
  * (the parser never `eval`s, never builds a URL to fetch with the user's auth);
  * parsed values become inert RDF literals. We cap the file size and the number
  * of rows so a hostile or accidental multi-GB export can't exhaust memory or
@@ -26,19 +26,23 @@ import { IntegrationSyncError } from "./errors.js";
 import type { ImportReport } from "./import-runner.js";
 import { createImportSession } from "./import-session.js";
 import type {
+  BinaryDoc,
   ConnectorStateOptions,
+  ImportContext,
+  ImportOutcome,
   ImportProgress,
   IntegrationMetadata,
   NormalisedDoc,
   PodWriter,
   VocabMap,
   WriteConditions,
+  WrittenBinary,
   WrittenDoc,
 } from "./types.js";
 
 /**
- * Hard caps for untrusted uploads. A real export is a few MB at most; these
- * are generous ceilings that still bound memory and the written document size.
+ * Hard caps for untrusted uploads, including large Apple Health exports.
+ * Streaming bounds input buffering; the row cap bounds RDF snapshot size.
  */
 export const MAX_FILE_BYTES = 64 * 1024 * 1024; // 64 MiB
 export const MAX_ROWS = 100_000;
@@ -51,16 +55,30 @@ export interface ImportFile {
   readonly type: string;
   /** Decode the file as UTF-8 text. */
   text(): Promise<string>;
+  /** Streaming file bytes (native browser File/Blob API). Preferred when supplied. */
+  stream?(): ReadableStream<Uint8Array>;
+  /** Reopenable byte range [start, end), required for ZIP archives (native File/Blob). */
+  slice?(start: number, end: number): { stream(): ReadableStream<Uint8Array> };
 }
 
 /** What a file-import adapter hands the runner to write (mirrors the OAuth ctx). */
 export interface FileImportContext {
+  /** Importing user's WebID, supplied by the host's PodWriter. */
+  readonly webId?: string;
   /** Resolve a slug to the absolute pod URL it will be written at (for fragment IRIs). */
   resolve(slug: string): string;
+  /** Read existing RDF, retaining write preconditions (as on ImportContext). */
+  read: ImportContext["read"];
   /** Serialise + PUT a normalised document into the pod. */
   write(doc: NormalisedDoc, conditions?: WriteConditions): Promise<WrittenDoc>;
+  /** Store a non-RDF resource (see `ImportContext.writeBinary`). */
+  writeBinary(doc: BinaryDoc): Promise<WrittenBinary>;
+  /** Delete a resource (see `ImportContext.remove`). */
+  remove(slug: string): Promise<void>;
   /** Report progress to the UI. */
   progress(p: ImportProgress): void;
+  /** Count a malformed or oversized source record omitted by the adapter. */
+  skip(): void;
   /** Shared row cap so adapters bound their own loops consistently. */
   readonly maxRows: number;
 }
@@ -74,10 +92,11 @@ export interface FileImportAdapter {
   readonly metadata: IntegrationMetadata;
   /**
    * The `accept` attribute for the file input (e.g. `".csv,text/csv"`). Honest
-   * about what the parser actually reads — for ZIP exports we accept the inner
-   * extracted file, never the archive itself.
+   * about the files the adapter actually reads, including supported archives.
    */
   readonly accept: string;
+  /** Adapter enforces streaming byte caps itself; bypass the whole-upload cap. */
+  readonly streaming?: boolean;
   /**
    * Human guidance shown above the picker — exactly which file to select,
    * including any "unzip first and choose X" step for archive exports.
@@ -92,7 +111,11 @@ export interface FileImportAdapter {
    */
   readonly exportUrl?: string;
   /** Parse the uploaded file and write normalised documents. */
-  importFile(file: ImportFile, ctx: FileImportContext): Promise<void>;
+  importFile(file: ImportFile, ctx: FileImportContext): Promise<void | FileImportOutcome>;
+}
+
+export interface FileImportOutcome extends Pick<ImportOutcome, "skipped"> {
+  readonly unsupported?: readonly string[];
 }
 
 export interface RunFileImportOptions extends ConnectorStateOptions {
@@ -111,7 +134,7 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
   const { adapter, file } = opts;
   const id = adapter.metadata.id;
 
-  if (file.size > MAX_FILE_BYTES) {
+  if (!adapter.streaming && file.size > MAX_FILE_BYTES) {
     throw new IntegrationSyncError(
       id,
       `That file is ${formatBytes(file.size)} — larger than the ${formatBytes(MAX_FILE_BYTES)} import limit. Please split the export.`,
@@ -125,14 +148,30 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
     opts,
     adapter.vocabMap,
   );
+  let skipped = 0;
   try {
-    await adapter.importFile(file, {
+    let removed = false;
+    const outcome = await adapter.importFile(file, {
+      webId: opts.podWriter.webId,
       maxRows: MAX_ROWS,
       resolve: (slug) => opts.podWriter.resolve(slug),
       progress: (p) => opts.onProgress?.(p),
+      read: session.read,
+      skip: () => skipped++,
       write: session.write,
+      writeBinary: session.writeBinary,
+      remove: async (slug) => {
+        await session.remove(slug);
+        removed = true;
+      },
     });
-    if (session.written.length === 0) {
+    skipped += outcome?.skipped ?? 0;
+    if (
+      session.written.length === 0 &&
+      !removed &&
+      !outcome?.skipped &&
+      !outcome?.unsupported?.length
+    ) {
       throw new IntegrationSyncError(
         id,
         "No importable records were found in that file. Double-check you selected the right export file.",
@@ -140,7 +179,7 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
     }
     const { indexUrl } = await opts.podWriter.registerType(session.registrations());
     await session.finish();
-    const state = session.state({});
+    const state = session.state({ skipped });
     opts.onState?.(state);
     return {
       adapterId: id,
@@ -148,7 +187,9 @@ export async function runFileImport(opts: RunFileImportOptions): Promise<ImportR
       written: session.written,
       categories: [...new Set(session.written.map((w) => w.category))],
       indexUrl,
+      skipped: skipped || undefined,
       state,
+      unsupported: outcome?.unsupported,
     };
   } catch (error) {
     // Partial writes already link to this run. Record it when storage is available,

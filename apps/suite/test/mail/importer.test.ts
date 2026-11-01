@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/noNonNullAssertion: Assertions establish fixture entries before use.
 import { readFile } from "node:fs/promises";
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
@@ -369,6 +370,43 @@ it("threads In-Reply-To-only chains through previously imported mail", async () 
     importMbox(chunks(mbox), storage, "personal", () => "id"),
   )) as Awaited<ReturnType<typeof parseEmail>>[];
   expect(new Set(items.map((i) => i.thread)).size).toBe(1);
+});
+it("reconciles an arriving parent's provisional thread with its known parent without References", async () => {
+  const input = [
+    "Message-ID: <independent>",
+    "Message-ID: <root>",
+    "Message-ID: <child>\nIn-Reply-To: <parent>",
+    "Message-ID: <early>\nIn-Reply-To: <child>",
+    "Message-ID: <parent>\nIn-Reply-To: <root>",
+    "Message-ID: <root-reply>\nIn-Reply-To: <root>",
+    "Message-ID: <child-reply>\nIn-Reply-To: <child>",
+    "Message-ID: <early-reply>\nIn-Reply-To: <early>",
+    "Message-ID: <parent-reply>\nIn-Reply-To: <parent>",
+    "Message-ID: <independent-reply>\nIn-Reply-To: <independent>",
+  ]
+    .map((headers) => `From sender\n${headers}\n\nBody\n`)
+    .join("");
+  const items = (await collect(
+    importMbox(chunks(bytes(input)), storage, "personal", () => "id"),
+  )) as Awaited<ReturnType<typeof parseEmail>>[];
+  const provisional = `${mailDocument(root, "threads", "<parent>")}#it`;
+  const canonical = `${mailDocument(root, "threads", "<root>")}#it`;
+  const independent = `${mailDocument(root, "threads", "<independent>")}#it`;
+  expect(items.map((item) => item.thread)).toEqual([
+    independent,
+    canonical,
+    provisional,
+    provisional,
+    canonical,
+    canonical,
+    canonical,
+    canonical,
+    canonical,
+    independent,
+  ]);
+  expect(items[4]!.mergedThreads).toEqual([provisional]);
+  for (const item of items)
+    expect(item.mailbox.message(item.message).partOfThread).toBe(item.thread);
 });
 it("honors References roots and reconciles cached descendants and missing ancestors", async () => {
   const input = [

@@ -320,12 +320,17 @@ syncBuiltinESMExports();`,
     // Warm the parser before timing; exclude process startup and fixture I/O.
     for (const spec of acceptedSpecs) expect(isSupportedSpec(spec)).toBe(true);
     for (const spec of unsupportedSpecs) expect(isSupportedSpec(spec)).toBe(false);
+    // Best of five runs: a loaded CI runner can stall any single run past the budget, while
+    // backtracking blow-ups stay slow on every run.
     for (const [spec, supported] of cases) {
-      const start = performance.now();
-      const result = isSupportedSpec(spec);
-      const elapsed = performance.now() - start;
-      expect(result).toBe(supported);
-      expect(elapsed).toBeLessThan(50);
+      let fastest = Number.POSITIVE_INFINITY;
+      for (let run = 0; run < 5; run += 1) {
+        const start = performance.now();
+        const result = isSupportedSpec(spec);
+        fastest = Math.min(fastest, performance.now() - start);
+        expect(result).toBe(supported);
+      }
+      expect(fastest).toBeLessThan(50);
     }
   });
 

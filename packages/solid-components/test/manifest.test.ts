@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // CEM-accuracy tests. The committed `custom-elements.json` is the CODEGEN CONTRACT, so
@@ -136,10 +137,13 @@ describe("custom-elements.json — CEM accuracy", () => {
     // value, but an element legitimately renders SEVERAL classes): vcard:AddressBook
     // routes to <jeswr-contact-list> (which advertises vcard:Individual), and
     // ldp:BasicContainer routes to <jeswr-collection> (which advertises ldp:Container).
-    // Both are VIEW-mode aliases. These are the KNOWN, justified map-only aliases.
+    // Legacy bookmarks are read aliases in BOTH modes; the manifest advertises the
+    // canonical class. These are the KNOWN, justified map-only aliases.
     const AllowedMapOnly: Record<string, string> = {
       "http://www.w3.org/2006/vcard/ns#AddressBook view": "jeswr-contact-list",
       "http://www.w3.org/ns/ldp#BasicContainer view": "jeswr-collection",
+      "https://w3id.org/jeswr/bookmark#Bookmark view": "jeswr-bookmark-list",
+      "https://w3id.org/jeswr/bookmark#Bookmark edit": "jeswr-bookmark-form",
     };
     for (const entry of ResolverEntries) {
       const key = `${entry.targetClass} ${entry.mode}`;
@@ -162,7 +166,7 @@ describe("custom-elements.json — CEM accuracy", () => {
     const expectations: Record<string, string> = {
       JeswrTaskForm: "http://www.w3.org/2005/01/wf/flow#Task",
       JeswrContactForm: "http://www.w3.org/2006/vcard/ns#Individual",
-      JeswrBookmarkForm: "https://w3id.org/jeswr/bookmark#Bookmark",
+      JeswrBookmarkForm: "https://jeswr.org/ns/bookmark#Bookmark",
     };
     for (const [name, cls] of Object.entries(expectations)) {
       const d = byName.get(name);

@@ -7,6 +7,7 @@
 
 import type { DatasetCore, Quad, Quad_Object, Quad_Subject, Term } from "@rdfjs/types";
 import { DataFactory, Writer } from "n3";
+import { canonicalizeAccmDataset } from "./canonical-vocab.js";
 import { isHttpUrl } from "./http.js";
 import { XSD } from "./vocab.js";
 
@@ -16,7 +17,7 @@ const { namedNode, literal, quad } = DataFactory;
 export function toTurtle(dataset: DatasetCore, baseIRI?: string): Promise<string> {
   return new Promise((resolve, reject) => {
     const writer = baseIRI ? new Writer({ baseIRI }) : new Writer();
-    for (const q of dataset) writer.addQuad(q as Quad);
+    for (const q of canonicalizeAccmDataset(dataset, DataFactory)) writer.addQuad(q as Quad);
     writer.end((error, result) => (error ? reject(error) : resolve(result)));
   });
 }

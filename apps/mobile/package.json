@@ -1,0 +1,32 @@
+{
+  "$comment": "AUTHORED-BY Claude Opus 5.5",
+  "name": "@jeswr/app-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "iOS and Android Capacitor shells around the Solid Suite (W12). Experimental, AI-agent-generated.",
+  "scripts": {
+    "lint": "biome check .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "www": "node scripts/prepare-www.ts",
+    "sync": "pnpm run www && cap sync",
+    "sync:android": "pnpm run www && cap sync android",
+    "sync:ios": "pnpm run www && cap sync ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/ios": "8.5.3",
+    "@capacitor/share": "8.0.3",
+    "@jeswr/suite-native": "workspace:*"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.1",
+    "@capacitor/cli": "8.5.3",
+    "@types/node": "^25.9.2",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

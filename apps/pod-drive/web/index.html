@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- AUTHORED-BY Codex GPT-6 -->
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -8,15 +9,15 @@
     <!--
       No-flash theme script — sets the `.dark` class on <html> BEFORE first paint
       so a dark-preference reload never flashes light. It is the exact output of
-      @jeswr/app-shell's themeScript() with the DEFAULT storageKey ("app-shell-theme")
-      and attributeClass ("dark"), which MUST match the <ThemeProvider> in main.tsx.
+      @jeswr/app-shell's themeScript() with the app-specific storageKey ("pod-drive:app-shell-theme")
+      and attributeClass ("dark"), which MUST match the <ThemeProvider storageKey="pod-drive:app-shell-theme"> in main.tsx.
       Inlined (not imported) because it must run synchronously in <head>, before the
       module bundle loads. AUTHORED-BY Claude Opus 4.8.
     -->
     <script>
       (function () {
         try {
-          var t = localStorage.getItem("app-shell-theme");
+          var t = localStorage.getItem("pod-drive:app-shell-theme");
           var d =
             t === "dark" ||
             ((t === null || t === "system") &&

@@ -1,0 +1,80 @@
+{
+  "_comment": "// AUTHORED-BY GPT-6.1-Sol; Source: jeswr/solid-specs@e1e1210 specs/service-description/examples/sparq-lws.jsonld",
+  "@context": [
+    "https://www.w3.org/ns/cid/v1",
+    "https://www.w3.org/ns/lws/v1",
+    "https://jeswr.org/ns/solid-sd/context/v1"
+  ],
+  "id": "https://lws.example/",
+  "type": "Storage",
+  "service": [
+    {
+      "id": "https://lws.example/#storage-root",
+      "type": "StorageRoot",
+      "serviceEndpoint": "https://lws.example/"
+    },
+    {
+      "id": "https://lws.example/#notifications",
+      "type": "NotificationService",
+      "serviceEndpoint": "https://lws.example/.lws/subscriptions/",
+      "subscriptionType": ["WebhookSubscription", "SseSubscription", "WebSocketSubscription"]
+    },
+    {
+      "id": "https://lws.example/#type-index",
+      "type": "TypeIndexService",
+      "serviceEndpoint": "https://lws.example/.lws/types/index"
+    },
+    {
+      "id": "https://lws.example/#type-search",
+      "type": "TypeSearchService",
+      "serviceEndpoint": "https://lws.example/.lws/types/search"
+    },
+    {
+      "id": "https://lws.example/#access-requests",
+      "type": "AccessRequestService",
+      "serviceEndpoint": "https://lws.example/.lws/requests/",
+      "conformsTo": ["https://www.w3.org/ns/lws#AccessProfile"]
+    },
+    {
+      "id": "https://lws.example/#access-grants",
+      "type": "AccessGrantService",
+      "serviceEndpoint": "https://lws.example/.lws/grants/",
+      "conformsTo": ["https://www.w3.org/ns/lws#AccessProfile"]
+    },
+    {
+      "id": "https://lws.example/#sparql",
+      "type": "SparqlQueryService",
+      "serviceEndpoint": "https://lws.example/sparql",
+      "conformsTo": ["https://jeswr.github.io/solid-specs/specs/access-controlled-query/"]
+    },
+    {
+      "id": "https://lws.example/#sync",
+      "type": "CrdtSyncService",
+      "serviceEndpoint": "https://lws.example/.sync/tickets",
+      "conformsTo": ["https://jeswr.org/ns/solid-sd#y-protocol-v1"]
+    },
+    {
+      "id": "https://lws.example/#recursive-delete",
+      "type": "RecursiveDeleteService",
+      "serviceEndpoint": "https://lws.example/.delete"
+    }
+  ],
+  "capability": [
+    { "type": "AccessControl", "model": "ODRLGrants" },
+    {
+      "type": "PatchSupport",
+      "source": "application/json",
+      "patchType": ["application/json-patch+json"]
+    },
+    {
+      "type": "PatchSupport",
+      "source": "application/ld+json",
+      "patchType": ["application/json-patch+json"]
+    },
+    {
+      "type": "MoveResource",
+      "appliesTo": ["DataResource", "Container"],
+      "preservesIdentifier": false
+    }
+  ]
+}

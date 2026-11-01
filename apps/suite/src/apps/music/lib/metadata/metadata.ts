@@ -2,6 +2,9 @@
 // AUTHORED-BY Codex GPT-6
 import { type IAudioMetadata, parseBuffer, UnexpectedFileContentError } from "music-metadata";
 
+// Match the pinned parser's default and share it with our normalization buffer.
+const maxMemoryAllocation = 64 * 1024 * 1024;
+
 /** Missing fields are null; track and disc are their numbers, without totals. */
 export interface AudioMetadata {
   readonly title: string | null;
@@ -24,6 +27,8 @@ export interface AudioMetadata {
  * the parser's error; recoverable damage may yield partial metadata.
  * Unsynchronised ID3v2.3 extended headers are unsupported and reject with
  * UnexpectedFileContentError rather than risk returning misaligned metadata.
+ * Raw unsynchronised tags and their complete reconstruction buffer are limited
+ * to 64 MiB; exceeding either limit rejects with UnexpectedFileContentError.
  * Uses music-metadata's browser-compatible Uint8Array API (no File or I/O).
  */
 export async function extractAudioMetadata(buffer: ArrayBuffer): Promise<AudioMetadata> {
@@ -32,6 +37,7 @@ export async function extractAudioMetadata(buffer: ArrayBuffer): Promise<AudioMe
     undefined,
     {
       duration: true,
+      maxMemoryAllocation,
     },
   );
   return {
@@ -53,8 +59,8 @@ export async function extractAudioMetadata(buffer: ArrayBuffer): Promise<AudioMe
 // frame headers. Frame sizes describe decoded bytes; the tag size describes
 // encoded bytes. Normalize leading tags before the pinned parser sees them.
 function normalizeId3v23(bytes: Uint8Array): Uint8Array {
-  const parts: Uint8Array[] = [];
-  let changed = false;
+  let normalized: Uint8Array | undefined;
+  let position = 0;
   let offset = 0;
   while (
     offset + 10 <= bytes.length &&
@@ -76,37 +82,43 @@ function normalizeId3v23(bytes: Uint8Array): Uint8Array {
           "Unsynchronised extended headers are unsupported",
         );
       }
-      const tag = new Uint8Array(size + 10);
-      tag.set(header);
-      let write = 10;
+      // Validate raw sizes before scanning the body, even if decoding would
+      // shrink it below the parser's limit. Include audio and all leading tags
+      // in the reconstruction bound; allocate once, without per-tag buffers.
+      if (size > maxMemoryAllocation || bytes.length > maxMemoryAllocation) {
+        throw new UnexpectedFileContentError("ID3v2.3", "Normalization exceeds allocation limit");
+      }
+      if (!normalized) {
+        normalized = new Uint8Array(bytes.length);
+        normalized.set(bytes.subarray(0, offset));
+        position = offset;
+      }
+      const start = position;
+      normalized.set(header, position);
+      position += 10;
       for (let read = offset + 10; read < end; read++) {
         const byte = bytes[read] as number;
-        tag[write++] = byte;
+        normalized[position++] = byte;
         // Remove exactly one escape zero, bounded by this tag's encoded body.
         if (byte === 0xff && read + 1 < end && bytes[read + 1] === 0) read++;
       }
-      tag[5] = (tag[5] as number) & ~0x80;
-      let decodedSize = write - 10;
+      normalized[start + 5] = (normalized[start + 5] as number) & ~0x80;
+      let decodedSize = position - start - 10;
       for (let i = 9; i >= 6; i--) {
-        tag[i] = decodedSize & 127;
+        normalized[start + i] = decodedSize & 127;
         decodedSize >>>= 7;
       }
-      parts.push(tag.subarray(0, write));
-      changed = true;
-    } else {
-      parts.push(bytes.subarray(offset, end));
+    } else if (normalized) {
+      const tag = bytes.subarray(offset, end);
+      normalized.set(tag, position);
+      position += tag.length;
     }
     offset = end;
   }
-  if (!changed) return bytes;
-  parts.push(bytes.subarray(offset));
-  const normalized = new Uint8Array(parts.reduce((length, part) => length + part.length, 0));
-  let position = 0;
-  for (const part of parts) {
-    normalized.set(part, position);
-    position += part.length;
-  }
-  return normalized;
+  if (!normalized) return bytes;
+  const tail = bytes.subarray(offset);
+  normalized.set(tail, position);
+  return normalized.subarray(0, position + tail.length);
 }
 
 // The parser's common track and derived year can be overwritten by ID3v1.

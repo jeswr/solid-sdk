@@ -42,12 +42,14 @@
   "license": "MIT",
   "devDependencies": {
     "@biomejs/biome": "^2.5.1",
+    "@types/n3": "^1.16.0",
+    "fake-indexeddb": "^6.0.0",
+    "fast-check": "^4.3.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.9",
-    "@jeswr/fetch-rdf": "workspace:*",
-    "@types/n3": "^1.16.0"
+    "vitest": "^4.1.9"
   },
   "dependencies": {
+    "@jeswr/fetch-rdf": "workspace:*",
     "@rdfjs/types": "^2.0.1",
     "@rdfjs/wrapper": "^0.34.0",
     "n3": "^2.0.3"

@@ -19,7 +19,7 @@ import {
   TEST_WEBID,
 } from "./testing.js";
 import type { ConnectorState, ImportContext, IntegrationAdapter, PodWriter } from "./types.js";
-import { CLASSES, DataCollection, MusicPlaylist, MusicRecording } from "./vocab.js";
+import { CLASSES, DataCollection, MusicPlaylist, MusicRecording, PodThing } from "./vocab.js";
 
 const RDF_TYPE = "http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
 function song(dataset: Store, subject: string, id: string, name: string) {
@@ -611,6 +611,55 @@ it("records one complete PROV activity per run and each source-item derivation",
   expect(pod.get(report.indexUrl)).not.toContain(`${PROV}Activity`);
 });
 
+it("annotates and counts only resources under the writer's resolved connector root", async () => {
+  const pod = createMemoryPod();
+  const port = writer(pod);
+  const url = port.resolve("items.ttl");
+  const root = new URL(".", url).href;
+  const internal = [`${url}#one`, `${port.resolve("linked/person.ttl")}#local`];
+  const external = [
+    TEST_WEBID,
+    `${root.slice(0, -1)}-other/items.ttl#foreign`,
+    `${TEST_POD_ROOT}integrations/other/items.ttl#foreign`,
+    "urn:synthetic:external-agent",
+  ];
+  const mappedSubject = `${url}#mapped-activity`;
+  const source = adapter(async (ctx) => {
+    const dataset = new Store();
+    new DataCollection(url, dataset, DataFactory).mark();
+    for (const subject of [...internal, ...external])
+      new PodThing(subject, dataset, DataFactory).types.add(FEDERATION.Agent);
+    await ctx.write({ slug: "items.ttl", category: "media", forClass: CLASSES.Dataset, dataset });
+    return {};
+  });
+  const report = await runImport({
+    adapter: {
+      ...source,
+      vocabMap(doc) {
+        new PodThing(mappedSubject, doc.dataset, DataFactory).types.add(FEDERATION.Activity);
+        return doc;
+      },
+    },
+    podWriter: port,
+    mode: "demo",
+  });
+  const dataset = pod.dataset(url);
+  const activity = [...new Provenance(url, dataset, DataFactory).generatedBy];
+  expect(activity).toHaveLength(1);
+  for (const subject of [url, ...internal, mappedSubject]) {
+    const provenance = new Provenance(subject, dataset, DataFactory);
+    expect([...provenance.generatedBy]).toEqual(activity);
+    expect(provenance.derivedFrom.size).toBeGreaterThan(0);
+  }
+  for (const subject of external) {
+    const provenance = new Provenance(subject, dataset, DataFactory);
+    expect(provenance.types.has(FEDERATION.Agent)).toBe(true);
+    expect(provenance.generatedBy.size).toBe(0);
+    expect(provenance.derivedFrom.size).toBe(0);
+  }
+  expect(report.state?.counts).toEqual({ documents: 1, items: internal.length, skipped: 0 });
+});
+
 it("shares merge, provenance and host state with file imports", async () => {
   const pod = createMemoryPod();
   const port = writer(pod);
@@ -654,4 +703,41 @@ it("shares merge, provenance and host state with file imports", async () => {
     DataFactory,
   );
   expect(doc.derivedFrom.has("urn:solid:connector:incremental:export")).toBe(true);
+});
+
+// AUTHORED-BY Codex GPT-6
+it("combines file adapter skip calls and outcome skips in the report and state", async () => {
+  const pod = createMemoryPod();
+  const port = writer(pod);
+  const report = await runFileImport({
+    adapter: {
+      metadata: {
+        ...spotifyAdapter.metadata,
+        id: "incremental",
+        tier: "C",
+        authKind: "export-file",
+      },
+      accept: ".txt",
+      fileHint: "Synthetic file",
+      async importFile(_file, ctx) {
+        expect(ctx.webId).toBe(TEST_WEBID);
+        ctx.skip();
+        ctx.skip();
+        const dataset = new Store();
+        song(dataset, `${ctx.resolve("items.ttl")}#one`, "one", "File");
+        await ctx.write({
+          slug: "items.ttl",
+          category: "media",
+          forClass: CLASSES.MusicRecording,
+          dataset,
+        });
+        return { skipped: 3, unsupported: ["Synthetic product"] };
+      },
+    },
+    podWriter: port,
+    file: memoryFile("synthetic.txt", "fixture"),
+  });
+  expect(report.skipped).toBe(5);
+  expect(report.state?.counts).toEqual({ documents: 1, items: 1, skipped: 5 });
+  expect(report.unsupported).toEqual(["Synthetic product"]);
 });

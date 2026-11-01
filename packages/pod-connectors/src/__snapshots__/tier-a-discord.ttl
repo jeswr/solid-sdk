@@ -1,0 +1,22 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+<https://pod.test/alice/integrations/discord/social/profile.ttl> <http://www.w3.org/ns/prov#wasDerivedFrom> <https://discord.com/api/v10/users/@me>, <https://discord.com/users/80351110224678912>.
+<https://pod.test/alice/integrations/discord/social/profile.ttl#account> a <http://xmlns.com/foaf/0.1/OnlineAccount>;
+    <http://www.w3.org/ns/prov#wasDerivedFrom> <https://discord.com/users/80351110224678912>;
+    <http://xmlns.com/foaf/0.1/accountName> "alice_v";
+    <http://xmlns.com/foaf/0.1/accountServiceHomepage> <https://discord.com/>;
+    <https://schema.org/identifier> "80351110224678912";
+    <https://schema.org/name> "Alice";
+    <https://schema.org/url> <https://discord.com/users/80351110224678912>.
+<https://pod.test/alice/integrations/discord/social/servers.ttl> <http://www.w3.org/ns/prov#wasDerivedFrom> <https://discord.com/api/v10/users/@me/guilds>, <https://discord.com/channels/197038439483310086>, <https://discord.com/channels/613425648685547541>.
+<https://pod.test/alice/integrations/discord/social/servers.ttl#guild-197038439483310086> a <http://xmlns.com/foaf/0.1/Group>;
+    <http://www.w3.org/ns/prov#wasDerivedFrom> <https://discord.com/channels/197038439483310086>;
+    <https://schema.org/description> "2,480 members";
+    <https://schema.org/identifier> "197038439483310086";
+    <https://schema.org/name> "Solid Community";
+    <https://schema.org/url> <https://discord.com/channels/197038439483310086>.
+<https://pod.test/alice/integrations/discord/social/servers.ttl#guild-613425648685547541> a <http://xmlns.com/foaf/0.1/Group>;
+    <http://www.w3.org/ns/prov#wasDerivedFrom> <https://discord.com/channels/613425648685547541>;
+    <https://schema.org/description> "312 members — you own this server";
+    <https://schema.org/identifier> "613425648685547541";
+    <https://schema.org/name> "Sourdough Bakers";
+    <https://schema.org/url> <https://discord.com/channels/613425648685547541>.

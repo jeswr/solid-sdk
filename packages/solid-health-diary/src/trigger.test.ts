@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 
 import { DataFactory, Parser, Store } from "n3";
@@ -178,7 +179,7 @@ describe("lag-profile validation (finite, non-negative, ordered)", () => {
     // A hostile document with an unordered lag window (min 100 > max 1) must not be
     // surfaced — parseTriggerClass discards it and returns the trusted prior.
     const ttl = `
-      @prefix diet: <https://w3id.org/jeswr/sectors/health/diet#> .
+      @prefix diet: <https://jeswr.org/ns/sectors/health/diet#> .
       @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
       ${triggerIri("gluten").replace(/^/, "<").concat(">")} a diet:TriggerClass ;
         diet:lagWindowMin "100"^^xsd:double ;

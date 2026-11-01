@@ -1,0 +1,14 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+<https://pod.test/alice/integrations/twitch/media/followed-channels.ttl> <http://www.w3.org/ns/prov#wasDerivedFrom> <https://api.twitch.tv/helix/channels/followed>, <https://www.twitch.tv/hasanabi>, <https://www.twitch.tv/xqc>.
+<https://pod.test/alice/integrations/twitch/media/followed-channels.ttl#follow-207813352> a <https://schema.org/WatchAction>;
+    <http://www.w3.org/ns/prov#wasDerivedFrom> <https://www.twitch.tv/hasanabi>;
+    <https://schema.org/identifier> "207813352";
+    <https://schema.org/name> "HasanAbi";
+    <https://schema.org/startTime> "2024-12-02T08:05:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/url> <https://www.twitch.tv/hasanabi>.
+<https://pod.test/alice/integrations/twitch/media/followed-channels.ttl#follow-71092938> a <https://schema.org/WatchAction>;
+    <http://www.w3.org/ns/prov#wasDerivedFrom> <https://www.twitch.tv/xqc>;
+    <https://schema.org/identifier> "71092938";
+    <https://schema.org/name> "xQc";
+    <https://schema.org/startTime> "2025-09-14T19:21:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/url> <https://www.twitch.tv/xqc>.

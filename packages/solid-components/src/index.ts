@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // @jeswr/solid-components — codegen-friendly, framework-agnostic Solid Web
@@ -141,6 +142,7 @@ export {
   BOOKMARK_CLASS,
   LDP_BASIC_CONTAINER,
   LDP_CONTAINER,
+  LEGACY_BOOKMARK_CLASS,
   RDF_TYPE,
   TASK_CLASS,
   VCARD_ADDRESS_BOOK,

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { DataFactory, Store } from "n3";
 import PostalMime, { type Address, decodeWords } from "postal-mime";
 import { Attachment } from "./attachment.js";
@@ -236,9 +237,14 @@ export async function* importMbox(
       item.mergedThreads = [...merged];
       for (const ancestor of ancestors) threads.set(ancestor, item.thread);
     } else {
-      const knownThread =
-        threads.get(item.message) ?? (parent === undefined ? undefined : threads.get(parent));
-      if (knownThread !== undefined) item.thread = knownThread;
+      const previous = threads.get(item.message);
+      const parentThread = parent === undefined ? undefined : threads.get(parent);
+      item.thread = parentThread ?? previous ?? item.thread;
+      if (previous !== undefined && previous !== item.thread) {
+        // The arriving parent joins its known ancestry; move its earlier replies with it.
+        for (const [iri, thread] of threads) if (thread === previous) threads.set(iri, item.thread);
+        item.mergedThreads = [previous];
+      }
     }
     message.partOfThread = item.thread;
     if (parent !== undefined) threads.set(parent, item.thread);

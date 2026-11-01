@@ -57,3 +57,4 @@ export {
   redactUserinfo,
 } from "./podScope.js";
 export { RedirectRefusedError, refuseRedirects } from "./refuseRedirects.js";
+export { snapshotFetchInput, snapshotRequest } from "./request-snapshot.js";

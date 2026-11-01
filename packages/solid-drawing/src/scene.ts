@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-5
 /**
  * Typed build / serialise / parse helpers for a `draw:Scene` descriptor.
@@ -24,11 +25,13 @@ import {
   DCT_CREATED,
   DCT_MODIFIED,
   DCT_TITLE,
+  DRAW,
   DRAW_SCENE,
   DRAW_SCENE_DOCUMENT,
   DRAW_SCHEMA_VERSION,
   DRAW_THUMBNAIL,
   DRAW_VIEW_BACKGROUND_COLOR,
+  LEGACY_DRAW_NS,
   PREFIXES,
   PROV_WAS_GENERATED_BY,
   RDF_TYPE,
@@ -208,10 +211,22 @@ function exactlyOne(
   subject: NamedNode,
   predicate: NamedNode,
 ): Quad_Object | undefined {
-  const matches = dataset.match(subject, predicate, null, null);
-  if (matches.size !== 1) return undefined;
-  for (const q of matches) return q.object;
-  return undefined;
+  const predicates = [predicate];
+  if (predicate.value.startsWith(DRAW)) {
+    predicates.push(namedNode(`${LEGACY_DRAW_NS}${predicate.value.slice(DRAW.length)}`));
+  }
+  // Apply cardinality across both aliases. Identical RDF terms agree; distinct
+  // values remain ambiguous, including a valid IRI paired with a legacy literal.
+  let object: Quad_Object | undefined;
+  for (const candidate of predicates) {
+    const matches = dataset.match(subject, candidate, null, null);
+    if (matches.size > 1) return undefined;
+    for (const q of matches) {
+      if (object !== undefined && !object.equals(q.object)) return undefined;
+      object = q.object;
+    }
+  }
+  return object;
 }
 
 /** The exactly-one IRI value of `(subject, predicate, ?)` (a NamedNode), else undefined. */
@@ -270,7 +285,9 @@ function setIfDefined<K extends keyof SceneData>(
 export function parseScene(resourceUrl: string, dataset: DatasetCore): SceneData | undefined {
   const subject = sceneSubject(resourceUrl);
 
-  const isScene = dataset.match(subject, RDF_TYPE, DRAW_SCENE, null).size > 0;
+  const isScene =
+    dataset.match(subject, RDF_TYPE, DRAW_SCENE, null).size > 0 ||
+    dataset.match(subject, RDF_TYPE, namedNode(`${LEGACY_DRAW_NS}Scene`), null).size > 0;
   if (!isScene) return undefined;
 
   const sceneDocument = exactlyOneIri(dataset, subject, DRAW_SCENE_DOCUMENT);

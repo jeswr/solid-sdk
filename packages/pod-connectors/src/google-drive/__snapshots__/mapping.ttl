@@ -1,0 +1,12 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+<https://pod.test/alice/integrations/google-drive/drive/files/binary-1/meta.ttl#it> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <https://schema.org/DigitalDocument> .
+<https://pod.test/alice/integrations/google-drive/drive/files/binary-1/meta.ttl#it> <https://jeswr.org/ns/pod-drive#md5Checksum> "08d6c05a21512a79a1dfeb9d2a8f262f" .
+<https://pod.test/alice/integrations/google-drive/drive/files/binary-1/meta.ttl#it> <https://schema.org/contentSize> "4" .
+<https://pod.test/alice/integrations/google-drive/drive/files/binary-1/meta.ttl#it> <https://schema.org/dateCreated> "2026-06-11T09:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+<https://pod.test/alice/integrations/google-drive/drive/files/binary-1/meta.ttl#it> <https://schema.org/dateModified> "2026-06-12T09:00:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+<https://pod.test/alice/integrations/google-drive/drive/files/binary-1/meta.ttl#it> <https://schema.org/encoding> <https://pod.test/alice/integrations/google-drive/drive/files/binary-1/content-2c155c1728e9ed2e2dbcbd47> .
+<https://pod.test/alice/integrations/google-drive/drive/files/binary-1/meta.ttl#it> <https://schema.org/encodingFormat> "image/png" .
+<https://pod.test/alice/integrations/google-drive/drive/files/binary-1/meta.ttl#it> <https://schema.org/identifier> "binary-1" .
+<https://pod.test/alice/integrations/google-drive/drive/files/binary-1/meta.ttl#it> <https://schema.org/isPartOf> <https://pod.test/alice/integrations/google-drive/drive/files/folder-1/meta.ttl#it> .
+<https://pod.test/alice/integrations/google-drive/drive/files/binary-1/meta.ttl#it> <https://schema.org/name> "Example photo" .
+<https://pod.test/alice/integrations/google-drive/drive/files/binary-1/meta.ttl#it> <https://schema.org/url> <https://drive.google.com/file/d/binary-1/view> .

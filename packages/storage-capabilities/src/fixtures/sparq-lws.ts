@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 
 /**
  * Representative sparq LWS CID based on ADR-002's fixture and SDK-core STATUS.md.

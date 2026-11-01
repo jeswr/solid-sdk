@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6
 // (Ported verbatim — plus the pristine-brand integration — from
 // @jeswr/solid-elements `src/auth/proactive-fetch.ts` (Opus 4.8-authored original,
 // task #123); this package is now its home, solid-elements will re-export.)
@@ -76,6 +77,7 @@
 
 import { computeAllowedOrigins, isOriginAllowed, isUseDpopNonceChallenge } from "./controller.js";
 import { brandFetchWrapper, resolvePristineFetch } from "./pristine.js";
+import { requestHref } from "./request.js";
 
 /**
  * The structural TokenProvider surface this wrapper drives. The consuming app supplies its
@@ -149,9 +151,11 @@ export function isProviderOAuthRequest(
   request: Request,
   issuerOrigins: ReadonlySet<string>,
 ): boolean {
+  const href = requestHref(request);
+  if (href === undefined) return false;
   let url: URL;
   try {
-    url = new URL(request.url);
+    url = new URL(href);
   } catch {
     return false; // fail-closed: not treated as provider-internal (the origin gate fails closed too)
   }
@@ -308,7 +312,8 @@ export interface ProactiveFetchConfig {
  * through this one function, so the learning hook plugs in here.
  */
 function shouldAttachToken(state: ProactiveFetchState, request: Request): boolean {
-  if (!isOriginAllowed(state.allowedOrigins, request.url)) return false;
+  const href = requestHref(request);
+  if (href === undefined || !isOriginAllowed(state.allowedOrigins, href)) return false;
   // OPTIONAL OAuth bypass (#123 PM parity): when issuer origins are supplied, never wrap the
   // provider's OWN discovery/token/refresh calls (would clobber oauth4webapi's headers / recurse).
   if (state.issuerOrigins && isProviderOAuthRequest(request, state.issuerOrigins)) return false;

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Recorded Discord API v10 shapes (discord.com/api) — trimmed to the fields
  * the adapter reads. Sources: GET /users/@me, GET /users/@me/guilds.

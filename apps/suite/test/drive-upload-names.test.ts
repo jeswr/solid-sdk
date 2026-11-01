@@ -64,6 +64,46 @@ describe("Drive upload names", () => {
   });
 
   it.each([
+    ".txt",
+    ".tar.gz",
+    ".📦.gz",
+  ])("rejects capping that would reinterpret the %s extension", (extension) => {
+    const name = `${".".repeat(180)}a${extension}`;
+    const capped = ".".repeat(180 - [...extension].length) + extension;
+    for (const operation of [
+      () => normalizeUploadName(name),
+      () => keepBothName(name, []),
+      () => keepBothName(name, [capped]),
+      () => encodeUploadPath([name], "file"),
+    ]) {
+      expect(operation).toThrowError(new UploadPlanningError("invalid-name"));
+    }
+  });
+
+  it.each([
+    ".txt",
+    ".tar.gz",
+    ".📦.gz",
+  ])("preserves %s when numbering a capped name with one non-dot stem character", (extension) => {
+    const dots = ".".repeat(179 - [...extension].length);
+    const name = `${dots}a${extension}`;
+    const source = `${dots}ab${extension}`;
+    expect(normalizeUploadName(source)).toBe(name);
+    expect(normalizeUploadName(name)).toBe(name);
+    expect(keepBothName(source, [])).toBe(name);
+    expect(keepBothName(source, [name])).toBe(`${dots.slice(0, -3)} (1)${extension}`);
+    const occupied = [name];
+    for (let n = 1; n <= 9; n += 1) {
+      occupied.push(`${dots.slice(0, -3)} (${n})${extension}`);
+    }
+    const numbered = keepBothName(source, occupied);
+    expect(numbered).toBe(`${dots.slice(0, -4)} (10)${extension}`);
+    expect([...numbered]).toHaveLength(180);
+    expect(normalizeUploadName(numbered)).toBe(numbered);
+    expect(encodeUploadPath([numbered], "file")).toBe(encodeURIComponent(numbered));
+  });
+
+  it.each([
     "",
     ".",
     "..",

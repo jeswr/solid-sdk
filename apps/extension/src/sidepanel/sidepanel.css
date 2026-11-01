@@ -1,0 +1,11 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+@import url('../shared/account-surface.css');
+
+[hidden] { display: none !important; }
+html, body { min-height: 100%; }
+body { width: 100%; }
+@media (min-width: 768px) {
+  .container { padding-right: var(--space-6); padding-left: var(--space-6); }
+}
+/* A side panel dragged wide keeps a reading width (design system: Settings surfaces 720px). */
+.container { max-width: var(--page-settings-w); margin-inline: auto; }

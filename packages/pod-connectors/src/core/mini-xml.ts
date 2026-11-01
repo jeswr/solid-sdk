@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * A minimal, dependency-free reader for the *flat, attribute-only* XML that
  * Apple Health's `export.xml` is built from. It is **not** a general XML
@@ -121,7 +122,7 @@ export function firstTagText(xml: string, tag: string): string | undefined {
 
 const ATTR_RE = /([A-Za-z_:][\w:.-]*)\s*=\s*"([^"]*)"|([A-Za-z_:][\w:.-]*)\s*=\s*'([^']*)'/g;
 
-function parseAttrs(chunk: string): XmlAttrs {
+export function parseAttrs(chunk: string): XmlAttrs {
   const out: Record<string, string> = {};
   let m: RegExpExecArray | null;
   // Bounded regex exec loop; assignments deliberately advance the parser.

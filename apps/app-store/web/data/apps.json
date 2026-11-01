@@ -4,7 +4,7 @@
     "name": "Pod Drive",
     "description": "File and folder browser over Solid LDP containers — a typed RDF model for containers and binary resources (size, mtime, content-type).",
     "category": "Documents",
-    "deployedUrl": "https://drive.solid-test.jeswr.org",
+    "deployedUrl": "https://jeswr.github.io/solid-sdk/pod-drive/",
     "status": "live",
     "repo": "https://github.com/jeswr/pod-drive",
     "launch": "autologin"
@@ -14,7 +14,7 @@
     "name": "Pod Docs",
     "description": "Typed RDF data layer for rich-text documents (with PROV history) stored in a Solid pod.",
     "category": "Documents",
-    "deployedUrl": "https://docs.solid-test.jeswr.org",
+    "deployedUrl": "https://jeswr.github.io/solid-sdk/pod-docs/",
     "status": "live",
     "repo": "https://github.com/jeswr/pod-docs",
     "launch": "autologin"
@@ -24,7 +24,7 @@
     "name": "Pod Photos",
     "description": "Solid photo and album app — a typed RDF data layer (schema:Photograph + EXIF→RDF + schema:ImageGallery) plus a React photo-gallery view.",
     "category": "Media",
-    "deployedUrl": "https://photos.solid-test.jeswr.org",
+    "deployedUrl": "https://jeswr.github.io/solid-sdk/pod-photos/",
     "status": "live",
     "repo": "https://github.com/jeswr/pod-photos",
     "launch": "autologin"
@@ -34,7 +34,7 @@
     "name": "Pod Music",
     "description": "Typed RDF data layer for tracks, albums, artists, playlists and listen-history (Music Ontology + schema.org) in a Solid pod.",
     "category": "Media",
-    "deployedUrl": "https://music.solid-test.jeswr.org",
+    "deployedUrl": "https://jeswr.github.io/solid-sdk/pod-music/",
     "status": "live",
     "repo": "https://github.com/jeswr/pod-music",
     "launch": "autologin"
@@ -44,7 +44,7 @@
     "name": "Pod Mail",
     "description": "Solid-native mail data layer — a typed RDF model for messages, threads and folders (schema:EmailMessage / SIOC).",
     "category": "Comms",
-    "deployedUrl": "https://mail.solid-test.jeswr.org",
+    "deployedUrl": "https://jeswr.github.io/solid-sdk/pod-mail/",
     "status": "live",
     "repo": "https://github.com/jeswr/pod-mail",
     "launch": "autologin"
@@ -54,7 +54,7 @@
     "name": "Pod Chat",
     "description": "Typed RDF data layer for ActivityStreams 2.0 chat rooms and messages, with actionable shared-task messages (wf:Task).",
     "category": "Comms",
-    "deployedUrl": "https://chat.solid-test.jeswr.org",
+    "deployedUrl": "https://jeswr.github.io/solid-sdk/pod-chat/",
     "status": "live",
     "repo": "https://github.com/jeswr/pod-chat",
     "launch": "autologin"
@@ -64,7 +64,7 @@
     "name": "Pod Health",
     "description": "Personal-health data layer over a Solid pod — health records, vitals, conditions, medications, immunizations and GPX workouts (FHIR-aligned + QUDT).",
     "category": "Health",
-    "deployedUrl": "https://health.solid-test.jeswr.org",
+    "deployedUrl": "https://jeswr.github.io/solid-sdk/pod-health/",
     "status": "live",
     "repo": "https://github.com/jeswr/pod-health",
     "launch": "autologin"
@@ -94,7 +94,7 @@
     "name": "Pod Money",
     "description": "Personal-finance data layer over a Solid pod — accounts, transactions, balances, holdings and categories on the fse finance (FIBO-slim) vocabulary.",
     "category": "Finance",
-    "deployedUrl": "https://money.solid-test.jeswr.org",
+    "deployedUrl": "https://jeswr.github.io/solid-sdk/pod-money/",
     "status": "live",
     "repo": "https://github.com/jeswr/pod-money",
     "launch": "autologin"
@@ -174,7 +174,7 @@
     "name": "Solid Access Manager",
     "description": "Manage who can access your Solid pod data — a grant dashboard by resource and by agent, an access-request inbox, and a consent-receipt history.",
     "category": "Productivity",
-    "deployedUrl": "https://solid-access-manager.vercel.app",
+    "deployedUrl": "https://jeswr.github.io/solid-sdk/access-manager/",
     "status": "live",
     "repo": "https://github.com/jeswr/solid-access-manager",
     "launch": "none"

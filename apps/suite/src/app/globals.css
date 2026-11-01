@@ -3,7 +3,10 @@
 @import "@jeswr/suite-ui/styles/tokens.css";
 @import "@jeswr/suite-ui/styles/theme.css";
 @import "@jeswr/suite-ui/styles/density.css";
+@import "@jeswr/suite-ui/styles/navigation.css";
+@import "@jeswr/suite-ui/styles/shell.css";
 @import "@jeswr/suite-ui/styles/components.css";
+@import "@jeswr/suite-ui/styles/collections.css";
 @source "../../../../packages/suite-ui/src";
 
 * {
@@ -77,6 +80,8 @@ ul {
 .fixture-page {
   padding: var(--space-4);
   display: grid;
+  /* One shrinkable track: wide tables scroll inside their own frame at 320px. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-8);
   min-width: 0;
 }
@@ -199,8 +204,8 @@ ul {
   display: block;
   margin-bottom: var(--space-2);
 }
-input:not([data-slot]),
-button:not([data-slot]) {
+/* Bare-element defaults carry zero specificity so any component class wins. */
+:where(input:not([data-slot]), button:not([data-slot])) {
   font: inherit;
   border-radius: var(--radius-md);
   background: var(--surface);
@@ -213,11 +218,10 @@ button:not([data-slot]) {
   min-height: var(--control-h-sm);
   margin-top: var(--space-2);
 }
-input:not([data-slot]),
-select:not([data-slot]) {
+:where(input:not([data-slot]), select:not([data-slot])) {
   border: 1px solid var(--input);
 }
-button:not([data-slot]) {
+:where(button:not([data-slot])) {
   border: 1px solid var(--border-strong);
 }
 .density-grid-card {
@@ -266,6 +270,72 @@ button:not([data-slot]) {
     animation: none;
     transition: none;
     scroll-behavior: auto;
+  }
+}
+
+/* DS-03 fixture framing; component anatomy lives in suite-ui. */
+.navigation-fixture {
+  min-height: 100dvh;
+}
+.navigation-fixture-rail {
+  display: flex;
+}
+.navigation-fixture-content {
+  flex: 1;
+  align-content: start;
+  padding-bottom: calc(80px + env(safe-area-inset-bottom));
+}
+.fixture-state {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+.fixture-state select {
+  font: inherit;
+  background: var(--surface);
+  color: var(--foreground);
+  border-radius: var(--radius-md);
+  min-height: 36px;
+  padding: var(--space-2);
+}
+.fixture-avatar {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-full);
+  background: var(--surface-3);
+  color: var(--foreground);
+  border: 2px solid var(--presence-drive);
+  font-size: var(--text-xs);
+}
+.fixture-avatar::before {
+  content: attr(data-initials);
+}
+.fixture-unread {
+  position: absolute;
+  top: 0;
+  right: 0;
+  min-width: 16px;
+  border-radius: var(--radius-full);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-size: var(--text-xs);
+}
+.fixture-feedback {
+  min-height: 24px;
+}
+.fixture-desktop-launcher {
+  display: none;
+}
+@media (min-width: 768px) {
+  .fixture-desktop-launcher {
+    display: block;
+  }
+}
+@media (pointer: coarse) {
+  .fixture-state select {
+    min-height: 44px;
   }
 }
 .fixture-density,
@@ -326,4 +396,74 @@ nav[aria-label="Component fixtures"] {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3) var(--space-6);
+}
+
+.suite-fixture-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-4);
+}
+.suite-fixture-controls label {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+}
+.suite-fixture-controls select {
+  font: inherit;
+  color: var(--foreground);
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  min-height: var(--control-h);
+  padding-inline: var(--cell-px);
+}
+.suite-collection-fixture p {
+  overflow-wrap: anywhere;
+}
+.suite-fixture-states {
+  display: grid;
+  gap: var(--space-8);
+  min-width: 0;
+}
+.ds07-stack {
+  display: grid;
+  gap: var(--space-4);
+}
+.ds07-stack h2 {
+  margin-bottom: 0;
+}
+.ds07-stack > .suite-button {
+  justify-self: start;
+}
+.ds07-page section {
+  min-width: 0;
+}
+.ds07-narrow {
+  width: 100%;
+  max-width: 320px;
+  min-width: 0;
+}
+.ds12-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+  align-items: start;
+  gap: var(--space-6);
+}
+.ds12-example {
+  min-width: 0;
+}
+.ds12-example h2 {
+  margin-bottom: var(--space-3);
+}
+.ds12-setting {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 44px;
+}
+.ds12-setting input {
+  width: 24px;
+  height: 24px;
+  accent-color: var(--primary);
 }

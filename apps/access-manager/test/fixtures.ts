@@ -25,7 +25,7 @@ export const PREFIXES = `
 @prefix pim: <http://www.w3.org/ns/pim/space#> .
 @prefix odrl: <http://www.w3.org/ns/odrl/2/> .
 @prefix dpv: <https://w3id.org/dpv#> .
-@prefix accm: <https://w3id.org/jeswr/accm#> .
+@prefix accm: <https://jeswr.org/ns/accm#> .
 @prefix vcard: <http://www.w3.org/2006/vcard/ns#> .
 `;
 

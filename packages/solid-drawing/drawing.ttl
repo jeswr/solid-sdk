@@ -1,8 +1,9 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
 # AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 #
 # Solid Drawing / Whiteboard vocabulary — the data model for an Excalidraw→Solid
 # fork.
-# Namespace: https://w3id.org/jeswr/drawing#   (prefix `draw:`)
+# Namespace: https://jeswr.org/ns/drawing#   (prefix `draw:`)
 #
 # A drawing scene is a SMALL RDF DESCRIPTOR that points at the byte-exact
 # `.excalidraw` JSON resource via `draw:sceneDocument`. The canvas is stored as an
@@ -16,11 +17,11 @@
 # rdfs:subClassOf schema:CreativeWork AND rooted into the suite Core ontology as a
 # gufo:SubKind of core:InformationResource — the convention every @jeswr sector
 # vocab follows (see @jeswr/solid-federation-vocab sectors/media). The
-# w3id.org/jeswr/drawing# alignments in solid-federation-vocab reference these
+# jeswr.org/ns/drawing# alignments in solid-federation-vocab reference these
 # same IRIs.
 
-@prefix draw:    <https://w3id.org/jeswr/drawing#> .
-@prefix core:    <https://w3id.org/jeswr/core#> .
+@prefix draw:    <https://jeswr.org/ns/drawing#> .
+@prefix core:    <https://jeswr.org/ns/core#> .
 @prefix schema:  <http://schema.org/> .
 @prefix dct:     <http://purl.org/dc/terms/> .
 @prefix prov:    <http://www.w3.org/ns/prov#> .
@@ -31,7 +32,7 @@
 @prefix vann:    <http://purl.org/vocab/vann/> .
 @prefix gufo:    <http://purl.org/nemo/gufo#> .
 
-<https://w3id.org/jeswr/drawing>
+<https://jeswr.org/ns/drawing>
     a owl:Ontology ;
     dct:title "Solid Drawing / Whiteboard Ontology"@en ;
     rdfs:label "Solid Drawing / Whiteboard Ontology"@en ;
@@ -47,11 +48,11 @@
     dct:creator "Claude Opus 4.8 (@jeswr PSS agent)" ;
     dct:issued "2026-06-21"^^xsd:date ;
     dct:modified "2026-06-21"^^xsd:date ;
-    vann:preferredNamespaceUri "https://w3id.org/jeswr/drawing#" ;
+    vann:preferredNamespaceUri "https://jeswr.org/ns/drawing#" ;
     vann:preferredNamespacePrefix "draw" ;
     owl:versionInfo "0.1.0" ;
-    owl:versionIRI <https://w3id.org/jeswr/drawing/0.1.0> ;
-    rdfs:seeAlso <https://w3id.org/jeswr/core> ;
+    owl:versionIRI <https://jeswr.org/ns/drawing/0.1.0> ;
+    rdfs:seeAlso <https://jeswr.org/ns/core> ;
     rdfs:comment "Experimental — AI-agent-generated; under active development, not production-hardened."@en .
 
 # -----------------------------------------------------------------------------
@@ -74,7 +75,7 @@ vann:preferredNamespaceUri    a owl:AnnotationProperty .
 # -----------------------------------------------------------------------------
 core:InformationResource a owl:Class ;
     rdfs:label "Information Resource"@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/core> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/core> .
 
 schema:CreativeWork a owl:Class ;
     rdfs:label "Creative Work"@en ;
@@ -93,7 +94,7 @@ draw:Scene a owl:Class, gufo:SubKind ;
         Excalidraw canvas. The canvas itself is the byte-exact .excalidraw JSON
         resource linked by draw:sceneDocument; this class carries only the scene's
         metadata, never the shapes."""@en ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/drawing> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/drawing> .
 
 # =============================================================================
 # MINTED PROPERTIES  (the four predicates not already covered by dct/schema/prov)
@@ -106,26 +107,26 @@ draw:sceneDocument a owl:ObjectProperty ;
         document/resource IRI), not shredded into triples."""@en ;
     rdfs:domain draw:Scene ;
     rdfs:range rdfs:Resource ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/drawing> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/drawing> .
 
 draw:schemaVersion a owl:DatatypeProperty ;
     rdfs:label "schema version"@en ;
     rdfs:comment "The Excalidraw scene-format version the canvas was written with (a literal)."@en ;
     rdfs:domain draw:Scene ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/drawing> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/drawing> .
 
 draw:viewBackgroundColor a owl:DatatypeProperty ;
     rdfs:label "view background colour"@en ;
     rdfs:comment "The canvas background colour, as the Excalidraw scene records it (a literal, e.g. \"#ffffff\")."@en ;
     rdfs:domain draw:Scene ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/drawing> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/drawing> .
 
 draw:thumbnail a owl:ObjectProperty ;
     rdfs:label "thumbnail"@en ;
     rdfs:comment "Links a draw:Scene to a thumbnail / preview image resource."@en ;
     rdfs:domain draw:Scene ;
     rdfs:range rdfs:Resource ;
-    rdfs:isDefinedBy <https://w3id.org/jeswr/drawing> .
+    rdfs:isDefinedBy <https://jeswr.org/ns/drawing> .
 
 # =============================================================================
 # RE-USED TERMS  (restated for the reader with their role here; rdfs:isDefinedBy

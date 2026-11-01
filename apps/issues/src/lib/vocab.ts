@@ -1,3 +1,6 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+import { NS } from "@jeswr/suite-vocab";
+
 /**
  * Vocabulary IRIs used by the data layer. Reused, dereferenceable terms only —
  * see `decisions/0001-issue-tracker-vocabulary.md` and `docs/data-modelling.md`.
@@ -68,7 +71,7 @@ export const AS = "https://www.w3.org/ns/activitystreams#";
 
 /**
  * `@jeswr/solid-task-model` task vocabulary — canonical home
- * `https://w3id.org/jeswr/task#` (prefix `tm:`), just published to
+ * `https://jeswr.org/ns/task#` (prefix `tm:`; w3id.org/jeswr/task# is a legacy alias), published to
  * `solid-federation-vocab`. Consumed here BY IRI (local TS constants, the same
  * idiom this module already uses for `wf:`/`#status-*` terms) so solid-issues
  * does not block on adding the terms to `@jeswr/solid-task-model`. Two extensions:
@@ -83,7 +86,7 @@ export const AS = "https://www.w3.org/ns/activitystreams#";
  *    value, and a `tm:actionValue` literal. Trigger + action coded values are the
  *    `tm:On…`/`tm:Set…`/… individuals below.
  */
-export const TM = "https://w3id.org/jeswr/task#";
+export const TM = NS.TASK;
 export const tm = (local: string) => `${TM}${local}`;
 /**
  * W3C ODRL 2.2 — the real vocabulary at `http://www.w3.org/ns/odrl/2/`. A

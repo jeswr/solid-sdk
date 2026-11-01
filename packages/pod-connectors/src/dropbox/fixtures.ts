@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Recorded Dropbox API v2 shapes (api.dropboxapi.com/2) — trimmed to the
  * fields the adapter reads. Sources: POST /files/list_folder and
@@ -7,10 +8,11 @@
 import type { FixtureRoute } from "../core/types.js";
 
 export interface DropboxEntry {
-  ".tag": "file" | "folder";
-  id: string;
-  name: string;
-  path_display: string;
+  ".tag": "file" | "folder" | "deleted";
+  id?: string;
+  name?: string;
+  path_display?: string;
+  path_lower?: string;
   size?: number; // files only, bytes
   server_modified?: string; // files only, ISO
 }

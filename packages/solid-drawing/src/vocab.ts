@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * Vocabulary IRIs + typed `NamedNode` term constants for the Solid drawing /
@@ -12,7 +13,7 @@
  * parsing the canvas.
  *
  * **Namespace discipline (the suite house rule).** Exactly five terms are MINTED
- * here, all under the dereferenceable `https://w3id.org/jeswr/drawing#` namespace
+ * here, all under the dereferenceable `https://jeswr.org/ns/drawing#` namespace
  * (prefix `draw:`): `Scene`, `sceneDocument`, `schemaVersion`,
  * `viewBackgroundColor`, `thumbnail`. Everything else is RE-USED from established,
  * dereferenceable standard vocabularies — Dublin Core Terms (`dct:created`,
@@ -24,7 +25,7 @@
  * schema:CreativeWork` AND, in the ontology TTL ({@link ../drawing.ttl}), rooted
  * into the suite Core ontology as a `gufo:SubKind` of `core:InformationResource`
  * — matching the convention every other `@jeswr` sector vocab follows (see
- * `@jeswr/solid-federation-vocab` `sectors/media`). The `w3id.org/jeswr/drawing#`
+ * `@jeswr/solid-federation-vocab` `sectors/media`). The `jeswr.org/ns/drawing#`
  * alignments in `solid-federation-vocab` reference these same IRIs.
  *
  * **House rule: nothing here builds RDF.** These are IRI string + `NamedNode`
@@ -42,8 +43,10 @@ const { namedNode } = DataFactory;
 //  package mints under; the rest are re-used standard vocabularies.
 // ---------------------------------------------------------------------------
 
-/** The drawing vocabulary namespace — the ONE namespace minted here (prefix `draw:`). */
-export const DRAW = "https://w3id.org/jeswr/drawing#";
+/** Canonical writing namespace; source: `@jeswr/suite-vocab` NS.DRAWING_APP. */
+export const DRAW = "https://jeswr.org/ns/drawing#";
+/** Read-only legacy drawing namespace. */
+export const LEGACY_DRAW_NS = "https://w3id.org/jeswr/drawing#";
 /** Dublin Core Terms — `dct:created`, `dct:modified`, `dct:title`. Re-used, not minted. */
 export const DCT = "http://purl.org/dc/terms/";
 /** schema.org (canonical http scheme) — `schema:CreativeWork`, `schema:about`. Re-used. */

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * config.ts env-override branches. The constants are module-level (read once at
@@ -54,5 +55,7 @@ describe("config env overrides", () => {
     expect(m.MAX_BYTES_RESPONSE).toBe(16 * 1024);
     expect(m.AS).toBe("https://www.w3.org/ns/activitystreams#");
     expect(m.LDP_INBOX).toBe("http://www.w3.org/ns/ldp#inbox");
+    expect(m.TASK_NS).toBe("https://jeswr.org/ns/task#");
+    expect(m.TASK_VOCAB).toBe("https://w3id.org/jeswr/task");
   });
 });

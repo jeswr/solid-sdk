@@ -2,8 +2,10 @@
   "@context": [
     "https://www.w3.org/ns/solid/oidc-context.jsonld",
     {
-      "fedapp": "https://w3id.org/jeswr/fed#",
-      "social": "https://w3id.org/jeswr/sectors/social#",
+      "fedapp": "https://jeswr.org/ns/fed#",
+      "acl": "http://www.w3.org/ns/auth/acl#",
+      "fedapp:access": { "@type": "@id" },
+      "social": "https://jeswr.org/ns/sectors/social#",
       "fedapp:sector": { "@type": "@id" },
       "fedapp:consumes": { "@type": "@id" },
       "fedapp:produces": { "@type": "@id" }
@@ -22,5 +24,5 @@
   "fedapp:sector": "social:sector",
   "fedapp:consumes": ["social:Note", "social:Feed"],
   "fedapp:produces": ["social:Note", "social:Feed"],
-  "fedapp:access": ["Read", "Append", "Write"]
+  "fedapp:access": ["acl:Read", "acl:Append", "acl:Write"]
 }

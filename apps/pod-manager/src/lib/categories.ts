@@ -27,6 +27,7 @@ export type CategoryIconName =
   | "car-front"
   | "file-text"
   | "message-circle"
+  | "mail"
   | "boxes";
 
 /** Which tier a category lives in. */
@@ -208,6 +209,21 @@ export const CATEGORIES: readonly DataCategory[] = [
       // First-party Chat (Wave 6) stores messages as sioc:Note / AS2.0 Note.
       `${SIOC}Note`,
       `${AS}Note`,
+    ],
+  },
+  {
+    id: "mail",
+    label: "Email",
+    tier: "other",
+    icon: "mail",
+    assurance: "Only apps you approve can read your email.",
+    description: "Messages and conversations imported from your mailboxes.",
+    // Connected sources and file imports: Gmail, mbox and Takeout mail.
+    classes: [
+      `${SCHEMA}EmailMessage`,
+      `${SCHEMA_HTTP}EmailMessage`,
+      `${SCHEMA}Conversation`,
+      `${SCHEMA_HTTP}Conversation`,
     ],
   },
 ] as const;

@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 //
 // <jeswr-bookmark-form> — an EDITABLE `book:Bookmark` form, bound to
@@ -16,23 +17,34 @@
 // Client SHACL validation is advisory (UX, not authz), so the shape's `^https?://`
 // pattern is NOT a sufficient guard — this code-level filter is the real one.
 //
-// @solid-class https://w3id.org/jeswr/bookmark#Bookmark
+// @solid-class https://jeswr.org/ns/bookmark#Bookmark
 // @solid-mode edit
 // @solid-cardinality one
 
 import { Bookmark, bookmarkSubject } from "@jeswr/solid-bookmark";
 import { DataFactory, type Store } from "n3";
+import { BOOKMARK_CLASS, LEGACY_BOOKMARK_CLASS, RDF_TYPE } from "../vocab.js";
 import { AbstractFormElement, findEditedSubject } from "./form-base.js";
 import { BOOKMARK_SHAPE_TTL } from "./shapes.js";
 import { safeHref } from "./shared.js";
 
-/** `book:Bookmark` — the class IRI the form binds + the merge subject scan keys on. */
-const BOOKMARK_TYPE = "https://w3id.org/jeswr/bookmark#Bookmark";
+/** Normalize only bookmark vocabulary in the local display graph via typed accessors. */
+function prepareBookmarkValues(graph: Store): void {
+  for (const subject of graph.getSubjects(RDF_TYPE, null, null)) {
+    const bookmark = new Bookmark(subject, graph, DataFactory);
+    if (!bookmark.isBookmark) continue;
+    bookmark.mark().types.delete(LEGACY_BOOKMARK_CLASS);
+    // Getters prefer canonical data, including false/empty values, over legacy aliases.
+    const { notes, archived } = bookmark;
+    bookmark.notes = notes;
+    bookmark.archived = archived;
+  }
+}
 
 /**
  * An editable `book:Bookmark` form element.
  *
- * @solid-class https://w3id.org/jeswr/bookmark#Bookmark
+ * @solid-class https://jeswr.org/ns/bookmark#Bookmark
  * @solid-mode edit
  * @solid-cardinality one
  *
@@ -44,6 +56,10 @@ export class JeswrBookmarkForm extends AbstractFormElement {
     return BOOKMARK_SHAPE_TTL;
   }
 
+  protected override valuesTransform(): (graph: Store) => void {
+    return prepareBookmarkValues;
+  }
+
   protected override applyFormDeltaToExisting(
     formGraph: Store,
     existing: Store,
@@ -52,12 +68,13 @@ export class JeswrBookmarkForm extends AbstractFormElement {
     const writeSubject = bookmarkSubject(resourceUrl);
     const readSubject = findEditedSubject(
       formGraph,
-      BOOKMARK_TYPE,
+      [BOOKMARK_CLASS, LEGACY_BOOKMARK_CLASS],
       writeSubject,
       DataFactory.namedNode,
     );
     const edited = new Bookmark(readSubject, formGraph, DataFactory);
     const target = new Bookmark(writeSubject, existing, DataFactory).mark();
+    target.types.delete(LEGACY_BOOKMARK_CLASS);
 
     // The `url` is a security surface (the bookmark's clickable href + a stored-XSS
     // vector) and the model's setter does NOT filter, so we filter HERE: a non-http(s)

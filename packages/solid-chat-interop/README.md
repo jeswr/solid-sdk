@@ -112,3 +112,10 @@ permission, transport and message-read errors still propagate.
 ## License
 
 [MIT](./LICENSE) © Jesse Wright
+
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+The `pc:` constants and serializer prefix use `NS.POD_CHAT` from `@jeswr/suite-vocab`
+(`https://jeswr.org/ns/pod-chat#`). Dataset serialization accepts legacy pc: predicates
+and class objects and emits their canonical spellings, preserving resource identities
+and literals. Message parsing is unchanged: messages use ActivityStreams, and a
+containing dataset may carry either canonical or legacy room descriptors.

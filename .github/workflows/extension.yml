@@ -1,0 +1,59 @@
+# AUTHORED-BY Claude Opus 5.5
+# Browser extension end-to-end suite (apps/extension), carried over from the standalone
+# jeswr/solid-suite-extension CI. Lint, typecheck, unit tests and build run in gate.yml.
+# The e2e suite starts a LOCAL Community Solid Server and two static test sites.
+name: extension
+
+on:
+  pull_request:
+    paths:
+      - "apps/extension/**"
+      - "packages/solid-elements/**"
+      - ".github/workflows/extension.yml"
+      - "pnpm-lock.yaml"
+  push:
+    branches: [main]
+    paths:
+      - "apps/extension/**"
+      - "packages/solid-elements/**"
+      - ".github/workflows/extension.yml"
+      - "pnpm-lock.yaml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extension-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run build --filter=@jeswr/app-extension^...
+      - name: Install Playwright Chromium
+        working-directory: apps/extension
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run e2e
+        run: pnpm --filter @jeswr/app-extension run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: solid-browser-extension
+          path: apps/extension/dist/
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: extension-e2e-results
+          path: |
+            apps/extension/test-results/
+            apps/extension/playwright-report/

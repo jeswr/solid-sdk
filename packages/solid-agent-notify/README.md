@@ -1,3 +1,4 @@
+<!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 # solid-agent-notify
 
 > ⚠️ **Experimental — AI-agent-generated.** This package was created by an AI coding agent (Claude Opus 4.8, @jeswr's PSS agent) and is under active development. It is not yet production-hardened — review before relying on it.
@@ -77,10 +78,15 @@ The headline cross-pod use case is a **"task assigned" / "task state changed"**
 notification: an `as:Announce` whose `as:object` IS a shared `wf:Task` (the SolidOS
 workflow-ontology task/issue — the same shape [`solid-issues`](https://github.com/jeswr/solid-issues)
 and the Pod Manager read/write). The shared terms are pinned by the federation
-vocab at [`https://w3id.org/jeswr/task`](https://w3id.org/jeswr/task) — a canonical
+vocab document at [`https://w3id.org/jeswr/task`](https://w3id.org/jeswr/task) — a canonical
 **re-use** of `wf:` + `dct:` + `as:`, not new terms: a task is a `wf:Task`, its
 state is `rdf:type wf:Open|wf:Closed`, metadata is `dct:title`/`dct:description`/
 `dct:created`/`dct:creator`, assignment is `wf:assignee`.
+`TASK_NS` names the canonical task namespace, `https://jeswr.org/ns/task#`.
+`TASK_VOCAB` retains the published vocabulary document URL above; changing a
+document reference is outside this namespace migration. Task RDF uses only the standard
+`wf:`, `dct:` and `as:` terms, so existing notifications remain readable without
+rewriting their data or vocabulary/document references.
 
 ```ts
 import {

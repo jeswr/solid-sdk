@@ -1,0 +1,37 @@
+# AUTHORED-BY Codex GPT-6.1-Sol
+<https://pod.test/alice/integrations/github/work/profile.ttl> <http://www.w3.org/ns/prov#wasDerivedFrom> <https://api.github.com/user>, <https://github.com/alice-dev>.
+<https://pod.test/alice/integrations/github/work/profile.ttl#account> a <http://xmlns.com/foaf/0.1/OnlineAccount>;
+    <http://www.w3.org/ns/prov#wasDerivedFrom> <https://github.com/alice-dev>;
+    <http://xmlns.com/foaf/0.1/accountName> "alice-dev";
+    <http://xmlns.com/foaf/0.1/accountServiceHomepage> <https://github.com/>;
+    <https://schema.org/dateCreated> "2014-03-18T09:12:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/description> "Building things on the open web.";
+    <https://schema.org/name> "Alice Verify";
+    <https://schema.org/url> <https://github.com/alice-dev>.
+<https://pod.test/alice/integrations/github/work/repositories.ttl> <http://www.w3.org/ns/prov#wasDerivedFrom> <https://api.github.com/user/repos>, <https://github.com/alice-dev/dotfiles>, <https://github.com/alice-dev/recipe-graph>, <https://github.com/alice-dev/solid-pod-manager>.
+<https://pod.test/alice/integrations/github/work/repositories.ttl#repo-712309> a <https://schema.org/SoftwareSourceCode>;
+    <http://www.w3.org/ns/prov#wasDerivedFrom> <https://github.com/alice-dev/dotfiles>;
+    <https://schema.org/codeRepository> <https://github.com/alice-dev/dotfiles>;
+    <https://schema.org/dateModified> "2025-11-30T22:13:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/identifier> "712309";
+    <https://schema.org/name> "alice-dev/dotfiles";
+    <https://schema.org/programmingLanguage> "Shell";
+    <https://schema.org/url> <https://github.com/alice-dev/dotfiles>.
+<https://pod.test/alice/integrations/github/work/repositories.ttl#repo-845671> a <https://schema.org/SoftwareSourceCode>;
+    <http://www.w3.org/ns/prov#wasDerivedFrom> <https://github.com/alice-dev/recipe-graph>;
+    <https://schema.org/codeRepository> <https://github.com/alice-dev/recipe-graph>;
+    <https://schema.org/dateModified> "2026-04-12T08:05:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/description> "Recipes as linked data.";
+    <https://schema.org/identifier> "845671";
+    <https://schema.org/name> "alice-dev/recipe-graph";
+    <https://schema.org/programmingLanguage> "Python";
+    <https://schema.org/url> <https://github.com/alice-dev/recipe-graph>.
+<https://pod.test/alice/integrations/github/work/repositories.ttl#repo-901234> a <https://schema.org/SoftwareSourceCode>;
+    <http://www.w3.org/ns/prov#wasDerivedFrom> <https://github.com/alice-dev/solid-pod-manager>;
+    <https://schema.org/codeRepository> <https://github.com/alice-dev/solid-pod-manager>;
+    <https://schema.org/dateModified> "2026-06-01T17:40:00.000Z"^^<http://www.w3.org/2001/XMLSchema#dateTime>;
+    <https://schema.org/description> "A consumer dashboard for your Solid pod.";
+    <https://schema.org/identifier> "901234";
+    <https://schema.org/name> "alice-dev/solid-pod-manager";
+    <https://schema.org/programmingLanguage> "TypeScript";
+    <https://schema.org/url> <https://github.com/alice-dev/solid-pod-manager>.

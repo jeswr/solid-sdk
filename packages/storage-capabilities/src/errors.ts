@@ -1,4 +1,4 @@
-// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY GPT-6.1-Sol
 
 /** A storage description discovery or validation failure (ADR-002). */
 export class CapabilitiesError extends Error {

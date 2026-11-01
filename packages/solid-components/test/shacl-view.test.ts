@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // §9 element tests for <jeswr-shacl-view>:
 //   - it renders the inner <shacl-form> with INLINE data-shapes/data-values,
@@ -7,7 +8,7 @@
 //   - no un-guarded fetch leaves the wrapper for a remote source.
 
 import "../src/index.js"; // registers <jeswr-shacl-view>
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { JeswrShaclView } from "../src/index.js";
 
 const SHAPES = `
@@ -42,9 +43,21 @@ async function waitForForm(el: JeswrShaclView): Promise<HTMLElement> {
   throw new Error(`inner <shacl-form> never rendered (status visible: ${el.textContent})`);
 }
 
-afterEach(() => {
+// shacl-form's 200 ms initialization debounce outlives Lit's updateComplete.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+});
+
+afterEach(async () => {
   document.body.innerHTML = "";
-  vi.restoreAllMocks();
+  try {
+    // Finish detached forms' initialization while jsdom still provides document.
+    await vi.runAllTimersAsync();
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  }
 });
 
 describe("<jeswr-shacl-view> §9 SSRF discipline", () => {
@@ -288,7 +301,7 @@ describe("<jeswr-shacl-view> §9 SSRF discipline", () => {
       for (let i = 0; i < 60; i++) {
         await el.updateComplete;
         await Promise.resolve();
-        await new Promise((r) => setTimeout(r, 0));
+        await vi.runAllTimersAsync();
       }
       // ZERO unguarded fetches — to the metadata endpoint, the internal IP, or
       // ANYTHING. (Inline sources fetch nothing at all.)
@@ -314,7 +327,7 @@ describe("<jeswr-shacl-view> §9 SSRF discipline", () => {
       const form = await waitForForm(el);
       for (let i = 0; i < 60; i++) {
         await Promise.resolve();
-        await new Promise((r) => setTimeout(r, 0));
+        await vi.runAllTimersAsync();
       }
       // No unguarded fetch fired — fix (1) is the closer: a NON-empty shapes graph
       // means the upstream auto-import branch's `countQuads(loaded-shapes) === 0`
@@ -349,7 +362,7 @@ describe("<jeswr-shacl-view> §9 SSRF discipline", () => {
       for (let i = 0; i < 60; i++) {
         await el.updateComplete;
         await Promise.resolve();
-        await new Promise((r) => setTimeout(r, 0));
+        await vi.runAllTimersAsync();
       }
       expect(globalSpy).not.toHaveBeenCalled();
       expect(el.querySelector("shacl-form")).toBeNull(); // fail-closed on empty shapes.
@@ -438,7 +451,7 @@ ex:alice dct:conformsTo <urn:profile:person> ; a ex:Person ; ex:name "Alice" .
     let bound = false;
     for (let i = 0; i < 200; i++) {
       await Promise.resolve();
-      await new Promise((r) => setTimeout(r, 5));
+      await vi.advanceTimersByTimeAsync(5);
       const root = (form.shadowRoot as unknown as ParentNode | null) ?? form;
       const node = root.querySelector("shacl-node") as HTMLElement | null;
       const renderedAliceValue = Array.from(root.querySelectorAll("[data-value]")).some((e) =>

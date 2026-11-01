@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Fable 5
 /**
  * Shared MANUAL-REDIRECT machinery, extracted from `./guard.ts` so both guarded fetches —
@@ -11,6 +12,8 @@
  * redirects switch to GET and drop the body + Content-* headers; a cross-origin redirect
  * additionally strips credential headers and the body).
  */
+
+import { hasBodyOverride, snapshotFetchInput } from "./request-snapshot.js";
 
 /** Whether a status code is a redirect we re-validate + follow manually. */
 export function isRedirect(status: number): boolean {
@@ -141,25 +144,33 @@ export function rewriteInitForRedirect(
   return next;
 }
 
-/** Normalise the `(input, init)` a `fetch`-shaped call receives into a `{ url, init }` pair. */
+/** Normalise a captured fetch call into the redirect loop's URL/init interface. */
 export function normalizeRequest(
   input: RequestInfo | URL,
   init: RequestInit | undefined,
 ): { url: string; init: RequestInit | undefined } {
-  if (typeof input === "string") {
-    return { url: input, init };
-  }
-  if (input instanceof URL) {
-    return { url: input.toString(), init };
-  }
-  const req = input as Request;
+  // Read every field from an owned snapshot, never from the caller's object, then hand the
+  // transport main's portable shape: a checked URL string plus a plain init in which the
+  // caller's explicit init (e.g. a replayable body) still wins.
+  // Applying init during capture would serialize a FormData override once here and again
+  // at the transport, pairing the first boundary's headers with the second boundary's body.
+  const snapshot = snapshotFetchInput(input, init, { metadataOnly: true });
+  if (typeof snapshot.input === "string") return { url: snapshot.url, init: snapshot.init };
+  const req = snapshot.input;
   const fromRequest: RequestInit = {
     method: req.method,
     headers: req.headers,
     credentials: req.credentials,
     redirect: req.redirect,
     ...(req.signal ? { signal: req.signal } : {}),
-    ...(req.body ? { body: req.body, duplex: "half" } : {}),
+    // Main kept duplex:"half" whenever the Request had a body, even under a body override.
+    ...(hasBodyOverride(snapshot.init)
+      ? snapshot.hadBody
+        ? { duplex: "half" }
+        : {}
+      : req.body
+        ? { body: req.body, duplex: "half" }
+        : {}),
   } as RequestInit;
-  return { url: req.url, init: { ...fromRequest, ...(init ?? {}) } };
+  return { url: snapshot.url, init: { ...fromRequest, ...snapshot.init } };
 }

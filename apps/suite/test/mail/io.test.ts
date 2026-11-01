@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // biome-ignore-all lint/style/noNonNullAssertion: Assertions establish fixture entries before use.
 import { DataFactory, Store } from "n3";
 import { describe, expect, it, vi } from "vitest";
@@ -525,6 +526,47 @@ describe("injected pod I/O", () => {
           1,
         );
       else {
+        expect((await s.store.load(documentOf(provisional))).mailbox.thread(provisional).size).toBe(
+          0,
+        );
+        expect(await loadThread(s.store, canonical)).toHaveLength(imported.length);
+      }
+    }
+    const members = (await s.store.load(documentOf(canonical))).mailbox.thread(canonical);
+    expect([...members.messageIris].sort()).toEqual(imported.map((item) => item.message).sort());
+    for (const item of imported) {
+      const loaded = await s.store.load(documentOf(item.message));
+      expect(loaded.mailbox.message(item.message).partOfThread).toBe(canonical);
+      expect(loaded.mailbox.message(item.message).body).toContain("Body");
+    }
+    expect((await loadThreads(s.store, inbox)).total).toBe(1);
+  });
+  it("reconciles persisted provisional replies into a known parent thread without References", async () => {
+    async function* source() {
+      for (const headers of [
+        "Message-ID: <root>",
+        "Message-ID: <child>\nIn-Reply-To: <parent>",
+        "Message-ID: <early>\nIn-Reply-To: <child>",
+        "Message-ID: <parent>\nIn-Reply-To: <root>",
+        "Message-ID: <root-reply>\nIn-Reply-To: <root>",
+        "Message-ID: <child-reply>\nIn-Reply-To: <child>",
+        "Message-ID: <early-reply>\nIn-Reply-To: <early>",
+        "Message-ID: <parent-reply>\nIn-Reply-To: <parent>",
+      ])
+        yield new TextEncoder().encode(`From sender\n${headers}\nSubject: Conversation\n\nBody\n`);
+    }
+    const s = server();
+    const imported = [];
+    const provisional = `${mailDocument(root, "threads", "<parent>")}#it`;
+    const canonical = `${mailDocument(root, "threads", "<root>")}#it`;
+    for await (const item of importMbox(source(), storage, "personal", () => "fallback")) {
+      imported.push(item);
+      await persistImportedMail(s.store, item);
+      if (imported.length === 3)
+        expect((await s.store.load(documentOf(provisional))).mailbox.thread(provisional).size).toBe(
+          2,
+        );
+      if (imported.length >= 4) {
         expect((await s.store.load(documentOf(provisional))).mailbox.thread(provisional).size).toBe(
           0,
         );

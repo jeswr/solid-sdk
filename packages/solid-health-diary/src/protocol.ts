@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 /**
  * `diet:EliminationProtocol` — the elimination/reintroduction state machine as a
@@ -15,19 +16,11 @@
  */
 
 import type { DatasetCore } from "@rdfjs/types";
-import {
-  LiteralAs,
-  LiteralFrom,
-  NamedNodeAs,
-  NamedNodeFrom,
-  OptionalAs,
-  OptionalFrom,
-  SetFrom,
-  TermWrapper,
-} from "@rdfjs/wrapper";
+import { LiteralAs, LiteralFrom, NamedNodeAs, NamedNodeFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
 import { phaseCodec } from "./concepts.js";
 import { httpIriOrUndefined } from "./iri.js";
+import { AliasOptionalAs, AliasOptionalFrom, AliasSetFrom, hasType } from "./legacy.js";
 import { assertSubjectSingletons } from "./rdfGuards.js";
 import { parseBody, storeToTurtle } from "./serialize.js";
 import { setIfDefined, tryRead, validDateOrUndefined } from "./util.js";
@@ -86,24 +79,29 @@ export class EliminationProtocol extends TermWrapper {
     return this.value;
   }
   get types(): Set<string> {
-    return SetFrom.subjectPredicate(this, rdf("type"), NamedNodeAs.string, NamedNodeFrom.string);
+    return AliasSetFrom.subjectPredicate(
+      this,
+      rdf("type"),
+      NamedNodeAs.string,
+      NamedNodeFrom.string,
+    );
   }
   mark(): this {
     this.types.add(DIET_ELIMINATION_PROTOCOL);
     return this;
   }
   get isProtocol(): boolean {
-    return this.types.has(DIET_ELIMINATION_PROTOCOL);
+    return hasType(this, DIET_ELIMINATION_PROTOCOL);
   }
 
   /** `diet:targetTrigger` → `diet:{slug}`; read back as the slug. */
   get targetTrigger(): TriggerSlug | undefined {
     return triggerSlugFromIri(
-      OptionalFrom.subjectPredicate(this, diet("targetTrigger"), NamedNodeAs.string) ?? "",
+      AliasOptionalFrom.subjectPredicate(this, diet("targetTrigger"), NamedNodeAs.string) ?? "",
     );
   }
   set targetTrigger(value: TriggerSlug | undefined) {
-    OptionalAs.object(
+    AliasOptionalAs.object(
       this,
       diet("targetTrigger"),
       value ? triggerIri(value) : undefined,
@@ -114,11 +112,11 @@ export class EliminationProtocol extends TermWrapper {
   /** `diet:phase` → `diet:{concept}`; read back as the friendly token. */
   get phase(): ProtocolPhase | undefined {
     return phaseCodec.fromIri(
-      OptionalFrom.subjectPredicate(this, diet("phase"), NamedNodeAs.string),
+      AliasOptionalFrom.subjectPredicate(this, diet("phase"), NamedNodeAs.string),
     );
   }
   set phase(value: ProtocolPhase | undefined) {
-    OptionalAs.object(
+    AliasOptionalAs.object(
       this,
       diet("phase"),
       value ? phaseCodec.toIri(value) : undefined,
@@ -127,39 +125,39 @@ export class EliminationProtocol extends TermWrapper {
   }
 
   get phaseStarted(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("phaseStarted"), LiteralAs.date);
+    return AliasOptionalFrom.subjectPredicate(this, diet("phaseStarted"), LiteralAs.date);
   }
   set phaseStarted(value: Date | undefined) {
-    OptionalAs.object(this, diet("phaseStarted"), value, LiteralFrom.dateTime);
+    AliasOptionalAs.object(this, diet("phaseStarted"), value, LiteralFrom.dateTime);
   }
 
   get phasePlannedEnd(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("phasePlannedEnd"), LiteralAs.date);
+    return AliasOptionalFrom.subjectPredicate(this, diet("phasePlannedEnd"), LiteralAs.date);
   }
   set phasePlannedEnd(value: Date | undefined) {
-    OptionalAs.object(this, diet("phasePlannedEnd"), value, LiteralFrom.dateTime);
+    AliasOptionalAs.object(this, diet("phasePlannedEnd"), value, LiteralFrom.dateTime);
   }
 
   get challengeStep(): number | undefined {
-    return OptionalFrom.subjectPredicate(this, diet("challengeStep"), LiteralAs.number);
+    return AliasOptionalFrom.subjectPredicate(this, diet("challengeStep"), LiteralAs.number);
   }
   set challengeStep(value: number | undefined) {
-    OptionalAs.object(this, diet("challengeStep"), value, LiteralFrom.integer);
+    AliasOptionalAs.object(this, diet("challengeStep"), value, LiteralFrom.integer);
   }
 
   /** `health:patient` — the pod-owner Patient/Person WebID. */
   get patient(): string | undefined {
-    return OptionalFrom.subjectPredicate(this, HEALTH_PATIENT_PROP, NamedNodeAs.string);
+    return AliasOptionalFrom.subjectPredicate(this, HEALTH_PATIENT_PROP, NamedNodeAs.string);
   }
   set patient(value: string | undefined) {
-    OptionalAs.object(this, HEALTH_PATIENT_PROP, value, NamedNodeFrom.string);
+    AliasOptionalAs.object(this, HEALTH_PATIENT_PROP, value, NamedNodeFrom.string);
   }
 
   get created(): Date | undefined {
-    return OptionalFrom.subjectPredicate(this, dct("created"), LiteralAs.date);
+    return AliasOptionalFrom.subjectPredicate(this, dct("created"), LiteralAs.date);
   }
   set created(value: Date | undefined) {
-    OptionalAs.object(this, dct("created"), value, LiteralFrom.dateTime);
+    AliasOptionalAs.object(this, dct("created"), value, LiteralFrom.dateTime);
   }
 }
 

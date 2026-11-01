@@ -45,6 +45,7 @@ export const pinterestAdapter: IntegrationAdapter = {
     scopes: SCOPES,
     tokenExchange: "proxy",
     tokenProxyUrl: undefined,
+    tokenRequest: "basic-form",
   },
   fixtures: () => PINTEREST_FIXTURES,
 
