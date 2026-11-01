@@ -21,7 +21,7 @@ on:
 
 permissions:
   contents: read
-  # Records a failed deployment of a commit, so the next run waits a window before retrying.
+  # Records each deployment's outcome on its commit; a failure makes the next run wait a window.
   statuses: write
 
 # Runs queue rather than cancel, so a deployment in progress is never interrupted.
@@ -82,6 +82,15 @@ jobs:
           url=$(npx --yes "$VERCEL_CLI" deploy --prebuilt --prod --archive=tgz \
             --meta "suiteCommitSha=$SHA" --token "$VERCEL_TOKEN")
           echo "Deployed $SHA: $url" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Record the successful deployment
+        if: success() && steps.plan.outputs.deploy == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.plan.outputs.sha }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$SHA" -f state=success \
+            -f context=vercel-production -f description="Deployed to Vercel production" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
       - name: Record the failed deployment
         if: failure() && steps.plan.outputs.deploy == 'true'
         env:
