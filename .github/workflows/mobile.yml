@@ -265,17 +265,20 @@ jobs:
           with open(os.environ["GITHUB_OUTPUT"], "a") as output:
               print(f"destination=platform=iOS Simulator,id={udid}", file=output)
           PY
-      - name: XCTest policies (Debug and Release, no signing)
+      - name: XCTest policies (Debug and Release, ad-hoc signed)
         working-directory: apps/mobile/ios/App
         env:
           TEST_DESTINATION: ${{ steps.simulator.outputs.destination }}
+        # The push signing-key tests use the real simulator Keychain, which refuses an unsigned
+        # host app with errSecMissingEntitlement (-34018); ad-hoc signing needs no team.
         run: |
           for configuration in Debug Release; do
             xcodebuild -project App.xcodeproj -scheme App -configuration "$configuration" \
               -sdk iphonesimulator -destination "$TEST_DESTINATION" \
               -parallel-testing-enabled NO -only-testing:AppTests \
               -resultBundlePath "$RUNNER_TEMP/AppTests-$configuration.xcresult" \
-              ENABLE_TESTABILITY=YES CODE_SIGNING_ALLOWED=NO test
+              ENABLE_TESTABILITY=YES CODE_SIGNING_ALLOWED=YES CODE_SIGN_STYLE=Manual \
+              CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER= test
           done
       - name: XCTest results
         if: always()
