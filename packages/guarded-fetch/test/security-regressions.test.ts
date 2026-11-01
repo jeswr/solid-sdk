@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+import { inspect } from "node:util";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createGuardedFetch,
@@ -37,6 +38,41 @@ afterEach(() => vi.useRealTimers());
 
 for (const { name, error, wrap } of wrappers) {
   describe(`${name}: captured redirect modes`, () => {
+    for (const mode of ["manual", "error"] as const) {
+      for (const override of ["absent", "undefined", "getter"] as const) {
+        it(`inherits Request ${mode} mode with ${override} redirect in a body override`, async () => {
+          const transport = vi.fn<typeof fetch>(
+            async (): Promise<Response> =>
+              transport.mock.calls.length === 1
+                ? new Response("redirect body", { status: 307, headers: { location: "next" } })
+                : new Response("mutation replayed"),
+          );
+          const redirect = vi.fn(() => undefined);
+          const init: RequestInit = { body: "private override" };
+          if (override === "undefined") init.redirect = undefined;
+          if (override === "getter")
+            Object.defineProperty(init, "redirect", { enumerable: true, get: redirect });
+          const request = new Request(`${BASE}item`, {
+            method: "PUT",
+            body: "original",
+            headers: { authorization: "Bearer secret" },
+            redirect: mode,
+          });
+          const pending = wrap(transport)(request, init);
+          if (mode === "manual") {
+            const response = await pending;
+            expect(response.status).toBe(307);
+            expect(await response.text()).toBe("redirect body");
+          } else await expect(pending).rejects.toBeInstanceOf(error);
+          expect(transport).toHaveBeenCalledTimes(1);
+          expect(transport.mock.calls[0]?.[1]?.body).toBe("private override");
+          expect(new Headers(transport.mock.calls[0]?.[1]?.headers).get("authorization")).toBe(
+            "Bearer secret",
+          );
+          expect(redirect).toHaveBeenCalledTimes(override === "getter" ? 1 : 0);
+        });
+      }
+    }
     it("leaves an unfollowable redirect body readable", async () => {
       const response = await wrap(async () => new Response("no location", { status: 302 }))(
         `${BASE}item`,
@@ -341,7 +377,9 @@ describe("error URL sanitisation", () => {
       const f = createGuardedFetch({
         dnsLookup,
         fetch: async () => {
-          throw new TypeError(`duplex is required for ${url}`);
+          throw new TypeError(`duplex is required for ${url}`, {
+            cause: Object.assign(new Error(`transport failed at ${url}`), { secret: "password" }),
+          });
         },
       });
       const error = await f(BASE).catch((e: unknown) => e);
@@ -351,9 +389,57 @@ describe("error URL sanitisation", () => {
   });
   function expectSafe(error: unknown) {
     expect(error).toBeInstanceOf(Error);
-    for (const secret of ["alice", "password", "code=", "oauth-secret", "access-token"])
-      expect(String(error)).not.toContain(secret);
+    const seen = new Set<unknown>();
+    for (let current = error; current !== undefined; ) {
+      expect(seen.has(current)).toBe(false);
+      seen.add(current);
+      for (const secret of ["alice", "password", "code=", "oauth-secret", "access-token"]) {
+        expect(String(current)).not.toContain(secret);
+        expect(inspect(current, { depth: null })).not.toContain(secret);
+      }
+      current = current instanceof Error ? current.cause : undefined;
+    }
   }
+  it("does not expose the native fetch cause for a secret-bearing malformed referrer", async () => {
+    const f = createGuardedFetch({ dnsLookup });
+    expectSafe(await f(BASE, { referrer: malformed }).catch((e: unknown) => e));
+  });
+  it("does not expose a raw DNS failure cause", async () => {
+    const f = createGuardedFetch({
+      dnsLookup: async () => {
+        throw new Error(`lookup failed at ${secretUrl}`);
+      },
+    });
+    expectSafe(await f(BASE).catch((e: unknown) => e));
+  });
+  it("retains sanitised connection refusal diagnostics without retaining a transport cause chain", async () => {
+    const refusal = new SsrfError(`non-public address refused for ${secretUrl}`);
+    // Connection failures from undici nest the useful refusal under a generic TypeError.
+    const cause = new TypeError("fetch failed", { cause: refusal });
+    refusal.cause = cause;
+    const f = createGuardedFetch({
+      dnsLookup,
+      fetch: async () => {
+        throw cause;
+      },
+    });
+    const error = await f(BASE).catch((e: unknown) => e);
+    expect(String(error)).toContain("non-public address refused");
+    expectSafe(error);
+  });
+  it("does not expose a raw timeout cause", async () => {
+    const controller = new AbortController();
+    const f = createGuardedFetch({
+      dnsLookup,
+      fetch: async () => {
+        controller.abort();
+        throw new Error(`aborted at ${secretUrl}`);
+      },
+    });
+    const error = await f(BASE, { signal: controller.signal }).catch((e: unknown) => e);
+    expect(String(error)).toContain("timed out");
+    expectSafe(error);
+  });
   for (const { name, wrap } of wrappers) {
     it(`${name} sanitises malformed URL and malformed Location errors`, async () => {
       const f = wrap(

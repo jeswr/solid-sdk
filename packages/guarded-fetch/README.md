@@ -65,6 +65,10 @@ their body size and total deadline enforced. Compositions such as
 guard check every hop; `refuseRedirects(nodeGuardedFetch)` sees and refuses the first
 redirect. Underlying transports must honour `redirect: "manual"`.
 
+An absent or undefined init `redirect` inherits the captured Request's mode.
+Guard-generated transport and DNS errors keep sanitised message diagnostics and discard
+raw causes, which can contain credentials in their stacks or custom properties.
+
 `maxBytes` and `maxRedirects` must be finite non-negative integers; `timeoutMs` must be
 finite and positive. Invalid limits throw `TypeError` at construction.
 The bare `createPinningDispatcher` accepts `PinningDispatcherOptions`: only

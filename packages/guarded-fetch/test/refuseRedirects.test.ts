@@ -293,7 +293,7 @@ describe("refuseRedirects — default underlying fetch", () => {
 });
 
 describe("refuseRedirects — composition with the SSRF guard", () => {
-  it("nested under createGuardedFetch: the redirect is refused (surfaced as SsrfError w/ RedirectRefusedError cause)", async () => {
+  it("nested under createGuardedFetch: the redirect is refused with a sanitised diagnostic and no raw cause", async () => {
     const inner = vi.fn(async () => movedTo("https://elsewhere.example/x"));
     const composed = createGuardedFetch({
       // IP-literal target so the guard needs no DNS resolver; refuseRedirects wraps the inner.
@@ -305,7 +305,8 @@ describe("refuseRedirects — composition with the SSRF guard", () => {
       cause?: unknown;
     };
     expect(err).toBeInstanceOf(SsrfError);
-    expect(err.cause).toBeInstanceOf(RedirectRefusedError);
+    expect(err.message).toContain("Refusing to follow a redirect");
+    expect(err.cause).toBeUndefined();
     expect(inner).toHaveBeenCalledTimes(1); // issued once, redirect never followed
   });
 

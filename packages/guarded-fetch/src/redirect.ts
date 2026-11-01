@@ -208,5 +208,13 @@ export function normalizeRequest(
         ? { body: req.body, duplex: "half" }
         : {}),
   } as RequestInit;
-  return { url: snapshot.url, init: { ...fromRequest, ...snapshot.init } };
+  return {
+    url: snapshot.url,
+    init: {
+      ...fromRequest,
+      ...snapshot.init,
+      // Fetch treats undefined as no override, even when the init key is present.
+      redirect: snapshot.init?.redirect ?? fromRequest.redirect,
+    },
+  };
 }

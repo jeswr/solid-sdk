@@ -45,8 +45,8 @@
  *     the refusing fetch UNDER the guard: `createGuardedFetch({ fetch: refuseRedirects(authed) })`
  *     — the guard host-validates and the refusing underlying fetch rejects any redirect before
  *     the guard would follow it. (Because the guard wraps a THROWING underlying fetch, that
- *     refusal surfaces as an `SsrfError` whose `cause` is the `RedirectRefusedError` — the
- *     redirect is still refused, only the outer error class differs.)
+ *     refusal surfaces as an `SsrfError` with a sanitised diagnostic; the raw transport
+ *     error is discarded. The redirect is still refused, only the outer error class differs.)
  *
  * **Pure core, no platform:** only the WHATWG `fetch` / `Response` globals — browser-safe, no
  * `node:*` import. Exported from the default `.` entry and re-exported from `./node`.

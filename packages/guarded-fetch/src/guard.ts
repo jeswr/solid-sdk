@@ -217,9 +217,7 @@ async function loadNodeDnsLookup(): Promise<DnsLookup> {
   try {
     mod = (await import(/* @vite-ignore */ NODE_DNS_SPECIFIER)) as typeof mod;
   } catch (cause) {
-    throw new NodeDnsUnavailableError(`node:dns/promises is not importable: ${message(cause)}`, {
-      cause,
-    });
+    throw new NodeDnsUnavailableError(`node:dns/promises is not importable: ${message(cause)}`);
   }
   return (host: string) => mod.lookup(host, { all: true });
 }
@@ -404,17 +402,14 @@ class SsrfGuard {
           signal: controller.signal,
         });
       } catch (cause) {
+        // Raw errors can retain secret-bearing URLs in their stack, cause or custom fields.
+        // Keep only the sanitised diagnostic in our message, including on timeout.
         if (controller.signal.aborted) {
           throw new SsrfError(
             `Fetch timed out for ${sanitizeUrl(currentUrl)} (${this.timeoutMs}ms).`,
-            {
-              cause,
-            },
           );
         }
-        throw new SsrfError(`Fetch failed for ${sanitizeUrl(currentUrl)}: ${message(cause)}`, {
-          cause,
-        });
+        throw new SsrfError(`Fetch failed for ${sanitizeUrl(currentUrl)}: ${message(cause)}`);
       }
 
       if (!isRedirect(res.status) || redirectMode === "manual") {
@@ -638,7 +633,7 @@ class SsrfGuard {
           this.assertDnslessHostnameAllowed(url.protocol, hostname);
           return;
         }
-        throw new SsrfError(`node:dns probe failed for ${hostname}: ${message(cause)}`, { cause });
+        throw new SsrfError(`node:dns probe failed for ${hostname}: ${message(cause)}`);
       }
     } else {
       this.assertDnslessHostnameAllowed(url.protocol, hostname);
@@ -658,7 +653,7 @@ class SsrfGuard {
     try {
       resolved = await lookup(hostname);
     } catch (cause) {
-      throw new SsrfError(`Host did not resolve: ${hostname}: ${message(cause)}`, { cause });
+      throw new SsrfError(`Host did not resolve: ${hostname}: ${message(cause)}`);
     }
     if (resolved.length === 0) {
       throw new SsrfError(`Host resolved to no addresses: ${hostname}.`);
@@ -816,10 +811,21 @@ function isBrowserContext(): boolean {
 }
 
 function message(cause: unknown): string {
-  const text = cause instanceof Error ? cause.message : String(cause);
-  // Keep useful transport diagnostics (e.g. a missing duplex option), but never
-  // echo a URL-bearing suffix. Consume the full suffix so malformed authorities
-  // with spaces in credentials cannot evade sanitisation.
-  const urlStart = text.search(/(?:[a-z][a-z\d+.-]*:)?\/\//i);
-  return urlStart < 0 ? text : `${text.slice(0, urlStart)}${sanitizeUrl(text.slice(urlStart))}`;
+  const diagnostics: string[] = [];
+  const seen = new Set<unknown>();
+  // Undici nests connection refusals under a generic "fetch failed". Retain only
+  // sanitised message text, with bounded traversal for cyclic/deep transport causes.
+  for (let current = cause; !seen.has(current) && diagnostics.length < 8; ) {
+    seen.add(current);
+    const text = current instanceof Error ? current.message : String(current);
+    // Consume the full URL suffix so malformed authorities with spaces in credentials
+    // cannot evade sanitisation.
+    const urlStart = text.search(/(?:[a-z][a-z\d+.-]*:)?\/\//i);
+    diagnostics.push(
+      urlStart < 0 ? text : `${text.slice(0, urlStart)}${sanitizeUrl(text.slice(urlStart))}`,
+    );
+    if (!(current instanceof Error) || current.cause === undefined) break;
+    current = current.cause;
+  }
+  return diagnostics.join(": ");
 }
