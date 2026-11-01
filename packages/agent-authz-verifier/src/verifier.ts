@@ -644,16 +644,67 @@ function validBound(value: unknown): boolean {
   return value === undefined || zonedDateTime(value);
 }
 
+const XSD_DATE_TIME = "http://www.w3.org/2001/XMLSchema#dateTime";
+const XSD_DATE = "http://www.w3.org/2001/XMLSchema#date";
+
+/** solid-odrl compares a constraint as instants when this holds (else lexically). */
+function temporal(c: OdrlConstraint): boolean {
+  return c.leftOperand === "dateTime" || c.datatype === XSD_DATE_TIME || c.datatype === XSD_DATE;
+}
+
+/** An XSD date, optionally zoned; `Date.parse` reads a bare date as UTC midnight. */
+const XSD_DATE_LEXICAL = /^(-?\d{4,})-(\d{2})-(\d{2})(Z|[+-]\d{2}:\d{2})?$/;
+
+/**
+ * A right operand the evaluator compares as an instant: a zoned dateTime, or a
+ * date under `xsd:date`. Anything else falls back to a lexical comparison.
+ */
+function temporalOperand(value: unknown, c: OdrlConstraint): boolean {
+  if (zonedDateTime(value)) return true;
+  if (c.datatype !== XSD_DATE || typeof value !== "string") return false;
+  const m = XSD_DATE_LEXICAL.exec(value);
+  return m !== null && zonedDateTime(`${m[1]}-${m[2]}-${m[3]}T00:00:00${m[4] ?? "Z"}`);
+}
+
+/**
+ * The left operands solid-odrl compares as instants anywhere in the chain. A
+ * request value for one must be a zoned dateTime: anything else (a number, a
+ * boolean, an unzoned or unparseable string) would leave a temporal constraint
+ * unsatisfied, or compared lexically, and a prohibition on it would not fire.
+ */
+function temporalOperands(chain: readonly OdrlPolicy[]): ReadonlySet<string> {
+  const operands = new Set<string>(["dateTime"]);
+  for (const policy of chain) {
+    for (const c of allConstraints(policy)) if (temporal(c)) operands.add(c.leftOperand);
+  }
+  return operands;
+}
+
+/** The first temporal constraint in the chain whose right operand is not an instant. */
+function lexicalTemporalConstraint(chain: readonly OdrlPolicy[]): OdrlConstraint | undefined {
+  for (const policy of chain) {
+    for (const c of allConstraints(policy)) {
+      const rights = Array.isArray(c.rightOperand) ? c.rightOperand : [c.rightOperand];
+      if (temporal(c) && !rights.every((r) => temporalOperand(r, c))) return c;
+    }
+  }
+  return undefined;
+}
+
 /**
  * A chain prohibition the request might trigger whose constraints name an operand
  * the request does not supply. solid-odrl treats a missing operand as unsatisfied,
  * so the prohibition would not fire: a request could escape it by leaving the
- * operand out. Mirrors the evaluator's two reads of each policy: the requested
- * action (where the caller's `delegationDepth` is stripped, so it is never
- * supplied) and, for every policy above the leaf, `grantUse` (where the evaluator
- * injects `delegationDepth`). Each suspect prohibition is probed with its
- * unresolved constraints, its depth constraints and its assignee removed.
- * Returns the policy holding one that would match.
+ * operand out. Mirrors each read `evaluateDelegated` makes of each policy, with
+ * the same agent, action and injected depth:
+ *  - every edge: the parent, for `grantUse` by the child's assigner, with the
+ *    true remaining depth injected as `delegationDepth`;
+ *  - every ancestor: the requested action by its delegate, and by the requester;
+ *  - the leaf: the requested action by the requester.
+ * The caller's own `delegationDepth` is stripped, as the evaluator strips it. In
+ * each read, a prohibition with an unsupplied operand is probed with only those
+ * constraints removed (its assignee, target and every resolved constraint still
+ * apply). Returns the policy holding one that would match.
  */
 function unresolvedProhibition(
   chain: readonly OdrlPolicy[],
@@ -661,31 +712,48 @@ function unresolvedProhibition(
   now: Date,
 ): OdrlPolicy | undefined {
   const { delegationDepth: _ignored, ...attributes } = request.attributes ?? {};
-  const supplied = (c: OdrlConstraint, depthInjected: boolean) =>
-    c.leftOperand === "dateTime" ||
-    (c.leftOperand === "delegationDepth"
-      ? depthInjected
-      : Object.hasOwn(attributes, c.leftOperand) && typeof attributes[c.leftOperand] !== "boolean");
-  for (const [index, policy] of chain.entries()) {
-    const reads: Array<[RequestContext["action"], boolean]> = [[request.action, false]];
-    if (index < chain.length - 1) reads.push(["grantUse", true]);
-    for (const [action, depthInjected] of reads) {
-      const suspects = (policy.prohibitions ?? [])
-        .filter((r) => (r.constraints ?? []).some((c) => !supplied(c, depthInjected)))
-        .map(({ assignee: _assignee, ...r }) => ({
-          ...r,
-          constraints: (r.constraints ?? []).filter(
-            (c) => supplied(c, depthInjected) && c.leftOperand !== "delegationDepth",
-          ),
-        }));
-      if (suspects.length === 0) continue;
-      const probe: OdrlPolicy = { id: policy.id, prohibitions: suspects };
-      if (
-        evaluate(probe, { ...request, action, attributes }, { now }).matchedProhibitions.length > 0
-      ) {
-        return policy;
-      }
+  const reads: Array<[OdrlPolicy, RequestContext]> = [];
+  for (const [i, policy] of chain.entries()) {
+    const child = chain[i + 1];
+    if (child !== undefined) {
+      reads.push([
+        policy,
+        {
+          agent: child.assigner as string,
+          action: "grantUse",
+          ...(request.target !== undefined && { target: request.target }),
+          attributes: { ...attributes, delegationDepth: chain.length - (i + 1) },
+        },
+      ]);
+      reads.push([policy, { ...request, agent: child.assigner as string, attributes }]);
     }
+    reads.push([policy, { ...request, attributes }]);
+  }
+  for (const [policy, read] of reads) {
+    const supplied = read.attributes ?? {};
+    // Resolved exactly when the evaluator compares it: a non-boolean value is
+    // present (or `dateTime`, which falls back to `now`), and a temporal
+    // comparison reads both sides as instants.
+    const resolved = (c: OdrlConstraint) => {
+      const value = Object.hasOwn(supplied, c.leftOperand)
+        ? supplied[c.leftOperand]
+        : c.leftOperand === "dateTime"
+          ? now.toISOString()
+          : undefined;
+      if (value === undefined || typeof value === "boolean") return false;
+      return !temporal(c) || Number.isFinite(Date.parse(String(value)));
+    };
+    const suspects = (policy.prohibitions ?? [])
+      .filter((r) => (r.constraints ?? []).some((c) => !resolved(c)))
+      .map((r) => ({ ...r, constraints: (r.constraints ?? []).filter(resolved) }));
+    if (suspects.length === 0) continue;
+    const probe: OdrlPolicy = {
+      ...policy,
+      permissions: [],
+      obligations: [],
+      prohibitions: suspects,
+    };
+    if (evaluate(probe, read, { now }).matchedProhibitions.length > 0) return policy;
   }
   return undefined;
 }
@@ -1182,20 +1250,35 @@ export async function verifyAgentAuthority(
   // verifier takes single-valued attributes only.
   // A malformed scalar (an object, NaN, a dateTime that does not parse) could
   // throw inside the evaluator; refuse it here as a denial.
-  const malformed = Object.entries(request.attributes ?? {}).find(
-    ([key, v]) =>
-      Array.isArray(v) ||
-      !(
-        typeof v === "boolean" ||
-        (typeof v === "number" && Number.isFinite(v)) ||
-        (typeof v === "string" && (key !== "dateTime" || zonedDateTime(v)))
-      ),
+  // A value for an operand the chain compares as an instant must be a zoned
+  // dateTime, whatever its JavaScript type.
+  const instants = temporalOperands(ordered);
+  const malformed = Object.entries(request.attributes ?? {}).find(([key, v]) =>
+    instants.has(key) && key !== "delegationDepth"
+      ? !zonedDateTime(v)
+      : Array.isArray(v) ||
+        !(
+          typeof v === "boolean" ||
+          (typeof v === "number" && Number.isFinite(v)) ||
+          typeof v === "string"
+        ),
   );
   if (malformed !== undefined) {
     return deny(
       "D",
       "POLICY_DENIED",
       `Phase D denied: the request attribute ${JSON.stringify(malformed[0])} is not a single well-formed value.`,
+      chainIds,
+    );
+  }
+  // A signed temporal bound the evaluator would compare as text (an unzoned or
+  // unparseable instant) cannot be applied as written.
+  const lexical = lexicalTemporalConstraint(ordered);
+  if (lexical !== undefined) {
+    return deny(
+      "D",
+      "POLICY_DENIED",
+      `Phase D denied: a ${JSON.stringify(lexical.leftOperand)} constraint compares against a value that is not a zoned dateTime.`,
       chainIds,
     );
   }

@@ -638,3 +638,216 @@ describe("signed-content reading is order- and accessor-independent", () => {
     expect(r.code).toBe("REVOKED");
   });
 });
+
+describe("prohibition probes match the evaluator's reads (Codex round 2)", () => {
+  const XsdDateTime = "http://www.w3.org/2001/XMLSchema#dateTime";
+
+  /** Single-hop: an unconstrained read for agentR, plus `prohibitions`, content-bound. */
+  async function verifyInternalWith(
+    prohibitions: OdrlPolicy["prohibitions"],
+    attributes: RequestContext["attributes"],
+  ): Promise<VerifyAuthorityResult> {
+    const policy: OdrlPolicy = {
+      ...base.instituteInternal,
+      permissions: [
+        { type: "permission", action: "read", target: CAST.records, assignee: CAST.agentR },
+      ],
+      prohibitions,
+    };
+    const content = await policyToTurtle(policy);
+    const vc = await issueAgentAuthorization(
+      {
+        principal: CAST.inst,
+        agent: CAST.agentR,
+        action: "read",
+        target: CAST.records,
+        policy: CAST.instituteInternalId,
+        policyContent: content,
+        validFrom: VALID_FROM,
+        validUntil: VALID_UNTIL,
+      },
+      base.keys.inst,
+    );
+    return verifyInternal(
+      internalChain({
+        credentials: [vc],
+        policies: [policy],
+        policyContents: { [CAST.instituteInternalId]: { content } },
+      }),
+      { request: { action: "read", target: CAST.records, attributes } },
+    );
+  }
+
+  /** Two hops: the mandate with extra `prohibitions` (re-signed) over the agreement. */
+  async function verifyPrimaryWith(
+    prohibitions: OdrlPolicy["prohibitions"],
+  ): Promise<VerifyAuthorityResult> {
+    const mandate: OdrlPolicy = {
+      ...base.mandate,
+      prohibitions: [...(base.mandate.prohibitions ?? []), ...(prohibitions ?? [])],
+    };
+    const content = await policyToTurtle(mandate);
+    const vc = await issueAgentAuthorization(
+      {
+        principal: CAST.alice,
+        agent: CAST.agentA,
+        action: ["read", "grantUse"],
+        target: CAST.records,
+        policy: CAST.mandateId,
+        policyContent: content,
+        validFrom: VALID_FROM,
+        validUntil: VALID_UNTIL,
+      },
+      base.keys.alice,
+    );
+    return verifyAgentAuthority(
+      {
+        credentials: [vc, base.credentials.agreement],
+        policies: [mandate, base.agreement],
+        policyContents: {
+          [CAST.mandateId]: { content },
+          [CAST.agreementId]: { content: base.policyDocuments.agreement },
+        },
+      },
+      {
+        request: {
+          action: "read",
+          target: CAST.records,
+          attributes: { purpose: CAST.purpose, dateTime: base.now.toISOString() },
+        },
+        rootPrincipal: CAST.alice,
+        now: base.now,
+        resolveKey: base.registry.resolveKey,
+        isControlledBy: base.registry.isControlledBy,
+      },
+    );
+  }
+
+  it("a dateTime attribute that is not a zoned dateTime string denies, whatever its type", async () => {
+    const after = [
+      {
+        type: "prohibition" as const,
+        action: "read" as const,
+        target: CAST.records,
+        constraints: [
+          { leftOperand: "dateTime" as const, operator: "gt" as const, rightOperand: VALID_FROM },
+        ],
+      },
+    ];
+    expect((await verifyInternalWith(after, {})).authorized).toBe(false);
+    for (const dateTime of [0, 1_700_000_000_000, true]) {
+      const r = await verifyInternalWith(after, {
+        dateTime,
+      } as unknown as RequestContext["attributes"]);
+      expect(r.authorized).toBe(false);
+      expect(r.code).toBe("POLICY_DENIED");
+    }
+  });
+
+  it("an attribute compared as an instant (xsd:dateTime datatype) must be a zoned dateTime", async () => {
+    const span = [
+      {
+        type: "prohibition" as const,
+        action: "read" as const,
+        target: CAST.records,
+        constraints: [
+          {
+            leftOperand: "elapsedTime" as const,
+            operator: "lt" as const,
+            rightOperand: VALID_UNTIL,
+            datatype: XsdDateTime,
+          },
+        ],
+      },
+    ];
+    for (const elapsedTime of ["garbage", "2026-08-01T00:00:00", 5]) {
+      const r = await verifyInternalWith(span, {
+        dateTime: base.now.toISOString(),
+        elapsedTime,
+      } as unknown as RequestContext["attributes"]);
+      expect(r.authorized).toBe(false);
+      expect(r.code).toBe("POLICY_DENIED");
+    }
+    // A zoned instant inside the window is prohibited; outside it is not.
+    const inside = await verifyInternalWith(span, {
+      dateTime: base.now.toISOString(),
+      elapsedTime: "2026-08-01T00:00:00Z",
+    });
+    expect(inside.authorized).toBe(false);
+    const outside = await verifyInternalWith(span, {
+      dateTime: base.now.toISOString(),
+      elapsedTime: "2028-01-01T00:00:00Z",
+    });
+    expect(outside.authorized).toBe(true);
+  });
+
+  it("a signed temporal bound that is not an instant denies rather than comparing as text", async () => {
+    const r = await verifyInternalWith(
+      [
+        {
+          type: "prohibition",
+          action: "read",
+          target: CAST.records,
+          constraints: [{ leftOperand: "dateTime", operator: "gt", rightOperand: "not-a-date" }],
+        },
+      ],
+      { dateTime: base.now.toISOString() },
+    );
+    expect(r.authorized).toBe(false);
+    expect(r.code).toBe("POLICY_DENIED");
+  });
+
+  it("a prohibition assigned to another agent does not block a request that omits its operand", async () => {
+    const other = [
+      {
+        type: "prohibition" as const,
+        action: "read" as const,
+        target: CAST.records,
+        assignee: "https://other.example/profile#me",
+        constraints: [
+          {
+            leftOperand: "purpose" as const,
+            operator: "eq" as const,
+            rightOperand: CAST.misusePurpose,
+          },
+        ],
+      },
+    ];
+    const r = await verifyInternalWith(other, { dateTime: base.now.toISOString() });
+    expect(r.code).toBeUndefined();
+    expect(r.authorized).toBe(true);
+    // The same prohibition on the requester still denies.
+    const mine = await verifyInternalWith(
+      [{ ...other[0], assignee: CAST.agentR } as NonNullable<OdrlPolicy["prohibitions"]>[number]],
+      { dateTime: base.now.toISOString() },
+    );
+    expect(mine.authorized).toBe(false);
+    expect(mine.code).toBe("POLICY_DENIED");
+  });
+
+  it("an ancestor grantUse prohibition applies only at the depth the evaluator injects", async () => {
+    const grantUse = (bound: number) => [
+      {
+        type: "prohibition" as const,
+        action: "grantUse" as const,
+        target: CAST.records,
+        constraints: [
+          { leftOperand: "delegationDepth" as const, operator: "gt" as const, rightOperand: bound },
+          {
+            leftOperand: "spatial" as const,
+            operator: "eq" as const,
+            rightOperand: "https://example.org/region/eu",
+          },
+        ],
+      },
+    ];
+    // The one edge below the mandate leaves depth 1: `> 3` cannot apply.
+    const inapplicable = await verifyPrimaryWith(grantUse(3));
+    expect(inapplicable.code).toBeUndefined();
+    expect(inapplicable.authorized).toBe(true);
+    // `> 0` applies, and its unsupplied spatial operand cannot switch it off.
+    const applicable = await verifyPrimaryWith(grantUse(0));
+    expect(applicable.authorized).toBe(false);
+    expect(applicable.code).toBe("POLICY_DENIED");
+  });
+});
