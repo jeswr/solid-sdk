@@ -1,6 +1,7 @@
 // Ported from apps/pod-manager/src/lib/forms/auto-form.ts
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
+// AUTHORED-BY Claude Opus 5.5
 /**
  * Auto-form generator (Wave 5 §2 fallback). When a subject has no `ui:` form
  * description and no first-party edit map, generate an editing form by
@@ -39,6 +40,24 @@ const XSD_DOUBLE = "http://www.w3.org/2001/XMLSchema#double";
 /** Predicates we never auto-generate an editor for (structural / dangerous). */
 const SKIP_PREDICATES = new Set([RDF_TYPE]);
 
+const VCARD = "http://www.w3.org/2006/vcard/ns#";
+
+/**
+ * The term a field actually shows: a structured vCard value (`[ a vcard:Work; vcard:value
+ * <mailto:…> ]`) shows its inner value. A nested node with no single plain value has
+ * nothing a text field could show, so it gets no field (never its internal label).
+ */
+function displayedTerm(ds: DatasetCore, object: Quad["object"]): Quad["object"] | undefined {
+  if (object.termType === "BlankNode" || object.termType === "NamedNode") {
+    const inner = [`${VCARD}hasValue`, `${VCARD}value`].flatMap((predicate) => [
+      ...(ds.match(object, DataFactory.namedNode(predicate), null, null) as Iterable<Quad>),
+    ]);
+    if (inner.length === 1) return (inner[0] as Quad).object;
+    if (inner.length > 1 || object.termType === "BlankNode") return undefined;
+  }
+  return object;
+}
+
 /** Infer (kind, mode, datatype) from an object term. */
 function inferWidget(object: Quad["object"]): {
   kind: FieldKind;
@@ -72,7 +91,7 @@ function inferWidget(object: Quad["object"]): {
       }
     }
   }
-  // Blank-node objects (nested structures) — not auto-editable; treat as text.
+  // Unreachable for nested nodes: autoFormFor gives them no field.
   return { kind: "text", mode: "literal" };
 }
 
@@ -91,8 +110,10 @@ export function autoFormFor(ds: DatasetCore, subject: string | Term): FieldSpec[
       continue;
     const predicate = q.predicate.value;
     if (SKIP_PREDICATES.has(predicate) || seen.has(predicate)) continue;
+    const shown = displayedTerm(ds, q.object);
+    if (!shown) continue;
     seen.add(predicate);
-    const widget = inferWidget(q.object);
+    const widget = inferWidget(shown);
     fields.push(
       normaliseField({
         id: predicate,
@@ -110,12 +131,5 @@ export function autoFormFor(ds: DatasetCore, subject: string | Term): FieldSpec[
 
 /** True iff `subject` has at least one auto-editable statement. */
 export function hasAutoForm(ds: DatasetCore, subject: string | Term): boolean {
-  for (const q of ds.match(null, null, null, null) as Iterable<Quad>) {
-    if (
-      q.subject.equals(typeof subject === "string" ? DataFactory.namedNode(subject) : subject) &&
-      !SKIP_PREDICATES.has(q.predicate.value)
-    )
-      return true;
-  }
-  return false;
+  return autoFormFor(ds, subject).length > 0;
 }

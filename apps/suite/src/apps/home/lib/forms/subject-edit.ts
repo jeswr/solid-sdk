@@ -1,6 +1,7 @@
 // Ported from apps/pod-manager/src/lib/forms/subject-edit.ts
 // AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
+// AUTHORED-BY Claude Opus 5.5
 /**
  * The pure heart of the generic editing engine: apply a field edit to a parsed
  * dataset, producing a NEW `n3.Store` that **preserves every unrelated triple**
@@ -19,10 +20,10 @@
  *
  * No React, no DOM, no I/O. `write.ts` wraps this with the conditional PUT.
  */
+import { safeHttpIri } from "@jeswr/rdf-serialize";
 import type { DatasetCore, Quad, Term } from "@rdfjs/types";
 import { SetFrom, TermAs, TermFrom, TermWrapper } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { subjectOf } from "../model/rdf";
 import {
   type FieldSpec,
   XSD_BOOLEAN,
@@ -33,12 +34,130 @@ import {
 } from "./field-types.js";
 
 const { namedNode, literal: lit } = DataFactory;
+const VCARD = "http://www.w3.org/2006/vcard/ns#";
+/** vCard links a structured value (often typed vcard:Work/Home) to the value itself. */
+const INNER_VALUE_PREDICATES = [`${VCARD}hasValue`, `${VCARD}value`] as const;
+/** Shown on a field Home will not edit, because editing it would lose data. */
+export const MULTIPLE_VALUES_HINT = "Edit these in the app that created them.";
+export const STRUCTURED_VALUE_HINT = "Edit this in the app that created it.";
+
 class EditableSubject extends TermWrapper {
-  replace(predicate: string, term: Term | undefined) {
-    const values = SetFrom.subjectPredicate(this, predicate, TermAs.term, TermFrom.itself);
-    values.clear();
-    if (term) values.add(term);
+  values(predicate: string) {
+    return SetFrom.subjectPredicate(this, predicate, TermAs.term, TermFrom.itself);
   }
+}
+
+/** A field's current shape: what it shows, and where an edit would write. */
+export interface FieldState {
+  /** Display strings for every value (never a blank-node label). */
+  values: string[];
+  /** Why the form must not edit this field; absent when it is safe to edit. */
+  lockedReason?: string;
+  /** The structured node and inner predicate an edit writes to, instead of the link. */
+  inner?: { node: Term; predicate: string };
+}
+
+/** The `vcard:hasValue`/`vcard:value` statements of a structured value node. */
+function innerValues(dataset: DatasetCore, node: Term): { predicate: string; object: Term }[] {
+  if (node.termType !== "NamedNode" && node.termType !== "BlankNode") return [];
+  const found: { predicate: string; object: Term }[] = [];
+  for (const predicate of INNER_VALUE_PREDICATES)
+    for (const q of dataset.match(
+      node as Quad["subject"],
+      namedNode(predicate),
+      null,
+      null,
+    ) as Iterable<Quad>)
+      found.push({ predicate, object: q.object });
+  return found;
+}
+
+function displayValue(spec: FieldSpec, term: Term): string {
+  if (spec.mode !== "mailto" && spec.mode !== "tel") return term.value;
+  // A contact field shows an address or number, never an unrelated link.
+  if (term.termType !== "Literal" && !/^(?:mailto|tel):/i.test(term.value)) return "";
+  return stripScheme(term.value);
+}
+
+/**
+ * Inspect a field before editing it. A field is locked (read-only in the form, and refused
+ * by the writer) when it has more than one value — replacing it would delete the others —
+ * or when its value is a nested structure Home can't edit in place. A single structured
+ * vCard value (`vcard:hasEmail [ a vcard:Work; vcard:value <mailto:…> ]`) is editable: the
+ * edit goes to its inner value, so the link, its type and any other details are kept.
+ */
+export function fieldState(
+  dataset: DatasetCore,
+  subject: string | Term,
+  spec: FieldSpec,
+): FieldState {
+  const s = typeof subject === "string" ? namedNode(subject) : subject;
+  const objects = [
+    ...(dataset.match(
+      s as Quad["subject"],
+      namedNode(spec.predicate),
+      null,
+      null,
+    ) as Iterable<Quad>),
+  ].map((q) => q.object);
+  const values: string[] = [];
+  let structured = false;
+  let inner: FieldState["inner"];
+  for (const object of objects) {
+    const nested = innerValues(dataset, object);
+    if (nested.length) {
+      structured = true;
+      for (const value of nested) values.push(displayValue(spec, value.object));
+      if (nested.length === 1)
+        inner = { node: object, predicate: (nested[0] as { predicate: string }).predicate };
+    } else if (object.termType === "BlankNode") structured = true;
+    else values.push(displayValue(spec, object));
+  }
+  if (values.length > 1) return { values, lockedReason: MULTIPLE_VALUES_HINT };
+  if (structured && !inner) return { values, lockedReason: STRUCTURED_VALUE_HINT };
+  return inner ? { values, inner } : { values };
+}
+
+/**
+ * Mark fields the form must not edit as read-only, with a hint saying why. Used for both
+ * the first read and a re-read (the 412 "Keep my changes" path).
+ */
+export function lockUneditableFields(
+  fields: readonly FieldSpec[],
+  dataset: DatasetCore,
+  subject: string | Term,
+): FieldSpec[] {
+  return fields.map((field) => {
+    if (field.readOnly) return field;
+    const reason = fieldState(dataset, subject, field).lockedReason;
+    return reason ? { ...field, readOnly: true, hint: reason } : field;
+  });
+}
+
+/** Replace a field's single value, refusing any edit that would drop other data. */
+function replaceField(store: Store, subject: Term, spec: FieldSpec, term: Term | undefined) {
+  const state = fieldState(store, subject, spec);
+  if (state.lockedReason) throw new FieldValidationError(spec.id, state.lockedReason);
+  const node = new EditableSubject(subject, store, DataFactory);
+  if (state.inner) {
+    const holder = new EditableSubject(state.inner.node, store, DataFactory);
+    if (term) {
+      const values = holder.values(state.inner.predicate);
+      values.clear();
+      values.add(term);
+      return;
+    }
+    // Clearing a structured value removes the link and the now-unused value node.
+    node.values(spec.predicate).delete(state.inner.node);
+    const valueNode = state.inner.node;
+    const quads = [...store];
+    if (!quads.some((q) => q.object.equals(valueNode)))
+      store.removeQuads(quads.filter((q) => q.subject.equals(valueNode)));
+    return;
+  }
+  const values = node.values(spec.predicate);
+  values.clear();
+  if (term) values.add(term);
 }
 
 /** Thrown when a field's value fails validation before any write is attempted. */
@@ -58,10 +177,25 @@ export function cloneToStore(source: DatasetCore): Store {
   return store;
 }
 
-/** Wrap a bare email in a `mailto:` IRI; empty → undefined. */
+/** Characters an email address may never carry into a `mailto:` IRI. */
+const UNSAFE_EMAIL = /[\s<>"{}|\\^`]/;
+/** One `@`, a dotted domain, and nothing that could break out of an IRI. */
+export function isEmailAddress(value: string): boolean {
+  return !UNSAFE_EMAIL.test(value) && /^[^@]+@[^@]+\.[^@]+$/.test(value);
+}
+
+/**
+ * Wrap a bare email in a `mailto:` IRI; empty or unsafe → undefined. The address is
+ * percent-encoded (`?` and `#` too, so it can't add headers or a fragment).
+ */
 export function toMailto(email: string): string | undefined {
   const v = email.trim();
-  return v ? `mailto:${v}` : undefined;
+  if (!v || !isEmailAddress(v)) return undefined;
+  try {
+    return `mailto:${encodeURI(v).replace(/[?#]/g, (ch) => encodeURIComponent(ch))}`;
+  } catch {
+    return undefined; // a lone surrogate can't be encoded
+  }
 }
 
 /**
@@ -96,10 +230,8 @@ export function valueToTerm(spec: FieldSpec, raw: string): Term | undefined {
     }
     case "mailto": {
       const m = toMailto(value);
-      // A light sanity check; the server + RDF layer accept the IRI as-is.
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value))
-        throw new FieldValidationError(spec.id, "Enter a valid email address.");
-      return namedNode(m as string);
+      if (!m) throw new FieldValidationError(spec.id, "Enter a valid email address.");
+      return namedNode(m);
     }
     case "tel": {
       const t = toTel(value);
@@ -169,14 +301,12 @@ function toIsoDateTime(value: string): string | undefined {
   return new Date(t).toISOString();
 }
 
-/** Return `value` iff it is an absolute http(s) URL, else `undefined`. */
+/**
+ * Return `value` as an injection-safe absolute http(s) IRI (IRI-forbidden characters such
+ * as spaces, `<` and `>` percent-encoded), else `undefined`.
+ */
 function absoluteHttpUrl(value: string): string | undefined {
-  try {
-    const u = new URL(value);
-    return u.protocol === "http:" || u.protocol === "https:" ? value : undefined;
-  } catch {
-    return undefined;
-  }
+  return safeHttpIri(value);
 }
 
 /**
@@ -195,11 +325,12 @@ export function applyFieldEdit(
   rawValue: string,
 ): Store {
   const store = cloneToStore(dataset);
-  new EditableSubject(
-    typeof subject === "string" ? namedNode(subject) : subject,
+  replaceField(
     store,
-    DataFactory,
-  ).replace(spec.predicate, valueToTerm(spec, rawValue));
+    typeof subject === "string" ? namedNode(subject) : subject,
+    spec,
+    valueToTerm(spec, rawValue),
+  );
   return store;
 }
 
@@ -222,39 +353,26 @@ export function applyFieldEdits(
     if (Object.hasOwn(values, f.id)) valueToTerm(f, values[f.id] as string);
   }
   const store = cloneToStore(dataset);
+  const s = typeof subject === "string" ? namedNode(subject) : subject;
   for (const f of fields) {
     if (f.readOnly || !Object.hasOwn(values, f.id)) continue;
-    new EditableSubject(
-      typeof subject === "string" ? namedNode(subject) : subject,
-      store,
-      DataFactory,
-    ).replace(f.predicate, valueToTerm(f, values[f.id] as string));
+    replaceField(store, s, f, valueToTerm(f, values[f.id] as string));
   }
   return store;
 }
 
 /**
  * Read the current string value of a field off a subject (the inverse of
- * {@link valueToTerm}, for seeding the editor). Returns the first matching
- * object's lexical form, with `mailto:`/`tel:` stripped for display. Absent →
- * empty string.
+ * {@link valueToTerm}, for seeding the editor). Returns the first value's lexical form,
+ * reading through a structured vCard value and stripping `mailto:`/`tel:` for display.
+ * Absent, or a nested structure with no plain value → empty string (never a blank-node label).
  */
 export function readFieldValue(
   dataset: DatasetCore,
   subject: string | Term,
   spec: FieldSpec,
 ): string {
-  const s = typeof subject === "string" ? namedNode(subject) : subject;
-  const p = namedNode(spec.predicate);
-  for (const q of dataset.match(s, p, null, null) as Iterable<Quad>) {
-    const o = q.object;
-    if (spec.mode === "mailto" || spec.mode === "tel") {
-      return stripScheme(contactValue(dataset, o));
-    }
-    if (spec.kind === "datetime" || spec.kind === "date") return o.value;
-    return o.value;
-  }
-  return "";
+  return fieldState(dataset, subject, spec).values[0] ?? "";
 }
 
 /** Read every value of a (possibly multi-valued) field as display strings. */
@@ -263,31 +381,9 @@ export function readFieldValues(
   subject: string | Term,
   spec: FieldSpec,
 ): string[] {
-  const s = typeof subject === "string" ? namedNode(subject) : subject;
-  const p = namedNode(spec.predicate);
-  const out: string[] = [];
-  for (const q of dataset.match(s, p, null, null) as Iterable<Quad>) {
-    out.push(
-      spec.mode === "mailto" || spec.mode === "tel"
-        ? stripScheme(contactValue(dataset, q.object))
-        : q.object.value,
-    );
-  }
-  return out;
+  return fieldState(dataset, subject, spec).values;
 }
 
-/** vCard supports both direct addresses and named/blank nodes with hasValue/value. */
-function contactValue(dataset: DatasetCore, term: Term): string {
-  if (term.termType === "Literal" || /^(?:mailto|tel):/i.test(term.value)) return term.value;
-  const linked = subjectOf(dataset, term);
-  return (
-    [
-      ...linked.objects("http://www.w3.org/2006/vcard/ns#hasValue"),
-      ...linked.objects("http://www.w3.org/2006/vcard/ns#value"),
-    ].find((value) => value.termType === "Literal" || /^(?:mailto|tel):/i.test(value.value))
-      ?.value ?? ""
-  );
-}
 /** Strip a `mailto:`/`tel:` scheme for display; anything else passes through. */
 export function stripScheme(uri: string): string {
   const m = /^(?:mailto|tel):(.*)$/i.exec(uri);

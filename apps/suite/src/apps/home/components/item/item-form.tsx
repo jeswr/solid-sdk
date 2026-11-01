@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button } from "@jeswr/suite-ui";
 import type { DatasetCore, Term } from "@rdfjs/types";
@@ -7,6 +8,7 @@ import type { FieldSpec } from "../../lib/forms/field-types";
 import {
   FieldValidationError,
   readFieldValue,
+  readFieldValues,
   toDatetimeLocal,
   valueToTerm,
 } from "../../lib/forms/subject-edit";
@@ -82,7 +84,12 @@ export function ItemForm({
         const props = {
           id: inputId,
           name: inputId,
-          disabled: busy || locked || field.readOnly,
+          // Read-only text stays focusable so its values and hint can be read.
+          disabled:
+            busy ||
+            locked ||
+            (field.readOnly === true && ["boolean", "choice"].includes(field.kind)),
+          readOnly: field.readOnly,
           required: field.required,
           "aria-invalid": Boolean(errors[field.id]),
           "aria-describedby": hint ? `${inputId}-hint` : undefined,
@@ -126,13 +133,15 @@ export function ItemForm({
               <input
                 {...props}
                 type={
-                  field.kind === "datetime"
-                    ? "datetime-local"
-                    : ["number", "decimal"].includes(field.kind)
-                      ? "number"
-                      : ["date", "email", "url", "tel"].includes(field.kind)
-                        ? field.kind
-                        : "text"
+                  field.readOnly
+                    ? "text"
+                    : field.kind === "datetime"
+                      ? "datetime-local"
+                      : ["number", "decimal"].includes(field.kind)
+                        ? "number"
+                        : ["date", "email", "url", "tel"].includes(field.kind)
+                          ? field.kind
+                          : "text"
                 }
                 step={field.kind === "decimal" ? "any" : undefined}
                 value={values[field.id]}
@@ -167,6 +176,8 @@ export function ItemForm({
 
 /** datetime-local holds wall time in the user's time zone, never a sliced UTC string. */
 function inputValue(dataset: DatasetCore, subject: string | Term, field: FieldSpec): string {
+  // A read-only field shows every value it has (e.g. two emails), as plain text.
+  if (field.readOnly) return readFieldValues(dataset, subject, field).join(", ");
   const value = readFieldValue(dataset, subject, field);
   return field.kind === "datetime" && value ? toDatetimeLocal(value) : value;
 }

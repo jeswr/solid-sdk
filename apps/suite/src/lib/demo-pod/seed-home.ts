@@ -1,10 +1,37 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 import { NS } from "@jeswr/suite-vocab";
-import { DataFactory, Writer } from "n3";
+import {
+  LiteralFrom,
+  NamedNodeAs,
+  NamedNodeFrom,
+  OptionalAs,
+  SetFrom,
+  TermWrapper,
+} from "@rdfjs/wrapper";
+import { DataFactory, Store, Writer } from "n3";
 import { buildDocument } from "../../apps/docs/lib/model/document";
 import type { DemoSeedFile } from "./pod";
 
-const { namedNode, literal, quad } = DataFactory;
+/** A seed item written through wrapper accessors, never hand-built quads. */
+class SeedItem extends TermWrapper {
+  addType(value: string) {
+    SetFrom.subjectPredicate(this, `${NS.RDF}type`, NamedNodeAs.string, NamedNodeFrom.string).add(
+      value,
+    );
+  }
+  setText(predicate: string, value: string) {
+    OptionalAs.object(this, predicate, value, LiteralFrom.string);
+  }
+  setIri(predicate: string, value: string) {
+    OptionalAs.object(this, predicate, value, NamedNodeFrom.string);
+  }
+  set modified(value: Date) {
+    OptionalAs.object(this, `${NS.DCT}modified`, value, LiteralFrom.dateTime);
+  }
+}
+/** A field value: plain text, or an IRI (vCard stores an email as a `mailto:` IRI). */
+type SeedField = readonly [predicate: string, value: string, kind?: "iri"];
 
 /** Separate resources match Home's primary-subject discovery contract. */
 export async function buildHomeSeed(now: number): Promise<DemoSeedFile[]> {
@@ -13,13 +40,13 @@ export async function buildHomeSeed(now: number): Promise<DemoSeedFile[]> {
       path: "contacts/bram.ttl",
       type: `${NS.VCARD}Individual`,
       name: "Bram Kerst",
-      fields: [[`${NS.VCARD}hasEmail`, "bram@example.org"]],
+      fields: [[`${NS.VCARD}hasEmail`, "mailto:bram@example.org", "iri"]] as SeedField[],
     },
     {
       path: "contacts/ada.ttl",
       type: `${NS.VCARD}Individual`,
       name: "Ada Rivers",
-      fields: [[`${NS.VCARD}hasEmail`, "ada@example.org"]],
+      fields: [[`${NS.VCARD}hasEmail`, "mailto:ada@example.org", "iri"]] as SeedField[],
     },
     {
       path: "calendar/coffee.ttl",
@@ -65,35 +92,30 @@ export async function buildHomeSeed(now: number): Promise<DemoSeedFile[]> {
   ];
   return Promise.all(
     entries.map(async (entry, index) => {
-      const subject = namedNode(`https://alice.demo.pod/${entry.path}#it`);
+      const subject = `https://alice.demo.pod/${entry.path}#it`;
       const modified = now - (index + 1) * 60_000;
       const writer = new Writer({ format: "text/turtle" });
-      writer.addQuads(
-        entry.type === `${NS.POD_DOCS}Document`
-          ? [
-              ...buildDocument(subject.value.split("#")[0] as string, {
-                title: entry.name,
-                body: "A shared plan for the next chapter.",
-                format: "text/plain",
-                now: new Date(modified),
-              }),
-            ]
-          : [
-              quad(subject, namedNode(`${NS.RDF}type`), namedNode(entry.type)),
-              quad(subject, namedNode(`${NS.SCHEMA}name`), literal(entry.name)),
-              quad(
-                subject,
-                namedNode(`${NS.DCT}modified`),
-                literal(new Date(modified).toISOString(), namedNode(`${NS.XSD}dateTime`)),
-              ),
-              ...entry.fields.map(([predicate, value]) =>
-                quad(subject, namedNode(predicate as string), literal(value as string)),
-              ),
-              ...("source" in entry
-                ? [quad(subject, namedNode(`${NS.SCHEMA}url`), namedNode(entry.source))]
-                : []),
-            ],
-      );
+      if (entry.type === `${NS.POD_DOCS}Document`)
+        writer.addQuads([
+          ...buildDocument(subject.split("#")[0] as string, {
+            title: entry.name,
+            body: "A shared plan for the next chapter.",
+            format: "text/plain",
+            now: new Date(modified),
+          }),
+        ]);
+      else {
+        const store = new Store();
+        const item = new SeedItem(subject, store, DataFactory);
+        item.addType(entry.type);
+        item.setText(`${NS.SCHEMA}name`, entry.name);
+        item.modified = new Date(modified);
+        for (const [predicate, value, kind] of entry.fields as readonly SeedField[])
+          if (kind === "iri") item.setIri(predicate, value);
+          else item.setText(predicate, value);
+        if ("source" in entry) item.setIri(`${NS.SCHEMA}url`, entry.source);
+        writer.addQuads([...store]);
+      }
       const body = await new Promise<string>((resolve, reject) =>
         writer.end((error, value) => (error ? reject(error) : resolve(value))),
       );

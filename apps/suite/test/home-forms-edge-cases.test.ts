@@ -53,8 +53,9 @@ it("infers all remaining widget types and ignores sibling subjects, types and du
     "decimal",
     "decimal",
     "textarea",
-    "text",
   ]);
+  // A nested blank node gets no field: a text box would show its internal label.
+  expect(autoFormFor(ds, subject).some((f) => f.predicate === "https://e.org/nested")).toBe(false);
   expect(hasAutoForm(ds, "https://absent.example/#it")).toBe(false);
   expect(autoFormFor(ds, "https://absent.example/#it")).toEqual([]);
   for (const kind of [

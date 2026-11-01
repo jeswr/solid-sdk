@@ -54,3 +54,29 @@ it("propagates serialization errors in Home seed resources", async () => {
   vi.spyOn(Writer.prototype, "end").mockImplementationOnce((callback) => callback?.(error, ""));
   await expect(buildHomeSeed(Date.now())).rejects.toBe(error);
 });
+
+// AUTHORED-BY Claude Opus 5.5 — finding 12
+it("writes contact emails as mailto: IRIs that the contact editor reads back", async () => {
+  const { CONTACT_FIELDS } = await import("../src/apps/home/lib/forms/edit-map");
+  const { readFieldValue } = await import("../src/apps/home/lib/forms/subject-edit");
+  const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildHomeSeed(Date.now()) });
+  const url = `${DEMO_ROOT}contacts/ada.ttl`;
+  const { dataset } = await readResource(pod.fetch, url);
+  const emails = [...dataset].filter(
+    (quad) => quad.predicate.value === "http://www.w3.org/2006/vcard/ns#hasEmail",
+  );
+  expect(emails.map((quad) => [quad.object.termType, quad.object.value])).toEqual([
+    ["NamedNode", "mailto:ada@example.org"],
+  ]);
+  const email = CONTACT_FIELDS.find((field) => field.label === "Email");
+  expect(readFieldValue(dataset, `${url}#it`, email as NonNullable<typeof email>)).toBe(
+    "ada@example.org",
+  );
+  const modified = [...dataset].find(
+    (quad) => quad.predicate.value === "http://purl.org/dc/terms/modified",
+  );
+  expect(modified?.object).toMatchObject({
+    termType: "Literal",
+    datatype: { value: "http://www.w3.org/2001/XMLSchema#dateTime" },
+  });
+});

@@ -1,10 +1,9 @@
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 "use client";
 import { Button, Dialog, DialogContent, DialogDescription, DialogTitle } from "@jeswr/suite-ui";
-import { NS } from "@jeswr/suite-vocab";
 import { useMemo, useState } from "react";
-import { normaliseField } from "../../lib/forms/field-types";
-import { resolveForm } from "../../lib/forms/resolve-form";
+import { itemEditFields } from "../../lib/forms/profile-fields";
 import { saveFormEdits } from "../../lib/forms/write";
 import type { HomeSession } from "../../state/use-domain-items";
 import { type ItemRead, readItem } from "./data";
@@ -27,44 +26,8 @@ export function EditForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [conflict, setConflict] = useState<Record<string, string>>();
-  const fields = useMemo(() => {
-    const resolved = resolveForm(item.url, item.dataset, item.subject).fields;
-    if (item.url !== session.webId.split("#")[0]) return resolved;
-    const allowed = [
-      "name",
-      "fn",
-      "hasPhoto",
-      "img",
-      "pronouns",
-      "hasEmail",
-      "hasTelephone",
-      "email",
-      "telephone",
-    ];
-    const profile = resolved
-      .filter((field) => allowed.includes(field.predicate.split(/[#/]/).at(-1) ?? ""))
-      .map((field) => {
-        const local = field.predicate.split(/[#/]/).at(-1);
-        if (["name", "fn"].includes(local ?? "")) return { ...field, label: "Name" };
-        if (local === "hasEmail")
-          return { ...field, label: "Email", kind: "email" as const, mode: "mailto" as const };
-        if (local === "hasTelephone")
-          return { ...field, label: "Phone", kind: "tel" as const, mode: "tel" as const };
-        if (["hasPhoto", "img"].includes(local ?? ""))
-          return { ...field, label: "Photo", kind: "url" as const, mode: "iri" as const };
-        return field;
-      });
-    for (const [label, predicate, kind, mode] of [
-      ["Name", `${NS.FOAF}name`, "text", "literal"],
-      ["Photo", `${NS.VCARD}hasPhoto`, "url", "iri"],
-      ["Pronouns", `${NS.SCHEMA}pronouns`, "text", "literal"],
-      ["Email", `${NS.VCARD}hasEmail`, "email", "mailto"],
-      ["Phone", `${NS.VCARD}hasTelephone`, "tel", "tel"],
-    ] as const)
-      if (!profile.some((field) => field.label === label || field.predicate === predicate))
-        profile.push(normaliseField({ label, predicate, kind, mode }));
-    return profile;
-  }, [item, session.webId]);
+  // Fields with several values or a nested structure come back read-only (see profile-fields).
+  const fields = useMemo(() => itemEditFields(item, session.webId), [item, session.webId]);
   const save = async (values: Record<string, string>, reRead = false) => {
     if (!navigator.onLine) {
       setError("Reconnect to save");
@@ -90,7 +53,11 @@ export function EditForm({
         setConflict(undefined);
         onSaved();
       } else if (result.reason === "stale") setConflict(values);
-      else setError(result.message);
+      else if (result.reason === "validation" && result.fieldId) {
+        // On "Keep my changes" a field may have gained values elsewhere; never drop them.
+        const label = fields.find((field) => field.id === result.fieldId)?.label ?? "A field";
+        setError(`${label} can't be changed here. ${result.message}`);
+      } else setError(result.message);
     } catch {
       setError("Couldn't save your changes. Please try again.");
     } finally {
