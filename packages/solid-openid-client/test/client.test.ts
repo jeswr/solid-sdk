@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 /**
  * Exhaustive tests for the Solid-OIDC engine against a FAITHFUL mock OP (no live IdP, no network,
@@ -902,7 +903,7 @@ describe("the authed fetch — DPoP proof bound to the access token (ath)", () =
     expect(seenInit?.credentials).toBe("include");
     expect(seenInit?.mode).toBe("cors");
     expect(seenInit?.cache).toBe("no-store");
-    expect(seenInit?.redirect).toBe("follow");
+    expect(seenInit?.redirect).toBe("manual");
     expect(seenInit?.integrity).toBe("sha256-abc");
     expect(seenInit?.keepalive).toBe(true);
     expect(seenInit?.referrer).toBe("https://app.example/page");

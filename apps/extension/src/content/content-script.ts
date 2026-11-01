@@ -1,4 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * The ISOLATED-world bridge between the page (MAIN-world `window.solid`) and the service
  * worker. It is the trust boundary: the page can only ASK; this script decides what to
@@ -7,6 +9,7 @@
  * origin's client-id mapping.
  */
 
+import { validateBodyFields } from '../shared/body-codec';
 import { installFormFill } from './formfill-controller';
 
 const CHANNEL = 'solid-browser-ext';
@@ -20,7 +23,8 @@ interface PageMessage {
   url?: string;
   method?: string;
   headers?: Record<string, string>;
-  body?: string | null;
+  body?: string;
+  bodyBase64?: string;
   webId?: string;
   clientId?: string;
   autoDivert?: boolean;
@@ -44,7 +48,18 @@ window.addEventListener('message', (event) => {
   if (!data || data.channel !== CHANNEL || data.dir !== 'to-content') return;
 
   switch (data.type) {
-    case 'SOLID_FETCH_REQUEST':
+    case 'SOLID_FETCH_REQUEST': {
+      try {
+        validateBodyFields(data.body, data.bodyBase64);
+      } catch (error) {
+        toPage({
+          type: 'SOLID_FETCH_RESPONSE',
+          requestId: data.requestId,
+          status: 400,
+          error: (error as Error).message,
+        });
+        break;
+      }
       chrome.runtime.sendMessage(
         {
           type: 'SOLID_FETCH_REQUEST',
@@ -52,7 +67,8 @@ window.addEventListener('message', (event) => {
           url: data.url,
           method: data.method,
           headers: data.headers ?? {},
-          body: data.body ?? null,
+          ...(data.body !== undefined ? { body: data.body } : {}),
+          ...(data.bodyBase64 !== undefined ? { bodyBase64: data.bodyBase64 } : {}),
           // Forward whether this was the best-effort global-fetch patch (autoDivert) vs an
           // explicit window.solid.fetch — drives the SW's native-passthrough-vs-403 choice
           // (High #1). It is a behaviour HINT, never a security input: the SW still runs the
@@ -64,6 +80,16 @@ window.addEventListener('message', (event) => {
           stampedOrigin: window.location.origin,
         },
         (response) => {
+          try {
+            validateBodyFields(response?.body, response?.bodyBase64);
+          } catch (error) {
+            toPage({
+              type: 'SOLID_FETCH_RESPONSE',
+              requestId: data.requestId,
+              error: (error as Error).message,
+            });
+            return;
+          }
           // Relay the whole worker response verbatim, INCLUDING the `passthrough` sentinel
           // flag (round-2 High #1): when the SW declines an autoDivert request without any
           // network, `response.passthrough === true` rides through here so the MAIN-world
@@ -72,6 +98,7 @@ window.addEventListener('message', (event) => {
         },
       );
       break;
+    }
 
     case 'SOLID_GET_STATE':
       chrome.runtime.sendMessage(
@@ -151,9 +178,10 @@ window.addEventListener('message', (event) => {
       break;
 
     case 'SOLID_LIST_GRANTS':
+    case 'SOLID_DISCONNECT':
       chrome.runtime.sendMessage(
         {
-          type: 'SOLID_LIST_GRANTS',
+          type: data.type,
           requestId: data.requestId,
           stampedOrigin: window.location.origin,
         },

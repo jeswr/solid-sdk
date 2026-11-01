@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
 // AUTHORED-BY Codex GPT-6.1-Sol
 //
@@ -8,11 +9,11 @@
 // SetFrom.subjectPredicate (term-type-preserving); writing uses NamedNodeFrom +
 // LiteralFrom + the dataset add, all from @rdfjs/wrapper.
 
+import { addHttpIriTriple, addLiteralTriple, objectTerms } from "@jeswr/rdf-serialize/wrapper";
 import type { DataFactory as DataFactoryType, DatasetCore, Quad, Term } from "@rdfjs/types";
 import {
   BlankNodeFrom,
   DatasetWrapper,
-  LiteralFrom,
   NamedNodeFrom,
   SetFrom,
   TermAs,
@@ -21,7 +22,7 @@ import {
   type TermWrapper as TermWrapperType,
 } from "@rdfjs/wrapper";
 import { DataFactory, Store } from "n3";
-import { escapeIri, safeHttpIri } from "./iri.js";
+import { escapeIri } from "./iri.js";
 import {
   FEDREG_ACCEPTS_SPEC,
   FEDREG_APP,
@@ -58,18 +59,9 @@ function uniqueNodes<T extends TermWrapper>(...groups: Iterable<T>[]): T[] {
   return [...nodes.values()];
 }
 
-/**
- * Read a property's objects as a Set of the OBJECT TERMS themselves (not their
- * lexical `.value`) so the term TYPE survives the read. For an IRI-valued property
- * this lets the validation layer inspect `.termType` and reject a literal / blank
- * node where an IRI is required (a malformed graph a lexical-only read would
- * silently accept); for the literal-valued `fedreg:asserted` it simply yields the
- * literal term. Mirrors the term-type-preserving pattern in @jeswr/federation-client.
- */
-function objectTerms(node: TermWrapper, predicate: string): Set<TermWrapperType> {
-  return readObjects(predicate, (iri) =>
-    SetFrom.subjectPredicate(node, iri, TermAs.instance(TermWrapper), TermFrom.instance),
-  );
+/** Preserve canonical-first fallback; the shared read keeps RDF term types. */
+function readAliasedTerms(node: TermWrapper, predicate: string): Set<TermWrapperType> {
+  return readObjects(predicate, (iri) => objectTerms(node, iri));
 }
 
 /**
@@ -79,20 +71,20 @@ function objectTerms(node: TermWrapper, predicate: string): Set<TermWrapperType>
  */
 export class MembershipNode extends TermWrapper {
   get apps(): Set<TermWrapperType> {
-    return objectTerms(this, FEDREG_APP);
+    return readAliasedTerms(this, FEDREG_APP);
   }
 
   get statuses(): Set<TermWrapperType> {
-    return objectTerms(this, FEDREG_STATUS);
+    return readAliasedTerms(this, FEDREG_STATUS);
   }
 
   get assertedBy(): Set<TermWrapperType> {
-    return objectTerms(this, FEDREG_ASSERTED_BY);
+    return readAliasedTerms(this, FEDREG_ASSERTED_BY);
   }
 
   /** The `fedreg:asserted` lexical value (first one found), or undefined. */
   get asserted(): string | undefined {
-    for (const term of objectTerms(this, FEDREG_ASSERTED)) {
+    for (const term of readAliasedTerms(this, FEDREG_ASSERTED)) {
       return term.value;
     }
     return undefined;
@@ -102,15 +94,15 @@ export class MembershipNode extends TermWrapper {
 /** A typed view of a `fedreg:StorageDescription` node. */
 export class StorageNode extends TermWrapper {
   get acceptsSpec(): Set<TermWrapperType> {
-    return objectTerms(this, FEDREG_ACCEPTS_SPEC);
+    return readAliasedTerms(this, FEDREG_ACCEPTS_SPEC);
   }
 
   get supportsSector(): Set<TermWrapperType> {
-    return objectTerms(this, FEDREG_SUPPORTS_SECTOR);
+    return readAliasedTerms(this, FEDREG_SUPPORTS_SECTOR);
   }
 
   get storage(): Set<TermWrapperType> {
-    return objectTerms(this, FEDREG_STORAGE);
+    return readAliasedTerms(this, FEDREG_STORAGE);
   }
 }
 
@@ -170,61 +162,22 @@ export function wrap(dataset: DatasetCore): RegistryDataset {
 
 // --- the write path (build) ----------------------------------------------
 
-/**
- * Add a `(subject, predicate-IRI, object-IRI)` triple through the factory.
- *
- * The object-IRI chokepoint: every object IRI in this vocab is legitimately an
- * http(s) IRI (a member app client_id, an assertedBy WebID/key, a storage root,
- * an acceptsSpec / supportsSector IRI, plus the trusted rdf:type / status vocab
- * constants). Route it through {@link safeHttpIri}: an untrusted string that is
- * not a parseable http(s) URL — or one carrying Turtle-IRIREF-breaking chars
- * (`> " { } | ^ \` SPACE`) that n3.Writer would emit verbatim between `<…>` —
- * is DROPPED (the triple is not added) rather than serialised as an injection.
- */
-function addIriTriple(node: TermWrapper, predicate: string, objectIri: string): void {
-  const safeObject = safeHttpIri(objectIri);
-  if (safeObject === undefined) {
-    return;
-  }
-  const factory = node.factory;
-  const subject = node as unknown as Term;
-  const p = NamedNodeFrom.string(predicate, factory);
-  const o = NamedNodeFrom.string(safeObject, factory);
-  node.dataset.add(factory.quad(subject as never, p as never, o as never));
-}
-
-/** Add a `(subject, predicate-IRI, typed-literal)` triple through the factory. */
-function addLiteralTriple(
-  node: TermWrapper,
-  predicate: string,
-  value: string,
-  datatype: string,
-): void {
-  const factory = node.factory;
-  const subject = node as unknown as Term;
-  const p = NamedNodeFrom.string(predicate, factory);
-  // LiteralFrom.datatypeTuple builds a typed literal (lexical + datatype IRI) via
-  // the factory — never a hand-built term.
-  const o = LiteralFrom.datatypeTuple([datatype, value], factory);
-  node.dataset.add(factory.quad(subject as never, p as never, o as never));
-}
-
 /** A Membership node opened for writing. */
 class WritableMembership extends TermWrapper {
   typeMembership(): void {
-    addIriTriple(this, RDF_TYPE, FEDREG_MEMBERSHIP);
+    addHttpIriTriple(this, RDF_TYPE, FEDREG_MEMBERSHIP);
   }
 
   addApp(iri: string): void {
-    addIriTriple(this, FEDREG_APP, iri);
+    addHttpIriTriple(this, FEDREG_APP, iri);
   }
 
   addStatus(iri: string): void {
-    addIriTriple(this, FEDREG_STATUS, iri);
+    addHttpIriTriple(this, FEDREG_STATUS, iri);
   }
 
   addAssertedBy(iri: string): void {
-    addIriTriple(this, FEDREG_ASSERTED_BY, iri);
+    addHttpIriTriple(this, FEDREG_ASSERTED_BY, iri);
   }
 
   addAsserted(dateTime: string): void {
@@ -235,7 +188,7 @@ class WritableMembership extends TermWrapper {
 /** A Registry node opened for writing. */
 class WritableRegistry extends TermWrapper {
   typeRegistry(): void {
-    addIriTriple(this, RDF_TYPE, FEDREG_REGISTRY);
+    addHttpIriTriple(this, RDF_TYPE, FEDREG_REGISTRY);
   }
 
   /**
@@ -262,19 +215,19 @@ class WritableRegistry extends TermWrapper {
 /** A StorageDescription node opened for writing. */
 class WritableStorage extends TermWrapper {
   typeStorage(): void {
-    addIriTriple(this, RDF_TYPE, FEDREG_STORAGE_DESCRIPTION);
+    addHttpIriTriple(this, RDF_TYPE, FEDREG_STORAGE_DESCRIPTION);
   }
 
   addStorage(iri: string): void {
-    addIriTriple(this, FEDREG_STORAGE, iri);
+    addHttpIriTriple(this, FEDREG_STORAGE, iri);
   }
 
   addAcceptsSpec(iri: string): void {
-    addIriTriple(this, FEDREG_ACCEPTS_SPEC, iri);
+    addHttpIriTriple(this, FEDREG_ACCEPTS_SPEC, iri);
   }
 
   addSupportsSector(iri: string): void {
-    addIriTriple(this, FEDREG_SUPPORTS_SECTOR, iri);
+    addHttpIriTriple(this, FEDREG_SUPPORTS_SECTOR, iri);
   }
 }
 

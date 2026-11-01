@@ -1,8 +1,10 @@
 // AUTHORED-BY Claude Fable 5
+// AUTHORED-BY Codex GPT-6
 import { Parser, Store } from "n3";
 import { describe, expect, it } from "vitest";
+import { buildBridgeAclTurtle } from "../acl.js";
 import { slackEventToBridgeMessage } from "../slack.js";
-import { writeMessageCreateOnly } from "./write.js";
+import { RawResourceMismatchError, writeMessageCreateOnly } from "./write.js";
 
 const CONTAINER = "https://alice.example/inbox/";
 
@@ -15,7 +17,11 @@ interface Recorded {
 
 /** A recording fake pod fetch. `existing` URLs answer 412 to a create-only PUT. */
 function recordingFetch(
-  opts: { existing?: ReadonlySet<string>; fail?: (url: string) => number } = {},
+  opts: {
+    existing?: ReadonlySet<string>;
+    raw?: string | Uint8Array;
+    fail?: (url: string) => number;
+  } = {},
 ) {
   const calls: Recorded[] = [];
   const fetchImpl = (async (input: string | URL, init?: RequestInit) => {
@@ -29,6 +35,7 @@ function recordingFetch(
     const failStatus = opts.fail?.(url);
     if (failStatus !== undefined && failStatus !== 0)
       return new Response(null, { status: failStatus });
+    if (method === "GET") return new Response(opts.raw, { status: 200 });
     return new Response(null, { status: 201 });
   }) as typeof fetch;
   return { fetchImpl, calls };
@@ -87,7 +94,7 @@ describe("writeMessageCreateOnly — create-only + idempotency", () => {
     expect(new Set(urls).size).toBe(3);
 
     // Second (replayed) delivery: those URLs already exist → all 412 → created:false.
-    const second = recordingFetch({ existing: new Set(urls) });
+    const second = recordingFetch({ existing: new Set(urls), raw });
     const result = await writeMessageCreateOnly({
       message,
       raw: enc(raw),
@@ -116,7 +123,7 @@ describe("writeMessageCreateOnly — create-only + idempotency", () => {
     });
     const rawUrl = probe.calls.find((c) => c.url.endsWith(".json"))?.url as string;
 
-    const retry = recordingFetch({ existing: new Set([rawUrl]) });
+    const retry = recordingFetch({ existing: new Set([rawUrl]), raw });
     const result = await writeMessageCreateOnly({
       message,
       raw: enc(raw),
@@ -125,6 +132,117 @@ describe("writeMessageCreateOnly — create-only + idempotency", () => {
     });
     // The raw anchor 412'd (already there) but the graph + chat were newly created.
     expect(result.created).toBe(true);
+  });
+
+  it.each([
+    "graph",
+    "chat",
+  ])("repairs a failed %s write and replays with the provisioned inbound ACL", async (failedResource) => {
+    const inbound = "https://alice.example/agents/inbound#me";
+    const { inbox } = await buildBridgeAclTurtle({
+      container: CONTAINER,
+      ownerWebId: "https://alice.example/profile/card#me",
+      inboundWebId: inbound,
+    });
+    const acl = new Store(new Parser().parse(inbox));
+    const aclNs = "http://www.w3.org/ns/auth/acl#";
+    const auth = acl.getSubjects(`${aclNs}agent`, inbound, null)[0];
+    if (auth === undefined) throw new Error("missing inbound authorization");
+    expect(acl.countQuads(auth, `${aclNs}default`, CONTAINER, null)).toBe(1);
+    const modes = new Set(acl.getObjects(auth, `${aclNs}mode`, null).map((mode) => mode.value));
+    const resources = new Map<string, NonNullable<RequestInit["body"]>>();
+    let failNext = true;
+    const writeFetch = (async (input, init) => {
+      const url = String(input);
+      if (init?.method === "GET") {
+        if (!modes.has(`${aclNs}Read`)) return new Response(null, { status: 403 });
+        return new Response(resources.get(url), { status: resources.has(url) ? 200 : 404 });
+      }
+      if (!modes.has(`${aclNs}Append`)) return new Response(null, { status: 403 });
+      expect(new Headers(init?.headers).get("if-none-match")).toBe("*");
+      if (resources.has(url)) return new Response(null, { status: 412 });
+      const isChat = url.endsWith(".chat.ttl");
+      const isGraph = url.endsWith(".ttl") && !isChat;
+      if (failNext && (failedResource === "graph" ? isGraph : isChat)) {
+        failNext = false;
+        return new Response(null, { status: 500 });
+      }
+      resources.set(url, init?.body ?? "");
+      return new Response(null, { status: 201 });
+    }) as typeof fetch;
+    const raw = slackEvent("retry with the inbound ACL");
+    const options = {
+      message: slackEventToBridgeMessage(enc(raw)),
+      raw,
+      container: CONTAINER,
+      writeFetch,
+    };
+    await expect(writeMessageCreateOnly(options)).rejects.toThrow(/pod write failed/);
+    await expect(writeMessageCreateOnly(options)).resolves.toMatchObject({ created: true });
+    expect(resources.size).toBe(3);
+    await expect(writeMessageCreateOnly(options)).resolves.toMatchObject({ created: false });
+    expect(resources.size).toBe(3);
+  });
+
+  it.each([
+    "changed body",
+    "different length",
+  ])("rejects a retained raw %s before writing graph or chat", async (difference) => {
+    const raw = slackEvent("hello");
+    const message = slackEventToBridgeMessage(enc(raw));
+    const probe = recordingFetch();
+    await writeMessageCreateOnly({
+      message,
+      raw,
+      container: CONTAINER,
+      writeFetch: probe.fetchImpl,
+    });
+    const rawUrl = probe.calls.find((c) => c.url.endsWith(".json"))?.url as string;
+    const retained = difference === "changed body" ? raw.replace("hello", "other") : `${raw} `;
+    const retry = recordingFetch({ existing: new Set([rawUrl]), raw: retained });
+    await expect(
+      writeMessageCreateOnly({
+        message,
+        raw,
+        container: CONTAINER,
+        writeFetch: retry.fetchImpl,
+      }),
+    ).rejects.toBeInstanceOf(RawResourceMismatchError);
+    expect(retry.calls.map((c) => [c.method, c.url])).toEqual([
+      ["PUT", rawUrl],
+      ["GET", rawUrl],
+    ]);
+  });
+
+  it.each([
+    302, 403, 404, 500,
+  ])("refuses an unreadable or redirected retained anchor (HTTP %i)", async (status) => {
+    const raw = slackEvent("hello");
+    const message = slackEventToBridgeMessage(enc(raw));
+    const calls: string[] = [];
+    const fetchImpl = (async (_input, init) => {
+      calls.push(init?.method ?? "GET");
+      return new Response(null, { status: init?.method === "PUT" ? 412 : status });
+    }) as typeof fetch;
+    await expect(
+      writeMessageCreateOnly({ message, raw, container: CONTAINER, writeFetch: fetchImpl }),
+    ).rejects.toThrow();
+    expect(calls).toEqual(["PUT", "GET"]);
+  });
+
+  it("rejects supplied bytes inconsistent with the parsed message without any writes", async () => {
+    const raw = slackEvent("hello");
+    const message = slackEventToBridgeMessage(enc(raw));
+    const { fetchImpl, calls } = recordingFetch();
+    await expect(
+      writeMessageCreateOnly({
+        message,
+        raw: raw.replace("hello", "other"),
+        container: CONTAINER,
+        writeFetch: fetchImpl,
+      }),
+    ).rejects.toBeInstanceOf(RawResourceMismatchError);
+    expect(calls).toEqual([]);
   });
 
   it("throws on a genuine pod write failure (non-412)", async () => {

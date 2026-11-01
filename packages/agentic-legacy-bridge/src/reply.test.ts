@@ -1,10 +1,28 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6.1-Sol
 import { describe, expect, it } from "vitest";
 import { buildReply, htmlSafeJson } from "./reply.js";
 
 const RAW = "urn:agentic:raw:abc123";
 
 describe("buildReply", () => {
+  it.each([
+    ["https://pod.example/日本語.ttl", "https://pod.example/%E6%97%A5%E6%9C%AC%E8%AA%9E.ttl"],
+    ["https://bücher.example/é.ttl", "https://xn--bcher-kva.example/%C3%A9.ttl"],
+    ["https://POD.example:443/replies/../reply.ttl", "https://pod.example/reply.ttl"],
+  ])("emits a usable header for %s while preserving RDF IRIs", async (iri, pointer) => {
+    const built = await buildReply({
+      inReplyTo: RAW,
+      podCopyUrl: iri,
+      issuer: iri,
+      sender: iri,
+      onboardingUrl: iri,
+    });
+    expect(new Headers(built.headers).get("X-Agentic-Reply")).toBe(pointer);
+    expect(built.credential.issuer).toBe(iri);
+    expect(built.credential.credentialSubject).toMatchObject({ sender: iri, onboarding: iri });
+  });
+
   it("builds an unsigned reply with offered events + onboarding + header", async () => {
     const r = await buildReply({
       inReplyTo: RAW,

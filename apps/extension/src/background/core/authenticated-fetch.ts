@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The authenticated resource fetch — DPoP-bound, origin-gated, fail-closed, with the
  * RFC 9449 §8 nonce-challenge retry. This is the one place the user's access token is
@@ -42,13 +43,11 @@ export interface AuthenticatedFetchOptions {
   readonly method: string;
   readonly headers: Record<string, string>;
   /**
-   * The request body. Restricted to a REPLAYABLE `string | null` because the §8 nonce
-   * retry must re-send the body: a one-shot `ReadableStream`/`Blob` stream cannot be sent
-   * twice. The page->worker message protocol already serialises bodies to strings, so this
-   * is the only shape that ever reaches here; a non-string body is rejected at the inject
-   * boundary (see inject.ts).
+   * Replayable text or snapshotted bytes, decoded from the page->worker protocol.
+   * Nonce retries and manual redirect hops re-send the same bytes; one-shot streams
+   * never reach this boundary.
    */
-  readonly body?: string | null;
+  readonly body?: string | Uint8Array<ArrayBuffer> | null;
   /** A cached server DPoP nonce to use on the first attempt, if known. */
   readonly nonce?: string;
   /** Injected fetch (test seam). Defaults to the global. */
