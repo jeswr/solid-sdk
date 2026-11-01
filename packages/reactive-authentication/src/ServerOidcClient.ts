@@ -131,7 +131,7 @@ export async function createServerOidcClient(options: ServerOidcOptions) {
       if (!as.authorization_endpoint) throw new Error("Missing authorization endpoint");
       const url = new URL(as.authorization_endpoint);
       if (url.protocol !== "https:") throw new Error("Unsafe authorization endpoint");
-      url.search = new URLSearchParams({
+      for (const [name, value] of Object.entries({
         client_id: options.clientId,
         redirect_uri: options.redirectUri,
         response_type: "code",
@@ -142,7 +142,9 @@ export async function createServerOidcClient(options: ServerOidcOptions) {
         code_challenge: await oauth.calculatePKCECodeChallenge(state.codeVerifier),
         prompt: "consent",
         dpop_jkt: await dpop.calculateThumbprint(),
-      }).toString();
+      })) {
+        url.searchParams.set(name, value);
+      }
       return { url: url.href, state };
     },
     async handleCallback(input: { url: string }, state: ServerAuthorizationState) {

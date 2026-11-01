@@ -32,6 +32,53 @@ async function fixture(wrapFetch = (fetcher) => fetcher) {
 }
 
 test.each([
+  false,
+  true,
+])("preserves authorization endpoint query parameters (stale OAuth parameters: %s)", async (staleOAuthParameters) => {
+  const oauthParameters = [
+    "client_id",
+    "redirect_uri",
+    "response_type",
+    "scope",
+    "state",
+    "nonce",
+    "code_challenge_method",
+    "code_challenge",
+    "prompt",
+    "dpop_jkt",
+  ];
+  const f = await fixture((fetcher) => async (input, init) => {
+    const response = await fetcher(input, init);
+    if (!new Request(input, init).url.endsWith("/.well-known/openid-configuration"))
+      return response;
+    const metadata = await response.json();
+    const endpoint = new URL(metadata.authorization_endpoint);
+    endpoint.search = "policy=tenant-a&route=west%2Beast&route=north%20zone&empty=";
+    if (staleOAuthParameters) {
+      for (const name of oauthParameters) {
+        endpoint.searchParams.append(name, "stale");
+        endpoint.searchParams.append(name, "duplicate");
+      }
+    }
+    metadata.authorization_endpoint = endpoint.href;
+    return Response.json(metadata);
+  });
+  const url = new URL(f.begin.url);
+  expect(url.origin + url.pathname).toBe(`${POD_ISSUER}authorize`);
+  expect(url.searchParams.getAll("policy")).toEqual(["tenant-a"]);
+  expect(url.searchParams.getAll("route")).toEqual(["west+east", "north zone"]);
+  expect(url.searchParams.getAll("empty")).toEqual([""]);
+  expect(url.searchParams.get("redirect_uri")).toBe(POD_CALLBACK);
+  expect(url.searchParams.get("response_type")).toBe("code");
+  expect(url.searchParams.get("state")).toBe(f.begin.state.state);
+  expect(url.searchParams.get("nonce")).toBe(f.begin.state.nonce);
+  for (const name of oauthParameters) {
+    expect(url.searchParams.getAll(name)).toHaveLength(1);
+  }
+  expect((await f.login()).webId).toBe(f.op.controls.webId);
+});
+
+test.each([
   "once",
   "always",
   "invalid_token",
