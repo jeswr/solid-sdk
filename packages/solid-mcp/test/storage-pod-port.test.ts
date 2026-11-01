@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { createPodClient } from "@jeswr/storage-client";
@@ -33,6 +34,29 @@ function fixture(protocol: "solid" | "lws" = "solid", readOnly = false) {
 }
 
 describe("storage-client PodPort", () => {
+  it.each([200, 404])("retains WAC HEAD discovery on HTTP %s", async (status) => {
+    const { pod, fetch } = fixture();
+    fetch.mockResolvedValueOnce(
+      new Response(null, { status, headers: { link: '<policy>; rel="acl"' } }),
+    );
+    expect(await pod.head?.(FILE)).toEqual({ acl: `${ROOT}policy` });
+    expect(createPodClient).toHaveBeenCalledOnce();
+    expect(fetch).toHaveBeenCalledWith(
+      FILE,
+      expect.objectContaining({ method: "HEAD", redirect: "manual" }),
+    );
+    await expect(pod.head?.("https://evil.example/private")).rejects.toThrow("scope");
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+
+  it("propagates discovery failures before inspecting ACL metadata", async () => {
+    vi.mocked(createPodClient).mockRejectedValueOnce(new Error("Discovery unavailable"));
+    const fetch = vi.fn<typeof globalThis.fetch>();
+    const pod = createStoragePodPort({ fetch, podRoot: ROOT });
+    await expect(pod.head?.(FILE)).rejects.toThrow("Discovery unavailable");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it.each([
     "solid",
     "lws",

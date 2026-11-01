@@ -9,7 +9,6 @@ import {
   pkgId,
   serializeNanopublications,
 } from "@jeswr/pkg-memory";
-import { createMemoryPodPort } from "@jeswr/pkg-memory/testing";
 import { buildMemory, parseMemory } from "@jeswr/solid-memory/memory";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -22,6 +21,7 @@ import { createFetchPodPort, type PodPort } from "../src/pod-port.js";
 import { createSolidMcpServer } from "../src/server.js";
 import { createPodToolRegistry } from "../src/tools.js";
 import { containerTurtle } from "./fake-pod.js";
+import { createWacMemoryPodPort } from "./wac-memory-pod.js";
 
 const ROOT = "https://example.org/pod/";
 const OWNER = "https://example.org/people/avery#me";
@@ -38,7 +38,7 @@ afterEach(async () => {
 });
 
 function podFixture(): PodPort {
-  return createMemoryPodPort({ root: ROOT, webId: OWNER });
+  return createWacMemoryPodPort({ root: ROOT, webId: OWNER });
 }
 function registry(
   pod: PodPort,

@@ -3,6 +3,7 @@ name: solid-mcp
 description: Use when implementing Solid MCP tools, portable pod data access, or stdio server integration.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # Solid MCP
 
@@ -54,7 +55,13 @@ an additional inclusive validFrom/validThrough filter, retaining calendar
 granularity and exact datetime microseconds. Reject ambiguous temporal bounds.
 Check all candidate categories before content filters. Never disclose special
 data, including through recall, unless its monthly private PROV audit append
-succeeds and is verified. Audit uses the current PodPort, owner-only ACLs,
-strong conditional ETags and bounded retries. A read-only server must withhold
-results that require auditing. Keep shared internal helpers stripped from
-declarations so private pkg-memory types remain bundled.
+succeeds and is verified. Audit uses the current PodPort and its optional HEAD
+metadata to discover a unique server-advertised WAC `rel="acl"` URL for each
+protected target, including on 404. Require a pod-scoped ACL URL and write the
+owner-only WAC authorization there; never guess a `.acl` URL. Missing or unsafe
+WAC links, ACP-only storage and custom ports
+without HEAD metadata fail closed with `Audit protection unavailable`, withholding
+the sensitive read. Do not add ACP support. Preserve strong conditional ETags and
+bounded retries. A read-only server must withhold results that require auditing.
+Keep shared internal helpers stripped from declarations so private pkg-memory
+types remain bundled.

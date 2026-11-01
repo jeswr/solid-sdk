@@ -5,9 +5,34 @@
 ```ts
 
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { ChatPodPort } from '@jeswr/solid-chat-interop';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { Store } from 'n3';
 import type { z } from 'zod';
+
+// @public
+export interface CliConfig {
+    // (undocumented)
+    clientId?: string;
+    // (undocumented)
+    clientSecret?: string;
+    // (undocumented)
+    oidcIssuer?: string;
+    // (undocumented)
+    podRoot: string;
+    // (undocumented)
+    readOnly: boolean;
+    // (undocumented)
+    tokenUrl?: string;
+    // (undocumented)
+    webId?: string;
+}
+
+// @public
+export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPodPort;
+
+// @public
+export function createCliFetch(config: CliConfig, fetchImpl?: typeof fetch): Promise<typeof fetch>;
 
 // @public
 export function createFetchPodPort(input: SolidMcpConfig): PodPort;
@@ -41,6 +66,9 @@ export interface FetchResult {
 export function listContainer(source: PodSource, url: string): Promise<PodChild[]>;
 
 // @public
+export function loadCliConfig(env?: NodeJS.ProcessEnv, home?: string): Promise<CliConfig>;
+
+// @public
 export interface MemoryClientInfo {
     clientId: string;
     model?: string;
@@ -71,8 +99,14 @@ export interface PodConditions {
 export type PodEntry = Pick<PodChild, "url" | "isContainer"> & Partial<Omit<PodChild, "url" | "isContainer">>;
 
 // @public
+export interface PodHeadResult {
+    acl?: string;
+}
+
+// @public
 export interface PodPort {
     delete(url: string, cond?: PodConditions): Promise<void>;
+    head?(url: string): Promise<PodHeadResult>;
     list(container: string): Promise<PodEntry[]>;
     read(url: string, options?: PodReadOptions): Promise<PodReadResult>;
     readonly root: string;

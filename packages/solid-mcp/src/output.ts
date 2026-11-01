@@ -19,6 +19,7 @@ import type { PodChild, SearchMatch } from "./pod.js";
 import { podReadMode, withPodReadLimits, withPodReadMode } from "./pod-operation.js";
 import {
   isFetchPodRead,
+  type PodHeadResult,
   type PodPort,
   type PodReadOptions,
   type PodReadResult,
@@ -68,6 +69,14 @@ export class PodOutput {
   private readonly decisions = new Map<string, boolean>();
 
   constructor(private readonly pod: PodPort) {}
+
+  /** Metadata inspection never authorizes disclosure of resource contents. */
+  async head(url: string): Promise<PodHeadResult> {
+    return withPodReadLimits(async () => {
+      const target = requirePodScopedUrl({ podRoot: this.pod.root }, url);
+      return (await this.pod.head?.(target)) ?? {};
+    });
+  }
 
   async read(url: string, options?: PodReadOptions): Promise<PodReadResult> {
     return withPodReadLimits(async () => {
@@ -247,6 +256,7 @@ export class PodOutput {
 /** Public diagnostics are fixed strings: backend errors may contain rejected values. */
 export function podOutputError(error: unknown): Error {
   const message = error instanceof Error ? error.message : String(error);
+  if (message === "Audit protection unavailable") return new Error(message);
   if (/purpose denied/i.test(message)) return new Error("purpose denied");
   if (/grant denied/i.test(message)) return new Error("grant denied");
   if (/pod-scope/i.test(message)) return new Error("pod-scope violation");

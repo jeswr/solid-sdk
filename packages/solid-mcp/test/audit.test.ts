@@ -1,11 +1,12 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { createMemoryPodPort } from "@jeswr/pkg-memory/testing";
 import { DataFactory as df, Parser, Store } from "n3";
 import { afterEach, expect, it, vi } from "vitest";
 import { auditSpecialRead } from "../src/audit.js";
 import { MAX_CONTENT_BYTES } from "../src/content.js";
 import { purposeDenied } from "../src/personal-policy.js";
 import type { PodPort } from "../src/pod-port.js";
+import { createWacMemoryPodPort } from "./wac-memory-pod.js";
 
 const ROOT = "https://example.org/pod/";
 const OWNER = `${ROOT}profile/card#me`;
@@ -16,7 +17,7 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 afterEach(() => vi.restoreAllMocks());
 function fixture() {
-  return createMemoryPodPort({ root: ROOT, webId: OWNER });
+  return createWacMemoryPodPort({ root: ROOT, webId: OWNER });
 }
 function url() {
   return `${ROOT}private/pkg/audit/${new Date().toISOString().slice(0, 7)}.ttl`;

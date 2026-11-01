@@ -18,38 +18,7 @@ import { PodOutput, podOutputError } from "./output.js";
 import { containerCandidates } from "./pod.js";
 import { withPodReadLimits } from "./pod-operation.js";
 import { createFetchPodPort, type PodPort } from "./pod-port.js";
-
-/** Parse a conservative Link-header subset; ambiguous/unsupported discovery fails closed. */
-function wacAclLink(header: string): string {
-  const acls: string[] = [];
-  let remaining = header;
-  while (remaining.trim()) {
-    const link =
-      /^\s*<([^<>]*)>((?:\s*;\s*[\w-]+\s*=\s*(?:"(?:[^"\\]|\\.)*"|[^\s;,"]+))*)\s*(?:,|$)/.exec(
-        remaining,
-      );
-    if (!link) throw new Error("Invalid chat ACL discovery Link header");
-    remaining = remaining.slice(link[0].length);
-    const params = new Map<string, string>();
-    for (const param of (link[2] ?? "").matchAll(
-      /;\s*([\w-]+)\s*=\s*("(?:[^"\\]|\\.)*"|[^\s;,"]+)/g,
-    )) {
-      const name = (param[1] ?? "").toLowerCase();
-      const raw = param[2] ?? "";
-      if (params.has(name)) throw new Error("Ambiguous chat ACL discovery Link header");
-      params.set(name, raw.startsWith('"') ? raw.slice(1, -1).replace(/\\(.)/g, "$1") : raw);
-    }
-    const relations = (params.get("rel") ?? "").split(/\s+/);
-    if (relations.includes("http://www.w3.org/ns/solid/acp#accessControl"))
-      throw new Error("Unsupported chat access-control model: ACP");
-    if (relations.includes("acl")) {
-      if (params.has("anchor")) throw new Error("Unsupported anchored chat ACL link");
-      acls.push(link[1] ?? "");
-    }
-  }
-  if (acls.length !== 1 || !acls[0]) throw new Error("A unique WAC ACL link is required for chats");
-  return acls[0];
-}
+import { wacAclLink } from "./wac-link.js";
 
 /** Adapt only the chat storage surface while MCP-01's shared port is absent. */
 export function createChatPodPort(config: SolidMcpConfig, pod?: PodPort): ChatPodPort {

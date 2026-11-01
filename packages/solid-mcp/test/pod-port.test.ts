@@ -13,6 +13,42 @@ function responding(status = 200, headers: HeadersInit = {}) {
 }
 
 describe("fetch PodPort", () => {
+  it.each([200, 404])("discovers relative WAC ACL metadata on HEAD HTTP %s", async (status) => {
+    const fetch = responding(status, {
+      link: '<other>; title="view, not an ACL"; rel="alternate", <permissions>; rel="acl"',
+    });
+    const pod = createFetchPodPort({ fetch, podRoot: ROOT });
+    expect(await pod.head?.(FILE)).toEqual({ acl: `${ROOT}permissions` });
+    expect(fetch).toHaveBeenCalledWith(
+      FILE,
+      expect.objectContaining({ method: "HEAD", redirect: "manual", cache: "no-cache" }),
+    );
+    await expect(pod.head?.("https://evil.example/private")).rejects.toThrow("scope");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    "",
+    '<policy>; rel="http://www.w3.org/ns/solid/acp#accessControl"',
+    '<a>; rel="acl", <b>; rel="acl"',
+    '<a>; rel="acl"; anchor="other"',
+    '<a>; rel="alternate"; title="rel=acl"',
+    '<a>; rel="acl"; rel="alternate"',
+    '<a>; rel="acl", malformed',
+  ])("omits unusable WAC metadata: %s", async (link) => {
+    const pod = createFetchPodPort({ fetch: responding(200, { link }), podRoot: ROOT });
+    expect(await pod.head?.(FILE)).toEqual({});
+  });
+
+  it.each([
+    301, 302, 307, 401, 403, 500,
+  ])("refuses HEAD HTTP %s even with an ACL link", async (status) => {
+    const fetch = responding(status, { link: '<permissions>; rel="acl"', location: FILE });
+    const pod = createFetchPodPort({ fetch, podRoot: ROOT });
+    await expect(pod.head?.(FILE)).rejects.toThrow("WAC ACL discovery failed");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("retains raw bytes, normalized media type and ETag", async () => {
     const bytes = new Uint8Array([0, 255, 127]);
     const fetch = vi.fn<typeof globalThis.fetch>(

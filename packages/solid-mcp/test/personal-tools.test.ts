@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import {
   buildNanopublications,
@@ -6,15 +7,15 @@ import {
   NanopubStore,
   parseAssertion,
 } from "@jeswr/pkg-memory";
-import { createMemoryPodPort } from "@jeswr/pkg-memory/testing";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { DataFactory as df, Parser } from "n3";
 import { afterEach, expect, it, vi } from "vitest";
 import { temporalRange } from "../src/personal-tools.js";
-import type { PodPort } from "../src/pod-port.js";
+import { createFetchPodPort, type PodPort } from "../src/pod-port.js";
 import { createSolidMcpServer } from "../src/server.js";
 import { createPodToolRegistry } from "../src/tools.js";
+import { createWacMemoryPodPort } from "./wac-memory-pod.js";
 
 const ROOT = "https://example.org/pod/";
 const OWNER = `${ROOT}profile/card#me`;
@@ -30,7 +31,7 @@ afterEach(async () => {
   await Promise.all(clients.splice(0).map((client) => client.close()));
 });
 function fixture() {
-  return createMemoryPodPort({ root: ROOT, webId: OWNER });
+  return createWacMemoryPodPort({ root: ROOT, webId: OWNER });
 }
 function run(pod: PodPort, readOnly = false, clientId = CLIENT) {
   const tools = createPodToolRegistry(pod, readOnly, { clientId });
@@ -289,6 +290,33 @@ it.each([
     expect(result.isError).toBe(true);
     expect(text(result)).not.toContain("Fictional condition");
   }
+});
+
+it.each([
+  undefined,
+  "",
+  '<policy>; rel="http://www.w3.org/ns/solid/acp#accessControl"',
+  '<https://outside.example/PRIVATE>; rel="acl"',
+])("withholds health and recall results when WAC discovery is unavailable (%s)", async (link) => {
+  const pod = fixture();
+  await seed(pod, condition, "MedicalHealth");
+  await permit(pod, ["MedicalHealth"]);
+  pod.head =
+    link === undefined
+      ? undefined
+      : createFetchPodPort({
+          podRoot: ROOT,
+          fetch: async () => new Response(null, { status: 404, headers: { link } }),
+        }).head;
+  const write = vi.spyOn(pod, "write");
+  for (const name of ["health_query", "memory_recall"]) {
+    const result = await run(pod)(name, { purpose, kind: "conditions" });
+    expect(result.isError).toBe(true);
+    expect(text(result)).toBe("Audit protection unavailable");
+  }
+  expect(
+    write.mock.calls.some(([target]) => target.includes("/audit/") && target.endsWith(".ttl")),
+  ).toBe(false);
 });
 
 it.each([

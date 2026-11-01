@@ -17,6 +17,7 @@ import { fetchBoundedRdf } from "./bounded-rdf.js";
 import type { PodChild } from "./pod.js";
 import { hasPodFetchLimits, podOperationFetch } from "./pod-operation.js";
 import { handlesProfileRedirects } from "./profile-redirects.js";
+import { wacAclLink } from "./wac-link.js";
 
 /** Conditional mutation headers supported by a pod. */
 export interface PodConditions {
@@ -30,6 +31,12 @@ export interface PodConditions {
 export interface PodReadOptions {
   /** Accepted media types; omitted for the backend's default representation. */
   accept?: string;
+}
+
+/** Server metadata for an exact resource, including a not-yet-created resource. */
+export interface PodHeadResult {
+  /** Absolute WAC ACL URL from a unique, unanchored server Link relation. */
+  acl?: string;
 }
 
 /** Raw resource bytes, media type and optional ETag. */
@@ -58,6 +65,8 @@ export interface PodPort {
   readonly webId: string;
   /** Read raw bytes. The configured WebID may be read for discovery, even when off-pod. */
   read(url: string, options?: PodReadOptions): Promise<PodReadResult>;
+  /** Inspect without following redirects; retain WAC discovery links on HTTP 404. */
+  head?(url: string): Promise<PodHeadResult>;
   /** List a container's immediate children. */
   list(container: string): Promise<PodEntry[]>;
   /** Write bytes with optional preconditions; reject redirects and disabled writes. */
@@ -133,6 +142,23 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
   const pod: PodPort = {
     root: config.podRoot,
     webId: config.webId ?? "",
+    async head(url) {
+      const target = requirePodScopedUrl(config, url);
+      const response = await podOperationFetch(config.fetch)(target, {
+        method: "HEAD",
+        redirect: "manual",
+        cache: "no-cache",
+      });
+      void response.body?.cancel().catch(() => {});
+      if ((!response.ok && response.status !== 404) || (response.url && response.url !== target))
+        throw new Error("WAC ACL discovery failed");
+      try {
+        return { acl: new URL(wacAclLink(response.headers.get("link") ?? ""), target).href };
+      } catch {
+        // ACP, absent, malformed or ambiguous WAC links cannot protect audit data.
+        return {};
+      }
+    },
     async read(url, options: PodReadOptions = {}) {
       // Only the operator-configured identity retains the legacy off-pod exception.
       // Tool/resource callers scope-check first, so clients cannot use it as an escape.

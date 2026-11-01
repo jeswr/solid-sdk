@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createPodClient, type StorageClient } from "@jeswr/storage-client";
@@ -100,6 +101,13 @@ export function createStoragePodPort(
   const pod: PodPort = {
     root: config.podRoot,
     webId: config.webId ?? "",
+    async head(url) {
+      const target = requirePodScopedUrl(config, url);
+      await storage();
+      // storage-client rejects 404 responses before exposing their Link headers.
+      // Use the same scoped fetch metadata path so absent targets remain discoverable.
+      return (await legacy.head?.(target)) ?? {};
+    },
     async read(url, options) {
       if (url === config.webId && podScopedUrlOrUndefined(config, url) === undefined)
         return legacy.read(url, options);

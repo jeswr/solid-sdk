@@ -194,7 +194,10 @@ supported. Supplying both `fetch` and `pod` to the server keeps chat ACL discove
 the fetch capability while pod operations use the supplied port.
 
 `PodPort` exposes raw-byte `read`, `list`, conditional `write` and `delete`, `root` and
-`webId`. Optional `PodReadOptions.accept` selects a representation; generic reads keep
+`webId`. Its optional `head` returns `PodHeadResult.acl`, an absolute WAC ACL URL
+discovered from a unique, unanchored `rel="acl"` Link on the exact target, including
+HTTP 404 for resources not yet created. HEAD refuses redirects. Optional
+`PodReadOptions.accept` selects a representation; generic reads keep
 the backend default, while RDF/profile reads request RDF explicitly. The fetch adapter retains listing metadata, ETags, guarded read redirects,
 and refusal of all mutation redirects. Mutations reject the root and its slashless
 alias. Both adapter and server default to read-only; opt into writes at both layers.
@@ -373,9 +376,14 @@ Special-category reads, including permitted memory recall and financial data,
 require a writable server and PodPort. Before returning results they append a
 PROV activity to `private/pkg/audit/<yyyy-mm>.ttl`: client IRI, DPV purpose,
 special categories and UTC time, with no fact values. Empty permitted health
-queries are audited too. Owner-only WAC ACLs precede audit content; strong ETags
-and bounded compare-and-swap retries preserve concurrent entries. The saved
-activity is verified through the current PodPort. Audit denial, corruption,
+queries are audited too. Before writing audit content, the server discovers each
+protected target's actual WAC ACL using HEAD and installs an owner-only authorization
+there; it never guesses a `.acl` URL. ACL URLs must be within the configured pod.
+Missing, ambiguous or unsafe WAC links, ACP-only storage, and custom PodPorts without
+WAC HEAD metadata refuse auditing and the sensitive read with the fixed diagnostic
+`Audit protection unavailable`. ACP is unsupported. Strong ETags and bounded
+compare-and-swap retries preserve concurrent entries. The saved activity is verified
+through the current PodPort. Audit denial, corruption,
 overflow or persistence failure withholds the tool result. Ordinary contact
 and address reads remain available on a read-only server when permitted.
 
@@ -412,8 +420,8 @@ while preserving permission, transport and message-read errors.
 Chat tools are registered alongside the canonical pod tools and compatibility
 aliases when using the fetch-based server configuration. The chat adapter retains
 its ACL discovery and write safeguards. The portable `PodPort` configuration
-registers pod and memory tools; chat tools require ACL discovery, which `PodPort`
-does not expose.
+registers pod and memory tools; chat tools currently require the fetch-based
+configuration for their ACL discovery.
 
 ## Streamable HTTP
 
