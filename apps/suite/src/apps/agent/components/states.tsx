@@ -57,13 +57,17 @@ export function QueryRows<T>({
 export function CollectionNotice({ rows }: { rows: readonly unknown[] }) {
   const metadata = rows as unknown as CollectionMetadata;
   if (!isComplete(rows)) return <p role="alert">{metadata.incompleteMessage}</p>;
-  return isTruncated(rows) ? (
+  if (!isTruncated(rows)) return null;
+  const shown = Math.min(rows.length, MEMBER_LIMIT);
+  return (
     <p role="status">
       {metadata.newest
-        ? `Showing the newest ${MEMBER_LIMIT}`
-        : `Showing ${MEMBER_LIMIT} of ${metadata.total}`}
+        ? `Showing the newest ${shown}`
+        : metadata.totalIsLowerBound
+          ? `Showing ${shown}. There are more records than this app checks at once.`
+          : `Showing ${shown} of ${metadata.total}`}
     </p>
-  ) : null;
+  );
 }
 export function DisabledAction({
   children,

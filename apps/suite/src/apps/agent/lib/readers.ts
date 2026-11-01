@@ -262,6 +262,8 @@ export async function readInbox(
     ...messages,
     total,
     truncated: truncated || messages.truncated,
+    // When the account listing itself was capped, unlisted accounts hold uncounted messages.
+    totalIsLowerBound: accounts.truncated,
     newest: false,
   });
 }

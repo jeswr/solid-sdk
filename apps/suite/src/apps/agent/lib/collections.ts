@@ -9,6 +9,8 @@ export interface CollectionMetadata {
   readonly newest: boolean;
   readonly complete: boolean;
   readonly incompleteMessage?: string;
+  /** `total` counts only what was listed; more members exist beyond a capped listing. */
+  readonly totalIsLowerBound?: boolean;
 }
 export type Collection<T> = Row<T>[] & CollectionMetadata;
 
@@ -21,6 +23,7 @@ export function collection<T>(
     newest = false,
     complete = true,
     incompleteMessage,
+    totalIsLowerBound = false,
   }: Partial<CollectionMetadata> = {},
 ): Collection<T> {
   for (const [name, value] of Object.entries({
@@ -29,6 +32,7 @@ export function collection<T>(
     newest,
     complete,
     incompleteMessage,
+    totalIsLowerBound,
   }))
     Object.defineProperty(rows, name, { value });
   return rows as Collection<T>;

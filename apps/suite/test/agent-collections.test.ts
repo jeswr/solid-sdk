@@ -207,6 +207,7 @@ it("bounds all inbox account listings and caps messages across accounts with an 
   // 1,000 account containers: only the 500 selected ones are listed, and the result says so.
   expect(isTruncated(rows)).toBe(true);
   expect(list).toHaveBeenCalledTimes(501);
+  expect(rows).toMatchObject({ total: 0, totalIsLowerBound: true });
   expect(peak).toBe(6);
   list.mockImplementation(async (url) =>
     url === `${BASE}inbox/direct/`
@@ -214,7 +215,7 @@ it("bounds all inbox account listings and caps messages across accounts with an 
       : Array.from({ length: 300 }, (_, i) => ({ url: `${url}${i}.ttl`, container: false })),
   );
   const messages = await readers.readInbox(client, "direct");
-  expect(messages).toMatchObject({ total: 600, newest: false });
+  expect(messages).toMatchObject({ total: 600, newest: false, totalIsLowerBound: false });
   expect(messages).toHaveLength(500);
   expect(isTruncated(messages)).toBe(true);
 });

@@ -164,7 +164,7 @@ it.each([
       children: () => h("p", {}, "Records"),
     }),
   );
-  expect(view.host.textContent?.includes("Showing the newest 500")).toBe(truncated);
+  expect(view.host.textContent?.includes("Showing the newest 1")).toBe(truncated);
   await view.unmount();
 });
 
@@ -496,7 +496,26 @@ it("labels unordered display samples honestly", async () => {
       children: () => null,
     }),
   );
-  expect(view.host.textContent).toContain("Showing 500 of 731");
+  expect(view.host.textContent).toContain("Showing 0 of 731");
   expect(view.host.textContent).not.toContain("newest");
+  await view.unmount();
+});
+
+it("never presents a lower-bound total as exact", async () => {
+  const view = await mount(
+    h(QueryRows, {
+      query: {
+        status: "ready",
+        data: collection([], { truncated: true, total: 200, totalIsLowerBound: true }),
+        reload: () => {},
+      },
+      empty: "Empty",
+      children: () => null,
+    }),
+  );
+  expect(view.host.textContent).toContain(
+    "Showing 0. There are more records than this app checks at once.",
+  );
+  expect(view.host.textContent).not.toContain("of 200");
   await view.unmount();
 });
