@@ -16,6 +16,7 @@ import {
   type ShellFrameProps,
   type ShellPreferences,
 } from "@jeswr/suite-ui/shell";
+import { OfflinePill, SyncSheet } from "@jeswr/suite-ui/sync";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, Suspense, useEffect, useState } from "react";
 import { useSuiteEnvironment } from "./environment";
@@ -28,6 +29,7 @@ import { useAccounts } from "./session/accounts-provider";
 import { SessionGuard } from "./session/session-guard";
 import { GlobalShortcuts } from "./shortcuts/global-shortcuts";
 import { ShortcutsProvider } from "./shortcuts/provider";
+import { useSyncSnapshot } from "./sync/online";
 
 export interface SuiteShellProps {
   app: AppSlug;
@@ -54,6 +56,8 @@ function Frame({
   const pathname = usePathname();
   const router = useRouter();
   const shellSource = useShellSearchSource();
+  const sync = useSyncSnapshot();
+  const [syncOpen, setSyncOpen] = useState(false);
   const { active } = useAccounts();
   const env = useSuiteEnvironment();
   const app = appRegistry.find((item) => item.slug === slug);
@@ -129,6 +133,7 @@ function Frame({
           context,
           actions,
           account: <div className="shell-mobile-account">{account}</div>,
+          offlinePill: <OfflinePill snapshot={sync} onOpen={() => setSyncOpen(true)} />,
           search: (
             <GlobalSearch
               source={searchSource ?? shellSource}
@@ -145,6 +150,14 @@ function Frame({
       >
         {children}
       </ShellFrame>
+      <SyncSheet
+        open={syncOpen}
+        onOpenChange={setSyncOpen}
+        snapshot={sync}
+        onRetryAll={() => {}}
+        onRetry={() => {}}
+        onResolve={() => {}}
+      />
     </RailPreferencesProvider>
   );
 }

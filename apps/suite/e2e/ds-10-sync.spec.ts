@@ -63,8 +63,9 @@ test("pill: every state, icon names, tooltips, axe and reflow", async ({ page },
         "aria-label",
         (await pill.getAttribute("aria-label")) ?? "",
       );
-      await icon.focus();
-      await expect(page.getByRole("tooltip")).toBeVisible();
+      // Radix opens tooltips on hover or keyboard focus (not programmatic focus).
+      await icon.hover();
+      await expect(page.locator('[data-slot="tooltip-content"]')).toBeVisible();
     }
     await accessible(page, `[data-fixture="${scenario}"]`);
     await capture(page, `pill-${scenario.replaceAll(" ", "-")}`, info.project.name);
@@ -213,7 +214,7 @@ test("capabilities: supported, hidden, disabled, note, missing, custom reason an
       await expect(page.getByRole("status")).toHaveText("Moved to trash");
     } else if (scenario !== "Online requirements") {
       await expect(region.getByRole("button")).toBeDisabled();
-      await region.getByRole("group").focus();
+      await region.getByRole("group").hover();
       await expect(page.getByRole("tooltip")).toHaveText(
         scenario === "Custom reason"
           ? "Your storage does not offer trash."
