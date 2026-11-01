@@ -10,7 +10,19 @@ export interface Tool {
   schema: z.ZodObject;
   run(input: unknown): Promise<unknown>;
 }
-export function proposerTools(ctx: ProposerContext, proposals: ActionProposal[]): Tool[] {
+export type ProposalDraft = Omit<ActionProposal, "wasGeneratedBy">;
+type ProposalSchema = Extract<(typeof podRecordSchema.options)[number], z.ZodType<ActionProposal>>;
+const proposalRecord = podRecordSchema.options.find(
+  (schema): schema is ProposalSchema => schema.shape.type.value === "action-proposal",
+) as ProposalSchema;
+const proposal = z.strictObject({
+  action: proposalRecord.omit({ wasGeneratedBy: true }).extend({
+    state: z.literal("proposed"),
+    intent: proposalRecord.shape.intent.extend({ parameters: z.record(z.string(), z.json()) }),
+  }),
+});
+
+export function proposerTools(ctx: ProposerContext, proposals: ProposalDraft[]): Tool[] {
   const podTools = createPodToolRegistry(ctx.pod, true)
     .filter((tool) => tool.name === "pod_read" || tool.name === "search")
     .map((tool) => ({
@@ -20,7 +32,6 @@ export function proposerTools(ctx: ProposerContext, proposals: ActionProposal[])
       run: tool.handler,
     }));
   const recall = z.strictObject({ query: z.string().min(1).max(4096) });
-  const proposal = z.strictObject({ action: z.record(z.string(), z.json()) });
   return [
     ...podTools,
     {
@@ -34,12 +45,10 @@ export function proposerTools(ctx: ProposerContext, proposals: ActionProposal[])
     {
       name: "propose",
       description:
-        "Return a proposed action for runtime review. This grants no authority and executes nothing.",
+        'Return a complete action-proposal with state "proposed" for runtime review. IDs and references must be absolute IRIs; timestamps must include seconds and an explicit timezone. The gateway supplies wasGeneratedBy; omit it. This grants no authority and executes nothing.',
       schema: proposal,
       async run(input) {
-        const action = podRecordSchema.parse(proposal.parse(input).action);
-        if (action.type !== "action-proposal" || action.state !== "proposed")
-          throw new Error("Expected proposed state");
+        const { action } = proposal.parse(input);
         proposals.push(action);
         return { proposed: action.id };
       },

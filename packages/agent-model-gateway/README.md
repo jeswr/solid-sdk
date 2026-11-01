@@ -39,8 +39,9 @@ It exposes exactly `pod_read`, `pod_search` (the Solid MCP registry's read-only 
 `memory_recall` (injected until agent-memory is implemented), and `propose`. The SDK has no
 built-in tools, external MCP configuration, inherited credentials, project settings or persisted
 session. Its home and working directory are temporary and removed after the run.
-`propose` validates an agent-model ActionProposal with state `proposed` and returns it locally.
-The gateway replaces `wasGeneratedBy` with the producing model-call UUID IRI. The runtime
+`propose` advertises and validates the agent-model ActionProposal fields with state `proposed`,
+excluding `wasGeneratedBy`, and returns the proposal locally. The gateway supplies
+`wasGeneratedBy` using the producing model-call UUID IRI. The runtime
 must persist that provenance and the proposals, and enforce mandates and approvals.
 The gateway has no send tool, pod mutation tool or audit writer.
 

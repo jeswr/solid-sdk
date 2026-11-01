@@ -1,12 +1,11 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { BridgeMessage } from "@jeswr/agent-channels";
-import type { ActionProposal } from "@jeswr/agent-model";
 import { structuredMetadataInterpreter } from "@jeswr/agentic-legacy-bridge/metadata";
 import { z } from "zod";
 import { anthropicPropose } from "./anthropic.js";
 import { baselineTriage } from "./deterministic.js";
 import { openaiPropose, responseSchema } from "./openai.js";
-import { proposerTools } from "./tools.js";
+import { type ProposalDraft, proposerTools } from "./tools.js";
 import { configuration, transport } from "./transport.js";
 import { type Gateway, GatewayError, type GatewayOptions, type ModelCall } from "./types.js";
 
@@ -104,7 +103,7 @@ export function createGateway(options: GatewayOptions): Gateway {
     proposer: {
       async propose(conversation, ctx) {
         const calls: ModelCall[] = [];
-        const proposals: ActionProposal[] = [];
+        const proposals: ProposalDraft[] = [];
         const provenance = new Map<string, string>();
         try {
           const tools = proposerTools(ctx, proposals);

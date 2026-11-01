@@ -26,12 +26,11 @@ const message: BridgeMessage = {
   warnings: [],
 };
 const schema = z.object({ summary: z.string() });
-const proposal: ActionProposal = {
+const proposal: Omit<ActionProposal, "wasGeneratedBy"> = {
   type: "action-proposal",
   id: "urn:proposal:1",
   state: "proposed",
   renderedPreview: "A draft",
-  wasGeneratedBy: "urn:runtime:1",
   createdAt: "2026-11-01T00:00:00Z",
   validUntil: "2026-11-02T00:00:00Z",
   intent: {
@@ -436,6 +435,25 @@ describe("OpenAI Proposer tool boundary", () => {
     ).toHaveLength(4);
     expect(bodies[0].parallel_tool_calls).toBe(false);
     expect(bodies[0].instructions).toContain(ctx.instructions);
+    const advertised = bodies[0].tools.find((tool: { name: string }) => tool.name === "propose");
+    const action = advertised.parameters.properties.action;
+    expect(action.required).toEqual([
+      "type",
+      "id",
+      "intent",
+      "renderedPreview",
+      "createdAt",
+      "validUntil",
+      "state",
+    ]);
+    expect(action.properties.state).toMatchObject({ const: "proposed" });
+    expect(action.properties.type).toMatchObject({ const: "action-proposal" });
+    expect(action.properties.wasGeneratedBy).toBeUndefined();
+    expect(action.additionalProperties).toBe(false);
+    expect(action.properties.intent.required).toEqual(Object.keys(proposal.intent));
+    expect(action.properties.intent.properties.amount.required).toEqual(["value", "currency"]);
+    expect(action.properties.intent.properties.parameters.type).toBe("object");
+    expect(advertised.description).toContain("gateway supplies wasGeneratedBy");
   });
   it.each([
     "send",
@@ -472,6 +490,11 @@ describe("OpenAI Proposer tool boundary", () => {
   it.each([
     { action: { ...proposal, state: "approved" } },
     { action: { ...proposal, state: "sent" } },
+    { action: { ...proposal, wasGeneratedBy: "urn:forged:provenance" } },
+    { action: { ...proposal, type: "account" } },
+    { action: { ...proposal, createdAt: "2026-02-30T00:00:00Z" } },
+    { action: { ...proposal, intent: { ...proposal.intent, target: "relative" } } },
+    { action: { ...proposal, intent: { ...proposal.intent, parameters: [] } } },
     { action: {} },
     { action: proposal, send: true },
   ])("refuses invalid or already-authorized proposals %o", async (args) => {
@@ -528,6 +551,32 @@ describe("Anthropic Proposer SDK isolation", () => {
       expect(
         await options.canUseTool("mcp__gateway__memory_recall", { query: "fixture" }),
       ).toMatchObject({ behavior: "allow" });
+      expect(await options.canUseTool("mcp__gateway__propose", { action: proposal })).toMatchObject(
+        {
+          behavior: "allow",
+        },
+      );
+      expect(await options.canUseTool("mcp__gateway__propose", { action: {} })).toMatchObject({
+        behavior: "deny",
+      });
+      const advertised = tools.find((tool) => tool.name === "propose");
+      expect(z.toJSONSchema(z.object(advertised.shape))).toMatchObject({
+        properties: {
+          action: {
+            required: [
+              "type",
+              "id",
+              "intent",
+              "renderedPreview",
+              "createdAt",
+              "validUntil",
+              "state",
+            ],
+            properties: { state: { const: "proposed" } },
+            additionalProperties: false,
+          },
+        },
+      });
       yield { type: "system", subtype: "init" };
       yield { type: "system", subtype: "api_retry", attempt: 1 };
       yield streamStart("msg-1");
