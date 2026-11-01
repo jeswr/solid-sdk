@@ -84,8 +84,8 @@ export class TaskStore {
         if (reg.kind === "instance") urls.add(documentUrl(reg.location));
         else {
           try {
-            for (const url of await this.io.list(reg.location))
-              if (url.endsWith(".ttl")) urls.add(url);
+            const listed = await this.io.list(reg.location);
+            for (const url of listed.filter((member) => member.endsWith(".ttl"))) urls.add(url);
           } catch (error) {
             if (!onError) throw error;
             onError(reg.location, error);
