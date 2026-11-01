@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import type { Features } from "@jeswr/storage-capabilities";
 import type { AuthFetch, StorageClient } from "@jeswr/storage-client";
 
@@ -14,6 +15,8 @@ export interface RunningTarget {
   storage: StorageClient;
   /** Independent expectations; compare state and detail, ignoring explanatory evidence. */
   claims: Partial<Features>;
+  /** SDK backend serialization support, independent of server RDF content negotiation. */
+  jsonLdWrites?: boolean;
   /** Smallest fixture size this target is configured to paginate, when known. */
   paginationWitnessSize?: number;
   /** Memory has no HTTP server; derive from its synthetic description instead. */

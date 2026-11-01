@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { createAccessClient, type Grant } from "@jeswr/pod-access";
+// AUTHORED-BY Codex GPT-6
+import { type AccessGrant, createAccessClient } from "@jeswr/pod-access";
 import {
   type Body,
   type CreateOptions,
@@ -197,7 +198,7 @@ export function createDriveStore(options: {
         ...(name === undefined ? {} : { name }),
       });
     },
-    async share(url: string, grant: Grant, opts: { inherit?: boolean } = {}) {
+    async share(url: string, grant: AccessGrant, opts: { inherit?: boolean } = {}) {
       return createAccessClient({ storage: await client() }).share(url, grant, opts);
     },
   };

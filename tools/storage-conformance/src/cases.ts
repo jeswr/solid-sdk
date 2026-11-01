@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import assert from "node:assert/strict";
 import { parseRdf } from "@jeswr/fetch-rdf";
 import { StorageError, type WriteResult } from "@jeswr/storage-client";
@@ -273,14 +274,29 @@ const rdf: ConformanceCase[] = [
         });
         assert.equal(cached.notModified, true);
         assert.equal(cached.dataset.size, 0);
-        // The public SDK explicitly refuses JSON-LD serialization until it has a writer.
-        await expectStorageError(
+        const before = await etag(target.storage, written.url);
+        const writeJsonLd = () =>
           target.storage.writeRdf(written.url, expected, {
             contentType: "application/ld+json",
-            ifMatch: await etag(target.storage, written.url),
-          }),
-          "unsupported",
-        );
+            ifMatch: before,
+          });
+        // Memory implements JSON-LD serialization; the HTTP backends still refuse it.
+        if (target.jsonLdWrites) {
+          const jsonLd = await writeJsonLd();
+          assert.equal(jsonLd.created, false);
+          assert.notEqual(jsonLd.etag, before);
+          const raw = await target.storage.read(jsonLd.url);
+          assert.equal(raw.contentType, "application/ld+json");
+          assertIsomorphic(await parseRdf(await raw.text(), "application/ld+json"), expected);
+          assertIsomorphic((await target.storage.readRdf(jsonLd.url)).dataset, expected);
+          await expectStorageError(writeJsonLd(), "precondition-failed", 412);
+          assert.equal(await etag(target.storage, jsonLd.url), jsonLd.etag);
+          assertIsomorphic((await target.storage.readRdf(jsonLd.url)).dataset, expected);
+        } else {
+          await expectStorageError(writeJsonLd(), "unsupported");
+          assert.equal(await etag(target.storage, written.url), before);
+          assertIsomorphic((await target.storage.readRdf(written.url)).dataset, expected);
+        }
       },
     }),
   ),

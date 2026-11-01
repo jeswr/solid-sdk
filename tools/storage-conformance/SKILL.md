@@ -3,6 +3,7 @@ name: storage-conformance
 description: Work on @jeswr/storage-conformance, the shared storage conformance suite package in the Solid SDK workspace.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 # @jeswr/storage-conformance
 
@@ -49,7 +50,10 @@ Read README.md's current integration limitations before interpreting report fail
 the pinned sparq 0.1.6 server has no discovery link, and Solid move is advertised as emulated
 by the stacked SDK (so T-080's requested Solid move skip conflicts with ADR-009 D3).
 Do not bypass discovery, synthesize server advertisements or alter SDK security to hide these.
-JSON-LD serialization is unsupported upstream; JSON-LD input and Turtle writes are covered.
+Memory targets set `jsonLdWrites: true`: require semantic JSON-LD write round-trips, accurate
+media types and stale-validator rejection. This describes SDK serialization, not the server's
+`rdfConneg` feature. HTTP backends still refuse JSON-LD serialization; require `unsupported`
+and unchanged validators/data. JSON-LD input and Turtle writes remain covered on every target.
 
 Before implementation, read SDK core ADR-001 D4 and `ADR-009-test-strategy.md` in
 `solid-suite-planning/specs/sdk-core/`, alongside this repository's `AGENTS.md`.

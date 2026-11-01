@@ -1,5 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { access } from "node:fs/promises";
+import { createServer } from "node:net";
 import { forClientCredentials } from "@jeswr/pod-auth/node";
 import { createPodClient } from "@jeswr/storage-client";
 import { afterEach, expect, test, vi } from "vitest";
@@ -13,6 +15,7 @@ vi.mock("@solid/community-server", () => ({
   },
 }));
 vi.mock("@jeswr/pod-auth/node", () => ({ forClientCredentials: vi.fn() }));
+vi.mock("node:net", () => ({ createServer: vi.fn() }));
 vi.mock("@jeswr/storage-client", async (original) => ({
   ...(await original<typeof import("@jeswr/storage-client")>()),
   createPodClient: vi.fn(),
@@ -94,6 +97,14 @@ test("same-origin credential-bearing controls fail before fetch can echo the URL
 });
 
 async function setup() {
+  // CSS and its transport are mocked in this unit suite; port allocation must be too.
+  const portServer = {
+    once: vi.fn(),
+    listen: vi.fn((_port: number, _host: string, ready: () => void) => ready()),
+    address: vi.fn(() => ({ port: 31337 })),
+    close: vi.fn((done: () => void) => done()),
+  };
+  vi.mocked(createServer).mockReturnValue(portServer as never);
   vi.stubGlobal("fetch", accountFetch());
   mocks.create.mockResolvedValue({ start: mocks.start, stop: mocks.stop });
   const logout = vi.fn();
@@ -117,15 +128,17 @@ async function setup() {
     features: memory.storage.features,
     description: {} as never,
   });
-  return { logout, authFetch };
+  return { logout, authFetch, portServer };
 }
 
 test("starts file-backed in-process CSS, uses pod-auth credentials and removes data on stop", async () => {
-  const { logout, authFetch } = await setup();
+  const { logout, authFetch, portServer } = await setup();
   const running = await cssTarget.start();
   const input = mocks.create.mock.calls[0]?.[0];
   expect(input.config).toBe("@css:config/file.json");
-  expect(input.shorthand.port).toBeGreaterThan(0);
+  expect(portServer.listen).toHaveBeenCalledWith(0, "127.0.0.1", expect.any(Function));
+  expect(portServer.close).toHaveBeenCalledOnce();
+  expect(input.shorthand.port).toBe(31337);
   expect(input.loaderProperties.moduleState.contexts).toHaveProperty(
     "https://linkedsoftwaredependencies.org/bundles/npm/@solid/community-server/^7.0.0/components/context.jsonld",
   );

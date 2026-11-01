@@ -1,6 +1,7 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /** Document persistence over the discovered SDK client, with logical containment checks. */
-import { createAccessClient, type Grant } from "@jeswr/pod-access";
+import { type AccessGrant, createAccessClient } from "@jeswr/pod-access";
 import { type StorageClient, StorageError } from "@jeswr/storage-client";
 import {
   type BuildDocumentInput,
@@ -236,7 +237,11 @@ export class DocsStore {
     }
   }
 
-  async share(url: string, grant: Grant, opts: { inherit?: boolean } = {}): Promise<Grant> {
+  async share(
+    url: string,
+    grant: AccessGrant,
+    opts: { inherit?: boolean } = {},
+  ): Promise<AccessGrant> {
     const storage = await this.assertInContainer(url);
     return createAccessClient({ storage }).share(url, grant, opts);
   }

@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { deriveFeatures, type StorageDescription } from "@jeswr/storage-capabilities";
 import { LWS, SSD } from "@jeswr/storage-capabilities/vocab";
 import { StorageError } from "@jeswr/storage-client";
@@ -49,6 +50,7 @@ export function memoryTarget(
         root,
         webId,
         storage,
+        jsonLdWrites: true,
         fetch: noTransport,
         paginationWitnessSize: protocol === "lws" ? pageSize + 1 : undefined,
         claims: {
