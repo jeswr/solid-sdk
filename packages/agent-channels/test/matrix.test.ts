@@ -327,7 +327,8 @@ it("receives delayed keys while preserving pending ciphertext and replaying late
   let keyAvailable = false;
   const crypto = {
     async receiveSync(value: Record<string, unknown>) {
-      if (value.to_device) keyAvailable = true;
+      const events = (value.to_device as { events: { type: string }[] } | undefined)?.events ?? [];
+      if (events.some((item) => item.type === "m.room_key")) keyAvailable = true;
     },
     async decrypt(value: Record<string, unknown>) {
       if (!keyAvailable) throw new Error("key has not arrived");
@@ -338,7 +339,7 @@ it("receives delayed keys while preserving pending ciphertext and replaying late
     [
       direct,
       sync([event(), cipher, event("$three")]),
-      sync([], { next_batch: "s2" }),
+      sync([], { next_batch: "s2", to_device: { events: [{ type: "m.dummy" }] } }),
       // Even if the server ignores the crypto-only filter, these events must be
       // read again from s1 after the original pending page has drained.
       sync([later], {
@@ -366,13 +367,37 @@ it("receives delayed keys while preserving pending ciphertext and replaying late
   const next = await r.binding.ingest.list(account, drained.next, limits);
   expect(next.items.map((item) => item.id)).toEqual(["$later"]);
   expect(JSON.parse(next.next)).toMatchObject({ since: "s3", pending: [] });
-  for (const index of [2, 3, 5])
+  for (const index of [2, 5])
     expect(required(r.requests[index]).url.searchParams.get("since")).toBe("s1");
+  expect(required(r.requests[3]).url.searchParams.get("since")).toBe("s2");
   for (const index of [2, 3]) {
     const filter = JSON.parse(required(required(r.requests[index]).url.searchParams.get("filter")));
     expect(filter.room.rooms).toEqual([]);
   }
   expect(r.tokens.calls.every((call) => call.access === "read")).toBe(true);
+});
+
+it("scopes crypto progress to the delivery batch and advances it only after crypto accepts sync", async () => {
+  const pending = { ...event(), type: "m.room.encrypted" };
+  const r = reader([sync([], { next_batch: "s1" }), sync([], { next_batch: "s2" }), sync([])]);
+  r.crypto.decrypt.mockRejectedValue(new Error("missing key"));
+  r.crypto.receiveSync.mockRejectedValueOnce(new Error("crypto rejected sync"));
+  const previous = cursor({ pending: [pending] });
+  await expect(r.binding.ingest.list(account, previous, limits)).rejects.toBeInstanceOf(
+    MatrixRoomError,
+  );
+  await expect(r.binding.ingest.list(account, previous, limits)).rejects.toBeInstanceOf(
+    MatrixRoomError,
+  );
+  expect(r.requests.slice(0, 2).map((request) => request.url.searchParams.get("since"))).toEqual([
+    "s0",
+    "s0",
+  ]);
+  const different = cursor({ since: "different-batch", pending: [pending] });
+  await expect(r.binding.ingest.list(account, different, limits)).rejects.toBeInstanceOf(
+    MatrixRoomError,
+  );
+  expect(required(r.requests[2]).url.searchParams.get("since")).toBe("different-batch");
 });
 
 it.each([

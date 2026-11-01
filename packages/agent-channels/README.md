@@ -172,6 +172,8 @@ Joined and left DM timelines share these checks; a room delta without a timeline
 On decryption failure, the reader synchronizes crypto changes and retries once, retaining
 the pending ciphertext and delivery checkpoint. Any timelines returned during that crypto
 sync are read again after pending delivery drains, so later key delivery cannot skip messages.
+The live reader retains a separate crypto sync token for the blocked delivery batch,
+acknowledging applied to-device messages so queued keys can continue arriving on retries.
 
 The host initializes the Rust SDK's `OlmMachine` with the provisioned device identity
 and private persistent crypto-store path, then supplies `await createMatrixCrypto(machine)`.

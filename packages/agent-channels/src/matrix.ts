@@ -125,6 +125,9 @@ export function createMatrixReader(options: MatrixReaderOptions): ChannelBinding
   const tokens = options.tokens;
   const crypto = options.crypto;
   const rest = matrixRest(homeserver, options.transport);
+  // Crypto can advance while delivery retries the same buffered page. Keep this
+  // progress with the device's live crypto machine, scoped to that delivery batch.
+  let cryptoProgress: { deliverySince: string; since: string } | undefined;
   return {
     id: "matrix",
     carriage: MATRIX_CONTENT,
@@ -241,15 +244,19 @@ export function createMatrixReader(options: MatrixReaderOptions): ChannelBinding
                 // crypto changes: room timelines must still be read from state.since
                 // once pending delivery drains, even if the server ignores this filter.
                 const params = new URLSearchParams({
-                  since: state.since,
+                  since:
+                    cryptoProgress?.deliverySince === state.since
+                      ? cryptoProgress.since
+                      : state.since,
                   timeout: "0",
                   filter: JSON.stringify({ room: { rooms: [] }, presence: { types: [] } }),
                 });
                 const sync = await responseBody(
                   await rest(`/sync?${params}`, account, tokens, "read"),
                 );
-                syncToken(sync.next_batch);
+                const since = syncToken(sync.next_batch);
                 await crypto.receiveSync(sync);
+                cryptoProgress = { deliverySince: state.since, since };
                 native = JSON.stringify(await crypto.decrypt(event, event.room_id as string));
               } catch {
                 throw new MatrixRoomError(event.room_id as string);
