@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * The shared federated **Contacts** model — typed read/write accessors over the
  * SolidOS `vcard:AddressBook` family (an address book, its people/groups index
@@ -42,7 +43,7 @@
  * server-only.
  */
 
-import { isHttpIri as isRdfHttpIri } from "@jeswr/rdf-serialize";
+import { escapeIri, isHttpIri as isRdfHttpIri } from "@jeswr/rdf-serialize";
 import type { DatasetCore, Term } from "@rdfjs/types";
 import {
   BlankNodeFrom,
@@ -106,28 +107,6 @@ function isMailto(value: string): boolean {
 /** True for a well-formed `tel:` IRI with a non-empty number. */
 function isTel(value: string): boolean {
   return /^tel:.+/.test(value);
-}
-
-/**
- * Percent-encode every Turtle **IRIREF-forbidden** character so an untrusted
- * `mailto:` / `tel:` value cannot break out of the `<…>` IRI delimiters and inject
- * triples when serialised by `n3.Writer`.
- *
- * **Why this and NOT `new URL().href`.** `mailto:`/`tel:` are OPAQUE (non-special)
- * URL schemes, so WHATWG `new URL("mailto:a@b> <evil>").href` does NOT percent-encode
- * the `>`/`<`/space in the opaque path — the {@link ../iri.ts} `httpIriOrUndefined`
- * canonicaliser (correct for http(s)) is the WRONG tool here. `n3.Writer` escapes
- * newlines/tabs but emits an IRI verbatim between `<…>`, so a raw `>` (or space, `<`,
- * `"`, `{`, `}`, `|`, `^`, backtick, backslash) breaks out and injects triples. This
- * is the load-bearing fix — the `isMailto`/`isTel` guards are insufficient (`.+`
- * matches those characters). The forbidden set is the RDF 1.1 Turtle `IRIREF`
- * production: U+0000–U+0020 (all control chars AND space) plus `< > " { } | ^ ` \`.
- */
-function escapeIri(v: string): string {
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: the Turtle IRIREF grammar forbids U+0000–U+0020 (control chars + space); percent-encoding them is the security fix.
-  return v.replace(/[\u0000-\u0020<>"{}|^`\\]/g, (c) => {
-    return `%${c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")}`;
-  });
 }
 
 /** Read a blank-node object's value as its raw label (the supported lambda mapping). */
@@ -449,7 +428,7 @@ export class Contact extends TermWrapper {
       const iri = raw.startsWith("mailto:") ? raw : `mailto:${raw}`;
       // `mailto:` is an OPAQUE scheme, so `new URL().href` does NOT percent-encode a
       // breakout `>`/space/`<` in the address — escape the Turtle IRIREF-forbidden
-      // chars ourselves so an untrusted address can't inject triples via n3.Writer.
+      // chars with the shared escaper before they reach n3.Writer.
       if (isMailto(iri)) addStructuredValue(this, VCARD_HAS_EMAIL, VCARD_HOME, escapeIri(iri));
     }
   }

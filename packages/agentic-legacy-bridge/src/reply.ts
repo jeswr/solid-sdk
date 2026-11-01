@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate.
+// AUTHORED-BY Codex GPT-6.1-Sol
 /**
  * Rung 3 (LEGACY-INTEROP.md §4) — build the STRUCTURED, machine-readable carrier
  * embedded alongside the human prose in an outbound reply.
@@ -199,7 +200,7 @@ export async function buildReply(options: BuildReplyOptions): Promise<BuiltReply
 
   const headers: Record<string, string> = {};
   const podCopy = safeHttpIri(options.podCopyUrl);
-  if (podCopy !== undefined) headers["X-Agentic-Reply"] = podCopy;
+  if (podCopy !== undefined) headers["X-Agentic-Reply"] = new URL(podCopy).href;
 
   const answer = cleanHumanText(options.humanText);
   const onboardingBlock = onboarding !== undefined ? onboardingBlockFor(onboarding) : undefined;

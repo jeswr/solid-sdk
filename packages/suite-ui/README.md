@@ -82,6 +82,39 @@ selection or missing custom date. Cancel asks for confirmation before calling `o
 offline content stays visible with sharing controls disabled. Retry/clear callbacks belong to the
 consumer. Dev examples live at `/dev/components/{people-picker,role-select,duration-chips,consent-sheet,permission-row}`.
 
+## Shared sign-in card
+
+Import `SignInCard` and its presentation types from `@jeswr/suite-ui/sign-in`, and
+load `@jeswr/suite-ui/styles/sign-in.css` after the token, theme, density and component
+styles. Tailwind consumers must scan this package's source, as for the primitives.
+
+Pass ordered `providers` (home provider first), optional `recentAccounts` and
+`recentProviders`, and `onWebId`, `onProvider`, `onCustomProvider`, and `onAccount`
+callbacks. Fields submit trimmed non-empty strings, including provider URLs pasted
+into the WebID field. The host resolves addresses and owns authentication, validation,
+remembered accounts and provider history; the card has no auth dependency or network
+transport. Host-supplied `signUpUrl`, `iconUrl`, and `photoUrl` must be absolute HTTP(S)
+URLs; unsafe values are ignored. Provider monogram colours cycle through six app tones
+in list order. The home provider is the single filled action; form submits use outlines.
+
+`pending={{ kind, key }}` disables actions and marks the matching control with
+“Signing in with {name}…” or “Signing in as {name}…” while keeping its icon and details;
+forms show “Signing in…”. Use the provider ID (or issuer URL), account WebID, or
+submitted form input as the key. Supply `onCancel` to offer cancellation. `error` renders one alert
+associated with the last submitted input. Set `allowCustomProvider={false}` to hide
+custom entry. `defaultCustomProviderOpen` initially expands custom entry; later prop
+changes do not override the user's choice. `webIdHelpHref` replaces the built-in WebID
+explanation sheet with a native link when it is an absolute HTTP(S) URL or a local path
+starting with a single `/`; unsafe values use the built-in explanation. `footer` adds
+host content and becomes inert while pending.
+
+The subpath also exports the pure `monogramFor`, `toneAt`, `toneFor` (retained for stable
+issuer-based colours), `safeHref`, `hostOf`, and `signUpTarget` helpers. `safeHref` trims
+outer whitespace, rejects embedded whitespace and backslashes, and accepts local paths
+only when its second argument is `true`. Interactive states are at
+`/dev/components/sign-in`, optionally filtered with
+`?state=default|recent|pending|error|custom`; the fixture includes a density selector.
+
 ## DS-02 primitives and atoms
 
 Import `@jeswr/suite-ui/styles/components.css` after the token, theme and density styles.

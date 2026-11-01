@@ -42,7 +42,12 @@
       "types": "./dist/sync/index.d.ts",
       "import": "./dist/sync/index.js"
     },
-    "./styles/sync.css": "./dist/styles/sync.css"
+    "./styles/sync.css": "./dist/styles/sync.css",
+    "./sign-in": {
+      "types": "./dist/sign-in/index.d.ts",
+      "import": "./dist/sign-in/index.js"
+    },
+    "./styles/sign-in.css": "./dist/styles/sign-in.css"
   },
   "files": [
     "dist",
