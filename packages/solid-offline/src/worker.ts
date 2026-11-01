@@ -15,6 +15,7 @@
  */
 
 import { createPodClient, type StorageClient } from '@jeswr/storage-client';
+import { createLwsBackend } from '@jeswr/storage-client/lws';
 import { createSolidBackend } from '@jeswr/storage-client/solid';
 import {
   assetConfigCandidates,
@@ -37,7 +38,7 @@ import { MetadataStore } from './metadata-store.js';
 import { cacheNameForWebId, isScopeChange } from './scope.js';
 import { createPolicyStorage } from './storage.js';
 import { type Broadcaster, type ByteCache, handleFetch, type SwrDeps } from './swr.js';
-import type { AppShellConfig, PageToWorkerMessage } from './types.js';
+import type { AppShellConfig, OfflineClientConfig, PageToWorkerMessage } from './types.js';
 
 declare const self: ServiceWorkerGlobalScope & {
   /**
@@ -61,6 +62,7 @@ let metaPromise: Promise<MetadataStore> | undefined;
 let channel: BroadcastChannel | undefined;
 let configuredWebId: string | undefined;
 let storageRoot: string | undefined;
+let storageBackend: OfflineClientConfig['storageBackend'];
 let invalidationGeneration = 0;
 /** Tracks whether `configuredWebId` has ever been set by a config message. */
 let webIdConfigured = false;
@@ -275,6 +277,7 @@ self.addEventListener('message', (event: ExtendableMessageEvent) => {
     // #15: adopt the page's resolved channel name (custom channels must work).
     setChannelName(data.config.channelName);
     storageRoot = data.config.storageRoot;
+    storageBackend = data.config.storageBackend;
     invalidationGeneration += 1;
     // P4: if the page sent an app-shell config, adopt it. `adoptShellConfig` is a
     // no-op when it equals the current one, and (roborev) REPLACES + re-precaches
@@ -351,6 +354,7 @@ async function baseDeps(): Promise<Omit<SwrDeps, 'isOnline'>> {
 /** Discover only for network operations; local invalidation needs just the storage boundary. */
 async function invalidateDeps(): Promise<InvalidateDeps> {
   const root = storageRoot;
+  const backend = storageBackend;
   const generation = invalidationGeneration;
   function checkScope(): void {
     if (generation !== invalidationGeneration)
@@ -363,10 +367,12 @@ async function invalidateDeps(): Promise<InvalidateDeps> {
   let discovered: Promise<StorageClient> | undefined;
   const networkStorage = (): Promise<StorageClient> => {
     checkScope();
-    discovered ??= createPolicyStorage(
-      async (fetch) => (await createPodClient({ storage: root, fetch })).storage,
-      transport,
-    );
+    discovered ??= createPolicyStorage(async (fetch) => {
+      if (backend?.protocol === 'solid') return createSolidBackend({ root, fetch });
+      if (backend?.protocol === 'lws')
+        return createLwsBackend({ root, fetch, storage: backend.id });
+      return (await createPodClient({ storage: root, fetch })).storage;
+    }, transport);
     return discovered;
   };
   return {

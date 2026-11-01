@@ -179,6 +179,62 @@ it('routes notification/resync messages through credential-free storage and the 
     'lws fresh',
   );
 
+  // Page-supplied backend metadata avoids root/description discovery. The root
+  // is private, but its publicly readable child must still reconcile.
+  vi.mocked(createPodClient).mockReset().mockRejectedValue(new Error('Private root'));
+  self.fetch.mockImplementation(async (input, init) => {
+    const request = new Request(input, init);
+    expect(request.url).toBe(url);
+    return turtleResponse(request.method === 'HEAD' ? '' : 'public update', { etag: 'v5' });
+  });
+  await send({
+    type: 'config',
+    config: { webId: bob, storageRoot: root, storageBackend: { protocol: 'solid' } },
+  });
+  await send({ type: 'notification', frame: { type: 'Update', object: url } });
+  expect(await (await b.cache.match(keyRequest(url, 'accept=text/turtle')))?.text()).toBe(
+    'public update',
+  );
+  self.fetch.mockImplementation(async (input, init) => {
+    const request = new Request(input, init);
+    expect(request.url).toBe(url);
+    return turtleResponse(request.method === 'HEAD' ? '' : 'public resync', { etag: 'v6' });
+  });
+  await send({ type: 'resync' });
+  expect(await (await b.cache.match(keyRequest(url, 'accept=text/turtle')))?.text()).toBe(
+    'public resync',
+  );
+  expect(createPodClient).not.toHaveBeenCalled();
+
+  // LWS keeps its discovered identity without root rediscovery, and still
+  // rejects responses advertising a different storage.
+  await send({
+    type: 'config',
+    config: { webId: bob, storageRoot: root, storageBackend: { protocol: 'lws', id: storageId } },
+  });
+  self.fetch.mockImplementation(async () => {
+    const response = turtleResponse('public lws', { etag: 'v7' });
+    response.headers.set('link', `<${storageId}>; rel="https://www.w3.org/ns/lws#storage"`);
+    return response;
+  });
+  await send({ type: 'notification', frame: { type: 'Update', object: url } });
+  expect(await (await b.cache.match(keyRequest(url, 'accept=text/turtle')))?.text()).toBe(
+    'public lws',
+  );
+  self.fetch.mockImplementation(async () => {
+    const response = turtleResponse('foreign', { etag: 'v8' });
+    response.headers.set(
+      'link',
+      '<https://other.example/description>; rel="https://www.w3.org/ns/lws#storage"',
+    );
+    return response;
+  });
+  await send({ type: 'notification', frame: { type: 'Update', object: url } });
+  expect(await (await b.cache.match(keyRequest(url, 'accept=text/turtle')))?.text()).toBe(
+    'public lws',
+  );
+  expect(createPodClient).not.toHaveBeenCalled();
+
   // Close the worker's own scoped DB handle before restoring globals.
   await send({ type: 'config', config: {} });
 });

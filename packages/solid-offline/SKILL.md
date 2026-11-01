@@ -62,7 +62,7 @@ Run the package and full workspace gates. For an intentional public API change, 
 - Keep backend-reported container kinds (LWS identifiers may be slashless) and listing size hints.
 - All derived/explicit seeds must pass `isWithinStorage`; an external WebID needs explicit seeds or an already-fetched profile.
 - `notificationsClient` optionally injects the shared pod-notifications client. Forward normalized changes, including Move and membership parents. Wire `resync` to the ETag sweep.
-- Strip both clients and fetch before structured cloning worker config; pass only the storage root. Keep the worker credential-free.
+- Strip both clients and fetch before structured cloning worker config; pass only the storage root and cloneable backend identity. LWS identity comes from authenticated page-side HEAD evidence (or explicit `storageBackend`), so public child reads do not require credential-free root discovery. Keep the worker credential-free.
 - Preserve HTTP Cache-Control/Vary/type evidence at the worker transport boundary. Without original policy, evict changed bytes conservatively. Never synthesize cacheability from ReadResult alone.
 - A sweep HEAD-confirms equal validators; changed or missing validators trigger reads. HEAD never replaces cached GET bytes. One failed observation must not stop the sweep.
 - The duplicated notification discovery, socket, frame-parser and backoff exports are removed. Backoff belongs to pod-notifications; `maxChannels` caps distinct topics and `pollIntervalMs` controls its polling fallback.

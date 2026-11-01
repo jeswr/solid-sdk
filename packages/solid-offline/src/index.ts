@@ -286,7 +286,7 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     return channel;
   }
 
-  function postConfig(target: ServiceWorker | null | undefined): void {
+  async function postConfig(target: ServiceWorker | null | undefined): Promise<void> {
     if (!target) return;
     // Closed guard (roborev): after close() a delayed registration callback
     // (statechange/controllerchange) must NOT re-post the departed config.
@@ -307,11 +307,24 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
       notificationsClient: _notificationsClient,
       ...cloneableConfig
     } = config;
+    let backend = config.storageBackend;
+    if (config.storage?.protocol === 'solid') backend = { protocol: 'solid' };
+    else if (!backend && config.storage?.protocol === 'lws') {
+      try {
+        const head = await config.storage.head(config.storage.root);
+        const id = head.links.get('https://www.w3.org/ns/lws#storage')?.[0]?.target;
+        if (id) backend = { protocol: 'lws', id };
+      } catch {
+        // Without page-side evidence, retain the existing discovery path.
+      }
+    }
+    if (closed) return;
     const message: PageToWorkerMessage = {
       type: 'config',
       config: {
         ...cloneableConfig,
         storageRoot: config.storage?.root ?? config.storageRoot,
+        storageBackend: backend,
         channelName: resolved.channelName,
       },
     };
@@ -344,12 +357,13 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     // later phases). Cover both "already active" and "installing" cases.
     const active = registration.active ?? navigator.serviceWorker.controller;
     if (active) {
-      postConfig(active);
+      await postConfig(active);
     }
+    if (closed) return registration;
     const installing = registration.installing ?? registration.waiting;
     if (installing) {
       installing.addEventListener('statechange', () => {
-        if (installing.state === 'activated') postConfig(installing);
+        if (installing.state === 'activated') void postConfig(installing);
       });
     }
 
@@ -357,7 +371,9 @@ export function createOfflineClient(config: OfflineClientConfig = {}): OfflineCl
     // Stored + de-duplicated so `close()` can remove it (a delayed controllerchange
     // after logout must NOT re-post the departed identity's config).
     if (!onControllerChange) {
-      onControllerChange = () => postConfig(navigator.serviceWorker.controller);
+      onControllerChange = () => {
+        void postConfig(navigator.serviceWorker.controller);
+      };
       navigator.serviceWorker.addEventListener('controllerchange', onControllerChange);
     }
 

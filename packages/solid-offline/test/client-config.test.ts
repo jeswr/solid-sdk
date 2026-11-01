@@ -1,5 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import type { NotificationsClient, Subscription } from '@jeswr/pod-notifications';
+import { createLwsBackend } from '@jeswr/storage-client/lws';
 import { createMemoryStorage } from '@jeswr/storage-client/memory';
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate; see docs/MODEL-PROVENANCE.md
 /**
@@ -439,3 +440,70 @@ function notificationHarness() {
     },
   };
 }
+
+it('sends cloneable LWS backend identity using authenticated page evidence', async () => {
+  const { active } = stubBrowser();
+  const root = 'https://alice.example/';
+  const id = `${root}description`;
+  const pageFetch = vi.fn(
+    async () =>
+      new Response(null, {
+        headers: {
+          link: `<${id}>; rel="https://www.w3.org/ns/lws#storage"`,
+        },
+      }),
+  );
+  const client = createOfflineClient({
+    storage: createLwsBackend({ root, storage: id, fetch: pageFetch }),
+  });
+  await client.register();
+  const posted = active.postMessage.mock.calls[0]?.[0];
+  expect(posted.config.storageBackend).toEqual({ protocol: 'lws', id });
+  expect(() => structuredClone(posted)).not.toThrow();
+  expect(posted.config.storage).toBeUndefined();
+  expect(pageFetch).toHaveBeenCalledOnce();
+  client.close();
+});
+
+it('does not attach lifecycle listeners if closed during backend metadata resolution', async () => {
+  const { active, controllerListeners } = stubBrowser();
+  let finish: ((response: Response) => void) | undefined;
+  const root = 'https://alice.example/';
+  const storage = createLwsBackend({
+    root,
+    fetch: async () =>
+      new Promise<Response>((resolve) => {
+        finish = resolve;
+      }),
+  });
+  const client = createOfflineClient({ storage });
+  const registering = client.register();
+  await vi.waitFor(() => expect(finish).toBeTypeOf('function'));
+  client.close();
+  finish?.(new Response(null));
+  await registering;
+  expect(active.postMessage).not.toHaveBeenCalled();
+  expect(controllerListeners.size).toBe(0);
+});
+
+it('serializes a known Solid backend without probing the storage root', async () => {
+  const { active } = stubBrowser();
+  const storage = createMemoryStorage({ protocol: 'solid', root: 'https://alice.example/' });
+  const head = vi.spyOn(storage, 'head');
+  const client = createOfflineClient({ storage });
+  await client.register();
+  expect(active.postMessage.mock.calls[0]?.[0].config.storageBackend).toEqual({
+    protocol: 'solid',
+  });
+  expect(head).not.toHaveBeenCalled();
+  client.close();
+});
+
+it('keeps LWS identity unknown when the page supplies no identity evidence', async () => {
+  const { active } = stubBrowser();
+  const storage = createMemoryStorage({ protocol: 'lws', root: 'https://alice.example/' });
+  const client = createOfflineClient({ storage });
+  await client.register();
+  expect(active.postMessage.mock.calls[0]?.[0].config.storageBackend).toBeUndefined();
+  client.close();
+});

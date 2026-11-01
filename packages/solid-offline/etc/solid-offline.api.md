@@ -377,6 +377,13 @@ interface OfflineClientConfig {
     notificationsClient?: NotificationsClient;
     /** Serialized storage root used by the credential-free worker for invalidation. */
     storageRoot?: string;
+    /** Cloneable backend identity; the page supplies this to avoid credential-free root discovery. */
+    storageBackend?: {
+        protocol: 'solid';
+    } | {
+        protocol: 'lws';
+        id: string;
+    };
     /** The logged-in user's WebID. Scopes the cache (DB name) per identity. */
     webId?: string;
     /**
