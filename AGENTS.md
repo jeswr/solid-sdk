@@ -150,8 +150,10 @@ interprets it. The package keeps only a thin facade, its vocabulary constants an
 domain policy SHACL cannot express (bead sst-ild.7.6; design of record
 `decisions/0003-domain-model-codegen.md`).
 
-- Start from the federation sector's SHACL where one exists; a package profile may narrow
-  it, and records each narrowing and omission in its header.
+- Start from the federation sector's SHACL where one exists
+  (`packages/solid-federation-vocab/sectors/<sector>/<sector>.shacl.ttl`). A package's
+  codegen profile may narrow it, and states each narrowing and omission in the profile
+  header or the package README (see `packages/solid-listening/codegen/media.shapes.ttl`).
 - When closed admission rejects a construct the model needs, file a bead against the
   generator (or extend it under review) instead of hand-writing accessors around it.
 - Every generated project carries a `codegen` script and a byte-for-byte drift test;
@@ -161,7 +163,8 @@ domain policy SHACL cannot express (bead sst-ild.7.6; design of record
   pass verbatim through the facade, and every behaviour change is pinned in a test and
   listed in the README. `packages/solid-bookmark` is the reference.
 - Normative vocabulary questions (which profile is canonical, whether to widen a
-  datatype) are decisions for the maintainer, filed as `needs:jesse` beads.
+  datatype) are decisions for the maintainer: file them as tracker beads labelled
+  `needs:jesse`, and keep the generated model on the current profile meanwhile.
 
 ## Conventions inherited verbatim from the suite
 
