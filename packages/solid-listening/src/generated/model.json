@@ -31,6 +31,9 @@
               "predicate": "https://w3id.org/jeswr/core#atTime",
               "kind": "nested",
               "node": "playedAt",
+              "minCount": 1,
+              "hasClass": "http://www.w3.org/2006/time#Instant",
+              "classOnly": true,
               "guards": {
                 "requiredFailClosed": true
               }
@@ -50,6 +53,9 @@
               "predicate": "https://w3id.org/jeswr/sectors/media#playedWork",
               "kind": "nested",
               "node": "track",
+              "minCount": 1,
+              "hasClass": "https://w3id.org/jeswr/sectors/media#Track",
+              "classOnly": true,
               "guards": {
                 "requiredFailClosed": true
               }
@@ -90,7 +96,9 @@
               "name": "inAlbum",
               "predicate": "https://w3id.org/jeswr/sectors/media#inAlbum",
               "kind": "nested",
-              "node": "album"
+              "node": "album",
+              "hasClass": "https://w3id.org/jeswr/sectors/media#Album",
+              "classOnly": true
             },
             {
               "name": "isrc",
@@ -104,7 +112,9 @@
               "name": "performedByArtist",
               "predicate": "https://w3id.org/jeswr/sectors/media#performedByArtist",
               "kind": "nested",
-              "node": "artist"
+              "node": "artist",
+              "hasClass": "https://w3id.org/jeswr/sectors/media#Artist",
+              "classOnly": true
             }
           ]
         },

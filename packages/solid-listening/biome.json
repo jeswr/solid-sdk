@@ -1,32 +1,12 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
+  "extends": "//",
   "files": {
-    "includes": ["**", "!src/generated/**"]
+    "includes": ["**", "!!src/generated"]
   },
-  "linter": {
-    "enabled": true,
-    "rules": {
-      "recommended": true,
-      "style": {
-        "useNamingConvention": {
-          "level": "error",
-          "options": {
-            "strictCase": false,
-            "conventions": [
-              {
-                "selector": { "kind": "objectLiteralProperty" },
-                "formats": ["camelCase", "CONSTANT_CASE", "snake_case", "PascalCase"]
-              }
-            ]
-          }
-        }
-      }
+  "overrides": [
+    {
+      "includes": ["src/scrobble.test.ts"],
+      "linter": { "rules": { "correctness": { "noUnsafeOptionalChaining": "off" } } }
     }
-  },
-  "formatter": {
-    "enabled": true,
-    "indentStyle": "space",
-    "indentWidth": 2,
-    "lineWidth": 100
-  }
+  ]
 }

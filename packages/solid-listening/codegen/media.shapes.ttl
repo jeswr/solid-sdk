@@ -11,6 +11,20 @@
 # profile: only the shapes the scrobble composite spans, so the generator has a
 # codegen config for every compiled shape. A reproduce test regenerates from these
 # inputs and diffs the committed src/generated, guarding drift.
+#
+# Two sector constraints are deliberately left out because the generator's closed
+# admission has no reviewed runtime guard for them, and neither the hand-written
+# model nor the July generated model enforced them:
+#   - media:isrc sh:pattern "^[A-Z]{2}[A-Z0-9]{3}[0-9]{2}[0-9]{5}$" (Warning);
+#   - the media:playedVia property (sh:nodeKind sh:BlankNodeOrIRI, Info), which the
+#     composite does not project.
+# Both stay in the published listening.shacl.ttl, which src/shape.test.ts validates
+# with rdf-validate-shacl. Reviewed pattern support is tracked as a follow-up bead.
+#
+# media:playedWork is narrowed from the sector's sh:class media:CreativeWork to
+# media:Track, matching this package's published listening.shacl.ttl: the generator
+# links class-only constraints to exactly-matching shapes, and sh:class is checked
+# against the data graph, where a scrobble's track is typed media:Track.
 @prefix mdsh:    <https://w3id.org/jeswr/sectors/media/shapes#> .
 @prefix media:   <https://w3id.org/jeswr/sectors/media#> .
 @prefix core:    <https://w3id.org/jeswr/core#> .
@@ -28,7 +42,7 @@ mdsh:PlaybackEventShape
         sh:nodeKind sh:IRI ;
         sh:minCount 1 ;
         sh:maxCount 1 ;
-        sh:class media:CreativeWork ;
+        sh:class media:Track ;
         sh:severity sh:Violation ;
     ] ;
     sh:property [
@@ -51,11 +65,6 @@ mdsh:PlaybackEventShape
         sh:class media:MediaAccount ;
         sh:maxCount 1 ;
         sh:severity sh:Warning ;
-    ] ;
-    sh:property [
-        sh:path media:playedVia ;
-        sh:nodeKind sh:BlankNodeOrIRI ;
-        sh:severity sh:Info ;
     ] ;
     sh:property [
         sh:path media:msPlayed ;
@@ -116,7 +125,6 @@ mdsh:TrackShape
         sh:path media:isrc ;
         sh:datatype xsd:string ;
         sh:maxCount 1 ;
-        sh:pattern "^[A-Z]{2}[A-Z0-9]{3}[0-9]{2}[0-9]{5}$" ;
         sh:severity sh:Warning ;
     ] .
 

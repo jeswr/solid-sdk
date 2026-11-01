@@ -39,6 +39,55 @@ export interface ScrobbleEntity {
   ): Promise<ScrobbleData | undefined>;
 }
 
+/** A typed view handle onto ONE sub-node of a composite entity. */
+export interface CompositeNodeHandle<W extends EntityWrapper> {
+  readonly name: string;
+  readonly typeIri: string;
+  readonly fragment: string;
+  readonly Wrapper: new (
+    term: string | Term,
+    dataset: DatasetCore,
+    factory: DataFactory,
+  ) => W;
+  subject(resourceUrl: string): string;
+}
+
+export interface ScrobbleEventNodeWrapper extends EntityWrapper {
+  "atTime"?: string;
+  "msPlayed"?: number;
+  "playedWork"?: string;
+}
+
+export interface ScrobbleTrackNodeWrapper extends EntityWrapper {
+  "trackTitle"?: string;
+  "durationSeconds"?: number;
+  "inAlbum"?: string;
+  "isrc"?: string;
+  "performedByArtist"?: string;
+}
+
+export interface ScrobblePlayedAtNodeWrapper extends EntityWrapper {
+  "playedAt"?: Date;
+}
+
+export interface ScrobbleArtistNodeWrapper extends EntityWrapper {
+  "artistName"?: string;
+}
+
+export interface ScrobbleAlbumNodeWrapper extends EntityWrapper {
+  "albumTitle"?: string;
+}
+
+export declare const nodes: {
+  readonly "Scrobble": {
+    readonly "event": CompositeNodeHandle<ScrobbleEventNodeWrapper>;
+    readonly "track": CompositeNodeHandle<ScrobbleTrackNodeWrapper>;
+    readonly "playedAt": CompositeNodeHandle<ScrobblePlayedAtNodeWrapper>;
+    readonly "artist": CompositeNodeHandle<ScrobbleArtistNodeWrapper>;
+    readonly "album": CompositeNodeHandle<ScrobbleAlbumNodeWrapper>;
+  };
+};
+
 export interface GeneratedModel {
   readonly manifest: ModelManifest;
   readonly prefixes: Record<string, string>;

@@ -1,7 +1,7 @@
 {
   "name": "@jeswr/solid-listening",
   "version": "0.1.0",
-  "description": "The media-sector listening-history / scrobble RDF model (the data model a Web Scrobbler→Solid fork writes one-per-play to a pod) — a media:PlaybackEvent referencing a media:Track/Artist/Album, reusing the @jeswr/solid-federation-vocab media sector (mints nothing), with typed accessors, a SHACL shape, an owner-only ACL helper, and fedcon:Proposal candidates for the sector gaps real scrobble data surfaced.",
+  "description": "The media-sector listening-history / scrobble RDF model (the data model a Web Scrobbler\u2192Solid fork writes one-per-play to a pod) \u2014 a media:PlaybackEvent referencing a media:Track/Artist/Album, reusing the @jeswr/solid-federation-vocab media sector (mints nothing), with typed accessors, a SHACL shape, an owner-only ACL helper, and fedcon:Proposal candidates for the sector gaps real scrobble data surfaced.",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Wright",
@@ -50,22 +50,17 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
-    "lint": "biome check src scripts",
-    "lint:fix": "biome check --write src scripts",
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-generated.mjs",
+    "codegen": "node node_modules/@jeswr/federation-codegen/dist/cli.js gen --ontology codegen/media.ontology.ttl --shapes codegen/media.shapes.ttl --config codegen/codegen.config.json --out src/generated",
+    "lint": "biome check src scripts test codegen/codegen.config.json package.json",
+    "lint:fix": "biome check --write src scripts test codegen/codegen.config.json package.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "gen": "node codegen/gen.mjs",
-    "build": "node scripts/build.mjs",
-    "check:dist": "node scripts/check-dist.mjs",
-    "check:generated": "node scripts/check-generated.mjs",
-    "check:lockfile-transport": "node scripts/check-lockfile-transport.mjs",
-    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:generated && npm run check:dist && npm run check:lockfile-transport"
+    "test:watch": "vitest"
   },
   "dependencies": {
-    "@jeswr/fetch-rdf": "^0.1.0",
-    "@jeswr/model-runtime": "git+https://github.com/jeswr/model-runtime.git#8c7f78e02b4508a83b1bb7f23fbeff559bb2b89a",
+    "@jeswr/fetch-rdf": "workspace:*",
+    "@jeswr/model-runtime": "workspace:*",
     "@rdfjs/wrapper": "^0.34.0",
     "n3": "^2.0.3"
   },
@@ -74,11 +69,11 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
-    "@jeswr/federation-codegen": "git+https://github.com/jeswr/federation-codegen.git#58840022f0021d8b1240f1d9ee5db326b2339503",
+    "@jeswr/federation-codegen": "workspace:*",
     "@rdfjs/types": "^2.0.1",
     "@types/n3": "^1.26.1",
     "@types/node": "^20",
-    "@zazuko/env-node": "^3.0.0",
+    "@zazuko/env-node": "^3.1.0",
     "rdf-validate-shacl": "^0.6.5",
     "typescript": "^5",
     "vitest": "^4.1.8"

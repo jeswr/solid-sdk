@@ -8,98 +8,94 @@
 @prefix time: <http://www.w3.org/2006/time#>.
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#>.
 
-shapes:Album-title sh:datatype xsd:string;
-    sh:maxCount 1;
-    sh:minCount 1;
-    sh:path dcterms:title;
-    sh:severity sh:Warning.
-shapes:AlbumShape a sh:NodeShape;
-    sh:property shapes:Album-title;
-    sh:targetClass media:Album.
-shapes:Artist-name sh:datatype xsd:string;
-    sh:maxCount 1;
-    sh:path foaf:name;
-    sh:severity sh:Info.
-shapes:ArtistShape a sh:NodeShape;
-    sh:property shapes:Artist-name;
-    sh:targetClass media:Artist.
-shapes:Instant-inXSDDateTime sh:datatype xsd:dateTime;
-    sh:maxCount 1;
-    sh:minCount 1;
-    sh:path time:inXSDDateTime;
-    sh:severity sh:Violation.
-shapes:PlaybackEvent-atTime sh:class time:Instant;
-    sh:maxCount 1;
-    sh:minCount 1;
-    sh:nodeKind sh:IRI;
-    sh:path core:atTime;
-    sh:severity sh:Violation.
-shapes:PlaybackEvent-completionFraction sh:datatype xsd:decimal;
-    sh:maxCount 1;
-    sh:maxInclusive 1;
-    sh:minInclusive 0;
-    sh:path media:completionFraction;
-    sh:severity sh:Info.
-shapes:PlaybackEvent-hadParticipant sh:class core:Agent;
-    sh:minCount 1;
-    sh:nodeKind sh:IRI;
-    sh:path core:hadParticipant;
-    sh:severity sh:Warning.
-shapes:PlaybackEvent-loved sh:datatype xsd:boolean;
-    sh:maxCount 1;
-    sh:path media:loved;
-    sh:severity sh:Info.
-shapes:PlaybackEvent-msPlayed sh:datatype xsd:integer;
+shapes:121d50a42d696be6c49d1cdde3a9dddc9213fe3935126e47bbe2b0e9aef26e3a-PlaybackEvent-msPlayed sh:datatype xsd:integer;
     sh:maxCount 1;
     sh:minInclusive 0;
     sh:path media:msPlayed;
     sh:severity sh:Info.
-shapes:PlaybackEvent-onAccount sh:class media:MediaAccount;
+shapes:17288e98eb707c05d2eee968ddf3c641e64baca74a1e8a746ad498665a12e0eb-PlaybackEvent-onAccount sh:class media:MediaAccount;
     sh:maxCount 1;
     sh:path media:onAccount;
     sh:severity sh:Warning.
-shapes:PlaybackEvent-playedVia sh:nodeKind sh:BlankNodeOrIRI;
-    sh:path media:playedVia;
-    sh:severity sh:Info.
-shapes:PlaybackEvent-playedWork sh:class media:CreativeWork;
-    sh:maxCount 1;
-    sh:minCount 1;
-    sh:nodeKind sh:IRI;
-    sh:path media:playedWork;
-    sh:severity sh:Violation.
-shapes:PlaybackEventShape a sh:NodeShape;
-    sh:property shapes:PlaybackEvent-atTime, shapes:PlaybackEvent-completionFraction, shapes:PlaybackEvent-hadParticipant, shapes:PlaybackEvent-loved, shapes:PlaybackEvent-msPlayed, shapes:PlaybackEvent-onAccount, shapes:PlaybackEvent-playedVia, shapes:PlaybackEvent-playedWork;
-    sh:targetClass media:PlaybackEvent.
-shapes:PlayedAtInstantShape a sh:NodeShape;
-    sh:property shapes:Instant-inXSDDateTime;
-    sh:targetClass time:Instant.
-shapes:Track-durationSeconds sh:datatype xsd:decimal;
-    sh:maxCount 1;
-    sh:minInclusive 0;
-    sh:path media:durationSeconds;
-    sh:severity sh:Info.
-shapes:Track-inAlbum sh:class media:Album;
+shapes:1b67191edf9b077b5524355718a191c8cd5e2b29e6cfc426594a62446ec603cc-Track-inAlbum sh:class media:Album;
     sh:maxCount 1;
     sh:nodeKind sh:IRI;
     sh:path media:inAlbum;
     sh:severity sh:Info.
-shapes:Track-isrc sh:datatype xsd:string;
-    sh:maxCount 1;
-    sh:path media:isrc;
-    sh:pattern "^[A-Z]{2}[A-Z0-9]{3}[0-9]{2}[0-9]{5}$";
-    sh:severity sh:Warning.
-shapes:Track-performedByArtist sh:class media:Artist;
-    sh:maxCount 1;
-    sh:nodeKind sh:IRI;
-    sh:path media:performedByArtist;
-    sh:severity sh:Info.
-shapes:Track-title sh:datatype xsd:string;
+shapes:34b2a30bdf469f1b8dc5554ae33c9b10e958fa48749ce5bc7e948a2b594f19cd-Track-title sh:datatype xsd:string;
     sh:maxCount 1;
     sh:minCount 1;
     sh:minLength 1;
     sh:path dcterms:title;
     sh:pattern "\\S";
     sh:severity sh:Violation.
+shapes:6c1948d6948697b236ba1b4150704437557fdf1bf5dccd2df5aa0ecfffd9f690-Track-performedByArtist sh:class media:Artist;
+    sh:maxCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path media:performedByArtist;
+    sh:severity sh:Info.
+shapes:7a890da0e64cec2e34f22342bfd1af08431754ba614108b899baba7c9d5fc5d1-Track-isrc sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:path media:isrc;
+    sh:severity sh:Warning.
+shapes:7d7253774d3022814f9263f86af5f7b6c7a0b676b7917dee809bfe0fdb44e699-Artist-name sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:path foaf:name;
+    sh:severity sh:Info.
+shapes:9675150e7cbf2984b3896e7bfae54a8d9212953ad45d05faeb2d43e9034b1a10-Album-title sh:datatype xsd:string;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:path dcterms:title;
+    sh:severity sh:Warning.
+shapes:9b2a3925abfe6a4193f4591d7310f0daa8520fd9b0f256d1545d2132a5cfc60e-PlaybackEvent-hadParticipant sh:class core:Agent;
+    sh:minCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path core:hadParticipant;
+    sh:severity sh:Warning.
+shapes:AlbumShape a sh:NodeShape;
+    sh:property shapes:9675150e7cbf2984b3896e7bfae54a8d9212953ad45d05faeb2d43e9034b1a10-Album-title;
+    sh:targetClass media:Album.
+shapes:ArtistShape a sh:NodeShape;
+    sh:property shapes:7d7253774d3022814f9263f86af5f7b6c7a0b676b7917dee809bfe0fdb44e699-Artist-name;
+    sh:targetClass media:Artist.
+shapes:PlaybackEventShape a sh:NodeShape;
+    sh:property shapes:121d50a42d696be6c49d1cdde3a9dddc9213fe3935126e47bbe2b0e9aef26e3a-PlaybackEvent-msPlayed, shapes:17288e98eb707c05d2eee968ddf3c641e64baca74a1e8a746ad498665a12e0eb-PlaybackEvent-onAccount, shapes:9b2a3925abfe6a4193f4591d7310f0daa8520fd9b0f256d1545d2132a5cfc60e-PlaybackEvent-hadParticipant, shapes:a338dc98ce7e5c5bbdf1176a202462432e624826adb59b550bc24efeb60484cc-PlaybackEvent-loved, shapes:b66010bf36645b478c5572e4c0a2bc37d22a5af0bd1f9c09245a387767ea4593-PlaybackEvent-playedWork, shapes:c70f47436eec8d27cfacdd7e71c35acb9ad96ec548ce48c52f1208643288378c-PlaybackEvent-completionFraction, shapes:dd2d89b3f8380ffe5c3c5be165407712a5df5abd752cca94f7506fe925feeca6-PlaybackEvent-atTime;
+    sh:targetClass media:PlaybackEvent.
+shapes:PlayedAtInstantShape a sh:NodeShape;
+    sh:property shapes:eabcc1dc5fb19a166aa5b58df083eabf4a5d2bfd602aeec96fe0dcf21a32fc98-Instant-inXSDDateTime;
+    sh:targetClass time:Instant.
 shapes:TrackShape a sh:NodeShape;
-    sh:property shapes:Track-durationSeconds, shapes:Track-inAlbum, shapes:Track-isrc, shapes:Track-performedByArtist, shapes:Track-title;
+    sh:property shapes:1b67191edf9b077b5524355718a191c8cd5e2b29e6cfc426594a62446ec603cc-Track-inAlbum, shapes:34b2a30bdf469f1b8dc5554ae33c9b10e958fa48749ce5bc7e948a2b594f19cd-Track-title, shapes:6c1948d6948697b236ba1b4150704437557fdf1bf5dccd2df5aa0ecfffd9f690-Track-performedByArtist, shapes:7a890da0e64cec2e34f22342bfd1af08431754ba614108b899baba7c9d5fc5d1-Track-isrc, shapes:e70e13ad16e2b4664908ee0e3cb13b2fcfcc4c02854ed1bfd92a6ce11e6d649e-Track-durationSeconds;
     sh:targetClass media:Track.
+shapes:a338dc98ce7e5c5bbdf1176a202462432e624826adb59b550bc24efeb60484cc-PlaybackEvent-loved sh:datatype xsd:boolean;
+    sh:maxCount 1;
+    sh:path media:loved;
+    sh:severity sh:Info.
+shapes:b66010bf36645b478c5572e4c0a2bc37d22a5af0bd1f9c09245a387767ea4593-PlaybackEvent-playedWork sh:class media:Track;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path media:playedWork;
+    sh:severity sh:Violation.
+shapes:c70f47436eec8d27cfacdd7e71c35acb9ad96ec548ce48c52f1208643288378c-PlaybackEvent-completionFraction sh:datatype xsd:decimal;
+    sh:maxCount 1;
+    sh:maxInclusive 1;
+    sh:minInclusive 0;
+    sh:path media:completionFraction;
+    sh:severity sh:Info.
+shapes:dd2d89b3f8380ffe5c3c5be165407712a5df5abd752cca94f7506fe925feeca6-PlaybackEvent-atTime sh:class time:Instant;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:nodeKind sh:IRI;
+    sh:path core:atTime;
+    sh:severity sh:Violation.
+shapes:e70e13ad16e2b4664908ee0e3cb13b2fcfcc4c02854ed1bfd92a6ce11e6d649e-Track-durationSeconds sh:datatype xsd:decimal;
+    sh:maxCount 1;
+    sh:minInclusive 0;
+    sh:path media:durationSeconds;
+    sh:severity sh:Info.
+shapes:eabcc1dc5fb19a166aa5b58df083eabf4a5d2bfd602aeec96fe0dcf21a32fc98-Instant-inXSDDateTime sh:datatype xsd:dateTime;
+    sh:maxCount 1;
+    sh:minCount 1;
+    sh:path time:inXSDDateTime;
+    sh:severity sh:Violation.

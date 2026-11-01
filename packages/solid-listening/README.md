@@ -1,4 +1,11 @@
+<!-- AUTHORED-BY Claude Opus 5.5 (workspace import edits) -->
+
 # @jeswr/solid-listening
+
+> **Experimental, AI-agent-generated.** Lives in `packages/solid-listening` of the
+> [`jeswr/solid-sdk`](https://github.com/jeswr/solid-sdk) workspace; the standalone
+> `jeswr/solid-listening` repository becomes a read-only build mirror. Design of record:
+> [`decisions/0003-domain-model-codegen.md`](../../decisions/0003-domain-model-codegen.md).
 
 The RDF model for a **listening history** — one **scrobble** (a single play) per pod
 resource, owner-private. The data model a
@@ -22,17 +29,14 @@ composite/document-projection generator, interpreted by the audited
 [`@jeswr/model-runtime`](https://github.com/jeswr/model-runtime) — the guards, the
 fail-closed cross-node MUSTs and the graph-walk parse live in that one audited
 runtime, not hand-written here. `src/scrobble.ts` is a thin facade over the
-generated core; `codegen/` holds the generation inputs (`npm run gen` regenerates,
-`check:generated` guards drift). See [`DECISIONS.md`](./DECISIONS.md) D6.
+generated core; `codegen/` holds the generation inputs (`pnpm run codegen`
+regenerates, and `test/codegen.test.ts` guards drift). See [`DECISIONS.md`](./DECISIONS.md) D6.
 
 ## Install
 
-GitHub-installable now (no build step — the built `dist/` is committed and the
-package sets `ignore-scripts=true`):
-
-```bash
-npm install github:jeswr/solid-listening#main
-```
+Inside the workspace, depend on it as `"@jeswr/solid-listening": "workspace:*"`.
+Outside it, install the read-only mirror once it is published
+(`github:jeswr/solid-listening#<sha>`); mirrors carry the built `dist/`.
 
 ## The model — one scrobble document
 
@@ -143,15 +147,26 @@ Subpath exports: `@jeswr/solid-listening/vocab`, `/shape`,
 
 ## Develop
 
+From the workspace root:
+
 ```bash
-npm run gen    # regenerate src/generated/ from codegen/ inputs (the media sector)
-npm run gate   # lint + typecheck + test + build + check:generated + check:dist + check:lockfile-transport
+pnpm --filter @jeswr/federation-codegen... run build
+pnpm --filter @jeswr/solid-listening run codegen   # regenerate src/generated/ from codegen/
+pnpm exec turbo run lint build typecheck test --filter=@jeswr/solid-listening
 ```
 
-`dist/` and `src/generated/` are committed. `check:generated` fails if the
-generated model drifts from a fresh generation (edit `codegen/` inputs, never the
-generated files, then `npm run gen`); `check:dist` fails if `dist/` drifts from a
-fresh build — rebuild + commit both alongside any change.
+`src/generated/` is committed; `dist/` is built fresh and never committed here. The
+drift test (`test/codegen.test.ts`) regenerates into a temporary directory and fails on
+any byte difference, and the workspace `check:codegen` guard requires it. Edit the
+`codegen/` inputs, never the generated files; for a deliberate input change pass
+`--update-lock` to the codegen command and review the lock diff.
+
+The codegen input profile (`codegen/media.shapes.ttl`) is the media sector's five
+scrobble shapes, with three deliberate projections documented in its header: the ISRC
+`sh:pattern` and the unprojected `media:playedVia` shape are left out (the generator
+has no reviewed guard for them, and no earlier model enforced them), and
+`media:playedWork` is narrowed to `sh:class media:Track`, matching
+`listening.shacl.ttl`. The published `listening.shacl.ttl` keeps every constraint.
 
 ## License
 
