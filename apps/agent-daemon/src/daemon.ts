@@ -342,7 +342,7 @@ export function createDaemon(o: DaemonOptions): Daemon {
       }
       const due = new Map<string, number>();
       await maintain();
-      if (signal) armMaintenance();
+      armMaintenance();
       do {
         if (signal?.aborted) break;
         const at = now();

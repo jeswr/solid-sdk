@@ -836,6 +836,69 @@ it("keeps a single pass single even with a live cancellation signal", async () =
   expect(h.executor.runOutboxOnce).toHaveBeenCalledOnce();
   expect(h.state.held()).toBe(false);
 });
+it.each([
+  { stage: "ingest", fails: false },
+  { stage: "ingest", fails: true },
+  { stage: "proposer", fails: false },
+  { stage: "proposer", fails: true },
+])("maintains single-pass $stage without a signal and clears timers (failure: $fails)", async ({
+  stage,
+  fails,
+}) => {
+  vi.useFakeTimers({ now: AT });
+  const h = harness();
+  let finish!: () => void;
+  const wait = new Promise<void>((resolve) => {
+    finish = resolve;
+  }).then(() => {
+    if (fails) throw new Error("Suspended operation failed");
+  });
+  if (stage === "ingest") {
+    const original = h.ingest.list.getMockImplementation();
+    if (!original) throw new Error("Fixture list missing");
+    h.ingest.list.mockImplementationOnce(async (...args) => {
+      await wait;
+      return original(...args);
+    });
+  } else {
+    const propose = vi.mocked(h.options.gateway.proposer.propose);
+    const original = propose.getMockImplementation();
+    if (!original) throw new Error("Fixture proposer missing");
+    propose.mockImplementationOnce(async (...args) => {
+      await wait;
+      return original(...args);
+    });
+  }
+  const pass = createDaemon({ ...h.options, now: Date.now }).once();
+  const settled = fails
+    ? expect(pass).rejects.toThrow(
+        stage === "proposer" ? "Proposer failed" : "Suspended operation failed",
+      )
+    : pass;
+  try {
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(h.ingest.list).toHaveBeenCalledOnce();
+    if (stage === "proposer") expect(h.options.gateway.proposer.propose).toHaveBeenCalledOnce();
+    expect(h.executor.runOutboxOnce).not.toHaveBeenCalled();
+    expect(h.executor.onControlOrMandateChange).toHaveBeenCalledTimes(5);
+    expect(h.executor.onApprovalChange).toHaveBeenCalledTimes(5);
+    expect(
+      h.pod.requests.filter((r) => r.url.endsWith("heartbeat.ttl") && r.method === "PUT"),
+    ).toHaveLength(3);
+    expect(h.state.held()).toBe(true);
+  } finally {
+    finish();
+    await settled;
+  }
+  expect(h.executor.runOutboxOnce).toHaveBeenCalledTimes(fails ? 0 : 1);
+  expect(h.executor.drain).toHaveBeenCalledOnce();
+  expect(h.state.held()).toBe(false);
+  expect(vi.getTimerCount()).toBe(0);
+  await vi.advanceTimersByTimeAsync(120_000);
+  expect(h.ingest.list).toHaveBeenCalledOnce();
+  expect(h.executor.onControlOrMandateChange).toHaveBeenCalledTimes(5);
+  expect(h.executor.onApprovalChange).toHaveBeenCalledTimes(5);
+});
 it("cancels a single pass during ingest before execution and holds its lease through drain", async () => {
   vi.useFakeTimers({ now: AT });
   const h = harness();
