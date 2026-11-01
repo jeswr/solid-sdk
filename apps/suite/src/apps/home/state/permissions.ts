@@ -12,12 +12,14 @@ import {
   type AgentRow,
   applyRevoke,
   type ClientMetadata,
+  isClientIdDocument,
   LockoutError,
   loadPermissions,
   PartialRevokeError,
   type PermissionLine,
   type PermissionsSnapshot,
   planRevoke,
+  RestoreConflictError,
   type RevokePlan,
   resolveClientName,
   UnsupportedAccessError,
@@ -28,6 +30,8 @@ interface RemovedLine {
   row: AgentRow;
   line: PermissionLine;
   token?: string;
+  /** The removed rules were changed elsewhere, so this Undo can no longer apply. */
+  stale?: boolean;
 }
 export interface PermissionsState {
   status: "loading" | "ready" | "error";
@@ -55,6 +59,8 @@ export type PermissionsAction =
   | { type: "row-done"; keys: string[] }
   | { type: "write-error"; key?: string }
   | { type: "undo-done"; token: string }
+  | { type: "undo-unavailable"; token: string }
+  | { type: "named"; key: string; name: string }
   | { type: "collapse"; key: string };
 
 export function permissionsReducer(
@@ -130,6 +136,22 @@ export function permissionsReducer(
           Object.entries(state.removed).filter(([, e]) => e.token !== action.token),
         ),
       };
+    case "undo-unavailable":
+      return {
+        ...state,
+        busy: false,
+        removed: Object.fromEntries(
+          Object.entries(state.removed).map(([key, e]) => [
+            key,
+            e.token === action.token ? { ...e, stale: true } : e,
+          ]),
+        ),
+      };
+    case "named":
+      return {
+        ...state,
+        rows: state.rows.map((r) => (r.key === action.key ? { ...r, name: action.name } : r)),
+      };
     case "collapse": {
       const keys = new Set(
         Object.entries(state.removed)
@@ -191,7 +213,12 @@ interface SessionCache {
   people: ReturnType<typeof createPeopleNameResolver>;
   snapshot?: PermissionsSnapshot;
   clients: Record<string, ClientMetadata>;
+  /** Resolved display names by agent key, applied to every later snapshot. */
+  names: Record<string, string>;
+  /** Undo plans outlive the page, so a toast's Undo still works after navigating away. */
+  undos: Map<string, RevokePlan>;
 }
+const CHANGED_ELSEWHERE = "This access was changed elsewhere, so it can't be restored here";
 const caches = new WeakMap<typeof globalThis.fetch, SessionCache>();
 export function readPermissionsView(): PermissionsView {
   try {
@@ -220,7 +247,13 @@ export function usePermissions() {
   const identity = `${session.webId}\u0000${session.storageUrl}`;
   let cache = caches.get(session.fetch);
   if (!cache || cache.identity !== identity) {
-    cache = { identity, people: createPeopleNameResolver(), clients: {} };
+    cache = {
+      identity,
+      people: createPeopleNameResolver(),
+      clients: {},
+      names: {},
+      undos: new Map(),
+    };
     caches.set(session.fetch, cache);
   }
   const sessionCache = cache;
@@ -239,7 +272,6 @@ export function usePermissions() {
   const mounted = useRef(false);
   const writing = useRef<number | undefined>(undefined);
   const stateOwner = useRef(sessionCache);
-  const undos = useRef(new Map<string, RevokePlan>());
   const stateRef = useRef(state);
   const scopedState = stateOwner.current === sessionCache ? state : initialPermissionsState;
   stateRef.current = scopedState;
@@ -279,25 +311,35 @@ export function usePermissions() {
         dispatch({ type: "error" });
         return;
       }
-      sessionCache.snapshot = snapshot;
-      dispatch({ type: "loaded", snapshot });
-      // Paint fallback names immediately; foreign metadata must not block the list.
-      const rows = await Promise.all(
-        snapshot.rows.map(async (row) => {
-          if (row.kind === "app") {
-            const metadata = await resolveClientName(row.id);
-            sessionCache.clients[row.id] = metadata;
-            return metadata.name ? { ...row, name: metadata.name } : row;
-          }
-          if (row.kind !== "person") return row;
-          const name = await sessionCache.people(row.id);
+      const named = (rows: AgentRow[]): AgentRow[] =>
+        rows.map((row) => {
+          const name = sessionCache.names[row.key];
           return name ? { ...row, name } : row;
-        }),
-      );
-      if (!mounted.current || seq !== generation.current) return;
-      sessionCache.snapshot = { ...snapshot, rows };
-      setClients({ ...sessionCache.clients });
-      dispatch({ type: "loaded", snapshot: sessionCache.snapshot });
+        });
+      const current: PermissionsSnapshot = { ...snapshot, rows: named(snapshot.rows) };
+      sessionCache.snapshot = current;
+      dispatch({ type: "loaded", snapshot: current });
+      // Paint fallback names immediately and apply each foreign name as it settles:
+      // one slow profile or Client ID Document never holds back the others.
+      const apply = (key: string, name: string | undefined) => {
+        if (!name || sessionCache.names[key] === name) return;
+        sessionCache.names[key] = name;
+        const latest = sessionCache.snapshot ?? current;
+        sessionCache.snapshot = { ...latest, rows: named(latest.rows) };
+        if (mounted.current && stateOwner.current === sessionCache)
+          dispatch({ type: "named", key, name });
+      };
+      for (const row of snapshot.rows) {
+        if (row.kind === "app" && isClientIdDocument(row.id))
+          void resolveClientName(row.id).then((metadata) => {
+            sessionCache.clients[row.id] = metadata;
+            if (mounted.current && stateOwner.current === sessionCache)
+              setClients({ ...sessionCache.clients });
+            apply(row.key, metadata.name);
+          });
+        else if (row.kind === "person")
+          void sessionCache.people(row.id).then((name) => apply(row.key, name));
+      }
     } catch {
       if (mounted.current && seq === generation.current) dispatch({ type: "error" });
     }
@@ -307,7 +349,6 @@ export function usePermissions() {
     mounted.current = true;
     writing.current = undefined;
     stateOwner.current = sessionCache;
-    undos.current.clear();
     dispatch({ type: "reset" });
     if (sessionCache.snapshot) dispatch({ type: "loaded", snapshot: sessionCache.snapshot });
     setClients({ ...sessionCache.clients });
@@ -345,33 +386,46 @@ export function usePermissions() {
 
   const undo = useCallback(
     async (token: string) => {
-      const plan = undos.current.get(token);
+      const plan = sessionCache.undos.get(token);
       if (!plan || writing.current || !navigator.onLine) return;
       const seq = ++generation.current;
       writing.current = seq;
       dispatch({ type: "undo-start" });
+      // The result is always announced, even after navigating away from the page.
+      const live = () => mounted.current && seq === generation.current;
       try {
         await applyRevoke(plan, {
           fetch: session.fetch,
           storage: session.storageUrl,
           webId: session.webId,
         });
-        if (mounted.current && seq === generation.current) {
-          undos.current.delete(token);
-          dispatch({ type: "undo-done", token });
-          toast.success("Access restored");
+        sessionCache.undos.delete(token);
+        if (live()) dispatch({ type: "undo-done", token });
+        toast.success("Access restored");
+      } catch (error) {
+        const cause = error instanceof PartialRevokeError ? error.cause : error;
+        if (error instanceof PartialRevokeError) {
+          // Documents already restored are done; a retry only covers the rest.
+          const restored = new Set(error.undo.restore?.map((delta) => delta.source));
+          sessionCache.undos.set(token, {
+            changes: [],
+            restore: (plan.restore ?? []).filter((delta) => !restored.has(delta.source)),
+          });
         }
-      } catch {
-        if (mounted.current && seq === generation.current) {
-          dispatch({ type: "write-error" });
+        if (cause instanceof RestoreConflictError) {
+          sessionCache.undos.delete(token);
+          if (live()) dispatch({ type: "undo-unavailable", token });
+          toast.error(CHANGED_ELSEWHERE);
+        } else {
+          if (live()) dispatch({ type: "write-error" });
           toast.error("Couldn't restore access. Refresh and try again.");
         }
       } finally {
         if (writing.current === seq) writing.current = undefined;
-        if (mounted.current && seq === generation.current) void refresh();
+        if (live()) void refresh();
       }
     },
-    [refresh, session],
+    [refresh, session, sessionCache],
   );
 
   const revoke = useCallback(
@@ -415,12 +469,12 @@ export function usePermissions() {
         });
         if (!mounted.current || seq !== generation.current) return;
         const token = crypto.randomUUID();
-        undos.current.set(token, result.undo);
+        sessionCache.undos.set(token, result.undo);
         if (line) dispatch({ type: "line-done", key: line.key, token });
         else dispatch({ type: "row-done", keys: rows.map((r) => r.key) });
         toast.success(
           line
-            ? consequenceText(line, name)
+            ? consequenceText(line, name, session.storageUrl)
             : target === "makePrivate"
               ? "Public and signed-in access removed"
               : `${name} no longer has access`,
@@ -440,7 +494,7 @@ export function usePermissions() {
               : `Couldn't change access for ${name}`;
         if (error instanceof PartialRevokeError) {
           const token = crypto.randomUUID();
-          undos.current.set(token, error.undo);
+          sessionCache.undos.set(token, error.undo);
           toast.error(message, {
             duration: Infinity,
             description: "Some changes were saved. Undo them or refresh before trying again.",
@@ -452,7 +506,7 @@ export function usePermissions() {
         if (mounted.current && seq === generation.current) void refresh();
       }
     },
-    [refresh, session, undo],
+    [refresh, session, sessionCache, undo],
   );
 
   return {

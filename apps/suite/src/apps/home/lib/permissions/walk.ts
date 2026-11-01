@@ -348,7 +348,10 @@ export async function loadPermissions(
       classify: (url) => classes.get(url),
       ...(records ? { records } : {}),
     }),
-    failures,
+    // One entry per item: several children can reach the same failing document.
+    failures: failures.filter(
+      (failure, index) => failures.findIndex((other) => other.url === failure.url) === index,
+    ),
     warnings,
     truncated,
   };

@@ -7,10 +7,10 @@
 // so materializeOwnAcl is intentionally unnecessary here.
 import { assertWithinPodScope } from "@jeswr/guarded-fetch";
 import type { Grant, PodImplementation, Subject } from "@jeswr/pod-access";
-import type { DatasetCore, Term } from "@rdfjs/types";
+import type { DatasetCore, Quad, Term } from "@rdfjs/types";
 import { SetFrom, TermAs, TermFrom } from "@rdfjs/wrapper";
 import { AclResource } from "@solid/object";
-import { DataFactory, Store } from "n3";
+import { DataFactory, Store, Writer } from "n3";
 import { isomorphic } from "rdf-isomorphic";
 import { parseResource, readResource, serializeTurtle } from "../model/rdf";
 import type { AgentRow, ModeId, PermissionLine, PermissionsSnapshot } from "./types";
@@ -19,6 +19,7 @@ import {
   AccessNode,
   AUTHENTICATED,
   authorizationQuads,
+  authorizationTurtle,
   clauseSignature,
   grantSignature,
   PUBLIC,
@@ -40,6 +41,14 @@ export class AclConflictError extends Error {
     super("The access policy changed; refresh before trying again");
   }
 }
+/** An undo whose rules were changed or re-created by someone else since the revoke. */
+export class RestoreConflictError extends AclConflictError {
+  override name = "RestoreConflictError";
+  constructor() {
+    super();
+    this.message = "This access was changed elsewhere, so it can't be restored here";
+  }
+}
 export interface RevokeChange {
   source: string;
   system: "wac" | "acp" | "unknown";
@@ -57,10 +66,22 @@ export interface RevokeChange {
   /** Trusted discovery dialect used when re-reading the current WAC policy. */
   implementation?: PodImplementation;
 }
+/**
+ * The inverse of one ACL document write, as whole authorization rules (each with its
+ * nested blank annotations, serialised alone). `remove` holds the rules the write
+ * created or rewrote, exactly as written; `add` holds the rules it removed or
+ * rewrote, exactly as they were. Undo matches `remove` structurally in a fresh read,
+ * so unrelated later edits to the same document survive, and only ever adds `add`.
+ */
+export interface RestoreDelta {
+  source: string;
+  remove: string[];
+  add: string[];
+}
 export interface RevokePlan {
   changes: RevokeChange[];
-  /** Exact inverse; conditional restoration refuses any intervening graph change. */
-  restore?: { source: string; before: string; after: string }[];
+  /** Rule-level inverse; refuses (RestoreConflictError) once those rules changed elsewhere. */
+  restore?: RestoreDelta[];
 }
 export function planRevoke(
   target: AgentRow | PermissionLine | PermissionsSnapshot,
@@ -133,6 +154,22 @@ function authorizations(dataset: DatasetCore): AccessNode[] {
     (auth) => new AccessNode(auth as Term, dataset, DataFactory),
   );
 }
+function termKey(term: Term): string {
+  return `${term.termType}:${term.value}`;
+}
+/** Owner Control may only be lost when the owner never had it for that scope. */
+function assertNoLockout(before: DatasetCore, after: DatasetCore, owner: string): void {
+  for (const node of authorizations(before))
+    for (const name of SCOPES)
+      for (const resource of node.iris(ACL + name)) {
+        const members = name !== "accessTo";
+        if (
+          ownerRetainsAnyControl(before, owner, resource, members) &&
+          !ownerRetainsAnyControl(after, owner, resource, members)
+        )
+          throw new LockoutError();
+      }
+}
 function ownerRetainsAnyControl(
   dataset: DatasetCore,
   owner: string,
@@ -150,8 +187,105 @@ function ownerRetainsAnyControl(
       !node.iris(`${ACL}origin`).length,
   );
 }
+/**
+ * Delete a rule with the nested blank annotations only it references. When any nested
+ * node is shared with another description, only the rule's own statements go.
+ */
+function deleteRule(dataset: DatasetCore, root: Term): void {
+  const quads = authorizationQuads(dataset, root);
+  const inside = new Set(quads.map((quad) => termKey(quad.subject)));
+  const shared = quads.some(
+    (quad) =>
+      quad.object.termType === "BlankNode" &&
+      [...dataset.match(null, null, quad.object)].some(
+        (reference) => !inside.has(termKey(reference.subject)),
+      ),
+  );
+  for (const quad of shared ? [...dataset.match(root)] : quads) dataset.delete(quad);
+}
 function dropDescription(node: AccessNode): void {
-  for (const q of [...node.dataset.match(TermAs.term(node))]) node.dataset.delete(q);
+  deleteRule(node.dataset, TermAs.term(node));
+}
+/** Same-parse rule identity: terms (including blank labels) compared exactly. */
+function ruleDescriptions(dataset: DatasetCore): Map<string, { root: Term; text: string }> {
+  const writer = new Writer();
+  return new Map(
+    authorizations(dataset).map((node) => {
+      const root = TermAs.term(node);
+      const text = authorizationQuads(dataset, root)
+        .map((q) => writer.quadToString(q.subject, q.predicate, q.object))
+        .sort()
+        .join("");
+      return [termKey(root), { root, text }];
+    }),
+  );
+}
+/** The rules a write changed, as the inverse delta of that write. */
+function ruleDelta(before: DatasetCore, after: DatasetCore, source: string): RestoreDelta {
+  const was = ruleDescriptions(before);
+  const now = ruleDescriptions(after);
+  const changed = (from: typeof was, to: typeof was, dataset: DatasetCore): string[] =>
+    [...from]
+      .filter(([key, rule]) => to.get(key)?.text !== rule.text)
+      .map(([, rule]) => authorizationTurtle(dataset, rule.root));
+  return { source, remove: changed(now, was, after), add: changed(was, now, before) };
+}
+interface DeltaRule {
+  root: Term;
+  quads: Quad[];
+}
+/** One serialised rule: exactly one authorization and nothing outside its description. */
+async function parseRule(turtle: string, url: string): Promise<DeltaRule> {
+  const dataset = await parseResource(turtle, "text/turtle", url);
+  const roots = authorizations(dataset);
+  if (roots.length !== 1) throw new UnsupportedAccessError();
+  const root = TermAs.term(roots[0] as AccessNode);
+  const quads = authorizationQuads(dataset, root);
+  if (quads.length !== [...dataset].length) throw new UnsupportedAccessError();
+  return { root, quads };
+}
+function sameRoot(a: Term, b: Term): boolean {
+  return a.termType === "NamedNode"
+    ? b.termType === "NamedNode" && a.value === b.value
+    : b.termType === "BlankNode";
+}
+/**
+ * Apply an inverse delta to a fresh read. Every rule to remove must still be present
+ * unchanged (equivalent blank rules only as a complete set) and every named rule to
+ * add must be absent; otherwise someone else changed them and nothing is written.
+ */
+async function applyDelta(dataset: DatasetCore, delta: RestoreDelta, url: string): Promise<void> {
+  const remove = await Promise.all(delta.remove.map((rule) => parseRule(rule, url)));
+  const add = await Promise.all(delta.add.map((rule) => parseRule(rule, url)));
+  const nodes = authorizations(dataset).map((node) => TermAs.term(node));
+  const selected = new Map<string, Term>();
+  for (const rule of remove) {
+    const candidates = nodes.filter(
+      (node) =>
+        sameRoot(rule.root, node) && isomorphic(rule.quads, authorizationQuads(dataset, node)),
+    );
+    const twins = remove.filter(
+      (other) => sameRoot(rule.root, other.root) && isomorphic(rule.quads, other.quads),
+    );
+    if (candidates.length !== twins.length) throw new RestoreConflictError();
+    for (const node of candidates) selected.set(termKey(node), node);
+  }
+  for (const node of selected.values()) deleteRule(dataset, node);
+  for (const rule of add) {
+    if (rule.root.termType === "NamedNode" && [...dataset.match(rule.root)].length)
+      throw new RestoreConflictError();
+    // Fresh blank labels: a parser-local label must never merge with an existing node.
+    const blanks = new Map<string, Term>();
+    const term = <T extends Term>(value: T): T =>
+      (value.termType === "BlankNode"
+        ? (blanks.get(value.value) ??
+          blanks.set(value.value, DataFactory.blankNode()).get(value.value))
+        : value) as T;
+    for (const quad of rule.quads)
+      dataset.add(
+        DataFactory.quad(term(quad.subject), quad.predicate, term(quad.object), quad.graph),
+      );
+  }
 }
 function copyDescription(node: AccessNode): AccessNode {
   const copy = new AccessNode(DataFactory.blankNode(), node.dataset, DataFactory);
@@ -364,41 +498,17 @@ export async function applyRevoke(
         if (accessSystem(current.dataset, url, current.headers) !== "wac")
           throw new UnsupportedAccessError();
         if (!current.etag || current.etag.startsWith("W/")) throw new AclConflictError();
-        const before = await serializeTurtle(current.dataset);
         const inverse = plan.restore?.find((r) => r.source === url);
-        let dataset: DatasetCore = new Store([...current.dataset]);
-        if (inverse) {
-          const expected = await parseResource(inverse.after, "text/turtle", url);
-          if (!isomorphic([...expected], [...current.dataset])) throw new AclConflictError();
-          dataset = await parseResource(inverse.before, "text/turtle", url);
-          // Inverse plans obey the same no-lockout rule, including every original
-          // resource/default scope, even if a caller constructs a plan themselves.
-          for (const node of authorizations(current.dataset))
-            for (const name of SCOPES) {
-              for (const resource of node.iris(ACL + name)) {
-                const members = name !== "accessTo";
-                if (
-                  ownerRetainsAnyControl(current.dataset, options.webId, resource, members) &&
-                  !ownerRetainsAnyControl(dataset, options.webId, resource, members)
-                )
-                  throw new LockoutError();
-              }
-            }
-        } else {
+        const dataset: DatasetCore = new Store([...current.dataset]);
+        if (inverse) await applyDelta(dataset, inverse, url);
+        else {
           const detached = new Map<string, string[]>();
           for (const change of await resolveChanges(dataset, changes))
             removeSubject(dataset, change, detached);
-          for (const change of changes)
-            if (
-              !ownerRetainsAnyControl(
-                dataset,
-                options.webId,
-                change.resource,
-                change.scope === "members",
-              )
-            )
-              throw new LockoutError();
         }
+        // Revocations and inverse plans (even caller-built ones) obey one rule: the
+        // owner keeps Control of every scope where they had it before this write.
+        assertNoLockout(current.dataset, dataset, options.webId);
         const after = await serializeTurtle(dataset);
         // Every authenticated write passes the scope guard immediately before dispatch.
         const response = await http(assertWithinPodScope(options.storage, url), {
@@ -411,7 +521,7 @@ export async function applyRevoke(
           throw new AclConflictError();
         }
         if (!response.ok) throw new Error(`Access update failed (${response.status})`);
-        undo.restore?.push({ source: url, before, after });
+        undo.restore?.push(ruleDelta(current.dataset, dataset, url));
         break;
       }
     }

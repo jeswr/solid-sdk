@@ -21,7 +21,7 @@ vi.mock("../src/apps/home/lib/permissions", async (original) => ({
   resolveClientName: mocks.client,
 }));
 
-import { PartialRevokeError } from "../src/apps/home/lib/permissions";
+import { PartialRevokeError, RestoreConflictError } from "../src/apps/home/lib/permissions";
 import { type PermissionsBinding, usePermissions } from "../src/apps/home/state/permissions";
 
 const ROOT = "https://pod.test/";
@@ -319,4 +319,97 @@ it("blocks offline writes, refreshes on reconnection, and never renders a prior 
   observeRender = (state) => observed.push(state.rows.length);
   await view.render(h(Probe));
   expect(observed.every((count) => count === 0)).toBe(true);
+});
+
+it("applies each name as it settles and never fetches a bare origin as a Client ID", async () => {
+  const app = (id: string, key: string): AgentRow => ({ ...bob, key, id, kind: "app" });
+  mocks.load.mockResolvedValue({
+    ...snapshot,
+    rows: [bob, app("https://slow.test/client.json", "slow"), app("https://origin.test", "origin")],
+  });
+  const slow = deferred<{ name: string }>();
+  mocks.client.mockReturnValue(slow.promise);
+  vi.stubGlobal(
+    "fetch",
+    vi.fn<typeof fetch>(
+      async () =>
+        new Response(`<${bob.id}> <http://xmlns.com/foaf/0.1/name> "Bob".`, {
+          headers: { "content-type": "text/turtle" },
+        }),
+    ),
+  );
+  await mount(h(Probe));
+  // The person's name lands while the app's document is still pending.
+  expect(binding.rows.find((row) => row.key === "bob")?.name).toBe("Bob");
+  expect(binding.rows.find((row) => row.key === "slow")?.name).toBeUndefined();
+  expect(mocks.client).toHaveBeenCalledExactlyOnceWith("https://slow.test/client.json");
+  await act(async () => slow.resolve({ name: "Slow app" }));
+  expect(binding.rows.find((row) => row.key === "slow")?.name).toBe("Slow app");
+  expect(binding.clients["https://slow.test/client.json"]).toEqual({ name: "Slow app" });
+  expect(binding.rows.find((row) => row.key === "bob")?.name).toBe("Bob");
+});
+
+async function revokedToken() {
+  const view = await mount(h(Probe));
+  mocks.load.mockResolvedValue({ ...snapshot, rows: [] });
+  await act(() => binding.revoke(bob.lines[0] as NonNullable<(typeof bob.lines)[0]>));
+  const token = binding.removed.files?.token as string;
+  expect(token).toBeTruthy();
+  return { token, view };
+}
+
+it("disables an Undo whose rules were changed elsewhere instead of suggesting a retry", async () => {
+  const { token } = await revokedToken();
+  mocks.apply.mockRejectedValueOnce(new RestoreConflictError());
+  await act(() => binding.undo(token));
+  expect(mocks.error).toHaveBeenLastCalledWith(
+    "This access was changed elsewhere, so it can't be restored here",
+  );
+  expect(binding.removed.files?.stale).toBe(true);
+  expect(binding.busy).toBe(false);
+  await act(() => binding.undo(token));
+  expect(mocks.apply).toHaveBeenCalledTimes(2);
+});
+
+it("retries only the unrestored documents after a partial Undo", async () => {
+  const { token } = await revokedToken();
+  const restore = ["a", "b"].map((name) => ({
+    source: `${ROOT}${name}/.acl`,
+    remove: [],
+    add: [],
+  }));
+  mocks.apply.mockReset();
+  mocks.apply.mockResolvedValueOnce({ undo: { changes: [], restore } });
+  await act(() => binding.revoke(bob));
+  const toastUndo = mocks.success.mock.lastCall?.[1]?.action.onClick as () => void;
+  mocks.apply.mockRejectedValueOnce(
+    new PartialRevokeError(
+      { changes: [], restore: [restore[0] as (typeof restore)[0]] },
+      new Error("offline"),
+    ),
+  );
+  await act(async () => toastUndo());
+  expect(mocks.error).toHaveBeenLastCalledWith("Couldn't restore access. Refresh and try again.");
+  mocks.apply.mockRejectedValueOnce(
+    new PartialRevokeError({ changes: [], restore: [] }, new RestoreConflictError()),
+  );
+  await act(async () => toastUndo());
+  expect(mocks.apply.mock.lastCall?.[0]).toEqual({ changes: [], restore: [restore[1]] });
+  expect(mocks.error).toHaveBeenLastCalledWith(
+    "This access was changed elsewhere, so it can't be restored here",
+  );
+  expect(token).toBeTruthy();
+});
+
+it("still announces a toast Undo's result after leaving the page", async () => {
+  const { view } = await revokedToken();
+  const toastUndo = mocks.success.mock.lastCall?.[1]?.action.onClick as () => void;
+  await view.unmount();
+  mocks.success.mockClear();
+  await act(async () => {
+    toastUndo();
+    await Promise.resolve();
+  });
+  expect(mocks.apply).toHaveBeenCalledTimes(2);
+  expect(mocks.success).toHaveBeenCalledWith("Access restored");
 });

@@ -10,8 +10,15 @@ export interface ClientMetadata {
 }
 const cache = new Map<string, { until: number; value: Promise<ClientMetadata> }>();
 const DAY = 24 * 60 * 60 * 1000;
+/** A failed or timed-out lookup is retried after this, never held for a day. */
+export const CLIENT_RETRY_MS = 5 * 60 * 1000;
+export const CLIENT_TIMEOUT_MS = 5000;
 function https(value: unknown): value is string {
   return typeof value === "string" && httpUrl(value)?.protocol === "https:";
+}
+/** Client ID Documents have a path; a bare origin (an acl:origin value) is never fetched. */
+export function isClientIdDocument(value: string): boolean {
+  return https(value) && new URL(value).pathname !== "/";
 }
 /** The optional fetch is an unauthenticated transport seam, NEVER a session fetch. */
 export async function resolveClientName(
@@ -19,24 +26,44 @@ export async function resolveClientName(
   publicFetch: typeof globalThis.fetch = globalThis.fetch,
   now: number = Date.now(),
 ): Promise<ClientMetadata> {
-  if (!https(clientId)) return {};
+  if (!isClientIdDocument(clientId)) return {};
   const hit = cache.get(clientId);
   if (hit && now < hit.until) return { ...(await hit.value) };
-  const value = (async (): Promise<ClientMetadata> => {
+  // Concurrent callers share the request; it is bounded even if the transport ignores abort.
+  const entry = { until: now + DAY, value: Promise.resolve<ClientMetadata>({}) };
+  entry.value = (async (): Promise<ClientMetadata> => {
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        reject(new Error("Client ID Document timed out"));
+      }, CLIENT_TIMEOUT_MS);
+    });
     try {
-      const response = await publicFetch(clientId, {
-        headers: { accept: "application/ld+json, application/json" },
-        credentials: "omit",
-        redirect: "error",
-      });
+      const response = await Promise.race([
+        publicFetch(clientId, {
+          headers: { accept: "application/ld+json, application/json" },
+          credentials: "omit",
+          redirect: "error",
+          signal: controller.signal,
+        }),
+        timeout,
+      ]);
+      if (!response.ok) throw new Error(`Client ID Document unavailable (${response.status})`);
       if (
-        !response.ok ||
         !["application/json", "application/ld+json"].includes(
           response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() ?? "",
         )
       )
         return {};
-      const json: unknown = await response.json();
+      let json: unknown;
+      try {
+        json = await Promise.race([response.json(), timeout]);
+      } catch (error) {
+        if (controller.signal.aborted) throw error;
+        return {};
+      }
       if (!json || typeof json !== "object" || Array.isArray(json)) return {};
       const doc = json as Record<string, unknown>;
       const result: ClientMetadata = {};
@@ -50,9 +77,13 @@ export async function resolveClientName(
         if (https(doc[field])) result[property] = doc[field];
       return result;
     } catch {
+      // Transport failures, refusals and timeouts are transient: retry soon.
+      entry.until = now + CLIENT_RETRY_MS;
       return {};
+    } finally {
+      clearTimeout(timer);
     }
   })();
-  cache.set(clientId, { until: now + DAY, value });
-  return { ...(await value) };
+  cache.set(clientId, entry);
+  return { ...(await entry.value) };
 }

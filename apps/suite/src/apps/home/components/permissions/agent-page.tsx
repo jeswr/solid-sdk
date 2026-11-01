@@ -16,7 +16,7 @@ import {
   usePermissionPreferences,
 } from "./permissions-page";
 
-function ClientCard({ metadata }: { metadata: ClientMetadata }) {
+export function ClientCard({ metadata }: { metadata: ClientMetadata }) {
   const [showLogo, setShowLogo] = useState(false);
   return (
     <section className="hm-permission-about" aria-labelledby="client-about">

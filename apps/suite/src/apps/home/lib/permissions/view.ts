@@ -23,12 +23,13 @@ export function permissionDate(value?: string): string {
     : "Date unknown";
 }
 
-export function dataTypeLabel(line: PermissionLine): string {
+export function dataTypeLabel(line: PermissionLine, storage: string): string {
   if (line.dataType) return line.dataType.label;
-  // Binary files have no primary subject. Drive is the suite's known Files location.
+  // Binary files have no primary subject. Drive is the suite's known Files location,
+  // relative to the pod root wherever the pod is mounted.
   if (
     line.resources.length &&
-    line.resources.every((r) => new URL(r.url).pathname.startsWith("/drive/"))
+    line.resources.every((r) => relativePath(r.url, storage).startsWith("drive/"))
   )
     return "Files";
   return "Other data";
@@ -42,17 +43,17 @@ export function durationLabel(line: PermissionLine): string {
   return line.expiresAt ? `Until ${permissionDate(line.expiresAt)}` : "Until revoked";
 }
 
-export function consequenceText(line: PermissionLine, name: string): string {
+export function consequenceText(line: PermissionLine, name: string, storage: string): string {
   return line.purpose?.label
     ? `${line.purpose.label} will stop working in ${name}`
-    : `${name} will lose access to your ${dataTypeLabel(line)}`;
+    : `${name} will lose access to your ${dataTypeLabel(line, storage)}`;
 }
 
-export function dataTypeLabels(row: AgentRow): string[] {
-  return [...new Set(row.lines.map(dataTypeLabel))];
+export function dataTypeLabels(row: AgentRow, storage: string): string[] {
+  return [...new Set(row.lines.map((line) => dataTypeLabel(line, storage)))];
 }
 
-export function revokeCopy(row: AgentRow): { title: string; description: string } {
+export function revokeCopy(row: AgentRow, storage: string): { title: string; description: string } {
   if (row.kind === "public" || row.kind === "authenticated")
     return {
       title: "Make private?",
@@ -62,7 +63,7 @@ export function revokeCopy(row: AgentRow): { title: string; description: string 
   const name = agentName(row);
   return {
     title: `Remove all access for ${name}?`,
-    description: `${name} will no longer be able to see or change ${dataTypeLabels(row).join(", ") || "your data"}. You can share again later.`,
+    description: `${name} will no longer be able to see or change ${dataTypeLabels(row, storage).join(", ") || "your data"}. You can share again later.`,
   };
 }
 
@@ -70,6 +71,7 @@ export function visibleRows(
   rows: readonly AgentRow[],
   tab: "people" | "apps",
   search: string,
+  storage: string,
 ): AgentRow[] {
   const query = search.trim().toLocaleLowerCase();
   const rank = (row: AgentRow) =>
@@ -79,7 +81,7 @@ export function visibleRows(
       (row) =>
         (tab === "apps" ? row.kind === "app" : row.kind !== "app") &&
         (!query ||
-          [agentName(row), ...dataTypeLabels(row)].some((text) =>
+          [agentName(row), ...dataTypeLabels(row, storage)].some((text) =>
             text.toLocaleLowerCase().includes(query),
           )),
     )
@@ -154,6 +156,12 @@ export function sameAgent(rowId: string, id: string | undefined): boolean {
   } catch {
     return false;
   }
+}
+
+/** "1 item couldn't be checked", deduplicated by URL. */
+export function failureNotice(failures: readonly { url: string }[]): string {
+  const count = new Set(failures.map((failure) => failure.url)).size;
+  return `${count} ${count === 1 ? "item" : "items"} couldn't be checked`;
 }
 
 export function accessRequestsEnabled(json?: string): boolean {

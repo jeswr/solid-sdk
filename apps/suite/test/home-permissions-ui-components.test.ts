@@ -3,12 +3,25 @@ import type { ReactNode } from "react";
 import { expect, it, vi } from "vitest";
 import { click, h, key, mount } from "./drive-ui-dom";
 
+vi.mock("../src/apps/home/components/home-app", () => ({ useHomeSession: () => ({}) }));
 vi.mock("next/link", () => ({
-  default: ({ href, children }: { href: string; children: ReactNode }) =>
-    h("a", { href }, children),
+  default: ({
+    href,
+    children,
+    className,
+  }: {
+    href: string;
+    children: ReactNode;
+    className?: string;
+  }) => h("a", { href, className }, children),
 }));
 
+import { ClientCard } from "../src/apps/home/components/permissions/agent-page";
 import { PermissionAccessRow } from "../src/apps/home/components/permissions/permission-access";
+import {
+  PermissionNotices,
+  RequestsLink,
+} from "../src/apps/home/components/permissions/permissions-page";
 import type { AgentRow } from "../src/apps/home/lib/permissions";
 import type { PermissionsBinding } from "../src/apps/home/state/permissions";
 
@@ -168,4 +181,148 @@ it.each([
     expect(state.revoke).toHaveBeenLastCalledWith("makePrivate");
   }
   expect(state.revoke).toHaveBeenCalledTimes(2);
+});
+
+it("keeps keyboard focus on the switch while saving and returns it there after Undo", async () => {
+  const state = binding();
+  const props = {
+    row,
+    storage: "https://pod.test/",
+    view: "overview" as const,
+    technical: false,
+    alwaysExpanded: true,
+  };
+  const view = await mount(h(PermissionAccessRow, { ...props, binding: state }));
+  const toggle = () =>
+    view.host.querySelector<HTMLButtonElement>(".hm-permission-line [role=switch]");
+  toggle()?.focus();
+  await click(toggle() as HTMLButtonElement);
+  expect(state.revoke).toHaveBeenCalledTimes(1);
+  const line = row.lines[0] as AgentRow["lines"][number];
+  // Saving: the switch stays focusable (aria-disabled, not disabled) and ignores input.
+  await view.render(
+    h(PermissionAccessRow, {
+      ...props,
+      binding: { ...state, busy: true, removed: { files: { row, line } } },
+    }),
+  );
+  expect(document.activeElement).toBe(toggle());
+  expect(toggle()?.disabled).toBe(false);
+  expect(toggle()?.getAttribute("aria-disabled")).toBe("true");
+  await click(toggle() as HTMLButtonElement);
+  expect(state.revoke).toHaveBeenCalledTimes(1);
+  const saved = { ...state, removed: { files: { row, line, token: "t" } } };
+  await view.render(h(PermissionAccessRow, { ...props, binding: saved }));
+  const undo = [...view.host.querySelectorAll(".hm-permission-line button")].find(
+    (b) => b.textContent === "Undo",
+  ) as HTMLButtonElement | undefined;
+  if (!undo) throw new Error("Missing Undo");
+  undo.focus();
+  await click(undo);
+  expect(state.undo).toHaveBeenCalledWith("t");
+  expect(document.activeElement).toBe(toggle());
+  // Restored: the consequence block unmounts without dropping focus to the page.
+  await view.render(h(PermissionAccessRow, { ...props, binding: state }));
+  expect(document.activeElement).toBe(toggle());
+  expect(toggle()?.hasAttribute("aria-disabled")).toBe(false);
+});
+
+it("explains and disables an Undo whose rules were changed elsewhere", async () => {
+  const state = binding();
+  const line = row.lines[0] as AgentRow["lines"][number];
+  const view = await mount(
+    h(PermissionAccessRow, {
+      row,
+      binding: { ...state, removed: { files: { row, line, token: "t", stale: true } } },
+      storage: "https://pod.test/",
+      view: "overview",
+      technical: false,
+      alwaysExpanded: true,
+    }),
+  );
+  expect(view.host.querySelector(".hm-permission-line [role=status]")?.textContent).toContain(
+    "This access was changed elsewhere, so it can't be restored here",
+  );
+  expect(
+    [...view.host.querySelectorAll(".hm-permission-line button")].some(
+      (b) => b.textContent === "Undo",
+    ),
+  ).toBe(false);
+  const toggle = view.host.querySelector<HTMLButtonElement>(".hm-permission-line [role=switch]");
+  await click(toggle as HTMLButtonElement);
+  expect(state.undo).not.toHaveBeenCalled();
+});
+
+it("labels Files relative to a pod mounted below the origin root", async () => {
+  const nested: AgentRow = {
+    ...row,
+    lines: row.lines.map((line) => ({
+      ...line,
+      dataType: undefined,
+      resources: line.resources.map((r) => ({ ...r, url: "https://pod.test/alice/drive/Work/" })),
+    })),
+  };
+  const view = await mount(
+    h(PermissionAccessRow, {
+      row: nested,
+      binding: binding(),
+      storage: "https://pod.test/alice/",
+      view: "overview",
+      technical: false,
+      alwaysExpanded: true,
+    }),
+  );
+  expect(
+    view.host.querySelector(".hm-permission-line [role=switch]")?.getAttribute("aria-label"),
+  ).toBe("Files for Bob");
+});
+
+it("puts Requests beside the tabs as a link and counts unchecked items once", async () => {
+  const link = await mount(h(RequestsLink, { pending: 2 }));
+  const anchor = link.host.querySelector("a");
+  expect(anchor?.getAttribute("href")).toBe("/permissions/requests");
+  expect(anchor?.textContent).toBe("Requests2 pending");
+  expect(anchor?.closest("[role=tablist]")).toBeNull();
+  const none = await mount(h(RequestsLink, {}));
+  expect(none.host.textContent).toBe("Requests");
+  const state = binding();
+  state.failures = [
+    { url: "https://pod.test/a", reason: "unreadable" },
+    { url: "https://pod.test/a", reason: "forbidden" },
+  ];
+  const notices = await mount(h(PermissionNotices, { binding: state }));
+  expect(notices.host.textContent).toBe("1 item couldn't be checked");
+});
+
+it("shows Client ID Document links safely and loads a remote logo only after consent", async () => {
+  const view = await mount(
+    h(ClientCard, {
+      metadata: {
+        name: "MaraCoach",
+        uri: "https://maracoach.example/about",
+        policyUri: "https://maracoach.example/privacy",
+        tosUri: "https://maracoach.example/terms",
+        logoUri: "https://images.example/mara.svg",
+      },
+    }),
+  );
+  const links = [...view.host.querySelectorAll("a")];
+  expect(links.map((link) => link.textContent)).toEqual([
+    "App website",
+    "Privacy policy",
+    "Terms of service",
+  ]);
+  expect(links.every((link) => link.rel === "noopener noreferrer")).toBe(true);
+  expect(view.host.querySelector("img")).toBeNull();
+  const show = [...view.host.querySelectorAll("button")].find(
+    (button) => button.textContent === "Show logo",
+  );
+  if (!show) throw new Error("Missing Show logo");
+  await click(show);
+  const logo = view.host.querySelector("img");
+  expect(logo?.getAttribute("src")).toBe("https://images.example/mara.svg");
+  expect(logo?.getAttribute("referrerpolicy")).toBe("no-referrer");
+  expect(logo?.getAttribute("alt")).toBe("MaraCoach logo");
+  const empty = await mount(h(ClientCard, { metadata: {} }));
+  expect(empty.host.textContent).toContain("This app hasn't provided any details.");
 });

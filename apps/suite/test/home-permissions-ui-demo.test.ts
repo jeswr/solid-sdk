@@ -107,7 +107,7 @@ describe("permissions demo seed", () => {
     expect(bob?.lines).toHaveLength(1);
     const line = bob?.lines[0];
     if (!line) throw new Error("Missing Bob grant");
-    expect(dataTypeLabel(line)).toBe("Files");
+    expect(dataTypeLabel(line, DEMO_ROOT)).toBe("Files");
     expect(line.inherited).toBe(true);
     const app = snapshot.rows.find((r) => r.kind === "app");
     expect(app?.lines[0]?.purpose?.label).toBe("Personalise the service");

@@ -82,7 +82,7 @@ function GrantDetails({
           <code>{relativePath(resource.url, storage)}</code>
           {technical ? (
             <a href={resource.source} target="_blank" rel="noopener noreferrer">
-              View grant<span className="sr-only"> for {dataTypeLabel(line)}</span>
+              View grant<span className="sr-only"> for {dataTypeLabel(line, storage)}</span>
             </a>
           ) : (
             <DisabledHint reason="Enable technical details in Settings">
@@ -114,38 +114,47 @@ export function PermissionLines({
   onChange: (line: PermissionLine, checked: boolean) => void;
 }) {
   const name = agentName(row);
+  const switches = useRef(new Map<string, HTMLButtonElement>());
   return (
     <div className="hm-permission-lines">
       {row.lines.map((line) => {
         const removed = binding.removed[line.key];
-        const reason = !binding.online
+        const label = dataTypeLabel(line, storage);
+        // Offline and unsupported lines are truly disabled. A save in flight only marks
+        // controls aria-disabled, so the focused switch or Undo keeps keyboard focus.
+        const blocked = !binding.online
           ? "Reconnect to change access"
           : line.resources.some((r) => r.system === "acp")
             ? "This storage doesn't support changing access here yet"
-            : binding.busy
-              ? "Saving access changes"
-              : "";
+            : "";
+        const reason = blocked || (binding.busy ? "Saving access changes" : "");
         return (
           <section
             className="hm-permission-line"
             key={line.key}
-            aria-label={`${dataTypeLabel(line)} for ${name}`}
+            aria-label={`${label} for ${name}`}
           >
             <div className="hm-permission-line-main">
               <div>
                 <p>
-                  <strong>{dataTypeLabel(line)}</strong> → {featureLabel(line, name)} ·{" "}
-                  {durationLabel(line)}
+                  <strong>{label}</strong> → {featureLabel(line, name)} · {durationLabel(line)}
                 </p>
                 <p className="hm-permission-muted">{roleLabel(line.role)}</p>
               </div>
               <DisabledHint reason={reason}>
                 <Switch
+                  ref={(node: HTMLButtonElement | null) => {
+                    if (node) switches.current.set(line.key, node);
+                    else switches.current.delete(line.key);
+                  }}
                   className="hm-permission-switch"
                   checked={!removed}
-                  disabled={!!reason}
-                  aria-label={`${dataTypeLabel(line)} for ${name}`}
-                  onCheckedChange={(checked) => onChange(line, checked)}
+                  disabled={!!blocked}
+                  aria-disabled={reason || removed?.stale ? true : undefined}
+                  aria-label={`${label} for ${name}`}
+                  onCheckedChange={(checked) => {
+                    if (!reason && !removed?.stale) onChange(line, checked);
+                  }}
                 />
               </DisabledHint>
             </div>
@@ -159,14 +168,26 @@ export function PermissionLines({
             )}
             {removed && (
               <div className="su-consequence" role="status">
-                <p>{consequenceText(line, name)}</p>
-                <Button
-                  variant="outline"
-                  disabled={!!reason || !removed.token}
-                  onClick={() => onChange(line, true)}
-                >
-                  Undo
-                </Button>
+                <p>{consequenceText(line, name, storage)}</p>
+                {removed.stale ? (
+                  <p className="hm-permission-muted">
+                    This access was changed elsewhere, so it can't be restored here
+                  </p>
+                ) : (
+                  <Button
+                    variant="outline"
+                    disabled={!!blocked || !removed.token}
+                    aria-disabled={reason ? true : undefined}
+                    onClick={() => {
+                      if (reason) return;
+                      // Undo removes this block; keep focus on the line's own switch.
+                      switches.current.get(line.key)?.focus();
+                      onChange(line, true);
+                    }}
+                  >
+                    Undo
+                  </Button>
+                )}
               </div>
             )}
           </section>
@@ -212,7 +233,7 @@ export function PermissionAccessRow({
         ? "Saving access changes"
         : "";
   const active = row.lines.filter((line) => !binding.removed[line.key]);
-  const allCopy = revokeCopy({ ...row, lines: active });
+  const allCopy = revokeCopy({ ...row, lines: active }, storage);
   const revokeAll = () => binding.revoke(pseudo ? "makePrivate" : { ...row, lines: active });
   const expand = (next: boolean) => {
     if (alwaysExpanded) return;
@@ -225,8 +246,8 @@ export function PermissionAccessRow({
   };
   const changeLine = (line: PermissionLine, checked: boolean) => {
     if (checked) {
-      const token = binding.removed[line.key]?.token;
-      if (token) void binding.undo(token);
+      const removed = binding.removed[line.key];
+      if (removed?.token && !removed.stale) void binding.undo(removed.token);
     } else if (line.inherited) open(line);
     else void binding.revoke(line);
   };
@@ -276,12 +297,12 @@ export function PermissionAccessRow({
             onExpandedChange={expand}
             items={row.lines.map((line) => ({
               id: line.key,
-              label: dataTypeLabel(line),
+              label: dataTypeLabel(line, storage),
               feature: featureLabel(line, name),
               duration: durationLabel(line),
               checked: !binding.removed[line.key],
               sources: [roleLabel(line.role)],
-              consequence: consequenceText(line, name),
+              consequence: consequenceText(line, name, storage),
               ...(reason ? { disabled: true as const, reason } : {}),
             }))}
             onItemChange={(key, checked) => {
@@ -327,7 +348,7 @@ export function PermissionAccessRow({
               </AlertDialogTitle>
               <AlertDialogDescription>
                 {confirm && confirm !== "all"
-                  ? consequenceText(confirm, name)
+                  ? consequenceText(confirm, name, storage)
                   : allCopy.description}
               </AlertDialogDescription>
             </AlertDialogHeader>

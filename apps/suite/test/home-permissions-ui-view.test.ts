@@ -10,6 +10,7 @@ import {
   dataTypeLabel,
   dataTypeLabels,
   durationLabel,
+  failureNotice,
   featureLabel,
   parentNames,
   permissionDate,
@@ -57,37 +58,52 @@ describe("permission copy and navigation", () => {
     expect(durationLabel(line)).toBe("Until revoked");
     expect(durationLabel({ ...line, expiresAt: "2026-12-01" })).toBe("Until Dec 1, 2026");
     expect(featureLabel(line, "Bob")).toBe("Used by Bob");
-    expect(consequenceText(line, "Bob")).toBe("Bob will lose access to your Files");
+    expect(consequenceText(line, "Bob", root)).toBe("Bob will lose access to your Files");
     const purpose = { ...line, purpose: { label: "Build your training plan" } };
     expect(featureLabel(purpose, "Coach")).toBe("Build your training plan");
-    expect(consequenceText(purpose, "Coach")).toBe(
+    expect(consequenceText(purpose, "Coach", root)).toBe(
       "Build your training plan will stop working in Coach",
     );
     expect(featureLabel({ ...line, purpose: { label: "" } }, "Bob")).toBe("Used by Bob");
   });
   it("labels binary Drive holdings, unknown data and distinct confirmation data types", () => {
-    expect(dataTypeLabel(line)).toBe("Files");
-    expect(dataTypeLabel({ ...line, dataType: undefined })).toBe("Files");
-    expect(dataTypeLabel({ ...line, dataType: undefined, resources: [] })).toBe("Other data");
+    expect(dataTypeLabel(line, root)).toBe("Files");
+    expect(dataTypeLabel({ ...line, dataType: undefined }, root)).toBe("Files");
+    expect(dataTypeLabel({ ...line, dataType: undefined, resources: [] }, root)).toBe("Other data");
     expect(
-      dataTypeLabel({
-        ...line,
-        dataType: undefined,
-        resources: [{ ...resource, url: `${root}other` }],
-      }),
+      dataTypeLabel(
+        {
+          ...line,
+          dataType: undefined,
+          resources: [{ ...resource, url: `${root}other` }],
+        },
+        root,
+      ),
     ).toBe("Other data");
+    // Files is relative to the pod root, not the origin root.
+    const nested = `${root}alice/`;
+    const podFiles = { ...resource, url: `${nested}drive/Work/` };
+    expect(dataTypeLabel({ ...line, dataType: undefined, resources: [podFiles] }, nested)).toBe(
+      "Files",
+    );
+    expect(dataTypeLabel({ ...line, dataType: undefined, resources: [podFiles] }, root)).toBe(
+      "Other data",
+    );
+    expect(dataTypeLabel({ ...line, dataType: undefined, resources: [resource] }, nested)).toBe(
+      "Other data",
+    );
     const contacts = { ...line, key: "contacts", dataType: { id: "contacts", label: "Contacts" } };
     const person = row({ name: "Bob", lines: [line, line, contacts] });
-    expect(dataTypeLabels(person)).toEqual(["Files", "Contacts"]);
-    expect(revokeCopy(person)).toEqual({
+    expect(dataTypeLabels(person, root)).toEqual(["Files", "Contacts"]);
+    expect(revokeCopy(person, root)).toEqual({
       title: "Remove all access for Bob?",
       description:
         "Bob will no longer be able to see or change Files, Contacts. You can share again later.",
     });
-    expect(revokeCopy(row({ lines: [] })).description).toContain("your data");
+    expect(revokeCopy(row({ lines: [] }), root).description).toContain("your data");
     for (const kind of ["public", "authenticated"] as const) {
-      expect(revokeCopy(row({ kind })).title).toBe("Make private?");
-      expect(revokeCopy(row({ kind })).description).toContain(
+      expect(revokeCopy(row({ kind }), root).title).toBe("Make private?");
+      expect(revokeCopy(row({ kind }), root).description).toContain(
         "Remove all public and signed-in access",
       );
     }
@@ -133,6 +149,12 @@ describe("permission copy and navigation", () => {
     };
     expect(parentNames(inherited)).toEqual(["Work", "your pod", "My Photos", "bad%ZZ"]);
   });
+  it("counts unchecked items once each, with singular and plural copy", () => {
+    const item = (url: string) => ({ url, reason: "unreadable" as const });
+    expect(failureNotice([item("a")])).toBe("1 item couldn't be checked");
+    expect(failureNotice([item("a"), item("a")])).toBe("1 item couldn't be checked");
+    expect(failureNotice([item("a"), item("b"), item("a")])).toBe("2 items couldn't be checked");
+  });
   it("hides the Requests tab unless the explicit capability is true", () => {
     for (const json of [
       undefined,
@@ -159,7 +181,7 @@ describe("permission sorting and filtering", () => {
       row({ key: "a", name: "Ada", since: "bad" }),
       row({ key: "public", kind: "public" }),
     ];
-    expect(visibleRows(people, "people", "").map((r) => r.key)).toEqual([
+    expect(visibleRows(people, "people", "", root).map((r) => r.key)).toEqual([
       "public",
       "auth",
       "new",
@@ -167,11 +189,11 @@ describe("permission sorting and filtering", () => {
       "a",
       "z",
     ]);
-    expect(visibleRows(people, "apps", "").map((r) => r.key)).toEqual(["app"]);
+    expect(visibleRows(people, "apps", "", root).map((r) => r.key)).toEqual(["app"]);
     expect(people[0]?.key).toBe("z");
-    expect(visibleRows(people, "people", " ADA ").map((r) => r.key)).toEqual(["a"]);
-    expect(visibleRows(people, "people", "files")).toHaveLength(6);
-    expect(visibleRows(people, "apps", "missing")).toEqual([]);
+    expect(visibleRows(people, "people", " ADA ", root).map((r) => r.key)).toEqual(["a"]);
+    expect(visibleRows(people, "people", "files", root)).toHaveLength(6);
+    expect(visibleRows(people, "apps", "missing", root)).toEqual([]);
     expect(
       visibleRows(
         [
@@ -180,6 +202,7 @@ describe("permission sorting and filtering", () => {
         ],
         "apps",
         "",
+        root,
       ).map((r) => r.name),
     ).toEqual(["A", "B"]);
   });

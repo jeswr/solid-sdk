@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   accessRequestsEnabled,
+  failureNotice,
   type PermissionsView,
   visibleRows,
 } from "../../lib/permissions/view";
@@ -85,7 +86,7 @@ export function PermissionNotices({ binding }: { binding: PermissionsBinding }) 
       )}
       {binding.failures.length > 0 && (
         <p role="status" className="hm-permission-muted">
-          {binding.failures.length} folders couldn't be checked
+          {failureNotice(binding.failures)}
         </p>
       )}
       {binding.truncated && (
@@ -94,6 +95,24 @@ export function PermissionNotices({ binding }: { binding: PermissionsBinding }) 
         </p>
       )}
     </>
+  );
+}
+
+/**
+ * Requests is a route, not a tab panel: it sits beside the tablist so arrow keys never
+ * land on a tab without a panel. HM-08 supplies the pending count.
+ */
+export function RequestsLink({ pending = 0 }: { pending?: number }) {
+  return (
+    <Link className="hm-permission-requests" href="/permissions/requests">
+      Requests
+      {pending > 0 && (
+        <span className="hm-permission-count">
+          {pending}
+          <span className="sr-only"> pending</span>
+        </span>
+      )}
+    </Link>
   );
 }
 
@@ -114,12 +133,8 @@ export function PermissionsPage() {
           <TabsList aria-label="Permissions" variant="line">
             <TabsTrigger value="people">People</TabsTrigger>
             <TabsTrigger value="apps">Apps</TabsTrigger>
-            {accessRequestsEnabled(process.env.NEXT_PUBLIC_SUITE_CAPS) && (
-              <TabsTrigger value="requests" asChild>
-                <Link href="/permissions/requests">Requests</Link>
-              </TabsTrigger>
-            )}
           </TabsList>
+          {accessRequestsEnabled(process.env.NEXT_PUBLIC_SUITE_CAPS) && <RequestsLink />}
           <Input
             className="hm-permission-search"
             aria-label="Search permissions"
@@ -131,7 +146,7 @@ export function PermissionsPage() {
         </div>
         <PermissionNotices binding={binding} />
         {(["people", "apps"] as const).map((kind) => {
-          const rows = visibleRows(binding.rows, kind, search);
+          const rows = visibleRows(binding.rows, kind, search, session.storageUrl);
           return (
             <TabsContent key={kind} value={kind}>
               {binding.status === "loading" ? (

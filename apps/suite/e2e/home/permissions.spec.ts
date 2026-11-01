@@ -91,6 +91,7 @@ test("People: keyboard toggle, inherited confirmation, saved policy and Undo; Ma
   ).toBeVisible();
   await expect(page.getByRole("tablist", { name: "Permissions", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: "Requests", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Requests", exact: true })).toHaveCount(0);
   const bob = bobCard(page);
   const header = bob.locator(".su-permission-trigger");
   await header.focus();
@@ -110,6 +111,8 @@ test("People: keyboard toggle, inherited confirmation, saved policy and Undo; Ma
   await expect(confirm).toBeVisible();
   await confirm.getByRole("button", { name: "Remove access", exact: true }).focus();
   await page.keyboard.press("Enter");
+  // The save keeps the switch focusable (aria-disabled), so focus returns to it.
+  await expect(toggle).toBeFocused();
   await expect(toggle).not.toBeChecked();
   await expect(bob.getByRole("status")).toContainText(
     "bob.demo.pod will lose access to your Files",
@@ -122,9 +125,10 @@ test("People: keyboard toggle, inherited confirmation, saved policy and Undo; Ma
   await bob.getByRole("button", { name: "Undo", exact: true }).focus();
   await page.keyboard.press("Enter");
   await expect(toggle).toBeChecked();
+  // Undo removes its own button; focus stays on the line's switch, not the page body.
+  await expect(toggle).toBeFocused();
   await expect.poll(() => podDocument(page, `${ROOT}drive/Work/.acl`)).toContain(BOB);
-  await header.focus();
-  await page.keyboard.press("Space");
+  await header.press("Space");
   await expect(header).toHaveAttribute("aria-expanded", "false");
   await page.keyboard.press("Space");
   await expect(header).toHaveAttribute("aria-expanded", "true");
@@ -232,47 +236,25 @@ test("row names deep-link to person and pseudo-agent detail; unknown accounts ar
   await expect(page.getByRole("link", { name: "Back to permissions", exact: true })).toBeVisible();
 });
 
-test("app metadata links are safe and remote logo only loads after Show logo", async ({ page }) => {
-  const logos: string[] = [];
+test("an origin-only app is named by its host and its origin is never fetched", async ({
+  page,
+}) => {
+  // acl:origin values are not Client ID Documents; only ids with a path are fetched.
+  const requests: string[] = [];
   await page.unroute("https://maracoach.example/**");
-  await page.route("https://maracoach.example/**", (route) =>
-    route.fulfill({
-      contentType: "application/ld+json",
-      headers: { "access-control-allow-origin": "*" },
-      body: JSON.stringify({
-        client_name: "MaraCoach",
-        client_uri: `${APP}about`,
-        policy_uri: `${APP}privacy`,
-        tos_uri: `${APP}terms`,
-        logo_uri: "https://images.example/mara.svg",
-      }),
-    }),
-  );
-  await page.route("https://images.example/**", (route) => {
-    logos.push(route.request().url());
-    return route.fulfill({
-      contentType: "image/svg+xml",
-      body: '<svg xmlns="http://www.w3.org/2000/svg" width="56" height="56"/>',
-    });
+  await page.route("https://maracoach.example/**", (route) => {
+    requests.push(route.request().url());
+    return route.abort();
   });
   await page.goto(`/permissions/a/${encodeRef(APP)}`);
   await expect(
-    page.getByRole("heading", { level: 1, name: "MaraCoach", exact: true }),
+    page.getByRole("heading", { level: 1, name: "maracoach.example", exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Show logo", exact: true })).toBeVisible();
-  expect(logos).toEqual([]);
-  for (const name of ["App website", "Privacy policy", "Terms of service"])
-    await expect(page.getByRole("link", { name, exact: true })).toHaveAttribute(
-      "rel",
-      "noopener noreferrer",
-    );
-  await expect(page.getByRole("img", { name: "MaraCoach logo", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Show logo", exact: true }).click();
-  await expect(page.getByRole("img", { name: "MaraCoach logo", exact: true })).toHaveAttribute(
-    "referrerpolicy",
-    "no-referrer",
-  );
-  await expect.poll(() => logos.length).toBe(1);
+  await expect(
+    page.getByText("This app hasn't provided any details.", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Show logo", exact: true })).toHaveCount(0);
+  expect(requests).toEqual([]);
   await accessible(page);
 });
 
