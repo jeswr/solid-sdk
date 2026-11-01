@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AUTHORED-BY Codex GPT-6 -->
+<HealthData>
+<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Health" unit="count" value="100" startDate="2026-10-20 08:00:00 +0000" endDate="2026-10-20 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Health" unit="count" value="101" startDate="2026-10-21 08:00:00 +0000" endDate="2026-10-21 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Health" unit="count" value="102" startDate="2026-10-22 08:00:00 +0000" endDate="2026-10-22 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Health" unit="count" value="103" startDate="2026-10-23 08:00:00 +0000" endDate="2026-10-23 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Health" unit="count" value="104" startDate="2026-10-24 08:00:00 +0000" endDate="2026-10-24 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Health" unit="count" value="105" startDate="2026-10-25 08:00:00 +0000" endDate="2026-10-25 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Health" unit="count" value="106" startDate="2026-10-26 08:00:00 +0000" endDate="2026-10-26 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Health" unit="count" value="107" startDate="2026-10-27 08:00:00 +0000" endDate="2026-10-27 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Health" unit="count" value="108" startDate="2026-10-28 08:00:00 +0000" endDate="2026-10-28 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Health" unit="count" value="109" startDate="2026-10-29 08:00:00 +0000" endDate="2026-10-29 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Health" unit="count" value="110" startDate="2026-10-20 08:00:00 +0000" endDate="2026-10-20 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Health" unit="count" value="111" startDate="2026-10-21 08:00:00 +0000" endDate="2026-10-21 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Health" unit="count" value="112" startDate="2026-10-22 08:00:00 +0000" endDate="2026-10-22 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Health" unit="count" value="113" startDate="2026-10-23 08:00:00 +0000" endDate="2026-10-23 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Health" unit="count" value="114" startDate="2026-10-24 08:00:00 +0000" endDate="2026-10-24 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Health" unit="count" value="115" startDate="2026-10-25 08:00:00 +0000" endDate="2026-10-25 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Health" unit="count" value="116" startDate="2026-10-26 08:00:00 +0000" endDate="2026-10-26 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Health" unit="count" value="117" startDate="2026-10-27 08:00:00 +0000" endDate="2026-10-27 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Health" unit="count" value="118" startDate="2026-10-28 08:00:00 +0000" endDate="2026-10-28 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierStepCount" sourceName="Apple Health" unit="count" value="119" startDate="2026-10-29 08:00:00 +0000" endDate="2026-10-29 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Health" unit="count/min" value="64" startDate="2026-10-20 08:00:00 +0000" endDate="2026-10-20 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Health" unit="count/min" value="65" startDate="2026-10-21 08:00:00 +0000" endDate="2026-10-21 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Health" unit="count/min" value="66" startDate="2026-10-22 08:00:00 +0000" endDate="2026-10-22 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Health" unit="count/min" value="67" startDate="2026-10-23 08:00:00 +0000" endDate="2026-10-23 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Health" unit="count/min" value="60" startDate="2026-10-24 08:00:00 +0000" endDate="2026-10-24 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Health" unit="count/min" value="61" startDate="2026-10-25 08:00:00 +0000" endDate="2026-10-25 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Health" unit="count/min" value="62" startDate="2026-10-26 08:00:00 +0000" endDate="2026-10-26 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Health" unit="count/min" value="63" startDate="2026-10-27 08:00:00 +0000" endDate="2026-10-27 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Health" unit="count/min" value="64" startDate="2026-10-28 08:00:00 +0000" endDate="2026-10-28 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Health" unit="count/min" value="65" startDate="2026-10-29 08:00:00 +0000" endDate="2026-10-29 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Health" unit="count/min" value="66" startDate="2026-10-20 08:00:00 +0000" endDate="2026-10-20 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Health" unit="count/min" value="67" startDate="2026-10-21 08:00:00 +0000" endDate="2026-10-21 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Health" unit="count/min" value="60" startDate="2026-10-22 08:00:00 +0000" endDate="2026-10-22 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Health" unit="count/min" value="61" startDate="2026-10-23 08:00:00 +0000" endDate="2026-10-23 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Health" unit="count/min" value="62" startDate="2026-10-24 08:00:00 +0000" endDate="2026-10-24 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Health" unit="count/min" value="63" startDate="2026-10-25 08:00:00 +0000" endDate="2026-10-25 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Health" unit="count/min" value="64" startDate="2026-10-26 08:00:00 +0000" endDate="2026-10-26 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Health" unit="count/min" value="65" startDate="2026-10-27 08:00:00 +0000" endDate="2026-10-27 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Health" unit="count/min" value="66" startDate="2026-10-28 08:00:00 +0000" endDate="2026-10-28 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Health" unit="count/min" value="67" startDate="2026-10-29 08:00:00 +0000" endDate="2026-10-29 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Apple Health" unit="kg" value="74.0" startDate="2026-10-20 08:00:00 +0000" endDate="2026-10-20 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Apple Health" unit="kg" value="74.1" startDate="2026-10-21 08:00:00 +0000" endDate="2026-10-21 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Apple Health" unit="kg" value="74.2" startDate="2026-10-22 08:00:00 +0000" endDate="2026-10-22 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Apple Health" unit="kg" value="74.3" startDate="2026-10-23 08:00:00 +0000" endDate="2026-10-23 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Apple Health" unit="kg" value="74.4" startDate="2026-10-24 08:00:00 +0000" endDate="2026-10-24 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Apple Health" unit="kg" value="74.5" startDate="2026-10-25 08:00:00 +0000" endDate="2026-10-25 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Apple Health" unit="kg" value="74.6" startDate="2026-10-26 08:00:00 +0000" endDate="2026-10-26 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Apple Health" unit="kg" value="74.7" startDate="2026-10-27 08:00:00 +0000" endDate="2026-10-27 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Apple Health" unit="kg" value="74.8" startDate="2026-10-28 08:00:00 +0000" endDate="2026-10-28 08:05:00 +0000"/>
+<Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Apple Health" unit="kg" value="74.9" startDate="2026-10-29 08:00:00 +0000" endDate="2026-10-29 08:05:00 +0000"/>
+</HealthData>

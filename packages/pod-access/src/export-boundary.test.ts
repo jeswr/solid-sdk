@@ -72,6 +72,10 @@ describe("public export boundary", () => {
   it("exposes no reader or error classes from any built public entry", async () => {
     await checkBuiltExports(`
       assert.ok(entries.length > 0);
+      const roles = await load("@jeswr/pod-access/roles");
+      assert.deepEqual(Object.keys(roles).sort(),
+        ["addGrant", "grantsWithRoles", "isRoleError", "modesToRole", "readGrants", "removeGrant", "rolesToModes", "setGrants"].sort());
+      assert.equal(roles.modesToRole(["read"], "resource"), "viewer");
       for (const entry of entries) {
         assert.equal("RdfNode" in entry, false);
         assert.equal("PolicyTooComplex" in entry, false);
@@ -82,7 +86,7 @@ describe("public export boundary", () => {
             assert.deepEqual(Reflect.ownKeys(value.prototype), ["constructor"], name);
         }
       }
-      for (const subpath of ["rdf", "systems/acp", "dist/rdf.js", "dist/systems/acp.js"])
+      for (const subpath of ["rdf", "systems/acp", "dist/rdf.js", "dist/systems/acp.js", "roles/rdf", "roles/http", "dist/roles/rdf.js"])
         await assert.rejects(load(manifest.name + "/" + subpath), {
           code: "ERR_PACKAGE_PATH_NOT_EXPORTED",
         });

@@ -1,12 +1,13 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
-/** Bounded SAI discovery and class matching only; no member sampling or grant enforcement. */
+/** Bounded SAI discovery and class matching; exact shapes stay private to the check. */
 import { DataFactory, Parser, Store } from 'n3';
 import type { PinnedTarget } from './class-grant';
-import { safePathUrl } from './class-path';
+import { safePathUrl, safeTargetUrl } from './class-path';
 import type { ResolutionBudget } from './class-resolution-budget';
 import type { ResolveFetch, ResolveOptions } from './class-resolve';
 import { CLASS_SHAPE_TREES } from './class-shape-trees';
+import type { ClassShape } from './shacl-lite';
 
 const INTEROP = 'http://www.w3.org/ns/solid/interop#';
 const ST = 'http://www.w3.org/ns/shapetrees#';
@@ -23,12 +24,13 @@ export interface ResolvedTarget extends PinnedTarget {
   readonly source: TargetSource;
   /** All rungs that independently produced this kind + URL, in discovery order. */
   readonly sources: readonly TargetSource[];
-  readonly check: 'unchecked';
+  readonly check: 'conforms' | 'mixed' | 'unchecked';
 }
 
 export interface ClassResolution {
   readonly targets: readonly ResolvedTarget[];
   readonly truncated: boolean;
+  readonly shape?: string;
 }
 
 type Document = Awaited<ReturnType<ResolveFetch>>;
@@ -123,12 +125,10 @@ function registrationTarget(
   registration: string,
   opts: ResolveOptions,
 ): string | null {
-  const parent = safePathUrl(registry);
-  const child = safePathUrl(registration);
+  const parent = safeTargetUrl(registry);
+  const child = safeTargetUrl(registration);
   if (!parent || !child || !parent.pathname.endsWith('/') || !child.pathname.endsWith('/'))
     return null;
-  // Queries/fragments must not turn a metadata document into a broader pinned container.
-  if (parent.search || parent.hash || child.search || child.hash) return null;
   if (
     parent.origin !== child.origin ||
     parent.pathname === child.pathname ||
@@ -198,26 +198,29 @@ export async function resolveSaiTargets(
     shapeDocuments.set(key, read);
     return read;
   };
-  const treeMatches = async (tree: string): Promise<boolean> => {
+  const treeMatches = async (tree: string): Promise<boolean | ClassShape> => {
     if (!active()) return false;
     if (CLASS_SHAPE_TREES.get(classIRI)?.includes(tree)) return true;
     const doc = await publicShapes(tree);
     if (!doc) return false;
     for (const shape of refs(doc, tree, `${ST}shape`, opts.budget)) {
       if (!active()) break;
-      if (matchesClass(doc, shape, classIRI)) return true;
+      if (matchesClass(doc, shape, classIRI)) return { iri: shape, store: doc.store };
       if (documentUrl(shape) === documentUrl(doc.url)) continue;
       const shapeDoc = await publicShapes(shape);
-      if (shapeDoc && matchesClass(shapeDoc, shape, classIRI)) return true;
+      if (shapeDoc && matchesClass(shapeDoc, shape, classIRI))
+        return { iri: shape, store: shapeDoc.store };
     }
     return false;
   };
-  const privateDocument = async (url: string): Promise<ParsedDocument | null> => {
-    if (!active() || !isAuthenticated(url, opts)) return null;
-    opts.read?.allowDocument(url, true);
+  const privateDocument = async (url: string, pathOnly = false): Promise<ParsedDocument | null> => {
+    if (!active() || !isAuthenticated(url, opts) || (pathOnly && !safeTargetUrl(url))) return null;
+    opts.read?.allowDocument(url, true, pathOnly);
     const body = await opts.fetch(url, true);
     const doc = active() ? parse(body, opts.budget) : null;
-    return doc && isAuthenticated(doc.url, opts) ? doc : null;
+    return doc && isAuthenticated(doc.url, opts) && (!pathOnly || safeTargetUrl(doc.url))
+      ? doc
+      : null;
   };
   const profileDoc = parse(profile, opts.budget);
   if (!profileDoc) return { targets, truncated };
@@ -227,7 +230,8 @@ export async function resolveSaiTargets(
     if (!setDoc) continue;
     for (const registry of refs(setDoc, set, `${INTEROP}hasDataRegistry`, opts.budget)) {
       if (!active()) break;
-      if (!isAuthenticated(registry, opts) || registries.has(registry)) continue;
+      if (!safeTargetUrl(registry) || !isAuthenticated(registry, opts) || registries.has(registry))
+        continue;
       if (
         registries.size >= MAX_REGISTRIES ||
         (opts.budget &&
@@ -237,7 +241,7 @@ export async function resolveSaiTargets(
         continue;
       }
       registries.add(registry);
-      const registryDoc = await privateDocument(registry);
+      const registryDoc = await privateDocument(registry, true);
       if (!registryDoc) continue;
       for (const registration of refs(
         registryDoc,
@@ -256,12 +260,13 @@ export async function resolveSaiTargets(
           continue;
         }
         registrations.add(url);
-        const doc = await privateDocument(registration);
+        const doc = await privateDocument(registration, true);
         if (!doc || !registrationTarget(registry, doc.url, opts)) continue;
         for (const tree of refs(doc, registration, `${INTEROP}registeredShapeTree`, opts.budget)) {
-          if ((await treeMatches(tree)) && active()) {
+          const match = await treeMatches(tree);
+          if (match && active()) {
             opts.read?.allowTarget({ url, kind: 'container' });
-            found?.add({ url, kind: 'container' }, 'sai');
+            found?.add({ url, kind: 'container' }, 'sai', match === true ? undefined : match);
             targets.push({
               url,
               kind: 'container',
@@ -281,10 +286,12 @@ export async function resolveSaiTargets(
 /** Incremental provenance merging keeps finalization constant-time when the budget expires. */
 export class ClassTargetCollector {
   readonly targets: ResolvedTarget[] = [];
+  readonly shapes = new Map<string, ClassShape>();
   private readonly indices = new Map<string, number>();
 
-  add(target: PinnedTarget, source: TargetSource): void {
+  add(target: PinnedTarget, source: TargetSource, shape?: ClassShape): void {
     const key = `${target.kind} ${target.url}`;
+    if (shape) this.shapes.set(key, shape);
     const index = this.indices.get(key);
     const previous = index === undefined ? undefined : this.targets[index];
     const sources = previous?.sources.includes(source)

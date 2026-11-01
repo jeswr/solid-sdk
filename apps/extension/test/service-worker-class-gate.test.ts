@@ -3,6 +3,7 @@ import { seedOriginGrantFixtures } from './profile-fixtures';
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
+// AUTHORED-BY Claude Opus 5.5
 //
 // INTEGRATION tests for the Phase-2 PER-DATA-CLASS gate AS WIRED INTO the service worker. These
 // drive the REAL `chrome.runtime.onMessage` listener with an in-memory chrome + captured fetch,
@@ -268,6 +269,26 @@ function send(
     // A sync-handled message (returns false after calling sendResponse) already resolved.
     setTimeout(() => resolve({ error: 'no async listener handled' }), 0);
   });
+}
+
+/**
+ * A BWC3 per-target decision selecting every target the worker offered for `classes` in the
+ * given profile's snapshot (the consent window does the same after the person confirms).
+ */
+async function allTargets(
+  consentId: unknown,
+  classes: readonly string[],
+  profileId?: string,
+): Promise<Record<string, string[]>> {
+  const view = (await send(
+    { type: 'SOLID_GET_PENDING_CONSENT', consentId, ...(profileId ? { profileId } : {}) },
+    EXT_SENDER,
+  )) as unknown as { classes: Array<{ dataClass: string; targets: Array<{ id: string }> }> } | null;
+  const out: Record<string, string[]> = {};
+  for (const c of view?.classes ?? [])
+    if (classes.includes(c.dataClass) && c.targets.length)
+      out[c.dataClass] = c.targets.map((t) => t.id);
+  return out;
 }
 
 function sendFetch(
@@ -1218,7 +1239,7 @@ describe('pim:Storage through the existing worker gate', () => {
         duration: 'P30D',
         stampedOrigin: APPX.origin,
         userActivated: true,
-        approvedClasses: [PIM_STORAGE_CLASS], // A page cannot include its own approval.
+        approvedTargets: { [PIM_STORAGE_CLASS]: ['forged'] }, // A page cannot include its own approval.
       },
       APPX,
     );
@@ -1240,7 +1261,7 @@ describe('pim:Storage through the existing worker gate', () => {
       type: 'SOLID_CONSENT_DECISION',
       consentId,
       profileId: '1',
-      approvedClasses: [PIM_STORAGE_CLASS],
+      approvedTargets: await allTargets(consentId, [PIM_STORAGE_CLASS], '1'),
     };
     await send(approve, APPX);
     expect(storage.get('solid:origin-grants')).toEqual([]);
@@ -1319,7 +1340,7 @@ describe('pim:Storage through the existing worker gate', () => {
         type: 'SOLID_CONSENT_DECISION',
         profileId: '1',
         consentId: new URL(createdWindows[1]).searchParams.get('consentId'),
-        approvedClasses: [],
+        approvedTargets: {},
       },
       EXT_SENDER,
     );
@@ -1401,7 +1422,7 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
         type: 'SOLID_CONSENT_DECISION',
         profileId: '1',
         consentId,
-        approvedClasses: [dataClass],
+        approvedTargets: await allTargets(consentId, [dataClass], '1'),
       },
       EXT_SENDER,
     );
@@ -1477,13 +1498,17 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
     );
   }
 
-  function approveConsent(index: number) {
+  async function approveConsent(index: number) {
     return send(
       {
         type: 'SOLID_CONSENT_DECISION',
         consentId: new URL(createdWindows[index]).searchParams.get('consentId'),
         profileId: '1',
-        approvedClasses: [classGrant().dataClass],
+        approvedTargets: await allTargets(
+          new URL(createdWindows[index]).searchParams.get('consentId'),
+          [classGrant().dataClass],
+          '1',
+        ),
       },
       EXT_SENDER,
     );
@@ -1518,7 +1543,7 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
         const view = await send({ type: 'SOLID_GET_PENDING_CONSENT', consentId }, EXT_SENDER);
         if (view?.origin === other.origin) {
           await send(
-            { type: 'SOLID_CONSENT_DECISION', consentId, approvedClasses: [] },
+            { type: 'SOLID_CONSENT_DECISION', consentId, approvedTargets: {} },
             EXT_SENDER,
           );
           continue;
@@ -1529,7 +1554,7 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
             type: 'SOLID_CONSENT_DECISION',
             consentId,
             profileId: '1',
-            approvedClasses: [classGrant().dataClass],
+            approvedTargets: await allTargets(consentId, [classGrant().dataClass], '1'),
           },
           EXT_SENDER,
         );
@@ -1549,7 +1574,7 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
           {
             type: 'SOLID_CONSENT_DECISION',
             consentId: new URL(url).searchParams.get('consentId'),
-            approvedClasses: [],
+            approvedTargets: {},
           },
           EXT_SENDER,
         );
@@ -1755,7 +1780,7 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
       await send(
         {
           type: 'SOLID_CONSENT_DECISION',
-          approvedClasses: [],
+          approvedTargets: {},
           consentId: new URL(createdWindows[0]).searchParams.get('consentId'),
         },
         EXT_SENDER,
@@ -1806,7 +1831,11 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
         type: 'SOLID_CONSENT_DECISION',
         profileId: '1',
         consentId,
-        approvedClasses: ['https://w3id.org/jeswr/sectors/finance#Transaction'],
+        approvedTargets: await allTargets(
+          consentId,
+          ['https://w3id.org/jeswr/sectors/finance#Transaction'],
+          '1',
+        ),
       },
       EXT_SENDER,
     );
@@ -1830,6 +1859,115 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
       APPX,
     );
     expect(denied.status).toBe(403);
+  });
+
+  async function openTwoTargetConsent() {
+    const finance = 'https://w3id.org/jeswr/sectors/finance#Transaction';
+    const index = `${INDEX}
+      <#archive> a solid:TypeRegistration ;
+        solid:forClass <${finance}> ;
+        solid:instanceContainer <https://alice.pod.example/archive/> .`;
+    fetchImpl = (url) =>
+      url.includes('/settings/pub.ttl')
+        ? Promise.resolve(new Response(index, { status: 200 }))
+        : routeFetch(url);
+    const request = requestAccess();
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+    const view = (await send(
+      { type: 'SOLID_GET_PENDING_CONSENT', consentId },
+      EXT_SENDER,
+    )) as unknown as {
+      classes: Array<{ targets: Array<{ id: string; url: string; source: string }> }>;
+    };
+    const targets = view.classes[0].targets;
+    expect(targets.map((t) => t.url)).toEqual([
+      'https://alice.pod.example/finance/',
+      'https://alice.pod.example/archive/',
+    ]);
+    expect(targets.every((t) => t.source === 'type-index')).toBe(true);
+    expect(new Set(targets.map((t) => t.id)).size).toBe(2);
+    return { finance, request, consentId, targets };
+  }
+
+  it('pins only the targets the person selected', async () => {
+    await seedSession();
+    await loadWorker();
+    const { finance, request, consentId, targets } = await openTwoTargetConsent();
+    const decision = await send(
+      {
+        type: 'SOLID_CONSENT_DECISION',
+        profileId: '1',
+        consentId,
+        approvedTargets: { [finance]: [targets[1].id] },
+      },
+      EXT_SENDER,
+    );
+    expect(decision.error).toBeUndefined();
+    const res = await request;
+    expect(res.ok).toBe(true);
+    expect((res.grants as Array<{ targets: unknown }>)[0].targets).toEqual([
+      { url: 'https://alice.pod.example/archive/', kind: 'container' },
+    ]);
+    expect(
+      (storage.get('solid:origin-grants') as OriginGrant[])[0].scope.classes?.[0].targets,
+    ).toEqual([{ url: 'https://alice.pod.example/archive/', kind: 'container' }]);
+    expect(
+      (
+        await sendFetch(
+          { url: 'https://alice.pod.example/archive/a.ttl', stampedOrigin: APPX.origin },
+          APPX,
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await sendFetch(
+          { url: 'https://alice.pod.example/finance/a.ttl', stampedOrigin: APPX.origin },
+          APPX,
+        )
+      ).status,
+    ).toBe(403);
+  });
+
+  it.each([
+    ['a forged id', (ids: string[]) => [...ids, 'forged']],
+    ['an id from another snapshot', (_ids: string[]) => [crypto.randomUUID()]],
+    ['a non-string id', (ids: string[]) => [ids[0], 7]],
+  ])('fails the whole decision closed for %s and mints no grant', async (_name, pick) => {
+    await seedSession();
+    await loadWorker();
+    const { finance, request, consentId, targets } = await openTwoTargetConsent();
+    const decision = await send(
+      {
+        type: 'SOLID_CONSENT_DECISION',
+        profileId: '1',
+        consentId,
+        approvedTargets: { [finance]: pick(targets.map((t) => t.id)) },
+      },
+      EXT_SENDER,
+    );
+    expect(decision.error).toBe('This consent decision did not match the request.');
+    expect(await request).toMatchObject({ ok: false });
+    expect(
+      ((storage.get('solid:origin-grants') as OriginGrant[] | undefined) ?? []).flatMap(
+        (grant) => grant.scope.classes ?? [],
+      ),
+    ).toEqual([]);
+    // The request is settled; replaying a valid decision cannot revive it.
+    expect(
+      (
+        await send(
+          {
+            type: 'SOLID_CONSENT_DECISION',
+            profileId: '1',
+            consentId,
+            approvedTargets: { [finance]: [targets[0].id] },
+          },
+          EXT_SENDER,
+        )
+      ).error,
+    ).toContain('expired');
   });
 
   it.each([
@@ -1878,7 +2016,11 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
         type: 'SOLID_CONSENT_DECISION',
         profileId: '1',
         consentId: new URL(createdWindows[0]).searchParams.get('consentId'),
-        approvedClasses: [classGrant().dataClass],
+        approvedTargets: await allTargets(
+          new URL(createdWindows[0]).searchParams.get('consentId'),
+          [classGrant().dataClass],
+          '1',
+        ),
       },
       EXT_SENDER,
     );
@@ -1903,7 +2045,7 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
       APPX,
     );
     expect(result.targets).toEqual([{ url: target, kind: 'container' }]);
-    expect(fetchCalls.map((call) => call.url)).toEqual([WEBID, index]);
+    expect(fetchCalls.map((call) => call.url)).toEqual([WEBID, index, target]);
     const headers = new Headers(fetchCalls[0].init?.headers);
     expect(headers.has('Authorization')).toBe(false);
     expect(headers.has('DPoP')).toBe(false);
@@ -1961,7 +2103,11 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
         type: 'SOLID_CONSENT_DECISION',
         profileId: '1',
         consentId,
-        approvedClasses: ['https://w3id.org/jeswr/sectors/finance#Transaction'],
+        approvedTargets: await allTargets(
+          consentId,
+          ['https://w3id.org/jeswr/sectors/finance#Transaction'],
+          '1',
+        ),
       },
       EXT_SENDER,
     );
@@ -2018,7 +2164,11 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
         type: 'SOLID_CONSENT_DECISION',
         profileId: '1',
         consentId: new URL(createdWindows[0]).searchParams.get('consentId'),
-        approvedClasses: [person],
+        approvedTargets: await allTargets(
+          new URL(createdWindows[0]).searchParams.get('consentId'),
+          [person],
+          '1',
+        ),
       },
       EXT_SENDER,
     );
@@ -2093,7 +2243,7 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
           type: 'SOLID_CONSENT_DECISION',
           profileId: '1',
           consentId,
-          approvedClasses: [classGrant().dataClass],
+          approvedTargets: await allTargets(consentId, [classGrant().dataClass], '1'),
         },
         EXT_SENDER,
       );
@@ -2128,7 +2278,7 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
     }
     const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
     await send(
-      { type: 'SOLID_CONSENT_DECISION', profileId: '1', consentId, approvedClasses: [] },
+      { type: 'SOLID_CONSENT_DECISION', profileId: '1', consentId, approvedTargets: {} },
       EXT_SENDER,
     );
 
@@ -2166,7 +2316,11 @@ describe('Phase-2 requestAccess → consent → grant (wired)', () => {
         type: 'SOLID_CONSENT_DECISION',
         profileId: '1',
         consentId,
-        approvedClasses: ['https://w3id.org/jeswr/sectors/finance#Transaction'],
+        approvedTargets: await allTargets(
+          consentId,
+          ['https://w3id.org/jeswr/sectors/finance#Transaction'],
+          '1',
+        ),
       },
       APPX,
     );
@@ -2636,7 +2790,7 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
       APPX,
     );
     expect(result.targets).toEqual([{ url: `${index}/finance/`, kind: 'container' }]);
-    expect(fetchCalls.map((c) => c.url)).toEqual([WEBID, index, `${index}/`]);
+    expect(fetchCalls.map((c) => c.url)).toEqual([WEBID, index, `${index}/`, `${index}/finance/`]);
     for (const call of fetchCalls) {
       const probing = call.init?.redirect === 'follow';
       expect(call.init).toMatchObject({
@@ -2644,7 +2798,8 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
         redirect: probing ? 'follow' : 'manual',
       });
       expect(new Headers(call.init?.headers).has('Authorization')).toBe(
-        type === 'privateTypeIndex' && call.url !== WEBID && !probing,
+        call.url === `${index}/finance/` ||
+          (type === 'privateTypeIndex' && call.url !== WEBID && !probing),
       );
       if (probing) expect(call.init).toMatchObject({ method: 'HEAD', headers: {} });
     }
@@ -3200,7 +3355,11 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
     expect(result.targets).toEqual([
       { url: 'https://alice.pod.example/finance/', kind: 'container' },
     ]);
-    expect(fetchCalls.map((call) => call.url)).toEqual([WEBID, indexA]);
+    expect(fetchCalls.map((call) => call.url)).toEqual([
+      WEBID,
+      indexA,
+      'https://alice.pod.example/finance/',
+    ]);
   });
 
   it('filters discovery targets against the live pod scope before delivery', async () => {
@@ -3299,7 +3458,12 @@ describe('EXT-05 explicit origin grant authority (adversarial)', () => {
       { targets: [{ url: 'https://pod.example/bob/private/' }] },
     ]);
     await send(
-      { type: 'SOLID_CONSENT_DECISION', consentId, profileId: '2', approvedClasses: [cls] },
+      {
+        type: 'SOLID_CONSENT_DECISION',
+        consentId,
+        profileId: '2',
+        approvedTargets: await allTargets(consentId, [cls], '2'),
+      },
       EXT_SENDER,
     );
     expect((await request).ok).toBe(true);
@@ -3555,8 +3719,78 @@ describe('worker-owned class discovery', () => {
   }
   async function deny() {
     const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
-    await send({ type: 'SOLID_CONSENT_DECISION', consentId, approvedClasses: [] }, EXT_SENDER);
+    await send({ type: 'SOLID_CONSENT_DECISION', consentId, approvedTargets: {} }, EXT_SENDER);
   }
+
+  it('samples before consent, returns the shape IRI, and never exposes member bytes or annotations to the page or replica', async () => {
+    await seedSession();
+    await loadWorker();
+    const interop = 'http://www.w3.org/ns/solid/interop#';
+    const sh = 'http://www.w3.org/ns/shacl#';
+    const target = `${pod}/data/contacts/`;
+    const tree = 'https://shapes.example/tree';
+    const shape = 'https://shapes.example/contact#Shape';
+    const docs: Record<string, string> = {
+      [WEBID]: `<${WEBID}> <${interop}hasRegistrySet> <${pod}/set> .`,
+      [`${pod}/set`]: `<> <${interop}hasDataRegistry> <${pod}/data/> .`,
+      [`${pod}/data/`]: `<> <${interop}hasDataRegistration> <${target}> .`,
+      [target]: `<> <${interop}registeredShapeTree> <${tree}>;
+        <http://www.w3.org/ns/ldp#contains> <one>, <two> .`,
+      [tree]: `<> <http://www.w3.org/ns/shapetrees#shape> <${shape}> .`,
+      [shape]: `<${shape}> a <${sh}NodeShape>; <${sh}targetClass> <${dataClass}>;
+        <${sh}property> [ <${sh}path> <https://example.org/name>; <${sh}minCount> 1 ] .`,
+      [`${target}one`]: `<#contact> a <${dataClass}>; <https://example.org/name> "${secret}" .`,
+      [`${target}two`]: `<#contact> a <${dataClass}> .`,
+    };
+    fetchImpl = async (url) =>
+      new Response(docs[url] ?? '', { headers: { 'Content-Type': 'text/turtle' } });
+    const pending = request();
+    await vi.waitFor(() => expect(createdWindows).toHaveLength(1));
+    const consentId = new URL(createdWindows[0]).searchParams.get('consentId');
+    const view = await send({ type: 'SOLID_GET_PENDING_CONSENT', consentId }, EXT_SENDER);
+    expect(view.classes).toMatchObject([{ shape, targets: [{ url: target, kind: 'container' }] }]);
+    expect(fetchCalls.map((call) => call.url)).toContain(`${target}one`);
+    expect(fetchCalls.map((call) => call.url)).toContain(`${target}two`);
+    expect(JSON.stringify(view)).not.toContain(secret);
+    await send(
+      {
+        type: 'SOLID_CONSENT_DECISION',
+        consentId,
+        profileId: '1',
+        approvedTargets: await allTargets(consentId, [dataClass], '1'),
+      },
+      EXT_SENDER,
+    );
+    const granted = await pending;
+    expect((granted.grants as ClassGrant[])[0].targets).toEqual([
+      { url: target, kind: 'container' },
+    ]);
+    const page = await send(
+      {
+        type: 'SOLID_RESOLVE_CLASS',
+        requestId: 'sampled',
+        classIRI: dataClass,
+        stampedOrigin: APPX.origin,
+      },
+      APPX,
+    );
+    expect(page).toEqual({
+      requestId: 'sampled',
+      shape,
+      targets: [{ url: target, kind: 'container' }],
+    });
+    expect(cacheStore.size).toBe(0);
+    expect(idbMeta.size).toBe(0);
+    expect(idbNonces.size).toBe(0);
+    expect(JSON.stringify([...storage.values(), page, granted])).not.toContain(secret);
+    for (const call of fetchCalls) {
+      expect(call.init?.cache).toBe('no-store');
+      expect(call.init?.redirect).toBe('manual');
+      expect(new Headers(call.init?.headers).has('Authorization')).toBe(
+        call.url.startsWith(pod) && call.url !== WEBID,
+      );
+    }
+  });
 
   it.each(
     ['refresh failure', 'logout', 'remove'].flatMap((ending) =>
@@ -4238,7 +4472,7 @@ describe('worker-owned class discovery', () => {
     await deny();
     expect((await pending).ok).toBe(false);
     expect(cancel).toHaveBeenCalledOnce();
-    expect(fetchCalls).toHaveLength(3);
+    expect(fetchCalls).toHaveLength(4);
     expect(fetchCalls.every((call) => call.init?.signal?.aborted)).toBe(true);
   });
 
@@ -4270,7 +4504,7 @@ describe('worker-owned class discovery', () => {
           cache: 'no-store',
         });
         expect(new Headers(call.init?.headers).has('Authorization')).toBe(
-          call.url === prefs || call.url === privateIndex,
+          call.url === prefs || call.url === privateIndex || call.url === `${pod}/finance/`,
         );
       }
       expect(cacheStore.size).toBe(0);

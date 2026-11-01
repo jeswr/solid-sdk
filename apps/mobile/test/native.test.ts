@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -170,6 +171,40 @@ describe("iOS project", () => {
 
   test("registers no URL types (ASWebAuthenticationSession receives the callback)", () => {
     expect(plist).not.toContain("CFBundleURLTypes");
+  });
+
+  test("UI result timeouts attach step and hierarchy diagnostics without querying a vanished element", () => {
+    const ui = read("ios/App/AppUITests/FixtureTests.swift");
+    const missing = ui.match(
+      /guard XCTWaiter\.wait\(for: \[present\][\s\S]*?throw FixtureFailure[^\n]*/,
+    )?.[0];
+    const timeout = ui.match(
+      /guard XCTWaiter\.wait\(for: \[expectation\][\s\S]*?throw FixtureFailure[^\n]*/,
+    )?.[0];
+    for (const branch of [missing, timeout]) {
+      expect(branch).toBeDefined();
+      expect(branch).not.toMatch(/element\.(?:value|label|debugDescription)/);
+      expect(branch).toContain("attachDebug(app, page: page, done: done, step: step,");
+      expect(branch?.indexOf("attachDebug(")).toBeLessThan(
+        branch?.indexOf("throw FixtureFailure") ?? -1,
+      );
+    }
+    expect(ui).toContain("let hasWebView = app.webViews.count > 0");
+    expect(ui).toContain("app.debugDescription");
+    for (const step of [
+      "initial fixture",
+      "before foreign navigation",
+      "after foreign navigation",
+      "after reactivation",
+    ])
+      expect(ui).toContain(`step: "${step}"`);
+    expect(ui).toMatch(
+      /guard foreground\(\), element\.exists else \{ return nil \}[\s\S]*?element\.value/,
+    );
+    expect(ui).toContain(
+      "if state == .runningBackground || state == .runningBackgroundSuspended { app.activate() }",
+    );
+    expect(ui).toContain("return state == .runningForeground");
   });
 
   test("targets iOS 16 and compiles the local plugins", () => {
@@ -440,6 +475,37 @@ describe("mobile CI emulator guardrails", () => {
     expect(job).toContain("adb logcat -d -v threadtime");
     expect(job).toContain("name: android-e2e-diagnostics");
     expect(job).toContain("path: apps/mobile/e2e/artifacts/");
+  });
+
+  test("secure-store lane inspects real state, attempts both prompts and always preserves the report", () => {
+    const driver = read("e2e/android-e2e.mjs");
+    expect(driver).toContain("checkSecureStoreFixture(report.fixture)");
+    expect(driver).toContain('const directory = "no_backup/securestore"');
+    expect(driver).toContain('shell("run-as", APP, "find", directory, "-type", "f")');
+    expect(driver).toContain('shell("run-as", APP, "base64", path)');
+    expect(driver).toContain("checkSecureStoreFiles(files, report.fixture.secureStore.marker)");
+    expect(driver).toContain('shell("locksettings", "set-pin", "1234")');
+    expect(driver).toContain('shell("locksettings", "verify", "--old", "1234")');
+    expect(driver).toContain('adb(["emu", "finger", "touch", "1"])');
+    expect(driver).toContain('for (const path of ["fingerprint", "credential"])');
+    expect(driver).toContain("attemptGatedUnwrap(path, io)");
+    expect(driver).toContain("checkGatedUnwrap(verdict)");
+    expect(driver).toContain("not automatable on this runner");
+    expect(driver).toContain("window.__e2eSecureStore.cleanup()");
+    const finalCleanup = driver.slice(driver.lastIndexOf("} finally {"));
+    expect(finalCleanup).toContain("if (pinInstalled)");
+    expect(finalCleanup).toContain("clearEmulatorPin(shell)");
+    const unsecured = driver.indexOf("await assertUnsecuredEmulator(shell)");
+    const armed = driver.indexOf("pinInstalled = true");
+    const mutation = driver.indexOf('shell("locksettings", "set-pin", "1234")');
+    expect(unsecured).toBeGreaterThan(-1);
+    expect(armed).toBeGreaterThan(unsecured);
+    expect(mutation).toBeGreaterThan(armed);
+    expect(job).toMatch(
+      /- if: always\(\)\n\s+uses: actions\/upload-artifact@v4\n\s+with:\n\s+name: android-e2e-diagnostics/,
+    );
+    // Production preparation's explicit files stay independent of the remote fixture map.
+    expect(read("scripts/prepare-www.ts")).not.toContain("secure-store.js");
   });
 
   test("bounds boot commands and failure diagnostics so artifacts can still upload", () => {

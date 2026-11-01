@@ -36,6 +36,15 @@
 		237A340C9DA2749F39F58A68 /* SuiteSharePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2751FA75371AA06F59E3AB8 /* SuiteSharePlugin.swift */; };
 		6BD8BE4938FA4D25F66382B0 /* ShareOutStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A17615AC1EB8B69123E36E6B /* ShareOutStoreTests.swift */; };
 		F2DDA7AD1BD4EBD692449B01 /* FixtureTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCA97BA2BB663E63CD45C637 /* FixtureTests.swift */; };
+		F4B9B4E14754357C61BAA2A1 /* SuiteSecureStorePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 621B21C8DE22655BA133A66B /* SuiteSecureStorePlugin.swift */; };
+		8ADAA7BF2211267F5587DEDD /* SecureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F87F89D3293E5108720B588A /* SecureStore.swift */; };
+		7F247B81197F10306C06213A /* SecureStoreState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0665BEBD95AD1E7DFF1C51D3 /* SecureStoreState.swift */; };
+		0C95C5B31EC3F8AEBFAE0994 /* SecureStoreKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = 353758E7722CC7B5E93F6827 /* SecureStoreKeys.swift */; };
+		CB20AD68EF1E7F678BF04177 /* SecureStorePersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6D3649DD161E6A9FD6AC6407 /* SecureStorePersistence.swift */; };
+		D6208C9BB8FB2AABB0B5692A /* SecureStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA3F0A6C79B7294EF6AD7021 /* SecureStoreTests.swift */; };
+		1460777E6C7800AABB8FA156 /* SecureStorePersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0179CB0ADC21CB79C29F306A /* SecureStorePersistenceTests.swift */; };
+		D461CB52EE61FBACE40AF922 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 727FE8EF11E7A38634D4AEF8 /* InfoPlist.strings */; };
+		13317911C2EE03FB9ECE9E16 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 5E7B7CD53279D54835AB8F8F /* Localizable.strings */; };
 		E3003BA39D9DD7C031CE9B91 /* PushCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A3844E635623530DFC28AEA /* PushCrypto.swift */; };
 		E3A0EDD6E73DECB061006C18 /* PushCrypto.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A3844E635623530DFC28AEA /* PushCrypto.swift */; };
 		43F9CBBE16DC0B6E0B7D8CC5 /* PushPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93DE7E223C1E3F684D6A7048 /* PushPolicy.swift */; };
@@ -140,6 +149,15 @@
 		A17615AC1EB8B69123E36E6B /* ShareOutStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ShareOutStoreTests.swift; sourceTree = "<group>"; };
 		FCA97BA2BB663E63CD45C637 /* FixtureTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FixtureTests.swift; sourceTree = "<group>"; };
 		AFBE66F4BD28F039A279BE0F /* AppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		621B21C8DE22655BA133A66B /* SuiteSecureStorePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuiteSecureStorePlugin.swift; sourceTree = "<group>"; };
+		F87F89D3293E5108720B588A /* SecureStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureStore.swift; sourceTree = "<group>"; };
+		0665BEBD95AD1E7DFF1C51D3 /* SecureStoreState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureStoreState.swift; sourceTree = "<group>"; };
+		353758E7722CC7B5E93F6827 /* SecureStoreKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureStoreKeys.swift; sourceTree = "<group>"; };
+		6D3649DD161E6A9FD6AC6407 /* SecureStorePersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureStorePersistence.swift; sourceTree = "<group>"; };
+		CA3F0A6C79B7294EF6AD7021 /* SecureStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureStoreTests.swift; sourceTree = "<group>"; };
+		0179CB0ADC21CB79C29F306A /* SecureStorePersistenceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureStorePersistenceTests.swift; sourceTree = "<group>"; };
+		033BF59458B39D9E3A9D24E3 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		7641C69BA07D47440EBC8E01 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/Localizable.strings; sourceTree = "<group>"; };
 		6A3844E635623530DFC28AEA /* PushCrypto.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushCrypto.swift; sourceTree = "<group>"; };
 		93DE7E223C1E3F684D6A7048 /* PushPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushPolicy.swift; sourceTree = "<group>"; };
 		64632C9B17EEE59B9C7ECF45 /* PushStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushStore.swift; sourceTree = "<group>"; };
@@ -203,6 +221,8 @@
 		24014B0E73567F85608FBCBD /* AppTests */ = {
 			isa = PBXGroup;
 			children = (
+				0179CB0ADC21CB79C29F306A /* SecureStorePersistenceTests.swift */,
+				CA3F0A6C79B7294EF6AD7021 /* SecureStoreTests.swift */,
 				2A12E13A9441ED49556141B6 /* PushProofTests.swift */,
 				1E99F3C474DD7D33A81610C6 /* PushStateTests.swift */,
 				86E25ED537E18A73CDD44316 /* PushCryptoTests.swift */,
@@ -245,6 +265,13 @@
 		504EC3061FED79650016851F /* App */ = {
 			isa = PBXGroup;
 			children = (
+				5E7B7CD53279D54835AB8F8F /* Localizable.strings */,
+				727FE8EF11E7A38634D4AEF8 /* InfoPlist.strings */,
+				6D3649DD161E6A9FD6AC6407 /* SecureStorePersistence.swift */,
+				353758E7722CC7B5E93F6827 /* SecureStoreKeys.swift */,
+				0665BEBD95AD1E7DFF1C51D3 /* SecureStoreState.swift */,
+				F87F89D3293E5108720B588A /* SecureStore.swift */,
+				621B21C8DE22655BA133A66B /* SuiteSecureStorePlugin.swift */,
 				0BF2AA18A77CA5F18284C231 /* SuitePushPlugin.swift */,
 				E1EEB1B35639161CCCB530E8 /* SuitePushCoordinator.swift */,
 				D59193B7E7F4F0199753B91F /* PushActivation.swift */,
@@ -466,6 +493,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				13317911C2EE03FB9ECE9E16 /* Localizable.strings in Resources */,
+				D461CB52EE61FBACE40AF922 /* InfoPlist.strings in Resources */,
 				504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */,
 				50B271D11FEDC1A000F3C39B /* public in Resources */,
 				504EC30F1FED79650016851F /* Assets.xcassets in Resources */,
@@ -530,6 +559,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CB20AD68EF1E7F678BF04177 /* SecureStorePersistence.swift in Sources */,
+				0C95C5B31EC3F8AEBFAE0994 /* SecureStoreKeys.swift in Sources */,
+				7F247B81197F10306C06213A /* SecureStoreState.swift in Sources */,
+				8ADAA7BF2211267F5587DEDD /* SecureStore.swift in Sources */,
+				F4B9B4E14754357C61BAA2A1 /* SuiteSecureStorePlugin.swift in Sources */,
 				48FBFA41AC02A3879AB98E86 /* PushCompletion.swift in Sources */,
 				E3003BA39D9DD7C031CE9B91 /* PushCrypto.swift in Sources */,
 				43F9CBBE16DC0B6E0B7D8CC5 /* PushPolicy.swift in Sources */,
@@ -568,6 +602,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1460777E6C7800AABB8FA156 /* SecureStorePersistenceTests.swift in Sources */,
+				D6208C9BB8FB2AABB0B5692A /* SecureStoreTests.swift in Sources */,
 				AA4353B5285F34797E4A0122 /* PushCryptoTests.swift in Sources */,
 				0BDDCA15735BCF708CF0D7FF /* PushStateTests.swift in Sources */,
 				3AF26BFC6B3557E5132843B4 /* PushProofTests.swift in Sources */,
@@ -644,6 +680,22 @@
 				504EC3111FED79650016851F /* Base */,
 			);
 			name = LaunchScreen.storyboard;
+			sourceTree = "<group>";
+		};
+		727FE8EF11E7A38634D4AEF8 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				033BF59458B39D9E3A9D24E3 /* en */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+		5E7B7CD53279D54835AB8F8F /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				7641C69BA07D47440EBC8E01 /* en */,
+			);
+			name = Localizable.strings;
 			sourceTree = "<group>";
 		};
 /* End PBXVariantGroup section */

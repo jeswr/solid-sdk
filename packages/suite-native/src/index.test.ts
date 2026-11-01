@@ -1,6 +1,10 @@
 // AUTHORED-BY Claude Opus 5.5
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import * as api from "./index.js";
+
+vi.mock("@capacitor/core", () => {
+  throw new Error("The root entry must not import Capacitor");
+});
 
 test("the root entry point exposes the runtime API without importing Capacitor", () => {
   expect(Object.keys(api).sort()).toEqual([
@@ -13,16 +17,19 @@ test("the root entry point exposes the runtime API without importing Capacitor",
     "MOBILE_CLIENT_ID_PATH",
     "MOBILE_REDIRECT_URI",
     "NativeAuthError",
+    "SecureStoreError",
     "ShareUnavailableError",
     "StateMismatchError",
     "SuiteNativeError",
     "USER_CANCELLED",
     "UserCancelledError",
     "createNativeCodeDriver",
+    "createSecureStore",
     "createShareInbox",
     "isNativeApp",
     "mobileClientIdDocument",
     "platform",
+    "refreshTokenKey",
     "sanitiseFileName",
     "share",
     "shareFiles",
