@@ -10,16 +10,17 @@
  */
 
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@jeswr/suite-ui";
-import { FileText, HardDrive, Menu, Search } from "lucide-react";
+import { FileText, HardDrive, Menu, Search, Table2 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
-export type SuiteAppId = "drive" | "docs";
+export type SuiteAppId = "drive" | "docs" | "sheets";
 
 const APPS: { id: SuiteAppId; label: string; href: string; icon: typeof HardDrive }[] = [
   { id: "drive", label: "Drive", href: "/drive", icon: HardDrive },
   { id: "docs", label: "Docs", href: "/docs", icon: FileText },
+  { id: "sheets", label: "Sheets", href: "/sheets", icon: Table2 },
 ];
 
 export interface SuiteFrameProps {
