@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 //
 // Unit tests for the data-class → target resolver (design §2.3, Type-Index rung). Pure parse
 // helpers run against Turtle fixtures; the network walk runs against an injected fetch. Proves
@@ -10,9 +11,21 @@ import { describe, expect, it } from 'vitest';
 import {
   parseTargetsForClass,
   parseTypeIndexRefs,
-  resolveClassTargets,
+  resolveClassTargets as resolveClass,
 } from '../src/background/core/class-resolve';
 import { PIM_STORAGE_CLASS } from '../src/shared/storage-class';
+
+// Keep the original Type Index target/filter assertions and check its resolver annotations.
+async function resolveClassTargets(...args: Parameters<typeof resolveClass>) {
+  const result = await resolveClass(...args);
+  expect(result.truncated).toBe(false);
+  for (const target of result.targets) {
+    expect(target.source).toBe('type-index');
+    expect(target.sources).toEqual(['type-index']);
+    expect(target.check).toBe('unchecked');
+  }
+  return result.targets.map(({ url, kind }) => ({ url, kind }));
+}
 
 const WEBID = 'https://alice.pod.example/profile/card#me';
 const FINANCE = 'https://w3id.org/jeswr/sectors/finance#Transaction';
@@ -58,6 +71,22 @@ describe('parseTypeIndexRefs', () => {
 });
 
 describe('parseTargetsForClass', () => {
+  it.each([
+    '..%2foutside/',
+    '%2Foutside/',
+    '%252foutside/',
+    '%2e%2e/',
+    '%2E%2e/contacts/',
+    '%5Coutside/',
+    './contacts/',
+    'contacts/../other/',
+  ])('does not pin ambiguous paths through the Type Index rung (%s)', (path) => {
+    const index = `<#r> <http://www.w3.org/ns/solid/terms#forClass> <${FINANCE}>;
+      <http://www.w3.org/ns/solid/terms#instanceContainer> <https://alice.pod.example/finance/${path}>;
+      <http://www.w3.org/ns/solid/terms#instance> <https://alice.pod.example/finance/${path}> .`;
+    expect(parseTargetsForClass(WEBID, index, FINANCE)).toEqual([]);
+  });
+
   it('collects instance + instanceContainer for the matching class only', () => {
     const targets = parseTargetsForClass(
       'https://alice.pod.example/settings/publicTypeIndex.ttl',

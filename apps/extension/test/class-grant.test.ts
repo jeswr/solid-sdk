@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8
+// AUTHORED-BY Codex GPT-6
 //
 // EXHAUSTIVE adversarial unit tests for the per-data-class grant gate — the Phase-2 security
 // heart (design §4). These prove the load-bearing enforcement as PURE functions:
@@ -119,6 +120,36 @@ describe('isWithinTarget — pinned membership, fail-closed', () => {
   });
   it('container DENIES a path-traversal that escapes it (URL parser normalises `..`)', () => {
     expect(isWithinTarget(container, 'https://alice.pod.example/finance/../secret/x')).toBe(false);
+  });
+  it.each([
+    '..%2foutside/',
+    '..%2Foutside/',
+    '%2foutside/',
+    '%2Foutside/',
+    '%252foutside/',
+    '%252Foutside/',
+    '%2e%2e/',
+    '%2E%2e/contacts/',
+    '%5coutside/',
+    '%5Coutside/',
+    '\\contacts/',
+    './contacts/',
+    'contacts/../other/',
+  ])('DENIES ambiguous request paths and stored target prefixes (%s)', (path) => {
+    const unsafe = `https://alice.pod.example/finance/${path}`;
+    expect(isWithinTarget(container, `${unsafe}member.ttl`)).toBe(false);
+    for (const kind of ['container', 'instance'] as const) {
+      expect(isWithinTarget({ url: unsafe, kind }, unsafe)).toBe(false);
+      expect(isWithinTarget({ url: unsafe, kind }, `${unsafe}member.ttl`)).toBe(false);
+    }
+  });
+  it('allows ordinary encoded path characters and ignores encodings in queries/fragments', () => {
+    expect(isWithinTarget(container, 'https://alice.pod.example/finance/caf%C3%A9/a%20b.ttl')).toBe(
+      true,
+    );
+    expect(isWithinTarget(container, 'https://alice.pod.example/finance/x.ttl?q=%2f%25#%2e')).toBe(
+      true,
+    );
   });
   it('DENIES a cross-origin request even at the same path', () => {
     expect(isWithinTarget(container, 'https://evil.example/finance/x')).toBe(false);
