@@ -1,4 +1,5 @@
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
+<!-- AUTHORED-BY Codex GPT-6 -->
 
 > **Experimental — AI-agent-generated.** Canonical source: `solid-sdk/packages/agentic-legacy-bridge`; the standalone repository becomes a read-only mirror when publishing is enabled.
 
@@ -257,8 +258,8 @@ import { createFetchWebhookHandler } from "@jeswr/agentic-legacy-bridge/webhook"
 // A Vercel / Node / worker fetch handler for the Slack Events API endpoint:
 export const POST = createFetchWebhookHandler({
   channel: { channel: "slack", signingSecret: process.env.SLACK_SIGNING_SECRET! },
-  container: "https://alice.example/inbox/",     // owner provisions the Append-only ACL once
-  writeFetch: bridgeAgentAuthedFetch,            // client-credentials/DPoP, acl:Append only
+  container: "https://alice.example/inbox/",     // owner provisions the Read+Append ACL once
+  writeFetch: bridgeAgentAuthedFetch,            // client-credentials/DPoP, acl:Read + acl:Append
   markPendingInterpretation: true,               // ack fast; a decoupled sweep runs the LLM pass
 });
 ```
@@ -273,8 +274,9 @@ export const POST = createFetchWebhookHandler({
   `412` = already-imported) keyed on the deterministic stable-message-id slug — a Slack retry, a Meta
   36-h redelivery, or a replayed still-valid request all map to the same URLs and no-op. No dedupe
   table, no sticky instance; a partial delivery heals on the platform's retry.
-- **Least privilege.** The bridge writes with an `acl:Append`-only pod identity and never touches an
-  ACL at runtime (the owner provisions the owner+bridge ACL once). A one-Meta-delivery-many-messages
+- **Least privilege.** The bridge uses `acl:Read` + `acl:Append` to validate retained raw anchors
+  and create resources, without Write or Control. It never touches an ACL at runtime (the owner
+  provisions the owner+bridge ACL once). A one-Meta-delivery-many-messages
   body is fanned out per message; the 1 MiB body cap bounds the fan-out.
 - **No SSRF surface at webhook time.** The handler makes NO payload-derived fetch — the only outbound
   is the pod write (own trusted origin, redirect-refusing).
@@ -293,12 +295,12 @@ fetches and recorded fixtures without any secret.
 | `SLACK_API_ENDPOINT` | Slack replies | Optional; if set it must be exactly `https://slack.com/api/chat.postMessage`. The strict endpoint gate prevents bearer-token exfiltration. |
 | `WEBHOOK_PUBLIC_URL` | Slack app configuration | Public HTTPS URL mounted to `createFetchWebhookHandler`, for example `https://bridge.example/webhooks/slack`; enter it as the Slack Events API **Request URL**. The package does not read this value. |
 | `POD_INBOX_CONTAINER` | Webhook persistence | Canonical owner-controlled Solid container URL ending `/`, with no query/fragment, e.g. `https://alice.example/inbox/`. |
-| `BRIDGE_WEBID` | Pod ACL provisioning | The bridge service-agent WebID granted **Append only** on `POD_INBOX_CONTAINER`; keep owner `Read/Write/Control`. The webhook never writes ACLs. |
+| `BRIDGE_WEBID` | Pod ACL provisioning | The bridge service-agent WebID granted **Read + Append** on `POD_INBOX_CONTAINER` so retries can validate retained raw anchors; keep owner `Read/Write/Control`. The webhook never writes ACLs. |
 | `SOLID_OIDC_ISSUER` | Constructing `writeFetch` | Solid issuer used by the host's client-credentials/DPoP flow. |
 | `SOLID_CLIENT_ID` | Constructing `writeFetch` | Bridge service client identifier. |
 | `SOLID_CLIENT_SECRET` | Constructing `writeFetch` | Bridge service client secret, held only in the deployment secret store. Inject the resulting authenticated fetch as `writeFetch`; never pass the secret to this package. |
 | `POD_RELATIONSHIP_CONTAINER` | Upgrade-state persistence | Owner-private Solid container ending `/`, e.g. `https://alice.example/relationships/`. Relationship resources require ETag-enabled `GET` plus conditional `PUT`; this must not be public or Append-only. |
-| `NEGOTIATION_WEBID` | Relationship ACL / upgrade orchestration | A separate service/owner WebID granted `Read` + `Write` on `POD_RELATIONSHIP_CONTAINER`; do not widen the webhook identity's Append-only inbox grant. |
+| `NEGOTIATION_WEBID` | Relationship ACL / upgrade orchestration | A separate service/owner WebID granted `Read` + `Write` on `POD_RELATIONSHIP_CONTAINER`; keep the webhook identity's inbox grant at Read + Append. |
 | `NEGOTIATION_SOLID_OIDC_ISSUER` | Constructing relationship `readFetch`/`writeFetch` | Solid issuer for the negotiation identity's client-credentials/DPoP flow. |
 | `NEGOTIATION_SOLID_CLIENT_ID` | Constructing relationship `readFetch`/`writeFetch` | Negotiation identity client identifier. |
 | `NEGOTIATION_SOLID_CLIENT_SECRET` | Constructing relationship `readFetch`/`writeFetch` | Negotiation identity client secret, held only in the deployment secret store. Inject authenticated fetch functions; never pass the secret into relationship data. |

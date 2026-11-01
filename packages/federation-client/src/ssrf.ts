@@ -1,4 +1,5 @@
 // AUTHORED-BY Claude Opus 4.8 (Fable unavailable) — re-review/upgrade candidate
+// AUTHORED-BY Codex GPT-6.1-Sol
 //
 // SSRF-guarding fetch for consuming a registry / storage / verify URL (a user/config-
 // supplied remote origin). This module is now a THIN RE-EXPORT of the consolidated,
@@ -18,23 +19,11 @@
 // shim-free. The undici DNS-pinning fetch lives in the SEPARATE `./node` entry (`./node.ts`
 // → `@jeswr/guarded-fetch/node`), the ONLY artifact that imports `undici` / `node:*`.
 //
-// PUBLIC API STABILITY. We re-export exactly the surface this package published before
-// (`createGuardedFetch`, `guardedFetch`, `SsrfError`, `isPublicAddress`,
-// `isLoopbackAddress`, `classifyIpLiteral`, and the `DnsLookup` / `GuardOptions` /
-// `ResolvedAddress` types) so `./index.ts` and `./registry.ts` are unchanged and a
-// consumer's imports keep resolving. `@jeswr/guarded-fetch`'s `GuardOptions` is a strict
-// SUPERSET of the old one (it adds an optional cloud-internal `hostnameDenylist`, a
-// production `enforcePortGate`, an `allowedContentTypes` allowlist, and a `GuardError` for
-// the non-SSRF policy refusals) — every old field is present with identical semantics, so a
-// caller passing the old options is unaffected.
-
-// The redirect-refusal primitive (`refuseRedirects` + `RedirectRefusedError`) is also
-// re-exported: the consolidated `@jeswr/guarded-fetch/node` re-exports both FROM the
-// guarded-fetch ROOT, and this package's build inlines that root ONCE into `dist/index.js`
-// while keeping it EXTERNAL to `dist/node.js` (the share-root plugin — ONE shared SsrfError /
-// RedirectRefusedError class). For `dist/node.js`'s `import { RedirectRefusedError,
-// refuseRedirects } from "./index.js"` to resolve at runtime, the ROOT must export them — so
-// they are surfaced here. Additive + browser-safe (both come from guarded-fetch's `.` entry).
+// This internal adapter keeps the guard available to federation-client's implementation.
+// The public root exposes only SsrfError, RedirectRefusedError and the DnsLookup /
+// GuardOptions / ResolvedAddress types. Import general guard helpers directly from
+// `@jeswr/guarded-fetch`. The build shares one bundled guard between `.` and `./node`
+// through a private chunk, preserving the error classes without public helper re-exports.
 export {
   classifyIpLiteral,
   createGuardedFetch,

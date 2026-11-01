@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { expect, test } from '../fixtures';
-import { grantOrigin, performLogin } from './helpers';
+import { clickClosingControl, grantOrigin, performLogin } from './helpers';
 import {
   checkPermissionAccessibility,
   permissionViewports,
@@ -114,6 +114,6 @@ test('populated form-fill preview cards reflow and meet browser axe checks in bo
       await remember.uncheck();
     });
   }
-  await preview.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await clickClosingControl(preview, preview.getByRole('button', { name: 'Cancel', exact: true }));
   for (const input of await site.locator('input').all()) await expect(input).toHaveValue('');
 });

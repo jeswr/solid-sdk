@@ -1370,6 +1370,24 @@ class SolidAuthEngine implements SolidAuth {
       if (generation === this.#generation) await this.#forget(issuer);
       return undefined;
     }
+    // ISSUER-BINDING GUARD: the restored WebID's profile must (still) list this issuer as a
+    // solid:oidcIssuer. Covers credentials persisted before issuer-only logins were bound,
+    // and a user who has since removed this OP from their profile. A profile that cannot
+    // be read keeps the credential (it may be a transient outage) but restores nothing.
+    let bound: boolean;
+    try {
+      bound = (await this.#advertisedIssuers(restored.webId)).some((i) => sameIssuer(i, issuer));
+    } catch {
+      return undefined;
+    }
+    if (generation !== this.#generation) return undefined;
+    if (!bound) {
+      // A live session on this issuer (restore() called while signed in) rests on the
+      // same disproved binding: sign it out too, not just the stored credential.
+      if (this.#session?.issuer.href === issuer.href) await this.logout().catch(() => {});
+      else await this.#forget(issuer);
+      return undefined;
+    }
     // We don't have the full AS/client here; rebuild a minimal live session for the
     // authenticated-fetch path. Re-discover lazily on a refresh via the provider.
     // The session is tagged with THIS restore's generation so a later refresh of it
@@ -2069,10 +2087,17 @@ class SolidAuthEngine implements SolidAuth {
   }
 
   // ── Issuer resolution: WebID profile → solid:oidcIssuer (never regex) ──────
-  async #resolveIssuer(webId: string): Promise<URL> {
-    const { dataset } = await fetchRdf(webId, { fetch: this.#profileFetch });
+  /** The `solid:oidcIssuer` values the WebID's (public) profile advertises. */
+  async #advertisedIssuers(webId: string): Promise<string[]> {
+    const { dataset } = await fetchRdf(webId, {
+      fetch: secureRedirectFetch(this.#profileFetch, this.#opts.allowInsecureLoopback ?? false),
+    });
     const agent = new Agent(webId, dataset, DataFactory);
-    const issuers = [...agent.oidcIssuer];
+    return [...agent.oidcIssuer];
+  }
+
+  async #resolveIssuer(webId: string): Promise<URL> {
+    const issuers = await this.#advertisedIssuers(webId);
     if (issuers.length === 0) throw new NoSolidIssuerError(webId);
     if (issuers.length === 1) return new URL(issuers[0]);
     const choose = this.#opts.chooseIssuer;
@@ -2083,14 +2108,7 @@ class SolidAuthEngine implements SolidAuth {
     // issuer↔WebID binding (a malicious OP could then assert this WebID). Compare by
     // URL origin+path (tolerant of a trailing slash), fail closed otherwise.
     const chosenUrl = new URL(chosen);
-    const advertised = issuers.some((i) => {
-      try {
-        return new URL(i).href.replace(/\/$/, "") === chosenUrl.href.replace(/\/$/, "");
-      } catch {
-        return false;
-      }
-    });
-    if (!advertised) {
+    if (!issuers.some((i) => sameIssuer(i, chosenUrl))) {
       throw new Error(
         `chooseIssuer returned an issuer (${chosen}) that the WebID profile does not advertise.`,
       );
@@ -2668,7 +2686,8 @@ class SolidAuthEngine implements SolidAuth {
   ): Promise<{ authorizationUrl: string }> {
     // Resolve the issuer + the (optional) requested WebID. `webId` binds the login to
     // an identity (its issuer resolved from the profile, then PROVEN on return);
-    // `oidcIssuer` is used directly (its returned WebID accepted after an https guard).
+    // `oidcIssuer` is used directly (its returned WebID must be https AND list this
+    // issuer in its profile — checked on return in #exchangeRedirectCode).
     let issuer: URL;
     let requestedWebId: string | null;
     if (options.webId !== undefined && options.webId !== "") {
@@ -2905,7 +2924,7 @@ class SolidAuthEngine implements SolidAuth {
     // SCHEME GUARD (untrusted WebID): the WebID's origin joins the credential boundary
     // (the DPoP token may be attached to it), so it MUST be https (loopback http only
     // under the opt-in) — a cleartext WebID would let the token ride over plaintext.
-    // Fail closed. This is the ONLY WebID guard for the issuer-only (`webId` null) path.
+    // Fail closed.
     const webId = validateWebId(claimedWebId, this.#opts.allowInsecureLoopback ?? false);
     // WEBID-MATCH GUARD (fail-closed): when the login was BOUND to a requested WebID,
     // the OP MUST have authenticated as it — the launch carries only the public WebID,
@@ -2915,6 +2934,18 @@ class SolidAuthEngine implements SolidAuth {
       throw new Error(
         `Signed in as a different WebID than requested (asked for ${flow.webId}, got ${webId}).`,
       );
+    }
+    // ISSUER-BINDING GUARD (fail-closed) for the issuer-only (`webId` null) path: any OP
+    // can put any WebID in its id_token, so the returned WebID is only accepted when its
+    // own profile lists THIS issuer as a solid:oidcIssuer (the Solid-OIDC binding the
+    // WebID-first path gets from #resolveIssuer). A profile that cannot be read fails too.
+    if (flow.webId === null) {
+      const advertised = await this.#advertisedIssuers(webId);
+      if (!advertised.some((i) => sameIssuer(i, issuer))) {
+        throw new Error(
+          `The WebID ${webId} does not list ${issuer.href} as its solid:oidcIssuer, so this identity provider cannot sign in as it.`,
+        );
+      }
     }
     return {
       generation,
@@ -3313,6 +3344,88 @@ function needsInteraction(e: unknown): boolean {
   } catch {
     return false;
   }
+}
+
+/** True when a URL string carries a query or fragment delimiter, even an empty one. */
+function hasQueryOrFragment(value: string): boolean {
+  return value.includes("?") || value.includes("#");
+}
+
+/** Redirect hops a profile read may follow before giving up. */
+const MAX_PROFILE_REDIRECTS = 5;
+
+/**
+ * Wrap a fetch so the profile read that proves the WebID↔issuer binding never crosses
+ * plaintext: redirects are followed by hand and every hop must be https (http only for a
+ * loopback host under `allowInsecureLoopback`), so a network attacker cannot answer an
+ * https → http hop with a profile naming their OP. Where the platform hides redirects
+ * (a browser's opaque redirect), the request is re-issued with `redirect: "follow"`; the
+ * browser's mixed-content blocking then refuses https → http, and the final URL is
+ * still checked.
+ */
+export function secureRedirectFetch(
+  base: typeof fetch,
+  allowInsecureLoopback: boolean,
+): typeof fetch {
+  const assertSecure = (url: string): void => {
+    try {
+      validateWebId(url, allowInsecureLoopback);
+      const parsed = new URL(url);
+      if (parsed.username || parsed.password) throw new Error();
+    } catch {
+      // Generic on purpose: a redirect target may carry signed query parameters.
+      throw new Error("Refusing a WebID profile read that is not over https.");
+    }
+  };
+  // A transport error can embed the whole hop URL; keep aborts (the generation
+  // fence relies on them) and replace everything else with a generic error.
+  const fetchHop = async (url: string, init: RequestInit): Promise<Response> => {
+    try {
+      return await base(url, init);
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") throw error;
+      throw new Error("The WebID profile read failed.");
+    }
+  };
+  return (async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    let url = input instanceof Request ? input.url : String(input);
+    for (let hop = 0; hop <= MAX_PROFILE_REDIRECTS; hop += 1) {
+      assertSecure(url);
+      const response = await fetchHop(url, { ...init, redirect: "manual" });
+      if (response.type === "opaqueredirect") {
+        const followed = await fetchHop(url, { ...init, redirect: "follow" });
+        if (followed.url) assertSecure(followed.url);
+        return followed;
+      }
+      const location =
+        response.status >= 300 && response.status < 400 ? response.headers.get("location") : null;
+      if (location === null) {
+        if (response.url) assertSecure(response.url);
+        return response;
+      }
+      void response.body?.cancel().catch(() => {});
+      url = new URL(location, url).href;
+    }
+    throw new Error("Too many redirects while reading the WebID profile.");
+  }) as typeof fetch;
+}
+
+/**
+ * Whether an advertised `solid:oidcIssuer` value names `issuer` (tolerant of a trailing
+ * slash, as discovery normalises it). Unparseable values never match (fail-closed).
+ */
+function sameIssuer(advertised: string, issuer: URL): boolean {
+  let candidate: URL;
+  try {
+    candidate = new URL(advertised);
+  } catch {
+    return false;
+  }
+  // An OIDC issuer identifier has no query or fragment (OIDC Discovery §3); refuse
+  // either rather than compare them, and only forgive a trailing slash on the PATH.
+  if (hasQueryOrFragment(advertised) || hasQueryOrFragment(issuer.href)) return false;
+  const trim = (path: string) => path.replace(/\/$/, "");
+  return candidate.origin === issuer.origin && trim(candidate.pathname) === trim(issuer.pathname);
 }
 
 /** The WebID from Solid-OIDC id_token claims (`webid`, else `sub`). */

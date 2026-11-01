@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex
+// AUTHORED-BY Codex GPT-6
 import { expect, it, vi } from "vitest";
 import type { PodSession } from "../src/lib/session/pod-session";
 import { act, h, mount } from "./drive-ui-dom";
@@ -9,7 +10,7 @@ vi.mock("@jeswr/suite-ui", async (original) => ({
   ...(await original<Record<string, unknown>>()),
   toast: notices.toast,
 }));
-vi.mock("@/apps/docs/lib/model/type-index", () => ({
+vi.mock("../src/apps/docs/lib/model/type-index", () => ({
   discoverProfileRegistrations: vi.fn(async () => []),
   ensureTypeRegistrations: vi.fn(),
 }));
