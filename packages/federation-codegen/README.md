@@ -1,4 +1,12 @@
+<!-- AUTHORED-BY Claude Opus 4.8 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+
 # @jeswr/federation-codegen
+
+> **Experimental, AI-agent-generated.** Lives in `packages/federation-codegen` of the
+> [`jeswr/solid-sdk`](https://github.com/jeswr/solid-sdk) workspace; the standalone
+> `jeswr/federation-codegen` repository becomes a read-only build mirror. Design of record:
+> [`decisions/0003-domain-model-codegen.md`](../../decisions/0003-domain-model-codegen.md).
 
 > Ontology-driven data-model codegen for the Solid app suite (design rev-3 **P0**). It
 > deterministically compiles a **sector ontology (OWL/RDFS)** + its **SHACL profile** + a per-domain
@@ -139,29 +147,20 @@ The CLI writes the artifacts + `codegen.lock.json`, and fails closed if a fetche
 differs from the lock (`--update-lock` to accept a reviewed change). The programmatic API is
 `generateModel(input)` (see `src/index.ts`).
 
-## Install (GitHub, no build step)
+## Install
 
-`dist/` is committed, so the package installs and runs under `ignore-scripts=true`:
-
-```bash
-npm install github:jeswr/federation-codegen#main
-```
-
-**Publish-ordering note (P0).** This package depends on `@jeswr/model-runtime`, and the models it
-*generates* `import` the runtime at the consumer's runtime — so the runtime must be resolvable for a
-consumer. During local P0 the two packages are co-developed siblings, so the dependency is
-`file:../model-runtime` (which resolves locally and lets the full parity suite run). **At publish time
-the runtime is published FIRST**, and this dependency (plus the `import "@jeswr/model-runtime"` in the
-generated `model.js`) repoints to `github:jeswr/model-runtime#<sha>` (or the npm range). Installing
-`federation-codegen` from GitHub before `model-runtime` is published will not resolve the runtime —
-this is a deliberate publish-ordering step, not a defect.
+Workspace consumers depend on `workspace:*`. External consumers keep using
+`github:jeswr/federation-codegen#<sha>` pins, served by the mirror (`scripts/mirror-publish.mjs`).
+`dist/` is built fresh in the workspace and never committed here.
 
 ## Development
 
 ```bash
-npm run gate        # lint + typecheck + test + build + check:dist
-npm run gen:example # regenerate examples/bookmark/generated from its inputs
+pnpm turbo run lint build typecheck test --filter=@jeswr/federation-codegen
 ```
+
+Regenerate the bookmarks example after a generator change with
+`pnpm --filter @jeswr/federation-codegen run build && pnpm --filter @jeswr/federation-codegen run gen:example`.
 
 ## Licence
 

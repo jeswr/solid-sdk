@@ -1,4 +1,12 @@
+<!-- AUTHORED-BY Claude Opus 4.8 -->
+<!-- AUTHORED-BY Claude Opus 5.5 -->
+
 # @jeswr/model-runtime
+
+> **Experimental, AI-agent-generated.** Lives in `packages/model-runtime` of the
+> [`jeswr/solid-sdk`](https://github.com/jeswr/solid-sdk) workspace; the standalone
+> `jeswr/model-runtime` repository becomes a read-only build mirror. Design of record:
+> [`decisions/0003-domain-model-codegen.md`](../../decisions/0003-domain-model-codegen.md).
 
 > The **one audited generic runtime** for the [`@jeswr/federation-codegen`](https://github.com/jeswr/federation-codegen)
 > pipeline. It interprets a JSON **shape-manifest** to parse / validate / read / write RDF over
@@ -96,25 +104,17 @@ The composite manifest is validated **fail-closed** (the tree invariant — one 
 exactly one incoming link, acyclic + spanning; a `nested` field carries no data-shape key and only the
 `requiredFailClosed` guard; composite documents are http(s)-scoped, matching the suite IRI discipline).
 
-## Install (GitHub, no build step)
+## Install
 
-`dist/` is committed, so the package installs and imports under `ignore-scripts=true` with no build:
-
-```bash
-npm install github:jeswr/model-runtime#main
-```
-
-Its runtime deps (`@jeswr/fetch-rdf`, `@rdfjs/wrapper`, `n3`) are all published on npm — nothing is
-bundled. npm publish of this package is a deferred migration.
+Workspace consumers depend on `workspace:*`. External consumers keep using
+`github:jeswr/model-runtime#<sha>` pins, served by the mirror (`scripts/mirror-publish.mjs`).
+`dist/` is built fresh in the workspace and never committed here.
 
 ## Development
 
 ```bash
-npm run gate    # lint (biome) + typecheck (tsc) + test (vitest) + build (tsc) + check:dist
+pnpm turbo run lint build typecheck test --filter=@jeswr/model-runtime
 ```
-
-`check:dist` fails if the committed `dist/` drifts from a fresh build — rebuild + commit `dist/`
-alongside any `src/` change.
 
 ## Licence
 

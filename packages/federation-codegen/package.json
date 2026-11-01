@@ -1,7 +1,7 @@
 {
   "name": "@jeswr/federation-codegen",
   "version": "0.1.0",
-  "description": "Ontology-driven data-model codegen for the Solid app suite \u2014 deterministic OWL/RDFS + SHACL \u2192 model.d.ts (types) + model.json (a fidelity-asserted verified projection of shapes.ttl) + model.js (a fixed-template shim over @jeswr/model-runtime). Includes the tier-a structural admission validator and the build-time fidelity assertion.",
+  "description": "Ontology-driven data-model codegen for the Solid app suite — deterministic OWL/RDFS + SHACL → model.d.ts (types) + model.json (a fidelity-asserted verified projection of shapes.ttl) + model.js (a fixed-template shim over @jeswr/model-runtime). Includes the tier-a structural admission validator and the build-time fidelity assertion.",
   "type": "module",
   "license": "MIT",
   "author": "Jesse Wright",
@@ -45,12 +45,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "gen:example": "node scripts/gen-bookmark.mjs",
-    "check:dist": "node scripts/check-dist.mjs",
-    "gate": "npm run lint && npm run typecheck && npm run test && npm run build && npm run check:dist"
+    "gen:example": "node scripts/gen-bookmark.mjs"
   },
   "dependencies": {
-    "@jeswr/model-runtime": "git+https://github.com/jeswr/model-runtime.git#8c7f78e02b4508a83b1bb7f23fbeff559bb2b89a",
+    "@jeswr/model-runtime": "workspace:*",
     "n3": "^2.0.3"
   },
   "peerDependencies": {
@@ -58,7 +56,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
-    "@jeswr/fetch-rdf": "^0.1.0",
+    "@jeswr/fetch-rdf": "workspace:*",
     "@rdfjs/types": "^2.0.1",
     "@rdfjs/wrapper": "^0.34.0",
     "@types/n3": "^1.26.1",
@@ -69,6 +67,7 @@
     "vitest": "^4.1.8"
   },
   "engines": {
-    "node": ">=20"
-  }
+    "node": ">=24"
+  },
+  "securityCritical": true
 }
