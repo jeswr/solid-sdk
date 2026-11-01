@@ -2,6 +2,7 @@
 import { createHash } from "node:crypto";
 import { createSessionVault, MemoryVaultStore, type PodSessionProvider } from "@jeswr/mcp-oauth";
 import { describe, expect, it, vi } from "vitest";
+import { navigation } from "../test/navigation.js";
 import { createApp } from "./handler.js";
 
 const ORIGIN = "https://mcp.example";
@@ -85,7 +86,7 @@ async function fixture() {
           post("/auth/login", login.cookie, { csrf: login.csrf, webid: "https://pod.example/" }),
         )
       ).status,
-    ).toBe(302);
+    ).toBe(200);
     const response = await app(
       request("/auth/callback?code=pod-code&state=upstream-state", {
         headers: { cookie: login.cookie },
@@ -170,7 +171,7 @@ describe("OAuth composition", () => {
     const response = await second(
       post("/auth/consent", consent.cookie, { csrf: consent.csrf, decision: "allow" }),
     );
-    const redirect = new URL(response.headers.get("location") as string);
+    const redirect = await navigation(response);
     expect(redirect.searchParams.get("state")).toBe("mcp-state");
     expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
     const tokenResponse = await f.token(redirect.searchParams.get("code") as string);
@@ -217,10 +218,64 @@ describe("OAuth composition", () => {
     const response = await f.app(
       post("/auth/consent", consent.cookie, { csrf: consent.csrf, decision: "deny" }),
     );
-    expect(new URL(response.headers.get("location") as string).searchParams.get("error")).toBe(
-      "access_denied",
-    );
+    expect((await navigation(response)).searchParams.get("error")).toBe("access_denied");
     expect(f.sessions.revoke).toHaveBeenCalledWith("pod-session");
+  });
+
+  it("rejects PKCE mismatch without consuming the code, and retires the session on code reuse", async () => {
+    const f = await fixture();
+    const consent = await f.consent();
+    const approved = await f.app(
+      post("/auth/consent", consent.cookie, {
+        csrf: consent.csrf,
+        decision: "allow",
+        sessionId: "attacker-selected",
+      }),
+    );
+    const code = (await navigation(approved)).searchParams.get("code") as string;
+    expect((await f.token(code, { code_verifier: "x".repeat(43) })).status).toBe(400);
+    expect((await f.token(code)).status).toBe(200);
+    expect((await f.token(code)).status).toBe(400);
+    expect(f.sessions.revoke).toHaveBeenCalledWith("pod-session");
+    expect(f.sessions.revoke).not.toHaveBeenCalledWith("attacker-selected");
+  });
+
+  it("rejects consent CSRF and callback replay while preserving a valid approval", async () => {
+    const f = await fixture();
+    const consent = await f.consent();
+    expect(
+      (await f.app(post("/auth/consent", consent.cookie, { csrf: "wrong", decision: "allow" })))
+        .status,
+    ).toBe(403);
+    expect(
+      (
+        await f.app(
+          post(
+            "/auth/consent",
+            consent.cookie,
+            { csrf: consent.csrf, decision: "allow" },
+            "https://evil.example",
+          ),
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await f.app(
+          request("/auth/callback?code=x&state=upstream-state", {
+            headers: { cookie: consent.cookie },
+          }),
+        )
+      ).status,
+    ).toBe(400);
+    expect(f.sessions.complete).toHaveBeenCalledOnce();
+    expect(
+      (
+        await f.app(
+          post("/auth/consent", consent.cookie, { csrf: consent.csrf, decision: "allow" }),
+        )
+      ).status,
+    ).toBe(200);
   });
 
   it("rejects missing cookies, wrong state, foreign origins and CSRF before broker completion", async () => {
@@ -274,7 +329,7 @@ describe("OAuth composition", () => {
         f.app(post("/auth/consent", consent.cookie, { csrf: consent.csrf, decision: "allow" })),
       ),
     );
-    expect(responses.map((r) => r.status).sort()).toEqual([302, 400]);
+    expect(responses.map((r) => r.status).sort()).toEqual([200, 400]);
     const other = await fixture();
     const expired = await other.consent();
     other.advance();
@@ -298,10 +353,9 @@ describe("OAuth composition", () => {
     const response = await f.app(
       post("/auth/login", login.cookie, { csrf: login.csrf, webid: "https://pod.example/" }),
     );
-    expect(
-      response.status === 400 ||
-        new URL(response.headers.get("location") as string).searchParams.has("error"),
-    ).toBe(true);
+    expect(response.status === 400 || (await navigation(response)).searchParams.has("error")).toBe(
+      true,
+    );
     expect(f.sessions.begin).not.toHaveBeenCalled();
   });
 });

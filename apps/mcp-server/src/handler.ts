@@ -12,7 +12,7 @@ import {
 import { createSolidMcpServer } from "@jeswr/solid-mcp";
 import { createMcpHttpHandler } from "@jeswr/solid-mcp/http";
 import { createVaultOAuthStores, decode, digest, encode, vaultSigningKey } from "./persistence.js";
-import { podRootFor } from "./pod.js";
+import { podRootFor, withCssCompatibility } from "./pod.js";
 import { equalSecret, escapeHtml, form, page, publicOrigin, secureResponse } from "./security.js";
 
 export interface AppOptions {
@@ -47,6 +47,7 @@ export async function createApp(
   options: AppOptions,
 ): Promise<(request: Request) => Promise<Response>> {
   const origin = publicOrigin(options.publicOrigin);
+  if (origin.protocol !== "https:") throw new Error("OAuth mode requires an HTTPS public origin");
   const issuer = `${origin.origin}/auth`;
   const resource = `${origin.origin}/mcp`;
   const callback = `${issuer}/callback`;
@@ -94,7 +95,7 @@ export async function createApp(
       return token ? oauth.verifyAccessToken(token, resource) : null;
     },
     server: async (principal) => {
-      const fetcher = await sessions.fetchFor(principal.sessionId);
+      const fetcher = withCssCompatibility(await sessions.fetchFor(principal.sessionId));
       const podRoot = await podRootFor(principal.webId, options.upstreamFetch);
       // This constructor creates a scoped FetchPodPort and the chat tools.
       // No MCP headers or caller-selected identity enter the pod capability.
@@ -291,7 +292,29 @@ export async function createApp(
   }
   return async (request) => {
     try {
-      return secureResponse(await dispatch(request));
+      const response = await dispatch(request);
+      // form-action 'self' can constrain cross-origin redirects after form POSTs.
+      // Native navigation preserves the strict CSP without any inline script.
+      if (
+        request.method === "POST" &&
+        ["/auth/login", "/auth/consent"].includes(new URL(request.url).pathname) &&
+        response.status === 302
+      ) {
+        const destination = response.headers.get("location");
+        if (!destination) throw new Error("Missing trusted redirect");
+        const label =
+          new URL(request.url).pathname === "/auth/login"
+            ? "Continue to your Solid identity provider"
+            : "Return to the MCP client";
+        const navigation = page(
+          label,
+          `<p><a href="${escapeHtml(destination)}" rel="noopener noreferrer">${label}</a></p>`,
+        );
+        for (const cookie of response.headers.getSetCookie())
+          navigation.headers.append("set-cookie", cookie);
+        return secureResponse(navigation);
+      }
+      return secureResponse(response);
     } catch {
       return secureResponse(failure());
     }

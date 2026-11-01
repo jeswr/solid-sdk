@@ -1,4 +1,5 @@
 {
+  "buildCommand": "cd ../.. && pnpm --filter @jeswr/app-mcp-server... run build",
   "rewrites": [{ "source": "/(.*)", "destination": "/api" }],
   "git": {
     "deploymentEnabled": false

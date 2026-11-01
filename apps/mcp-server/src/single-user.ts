@@ -9,6 +9,7 @@ import {
 } from "@jeswr/solid-dpop";
 import { createSolidMcpServer, normalizePodRoot } from "@jeswr/solid-mcp";
 import { createMcpHttpHandler } from "@jeswr/solid-mcp/http";
+import { withCssCompatibility } from "./pod.js";
 import { equalSecret, publicOrigin, secureResponse } from "./security.js";
 
 export interface SingleUserOptions {
@@ -84,7 +85,7 @@ export async function createSingleUserApp(options: SingleUserOptions) {
       equalSecret(request.headers.get("authorization") ?? "", `Bearer ${options.accessToken}`),
     server: () =>
       createSolidMcpServer({
-        fetch: fetcher,
+        fetch: withCssCompatibility(fetcher),
         podRoot,
         webId: options.webId,
         readOnly: options.readOnly !== false,
