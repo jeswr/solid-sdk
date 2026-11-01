@@ -1,4 +1,5 @@
 // AUTHORED-BY GPT-5.6 Codex
+// AUTHORED-BY Codex GPT-6
 (() => {
   const platform =
     window.Capacitor?.getPlatform?.() === "ios" || window.webkit?.messageHandlers?.bridge
@@ -88,6 +89,17 @@
     }
     await window.__e2eRefreshShares();
     state.topBridge = true;
+    if (state.platform === "android") {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "/secure-store.js";
+        script.onload = resolve;
+        script.onerror = () => reject(new Error("Could not load Android secure-store probes"));
+        document.head.append(script);
+      });
+      state.secureStoreResponses = window.__e2eSecureStore.responses;
+      state.secureStore = await window.__e2eSecureStore.ungated();
+    }
     state.hostile = await deadline(hostile, 10000);
   }
   run()
