@@ -16,6 +16,7 @@ import {
   WRITABLE_RDF,
 } from "./rdf.js";
 import { rdfBody } from "./read.js";
+import { isTrashEndpoint, postTrash } from "./services.js";
 import { patchFormulas } from "./solid-patch.js";
 import type {
   Body,
@@ -292,6 +293,9 @@ export function lwsWrites(
       });
     },
     async create(url, body, opts = {}) {
+      if (isTrashEndpoint(client(), url)) {
+        return postTrash(client(), fetch, url, body, opts.signal, inspect);
+      }
       const parent = target("POST", url);
       const kind = opts.kind ?? "resource";
       if (kind !== "resource" && kind !== "container") throw new TypeError("Invalid kind");

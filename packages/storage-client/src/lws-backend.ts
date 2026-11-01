@@ -19,6 +19,7 @@ import {
   MEDIA_TYPE,
   type ReadExpectation,
 } from "./read.js";
+import { versionHistoryQuery } from "./services.js";
 import type { AuthFetch, Entry, MetadataLink, ReadResult, StorageClient } from "./types.js";
 
 const LWS = "https://www.w3.org/ns/lws#";
@@ -332,10 +333,10 @@ export function createLwsBackend(options: LwsBackendOptions): StorageClient {
     readRdf,
     isWithinStorage,
     async list(url, opts) {
-      return list(listingContainer(root, url), opts);
+      return list(listingContainer(root, url, versionHistoryQuery(features, root, url)), opts);
     },
     async *listAll(url, opts = {}) {
-      const container = listingContainer(root, url);
+      const container = listingContainer(root, url, versionHistoryQuery(features, root, url));
       yield* paginate(
         container,
         (cursor) => client.list(container, { ...opts, cursor }),

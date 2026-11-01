@@ -55,6 +55,8 @@ export interface ReadResult {
   etag: string | null;
   contentType: string | null;
   lastModified: Date | null;
+  /** Memento-Datetime on an immutable version, when supplied by the server. */
+  mementoDatetime?: Date | null;
   /** null on 304 / HEAD. */
   body: ReadableStream<Uint8Array> | null;
   bytes(): Promise<Uint8Array>;

@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 // HTTP plumbing shared by the network backends: scope-checked requests, network-error mapping,
 // Link / WAC-Allow parsing and ReadResult construction (ADR-003 §2, §6, §7). Not exported.
 import { assertWithinPodScope, redactUserinfo } from "@jeswr/guarded-fetch";
@@ -52,10 +53,10 @@ export function scoped(root: string, method: string, url: string): string {
 }
 
 /** Scope and validate a listing container before requests or pagination can check aborts. */
-export function listingContainer(root: string, url: string): string {
+export function listingContainer(root: string, url: string, versionQuery = false): string {
   const container = scoped(root, "GET", url);
   // Empty query/fragment delimiters survive in href even though URL.search/hash report "".
-  if (/[?#]/.test(container)) {
+  if ((!versionQuery && /[?#]/.test(container)) || container.includes("#")) {
     throw new StorageError("bad-request", {
       method: "GET",
       url: container,
@@ -279,6 +280,7 @@ export function readResultFrom(
     etag: response.headers.get("etag"),
     contentType,
     lastModified: dateOf(response.headers.get("last-modified")),
+    mementoDatetime: dateOf(response.headers.get("memento-datetime")),
     body,
     bytes,
     text: async () => new TextDecoder().decode(await bytes()),

@@ -156,7 +156,9 @@ Solid read side (ADR-003 §6):
   mid-transfer is a `network` error on both paths (non-retryable once the signal aborted).
 - Scope errors redact embedded credentials of the target and the root in every authority
   spelling (backslashes included). `list()` refuses a URL with a query or fragment
-  (`bad-request`), `kind` follows the path (never the query), and the slashless root alias is the root even with a query or fragment (`parentOf` → null).
+  (`bad-request`), except a query matching the advertised version-history template for a scoped
+  resource. Fragments remain refused. `kind` follows the path (never the query), and the slashless
+  root alias is the root even with a query or fragment (`parentOf` → null).
   Both network backends' `listAll()` scope, canonicalise and validate the container exactly as
   `list()` before pagination checks aborts, so even an already-aborted signal cannot expose raw
   container credentials in errors. Pagination receives only the canonical container and cursors.
@@ -193,8 +195,9 @@ Solid read side (ADR-003 §6):
   context that differs from `storage` gives `scope` and discards the body. Matching/absent links
   are accepted; links with a different anchor context are ignored. Errors never echo the foreign id.
 - `list` and `listAll` accept scoped opaque container identifiers, including those without a trailing
-  slash, preserving their URLs. Query/fragment (even empty `?`/`#`) gives `bad-request`; the response
-  must be a valid Container or ContainerPage. GET Accept:
+  slash, preserving their URLs. Query/fragment (even empty `?`/`#`) gives `bad-request`, except a
+  query matching the advertised version-history template for a scoped resource. Fragments remain
+  refused. The response must be a valid Container or ContainerPage. GET Accept:
   `application/lws+json, application/ld+json;q=0.5`. Cursors are scoped first, then fetched as canonical
   URLs with opaque queries preserved. Only 200 succeeds; other 2xx/3xx are
   `invalid-response`, HTTP errors use the shared mapping, redirects are never followed.
@@ -494,3 +497,8 @@ Keep development tool versions aligned with the root manifest. The pinned pnpm 1
 `ignore-scripts` requires local tool declarations for filtered scripts.
 
 Validate changes with this package's `lint`, `build`, `typecheck`, and `test` scripts.
+
+## Optional trash and version clients (SDK-APP-12)
+
+`./trash` → `createTrashClient(storage)`; `./versions` → `createVersionsClient(storage)`. Both require advertised available features and scoped endpoints.
+Read [optional service client guidance](README.md#optional-service-clients-sdk-app-12) for API contracts, query templates, conditional restores, memory flags and the protocol appendix.

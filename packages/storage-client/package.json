@@ -32,6 +32,14 @@
       "types": "./dist/helpers.d.ts",
       "default": "./dist/helpers.js"
     },
+    "./trash": {
+      "types": "./dist/trash.d.ts",
+      "default": "./dist/trash.js"
+    },
+    "./versions": {
+      "types": "./dist/versions.d.ts",
+      "default": "./dist/versions.js"
+    },
     "./testing": {
       "types": "./dist/testing.d.ts",
       "default": "./dist/testing.js"
