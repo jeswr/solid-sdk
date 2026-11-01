@@ -4,7 +4,6 @@ import { DataFactory } from "n3";
 import { escapeIri } from "./iri.js";
 
 const LANGUAGE = /^[a-zA-Z]+(-[a-zA-Z0-9]+)*$/;
-const SCHEME = /^[A-Za-z][A-Za-z0-9+.-]*:/;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: Reject IRIREF-forbidden characters and lone surrogates.
 const FORBIDDEN_IRI = /[\u0000-\u0020<>"{}|^`\\\uD800-\uDFFF]/u;
 const RDF = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
@@ -27,8 +26,10 @@ function stringField(value: unknown): string {
 
 function iri(value: unknown): string {
   const result = stringField(value);
-  if (!SCHEME.test(result) || FORBIDDEN_IRI.test(result)) {
-    throw new TypeError("RDF terms require absolute IRIs without IRIREF-forbidden characters");
+  // Relative references (`<>` for a POSTed resource, `<#me>`) stay legal Turtle; only
+  // IRIREF-forbidden characters can break out of the angle brackets.
+  if (FORBIDDEN_IRI.test(result)) {
+    throw new TypeError("RDF terms require IRIs without IRIREF-forbidden characters");
   }
   return result;
 }

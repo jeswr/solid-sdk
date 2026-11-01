@@ -12,7 +12,7 @@ for the positional API. The default format is `text/turtle`. N-Triples, N-Quads 
 `n3.Writer`; unknown formats retain its Turtle fallback. Preserve valid RDF's lexical identity.
 Before N3, rebuild every quad from validated RDF/JS fields using the factory, without invoking
 caller methods or trusting private IDs. Reject invalid term positions, non-string fields,
-relative or IRIREF-forbidden IRIs (including lone surrogates), malformed language tags
+IRIREF-forbidden IRIs (including lone surrogates; relative references such as `<>` stay legal), malformed language tags
 (`/^[a-zA-Z]+(-[a-zA-Z0-9]+)*$/`), and inconsistent language/datatype/direction combinations
 with TypeError. Relabel unsafe blank-node labels consistently without colliding with existing
 labels. Preserve valid language/direction fields, including language-tag spelling; leave literal escaping to N3.

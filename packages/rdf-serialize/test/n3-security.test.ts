@@ -191,7 +191,6 @@ describe.each(FORMATS)("N3 term and prefix safety (%s)", (format) => {
     { graph: { termType: "DefaultGraph", value: "forged" } },
     { object: { termType: "Variable", value: "x . <urn:victim>" } },
     { object: { termType: "NamedNode", value: 42 } },
-    { object: namedNode("relative") },
     { object: namedNode("urn:lone\uD800surrogate") },
     {
       object: { termType: "Literal", value: 42, language: "", datatype: namedNode("urn:datatype") },
@@ -294,4 +293,22 @@ it.each([
   await expect(serialize([quad(s, p, o, namedNode("urn:bad>graph"))], { format })).rejects.toThrow(
     TypeError,
   );
+});
+
+describe("relative references", () => {
+  it("keeps <> and <#me> legal for POSTed Turtle bodies, resolving against the target", async () => {
+    const input = [
+      quad(namedNode(""), p, namedNode("#me")),
+      quad(namedNode("#me"), p, literal("x")),
+    ];
+    const output = await serialize(input);
+    expect(output).toContain("<>");
+    const parsed = await parseRdf(output, "text/turtle", { baseIRI: "https://pod.example/n/1" });
+    expect(parsed.size).toBe(2);
+    expect(
+      parsed.has(
+        quad(namedNode("https://pod.example/n/1"), p, namedNode("https://pod.example/n/1#me")),
+      ),
+    ).toBe(true);
+  });
 });
