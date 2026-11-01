@@ -84,6 +84,7 @@ export function MeasurementSheet({
   const side = useSheetSide();
   const trigger = useRef<HTMLElement | null>(null);
   const generation = useRef(0);
+  const operationId = useRef("");
   const form = useForm<Fields>({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -101,6 +102,7 @@ export function MeasurementSheet({
   useEffect(() => {
     generation.current++;
     if (metric) {
+      operationId.current = crypto.randomUUID();
       reset({
         metric,
         value: "",
@@ -151,6 +153,7 @@ export function MeasurementSheet({
                   new Date(values.at),
                   values.note,
                   Number(values.second),
+                  operationId.current,
                 );
               } else
                 await add(
@@ -159,6 +162,8 @@ export function MeasurementSheet({
                   values.unit,
                   new Date(values.at),
                   values.note,
+                  undefined,
+                  operationId.current,
                 );
               if (request === generation.current) onClose();
             } catch {

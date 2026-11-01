@@ -173,7 +173,10 @@ export function dueMedications(records: readonly ClinicalRecord[], now: Date) {
 }
 export function nextDose(record: ClinicalRecord, now: Date): Date | null {
   if (!record.date) return record.reminders.find((at) => at >= now) ?? null;
-  const start = Math.floor(now.getTime() / 1000) * 1000;
+  const start = Math.max(
+    Math.floor(now.getTime() / 1000) * 1000,
+    wallClockToInstant(`${record.date}T00:00:00`, record.timeZone),
+  );
   const dose = generateDueDoses(
     scheduleFor(record.iri, record),
     { start, end: start + 8 * 86400000 },

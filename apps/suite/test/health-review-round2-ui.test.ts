@@ -91,7 +91,10 @@ it("acknowledges every saved pressure observation and shows later server changes
   );
 });
 
-it("retries a GPX index failure without reselecting files or duplicating completed workouts", async () => {
+it.each([
+  "before",
+  "after",
+])("retries a GPX index failure %s commit without reselecting files or duplicating completed workouts", async (when) => {
   let fail = true;
   const indexPaths = new Set<string>(),
     routePaths: string[] = [];
@@ -100,7 +103,13 @@ it("retries a GPX index failure without reselecting files or duplicating complet
     if (init?.method === "PUT" && url.endsWith("/route.gpx")) routePaths.push(url);
     if (init?.method === "PUT" && url.endsWith("/index.ttl")) {
       indexPaths.add(url);
-      if (fail && indexPaths.size === 2) return new Response(null, { status: 500 });
+      if (fail && indexPaths.size === 2) {
+        if (when === "after") {
+          await pod.fetch(input, init);
+          throw new Error("Index response lost after commit");
+        }
+        return new Response(null, { status: 500 });
+      }
     }
     return pod.fetch(input, init);
   });

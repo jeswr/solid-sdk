@@ -59,8 +59,14 @@ interface HealthContextValue {
     at: Date,
     note: string,
     second?: number,
+    operationId?: string,
   ): Promise<void>;
-  save(kind: ClinicalKind, draft: RecordDraft, existing?: ClinicalRecord): Promise<void>;
+  save(
+    kind: ClinicalKind,
+    draft: RecordDraft,
+    existing?: ClinicalRecord,
+    operation?: { id: string; at: Date },
+  ): Promise<void>;
 }
 const Context = createContext<HealthContextValue | null>(null);
 export function HealthProvider({
@@ -187,8 +193,9 @@ export function HealthProvider({
       at: Date,
       note: string,
       second?: number,
+      operationId?: string,
     ) => {
-      const id = crypto.randomUUID();
+      const id = operationId ?? crypto.randomUUID();
       if (kind === "blood-pressure" && second === undefined)
         throw new Error("Both blood pressure values are required");
       const values: { kind: MetricKind; value: number }[] =
@@ -221,8 +228,13 @@ export function HealthProvider({
     [store, mutate, session],
   );
   const save = useCallback(
-    async (kind: ClinicalKind, draft: RecordDraft, existing?: ClinicalRecord) => {
-      const id = existing?.id ?? crypto.randomUUID();
+    async (
+      kind: ClinicalKind,
+      draft: RecordDraft,
+      existing?: ClinicalRecord,
+      operation?: { id: string; at: Date },
+    ) => {
+      const id = existing?.id ?? operation?.id ?? crypto.randomUUID();
       const iri = existing?.iri ?? `${store.base}${kind}/${id}.ttl#it`;
       if (existing && !existing.etag)
         throw new Error("This record cannot be safely edited without a version");
@@ -249,7 +261,7 @@ export function HealthProvider({
             id,
             draft,
             condition,
-            new Date(),
+            operation?.at ?? new Date(),
             existing?.iri,
           );
           completedRecordGeneration.current = generation;

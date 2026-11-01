@@ -228,12 +228,14 @@ function RecordSheet({
   const side = useSheetSide();
   const trigger = useRef<HTMLElement | null>(null);
   const generation = useRef(0);
+  const operation = useRef({ id: "", at: new Date() });
   const [error, setError] = useState("");
   const form = useForm<RecordDraft>({ resolver: zodResolver(recordSchema(kind)) });
   const { reset } = form;
   useEffect(() => {
     generation.current++;
     if (record) {
+      operation.current = { id: crypto.randomUUID(), at: new Date() };
       reset(
         record === "new"
           ? {
@@ -251,6 +253,7 @@ function RecordSheet({
     }
   }, [record, kind, reset]);
   const frequency = form.watch("frequency");
+  const timeZone = form.watch("timeZone");
   const fieldError = (name: keyof RecordDraft) => form.formState.errors[name]?.message;
   return (
     <Sheet
@@ -282,12 +285,19 @@ function RecordSheet({
             const request = generation.current;
             setError("");
             try {
-              await save(kind, values, record && record !== "new" ? record : undefined);
+              await save(
+                kind,
+                values,
+                record && record !== "new" ? record : undefined,
+                operation.current,
+              );
               if (request === generation.current) onClose();
             } catch {
               if (request !== generation.current) return;
               setError(
-                "Couldn't save this record. It may have changed elsewhere. Close this form and reopen the refreshed record before trying again.",
+                record === "new"
+                  ? "Couldn't save this record. Check your connection and try again."
+                  : "Couldn't save this record. It may have changed elsewhere. Close this form and reopen the refreshed record before trying again.",
               );
             }
           })}
@@ -340,7 +350,7 @@ function RecordSheet({
               </select>
               {frequency !== "none" && (
                 <>
-                  <label htmlFor="hlt-time">Reminder time (UTC)</label>
+                  <label htmlFor="hlt-time">Reminder time ({timeZone})</label>
                   <Input
                     id="hlt-time"
                     type="time"
@@ -354,7 +364,7 @@ function RecordSheet({
                 </>
               )}
               <p className="hlt-muted hlt-small">
-                Times use UTC. Weekly reminders repeat from your start date.
+                Times use {timeZone}. Weekly reminders repeat from your start date.
               </p>
             </>
           )}
