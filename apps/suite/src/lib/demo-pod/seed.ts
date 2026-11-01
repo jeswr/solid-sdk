@@ -11,6 +11,7 @@ import type { Quad } from "@rdfjs/types";
 import { DataFactory, Writer } from "n3";
 import { HILLS_PNG, REPORT_PDF, SUNSET_PNG } from "./binaries";
 import type { DemoSeedFile } from "./pod";
+import { seedCalendar } from "./seed-calendar";
 
 const { namedNode, literal, quad } = DataFactory;
 const RDF_TYPE = namedNode("http://www.w3.org/1999/02/22-rdf-syntax-ns#type");
@@ -91,7 +92,7 @@ export async function buildDemoSeed(now: number): Promise<DemoSeedFile[]> {
     "- Draft the launch plan in Docs",
     "",
   ].join("\n");
-  return [
+  const files: DemoSeedFile[] = [
     { path: "profile/card", body: profile, contentType: "text/turtle", modified: now - 40 * DAY },
     {
       path: "settings/privateTypeIndex.ttl",
@@ -128,4 +129,5 @@ export async function buildDemoSeed(now: number): Promise<DemoSeedFile[]> {
     { path: "drive/data.ttl", body: contact, contentType: "text/turtle", modified: now - 12 * DAY },
     { path: "drive/Archive/", body: "", contentType: "text/turtle", modified: now - 30 * DAY },
   ];
+  return seedCalendar(files, now);
 }

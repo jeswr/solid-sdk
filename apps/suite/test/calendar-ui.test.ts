@@ -1,0 +1,727 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { createDemoPod } from "../src/lib/demo-pod/pod";
+import { buildDemoSeed, DEMO_ROOT, DEMO_WEBID } from "../src/lib/demo-pod/seed";
+import type { PodSession } from "../src/lib/session/pod-session";
+import { act, click, deferred, h, key, mount } from "./drive-ui-dom";
+
+const mocks = vi.hoisted(() => ({
+  session: undefined as PodSession | undefined,
+  status: "ready" as "ready" | "loading" | "error",
+  path: "/calendar/week",
+  date: "2026-11-01",
+  query: "",
+  router: { replace: vi.fn(), push: vi.fn() },
+}));
+vi.mock("@/lib/session/pod-session", () => ({
+  usePodSessionState: () =>
+    mocks.status === "ready"
+      ? { status: "ready", session: mocks.session }
+      : mocks.status === "loading"
+        ? { status: "loading" }
+        : { status: "error", error: new Error("storage") },
+  PodSessionProvider: ({ children }: { children: unknown }) => children,
+}));
+vi.mock(
+  "@/components/interim-shell/suite-frame",
+  async () => import("../src/components/interim-shell/suite-frame"),
+);
+vi.mock("next/navigation", () => ({
+  usePathname: () => mocks.path,
+  useSearchParams: () => new URLSearchParams({ d: mocks.date, q: mocks.query }),
+  useRouter: () => mocks.router,
+}));
+vi.mock("next/link", () => ({
+  default: ({ children, ...props }: Record<string, unknown>) => h("a", props, children as string),
+}));
+
+import { CalendarApp } from "../src/apps/calendar/components/calendar-app";
+import { CalendarScreen, CalendarSearch } from "../src/apps/calendar/components/calendar-views";
+import { calendarIO } from "../src/apps/calendar/lib/model";
+import {
+  CalendarProvider,
+  useCalendarState,
+  useEventMutations,
+  useEventsInRange,
+} from "../src/apps/calendar/state/calendar-context";
+import {
+  type CalendarView,
+  type Occurrence,
+  PALETTE,
+  rangeKey,
+} from "../src/apps/calendar/state/view";
+
+const NOW = Date.UTC(2026, 10, 1, 12);
+let unsubscribe: (() => void) | undefined;
+let notify: ((url: string) => void) | undefined;
+beforeEach(async () => {
+  mocks.path = "/calendar/week";
+  mocks.date = "2026-11-01";
+  mocks.query = "";
+  mocks.status = "ready";
+  mocks.router.replace.mockReset();
+  mocks.router.push.mockReset();
+  localStorage.clear();
+  Object.defineProperty(window.navigator, "language", { value: "en-GB", configurable: true });
+  const pod = createDemoPod({ root: DEMO_ROOT, seed: await buildDemoSeed(NOW), now: () => NOW });
+  const listeners = new Set<(url: string) => void>();
+  unsubscribe = pod.subscribe((url) => {
+    for (const listener of listeners) listener(url);
+  });
+  notify = (url) => {
+    for (const listener of listeners) listener(url);
+  };
+  mocks.session = {
+    mode: "demo",
+    webId: DEMO_WEBID,
+    displayName: "Alice",
+    storageUrl: DEMO_ROOT,
+    fetch: pod.fetch,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    reset: vi.fn(),
+  };
+  vi.stubGlobal("HTMLButtonElement", window.HTMLButtonElement);
+  vi.stubGlobal("HTMLAnchorElement", window.HTMLAnchorElement);
+});
+afterEach(() => {
+  unsubscribe?.();
+});
+function screen(view: CalendarView = "week") {
+  return h(CalendarApp, { children: h(CalendarScreen, { view }) });
+}
+async function settle() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 80));
+  });
+}
+function buttons(host: HTMLElement, title: string) {
+  return [...host.querySelectorAll<HTMLButtonElement>("button.cal-event")].filter((button) =>
+    button.getAttribute("aria-label")?.startsWith(title),
+  );
+}
+
+it("renders week recurrence, filters Work everywhere and persists visibility per WebID", async () => {
+  const mounted = await mount(screen());
+  await settle();
+  expect(buttons(mounted.host, "Team stand-up,")).toHaveLength(3);
+  const checkbox = mounted.host.querySelector<HTMLElement>(
+    '[aria-label="Show Work calendar"]',
+  ) as HTMLElement;
+  await click(checkbox);
+  await settle();
+  expect(buttons(mounted.host, "Team stand-up,")).toHaveLength(0);
+  expect(localStorage.getItem(`suite:calendar:${DEMO_WEBID}`)).toContain("work.ttl");
+  mocks.path = "/calendar/month";
+  await mounted.render(screen("month"));
+  await settle();
+  expect(buttons(mounted.host, "Team stand-up,")).toHaveLength(0);
+  expect(mounted.host.querySelectorAll('.cal-month [role="gridcell"]')).toHaveLength(42);
+});
+it("moves month focus, handles date navigation and opens the selected day", async () => {
+  mocks.path = "/calendar/month";
+  const mounted = await mount(screen("month"));
+  await settle();
+  const day = mounted.host.querySelector<HTMLElement>(
+    '.cal-month [data-day="2026-11-01"]',
+  ) as HTMLElement;
+  await act(() => day.focus());
+  await key(day, "ArrowRight");
+  expect(document.activeElement?.getAttribute("data-day")).toBe("2026-11-02");
+  const monday = document.activeElement as HTMLElement;
+  await key(monday, "End");
+  expect(document.activeElement?.getAttribute("data-day")).toBe("2026-11-08");
+  await key(document.activeElement as HTMLElement, "Home");
+  expect(document.activeElement?.getAttribute("data-day")).toBe("2026-11-02");
+  await key(document.activeElement as HTMLElement, "PageDown");
+  expect(mocks.router.replace).toHaveBeenLastCalledWith("/calendar/month?d=2026-12-02");
+  mocks.date = "2026-12-02";
+  await mounted.render(screen("month"));
+  await settle();
+  expect(document.activeElement?.getAttribute("data-day")).toBe("2026-12-02");
+  await key(document.activeElement as HTMLElement, "Enter");
+  expect(mocks.router.push).toHaveBeenLastCalledWith("/calendar/day?d=2026-12-02");
+});
+it("moves between week slots, tabs to an event, shows read-only details and restores focus", async () => {
+  const mounted = await mount(screen());
+  await settle();
+  const slot = mounted.host.querySelector<HTMLElement>(
+    '[data-slot="2026-10-26:14"]',
+  ) as HTMLElement;
+  await act(() => slot.focus());
+  await key(slot, "ArrowRight");
+  expect(document.activeElement?.getAttribute("data-slot")).toBe("2026-10-27:14");
+  await key(document.activeElement as HTMLElement, "ArrowLeft");
+  await key(document.activeElement as HTMLElement, "Tab");
+  const event = document.activeElement as HTMLButtonElement;
+  expect(event.getAttribute("aria-label")).toMatch(/^Team stand-up,/);
+  await click(event);
+  expect(mounted.host.querySelector(".cal-details")?.textContent).toContain(
+    "Weekly on Mon, Wed, Fri",
+  );
+  expect(mounted.host.querySelector(".cal-details")?.textContent).toContain("15 minutes before");
+  await click(mounted.host.querySelector('[aria-label="Close event details"]') as HTMLElement);
+  await settle();
+  expect(mounted.host.querySelector(".cal-details")).toBeNull();
+  expect(document.activeElement).toBe(event);
+});
+it("restores the focused half-hour slot after loading the previous week", async () => {
+  const mounted = await mount(screen());
+  await settle();
+  const slot = mounted.host.querySelector<HTMLElement>(
+    '[data-slot="2026-10-26:13"]',
+  ) as HTMLElement;
+  await act(() => slot.focus());
+  await key(slot, "ArrowLeft");
+  expect(mocks.router.replace).toHaveBeenLastCalledWith("/calendar/week?d=2026-10-25");
+  mocks.date = "2026-10-25";
+  await mounted.render(screen());
+  await settle();
+  expect(document.activeElement?.getAttribute("data-slot")).toBe("2026-10-25:13");
+});
+it("shows month overflow and searches loaded event fields", async () => {
+  mocks.path = "/calendar/month";
+  const mounted = await mount(screen("month"));
+  await settle();
+  const more = mounted.host.querySelector('[data-day="2026-11-01"] .cal-more') as HTMLElement;
+  expect(more.textContent).toMatch(/\+\d+ more/);
+  await click(more);
+  expect(document.querySelector(".cal-overflow")?.textContent).toContain("Read in the park");
+  await mounted.unmount();
+  mocks.path = "/calendar/search";
+  mocks.query = "share";
+  const search = await mount(h(CalendarApp, { children: h(CalendarSearch) }));
+  await settle();
+  expect(search.host.textContent).toContain("Searching events from");
+  expect(buttons(search.host, "Dinner with friends,")).toHaveLength(1);
+});
+it("renders agenda pagination, navigation shortcuts and input exclusions", async () => {
+  mocks.path = "/calendar/agenda";
+  const mounted = await mount(screen("agenda"));
+  await settle();
+  const load = [...mounted.host.querySelectorAll("button")].find(
+    (button) => button.textContent === "Load more",
+  ) as HTMLElement;
+  await click(load);
+  await settle();
+  expect(buttons(mounted.host, "Team stand-up,").length).toBeGreaterThan(12);
+  await key(mounted.host, "m");
+  expect(mocks.router.push).toHaveBeenLastCalledWith("/calendar/month?d=2026-11-01");
+  await key(mounted.host, "n");
+  expect(mocks.router.replace).toHaveBeenLastCalledWith("/calendar/agenda?d=2026-12-01");
+  mocks.router.replace.mockClear();
+  await key(mounted.host.querySelector("input") as HTMLElement, "t");
+  expect(mocks.router.replace).not.toHaveBeenCalled();
+});
+it("renders empty and error states with calendar creation and retry actions", async () => {
+  const session = mocks.session as PodSession;
+  mocks.session = {
+    ...session,
+    fetch: createDemoPod({
+      root: DEMO_ROOT,
+      seed: (await buildDemoSeed(NOW)).filter(
+        (file) =>
+          !file.path.startsWith("calendar/") && file.path !== "settings/privateTypeIndex.ttl",
+      ),
+    }).fetch,
+  };
+  const mounted = await mount(screen());
+  await settle();
+  expect(mounted.host.textContent).toContain("Your calendar starts here");
+  await mounted.unmount();
+  mocks.session = { ...session, fetch: async () => new Response(null, { status: 403 }) };
+  const denied = await mount(screen());
+  await settle();
+  expect(denied.host.querySelector('[role="alert"]')).not.toBeNull();
+  expect(denied.host.querySelector('[aria-label="Loading events"]')).toBeNull();
+});
+it("exposes optimistic mutation hooks and refreshes subscriptions without leaking the old account", async () => {
+  let latest: ReturnType<typeof useEventsInRange> | undefined;
+  let mutations: ReturnType<typeof useEventMutations> | undefined;
+  let selected: Occurrence | undefined;
+  function Probe() {
+    latest = useEventsInRange("2026-11-01", "2026-11-02");
+    mutations = useEventMutations();
+    selected = useCalendarState().selected;
+    return null;
+  }
+  const mounted = await mount(h(CalendarProvider, { children: h(Probe) }));
+  await settle();
+  expect(latest?.status).toBe("ready");
+  const account = mocks.session as PodSession;
+  const pending = deferred<Response>();
+  const original = account.fetch;
+  mocks.session = {
+    ...account,
+    fetch: async (input, init) =>
+      init?.method === "PUT" ? pending.promise : original(input, init),
+  };
+  await mounted.render(h(CalendarProvider, { children: h(Probe) }));
+  await settle();
+  let write: Promise<void> | undefined;
+  await act(() => {
+    write = mutations?.create(`${DEMO_ROOT}calendar/work/optimistic.ttl`, {
+      name: "Optimistic",
+      start: new Date(2026, 10, 1, 15),
+      inCalendar: `${DEMO_ROOT}calendar/work.ttl#it`,
+    });
+  });
+  expect(
+    latest?.status === "ready" && latest.events.some((e) => e.data.name === "Optimistic"),
+  ).toBe(true);
+  await act(async () => {
+    pending.resolve(new Response(null, { status: 500 }));
+    await write?.catch(() => undefined);
+  });
+  await settle();
+  expect(
+    latest?.status === "ready" && latest.events.some((e) => e.data.name === "Optimistic"),
+  ).toBe(false);
+  await act(() => notify?.(`${DEMO_ROOT}calendar/work/changed.ttl`));
+  await settle();
+  expect(latest?.status).toBe("ready");
+  expect(selected).toBeUndefined();
+  mocks.session = {
+    ...account,
+    webId: `${DEMO_ROOT}profile/card#other`,
+    fetch: async () => {
+      throw new Error("offline");
+    },
+  };
+  await mounted.render(h(CalendarProvider, { children: h(Probe) }));
+  await settle();
+  expect(latest?.status).toBe("error");
+});
+
+it("reconciles open details after subscription renames and closes them after deletion", async () => {
+  const mounted = await mount(screen());
+  await settle();
+  await click(buttons(mounted.host, "Team stand-up,")[0] as HTMLElement);
+  const account = mocks.session as PodSession;
+  const io = calendarIO(account.fetch, account.storageUrl);
+  const url = `${DEMO_ROOT}calendar/work/stand-up.ttl`;
+  const item = await io.loadEvent(url);
+  if (!item) throw new Error("Missing stand-up fixture");
+  await act(async () => {
+    await io.saveEvent(
+      url,
+      { ...item.data, name: "Renamed remotely" },
+      { etag: item.etag as string },
+    );
+  });
+  await settle();
+  expect(mounted.host.querySelector(".cal-details h2")?.textContent).toBe("Renamed remotely");
+  await act(async () => {
+    const current = await io.loadEvent(url);
+    await io.removeEvent(url, current?.etag as string);
+  });
+  await settle();
+  expect(mounted.host.querySelector(".cal-details")).toBeNull();
+});
+
+it.each([
+  "profile/card",
+  "settings/privateTypeIndex.ttl",
+])("shows discovery failures and Retry in search for %s", async (path) => {
+  mocks.path = "/calendar/search";
+  const session = mocks.session as PodSession;
+  let broken = true;
+  mocks.session = {
+    ...session,
+    fetch: async (input, init) =>
+      broken && String(input) === `${DEMO_ROOT}${path}`
+        ? new Response(null, { status: 500 })
+        : session.fetch(input, init),
+  };
+  const mounted = await mount(h(CalendarApp, { children: h(CalendarSearch) }));
+  await settle();
+  expect(mounted.host.querySelector('[role="alert"]')).not.toBeNull();
+  expect(mounted.host.querySelector(".cal-slot")).toBeNull();
+  broken = false;
+  const retry = [...mounted.host.querySelectorAll("button")].find((b) =>
+    b.textContent?.includes("Retry"),
+  );
+  await click(retry as HTMLElement);
+  await settle();
+  expect(mounted.host.querySelector('[role="alert"]')).toBeNull();
+  expect(buttons(mounted.host, "Team stand-up,").length).toBeGreaterThan(0);
+});
+
+it.each([
+  "week",
+  "agenda",
+  "search",
+])("keeps all calendar failures and retry visible in empty %s results", async (view) => {
+  mocks.path = `/calendar/${view}`;
+  mocks.query = "no match";
+  const session = mocks.session as PodSession;
+  mocks.session = {
+    ...session,
+    fetch: async (input, init) =>
+      /calendar\/(work|personal)\.ttl$/.test(String(input))
+        ? new Response(null, { status: 500 })
+        : session.fetch(input, init),
+  };
+  const mounted = await mount(
+    view === "search"
+      ? h(CalendarApp, { children: h(CalendarSearch) })
+      : screen(view as CalendarView),
+  );
+  await settle();
+  expect(mounted.host.querySelectorAll(".cal-warning")).toHaveLength(2);
+  expect(mounted.host.querySelectorAll(".cal-warning button")).toHaveLength(2);
+  expect(mounted.host.textContent).not.toContain("Your calendar starts here");
+  expect(mounted.host.textContent).not.toContain("No events");
+  expect(mounted.host.textContent).not.toContain("No results for");
+});
+
+it("keeps range failures visible in search with no matching events", async () => {
+  mocks.path = "/calendar/search";
+  mocks.query = "no match";
+  const session = mocks.session as PodSession;
+  mocks.session = {
+    ...session,
+    fetch: async (input, init) =>
+      String(input) === `${DEMO_ROOT}calendar/work/`
+        ? new Response(null, { status: 500 })
+        : session.fetch(input, init),
+  };
+  const mounted = await mount(h(CalendarApp, { children: h(CalendarSearch) }));
+  await settle();
+  expect(mounted.host.querySelector(".cal-warning")?.textContent).toContain(
+    "Could not load events from Work",
+  );
+  expect(mounted.host.textContent).toContain("Search results may be incomplete");
+});
+
+it("keeps confirmed creates, updates, ETags and deletes visible during slow revalidation, then accepts remote changes", async () => {
+  const account = mocks.session as PodSession;
+  const io = calendarIO(account.fetch, account.storageUrl);
+  let readGate: ReturnType<typeof deferred<void>> | undefined;
+  mocks.session = {
+    ...account,
+    fetch: async (input, init) => {
+      if (readGate && String(input) === `${DEMO_ROOT}calendar/work/`) await readGate.promise;
+      return account.fetch(input, init);
+    },
+  };
+  let latest!: ReturnType<typeof useEventsInRange>;
+  let otherRange!: ReturnType<typeof useEventsInRange>;
+  let mutations!: ReturnType<typeof useEventMutations>;
+  function Probe() {
+    latest = useEventsInRange("2026-11-01", "2026-11-02");
+    otherRange = useEventsInRange("2026-10-01", "2026-12-01");
+    mutations = useEventMutations();
+    return null;
+  }
+  const mounted = await mount(h(CalendarProvider, { children: h(Probe) }));
+  await settle();
+  const url = `${DEMO_ROOT}calendar/work/confirmed.ttl`;
+  const data = {
+    name: "Confirmed",
+    start: new Date(2026, 10, 1, 14),
+    inCalendar: `${DEMO_ROOT}calendar/work.ttl#it`,
+  };
+  const current = () =>
+    latest.status === "ready" ? latest.events.find((e) => e.url === url) : undefined;
+  const other = () =>
+    otherRange.status === "ready" ? otherRange.events.find((e) => e.url === url) : undefined;
+  readGate = deferred<void>();
+  await act(async () => {
+    await mutations.create(url, data);
+  });
+  await settle();
+  const created = await io.loadEvent(url);
+  expect(current()?.data.name).toBe("Confirmed");
+  expect(other()?.data.name).toBe("Confirmed");
+  expect(current()?.etag).toBe(created?.etag);
+  await act(() => {
+    readGate?.resolve();
+    readGate = undefined;
+  });
+  await settle();
+  expect(current()?.etag).toBe(created?.etag);
+  readGate = deferred<void>();
+  await act(async () => {
+    await mutations.update(url, { ...data, name: "Updated" }, created?.etag as string);
+  });
+  await settle();
+  const updated = await io.loadEvent(url);
+  expect(current()?.data.name).toBe("Updated");
+  expect(current()?.etag).toBe(updated?.etag);
+  await act(() => {
+    readGate?.resolve();
+    readGate = undefined;
+  });
+  await settle();
+  await act(async () => {
+    await io.saveEvent(url, { ...data, name: "Remote" }, { etag: updated?.etag as string });
+  });
+  await settle();
+  expect(current()?.data.name).toBe("Remote");
+  const remote = await io.loadEvent(url);
+  readGate = deferred<void>();
+  await act(async () => {
+    await mutations.delete(url, remote?.etag as string);
+  });
+  await settle();
+  expect(current()).toBeUndefined();
+  expect(other()).toBeUndefined();
+  await act(() => {
+    readGate?.resolve();
+    readGate = undefined;
+  });
+  await settle();
+  expect(current()).toBeUndefined();
+  expect(other()).toBeUndefined();
+  await mounted.unmount();
+});
+
+it("renders session loading/error states and retries the session", async () => {
+  mocks.status = "loading";
+  const mounted = await mount(h(CalendarProvider, { children: null }));
+  expect(mounted.host.textContent).toContain("Opening Calendar");
+  mocks.status = "error";
+  await mounted.render(h(CalendarProvider, { children: null }));
+  expect(mounted.host.querySelector('[role="alert"]')).not.toBeNull();
+  const reload = vi.fn();
+  vi.stubGlobal("location", { reload });
+  await click(
+    [...mounted.host.querySelectorAll("button")].find(
+      (b) => b.textContent === "Retry",
+    ) as HTMLElement,
+  );
+  expect(reload).toHaveBeenCalledOnce();
+});
+
+it("requires a provider for calendar hooks", async () => {
+  function Orphan() {
+    useCalendarState();
+    return null;
+  }
+  const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  try {
+    await expect(mount(h(Orphan))).rejects.toThrow("Calendar hooks require CalendarProvider");
+  } finally {
+    errors.mockRestore();
+  }
+});
+
+it("retries an incomplete calendar creation through the context", async () => {
+  const account = mocks.session as PodSession;
+  let broken = true;
+  mocks.session = {
+    ...account,
+    fetch: async (input, init) =>
+      broken && String(input).endsWith("/recover-context/") && init?.method === "PUT"
+        ? new Response(null, { status: 500 })
+        : account.fetch(input, init),
+  };
+  let context!: ReturnType<typeof useCalendarState>;
+  function Probe() {
+    context = useCalendarState();
+    return null;
+  }
+  await mount(h(CalendarProvider, { children: h(Probe) }));
+  await settle();
+  await act(async () => {
+    await expect(context.create("Recover Context", PALETTE[0] as string)).rejects.toThrow("500");
+  });
+  broken = false;
+  await act(async () => {
+    await context.create("Recover Context", PALETTE[0] as string);
+  });
+  await settle();
+  expect(
+    context.calendars.status === "ready" &&
+      context.calendars.calendars.some((c) => c.title === "Recover Context"),
+  ).toBe(true);
+});
+
+it("keeps pending updates with their ETag, hides their calendar and closes its selected details", async () => {
+  const account = mocks.session as PodSession;
+  const io = calendarIO(account.fetch, account.storageUrl);
+  const url = `${DEMO_ROOT}calendar/work/stand-up.ttl`;
+  const item = await io.loadEvent(url);
+  if (!item) throw new Error("Missing stand-up fixture");
+  const gate = deferred<void>();
+  mocks.session = {
+    ...account,
+    fetch: async (input, init) => {
+      if (String(input) === url && init?.method === "PUT") await gate.promise;
+      return account.fetch(input, init);
+    },
+  };
+  let context!: ReturnType<typeof useCalendarState>;
+  let latest!: ReturnType<typeof useEventsInRange>;
+  let mutations!: ReturnType<typeof useEventMutations>;
+  function Probe() {
+    context = useCalendarState();
+    latest = useEventsInRange("2026-10-26", "2026-11-02");
+    mutations = useEventMutations();
+    return null;
+  }
+  await mount(h(CalendarProvider, { children: h(Probe) }));
+  await settle();
+  await act(() => {
+    if (latest.status === "ready")
+      context.openEvent(latest.events.find((e) => e.url === url) as Occurrence, document.body);
+  });
+  let task: Promise<void> | undefined;
+  await act(() => {
+    task = mutations.update(url, { ...item.data, name: "Pending rename" }, item.etag as string);
+  });
+  expect(latest.status === "ready" && latest.events.find((e) => e.url === url)?.etag).toBe(
+    item.etag,
+  );
+  expect(context.selected?.data.name).toBe("Pending rename");
+  await act(() => {
+    context.setPrefs((prefs) => ({ ...prefs, hidden: [`${DEMO_ROOT}calendar/work.ttl`] }));
+  });
+  await settle();
+  expect(context.selected).toBeUndefined();
+  expect(latest.status === "ready" && latest.events.some((e) => e.url === url)).toBe(false);
+  await act(async () => {
+    gate.resolve();
+    await task;
+  });
+  await settle();
+  await act(async () => {
+    await expect(mutations.update(url, item.data, '"stale"')).rejects.toThrow("412");
+  });
+});
+
+it("surfaces rejected cached ranges, retries them and ignores late failure after unmount", async () => {
+  let context!: ReturnType<typeof useCalendarState>;
+  let latest!: ReturnType<typeof useEventsInRange>;
+  function Range() {
+    latest = useEventsInRange("2026-11-01", "2026-11-02");
+    return null;
+  }
+  function Harness({ show }: { show: boolean }) {
+    context = useCalendarState();
+    return show ? h(Range) : null;
+  }
+  const render = (show: boolean) => h(CalendarProvider, { children: h(Harness, { show }) });
+  const mounted = await mount(render(false));
+  await settle();
+  const cacheKey = () => {
+    if (context.calendars.status !== "ready") throw new Error("Calendars not ready");
+    return rangeKey(
+      context.session.webId,
+      context.calendars.calendars.map((c) => JSON.stringify([c.url, c.etag, c.title, c.colour])),
+      "2026-11-01",
+      "2026-11-02",
+    );
+  };
+  const error = new Error("cached range failed");
+  const gate = deferred<never>();
+  context.cache.set(cacheKey(), gate.promise);
+  await mounted.render(render(true));
+  await act(async () => {
+    gate.reject(error);
+    await gate.promise.catch(() => undefined);
+  });
+  expect(latest.status).toBe("error");
+  expect(context.cache.has(cacheKey())).toBe(false);
+  await act(() => context.reload());
+  await settle();
+  expect(latest.status).toBe("ready");
+  await mounted.render(render(false));
+  const late = deferred<never>();
+  context.cache.set(cacheKey(), late.promise);
+  await mounted.render(render(true));
+  await mounted.unmount();
+  await act(async () => {
+    late.reject(error);
+    await late.promise.catch(() => undefined);
+  });
+});
+
+it.each([
+  375, 768,
+])("restores the event trigger after closing the details Sheet at %s pixels", async (width) => {
+  const media = vi.spyOn(window, "matchMedia").mockImplementation((query) => ({
+    matches:
+      query.includes("max-width: 1023px") || (width === 375 && query.includes("max-width: 639px")),
+    media: query,
+    onchange: null,
+    addListener() {},
+    removeListener() {},
+    addEventListener() {},
+    removeEventListener() {},
+    dispatchEvent: () => false,
+  }));
+  try {
+    const mounted = await mount(screen());
+    await settle();
+    const event = buttons(mounted.host, "Team stand-up,")[0] as HTMLElement;
+    await act(() => event.focus());
+    await click(event);
+    expect(document.querySelector('[role="dialog"] .cal-details')).not.toBeNull();
+    await click(document.querySelector('[aria-label="Close event details"]') as HTMLElement);
+    await settle();
+    expect(document.querySelector(".cal-details")).toBeNull();
+    expect(document.activeElement).toBe(event);
+  } finally {
+    media.mockRestore();
+  }
+});
+
+it("acknowledges writes and reconciles details per calendar while another calendar fails", async () => {
+  const account = mocks.session as PodSession;
+  const io = calendarIO(account.fetch, account.storageUrl);
+  let failedCalendar = "";
+  mocks.session = {
+    ...account,
+    fetch: async (input, init) =>
+      failedCalendar && String(input) === `${DEMO_ROOT}calendar/${failedCalendar}/`
+        ? new Response(null, { status: 500 })
+        : account.fetch(input, init),
+  };
+  let context!: ReturnType<typeof useCalendarState>;
+  let latest!: ReturnType<typeof useEventsInRange>;
+  let mutations!: ReturnType<typeof useEventMutations>;
+  function Probe() {
+    context = useCalendarState();
+    latest = useEventsInRange("2026-11-01", "2026-11-02");
+    mutations = useEventMutations();
+    return null;
+  }
+  await mount(h(CalendarProvider, { children: h(Probe) }));
+  await settle();
+  const url = `${DEMO_ROOT}calendar/work/partial.ttl`;
+  const data = {
+    name: "Saved locally",
+    start: new Date(2026, 10, 1, 14),
+    inCalendar: `${DEMO_ROOT}calendar/work.ttl#it`,
+  };
+  failedCalendar = "work";
+  await act(async () => {
+    await mutations.create(url, data);
+  });
+  await settle();
+  const event = () =>
+    latest.status === "ready" ? latest.events.find((e) => e.url === url) : undefined;
+  expect(event()?.data.name).toBe("Saved locally");
+  await act(() => {
+    context.openEvent(event() as Occurrence, document.body);
+  });
+  expect(context.selected?.data.name).toBe("Saved locally");
+  failedCalendar = "personal";
+  await act(() => context.reload());
+  await settle();
+  const item = await io.loadEvent(url);
+  await act(async () => {
+    await io.saveEvent(url, { ...data, name: "Remote rename" }, { etag: item?.etag as string });
+  });
+  await settle();
+  expect(event()?.data.name).toBe("Remote rename");
+  expect(context.selected?.data.name).toBe("Remote rename");
+  expect(latest.status === "ready" && latest.warnings).toHaveLength(1);
+});
