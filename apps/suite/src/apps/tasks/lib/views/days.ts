@@ -25,14 +25,21 @@ export function addDays(date: Date, amount: number): Date {
   return result;
 }
 
+/** Browsers expose the locale week either as a method, a legacy property, or neither. */
+function localeFirstDay(): number {
+  const locale = new Intl.Locale(new Intl.DateTimeFormat().resolvedOptions().locale) as {
+    getWeekInfo?: () => { firstDay: number };
+    weekInfo?: { firstDay: number };
+  };
+  return (
+    (typeof locale.getWeekInfo === "function"
+      ? locale.getWeekInfo().firstDay
+      : (locale.weekInfo?.firstDay ?? 1)) % 7
+  );
+}
+
 export function startOfWeek(date: Date, weekStart: WeekStart): Date {
-  const firstDay =
-    weekStart === "locale"
-      ? new Intl.Locale(new Intl.DateTimeFormat().resolvedOptions().locale).getWeekInfo().firstDay %
-        7
-      : weekStart === "monday"
-        ? 1
-        : 0;
+  const firstDay = weekStart === "locale" ? localeFirstDay() : weekStart === "monday" ? 1 : 0;
   const start = dateFromDayKey(localDayKey(date));
   return addDays(start, -((start.getDay() - firstDay + 7) % 7));
 }
