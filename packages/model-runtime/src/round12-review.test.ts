@@ -135,3 +135,33 @@ describe("R13: overrides keep primary checks for untyped composite write focuses
     }
   });
 });
+
+describe("R14: one focus check per write, so the shared budget is not double-counted", () => {
+  const view = (): ManifestEntity => ({
+    name: "View",
+    typeIris: [`${EX}View`],
+    subject: { convention: "self" },
+    fields: [
+      {
+        name: "tags",
+        predicate: `${EX}p`,
+        aliasPredicates: [`${EX}old`],
+        kind: "literal",
+        datatype: "xsd:string",
+        collection: "set",
+      },
+    ],
+  });
+  it("a large valid aliased set on an untyped subject migrates under an override", () => {
+    const members = Array.from({ length: 3000 }, (_, i) => `"m${i}"`).join(", ");
+    for (const options of [{}, { migrationManifest: manifest(a()) }]) {
+      const e = defineModel(manifest(view()), options).entities.View;
+      if (!e) throw new Error("missing entity");
+      const ds = store(`ex:doc ex:old ${members} .`);
+      const w = new e.Wrapper(DOC, ds, DataFactory) as unknown as { tags: Set<string> };
+      expect(w.tags.delete("absent")).toBe(false);
+      expect(ds.countQuads(DOC, `${EX}old`, null, null)).toBe(0);
+      expect(ds.countQuads(DOC, `${EX}p`, null, null)).toBe(3000);
+    }
+  });
+});
