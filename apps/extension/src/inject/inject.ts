@@ -1,5 +1,6 @@
 // AUTHORED-BY Claude Opus 4.8
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 /**
  * The MAIN-world injection: defines `window.solid` on every page. This script runs in the
  * page's own JS world (so the page can call it), but it holds NO credential — every
@@ -8,7 +9,16 @@
  * proxied fetch Response. The credential boundary is enforced in the worker, not here.
  */
 
-export {};
+import {
+  assertBodySize,
+  assertTextBodySize,
+  base64ToBytes,
+  bytesToBase64,
+  MAX_BODY_BYTES,
+  REQUEST_BODY_LIMIT_ERROR,
+  readBodyBounded,
+  validateBodyFields,
+} from '../shared/body-codec';
 
 const CHANNEL = 'solid-browser-ext';
 
@@ -190,14 +200,22 @@ function installSolidInjection(): void {
         } else if (data.error) {
           pending.reject(new Error(data.error));
         } else {
-          const response = new Response(data.body ?? null, {
-            status: data.status,
-            statusText: data.statusText,
-            headers: new Headers(data.headers ?? {}),
-          });
-          // ResponseInit cannot carry these read-only properties. Preserve the worker's
-          // final URL so apps resolve relative RDF references against the served resource.
-          pending.resolve(withResponseMetadata(response, data.url ?? '', data.redirected === true));
+          try {
+            validateBodyFields(data.body, data.bodyBase64);
+            const response = new Response(
+              data.bodyBase64 !== undefined ? base64ToBytes(data.bodyBase64) : (data.body ?? null),
+              {
+                status: data.status,
+                statusText: data.statusText,
+                headers: new Headers(data.headers ?? {}),
+              },
+            );
+            pending.resolve(
+              withResponseMetadata(response, data.url ?? '', data.redirected === true),
+            );
+          } catch (error) {
+            pending.reject(error as Error);
+          }
         }
         break;
       }
@@ -245,47 +263,156 @@ function installSolidInjection(): void {
    * best-effort global-fetch patch (NOT an explicit `window.solid.fetch` call) so the SW can
    * native-passthrough a non-pod / un-granted request instead of hard-failing the page (High #1).
    */
-  function solidFetch(
+  async function solidFetch(
     input: RequestInfo | URL,
     init?: RequestInit,
     autoDivert = false,
   ): Promise<Response> {
+    const request = typeof input === 'object' && !urlLike(input) ? (input as Request) : null;
+    if (
+      request &&
+      ((init?.mode === undefined && request.mode === 'navigate') || !/^https?:/.test(request.url))
+    )
+      return PRISTINE_FETCH(input, init);
+
+    // Snapshot mutable fields synchronously, BEFORE Blob/Request body reads yield.
+    // Web IDL dictionaries include inherited and non-enumerable members too.
+    const snapInit = init
+      ? (Object.fromEntries(
+          [
+            'method',
+            'headers',
+            'body',
+            'mode',
+            'credentials',
+            'cache',
+            'redirect',
+            'referrer',
+            'referrerPolicy',
+            'integrity',
+            'keepalive',
+            'signal',
+            'duplex',
+            'priority',
+            'window',
+          ].map((key) => [key, Reflect.get(init, key)]),
+        ) as RequestInit)
+      : undefined;
+    if (snapInit?.headers !== undefined) snapInit.headers = new Headers(snapInit.headers);
+    // An explicit null signal clears the Request signal; undefined inherits it.
+    const signal = snapInit?.signal === undefined ? request?.signal : snapInit.signal;
+    signal?.throwIfAborted();
+    const source = snapInit?.body;
+    let snapInput = urlLike(input) ? input.href : input;
+    let method: string;
+    const headers = new Headers(snapInit?.headers ?? request?.headers);
+    let body: string | undefined;
+    let bodyBase64: string | undefined;
+    try {
+      // Reject this combination even for an oversized body, without copying it first.
+      const effectiveMethod =
+        snapInit?.method === undefined ? (request?.method ?? 'GET') : String(snapInit.method);
+      if ((source != null || request?.body != null) && /^(GET|HEAD)$/i.test(effectiveMethod))
+        throw new TypeError('Request with GET/HEAD method cannot have body');
+
+      // Request construction extracts/copies BodyInit. Bound all known sizes FIRST.
+      if (typeof source === 'string') assertTextBodySize(source);
+      else if (
+        ArrayBuffer.isView(source) ||
+        Object.prototype.toString.call(source) === '[object ArrayBuffer]'
+      )
+        assertBodySize((source as ArrayBuffer | ArrayBufferView).byteLength);
+      else if (source instanceof Blob) assertBodySize(source.size);
+      else if (Object.prototype.toString.call(source) === '[object URLSearchParams]') {
+        body = source!.toString();
+        assertBodySize(body.length); // Form encoding is ASCII.
+      }
+
+      const requestInput = request ?? new URL(snapInput.toString(), window.location.href).href;
+      if (source instanceof FormData || source instanceof ReadableStream) {
+        if (autoDivert) return PRISTINE_FETCH(snapInput, snapInit);
+        // Validate native errors before the explicit API's unsupported-body error.
+        // An empty placeholder avoids unbounded multipart encoding. A stream is not
+        // read/locked by construction, which also checks duplex and stream usability.
+        new Request(
+          requestInput,
+          source instanceof FormData ? { ...snapInit, body: new Uint8Array(0) } : snapInit,
+        );
+        throw new Error(
+          'window.solid.fetch does not support FormData or ReadableStream request bodies',
+        );
+      }
+
+      // Use the platform's effective-request validation for every input and override.
+      // Clone only inherited bodies: an override can replace a used/locked input body.
+      const normalized = new Request(
+        request && source == null ? request.clone() : requestInput,
+        snapInit,
+      );
+      if (request) snapInput = normalized;
+      method = normalized.method;
+      if (source != null) {
+        if (typeof source === 'string') {
+          validateBodyFields(source, undefined);
+          body = source;
+        } else if (
+          ArrayBuffer.isView(source) ||
+          Object.prototype.toString.call(source) === '[object ArrayBuffer]'
+        ) {
+          const view = ArrayBuffer.isView(source)
+            ? new Uint8Array(source.buffer, source.byteOffset, source.byteLength)
+            : new Uint8Array(source as ArrayBuffer);
+          assertBodySize(view.byteLength);
+          const copy = new Uint8Array(view);
+          if (snapInit) snapInit.body = copy;
+          bodyBase64 = bytesToBase64(copy);
+        } else if (Object.prototype.toString.call(source) === '[object URLSearchParams]') {
+          // Already serialized and size-checked before Request construction.
+          if (snapInit) snapInit.body = new URLSearchParams(body);
+          if (!headers.has('content-type'))
+            headers.set('content-type', 'application/x-www-form-urlencoded;charset=UTF-8');
+        } else if (source instanceof Blob) {
+          assertBodySize(source.size);
+          if (!headers.has('content-type') && source.type) headers.set('content-type', source.type);
+          const bytes = new Uint8Array(await source.arrayBuffer());
+          signal?.throwIfAborted();
+          bodyBase64 = bytesToBase64(bytes);
+        } else {
+          throw new Error(
+            'window.solid.fetch does not support FormData or ReadableStream request bodies',
+          );
+        }
+      } else if (request && normalized.body !== null) {
+        const bytes = await readBodyBounded(
+          normalized.clone().body,
+          MAX_BODY_BYTES,
+          REQUEST_BODY_LIMIT_ERROR,
+          signal ?? undefined,
+        );
+        signal?.throwIfAborted();
+        bodyBase64 = bytesToBase64(bytes);
+      }
+    } catch (error) {
+      // Cancellation must reject with the caller's reason, including on the native fallback path.
+      signal?.throwIfAborted();
+      // Serialization is best-effort for the global patch: native fetch retains the
+      // unread snapshot even if the bounded bridge read overflows or fails.
+      if (autoDivert) return PRISTINE_FETCH(snapInput, snapInit);
+      throw error;
+    }
+    signal?.throwIfAborted();
     return new Promise((resolve, reject) => {
       const requestId = crypto.randomUUID();
-      // Retain the input/init so a passthrough sentinel can be completed with the page's own
-      // native fetch verbatim (round-2 High #1). SNAPSHOT them at CALL TIME (round-3 Medium):
-      // native `fetch` reads the URL/init synchronously, but a passthrough fetch happens only
-      // AFTER the async SW round-trip — so without a snapshot, a page that mutates the `URL`,
-      // the `Headers`, or `init.credentials` between the call and the sentinel would change the
-      // eventual request. Copy the URL (a mutable `URL` object), the init object, and the
-      // headers into fresh values so a later mutation of the caller's objects cannot leak in. A
-      // string input + string body are immutable, so they need no copy. A `URL` is detected by
-      // duck-typing (`urlLike`, cross-realm-safe) and snapshotted to its `href` STRING: a WHATWG
-      // URL is fully specified by `href`, native fetch accepts a string URL identically, and a
-      // string can't be mutated — so a later `url.pathname = …` on the caller's object cannot leak
-      // into the deferred passthrough. (Snapshotting to a fresh `URL` would also work but only if
-      // `URL` is the same realm; a string is robust in both browser and JSDOM.)
-      const snapInput: RequestInfo | URL = urlLike(input) ? input.href : input;
-      const snapInit: RequestInit | undefined = init
-        ? { ...init, ...(init.headers ? { headers: new Headers(init.headers) } : {}) }
-        : undefined;
+      // Deferred native fallback keeps Request metadata and a separate, unread body.
       pendingFetches.set(requestId, { resolve, reject, input: snapInput, init: snapInit });
-      let body: string | null = null;
-      if (init?.body != null) {
-        if (typeof init.body !== 'string') {
-          pendingFetches.delete(requestId);
-          reject(new Error('window.solid.fetch currently supports only string request bodies.'));
-          return;
-        }
-        body = init.body;
-      }
       postToContent({
         type: 'SOLID_FETCH_REQUEST',
         requestId,
-        url: input.toString(),
-        method: init?.method ?? 'GET',
-        headers: init?.headers ? Object.fromEntries(new Headers(init.headers).entries()) : {},
-        body,
+        url: request?.url ?? snapInput.toString(),
+        method,
+        headers: Object.fromEntries(headers.entries()),
+        ...(body !== undefined ? { body } : {}),
+        ...(bodyBase64 !== undefined ? { bodyBase64 } : {}),
         autoDivert,
       });
     });
@@ -459,15 +586,7 @@ function installSolidInjection(): void {
 
   const patchedFetch: typeof fetch = (input, init) => {
     if (shouldDivert(input)) {
-      // A Request object (not a plain URL/string) carries a body/headers the bridge can't
-      // currently serialise structurally — pass it through solidFetch via its URL + init only
-      // for the simple (string/URL) case; a complex Request falls back to native fetch (the SW
-      // gate still governs the eventual pod read if the app re-issues it through window.solid).
-      if (typeof input === 'string' || urlLike(input)) {
-        // autoDivert=true: this is the transparency patch, NOT an explicit window.solid.fetch —
-        // the SW native-passes-through (no 403) when the request is non-pod / un-granted (High #1).
-        return solidFetch(input, init, true);
-      }
+      return solidFetch(input, init, true);
     }
     return PRISTINE_FETCH(input as RequestInfo, init);
   };

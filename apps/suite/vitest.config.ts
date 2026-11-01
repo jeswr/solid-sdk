@@ -115,6 +115,7 @@ export default defineConfig({
         "src/apps/drive/lib/operations/**/*.ts",
         "src/apps/drive/lib/view/**/*.ts",
         "src/apps/mail/lib/address/**/*.ts",
+        "src/lib/session/extension-pod-session.ts",
       ],
       exclude: ["src/apps/contacts/state/**/*.tsx"],
       reporter: ["text", "json", "json-summary"],
