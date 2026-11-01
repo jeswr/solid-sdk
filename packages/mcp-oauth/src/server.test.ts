@@ -1,4 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
+// AUTHORED-BY Codex GPT-6
 import { createPublicKey, verify } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { fixture, ISSUER, REDIRECT, RESOURCE, SESSION } from "../test/fixtures.js";
@@ -193,7 +194,7 @@ describe("metadata and complete OAuth flow", () => {
     });
     expect((await f.refresh(clientId, rotated.refresh_token)).status).toBe(400);
     expect(f.provider.fetchFor).not.toHaveBeenCalled();
-    expect(f.provider.revoke).not.toHaveBeenCalled();
+    expect(f.provider.revoke).toHaveBeenCalledWith(SESSION.id);
   });
 
   it("supports root issuer paths, defaults and empty scopes", async () => {
@@ -605,15 +606,23 @@ describe("token replay, binding, expiry and revocation", () => {
     expect((await f.refresh(id, tokens.refresh_token)).status).toBe(400);
   });
 
-  it("revokes every generation on refresh reuse, while leaving another family valid", async () => {
+  it("revokes every bound family on refresh reuse, while leaving another session valid", async () => {
     const f = fixture();
     const id = await f.register();
     const original = await (await f.exchange(id, await f.code(id))).json();
     const second = await (await f.refresh(id, original.refresh_token)).json();
     const third = await (await f.refresh(id, second.refresh_token)).json();
-    const unrelated = await (await f.exchange(id, await f.code(id))).json();
+    const sibling = await (await f.exchange(id, await f.code(id))).json();
+    const otherResponse = await f.server.authorize(f.authRequest(id), {
+      ...SESSION,
+      id: "other-session",
+    });
+    const otherCode = new URL(otherResponse.headers.get("location") as string).searchParams.get(
+      "code",
+    ) as string;
+    const unrelated = await (await f.exchange(id, otherCode)).json();
     expect((await f.refresh(id, original.refresh_token)).status).toBe(400);
-    for (const tokens of [original, second, third]) {
+    for (const tokens of [original, second, third, sibling]) {
       await expect(f.server.verifyAccessToken(tokens.access_token, RESOURCE)).rejects.toMatchObject(
         { error: "invalid_token" },
       );
@@ -738,6 +747,26 @@ describe("token replay, binding, expiry and revocation", () => {
     const response = await f.form("revoke", { client_id: id, token: tokens.access_token });
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ error: "server_error" });
+  });
+
+  it("persists session intent before grant-local revocation or broker cleanup", async () => {
+    const f = fixture();
+    const id = await f.register();
+    const tokens = await (await f.exchange(id, await f.code(id))).json();
+    vi.spyOn(f.stores.grants, "revokeSession").mockRejectedValueOnce(
+      new Error("storage unavailable"),
+    );
+    const params = { client_id: id, token: tokens.refresh_token };
+    expect((await f.form("revoke", params)).status).toBe(500);
+    expect(await f.stores.grants.isSessionRevoked(SESSION.id)).toBe(false);
+    expect(f.provider.revoke).not.toHaveBeenCalled();
+
+    vi.spyOn(f.stores.grants, "revoke").mockRejectedValueOnce(new Error("storage unavailable"));
+    expect((await f.form("revoke", params)).status).toBe(500);
+    expect(await f.stores.grants.isSessionRevoked(SESSION.id)).toBe(true);
+    expect(f.provider.revoke).not.toHaveBeenCalled();
+    expect((await f.refresh(id, tokens.refresh_token)).status).toBe(400);
+    expect(f.provider.revoke).toHaveBeenCalledWith(SESSION.id);
   });
 
   it("rejects concurrent code exchange and never leaves usable credentials after replay", async () => {

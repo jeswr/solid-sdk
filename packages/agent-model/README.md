@@ -28,6 +28,12 @@ record IDs and authority references remain absolute IRIs.
 
 Accounts expose `channelHandleHash`; intents expose `recipientHash`. Callers compute
 salted hashes before constructing records. No handle-resolution or send operation exists.
+Accounts may also carry a strict `inventory` object with all salted `channelHandles`,
+unresolved `credentialRefs`, setup status, observation/test dates (reported text), historic
+connector evidence and identity conflicts. Inventory lists use RDF sequences; evidence and
+conflict items use `rdf:JSON`. The primary handle remains scalar and may be omitted only
+when an explicit inventory has no handles. Inventory observations establish no live access.
+Owner restrictions, label and binding state remain separate from inventory.
 Approval and mandate proofs are preserved without verification. A parsed approval is
 not authority to act; cryptographic verification and current expiry/revocation checks
 belong to agent-mandate and agent-executor. Mandate records reference credentials rather

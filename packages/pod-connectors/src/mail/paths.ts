@@ -1,7 +1,7 @@
 // AUTHORED-BY Claude Opus 5.5
 // AUTHORED-BY Codex GPT-6.1-Sol
 /**
- * The pod-mail layout (apps MAI-01 `paths.ts`), relative to the connector container:
+ * The shared MAI-01 layout, relative to a storage or connector root:
  * `mail/<account>/{messages,threads,folders}/<id>.ttl`, the `.eml` beside each message,
  * and attachments under `mail/attachments/<account>/<id>-<n>`.
  */
@@ -18,12 +18,27 @@ function nonEmpty(value: string, what: string): string {
 
 export const SYSTEM_FOLDERS = ["Inbox", "Sent", "Drafts", "Trash", "Archive", "Starred"] as const;
 
+/** Relative to an account root; callers retain their own identifier validation. */
+export function documentSlug(kind: "messages" | "threads" | "folders", id: string): string {
+  return `${kind}/${pathId(id)}.ttl`;
+}
+
+/** Relative to an account root; the caller supplies the system key (usually lowercase). */
+export function systemFolderSlug(id: string): string {
+  return `folders/system:${pathId(id)}.ttl`;
+}
+
+/** Relative layout only; attachmentSlug additionally validates the connector account. */
+export function attachmentPath(account: string, id: string, index: number): string {
+  return `mail/attachments/${pathId(account)}/${pathId(id)}-${index}`;
+}
+
 export function accountRoot(account: string): string {
   return `mail/${pathId(nonEmpty(account, "account"))}/`;
 }
 
 export function messageSlug(account: string, id: string): string {
-  return `${accountRoot(account)}messages/${pathId(nonEmpty(id, "message id"))}.ttl`;
+  return `${accountRoot(account)}${documentSlug("messages", nonEmpty(id, "message id"))}`;
 }
 
 export function emlSlug(account: string, id: string): string {
@@ -31,18 +46,18 @@ export function emlSlug(account: string, id: string): string {
 }
 
 export function threadSlug(account: string, key: string): string {
-  return `${accountRoot(account)}threads/${pathId(nonEmpty(key, "thread id"))}.ttl`;
+  return `${accountRoot(account)}${documentSlug("threads", nonEmpty(key, "thread id"))}`;
 }
 
 /** System folders use the reserved literal `system:` prefix; custom label colons are escaped. */
 export function folderSlug(account: string, title: string): string {
   const system = (SYSTEM_FOLDERS as readonly string[]).includes(title);
   return system
-    ? `${accountRoot(account)}folders/system:${pathId(title.toLowerCase())}.ttl`
-    : `${accountRoot(account)}folders/${pathId(nonEmpty(title, "folder"))}.ttl`;
+    ? `${accountRoot(account)}${systemFolderSlug(title.toLowerCase())}`
+    : `${accountRoot(account)}${documentSlug("folders", nonEmpty(title, "folder"))}`;
 }
 
 /** MIME file names are metadata, never paths. */
 export function attachmentSlug(account: string, id: string, index: number): string {
-  return `mail/attachments/${pathId(nonEmpty(account, "account"))}/${pathId(id)}-${index}`;
+  return attachmentPath(nonEmpty(account, "account"), id, index);
 }

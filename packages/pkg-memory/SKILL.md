@@ -1,6 +1,6 @@
 ---
 name: pkg-memory
-description: Build, parse and classify PKG nanopublications, enforce purpose policies, and store memory through PodPort.
+description: Use when building, serializing, parsing or classifying PKG nanopublications and the eight typed memory fact templates, enforcing purpose policies, or storing memory through PodPort.
 ---
 <!-- AUTHORED-BY Codex GPT-6.1-Sol -->
 <!-- AUTHORED-BY Codex GPT-6 -->

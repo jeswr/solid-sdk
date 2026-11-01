@@ -1,0 +1,519 @@
+/* AUTHORED-BY Codex GPT-6.1-Sol */
+/* AUTHORED-BY Codex GPT-6 */
+/* Anatomy and dimensions from the Home permission rows and shared mockup controls. */
+:root {
+  --consent-consequence: oklch(0.97 0.03 85);
+  --consent-consequence-border: oklch(0.88 0.08 85);
+  --consent-consequence-foreground: var(--warning-foreground);
+}
+.dark {
+  --consent-consequence: oklch(0.28 0.05 80);
+  --consent-consequence-border: oklch(0.4 0.08 80);
+  --consent-consequence-foreground: oklch(0.92 0.06 85);
+}
+.su-stack {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.su-small-gap {
+  gap: var(--space-1);
+}
+.su-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--space-3) / 2);
+  min-width: 0;
+}
+.su-label {
+  font-weight: 600;
+}
+.su-muted {
+  display: block;
+  color: var(--foreground-muted);
+  font-size: var(--text-sm);
+  line-height: var(--lh-sm);
+}
+.su-title {
+  margin: 0;
+  font-size: var(--text-lg);
+  line-height: var(--lh-lg);
+  font-weight: 600;
+}
+.su-fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.su-fieldset legend {
+  margin-bottom: var(--space-3);
+}
+/* Keep sharing button overrides local, including portalled dialogs. */
+:where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-button,
+.su-chip,
+.su-input,
+.su-checkbox,
+.su-switch,
+.su-permission-trigger {
+  font: inherit;
+  color: var(--foreground);
+  background: var(--surface);
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  min-height: var(--control-h);
+  max-width: 100%;
+}
+:where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  font-weight: 500;
+  cursor: pointer;
+}
+:where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-button:hover,
+.su-chip:hover {
+  background: var(--surface-2);
+}
+:where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-button:disabled,
+.su-chip:disabled,
+.su-input:disabled,
+.su-checkbox:disabled,
+.su-switch:disabled {
+  cursor: not-allowed;
+}
+:where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-button:disabled,
+.su-chip:disabled,
+.su-input:disabled {
+  color: var(--foreground-muted);
+}
+.su-role-option:focus-visible,
+:where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-button:focus-visible,
+.su-chip:focus-visible,
+.su-input:focus-visible,
+.su-checkbox:focus-visible,
+.su-switch:focus-visible,
+.su-permission-trigger:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  scroll-margin: var(--space-4);
+}
+:where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-destructive {
+  color: var(--destructive);
+}
+:where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-destructive:hover {
+  background: var(--destructive-soft);
+}
+.su-input {
+  width: 100%;
+  min-width: 0;
+  padding: calc(var(--space-3) / 2) var(--space-3);
+}
+.su-picker-input {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+}
+.su-contact-list {
+  list-style: none;
+  padding: var(--space-1);
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.su-contact-list[hidden] {
+  display: none;
+}
+.su-contact-option,
+.su-person-chip {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: var(--space-2);
+  min-width: 0;
+  border-radius: var(--radius-md);
+}
+.su-contact-option {
+  cursor: pointer;
+  min-height: var(--row-h);
+}
+.su-contact-option[aria-selected="true"],
+.su-contact-option:hover {
+  background: var(--primary-soft);
+  color: var(--primary-soft-foreground);
+}
+.su-person-chip {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+.su-person-label {
+  display: grid;
+  gap: calc(var(--space-1) / 2);
+  min-width: 0;
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.su-account-id {
+  font-size: var(--text-sm);
+  color: var(--foreground-muted);
+  overflow-wrap: anywhere;
+}
+.su-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-8);
+  height: var(--space-8);
+  flex: none;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+  background: var(--surface-3);
+  color: var(--foreground);
+}
+.su-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+:where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-icon-button {
+  min-width: var(--control-h);
+  padding: 0;
+  flex: none;
+}
+.su-error {
+  color: var(--destructive);
+  font-size: var(--text-sm);
+}
+/* Radix Select uses the mockups' control and popover dimensions. */
+.su-role-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+}
+.su-role-menu {
+  z-index: 60;
+  min-width: var(--radix-select-trigger-width);
+  max-width: calc(100vw - var(--space-8));
+  max-height: var(--radix-select-content-available-height);
+  overflow-y: auto;
+  padding: var(--space-1);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow: var(--shadow-2);
+  border: 1px solid var(--border-strong);
+}
+.su-role-option {
+  position: relative;
+  min-height: var(--control-h);
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-8) var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  outline-offset: -2px;
+}
+.su-role-option[data-highlighted] {
+  background: var(--primary-soft);
+  color: var(--primary-soft-foreground);
+}
+.su-role-option[data-disabled] {
+  color: var(--foreground-muted);
+  cursor: not-allowed;
+}
+.su-role-indicator {
+  position: absolute;
+  right: var(--space-2);
+  top: var(--space-2);
+}
+.su-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--space-6);
+  height: var(--space-6);
+  min-height: var(--space-6);
+  padding: 0;
+  flex: none;
+}
+.su-chip {
+  min-height: var(--control-h-sm);
+  border-radius: var(--radius-full);
+  padding: calc(var(--space-1) / 2) var(--space-3);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.su-chip[data-state="checked"] {
+  background: var(--primary-soft);
+  color: var(--primary-soft-foreground);
+  border-color: var(--primary);
+}
+.su-check-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--control-h);
+  min-width: 0;
+  cursor: pointer;
+}
+.su-checkbox[data-state="checked"],
+.su-checkbox[data-state="indeterminate"] {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+.su-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay);
+  z-index: 50;
+}
+.su-sheet,
+.su-confirm {
+  box-sizing: border-box;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, calc(100% - var(--space-8)));
+  max-height: calc(100dvh - var(--space-8));
+  overflow-y: auto;
+  padding: var(--space-6);
+  color: var(--foreground);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-3);
+  z-index: 51;
+  font-family: var(--font-ui);
+  font-size: var(--text-base);
+  line-height: var(--lh-base);
+  overflow-wrap: anywhere;
+}
+.su-confirm {
+  width: min(420px, calc(100% - var(--space-8)));
+  z-index: 53;
+}
+.su-overlay:has(+ .su-confirm) {
+  z-index: 52;
+}
+.su-sheet p,
+.su-confirm p {
+  margin: 0;
+}
+.su-equal-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-3);
+}
+:where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-equal-actions > .su-button {
+  width: 100%;
+}
+.su-data-card {
+  padding: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+.su-source {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--space-3) / 2);
+  min-height: var(--space-6);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  font-size: var(--text-xs);
+  color: var(--foreground-muted);
+  overflow-wrap: anywhere;
+}
+.su-source-logo {
+  display: inline-grid;
+  place-items: center;
+  width: var(--space-4);
+  height: var(--space-4);
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--foreground);
+  flex: none;
+}
+.su-permission {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
+  min-width: 0;
+}
+.su-permission-header {
+  display: grid;
+  grid-template-columns: var(--space-10) minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+}
+.su-agent-avatar {
+  display: inline-grid;
+  place-items: center;
+  width: var(--space-10);
+  height: var(--space-10);
+  border-radius: var(--radius-md);
+  background: var(--app-permissions);
+  color: var(--glyph);
+  font-weight: 700;
+}
+.su-permission-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  text-align: left;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.su-permission-trigger svg {
+  flex: none;
+}
+.su-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--space-6);
+  padding-inline: var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--surface-2);
+  color: var(--foreground-muted);
+  font-size: var(--text-xs);
+}
+.su-permission-items {
+  border-top: 1px solid var(--border);
+  padding: var(--space-1) var(--space-4) var(--space-3);
+}
+.su-permission-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding-block: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+.su-permission-item:last-child {
+  border-bottom: 0;
+}
+.su-feature-map {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+.su-switch {
+  width: var(--space-10);
+  height: var(--space-6);
+  min-height: var(--space-6);
+  padding: calc(var(--space-1) / 2);
+  background: var(--surface-3);
+  border-radius: var(--radius-full);
+}
+.su-switch[data-state="checked"] {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.su-switch-thumb {
+  display: block;
+  width: var(--space-4);
+  height: var(--space-4);
+  border-radius: var(--radius-full);
+  background: var(--foreground-muted);
+}
+.su-switch[data-state="checked"] .su-switch-thumb {
+  margin-left: auto;
+  background: var(--primary-foreground);
+}
+.su-consequence {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
+  color: var(--consent-consequence-foreground);
+  background: var(--consent-consequence);
+  border: 1px solid var(--consent-consequence-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+}
+.su-consequence p {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+}
+.su-skeleton {
+  display: block;
+  height: var(--space-6);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  animation: su-pulse 1.4s ease-in-out infinite;
+}
+.su-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@keyframes su-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+@media (max-width: 767px) {
+  .su-sheet {
+    top: auto;
+    bottom: 0;
+    left: 0;
+    transform: none;
+    width: 100%;
+    max-height: calc(100dvh - var(--space-4));
+    border-radius: var(--radius-xl) var(--radius-xl) 0 0;
+    padding: var(--space-4);
+  }
+  .su-permission-header {
+    grid-template-columns: var(--space-10) minmax(0, 1fr);
+  }
+  .su-permission .su-permission-header > .su-button {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+@media (max-width: 374px) {
+  .su-picker-input {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (pointer: coarse) {
+  .su-role-option,
+  :where(.su-people-picker, .su-sheet, .su-confirm, .su-permission) .su-button,
+  .su-chip,
+  .su-input,
+  .su-checkbox,
+  .su-switch,
+  .su-permission-trigger {
+    min-height: 44px;
+  }
+  .su-checkbox {
+    min-width: 44px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .su-skeleton {
+    animation: none;
+  }
+}

@@ -1,5 +1,5 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
-import { fetchRdf } from "@jeswr/fetch-rdf";
+import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { createPodScopedFetch } from "@jeswr/guarded-fetch";
 import { serialize } from "@jeswr/rdf-serialize";
 import type { DatasetCore } from "@rdfjs/types";
@@ -82,6 +82,25 @@ export function photoStorage(fetch: typeof globalThis.fetch, storage: string) {
         },
         body: "",
       });
+      // CSS can reject an existing container before checking If-None-Match.
+      // A conflict is safe to ignore only if this URL actually holds a container.
+      if (response.status === 409) {
+        try {
+          const { dataset } = await fetchRdf(url, {
+            fetch: scoped,
+            headers: { "cache-control": "no-cache" },
+          });
+          const types = new Container(url, dataset, DataFactory).type;
+          if (
+            types.has("http://www.w3.org/ns/ldp#BasicContainer") ||
+            types.has("http://www.w3.org/ns/ldp#Container")
+          )
+            continue;
+        } catch (error) {
+          if (!(error instanceof RdfFetchError) || (error.status !== 404 && error.status !== 410))
+            throw error;
+        }
+      }
       if (!response.ok && response.status !== 412) throw new PhotoIoError(url, response.status);
     }
   }

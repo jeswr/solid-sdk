@@ -16,6 +16,7 @@ import {
 import { fetchBoundedRdf } from "./bounded-rdf.js";
 import type { PodChild } from "./pod.js";
 import { hasPodFetchLimits, podOperationFetch } from "./pod-operation.js";
+import { handlesProfileRedirects } from "./profile-redirects.js";
 
 /** Conditional mutation headers supported by a pod. */
 export interface PodConditions {
@@ -135,15 +136,13 @@ export function createFetchPodPort(input: SolidMcpConfig): PodPort {
           hasContainerTypeLink(response.headers.get("link") ?? "");
         return response;
       };
-      const fetcher =
-        profile && podScopedUrlOrUndefined(config, url) === undefined
-          ? transport
-          : scopedFetch({ ...config, fetch: transport });
+      const offPodProfile = profile && podScopedUrlOrUndefined(config, url) === undefined;
+      const fetcher = offPodProfile ? transport : scopedFetch({ ...config, fetch: transport });
       const response = await fetcher(target, {
         method: "GET",
-        // The off-pod identity exception must never follow an unchecked redirect.
-        // In-pod reads still use guardedFetch's validated redirect loop.
-        redirect: "manual",
+        // The CLI transport validates and anonymizes every off-pod profile hop.
+        // Other injected fetches retain manual redirects; in-pod reads use the scoped loop.
+        redirect: offPodProfile && handlesProfileRedirects(config.fetch) ? "follow" : "manual",
         // Generic reads preserve the server's default representation.
         headers: options.accept === undefined ? undefined : { accept: options.accept },
       });

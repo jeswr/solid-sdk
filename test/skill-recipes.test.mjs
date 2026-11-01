@@ -1,3 +1,4 @@
+// AUTHORED-BY Codex GPT-6.1-Sol
 // AUTHORED-BY Codex GPT-6
 // Execute the documented examples so API and credential-boundary regressions fail the gate.
 import * as nodeCrypto from "node:crypto";
@@ -414,7 +415,9 @@ describe("reviewed recipe failure boundaries", () => {
   });
 
   it("treats storage acquisition and read errors as misses without weakening identity checks", async () => {
-    const code = blocks("solid-offline", "ts").find((block) => block.includes("function read("));
+    const code = blocks("solid-offline-patterns", "ts").find((block) =>
+      block.includes("function read("),
+    );
     const webId = "https://pod.example/alice/card#me";
     const resource = "https://pod.example/alice/items";
     const keyFor = (identity, url) => `${identity}\u0000${url}`;

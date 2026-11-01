@@ -1,4 +1,5 @@
 # AUTHORED-BY Codex GPT-6.1-Sol
+# AUTHORED-BY Codex GPT-6
 @prefix agent: <https://jeswr.org/ns/agent#>.
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>.
 
@@ -164,6 +165,8 @@ agent:channel rdfs:comment "Agent record field channel.";
     rdfs:label "channel".
 agent:channelHandle rdfs:comment "Salted hash of an account or sender handle. Raw handles are held only by the daemon.";
     rdfs:label "channelHandle".
+agent:channelHandles rdfs:comment "Ordered inventory of salted account handle hashes, including an empty list for unconfigured accounts.";
+    rdfs:label "channelHandles".
 agent:channelMessageId rdfs:comment "The channel's own id for the transmitted message (recorded on the receipt).";
     rdfs:label "channelMessageId".
 agent:claimSubject rdfs:comment "The subject the claim is about.";
@@ -208,6 +211,8 @@ agent:credential rdfs:comment "Reference to a signed mandate authorization crede
     rdfs:label "credential".
 agent:credentialRef rdfs:comment "Daemon profile name or provisioning reference string; never the credential value.";
     rdfs:label "credentialRef".
+agent:credentialRefs rdfs:comment "Ordered inventory of unresolved credential references; never credential values.";
+    rdfs:label "credentialRefs".
 agent:credentialState rdfs:comment "Current binding credential state, without credential values.";
     rdfs:label "credentialState".
 agent:decision rdfs:comment "Owner choice of approve or deny; never trusted before external proof verification.";
@@ -262,6 +267,10 @@ agent:grantee rdfs:comment "The agent a grant is issued to.";
     rdfs:label "grantee".
 agent:historyWindow rdfs:comment "Available channel history as an xsd:duration.";
     rdfs:label "historyWindow".
+agent:historicEvidence rdfs:comment "Ordered hash-only historic connector observations; never evidence of live provider access.";
+    rdfs:label "historicEvidence".
+agent:identityConflict rdfs:comment "Ordered hash-only unresolved identity or provider mismatch observations.";
+    rdfs:label "identityConflict".
 agent:identityStatus rdfs:comment "Sender identity status; inbound messages remain unverified in the logical record.";
     rdfs:label "identityStatus".
 agent:implementsConfiguration rdfs:comment "A configuration the agent implements.";
@@ -272,6 +281,8 @@ agent:inReplyTo rdfs:comment "Reply linkage between channel messages.";
     rdfs:label "inReplyTo".
 agent:intent rdfs:comment "Agent record field intent.";
     rdfs:label "intent".
+agent:inventory rdfs:comment "Registry-controlled account observations, separate from owner restrictions, label and live binding state.";
+    rdfs:label "inventory".
 agent:interactionPattern rdfs:comment "negotiate, invoke, public-read, ...";
     rdfs:label "interactionPattern".
 <https://jeswr.org/ns/agent#kind/accept> rdfs:comment "accept value in the kind concept scheme; an evidence classification, not a grant.";
@@ -296,6 +307,8 @@ agent:interactionPattern rdfs:comment "negotiate, invoke, public-read, ...";
     rdfs:label "kind/unsupported".
 agent:lastIngest rdfs:comment "Timestamp of the most recent ingestion.";
     rdfs:label "lastIngest".
+agent:lastTested rdfs:comment "Registry-reported connector test date or timestamp; not proof of a live connection.";
+    rdfs:label "lastTested".
 agent:length rdfs:comment "Number of ordered items in a bounded RDF sequence, including zero for an empty sequence.";
     rdfs:label "length".
 agent:limitation rdfs:comment "A stated limit of what a record establishes.";
@@ -330,6 +343,8 @@ agent:odrlAction rdfs:comment "The ODRL action short-name the outbound intent pe
     rdfs:label "odrlAction".
 agent:offer rdfs:comment "The identified offer message.";
     rdfs:label "offer".
+agent:observedAt rdfs:comment "Registry observation date or timestamp, preserved as reported text.";
+    rdfs:label "observedAt".
 agent:offeror rdfs:comment "Software actor that made the offer.";
     rdfs:label "offeror".
 agent:operation rdfs:comment "The operation concerned.";
@@ -398,6 +413,8 @@ agent:sendSupported rdfs:comment "Whether the binding implements sending; not an
     rdfs:label "sendSupported".
 agent:sequence rdfs:comment "Position of an entry in its ledger (xsd:integer).";
     rdfs:label "sequence".
+agent:setupStatus rdfs:comment "Registry-reported connector setup status; never an owner grant or proof of live access.";
+    rdfs:label "setupStatus".
 agent:source rdfs:comment "The source whose authority was assessed.";
     rdfs:label "source".
 agent:sourceRule rdfs:comment "The local source-authority rule applied.";

@@ -1,12 +1,12 @@
 // AUTHORED-BY Codex GPT-6
-import { fetchRdf, RdfFetchError } from "@jeswr/fetch-rdf";
 import { normalizePodBase } from "@jeswr/guarded-fetch";
 import { createSolidAuth, type SolidAuth, type SolidAuthConfig } from "@jeswr/solid-auth-core";
 import { Agent } from "@solid/object";
 import { DataFactory } from "n3";
 import { detectAccessSystem } from "../engine/access.js";
 import { createPodHttp } from "../engine/pod-http.js";
-import type { AccessSystem, PodSide } from "../engine/types.js";
+import { parse } from "../engine/rdf.js";
+import type { AccessSystem, PodHttp, PodSide } from "../engine/types.js";
 
 export type ConnectionId = "source" | "target";
 export interface ConnectionState {
@@ -186,6 +186,9 @@ export class PodConnection {
       const profileFetch =
         (authenticated: boolean): typeof fetch =>
         async (input, init) => {
+          // A delayed first response must not start a conversion under a different sign-in.
+          if (generation !== this.generation || this.auth.webId !== webId)
+            throw new Error("Profile sign-in changed");
           if (typeof input !== "string" || new URL(input).href !== documentUrl.href) {
             throw new Error("Profile request outside the authenticated WebID document");
           }
@@ -195,18 +198,24 @@ export class PodConnection {
             redirect: "manual",
           });
         };
-      let profile: Awaited<ReturnType<typeof fetchRdf>>;
-      try {
-        profile = await fetchRdf(documentUrl.href, { fetch: profileFetch(false) });
-      } catch (error) {
+      const profileHttp = (authenticated: boolean): Pick<PodHttp, "get"> => ({
+        get: (url, init) =>
+          profileFetch(authenticated)(url, {
+            headers: { accept: init?.accept ?? "text/turtle, application/ld+json;q=0.9" },
+            signal: init?.signal,
+          }),
+      });
+      let http = profileHttp(false);
+      let response = await http.get(documentUrl.href);
+      if (response.status === 401 || response.status === 403) {
         if (generation !== this.generation || this.auth.webId !== webId) return;
-        if (!(error instanceof RdfFetchError) || (error.status !== 401 && error.status !== 403))
-          throw error;
-        profile = await fetchRdf(documentUrl.href, { fetch: profileFetch(true) });
+        http = profileHttp(true);
+        response = await http.get(documentUrl.href);
       }
+      const profile = await parse(response, documentUrl.href, http, undefined, true);
       if (generation !== this.generation || this.auth.webId !== webId) return;
       // Bind to the signed-in subject, never an arbitrary profile mainSubject.
-      const agent = new Agent(webId, profile.dataset, DataFactory);
+      const agent = new Agent(webId, profile, DataFactory);
       const roots = [...agent.pimStorage].map((root) => {
         const url = new URL(root);
         if (url.protocol !== "https:" || url.search || url.hash)
