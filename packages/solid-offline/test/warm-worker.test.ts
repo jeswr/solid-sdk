@@ -230,7 +230,7 @@ it('uses HEAD size evidence to avoid GET when the remaining budget is smaller', 
   expect(put).not.toHaveBeenCalled();
 });
 
-it('bounds all LWS listAll pages before the worker stores them', async () => {
+it('bounds all LWS listing pages before the worker stores them', async () => {
   const next = `${root}cursor?after=one`;
   const oversized = streaming(undefined, 512);
   const { pageFetch, cache } = await worker(async (input, init) => {
@@ -256,6 +256,78 @@ it('bounds all LWS listAll pages before the worker stores them', async () => {
   expect(await meta.getByUrl(next)).toEqual([]);
   meta.close();
   expect(cache.size).toBe(1); // The complete root listing only.
+});
+
+it.each([
+  1, 2, 3, 4,
+])('caps reads and empty listing pages at %i resource slots', async (maxResources) => {
+  const cursors = Array.from({ length: 5 }, (_, i) => `${root}cursor?after=${i}`);
+  const { pageFetch, network, cache, put } = await worker(async (input, init) => {
+    const request = new Request(input, init);
+    if (request.method === 'HEAD') return new Response(null);
+    const next = cursors[cursors.indexOf(request.url) + 1];
+    return new Response(JSON.stringify({ type: 'ContainerPage', items: [] }), {
+      headers: {
+        'content-type': 'application/lws+json',
+        ...(next ? { link: `<${next}>; rel="next"` } : {}),
+      },
+    });
+  });
+  const storage = createLwsBackend({ root, fetch: pageFetch });
+  const result = await warm(webId, { storage }, resolveBudget({ maxResources }), '', {
+    seeds: [root],
+  });
+  const gets = network.mock.calls
+    .map(([input, init]) => new Request(input, init))
+    .filter((request) => request.method === 'GET');
+  // A root read and its first listing page each consume a slot, even though
+  // they share a URL. Empty pages must consume slots too, without yielding children.
+  expect(gets.map((request) => request.url)).toEqual([
+    ...Array(Math.min(2, maxResources)).fill(root),
+    ...cursors.slice(0, Math.max(0, maxResources - 2)),
+  ]);
+  expect(result.warmed).toBe(1);
+  expect(result.budgetHit).toBe(true);
+  expect(put).toHaveBeenCalledTimes(maxResources);
+  expect(cache.size).toBeLessThanOrEqual(maxResources);
+  const meta = await MetadataStore.open(scopedWebId);
+  for (const cursor of cursors.slice(Math.max(0, maxResources - 2)))
+    expect(await meta.getByUrl(cursor)).toEqual([]);
+  meta.close();
+});
+
+it('shares resource slots across concurrent container reads and listing pages', async () => {
+  const seeds = Array.from({ length: 4 }, (_, i) => `${root}container-${i}`);
+  const { pageFetch, network, cache, put } = await worker(async (input, init) => {
+    const request = new Request(input, init);
+    const headers = {
+      'content-type': 'application/lws+json',
+      link:
+        '<https://www.w3.org/ns/lws#Container>; rel="type", ' +
+        `<${root}cursor?container=${encodeURIComponent(request.url)}>; rel="next"`,
+    };
+    return new Response(
+      request.method === 'HEAD' ? null : JSON.stringify({ type: 'ContainerPage', items: [] }),
+      { headers },
+    );
+  });
+  const storage = createLwsBackend({ root, fetch: pageFetch });
+  const result = await warm(
+    webId,
+    { storage },
+    resolveBudget({ maxResources: 7, concurrency: 4 }),
+    '',
+    { seeds },
+  );
+  const gets = network.mock.calls
+    .map(([input, init]) => new Request(input, init))
+    .filter((request) => request.method === 'GET');
+  expect(gets).toHaveLength(7);
+  expect(gets.every((request) => seeds.includes(request.url))).toBe(true);
+  expect(result.warmed).toBe(4);
+  expect(result.budgetHit).toBe(true);
+  expect(put).toHaveBeenCalledTimes(7);
+  expect(cache.size).toBeLessThanOrEqual(7);
 });
 
 it('cancels an in-flight worker stream when warming is stopped', async () => {

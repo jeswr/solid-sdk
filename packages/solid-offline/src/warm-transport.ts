@@ -230,6 +230,7 @@ export async function warmStorage(
       ...storage,
       head: (url, opts) => observe('head', url, opts),
       read: (url, opts) => observe('read', url, opts),
+      list: (url, opts) => storage.list(url, tagged(opts)),
       async *listAll(url, opts) {
         yield* storage.listAll(url, tagged(opts));
       },

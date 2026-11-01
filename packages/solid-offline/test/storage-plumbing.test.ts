@@ -1,6 +1,6 @@
 // AUTHORED-BY Codex GPT-6.1-Sol
 import { readdir, readFile } from 'node:fs/promises';
-import { StorageError } from '@jeswr/storage-client';
+import { type StorageClient, StorageError } from '@jeswr/storage-client';
 import { createMemoryStorage } from '@jeswr/storage-client/memory';
 import { createSolidBackend } from '@jeswr/storage-client/solid';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -49,14 +49,15 @@ describe('StorageClient warming', () => {
           .url,
       );
     const read = vi.spyOn(storage, 'read');
-    const listAll = vi.spyOn(storage, 'listAll');
+    const list = vi.spyOn(storage, 'list');
     const result = await warm(`${ROOT}profile#me`, { storage }, resolveBudget(), '', {
       seeds: [ROOT],
     });
     expect(result.budgetHit).toBe(false);
     expect(result.warmed).toBe(8);
     expect(result.visits.filter((visit) => members.includes(visit.url))).toHaveLength(7);
-    expect(listAll).toHaveBeenCalledWith(ROOT, { signal: undefined });
+    expect(list).toHaveBeenCalledTimes(4);
+    expect(list).toHaveBeenCalledWith(ROOT, { cursor: undefined, signal: undefined });
     expect(read.mock.calls.map(([url]) => url).sort()).toEqual([ROOT, ...members].sort());
   });
 
@@ -70,13 +71,54 @@ describe('StorageClient warming', () => {
       ...memory,
       read: async (url: string) => ({ ...(await memory.read(mapUrl(url))), url }),
       head: (url: string) => memory.head(mapUrl(url)),
-      listAll: (url: string) => memory.listAll(mapUrl(url)),
+      list: (url: string, opts?: Parameters<StorageClient['list']>[1]) =>
+        memory.list(mapUrl(url), opts),
     };
     const result = await warm(`${ROOT}profile#me`, { storage }, resolveBudget(), '', {
       seeds: [opaque],
     });
     expect(result.visits.find((visit) => visit.url === opaque)?.container).toBe(true);
     expect(result.visits.some((visit) => visit.url === doc)).toBe(true);
+  });
+
+  it.each([ROOT, `${ROOT}cursor`])('rejects a listing cycle back to %s', async (repeated) => {
+    const storage = createMemoryStorage({ protocol: 'lws', root: ROOT });
+    const child = (await storage.create(ROOT, 'body', { contentType: 'text/plain' })).url;
+    const page = await storage.list(ROOT);
+    const list = vi.spyOn(storage, 'list').mockImplementation(async (_url, opts) => ({
+      ...page,
+      next: { url: opts?.cursor ? repeated : `${ROOT}cursor` },
+    }));
+    const read = vi.spyOn(storage, 'read');
+    const result = await warm(`${ROOT}profile#me`, { storage }, resolveBudget(), '', {
+      seeds: [ROOT],
+    });
+    expect(list).toHaveBeenCalledTimes(2);
+    expect(read.mock.calls.map(([url]) => url)).toEqual([ROOT]);
+    expect(result.visits.some((visit) => visit.url === child)).toBe(false);
+  });
+
+  it('retains the 10,000-page ceiling when the resource budget is larger', async () => {
+    const storage = createMemoryStorage({ protocol: 'lws', root: ROOT });
+    const child = (await storage.create(ROOT, 'body', { contentType: 'text/plain' })).url;
+    const page = await storage.list(ROOT);
+    let cursor = 0;
+    const list = vi.spyOn(storage, 'list').mockImplementation(async () => ({
+      ...page,
+      items: cursor === 0 ? page.items : [],
+      next: { url: `${ROOT}cursor?page=${cursor++}` },
+    }));
+    const read = vi.spyOn(storage, 'read');
+    const result = await warm(
+      `${ROOT}profile#me`,
+      { storage },
+      resolveBudget({ maxResources: 20_000 }),
+      '',
+      { seeds: [ROOT] },
+    );
+    expect(list).toHaveBeenCalledTimes(10_000);
+    expect(read.mock.calls.map(([url]) => url)).toEqual([ROOT]);
+    expect(result.visits.some((visit) => visit.url === child)).toBe(false);
   });
 
   it('uses listing size/type to skip large members without a read, and respects resource/depth caps', async () => {

@@ -58,7 +58,7 @@ Run the package and full workspace gates. For an intentional public API change, 
 
 ## Storage and subscription plumbing (T-062)
 
-- `WarmDeps.storage` is a StorageClient; use `head`/`read`/`listAll`, never parse container listings locally.
+- `WarmDeps.storage` is a StorageClient; use `head`/`read`/`list`, never parse container listings locally. Reserve a shared resource slot before each listing page; preserve the cursor loop guard and 10,000-page ceiling of `listAll`.
 - Keep backend-reported container kinds (LWS identifiers may be slashless) and listing size hints.
 - All derived/explicit seeds must pass `isWithinStorage`; an external WebID needs explicit seeds or an already-fetched profile.
 - `notificationsClient` optionally injects the shared pod-notifications client. Forward normalized changes, including Move and membership parents. Wire `resync` to the ETag sweep.

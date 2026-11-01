@@ -3,11 +3,16 @@
 /**
  * Bounded page-side cache warming through StorageClient. The client supplied by
  * the app carries authentication; the worker only intercepts/caches its reads.
- * Traverse with listAll so backend pagination and opaque LWS identifiers work.
+ * Traverse backend listing pages with shared admission for reads and pages.
  * Profile/type-index seed parsing remains local, with all targets scope-filtered.
  */
 
-import { type ReadResult, type StorageClient, StorageError } from '@jeswr/storage-client';
+import {
+  type PageCursor,
+  type ReadResult,
+  type StorageClient,
+  StorageError,
+} from '@jeswr/storage-client';
 import { policyResponse } from './storage.js';
 import {
   LARGE_RESOURCE_BYTES,
@@ -46,6 +51,9 @@ const BINARY_TYPE_PREFIXES = [
   'application/pdf',
   'application/zip',
 ];
+
+/** Retain StorageClient.listAll's page ceiling while admitting pages individually. */
+const MAX_LISTING_PAGES = 10_000;
 
 export interface WarmDeps {
   /** Authenticated page-side client; all reads stay inside its storage boundary. */
@@ -296,7 +304,7 @@ function enqueue(
  * ACL doc).
  *
  * The body reads as a short pipeline of guard clauses + named steps; the
- * non-obvious INVARIANT it preserves is the #10 byte-budget reservation (the
+ * non-obvious INVARIANT it preserves is the #10 resource reservation (the
  * synchronous slot reserved AFTER the HEAD probe rules out binary/large but
  * BEFORE the byte-warming GET — see `reserveSlot`). Each step is its own helper so
  * the control flow here stays flat.
@@ -320,7 +328,7 @@ async function visit(
   // metadata-only and short-circuits here, so the byte-pulling GET is never issued.
   if (await probeHeadForSkip(item, state, deps, budget)) return discovered;
 
-  // #10: reserve the byte-budget slot synchronously BEFORE the GET (the GET is what
+  // #10: reserve the resource slot synchronously BEFORE the GET (the GET is what
   // flows through the SW + caches bytes), so concurrent workers can't overshoot.
   if (!reserveSlot(state, budget)) return discovered;
 
@@ -387,7 +395,7 @@ async function probeHeadForSkip(
 }
 
 /**
- * Reserve one byte-budget slot synchronously (#10). Returns `false` (and flags
+ * Reserve one resource slot synchronously (#10). Returns `false` (and flags
  * `budgetHit`) when the cap is already reached — the caller then skips the GET.
  * `reserved` is a conservative upper bound: a GET that later 403s or busts the
  * byte budget still consumed a slot (the safe direction for a cap).
@@ -461,7 +469,7 @@ async function warmGetResponse(
     for (const url of typeIndexTargets(item.url, decodeBody(buf)))
       discovered.push({ url, kind: 'child', depth: item.depth + 1 });
   if (container && item.depth < budget.maxDepth)
-    await enumerateContainer(item, deps, discovered, budget);
+    await enumerateContainer(item, state, deps, discovered, budget);
   recordVisit(state, deps, {
     url: item.url,
     kind: item.kind,
@@ -529,22 +537,43 @@ function pruneForbidden(
 /** Enumerate via the backend, including every LWS page and opaque container URL. */
 async function enumerateContainer(
   item: FrontierItem,
+  state: CrawlState,
   deps: WarmDeps,
   discovered: FrontierItem[],
   budget: ResolvedWarmBudget,
 ): Promise<void> {
+  const seen = new Set([new URL(item.url).href]);
+  let cursor: PageCursor | undefined;
   try {
-    for await (const child of deps.storage.listAll(item.url, { signal: deps.signal })) {
-      if (discovered.length >= budget.maxResources) break;
-      if (!deps.storage.isWithinStorage(child.url)) continue;
-      discovered.push({
-        url: child.url,
-        kind: 'child',
-        depth: item.depth + 1,
-        size: child.size,
-        contentType: child.contentType,
+    for (let pages = 0; pages < MAX_LISTING_PAGES; pages++) {
+      deps.signal?.throwIfAborted();
+      // listAll hides page requests. Admit each list call before the backend can
+      // fetch/cache it, including empty pages and the repeated first-page GET.
+      if (!reserveSlot(state, budget)) return;
+      const page = await deps.storage.list(item.url, {
+        cursor,
+        signal: deps.signal,
       });
+      for (const child of page.items) {
+        deps.signal?.throwIfAborted();
+        if (discovered.length >= budget.maxResources) return;
+        if (!deps.storage.isWithinStorage(child.url)) continue;
+        discovered.push({
+          url: child.url,
+          kind: 'child',
+          depth: item.depth + 1,
+          size: child.size,
+          contentType: child.contentType,
+        });
+      }
+      deps.signal?.throwIfAborted();
+      if (page.next === null) return;
+      if (seen.has(page.next.url)) throw new Error('Listing repeats a page');
+      seen.add(page.next.url);
+      cursor = page.next;
     }
+    // Preserve listAll's fail-closed handling for overlong listings.
+    discovered.length = 0;
   } catch {
     // Failed/forbidden listings never introduce a partial subtree.
     discovered.length = 0;

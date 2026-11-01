@@ -16,6 +16,7 @@
  */
 
 import type { StorageClient } from '@jeswr/storage-client';
+import { createLwsBackend } from '@jeswr/storage-client/lws';
 import { createSolidBackend } from '@jeswr/storage-client/solid';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -253,6 +254,31 @@ describe('warmer: BFS traversal', () => {
 });
 
 describe('warmer: budget enforcement', () => {
+  it('counts empty cursor pages against maxResources without a worker', async () => {
+    const calls: string[] = [];
+    const storage = createLwsBackend({
+      root: `${BASE}/`,
+      fetch: async (input, init) => {
+        const request = new Request(input, init);
+        if (request.method === 'HEAD') return new Response(null);
+        calls.push(request.url);
+        const cursor = Number(new URL(request.url).searchParams.get('cursor') ?? -1);
+        return new Response(JSON.stringify({ type: 'ContainerPage', items: [] }), {
+          headers: {
+            'content-type': 'application/lws+json',
+            ...(cursor < 10 ? { link: `<${BASE}/?cursor=${cursor + 1}>; rel="next"` } : {}),
+          },
+        });
+      },
+    });
+    const result = await warm(WEBID, { storage }, resolveBudget({ maxResources: 3 }), '', {
+      seeds: [`${BASE}/`],
+    });
+    expect(calls).toEqual([`${BASE}/`, `${BASE}/`, `${BASE}/?cursor=0`]);
+    expect(result.warmed).toBe(1);
+    expect(result.budgetHit).toBe(true);
+  });
+
   it('stops at maxResources', async () => {
     // Storage lists 50 small docs; cap at 5.
     const members = Array.from({ length: 50 }, (_, i) => `${BASE}/d${i}`);
