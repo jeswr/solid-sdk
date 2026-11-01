@@ -406,7 +406,7 @@ describe("reviewed recipe failure boundaries", () => {
     expect(invalidate).toHaveBeenCalledWith(hotResource);
     const since = new Date("2026-10-01T00:00:00Z");
     handlers.get("resync")(since);
-    expect(reconcile).toHaveBeenLastCalledWith(since);
+    await vi.waitFor(() => expect(reconcile).toHaveBeenLastCalledWith(since));
     await cleanup();
     for (const remove of removers) expect(remove).toHaveBeenCalledOnce();
     expect(subscription.close).toHaveBeenCalledOnce();
@@ -425,11 +425,96 @@ describe("reviewed recipe failure boundaries", () => {
     expect(cached).toBe("initial");
     authoritative = "changed before push connected";
     transition("live");
-    expect(cached).toBe(authoritative);
+    await vi.waitFor(() => expect(cached).toBe(authoritative));
     expect(reconcile.mock.calls).toEqual([[new Date(0)], [new Date(0)]]);
     transition("degraded");
     transition("live");
     expect(reconcile).toHaveBeenCalledTimes(2); // Later reconnects use resync.
+    await cleanup();
+  });
+
+  it.each([
+    ["live", "resync"],
+    ["resync", "live"],
+  ])("serializes initial, %s and %s reads despite reverse completion", async (first, second) => {
+    const { watch, transition, handlers, reportError } = await notificationRecipe();
+    const reads = Array.from({ length: 3 }, () => ({
+      started: Promise.withResolvers(),
+      release: Promise.withResolvers(),
+      completed: Promise.withResolvers(),
+    }));
+    let authoritative = "initial snapshot";
+    let cached;
+    let active = 0;
+    let peakActive = 0;
+    let nextRead = 0;
+    const reconcile = vi.fn(async () => {
+      const read = reads[nextRead++];
+      const snapshot = authoritative;
+      peakActive = Math.max(peakActive, ++active);
+      read.started.resolve();
+      await read.release.promise;
+      cached = snapshot;
+      active--;
+      read.completed.resolve();
+    });
+    const watching = watch(reconcile);
+    await reads[0].started.promise;
+    const since = new Date("2026-10-01T00:00:00Z");
+    for (const event of [first, second]) {
+      authoritative = `snapshot before ${event}`;
+      if (event === "live") transition("live");
+      else handlers.get("resync")(since);
+      await Promise.resolve();
+    }
+    // Concurrent reads would commit newer snapshots first and the initial snapshot last.
+    reads[2].release.resolve();
+    await reads[2].release.promise;
+    reads[1].release.resolve();
+    await reads[1].release.promise;
+    reads[0].release.resolve();
+    const cleanup = await watching;
+    await reads[2].completed.promise;
+    expect(cached).toBe(authoritative);
+    expect(peakActive).toBe(1);
+    expect(reconcile.mock.calls).toEqual([
+      [new Date(0)],
+      [first === "live" ? new Date(0) : since],
+      [second === "live" ? new Date(0) : since],
+    ]);
+    expect(reportError).not.toHaveBeenCalled();
+    await cleanup();
+  });
+
+  it("serializes repeated resync reads after setup", async () => {
+    const { watch, handlers } = await notificationRecipe("live");
+    const pending = Promise.withResolvers();
+    const started = Promise.withResolvers();
+    const completed = Promise.withResolvers();
+    const first = new Date("2026-10-01T00:00:00Z");
+    const second = new Date("2026-10-02T00:00:00Z");
+    let authoritative = "initial snapshot";
+    let cached;
+    const reconcile = vi.fn(async (since) => {
+      const snapshot = authoritative;
+      if (since === first) {
+        started.resolve();
+        await pending.promise;
+      }
+      cached = snapshot;
+      if (since === second) completed.resolve();
+    });
+    const cleanup = await watch(reconcile);
+    authoritative = "first resync snapshot";
+    handlers.get("resync")(first);
+    await started.promise;
+    authoritative = "second resync snapshot";
+    handlers.get("resync")(second);
+    await Promise.resolve();
+    pending.resolve();
+    await completed.promise;
+    expect(cached).toBe(authoritative);
+    expect(reconcile.mock.calls).toEqual([[new Date(0)], [first], [second]]);
     await cleanup();
   });
 

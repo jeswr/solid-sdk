@@ -31,9 +31,14 @@ export async function watchCollection(
     pollIntervalMs: 30_000,
   });
   const stopChanges = subscription.on('change', event => invalidate(event.object));
+  let reconciliation = Promise.resolve();
+  const reconcileSerially = (since: Date) => {
+    reconciliation = reconciliation.then(() => reconcile(since));
+    return reconciliation;
+  };
   const reconcileAfterEvent = async (since: Date) => {
     try {
-      await reconcile(since);
+      await reconcileSerially(since);
     } catch (error) {
       await close();
       throw error;
@@ -57,7 +62,7 @@ export async function watchCollection(
   };
   try {
     // Seed polling/already-live subscriptions; first live covers the push setup gap.
-    await reconcile(new Date(0));
+    await reconcileSerially(new Date(0));
   } catch (error) {
     await close();
     throw error;
@@ -74,7 +79,8 @@ an iterator detaches that iterator, so still close the subscription itself.
 not emit `resync`, so refresh again then to cover changes during setup. Initial reconciliation
 is awaited and failures close the subscription before rejecting `watchCollection`. Later
 reconciliation failures also close it and call the application's non-throwing `reportError`
-handler; use that handler to show an error or arrange a retry.
+handler; use that handler to show an error or arrange a retry. Initial, first-live and resync
+reconciliations share a serial queue so an older read cannot overwrite a newer snapshot.
 
 `plan()` is an I/O-free advertised preference, while `subscription.channel` reports the actual
 transport. Supported push adapters are Solid WebSocketChannel2023 / StreamingHTTP, LWS
