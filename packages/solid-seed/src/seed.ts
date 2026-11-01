@@ -56,13 +56,27 @@ function instanceKey(shape: string, index = 0): string {
   return `${shape}\u0000${index}`;
 }
 
+/**
+ * True when the path percent-encodes a character that needs no encoding (RFC 3986
+ * unreserved), "/" or "\\". Servers such as CSS decode and re-encode each segment
+ * before lookup, so `/x.%61cl` would reach `/x.acl`; the only legitimate escapes
+ * are for characters that must be escaped.
+ */
+function encodesPlainCharacter(path: string): boolean {
+  for (const [, hex] of path.matchAll(/%([0-9a-f]{2})/gi)) {
+    if (/[A-Za-z0-9._~/\\-]/.test(String.fromCharCode(Number.parseInt(hex as string, 16))))
+      return true;
+  }
+  return false;
+}
+
 function resolveResource(baseUrl: string, path: string): string {
   const base = assertHttpIri(baseUrl, "SeedTarget.baseUrl", { requireOrigin: true });
   // Auxiliary resources (.acl, .acr, .meta) are never seeded as data, including
   // through a percent-encoded dot a server may decode before mapping the path.
-  if (!path.startsWith("/") || /\.(acl|acr|meta)$/i.test(path) || /%(2e|2f|5c)/i.test(path)) {
+  if (!path.startsWith("/") || /\.(acl|acr|meta)$/i.test(path) || encodesPlainCharacter(path)) {
     throw new Error(
-      `resource path must start with "/", must not target an auxiliary resource and must not encode ".", "/" or "\\": ${path}`,
+      `resource path must start with "/", must not target an auxiliary resource and must not percent-encode an unreserved character, "/" or "\\": ${path}`,
     );
   }
   // biome-ignore lint/suspicious/noControlCharactersInRegex: reject every IRIREF control/space byte
@@ -352,7 +366,11 @@ async function removePlaceholder(target: SeedTarget, url: string): Promise<void>
  * `.acr`) or none would otherwise store it as an ordinary resource that grants nothing.
  */
 async function assertAclLocation(target: SeedTarget, url: string): Promise<void> {
-  const response = await podFetch(target, url, { method: "HEAD" });
+  let response = await podFetch(target, url, { method: "HEAD" });
+  if (response.status === 405 || response.status === 501) {
+    await response.body?.cancel();
+    response = await podFetch(target, url, { method: "GET" });
+  }
   await response.body?.cancel();
   if (!response.ok) throw new HttpFailure("HEAD", url, response.status, "");
   const acls = parseLinkHeaders(response.headers.get("link"), url)
@@ -367,7 +385,10 @@ async function assertAclLocation(target: SeedTarget, url: string): Promise<void>
 
 /** A minimal valid body for a placeholder of this content type. */
 function placeholderBody(contentType: string): string {
-  return /json/i.test(contentType) ? "{}" : "";
+  if (/json/i.test(contentType)) return "{}";
+  if (/rdf\+xml/i.test(contentType))
+    return '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"/>';
+  return "";
 }
 
 async function writeAcl(
@@ -417,7 +438,12 @@ async function writeResource(
  * Write a resource that carries an access spec so its data never sits under an
  * inherited (possibly public) ACL: create an empty placeholder, confirm the
  * server's ACL location, write the ACL, and only then write the data. If the ACL
- * cannot be written, a placeholder this run created is removed.
+ * or the data cannot be written, a placeholder this run created is removed, so a
+ * re-run starts again. A container is created with its own description instead,
+ * because servers such as CSS refuse a PUT to an existing container; only that
+ * description (not member data) is briefly governed by the inherited ACL.
+ * A process that dies between placeholder and data leaves the placeholder, and
+ * `ensure` cannot tell it from real data; re-run with `replace` after a crash.
  */
 async function writeProtected(
   pod: MaterializedPod,
@@ -428,10 +454,13 @@ async function writeProtected(
   const url = resource.outcome.url;
   const contentType = resource.spec.contentType ?? DEFAULT_CONTENT_TYPE;
   let outcome: "created" | "skipped" | "replaced" = mode === "replace" ? "replaced" : "created";
+  const container = url.endsWith("/");
   let createdPlaceholder = false;
+  let dataWritten = false;
   try {
-    await put(pod.target, url, placeholderBody(contentType), contentType, true);
+    await put(pod.target, url, container ? body : placeholderBody(contentType), contentType, true);
     createdPlaceholder = true;
+    dataWritten = container;
   } catch (error) {
     if (!(error instanceof HttpFailure && error.status === 412) || mode === "create") throw error;
     // The resource exists: ensure leaves its data alone; replace keeps the old data
@@ -445,7 +474,13 @@ async function writeProtected(
     if (createdPlaceholder) await removePlaceholder(pod.target, url);
     throw error;
   }
-  if (outcome !== "skipped") await put(pod.target, url, body, contentType, false);
+  if (outcome === "skipped" || dataWritten) return outcome;
+  try {
+    await put(pod.target, url, body, contentType, false);
+  } catch (error) {
+    if (createdPlaceholder) await removePlaceholder(pod.target, url);
+    throw error;
+  }
   return outcome;
 }
 

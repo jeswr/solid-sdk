@@ -538,6 +538,72 @@ describe("access-controlled resources: the ACL lands before any data", () => {
     expect(pod.resources.get(Secret)?.body).toBe("private data");
   });
 
+  it("a failed data write removes the placeholder, so ensure can recover", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    pod.failNextPut("/public/secret", 500, 1);
+    await expect(seedPods({ layout: layout(pod), mode: "ensure" })).rejects.toBeInstanceOf(
+      SeedError,
+    );
+    expect(pod.resources.has(Secret)).toBe(false);
+    await seedPods({ layout: layout(pod), mode: "ensure" });
+    expect(pod.resources.get(Secret)?.body).toBe("private data");
+  });
+
+  it("checks the ACL location with GET when the server refuses HEAD", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    pod.headUnsupported = true;
+    await seedPods({ layout: layout(pod) });
+    expect(pod.resources.get(Secret)?.body).toBe("private data");
+  });
+
+  it("an RDF/XML placeholder is a valid empty RDF/XML document", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    const xml = '<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"/>';
+    await seedPods({
+      layout: {
+        pods: [
+          {
+            account: { target: pod },
+            resources: [
+              {
+                path: "/public/secret",
+                contentType: "application/rdf+xml",
+                source: { body: xml },
+                access: { publicRead: false },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(pod.putRecords("/public/secret")[0]?.body).toBe(xml);
+  });
+
+  it("a container with access is created with its description, since CSS refuses a second PUT", async () => {
+    const pod = new MemoryPod("https://pod.example");
+    pod.containerPutConflict = true;
+    const containerLayout: PodLayout = {
+      pods: [
+        {
+          account: { target: pod },
+          resources: [
+            {
+              path: "/private/",
+              source: { body: "<> a <https://example.org/Box> ." },
+              access: { publicRead: false },
+            },
+          ],
+        },
+      ],
+    };
+    for (const mode of ["create", "ensure"] as const) {
+      await seedPods({ layout: containerLayout, mode });
+    }
+    const order = pod.putRecords().map((r) => new URL(r.url).pathname);
+    expect(order).toEqual(["/private/", "/private/.acl", "/private/", "/private/.acl"]);
+    expect(pod.resources.get("https://pod.example/private/")?.body).toContain("Box");
+  });
+
   it("every pod request refuses redirects", async () => {
     const pod = new MemoryPod("https://pod.example");
     await seedPods({ layout: layout(pod) });
@@ -547,7 +613,20 @@ describe("access-controlled resources: the ACL lands before any data", () => {
 });
 
 describe("resource path guard", () => {
-  for (const path of ["/x%2Eacl", "/x%2eacl", "/x.acr", "/x.meta", "/a%2Fb", "/a%2fb", "/a%5Cb"]) {
+  for (const path of [
+    "/x%2Eacl",
+    "/x%2eacl",
+    "/x.acr",
+    "/x.meta",
+    "/a%2Fb",
+    "/a%2fb",
+    "/a%5Cb",
+    "/x.%61cl",
+    "/x.ac%6C",
+    "/x.%61cr",
+    "/x.%6Deta",
+    "/a%7Eb",
+  ]) {
     it(`refuses ${path}`, async () => {
       const pod = new MemoryPod("https://pod.example");
       await expect(
@@ -560,4 +639,14 @@ describe("resource path guard", () => {
       expect(pod.putRecords()).toHaveLength(0);
     });
   }
+});
+
+it("a path may still escape characters that need escaping", async () => {
+  const pod = new MemoryPod("https://pod.example");
+  await seedPods({
+    layout: {
+      pods: [{ account: { target: pod }, resources: [{ path: "/a%20b", source: { body: "x" } }] }],
+    },
+  });
+  expect(pod.putRecords("/a%20b")).toHaveLength(1);
 });

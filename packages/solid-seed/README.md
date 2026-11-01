@@ -79,9 +79,14 @@ A resource with an `access` entry is written in three steps so its data never si
 inherited (possibly public) container ACL: an empty placeholder is created, its ACL is written, and
 only then is the data written. Before writing the ACL the seeder requires the server to advertise
 it at `<resource>.acl` with `Link: rel="acl"`; a server that uses another location (ACP `.acr`) or
-none fails the seed rather than storing an ACL that grants nothing. If the ACL write fails, a
-placeholder created by this run is deleted.
+none fails the seed rather than storing an ACL that grants nothing. If the ACL or data write fails,
+a placeholder created by this run is deleted. A container is created with its own description
+instead of a placeholder (CSS refuses a second PUT to a container), so only that description is
+briefly under the inherited ACL. A process that dies between placeholder and data leaves the empty
+placeholder, which `ensure` cannot tell from real data; re-run with `replace` after a crash.
 
 `baseUrl` must be an origin (`https://pod.example`), not a path-based pod. Paths cannot target
-auxiliary resources (`.acl`, `.acr`, `.meta`) or percent-encode `.`, `/` or `\`. Every request is
-sent with `redirect: "error"`, and error details read at most 4 KiB of a response.
+auxiliary resources (`.acl`, `.acr`, `.meta`) or percent-encode an unreserved character, `/` or `\`
+(servers such as CSS decode `/x.%61cl` to `/x.acl`). Every request is sent with
+`redirect: "error"`, so an `authFetch` wrapper must pass `init.redirect` through; error details read
+at most 4 KiB of a response.

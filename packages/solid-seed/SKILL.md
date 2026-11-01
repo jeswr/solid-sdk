@@ -13,7 +13,7 @@ harness or server package into application code that defines a layout.
 ## Layout rules
 
 - Paths are pod-root-relative and begin with `/`; never target `.acl`, `.acr` or `.meta`, and
-  never percent-encode `.`, `/` or `\`. `baseUrl` is an origin, not a path-based pod.
+  never percent-encode an unreserved character, `/` or `\`. `baseUrl` is an origin, not a path-based pod.
 - Prefer `{ instance }` for generated RDF, `{ dataset }` for caller-owned RDF/JS data, and
   `{ body }` only for already-issued artifacts such as JSON-LD VCs.
 - Assign one generated instance to one resource per pod. Cross-instance references are rebased

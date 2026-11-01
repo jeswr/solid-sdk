@@ -27,7 +27,11 @@ export class MemoryPod implements SeedTarget {
    * (e.g. `.acr` for an ACP server).
    */
   aclLink: "suffix" | "none" | { suffix: string } = "suffix";
-  #failure?: { path: string; remaining: number; status: number };
+  /** Refuse HEAD with 405, as some servers do. */
+  headUnsupported = false;
+  /** Refuse a PUT to an existing container with 409, as CSS does. */
+  containerPutConflict = false;
+  #failure?: { path: string; remaining: number; status: number; skip: number };
 
   constructor(origin: string, webid = `${origin}/profile/card#me`) {
     this.baseUrl = origin;
@@ -47,10 +51,14 @@ export class MemoryPod implements SeedTarget {
         request.method === "PUT" &&
         this.#failure !== undefined &&
         path === this.#failure.path &&
-        this.#failure.remaining > 0
+        this.#failure.remaining > 0 &&
+        this.#failure.skip-- <= 0
       ) {
         this.#failure.remaining -= 1;
         return new Response("injected failure", { status: this.#failure.status });
+      }
+      if (request.method === "HEAD" && this.headUnsupported) {
+        return new Response(null, { status: 405 });
       }
       if (request.method === "HEAD" || request.method === "GET") {
         const stored = this.resources.get(request.url);
@@ -78,6 +86,13 @@ export class MemoryPod implements SeedTarget {
         if (request.headers.get("if-none-match") === "*" && this.resources.has(request.url)) {
           return new Response("precondition failed", { status: 412 });
         }
+        if (
+          this.containerPutConflict &&
+          request.url.endsWith("/") &&
+          this.resources.has(request.url)
+        ) {
+          return new Response("Existing containers cannot be updated via PUT.", { status: 409 });
+        }
         this.resources.set(request.url, {
           body,
           contentType: request.headers.get("content-type") ?? "",
@@ -88,8 +103,9 @@ export class MemoryPod implements SeedTarget {
     };
   }
 
-  failNextPut(path: string, status = 500): void {
-    this.#failure = { path, status, remaining: 1 };
+  /** Fail one PUT to `path`, after letting `skip` earlier PUTs to it through. */
+  failNextPut(path: string, status = 500, skip = 0): void {
+    this.#failure = { path, status, remaining: 1, skip };
   }
 
   putRecords(path?: string): RequestRecord[] {
